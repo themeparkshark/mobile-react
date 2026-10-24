@@ -68,6 +68,8 @@ export interface ParkArrivalMomentProps {
   readonly repeat?: boolean;
   /** Which of Finn's hello poses (fixed per park and day). */
   readonly pose?: number;
+  /** The rare golden arrival (every fifth): gold rain with tumbling coins, Finn in a crown, a shine on the ribbon. */
+  readonly golden?: boolean;
   readonly onDone: () => void;
 }
 
@@ -78,7 +80,9 @@ function ParkArrivalMoment(props: ParkArrivalMomentProps) {
   return <ArrivalStage {...props} reduced={preference} />;
 }
 
-function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat = false, pose = 0, onDone, reduced }: ParkArrivalMomentProps & { readonly reduced: boolean }) {
+function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat: repeatVisit = false, pose = 0, golden = false, onDone, reduced }: ParkArrivalMomentProps & { readonly reduced: boolean }) {
+  // A golden arrival is always the full party, even on a repeat visit.
+  const repeat = repeatVisit && !golden;
   const { width, height } = useWindowDimensions();
   const budget = usePowerBudget();
   const rootRef = useRef<View>(null);
@@ -114,6 +118,7 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
   const wave = useSharedValue(0);
   const point = useSharedValue(0);
   const flip = useSharedValue(0);
+  const ribbonShine = useSharedValue(0);
   const goalIn = useSharedValue(0);
   const leave = useSharedValue(0);
   const fly = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
@@ -139,8 +144,8 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
   // Where each card sits (its centre), the start of its flight home and of its trail.
   const froms = useMemo(() => cards.map((_, i) => ({ x: width / 2 + (i - (cards.length - 1) / 2) * (cardWidth + 10), y: cardsTop + 76 })),
     [cards, width, cardWidth, cardsTop]);
-  const pieces = useMemo(() => confettiPieces(confetti, width, height - fxTop, 0), [confetti, width, height, fxTop]);
-  const pieces2 = useMemo(() => confettiPieces(confetti2, width, (height - fxTop) * 0.8, 7), [confetti2, width, height, fxTop]);
+  const pieces = useMemo(() => confettiPieces(confetti, width, height - fxTop, 0, golden), [confetti, width, height, fxTop, golden]);
+  const pieces2 = useMemo(() => confettiPieces(confetti2, width, (height - fxTop) * 0.8, 7, golden), [confetti2, width, height, fxTop, golden]);
 
   const finish = useCallback(() => {
     if (phase.current === 'done') return;
@@ -263,6 +268,8 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
     point.value = withDelay(A.pointAt, withSequence(withSpring(1, SPRING.stamp), withDelay(520, withSpring(0, SPRING.settle))));
     flip.value = withDelay(A.pointAt + 120, withTiming(1, { duration: A.flipMs, easing: EASE.inOut }));
     goalIn.value = withDelay(A.goalAt, withSpring(1, SPRING.stamp));
+    // The golden arrival: a bar of light runs across the ribbon right after the burst.
+    if (golden) ribbonShine.value = withDelay(A.burstAt + 120, withTiming(1, { duration: 520, easing: EASE.inOut }));
   };
 
   const armed = useRef(false);
@@ -280,7 +287,7 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
     warmArrivalArt();
     return () => {
       timers.current.forEach(clearTimeout); timers.current = [];
-      [shown, clock, scrim, ribbon, punch, banner, gold, bloom, flash, burst, rain, rain2, finn, wave, point, flip, goalIn, leave,
+      [shown, clock, scrim, ribbon, punch, banner, gold, bloom, flash, burst, rain, rain2, finn, wave, point, flip, ribbonShine, goalIn, leave,
         ...fly, ...drop, ...shine, ...ping].forEach(v => cancelAnimation(v));
     };
     // The moment plays once per mount.
@@ -370,6 +377,7 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
         {/* Finn peeks over the ribbon's right end (drawn behind it, so the ribbon holds him up). */}
         <Animated.View style={[styles.finn, { right: Math.max(2, (width - ribbonWidth) / 2 - 6) }, finnStyle]}>
           <Image source={FINN_ART[pose % FINN_ART.length]} style={{ width: 100, height: 125 }} contentFit="contain" transition={0} />
+          {golden && <View style={styles.finnCrown}><GameIcon name="crown" size={40} /></View>}
         </Animated.View>
         {/* The scale runs on a plain wrapper: iOS left the plaque's fill behind at its start size when the
             bordered view itself was scaled. */}
@@ -381,6 +389,7 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
         <Animated.View style={[{ width: ribbonWidth, height: ribbonWidth / 3.92 }, ribbonStyle]}>
           <Image source={ARRIVAL_ART.ribbon} style={StyleSheet.absoluteFill} contentFit="contain" transition={0}
             onLoad={() => { artReady.current = true; tryStart(); }} onError={() => { artReady.current = true; tryStart(); }} />
+          {golden && !reduced && <RibbonShine progress={ribbonShine} width={ribbonWidth} />}
           <View style={styles.titleRow}>
             {title.split('').map((char, i) => (
               <StampLetter key={`${i}-${char}`} char={char} size={titleSize} at={delays[i] ?? 0} clock={clock} reduced={reduced} />
@@ -496,6 +505,9 @@ const TodayCard = memo(function TodayCard({ card, index, width, drop, fly, leave
     <Animated.View style={[styles.cardSlot, { width }, style]}>
       {card.kind === 'limited' && <Image source={ARRIVAL_ART.soft} style={styles.cardGlow} contentFit="fill" transition={0} tintColor={GOLD_FX.glow} />}
       <View style={styles.cardShadow} />
+      {/* Today's special coin wears a gold foil edge (light gold, deep gold, light gold) like a prize card. */}
+      {card.kind === 'limited' && <LinearGradient colors={['#fff8d6', '#f2b100', '#fff3b0', '#c98a00', '#ffe68a']}
+        locations={[0, 0.3, 0.5, 0.75, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.foil} />}
       <View style={[styles.card, card.kind === 'limited' && styles.cardGold]}>
         <CardFace card={card} flip={flip} shine={shine} />
         <View pointerEvents="none" style={styles.cardClip}>
@@ -510,6 +522,20 @@ const TodayCard = memo(function TodayCard({ card, index, width, drop, fly, leave
     </Animated.View>
   );
 });
+
+/** The golden arrival's bar of light across the ribbon (one-shot, UI thread). */
+function RibbonShine({ progress, width }: { readonly progress: SharedValue<number>; readonly width: number }) {
+  const style = useAnimatedStyle(() => {
+    const t = progress.value;
+    return { opacity: t <= 0 || t >= 1 ? 0 : 1, transform: [{ translateX: -60 + (width + 60) * t }, { skewX: '-20deg' }] };
+  });
+  return <View pointerEvents="none" style={styles.ribbonShine}>
+    <Animated.View style={[styles.ribbonShineBar, style]}>
+      <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.9)', 'rgba(255,255,255,0)']}
+        start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+    </Animated.View>
+  </View>;
+}
 
 /** Picture tags: a gold star for today's special coin (never a word that reads like a countdown), a NEW tag, a magnifier for coins to find. */
 function CardTag({ card }: { readonly card: ArrivalCard }) {
@@ -551,21 +577,27 @@ function CardFace({ card, flip, shine }: { readonly card: ArrivalCard; readonly 
     </>;
   }
   if (card.kind === 'new') {
+    // New coins here: a little fanned stack of fin coins with a sparkle (more coins = more to collect), and the
+    // count in a blue pill.
     return <>
       <View style={styles.art}>
-        <Image source={ARRIVAL_ART.mapCoin} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+        <Image source={ARRIVAL_ART.mapCoin} style={[styles.stackCoin, styles.stackBack]} contentFit="contain" transition={0} />
+        <Image source={ARRIVAL_ART.mapCoin} style={[styles.stackCoin, styles.stackMid]} contentFit="contain" transition={0} />
+        <Image source={ARRIVAL_ART.mapCoin} style={[styles.stackCoin, styles.stackFront]} contentFit="contain" transition={0} />
         <Image source={ARRIVAL_ART.sparkle} style={styles.newSpark} contentFit="contain" transition={0} />
       </View>
-      <Text style={styles.cardBig} allowFontScaling={false}>{card.count}</Text>
+      <View style={[styles.countPill, styles.countPillBlue]}>
+        <Text style={[styles.countPillText, styles.countPillTextLight]} allowFontScaling={false}>{card.count}</Text>
+      </View>
     </>;
   }
-  // Coins still to find here: empty coin spots (round, dashed, full coin shape) and a "?" coin in front;
-  // never the wallet's coin stack (that reads as a reward). The count sits in a gold pill.
+  // Coins still to find here: a map pin with a "?" coin beside it and an empty dashed coin spot ("go find
+  // these on the map"); never the wallet's coin stack (that reads as a reward). The count sits in a gold pill.
   return <>
     <View style={styles.art}>
-      <View style={[styles.slotGhost, styles.ghostBack]} />
-      <View style={[styles.slotGhost, styles.ghostMid]} />
-      <View style={[styles.ghost, styles.ghostFront]}>
+      <View style={[styles.slotGhost, styles.findSpot]} />
+      <View style={styles.findPin}><GameIcon name="pin" size={46} /></View>
+      <View style={[styles.ghost, styles.findCoin]}>
         <Image source={ARRIVAL_ART.mapCoin} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
         <View style={styles.askDisc}><Text style={styles.ask} allowFontScaling={false}>?</Text></View>
       </View>
@@ -696,7 +728,11 @@ const styles = StyleSheet.create({
   // A hard sticker shadow (no blurred shadow on a moving card: cheap for the GPU, and it reads hand-drawn).
   cardShadow: { position: 'absolute', left: 2, right: -2, top: 6, bottom: -6, borderRadius: 18, backgroundColor: 'rgba(5,52,110,0.3)' },
   cardGlow: { position: 'absolute', left: -26, right: -26, top: -26, bottom: -26 },
-  cardGold: { borderColor: BRAND.gold, borderWidth: 4, backgroundColor: '#fff6d6' },
+  finnCrown: { position: 'absolute', top: -14, left: 22, transform: [{ rotate: '-12deg' }] },
+  ribbonShine: { position: 'absolute', left: '9%', right: '9%', top: '14%', bottom: '24%', overflow: 'hidden', borderRadius: 8 },
+  ribbonShineBar: { position: 'absolute', top: -10, bottom: -10, width: 48 },
+  cardGold: { borderColor: '#fff3b0', borderWidth: 2, backgroundColor: '#fff6d6' },
+  foil: { position: 'absolute', left: -4, right: -4, top: -4, bottom: -4, borderRadius: 21 },
   cardClip: { ...StyleSheet.absoluteFillObject, borderRadius: 15, overflow: 'hidden' },
   cardShine: { position: 'absolute', top: -30, bottom: -30 },
   tag: { position: 'absolute', top: -12, alignSelf: 'center', backgroundColor: BRAND.gold, borderRadius: 10,
@@ -727,6 +763,15 @@ const styles = StyleSheet.create({
   art: { width: 64, height: 64, marginTop: 4 },
   coinArt: { alignItems: 'center', justifyContent: 'center' },
   newSpark: { position: 'absolute', right: -8, top: -6, width: 26, height: 26 },
+  stackCoin: { position: 'absolute', width: 44, height: 44 },
+  stackBack: { left: -4, top: 4, transform: [{ rotate: '-16deg' }, { scale: 0.82 }] },
+  stackMid: { right: -4, top: 4, transform: [{ rotate: '16deg' }, { scale: 0.82 }] },
+  stackFront: { left: 10, top: 16 },
+  countPillBlue: { backgroundColor: BRAND.blueBright, borderColor: BRAND.white },
+  countPillTextLight: { color: BRAND.white },
+  findPin: { position: 'absolute', left: 2, top: -2 },
+  findSpot: { left: 26, top: 22, width: 34, height: 34, borderRadius: 17 },
+  findCoin: { left: 26, top: 22, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   ghost: { position: 'absolute', width: 44, height: 44 },
   ghostBack: { left: -6, top: 2 },
   ghostMid: { right: -6, top: 2 },

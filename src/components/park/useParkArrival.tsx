@@ -25,13 +25,15 @@ import { TONES, type StatusEntry } from '../map/MapStatusStack';
 import ParkArrivalMoment from './ParkArrivalMoment';
 import { warmArrivalArt } from './arrivalArt';
 import {
-  TODAY_CHIP_MS, arrivalCards, arrivalIsRepeat, arrivalSeenToday, finnPose, markArrivalHistory, markArrivalSeen, parkDayKey,
+  TODAY_CHIP_MS, arrivalCards, arrivalIsGolden, arrivalIsRepeat, arrivalSeenToday, finnPose, markArrivalHistory, markArrivalSeen, parkDayKey,
   todayChipFresh, type ArrivalBoss, type ArrivalCard, type ArrivalGoal, type ArrivalHistory, type ArrivalSeen, type ArrivalTask,
 } from './parkArrival';
 
 const KEY = (playerId: number) => `tps.parkArrival.v1:${playerId}`;
 /** Last arrival day per park (a week), so a second visit this week gets the short hello. */
 const HISTORY_KEY = (playerId: number) => `tps.parkArrival.history.v1:${playerId}`;
+/** How many park arrivals this player has had (every fifth is golden). */
+const COUNT_KEY = (playerId: number) => `tps.parkArrival.count.v1:${playerId}`;
 /** How long the moment waits for the boss feed before playing without it. */
 const BOSS_WAIT_MS = 2200;
 /** The longest the map holds its other moments for an arrival that has not started. */
@@ -52,6 +54,15 @@ if (__DEV__) {
   };
 }
 let pendingHistory: { parkId: number; day: string } | null = null;
+let pendingCount: number | null = null;
+if (__DEV__) {
+  // QA: the next arrival is the golden one (every fifth): forgets today, keeps the week's history.
+  (globalThis as Record<string, unknown>).__tpsParkArrivalGolden = () => {
+    pendingCount = 4;
+    devReset?.(true);
+    return 'golden';
+  };
+}
 
 export default function useParkArrival({ playerId, park, tasks, ready, projector }: {
   readonly playerId: number | null | undefined;
@@ -67,8 +78,9 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
   const [seen, setSeen] = useState<ArrivalSeen | null>(null);
   const [boss, setBoss] = useState<{ parkId: number; value: ArrivalBoss | null; final: boolean } | null>(null);
   const [playing, setPlaying] = useState<{ parkId: number; cards: ArrivalCard[]; goal: ArrivalGoal | null; replay: boolean;
-    repeat: boolean; pose: number } | null>(null);
+    repeat: boolean; pose: number; golden: boolean } | null>(null);
   const history = useRef<ArrivalHistory>({});
+  const arrivals = useRef(0);
   // Today's Daily 3 read has answered (or given up): the arrival starts with what it knows, then never changes.
   const [goalSettled, setGoalSettled] = useState<string | null>(null);
   const [goal, setGoal] = useState<ArrivalGoal | null>(null);
@@ -84,7 +96,12 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     if (!playerId) { setSeen(null); return; }
     let active = true;
     // History first, so the seen record (which unlocks the start) never lands before it.
-    void AsyncStorage.getItem(HISTORY_KEY(playerId)).then(raw => {
+    void AsyncStorage.getItem(COUNT_KEY(playerId)).then(raw => {
+      if (!active) return;
+      const n = Number(raw);
+      arrivals.current = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+      if (__DEV__ && pendingCount !== null) { arrivals.current = pendingCount; pendingCount = null; }
+    }).catch(() => undefined).finally(() => AsyncStorage.getItem(HISTORY_KEY(playerId)).then(raw => {
       if (!active) return;
       try { history.current = raw ? JSON.parse(raw) as ArrivalHistory : {}; } catch { history.current = {}; }
       if (__DEV__ && pendingHistory) {
@@ -94,7 +111,7 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     }).catch(() => undefined).finally(() => AsyncStorage.getItem(KEY(playerId)).then(raw => {
       if (!active) return;
       try { setSeen(raw ? JSON.parse(raw) as ArrivalSeen : {}); } catch { setSeen({}); }
-    }).catch(() => { if (active) setSeen({}); }));
+    }).catch(() => { if (active) setSeen({}); })));
     return () => { active = false; };
   }, [playerId, resetVersion]);
 
@@ -173,7 +190,11 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     const repeat = arrivalIsRepeat(history.current, parkId, day);
     history.current = markArrivalHistory(history.current, parkId, day);
     void AsyncStorage.setItem(HISTORY_KEY(playerId), JSON.stringify(history.current)).catch(() => undefined);
-    setPlaying({ parkId, cards: cardsFor(boss.value), goal, replay: false, repeat, pose: finnPose(parkId, day) });
+    // Every fifth arrival is the golden one (a rare surprise: gold rain, Finn in a crown, the full party).
+    arrivals.current += 1;
+    const golden = arrivalIsGolden(arrivals.current);
+    void AsyncStorage.setItem(COUNT_KEY(playerId), String(arrivals.current)).catch(() => undefined);
+    setPlaying({ parkId, cards: cardsFor(boss.value), goal, replay: false, repeat, pose: golden ? 1 : finnPose(parkId, day), golden });
   }, [due, ready, playing, parkId, tasks, boss, playerId, day, seen, cardsFor, always, goalSettled, fetchKey, goal]);
 
   // Leaving the park ends the moment at once.
@@ -184,7 +205,7 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     if (parkId === null || playing) return;
     queueHaptic('tapLight');
     setPlaying({ parkId, cards: cardsFor(boss?.parkId === parkId ? boss.value : null), goal, replay: true, repeat: true,
-      pose: finnPose(parkId, day) });
+      pose: finnPose(parkId, day), golden: false });
   }, [parkId, playing, cardsFor, boss, goal, day]);
 
   const todayCards = useMemo(() => (parkId !== null && seen && arrivalSeenToday(seen, parkId, day) ? cardsFor(boss?.parkId === parkId ? boss.value : null) : []),
@@ -214,7 +235,7 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 60 }]}>
       <ParkArrivalMoment key={`${playing.parkId}:${playing.replay ? 'r' : 'f'}`} parkName={parkName} cards={playing.cards}
         goal={playing.goal} projector={projector} replay={playing.replay} repeat={playing.repeat} pose={playing.pose}
-        onDone={onDone} />
+        golden={playing.golden} onDone={onDone} />
     </View>
   ) : null), [playing, parkName, projector, onDone]);
 

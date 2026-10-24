@@ -147,7 +147,7 @@ export function arrivalCards({ tasks, nextBoss, parkNames, now }: {
 export const ARRIVAL = {
   scrimMs: 240,
   /** A light sky-blue veil (never navy): the map recedes so the gold reads. */
-  scrimOpacity: 0.42,
+  scrimOpacity: 0.3,
   ribbonMs: 210,
   welcomeAt: 100,
   lettersAt: 120,
@@ -252,6 +252,16 @@ export function markArrivalHistory(history: ArrivalHistory | null | undefined, p
 }
 
 /** Finn has a few ways to say hello; the pose for a park and day stays put (no flicker on a replay). */
+/**
+ * Every fifth park arrival is a golden one (a rare surprise that keeps arrivals fresh): the full party even
+ * on a repeat visit, a gold rain with gold coins tumbling in it, Finn in a crown and a shine across the
+ * ribbon. `count` is the player's arrivals so far, this one included.
+ */
+export const GOLDEN_EVERY = 5;
+export function arrivalIsGolden(count: number): boolean {
+  return Number.isFinite(count) && count > 0 && count % GOLDEN_EVERY === 0;
+}
+
 export const FINN_POSES = 3;
 export function finnPose(parkId: number, day: string): number {
   let h = parkId * 31;

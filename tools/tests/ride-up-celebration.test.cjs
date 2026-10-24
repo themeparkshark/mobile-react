@@ -36,7 +36,7 @@ test('mounted only when the queue really ended with boarding, and the chips land
   const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
   assert.match(recap, /\{rideUp && <RideUpCelebration rideName=\{rideName\} \/>\}/);
   assert.match(recap, /const rideUp = endReason === 'boarded'/);
-  assert.match(recap, /RIDE_UP\.confettiAt - 160/);
+  assert.match(recap, /RIDE_UP\.ringAt \+ index \* RIDE_UP\.statStepMs/, 'the earned row rolls with the gold bar');
 });
 
 test('the recap\'s own header card is the stage: no veil, no second banner, the real title stamps', () => {
@@ -46,4 +46,16 @@ test('the recap\'s own header card is the stage: no veil, no second banner, the 
   assert.doesNotMatch(src, /styles\.veil|veil:/, 'no full-page veil');
   assert.doesNotMatch(src, /YOUR RIDE&apos;S UP!/, 'no duplicate title banner');
   assert.match(src, /SLAM_SQUASH/);
+});
+
+test('round 5: the earned row is in place from frame 1 and every number lands by about 1.4 s on the UI thread', () => {
+  const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
+  assert.doesNotMatch(recap, /function useCountUp|requestAnimationFrame|setTimeout/, 'no JS-thread counting in the recap');
+  assert.match(recap, /entering=\{reducedMotion \|\| rideUp \? undefined/, 'no delayed entrance on the ride-up row');
+  assert.match(recap, /<RollingValue value=\{wholeMinutes\}/, 'the minutes roll too');
+  assert.match(src, /export function RollingValue/);
+  assert.match(src, /useAnimatedProps/, 'the digits are an animated native prop, not React state');
+  const lastLands = num('ringAt') + 4 * num('statStepMs') + num('statMs');
+  assert.ok(lastLands <= 1450, `the fifth stat lands by about 1.4 s (${lastLands})`);
+  assert.ok(num('ringAt') + num('ringMs') <= 1450, 'the minutes land with the bar');
 });

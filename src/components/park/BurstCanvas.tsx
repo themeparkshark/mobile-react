@@ -8,34 +8,39 @@
  * Motion: 0 draws nothing). Used by the shelf landing, the row complete and
  * the First coin today! ribbon.
  */
-import { Canvas, PaintStyle, Picture, Skia, createPicture } from '@shopify/react-native-skia';
+import { Canvas, PaintStyle, Picture, Skia, createPicture, type SkCanvas } from '@shopify/react-native-skia';
 import { memo, useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { GOLD_FX } from '../../ui/motionEasing';
 
-function BurstCanvas({ progress, count, radius, ring = 0, starSize = 12, x, y, delayed = 0 }: {
-  readonly progress: SharedValue<number>;
-  readonly count: number;
-  /** How far the stars fly (pt). */
-  readonly radius: number;
-  /** Ring start radius (pt); 0 draws no ring. */
-  readonly ring?: number;
-  readonly starSize?: number;
-  /** The burst's centre in the parent's coordinates. */
-  readonly x: number;
-  readonly y: number;
-  /** A second wave: the stars start this far into the progress (0..0.5) and sit on the half-step angles. */
-  readonly delayed?: number;
-}) {
-  const box = Math.ceil((radius + starSize * 2 + ring * 1.2) * 2 + 20);
-  const c = box / 2;
-  const stars = useMemo(() => Array.from({ length: Math.max(0, count) }, (_, i) => {
+/** One star of a burst (precomputed on JS, read by the worklet). */
+export interface BurstStar { dx: number; dy: number; reach: number; size: number; gold: boolean; spin: number }
+
+/** The stars of a burst: `count` evenly spread (a second wave sits on the half-step angles). */
+export function burstStars(count: number, starSize: number, delayed = 0): BurstStar[] {
+  return Array.from({ length: Math.max(0, count) }, (_, i) => {
     const a = ((i + (delayed > 0 ? 0.5 : 0)) / Math.max(1, count)) * Math.PI * 2;
     return { dx: Math.cos(a), dy: Math.sin(a), reach: 0.7 + ((i * 7) % 5) / 14, size: starSize * (0.75 + (i % 3) * 0.22), gold: i % 3 !== 1, spin: i % 2 ? 1 : -1 };
-  }), [count, starSize, delayed]);
-  const picture = useDerivedValue(() => createPicture(canvas => {
-    const raw = progress.value;
+  });
+}
+
+/**
+ * Draws one burst (ring plus stars) centred on (cx, cy) at progress `raw` (0..1) into a Skia
+ * canvas. A worklet, so a moment can draw several bursts and its other layers into one canvas.
+ */
+export function drawBurst(canvas: SkCanvas, raw: number, cx: number, cy: number, stars: readonly BurstStar[],
+  radius: number, ring: number, delayed: number): void {
+  'worklet';
+  canvas.save();
+  canvas.translate(cx, cy);
+  drawBurstAtOrigin(canvas, raw, 0, stars, radius, ring, delayed);
+  canvas.restore();
+}
+
+function drawBurstAtOrigin(canvas: SkCanvas, raw: number, c: number, stars: readonly BurstStar[],
+  radius: number, ring: number, delayed: number): void {
+  'worklet';
     const b = delayed > 0 ? (raw - delayed) / (1 - delayed) : raw;
     if (b <= 0 || b >= 1) return;
     const paint = Skia.Paint();
@@ -78,6 +83,27 @@ function BurstCanvas({ progress, count, radius, ring = 0, starSize = 12, x, y, d
       canvas.drawPath(star, paint);
       canvas.restore();
     }
+}
+
+function BurstCanvas({ progress, count, radius, ring = 0, starSize = 12, x, y, delayed = 0 }: {
+  readonly progress: SharedValue<number>;
+  readonly count: number;
+  /** How far the stars fly (pt). */
+  readonly radius: number;
+  /** Ring start radius (pt); 0 draws no ring. */
+  readonly ring?: number;
+  readonly starSize?: number;
+  /** The burst's centre in the parent's coordinates. */
+  readonly x: number;
+  readonly y: number;
+  /** A second wave: the stars start this far into the progress (0..0.5) and sit on the half-step angles. */
+  readonly delayed?: number;
+}) {
+  const box = Math.ceil((radius + starSize * 2 + ring * 1.2) * 2 + 20);
+  const c = box / 2;
+  const stars = useMemo(() => burstStars(count, starSize, delayed), [count, starSize, delayed]);
+  const picture = useDerivedValue(() => createPicture(canvas => {
+    drawBurstAtOrigin(canvas, progress.value, c, stars, radius, ring, delayed);
   }, { width: box, height: box }));
   if (count <= 0 && ring <= 0) return null;
   return <Canvas pointerEvents="none" style={[styles.canvas, { left: x - c, top: y - c, width: box, height: box }]}>

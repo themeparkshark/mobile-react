@@ -342,6 +342,10 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     const landingKey = landingColumn >= 0 ? landedKey : null;
     const ownedIds = new Set(completedFor(section).map(done => done.id));
     const shine = landingKey && rowComplete(row.map(task => task.id), ownedIds) ? landingKey : null;
+    // The row that will complete when the arriving coin lands mounts its shine early (hidden), so the landing
+    // frame mounts nothing new.
+    const shineArmed = !!requestKey && closedKey !== requestKey && row.some(task => matchesArrival(section, task.id)) &&
+      rowComplete(row.map(task => task.id), ownedIds);
     return (
     <View key={rowIndex} style={{ paddingBottom: 14 }}>
       <ShelfKick landingKey={landingKey}>
@@ -400,7 +404,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
           })}
         </View>
         {/* A full row gleams once, over its coins. */}
-        {shine && <RowShine landingKey={shine} width={width - 40} slots={row.length} />}
+        {(shine || shineArmed) && <RowShine landingKey={shine} armed={shineArmed} width={width - 40}
+          height={coinSize + 43} slots={row.length} />}
       </View>
       </ShelfKick>
     </View>

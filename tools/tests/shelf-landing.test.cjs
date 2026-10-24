@@ -68,7 +68,7 @@ test('about one landing in ten is shiny, fixed per landing; a full row hops left
   assert.ok(L.rowHopDelay(1) - L.rowHopDelay(0) === L.SHELF_LANDING.rowHopStepMs);
   assert.ok(L.rowHopDelay(4) < L.SHELF_LANDING.shineAfterMs + L.SHELF_LANDING.shineMs + 200, 'the last hop lands while the bar is still there');
   const src = read('src/components/CoinShelfArrival.tsx');
-  assert.match(src, /<BurstCanvas/, 'ring and stars in one Skia canvas');
+  assert.match(src, /drawBurst\(canvas, b, slot\.x, slot\.y/, 'ring and stars in the landing\'s one Skia canvas');
   assert.match(src, /scaleY: 1 - 0\.2 \* sq/, 'the coin slams flat for the hit-stop');
   assert.doesNotMatch(src, /Math\.cos\(t \* Math\.PI \* 3\)/, 'never edge-on right before impact');
   const fx = read('src/components/ShelfLandingFx.tsx');
@@ -80,7 +80,21 @@ test('round 4: a short anticipation, the bloom obeys Dim Flashing Lights, the ca
   assert.ok(L.first.dropAt <= 250, 'the coin never hovers still for long before it dives');
   assert.ok(L.first.dropAt + L.first.dropMs + L.hitStopMs + L.shineAfterMs <= 1000, 'dive, slam and row shine start inside 1.0 s');
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/CoinShelfArrival.tsx'), 'utf8');
-  assert.match(src, /opacity: \(flashTop > 0 \? 0\.95 : 0\) \* flash\.value/, 'no bloom pop with Dim Flashing Lights');
+  assert.match(src, /if \(f > 0\.001 && flashTop > 0\)/, 'no bloom pop with Dim Flashing Lights');
   assert.doesNotMatch(src, /bottom: 118/, 'the caption is never parked over the Limited Coins banner');
   assert.doesNotMatch(src, />Mastery</, 'a picture button, not a reading word');
+});
+
+test('round 5: the landing is one Skia canvas and the row shine mounts early, on the plank, inside the panel', () => {
+  const src = read('src/components/CoinShelfArrival.tsx');
+  assert.match(src, /<ShelfLandingCanvas /, 'one canvas for every glow, trail, flash and burst');
+  assert.doesNotMatch(src, /TrailGhost|styles\.bright|styles\.slotRing|styles\.slotFlash|<BurstCanvas/, 'no separate animated layers for the light');
+  assert.equal((src.match(/<Canvas /g) || []).length, 1, 'exactly one canvas');
+  const fx = read('src/components/ShelfLandingFx.tsx');
+  assert.doesNotMatch(fx, /expo-linear-gradient/, 'the bar and the plank glow are drawn in Skia');
+  assert.match(fx, /armed = false/);
+  assert.doesNotMatch(fx, /right: -4|backgroundColor: '#05346e'/, 'the row-done pill never hangs off the panel as a dark tab');
+  assert.match(fx, /borderColor: '#e9a800'/, 'a gold rim');
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /armed=\{shineArmed\}/, 'the shine mounts with the shelf, not on the landing frame');
 });

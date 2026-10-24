@@ -57,3 +57,21 @@ test('one continuous throw: the coin flies into the ribbon while it drops, the c
   const hook = read('src/components/park/useFirstCoinToday.tsx');
   assert.match(hook, /const noteCollected = useCallback\(\(\) => \{ if \(claim\(\)\) setQueued\(true\); \}, \[claim\]\)/, 'one claim rule for both paths');
 });
+
+test('round 5: no still beat before the flight home, the ribbon clears the right rail, the coin has its own badge', () => {
+  const { FIRST_COIN: F, firstCoinImpactAt, firstCoinEndsAt } = require('./helpers/ts-module.cjs').loadTs('src/components/park/firstCoinToday.ts');
+  const hit = firstCoinImpactAt();
+  // Beats after the hit: gold fan (hit to hit + 140), shine, Finn's second pump, then home. No gap over 400 ms.
+  const beats = [[hit, hit + 140], [F.shineAt, F.shineAt + F.shineMs], [F.pumpAt, F.pumpAt + 300], [F.homeAt, F.homeAt + F.homeMs]]
+    .sort((a, b) => a[0] - b[0]);
+  for (let i = 1; i < beats.length; i += 1) {
+    const gap = beats[i][0] - Math.max(...beats.slice(0, i).map(b => b[1]));
+    assert.ok(gap <= 400, `a still gap of ${gap} ms before beat ${i}`);
+  }
+  assert.ok(firstCoinEndsAt() <= 2000, 'gone by 2.0 s');
+  assert.ok(F.homePeak >= 2.5, 'the coin swells 2.5x on its way home');
+  assert.ok(F.railClear >= 56, 'the ribbon ends left of the right rail pins');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/park/FirstCoinRibbon.tsx'), 'utf8');
+  assert.ok(src.indexOf('<BurstCanvas') < src.indexOf('styles.ribbonWrap'), 'the sparkle rings draw under the ribbon, never on the words');
+  assert.match(src, /styles\.badge/);
+});

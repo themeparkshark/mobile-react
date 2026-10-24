@@ -194,3 +194,21 @@ test('capture aids are dev only: slow-mo is 1 outside dev, the frame HUD renders
   const hud = read('src/components/park/DevPerfHud.tsx');
   assert.match(hud, /if \(!PERF_HUD\) return null;/);
 });
+
+test('round 5: every fifth arrival is golden; the cards read as pictures; the veil keeps the map vivid', () => {
+  assert.equal(arrival.arrivalIsGolden(5), true);
+  assert.equal(arrival.arrivalIsGolden(10), true);
+  for (const n of [0, 1, 2, 3, 4, 6, 9, NaN]) assert.equal(arrival.arrivalIsGolden(n), false, String(n));
+  assert.ok(arrival.ARRIVAL.scrimOpacity <= 0.3, 'a light veil, the drawn park stays vivid under the rays');
+  const src = read('src/components/park/ParkArrivalMoment.tsx');
+  assert.match(src, /styles\.stackFront/, 'new coins read as a little stack of fin coins');
+  assert.match(src, /<GameIcon name="pin"/, 'coins to find read as a map pin');
+  assert.match(src, /styles\.foil/, 'today\'s special coin wears a gold foil edge');
+  assert.match(src, /const repeat = repeatVisit && !golden/, 'a golden arrival is always the full party');
+  assert.match(src, /confettiPieces\(confetti, width, height - fxTop, 0, golden\)/);
+  const fx = read('src/components/park/ArrivalFxCanvas.tsx');
+  assert.match(fx, /if \(piece\.coin\)/, 'gold coins tumble in the golden rain');
+  const hook = read('src/components/park/useParkArrival.tsx');
+  assert.match(hook, /arrivalIsGolden\(arrivals\.current\)/);
+  assert.match(hook, /AsyncStorage\.setItem\(COUNT_KEY\(playerId\)/, 'the count is kept per player');
+});

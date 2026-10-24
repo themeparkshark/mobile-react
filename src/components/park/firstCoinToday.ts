@@ -29,12 +29,20 @@ export const FIRST_COIN = {
   sparkleAt: 480,
   sparkleWaveMs: 160,
   sparkles: 12,
+  /** A white shine runs across the ribbon after the rings (no still frame between the burst and the flight home). */
+  shineAt: 960,
+  shineMs: 420,
+  /** Finn pumps his fist a second time while the shine runs. */
+  pumpAt: 1120,
   /** The ribbon leaves at this time (slides up, faster than it came)... */
-  exitAt: 2000,
+  exitAt: 1560,
   exitMs: 200,
-  /** ...and the crowned coin hops out of its slot and flies home (the shelf button) as it goes. */
-  homeAt: 1920,
-  homeMs: 380,
+  /** ...and the crowned coin hops out of its slot and flies home, 2.5x big at its peak, with a gold trail. */
+  homeAt: 1480,
+  homeMs: 420,
+  homePeak: 2.5,
+  /** The ribbon ends left of the map's right rail (its pins stay visible). */
+  railClear: 62,
 } as const;
 
 /** The impact frame: the coin lands in the slot and the crown hits. */

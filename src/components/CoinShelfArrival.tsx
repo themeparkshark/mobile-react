@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Canvas, PaintStyle, Picture, Skia, TileMode, createPicture, vec } from '@shopify/react-native-skia';
 import Animated, {
-  cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, type SharedValue,
+  cancelAnimation, Easing, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, type SharedValue,
 } from 'react-native-reanimated';
 import { withDelay, withSequence, withSpring, withTiming, momentMs } from './park/momentTime';
 import { playMoment } from '../gamekit/audio/playMoment';
@@ -14,11 +15,10 @@ import GameIcon from '../ui/GameIcon';
 import { GoldBurst } from '../ui/GoldBurst';
 import { EASE, GOLD_FX, SPRING, flashPeak, momentParticles } from '../ui/motionEasing';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
-import BurstCanvas from './park/BurstCanvas';
+import { burstStars, drawBurst } from './park/BurstCanvas';
 import { perfMark } from './park/momentPerf';
 import { SHELF_LANDING } from './shelfLanding';
 
-const SOFT = require('../../assets/images/reveal/soft-spot.webp');
 
 /**
  * A new coin goes home. The empty slot it belongs in glows gold twice ("this
@@ -171,20 +171,8 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
       opacity: landed ? 0 : Math.min(1, hover.value * 2),
     };
   });
-  // A short gold trail behind the diving coin: three fading copies a step behind it.
-  const trail = [0.07, 0.14, 0.21].map(lag => ({ lag, alpha: 0.5 - lag * 1.6 }));
   // The veil holds while the coin is in the air and lifts on the hit (the shelf brightens with the landing).
   const dimStyle = useAnimatedStyle(() => ({ opacity: 0.35 * (1 - lift.value) }));
-  const brightStyle = useAnimatedStyle(() => ({ opacity: (flashTop > 0 ? 0.16 : 0) * flash.value }));
-  const slotStyle = useAnimatedStyle(() => ({
-    opacity: 0.3 + 0.6 * pulse.value,
-    transform: [{ scale: 1 + 0.12 * pulse.value }],
-  }));
-  // The white flash in the slot stays at or under the shared cap (flashPeak: 0 with Dim Flashing Lights); the
-  // brightness comes from a gold glow that blooms on the hit (a glow, not a flash).
-  const flashStyle = useAnimatedStyle(() => ({ opacity: flashTop * flash.value, transform: [{ scale: 0.8 + 0.8 * flash.value }] }));
-  // Dim Flashing Lights (or Reduce Motion): no bloom pop at all, like the wash and the flash.
-  const bloomStyle = useAnimatedStyle(() => ({ opacity: (flashTop > 0 ? 0.95 : 0) * flash.value, transform: [{ scale: 0.7 + 0.9 * flash.value }] }));
   const chipStyle = useAnimatedStyle(() => ({
     opacity: chip.value,
     transform: [{ translateY: (1 - chip.value) * 30 }, { scale: 0.9 + chip.value * 0.1 }],
@@ -196,41 +184,18 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
       accessibilityRole="button" accessibilityLabel={`Place ${rideName} coin on its shelf now`}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
     </Pressable>}
-    {/* The shelf brightens on the hit (a white wash at most 0.16). */}
-    {!reduced && <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.bright, brightStyle]} />}
-    {/* The slot that is waiting for this coin: a gold ring that glows twice. */}
-    {!landed && !reduced && <Animated.View pointerEvents="none" style={[styles.slotRing, {
-      left: target.x - 5, top: target.y - 5, width: target.width + 10, height: target.height + 10,
-      borderRadius: (target.width + 10) / 2 }, slotStyle]} />}
-    {!reduced && <View pointerEvents="none" style={[{ position: 'absolute', left: startX + size / 2, top: startY + size / 2, width: 0, height: 0,
-      alignItems: 'center', justifyContent: 'center' }]}>
-      <GoldBurst size={size * 2.1} amount={glow} spin={false} reduced={reduced} />
-    </View>}
-    {!landed && !reduced && trail.map(({ lag, alpha }) => (
-      <TrailGhost key={lag} lag={lag} alpha={alpha} progress={progress} hover={hover} dx={dx} dy={dy} end={end}
-        left={startX} top={startY} size={size} />
-    ))}
+    {/* Every glow, ring, trail, flash and burst of the landing in ONE Skia canvas (one picture per UI frame). */}
+    {!reduced && <ShelfLandingCanvas width={target.frameWidth} height={target.frameHeight} progress={progress} hover={hover}
+      pulse={pulse} glow={glow} flash={flash} puff={puff} flashTop={flashTop} sparkles={sparkles} shiny={shiny}
+      startX={startX} startY={startY} size={size} dx={dx} dy={dy} end={end} slot={slotCenter} slotWidth={target.width} />}
     {!landed && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: startX, top: startY, width: size, height: size }, coinStyle]}>
-      {/* A gold rim glow: the coin is the brightest thing on the shelf while it flies. */}
-      {!reduced && <Image source={SOFT} tintColor={GOLD_FX.glow} contentFit="fill" transition={0}
-        style={{ position: 'absolute', left: -size * 0.3, top: -size * 0.3, width: size * 1.6, height: size * 1.6, opacity: 0.95 }} />}
       <Image source={coinUrl} contentFit="contain" onError={placeNow} style={{ width: size, height: size }} transition={0} />
     </Animated.View>}
-    {/* On the landing frame: a white-gold flash in the slot, then a gold ring bursts out and sparkles puff wide. */}
-    {!reduced && <View pointerEvents="none" style={[styles.at, { left: slotCenter.x, top: slotCenter.y }]}>
-      {shiny && <GoldBurst size={target.width * 4.2} amount={rays} spin={false} reduced={reduced}
-        style={[styles.raysAt, { left: -target.width * 2.1, top: -target.width * 2.1 }]} />}
-      <Animated.View style={[{ position: 'absolute', width: target.width * 2.6, height: target.width * 2.6,
-        left: -target.width * 1.3, top: -target.width * 1.3 }, bloomStyle]}>
-        <Image source={SOFT} tintColor={GOLD_FX.raysSoft} contentFit="fill" transition={0} style={StyleSheet.absoluteFill} />
-      </Animated.View>
-      <Animated.View style={[styles.slotFlash, { width: target.width * 1.5, height: target.width * 1.5, borderRadius: target.width * 0.75,
-        left: -target.width * 0.75, top: -target.width * 0.75 }, flashStyle]} />
+    {/* The rare shiny landing: gold rays behind the slot (about 1 in 10). */}
+    {!reduced && shiny && <View pointerEvents="none" style={[styles.at, { left: slotCenter.x, top: slotCenter.y }]}>
+      <GoldBurst size={target.width * 4.2} amount={rays} spin={false} reduced={reduced}
+        style={[styles.raysAt, { left: -target.width * 2.1, top: -target.width * 2.1 }]} />
     </View>}
-    {!reduced && <BurstCanvas progress={puff} count={sparkles} radius={target.width * SHELF_LANDING.puffReach}
-      ring={target.width * 0.55} starSize={shiny ? 13 : 11} x={slotCenter.x} y={slotCenter.y} />}
-    {!reduced && shiny && <BurstCanvas progress={puff} count={0} radius={target.width} ring={target.width * 0.9}
-      x={slotCenter.x} y={slotCenter.y} delayed={0.18} />}
     {/* The caption sits at the top of the shelf, over the coins above (never over a section banner such as Coin Guide or
         Limited Coins); only when the slot itself is in that top strip does it go under the slot's plank instead. */}
     <Animated.View style={[styles.chip, target.y > CHIP_CLEAR
@@ -259,26 +224,85 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
   </View>;
 }
 
-/** One step of the coin's gold trail: the same flight, a little behind, fading. */
-function TrailGhost({ lag, alpha, progress, hover, dx, dy, end, left, top, size }: {
-  readonly lag: number; readonly alpha: number; readonly progress: SharedValue<number>; readonly hover: SharedValue<number>;
-  readonly dx: number; readonly dy: number; readonly end: number; readonly left: number; readonly top: number; readonly size: number;
+/**
+ * The landing's light, drawn on the UI thread in one canvas: the gold ring that pulses on the
+ * empty slot, the gold glow around the hovering coin (it rides the coin), a three-step gold
+ * trail behind the dive, the gold bloom and the capped white flash on the hit, and the ring and
+ * star burst from the slot (a second ring on a shiny landing). Replaces nine separate animated
+ * views and two canvases, so the dive and the hit cost one picture per frame.
+ */
+function ShelfLandingCanvas({ width, height, progress, hover, pulse, glow, flash, puff, flashTop, sparkles, shiny,
+  startX, startY, size, dx, dy, end, slot, slotWidth }: {
+  readonly width: number; readonly height: number;
+  readonly progress: SharedValue<number>; readonly hover: SharedValue<number>; readonly pulse: SharedValue<number>;
+  readonly glow: SharedValue<number>; readonly flash: SharedValue<number>; readonly puff: SharedValue<number>;
+  readonly flashTop: number; readonly sparkles: number; readonly shiny: boolean;
+  readonly startX: number; readonly startY: number; readonly size: number; readonly dx: number; readonly dy: number;
+  readonly end: number; readonly slot: { readonly x: number; readonly y: number }; readonly slotWidth: number;
 }) {
-  const style = useAnimatedStyle(() => {
-    const t = Math.max(0, progress.value - lag);
-    if (progress.value <= lag || progress.value >= 1) return { opacity: 0 };
-    return {
-      opacity: alpha,
-      transform: [
-        { translateX: dx * t },
-        { translateY: dy * t - Math.sin(Math.min(1, t * 1.6) * Math.PI) * 36 },
-        { scale: (0.3 + 0.7 * Math.min(1, hover.value)) * (1 + (end - 1) * t) * 0.92 },
-      ],
+  const stars = useMemo(() => burstStars(sparkles, shiny ? 13 : 11), [sparkles, shiny]);
+  const gold = useMemo(() => Skia.Color(GOLD_FX.rays), []);
+  const picture = useDerivedValue(() => createPicture(canvas => {
+    const paint = Skia.Paint();
+    paint.setAntiAlias(true);
+    const t = progress.value;
+    const cx0 = startX + size / 2, cy0 = startY + size / 2;
+    const at = (k: number) => {
+      'worklet';
+      return { x: cx0 + dx * k, y: cy0 + dy * k - Math.sin(Math.min(1, k * 1.6) * Math.PI) * 36,
+        s: (0.3 + 0.7 * Math.min(1, hover.value)) * (1 + (end - 1) * k) };
     };
-  });
-  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left, top, width: size, height: size }, style]}>
-    <Image source={SOFT} tintColor={GOLD_FX.rays} contentFit="fill" transition={0} style={StyleSheet.absoluteFill} />
-  </Animated.View>;
+    const soft = (x: number, y: number, r: number, color: string, alpha: number) => {
+      'worklet';
+      if (alpha <= 0.01 || r <= 0.5) return;
+      paint.setShader(Skia.Shader.MakeRadialGradient(vec(x, y), r,
+        [Skia.Color(color), Skia.Color('rgba(255,207,59,0)')], [0.35, 1], TileMode.Clamp));
+      paint.setAlphaf(Math.min(1, alpha));
+      canvas.drawCircle(x, y, r, paint);
+      paint.setShader(null);
+      paint.setAlphaf(1);
+    };
+    // 1. The empty slot glows gold twice.
+    if (t < 1 && pulse.value > 0.001) {
+      const ring = Skia.Paint();
+      ring.setAntiAlias(true);
+      ring.setStyle(PaintStyle.Stroke);
+      ring.setStrokeWidth(4);
+      ring.setColor(gold);
+      ring.setAlphaf(0.3 + 0.6 * pulse.value);
+      canvas.drawCircle(slot.x, slot.y, ((slotWidth + 10) / 2) * (1 + 0.12 * pulse.value), ring);
+    }
+    // 2. The gold glow rides the hovering coin and fades as it dives.
+    if (t < 1) {
+      const p = at(t);
+      soft(p.x, p.y, size * 0.85 * p.s, GOLD_FX.glow, 0.95 * Math.min(1, hover.value * 2) * (1 - 0.6 * t));
+      soft(p.x, p.y, size * 1.05 * p.s, GOLD_FX.glow, glow.value);
+      // 3. A short gold trail a step behind the dive.
+      for (let i = 1; i <= 3; i += 1) {
+        const lag = i * 0.07;
+        if (t > lag) {
+          const q = at(t - lag);
+          soft(q.x, q.y, size * 0.5 * q.s * 0.92, GOLD_FX.rays, 0.5 - lag * 1.6);
+        }
+      }
+    }
+    // 4. The hit: a gold bloom (a glow, not a flash) and a white flash at or under the shared cap.
+    const f = flash.value;
+    if (f > 0.001 && flashTop > 0) {
+      soft(slot.x, slot.y, slotWidth * 1.3 * (0.7 + 0.9 * f), GOLD_FX.raysSoft, 0.95 * f);
+      paint.setColor(Skia.Color('#fffbe8'));
+      paint.setAlphaf(flashTop * f);
+      canvas.drawCircle(slot.x, slot.y, slotWidth * 0.75 * (0.8 + 0.8 * f), paint);
+      paint.setAlphaf(1);
+    }
+    // 5. The ring and the stars burst from the slot (a second ring on a shiny landing).
+    const b = puff.value;
+    if (b > 0 && b < 1) {
+      drawBurst(canvas, b, slot.x, slot.y, stars, slotWidth * SHELF_LANDING.puffReach, slotWidth * 0.55, 0);
+      if (shiny) drawBurst(canvas, b, slot.x, slot.y, [], slotWidth, slotWidth * 0.9, 0.18);
+    }
+  }, { width, height }));
+  return <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}><Picture picture={picture} /></Canvas>;
 }
 
 /** The caption's own strip at the top of the shelf (its height plus a margin). */
@@ -286,11 +310,8 @@ const CHIP_CLEAR = 96;
 
 const styles = StyleSheet.create({
   dim: { backgroundColor: '#05346e' },
-  bright: { backgroundColor: '#fffbe8' },
   raysAt: { position: 'absolute' },
-  slotRing: { position: 'absolute', borderWidth: 4, borderColor: GOLD_FX.rays },
   at: { position: 'absolute', width: 0, height: 0 },
-  slotFlash: { position: 'absolute', backgroundColor: '#fffbe8' },
   // Outer layer carries position and shadow; the body carries the fill so the
   // cream always spans the full chip, close button included.
   chip: { position: 'absolute', left: 14, right: 14, borderRadius: 18, borderBottomWidth: 5,

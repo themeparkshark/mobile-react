@@ -23,12 +23,12 @@
  */
 import { Canvas, PaintStyle, Picture, Skia, createPicture } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type StyleProp, type TextStyle } from 'react-native';
+import { StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type StyleProp, type TextStyle } from 'react-native';
 import Animated, {
-  Easing, ReduceMotion, cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue,
+  Easing, ReduceMotion, cancelAnimation, runOnJS, useAnimatedProps, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue,
 } from 'react-native-reanimated';
 import { isDimFlashingLightsEnabled } from '../../../../modules/flash-safety';
-import { playHaptic } from '../../../gamekit/Haptics';
+import { playHaptic, queueHaptic } from '../../../gamekit/Haptics';
 import { playMoment } from '../../../gamekit/audio/playMoment';
 import { useReduceMotionPreference } from '../../../hooks/useReducedGameMotion';
 import { usePowerBudget } from '../../../power';
@@ -53,6 +53,9 @@ export const RIDE_UP = {
   leaveMs: 260,
   /** The coin tick ladder while the bar fills. */
   ticks: 6,
+  /** The earned row rolls with the bar: stat i starts at ringAt + i x statStepMs and rolls for statMs. */
+  statStepMs: 120,
+  statMs: 600,
   sparkles: 12,
   confetti: 28,
 } as const;
@@ -194,6 +197,54 @@ export function RideUpKicker({ active, style, children }: { readonly active: boo
   return <Animated.Text style={[style, styles.kickerGlow, styles.kickerOrigin, animated]}>{children}</Animated.Text>;
 }
 
+Animated.addWhitelistedNativeProps({ text: true });
+const RollingInput = Animated.createAnimatedComponent(TextInput);
+
+/** When stat `index` of the earned row lands on "Your ride's up!" (ms from the card's first frame). */
+export function rideUpStatLandsAt(index: number): number {
+  return RIDE_UP.ringAt + index * RIDE_UP.statStepMs + RIDE_UP.statMs;
+}
+
+/**
+ * A number that rolls up from 0 on the UI thread (no React render per digit), then pops
+ * 1.12x and settles on the frame it lands. On "Your ride's up!" the earned row and the
+ * minutes roll with the gold bar so every final number is on screen by about 1.4 s, even
+ * when the JS thread is busy. Reduce Motion shows the number at once.
+ */
+export function RollingValue({ value, prefix = '', suffix = '', delayMs, durationMs, reduced, tick = false, style }: {
+  readonly value: number; readonly prefix?: string; readonly suffix?: string; readonly delayMs: number;
+  readonly durationMs: number; readonly reduced: boolean;
+  /** A selection tick in the hand on the landing frame. */
+  readonly tick?: boolean;
+  readonly style?: StyleProp<TextStyle>;
+}) {
+  const start = reduced || value <= 0 ? value : 0;
+  const shown = useSharedValue(start);
+  const pop = useSharedValue(1);
+  const alive = useRef(true);
+  const landed = () => { if (alive.current && tick) queueHaptic('tickSelection'); };
+  useEffect(() => {
+    alive.current = true;
+    if (reduced || value <= 0) { shown.value = value; return () => { alive.current = false; }; }
+    shown.value = 0;
+    shown.value = withDelay(delayMs, withTiming(value, { duration: durationMs, easing: EASE.out }, ok => {
+      if (ok) runOnJS(landed)();
+    }));
+    pop.value = withDelay(delayMs + durationMs, withSequence(withTiming(1.12, { duration: DURATION.tap }), withSpring(1, SPRING.stamp)));
+    return () => { alive.current = false; cancelAnimation(shown); cancelAnimation(pop); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, reduced]);
+  const animatedProps = useAnimatedProps(() => {
+    const text = prefix + String(Math.round(shown.value)) + suffix;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { text, defaultValue: text } as any;
+  });
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  return <RollingInput editable={false} caretHidden pointerEvents="none" underlineColorAndroid="transparent"
+    accessible={false} defaultValue={prefix + String(start) + suffix} animatedProps={animatedProps}
+    style={[styles.rolling, style, popStyle]} />;
+}
+
 /** One shower of confetti over the whole recap, on the burst (the only full-screen piece; no veil). */
 export default function RideUpCelebration({ rideName }: { readonly rideName: string }) {
   const preference = useReduceMotionPreference();
@@ -229,6 +280,7 @@ function Confetti({ rideName }: { readonly rideName: string }) {
 }
 
 const styles = StyleSheet.create({
+  rolling: { padding: 0, textAlign: 'center' },
   bar: { position: 'absolute', left: 0, right: 0, bottom: 0, height: BAR, backgroundColor: GOLD_FX.rays,
     borderTopWidth: 2, borderTopColor: '#fff2b0', transformOrigin: 'left' },
   glint: { position: 'absolute', left: 0, bottom: -3, width: 20, height: BAR + 6, borderRadius: 10, backgroundColor: '#fff6cf' },

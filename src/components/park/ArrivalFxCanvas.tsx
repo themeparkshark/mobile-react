@@ -21,12 +21,16 @@ type Point = { x: number; y: number };
 export interface ConfettiPieceSpec {
   readonly x: number; readonly delay: number; readonly fall: number; readonly drift: number;
   readonly spin: number; readonly w: number; readonly color: string;
+  /** A tumbling gold coin instead of a paper piece (the golden arrival's rain). */
+  readonly coin?: boolean;
 }
 
 const CONFETTI_COLORS = [GOLD_FX.rays, BRAND.white, BRAND.blueBright, BRAND.gold, BRAND.sky, GOLD_FX.raysSoft];
+/** The golden arrival: gold and white only, and every third piece is a gold coin. */
+const GOLDEN_COLORS = [GOLD_FX.rays, BRAND.gold, '#fff3b0', BRAND.white, GOLD_FX.raysSoft, BRAND.gold];
 
 /** Deterministic pieces (no Math.random in render): a seed makes the second shower different from the first. */
-export function confettiPieces(count: number, width: number, fall: number, seed: number): ConfettiPieceSpec[] {
+export function confettiPieces(count: number, width: number, fall: number, seed: number, golden = false): ConfettiPieceSpec[] {
   return Array.from({ length: Math.max(0, count) }, (_, k) => {
     const i = k + seed;
     return {
@@ -36,7 +40,8 @@ export function confettiPieces(count: number, width: number, fall: number, seed:
       drift: (i % 2 ? 1 : -1) * (14 + ((i * 17) % 22)),
       spin: (i % 2 ? 1 : -1) * (240 + ((i * 41) % 300)),
       w: 13 + (i % 3) * 4,
-      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+      color: (golden ? GOLDEN_COLORS : CONFETTI_COLORS)[i % CONFETTI_COLORS.length],
+      coin: golden && k % 3 === 0,
     };
   });
 }
@@ -58,6 +63,20 @@ export function drawRain(canvas: SkCanvas, paint: SkPaint, ink: SkPaint, progres
     canvas.rotate(piece.spin * t, 0, 0);
     // The flutter: the piece turns over as it falls.
     canvas.scale(1, 0.25 + 0.75 * Math.abs(Math.cos(t * Math.PI * 4)));
+    if (piece.coin) {
+      // A gold coin tumbling end over end: a gold disc, a lighter face and a navy rim.
+      const r = piece.w * 0.55;
+      paint.setColor(Skia.Color(GOLD_FX.rays));
+      paint.setAlphaf(alpha);
+      canvas.drawCircle(0, 0, r, paint);
+      paint.setColor(Skia.Color('#fff3b0'));
+      paint.setAlphaf(alpha);
+      canvas.drawCircle(-r * 0.15, -r * 0.15, r * 0.55, paint);
+      ink.setAlphaf(0.5 * alpha);
+      canvas.drawCircle(0, 0, r, ink);
+      canvas.restore();
+      continue;
+    }
     const rect = Skia.RRectXY(Skia.XYWHRect(-piece.w / 2, -h / 2, piece.w, h), 2, 2);
     paint.setColor(Skia.Color(piece.color));
     paint.setAlphaf(alpha);

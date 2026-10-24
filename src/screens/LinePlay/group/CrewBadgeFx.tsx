@@ -91,7 +91,9 @@ export const CrewBadgeFx = memo(function CrewBadgeFx({ joinOrder, starsKey, redu
   const plusStyle = useAnimatedStyle(() => {
     const t = plus.value;
     if (t <= 0 || t >= 1) return { opacity: 0 };
-    return { opacity: t < 0.2 ? t / 0.2 : 1 - (t - 0.2) / 0.8, transform: [{ translateY: -24 * t }, { scale: 0.7 + 0.3 * Math.min(1, t * 3) }] };
+    // Pops in past full size (SPRING.pop feel), then rises and fades.
+    const pop = t < 0.18 ? 0.6 + 0.65 * (t / 0.18) : t < 0.3 ? 1.25 - 0.25 * ((t - 0.18) / 0.12) : 1;
+    return { opacity: t < 0.12 ? t / 0.12 : t < 0.55 ? 1 : 1 - (t - 0.55) / 0.45, transform: [{ translateY: -30 * t }, { scale: pop }] };
   });
 
   return <View>
@@ -110,19 +112,23 @@ function Heart({ index, t }: { readonly index: number; readonly t: SharedValue<n
     if (k <= 0 || k >= 1) return { opacity: 0 };
     return {
       opacity: k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85,
-      transform: [{ translateX: (index - 1) * 7 + 5 * Math.sin(k * Math.PI * 2 + index) }, { translateY: -34 * k }, { scale: 0.6 + 0.4 * k }],
+      transform: [{ translateX: (index - 1) * 12 + 7 * Math.sin(k * Math.PI * 2 + index) }, { translateY: -48 * k }, { scale: 0.7 + 0.4 * k }],
     };
   });
-  return <Animated.View style={[styles.heart, style]}><GameIcon name="heart" size={16} mono={HEART_GOLD} /></Animated.View>;
+  return <Animated.View style={[styles.heart, style]}><GameIcon name="heart" size={HEART_SIZE} mono={HEART_GOLD} /></Animated.View>;
 }
 
-/** Gold, never red (red reads as a miss). */
+/** Gold, never red (red reads as a miss). Big enough to read at a glance (and on a contact sheet). */
 const HEART_GOLD = '#ffc928';
+export const HEART_SIZE = 22;
+/** The "+1" is at least 22 pt tall. */
+export const PLUS_FONT = 20;
 
 const styles = StyleSheet.create({
   float: { position: 'absolute', left: 0, right: 0, top: -4, alignItems: 'center' },
-  plus: { position: 'absolute', top: -14, backgroundColor: BRAND.gold, borderRadius: 9, borderWidth: 2, borderColor: BRAND.white,
-    paddingHorizontal: 4 },
-  plusText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
-  heart: { position: 'absolute', top: 0 },
+  plus: { position: 'absolute', top: -26, minHeight: 28, justifyContent: 'center', backgroundColor: BRAND.gold, borderRadius: 14,
+    borderWidth: 2.5, borderColor: BRAND.white, paddingHorizontal: 7,
+    shadowColor: BRAND.navy, shadowOpacity: 0.35, shadowOffset: { width: 0, height: 2 }, shadowRadius: 0 },
+  plusText: { fontFamily: 'Shark', fontSize: PLUS_FONT, lineHeight: 23, color: BRAND.navy },
+  heart: { position: 'absolute', top: -6 },
 });

@@ -7,11 +7,11 @@
  * keyed to the landing (nothing loops, nothing runs at rest). Reduce Motion:
  * no travel; the badge simply shows and the chime and buzz stay.
  */
-import { LinearGradient } from 'expo-linear-gradient';
+import { Canvas, Picture, Skia, TileMode, createPicture, vec } from '@shopify/react-native-skia';
 import { useEffect, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
-  cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue,
+  cancelAnimation, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue,
 } from 'react-native-reanimated';
 import { withDelay, withSequence, withSpring, withTiming } from './park/momentTime';
 import { queueHaptic } from '../gamekit/Haptics';
@@ -88,13 +88,24 @@ function rowCompleteCue() {
 
 /**
  * A just-completed row celebrates, over the coins: one bright gold-and-white light bar sweeps across it,
- * the plank glows gold for a beat, and a five-pip "row done" badge pops on the plank's end.
+ * the plank glows gold for a beat, and a five-pip "row done" pill pops onto the plank (inside the shelf
+ * panel) with one shine across it. The bar and the plank glow are one small Skia canvas (one picture per
+ * frame). It mounts with the shelf (`armed`, hidden) so nothing new mounts on the landing frame.
  */
-export function RowShine({ landingKey, width, slots = 5 }: { readonly landingKey?: string | null; readonly width: number; readonly slots?: number }) {
+export function RowShine({ landingKey, armed = false, width, height, slots = 5 }: {
+  readonly landingKey?: string | null;
+  /** Mount early (hidden) when this row will complete with the arriving coin. */
+  readonly armed?: boolean;
+  readonly width: number;
+  /** The row's height (the canvas covers the coins and the plank). */
+  readonly height: number;
+  readonly slots?: number;
+}) {
   const reduced = useReducedGameMotion();
   const t = useSharedValue(0);
   const glow = useSharedValue(0);
   const badge = useSharedValue(0);
+  const gleam = useSharedValue(0);
   useEffect(() => {
     if (!landingKey) return undefined;
     if (reduced) { rowCompleteCue(); badge.value = 1; return undefined; }
@@ -103,8 +114,9 @@ export function RowShine({ landingKey, width, slots = 5 }: { readonly landingKey
     glow.value = withDelay(SHELF_LANDING.shineAfterMs, withSequence(withTiming(1, { duration: 200, easing: EASE.out }),
       withDelay(SHELF_LANDING.plankGlowMs - 400, withTiming(0, { duration: 400, easing: EASE.in }))));
     badge.value = withDelay(SHELF_LANDING.badgeAt, withSpring(1, SPRING.pop));
-    return () => { cancelAnimation(t); cancelAnimation(glow); cancelAnimation(badge); };
-  }, [landingKey, reduced, t, glow, badge]);
+    gleam.value = withDelay(SHELF_LANDING.badgeAt + 160, withTiming(1, { duration: 420, easing: EASE.inOut }));
+    return () => { cancelAnimation(t); cancelAnimation(glow); cancelAnimation(badge); cancelAnimation(gleam); };
+  }, [landingKey, reduced, t, glow, badge, gleam]);
   // The cue rides the same UI clock as the band: it fires when the band first moves.
   const started = useSharedValue(0);
   useEffect(() => {
@@ -114,39 +126,59 @@ export function RowShine({ landingKey, width, slots = 5 }: { readonly landingKey
     return () => cancelAnimation(started);
   }, [landingKey, reduced, started]);
   const band = Math.max(70, width * 0.3);
-  const style = useAnimatedStyle(() => ({
-    opacity: t.value <= 0 || t.value >= 1 ? 0 : 1,
-    transform: [{ translateX: -band + (width + band) * t.value }, { skewX: '-18deg' }],
-  }));
-  const glowStyle = useAnimatedStyle(() => ({ opacity: 0.85 * glow.value }));
+  const picture = useDerivedValue(() => createPicture(canvas => {
+    const g = glow.value, p = t.value;
+    if (g > 0.01) {
+      // The plank glows gold under the coins.
+      const paint = Skia.Paint();
+      paint.setAntiAlias(true);
+      paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, height - 34), vec(0, height),
+        [Skia.Color('rgba(255,207,59,0)'), Skia.Color('rgba(255,207,59,0.9)'), Skia.Color('rgba(255,246,207,0.95)')],
+        [0, 0.55, 1], TileMode.Clamp));
+      paint.setAlphaf(0.85 * g);
+      canvas.drawRect(Skia.XYWHRect(0, height - 34, width, 34), paint);
+    }
+    if (p > 0 && p < 1) {
+      // One skewed gold-and-white bar of light sweeping left to right.
+      const x = -band + (width + band) * p;
+      const paint = Skia.Paint();
+      paint.setAntiAlias(true);
+      paint.setShader(Skia.Shader.MakeLinearGradient(vec(x, 0), vec(x + band, 0),
+        [Skia.Color('rgba(255,236,150,0)'), Skia.Color('rgba(255,236,150,0.65)'), Skia.Color('rgba(255,255,255,1)'),
+          Skia.Color('rgba(255,236,150,0.65)'), Skia.Color('rgba(255,236,150,0)')], [0, 0.3, 0.5, 0.7, 1], TileMode.Clamp));
+      const path = Skia.Path.Make();
+      const skew = height * 0.32;
+      path.moveTo(x + skew, 0); path.lineTo(x + band + skew, 0); path.lineTo(x + band - skew, height); path.lineTo(x - skew, height);
+      path.close();
+      canvas.drawPath(path, paint);
+    }
+  }, { width, height }));
   const badgeStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, badge.value * 2),
     transform: [{ scale: reduced ? 1 : 1.7 - 0.7 * badge.value }],
   }));
-  if (!landingKey) return null;
+  const gleamStyle = useAnimatedStyle(() => ({
+    opacity: gleam.value > 0 && gleam.value < 1 ? 1 : 0,
+    transform: [{ translateX: -24 + 110 * gleam.value }, { rotate: '18deg' }],
+  }));
+  if (!landingKey && !armed) return null;
   return <>
-    {!reduced && <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
-      {/* The plank glows gold under the coins for a beat. */}
-      <Animated.View style={[styles.plankGlow, glowStyle]}>
-        <LinearGradient colors={['rgba(255,207,59,0)', 'rgba(255,207,59,0.9)', 'rgba(255,246,207,0.95)']}
-          start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
-      </Animated.View>
-      <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, width: band }, style]}>
-        <LinearGradient colors={['rgba(255,236,150,0)', 'rgba(255,236,150,0.65)', 'rgba(255,255,255,1)', 'rgba(255,236,150,0.65)', 'rgba(255,236,150,0)']}
-          start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
-      </Animated.View>
-    </View>}
-    {/* "Row done" with zero words: five gold pips on a little plaque at the plank's end. */}
-    <Animated.View pointerEvents="none" style={[styles.badge, badgeStyle]} accessible accessibilityLabel={`Row complete, ${slots} of ${slots}`}>
+    {!reduced && <Canvas pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}><Picture picture={picture} /></Canvas>}
+    {/* "Row done" with zero words: five gold pips on a gold-rimmed pill sitting on the plank. */}
+    <Animated.View pointerEvents="none" style={[styles.badge, badgeStyle]} accessible={!!landingKey}
+      accessibilityLabel={`Row complete, ${slots} of ${slots}`}>
       {Array.from({ length: slots }, (_, i) => <View key={i} style={styles.pip} />)}
+      {!reduced && <Animated.View style={[styles.gleam, gleamStyle]} />}
     </Animated.View>
   </>;
 }
 
 const styles = StyleSheet.create({
   clip: { overflow: 'hidden', borderRadius: 14 },
-  plankGlow: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 34 },
-  badge: { position: 'absolute', right: -4, bottom: -6, flexDirection: 'row', gap: 3, paddingHorizontal: 6, paddingVertical: 4,
-    borderRadius: 10, backgroundColor: '#05346e', borderWidth: 2, borderColor: '#ffffff' },
-  pip: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#ffcf3b', borderWidth: 1, borderColor: '#fff6cf' },
+  // On the plank, inside the shelf panel: cream with a gold rim (never a dark tab hanging off the edge).
+  badge: { position: 'absolute', right: 8, bottom: 6, flexDirection: 'row', gap: 3, paddingHorizontal: 7, paddingVertical: 4,
+    borderRadius: 12, backgroundColor: '#fff8e4', borderWidth: 2.5, borderColor: '#e9a800', overflow: 'hidden',
+    shadowColor: '#05346e', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 2 }, shadowRadius: 0 },
+  pip: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#ffcf3b', borderWidth: 1.5, borderColor: '#c88a00' },
+  gleam: { position: 'absolute', top: -6, bottom: -6, width: 12, backgroundColor: 'rgba(255,255,255,0.85)' },
 });

@@ -7,13 +7,13 @@
  *
  * Only server-confirmed amounts are shown as earned; nothing here grants.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
-import RideUpCelebration, { RIDE_UP, RideUpHero, RideUpKicker } from './RideUpCelebration';
+import RideUpCelebration, { RIDE_UP, RideUpHero, RideUpKicker, RollingValue } from './RideUpCelebration';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
 import { BRAND, GameButton, GameIcon, type GameIconName } from '../../../ui';
 import type { PredictionResolution } from '../../../services/lineplay/content';
@@ -30,26 +30,9 @@ import { parkDayLine, recapRows, type RecapRewardsInput } from '../../../service
 const QUEUE_STAMP_IMAGE = require('../../../../assets/images/stamps/stamp-09.png');
 const QUEUE_RECAP_SHARK = require('../../../../assets/images/screens/lineplay/queue-recap-shark.png');
 
-/** Counts a number up once on arrival; reduced motion shows it at once. */
-function useCountUp(target: number, delayMs: number, reducedMotion: boolean): number {
-  const [value, setValue] = useState(reducedMotion ? target : 0);
-  const frame = useRef<number | null>(null);
-  useEffect(() => {
-    if (reducedMotion || target <= 0) { setValue(target); return; }
-    const duration = Math.min(900, 380 + target * 18);
-    let start: number | null = null;
-    const timer = setTimeout(() => {
-      const step = (now: number) => {
-        start ??= now;
-        const t = Math.min(1, (now - start) / duration);
-        setValue(Math.round(target * (1 - Math.pow(1 - t, 3))));
-        if (t < 1) frame.current = requestAnimationFrame(step);
-      };
-      frame.current = requestAnimationFrame(step);
-    }, delayMs);
-    return () => { clearTimeout(timer); if (frame.current != null) cancelAnimationFrame(frame.current); };
-  }, [target, delayMs, reducedMotion]);
-  return value;
+/** How long a recap number rolls (bigger numbers roll a little longer, capped). */
+function rollMs(target: number): number {
+  return Math.min(900, 380 + target * 18);
 }
 
 /** "Memory Match x2 · Ride trivia" from a list of played activity names. */
@@ -59,16 +42,21 @@ export function playedSummary(names: readonly string[]): string {
   return Array.from(counts, ([name, count]) => count > 1 ? `${name} x${count}` : name).join(' · ');
 }
 
-function RecapStat({ icon, value, prefix = '', label, index, reducedMotion, after = 0 }: {
+function RecapStat({ icon, value, prefix = '', label, index, reducedMotion, rideUp = false }: {
   icon: GameIconName; value: number; prefix?: string; label: string; index: number; reducedMotion: boolean;
-  /** "Your ride's up!" plays first: the chips stagger in under its burst. */
-  after?: number;
+  /**
+   * "Your ride's up!": the chip is in place from the card's first frame and its number rolls
+   * with the gold bar (RIDE_UP.statStepMs apart), landing with a pop and a tick by about 1.4 s.
+   */
+  rideUp?: boolean;
 }) {
-  const shown = useCountUp(value, after + 260 + index * 90, reducedMotion);
-  return <Animated.View entering={reducedMotion ? undefined : ZoomIn.delay(after + 160 + index * 90).springify().damping(11)}
+  const delayMs = rideUp ? RIDE_UP.ringAt + index * RIDE_UP.statStepMs : 260 + index * 90;
+  const durationMs = rideUp ? RIDE_UP.statMs : rollMs(value);
+  return <Animated.View entering={reducedMotion || rideUp ? undefined : ZoomIn.delay(160 + index * 90).springify().damping(11)}
     style={styles.recapStat} accessible accessibilityLabel={`${prefix}${value} ${label}`}>
     <GameIcon name={icon} size={30} />
-    <Text style={styles.recapStatValue}>{prefix}{shown}</Text>
+    <RollingValue value={value} prefix={prefix} delayMs={delayMs} durationMs={durationMs} reduced={reducedMotion}
+      tick={rideUp} style={styles.recapStatValue} />
     <Text style={styles.recapStatLabel}>{label}</Text>
   </Animated.View>;
 }
@@ -166,7 +154,7 @@ export default function SessionRecap({
   const rows = bonusMode ? recapRows(bonusRecap) : [];
   const parkDay = bonusMode ? parkDayLine(bonusRecap) : null;
   const reducedMotion = useReducedGameMotion();
-  const minutes = useCountUp(Math.floor(elapsedSeconds / 60), 120, reducedMotion);
+  const wholeMinutes = Math.floor(elapsedSeconds / 60);
   const secs = elapsedSeconds % 60;
   const rideUp = endReason === 'boarded';
   const leftQueue = endReason === 'left_queue';
@@ -175,8 +163,6 @@ export default function SessionRecap({
     (coin.available_parts ?? 0) >= coin.parts_to_next_level && playerEnergy != null &&
     playerEnergy >= coin.energy_to_next_level;
   let stat = 0;
-  // The chips land under the celebration's burst (RIDE_UP.confettiAt), 90 ms apart.
-  const after = rideUp && !reducedMotion ? RIDE_UP.confettiAt - 160 : 0;
 
   return (
     <View style={{ flex: 1 }}>
@@ -188,8 +174,12 @@ export default function SessionRecap({
         <View style={styles.recapHeroCopy}>
           <RideUpKicker active={rideUp} style={styles.recapKicker}>{rideUp ? 'YOUR RIDE’S UP!' : leftQueue ? 'WAIT WRAPPED UP' : 'LINEPLAY COMPLETE'}</RideUpKicker>
           <Text style={styles.recapRide} numberOfLines={2}>{rideName}</Text>
-          <Text style={styles.recapTime} accessibilityLabel={`${Math.floor(elapsedSeconds / 60)} minutes ${secs} seconds`}>
-            {minutes}m {secs}s</Text>
+          <View accessible accessibilityLabel={`${wholeMinutes} minutes ${secs} seconds`}>
+            {/* The minutes roll with the gold bar on "Your ride's up!" (UI thread). */}
+            <RollingValue value={wholeMinutes} suffix={`m ${secs}s`} reduced={reducedMotion}
+              delayMs={rideUp ? RIDE_UP.ringAt : 120} durationMs={rideUp ? RIDE_UP.ringMs : rollMs(wholeMinutes)}
+              style={[styles.recapTime, styles.recapTimeRoll]} />
+          </View>
           <Text style={styles.recapSub}>{rideUp || leftQueue ? 'of line games, all saved' : 'time played'}</Text>
         </View>
         {heroInventory && onOpenInventory ? (
@@ -225,12 +215,12 @@ export default function SessionRecap({
       <Text style={styles.recapSectionTitle}>{rewardsConfirmed ? 'WHAT YOU EARNED' : 'YOUR LINEPLAY ADVENTURE'}</Text>
       <View style={styles.recapStats}>
         <RecapStat icon="star" value={activityCount} label={activityCount === 1 ? 'activity' : 'activities'}
-          index={stat++} reducedMotion={reducedMotion} after={after} />
-        {rewardsConfirmed && <RecapStat icon="energy" value={earnedEnergy} prefix="+" label="energy" index={stat++} reducedMotion={reducedMotion} after={after} />}
-        {rewardsConfirmed && <RecapStat icon="xp" value={experience} prefix="+" label="xp" index={stat++} reducedMotion={reducedMotion} after={after} />}
-        {rewardsConfirmed && <RecapStat icon="parts" value={partsCount} label="parts" index={stat++} reducedMotion={reducedMotion} after={after} />}
+          index={stat++} reducedMotion={reducedMotion} rideUp={rideUp} />
+        {rewardsConfirmed && <RecapStat icon="energy" value={earnedEnergy} prefix="+" label="energy" index={stat++} reducedMotion={reducedMotion} rideUp={rideUp} />}
+        {rewardsConfirmed && <RecapStat icon="xp" value={experience} prefix="+" label="xp" index={stat++} reducedMotion={reducedMotion} rideUp={rideUp} />}
+        {rewardsConfirmed && <RecapStat icon="parts" value={partsCount} label="parts" index={stat++} reducedMotion={reducedMotion} rideUp={rideUp} />}
         {rewardsConfirmed && ticketsEarned > 0 && <RecapStat icon="ticket" value={ticketsEarned} prefix="+"
-          label={ticketsEarned === 1 ? 'ticket' : 'tickets'} index={stat++} reducedMotion={reducedMotion} after={after} />}
+          label={ticketsEarned === 1 ? 'ticket' : 'tickets'} index={stat++} reducedMotion={reducedMotion} rideUp={rideUp} />}
       </View>
 
       {rewardsConfirmed && queueStamp?.earned && onOpenStampBook && (
@@ -451,6 +441,7 @@ const styles = StyleSheet.create({
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   recapTime: { color: '#ffffff', fontFamily: 'Shark', fontSize: 36, marginTop: spacing.xs,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
+  recapTimeRoll: { textAlign: 'left', alignSelf: 'flex-start', minWidth: 160 },
   recapSub: { color: '#d6f4ff', fontFamily: 'Knockout', fontSize: 14 },
   recapSectionTitle: { color: '#073b74', fontFamily: 'Shark', fontSize: 17, textAlign: 'center', marginTop: spacing.lg },
   recapStats: {
