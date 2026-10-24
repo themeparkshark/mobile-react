@@ -13,6 +13,7 @@ import FlameUpRow from './FlameUpRow';
 import { EmberCard, FreezeSavedCard, FreezeSlots } from './FreezeMoments';
 import { GameIcon, ICON_SOURCES } from '../../ui';
 import type { PaidRewards } from '../../api/endpoints/retention';
+import NextUpRail from '../nextUp/NextUpRail';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
@@ -85,6 +86,8 @@ export default function StreakFlamePreview() {
             <Pressable key={c} onPress={() => play(c)} style={styles.btn}><Text style={styles.btnText}>{c}</Text></Pressable>
           ))}
         </View>
+        <Text style={styles.h}>Next Up (real XP toward the next level chest)</Text>
+        <NextUpRail item={{ kind: 'ride', icon: 'coin', title: 'Win a ride coin', action: { type: 'ride' } }} onAction={() => undefined} />
         <View style={styles.freezeMock}>
           <FlameArt days={7} size={70} reducedMotion={false} />
           <FreezeSlots key={arriveKey} freezes={freezes} cap={2} arrive={arrive} from={{ x: -140, y: 160 }} reducedMotion={false} />

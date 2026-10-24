@@ -605,7 +605,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     content = <FreezeSavedCard streak={view.streak} days={view.days} reducedMotion={reducedMotion} onDone={close} />;
   } else if (view?.k === 'welcome') {
     title = 'Welcome back!';
-    content = <WelcomeBack cards={view.cards} reducedMotion={reducedMotion} onDone={close} />;
+    // Mounted only while it is really in front, so its entrance plays when the kid can see it (never behind another layer).
+    content = front ? <WelcomeBack cards={view.cards} reducedMotion={reducedMotion} onDone={close} /> : null;
   } else if (view?.k === 'ember') {
     title = 'New day!';
     content = <EmberCard was={view.was} reducedMotion={reducedMotion} onDone={close} />;
