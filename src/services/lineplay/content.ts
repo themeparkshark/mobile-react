@@ -286,7 +286,7 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
     difficulty: 'hard', fact: 'The Matterhorn was the first roller coaster with tubular steel track.', source: 'Disney Parks Blog',
   },
   {
-    id: 'gen-46', parkId: 6, question: 'Which holiday shares its date with Animal Kingdom’s 1998 opening?',
+    id: 'gen-46', parkId: 5, question: 'Which holiday shares its date with Animal Kingdom’s 1998 opening?',
     choices: ['Earth Day', 'New Year’s Day', 'Halloween', 'Independence Day'], correctIndex: 0,
     difficulty: 'medium', fact: 'Disney’s Animal Kingdom opened on Earth Day, April 22, 1998.', source: 'Disney Parks Blog',
   },
