@@ -46,7 +46,9 @@ const LABEL_PX = 110;
 /** Screen gutters the label never crosses (pt), its outline width, and how much of the inner width it rests at. */
 export const FINISH_GUTTER = 16;
 const LABEL_OUTLINE = 14;
-const REST_OF_GUTTER = 0.86;
+const REST_OF_GUTTER = 0.78;
+/** The slam's peak width as a share of the inner width: room for the tilt, the glyph overhang and the shadow. */
+const PEAK_OF_GUTTER = 0.9;
 
 export interface FinishBeatProps {
   /** Bump to fire (0 never fires). */
@@ -159,7 +161,7 @@ const FinishCanvas = React.memo(function FinishCanvas({ clock, label, width, hei
   // clipped FNISH for 2 frames). The extra energy goes into the ray fan's swell instead.
   const inner = Math.max(1, width - 2 * FINISH_GUTTER);
   const fit = Math.min(1, (inner * REST_OF_GUTTER) / Math.max(1, (raw + LABEL_OUTLINE) * 1.12));
-  const maxK = inner / Math.max(1, raw + LABEL_OUTLINE);
+  const maxK = (inner * PEAK_OF_GUTTER) / Math.max(1, raw + LABEL_OUTLINE);
   const cx = width / 2;
   const pose = useDerivedValue(() => finishPose(clock.value, reduced, handoff));
   const labelT = useDerivedValue(() => {

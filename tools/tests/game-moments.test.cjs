@@ -776,16 +776,19 @@ test('r6: the camera snaps to rest instead of writing a sub-pixel transform for 
 test('r6: FINISH! never crosses the 16 pt gutters, the fan swells brighter, and repeat Bursts get the short beat', () => {
   const fb = read('src/gamekit/fx/FinishBeat.tsx');
   assert.match(fb, /export const FINISH_GUTTER = 16;/);
-  assert.match(fb, /const maxK = inner \/ Math\.max\(1, raw \+ LABEL_OUTLINE\);/);
+  assert.match(fb, /const maxK = \(inner \* PEAK_OF_GUTTER\) \/ Math\.max\(1, raw \+ LABEL_OUTLINE\);/);
+  assert.match(fb, /const REST_OF_GUTTER = 0\.78;/);
+  assert.match(fb, /const PEAK_OF_GUTTER = 0\.9;/);
   assert.match(fb, /const cap = kx > maxK \? maxK \/ kx : 1;/);
   // At the slam's peak (1.8x) the capped width stays inside the gutters for a long word on an SE.
   const width = 375, raw = 480, outline = 14;
   const inner = width - 32;
-  const fit = Math.min(1, (inner * 0.86) / ((raw + outline) * 1.12));
-  const maxK = inner / (raw + outline);
+  const fit = Math.min(1, (inner * 0.78) / ((raw + outline) * 1.12));
+  const maxK = (inner * 0.9) / (raw + outline);
   const kx = 1.8 * 1.0 * fit;
   const shown = Math.min(kx, maxK) * (raw + outline);
-  assert.ok(shown <= inner + 1e-9, `peak ${shown} fits ${inner}`);
+  assert.ok(shown <= inner * 0.9 + 1e-9, `peak ${shown} fits ${inner} with room for the tilt`);
+  assert.ok(maxK / fit > 1.1, 'the slam still has visible travel down to its rest size');
   assert.match(fb, /const raysA = useDerivedValue\(\(\) => Math\.min\(1, pose\.value\.gold \+ 0\.25 \* swell \* pose\.value\.bloom\)\);/);
   assert.match(fb, /const swell = flash > 0 \? 1 : 0\.4;/, 'Dim Flashing Lights keeps a softer swell');
   // The short beat leaves sooner and keeps one shared exit.
