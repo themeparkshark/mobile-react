@@ -323,10 +323,17 @@ export function ResultsCard({
 }
 
 /** One brag chip (cream, navy ink), shared by every results card. */
+/** What a chip reads aloud: one of a thing is never plural ("1 RIGHT ANSWER", not "1 RIGHT ANSWERS"). */
+export function chipA11y(count: string | number, label: string): string {
+  const one = String(count).trim() === '1';
+  const word = one && /[^S]S$/.test(label) ? label.slice(0, -1) : label;
+  return `${count} ${word}`;
+}
+
 export function ResultChip({ label, value, pips, icon, iconRow }: ResultStat) {
   if (iconRow) {
     return (
-      <View style={styles.chip} accessible accessibilityLabel={`${value} ${label}`}>
+      <View style={styles.chip} accessible accessibilityLabel={chipA11y(value, label)}>
         <View style={styles.iconRow}>
           {Array.from({ length: Math.max(1, iconRow.of) }, (_, i) => (
             <GameIcon key={i} name={iconRow.name} size={i < iconRow.on ? 26 : 20} mono={i < iconRow.on ? undefined : '#9cc9ec'} />
@@ -337,7 +344,7 @@ export function ResultChip({ label, value, pips, icon, iconRow }: ResultStat) {
     );
   }
   return (
-    <View style={styles.chip} accessible accessibilityLabel={pips ? `${pips[0]} ${label}` : `${value} ${label}`}>
+    <View style={styles.chip} accessible accessibilityLabel={chipA11y(pips ? pips[0] : value, label)}>
       {pips ? (
         <View style={styles.pips}>
           {Array.from({ length: pips[1] }, (_, i) => <View key={i} style={[styles.pip, i < pips[0] && styles.pipOn]} />)}

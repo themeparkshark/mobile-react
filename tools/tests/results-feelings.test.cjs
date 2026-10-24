@@ -1024,3 +1024,19 @@ test('the shared feeling pill keeps its fill: the pop is on a wrapper, the fill 
   assert.match(card, /<Animated\.View style=\{\[styles\.nearPop, bestStyle\]\}>\s*<View style=\{\[styles\.nearLine, feeling\.tone === 'gold' && styles\.nearWin\]\}>/);
   assert.doesNotMatch(card, /styles\.nearLine, feeling\.tone === 'gold' && styles\.nearWin, bestStyle/);
 });
+
+test('a results chip reads one of a thing as singular (1 RIGHT ANSWER, 1 BURST), more as plural', () => {
+  const src = read('src/gamekit/results/ResultsCard.tsx');
+  const fn = src.match(/export function chipA11y[\s\S]*?\n}\n/);
+  assert.ok(fn, 'chipA11y exists');
+  const js = ts.transpileModule(fn[0], { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const m = { exports: {} };
+  vm.runInNewContext(js, { module: m, exports: m.exports });
+  const chipA11y = m.exports.chipA11y;
+  assert.equal(chipA11y(1, 'RIGHT ANSWERS'), '1 RIGHT ANSWER');
+  assert.equal(chipA11y('1', 'BURSTS'), '1 BURST');
+  assert.equal(chipA11y(4, 'BURSTS'), '4 BURSTS');
+  assert.equal(chipA11y('x66', 'BEST COMBO'), 'x66 BEST COMBO');
+  assert.equal(chipA11y(1, 'BEST ANSWER'), '1 BEST ANSWER');
+  assert.match(src, /accessibilityLabel=\{chipA11y\(pips \? pips\[0\] : value, label\)\}/);
+});
