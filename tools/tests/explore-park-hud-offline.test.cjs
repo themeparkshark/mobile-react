@@ -39,6 +39,12 @@ test('park map retries back off calmly: 5 s, 10 s, 20 s, then every 30 s', () =>
   assert.deepEqual([0, 1, 2, 3, 8].map(mapRetryDelay), [5000, 10000, 20000, 30000, 30000]);
 });
 
+test('a first slow load reads as looking for rides; the weak-signal note waits for a failed retry', () => {
+  const read = f => require('node:fs').readFileSync(require('node:path').join(__dirname, '../../', f), 'utf8');
+  assert.match(read('src/screens/ExploreScreen/ParkMapRetry.tsx'), /calm: failed && attempt\.current === 0/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /<ParkMapRetryCard retrying=\{mapRetry\.retrying \|\| mapRetry\.calm\}/);
+});
+
 test('while the rides have not loaded, the status bar never claims every ride is open', () => {
   const read = f => require('node:fs').readFileSync(require('node:path').join(__dirname, '../../', f), 'utf8');
   // The team bar makes no ride-status claim at all (no leader = "no team has a ride yet"),

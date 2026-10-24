@@ -1290,7 +1290,7 @@ function ExploreScreen() {
       {/* The park buttons never wait on the map data: a failed load keeps them and shows a retry note. */}
       {park && !redeemables && mapLoadFailed && (
         <View pointerEvents="box-none" style={{ position: 'absolute', left: 16, right: 16, bottom: 250, zIndex: 11 }}>
-          <ParkMapRetryCard retrying={mapRetry.retrying} onRetry={mapRetry.retryNow} />
+          <ParkMapRetryCard retrying={mapRetry.retrying || mapRetry.calm} onRetry={mapRetry.retryNow} />
         </View>
       )}
       {park && (
