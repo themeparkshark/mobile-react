@@ -84,6 +84,13 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const [loading, setLoading] = useState<boolean>(true);
   const [progressStale, setProgressStale] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  // A coin that is on its way to the shelf keeps trying (a few quiet retries) before a kid has to tap anything.
+  const autoRetries = useRef(0);
+  useEffect(() => {
+    if (!progressStale || !isEarnedShelfArrival(earnedCoin) || autoRetries.current >= 3) return undefined;
+    const timer = setTimeout(() => { autoRetries.current += 1; setRefreshVersion(version => version + 1); }, 2500);
+    return () => clearTimeout(timer);
+  }, [progressStale, earnedCoin]);
   const [waitSnapshot, setWaitSnapshot] = useState<{
     parkId: number; entries: WikiLiveEntry[]; checkedAt: number;
   } | null>(null);
@@ -444,8 +451,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                 borderWidth: 2, borderColor: '#ffc932' }}>
               <Text style={{ color: '#075b9b', textAlign: 'center', fontFamily: 'Knockout', fontSize: 16 }}>
                 {currentPark
-                  ? 'Could not update your park progress. This may be old. Tap to try again.'
-                  : 'Could not load your park progress. Tap to try again.'}
+                  ? 'Your shelf did not update yet. Tap to try again.'
+                  : 'Your shelf did not load yet. Tap to try again.'}
               </Text>
             </Pressable>}
             {currentPark && tasks && secretTasks && (
@@ -683,10 +690,10 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
           {isFocused && requestKey && closedKey !== requestKey && !loading &&
             (!arrivalSlot || arrival.failed) && <View style={{ position: 'absolute', bottom: 52, left: 20, right: 20,
               backgroundColor: '#075083', borderColor: '#A6DFF5', borderWidth: 2, borderRadius: 18, padding: 16 }}>
-              <Text style={{ fontFamily: 'Shark', color: '#fff', textAlign: 'center', fontSize: 19 }}>Refresh your park to show this coin</Text>
+              <Text style={{ fontFamily: 'Shark', color: '#fff', textAlign: 'center', fontSize: 19 }}>Your new coin is on its way!</Text>
               <Pressable accessibilityRole="button" onPress={() => { setRefreshVersion(value => value + 1); arrival.notifyLayout(); }}
                 style={{ minHeight: 48, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFD34B', borderRadius: 12, marginTop: 12 }}>
-                <Text style={{ fontFamily: 'Shark', color: '#075083', fontSize: 17 }}>Retry shelf view</Text>
+                <Text style={{ fontFamily: 'Shark', color: '#075083', fontSize: 17 }}>Try again</Text>
               </Pressable>
               <Pressable accessibilityRole="button" onPress={closeArrival} style={{ minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
                 <Text style={{ fontFamily: 'Knockout', color: '#DFF6FF', fontSize: 15 }}>Keep exploring this park</Text>

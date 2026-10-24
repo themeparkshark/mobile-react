@@ -9,7 +9,7 @@ import { StyleSheet } from 'react-native';
 import { PerfOverlay, usePerfProbe } from '../../gamekit/perf/PerfOverlay';
 import { PERF_HUD, registerPerfSampler } from './momentPerf';
 
-function Hud({ top }: { readonly top: number }) {
+function Hud({ top, left }: { readonly top: number; readonly left: number }) {
   const probe = usePerfProbe(true);
   useEffect(() => {
     registerPerfSampler(() => {
@@ -18,12 +18,12 @@ function Hud({ top }: { readonly top: number }) {
     }, probe.reset);
     return () => registerPerfSampler(null, null);
   }, [probe]);
-  return <PerfOverlay probe={probe} visible style={[styles.hud, { top }]} />;
+  return <PerfOverlay probe={probe} visible style={[styles.hud, { top, left }]} />;
 }
 
-export default function DevPerfHud({ top = 430 }: { readonly top?: number }) {
+export default function DevPerfHud({ top = 560, left = 112 }: { readonly top?: number; readonly left?: number }) {
   if (!PERF_HUD) return null;
-  return <Hud top={top} />;
+  return <Hud top={top} left={left} />;
 }
 
-const styles = StyleSheet.create({ hud: { position: 'absolute', left: 8, right: 'auto', zIndex: 999 } });
+const styles = StyleSheet.create({ hud: { position: 'absolute', right: 'auto', zIndex: 999 } });
