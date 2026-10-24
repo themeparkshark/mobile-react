@@ -302,9 +302,9 @@ export { COUNT, HUD_BUMP, PRESS, STAGGER } from '../../ui/motion';
 export const REVEAL_ROWS = {
   first: 240, beat: 150, hold: 380, finishBy: 1200,
   /** The open chest stays big and centred on its full rays this long after the lid pops (the burst frame is the biggest). */
-  heroHold: 340,
+  heroHold: 300,
   /** The first prize lands this long after the chest starts gliding up into its slot. */
-  firstAfterGlide: 120,
+  firstAfterGlide: 200,
 } as const;
 
 /**
