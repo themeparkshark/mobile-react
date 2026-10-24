@@ -18,6 +18,8 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SPLASH_VIDEO = require('../../assets/videos/splash-loop.mp4');
 /** The loop's first frame (a still of the same video, no new art). */
 const SPLASH_POSTER = require('../../assets/images/screens/login/splash-loop-poster.jpg');
+/** The Splash route's art (already decoded): drawn under the video so the first Loading frame is never a blank blue sheet. */
+const SPLASH_ART = require('../../assets/images/splash-bg.png');
 /** Same blue as the native splash (app.config.js splash.backgroundColor). */
 const SPLASH_BLUE = '#0768B9';
 const SPLASH_LOGO = require('../../assets/images/splash-logo.png');
@@ -235,6 +237,10 @@ export default function LoadingScreen() {
   return (
     // Splash blue plus the video's first frame as its poster: no dark navy flash at launch.
     <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: SPLASH_BLUE }}>
+      {/* Under everything: the Splash route's own art (in memory already), so while the video's poster
+          and the logo decode, the frame still shows the title and sharks, never a blank blue sheet. */}
+      <Image source={SPLASH_ART} transition={0} contentFit="cover" accessible={false}
+        style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT }} />
       {/* Looping video background, exact screen dimensions */}
       <Video
         source={SPLASH_VIDEO}

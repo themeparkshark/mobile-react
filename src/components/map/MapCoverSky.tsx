@@ -67,7 +67,8 @@ function MapCoverSky({ done = false, fill: drivenFill }: {
         const { width: w, height: h } = e.nativeEvent.layout;
         setBox(current => (current && current.width === w && current.height === h ? current : { width: w, height: h }));
       }}>
-      {COVER_CLOUDS.map((c, i) => <CoverCloud key={i} t={t} cloud={c} width={width} height={height} />)}
+      {/* Clouds wait for the cover's own size, so they never jump from window spots to cover spots. */}
+      {box && COVER_CLOUDS.map((c, i) => <CoverCloud key={i} t={t} cloud={c} width={width} height={height} />)}
       <View style={styles.center}>
         <Animated.View style={sharkStyle}>
           <Image source={SHARK} style={{ width: sharkSize, height: sharkSize }} contentFit="contain" />

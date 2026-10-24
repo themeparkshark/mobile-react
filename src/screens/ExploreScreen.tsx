@@ -1677,7 +1677,7 @@ function ExploreScreen() {
       )}
       {/* The map's loading sky sits above every map button, card and tip (under the header and
           footer), so a kid sees one loading bar finish, then the map and its buttons in one fade. */}
-      <MapLaunchCover blockTouches style={{ top: 70 + (Constants.statusBarHeight ?? 0), zIndex: 45 }} />
+      <MapLaunchCover armOnMount blockTouches style={{ top: 70 + (Constants.statusBarHeight ?? 0), zIndex: 45 }} />
 
       {/* Community Center Modal */}
       <CommunityCenterModal

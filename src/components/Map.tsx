@@ -2,7 +2,7 @@ import { openExternal } from '../services/external';
 import MapLaunchCover from './map/MapLaunchCover';
 import { beginMapCover, mapCoverDrawn, releaseMapCover, useMapCovered } from './map/mapCover';
 import { Image } from 'expo-image';
-import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { PlayerSharkMarker } from './map/PlayerSharkMarker';
@@ -361,7 +361,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const covered = useMapCovered();
   const coverToken = useRef(0);
   const revealMap = () => mapCoverDrawn(coverToken.current);
-  useEffect(() => {
+  // A layout effect, so the cover is up before this map's first frame paints (a park map that
+  // replaces the home map never shows a blank blue frame).
+  useLayoutEffect(() => {
     const tok = beginMapCover();
     coverToken.current = tok;
     return () => releaseMapCover(tok);

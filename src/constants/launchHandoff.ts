@@ -13,14 +13,38 @@ export const COVER_FINISH_MS = 200;
 /** The cover's fade (the map and its buttons arrive together under it). */
 export const COVER_FADE_MS = 380;
 
+/** A map that mounts under the cover always gets at least this long to draw. */
+export const COVER_MAP_MIN_MS = 1200;
+/** Never longer than this from the cover's first frame (a phone too busy to mount the map in time). */
+export const COVER_HARD_MAX_MS = 5000;
+
 /**
- * When the cover lifts. A new cover gets COVER_MAX_MS. A map that replaces another while the
- * cover is still up (home map, then the park map a moment later at launch) keeps the same
- * cover and the same deadline: the bar never restarts and the cover never outlives its cap.
+ * When the cover lifts.
+ * - The map screen raises the cover on its first frame, before any map has mounted: it waits up
+ *   to COVER_HARD_MAX_MS (a safety, in case no map ever mounts).
+ * - A map mounting under that cover lifts it COVER_MAX_MS after the cover's first frame (or
+ *   earlier, once it has drawn), but always gives the map COVER_MAP_MIN_MS and never passes the
+ *   hard cap. On a phone the map mounts within a few frames, so the cover is up at most COVER_MAX_MS.
+ * - A map that replaces another under the cover keeps the same deadline: the bar never restarts.
+ * - A cover that starts with no cover up (walking into a park later) gets COVER_MAX_MS.
  */
-export function coverDeadline(now: number, current: { readonly up: boolean; readonly deadline: number } | null): number {
-  if (current?.up && current.deadline > now) return current.deadline;
-  return now + COVER_MAX_MS;
+export function coverDeadline(now: number, current: {
+  readonly up: boolean; readonly deadline: number; readonly startedAt: number; readonly mapMounted: boolean;
+} | null, mapMounting: boolean): number {
+  if (!current?.up || current.deadline <= now) return now + (mapMounting ? COVER_MAX_MS : COVER_HARD_MAX_MS);
+  if (!mapMounting || current.mapMounted) return current.deadline;
+  return Math.min(current.startedAt + COVER_HARD_MAX_MS, Math.max(current.startedAt + COVER_MAX_MS, now + COVER_MAP_MIN_MS));
+}
+
+/**
+ * The screen holds the cover while it still picks the home map or the park map at launch: the one
+ * cover (one bar, never restarted) may then wait up to the hard cap. Once the choice is made, the
+ * normal deadline is back, and the map still gets COVER_MAP_MIN_MS to draw.
+ */
+export function coverHoldDeadline(held: boolean, now: number, current: { readonly startedAt: number; readonly deadline: number }): number {
+  const hard = current.startedAt + COVER_HARD_MAX_MS;
+  if (held) return Math.max(current.deadline, hard);
+  return Math.min(hard, Math.max(current.startedAt + COVER_MAX_MS, now + COVER_MAP_MIN_MS));
 }
 
 /** Where the bar starts: the splash's share at launch, a short head start for a later cover. */

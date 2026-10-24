@@ -417,7 +417,7 @@ test('Ride Detail on an SE: a small community count is one row and the empty lin
 test('the map loading cover shows Alex clouds, a bobbing shark and the splash bar finishing', () => {
   const map = read('src/components/Map.tsx');
   // The map registers with the one screen cover; it draws the cover itself only on preview screens.
-  assert.match(map, /const tok = beginMapCover\(\);/);
+  assert.match(map, /useLayoutEffect\(\(\) => \{\s*const tok = beginMapCover\(\);/);
   assert.match(map, /return \(\) => releaseMapCover\(tok\);/);
   assert.match(map, /const revealMap = \(\) => mapCoverDrawn\(coverToken\.current\);/);
   assert.match(map, /\{coverHost === 'self' && <MapLaunchCover style=\{styles\.cover\} \/>\}/);
@@ -434,6 +434,9 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   assert.match(cover, /transform: \[\{ scaleX: /);
   assert.doesNotMatch(cover, /width: `\$\{fill\.value/);
   assert.match(cover, /transformOrigin: 'left'/);
+  assert.match(cover, /\{box && COVER_CLOUDS\.map\(/, 'clouds wait for the measured cover');
+  // The Loading screen draws the Splash art under its video: no blank blue first frame.
+  assert.match(read('src/screens/LoadingScreen.tsx'), /<Image source=\{SPLASH_ART\} transition=\{0\} contentFit="cover"/);
   // One bar from launch to map: the splash fills LAUNCH_HANDOFF_SHARE, the cover fills the rest.
   assert.match(read('src/screens/LoadingScreen.tsx'), /<Progress progress=\{progress \* LAUNCH_HANDOFF_SHARE\} \/>/);
   const k = loadTs('src/constants/launchHandoff.ts');
@@ -443,10 +446,25 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   assert.equal(k.coverStartShare(false, true, 0.83), 0.83, 'a map swapped in under the cover never restarts the bar');
   assert.equal(k.coverStartShare(false, false, 0.5), k.LATER_COVER_SHARE);
   // A home map swapped for the park map keeps the first deadline: the cover never outlives its cap.
-  assert.equal(k.coverDeadline(1000, null), 1000 + k.COVER_MAX_MS);
-  assert.equal(k.coverDeadline(2500, { up: true, deadline: 4200 }), 4200);
-  assert.equal(k.coverDeadline(5000, { up: true, deadline: 4200 }), 5000 + k.COVER_MAX_MS, 'a later cover is a new cover');
-  assert.equal(k.coverDeadline(2500, { up: false, deadline: 4200 }), 2500 + k.COVER_MAX_MS);
+  // The screen's first frame raises the cover (hard cap only, in case no map ever mounts).
+  assert.equal(k.coverDeadline(1000, null, false), 1000 + k.COVER_HARD_MAX_MS);
+  const armed = { up: true, deadline: 1000 + k.COVER_HARD_MAX_MS, startedAt: 1000, mapMounted: false };
+  // The map mounts a few frames later (a phone): the cover is up COVER_MAX_MS from its first frame.
+  assert.equal(k.coverDeadline(1050, armed, true), 1000 + k.COVER_MAX_MS);
+  // A busy phone mounts the map late: it still gets a moment to draw, never past the hard cap.
+  assert.equal(k.coverDeadline(3800, armed, true), 3800 + k.COVER_MAP_MIN_MS);
+  assert.equal(k.coverDeadline(5500, armed, true), 1000 + k.COVER_HARD_MAX_MS);
+  // A home map swapped for the park map keeps the first deadline: the cover never outlives its cap.
+  const mapped = { up: true, deadline: 4200, startedAt: 1000, mapMounted: true };
+  assert.equal(k.coverDeadline(2500, mapped, true), 4200);
+  assert.equal(k.coverDeadline(5000, mapped, true), 5000 + k.COVER_MAX_MS, 'a later cover is a new cover');
+  assert.equal(k.coverDeadline(2500, { ...mapped, up: false }, true), 2500 + k.COVER_MAX_MS);
+  assert.ok(k.COVER_HARD_MAX_MS <= 5000);
+  // Picking home or park at launch holds the one cover (never past the hard cap), then the normal deadline is back.
+  assert.equal(k.coverHoldDeadline(true, 1500, { startedAt: 1000, deadline: 4200 }), 1000 + k.COVER_HARD_MAX_MS);
+  assert.equal(k.coverHoldDeadline(false, 1500, { startedAt: 1000, deadline: 6000 }), 1000 + k.COVER_MAX_MS);
+  assert.equal(k.coverHoldDeadline(false, 3900, { startedAt: 1000, deadline: 6000 }), Math.min(6000, 3900 + k.COVER_MAP_MIN_MS));
+  assert.equal(k.coverHoldDeadline(false, 5800, { startedAt: 1000, deadline: 6000 }), 6000);
   assert.equal(k.coverCanLift(true, false), true);
   assert.equal(k.coverCanLift(true, true), false, 'held while the screen picks home or park');
   assert.equal(k.coverCanLift(false, false), false);
@@ -468,16 +486,22 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
 
 test('the map loading cover lifts on the UI thread and hides the whole HUD until the map arrives', () => {
   const store = read('src/components/map/mapCover.ts');
-  // The lift is a Reanimated withDelay scheduled at mount (UI thread), the bar on the same clock.
-  assert.match(store, /coverOpacity\.value = withDelay\(remaining, withTiming\(0/);
-  assert.match(store, /coverFill\.value = withTiming\(1, \{ duration: remaining/);
-  assert.doesNotMatch(store, /setTimeout\([^)]*lift[^)]*COVER/);
   const cover = read('src/components/map/MapLaunchCover.tsx');
-  assert.match(cover, /opacity: coverOpacity\.value/);
-  assert.match(cover, /<MapCoverSky fill=\{coverFill\} \/>/);
+  // The cover owns its shared values (opacity starts at 1: the first frame is the sky) and turns each
+  // plan into a UI-thread withDelay fade with the bar on the same clock.
+  assert.match(cover, /const opacity = useSharedValue\(1\);/);
+  assert.match(cover, /opacity\.value = withDelay\(remaining, withTiming\(0/);
+  assert.match(cover, /fill\.value = withTiming\(1, \{ duration: remaining/);
+  assert.match(cover, /<MapCoverSky fill=\{fill\} \/>/);
+  assert.match(cover, /\}, \[plan\.version\]\);/);
+  // The store never times the lift on the JS thread (only a safety net for React state).
+  assert.doesNotMatch(store, /react-native-reanimated/);
+  assert.match(store, /safety = setTimeout\(\(\) => coverLifted\(tok\), wait\);/);
+  // The sky is up on the map screen's first frame, before any map mounts (no bare blue page with buttons).
+  assert.match(cover, /useState\(\(\) => \{ if \(armOnMount\) armMapCover\(\); return 0; \}\);\s*const plan = useCoverPlan\(\);/);
   const explore = read('src/screens/ExploreScreen.tsx');
   // Above every HUD widget (zIndex up to 40) and under the header; taps on the hidden HUD are swallowed.
-  assert.match(explore, /<MapLaunchCover blockTouches style=\{\{ top: 70 \+ \(Constants\.statusBarHeight \?\? 0\), zIndex: 45 \}\} \/>/);
+  assert.match(explore, /<MapLaunchCover armOnMount blockTouches style=\{\{ top: 70 \+ \(Constants\.statusBarHeight \?\? 0\), zIndex: 45 \}\} \/>/);
   assert.match(explore, /<Map onPress=\{[^\n]*\n\s*coverHost="screen"/);
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /<Map coverHost="screen" /);
   // Tips, tutorials, the home intro and the adventure slam wait for the cover to lift.
