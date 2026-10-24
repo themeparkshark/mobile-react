@@ -788,6 +788,18 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     const t = tlRef.current;
     if (!t) return;
     setPhase('finish');
+    if (!ride) {
+      // The end beat lands on the frame the clock hits 0 (never after the bank's storage round trip, which
+      // left a dead gap after the 1): FINISH! slams at the last-5 size with a gold shockwave and a coin
+      // sparkle burst. It clears the stage first, so it is the only callout up.
+      GameAudio.play(cues.whistle, { volume: 0.8 });
+      quietRef.current = true;
+      stamps.current?.clear();
+      fx.current?.clearText();
+      setBanner((bn) => ({ ...bn, text: null, sub: null }));
+      setFinishKey((k) => k + 1);
+      playHaptic('finisher', { priority: WHACK_PRIO.golden });
+    }
     const b = await bankBurst();
     if (!b) return;
     const won = b.result.win;
@@ -803,17 +815,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       }
       return;
     }
-    GameAudio.play(cues.whistle, { volume: 0.8 });
-    // The end beat: FINISH! slams at the last-5 size with a gold shockwave and a coin-sparkle burst.
-    // It clears the stage first, so it is the only callout up (no x4 COMBO slab riding on top).
-    quietRef.current = true;
-    stamps.current?.clear();
-    fx.current?.clearText();
-    setBanner((bn) => ({ ...bn, text: null, sub: null }));
-    setFinishKey((k) => k + 1);
-    playHaptic('finisher', { priority: WHACK_PRIO.golden });
     if (bankedEarly) {
-      laterInRun(() => finishRun('banked'), 700);
+      // FINISH! holds until 1100 ms, then the results card takes the stage (one celebration at a time).
+      laterInRun(() => finishRun('banked'), 1100);
       return;
     }
     // Multiplayer submissions.
@@ -837,7 +841,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     const next = t.input.burstIndex + 1;
     if (next >= totalBursts) {
       // The finale's own cam (boss) already played; leave a beat for it.
-      laterInRun(() => finishRun(), t.boss && b.result.bossDown ? 1600 : 900);
+      laterInRun(() => finishRun(), t.boss && b.result.bossDown ? 1600 : 1100);
       return;
     }
     // Walk Boost: +2.5%/m, full at 40m, a Golden Start at most once per 3 Bursts, random-seed solo Runs only.
@@ -884,7 +888,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       setTimeout(() => setReadyOn(true), 1200);
       // Autoplay saves a banked fever for the finale (the expert line).
       if (autoplay) setTimeout(() => onReadyRef.current(feverReady && next === totalBursts - 1), 3500);
-    }, 800);
+    }, 1100);
   }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay]);
 
   const onReady = useCallback((goFever: boolean) => {

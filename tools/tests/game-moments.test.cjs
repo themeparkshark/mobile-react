@@ -465,3 +465,11 @@ test('round 3: the first banner waits for the whole GO tail, and the FINISH! rin
   assert.match(whack, /clipTop=\{L\.hudH \+ 4\}/);
   assert.match(read('src/gamekit/fx/FinishBeat.tsx'), /<Group clip=\{clip\}>/);
 });
+
+test('round 3: Whack FINISH! fires on the frame the clock hits 0, before the bank round trip (no dead gap after the 1)', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  const i = whack.indexOf('const onBurstEnd');
+  const body = whack.slice(i, whack.indexOf('const b = await bankBurst();', i));
+  assert.match(body, /setFinishKey\(\(k\) => k \+ 1\);/);
+  assert.match(body, /fx\.current\?\.clearText\(\);/);
+});
