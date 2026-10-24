@@ -150,8 +150,13 @@ const AnimatedPillar = ({
 
   // Position styles
   const positionStyle = useMemo(() => {
-    const baseSize = isWinner ? SCREEN_W * 0.45 : SCREEN_W * 0.32;
     const aspectRatio = 1.8; // Approximate pillar aspect ratio
+    // On short screens (iPhone SE) the winner tower grew up into the header
+    // cards. Cap the tower height to the room between the header and the
+    // tower bases (58% down), keeping the winner-to-side size ratio.
+    const maxWinner = (SCREEN_H * 0.58 - 180) / aspectRatio;
+    const winnerSize = Math.min(SCREEN_W * 0.45, maxWinner);
+    const baseSize = isWinner ? winnerSize : Math.min(SCREEN_W * 0.32, winnerSize * 0.75);
     
     switch (position) {
       case 'left':

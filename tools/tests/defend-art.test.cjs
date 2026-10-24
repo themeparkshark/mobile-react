@@ -46,3 +46,15 @@ test('Defend start and result screens are light cards, not dark scrims', () => {
 test('the Defend countdown ends on GO!, never a 0', () => {
   assert.match(read('src/components/GymBattle/DefendMiniGameModal.tsx'), /\{countdown > 0 \? countdown : 'GO!'\}/);
 });
+
+// iPhone SE: the winner tower grew into the header cards, and the Defend score
+// plaque and bonus banner covered the shield.
+test('Gym towers and the Defend layout fit a short screen', () => {
+  const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  assert.match(gym, /const maxWinner = \(SCREEN_H \* 0\.58 - 180\) \/ aspectRatio;/);
+  assert.match(gym, /Math\.min\(SCREEN_W \* 0\.32, winnerSize \* 0\.75\)/);
+  const defend = read('src/components/GymBattle/DefendMiniGameModal.tsx');
+  assert.match(defend, /const SHORT = SCREEN_H < 700;/);
+  assert.match(defend, /bottom: SHORT \? 64 : 120,/);
+  assert.match(defend, /top: SHORT \? 168 : 220,/);
+});

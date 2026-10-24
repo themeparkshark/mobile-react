@@ -34,6 +34,10 @@ import { defendGym } from '../../api/endpoints/gym-battle';
 import { friendlyActionError } from '../../services/match/matchLink';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+// iPhone SE and other short screens: a smaller shield, a lower score plaque
+// and a higher bonus banner, so nothing overlaps the shield.
+const SHORT = SCREEN_H < 700;
+const SHIELD = SHORT ? 180 : 220;
 
 interface Props {
   visible: boolean;
@@ -680,9 +684,9 @@ const styles = StyleSheet.create({
   },
   shieldGlow: {
     position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
+    width: SHIELD + 60,
+    height: SHIELD + 60,
+    borderRadius: (SHIELD + 60) / 2,
     backgroundColor: '#FFD700',
     shadowColor: '#FF6B00',
     shadowOffset: { width: 0, height: 0 },
@@ -690,8 +694,8 @@ const styles = StyleSheet.create({
     shadowRadius: 60,
   },
   shieldContainer: {
-    width: 220,
-    height: 220,
+    width: SHIELD,
+    height: SHIELD,
   },
   shield: {
     width: '100%',
@@ -709,7 +713,7 @@ const styles = StyleSheet.create({
   },
   defenseContainer: {
     position: 'absolute',
-    bottom: 120,
+    bottom: SHORT ? 64 : 120,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -736,7 +740,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   tapCountBig: {
-    fontSize: 72,
+    fontSize: SHORT ? 60 : 72,
     fontWeight: '900',
     color: '#0768B9',
     textShadowColor: '#FFD700',
@@ -759,7 +763,7 @@ const styles = StyleSheet.create({
   },
   multiplierBanner: {
     position: 'absolute',
-    top: 220,
+    top: SHORT ? 168 : 220,
     left: 20,
     right: 20,
     backgroundColor: 'rgba(255, 68, 68, 0.9)',
