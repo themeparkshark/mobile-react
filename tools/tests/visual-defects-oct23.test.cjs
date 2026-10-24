@@ -404,7 +404,9 @@ test('Ride Detail on an SE: a small community count is one row and the empty lin
 test('the map loading cover shows Alex clouds, a bobbing shark and the splash bar finishing', () => {
   const map = read('src/components/Map.tsx');
   assert.match(map, /<MapCoverSky done=\{coverDone\} \/>/);
-  assert.match(map, /setTimeout\(revealMap, COVER_MAX_MS\)/);
+  // The fallback lift is a native delayed fade started at mount: a busy JS thread cannot hold the cover.
+  assert.match(map, /Animated\.timing\(cover, \{ toValue: 0, delay: COVER_MAX_MS,[^}]*useNativeDriver: true \}\)/);
+  assert.match(map, /cover\.stopAnimation\(\);/);
   const cover = read('src/components/map/MapCoverSky.tsx');
   assert.match(cover, /explore\/cloud\.png/);
   assert.match(cover, /icons\/game\/shark\.png/);

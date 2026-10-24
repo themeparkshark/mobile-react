@@ -5,6 +5,6 @@
  */
 export const LAUNCH_HANDOFF_SHARE = 0.7;
 /** How long the cover bar takes to creep toward full if the map is still drawing. */
-export const COVER_BAR_CREEP_MS = 2600;
+export const COVER_BAR_CREEP_MS = 3200;
 /** The cover never waits longer than this for the map to draw. */
 export const COVER_MAX_MS = 3200;

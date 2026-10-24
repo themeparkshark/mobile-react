@@ -363,12 +363,15 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     if (revealed.current) return;
     revealed.current = true;
     setCoverDone(true);
+    cover.stopAnimation();
     Animated.timing(cover, { toValue: 0, delay: 180, duration: 420, easing: Easing.out(Easing.quad), useNativeDriver: true })
       .start(() => setCovered(false));
   };
   useEffect(() => {
-    const t = setTimeout(revealMap, COVER_MAX_MS);
-    return () => clearTimeout(t);
+    // The fallback lift is scheduled natively at mount (a delayed native-driver fade), so the cover
+    // never outlives COVER_MAX_MS even while the map screen's JS is still busy mounting.
+    Animated.timing(cover, { toValue: 0, delay: COVER_MAX_MS, duration: 420, easing: Easing.out(Easing.quad), useNativeDriver: true })
+      .start(({ finished }) => { if (finished && !revealed.current) { revealed.current = true; setCovered(false); } });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const mapViewRef = useRef<MapViewRef>(null);
