@@ -37,11 +37,12 @@ const STREAK = require('../../assets/games/memory/studio/streak.png');
  * object). A View ring looks the same and costs less.
  *
  * Two rings, both moved only by opacity and scale on the UI thread:
- * - the flight ring closes in from r 38 to r 16 (a thin gold line);
+ * - the flight ring closes in from r 34 to r 16 (a thin gold line). r 34 keeps it on screen
+ *   beside the compact plate at the right edge (plate centre about x 364 of 402);
  * - the hit ring sits at r 16 with a thick 5 px gold stroke and pops on a QUICK hit,
  *   the same punch the old SVG gave by fattening its stroke from 2 to 5 px.
  */
-const RING_MAX_R = 38;
+const RING_MAX_R = 34;
 const RING_HIT_R = 16;
 const RING_HIT_STROKE = 5;
 
