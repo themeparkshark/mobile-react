@@ -236,7 +236,7 @@ test('the coin art runs on one UI-thread clock, so a level change restarts nothi
 });
 
 test('the level-up payoff grows with every tier, Legendary clearly the biggest', () => {
-  const fields = ['fanPeak', 'fanHold', 'ringReach', 'ringWidth', 'sparkleWaves', 'sparkles'];
+  const fields = ['fanPeak', 'fanHold', 'fanScale', 'ringReach', 'ringWidth', 'sparkleWaves', 'sparkles'];
   let prev = null;
   for (let level = 2; level <= 10; level += 1) {
     const p = motion.levelUpPayoff(level);
@@ -247,6 +247,7 @@ test('the level-up payoff grows with every tier, Legendary clearly the biggest',
   const legendary = motion.levelUpPayoff(5);
   assert.equal(legendary.fanPeak, 1, 'Legendary fan at full strength');
   assert.ok(legendary.fanHold >= 0.8, 'the fan stays lit behind the Legendary card');
+  assert.ok(legendary.fanScale >= 2.2 && silver.fanScale <= 1.6, 'Legendary rays reach well past the card, Silver stays close');
   assert.equal(legendary.sparkleWaves, 2, 'a second sparkle wave from Legendary');
   assert.ok(legendary.ringReach > silver.ringReach + 0.3 && legendary.ringWidth > silver.ringWidth, 'a clearly bigger ring than Silver');
   const modal = read('src/components/CoinLevelingModal.tsx');
