@@ -268,3 +268,10 @@ test('the Welcome tip never shows before the wait card is measured', () => {
   assert.match(screen, /<OneTimeTip id="lineplay_intro" ready=\{lineTipReady && waitCardBottom != null\}/);
   assert.match(screen, /<OneTimeTip id="first_ride_part" ready=\{lineTipReady && partTipPending && waitCardBottom != null\}/);
 });
+
+test('the chapter page blocks are keyed, so the order switch after the first layout never leaves a half-faded header', () => {
+  const card = read('src/screens/LinePlay/components/ChapterCard.tsx');
+  assert.match(card, /<Animated\.View key="header" entering=\{rise\(compact \? 1 : 0\)\}/);
+  assert.match(card, /<Animated\.View key="play-now" entering=\{rise\(compact \? 0 : 1\)\}/);
+  assert.match(card, /\{compact \? <>\{playNow\}\{header\}<\/> : <>\{header\}\{playNow\}<\/>\}/);
+});

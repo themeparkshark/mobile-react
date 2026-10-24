@@ -75,7 +75,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
     : relayDone ? 'Crew Prompts' : chapter.relay.title;
 
   const header = (
-    <Animated.View entering={rise(compact ? 1 : 0)} style={[styles.header, compact && styles.headerCompact]}>
+    <Animated.View key="header" entering={rise(compact ? 1 : 0)} style={[styles.header, compact && styles.headerCompact]}>
       <View style={styles.headerCopy}>
         <KidText style={[styles.kicker, compact && styles.kickerCompact]} numberOfLines={1}
           adjustsFontSizeToFit minimumFontScale={0.8}>{chapterKicker(chapter)}</KidText>
@@ -91,7 +91,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
     </Animated.View>
   );
   const playNow = (
-    <Animated.View entering={rise(compact ? 0 : 1)} style={compact && styles.playFirst}>
+    <Animated.View key="play-now" entering={rise(compact ? 0 : 1)} style={compact && styles.playFirst}>
       <Pressable accessibilityRole="button"
         accessibilityLabel={`${done === 3 ? 'Play' : 'Start'} ${nextName}`}
         disabled={paused} onPress={() => onChooseMission(nextId)}
@@ -131,7 +131,9 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
 
   return (
     <PageScroll fill={FRAME_FILL} contentStyle={compact && styles.contentCompact} onLayout={measure}>
-      {/* A short phone (iPhone SE) puts the clue to play first, fully on screen; the mission header follows. */}
+      {/* A short phone (iPhone SE) puts the clue to play first, fully on screen; the mission header follows.
+          Keyed, so when the first layout switches the order mid-entrance each block MOVES with its own
+          animation; it is never morphed into the other block and left half faded. */}
       {compact ? <>{playNow}{header}</> : <>{header}{playNow}</>}
       {/* Compact: just the numbered bubbles (names stay in the spoken label), so the row ends whole
           above the fade instead of small labels dissolving into it. */}
