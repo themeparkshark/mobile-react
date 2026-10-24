@@ -32,7 +32,7 @@ import TapHint from '../../components/TapHint';
 import TeacherShark from '../../components/Tutorial/TeacherShark';
 import { playSfx } from '../../gamekit/SFX';
 import MemoryGame from '../../games/memory/MemoryGame';
-import { takeFirstWinCoinSpot } from '../../games/memory/firstWinHandoff';
+import { takeFirstWinCoinSpot, type CoinSpot } from '../../games/memory/firstWinHandoff';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import {
   EMPTY_GUEST_TASTE, GUEST_TASTE_COPY as COPY, guestStep, readGuestTaste, saveGuestTaste, type GuestTasteProgress,
@@ -43,6 +43,8 @@ const CHURRO = require('../../../assets/images/prep-items/churros/churro_01.png'
 const COIN = require('../../../assets/images/coingold.png');
 const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
 const UNDERWATER = require('../../../assets/images/screens/park/background-new.png');
+/** The same boater Finn the kid just played with (existing barker art), cheering on the shelf step. */
+const FINN_BOATER = require('../../assets/games/memory/studio/barker_dance.png');
 
 /** Steps in Finn's progress dots. */
 const STEP_INDEX = { find: 0, play: 1, coin: 2, save: 3 } as const;
@@ -63,6 +65,12 @@ export default function GuestTaste() {
   const [bagged, setBagged] = useState(false);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const alive = useRef(true);
+  // Where this screen sits in the window, so the first-win coin can be drawn on
+  // the shelf step's very first frame at the exact spot it left the card.
+  const rootRef = useRef<View>(null);
+  const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
+  const handoff = useRef<{ spot: CoinSpot | null } | null>(null);
+  const [bridgeOff, setBridgeOff] = useState(false);
   useEffect(() => {
     alive.current = true;
     void readGuestTaste().then(saved => { if (alive.current) setProgress(saved); });
@@ -76,9 +84,13 @@ export default function GuestTaste() {
   const onLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     setSize(prev => prev && prev.w === width && prev.h === height ? prev : { w: width, h: height });
+    rootRef.current?.measureInWindow((x, y, w) => { if (w > 0 && alive.current) setOrigin({ x, y }); });
   }, []);
 
   const step = progress ? guestStep(progress) : null;
+  // Taken once, the moment the shelf step starts (the card wrote it on CONTINUE).
+  if (step === 'coin' && handoff.current == null) handoff.current = { spot: reduced ? null : takeFirstWinCoinSpot() };
+  const spot = step === 'coin' ? handoff.current?.spot ?? null : null;
   /** Short phones (iPhone SE): the shelf sits higher and smaller so Finn's line never covers it. */
   const short = !!size && size.h < 600;
   const current = progress ?? EMPTY_GUEST_TASTE;
@@ -93,7 +105,7 @@ export default function GuestTaste() {
   // sits on it. From the game on, a still underwater scene takes over, so a
   // guest left on the save card is not re-blurring a live map every frame.
   const liveMap = step === 'find';
-  return <View style={styles.fill} onLayout={onLayout}>
+  return <View ref={rootRef} collapsable={false} style={styles.fill} onLayout={onLayout}>
     {liveMap ? <>
       <View style={StyleSheet.absoluteFill} pointerEvents="none"><Map>{null}</Map></View>
       <BlurView intensity={6} tint="light" style={StyleSheet.absoluteFill} />
@@ -105,11 +117,21 @@ export default function GuestTaste() {
     {step === 'find' && size && toBadge && <ChurroFind reduced={reduced} toBadge={toBadge} room={findRoom(size.h)}
       onCatch={() => setYum(true)} onBagged={() => setBagged(true)}
       onDone={() => advance({ ...current, caught: true })} />}
-    {step === 'coin' && <ShelfCoinLanding reduced={reduced} compact={short} onDone={() => advance({ ...current, shelved: true })} />}
+    {(step === 'coin' || step === 'play') && <ShelfCoinLanding active={step === 'coin'} reduced={reduced} compact={short}
+      rowWidth={size ? Math.min(360, size.w - 40) - 54 : 0}
+      handoff={spot} onCoinShown={() => setTimeout(() => { if (alive.current) setBridgeOff(true); }, 80)} onDone={() => advance({ ...current, shelved: true })} />}
+    {/* Frame one of the shelf step: the coin is still exactly where it left Finn's card,
+        until the shelf's own flying coin (same spot, same size) takes over. */}
+    {(step === 'play' || step === 'coin') && <Image source={COIN} pointerEvents="none" contentFit="contain"
+      style={spot && origin && !bridgeOff
+        ? { position: 'absolute', left: spot.x - origin.x, top: spot.y - origin.y, width: spot.size, height: spot.size }
+        : styles.bridgeIdle} />}
+    {/* Finn's boater picture is drawn (hidden) while the game is up, so the shelf step's Finn is never late. */}
+    {step === 'play' && <Image source={FINN_BOATER} pointerEvents="none" style={styles.bridgeIdle} />}
     {step === 'save' && <SaveCard onPlayMore={() => setArcadeOpen(true)} />}
 
     {/* Finn walks the whole taste with the same four dots: find, play, coin, save. */}
-    {step === 'coin' && <TeacherShark title={COPY.coin.title} text={COPY.coin.body} mood="celebrating" position="bottom-center"
+    {step === 'coin' && <TeacherShark title={COPY.coin.title} text="" sharkSource={FINN_BOATER} mood="celebrating" position="bottom-center"
       showNext={false} onNext={() => undefined} stepIndex={STEP_INDEX.coin} totalSteps={4} bottomOffset={short ? 26 : 48} />}
 
     {(step === 'find' || step === 'play') && !gameOpen && <TreatBadge count={treats} reduced={reduced} />}
@@ -223,31 +245,43 @@ function ChurroFind({ reduced, toBadge, room, onCatch, onBagged, onDone }: {
  * The won coin arcs onto the first socket of a park shelf (the same ribbon,
  * plank and empty sockets as a real park shelf) and clinks into place with a
  * gold burst. It moves on by itself about a second later, or on a tap.
+ *
+ * It is mounted, hidden and inert, while Finn's game is up (active false), so
+ * every picture is already drawn: when the game hands over, the shelf, its
+ * sockets and the coin are all there on the very first frame.
  */
-function ShelfCoinLanding({ reduced, compact, onDone }: { reduced: boolean; compact: boolean; onDone: () => void }) {
+function ShelfCoinLanding({ active, reduced, compact, rowWidth, handoff, onCoinShown, onDone }: {
+  active: boolean; reduced: boolean; compact: boolean; rowWidth: number; handoff: CoinSpot | null;
+  onCoinShown: () => void; onDone: () => void;
+}) {
   const fly = useSharedValue(reduced ? 1 : 0), glow = useSharedValue(0);
+  const shown = useRef(onCoinShown); shown.current = onCoinShown;
   // Where the coin starts: by default big, above the ribbon. Right after Finn's
   // first-win card it starts on the exact spot and size of that card's coin, so
-  // the kid sees the same coin travel onto the shelf. React state (not shared
-  // values) so the first frame after the measure always draws it there.
-  const handoff = useRef(reduced ? null : takeFirstWinCoinSpot());
+  // the kid sees the same coin travel onto the shelf (GuestTaste draws that coin
+  // at the spot until this one, measured, takes over). React state, not shared
+  // values, so the first frame after the measure always draws it there.
+  const spot = active && !reduced ? handoff : null;
   const [from, setFrom] = useState<{ x: number; y: number; s: number; seen: boolean }>(
-    { x: 0, y: FLY_FROM_Y, s: 2.1, seen: !handoff.current });
-  const [landed, setLanded] = useState(reduced);
+    { x: 0, y: FLY_FROM_Y, s: 2.1, seen: false });
+  const [landed, setLanded] = useState(false);
   const flyRef = useRef<View>(null);
-  const onFlyLayout = useCallback(() => {
-    const spot = handoff.current;
-    handoff.current = null;
-    if (!spot) return;
+  const measured = useRef(false);
+  useEffect(() => {
+    if (!active || measured.current) return undefined;
+    measured.current = true;
+    if (!spot) { setFrom(current => ({ ...current, seen: true })); shown.current(); return undefined; }
     // Never hidden if the measure is slow.
-    const show = setTimeout(() => setFrom(current => ({ ...current, seen: true })), 150);
+    const show = setTimeout(() => { setFrom(current => ({ ...current, seen: true })); shown.current(); }, 150);
     flyRef.current?.measureInWindow((x, y, w) => {
       clearTimeout(show);
-      if (!(w > 0)) { setFrom(current => ({ ...current, seen: true })); return; }
+      if (!(w > 0)) { setFrom(current => ({ ...current, seen: true })); shown.current(); return; }
       const k = w / SOCKET; // the shelf card is scaled down on short phones
       setFrom({ x: (spot.x + spot.size / 2 - (x + w / 2)) / k, y: (spot.y + spot.size / 2 - (y + w / 2)) / k, s: spot.size / w, seen: true });
+      shown.current();
     });
-  }, []);
+    return () => clearTimeout(show);
+  }, [active, spot]);
   const done = useRef(false);
   const finish = useCallback(() => { if (!done.current) { done.current = true; onDone(); } }, [onDone]);
   const land = useCallback(() => {
@@ -256,13 +290,14 @@ function ShelfCoinLanding({ reduced, compact, onDone }: { reduced: boolean; comp
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   }, []);
   useEffect(() => {
-    if (reduced) { land(); return; }
+    if (!active) return undefined;
+    if (reduced) { land(); return undefined; }
     fly.value = withDelay(200, withTiming(1, { duration: 760, easing: Easing.inOut(Easing.cubic) }, ok => {
       if (ok) runOnJS(land)();
     }));
     const fallback = setTimeout(land, 1300);
     return () => { clearTimeout(fallback); cancelAnimation(fly); };
-  }, [reduced, fly, land]);
+  }, [active, reduced, fly, land]);
   useEffect(() => {
     if (!landed) return;
     if (!reduced) glow.value = withSequence(withTiming(1, { duration: 140 }), withTiming(0, { duration: 600 }));
@@ -278,26 +313,29 @@ function ShelfCoinLanding({ reduced, compact, onDone }: { reduced: boolean; comp
       { rotate: `${(1 - t) * -25}deg` }, { scale: from.s + (1 - from.s) * t }] };
   });
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scale: 1 + glow.value * 0.5 }] }));
-  return <Pressable style={[styles.shelfWrap, compact && styles.shelfWrapCompact]} onPress={finish} accessibilityRole="button"
-    accessibilityLabel={`${COPY.coin.ribbon}. ${COPY.coin.title} ${COPY.coin.body}`} accessibilityHint={COPY.coin.tap}>
-    <Animated.View entering={reduced ? undefined : FadeIn.duration(200)} exiting={reduced ? undefined : FadeOut.duration(220)}
-      style={[styles.shelfCard, compact && styles.shelfCardCompact]}>
+  return <Pressable style={[styles.shelfWrap, compact && styles.shelfWrapCompact, !active && styles.hidden]} onPress={finish}
+    disabled={!active} pointerEvents={active ? 'auto' : 'none'}
+    accessibilityElementsHidden={!active} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'}
+    accessibilityRole="button"
+    accessibilityLabel={`${COPY.coin.ribbon}. ${COPY.coin.title} ${landed ? 'Your coin is on the shelf.' : COPY.coin.body}`} accessibilityHint={COPY.coin.tap}>
+    <Animated.View exiting={reduced ? undefined : FadeOut.duration(220)} style={[styles.shelfCard, compact && styles.shelfCardCompact]}>
       <Image source={UNDERWATER} style={[StyleSheet.absoluteFill, styles.shelfArt]} contentFit="cover" />
       <View style={styles.ribbonWrap}><Ribbon text={COPY.coin.ribbon} /></View>
       <View style={styles.shelfPanel}>
         <View style={styles.shelfRow}>
-          <ParkShelfArtwork variant="normal" height={55} />
+          <ParkShelfArtwork variant="normal" height={55} initialWidth={rowWidth} />
           <View style={styles.sockets}>
             {Array.from({ length: SOCKETS }, (_, slot) => <View key={slot} style={styles.socket}>
               {slot === 0 && <Animated.View style={[styles.slotGlow, glowStyle]} />}
-              {slot === 0 && landed
-                ? <View style={styles.ownedCoin}><Image source={COIN} style={styles.ownedCoinImg} contentFit="contain" /></View>
-                : <MysteryCoinArtwork size={SOCKET} />}
+              {/* The owned coin is mounted from the start (hidden) so it never pops in late. */}
+              {slot === 0 && <View style={[styles.ownedCoin, !landed && styles.hidden]}>
+                <Image source={COIN} style={styles.ownedCoinImg} contentFit="contain" /></View>}
+              {!(slot === 0 && landed) && <View style={slot === 0 ? styles.socketUnder : undefined}><MysteryCoinArtwork size={SOCKET} /></View>}
               {slot === 0 && landed && !reduced && <View style={styles.socketBurst}><SparkleBurst size={150} /></View>}
             </View>)}
           </View>
           {/* An unmoved twin of the flying coin's box: measured for the hand-off (a transformed view measures moved). */}
-          <View ref={flyRef} collapsable={false} onLayout={onFlyLayout} pointerEvents="none" style={[styles.flyCoin, styles.flyAnchor]} />
+          <View ref={flyRef} collapsable={false} pointerEvents="none" style={[styles.flyCoin, styles.flyAnchor]} />
           <Animated.View pointerEvents="none" style={[styles.flyCoin, coinStyle]}>
             <Image source={COIN} style={styles.flyCoinImg} contentFit="contain" />
           </Animated.View>
@@ -317,8 +355,8 @@ function SaveCard({ onPlayMore }: { onPlayMore: () => void }) {
       </View>
       {/* Centred above the title, like the dots in Finn's bubble. */}
       <ProgressDots index={STEP_INDEX.save} total={4} />
-      <Text style={styles.title} accessibilityRole="header">{COPY.save.title}</Text>
-      <Text style={styles.body}>{COPY.save.body}</Text>
+      {/* Title, then one line above the button: a non-reader is not asked to read a paragraph. */}
+      <Text style={styles.title} accessibilityRole="header" accessibilityLabel={`${COPY.save.title} ${COPY.save.body}`}>{COPY.save.title}</Text>
       {/* One grouped unit: the cue is a plain label (not a button) right on top of the Apple button it means. */}
       <View style={styles.grownUpGroup}>
         <View style={styles.grownUp} accessible accessibilityRole="text">
@@ -399,6 +437,8 @@ const styles = StyleSheet.create({
   flyCoin: { position: 'absolute', top: 4, left: '50%', marginLeft: -SOCKET / 2, width: SOCKET, height: SOCKET, zIndex: 3 },
   flyCoinImg: { width: SOCKET, height: SOCKET },
   flyAnchor: { opacity: 0 },
+  bridgeIdle: { position: 'absolute', left: 0, top: 0, width: 40, height: 40, opacity: 0 },
+  socketUnder: { position: 'absolute' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   card: { width: '100%', maxWidth: 360, alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: 26,
     borderWidth: 4, borderColor: BRAND.white, paddingTop: 58, paddingHorizontal: 20, paddingBottom: 14, ...SHADOW.lifted },

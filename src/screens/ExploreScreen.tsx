@@ -54,7 +54,7 @@ import ParkProjectMapBeacon from './ExploreScreen/ParkProjectMapBeacon';
 import type { ParkProject } from '../api/endpoints/me/park-projects';
 import ItemMarker from './ExploreScreen/ItemMarker';
 import GuestTaste from './ExploreScreen/GuestTaste';
-import { chestMayPresent, hasFirstCatch, homeIntroMayPresent, mapSuggestionSlots, suggestionSlotScreenTop, suggestionSlotTop } from './ExploreScreen/mapPresentationQueue';
+import { chestMayPresent, firstVisitChestWaits, FIRST_VISIT_CHEST_WAIT_MS, hasFirstCatch, homeIntroMayPresent, mapSuggestionSlots, suggestionSlotScreenTop, suggestionSlotTop } from './ExploreScreen/mapPresentationQueue';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import RideControlBar from '../components/RideControlBar';
 import { rideLook } from '../services/rideLandmark';
@@ -373,7 +373,13 @@ function ExploreScreen() {
   
   const collectedOnce = useRef(false);
   const [caughtThisSession, setCaughtThisSession] = useState(false);
+  const [catchesThisVisit, setCatchesThisVisit] = useState(0);
   const [firstLineGap, setFirstLineGap] = useState(false);
+  // A brand new player's first visit (no catch ever when the map first loaded): the daily chest waits for real hunting.
+  const firstVisit = useRef<boolean | null>(null);
+  if (firstVisit.current == null && player && isReady) firstVisit.current = !hasFirstCatch(player, hasCompleted('home_first_find'), false);
+  const [huntStartedAt, setHuntStartedAt] = useState<number | null>(null);
+  const [chestClock, setChestClock] = useState(0);
   // Minute one: while Finn is talking, waiting to start, or holding the first
   // find, he is the only voice. Event chips, the park story chip and the event
   // recap wait (the daily chest already waits through chestMayPresent).
@@ -484,6 +490,7 @@ function ExploreScreen() {
   const onHomeCatchCollected = useCallback(() => {
     collectedOnce.current = true;
     setCaughtThisSession(true);
+    setCatchesThisVisit(count => count + 1);
     setHomeCollectionVersion((version) => version + 1);
   }, []);
   const onHomeCatchUnavailable = useCallback(() => setHomeCollectionVersion((version) => version + 1), []);
@@ -978,7 +985,21 @@ function ExploreScreen() {
   const leftSlotSwapGuard = useSwapTapGuard(leftSlotKey);
   // The Daily 3 / level chest overlay is up: other map moments wait their turn.
   const [retentionOccluding, setRetentionOccluding] = useState(false);
-  const chestReady = chestMayPresent({
+  // Finn's "Let's hunt!" line closed on a first visit: free hunting starts now, and the chest may come 30 s later.
+  const huntFree = caughtThisSession && !isActive && !firstLineGap && hasCompleted('home_first_find');
+  useEffect(() => {
+    if (!huntFree || huntStartedAt != null || !firstVisit.current) return;
+    setHuntStartedAt(Date.now());
+  }, [huntFree, huntStartedAt]);
+  useEffect(() => {
+    if (huntStartedAt == null) return undefined;
+    const timer = setTimeout(() => setChestClock(tick => tick + 1), FIRST_VISIT_CHEST_WAIT_MS + 50);
+    return () => clearTimeout(timer);
+  }, [huntStartedAt]);
+  const firstVisitHold = firstVisitChestWaits({
+    firstVisit: !!firstVisit.current, catchesThisVisit, huntStartedAt, now: chestClock >= 0 ? Date.now() : 0,
+  });
+  const chestReady = !firstVisitHold && chestMayPresent({
     // In the half second between the first catch and Finn's "Nice catch!" line, the chest waits too (no flash).
     tutorialActive: isActive || firstLineGap, findOpen: showPrepItemModal, findPending: !!pendingFind,
     firstCatchDone: hasFirstCatch(player, hasCompleted('home_first_find'), caughtThisSession),
@@ -1294,7 +1315,8 @@ function ExploreScreen() {
       {player && permissionChecked && !permissionGranted && <PermissionsNotGranted />}
       {/* One overlay at a time: the daily chest comes last, after the first catch and never alongside a find. */}
       {chestShowing && dailyGift &&
-        <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} onClosed={onChestClosed} />}
+        <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} onClosed={onChestClosed}
+          simple={!!firstVisit.current} />}
       {retention.overlay}
       {player && liveEvt.event && <EventSheet event={liveEvt.event} visible={eventOpen} onClose={() => setEventOpen(false)} atPark={!!park}
         onShowRide={id => { const t = visibleTasks.find(task => task.id === id); if (t) { setEventOpen(false); setSelectedTask(t); } }} />}

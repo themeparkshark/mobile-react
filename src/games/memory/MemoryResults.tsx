@@ -654,11 +654,12 @@ const styles = StyleSheet.create({
   firstWinFinn: { alignItems: 'center', justifyContent: 'center' },
   firstWinHead: { alignSelf: 'stretch', alignItems: 'center' },
   firstWinRing: { ...StyleSheet.absoluteFillObject, borderWidth: 6, borderColor: MM.gold },
-  firstWinNext: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, marginBottom: 14 },
-  firstWinPic: { width: 84, height: 58 },
-  firstWinRide: { position: 'absolute', left: 0, top: 4, width: 62, height: 50 },
-  firstWinCoinSpot: { position: 'absolute', right: 0, bottom: 0, width: 40, height: 40 },
-  firstWinCoin: { width: 40, height: 40 },
+  // The picture leads (a ride car, then the coin it gives, side by side), the line sits under it.
+  firstWinNext: { alignItems: 'center', marginTop: 6, marginBottom: 16 },
+  firstWinPic: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
+  firstWinRide: { width: 76, height: 62 },
+  firstWinCoinSpot: { width: 56, height: 56 },
+  firstWinCoin: { width: 56, height: 56 },
   firstWinBtnWrap: { alignSelf: 'stretch', alignItems: 'center' },
   // The fingertip (bottom of the hand) lands on the lower right of CONTINUE.
   firstWinHand: { right: 26, bottom: 6 },

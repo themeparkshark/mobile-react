@@ -714,7 +714,11 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
         </Animated.View>
       )}
 
-      {/* Menus step back (dimmed, not tappable) while a catch is open. */}
+      {/* Menus step back (dimmed, not tappable) while a catch is open. While Finn talks
+          (quiet) they step out of the way: his bubble sits low on the map, and a kid
+          tapping a familiar corner button must never land on Finn instead. */}
+      {/* A plain outer view owns the quiet hide: an animated opacity (chromeFade) would win over a static one. */}
+      <View style={[StyleSheet.absoluteFill, quiet && styles.hidden]} pointerEvents={quiet ? 'none' : 'box-none'}>
       <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         {/* Quick Access Menu - hamburger on left */}
         <QuickAccessMenu position="left" />
@@ -722,6 +726,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
         {/* Radial Stats Menu - shark avatar on right */}
         <RadialStatsMenu />
       </Animated.View>
+      </View>
 
       {/* The catch, above the menus: the Ride Photo viewfinder owns the screen while it is open. */}
       <HomeCatchMoment ref={catchRef} request={catchRequest} stageItem={stageItem} badgeBottom={BOTTOM_SLOT}

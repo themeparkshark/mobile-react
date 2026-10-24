@@ -67,9 +67,11 @@ export const GUEST_TASTE_COPY = {
   caught: 'Nice catch!',
   yum: { title: 'Yum!', body: 'Churros are my favorite!' },
   play: { title: 'Now a quick game!', body: 'Match 4 pairs with me.', button: 'Play' },
+  // The coin on the shelf says the rest: Finn's bubble is just 'You won!' (body is for screen readers only).
   coin: { ribbon: 'Ride Coins', title: 'You won!', body: 'Wins put coins on your shelf.', tap: 'Tap to go on' },
+  // One line above the button (the grown-up cue); body is for screen readers only.
   save: { title: 'Make your own shark!', body: 'Real treats and ride coins are waiting for you.',
-    grownUp: 'Ask a grown-up to sign in', have: 'Already have a shark? This button brings it back.', again: 'Play more games' },
+    grownUp: 'Ask a grown-up to sign in', have: 'Already have a shark? This brings it back.', again: 'Play more games' },
 } as const;
 
 function parse(raw: string | null): GuestTasteProgress {

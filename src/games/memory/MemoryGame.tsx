@@ -167,6 +167,36 @@ const GULL_GRAB = require('../../assets/games/memory/studio/gull_grab.png');
 const GULL_OFF = require('../../assets/games/memory/studio/gull_takeoff.png');
 const TIDE_ARROW = require('../../assets/games/memory/studio/tide_arrow.png');
 const HALO = require('../../assets/games/memory/v8/fx/glow_halo_2.png');
+// Existing carnival art reused for the warm-up sky (no new art): Sharky's bunting and the map's cloud.
+const SKY_BUNTING = require('../../assets/games/sharky/tide/v71/gate_rush_bunting.png');
+const SKY_CLOUD = require('../../../assets/images/screens/explore/cloud.png');
+
+/**
+ * Finn's warm-up: the 2-row board leaves a tall band of empty sky above the
+ * booth. A string of carnival bunting and two clouds fill it, so the first
+ * screen a kid plays on looks like a midway, not a blank wall. Still images
+ * only (no animation, no battery cost), drawn behind everything.
+ */
+function WarmupSky({ g }: { g: BoothGeo }) {
+  // The sky band: from the top of the field to Finn's hat / the HUD plates.
+  const floor = Math.min(g.barker.y + 18, g.hud.y - 4);
+  if (floor < 110) return null;
+  const w = g.W * 0.94;
+  const h = Math.min(w * (341 / 1024), floor * 0.5);
+  const bw = h * (1024 / 341);
+  const top = Math.max(10, Math.min(floor - h - 6, floor * 0.42));
+  const cloud = Math.min(96, floor * 0.34);
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Image source={SKY_CLOUD} resizeMode="contain"
+        style={{ position: 'absolute', left: g.W * 0.06, top: Math.max(6, top - cloud * 0.9), width: cloud, height: cloud * (155 / 232), opacity: 0.95 }} />
+      <Image source={SKY_CLOUD} resizeMode="contain"
+        style={{ position: 'absolute', right: g.W * 0.08, top: Math.max(4, top - cloud * 1.15), width: cloud * 0.72, height: cloud * 0.72 * (155 / 232), opacity: 0.9 }} />
+      <Image source={SKY_BUNTING} resizeMode="contain"
+        style={{ position: 'absolute', left: (g.W - bw) / 2, top, width: bw, height: h }} />
+    </View>
+  );
+}
 const JINGLE = require('../../../assets/sounds/redeem_modal_jingle.mp3');
 
 export interface MemoryGameProps {
@@ -1136,6 +1166,10 @@ export default function MemoryGame({
     GameAudio.playLadder('mm_match', 7, { volume: 0.9 });
     GameAudio.play('mm_brass_g');
     Haptic.success();
+    // Finn's warm-up: the CLEARED sign starts dropping the moment the last pair
+    // goes, so a first win never reads as an empty board (other modes keep the 3-beat slam).
+    const signNow = r.mode === 'warmup';
+    if (signNow) awning.current?.sign('CLEARED');
     // Beat 2: counter bounces slot by slot, coin fountains from the post tops, fist pump, scene shake.
     later(EIGHTH_MS, () => {
       setBounceKey((k) => k + 1);
@@ -1153,7 +1187,7 @@ export default function MemoryGame({
       fx.current?.burst('confetti', g.W / 2, g.awning.y + g.awning.h, { count: reducedMotion ? 6 : 60 });
       GameAudio.play('mm_board_clear');
       GameAudio.duck(6, 60, 300, 300);
-      if (r.mode !== 'ride' && r.mode !== 'daily') awning.current?.sign('CLEARED');
+      if (r.mode !== 'ride' && r.mode !== 'daily' && !signNow) awning.current?.sign('CLEARED');
     });
     later(700, () => { if (!calm) camera.frame(1); });
   }, [calm, camera, later, reducedMotion]);
@@ -2433,6 +2467,7 @@ export default function MemoryGame({
         <LinearGradient colors={['#0b80c4', '#35a8e6', '#bfe5ff']} style={StyleSheet.absoluteFill} />
         {g ? (
           <>
+            {mode === 'warmup' ? <WarmupSky g={g} /> : null}
             {/* Scene layer: backdrop rays and the booth front take camera beats; the board never does. */}
             <Animated.View style={[StyleSheet.absoluteFill, camera.style]} pointerEvents="none">
               <Rays cx={g.W / 2} cy={g.grid.y + g.grid.h / 2} r={Math.max(g.W, g.H)} amount={rays} still={reducedMotion} />

@@ -463,3 +463,55 @@ test('Reduce Motion: the results card never hangs at opacity 0, and the CLEARED 
   // Reanimated finishes timings at once under the system Reduce Motion, so a delayed fade-out hid the sign.
   assert.match(booth, /if \(!reducedMotion\) out\.value = withDelay\(delay \+ 1100/);
 });
+
+// Wave 2, round 2 -----------------------------------------------------------
+
+test('first visit: "Let\'s hunt!" leads to hunting; the daily chest waits for a second catch or 30 s of free hunting', () => {
+  const q = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
+  const base = { firstVisit: true, catchesThisVisit: 1, huntStartedAt: null, now: 1000 };
+  assert.equal(q.firstVisitChestWaits(base), true, 'Finn is still talking');
+  assert.equal(q.firstVisitChestWaits({ ...base, huntStartedAt: 1000, now: 1000 + q.FIRST_VISIT_CHEST_WAIT_MS - 1 }), true);
+  assert.equal(q.firstVisitChestWaits({ ...base, huntStartedAt: 1000, now: 1000 + q.FIRST_VISIT_CHEST_WAIT_MS }), false);
+  assert.equal(q.firstVisitChestWaits({ ...base, catchesThisVisit: 2 }), false, 'a second catch frees the chest');
+  assert.equal(q.firstVisitChestWaits({ ...base, firstVisit: false }), false, 'returning players are unchanged');
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /const chestReady = !firstVisitHold && chestMayPresent\(/);
+  assert.match(explore, /simple=\{!!firstVisit\.current\}/);
+  const chest = read('src/components/DailyGiftModal.tsx');
+  assert.match(chest, /\{simple \? null : <View style=\{styles\.ladder\}>/, 'first visit: no 7-day strip');
+  assert.match(chest, /simple && phase === 'closed' && <TapHint/, 'a hand taps the one big chest');
+});
+
+test('while Finn talks the map corner buttons step out of the way (a plain view, so chromeFade cannot override it)', () => {
+  const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(home, /<View style=\{\[StyleSheet\.absoluteFill, quiet && styles\.hidden\]\} pointerEvents=\{quiet \? 'none' : 'box-none'\}>\s*<Animated\.View style=\{\[StyleSheet\.absoluteFill, chromeFade\]\}/);
+});
+
+test('warm-up: CLEARED starts the moment the last pair goes, and the sky above the booth is filled with existing art', () => {
+  const game = read('src/games/memory/MemoryGame.tsx');
+  assert.match(game, /const signNow = r\.mode === 'warmup';\s*if \(signNow\) awning\.current\?\.sign\('CLEARED'\);/);
+  assert.match(game, /&& !signNow\) awning\.current\?\.sign\('CLEARED'\)/, 'never a second sign');
+  assert.match(game, /mode === 'warmup' \? <WarmupSky g=\{g\} \/> : null/);
+  assert.match(game, /gate_rush_bunting\.png/);
+  assert.match(game, /screens\/explore\/cloud\.png/);
+});
+
+test('first-win card: the ride car and a 56 pt coin sit side by side above the line', () => {
+  const results = read('src/games/memory/MemoryResults.tsx');
+  assert.match(results, /firstWinPic: \{ flexDirection: 'row'/);
+  assert.match(results, /firstWinCoin: \{ width: 56, height: 56 \}/);
+  assert.doesNotMatch(results, /firstWinCoinSpot: \{ position: 'absolute'/, 'the coin no longer sits on top of the car');
+});
+
+test('shelf hand-off: the shelf is mounted hidden during the game, and the card coin is drawn on frame one', () => {
+  const taste = read('src/screens/ExploreScreen/GuestTaste.tsx');
+  assert.match(taste, /\(step === 'coin' \|\| step === 'play'\) && <ShelfCoinLanding active=\{step === 'coin'\}/);
+  assert.match(taste, /spot && origin && !bridgeOff/);
+  assert.match(taste, /initialWidth=\{rowWidth\}/);
+  assert.match(taste, /sharkSource=\{FINN_BOATER\}/, 'the same boater Finn as the warm-up');
+  assert.match(taste, /text="" sharkSource/, 'You won! plus the coin picture, no extra line');
+  const shelf = read('src/components/ParkShelfArtwork.tsx');
+  assert.match(shelf, /useState\(initialWidth > 0 \? initialWidth : 0\)/);
+  const card = taste.slice(taste.indexOf('function SaveCard'), taste.indexOf('function ProgressDots'));
+  assert.doesNotMatch(card, /<Text style=\{styles\.body\}>/, 'title and one line above the button');
+});

@@ -84,6 +84,8 @@ interface TeacherSharkProps {
    * stays low, so the find and its pointing hand stay in view above it.
    */
   beside?: boolean;
+  /** Another existing Finn picture (for example the boater barker right after his warm-up). */
+  sharkSource?: number;
 }
 
 export default function TeacherShark({
@@ -103,6 +105,7 @@ export default function TeacherShark({
   pointAtNext = false,
   picture,
   beside = false,
+  sharkSource,
 }: TeacherSharkProps) {
   const reducedMotion = useUiReducedMotion();
   const bobValue = useSharedValue(0);
@@ -288,7 +291,7 @@ export default function TeacherShark({
       {/* Shark Character: Teacher Finn */}
       <Animated.View style={[styles.sharkContainer, beside && styles.sharkContainerBeside, sharkAnimStyle]}>
         <Image
-          source={TEACHER_SHARK_IMAGE}
+          source={sharkSource ?? TEACHER_SHARK_IMAGE}
           style={styles.sharkImage}
           resizeMode="contain"
         />
