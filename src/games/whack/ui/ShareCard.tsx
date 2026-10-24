@@ -48,7 +48,7 @@ export function ShareCardButton({ tiles, score, stars }: { tiles: number[]; ride
     setBusy(true);
     try {
       const uri = await captureFlex(ref, 'story');
-      await openShareSheet(uri, shareMessage(campaignUrl('whack')));
+      await openShareSheet(uri, shareMessage(campaignUrl('whack')), `Whack-a-Shark ${score}`);
     } catch {
       // The share sheet is optional; a failure never blocks the results.
     } finally {

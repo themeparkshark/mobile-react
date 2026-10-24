@@ -31,7 +31,8 @@ const capture = loadTs('src/share/capture.ts', {
   },
   'react-native-view-shot': { captureRef: async () => 'file:///tmp/card.jpg' },
   // The grown-up gate passes here; its own tests cover a no.
-  '../services/external': { shareExternal: async (content) => { shared.last = content; return shared.result; }, shareFileExternal: async () => true },
+  '../services/external': { shareExternal: async (content) => { shared.last = content; return shared.result; }, shareFileExternal: async () => true,
+    shareFileName: (name, ext) => `${name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'Theme-Park-Shark'}.${ext}` },
 });
 
 const MONTHS = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d/i;
@@ -438,16 +439,19 @@ test('the coin sheet Share carries a word (the md pill says Share) and the stamp
   assert.match(fs.readFileSync(pathMod.join(repo, 'src/share/types.ts'), 'utf8'), /readonly artHasShark: boolean;/);
 });
 
-test('the share sheet names the picture "Theme Park Shark" (no random id) and sends the link line with it', async () => {
+test('the share sheet names the picture (no random id) and sends the link line with it', async () => {
   shared.result = { action: 'sharedAction', activityType: 'com.apple.UIKit.activity.Message' };
   fsCalls.length = 0;
   await capture.openShareSheet('file:///tmp/B80AB5AF-733B.jpg', 'Come play Theme Park Shark with me! https://themeparkshark.com/app?c=flex_find');
-  assert.equal(capture.SHARE_FILE_NAME, 'Theme Park Shark.jpg');
+  assert.equal(capture.SHARE_FILE_NAME, 'Theme Park Shark');
   assert.deepEqual(JSON.parse(JSON.stringify(shared.last)), {
-    url: 'file:///cache/share-card/Theme%20Park%20Shark.jpg',
+    url: 'file:///cache/share-card/Theme-Park-Shark.jpg',
     message: 'Come play Theme Park Shark with me! https://themeparkshark.com/app?c=flex_find',
   });
-  assert.deepEqual(JSON.parse(JSON.stringify(fsCalls.find(c => c[0] === 'copy')[1])), { from: 'file:///tmp/B80AB5AF-733B.jpg', to: 'file:///cache/share-card/Theme%20Park%20Shark.jpg' });
+  assert.deepEqual(JSON.parse(JSON.stringify(fsCalls.find(c => c[0] === 'copy')[1])), { from: 'file:///tmp/B80AB5AF-733B.jpg', to: 'file:///cache/share-card/Theme-Park-Shark.jpg' });
+  // A card's own name (the hotfix's readable names): Whack-a-Shark-12840.jpg.
+  await capture.openShareSheet('file:///tmp/x.jpg', 'm', 'Whack-a-Shark 12840');
+  assert.equal(shared.last.url, 'file:///cache/share-card/Whack-a-Shark-12840.jpg');
   // No message: the picture alone. A file error falls back to the original picture.
   await capture.openShareSheet('file:///tmp/a.jpg');
   assert.equal(shared.last.message, undefined);

@@ -13,6 +13,7 @@
  * A source test fails the build on any bare Linking.openURL,
  * WebBrowser.openBrowserAsync, Share.share or Sharing.shareAsync outside this file.
  */
+import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as WebBrowser from 'expo-web-browser';
 import { Linking, Share, type ShareContent, type ShareOptions } from 'react-native';
@@ -74,17 +75,48 @@ export async function shareExternal(content: ShareContent, options?: ShareOption
 }
 
 /**
+ * A readable file name for the share sheet header ("Whack-a-Shark-460.png"), never
+ * the capture's UUID. Letters, digits and dashes only. Exported for tests.
+ */
+export function shareFileName(name: string, ext: string): string {
+  const base = name.replace(/['\u2019]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '');
+  return `${base || 'Theme-Park-Shark'}.${ext}`;
+}
+
+/** One folder for the named copy; each share clears the last one, so copies never pile up. */
+const SHARE_DIR = 'share-card/';
+
+/** The capture copied under a readable name. The original uri when the copy cannot be made. */
+async function namedShareCopy(uri: string, name: string | undefined): Promise<string> {
+  const cache = FileSystem.cacheDirectory;
+  if (!name || !cache || !/^file:/i.test(uri)) return uri;
+  const ext = (/\.([A-Za-z0-9]{2,5})(?:[?#].*)?$/.exec(uri)?.[1] ?? 'png').toLowerCase();
+  const dir = `${cache}${SHARE_DIR}`;
+  try {
+    await FileSystem.deleteAsync(dir, { idempotent: true });
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+    const to = `${dir}${shareFileName(name, ext)}`;
+    await FileSystem.copyAsync({ from: uri, to });
+    return to;
+  } catch {
+    return uri;
+  }
+}
+
+/**
  * Shares a file (a share card image) after the grown-up gate. True once the share
  * sheet closes (shared or cancelled). False when declined, unavailable, or the sheet
  * never answered within SHARE_SHEET_WAIT_MS. Throws when the sheet fails to open.
+ * `name` titles the file in the sheet ("Whack-a-Shark 460" becomes Whack-a-Shark-460.png).
  */
-export async function shareFileExternal(uri: string, options?: Sharing.SharingOptions): Promise<boolean> {
+export async function shareFileExternal(uri: string, options?: Sharing.SharingOptions, name?: string): Promise<boolean> {
   if (!(await askGrownUp(SHARE))) return false;
   if (!(await Sharing.isAvailableAsync())) return false;
+  const file = await namedShareCopy(uri, name);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      Sharing.shareAsync(uri, options).then(() => true),
+      Sharing.shareAsync(file, options).then(() => true),
       new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), SHARE_SHEET_WAIT_MS); }),
     ]);
   } finally {

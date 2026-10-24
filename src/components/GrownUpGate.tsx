@@ -6,7 +6,6 @@ import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from '
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
 import { useModalLayer } from '../ui/modalLayers';
-import { showToast } from '../utils/toast';
 
 /**
  * The grown-up gate in front of every paywall and real-money purchase
@@ -76,14 +75,14 @@ export const GATE_DISMISS_FALLBACK_MS = 2000;
 export const GATE_SHOW_WATCHDOG_MS = 3000;
 /** Real money (a buy, a plan, VIP) waits longer: a busy phone must not close a gate a grown-up is reading. */
 export const GATE_SHOW_WATCHDOG_MONEY_MS = 6000;
-/** After the wait, one more beat for an onShow that is already on its way (a stalled JS thread). */
-export const GATE_SHOW_GRACE_MS = 400;
 /** The watchdog wait for one ask. Exported for tests. */
 export function gateWatchdogMs(reason: GateReason | null | undefined): number {
   return reason && (reason.kind === 'money' || reason.kind === 'renews' || reason.kind === 'vip') ? GATE_SHOW_WATCHDOG_MONEY_MS : GATE_SHOW_WATCHDOG_MS;
 }
-/** What a kid sees when the gate could not open (another window was in the way). */
-export const GATE_RETRY_TOAST = 'That didn’t open. Try again in a sec.';
+/** How long the kind "Try again in a sec" hint stays up after the gate could not show. */
+export const GATE_HINT_MS = 2200;
+/** The hint a kid sees when the gate could not show, so a tap never does nothing. Exported for tests. */
+export const GATE_RETRY_HINT = 'Try again in a sec';
 
 /** The 30 s rest survives a force-quit. */
 async function loadRest() {
@@ -325,6 +324,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const [more, setMore] = useState(false);
   // The answer while the gate fades out; null while it is up.
   const [closing, setClosing] = useState<boolean | null>(null);
+  // The gate could not show (iOS refused it): a short "Try again in a sec" instead of a silent no.
+  const [hint, setHint] = useState(false);
   const reqRef = useRef<GateRequest | null>(null);
   const answerRef = useRef<boolean | null>(null);
   const shownRef = useRef(false);
@@ -357,10 +358,13 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     return () => {
       hosts = hosts.filter(h => h !== host);
       syncShowGate();
-      // The modal holding it went away: the ask ends as a no, so no button waits forever.
+      // The modal holding it went away: the ask ends (a yes given during the fade still counts),
+      // so no button waits forever and an answered yes is never lost.
       const left = reqRef.current;
+      const ok = answerRef.current === true;
       reqRef.current = null;
-      left?.resolve(false);
+      answerRef.current = null;
+      left?.resolve(ok);
     };
   }, [nested]);
   // The root gate waits behind any open sheet instead of stacking a second <Modal> (ui/modalLayers.ts).
@@ -368,29 +372,37 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const layerFront = useModalLayer(!!req && !nested, 'wait');
   const front = nested ? !!req : layerFront;
   const presenting = !!req && front && closing === null;
-  // A gate iOS never showed answers no (never yes). It checks twice (the wait, then
-  // GATE_SHOW_GRACE_MS) so an onShow that lands late never closes a gate on screen, and
-  // the kid sees a short line instead of a button that silently did nothing.
   useEffect(() => {
     if (!presenting || !req) return undefined;
-    let grace: ReturnType<typeof setTimeout> | undefined;
+    // A gate iOS never showed answers no (never yes) with the kind hint. Real money waits longer
+    // (gateWatchdogMs), so a busy phone never closes a gate a grown-up is about to read.
     const t = setTimeout(() => {
       if (shownRef.current) return;
-      grace = setTimeout(() => {
-        if (shownRef.current) return;
-        if (__DEV__) console.warn(`GrownUpGate never showed (${req.reason?.kind ?? 'no reason'}): another modal was up. Put a GrownUpGateSlot in it or close it first (share/handoff.ts).`);
-        showToast(GATE_RETRY_TOAST, 'info', 3500);
-        close(false);
-      }, GATE_SHOW_GRACE_MS);
+      if (__DEV__) console.warn(`GrownUpGate never showed (${req.reason?.kind ?? 'no reason'}): another modal was up. Put a GrownUpGateSlot in it or close it first (share/handoff.ts).`);
+      setHint(true); close(false);
     }, gateWatchdogMs(req.reason));
-    return () => { clearTimeout(t); if (grace) clearTimeout(grace); };
+    return () => clearTimeout(t);
   }, [presenting, req, close]);
   useEffect(() => {
     if (closing === null) return undefined;
     const t = setTimeout(finish, GATE_DISMISS_FALLBACK_MS);
     return () => clearTimeout(t);
   }, [closing, finish]);
-  if (!req || !front) return null;
+  useEffect(() => {
+    if (!hint) return undefined;
+    const t = setTimeout(() => setHint(false), GATE_HINT_MS);
+    return () => clearTimeout(t);
+  }, [hint]);
+  // Not a <Modal>: it draws inside whatever holds this host, so it shows even where the gate could not.
+  const hintPill = hint ? (
+    <View style={styles.hintWrap} pointerEvents="none">
+      <View style={styles.hint} accessible accessibilityLiveRegion="polite" accessibilityLabel={GATE_RETRY_HINT}>
+        <GameIcon name="lock" size={22} />
+        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.hintText}>{GATE_RETRY_HINT}</Text>
+      </View>
+    </View>
+  ) : null;
+  if (!req || !front) return hintPill;
   const resting = req.seed < 0;
   const q = resting ? null : grownUpQuestion(req.seed);
   const why = resting ? null : gateReasonLines(req.reason);
@@ -405,6 +417,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     setTyped(t => (t.length < 3 ? t + k : t));
   };
   return (
+    <>
     <Modal visible={closing === null} transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent
       onShow={() => { shownRef.current = true; }} onDismiss={finish}>
       <View style={styles.scrim}>
@@ -484,6 +497,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
         )}
       </View>
     </Modal>
+    {hintPill}
+    </>
   );
 }
 
@@ -521,6 +536,10 @@ const styles = StyleSheet.create({
   keyDelText: { fontFamily: undefined, fontSize: 26 },
   cancel: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
   cancelText: { fontFamily: FONT.display, fontSize: 17, color: GATE_COLORS.inkSoft },
+  hintWrap: { position: 'absolute', left: 0, right: 0, bottom: 110, alignItems: 'center' },
+  hint: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 18,
+    backgroundColor: GATE_COLORS.panel, borderWidth: 3, borderColor: GATE_COLORS.border },
+  hintText: { fontFamily: FONT.display, fontSize: 18, color: GATE_COLORS.ink },
 });
 
 // Load the saved rest and miss count as soon as the app starts (best effort).

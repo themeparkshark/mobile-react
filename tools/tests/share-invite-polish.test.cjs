@@ -55,7 +55,7 @@ test('a shared ride card never prints the typed note, and is story size with the
 
 test('Whack and Memory results share a story-size picture with the link and QR, and no ride name', () => {
   const whack = src('src/games/whack/ui/ShareCard.tsx');
-  assert.match(whack, /captureFlex\(ref, 'story'\);\s*await openShareSheet\(uri, shareMessage\(campaignUrl\('whack'\)\)\);/);
+  assert.match(whack, /captureFlex\(ref, 'story'\);\s*await openShareSheet\(uri, shareMessage\(campaignUrl\('whack'\)\), `Whack-a-Shark \$\{score\}`\);/);
   assert.match(whack, /campaign="whack"/);
   assert.doesNotMatch(whack, /\{rideName/, 'the ride name never goes on the picture');
   const { shareText } = loadTs('src/games/whack/ui/ShareCard.tsx', {
@@ -66,7 +66,7 @@ test('Whack and Memory results share a story-size picture with the link and QR, 
   });
   assert.equal(shareText('Space Mountain', 1200, 2), 'I scored 1,200 in Whack-a-Shark. 2 of 3 stars. Can you beat it?');
   const memory = src('src/games/memory/MemoryExtras.tsx');
-  assert.match(memory, /captureFlex\(storyRef, 'story'\);\s*await openShareSheet\(uri, shareMessage\(campaignUrl\('memory'\)\)\);/);
+  assert.match(memory, /captureFlex\(storyRef, 'story'\);\s*await openShareSheet\(uri, shareMessage\(campaignUrl\('memory'\)\), `Memory Daily \$\{daily\.day\}`\);/);
   assert.match(memory, /campaign="memory"/);
   for (const code of [whack, memory]) assert.doesNotMatch(code, /shareFileExternal|captureRef/, 'one share path: gate, then the share sheet');
   // One share look everywhere: the gold-rimmed pill, and Memory previews the picture that ships.
@@ -145,7 +145,7 @@ test('a Share Studio sheet fades out before the grown-up gate, and is a layer wh
 
 test('a ride card shares from inside its sheet: the gate slot shows above it, a no keeps the card open', async () => {
   const card = src('src/components/RideTracker/ShareableRideCard.tsx');
-  assert.match(card, /const uri = await captureFlex\(storyRef, 'story'\);[\s\S]{0,300}const outcome = await openShareSheet\(uri, shareMessage\(campaignUrl\('ride_log'\)\)\);\s*if \(outcome\.opened\) onShare\?\.\(\);/);
+  assert.match(card, /const uri = await captureFlex\(storyRef, 'story'\);[\s\S]{0,300}const outcome = await openShareSheet\(uri, shareMessage\(campaignUrl\('ride_log'\)\), `\$\{ride\.ride_name\} Ride Card`\);\s*if \(outcome\.opened\) onShare\?\.\(\);/);
   assert.doesNotMatch(card, /shareFileExternal|beforeShare/, 'one share path for every card (gate, then the iOS share sheet)');
   for (const file of ['src/screens/RideTracker/RideHistoryScreen.tsx', 'src/screens/RideTracker/RideDetailScreen.tsx']) {
     const screen = src(file);
@@ -179,9 +179,8 @@ test('a grown-up gate iOS never shows answers "no" and steps aside, so later ask
   assert.match(gate, /export const GATE_SHOW_WATCHDOG_MS = 3000;/);
   assert.match(gate, /onShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
   // Never shown means no (never yes), and never silent: a kid-readable toast, plus a dev warning naming the ask.
-  assert.match(gate, /if \(shownRef\.current\) return;\s*grace = setTimeout\(\(\) => \{\s*if \(shownRef\.current\) return;[\s\S]{0,300}showToast\(GATE_RETRY_TOAST, 'info', 3500\);\s*close\(false\);\s*\}, GATE_SHOW_GRACE_MS\);\s*\}, gateWatchdogMs\(req\.reason\)\);/, 'never shown means no, never yes');
+  assert.match(gate, /if \(shownRef\.current\) return;[\s\S]{0,300}setHint\(true\); close\(false\);\s*\}, gateWatchdogMs\(req\.reason\)\);/, 'never shown means no, never yes');
   assert.match(gate, /if \(__DEV__\) console\.warn\(`GrownUpGate never showed/);
-  assert.match(gate, /export const GATE_RETRY_TOAST = 'That didn’t open\. Try again in a sec\.';/);
 });
 
 test('the gate watchdog re-arms for every ask and gives real-money gates longer', () => {
@@ -189,7 +188,7 @@ test('the gate watchdog re-arms for every ask and gives real-money gates longer'
   // Every ask resets shown and re-runs the watch (the effect depends on req).
   assert.match(gate, /reqRef\.current = r; answerRef\.current = null; shownRef\.current = false;/);
   assert.match(gate, /\}, \[presenting, req, close\]\);/);
-  const body = gate.slice(gate.indexOf('export const GATE_SHOW_WATCHDOG_MS'), gate.indexOf('/** What a kid sees'));
+  const body = gate.slice(gate.indexOf('export const GATE_SHOW_WATCHDOG_MS'), gate.indexOf('/** How long the kind'));
   const js = body.replace(/export /g, '').replace('(reason: GateReason | null | undefined): number', '(reason)');
   const ms = new Function(`${js}\nreturn { gateWatchdogMs };`)();
   assert.equal(ms.gateWatchdogMs({ kind: 'share' }), 3000);

@@ -2,7 +2,7 @@
  * Capture a flex card and hand it to the OS share sheet. The OS sheet is the
  * only way out: no in-app posting, no account linking (kid safety).
  */
-import { shareExternal, shareFileExternal } from '../services/external';
+import { shareExternal, shareFileExternal, shareFileName } from '../services/external';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import type { RefObject } from 'react';
@@ -55,18 +55,22 @@ export function activityLabel(activity: string | null | undefined): string | nul
   return 'other';
 }
 
-/** The picture's name in the share sheet header and in Messages or AirDrop (never a random id). */
-export const SHARE_FILE_NAME = 'Theme Park Shark.jpg';
+/** The picture's name in the share sheet header and in Messages or AirDrop when a card has none of its own. */
+export const SHARE_FILE_NAME = 'Theme Park Shark';
 
-/** The capture under its friendly name. Any file trouble falls back to the original picture. */
-export async function friendlyShareFile(uri: string): Promise<string> {
-  const dir = FileSystem.cacheDirectory;
-  if (!dir) return uri;
+/**
+ * The capture under a readable name (services/external shareFileName: "Whack-a-Shark-12840.jpg"),
+ * never the capture's random id. The same folder as the hotfix's named copies; each share clears it.
+ * Any file trouble falls back to the original picture.
+ */
+export async function friendlyShareFile(uri: string, name: string = SHARE_FILE_NAME): Promise<string> {
+  const cache = FileSystem.cacheDirectory;
+  if (!cache) return uri;
+  const folder = `${cache}share-card/`;
   try {
-    const folder = `${dir}share-card/`;
-    await FileSystem.makeDirectoryAsync(folder, { intermediates: true }).catch(() => undefined);
-    const to = `${folder}${encodeURIComponent(SHARE_FILE_NAME)}`;
-    await FileSystem.deleteAsync(to, { idempotent: true });
+    await FileSystem.deleteAsync(folder, { idempotent: true });
+    await FileSystem.makeDirectoryAsync(folder, { intermediates: true });
+    const to = `${folder}${shareFileName(name, 'jpg')}`;
     await FileSystem.copyAsync({ from: uri, to });
     return to;
   } catch {
@@ -78,8 +82,8 @@ export async function friendlyShareFile(uri: string): Promise<string> {
  * The OS share sheet for a card picture. `message` (a short line with the app link) rides
  * along so Messages and chat apps get the link without a paste; photo-only targets drop it.
  */
-export async function openShareSheet(uri: string, message?: string): Promise<ShareOutcome> {
-  const file = await friendlyShareFile(uri);
+export async function openShareSheet(uri: string, message?: string, name?: string): Promise<ShareOutcome> {
+  const file = await friendlyShareFile(uri, name);
   if (Platform.OS === 'ios') {
     const result = await shareExternal(message ? { url: file, message } : { url: file });
     if (!result) return { opened: false, shared: false, activity: null };

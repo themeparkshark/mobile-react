@@ -248,7 +248,7 @@ test('the gate shows above any share modal: a slot inside each one, the top slot
   assert.match(gate, /export function GrownUpGateSlot\(\) \{\s*return <GrownUpGateHost nested \/>;/);
   assert.match(gate, /hosts = nested \? \[\.\.\.hosts, host\] : \[host, \.\.\.hosts\];/, 'the root host stays at the bottom');
   assert.match(gate, /showGate = hosts\.length \? hosts\[hosts\.length - 1\]\.show : null;/, 'askGrownUp uses the top host');
-  assert.match(gate, /left\?\.resolve\(false\);/, 'a host that goes away answers no, so no button waits forever');
+  assert.match(gate, /left\?\.resolve\(ok\);/, 'a host that goes away answers (no, or a yes given during the fade): no button waits forever');
   // Results Share in every game, the ride card sheets, the Ride Photo card and both share studio modals.
   const slots = {
     'src/gamekit/GameShellV2.tsx': /\{visible && <GrownUpGateSlot \/>\}\s*<\/View>\s*\);\s*return rideChallenge \? gameContent/,
@@ -264,14 +264,14 @@ test('the gate answers only after it has faded out, so the share sheet can prese
   const gate = read('src/components/GrownUpGate.tsx');
   assert.match(gate, /<Modal visible=\{closing === null\}[\s\S]{0,200}?onShow=\{\(\) => \{ shownRef\.current = true; \}\} onDismiss=\{finish\}>/);
   assert.match(gate, /setTimeout\(finish, GATE_DISMISS_FALLBACK_MS\)/, 'a missed onDismiss still answers');
-  assert.match(gate, /if \(shownRef\.current\) return;[\s\S]{0,400}close\(false\);\s*\}, GATE_SHOW_GRACE_MS\);\s*\}, gateWatchdogMs\(req\.reason\)\)/, 'a refused gate answers no');
+  assert.match(gate, /if \(shownRef\.current\) return;[\s\S]{0,300}setHint\(true\); close\(false\);\s*\}, gateWatchdogMs\(req\.reason\)\)/, 'a refused gate answers no, with a kind hint');
   const g = gateModule();
   assert.equal(g.GATE_DISMISS_FALLBACK_MS, 2000);
   assert.match(gate, /if \(Platform\.OS !== 'ios'\) \{ finish\(\); return; \}/, 'Android answers at once');
   assert.equal(g.GATE_SHOW_WATCHDOG_MS, 3000);
   const ext = read('src/services/external.ts');
   assert.match(ext, /export const SHARE_SHEET_WAIT_MS = 30_000;/);
-  assert.match(ext, /Sharing\.shareAsync\(uri, options\)\.then\(\(\) => true\),\s*new Promise<boolean>\(resolve => \{ timer = setTimeout\(\(\) => resolve\(false\), SHARE_SHEET_WAIT_MS\); \}\)/);
+  assert.match(ext, /Sharing\.shareAsync\(file, options\)\.then\(\(\) => true\),\s*new Promise<boolean>\(resolve => \{ timer = setTimeout\(\(\) => resolve\(false\), SHARE_SHEET_WAIT_MS\); \}\)/);
   assert.match(ext, /Share\.share\(content, options\),\s*new Promise<null>/);
   assert.match(read('src/components/RideTracker/ShareableRideCard.tsx'), /if \(outcome\.opened\) onShare\?\.\(\);/, 'the sheet only closes after a real answer');
 });

@@ -55,7 +55,7 @@ test('dialogs and the grown-up gate wait their turn instead of stacking', () => 
   assert.match(dialog, /if \(shown\) \{/, 'the dialog opens only once it is the front layer');
   const gate = src('src/components/GrownUpGate.tsx');
   assert.match(gate, /const layerFront = useModalLayer\(!!req && !nested, 'wait'\);\s*const front = nested \? !!req : layerFront;/);
-  assert.match(gate, /if \(!req \|\| !front\) return null;/);
+  assert.match(gate, /if \(!req \|\| !front\) return hintPill;/, 'nothing but the hint until it is the front layer');
 });
 
 test('no Modal in the shop bypasses the layers', () => {

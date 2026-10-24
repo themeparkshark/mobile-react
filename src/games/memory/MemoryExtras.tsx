@@ -271,7 +271,7 @@ export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () =
     try {
       // Story size (1080x1920) with the TPS link and a QR; the grid never shows the cards.
       const uri = await captureFlex(storyRef, 'story');
-      await openShareSheet(uri, shareMessage(campaignUrl('memory')));
+      await openShareSheet(uri, shareMessage(campaignUrl('memory')), `Memory Daily ${daily.day}`);
     } catch {
       // The share sheet was dismissed or view-shot failed: nothing is sent.
     } finally {

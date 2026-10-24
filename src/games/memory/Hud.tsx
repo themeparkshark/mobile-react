@@ -35,8 +35,15 @@ const STREAK = require('../../assets/games/memory/studio/streak.png');
  * re-measure sends a native layout event. A burst of those during Finn's
  * warm-up crashed the app once (reanimated read an event that was not an
  * object). A View ring looks the same and costs less.
+ *
+ * Two rings, both moved only by opacity and scale on the UI thread:
+ * - the flight ring closes in from r 38 to r 16 (a thin gold line);
+ * - the hit ring sits at r 16 with a thick 5 px gold stroke and pops on a QUICK hit,
+ *   the same punch the old SVG gave by fattening its stroke from 2 to 5 px.
  */
 const RING_MAX_R = 38;
+const RING_HIT_R = 16;
+const RING_HIT_STROKE = 5;
 
 // -----------------------------------------------------------------------------
 // Chain plate + Showtime gauge + QUICK ring
@@ -99,8 +106,12 @@ export const ChainPlate = forwardRef<ChainPlateHandle, {
     transform: [{ translateX: shake.value }, { scale: scale.value * (1 + fuse.value * 0.06) }],
   }));
   const ringSt = useAnimatedStyle(() => ({
-    opacity: ring.value > 0.001 ? 0.35 + (1 - ring.value) * 0.65 : ringHit.value,
-    transform: [{ scale: (16 + ring.value * 22) / RING_MAX_R }],
+    opacity: ring.value > 0.001 ? 0.35 + (1 - ring.value) * 0.65 : 0,
+    transform: [{ scale: (RING_HIT_R + ring.value * (RING_MAX_R - RING_HIT_R)) / RING_MAX_R }],
+  }));
+  const ringHitSt = useAnimatedStyle(() => ({
+    opacity: ringHit.value,
+    transform: [{ scale: 1 + ringHit.value * 0.14 }],
   }));
   const pips = [];
   if (showtime) {
@@ -114,6 +125,7 @@ export const ChainPlate = forwardRef<ChainPlateHandle, {
       accessible accessibilityLabel={`Chain ${chain}${showtime ? ', Showtime' : ''}`}>
       <View style={styles.ringWrap} pointerEvents="none">
         <Animated.View style={[styles.quickRing, ringSt]} />
+        <Animated.View style={[styles.quickRingHit, ringHitSt]} />
       </View>
       <View style={styles.chainRow}>
         <Image source={STREAK} style={[styles.streakIcon, chain === 0 && !showtime && styles.streakIdle]} resizeMode="contain" />
@@ -271,7 +283,12 @@ const styles = StyleSheet.create({
   chainCompact: { width: undefined, minWidth: 58, paddingHorizontal: 10 },
   streakIdle: { opacity: 0.45 },
   ringWrap: { position: 'absolute', left: 4, top: -20, width: 84, height: 84, alignItems: 'center', justifyContent: 'center' },
-  quickRing: { width: RING_MAX_R * 2, height: RING_MAX_R * 2, borderRadius: RING_MAX_R, borderWidth: 3, borderColor: MM.gold },
+  quickRing: { position: 'absolute', width: RING_MAX_R * 2, height: RING_MAX_R * 2, borderRadius: RING_MAX_R, borderWidth: 2.5, borderColor: MM.gold },
+  // Outer edge at r 16 + half the stroke, like the old SVG circle's stroke at its hit peak.
+  quickRingHit: {
+    position: 'absolute', width: (RING_HIT_R + RING_HIT_STROKE / 2) * 2, height: (RING_HIT_R + RING_HIT_STROKE / 2) * 2,
+    borderRadius: RING_HIT_R + RING_HIT_STROKE / 2, borderWidth: RING_HIT_STROKE, borderColor: MM.gold, opacity: 0,
+  },
   chainRow: { flexDirection: 'row', alignItems: 'center' },
   streakIcon: { width: 20, height: 22 },
   chainText: { fontFamily: 'Shark', fontSize: 20, color: MM.navyText, marginLeft: 3 },

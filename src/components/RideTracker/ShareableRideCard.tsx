@@ -153,7 +153,7 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
 
       // The same share path as the Share Studio cards (grown-up gate first, then the iOS share sheet).
       // The gate shows above this card's sheet (GrownUpGateSlot), so a "no" keeps the card open.
-      const outcome = await openShareSheet(uri, shareMessage(campaignUrl('ride_log')));
+      const outcome = await openShareSheet(uri, shareMessage(campaignUrl('ride_log')), `${ride.ride_name} Ride Card`);
       if (outcome.opened) onShare?.();
     } catch {
       gameAlert('Could not make your card', 'Your ride is saved. Try sharing it again.');
