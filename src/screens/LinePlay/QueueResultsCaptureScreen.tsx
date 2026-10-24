@@ -35,6 +35,7 @@ import { ShellFrameContext } from '../../gamekit/ShellFrameContext';
 import type { WrapUpReason } from '../../gamekit/core/session';
 import { SFX } from '../../gamekit/SFX';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
+import { silenceForCapture } from '../../gamekit/audio/captureSilence';
 import { Haptic, hapticTrace } from '../../gamekit/Haptics';
 import { WhackAShark } from '../../games/whack';
 import { SharkySwim } from '../../games/sharky';
@@ -132,6 +133,9 @@ export default function QueueResultsCaptureScreen() {
   // What the run asked to hear and feel (names only; the volume stays at 0).
   const cues = useRef<string[]>([]);
   useEffect(() => {
+    // The capture never plays a sound, so it never touches the native audio
+    // stack either (a stuck simulator audio server freezes the app).
+    const unsilence = silenceForCapture();
     SFX.setMasterVolume(0);
     const play = GameAudio.play;
     GameAudio.play = (name, opts) => {
@@ -151,6 +155,7 @@ export default function QueueResultsCaptureScreen() {
     hapticTrace.listener = (name) => { cues.current = [...cues.current, `pattern ${name}`].slice(-12); };
     return () => {
       SFX.setMasterVolume(1);
+      unsilence();
       GameAudio.play = play;
       Object.assign(Haptic, feel);
       hapticTrace.listener = null;

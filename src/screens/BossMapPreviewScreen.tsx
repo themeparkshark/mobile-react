@@ -1,5 +1,6 @@
 import playerStorage from '../gamekit/core/playerStorage';
 import { useContext, useEffect, useMemo, useState } from 'react';
+import { silenceForCapture } from '../gamekit/audio/captureSilence';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BOSS_NAMES, type BossId, type BossRaid } from '../api/endpoints/parks/raid';
 import type { RideControlClaim, RideControlPark } from '../api/endpoints/parks/rideControl';
@@ -60,6 +61,8 @@ function fixtureRaid(boss: BossId, over: Partial<BossRaid> = {}): BossRaid {
  * `themeparkshark://ws6?section=win&boss=robo_shark&held=1` (simulator capture).
  */
 export default function BossMapPreviewScreen() {
+  // A capture screen is silent and never touches the native audio stack.
+  useEffect(() => silenceForCapture(), []);
   const [section, setSection] = useState<Section>('map');
   const [boss, setBoss] = useState<BossId>('kraken'), [run, setRun] = useState(0), [selected, setSelected] = useState(false);
   const [held, setHeld] = useState(false);

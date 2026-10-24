@@ -729,3 +729,24 @@ test('round 3: one card per ride miss, one surface, one exit word, honest ticks 
   // Sharky score: a full-width count-up field so its shadow sits under the fill at every size.
   assert.match(read('src/games/sharky/hud/SharkyResults.tsx'), /score: \{ width: '100%', fontFamily: 'Shark', fontSize: 54, lineHeight: 62/);
 });
+
+test('round 3 checks on screen: solid coin dots, the next-star word waits for its bar, captures stay off the audio stack', () => {
+  const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
+  // The pop is on a wrapper and the colour on a plain view: a right answer is a solid gold dot,
+  // an empty one darker blue (white read as filled on the blue card; a release capture drew a right answer hollow).
+  assert.match(duel, /<Animated\.View style=\{st\}><View style=\{\[styles\.goalDot, on \? styles\.goalDotOn : styles\.goalDotOff\]\} \/><\/Animated\.View>/);
+  assert.match(duel, /goalDotOff: \{ backgroundColor: '#3d9be6' \}/);
+  // "ALL 3 STARS!" never shows before the stars land.
+  const bar = read('src/gamekit/results/NextStarBar.tsx');
+  assert.match(bar, /shown\.value = withDelay\(delayMs, withTiming\(1/);
+  assert.match(bar, /<Animated\.Text style=\{\[styles\.word, tone === 'onWhite' && styles\.wordInk, wordStyle\]\}>/);
+  // Only capture screens silence the app; every one restores it on close.
+  const silence = read('src/gamekit/audio/captureSilence.ts');
+  assert.match(silence, /GameAudio\.useCaptureBackend\(silentBackend\(\)\)/);
+  assert.match(silence, /Audio\.setIsEnabledAsync\(true\)/);
+  assert.match(read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx'), /const unsilence = silenceForCapture\(\);[\s\S]*unsilence\(\);/);
+  assert.match(read('src/screens/BossMapPreviewScreen.tsx'), /useEffect\(\(\) => silenceForCapture\(\), \[\]\);/);
+  const { execSync } = require('node:child_process');
+  const users = execSync("git grep -l 'silenceForCapture\\|useCaptureBackend' -- src", { encoding: 'utf8' }).trim().split('\n').sort();
+  assert.deepEqual(users, ['src/gamekit/audio/GameAudio.ts', 'src/gamekit/audio/captureSilence.ts', 'src/screens/BossMapPreviewScreen.tsx', 'src/screens/LinePlay/QueueResultsCaptureScreen.tsx']);
+});

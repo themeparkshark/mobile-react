@@ -261,7 +261,10 @@ function GoalDot({ on, k, reducedMotion }: { on: boolean; k: number; reducedMoti
     s.value = withDelay(450 + k * 180, withSequence(withTiming(1.3, { duration: 110 }), withSpring(1, { damping: 8, stiffness: 300 })));
   }, [s, k, reducedMotion]);
   const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
-  return <Animated.View style={[styles.goalDot, on && styles.goalDotOn, st]} />;
+  // The pop is on a wrapper, the colour on a plain view: a right answer is
+  // always a solid gold dot, an empty one a darker blue (never white, which
+  // reads as "filled" on the blue card).
+  return <Animated.View style={st}><View style={[styles.goalDot, on ? styles.goalDotOn : styles.goalDotOff]} /></Animated.View>;
 }
 
 /**
@@ -402,8 +405,9 @@ const styles = StyleSheet.create({
   arrowDown: { transform: [{ rotate: '90deg' }] },
   goal: { alignItems: 'center', marginTop: 6 },
   goalRow: { flexDirection: 'row', alignItems: 'center' },
-  goalDot: { width: 24, height: 24, borderRadius: 12, borderWidth: 3, borderColor: C.ink, backgroundColor: '#ffffff', marginHorizontal: 4 },
+  goalDot: { width: 26, height: 26, borderRadius: 13, borderWidth: 3, borderColor: '#05346e', marginHorizontal: 4 },
   goalDotOn: { backgroundColor: C.gold },
+  goalDotOff: { backgroundColor: '#3d9be6' },
   goalEq: { fontFamily: 'Shark', fontSize: 24, color: '#ffffff', marginHorizontal: 6 },
   goalCoin: { width: 36, height: 36 },
   goalText: { fontFamily: 'Shark', fontSize: 20, color: '#ffffff', marginTop: 2 },

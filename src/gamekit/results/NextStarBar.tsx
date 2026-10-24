@@ -27,21 +27,26 @@ export function NextStarBar({ goal, delayMs = 0, reducedMotion = false, tone = '
   tone?: 'onBlue' | 'onWhite';
 }) {
   const bar = useSharedValue(reducedMotion ? goal.progress : 0);
+  // The word arrives with the bar, so "ALL 3 STARS!" never shows before the stars land.
+  const shown = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
     if (reducedMotion) {
       bar.value = goal.progress;
+      shown.value = 1;
       return undefined;
     }
     bar.value = withDelay(delayMs, withTiming(goal.progress, { duration: 700, easing: Easing.out(Easing.cubic) }));
-    return () => cancelAnimation(bar);
-  }, [goal.progress, delayMs, reducedMotion, bar]);
+    shown.value = withDelay(delayMs, withTiming(1, { duration: 220 }));
+    return () => { cancelAnimation(bar); cancelAnimation(shown); };
+  }, [goal.progress, delayMs, reducedMotion, bar, shown]);
+  const wordStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
   // A full-width fill scaled from its left edge: a transform, so the bar
   // never re-lays out while it grows.
   const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0, Math.min(1, bar.value)) }] }));
   return (
     <View style={styles.goal} accessible accessibilityLabel={a11yLabel ?? (goal.nextStar
       ? `${formatScore(goal.remaining)} points to star ${goal.nextStar}` : 'All three stars')}>
-      <Text style={[styles.word, tone === 'onWhite' && styles.wordInk]}>{word ?? nextStarWord(goal)}</Text>
+      <Animated.Text style={[styles.word, tone === 'onWhite' && styles.wordInk, wordStyle]}>{word ?? nextStarWord(goal)}</Animated.Text>
       <View style={styles.row}>
         <View style={styles.track}>
           <Animated.View style={[styles.fill, fillStyle]} />
