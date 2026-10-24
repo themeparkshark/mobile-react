@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useState } from 'react';
 import {
   COVER_FADE_MS, COVER_FINISH_MS, LATER_COVER_SHARE, coverCeiling, coverLiftAt,
 } from '../../constants/launchHandoff';
@@ -35,14 +35,21 @@ export interface CoverPlan {
    * the whole screen, header and footer included, so launch reads as one splash, then the game.
    */
   readonly launch: boolean;
+  /**
+   * The map under the cover is really on screen: its tiles have drawn (or the tile sheet's wait ran
+   * out). With the cover gone, this is the first visible map frame; tips time their calm from it.
+   */
+  readonly shown: boolean;
 }
 
-let plan: CoverPlan = { up: false, version: 0, token: 0, deadline: 0, share: null, ceiling: 0, lifting: false, launch: false };
+let plan: CoverPlan = { up: false, version: 0, token: 0, deadline: 0, share: null, ceiling: 0, lifting: false, launch: false, shown: false };
 let startedAt = 0;
 let mapMounted = false;
 let firstCover = true;
 let drawn = false;
 let held = false;
+/** Header and HUD icons that mounted under the cover and have not drawn yet (useCoverArt). */
+const artWaiting = new Set<string>();
 let safety: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<(value: CoverPlan) => void>();
 
@@ -64,7 +71,9 @@ function publish(next: Omit<CoverPlan, 'version'>, notify = true) {
 export function coverLifted(tok: number) {
   if (tok !== plan.token || !plan.up) return;
   const wasLaunch = plan.launch;
-  publish({ ...plan, up: false, lifting: false, share: null });
+  artWaiting.clear();
+  // No map ever mounted under this cover (nothing to wait for): the screen is what shows.
+  publish({ ...plan, up: false, lifting: false, share: null, shown: plan.shown || !mapMounted });
   // Launch is over: the audio hardware may wake once the map has settled (never during launch).
   if (wasLaunch) openAudioStartAfterLaunch();
 }
@@ -72,7 +81,7 @@ export function coverLifted(tok: number) {
 /** Re-plan the lift from what is true now: lift at once, or wait (bar creeping to the next step). */
 function replan(now: number, notify = true) {
   if (!plan.up || plan.lifting) return;
-  const at = coverLiftAt({ now, startedAt, drawn, held });
+  const at = coverLiftAt({ now, startedAt, drawn, held, artPending: artWaiting.size > 0 });
   if (at <= now) { publish({ ...plan, lifting: true, share: null }, notify); return; }
   const ceiling = Math.max(plan.ceiling, coverCeiling(mapMounted, held));
   if (at === plan.deadline && ceiling === plan.ceiling) return;
@@ -92,8 +101,8 @@ export function armMapCover(now = Date.now()) {
   const launch = firstCover;
   firstCover = false;
   publish({
-    up: true, token: plan.token + 1, deadline: coverLiftAt({ now, startedAt, drawn, held }),
-    share: launch ? null : LATER_COVER_SHARE, ceiling: coverCeiling(false, held), lifting: false, launch,
+    up: true, token: plan.token + 1, deadline: coverLiftAt({ now, startedAt, drawn, held, artPending: artWaiting.size > 0 }),
+    share: launch ? null : LATER_COVER_SHARE, ceiling: coverCeiling(false, held), lifting: false, launch, shown: false,
   }, false);
 }
 
@@ -108,9 +117,9 @@ export function beginMapCover(now = Date.now()): number {
   mapMounted = true;
   drawn = false;
   publish({
-    up: true, token: plan.token + 1, deadline: coverLiftAt({ now, startedAt, drawn, held }),
+    up: true, token: plan.token + 1, deadline: coverLiftAt({ now, startedAt, drawn, held, artPending: artWaiting.size > 0 }),
     share: continuing || launch ? null : LATER_COVER_SHARE,
-    ceiling: Math.max(continuing ? plan.ceiling : 0, coverCeiling(true, held)), lifting: false, launch,
+    ceiling: Math.max(continuing ? plan.ceiling : 0, coverCeiling(true, held)), lifting: false, launch, shown: false,
   });
   if (__DEV__) coverLog('map mounted', now);
   return plan.token;
@@ -122,7 +131,35 @@ export function mapCoverDrawn(tok: number) {
   if (tok !== plan.token || drawn) return;
   drawn = true;
   if (__DEV__) coverLog('map drawn', Date.now());
+  if (!plan.up) { mapTilesShown(tok); return; }
+  if (!plan.shown) plan = { ...plan, shown: true };
   replan(Date.now());
+}
+
+/**
+ * The map with this token is on screen: its tiles drew after the cover lifted, or the tile sheet's
+ * wait ran out. Tips and Finn's cards time their calm window from here.
+ */
+export function mapTilesShown(tok: number) {
+  if (tok !== plan.token || plan.shown) return;
+  publish({ ...plan, shown: true });
+}
+
+/**
+ * A header or HUD icon that must be on the first frame after the cover lifts (the coin, key and
+ * ticket pills, the chest button, the player's shark). Mounted under a cover, it holds the lift
+ * (never past the cover's hard cap) until its art has drawn. Returns the callback for the image's
+ * onLoad and onError. An icon that mounts with no cover up never waits for anything.
+ */
+export function useCoverArt(enabled = true): () => void {
+  const key = useId();
+  useLayoutEffect(() => {
+    if (!enabled || !plan.up || plan.lifting) return;
+    artWaiting.add(key);
+    replan(Date.now(), true);
+    return () => { if (artWaiting.delete(key)) replan(Date.now()); };
+  }, [enabled, key]);
+  return useCallback(() => { if (artWaiting.delete(key)) replan(Date.now()); }, [key]);
 }
 
 /** The screen holds the cover (never past COVER_MAX_MS once the map drew) while it is still picking home or park. */
@@ -161,4 +198,13 @@ export function useCoverPlan(): CoverPlan {
 /** Whether the map screen's loading cover is up (for gating tips and cards). */
 export function useMapCovered(): boolean {
   return useCoverPlan().up;
+}
+
+/**
+ * The map is really on screen: the cover is gone and the map's tiles have drawn (or their wait ran
+ * out). A kid's first seconds of map are timed from here, not from the cover's JS lift.
+ */
+export function useMapOnScreen(): boolean {
+  const value = useCoverPlan();
+  return !value.up && value.shown;
 }

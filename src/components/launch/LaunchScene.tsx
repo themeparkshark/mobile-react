@@ -1,6 +1,6 @@
 import { nativeSplashArtDrawn } from '../../nativeSplash';
-import { memo, useEffect } from 'react';
-import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import { memo, useEffect, useState } from 'react';
+import { Dimensions, Image as RNImage, StyleSheet, Text, View } from 'react-native';
 import { initialWindowMetrics } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import Animated, {
@@ -10,8 +10,23 @@ import Animated, {
 import config from '../../config';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 
-/** Alex's launch art: the same picture as the native launch screen (ios SplashScreen.storyboard). */
-export const LAUNCH_ART = require('../../../assets/images/splash-bg.png');
+/**
+ * Alex's launch art: the same picture as the native launch screen (ios SplashScreen.storyboard draws
+ * splash-bg.png), saved as a 750-wide JPEG (about 240 KB, not the 2.3 MB 1080-wide PNG) so a busy
+ * phone decodes it while the native splash is still up.
+ */
+export const LAUNCH_ART = require('../../../assets/images/launch-art.jpg');
+
+/** The art has drawn once this launch: a later screen with the scene shows the bar at once. */
+let launchArtDrawn = false;
+// Start decoding the art the moment this module loads (Root imports it at app start, while the
+// native splash is still up), so the scene's first frame already has its picture.
+try {
+  const uri = RNImage.resolveAssetSource(LAUNCH_ART)?.uri;
+  if (uri) Image.prefetch(uri, 'memory-disk').catch(() => undefined);
+} catch {
+  // No asset resolver (tests): the scene still loads the art itself.
+}
 /** Same blue as the native splash (app.config.js splash.backgroundColor). */
 export const LAUNCH_BLUE = '#0768B9';
 
@@ -84,14 +99,23 @@ function LaunchScene({ active = true, fact: givenFact }: {
   const factStyle = useAnimatedStyle(() => ({ opacity: factIn.value }));
   const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0, Math.min(1, launchFill.value)) }] }));
   const still = reduced || !active;
+  // Until the art has drawn, the scene is only the native splash's own blue: the bar, the fact and
+  // the bubbles wait for the picture, so a slow decode can never show an empty bar on a flat screen.
+  // The bar keeps filling underneath, so it appears already moving.
+  const [artIn, setArtIn] = useState(launchArtDrawn);
+  const onArt = () => {
+    launchArtDrawn = true;
+    setArtIn(true);
+    nativeSplashArtDrawn();
+  };
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.blue]}>
       <Image source={LAUNCH_ART} transition={0} contentFit="cover" accessible={false} cachePolicy="memory-disk" priority="high"
-        onLoad={nativeSplashArtDrawn} style={{ width, height }} />
-      {!still && LAUNCH_BUBBLES.map((b, i) => <Bubble key={i} bubble={b} rise={height * 0.6} />)}
+        onLoad={onArt} onError={onArt} style={{ width, height }} />
+      {artIn && !still && LAUNCH_BUBBLES.map((b, i) => <Bubble key={i} bubble={b} rise={height * 0.6} />)}
       {/* The phone's own bottom inset (one fixed number), so the fact and bar sit in exactly the same
           spot on the Splash route, the Loading screen and the map's cover (no jump at a hand-off). */}
-      <View style={[styles.bottom, { paddingBottom: BOTTOM_INSET }]}>
+      <View style={[styles.bottom, { paddingBottom: BOTTOM_INSET, opacity: artIn ? 1 : 0 }]}>
         <View style={styles.column}>
           <Animated.View style={factStyle}>
             <Text style={styles.fact} numberOfLines={3}>{fact ?? ' '}</Text>

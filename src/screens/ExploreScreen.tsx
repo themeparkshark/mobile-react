@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
-import { Text, View, Pressable, StyleSheet } from 'react-native';
+import { Dimensions, Text, View, Pressable, StyleSheet } from 'react-native';
 import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
 import useLivePoll from '../hooks/useLivePoll';
 import useUserIdle, { idlePollInterval, markUserActivity } from '../hooks/useUserIdle';
@@ -27,7 +27,7 @@ import TopbarColumn from '../components/Topbar/TopbarColumn';
 import UsernameBanner from '../components/Topbar/UsernameBanner';
 import Wrapper from '../components/Wrapper';
 import MapLaunchCover from '../components/map/MapLaunchCover';
-import { holdMapCover, useMapCovered } from '../components/map/mapCover';
+import { holdMapCover, useCoverArt, useMapCovered, useMapOnScreen } from '../components/map/mapCover';
 import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import { LocationContext } from '../context/LocationProvider';
@@ -142,6 +142,16 @@ import { UpperText } from '../ui/upper';
 
 /** After the map cover lifts, Finn's park tips wait this long (the map, its pins and PLAY RIDE arrive first). */
 const MAP_CALM_MS = 5000;
+/**
+ * Finn's "A ride coin is in range" card: a narrow card on the right, resting just above PLAY RIDE,
+ * so it never covers the player's shark in the middle or the chest button under the compass. On a
+ * short phone (iPhone SE) it drops Finn's picture and sits a little lower to stay clear of both.
+ */
+const SHORT_MAP = Dimensions.get('window').height < 740;
+const COIN_TIP_STYLE = {
+  position: 'absolute', right: 12, width: Math.min(300, Dimensions.get('window').width - 24),
+  bottom: SHORT_MAP ? 150 : 196, zIndex: 40,
+} as const;
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -288,12 +298,16 @@ function ExploreScreen() {
   const mapCovered = useMapCovered();
   // The first seconds after the cover lifts belong to the map, its pins and PLAY RIDE: Finn's park
   // tips wait MAP_CALM_MS, so a kid never meets a pile of cards (at most one card in that window).
+  // The window starts at the first VISIBLE map frame: this screen is on top (the Splash and Loading
+  // routes are gone), the cover has lifted and the map's tiles have drawn (or their wait ran out).
+  // Timing it from the cover's JS lift let a busy phone spend the 5 s behind the launch screens.
+  const mapOnScreen = useMapOnScreen() && mapFocused;
   const [mapCalm, setMapCalm] = useState(false);
   useEffect(() => {
-    if (mapCovered) { setMapCalm(false); return; }
+    if (!mapOnScreen) { setMapCalm(false); return; }
     const timer = setTimeout(() => setMapCalm(true), MAP_CALM_MS);
     return () => clearTimeout(timer);
-  }, [mapCovered]);
+  }, [mapOnScreen]);
   // At launch the home map can show for a moment before the park check settles and swaps in the
   // park map. Hold the one cover (never past its deadline) until the screen knows which map it is.
   const mapChoicePending = !!player && permissionGranted && !park && !homeLocationConfirmed;
@@ -361,22 +375,24 @@ function ExploreScreen() {
   const [frightIntroOwns, setFrightIntroOwns] = useState(false);
   // Trigger onboarding tutorial on first visit
   useEffect(() => {
-    if (mapFocused && !mapCovered && player && isReady && parkLoaded && permissionGranted && !isActive && !hasCompleted('onboarding') && !frightIntroOwns) {
+    if (mapOnScreen && player && isReady && parkLoaded && permissionGranted && !isActive && !hasCompleted('onboarding') && !frightIntroOwns) {
       const timer = setTimeout(() => {
         startTutorial('onboarding', { inPark: !!park });
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [mapFocused, mapCovered, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
+  }, [mapOnScreen, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
 
   // A player who learned the home hunt should meet the park loop when they
   // actually arrive. Park-first players already saw these steps in onboarding.
   useEffect(() => {
-    if (!mapFocused || mapCovered || !player || !isReady || !parkLoaded || !permissionGranted || !park || isActive ||
+    // Finn's park lesson waits for the same calm window as his tips: the first seconds of a visible
+    // map belong to the map, its pins and PLAY RIDE.
+    if (!mapOnScreen || !mapCalm || !player || !isReady || !parkLoaded || !permissionGranted || !park || isActive ||
       !hasCompleted('onboarding') || hasCompleted('park_arrival') || frightIntroOwns) return;
-    const timer = setTimeout(() => startTutorial('park_arrival'), 1500);
+    const timer = setTimeout(() => startTutorial('park_arrival'), 300);
     return () => clearTimeout(timer);
-  }, [mapFocused, mapCovered, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
+  }, [mapOnScreen, mapCalm, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
   
   // One overlay at a time: a find that shows up during a tutorial waits for it.
   const [pendingFind, setPendingFind] = useState<{ item: PrepItemType; pivotId: number } | null>(null);
@@ -390,6 +406,8 @@ function ExploreScreen() {
   // Collect moment: after a ride win, back on the map, the coin flies from its island onto the shelf button.
   const mapProjector = useRef<MapProjector | null>(null);
   const avatarRef = useRef<View>(null);
+  // The map's loading cover waits for the player's shark on the HUD (never an empty circle after the lift).
+  const avatarArtDrawn = useCoverArt(!!player);
   const flightLayerRef = useRef<View>(null);
   const reducedMotion = useReducedGameMotion();
   const [pendingCollect, setPendingCollect] = useState<{ latitude: number; longitude: number; coinUrl: string | null; first: boolean } | null>(null);
@@ -1212,7 +1230,7 @@ function ExploreScreen() {
                 event currencies (and the unused legacy park coin) stay hidden. */}
             {park && theme?.currency && (
               <TopbarColumn>
-                <Currency image={theme.currency.icon_url} count={currencyBalance(player, theme.currency.name)}
+                <Currency coverArt image={theme.currency.icon_url} count={currencyBalance(player, theme.currency.name)}
                   name={theme.currency.name} flyTarget="theme_currency" />
               </TopbarColumn>
             )}
@@ -1221,14 +1239,14 @@ function ExploreScreen() {
                 (['Coins', 'Keys'].includes(currency.name) || currencyBalance(player, currency.name) > 0))
               .map((currency) => (
                 <TopbarColumn key={currency.id}>
-                  <Currency image={currency.icon_url} count={currencyBalance(player, currency.name)}
+                  <Currency coverArt image={currency.icon_url} count={currencyBalance(player, currency.name)}
                     name={currency.name === 'Coins' ? 'Coins' : currency.name}
                     flyTarget={currency.name === 'Coins' ? 'coins' : currency.name === 'Keys' ? 'keys' : undefined} />
                 </TopbarColumn>
               ))}
             {park && (
               <TopbarColumn>
-                <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
+                <Currency coverArt image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
               </TopbarColumn>
             )}
             {/* Away from a park: Coins | HOME HUNT | Tickets. It names the mode the map is in. */}
@@ -1236,7 +1254,7 @@ function ExploreScreen() {
               <>
                 <TopbarColumn>
                   {currencies[0] && (
-                    <Currency image={currencies[0].icon_url} count={currencyBalance(player, currencies[0].name)}
+                    <Currency coverArt image={currencies[0].icon_url} count={currencyBalance(player, currencies[0].name)}
                       name="Coins" flyTarget="coins" />
                   )}
                 </TopbarColumn>
@@ -1257,7 +1275,7 @@ function ExploreScreen() {
                   </Pressable>
                 </TopbarColumn>
                 <TopbarColumn>
-                  <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
+                  <Currency coverArt image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
                 </TopbarColumn>
               </>
             )}
@@ -1313,7 +1331,7 @@ function ExploreScreen() {
           catching={homeCatch} onCatchCollected={onHomeCatchCollected} onCatchDone={onHomeCatchDone}
           onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
-          introAllowed={mapFocused && !mapCovered && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
+          introAllowed={mapOnScreen && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
           onIntroOpenChange={setHomeIntroOpen} chestButton={mapControls} chestButtonCount={mapControlsCount} compassHintReady={parkTipReady} highlightNearestFind={highlightNearestFind}
           parkStory={activeParkProject ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null}
@@ -1487,7 +1505,7 @@ function ExploreScreen() {
                     RootNavigation.navigate('Park', { park: park.id, player: player.id });
                   }}
                 >
-                  <Avatar player={player} size="lg" />
+                  <Avatar player={player} size="lg" onArtDrawn={avatarArtDrawn} />
                 </Button>
               </Animated.View>
             )}
@@ -1505,8 +1523,9 @@ function ExploreScreen() {
         {/* One-time Finn tips: the park welcome, then the first ride coin in range. Never over a game or dialog. */}
         {player && parkTip && (
           <OneTimeTip key={parkTip} id={parkTip} ready={parkTipReady}
+            compact={parkTip === 'coin_in_range' && SHORT_MAP}
             style={parkTip === 'coin_in_range'
-              ? { position: 'absolute', left: 12, right: 12, bottom: 196, zIndex: 40 }
+              ? COIN_TIP_STYLE
               : { position: 'absolute', left: 12, right: 12, top: 132, zIndex: 40 }} />
         )}
         {/* One HUD row floats over the map (the map runs right up to the header). */}

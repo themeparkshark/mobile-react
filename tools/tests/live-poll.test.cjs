@@ -147,7 +147,7 @@ test('entry screens left under the map stop their video and loops', () => {
   assert.match(loading, /<LaunchScene active=\{focused\} fact=\{fact\} \/>/);
   const scene = read('src/components/launch/LaunchScene.tsx');
   assert.match(scene, /const still = reduced \|\| !active;/);
-  assert.match(scene, /\{!still && LAUNCH_BUBBLES\.map/);
+  assert.match(scene, /\{artIn && !still && LAUNCH_BUBBLES\.map/);
   assert.match(scene, /return \(\) => cancelAnimation\(p\);/, 'bubbles stop their loops on unmount');
   const login = read('src/screens/Auth/LoginScreen.tsx');
   assert.match(login, /shouldPlay=\{focused\}/);

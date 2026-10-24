@@ -32,10 +32,12 @@ export const COVER_CLOUDS = [
  * On the map screen the bar is the screen cover's own (mapCover.coverFill), so it finishes
  * exactly as the cover lifts.
  */
-function MapCoverSky({ done = false, fill: drivenFill }: {
+function MapCoverSky({ done = false, fill: drivenFill, bar = true }: {
   readonly done?: boolean;
   /** The screen's cover bar (mapCover.coverFill), on the same clock as the cover's lift. */
   readonly fill?: SharedValue<number>;
+  /** Off for the sheet over a map whose tiles are still coming (the HUD is already up there). */
+  readonly bar?: boolean;
 }) {
   const window = useWindowDimensions();
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
@@ -51,11 +53,11 @@ function MapCoverSky({ done = false, fill: drivenFill }: {
     return () => cancelAnimation(t);
   }, [reduced, t]);
   useEffect(() => {
-    if (drivenFill) return;
+    if (drivenFill || !bar) return;
     ownFill.value = done
       ? withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) })
       : withTiming(1, { duration: COVER_MAX_MS, easing: Easing.out(Easing.cubic) });
-  }, [done, drivenFill, ownFill]);
+  }, [done, drivenFill, ownFill, bar]);
   const sharkSize = Math.round(Math.min(width, height) * 0.26);
   const barWidth = Math.round(Math.min(width * 0.7, 320));
   const sharkStyle = useAnimatedStyle(() => ({ transform: [{ translateY: 6 - t.value * 16 }, { rotate: `${-4 + t.value * 8}deg` }] }));
@@ -75,11 +77,13 @@ function MapCoverSky({ done = false, fill: drivenFill }: {
             cachePolicy="memory-disk" priority="high" transition={0} />
         </Animated.View>
         {/* The splash's bar (white rim, navy fill), so the launch reads as one bar finishing. */}
-        <View style={[styles.barRim, { width: barWidth }]}>
-          <View style={styles.bar}>
-            <Animated.View style={[styles.barFill, fillStyle]} />
+        {bar && (
+          <View style={[styles.barRim, { width: barWidth }]}>
+            <View style={styles.bar}>
+              <Animated.View style={[styles.barFill, fillStyle]} />
+            </View>
           </View>
-        </View>
+        )}
       </View>
     </View>
   );

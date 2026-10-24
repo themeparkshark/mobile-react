@@ -976,6 +976,8 @@ export default function CommunityCenterScreen() {
             <Animated.View 
               style={[
                 styles.giftCountBadge,
+                // iPhone SE: a little lower, so the bubble clears the wallet pill above it.
+                SHORT_SCREEN && { top: 128 },
                 {
                   opacity: entranceAnim,
                   transform: [{ 

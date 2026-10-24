@@ -154,5 +154,7 @@ test('opening on the launch scene, the native art waits for the JS art (capped b
   assert.deepEqual(calls, ['hide']);
   timer.fn();
   assert.deepEqual(calls, ['hide'], 'released once');
-  assert.match(read('src/components/launch/LaunchScene.tsx'), /onLoad=\{nativeSplashArtDrawn\}/);
+  const scene = read('src/components/launch/LaunchScene.tsx');
+  assert.match(scene, /onLoad=\{onArt\} onError=\{onArt\}/);
+  assert.match(scene, /const onArt = \(\) => \{\s*launchArtDrawn = true;\s*setArtIn\(true\);\s*nativeSplashArtDrawn\(\);/);
 });

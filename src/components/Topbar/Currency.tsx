@@ -7,6 +7,7 @@ import { useHelp } from '../help/HelpProvider';
 import { glossaryKeyForName } from '../../services/help/glossary';
 import countText from '../../helpers/countText';
 import { UpperText } from '../../ui/upper';
+import { useCoverArt } from '../map/mapCover';
 
 interface CurrencyProps {
   /** Remote icon URL or a bundled require(); falls back to the gold coin. */
@@ -14,11 +15,14 @@ interface CurrencyProps {
   count: number;
   name?: string;
   flyTarget?: string;
+  /** On the map's header: the loading cover waits for this icon, so the pill never shows a number alone. */
+  coverArt?: boolean;
 }
 
 const FALLBACK_ICON = require('../../../assets/images/coingold.png');
 
-export default function Currency({ image, count, name, flyTarget }: CurrencyProps) {
+export default function Currency({ image, count, name, flyTarget, coverArt = false }: CurrencyProps) {
+  const artDrawn = useCoverArt(coverArt);
   const { registerTarget } = useCurrencyFly();
   const containerRef = useRef<View>(null);
 
@@ -208,7 +212,8 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
                 gold square. The launch warms these icons, and a failed load falls back to the coin. */}
             <Image
               source={iconFailed || !image ? FALLBACK_ICON : typeof image === 'number' ? image : { uri: image }}
-              onError={() => setIconFailed(true)}
+              onLoad={artDrawn}
+              onError={() => { if (iconFailed || !image) artDrawn(); setIconFailed(true); }}
               cachePolicy="memory-disk"
               priority="high"
               transition={0}

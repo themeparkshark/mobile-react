@@ -34,13 +34,16 @@ export const COVER_HARD_MAX_MS = 4000;
  * - the map has drawn and the screen knows which map it shows: lift now;
  * - the map has drawn but the screen is still picking home or park: wait for that until
  *   COVER_MAX_MS from the cover's first frame, then lift onto the map that drew;
- * - the map has not drawn yet: wait for its tiles (the hard cap is only a safety).
+ * - the map has not drawn yet: wait for its tiles (the hard cap is only a safety);
+ * - the header and HUD icons (coin, key, ticket, chest, the player's shark) have not drawn yet: wait
+ *   for them too, so the first frame after the lift never shows a numbers-only pill or an empty circle.
  */
 export function coverLiftAt(state: {
   readonly now: number; readonly startedAt: number; readonly drawn: boolean; readonly held: boolean;
+  readonly artPending?: boolean;
 }): number {
   const hard = state.startedAt + COVER_HARD_MAX_MS;
-  if (!state.drawn) return hard;
+  if (!state.drawn || state.artPending) return hard;
   if (!state.held) return state.now;
   return Math.min(hard, Math.max(state.now, state.startedAt + COVER_MAX_MS));
 }

@@ -1,7 +1,7 @@
 import { openExternal } from '../services/external';
 import MapLaunchCover from './map/MapLaunchCover';
 import TileWaitSheet, { TILE_WAIT_MAX_MS } from './map/TileWaitSheet';
-import { beginMapCover, mapCoverDrawn, releaseMapCover, useMapCovered } from './map/mapCover';
+import { beginMapCover, mapCoverDrawn, mapTilesShown, releaseMapCover, useMapCovered } from './map/mapCover';
 import { Image } from 'expo-image';
 import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
@@ -368,7 +368,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const [tileWaitOver, setTileWaitOver] = useState(false);
   useEffect(() => {
     if (covered || tilesDrawn || tileWaitOver) return;
-    const timer = setTimeout(() => setTileWaitOver(true), TILE_WAIT_MAX_MS + 500);
+    const timer = setTimeout(() => { setTileWaitOver(true); mapTilesShown(coverToken.current); }, TILE_WAIT_MAX_MS + 500);
     return () => clearTimeout(timer);
   }, [covered, tilesDrawn, tileWaitOver]);
   // A layout effect, so the cover is up before this map's first frame paints (a park map that

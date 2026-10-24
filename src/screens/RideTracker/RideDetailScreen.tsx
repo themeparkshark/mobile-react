@@ -101,13 +101,18 @@ MetaPill.displayName = 'MetaPill';
 
 // ─── Favorite star ───
 // Off: Alex's star drawn as a white rim around a darker blue middle (an empty slot to fill).
-// On: the full gold star. Saving pops it with a spring and six little gold stars burst out of it, so
-// the star itself says "saved" with zero reading and nothing ever covers the ride's name (it replaced a
-// words banner that sat on long names). Taking it off shrinks it back into its slot. Native driver only.
+// On: the full gold star. Saving pops it with a spring, a white ring flashes out of it and six gold
+// stars burst out one after another, so the star itself says "saved" with zero reading and nothing
+// ever covers the ride's name (it replaced a words banner that sat on long names). Taking it off
+// shrinks it back into its slot. Native driver only; Reduce Motion shows the gold star with no burst.
 const SPARKS = [0, 1, 2, 3, 4, 5].map(i => {
   const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
-  return { x: Math.cos(a), y: Math.sin(a) };
+  // A slight stagger (every other star leaves a beat later), so the burst reads as a pop, not a blink.
+  const start = (i % 2) * 0.1 + i * 0.015;
+  return { x: Math.cos(a), y: Math.sin(a), start };
 });
+/** How long one save's burst lasts (the stars fly out and fade). */
+export const STAR_BURST_MS = 680;
 const FavoriteStar: React.FC<{ on: boolean; size: number }> = React.memo(({ on, size }) => {
   const pop = useRef(new Animated.Value(1)).current;
   const burst = useRef(new Animated.Value(0)).current;
@@ -116,34 +121,56 @@ const FavoriteStar: React.FC<{ on: boolean; size: number }> = React.memo(({ on, 
   useEffect(() => {
     if (first.current) { first.current = false; return; }
     if (reducedMotion) return;
-    pop.setValue(on ? 0.7 : 1.15);
+    pop.setValue(on ? 0.6 : 1.15);
     burst.setValue(0);
     const anim = Animated.parallel([
       Animated.spring(pop, { toValue: 1, friction: 3, tension: 160, useNativeDriver: true }),
-      ...(on ? [Animated.timing(burst, { toValue: 1, duration: 520, easing: Easing.out(Easing.quad), useNativeDriver: true })] : []),
+      ...(on ? [Animated.timing(burst, { toValue: 1, duration: STAR_BURST_MS, easing: Easing.linear, useNativeDriver: true })] : []),
     ]);
     anim.start();
     return () => anim.stop();
   }, [on, reducedMotion, pop, burst]);
   const inner = Math.round(size * 0.56);
-  const spark = Math.round(size * 0.32);
-  const reach = size * 0.95;
+  const spark = Math.round(size * 0.42);
+  const reach = size * 1.2;
+  const ring = Math.round(size * 1.1);
   return (
     <Animated.View style={{ width: size, height: size, transform: [{ scale: pop }] }}>
-      {on && !reducedMotion && SPARKS.map((d, i) => (
-        <Animated.View key={i} pointerEvents="none" accessible={false}
+      {on && !reducedMotion && (
+        // The white ring flash: it opens out of the star and fades in the first third of the burst.
+        <Animated.View pointerEvents="none" accessible={false}
           style={{
-            position: 'absolute', left: (size - spark) / 2, top: (size - spark) / 2,
-            opacity: burst.interpolate({ inputRange: [0, 0.15, 0.7, 1], outputRange: [0, 1, 1, 0] }),
-            transform: [
-              { translateX: burst.interpolate({ inputRange: [0, 1], outputRange: [0, d.x * reach] }) },
-              { translateY: burst.interpolate({ inputRange: [0, 1], outputRange: [0, d.y * reach] }) },
-              { scale: burst.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.4, 1, 0.6] }) },
-            ],
-          }}>
-          <GameIcon name="star" size={spark} />
-        </Animated.View>
-      ))}
+            position: 'absolute', left: (size - ring) / 2, top: (size - ring) / 2, width: ring, height: ring,
+            borderRadius: ring / 2, borderWidth: 3, borderColor: B.white,
+            opacity: burst.interpolate({ inputRange: [0, 0.05, 0.35, 1], outputRange: [0, 0.95, 0, 0] }),
+            transform: [{ scale: burst.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0.5, 1.45, 1.45] }) }],
+          }} />
+      )}
+      {on && !reducedMotion && SPARKS.map((d, i) => {
+        const t0 = d.start;
+        const t1 = Math.min(1, t0 + 0.8);
+        const span = t1 - t0;
+        // An ease-out in plain points (native interpolation is piecewise linear).
+        const fly = burst.interpolate({
+          inputRange: [0, t0, t0 + span * 0.25, t0 + span * 0.5, t1, 1].map((v, k, a) => (k > 0 && v <= a[k - 1] ? a[k - 1] + 1e-4 : v)),
+          outputRange: [0, 0, 0.44, 0.75, 1, 1],
+        });
+        return (
+          <Animated.View key={i} pointerEvents="none" accessible={false}
+            style={{
+              position: 'absolute', left: (size - spark) / 2, top: (size - spark) / 2,
+              opacity: burst.interpolate({ inputRange: [0, t0, t0 + 0.08, t0 + 0.55, t1, 1], outputRange: [0, 0, 1, 1, 0, 0] }),
+              transform: [
+                { translateX: Animated.multiply(fly, d.x * reach) },
+                { translateY: Animated.multiply(fly, d.y * reach) },
+                { scale: burst.interpolate({ inputRange: [0, t0, t0 + 0.2, t1, 1], outputRange: [0.4, 0.4, 1.1, 0.6, 0.6] }) },
+                { rotate: burst.interpolate({ inputRange: [0, 1], outputRange: ['0deg', i % 2 ? '-50deg' : '50deg'] }) },
+              ],
+            }}>
+            <GameIcon name="star" size={spark} />
+          </Animated.View>
+        );
+      })}
       {on ? <GameIcon name="star" size={size} /> : (
         <>
           <GameIcon name="star" size={size} mono={B.white} />

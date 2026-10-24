@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, SHADOW } from '../../ui';
+import { useCoverArt } from './mapCover';
 
 const CHEST = require('../../../assets/images/daily/chest-closed.png');
 
@@ -11,11 +12,13 @@ const CHEST = require('../../../assets/images/daily/chest-closed.png');
  * so "Back to map" never loses the day's reward.
  */
 export default function ChestMapButton({ onPress }: { readonly onPress: () => void }) {
+  // The map's loading cover waits for the chest art, so the button is never an empty blue circle.
+  const artDrawn = useCoverArt();
   return (
     <Pressable onPress={() => { haptic('tapLight'); onPress(); }} accessibilityRole="button"
       accessibilityLabel="Daily chest, ready to open" hitSlop={6}
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
-      <Image source={CHEST} style={styles.chest} contentFit="contain" />
+      <Image source={CHEST} style={styles.chest} contentFit="contain" transition={0} onLoad={artDrawn} onError={artDrawn} />
       <View style={styles.dot} accessibilityElementsHidden />
     </Pressable>
   );

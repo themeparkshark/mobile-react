@@ -523,7 +523,7 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   // Header icons have no big-coin placeholder (it drew as a flat gold square while a 36 pt icon decoded).
   const currencySrc = read('src/components/Topbar/Currency.tsx');
   assert.doesNotMatch(currencySrc, /placeholder=\{FALLBACK_ICON\}/);
-  assert.match(currencySrc, /onError=\{\(\) => setIconFailed\(true\)\}/);
+  assert.match(currencySrc, /onError=\{\(\) => \{ if \(iconFailed \|\| !image\) artDrawn\(\); setIconFailed\(true\); \}\}/);
   assert.match(read('src/components/Wrapper.tsx'), /cachePolicy="memory-disk"\s*priority="high"\s*transition=\{0\}/);
   // The launch map comes from the phone's recent fix when there is one (a fresh fix can take seconds).
   assert.match(read('src/context/LocationProvider.tsx'), /getLastKnownPositionAsync\(\{ maxAge: 5 \* 60 \* 1000, requiredAccuracy: 200 \}\)/);
@@ -552,9 +552,9 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /<Map coverHost="screen" /);
   // Tips, tutorials, the home intro and the adventure slam wait for the cover to lift.
   assert.match(explore, /const parkTipReady = !mapCovered && mapCalm && mapTipReady\(\{/);
-  assert.match(explore, /if \(!mapFocused \|\| mapCovered \|\| !player/);
-  assert.match(explore, /if \(mapFocused && !mapCovered && player/);
-  assert.match(explore, /introAllowed=\{mapFocused && !mapCovered && homeIntroAllowed\}/);
+  assert.match(explore, /if \(!mapOnScreen \|\| !mapCalm \|\| !player/);
+  assert.match(explore, /if \(mapOnScreen && player/);
+  assert.match(explore, /introAllowed=\{mapOnScreen && homeIntroAllowed\}/);
   assert.match(explore, /slam=\{mapCovered \? undefined : adventureMoment\.slam\}/);
   // One cover through the home-to-park swap at launch.
   assert.match(explore, /const mapChoicePending = !!player && permissionGranted && !park && !homeLocationConfirmed;/);
@@ -704,7 +704,7 @@ test('first seconds on the map: pins arrive in the cover fade, late pins land in
   assert.match(explore, /const parkTipReady = !mapCovered && mapCalm && mapTipReady\(\{/);
   const map = read('src/components/Map.tsx');
   assert.match(map, /\{!covered && !tileWaitOver && <TileWaitSheet drawn=\{tilesDrawn\} \/>\}/);
-  assert.match(map, /setTimeout\(\(\) => setTileWaitOver\(true\), TILE_WAIT_MAX_MS \+ 500\)/);
+  assert.match(map, /setTimeout\(\(\) => \{ setTileWaitOver\(true\); mapTilesShown\(coverToken\.current\); \}, TILE_WAIT_MAX_MS \+ 500\)/);
   assert.match(map, /onDidFinishRenderingFrameFully=\{covered \|\| !tilesDrawn \? revealMap : undefined\}/);
   const sheet = read('src/components/map/TileWaitSheet.tsx');
   assert.match(sheet, /pointerEvents="none"/);
@@ -726,4 +726,113 @@ test('launch bubbles move a plain layer: the drawn bubble (with its border) is a
   const src = read('src/components/launch/LaunchScene.tsx');
   assert.match(src, /<Animated\.View style=\{\[styles\.bubbleSlot, \{ left: `\$\{bubble\.left\}%`, width: bubble\.size, height: bubble\.size \}, style\]\}>\s*<View style=\{\[styles\.bubble, \{ borderRadius: bubble\.size \/ 2 \}\]\} \/>/);
   assert.match(src, /bubbleSlot: \{ position: 'absolute', bottom: 20 \},/);
+});
+
+// Wave 3 round 3: launch art, HUD icons on the first frame after the lift, calm from the first visible map frame.
+function loadCoverStore() {
+  let ids = 0;
+  const cleanups = [];
+  const react = {
+    useId: () => `k${++ids}`,
+    useLayoutEffect: (fn) => { const c = fn(); if (typeof c === 'function') cleanups.push(c); },
+    useEffect: () => undefined,
+    useCallback: (fn) => fn,
+    useState: (v) => [typeof v === 'function' ? v() : v, () => undefined],
+  };
+  const store = loadTs('src/components/map/mapCover.ts', { react });
+  return { store, cleanups };
+}
+
+test('the launch cover waits for the header and HUD icons (inside its hard cap), then lifts onto a map with every icon', () => {
+  const k = loadTs('src/constants/launchHandoff.ts');
+  assert.equal(k.coverLiftAt({ now: 1300, startedAt: 1000, drawn: true, held: false, artPending: true }), 1000 + k.COVER_HARD_MAX_MS);
+  assert.equal(k.coverLiftAt({ now: 1300, startedAt: 1000, drawn: true, held: false, artPending: false }), 1300);
+  const { store } = loadCoverStore();
+  store.armMapCover(Date.now());
+  const tok = store.beginMapCover(Date.now());
+  const coinDrawn = store.useCoverArt(true);
+  const sharkDrawn = store.useCoverArt(true);
+  store.useCoverArt(false); // an icon that is not on the map's header never waits
+  store.mapCoverDrawn(tok);
+  assert.equal(store.useCoverPlan().lifting, false, 'tiles drawn but the coin and the shark are not');
+  coinDrawn();
+  assert.equal(store.useCoverPlan().lifting, false);
+  sharkDrawn();
+  assert.equal(store.useCoverPlan().lifting, true, 'every icon drawn: the cover lifts now');
+  assert.equal(store.useCoverPlan().shown, true);
+  store.coverLifted(tok);
+  assert.equal(store.isMapCovered(), false);
+  assert.equal(store.useMapOnScreen(), true);
+  // Wired where the grader saw empty pills and circles.
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.equal((explore.match(/<Currency coverArt image=/g) || []).length, 5);
+  assert.match(explore, /<Avatar player=\{player\} size="lg" onArtDrawn=\{avatarArtDrawn\} \/>/);
+  assert.match(explore, /const avatarArtDrawn = useCoverArt\(!!player\);/);
+  assert.match(read('src/components/map/ChestMapButton.tsx'), /onLoad=\{artDrawn\} onError=\{artDrawn\}/);
+  assert.match(read('src/components/Topbar/Currency.tsx'), /onLoad=\{artDrawn\}/);
+  const avatar = read('src/components/Avatar.tsx');
+  assert.match(avatar, /onLoad=\{index === 0 \? artDrawn : undefined\}/);
+  assert.match(avatar, /onLoad=\{artDrawn\}/);
+});
+
+test('the map is on screen only once the cover is gone AND the tiles drew (or their wait ran out); calm and Finn time from there', () => {
+  const { store } = loadCoverStore();
+  store.armMapCover(Date.now());
+  const tok = store.beginMapCover(Date.now());
+  store.coverLifted(tok); // the hard cap lifted it before any tile drew
+  assert.equal(store.isMapCovered(), false);
+  assert.equal(store.useMapOnScreen(), false, 'a lifted cover over an undrawn map is not a visible map');
+  store.mapCoverDrawn(tok);
+  assert.equal(store.useMapOnScreen(), true);
+  const late = loadCoverStore().store;
+  late.armMapCover(Date.now());
+  const t2 = late.beginMapCover(Date.now());
+  late.coverLifted(t2);
+  late.mapTilesShown(t2); // the tile sheet's wait ran out
+  assert.equal(late.useMapOnScreen(), true);
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /const mapOnScreen = useMapOnScreen\(\) && mapFocused;/);
+  assert.match(explore, /if \(!mapOnScreen\) \{ setMapCalm\(false\); return; \}\s*const timer = setTimeout\(\(\) => setMapCalm\(true\), MAP_CALM_MS\);/);
+  assert.match(explore, /startTutorial\('park_arrival'\), 300\)/);
+});
+
+test('launch scene: only the native blue until the art draws, then art, bar and fact together; small art prefetched at module load', () => {
+  const src = read('src/components/launch/LaunchScene.tsx');
+  assert.match(src, /const \[artIn, setArtIn\] = useState\(launchArtDrawn\);/);
+  assert.match(src, /\{artIn && !still && LAUNCH_BUBBLES\.map/);
+  assert.match(src, /style=\{\[styles\.bottom, \{ paddingBottom: BOTTOM_INSET, opacity: artIn \? 1 : 0 \}\]\}/);
+  assert.match(src, /Image\.prefetch\(uri, 'memory-disk'\)/);
+  assert.match(read('src/Root.tsx'), /import SplashScreen from '\.\/screens\/SplashScreen';/);
+  assert.match(read('src/screens/SplashScreen.tsx'), /LaunchScene/);
+});
+
+test('a slow map shows the living sky (clouds and the bobbing shark), never a flat pale sheet', () => {
+  const sheet = read('src/components/map/TileWaitSheet.tsx');
+  assert.match(sheet, /<MapCoverSky bar=\{false\} \/>/);
+  const sky = read('src/components/map/MapCoverSky.tsx');
+  assert.match(sky, /if \(drivenFill \|\| !bar\) return;/);
+  assert.match(sky, /\{bar && \(/);
+});
+
+test('SE fits: the coin-in-range card is narrow on the right above PLAY RIDE; the gifts bubble clears the wallet', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /position: 'absolute', right: 12, width: Math\.min\(300, Dimensions\.get\('window'\)\.width - 24\),/);
+  assert.match(explore, /compact=\{parkTip === 'coin_in_range' && SHORT_MAP\}/);
+  assert.match(read('src/screens/CommunityCenterScreen.tsx'), /SHORT_SCREEN && \{ top: 128 \},/);
+});
+
+test('favorites star: bigger staggered burst with a white ring flash, native driver, nothing with Reduce Motion', () => {
+  const src = read('src/screens/RideTracker/RideDetailScreen.tsx');
+  assert.match(src, /export const STAR_BURST_MS = 680;/);
+  assert.match(src, /const spark = Math\.round\(size \* 0\.42\);/);
+  assert.match(src, /const reach = size \* 1\.2;/);
+  assert.match(src, /borderColor: B\.white,/);
+  assert.match(src, /if \(reducedMotion\) return;/);
+  assert.match(src, /\{on && !reducedMotion && SPARKS\.map/);
+  assert.doesNotMatch(src.slice(src.indexOf('// ─── Favorite star ───'), src.indexOf("FavoriteStar.displayName")), /useNativeDriver: false|easing: Easing\.out\(Easing\.quad\) \}\)/);
+});
+
+test('audio: a cue asked for before launch is over loads on expo-av at once and moves to the graph when the gate opens', () => {
+  const backends = read('src/gamekit/audio/backends.ts');
+  assert.match(backends, /if \(!AV_ONLY_TYPES\.has\(assetType\(src\)\) && !audioStartOpen\(\)\) \{[^]*?const ok = await this\.av\.load\(key, src, voices\);[^]*?whenAudioMayStart\(\)\s*\.then\(\(\) => this\.api\.load\(key, src\)\)/);
 });

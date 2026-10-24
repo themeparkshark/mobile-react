@@ -16,7 +16,7 @@
 
 import { Audio } from 'expo-av';
 import { Asset } from 'expo-asset';
-import { audioWanted, whenAudioMayStart } from './startGate';
+import { audioStartOpen, audioWanted, whenAudioMayStart } from './startGate';
 
 /**
  * react-native-audio-api 0.6 AudioParam automation is unsafe from JS: the
@@ -668,6 +668,18 @@ export class HybridBackend implements AudioBackend {
   }
 
   async load(key: string, src: number, voices: number): Promise<boolean> {
+    if (!AV_ONLY_TYPES.has(assetType(src)) && !audioStartOpen()) {
+      // Launch is not over (startGate.ts): never wait on the gate. The cue loads on expo-av now (it
+      // plays at once, a little later than the graph would), then moves to the low-latency graph
+      // once the gate opens, for every later play.
+      const ok = await this.av.load(key, src, voices);
+      if (ok) this.routes.set(key, this.av);
+      void whenAudioMayStart()
+        .then(() => this.api.load(key, src))
+        .then((up) => { if (up && this.routes.has(key)) this.routes.set(key, this.api); })
+        .catch(() => undefined);
+      return ok;
+    }
     if (!AV_ONLY_TYPES.has(assetType(src)) && (await this.api.load(key, src))) {
       this.routes.set(key, this.api);
       return true;
