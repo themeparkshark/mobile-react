@@ -41,6 +41,7 @@ import { Burst } from './social/SocialFx';
 import { effectiveStatus, initialTab, mergePage, searchHint, type FriendStatus, type FriendsTab } from './social/socialModel';
 import { SurfaceContext, clearStatus, setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
 import { staggerIn } from '../ui/stagger';
+import AmbientSwim from '../ui/AmbientSwim';
 
 const CREST = require('../../assets/images/screens/friends/noti.png');
 // The shark-and-envelope cut off its square tile (same art as the bell's request badge), so it sits in the tab like the heart.
@@ -213,7 +214,8 @@ function SocialList({ rows, refreshing, onRefresh, onEndReached, footer, empty, 
 function Empty({ title, message, onFind }: { readonly title: string; readonly message: string; readonly onFind?: () => void }) {
   return (
     <Animated.View entering={FadeIn} style={styles.empty}>
-      <Image source={CREST} style={styles.emptyArt} contentFit="contain" />
+      {/* The empty screen still has a friend in it: the art swims and bubbles rise (ambient budget). */}
+      <AmbientSwim><Image source={CREST} style={styles.emptyArt} contentFit="contain" /></AmbientSwim>
       <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.2}>{title}</Text>
       <Text style={styles.emptyText} maxFontSizeMultiplier={1.3}>{message}</Text>
       {onFind && <Pill label="Find friends" icon="search" tone="gold" onPress={onFind} style={{ marginTop: 14 }} />}

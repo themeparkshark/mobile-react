@@ -37,6 +37,7 @@ import { LeavingRow, Pill, SectionHeader, SocialError } from './social/SocialKit
 import CleanScreenBackground, { CLEAN_SCREEN_ACCENT, CLEAN_SCREEN_INK, CLEAN_SCREEN_INK_SOFT } from '../components/CleanScreenBackground';
 import { SurfaceContext, useFriendOverrides } from './social/socialStore';
 import { staggerIn } from '../ui/stagger';
+import useAmbientLoop from '../power/useAmbientLoop';
 
 /** Mark-all-read only makes sense when something is unread. */
 export function showMarkAllRead(notifications: readonly { read_at?: string | null; id?: string }[], readIds?: ReadonlySet<string>): boolean {
@@ -52,15 +53,14 @@ const HEADER_WITH_PILL_HEIGHT = 70;
 function CaughtUp() {
   const reduced = useUiReducedMotion();
   const ring = useSharedValue(0);
-  useEffect(() => {
-    if (reduced) return;
+  // The bell rings now and then, through the ambient budget: it rests when idle, in the background or on Battery Saver.
+  useAmbientLoop(() => {
     ring.value = withDelay(500, withRepeat(withSequence(
       withTiming(1, { duration: 90 }), withTiming(-1, { duration: 120 }), withTiming(0.7, { duration: 110 }),
       withTiming(-0.5, { duration: 110 }), withTiming(0, { duration: 140, easing: Easing.out(Easing.quad) }),
       withTiming(0, { duration: 2600 }),
     ), -1, false));
-    return () => cancelAnimation(ring);
-  }, [reduced, ring]);
+  }, () => { cancelAnimation(ring); ring.value = 0; }, !reduced);
   const bellStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${ring.value * 14}deg` }] }));
   return (
     <Reanimated.View entering={reduced ? undefined : FadeInDown.springify().damping(14)} style={styles.empty}>
