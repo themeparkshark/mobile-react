@@ -17,7 +17,7 @@ import NextUpRail from '../nextUp/NextUpRail';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
-const DAILY_PAID: PaidRewards = { coins: 15, tickets: 1, energy: 20, xp: 35 };
+const DAILY_PAID: PaidRewards = { coins: 15, tickets: 1, energy: 20, xp: 35, item: { id: 2, name: 'Purple Castle T-Shirt', image: null, rarity: 1 } };
 const LEVEL_PAID: PaidRewards = { coins: 120, tickets: 2, energy: 30, item: { id: 1, name: 'Captain Hat', image: null, rarity: 2 } };
 
 type Stage = { k: 'flame'; moment: Exclude<FlameMoment, { kind: 'none' }> } | { k: 'tomorrow'; days: number }
@@ -107,7 +107,7 @@ export default function StreakFlamePreview() {
               <RewardReveal key={stage.n} reducedMotion={false} rewards={stage.rewards} opening={stage.opening} onOpen={openChest} onDone={() => setStage(null)}
                 subtitle={stage.src === 'daily' ? 'All three goals done!' : 'You reached Level 4!'} dropIn={stage.src === 'level'}
                 autoOpen={stage.src === 'daily'} fullSet={stage.src === 'daily'}
-                expectRows={stage.src === 'daily' ? { small: 4, big: 0 } : { small: 3, big: 1 }}
+                expectRows={stage.src === 'daily' ? { small: 4, big: 1 } : { small: 3, big: 1 }}
                 preview={<GymPreview level={stage.src === 'level'} />}
                 closedArt={stage.src === 'daily' ? ICON_SOURCES.chest : LEVEL_CHEST} openArt={stage.src === 'daily' ? ICON_SOURCES.chestOpen : LEVEL_CHEST_OPEN}
                 footer={stage.src === 'daily' ? <FlameUpRow from={8} to={9} grow reducedMotion={false} /> : undefined} />

@@ -21,6 +21,12 @@ import RewardBurst from '../RewardBurst';
 import { useAmbient } from './power';
 
 const BOX = require('../../../assets/images/retention/mystery-box.png');
+/** Everything around the chest and rows on a known-prize card (safe areas, ribbon, header, flame row, button, padding). */
+const CHROME_KNOWN = 410;
+/** The rows area for this many small prize rows and hero cards (row heights plus gaps). */
+function rowsFor(small: number, big: number): number {
+  return small * 48 + big * 104 + 14;
+}
 const FREEZE = require('../../../assets/images/retention/freeze.png');
 const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
 
@@ -72,13 +78,17 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   // Small phones (SE) get a compact layout so every prize shows without scrolling.
   const compact = height < 720;
   const known = !!expectRows && expectRows.small + expectRows.big > 0;
-  const size = Math.min(width * (known ? 0.5 : 0.44), height * (compact ? 0.17 : known ? 0.25 : 0.21), known ? 210 : 190);
-  const stageH = size + (known ? 70 : 8);
+  // With known prizes the card is sized to fit the whole screen (ribbon, chest, every row, the flame row and the
+  // button, under the Dynamic Island and above the home bar): the chest takes what the rows leave.
+  const expectedRowsH = known && expectRows ? rowsFor(expectRows.small, expectRows.big) : 0;
+  const size = known
+    ? Math.max(compact ? 96 : 120, Math.min(width * 0.5, 210, height - CHROME_KNOWN - expectedRowsH))
+    : Math.min(width * 0.44, height * (compact ? 0.17 : 0.21), 190);
+  const stageH = size + (known ? 22 : 8);
   // Rows get a fixed area (scrolls only on small phones), so the card never changes height.
   const baseRows = compact ? Math.max(200, height - size - 300) : Math.max(200, Math.min(300, height - size - 380));
   // Sized to the prizes coming; if the server pays more rows than the preview said (a milestone gear), it grows to fit
   // them all at the burst (never a row cut off at the top).
-  const rowsFor = (small: number, big: number) => small * (compact ? 50 : 54) + big * 104 + 18;
   const bob = useSharedValue(0);
   const shake = useSharedValue(0);
   const pop = useSharedValue(1);
@@ -104,7 +114,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const rows = rewards ? rewardRows(rewards) : [];
   const revealed = !!rewards;
   const rowsHeight = known && expectRows
-    ? Math.min(baseRows + 120, Math.max(rowsFor(expectRows.small, expectRows.big),
+    ? Math.min(Math.max(expectedRowsH, height - CHROME_KNOWN - size), Math.max(expectedRowsH,
       revealed ? rowsFor(rows.filter(r => !isBigReward(r.kind)).length, rows.filter(r => isBigReward(r.kind)).length) : 0))
     : baseRows;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
