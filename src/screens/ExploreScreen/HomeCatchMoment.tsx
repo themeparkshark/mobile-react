@@ -570,6 +570,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   };
   const [bonusXp, setBonusXp] = useState<number | null>(null);
   const [coinStamp, setCoinStamp] = useState<number | null>(null);
+  /**
+   * Round 4: a plain (React) gate over the badge, on from the server's answer to the done frame. A React commit
+   * after the badge has left could flash an old frame of its animated props on Fabric (r4 clip, one frame at
+   * 5.955 s); the gate's opacity 0 rides in that same commit, so a finished badge can never reappear.
+   */
+  const [badgeOn, setBadgeOn] = useState(false);
   // v2: the full-screen catch reveal for Ride Photo catches (the print, the pop, the tally, the book page).
   const [shownReveal, setReveal] = useState<CatchRevealData | null>(null);
   /** Bumped by every prime, so a finished catch's deferred clears never touch the next ride. */
@@ -747,6 +753,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const motion = !latest.current.reducedMotion;
     const next = catchSummary(item, data);
     setSummary(next);
+    setBadgeOn(true);
     latest.current.onCascade?.(true);
     setBonusXp(typeof data.photo?.bonus_xp === 'number' && data.photo.bonus_xp > 0 ? data.photo.bonus_xp : null);
     // Via the print, the map and player updates wait out the close and the flight (their commits never land in
@@ -868,6 +875,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
     }));
     setShowing(null);
+    setBadgeOn(false);
     reveal.value = 0; gradeIn.value = 0;
     // The (already invisible) reveal clears two frames later, off the done frame; its photo is released after.
     revealedRef.current = false; revealCovered.value = false; revealHand.current = null; escapeHand.current = null;
@@ -1112,6 +1120,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       if (!current || current.token !== token) return;
       current.data = data; current.next = next;
       setSummary(next);
+      setBadgeOn(true);
       latest.current.onCascade?.(true);
       barFrom.value = next.progressFrom; barTo.value = next.progressTo;
       // Small surprises for the tenth catch and beyond: the inked burst turns a new angle every catch, and
@@ -1719,8 +1728,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         goldSize={goldSize} goldAmt={goldAmt} goldBloom={goldBloomV} fxT={fxT} gatherT={gatherT} reduced={reducedMotion} onCopyShown={onCopyShown} />}
 
       {/* The badge stays mounted (hidden at badgeIn 0), so the first reward never mounts its views mid-cascade */}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, !badgeOn && styles.gateOff]}>
       <CatchBadge st={badgeStyles} summary={summary} photo={photo} bonusXp={bonusXp} newRide={newRide} art={art} name={name} color={color}
         left={badgeLeft} bottom={badgeBottom} coinStamp={coinStamp} />
+      </View>
       {/* The coin stream (always mounted, still until a catch throws its coins). */}
       {layer.width > 0 && <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         {Array.from({ length: COIN_STREAM.max }, (_, index) => (
@@ -1734,6 +1745,7 @@ export default memo(HomeCatchMoment);
 
 const styles = StyleSheet.create({
   tint: { backgroundColor: 'rgba(11,47,92,0.35)' },
+  gateOff: { opacity: 0 },
   warmCanvas: { position: 'absolute', left: 0, top: 0, width: 2, height: 2, opacity: 0.01 },
   ring: { position: 'absolute', left: 0, top: 0, width: 80, height: 80, borderRadius: 40, borderWidth: 5 },
   halo: { position: 'absolute', left: 0, top: 0, width: 140, height: 140 },
