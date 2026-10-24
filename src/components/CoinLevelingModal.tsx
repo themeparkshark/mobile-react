@@ -226,6 +226,17 @@ export default function CoinLevelingModal({
     return () => { entrance.stop(); bars.stop(); };
   }, [visible, rideCoin?.id, reducedMotion]);
 
+  // The success card is mounted by setState('success'). Its spring starts only after that commit: a spring
+  // started earlier can finish on the UI thread before a busy JS thread mounts the card, which then mounts
+  // with the stale small scale and sits there (seen for over a second in release JS under load).
+  useEffect(() => {
+    if (state !== 'success') return;
+    cancelUi(successIn);
+    if (reducedMotionRef.current) { successIn.value = 1; return; }
+    successIn.value = 0;
+    successIn.value = uiSpring(1, SPRING.stamp);
+  }, [state]);
+
   useEffect(() => {
     if (!reducedMotion) return;
     stopUpgradeEffects();
@@ -330,7 +341,9 @@ export default function CoinLevelingModal({
 
         // Stop shake, big pop: the new coin punches to 1.35x, then springs home.
         cancelUi(coinShake); coinShake.value = 0;
-        cancelUi(coinPop); coinPop.value = 0.5;
+        // The punch starts from wherever the charge left the coin (about 1.12x), never from a shrunken coin:
+        // if a busy device holds a frame here, the kid still sees a big coin, not a half-size one.
+        cancelUi(coinPop);
         setSlowServer(false);
         // Burst: the bar snaps full, the gold blooms and settles to a warm glow behind the new
         // coin, sparkles fly, and one shine sweeps the coin.
@@ -354,9 +367,7 @@ export default function CoinLevelingModal({
           coinPop.value = 1; successIn.value = 1;
         } else {
           coinPop.value = uiSequence(uiTiming(1.35, { duration: 140, easing: EASE.out }), uiSpring(1, SPRING.pop));
-          successIn.value = 0;
-          // The whole card stamps in (one small overshoot); the coin above it does the big pop.
-          successIn.value = uiSpring(1, SPRING.stamp);
+          // The success card springs in from an effect once it is mounted (see the state effect), never before.
         }
 
         // The server upgrade is already confirmed. A profile refresh failure must not
