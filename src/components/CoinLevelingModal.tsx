@@ -62,11 +62,21 @@ const CTA_HEIGHT = SUCCESS_CTA_WIDTH / 3.8;
 const CHARGE_MS = LEVEL_UP_ACTS.charge.end;
 /** The new coin settles this much bigger on the success card (120 pt art to about 142 pt), and this far lower. */
 export const SUCCESS_COIN_SCALE = 1.18;
-const SUCCESS_COIN_DROP = 14;
+/**
+ * A short phone (iPhone SE, 667 pt): the success card is laid out tighter (the coin grows a little, no extra line,
+ * smaller prize chips, the first-time tip only if there is room) so Awesome! is on screen from the first frame.
+ */
+export const SHORT_PHONE = SCREEN_H < 740;
+const COIN_GROW = SHORT_PHONE ? 1.06 : SUCCESS_COIN_SCALE;
+const SUCCESS_COIN_DROP = SHORT_PHONE ? 4 : 14;
 /** On success the line under the coin (and the blue band) move down this far, clear of the bigger coin and its plate. */
-const SUCCESS_TEXT_DROP = 22;
+const SUCCESS_TEXT_DROP = SHORT_PHONE ? 0 : 22;
 /** Vertical padding of the success box, the breathing gap it keeps after fitting, and when and how fast it fits. */
-const SUCCESS_BOX_PAD = 10;
+const SUCCESS_BOX_PAD = SHORT_PHONE ? 4 : 10;
+/** The first-time tip shows on the success card only when the card has this much spare room for it. */
+const TIP_ROOM = 96;
+/** Prize chips: smaller on a short phone so two fit on one row. */
+const CHIP = SHORT_PHONE ? { icon: 22, font: 17, padX: 8 } : { icon: 26, font: 20, padX: 10 };
 export const SUCCESS_SNUG_GAP = 12;
 const SUCCESS_SNUG_AFTER_MS = 950;
 export const SUCCESS_SNUG_MS = 280;
@@ -152,7 +162,7 @@ export default function CoinLevelingModal({
   const plate = useSharedValue(0);
   const coinStyle = useAnimatedStyle(() => {
     const x = windupWobble(windup.value, CHARGE_MS, 1.5, 6);
-    return { transform: [{ translateY: SUCCESS_COIN_DROP * grow.value }, { scale: coinPop.value * (1 + (SUCCESS_COIN_SCALE - 1) * grow.value) },
+    return { transform: [{ translateY: SUCCESS_COIN_DROP * grow.value }, { scale: coinPop.value * (1 + (COIN_GROW - 1) * grow.value) },
       { translateX: x }, { rotate: `${x * 0.9}deg` }] };
   });
   // The success content is on screen from its very first frame (never a blank card while a spring starts
@@ -186,6 +196,9 @@ export default function CoinLevelingModal({
   // The success content's measured heights (the box that grows, and what is inside it), and whether it has settled.
   const successBox = useRef({ outer: 0, inner: 0 });
   const successSettled = useRef(false);
+  // Whether the success card had room for the first-time tip (decided once per success, from its spare space).
+  const [tipRoom, setTipRoom] = useState(false);
+  const tipRoomDecided = useRef(false);
   const snugBusy = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The level-up show, on the UI thread: the charge bar, the gold gathering behind the coin,
@@ -289,6 +302,7 @@ export default function CoinLevelingModal({
   // with the stale small scale and sits there (seen for over a second in release JS under load).
   useEffect(() => {
     successSettled.current = false;
+    if (state !== 'success') { tipRoomDecided.current = false; setTipRoom(false); }
     if (snugBusy.current) { clearTimeout(snugBusy.current); snugBusy.current = null; }
     if (state !== 'success') return undefined;
     // Once the punch and the stamp have settled (and a first-time tip has had its moment to appear), the card
@@ -320,8 +334,12 @@ export default function CoinLevelingModal({
   // Fit the held height to the success content: the spare space in the growing success box (beyond a small
   // breathing gap) comes off the held minimum. Layout events while it eases are ignored, then it checks once more.
   const snug = () => {
-    if (!successSettled.current || snugBusy.current) return;
     const { outer, inner } = successBox.current;
+    if (!tipRoomDecided.current && outer > 0 && inner > 0) {
+      tipRoomDecided.current = true;
+      setTipRoom(outer - inner - SUCCESS_BOX_PAD * 2 >= TIP_ROOM);
+    }
+    if (!successSettled.current || snugBusy.current) return;
     if (outer <= 0 || inner <= 0 || heldTarget.current <= 0) return;
     const spare = outer - inner - SUCCESS_BOX_PAD * 2 - SUCCESS_SNUG_GAP;
     if (spare <= 2) return;
@@ -703,6 +721,8 @@ export default function CoinLevelingModal({
                   textAlign: 'center',
                   marginBottom: 2,
                   marginTop: state === 'success' ? SUCCESS_TEXT_DROP : 0,
+                  // A short phone skips this line on the success card (the ribbon already names the new tier).
+                  display: state === 'success' && SHORT_PHONE ? 'none' : 'flex',
                 }}>
                   {state === 'success' ? 'YOUR COIN LEVELED UP'
                     : state === 'maxed' ? 'MAX LEVEL REACHED' : 'LEVEL UP YOUR COIN'}
@@ -1067,10 +1087,10 @@ export default function CoinLevelingModal({
                       borderWidth: 2,
                       borderColor: '#F3C657',
                       borderRadius: 18,
-                      paddingHorizontal: 20,
-                      paddingVertical: 14,
+                      paddingHorizontal: SHORT_PHONE ? 12 : 20,
+                      paddingVertical: SHORT_PHONE ? 8 : 14,
                       alignItems: 'center',
-                      marginBottom: 16,
+                      marginBottom: SHORT_PHONE ? 6 : 16,
                       width: '100%',
                     }}>
                       {/* The tier first, as a big chip in the tier's own metal (silver, gold, water blue, orange):
@@ -1086,10 +1106,12 @@ export default function CoinLevelingModal({
                           <Text style={{ fontFamily: 'Shark', fontSize: 20, color: '#ffffff', paddingTop: 2 }}>{nextLevel}</Text>
                         </View>
                       </View>
-                      <Text style={{ fontFamily: 'Knockout', fontSize: 14,
-                        color: '#19496B', marginTop: 8, textAlign: 'center' }}>
-                        {nextVisualReward}
-                      </Text>
+                      {!SHORT_PHONE && (
+                        <Text style={{ fontFamily: 'Knockout', fontSize: 14,
+                          color: '#19496B', marginTop: 8, textAlign: 'center' }}>
+                          {nextVisualReward}
+                        </Text>
+                      )}
 
                       {/* Progression v2 reveal: the perk or milestone card and its chips (server data). */}
                       {reveal && (
@@ -1100,9 +1122,9 @@ export default function CoinLevelingModal({
                           {revealBadges(unlocks, levelXp).length > 0 && <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 8 }}>
                             {revealBadges(unlocks, levelXp).map(badge => (
                               <View key={badge.say} accessible accessibilityLabel={badge.say} style={{ flexDirection: 'row', alignItems: 'center', gap: 6,
-                                backgroundColor: '#fff5d6', borderRadius: 16, borderWidth: 2, borderColor: '#ffcf3b', paddingHorizontal: 10, paddingVertical: 4 }}>
-                                <GameIcon name={badge.icon} size={26} />
-                                <Text style={{ fontFamily: 'Shark', fontSize: 20, color: '#05346e', paddingTop: 2 }}>{badge.label}</Text>
+                                backgroundColor: '#fff5d6', borderRadius: 16, borderWidth: 2, borderColor: '#ffcf3b', paddingHorizontal: CHIP.padX, paddingVertical: 4 }}>
+                                <GameIcon name={badge.icon} size={CHIP.icon} />
+                                <Text style={{ fontFamily: 'Shark', fontSize: CHIP.font, color: '#05346e', paddingTop: 2 }}>{badge.label}</Text>
                               </View>
                             ))}
                           </View>}
@@ -1118,9 +1140,9 @@ export default function CoinLevelingModal({
                             return (
                               <View key={perk.id} accessible accessibilityLabel={`New bonus: ${perk.description}`}
                                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#ffffff', borderRadius: 16,
-                                  borderWidth: 2, borderColor: '#ffcf3b', paddingHorizontal: 12, paddingVertical: 5 }}>
-                                <GameIcon name={chip.icon} size={26} />
-                                <Text style={{ fontFamily: 'Shark', fontSize: 20, color: '#05346e', paddingTop: 2 }}>{chip.label}</Text>
+                                  borderWidth: 2, borderColor: '#ffcf3b', paddingHorizontal: CHIP.padX + 2, paddingVertical: 5 }}>
+                                <GameIcon name={chip.icon} size={CHIP.icon} />
+                                <Text style={{ fontFamily: 'Shark', fontSize: CHIP.font, color: '#05346e', paddingTop: 2 }}>{chip.label}</Text>
                               </View>
                             );
                           })}
@@ -1128,7 +1150,7 @@ export default function CoinLevelingModal({
                       )}
                     </View>
                     {/* The very first level-up's tip sits inside the card, above the button (never over it). */}
-                    <OneTimeTip id="first_level_up" ready={visible && state === 'success'} compact instantExit
+                    <OneTimeTip id="first_level_up" ready={visible && state === 'success' && tipRoom} compact instantExit
                       style={{ alignSelf: 'stretch', marginBottom: 10 }} />
                     </View>
 

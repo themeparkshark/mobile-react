@@ -451,3 +451,11 @@ test('wave 3 round 3: the chaser art sits inside its gold rim', () => {
   assert.ok(/blendMode="dstOut"/.test(pin) && /const FOIL_INSET = 0\.0[4-8]/.test(pin), 'the foil laps over the art edge, so no blue edge shows outside the gold');
   assert.ok(!/ColorMatrix/.test(pin), 'the art keeps its own light-blue colours (no colour blend)');
 });
+
+test('wave 3 round 3: on a short phone the success card keeps Awesome! on screen', () => {
+  const modal = read('src/components/CoinLevelingModal.tsx');
+  assert.ok(modal.includes('export const SHORT_PHONE = SCREEN_H < 740;'), 'an SE-height phone gets the tight success card');
+  assert.ok(/ready=\{visible && state === 'success' && tipRoom\}/.test(modal), 'the first-time tip shows only when the card has room for it');
+  assert.ok(/setTipRoom\(outer - inner - SUCCESS_BOX_PAD \* 2 >= TIP_ROOM\)/.test(modal), 'room is measured from the success box');
+  assert.ok(modal.includes("display: state === 'success' && SHORT_PHONE ? 'none' : 'flex'"), 'the extra line is dropped on a short phone');
+});
