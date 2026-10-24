@@ -203,13 +203,17 @@ export interface MapStatusLine {
   readonly text: string;
   readonly tone: 'info' | 'error';
   readonly action: 'retry' | 'collections' | 'standings' | null;
+  /** Lead with a picture (the retry arrow) so a non-reader knows what the tap does. */
+  readonly icon?: 'retry';
 }
 
 /** The home map's state as one short line (a chip, never a card), or null while finds are up. */
-export function mapStatusLine({ homeLocationConfirmed, isLoading, empty, loadError, rankLine = null, firstHunt = false }: {
+export function mapStatusLine({ homeLocationConfirmed, isLoading, empty, loadError, rankLine = null, firstHunt = false, healGaveUp = false }: {
   homeLocationConfirmed: boolean; isLoading: boolean; empty: boolean; loadError: boolean; rankLine?: string | null;
   /** A brand new player's first hunt: the saved treats stay up and the map retries by itself, with no grown-up words. */
   firstHunt?: boolean;
+  /** The quick retries after a failed load all failed too. */
+  healGaveUp?: boolean;
 }): MapStatusLine | null {
   if (!homeLocationConfirmed) return { text: 'Checking your map...', tone: 'info', action: null };
   if (isLoading) return { text: 'Scouting for treats...', tone: 'info', action: null };
@@ -217,6 +221,8 @@ export function mapStatusLine({ homeLocationConfirmed, isLoading, empty, loadErr
   // A quiet map still shows this week's standing when there is one (tap opens the board).
   if (empty) return rankLine ? { text: `All quiet · ${rankLine}`, tone: 'info', action: 'standings' }
     : { text: 'All quiet · tap for your collection', tone: 'info', action: 'collections' };
-  if (loadError) return firstHunt ? null : { text: 'Saved map · tap to refresh', tone: 'info', action: 'retry' };
+  // First hunt: silent while the map heals itself; if it cannot, a retry arrow and two words.
+  if (loadError && firstHunt) return healGaveUp ? { text: 'Try again', tone: 'info', action: 'retry', icon: 'retry' } : null;
+  if (loadError) return { text: 'Saved map · tap to refresh', tone: 'info', action: 'retry' };
   return null;
 }

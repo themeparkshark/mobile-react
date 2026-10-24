@@ -20,6 +20,7 @@ import { shouldThrottleHomeRequest } from './homeRefresh';
 import { isInPickupRange } from './homeFindCopy';
 import HomeIntro, { useHomeIntroSeen } from './HomeIntro';
 import HomeHuntChip, { chipWidthFor, type HuntChipMessage } from './HomeHuntChip';
+import { createMapAutoRetry } from './mapAutoRetry';
 import HomeHudChips, { type ParkStoryChip } from './HomeHudChips';
 import HomeCatchMoment, { type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
 import { pickupFix } from './homeCatch';
@@ -152,6 +153,8 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  // True once the quick retries after a failed load have all failed (shows the try-again cue).
+  const [healGaveUp, setHealGaveUp] = useState(false);
   const { location, latestLocationSampleRef } = useContext(LocationContext);
   const { player, refreshPlayer } = useContext(AuthContext);
 
@@ -167,6 +170,17 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const cacheReadOnce = useRef(false);
   const firstScreenFocus = useRef(true);
   const screenFocused = useRef(false);
+  // A failed refresh heals itself: quick retries at 5 s, 15 s and 30 s after failures in a
+  // row while the map is on screen (one that comes due while away runs on return), so a kid
+  // is never left looking at treats that cannot be caught. After that, GPS moves, the 60 s
+  // check and the try-again cue keep going.
+  const [autoRetry] = useState(() => createMapAutoRetry({
+    delays: AUTO_RETRY_MS,
+    canRun: () => screenFocused.current && AppState.currentState === 'active',
+    run: () => void loadPrepItemsRef.current(true),
+    onGiveUp: () => setHealGaveUp(true),
+  }));
+  useEffect(() => () => autoRetry.dispose(), [autoRetry]);
   const [rankLine, setRankLine] = useState<string | null>(getHomeHuntRankLine());
   const [liveBar, setLiveBar] = useState<'raid' | 'teams' | null>(null);
   useEffect(() => { if (quiet) setLiveBar(null); }, [quiet]);
@@ -298,12 +312,15 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
         setPrepItems(Array.isArray(response.data) ? response.data : []);
         takeStats(response.player_stats);
         setLoadError(false);
+        setHealGaveUp(false);
+        autoRetry.onSuccess();
         recordFetch(lat, lng, lastFetchLocation, lastFetchTime);
 
         // Also refresh player data to sync currencies
         void refreshPlayer().catch(() => undefined);
       } catch (error) {
         setLoadError(true);
+        autoRetry.onFailure();
         if (__DEV__) console.log('Prep items load error:', error instanceof Error ? error.message : String(error));
       } finally {
         loadInFlight.current = false;
@@ -333,7 +350,9 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   // screen is active, and recheck once when the app returns to foreground.
   useEffect(() => {
     const check = () => {
-      if (screenFocused.current && AppState.currentState === 'active') void loadPrepItemsRef.current();
+      if (!screenFocused.current || AppState.currentState !== 'active') return;
+      // A quick retry that came due in the background runs now, unthrottled.
+      void loadPrepItemsRef.current(autoRetry.consumeOwed());
     };
     const interval = setInterval(check, 60_000);
     const subscription = AppState.addEventListener('change', state => {
@@ -346,20 +365,6 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
     if (refreshVersion > 0) void loadPrepItems(true);
   }, [refreshVersion]);
 
-  // A failed refresh heals itself: a few quick retries (5 s, 15 s, 30 s) while the map
-  // is on screen, so a kid is never left looking at treats that cannot be caught.
-  // After that, GPS moves and the 60 s check keep trying as before.
-  const errorRetries = useRef(0);
-  useEffect(() => {
-    if (!loadError) { errorRetries.current = 0; return undefined; }
-    const wait = AUTO_RETRY_MS[errorRetries.current];
-    if (wait == null) return undefined;
-    const timer = setTimeout(() => {
-      errorRetries.current += 1;
-      if (screenFocused.current && AppState.currentState === 'active') void loadPrepItemsRef.current(true);
-    }, wait);
-    return () => clearTimeout(timer);
-  }, [loadError]);
 
   // Returning from Collections may change what spawns. Refresh immediately
   // even when GPS has not moved and the current spawn batch has not expired.
@@ -368,6 +373,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
     if (firstScreenFocus.current) {
       firstScreenFocus.current = false;
     } else {
+      autoRetry.consumeOwed();
       void loadPrepItemsRef.current(true);
     }
     return () => { screenFocused.current = false; };
@@ -685,14 +691,14 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const slotBottom = chip && containerSize.width > 0 ? peekBottom(obstacles, containerSize, BOTTOM_SLOT, hudTop + 30 + 8, chipWidthFor(chip)) : BOTTOM_SLOT;
 
   // Map states are one-line chips too: nothing over the map is ever a card.
-  const status = mapStatusLine({ homeLocationConfirmed, isLoading, empty: activePrepItems.length === 0, loadError, rankLine, firstHunt });
+  const status = mapStatusLine({ homeLocationConfirmed, isLoading, empty: activePrepItems.length === 0, loadError, rankLine, firstHunt, healGaveUp });
   const statusChip = useMemo<HuntChipMessage | null>(() => {
     if (!status) return null;
     const retry = () => void loadPrepItems(true);
     const onPress = status.action === 'retry' ? retry
       : status.action === 'collections' ? () => RootNavigation.navigate('SetCollection')
         : status.action === 'standings' ? () => RootNavigation.navigate('Leaderboard', { tab: 'home_hunt' }) : undefined;
-    return { key: `status-${status.text}`, text: status.text, tone: status.tone, ttlMs: 0, onPress };
+    return { key: `status-${status.text}`, text: status.text, tone: status.tone, icon: status.icon, ttlMs: 0, onPress };
   }, [status?.text]); // eslint-disable-line react-hooks/exhaustive-deps
   const bottom: React.ReactNode = catchRequest ? null
     : <HomeHuntChip message={chip ?? statusChip} onDismiss={chip ? dismissChip : noop} />;
@@ -706,7 +712,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       {/* Map with prep items - player marker is handled by Map component */}
       <Map controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled} focusCoordinate={findFocus}
         extraControls={chestButton} extraControlsCount={chestButtonCount} ambientFrozen={catchOpen} chromeHidden={catchOpen} onUserPan={onUserPan}
-        hintReady={compassHintReady && !catchOpen && introSeen === true}>
+        hintReady={compassHintReady && !catchOpen && introSeen === true} trailHidden={firstHunt}>
         {homeLocationConfirmed && allPlaced.map(({ item: prepItem, distance, inRange }) => (
           <HomeFindMarker key={prepItem.pivot_id || prepItem.id} item={prepItem}
             // Rounded so GPS jitter does not re-render every marker.
@@ -732,8 +738,11 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
 
       {homeLocationConfirmed && (
         <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
-          <HomeHudChips top={hudTop} onWidth={setHudWidth} findsUntilTicket={ticket.until} ticketsCapped={ticket.capped} onTicketPress={showTicketLine}
-            parkStory={parkStory} eventChip={eventChip} />
+          {/* First hunt: the ticket chip steps back (dimmed, still tappable) so the treat is what pops. */}
+          <View style={[StyleSheet.absoluteFill, firstHunt && styles.hudDim]} pointerEvents="box-none">
+            <HomeHudChips top={hudTop} onWidth={setHudWidth} findsUntilTicket={ticket.until} ticketsCapped={ticket.capped} onTicketPress={showTicketLine}
+              parkStory={parkStory} eventChip={eventChip} />
+          </View>
         </Animated.View>
       )}
 
@@ -764,6 +773,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
 }
 
 const styles = StyleSheet.create({
+  hudDim: { opacity: 0.5 },
   container: {
     flex: 1,
   },

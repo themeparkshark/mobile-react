@@ -46,6 +46,14 @@ const UNDERWATER = require('../../../assets/images/screens/park/background-new.p
 const FINN_BOATER = require('../../assets/games/memory/studio/barker_dance.png');
 /** The same boater Finn waving on the sign-in card (existing barker art, 436 x 576). */
 const FINN_BOATER_WAVE = require('../../assets/games/memory/studio/barker_wave.png');
+/** The same boater Finn pumping a fist: "Now a quick game!" (one Finn from the first frame to the ask). */
+const FINN_BOATER_GAME = require('../../assets/games/memory/studio/barker_fist_pump.png');
+/** Finn's height beside his bubble on the shelf step (TeacherShark's beside layout). */
+const SHELF_FINN_H = 120;
+/** Between the shelf card and Finn's row under it. */
+const SHELF_FINN_GAP = 14;
+/** The shelf card's height before it is measured (17 Pro, measured on screen). */
+const SHELF_CARD_H = 236;
 
 /** Steps in Finn's progress dots. */
 const STEP_INDEX = { find: 0, play: 1, coin: 2, save: 3 } as const;
@@ -72,6 +80,8 @@ export default function GuestTaste() {
   const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
   const handoff = useRef<{ spot: CoinSpot | null } | null>(null);
   const [bridgeOff, setBridgeOff] = useState(false);
+  /** The shelf card's real height (measured while it waits, hidden, under the game). */
+  const [shelfH, setShelfH] = useState(SHELF_CARD_H);
   useEffect(() => {
     alive.current = true;
     void readGuestTaste().then(saved => { if (alive.current) setProgress(saved); });
@@ -94,6 +104,8 @@ export default function GuestTaste() {
   const spot = step === 'coin' ? handoff.current?.spot ?? null : null;
   /** Short phones (iPhone SE): the shelf sits higher and smaller so Finn's line never covers it. */
   const short = !!size && size.h < 600;
+  // The shelf and Finn's row under it are one group, centred in the sea (short phones keep the compact layout).
+  const shelfGroupBottom = size && !short ? Math.max(40, Math.round((size.h - (shelfH + SHELF_FINN_GAP + SHELF_FINN_H)) / 2)) : null;
   const current = progress ?? EMPTY_GUEST_TASTE;
   const treats = current.caught || bagged ? 1 : 0;
   // From the churro (centre of the find area) to the badge in the top corner.
@@ -120,6 +132,8 @@ export default function GuestTaste() {
       onDone={() => advance({ ...current, caught: true })} />}
     {(step === 'coin' || step === 'play') && <ShelfCoinLanding active={step === 'coin'} reduced={reduced} compact={short}
       rowWidth={size ? Math.min(360, size.w - 40) - 54 : 0}
+      groupBottom={shelfGroupBottom == null ? null : shelfGroupBottom + SHELF_FINN_H + SHELF_FINN_GAP}
+      onCardHeight={h => setShelfH(prev => (Math.abs(prev - h) < 1 ? prev : h))}
       handoff={spot} onCoinShown={() => setTimeout(() => { if (alive.current) setBridgeOff(true); }, 80)} onDone={() => advance({ ...current, shelved: true })} />}
     {/* Frame one of the shelf step: the coin is still exactly where it left Finn's card,
         until the shelf's own flying coin (same spot, same size) takes over. */}
@@ -132,13 +146,17 @@ export default function GuestTaste() {
     {step === 'save' && <SaveCard reduced={reduced} compact={short} onPlayMore={() => setArcadeOpen(true)} />}
 
     {/* Finn walks the whole taste with the same four dots: find, play, coin, save. */}
+    {/* Finn stands right under the shelf, beside his "You won!" bubble, under the coin's socket: one moment, centred. */}
     {step === 'coin' && <TeacherShark title={COPY.coin.title} text="" sharkSource={FINN_BOATER} mood="celebrating" position="bottom-center"
-      showNext={false} onNext={() => undefined} stepIndex={STEP_INDEX.coin} totalSteps={4} bottomOffset={short ? 26 : 48} />}
+      beside={shelfGroupBottom != null}
+      showNext={false} onNext={() => undefined} stepIndex={STEP_INDEX.coin} totalSteps={4}
+      bottomOffset={shelfGroupBottom != null ? shelfGroupBottom + 8 : short ? 26 : 48} />}
 
     {(step === 'find' || step === 'play') && !gameOpen && <TreatBadge count={treats} reduced={reduced} />}
 
     {(step === 'find' || step === 'play') && !gameOpen &&
       <TeacherShark title={step === 'find' ? (yum ? COPY.yum.title : COPY.find.title) : COPY.play.title}
+        sharkSource={step === 'find' ? (yum ? FINN_BOATER : FINN_BOATER_WAVE) : FINN_BOATER_GAME}
         text={step === 'find' ? (yum ? COPY.yum.body : COPY.find.body) : COPY.play.body}
         mood={step === 'find' ? (yum ? 'celebrating' : 'waving') : 'excited'} position="bottom-center"
         showNext={step === 'play'} nextText={COPY.play.button} pointAtNext={step === 'play'}
@@ -251,8 +269,10 @@ function ChurroFind({ reduced, toBadge, room, onCatch, onBagged, onDone }: {
  * every picture is already drawn: when the game hands over, the shelf, its
  * sockets and the coin are all there on the very first frame.
  */
-function ShelfCoinLanding({ active, reduced, compact, rowWidth, handoff, onCoinShown, onDone }: {
+function ShelfCoinLanding({ active, reduced, compact, rowWidth, handoff, groupBottom, onCardHeight, onCoinShown, onDone }: {
   active: boolean; reduced: boolean; compact: boolean; rowWidth: number; handoff: CoinSpot | null;
+  /** Where the shelf card's bottom sits (pt from the bottom), so Finn's row fits right under it; null keeps the default. */
+  groupBottom: number | null; onCardHeight: (height: number) => void;
   onCoinShown: () => void; onDone: () => void;
 }) {
   const fly = useSharedValue(reduced ? 1 : 0), glow = useSharedValue(0);
@@ -314,12 +334,14 @@ function ShelfCoinLanding({ active, reduced, compact, rowWidth, handoff, onCoinS
       { rotate: `${(1 - t) * -25}deg` }, { scale: from.s + (1 - from.s) * t }] };
   });
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scale: 1 + glow.value * 0.5 }] }));
-  return <Pressable style={[styles.shelfWrap, compact && styles.shelfWrapCompact, !active && styles.hidden]} onPress={finish}
+  return <Pressable style={[styles.shelfWrap, compact && styles.shelfWrapCompact,
+    groupBottom != null && !compact && { justifyContent: 'flex-end', paddingBottom: groupBottom }, !active && styles.hidden]} onPress={finish}
     disabled={!active} pointerEvents={active ? 'auto' : 'none'}
     accessibilityElementsHidden={!active} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'}
     accessibilityRole="button"
     accessibilityLabel={`${COPY.coin.ribbon}. ${COPY.coin.title} ${landed ? 'Your coin is on the shelf.' : COPY.coin.body}`} accessibilityHint={COPY.coin.tap}>
-    <Animated.View exiting={reduced ? undefined : FadeOut.duration(220)} style={[styles.shelfCard, compact && styles.shelfCardCompact]}>
+    <Animated.View exiting={reduced ? undefined : FadeOut.duration(220)} style={[styles.shelfCard, compact && styles.shelfCardCompact]}
+      onLayout={event => onCardHeight(event.nativeEvent.layout.height)}>
       <Image source={UNDERWATER} style={[StyleSheet.absoluteFill, styles.shelfArt]} contentFit="cover" />
       <View style={styles.ribbonWrap}><Ribbon text={COPY.coin.ribbon} /></View>
       <View style={styles.shelfPanel}>

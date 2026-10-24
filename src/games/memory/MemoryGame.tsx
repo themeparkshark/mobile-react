@@ -174,14 +174,20 @@ const HALO = require('../../assets/games/memory/v8/fx/glow_halo_2.png');
 export const WARMUP_HINT_DELAY_MS = 2000;
 const SKY_BUNTING = require('../../assets/games/sharky/tide/v71/gate_rush_bunting.png');
 const SKY_CLOUD = require('../../assets/games/memory/v8/fx/cloud_puff_2.png');
-/** cloud_puff_2 is 192 x 172. */
+const SKY_CLOUD_SMALL = require('../../assets/games/memory/v8/fx/cloud_puff_1.png');
+/** cloud_puff_1 and cloud_puff_2 are 192 x 172. */
 const CLOUD_RATIO = 172 / 192;
+/** The park deck's coaster card (361 x 512): two of them side by side say "find two that match" with no words. */
+const MATCH_CUE_CARD = require('../../assets/games/memory/deck-park-coaster.png');
+const MATCH_CUE_RATIO = 512 / 361;
 
 /**
  * Finn's warm-up: the 2-row board leaves a tall band of empty sky above the
- * booth. A string of carnival bunting and two clouds fill it, so the first
- * screen a kid plays on looks like a midway, not a blank wall. Still images
- * only (no animation, no battery cost), drawn behind everything.
+ * booth. A string of carnival bunting, four outlined clouds at different sizes
+ * and a picture cue (two matching coaster cards, the warm-up's how-to for a kid
+ * who cannot read yet) fill it, so the first screen a kid plays on looks like a
+ * midway, not a blank wall. Still images only (no animation, no battery cost),
+ * drawn behind everything.
  */
 function WarmupSky({ g }: { g: BoothGeo }) {
   // The sky band: from the top of the field to Finn's hat / the HUD plates.
@@ -192,14 +198,31 @@ function WarmupSky({ g }: { g: BoothGeo }) {
   const bw = h * (1024 / 341);
   const top = Math.max(10, Math.min(floor - h - 6, floor * 0.42));
   const cloud = Math.min(96, floor * 0.34);
+  // The cue sits centred above the bunting, between the big clouds.
+  const cueH = Math.max(34, Math.min(58, top - 14));
+  const cueW = cueH / MATCH_CUE_RATIO;
+  const cueTop = Math.max(6, (top - cueH) / 2);
+  const clouds: readonly { src: number; left?: number; right?: number; top: number; size: number; flip?: boolean }[] = [
+    { src: SKY_CLOUD, left: g.W * 0.04, top: Math.max(6, top - cloud * 0.9), size: cloud },
+    { src: SKY_CLOUD, right: g.W * 0.05, top: Math.max(4, top - cloud * 1.15), size: cloud * 0.72, flip: true },
+    { src: SKY_CLOUD_SMALL, left: g.W * 0.27, top: Math.max(2, top - cloud * 1.2), size: cloud * 0.42 },
+    { src: SKY_CLOUD_SMALL, right: g.W * 0.24, top: top + h * 0.2, size: cloud * 0.5, flip: true },
+  ];
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Image source={SKY_CLOUD} resizeMode="contain"
-        style={{ position: 'absolute', left: g.W * 0.06, top: Math.max(6, top - cloud * 0.9), width: cloud, height: cloud * CLOUD_RATIO }} />
-      <Image source={SKY_CLOUD} resizeMode="contain"
-        style={{ position: 'absolute', right: g.W * 0.08, top: Math.max(4, top - cloud * 1.15), width: cloud * 0.72, height: cloud * 0.72 * CLOUD_RATIO, transform: [{ scaleX: -1 }] }} />
-      <Image source={SKY_BUNTING} resizeMode="contain"
-        style={{ position: 'absolute', left: (g.W - bw) / 2, top, width: bw, height: h }} />
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View style={StyleSheet.absoluteFill} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        {clouds.map((c, i) => <Image key={i} source={c.src} resizeMode="contain"
+          style={{ position: 'absolute', left: c.left, right: c.right, top: c.top, width: c.size, height: c.size * CLOUD_RATIO,
+            transform: c.flip ? [{ scaleX: -1 }] : undefined }} />)}
+        <Image source={SKY_BUNTING} resizeMode="contain"
+          style={{ position: 'absolute', left: (g.W - bw) / 2, top, width: bw, height: h }} />
+      </View>
+      {/* Two of the same card, side by side: the whole rule as one picture. */}
+      <View accessible accessibilityRole="image" accessibilityLabel="Find two cards that match"
+        style={{ position: 'absolute', top: cueTop, left: (g.W - cueW * 2 - 10) / 2, flexDirection: 'row', gap: 10 }}>
+        <Image source={MATCH_CUE_CARD} resizeMode="contain" style={{ width: cueW, height: cueH, transform: [{ rotate: '-8deg' }] }} />
+        <Image source={MATCH_CUE_CARD} resizeMode="contain" style={{ width: cueW, height: cueH, transform: [{ rotate: '8deg' }] }} />
+      </View>
     </View>
   );
 }
@@ -2439,7 +2462,8 @@ export default function MemoryGame({
     : mode === 'timeAttack' ? `${deck.label} · Board ${hud.board}`
     : mode === 'daily' ? `${deck.label} · ${daily?.ranked && runIndex === 0 ? 'Ranked' : 'Practice'}`
     : mode === 'race' ? `${deck.label} · Practice race`
-    : mode === 'warmup' ? 'Match 4 pairs with Finn' : deck.label;
+    // The warm-up's how-to is a picture in the sky (two matching cards), not small header text.
+    : mode === 'warmup' ? undefined : deck.label;
   const notchFrac = mode === 'ride' && !(r?.signal) ? 15000 / 45000 : -1;
   const raceSharks = SHARKS;
   void raceSharks;

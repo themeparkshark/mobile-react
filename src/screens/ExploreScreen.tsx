@@ -429,12 +429,16 @@ function ExploreScreen() {
   // A tap catches; the server's nearby check (`auto`) only feeds Finn's first find.
   const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number, source: 'tap' | 'auto' = 'tap') => {
     if (!homeLocationConfirmed || !parkLoaded) return;
+    const finnsFirstFind = isReady && !hasCompleted('onboarding');
+    // Only Finn's first find ever opens by itself. A treat that comes in range later (even while
+    // Finn says "Let's hunt!") just glows and hops: holding it here used to open a second catch
+    // the moment he finished, with no tap, which ended the first hunt's quiet 30 s at once.
+    if (source === 'auto' && !finnsFirstFind) return;
     // Finn's first find waits for him: it is held while he talks, and before
     // he starts, so his welcome can point at it and Grab it! opens it.
-    if (isActive || (source === 'auto' && isReady && !hasCompleted('onboarding'))) {
+    if (isActive || (source === 'auto' && finnsFirstFind)) {
       setPendingFind({ item: prepItem, pivotId }); return;
     }
-    if (source === 'auto') return;
     setTooFarRequiredMeters(HOME_PREP_PICKUP_RADIUS_METERS);
     setTooFarIsHomeItem(true);
     // Check distance before allowing collection
@@ -1049,7 +1053,8 @@ function ExploreScreen() {
     enabled: !!player && permissionGranted && isReady && hasCompleted('onboarding'),
     mapFocused,
     // A level chest waits for the daily chest, any find, ride, boss or tutorial to finish.
-    screenFree: chestScreenFree && !chestShowing && !dailyGiftOccluded && !redeemFlowOpen
+    // A brand new player's first hunt stays open map for 30 s (or a real second catch), like the daily chest.
+    screenFree: chestScreenFree && !firstVisitHold && !chestShowing && !dailyGiftOccluded && !redeemFlowOpen
       && !(chestUnclaimed && !!dailyGift && !chestDismissed(dailyGift.id)),
     // Real events that can finish a goal (a ride closing is caught by the next map focus, not here).
     refreshKey: `${dailyGift?.redeemed_at ?? ''}|${homeCollectionVersion}|${collectFlight?.key ?? 0}`,
@@ -1082,8 +1087,9 @@ function ExploreScreen() {
     if (nextUpWasBusy.current && !nextUpBusy) void nextUpRefresh();
     nextUpWasBusy.current = nextUpBusy;
   }, [nextUpBusy, nextUpRefresh]);
-  const mapControls = retention.button ? <>{chestButton}{retention.button}</> : chestButton;
-  const mapControlsCount = (chestButton ? 1 : 0) + (retention.button ? 1 : 0);
+  // A brand new player's first 30 s of hunting: no chest or goal buttons yet, just the treats (the chest comes after).
+  const mapControls = firstVisitHold ? null : retention.button ? <>{chestButton}{retention.button}</> : chestButton;
+  const mapControlsCount = firstVisitHold ? 0 : (chestButton ? 1 : 0) + (retention.button ? 1 : 0);
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
@@ -1344,8 +1350,9 @@ function ExploreScreen() {
           eventChip={liveEvt.event?.include_home && !finnOwnsMap ? <EventHomeChip event={liveEvt.event} onPress={() => setEventOpen(true)} /> : null}
           quiet={finnOwnsMap} firstHunt={firstHunt} />
       )}
-      {/* Trail Boxes at home: your boxes wait for the next park day (pill above the avatar menu; only when you have boxes). */}
-      {player && !park && permissionGranted && (
+      {/* Trail Boxes at home: your boxes wait for the next park day (pill above the avatar menu; only when you have boxes).
+          Not on a brand new player's first hunt, or while Finn talks: the treat and its hand are the one thing that pops. */}
+      {player && !park && permissionGranted && !firstHunt && !finnOwnsMap && (
         <View pointerEvents="box-none" style={{ position: 'absolute', right: 16, bottom: 194, zIndex: 10, alignItems: 'flex-end' }}>
           <TrailHost active={mapFocused} inPark={false} openRequest={trailOpenRequest} />
         </View>

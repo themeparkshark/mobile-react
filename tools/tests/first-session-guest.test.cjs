@@ -233,7 +233,8 @@ test('the map waits to know where the player is, holds the first find for Finn, 
   // Home or park must be known for the real hello; weak GPS gets the honest fallback (round 4).
   assert.match(source, /if \(!parkLoaded \|\| \(!park && !homeLocationConfirmed\)\) \{/, 'no real hello until home or park is known');
   assert.match(source, /startTutorial\('onboarding', \{ inPark: !!park, findReady: !park && homeFindReady, looking: !park && !homeFindReady \}\)/);
-  assert.match(source, /source === 'auto' && isReady && !hasCompleted\('onboarding'\)/, 'the first find waits for Finn');
+  assert.match(source, /const finnsFirstFind = isReady && !hasCompleted\('onboarding'\);/);
+  assert.match(source, /if \(isActive \|\| \(source === 'auto' && finnsFirstFind\)\) \{\s*setPendingFind/, 'the first find waits for Finn');
   assert.match(source, /onFindInRange=\{onFindInRange\}/, 'a loaded find in range counts at once');
   assert.match(source, /findLanded\?\.\(\)/, 'a find that lands late upgrades his line');
   // The pending find is cleared inside the timer (clearing it first cancelled the timer and the find never opened).
@@ -586,7 +587,10 @@ test('first hunt: the map shows only the treats (footsteps, no metres, no Saved 
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /plainDistance=\{firstHunt\}/);
   assert.match(home, /AUTO_RETRY_MS = \[5_000, 15_000, 30_000\]/);
-  assert.match(home, /if \(!loadError\) \{ errorRetries\.current = 0; return undefined; \}/);
+  assert.match(home, /autoRetry\.onFailure\(\);/, 'every failure arms the next retry (not only the first)');
+  assert.match(home, /autoRetry\.onSuccess\(\);/);
+  assert.match(home, /loadPrepItemsRef\.current\(autoRetry\.consumeOwed\(\)\)/, 'a retry owed while backgrounded runs on return');
+  assert.match(home, /firstHunt, healGaveUp \}\)/);
   const marker = read('src/screens/ExploreScreen/PrepItem.tsx');
   assert.match(marker, /!inRange && !far && <Image source=\{FOOTSTEPS\}/, 'footsteps alone when there is no number');
 });
@@ -605,4 +609,112 @@ test('sign-in card: Finn plus card sit mid-sea on tall phones (his overhang coun
   assert.match(taste, /<SaveCard reduced=\{reduced\} compact=\{short\}/);
   assert.match(taste, /style=\{\[styles\.card, !compact && styles\.cardCentred\]\}/);
   assert.match(taste, /cardCentred: \{ marginTop: 80 \}/);
+});
+
+test('map auto-retry: 3 failures in a row retry at 5, 15 and 30 s, then a success resets it', () => {
+  const { createMapAutoRetry } = loadTs('src/screens/ExploreScreen/mapAutoRetry.ts');
+  const timers = [];
+  let runs = 0; let gaveUp = 0; let active = true;
+  const retry = createMapAutoRetry({
+    delays: [5000, 15000, 30000], canRun: () => active, run: () => { runs += 1; }, onGiveUp: () => { gaveUp += 1; },
+    setTimer: (fn, ms) => { const t = { fn, ms, live: true }; timers.push(t); return t; },
+    clearTimer: t => { t.live = false; },
+  });
+  const fire = () => { const t = timers.filter(x => x.live).pop(); t.live = false; t.fn(); return t.ms; };
+  retry.onFailure();
+  assert.equal(fire(), 5000); assert.equal(runs, 1);
+  retry.onFailure();
+  assert.equal(fire(), 15000); assert.equal(runs, 2);
+  retry.onFailure();
+  assert.equal(fire(), 30000); assert.equal(runs, 3);
+  assert.equal(gaveUp, 0);
+  retry.onSuccess();
+  assert.equal(retry.failures(), 0);
+  // A fresh failure starts again at 5 s.
+  retry.onFailure();
+  assert.equal(timers.filter(x => x.live)[0].ms, 5000);
+  retry.dispose();
+  assert.equal(timers.filter(x => x.live).length, 0);
+});
+
+test('map auto-retry: a retry due while off screen is owed and runs on return; the 4th failure gives up once', () => {
+  const { createMapAutoRetry } = loadTs('src/screens/ExploreScreen/mapAutoRetry.ts');
+  const timers = [];
+  let runs = 0; let gaveUp = 0; let active = false;
+  const retry = createMapAutoRetry({
+    delays: [5000, 15000, 30000], canRun: () => active, run: () => { runs += 1; }, onGiveUp: () => { gaveUp += 1; },
+    setTimer: (fn, ms) => { const t = { fn, ms, live: true }; timers.push(t); return t; },
+    clearTimer: t => { t.live = false; },
+  });
+  retry.onFailure();
+  timers[0].live = false; timers[0].fn();
+  assert.equal(runs, 0, 'never loads while the map is away');
+  assert.equal(retry.consumeOwed(), true, 'the skipped retry is kept');
+  assert.equal(retry.consumeOwed(), false, 'and used once');
+  active = true;
+  retry.onFailure(); retry.onFailure(); retry.onFailure();
+  assert.equal(gaveUp, 1);
+  retry.onFailure();
+  assert.equal(gaveUp, 1, 'no repeat cue');
+  const look = loadTs('src/screens/ExploreScreen/findPresentation.ts');
+  const base = { homeLocationConfirmed: true, isLoading: false, empty: false, loadError: true, firstHunt: true };
+  assert.equal(look.mapStatusLine(base), null, 'silent while healing');
+  const cue = look.mapStatusLine({ ...base, healGaveUp: true });
+  assert.equal(cue.icon, 'retry'); assert.equal(cue.action, 'retry'); assert.equal(cue.text, 'Try again');
+});
+
+test('first hunt: a treat in range while Finn says "Let\'s hunt!" is never held and opened as a second catch', () => {
+  const source = read('src/screens/ExploreScreen.tsx');
+  const handler = source.slice(source.indexOf('const handlePrepItemNearby = useCallback'), source.indexOf('setTooFarRequiredMeters(HOME_PREP_PICKUP_RADIUS_METERS)'));
+  const bail = handler.indexOf("if (source === 'auto' && !finnsFirstFind) return;");
+  const hold = handler.indexOf('setPendingFind({ item: prepItem, pivotId })');
+  assert.ok(bail > 0 && hold > 0 && bail < hold, 'an auto find after onboarding returns before it can be held');
+  // The 30 s hold still ends only on a real second catch or the clock.
+  const queue = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
+  assert.equal(queue.firstVisitChestWaits({ firstVisit: true, catchesThisVisit: 1, huntStartedAt: 1000, now: 1000 + 29_000 }), true);
+  assert.equal(queue.firstVisitChestWaits({ firstVisit: true, catchesThisVisit: 1, huntStartedAt: 1000, now: 1000 + 30_000 }), false);
+});
+
+test('one boater Finn from the first frame: the churro find, the Play step, the shelf and the ask all use the barker art', () => {
+  const taste = read('src/screens/ExploreScreen/GuestTaste.tsx');
+  assert.match(taste, /sharkSource=\{step === 'find' \? \(yum \? FINN_BOATER : FINN_BOATER_WAVE\) : FINN_BOATER_GAME\}/);
+  assert.match(taste, /FINN_BOATER_GAME = require\('\.\.\/\.\.\/assets\/games\/memory\/studio\/barker_fist_pump\.png'\)/);
+  // Every TeacherShark in the guest taste names its Finn (none falls back to the gown art).
+  const sharks = taste.match(/<TeacherShark[\s\S]*?\/>/g) ?? [];
+  assert.equal(sharks.length, 2);
+  for (const shark of sharks) assert.match(shark, /sharkSource=/);
+});
+
+test('shelf moment: the shelf and Finn beside his "You won!" bubble are one centred group', () => {
+  const taste = read('src/screens/ExploreScreen/GuestTaste.tsx');
+  assert.match(taste, /const shelfGroupBottom = size && !short \? Math\.max\(40, Math\.round\(\(size\.h - \(shelfH \+ SHELF_FINN_GAP \+ SHELF_FINN_H\)\) \/ 2\)\) : null;/);
+  assert.match(taste, /beside=\{shelfGroupBottom != null\}/);
+  assert.match(taste, /bottomOffset=\{shelfGroupBottom != null \? shelfGroupBottom \+ 8 : short \? 26 : 48\}/);
+  assert.match(taste, /groupBottom=\{shelfGroupBottom == null \? null : shelfGroupBottom \+ SHELF_FINN_H \+ SHELF_FINN_GAP\}/);
+  // 17 Pro sea (672 pt): equal sea above the shelf and below Finn.
+  const h = 672, shelf = 236, group = shelf + 14 + 120;
+  const bottom = Math.max(40, Math.round((h - group) / 2));
+  assert.equal(h - (bottom + group), bottom);
+});
+
+test('warm-up sky: four outlined clouds and a two-card picture cue replace the small subtitle', () => {
+  const game = read('src/games/memory/MemoryGame.tsx');
+  assert.match(game, /mode === 'warmup' \? undefined : deck\.label;/);
+  assert.doesNotMatch(game, /Match 4 pairs with Finn/);
+  const sky = game.slice(game.indexOf('function WarmupSky'), game.indexOf('const JINGLE'));
+  assert.equal((sky.match(/src: SKY_CLOUD(_SMALL)?,/g) ?? []).length, 4, 'four clouds');
+  assert.equal((sky.match(/<Image source=\{MATCH_CUE_CARD\}/g) ?? []).length, 2, 'two matching cards');
+  assert.match(sky, /accessibilityLabel="Find two cards that match"/);
+  assert.doesNotMatch(sky, /withTiming|withRepeat|useSharedValue/, 'still images only');
+});
+
+test('first hunt map: no Trail Box pill or badge, no chest buttons during the 30 s, ticket chip dimmed, level chests wait too', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /\{player && !park && permissionGranted && !firstHunt && !finnOwnsMap && \(\s*<View pointerEvents="box-none"[^>]*>\s*<TrailHost/);
+  assert.match(explore, /const mapControls = firstVisitHold \? null :/);
+  assert.match(explore, /screenFree: chestScreenFree && !firstVisitHold && !chestShowing/);
+  const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(home, /trailHidden=\{firstHunt\}/);
+  assert.match(home, /firstHunt && styles\.hudDim/);
+  assert.match(read('src/components/Map.tsx'), /<TrailBoxBadge trail=\{trailHidden \? null : liveTrail\} live=\{lifeOn\} \/>/);
 });
