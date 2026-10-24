@@ -106,7 +106,7 @@ test('the XP board says plainly when VIP bonus XP counts in the ranking', () => 
   assert.equal(model.xpVipNote([{ is_subscribed: false }], true), null, 'no VIP on the board, no line');
   assert.equal(model.xpVipNote(vip, false), null, 'a board ranked without the bonus needs no line');
   assert.ok(model.XP_VIP_NOTE.split(' ').length <= 9, 'one short kid line');
-  assert.doesNotMatch(model.XP_VIP_NOTE, /—|bet|odds|hurry|now!/i);
+  assert.doesNotMatch(model.XP_VIP_NOTE, /\u2014|bet|odds|hurry|now!/i);
   const board = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/LeaderboardsScreen/Experience.tsx'), 'utf8');
   assert.match(board, /cache\.vipBonus = xpIncludesVipBonus\(meta\);/);
   assert.match(board, /const vipNote = xpVipNote\(players, cache\.vipBonus\);/);
