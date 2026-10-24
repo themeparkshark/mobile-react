@@ -235,8 +235,6 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
     <View style={[styles.root, { width: win.width, height: win.height }]} onLayout={onLayout}>
       <LinearGradient colors={['#dff3ff', NEUTRAL]} style={StyleSheet.absoluteFill} />
       <View style={styles.trim} />
-      {/* The feeling word slams in as the last star stamps (never before the stars). */}
-      <ResultsRibbon title={title} reducedMotion={reducedMotion} delayMs={titleAt} style={[styles.headline, short && styles.headlineShort]} />
 
       {/* The shark on stage */}
       {/* Tall phones give the title room above the shark. Short phones (SE) get a
@@ -256,6 +254,10 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
       </View>
 
       <Animated.View style={[styles.card, short && styles.cardShort, { marginBottom: bottomPad }, cardStyle]}>
+        {/* The one results title every game shares: Alex's ribbon over the card's top
+            edge, with the shark's podium standing on it (the same picture as Whack,
+            the Duel and Boss). The feeling word slams in as the last star stamps. */}
+        <ResultsRibbon title={title} reducedMotion={reducedMotion} delayMs={titleAt} style={styles.ribbonWrap} />
         {/* The shared card's order: stars (or the stamp), then the score, then NEW BEST. */}
         {saved ? <SavedStamp reducedMotion={reducedMotion} delayMs={STAR_AT} /> : (
           <View style={[styles.stars, short && styles.starsShort]}>
@@ -351,16 +353,16 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
 const styles = StyleSheet.create({
   root: { alignItems: 'center', overflow: 'hidden' },
   trim: { position: 'absolute', left: 0, right: 0, top: 0, height: 5, backgroundColor: REWARD },
-  headline: { position: 'absolute', top: 50, left: 12, right: 12, zIndex: 2 },
-  // The stage starts under the title and flexes into the space the card leaves.
-  stage: { width: '100%', flex: 1, minHeight: 0, alignItems: 'center', justifyContent: 'flex-end', marginTop: 124 },
-  // Short phones (iPhone SE, 667 pt): the title sits higher and the card is tighter.
-  stageShort: { marginTop: 88 },
-  headlineShort: { top: 16 },
+  // The stage starts under the close button and flexes into the space the card leaves.
+  stage: { width: '100%', flex: 1, minHeight: 0, alignItems: 'center', justifyContent: 'flex-end', marginTop: 64 },
+  // Short phones (iPhone SE, 667 pt): only the status bar sits above the stage.
+  stageShort: { marginTop: 24 },
+  // The shared ribbon on the card's top edge (same spot as the Duel and Boss cards).
+  ribbonWrap: { position: 'absolute', top: -36, left: -14, right: -14, zIndex: 2 },
   sharkWrap: { position: 'absolute', alignItems: 'center' },
   dizzyStars: { position: 'absolute', top: -6 },
   // The one results surface every game shares: the blue card with a white border.
-  card: { width: '92%', backgroundColor: CARD_BLUE, borderRadius: 26, borderWidth: 4, borderColor: '#ffffff', padding: 14, alignItems: 'center', marginTop: -6,
+  card: { width: '92%', backgroundColor: CARD_BLUE, borderRadius: 26, borderWidth: 4, borderColor: '#ffffff', padding: 14, paddingTop: 42, alignItems: 'center', marginTop: 30,
     shadowColor: '#05346e', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.28, shadowRadius: 18 },
   // Full width with a fixed line height: the count-up field never starts
   // narrower than its final number, so the navy shadow always sits right under
@@ -395,7 +397,7 @@ const styles = StyleSheet.create({
   tokens: { flexDirection: 'row', alignItems: 'center' },
   tokenArt: { width: 24, height: 24 },
   medal: { width: 46, height: 46 },
-  cardShort: { paddingVertical: 10 },
+  cardShort: { paddingTop: 38, paddingBottom: 10, marginTop: 28 },
   starsShort: { marginVertical: 2 },
   scoreShort: { fontSize: 44, lineHeight: 52 },
   playWrapShort: { marginTop: 8 },
