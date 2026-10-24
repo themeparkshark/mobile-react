@@ -71,6 +71,8 @@ interface TeacherSharkProps {
   stepIndex: number;
   totalSteps: number;
   onNext: () => void;
+  /** The next tap was taken and its activity is opening: the button pulses. */
+  nextLoading?: boolean;
   onSkip?: () => void;
   /** Keep Finn clear of persistent bottom navigation, or park him above a spotlit card. */
   bottomOffset?: number;
@@ -100,6 +102,7 @@ export default function TeacherShark({
   stepIndex,
   totalSteps,
   onNext,
+  nextLoading = false,
   onSkip,
   bottomOffset = 20,
   pointAtNext = false,
@@ -274,7 +277,7 @@ export default function TeacherShark({
         {/* Buttons */}
         <View style={styles.buttonRow}>
           {showNext && (
-            <GameButton label={nextText} onPress={onNext} accessibilityHint="Continues the guide" />
+            <GameButton label={nextText} onPress={onNext} loading={nextLoading} accessibilityHint="Continues the guide" />
           )}
           {showNext && pointAtNext && <TapHint delay={2200} style={styles.nextHand} />}
           {showSkip && onSkip && (

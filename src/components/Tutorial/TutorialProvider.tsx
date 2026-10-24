@@ -61,6 +61,9 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
   const firstPlayRef = useRef(false);
   const firstPlayAttemptRef = useRef(0);
   const [firstPlayAttempt, setFirstPlayAttempt] = useState(0);
+  // The PLAY tap is taken: the button pulses for a frame before the warm-up mounts, so a
+  // slow first mount never looks like a dropped tap.
+  const [firstPlayStarting, setFirstPlayStarting] = useState(false);
   const firstPlayOrigin = useRef<string | null>(null);
   const [completedSequences, setCompletedSequences] = useState<Set<TutorialSequence>>(new Set());
   const [currentSequence, setCurrentSequence] = useState<TutorialSequence | null>(null);
@@ -298,9 +301,15 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
   const startFirstPlay = () => {
     if (!isActive || currentStep?.activity !== 'memory_warmup' || firstPlayRef.current) return;
     firstPlayRef.current = true;
-    firstPlayAttemptRef.current += 1; setFirstPlayAttempt(firstPlayAttemptRef.current);
     firstPlayOrigin.current = `${currentSequence}:${currentIndex}`;
-    setFirstPlayOpen(true);
+    setFirstPlayStarting(true);
+    // Two frames: the pulsing button paints first, then the warm-up mounts.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!firstPlayRef.current) return;
+      firstPlayAttemptRef.current += 1; setFirstPlayAttempt(firstPlayAttemptRef.current);
+      setFirstPlayOpen(true);
+      setFirstPlayStarting(false);
+    }));
   };
   const finishFirstPlay = (won: boolean, attempt: number) => {
     if (!firstPlayRef.current || attempt !== firstPlayAttemptRef.current) return;
@@ -353,6 +362,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
             stepIndex={currentIndex}
             totalSteps={currentSteps.length}
             onNext={currentStep.activity ? startFirstPlay : nextStep}
+            nextLoading={firstPlayStarting}
             onSkip={skipTutorial}
             bottomOffset={teacherBottomOffset(currentStep, spotlightTarget, Dimensions.get('window').height,
               // Map guides stand Finn above the MAP compass, never on it.

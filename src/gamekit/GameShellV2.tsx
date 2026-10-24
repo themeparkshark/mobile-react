@@ -58,6 +58,7 @@ import { Haptic } from './Haptics';
 import { playSfx } from './SFX';
 import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovementContext';
 import { RideChallengeContext } from './RideChallengeContext';
+import { GrownUpGateSlot } from '../components/GrownUpGate';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon from '../ui/GameIcon';
 import { ResultsCard, type ResultStat } from './results/ResultsCard';
@@ -851,6 +852,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             style={styles.confetti}
             pointerEvents="none"
           />}
+          {/* The grown-up gate for a results Share or link: inside this modal, so it shows on top. */}
+          {visible && <GrownUpGateSlot />}
         </View>
     );
     return rideChallenge ? gameContent : (
