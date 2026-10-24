@@ -6,17 +6,31 @@
  * The art swims a lazy figure-8 (12 pt by 6 pt, one loop every 4 s) with a soft tilt, and three
  * small bubbles rise past it now and then. Ambient only: it runs through useAmbientLoop, so it
  * rests when the phone is idle, in the background, on Battery Saver idle or with Reduce Motion,
- * and it stops when the screen loses focus. Transforms only; no layout callbacks, no SVG.
+ * and it stops when the screen loses focus (safe outside a navigator too: it then just runs). Transforms only; no layout callbacks, no SVG.
  */
-import { type ReactNode, useCallback, useState } from 'react';
+import { type ReactNode, useContext, useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { NavigationContext } from '@react-navigation/native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming,
   type SharedValue } from 'react-native-reanimated';
 import useAmbientLoop from '../power/useAmbientLoop';
 import useUiReducedMotion from './useUiReducedMotion';
 import { BRAND } from './tokens';
 import { AMBIENT } from './motion';
+
+/** True while this view's screen is focused; always true outside a navigator (previews, modals). */
+export function useScreenFocused(): boolean {
+  const nav = useContext(NavigationContext);
+  const [focused, setFocused] = useState(() => (nav ? nav.isFocused() : true));
+  useEffect(() => {
+    if (!nav) return undefined;
+    setFocused(nav.isFocused());
+    const off1 = nav.addListener('focus', () => setFocused(true));
+    const off2 = nav.addListener('blur', () => setFocused(false));
+    return () => { off1(); off2(); };
+  }, [nav]);
+  return focused;
+}
 
 export const SWIM = { loopMs: 4000, widePt: 12, tallPt: 6, tiltDeg: 4, bubbleMs: 2600, bubbleGapMs: 1400 } as const;
 
@@ -25,8 +39,7 @@ const BUBBLES = [{ x: -40, size: 14, delay: 0 }, { x: 34, size: 11, delay: 600 }
 
 export default function AmbientSwim({ children, bubbles = true }: { readonly children: ReactNode; readonly bubbles?: boolean }) {
   const reduced = useUiReducedMotion();
-  const [focused, setFocused] = useState(true);
-  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
+  const focused = useScreenFocused();
   const t = useSharedValue(0);
   const rise = useSharedValue(0);
   useAmbientLoop(() => {
@@ -74,8 +87,7 @@ function Bubble({ rise, x, size, delay }: { rise: SharedValue<number>; x: number
  */
 export function Breathe({ children }: { readonly children: ReactNode }) {
   const reduced = useUiReducedMotion();
-  const [focused, setFocused] = useState(true);
-  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
+  const focused = useScreenFocused();
   const b = useSharedValue(0);
   useAmbientLoop(() => {
     b.value = 0;

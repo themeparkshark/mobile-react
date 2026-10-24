@@ -26,6 +26,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
+import AmbientSwim from './AmbientSwim';
 import useUiReducedMotion from './useUiReducedMotion';
 import GameButton from './GameButton';
 import GameIcon from './GameIcon';
@@ -195,7 +196,10 @@ export default function SharkLoader(props: SharkLoaderProps) {
         gap: SPACE.md,
       }, style]}>
       {content.art === 'swim' && <SwimmingShark size={art} still={reducedMotion} />}
-      {content.art === 'shark' && <Image source={SHARK_LOADER_ART} contentFit="contain" style={{ width: art, height: art }} />}
+      {/* An empty screen still has a friend in it: the shark swims a lazy figure-8 (ambient budget). */}
+      {content.art === 'shark' && (state === 'empty'
+        ? <AmbientSwim><Image source={SHARK_LOADER_ART} contentFit="contain" style={{ width: art, height: art }} /></AmbientSwim>
+        : <Image source={SHARK_LOADER_ART} contentFit="contain" style={{ width: art, height: art }} />)}
       {content.art === 'icon' && content.icon && <GameIcon name={content.icon} size={Math.round(art * 0.8)} />}
       {!!content.title && <GameText preset={compact ? 'heading' : 'title'} tone={textTone} align="center">{content.title}</GameText>}
       {!!content.message && <GameText preset={content.art === 'swim' ? 'label' : 'body'} tone={textTone} align="center"
