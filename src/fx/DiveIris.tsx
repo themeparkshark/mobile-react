@@ -72,6 +72,8 @@ export const DIVE = {
   safetyMs: 2500,
   /** The open always waits at least this long (UI thread) after the landing signal, so the screen has drawn. */
   drawMs: 50,
+  /** If the water has not covered the screen this long after its close should have ended, go anyway (ms). */
+  watchdogMs: 1200,
   /** How often the water re-checks after safetyMs (ms). */
   recheckMs: 400,
   /** The water's patience: a game screen that never lands by now gets a plain fade, not the iris (ms). */
@@ -321,6 +323,10 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     let coveredAt = 0;
     let decided = false;
     let landed = false;
+    /** The game screen was asked for (on the cover, or by the watchdog when the UI thread is stalled). */
+    let went = false;
+    /** The watchdog navigated before the water was up: the landing may come before anyone listens. */
+    let forced = false;
     const openNow = (delay: number) => {
       'worklet';
       open.value = withDelay(delay, withTiming(1, { duration: T.openMs, easing: EASE.inOut }, done => {
@@ -334,7 +340,7 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     const decide = (why: string) => {
       if (!alive || decided) return;
       const slow = devSlow();
-      const verdict = diveGate({ landed, sinceCoverMs: Date.now() - coveredAt, slow, fresh: dive.fresh,
+      const verdict = diveGate({ landed, sinceCoverMs: Date.now() - coveredAt, slow, fresh: dive.fresh && !forced,
         targetShown: RootNavigation.navigationRef.getCurrentRoute()?.name === dive.target });
       if (verdict === 'hold') {
         timers.push(setTimeout(() => decide('recheck'), DIVE.recheckMs * slow));
@@ -366,13 +372,21 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
       mark('covered(ui)', uiAt);
       coveredAt = Date.now();
       queueHaptic('hitMedium');
-      setHolding(true);
+      if (!decided) setHolding(true);
       landedListeners.add(onLanded);
-      dive.go();
-      mark('go');
+      if (!went) { went = true; dive.go(); mark('go'); }
       timers.push(setTimeout(() => decide('safety'), DIVE.safetyMs * devSlow()));
     };
-    timers.push(setTimeout(finishDive, (T.closeMs + DIVE.giveUpMs * devSlow() + T.openMs) + 2000));
+    timers.push(setTimeout(() => { if (!went) { went = true; dive.go(); } finishDive(); },
+      (T.closeMs + DIVE.giveUpMs * devSlow() + T.openMs) + 2000));
+    // A stalled UI thread never holds the tap hostage: the game is asked for anyway (the water catches up).
+    timers.push(setTimeout(() => {
+      if (went) return;
+      went = true; forced = true;
+      landedListeners.add(onLanded);
+      mark('go(watchdog)');
+      dive.go();
+    }, T.closeMs + DIVE.watchdogMs * devSlow()));
     close.value = withTiming(1, { duration: T.closeMs, easing: EASE.in }, done => {
       if (done) runOnJS(onCovered)(Date.now());
     });

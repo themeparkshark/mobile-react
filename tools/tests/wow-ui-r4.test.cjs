@@ -46,6 +46,9 @@ test('dive gate: a fresh game screen opens only on its landing signal, never by 
   assert.doesNotMatch(src, /addListener\('state'/, 'navigation state plus a few frames is no longer an open trigger');
   assert.match(src, /DIVE\.safetyMs \* devSlow\(\)/);
   assert.match(src, /DIVE\.recheckMs \* slow/, 'the water keeps swimming and re-checks while it holds');
+  assert.match(src, /mark\('go\(watchdog\)'\);\n\s+dive\.go\(\);/, 'a stalled UI thread never eats the tap: the game is asked for anyway');
+  assert.ok(DIVE.watchdogMs <= 1500);
+  assert.match(src, /if \(!went\) \{ went = true; dive\.go\(\); \} finishDive\(\);/, 'the last-resort finish still takes you to the game');
 });
 
 test('dive: Battery Saver thins the water, Dim Flashing Lights turns off the gold rim flash', () => {
