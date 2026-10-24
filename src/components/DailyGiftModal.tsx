@@ -404,15 +404,15 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   // Light pouring out of the gap while the lid is up (it covers the gap, so no inside of the chest is ever drawn).
   const seamStyle = useAnimatedStyle(() => ({ opacity: seam.value, transform: [{ scaleX: 0.6 + 0.5 * Math.min(1, seam.value) }, { scaleY: 0.7 + 0.5 * seam.value }] }));
   // The lid hinges back at its top edge and lifts, opening a gap at the seam that the light pours out of.
+  // The lid and body copies are always drawn (an iOS image under a hidden parent drew a few frames late once shown,
+  // so the first popped frame showed the body with no lid). At rest they sit exactly over the whole picture.
   const lidStyle = useAnimatedStyle(() => ({
-    opacity: lid.value > LID_AT_REST ? 1 : 0,
     transform: [{ translateY: -lidLift * lid.value }, { perspective: 600 },
       { rotateX: `${LID_HINGE_DEG * lid.value}deg` }, { rotate: `${-LID_TILT_DEG * lid.value}deg` }],
   }));
   // The prize climbs out of the chest mouth with a springy overshoot, then rests just above it.
-  // The cut copies show only while the lid is off its rest; at rest the chest is one whole picture (no seam line).
+  // Under the two copies the whole picture shows at rest (it covers any seam line), and steps aside while the lid is up.
   const wholeChestStyle = useAnimatedStyle(() => ({ opacity: lid.value > LID_AT_REST ? 0 : 1 }));
-  const bodyBandStyle = useAnimatedStyle(() => ({ opacity: lid.value > LID_AT_REST ? 1 : 0 }));
   const riseStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, prize.value * 2),
     transform: [{ translateY: (1 - prize.value) * 40 }, { scale: 0.4 + prize.value * 0.6 }],
@@ -495,11 +495,10 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                     <Animated.View style={[StyleSheet.absoluteFill, wholeChestStyle]}>
                       <Image source={CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" transition={0} />
                     </Animated.View>
-                    <Animated.View style={[styles.chestBand, { top: chestSize * LID_CUT, width: chestSize, height: chestSize * (1 - LID_CUT) },
-                      bodyBandStyle]}>
+                    <View style={[styles.chestBand, { top: chestSize * LID_CUT, width: chestSize, height: chestSize * (1 - LID_CUT) }]}>
                       <Image source={CHEST_CLOSED} style={{ position: 'absolute', top: -chestSize * LID_CUT, width: chestSize, height: chestSize }}
                         contentFit="contain" transition={0} />
-                    </Animated.View>
+                    </View>
                     {phase === 'open' && (
                       // The light fills the open gap while the lid is up (it hides the cut), then goes back in.
                       <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 1.05, height: chestSize * 0.34,
@@ -562,19 +561,26 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
           )}
           </View>
 
-          {phase === 'open' && next && (
-            <Text style={styles.next}>{`${next.days_away} more day${next.days_away === 1 ? '' : 's'} to your ${next.label}`}</Text>
+          {/* The card keeps one height from the tap to the settled prize (the chest never jumps at its payoff): the next
+              milestone line and Awesome! are laid out from the start, shown once the chest is open, and Back to map sits
+              in Awesome!'s spot while the chest is shut. */}
+          {next && (
+            <Text style={[styles.next, phase !== 'open' && styles.waiting]} accessibilityElementsHidden={phase !== 'open'}
+              importantForAccessibility={phase === 'open' ? 'auto' : 'no-hide-descendants'}>
+              {`${next.days_away} more day${next.days_away === 1 ? '' : 's'} to your ${next.label}`}
+            </Text>
           )}
-
-          {phase === 'open' && (
-            <Pressable onPress={dismiss} accessibilityRole="button" style={styles.button}>
+          <View style={styles.footerSlot}>
+            <Pressable onPress={dismiss} disabled={phase !== 'open'} pointerEvents={phase === 'open' ? 'auto' : 'none'}
+              accessibilityElementsHidden={phase !== 'open'} importantForAccessibility={phase === 'open' ? 'auto' : 'no-hide-descendants'}
+              accessibilityRole="button" style={[styles.button, phase !== 'open' && styles.waiting]}>
               <Text style={styles.buttonText}>{ticketDay ? 'SEE YOU AT THE PARK!' : 'AWESOME!'}</Text>
             </Pressable>
-          )}
-          {phase === 'closed' && <Pressable onPress={dismiss} accessibilityRole="button"
-            accessibilityLabel="Back to map without opening this chest" style={styles.laterButton}>
-            <Text style={styles.laterText}>BACK TO MAP</Text>
-          </Pressable>}
+            {phase === 'closed' && <Pressable onPress={dismiss} accessibilityRole="button"
+              accessibilityLabel="Back to map without opening this chest" style={[styles.laterButton, styles.laterInSlot]}>
+              <Text style={styles.laterText}>BACK TO MAP</Text>
+            </Pressable>}
+          </View>
         </View>
         <RewardBurst progress={burst} x={width * 0.47} y={height * 0.36} />
         {walletFly && <WalletChip at={walletFly.to} start={walletFly.start} amount={amount} landed={landed} count={walletFly.count}
@@ -767,4 +773,8 @@ const styles = StyleSheet.create({
   laterButton: { minHeight: 44, alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center',
     marginTop: 8, borderRadius: 12, borderWidth: 2, borderColor: '#8fcdff', backgroundColor: '#075395' },
   laterText: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.white },
+  // One footer height in every phase: Awesome! is laid out from the start (hidden until the chest opens).
+  footerSlot: { alignSelf: 'stretch' },
+  laterInSlot: { position: 'absolute', left: 0, right: 0, top: 14, bottom: 0, marginTop: 0 },
+  waiting: { opacity: 0 },
 });

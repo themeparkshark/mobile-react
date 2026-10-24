@@ -38,7 +38,7 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  Easing, Extrapolation, ZoomIn, cancelAnimation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  Easing, Extrapolation, FadeIn, ZoomIn, cancelAnimation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -837,7 +837,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 
 
         {(phase === 'show' || phase === 'summary') && (
-          <View style={[styles.footer, { paddingBottom: insets.bottom + 18 }]}>
+          // The footer fades in over a few frames, so its button never shows a frame as a blank pill before its label draws.
+          <Animated.View entering={still ? undefined : FadeIn.duration(180)} style={[styles.footer, { paddingBottom: insets.bottom + 18 }]}>
             {pulls.length > 1 && phase === 'show' && (
               <View style={styles.pips} accessible accessibilityLabel={`Box ${index + 1} of ${pulls.length}`}>
                 {pulls.map((p, i) => <View key={p.id} style={[styles.pip, i <= index && styles.pipOn, p.is_chaser && i <= index && styles.pipGold]} />)}
@@ -876,7 +877,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             )}
             <GameButton label={index < pulls.length - 1 ? 'Next box' : pulls.length > 1 && phase === 'show' ? 'See all' : 'Done'}
               icon={index < pulls.length - 1 ? 'gift' : 'check'} onPress={next} />
-          </View>
+          </Animated.View>
         )}
       </Pressable>
     </Modal>

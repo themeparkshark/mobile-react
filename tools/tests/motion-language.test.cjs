@@ -464,7 +464,7 @@ test('wave 3 round 4: the energy-day chest pops its lid and lands shut, whole ar
   const chest = read('src/components/DailyGiftModal.tsx');
   assert.ok(!/chestInside/.test(chest), 'no flat dark inside slab');
   assert.ok(/const wholeChestStyle = useAnimatedStyle\(\(\) => \(\{ opacity: lid\.value > LID_AT_REST \? 0 : 1 \}\)\)/.test(chest), 'at rest the chest is one whole picture');
-  assert.ok(/opacity: lid\.value > LID_AT_REST \? 1 : 0,\s*transform:/.test(chest), 'the cut lid shows only while it is up');
+  assert.ok(/const lidStyle = useAnimatedStyle\(\(\) => \(\{\s*transform:/.test(chest), 'the lid copy is always drawn (it sits over the whole picture at rest), so the first popped frame has its lid');
   const celebrate = chest.slice(chest.indexOf('const celebrate = '), chest.indexOf('const open = async'));
   const lidLine = celebrate.slice(celebrate.indexOf('lid.value = withSequence('), celebrate.indexOf('pop.value = withSequence('));
   assert.ok(/withTiming\(0, \{ duration: 90, easing: EASE\.in \}\)\);\s*$/.test(lidLine), 'the lid lands shut (its last step ends at 0)');
@@ -502,4 +502,19 @@ test('wave 3 round 4: tier plates have ink edges, Prismatic has a few long rays,
 test('wave 3 round 4: the queued or recovered Set Complete times like the inline one', () => {
   const reveal = read('src/screens/StoreScreen/SetCompleteReveal.tsx');
   assert.ok(reveal.includes('entering={still || bridged ? undefined : FadeIn.duration(DURATION.base)}'), 'one cross-fade time for both paths');
+});
+
+test('wave 3 rerun round 2: the box reveal footer fades in, so Done never shows a frame as a blank pill', () => {
+  const box = read('src/screens/pins/BoxReveal.tsx');
+  assert.ok(/<Animated\.View entering=\{still \? undefined : FadeIn\.duration\(180\)\} style=\{\[styles\.footer/.test(box), 'the footer fades in on the UI thread');
+  assert.ok(/onPress=\{next\} \/>\s*<\/Animated\.View>/.test(box), 'the Done button sits inside the fading footer');
+});
+
+test('wave 3 rerun round 2: the daily chest card keeps one height from the tap to the prize', () => {
+  const chest = read('src/components/DailyGiftModal.tsx');
+  assert.ok(!/bodyBandStyle/.test(chest), 'the body copy is never hidden, so it never draws late');
+  assert.ok(/<View style=\{styles\.footerSlot\}>\s*<Pressable onPress=\{dismiss\} disabled=\{phase !== 'open'\}/.test(chest), 'Awesome! is laid out from the start');
+  assert.ok(/style=\{\[styles\.button, phase !== 'open' && styles\.waiting\]\}/.test(chest), 'it stays hidden until the chest opens');
+  assert.ok(/styles\.laterButton, styles\.laterInSlot/.test(chest), 'Back to map sits in the same spot while the chest is shut');
+  assert.ok(!/\{phase === 'open' && \(\s*<Pressable onPress=\{dismiss\}/.test(chest), 'no button mounts at the payoff');
 });
