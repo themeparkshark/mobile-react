@@ -159,6 +159,8 @@ export default function CoinLevelingModal({
   // The card keeps its height from the tap through the success card (no collapse into a short card): the
   // content's height is tracked while the preview shows and held as a minimum once the charge starts.
   const contentHeight = useRef(0);
+  // The card's visible height: the held height never passes it, so the success card's button is always on screen.
+  const viewportHeight = useRef(0);
   const [lockedHeight, setLockedHeight] = useState(0);
 
   // The level-up show, on the UI thread: the charge bar, the gold gathering behind the coin,
@@ -320,7 +322,7 @@ export default function CoinLevelingModal({
     // bigger and faster (windupWobble), the coin swells faster and faster, the bar fills at a steady pace,
     // the gold gathers behind it and gold rings tighten onto it, coming in quicker toward the burst.
     // Then, if the server is slow, it hums (a breathing coin, a pulsing glow, a ring every 0.65 s), never a still bar.
-    setLockedHeight(contentHeight.current);
+    setLockedHeight(viewportHeight.current > 0 ? Math.min(contentHeight.current, viewportHeight.current - 14) : contentHeight.current);
     setSlowServer(false);
     stopUiShow(); bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0;
     charge.value = 0;
@@ -556,6 +558,7 @@ export default function CoinLevelingModal({
           overflow: 'hidden',
         }}>
           <ScrollView
+            onLayout={event => { viewportHeight.current = event.nativeEvent.layout.height; }}
             bounces={false}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 14 }}
