@@ -10,6 +10,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { captureFlex, openShareSheet } from '../../../share/capture';
+import { campaignUrl, shareMessage } from '../../../share/link';
 import { OFFSCREEN, StoryShareFrame } from '../../../share/StoryShareFrame';
 import { ShareFace } from '../../../share/FlexShareButton';
 
@@ -47,7 +48,7 @@ export function ShareCardButton({ tiles, score, stars }: { tiles: number[]; ride
     setBusy(true);
     try {
       const uri = await captureFlex(ref, 'story');
-      await openShareSheet(uri);
+      await openShareSheet(uri, shareMessage(campaignUrl('whack')));
     } catch {
       // The share sheet is optional; a failure never blocks the results.
     } finally {

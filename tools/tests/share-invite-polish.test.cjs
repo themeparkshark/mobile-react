@@ -55,7 +55,7 @@ test('a shared ride card never prints the typed note, and is story size with the
 
 test('Whack and Memory results share a story-size picture with the link and QR, and no ride name', () => {
   const whack = src('src/games/whack/ui/ShareCard.tsx');
-  assert.match(whack, /captureFlex\(ref, 'story'\);\s*await openShareSheet\(uri\);/);
+  assert.match(whack, /captureFlex\(ref, 'story'\);\s*await openShareSheet\(uri, shareMessage\(campaignUrl\('whack'\)\)\);/);
   assert.match(whack, /campaign="whack"/);
   assert.doesNotMatch(whack, /\{rideName/, 'the ride name never goes on the picture');
   const { shareText } = loadTs('src/games/whack/ui/ShareCard.tsx', {
@@ -66,7 +66,7 @@ test('Whack and Memory results share a story-size picture with the link and QR, 
   });
   assert.equal(shareText('Space Mountain', 1200, 2), 'I scored 1,200 in Whack-a-Shark. 2 of 3 stars. Can you beat it?');
   const memory = src('src/games/memory/MemoryExtras.tsx');
-  assert.match(memory, /captureFlex\(storyRef, 'story'\);\s*await openShareSheet\(uri\);/);
+  assert.match(memory, /captureFlex\(storyRef, 'story'\);\s*await openShareSheet\(uri, shareMessage\(campaignUrl\('memory'\)\)\);/);
   assert.match(memory, /campaign="memory"/);
   for (const code of [whack, memory]) assert.doesNotMatch(code, /shareFileExternal|captureRef/, 'one share path: gate, then the share sheet');
   // One share look everywhere: the gold-rimmed pill, and Memory previews the picture that ships.
@@ -134,7 +134,7 @@ test('every campaign QR encodes its own counted link', () => {
 
 test('a Share Studio sheet fades out before the grown-up gate, and is a layer while up', () => {
   const host = src('src/share/ShareStudioHost.tsx');
-  assert.match(host, /const uri = await captureFlex\(cardRef, format\);[\s\S]{0,400}setStage\('leaving'\);[\s\S]{0,200}const outcome = await openShareSheet\(uri\);/,
+  assert.match(host, /const uri = await captureFlex\(cardRef, format\);[\s\S]{0,400}setStage\('leaving'\);[\s\S]{0,200}const outcome = await openShareSheet\(uri, shareMessage\(flexShareUrl\(request\.kind, request\.payload\)\)\);/,
     'the picture is made first, then the sheet leaves, then the gate and share sheet');
   assert.match(host, /useModalLayer\(stage !== 'gone', 'show'\)/, 'Root dialogs and the gate wait for the sheet');
   assert.equal((host.match(/visible=\{visible\} onShow=\{onShow\} onDismiss=\{onDismiss\}/g) || []).length, 2, 'sheet and moment both hand off');
@@ -143,16 +143,16 @@ test('a Share Studio sheet fades out before the grown-up gate, and is a layer wh
   assert.doesNotMatch(host, /useState\(\(\) => registerFlexHost/, 'no host registers during render');
 });
 
-test('a ride card shared from inside a modal steps out of the modal before the grown-up gate', async () => {
+test('a ride card shares from inside its sheet: the gate slot shows above it, a no keeps the card open', async () => {
   const card = src('src/components/RideTracker/ShareableRideCard.tsx');
-  assert.match(card, /const uri = await captureFlex\(storyRef, 'story'\);[\s\S]{0,200}await beforeShare\?\.\(\);[\s\S]{0,200}await openShareSheet\(uri\);/);
-  assert.doesNotMatch(card, /shareFileExternal/, 'one share path for every card (gate, then the iOS share sheet)');
+  assert.match(card, /const uri = await captureFlex\(storyRef, 'story'\);[\s\S]{0,300}const outcome = await openShareSheet\(uri, shareMessage\(campaignUrl\('ride_log'\)\)\);\s*if \(outcome\.opened\) onShare\?\.\(\);/);
+  assert.doesNotMatch(card, /shareFileExternal|beforeShare/, 'one share path for every card (gate, then the iOS share sheet)');
   for (const file of ['src/screens/RideTracker/RideHistoryScreen.tsx', 'src/screens/RideTracker/RideDetailScreen.tsx']) {
     const screen = src(file);
-    assert.match(screen, /onDismiss=\{shareHandoff\.onDismiss\}/, `${file}: the modal reports when iOS is done dismissing it`);
-    assert.match(screen, /beforeShare=\{shareHandoff\.handoff\}/, `${file}: the card hands off`);
+    assert.match(screen, /<GrownUpGateSlot \/>\s*<\/Modal>/, `${file}: the gate shows inside the sheet (hotfix design)`);
+    assert.doesNotMatch(screen, /useModalHandoff|beforeShare/, `${file}: no step-out before the gate`);
   }
-  // The hook: closes the modal, resolves on onDismiss, or after MODAL_HANDOFF_MS at the latest.
+  // The hook still used by the reveals: closes the modal, resolves on onDismiss, or after MODAL_HANDOFF_MS at the latest.
   let closed = 0;
   const timers = [];
   const { useModalHandoff, MODAL_HANDOFF_MS } = loadTs('src/share/handoff.ts', { react: { useCallback: f => f, useRef: v => ({ current: v }) } },
@@ -175,31 +175,26 @@ test('a ride card shared from inside a modal steps out of the modal before the g
 
 test('a grown-up gate iOS never shows answers "no" and steps aside, so later asks are not stuck', () => {
   const gate = src('src/components/GrownUpGate.tsx');
-  assert.match(gate, /export const GATE_SHOW_WATCHDOG_MS = 2500;/);
+  // The hotfix gate (slots, answer after the fade) is the base; this lane adds the toast, grace beat and money wait.
+  assert.match(gate, /export const GATE_SHOW_WATCHDOG_MS = 3000;/);
   assert.match(gate, /onShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
   // Never shown means no (never yes), and never silent: a kid-readable toast, plus a dev warning naming the ask.
-  assert.match(gate, /<GateShowWatchdog key=\{askId\} shown=\{shownRef\} waitMs=\{gateWatchdogMs\(req\.reason\)\} onNeverShown=\{\(\) => \{[\s\S]{0,400}showToast\(GATE_RETRY_TOAST, 'info', 3500\);\s*close\(false\);\s*\}\} \/>/, 'never shown means no, never yes');
+  assert.match(gate, /if \(shownRef\.current\) return;\s*grace = setTimeout\(\(\) => \{\s*if \(shownRef\.current\) return;[\s\S]{0,300}showToast\(GATE_RETRY_TOAST, 'info', 3500\);\s*close\(false\);\s*\}, GATE_SHOW_GRACE_MS\);\s*\}, gateWatchdogMs\(req\.reason\)\);/, 'never shown means no, never yes');
   assert.match(gate, /if \(__DEV__\) console\.warn\(`GrownUpGate never showed/);
   assert.match(gate, /export const GATE_RETRY_TOAST = 'That didn’t open\. Try again in a sec\.';/);
-  // Two checks (the wait, then a grace beat), so a late onShow never closes a gate on screen.
-  assert.match(gate, /if \(shown\.current\) return;\s*grace = setTimeout\(\(\) => \{ if \(!shown\.current\) onNeverShown\(\); \}, GATE_SHOW_GRACE_MS\);\s*\}, waitMs\);/);
 });
 
 test('the gate watchdog re-arms for every ask and gives real-money gates longer', () => {
   const gate = src('src/components/GrownUpGate.tsx');
-  // A new key per ask: each ask gets its own watch, even when the host is not remounted.
-  assert.match(gate, /if \(r\) setAskId\(n => n \+ 1\); setReq\(r\);/);
-  // shown stays true while the gate's Modal is up (a second ask on an open gate never trips it), reset when it goes.
-  assert.match(gate, /<PresentedReset shown=\{shownRef\} \/>/);
-  assert.match(gate, /useEffect\(\(\) => \(\) => \{ shown\.current = false; \}, \[shown\]\);/);
-  assert.doesNotMatch(gate.slice(gate.indexOf('function GateShowWatchdog'), gate.indexOf('function PresentedReset')), /shown\.current = false/,
-    'the watchdog itself never clears shown (that would close an open gate)');
+  // Every ask resets shown and re-runs the watch (the effect depends on req).
+  assert.match(gate, /reqRef\.current = r; answerRef\.current = null; shownRef\.current = false;/);
+  assert.match(gate, /\}, \[presenting, req, close\]\);/);
   const body = gate.slice(gate.indexOf('export const GATE_SHOW_WATCHDOG_MS'), gate.indexOf('/** What a kid sees'));
   const js = body.replace(/export /g, '').replace('(reason: GateReason | null | undefined): number', '(reason)');
   const ms = new Function(`${js}\nreturn { gateWatchdogMs };`)();
-  assert.equal(ms.gateWatchdogMs({ kind: 'share' }), 2500);
-  assert.equal(ms.gateWatchdogMs({ kind: 'leave', where: 'x' }), 2500);
-  assert.equal(ms.gateWatchdogMs(null), 2500);
+  assert.equal(ms.gateWatchdogMs({ kind: 'share' }), 3000);
+  assert.equal(ms.gateWatchdogMs({ kind: 'leave', where: 'x' }), 3000);
+  assert.equal(ms.gateWatchdogMs(null), 3000);
   assert.equal(ms.gateWatchdogMs({ kind: 'money', price: '$1', gets: 'x' }), 6000);
   assert.equal(ms.gateWatchdogMs({ kind: 'renews', what: 'x', price: '$1', period: 'month', trial: null }), 6000);
   assert.equal(ms.gateWatchdogMs({ kind: 'vip' }), 6000);
@@ -351,7 +346,7 @@ test('Invite and Closet look share story pictures with their own QR; no unused Q
   assert.equal(invite.inviteMessage('', 'u'), 'Play Theme Park Shark with me!\nu');
   const look = src('src/share/LookShareButton.tsx');
   assert.match(look, /campaign="look"/);
-  assert.match(look, /await captureFlex\(ref, 'story'\);\s*await openShareSheet\(uri\);/);
+  assert.match(look, /await captureFlex\(ref, 'story'\);\s*await openShareSheet\(uri, shareMessage\(campaignUrl\('look'\)\)\);/);
   assert.match(src('src/screens/InventoryScreen.tsx'), /<LookShareButton inventory=\{worn\}/);
   const qr = src('src/share/campaignQr.ts');
   for (const used of ['invite', 'crew', 'ride_log', 'whack', 'memory', 'look']) assert.match(qr, new RegExp(`  ${used}: require`));

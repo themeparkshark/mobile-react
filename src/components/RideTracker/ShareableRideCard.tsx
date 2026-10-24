@@ -12,6 +12,7 @@ import SharkReactionIcon, { reactionLabel } from './SharkReactionIcon';
 import { GameIcon, gameAlert } from '../../ui';
 import { ShareFace } from '../../share/FlexShareButton';
 import { captureFlex, openShareSheet } from '../../share/capture';
+import { campaignUrl, shareMessage } from '../../share/link';
 import { OFFSCREEN, StoryShareFrame } from '../../share/StoryShareFrame';
 import { LocationStatusContext } from '../../context/LocationProvider';
 
@@ -22,8 +23,6 @@ interface ShareableRideCardProps {
   ride: PlayerRideType;
   rideCount?: number;
   onShare?: () => void;
-  /** The card sits in an RN <Modal>: close it (useModalHandoff) before the grown-up gate. */
-  beforeShare?: () => Promise<void>;
   /** Kept on the phone, not in the journal yet: no count to fetch and nothing to share yet. */
   queued?: boolean;
 }
@@ -114,7 +113,7 @@ const ButtonSpinner: React.FC<{ still: boolean }> = ({ still }) => {
   );
 };
 
-const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, onShare, beforeShare, queued = false }) => {
+const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, onShare, queued = false }) => {
   const storyRef = useRef<View>(null);
   const busy = useRef(false);
   const [sharing, setSharing] = useState(false);
@@ -151,19 +150,18 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
       }
 
       const uri = await captureFlex(storyRef, 'story');
-      // The picture is made: step out of the modal so the grown-up gate can show.
-      await beforeShare?.();
 
       // The same share path as the Share Studio cards (grown-up gate first, then the iOS share sheet).
-      await openShareSheet(uri);
-      onShare?.();
+      // The gate shows above this card's sheet (GrownUpGateSlot), so a "no" keeps the card open.
+      const outcome = await openShareSheet(uri, shareMessage(campaignUrl('ride_log')));
+      if (outcome.opened) onShare?.();
     } catch {
       gameAlert('Could not make your card', 'Your ride is saved. Try sharing it again.');
     } finally {
       busy.current = false;
       setSharing(false);
     }
-  }, [ride, onShare, beforeShare, loadingCount, inPark, queued]);
+  }, [ride, onShare, loadingCount, inPark, queued]);
 
   return (
     <View>

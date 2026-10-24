@@ -43,3 +43,8 @@ export function campaignUrl(campaign: string): string {
  * today (TestFlight now, the App Store once the server's destination flips).
  */
 export const INVITE_URL = campaignUrl('invite');
+
+/** The short line that rides with a share picture, so Messages and chats get the link. */
+export function shareMessage(url: string): string {
+  return `Come play Theme Park Shark with me! ${url}`;
+}

@@ -26,7 +26,7 @@ function gateModule(store = {}, navigated = [], dev = true) {
     react: { useEffect() {}, useState: v => [v, () => {}] },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
     '../ui/iconNames': {}, './RealMoneyMark': { default: 'RealMoneyMark' },
-    'react-native': { Modal: 'Modal', Pressable: 'Pressable', StyleSheet: { create: s => s }, Text: 'Text', View: 'View' },
+    'react-native': { Modal: 'Modal', Platform: { OS: 'ios' }, Pressable: 'Pressable', StyleSheet: { create: s => s }, Text: 'Text', View: 'View' },
     '../RootNavigation': { navigate: (...args) => navigated.push(args) },
     '../ui': { BRAND: { goldLip: '#d99a00', navy: '#05346e' }, FONT: {}, GameIcon: 'GameIcon' },
     '../ui/modalLayers': { useModalLayer: () => true },
@@ -240,7 +240,49 @@ test('the try-on opens the gate only after the sheet has fully hidden', () => {
 
 test('one gate host, mounted once at the root', () => {
   assert.equal((read('src/Root.tsx').match(/<GrownUpGateHost \/>/g) || []).length, 1);
-  assert.deepEqual(where(/<GrownUpGateHost/), ['src/Root.tsx']);
+  assert.deepEqual(where(/<GrownUpGateHost/).filter(f => f !== 'src/components/GrownUpGate.tsx'), ['src/Root.tsx']);
+});
+
+test('the gate shows above any share modal: a slot inside each one, the top slot answers (ship gate, Oct 23)', () => {
+  const gate = read('src/components/GrownUpGate.tsx');
+  assert.match(gate, /export function GrownUpGateSlot\(\) \{\s*return <GrownUpGateHost nested \/>;/);
+  assert.match(gate, /hosts = nested \? \[\.\.\.hosts, host\] : \[host, \.\.\.hosts\];/, 'the root host stays at the bottom');
+  assert.match(gate, /showGate = hosts\.length \? hosts\[hosts\.length - 1\]\.show : null;/, 'askGrownUp uses the top host');
+  assert.match(gate, /left\?\.resolve\(false\);/, 'a host that goes away answers no, so no button waits forever');
+  // Results Share in every game, the ride card sheets, the Ride Photo card and both share studio modals.
+  const slots = {
+    'src/gamekit/GameShellV2.tsx': /\{visible && <GrownUpGateSlot \/>\}\s*<\/View>\s*\);\s*return rideChallenge \? gameContent/,
+    'src/screens/RideTracker/RideDetailScreen.tsx': /<GrownUpGateSlot \/>\s*<\/Modal>/,
+    'src/screens/RideTracker/RideHistoryScreen.tsx': /<GrownUpGateSlot \/>\s*<\/Modal>/,
+    'src/screens/SetCollection/DexItemCard.tsx': /<GrownUpGateSlot \/>\}\s*<\/Modal>/,
+  };
+  for (const [file, re] of Object.entries(slots)) assert.match(read(file), re, file);
+  assert.equal((read('src/share/ShareStudioHost.tsx').match(/<GrownUpGateSlot \/>\s*<\/Modal>/g) || []).length, 2, 'flex sheet and flex moment');
+});
+
+test('the gate answers only after it has faded out, so the share sheet can present (ship gate, Oct 23)', () => {
+  const gate = read('src/components/GrownUpGate.tsx');
+  assert.match(gate, /<Modal visible=\{closing === null\}[\s\S]{0,200}?onShow=\{\(\) => \{ shownRef\.current = true; \}\} onDismiss=\{finish\}>/);
+  assert.match(gate, /setTimeout\(finish, GATE_DISMISS_FALLBACK_MS\)/, 'a missed onDismiss still answers');
+  assert.match(gate, /if \(shownRef\.current\) return;[\s\S]{0,400}close\(false\);\s*\}, GATE_SHOW_GRACE_MS\);\s*\}, gateWatchdogMs\(req\.reason\)\)/, 'a refused gate answers no');
+  const g = gateModule();
+  assert.equal(g.GATE_DISMISS_FALLBACK_MS, 2000);
+  assert.match(gate, /if \(Platform\.OS !== 'ios'\) \{ finish\(\); return; \}/, 'Android answers at once');
+  assert.equal(g.GATE_SHOW_WATCHDOG_MS, 3000);
+  const ext = read('src/services/external.ts');
+  assert.match(ext, /export const SHARE_SHEET_WAIT_MS = 30_000;/);
+  assert.match(ext, /Sharing\.shareAsync\(uri, options\)\.then\(\(\) => true\),\s*new Promise<boolean>\(resolve => \{ timer = setTimeout\(\(\) => resolve\(false\), SHARE_SHEET_WAIT_MS\); \}\)/);
+  assert.match(ext, /Share\.share\(content, options\),\s*new Promise<null>/);
+  assert.match(read('src/components/RideTracker/ShareableRideCard.tsx'), /if \(outcome\.opened\) onShare\?\.\(\);/, 'the sheet only closes after a real answer');
+});
+
+test('one safe-area root above every provider (first-tap warm-up crash, ship gate Oct 23)', () => {
+  const app = read('App.tsx');
+  assert.match(app, /<GestureHandlerRootView style=\{\{ flex: 1 \}\}>[\s\S]*?<SafeAreaProvider initialMetrics=\{initialWindowMetrics\}>[\s\S]*?<ErrorBoundary/);
+  assert.ok(app.indexOf('<SafeAreaProvider') < app.indexOf('<TutorialProvider>'), 'above the tutorial host that mounts the warm-up game');
+  assert.match(app, /<\/ErrorBoundary>\s*<\/SafeAreaProvider>\s*<\/GestureHandlerRootView>/);
+  // The warm-up's memory HUD keeps no animated SVG node (reanimated EventHandlerRegistry abort).
+  assert.doesNotMatch(read('src/games/memory/Hud.tsx'), /createAnimatedComponent\(Circle\)|useAnimatedProps/);
 });
 
 test('every real-money App Store call sits behind the grown-up gate in the same function (compliance r4)', () => {

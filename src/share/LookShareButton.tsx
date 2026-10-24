@@ -10,6 +10,7 @@ import * as Haptics from '../helpers/haptics';
 import { outfitLayerUrls } from '../helpers/wardrobe';
 import type { InventoryType } from '../models/inventory-type';
 import { captureFlex, openShareSheet } from './capture';
+import { campaignUrl, shareMessage } from './link';
 import { ShareFace } from './FlexShareButton';
 import { FlexShark } from './FlexShark';
 import { OFFSCREEN, StoryShareFrame } from './StoryShareFrame';
@@ -30,7 +31,7 @@ export function LookShareButton({ inventory, style }: { readonly inventory: Inve
     void Haptics.selectionAsync();
     try {
       const uri = await captureFlex(ref, 'story');
-      await openShareSheet(uri);
+      await openShareSheet(uri, shareMessage(campaignUrl('look')));
     } catch {
       // Closed or not made: nothing left the phone.
     } finally {

@@ -14,7 +14,7 @@ import { getCommunityStats, CommunityStats } from '../../api/endpoints/rides/com
 import { toggleWishlist, getWishlist } from '../../api/endpoints/rides/wishlist';
 import SharkRating from '../../components/RideTracker/SharkRating';
 import ShareableRideCard from '../../components/RideTracker/ShareableRideCard';
-import { useModalHandoff } from '../../share/handoff';
+import { GrownUpGateSlot } from '../../components/GrownUpGate';
 import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
 import { Modal } from 'react-native';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
@@ -115,7 +115,6 @@ export default function RideDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [shareEntry, setShareEntry] = useState<PlayerRideType | null>(null);
   const closeShare = useCallback(() => setShareEntry(null), []);
-  const shareHandoff = useModalHandoff(closeShare);
   const [imageError, setImageError] = useState(false);
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastY = useRef(new Animated.Value(10)).current;
@@ -328,18 +327,20 @@ export default function RideDetailScreen() {
       />
 
       {/* Share Modal */}
-      <Modal visible={!!shareEntry} animationType="slide" transparent onRequestClose={closeShare} onDismiss={shareHandoff.onDismiss}>
+      <Modal visible={!!shareEntry} animationType="slide" transparent onRequestClose={closeShare}>
         <Pressable style={s.modalOverlay} onPress={() => setShareEntry(null)}>
           <Pressable style={s.modalContent} onPress={() => {}}>
             {shareEntry && (
               <>
-                <ShareableRideCard ride={shareEntry} rideCount={totalRides} onShare={closeShare} beforeShare={shareHandoff.handoff} />
+                <ShareableRideCard ride={shareEntry} rideCount={totalRides} onShare={closeShare} />
                 {/* The one close word of every share sheet (Share Studio uses it too). */}
                 <GameButton label={CLOSE_WORD} variant="ghost" tone="onBlue" onPress={() => setShareEntry(null)} accessibilityLabel="Close" style={{ marginTop: 4 }} />
               </>
             )}
           </Pressable>
         </Pressable>
+        {/* The grown-up gate for Share shows above this sheet. */}
+        <GrownUpGateSlot />
       </Modal>
 
       {/* Favorite toast */}

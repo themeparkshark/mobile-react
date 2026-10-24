@@ -16,6 +16,7 @@ import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Tex
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { captureFlex, openShareSheet } from '../../share/capture';
+import { campaignUrl, shareMessage } from '../../share/link';
 import { OFFSCREEN, StoryShareFrame } from '../../share/StoryShareFrame';
 import { ShareFace } from '../../share/FlexShareButton';
 import { FLEX_SIZE } from '../../share/formats';
@@ -270,7 +271,7 @@ export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () =
     try {
       // Story size (1080x1920) with the TPS link and a QR; the grid never shows the cards.
       const uri = await captureFlex(storyRef, 'story');
-      await openShareSheet(uri);
+      await openShareSheet(uri, shareMessage(campaignUrl('memory')));
     } catch {
       // The share sheet was dismissed or view-shot failed: nothing is sent.
     } finally {

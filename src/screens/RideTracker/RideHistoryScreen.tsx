@@ -14,7 +14,7 @@ import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides
 import { getWishlist, WishlistRide } from '../../api/endpoints/rides/wishlist';
 import RideCard from '../../components/RideTracker/RideCard';
 import ShareableRideCard from '../../components/RideTracker/ShareableRideCard';
-import { useModalHandoff } from '../../share/handoff';
+import { GrownUpGateSlot } from '../../components/GrownUpGate';
 import { colors } from '../../design-system';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import { Modal } from 'react-native';
@@ -187,7 +187,6 @@ export default function RideHistoryScreen() {
     setShareRide(ride);
   }, []);
   const closeShare = useCallback(() => setShareRide(null), []);
-  const shareHandoff = useModalHandoff(closeShare);
 
   const renderItem = useCallback(({ item }: { item: PlayerRideType }) => (
     <RideCard ride={item} onPress={() => handleRidePress(item)} onShare={handleShare} />
@@ -277,18 +276,20 @@ export default function RideHistoryScreen() {
       )}
       {/* Share Modal */}
       <Modal visible={!!shareRide} animationType={reducedMotion ? 'fade' : 'slide'} transparent
-        onRequestClose={closeShare} onDismiss={shareHandoff.onDismiss}>
+        onRequestClose={closeShare}>
         <Pressable style={styles.modalOverlay} onPress={() => setShareRide(null)}>
           <Pressable style={styles.modalContent} onPress={() => {}}>
             {shareRide && (
               <>
-                <ShareableRideCard ride={shareRide} onShare={closeShare} beforeShare={shareHandoff.handoff} />
+                <ShareableRideCard ride={shareRide} onShare={closeShare} />
                 {/* The one close word of every share sheet (Share Studio uses it too). */}
                 <GameButton label={CLOSE_WORD} variant="ghost" tone="onBlue" onPress={() => setShareRide(null)} accessibilityLabel="Close" style={{ marginTop: 4 }} />
               </>
             )}
           </Pressable>
         </Pressable>
+        {/* The grown-up gate for Share shows above this sheet. */}
+        <GrownUpGateSlot />
       </Modal>
     </SafeAreaView>
   );

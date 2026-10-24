@@ -3,6 +3,7 @@
  * only way out: no in-app posting, no account linking (kid safety).
  */
 import { shareExternal, shareFileExternal } from '../services/external';
+import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import type { RefObject } from 'react';
 import { PixelRatio, Platform, Share, type View } from 'react-native';
@@ -27,6 +28,8 @@ export async function captureFlex(ref: RefObject<View | null>, format: FlexForma
 }
 
 export interface ShareOutcome {
+  /** true once the share sheet opened and closed; false when the grown-up said no or it never opened. */
+  readonly opened: boolean;
   /** true shared, false closed without sharing, null unknown (Android). */
   readonly shared: boolean | null;
   /** iOS destination activity type, e.g. com.burbn.instagram.shareextension. */
@@ -52,14 +55,38 @@ export function activityLabel(activity: string | null | undefined): string | nul
   return 'other';
 }
 
-export async function openShareSheet(uri: string): Promise<ShareOutcome> {
+/** The picture's name in the share sheet header and in Messages or AirDrop (never a random id). */
+export const SHARE_FILE_NAME = 'Theme Park Shark.jpg';
+
+/** The capture under its friendly name. Any file trouble falls back to the original picture. */
+export async function friendlyShareFile(uri: string): Promise<string> {
+  const dir = FileSystem.cacheDirectory;
+  if (!dir) return uri;
+  try {
+    const folder = `${dir}share-card/`;
+    await FileSystem.makeDirectoryAsync(folder, { intermediates: true }).catch(() => undefined);
+    const to = `${folder}${encodeURIComponent(SHARE_FILE_NAME)}`;
+    await FileSystem.deleteAsync(to, { idempotent: true });
+    await FileSystem.copyAsync({ from: uri, to });
+    return to;
+  } catch {
+    return uri;
+  }
+}
+
+/**
+ * The OS share sheet for a card picture. `message` (a short line with the app link) rides
+ * along so Messages and chat apps get the link without a paste; photo-only targets drop it.
+ */
+export async function openShareSheet(uri: string, message?: string): Promise<ShareOutcome> {
+  const file = await friendlyShareFile(uri);
   if (Platform.OS === 'ios') {
-    const result = await shareExternal({ url: uri });
-    if (!result) return { shared: false, activity: null };
-    if (result.action === Share.sharedAction) return { shared: true, activity: activityLabel(result.activityType) };
-    return { shared: false, activity: null };
+    const result = await shareExternal(message ? { url: file, message } : { url: file });
+    if (!result) return { opened: false, shared: false, activity: null };
+    if (result.action === Share.sharedAction) return { opened: true, shared: true, activity: activityLabel(result.activityType) };
+    return { opened: true, shared: false, activity: null };
   }
   if (!await Sharing.isAvailableAsync()) throw new Error('share sheet unavailable');
-  if (!(await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share' }))) return { shared: false, activity: null };
-  return { shared: null, activity: null };
+  if (!(await shareFileExternal(file, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share' }))) return { opened: false, shared: false, activity: null };
+  return { opened: true, shared: null, activity: null };
 }

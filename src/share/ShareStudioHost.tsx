@@ -36,7 +36,7 @@ import { CARD_CHROME, FLEX_SIZE, FlexCard } from './FlexCard';
 import { HERO_ART } from './FlexHero';
 import { PROP_ART } from './FlexShark';
 import { FRAMES } from './frames';
-import { flexShareUrl } from './link';
+import { flexShareUrl, shareMessage } from './link';
 import { QR_BY_KIND } from './qr';
 import { resolveFlexPayload, RESOLVE_BUDGET_MS } from './resolve';
 import {
@@ -48,6 +48,7 @@ import { markRevealShown } from './revealOnce';
 import { CLOSE_WORD } from './closeWord';
 import { useDevAutoPress } from './devDrive';
 import { trackShare } from './track';
+import { GrownUpGateSlot } from '../components/GrownUpGate';
 import type { FlexFormat, FlexPayload, FlexRequest } from './types';
 
 export const REVEAL_TAP_GUARD_MS = 900;
@@ -201,7 +202,7 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
         setStage('leaving');
         setTimeout(onDismiss, HANDOFF_MS);
       });
-      const outcome = await openShareSheet(uri);
+      const outcome = await openShareSheet(uri, shareMessage(flexShareUrl(request.kind, request.payload)));
       if (outcome.shared === false) event('dismissed');
       else {
         event('shared', outcome.activity);
@@ -276,6 +277,8 @@ function FlexSheet({ request }: { readonly request: FlexRequest }) {
         </View>
       </View>
       </ModalLayerContext.Provider>
+      {/* The grown-up gate for Share shows above this sheet. */}
+      <GrownUpGateSlot />
     </Modal>
   );
 }
@@ -444,6 +447,8 @@ function FlexMoment({ request }: { readonly request: FlexRequest }) {
         </Animated.View>
       </View>
       </ModalLayerContext.Provider>
+      {/* The grown-up gate for Share shows above this moment. */}
+      <GrownUpGateSlot />
     </Modal>
   );
 }

@@ -28,6 +28,7 @@ function flexArtOf(source: ImageSourcePropType | { uri?: string } | number | str
   const uri = (source as { uri?: string } | null)?.uri;
   return uri ?? require('../../../assets/images/screens/park/gold.png');
 }
+import { GrownUpGateSlot } from '../../components/GrownUpGate';
 
 export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = null }: {
   readonly item: DexItem | null; readonly set: DexSet | null;
@@ -156,6 +157,8 @@ export function ItemCard({ item, set, onClose, onShare, onFind, error, hunt = nu
           </Animated.View>
         )}
       </View>
+      {/* The grown-up gate for Share shows above this card. */}
+      {item != null && <GrownUpGateSlot />}
     </Modal>
   );
 }

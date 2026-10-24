@@ -16,7 +16,14 @@ const track = loadTs('src/share/track.ts', {
 });
 
 const shared = { result: { action: 'sharedAction', activityType: 'com.burbn.instagram.shareextension' } };
+const fsCalls = [];
 const capture = loadTs('src/share/capture.ts', {
+  'expo-file-system': {
+    cacheDirectory: 'file:///cache/',
+    makeDirectoryAsync: async (...a) => { fsCalls.push(['mkdir', ...a]); },
+    deleteAsync: async (...a) => { fsCalls.push(['delete', ...a]); },
+    copyAsync: async (a) => { fsCalls.push(['copy', a]); },
+  },
   'expo-sharing': { isAvailableAsync: async () => true, shareAsync: async () => undefined },
   'react-native': {
     PixelRatio: { get: () => 3 }, Platform: { OS: 'ios' },
@@ -24,7 +31,7 @@ const capture = loadTs('src/share/capture.ts', {
   },
   'react-native-view-shot': { captureRef: async () => 'file:///tmp/card.jpg' },
   // The grown-up gate passes here; its own tests cover a no.
-  '../services/external': { shareExternal: async () => shared.result, shareFileExternal: async () => true },
+  '../services/external': { shareExternal: async (content) => { shared.last = content; return shared.result; }, shareFileExternal: async () => true },
 });
 
 const MONTHS = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d/i;
@@ -138,9 +145,11 @@ test('export sizes are exactly 1080x1920 and 1080x1080 at every density', () => 
 
 test('the iOS share sheet reports the destination as a short label; dismissal is not a share', async () => {
   shared.result = { action: 'sharedAction', activityType: 'com.burbn.instagram.shareextension' };
-  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { shared: true, activity: 'instagram' });
+  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { opened: true, shared: true, activity: 'instagram' });
   shared.result = { action: 'dismissedAction' };
-  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { shared: false, activity: null });
+  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { opened: true, shared: false, activity: null });
+  shared.result = null; // the grown-up said no
+  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { opened: false, shared: false, activity: null });
   assert.equal(capture.activityLabel('com.apple.UIKit.activity.SaveToCameraRoll'), 'save_photo');
   assert.equal(capture.activityLabel('com.zhiliaoapp.musically.ShareExtension'), 'tiktok');
   assert.equal(capture.activityLabel('com.apple.UIKit.activity.Message'), 'messages');
@@ -427,4 +436,24 @@ test('the coin sheet Share carries a word (the md pill says Share) and the stamp
   // The coin sheet uses the same labeled pill as every reveal, under its main button.
   assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8'), /kind="coin_level" surface="coin_sheet" size="md"/);
   assert.match(fs.readFileSync(pathMod.join(repo, 'src/share/types.ts'), 'utf8'), /readonly artHasShark: boolean;/);
+});
+
+test('the share sheet names the picture "Theme Park Shark" (no random id) and sends the link line with it', async () => {
+  shared.result = { action: 'sharedAction', activityType: 'com.apple.UIKit.activity.Message' };
+  fsCalls.length = 0;
+  await capture.openShareSheet('file:///tmp/B80AB5AF-733B.jpg', 'Come play Theme Park Shark with me! https://themeparkshark.com/app?c=flex_find');
+  assert.equal(capture.SHARE_FILE_NAME, 'Theme Park Shark.jpg');
+  assert.deepEqual(JSON.parse(JSON.stringify(shared.last)), {
+    url: 'file:///cache/share-card/Theme%20Park%20Shark.jpg',
+    message: 'Come play Theme Park Shark with me! https://themeparkshark.com/app?c=flex_find',
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(fsCalls.find(c => c[0] === 'copy')[1])), { from: 'file:///tmp/B80AB5AF-733B.jpg', to: 'file:///cache/share-card/Theme%20Park%20Shark.jpg' });
+  // No message: the picture alone. A file error falls back to the original picture.
+  await capture.openShareSheet('file:///tmp/a.jpg');
+  assert.equal(shared.last.message, undefined);
+  const link = loadTs('src/share/link.ts', {});
+  assert.equal(link.shareMessage(link.flexShareUrl('find', { prize: 'pass' })), 'Come play Theme Park Shark with me! https://themeparkshark.com/app?c=flex_sharkpass');
+  for (const f of ['src/share/ShareStudioHost.tsx', 'src/games/whack/ui/ShareCard.tsx', 'src/games/memory/MemoryExtras.tsx', 'src/share/LookShareButton.tsx', 'src/components/RideTracker/ShareableRideCard.tsx']) {
+    assert.match(fs.readFileSync(pathMod.join(repo, f), "utf8"), /openShareSheet\(uri, shareMessage\(/, `${f}: the link rides with the picture`);
+  }
 });
