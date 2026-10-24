@@ -582,3 +582,11 @@ test('an iPhone SE board shows tiles of at least 44 pt (not only touch areas)', 
   assert.ok(m.besideTileSide(side) >= 44, `SE tiles ${m.besideTileSide(side)} pt`);
   assert.ok(m.besideTileSide(m.boardBesideSide({ width: 366, height: 227 })) >= 50, '17 Pro keeps big tiles');
 });
+
+test('a space clue page says its own mission name and no second count (the rail bubbles own it)', () => {
+  const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
+  assert.doesNotMatch(slot, /MISSION \d OF 3/);
+  assert.match(slot, /title=\{navigator \? 'Spot the clue' : 'Field Note'\}/);
+  const rail = read('src/screens/LinePlay/components/ActivityPageRail.tsx');
+  assert.match(rail, /numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.7\}>/, 'a long next name shrinks a little, never cut');
+});

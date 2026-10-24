@@ -87,7 +87,7 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
       disabled={showMore ? morePaused : count <= 1} onPress={showMore ? onMore : onNext}
       style={[styles.next, calm && styles.nextQuiet, (showMore ? morePaused : count <= 1) && styles.disabled]}>
       {nextIcon && !showMore && count > 1 && !wrapsToFirst ? <GameIcon name={nextIcon} size={24} /> : null}
-      <Text style={[styles.nextText, calm && styles.nextTextQuiet]} numberOfLines={1}>
+      <Text style={[styles.nextText, calm && styles.nextTextQuiet]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
         {showMore ? morePaused ? 'Resume for more rounds' : 'More queue rounds'
           : count <= 1 ? 'Only activity' : wrapsToFirst ? `Back to ${firstLabel.toLowerCase()}` : `Next: ${nextLabel}`}
       </Text>

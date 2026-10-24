@@ -180,7 +180,7 @@ function MiniGameSlot({
   const label = item.title ?? (isStarChart ? 'Rebuild the Star Chart' : GAME_LABELS[item.gameId] ?? item.gameId);
   return (
     <PageScroll fill={CARD_FILL}>
-      <ActivityHero kicker={navigator ? 'STARPORT · MISSION 3 OF 3' : 'QUEUE ARCADE'} title={label} navigator={navigator} />
+      <ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE ARCADE'} title={label} navigator={navigator} />
       <View style={styles.bestRow} accessible
         accessibilityLabel={bestStars == null ? 'New game this wait' : `Best this wait: ${bestStars} of 3 stars`}>
         {bestStars == null ? <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View>
@@ -368,7 +368,7 @@ function LoreSlot({
 
   return (
     <PageScroll fill={CARD_FILL}>
-      <ActivityHero kicker={navigator ? 'STARPORT · MISSION 2 OF 3' : 'QUEUE QUEST'} title={navigator ? 'Find the signal' : 'Field Note'} navigator={navigator} />
+      <ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE QUEST'} title={navigator ? 'Spot the clue' : 'Field Note'} navigator={navigator} />
       <Text style={styles.loreTitle}>{lore.title}</Text>
       <Text style={styles.loreBody}>{lore.body}</Text>
       {factSourceLine(lore.source) ? <Text style={styles.loreSource}>{factSourceLine(lore.source)}</Text> : null}
