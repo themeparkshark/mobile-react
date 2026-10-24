@@ -86,6 +86,7 @@ import CurrencyFlyProvider from './src/context/CurrencyFlyProvider';
 import { TutorialProvider } from './src/components/Tutorial';
 import HelpProvider from './src/components/help/HelpProvider';
 import LinePlayRewardRecovery from './src/services/lineplay/LinePlayRewardRecovery';
+import RideLogOutboxSync from './src/services/RideLogOutboxSync';
 import RemintNoticeModal from './src/components/RemintNoticeModal';
 import { PowerProvider } from './src/power';
 
@@ -100,6 +101,7 @@ export default function App() {
       <PowerProvider>
       <AuthProvider>
         <LinePlayRewardRecovery />
+        <RideLogOutboxSync />
         <SoundEffectProvider>
           <MusicProvider>
             <BroadcastProvider>

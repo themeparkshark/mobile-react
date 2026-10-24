@@ -26,9 +26,9 @@ import { CLOSE_WORD } from '../../share/closeWord';
 // ─── Short park names for filter chips ───
 const SHORT_PARK_NAMES: Record<number, string> = {
   2: 'Magic Kingdom',
-  4: 'EPCOT',
-  5: 'Hollywood Studios',
-  6: 'Animal Kingdom',
+  6: 'EPCOT',
+  4: 'Hollywood Studios',
+  5: 'Animal Kingdom',
   8: 'Disneyland',
   13: 'DCA',
   3: 'Universal FL',
