@@ -5,7 +5,7 @@
  * numbers and ticks without the scale punch. Tapping anywhere skips it.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSequence, withSpring,
   withTiming } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -56,7 +56,10 @@ export default function ResumeCountdown({ active, onDone }: { active: boolean; o
     <Animated.View style={[styles.bubble, numberStyle]}>
       <Text style={styles.number}>{count}</Text>
     </Animated.View>
-    <Text style={styles.hint}>Back in line</Text>
+    {/* On a navy pill, so the words read over any page behind the scrim (board tiles, stars). */}
+    <View style={styles.hintPill}>
+      <Text style={styles.hint}>Back in line</Text>
+    </View>
   </Pressable>;
 }
 
@@ -66,6 +69,7 @@ const styles = StyleSheet.create({
   bubble: { width: 132, height: 132, borderRadius: 66, backgroundColor: BRAND.gold, borderWidth: 4,
     borderColor: BRAND.navy, borderBottomWidth: 8, alignItems: 'center', justifyContent: 'center' },
   number: { fontFamily: 'Shark', fontSize: 74, color: BRAND.navy, marginTop: 6 },
-  hint: { fontFamily: 'Shark', fontSize: 22, color: BRAND.white, marginTop: 14,
-    textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  hintPill: { marginTop: 14, paddingHorizontal: 18, paddingVertical: 6, borderRadius: 999,
+    backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white },
+  hint: { fontFamily: 'Shark', fontSize: 22, color: BRAND.white, marginTop: 2 },
 });

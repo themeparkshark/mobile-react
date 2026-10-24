@@ -383,7 +383,9 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
     accessibilityLabel={showHint ? 'Hide the circuit clue' : 'Show a clue for this circuit'}
     accessibilityHint={`Tap a tile to turn it. Link all three ${look.relayNoun} to the exit.`}
     accessibilityState={{ disabled: locked, expanded: showHint }} hitSlop={6}>
-    <GameIcon name="search" size={beside ? 20 : 24} />
+    {/* The same "turn this tile" picture the hinted tile wears, never the magnifier: on this page the
+        rail's "Next: Spot the clue" owns the magnifier, so each picture means one thing. */}
+    <TurnTileGlyph size={beside ? 24 : 28} />
   </Pressable>;
   const relayStars = (starSize: number) => <View style={styles.relayRow} accessible
     accessibilityLabel={`${trace.signals} of 3 ${look.relayNoun} connected, ${panel.name}, ${size} by ${size}`}>

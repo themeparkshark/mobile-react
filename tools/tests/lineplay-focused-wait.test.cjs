@@ -37,7 +37,12 @@ test('focused queue status preserves pause, arcade and honest games-only details
   assert.ok(c.app.find(node => node.type === 'Text' && words(node.props.children) === 'The ride sign said 35m.'));
   assert.ok(!c.app.find(node => node.type === 'Text' && /No posted wait|no sign time/.test(String(node.props.children))));
   c.app.change({ paused: true, pauseReason: 'manual' });
-  assert.ok(c.control('Resume queue games')); assert.equal(c.control('Open queue games').props.disabled, true);
+  assert.ok(c.control('Resume queue games'));
+  // Paused, ARCADE is never a dead tap: it stays live and the screen runs the resume countdown first.
+  const paused = c.control('Resume and open queue games');
+  assert.ok(paused, 'paused ARCADE says what one tap does');
+  assert.notEqual(paused.props.disabled, true);
+  paused.props.onPress(); assert.equal(c.arcades(), 2);
 });
 test('focused reward status uses confirmed credited Parts, with verification details still available', () => {
   const c = wait({ rewardTrackingAvailable: true, lineRewardsReady: true, creditedParts: 2,
@@ -46,4 +51,13 @@ test('focused reward status uses confirmed credited Parts, with verification det
   assert.ok(c.control('Open queue games for bonus rewards'));
   c.control('Show wait and reward details').props.onPress(); c.app.render();
   assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Time near the ride: 7:30. You get 1 Ride Part every 5 minutes, up to 3 per wait.'));
+});
+test('VoiceOver says what the card shows: with the coin, the status first and the wait total named as its own phrase', () => {
+  const label = c => c.app.find(node => node.props?.accessible && /earned this wait/.test(node.props?.accessibilityLabel ?? ''))?.props.accessibilityLabel;
+  const reward = { rewardTrackingAvailable: true, lineRewardsReady: true, creditedParts: 4, verifiedEligibleSeconds: 450, verifiedPresenceAt: Date.now() };
+  const withCoin = wait({ ...reward, hero: 'coin' });
+  assert.equal(label(withCoin), '1:30 until your next Ride Part. 4 Ride Parts earned this wait.');
+  assert.doesNotMatch(label(withCoin), /^4 Ride Parts earned\./, 'never a bare count that disagrees with the coin chip');
+  const noCoin = wait(reward);
+  assert.match(label(noCoin), /^4 Ride Parts earned this wait\. 1:30/);
 });

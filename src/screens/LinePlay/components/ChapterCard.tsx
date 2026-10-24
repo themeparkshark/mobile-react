@@ -58,13 +58,23 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
   const [measuredHeight, setViewHeight] = useState(0);
   const viewHeight = windowHeight != null && windowHeight > 0 ? windowHeight : measuredHeight;
   // The first screen ends on whole blocks: the crew row starts below the window when it would peek.
-  const [trailBottom, setTrailBottom] = useState(0);
-  const [trailHeight, setTrailHeight] = useState(0);
+  // Block sizes are kept per layout (full or compact), because Details switching the layout would
+  // otherwise leave the last layout's numbers in place for a few frames.
+  const [trailBottomSeen, setTrailBottom] = useState(0);
+  const [trailHeights, setTrailHeights] = useState<Partial<Record<string, number>>>({});
   // The bottom of the two lead blocks (PLAY NOW and the header): the trail starts below the window when it would peek too.
-  const [leadBottom, setLeadBottom] = useState(0);
+  const [leadBottoms, setLeadBottoms] = useState<Partial<Record<string, number>>>({});
   const [crewHeight, setCrewHeight] = useState(0);
   const fit = chapterPageFit(viewHeight, shortScreen);
   const compact = fit !== 'full';
+  const leadBottom = leadBottoms[fit] ?? 0;
+  const trailHeight = trailHeights[fit] ?? 0;
+  const setLeadBottom = (bottom: number) => setLeadBottoms(seen => seen[fit] === bottom ? seen : { ...seen, [fit]: bottom });
+  const trailGap = foldGap(viewHeight, leadBottom, trailHeight, compact ? TRAIL_GAP_COMPACT : TRAIL_GAP);
+  // The crew row's offset is worked out from the same window height in the same render: the trail sits
+  // right under the lead blocks, so its bottom is lead + gap + height. No frame waits for the trail's
+  // own layout, so closing Details never shows the crew row's top edge under the bubbles.
+  const trailBottom = leadBottom > 0 && trailHeight > 0 ? leadBottom + trailGap + trailHeight : trailBottomSeen;
   // Blocks rise in once, when the page first opens. A later layout switch (Details opening
   // or closing changes what leads) just shows the blocks, never replays the entrance.
   const entered = useRef(false);
@@ -108,8 +118,9 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
         disabled={paused} onPress={() => onChooseMission(nextId)}
         style={({ pressed }) => [styles.playNow, compact && styles.playNowCompact, paused && styles.missionPaused, pressed && styles.pressed]}>
         <View style={styles.playNowCopy}>
-          {/* No count here: the numbered bubbles below own it (one count per screen). */}
-          <KidText style={styles.playNowKicker}>{done === 3 ? 'KEEP THE WAIT FUN' : 'PLAY NOW'}</KidText>
+          {/* No count here: the numbered bubbles below own it (one count per screen). PLAY, the same
+              word as the SE strip, so every phone size says one word for one idea. */}
+          <KidText style={styles.playNowKicker}>{done === 3 ? 'KEEP THE WAIT FUN' : 'PLAY'}</KidText>
           <Text style={styles.playNowTitle}>{nextName}</Text>
           {!compact && <Text style={styles.playNowHint}>One phone · play solo or with your crew</Text>}
         </View>
@@ -142,7 +153,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
             <Text style={styles.playStripText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
               <Text style={styles.playStripKicker}>{'PLAY  '}</Text>{nextName}
             </Text>
-            {dotsInStrip && <ClueDots size={18} current={done === 3 ? -1 : nextMissionIndex}
+            {dotsInStrip && <ClueDots size={16} onGold current={done === 3 ? -1 : nextMissionIndex}
               done={missionIds.map(id => completedIds.has(id))} accessibilityLabel={`${done} of 3 ${chapter.progressNoun}`} />}
           </View>
           <GameIcon name="play" size={40} />
@@ -175,10 +186,11 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
       {/* Compact: just the numbered bubbles (names stay in the spoken label), so the row ends whole
           above the fade instead of small labels dissolving into it. */}
       <Animated.View entering={rise(2)} style={[styles.trail, compact && styles.trailCompact,
-        { marginTop: foldGap(viewHeight, leadBottom, trailHeight, compact ? TRAIL_GAP_COMPACT : TRAIL_GAP) }]}
+        { marginTop: trailGap }]}
         onLayout={event => {
           setTrailBottom(layoutBottom(event));
-          setTrailHeight(Math.round(event.nativeEvent.layout.height));
+          const height = Math.round(event.nativeEvent.layout.height);
+          setTrailHeights(seen => seen[fit] === height ? seen : { ...seen, [fit]: height });
         }}
         accessibilityLabel={`${done} of 3 ${chapter.progressNoun}`}>
         {chapter.missionNames.map((name, index) => {

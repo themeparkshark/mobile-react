@@ -208,7 +208,9 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
           </View>
         )}
       </Pressable>
-      <View style={[styles.labelChip, progress.ready && owned && styles.labelChipReady]}>
+      {/* Spoken as the whole sentence ("1 of 6 Parts to Level 3"), never a bare "1 of 6". */}
+      <View style={[styles.labelChip, progress.ready && owned && styles.labelChipReady]} accessible
+        accessibilityLabel={showCount ? progress.label : label}>
         {progress.ready && owned && !busy && <GameIcon name="sparkle" size={14} />}
         {showCount && <GameIcon name="parts" size={17} />}
         {/* The count's digits use the flagged-1 font, so "1 of 6" never reads "I of 6". */}

@@ -354,7 +354,8 @@ test('one gold button per screen: the rail Next is quiet on the chapter page and
 test('one count per screen: the bubbles and the rail own the clue count', () => {
   const chapter = read('src/screens/LinePlay/components/ChapterCard.tsx');
   assert.doesNotMatch(chapter, /OF 3 · PLAY NOW/);
-  assert.match(chapter, /'PLAY NOW'/);
+  assert.doesNotMatch(chapter, /'PLAY NOW'/, 'one kicker word on every size: PLAY');
+  assert.match(chapter, /'KEEP THE WAIT FUN' : 'PLAY'\}/);
   assert.match(chapter, /\{chapterPageKicker\(chapter\)\}/);
   const nav = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
   assert.doesNotMatch(nav, /MISSION 1 OF 3/);
@@ -373,8 +374,13 @@ test('the chapter page ends on whole blocks: the crew row starts below the windo
   assert.equal(m.foldGap(150, 176, 52, 12), 12, 'the bubbles themselves are below the window');
   const chapter = read('src/screens/LinePlay/components/ChapterCard.tsx');
   assert.match(chapter, /marginTop: foldGap\(viewHeight, trailBottom, crewHeight, CREW_ROW_GAP\)/);
+  // The crew row's offset comes from the same render's window height, never a trail layout one frame late.
+  assert.match(chapter, /const trailBottom = leadBottom > 0 && trailHeight > 0 \? leadBottom \+ trailGap \+ trailHeight : trailBottomSeen;/);
+  assert.match(chapter, /const leadBottom = leadBottoms\[fit\] \?\? 0;/);
+  assert.match(chapter, /const trailHeight = trailHeights\[fit\] \?\? 0;/);
   // Details open on a 17 Pro: the bubbles would peek under PLAY NOW and the header, so they start below the window too.
-  assert.match(chapter, /marginTop: foldGap\(viewHeight, leadBottom, trailHeight, compact \? TRAIL_GAP_COMPACT : TRAIL_GAP\)/);
+  assert.match(chapter, /const trailGap = foldGap\(viewHeight, leadBottom, trailHeight, compact \? TRAIL_GAP_COMPACT : TRAIL_GAP\);/);
+  assert.match(chapter, /\{ marginTop: trailGap \}/);
   assert.equal(m.foldGap(149, 130, 44, 8), 21, '17 Pro reading Details: bubbles below the window, not a sliver');
 });
 
@@ -424,7 +430,8 @@ test('one name per activity: PLAY NOW, the rail and the board header say the sam
   assert.match(screen, /const nextPageIndex = railNextIndex\(activityPages\.map\(page => page\.id\), visiblePageIndex, playNowId\);/);
   assert.match(screen, /\? chapter\.missionNames\[0\] : 'Shark Trivia';/);
   assert.match(screen, /navigationTitle=\{snapshot\.chapter\?\.navigationPanel \? snapshot\.chapter\.missionNames\[0\] : undefined\}/);
-  assert.match(screen, /'chapter_intro' \? 'CHAPTER' : 'FREE PLAY'/, 'CHAPTER, the same word as the Chapter button');
+  assert.doesNotMatch(screen, /'CHAPTER'/, 'Chapter is only ever the rail button word, never a plain label too');
+  assert.match(screen, /hideCount=\{!storyStep && activityPages\[visiblePageIndex\]\?\.kind === 'chapter_intro'\}/);
   assert.doesNotMatch(screen, /'Navigation panel'|'STORY'/);
   const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
   assert.match(slot, /<NavigationPanelCard seed=\{item\.seed\} title=\{navigationTitle\}/);
@@ -552,9 +559,9 @@ test('one clue count form: 3 mini bubbles on the rail, in the SE strip and on th
   const screen = read(SCREEN);
   assert.doesNotMatch(screen, /CLUE \$\{storyStep\}\/3/, 'no CLUE 1/3 text on the rail');
   assert.match(screen, /progressDots=\{storyStep && snapshot\.chapter \? \{ current: storyStep - 1,/);
-  assert.match(screen, /nextIcon=\{pageIcon\(activityPages\[nextPageIndex\]\)\}/);
+  assert.match(screen, /nextIcon=\{railPageIcon\(activityPages\[nextPageIndex\]\?\.kind\)\}/);
   assert.match(screen, /case 'lore': return chapter && item\.id === `\$\{chapter\.id\}-field-note` \? chapter\.missionNames\[1\] : 'Field Note';/);
-  assert.match(screen, /case 'lore': return 'search';/, 'Spot the clue gets a magnifier picture');
+  assert.equal(layout().railPageIcon('lore'), 'search', 'Spot the clue gets a magnifier picture');
   assert.match(read('src/services/lineplay/chapters.ts'), /missionNames: \['Fix the signal', 'Spot the clue', 'Rebuild the star chart'\]/,
     'not two near-twin signal names');
   const m = layout();
@@ -595,4 +602,55 @@ test('the board page "Tap to play" strip with no header fills its window (no cre
   const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
   assert.match(card, /\[styles\.playStrip, !withHeader && styles\.playStripFill, pressed && !reducedMotion && styles\.pressed\]/);
   assert.match(card, /playStripFill: \{ flexGrow: 1, maxHeight: 112 \}/);
+});
+
+test('every picture on the board page means one thing: the hint is the turn-tile picture, the rail Next keeps the magnifier', () => {
+  const m = layout();
+  const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
+  const hint = card.slice(card.indexOf('const hintButton ='), card.indexOf('const relayStars'));
+  assert.match(hint, /<TurnTileGlyph size=\{beside \? 24 : 28\} \/>/, 'the hint wears the same picture as the hinted tile');
+  assert.doesNotMatch(hint, /GameIcon/, 'never a GameIcon a rail page could also wear');
+  // The board's own pictures (the 3 relay stars, checks) are never the picture of the page after it.
+  const boardIcons = [...card.matchAll(/<GameIcon[^>]*name="([a-zA-Z]+)"/g)].map(match => match[1]);
+  const pages = ['chapter_intro', 'crew_grid', 'circuit', 'crew_relay', 'signal', 'puzzle', 'trivia', 'lore', 'prediction', 'minigame'];
+  assert.equal(m.railPageIcon('trivia') === m.railPageIcon('lore'), false);
+  // On the space board, Next is always Spot the clue (lore).
+  assert.ok(!boardIcons.includes(m.railPageIcon('lore')), `board icons ${boardIcons} never include the magnifier`);
+  for (const kind of pages) assert.ok(m.railPageIcon(kind), `${kind} has a picture`);
+  assert.equal(m.railPageIcon(undefined), undefined);
+});
+
+test('paused, ARCADE is never a dead tap: one tap runs the resume 3 2 1, then the arcade opens', () => {
+  const screen = read(SCREEN);
+  assert.match(screen, /if \(snapshot\.state === 'paused' \|\| resuming\) \{\n\s+arcadeAfterResume\.current = true;\n\s+if \(!resuming\) setResuming\(true\);\n\s+void Haptics\.selectionAsync\(\);/);
+  assert.match(screen, /session\.resume\(\);\n\s+if \(arcadeAfterResume\.current\) \{ arcadeAfterResume\.current = false; setArcadeOpen\(true\); \}/);
+  assert.match(screen, /arcadeAfterResume\.current = false; session\.pause\('manual'\)/, 'pausing again forgets the queued arcade');
+  const card = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.doesNotMatch(card, /onPress=\{onPlayBonus\} disabled=\{paused\}/, 'no disabled ARCADE while paused');
+});
+
+test('the resume countdown caption sits on a navy pill, readable over any page', () => {
+  const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
+  assert.match(countdown, /<View style=\{styles\.hintPill\}>\n\s+<Text style=\{styles\.hint\}>Back in line<\/Text>/);
+  assert.match(countdown, /hintPill: \{[^}]*backgroundColor: BRAND\.navy/);
+  assert.doesNotMatch(countdown, /textShadow/, 'no bare shadowed text over the board');
+});
+
+test('in the gold SE strip the current clue reads at arm\'s length: navy capsule, white ring', () => {
+  const dots = read('src/screens/LinePlay/components/ClueDots.tsx');
+  assert.match(dots, /capsule: \{[^}]*backgroundColor: BRAND\.navy/);
+  assert.match(dots, /dotNowOnGold: \{ borderColor: '#ffffff' \}/);
+  assert.match(read('src/screens/LinePlay/components/ChapterCard.tsx'), /<ClueDots size=\{16\} onGold/);
+  const m = layout();
+  assert.equal(m.STRIP_WITH_DOTS, 68);
+  assert.equal(m.stripDotsFit(80), true, 'still fits an SE reading Details');
+});
+
+test('one word for one idea in VoiceOver: clues found everywhere, and the coin chip says the whole sentence', () => {
+  const chapters = read('src/services/lineplay/chapters.ts');
+  const nouns = [...chapters.matchAll(/progressNoun: '([^']*)'/g)].map(match => match[1]);
+  assert.ok(nouns.length >= 6);
+  assert.deepEqual([...new Set(nouns)], ['clues found']);
+  const stage = read('src/screens/LinePlay/components/waitscreen/WaitCoinStage.tsx');
+  assert.match(stage, /accessibilityLabel=\{showCount \? progress\.label : label\}/);
 });

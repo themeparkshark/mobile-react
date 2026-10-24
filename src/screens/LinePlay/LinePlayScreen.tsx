@@ -34,7 +34,6 @@ import * as Haptics from 'expo-haptics';
 import { StackActions, useNavigation, useRoute } from '@react-navigation/native';
 import { colors, spacing, borderRadius } from '../../design-system';
 import { GameDialog, gameAlert } from '../../ui';
-import type { GameIconName } from '../../ui/iconNames';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { useLinePlaySession } from '../../services/lineplay/useLinePlaySession';
@@ -155,23 +154,6 @@ function pageName(item: ActivityItem | { kind: 'signal' | 'puzzle'; id: string }
   }
 }
 
-/** A small picture for each page, beside the rail's "Next: ..." so a kid who can't read yet still follows. */
-function pageIcon(item: ActivityItem | { kind: 'signal' | 'puzzle'; id: string } | undefined): GameIconName | undefined {
-  switch (item?.kind) {
-    case 'chapter_intro': return 'map';
-    case 'crew_grid': return 'sparkle';
-    case 'circuit': return 'wrench';
-    case 'crew_relay': return 'shark';
-    case 'signal': return 'map';
-    case 'puzzle': return 'lock';
-    case 'trivia': return 'info';
-    case 'lore': return 'search';
-    case 'prediction': return 'timer';
-    case 'minigame': return 'star';
-    default: return undefined;
-  }
-}
-
 function tabLabel(screen: string): string {
   return screen === 'Leaderboard' ? 'Standings' : screen;
 }
@@ -181,7 +163,7 @@ import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLive
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { linePlayTipReady } from '../../services/help/tipGate';
-import { chapterMissionIds, chapterPlayNow, crewRowInBand, PAGE_FRAME_V, railBackAction, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIM_HOLD_MAX_MS, PAGES_DIP_MS, PAGES_DIP_OPACITY,
+import { chapterMissionIds, chapterPlayNow, railPageIcon, crewRowInBand, PAGE_FRAME_V, railBackAction, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIM_HOLD_MAX_MS, PAGES_DIP_MS, PAGES_DIP_OPACITY,
   PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
@@ -246,6 +228,8 @@ export default function LinePlayScreen() {
   /** The "How did your wait end?" sheet; `tab` continues to that tab after the recap. */
   const [waitEndPrompt, setWaitEndPrompt] = useState<{ tab: string | null } | null>(null);
   const [resuming, setResuming] = useState(false);
+  // ARCADE tapped while paused: the resume countdown opens the arcade when it ends.
+  const arcadeAfterResume = useRef(false);
   const [toast, setToast] = useState<QueueToastMessage | null>(null);
   const toastKey = useRef(0);
   const showToastRef = useRef<((message: Omit<QueueToastMessage, 'key'>) => void) | null>(null);
@@ -789,7 +773,7 @@ export default function LinePlayScreen() {
   const bonus = snapshot.bonus?.enabled ? snapshot.bonus : null;
   const { playSound } = useContext(SoundEffectContext);
   const reducedFx = useReducedGameMotion();
-  // Details open or close: the page window dips to a soft 35% (never empty), takes its new size
+  // Details open or close: the page window dips softly to PAGES_DIP_OPACITY (84%, never empty), takes its new size
   // inside its own rounded frame, then rises back (UI thread, under 220 ms in all).
   const pagesFade = useSharedValue(1);
   const pagesFadeStyle = useAnimatedStyle(() => ({ opacity: pagesFade.value }));
@@ -1116,9 +1100,18 @@ export default function LinePlayScreen() {
               onTogglePause={() => {
                 if (resuming) return;
                 if (snapshot.state === 'paused') setResuming(true);
-                else { session.pause('manual'); void Haptics.selectionAsync(); }
+                else { arcadeAfterResume.current = false; session.pause('manual'); void Haptics.selectionAsync(); }
               }}
-              onPlayBonus={arcadeChoices.length ? () => setArcadeOpen(true) : undefined}
+              onPlayBonus={arcadeChoices.length ? () => {
+                // Paused: never a dead tap. The same 3 2 1 as the play button runs, then the arcade opens.
+                if (snapshot.state === 'paused' || resuming) {
+                  arcadeAfterResume.current = true;
+                  if (!resuming) setResuming(true);
+                  void Haptics.selectionAsync();
+                  return;
+                }
+                setArcadeOpen(true);
+              } : undefined}
               bonus={snapshot.bonus}
               gameOpen={activeGame != null}
               detailsOpen={detailsOpen}
@@ -1378,15 +1371,13 @@ export default function LinePlayScreen() {
               // On a clue, the count is the same 3 mini bubbles as the chapter page (one count form).
               progressDots={storyStep && snapshot.chapter ? { current: storyStep - 1,
                 done: chapterMissionIds(snapshot.chapter).map(id => completedActivityIds.has(id)) } : null}
-              progressText={storyStep ? undefined
-                // CHAPTER, the same word as the rail's Chapter button (one word for one idea).
-                : activityPages[visiblePageIndex]?.kind === 'chapter_intro' ? 'CHAPTER' : 'FREE PLAY'}
-              progressAccessibilityLabel={storyStep ? `Story clue ${storyStep} of 3`
-                : activityPages[visiblePageIndex]?.kind === 'chapter_intro'
-                  ? 'Ride chapter. Choose a clue to begin.'
-                  : 'Free play. Play any game you like.'}
+              // The chapter page: no count or label at all. Its own bubbles own the count, and "Chapter"
+              // is only ever the rail's button word, never a plain label too.
+              hideCount={!storyStep && activityPages[visiblePageIndex]?.kind === 'chapter_intro'}
+              progressText={storyStep ? undefined : 'FREE PLAY'}
+              progressAccessibilityLabel={storyStep ? `Clue ${storyStep} of 3` : 'Free play. Play any game you like.'}
               nextLabel={pageName(activityPages[nextPageIndex], snapshot.chapter)}
-              nextIcon={pageIcon(activityPages[nextPageIndex])}
+              nextIcon={railPageIcon(activityPages[nextPageIndex]?.kind)}
               onFirst={() => jumpToPage(0)} onNext={() => jumpToPage(nextPageIndex)}
               moreAvailable={snapshot.playlist.length < MAX_SESSION_ACTIVITY_SLOTS}
               morePaused={snapshot.state !== 'active'}
@@ -1504,6 +1495,7 @@ export default function LinePlayScreen() {
       <ResumeCountdown active={resuming} onDone={() => {
         setResuming(false);
         session.resume();
+        if (arcadeAfterResume.current) { arcadeAfterResume.current = false; setArcadeOpen(true); }
       }} />
 
       {/* End by hand: one branded sheet (header End, back, or a footer tab). */}

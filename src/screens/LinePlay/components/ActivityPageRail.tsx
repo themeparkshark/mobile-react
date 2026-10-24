@@ -42,13 +42,15 @@ interface Props {
    * button, so a kid sees exactly one gold button to press.
    */
   readonly quiet?: boolean;
+  /** No count or label in the middle (the chapter page: its own bubbles own the count). */
+  readonly hideCount?: boolean;
 }
 
 /** Keeps the next playable round visible after a player finishes a queue activity. */
 export default function ActivityPageRail({ index, count, nextLabel, firstLabel = 'Chapter',
   progressText, progressAccessibilityLabel, onFirst, onArcade, arcadePaused = false, onNext,
   moreAvailable = false, morePaused = false, onMore, mode = 'pages', onShowPages, quiet = false,
-  backAction = 'show', progressDots = null, nextIcon }: Props) {
+  backAction = 'show', progressDots = null, nextIcon, hideCount = false }: Props) {
   if (mode === 'back' && onShowPages) {
     const play = backAction === 'play';
     return <View style={styles.rail}>
@@ -76,7 +78,7 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
       <Text style={styles.arcadeText}>ARCADE</Text>
       {progressText ? <KidText style={styles.arcadeProgress} numberOfLines={1}
         accessibilityLabel={progressAccessibilityLabel}>{progressText}</KidText> : null}
-    </Pressable> : progressDots ? <ClueDots done={progressDots.done} current={progressDots.current}
+    </Pressable> : hideCount ? null : progressDots ? <ClueDots done={progressDots.done} current={progressDots.current}
       accessibilityLabel={progressAccessibilityLabel} />
       : <KidText style={styles.count}
       accessibilityLabel={progressAccessibilityLabel ?? `Activity ${index + 1} of ${count}`}>

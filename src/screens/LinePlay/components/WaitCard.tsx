@@ -203,6 +203,19 @@ function HeroDetails({ stamps, lines, ticket }: {
   </View>;
 }
 
+/**
+ * What VoiceOver says for the card's status line. With the coin on screen, the coin's chip shows the
+ * Parts toward its next level ("1 of 6"), so the status says what is shown first and names the wait's
+ * total as its own phrase ("4 Ride Parts earned this wait"), never a bare second number for one idea.
+ */
+export function compactCopyLabel({ hero, earned, headline, subline }: {
+  hero: boolean; earned: number; headline: string; subline: string;
+}): string {
+  const total = `${earned} Ride Part${earned === 1 ? '' : 's'} earned this wait.`;
+  const status = `${headline} ${subline}`.trim();
+  return hero ? `${status}${/[.!?]$/.test(status) ? '' : '.'} ${total}` : `${total} ${status}`;
+}
+
 export default function WaitCard({
   rideName,
   compact = false,
@@ -365,8 +378,9 @@ export default function WaitCard({
         <View style={styles.topRow}>
           <Text style={[styles.rideName, compact && styles.compactRideName]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>{rideName}</Text>
           {compact && !completed && onPlayBonus && <Pressable accessibilityRole="button"
-            accessibilityLabel={rewardTrackingAvailable ? 'Open queue games for bonus rewards' : 'Open queue games'}
-            onPress={onPlayBonus} disabled={paused}
+            accessibilityLabel={paused ? 'Resume and open queue games' : rewardTrackingAvailable ? 'Open queue games for bonus rewards' : 'Open queue games'}
+            // Paused, it still works: one tap runs the same 3 2 1 as the play button, then opens the arcade.
+            onPress={onPlayBonus}
             style={({ pressed }) => [styles.compactArcade, paused && styles.buttonResting, pressed && styles.playButtonPressed]}>
             <Text style={[styles.compactArcadeText, paused && styles.buttonRestingText]}>ARCADE</Text>
           </Pressable>}
@@ -380,7 +394,7 @@ export default function WaitCard({
         {compact ? <View style={styles.compactMeter}>
           {hero ? null : noPartsHere ? <GameIcon name="queue" size={34} />
             : <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />}
-          <View style={styles.compactCopy} accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}`}>
+          <View style={styles.compactCopy} accessible accessibilityLabel={compactCopyLabel({ hero: hero != null, earned, headline, subline })}>
             <KidText style={styles.compactHeadline} numberOfLines={1}>{`${headline}${sublineInHeadline
               ? ` ${subline}` : !hero && rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}`}</KidText>
             {noPartsHere && <Text style={styles.compactNote} numberOfLines={1}>No Parts at this ride</Text>}
@@ -443,8 +457,8 @@ export default function WaitCard({
         </View>}
 
         {!compact && !completed && onPlayBonus && (
-          <Pressable accessibilityRole="button" accessibilityLabel={rewardTrackingAvailable ? "Open queue games for bonus rewards" : "Open queue games"}
-            onPress={onPlayBonus} disabled={paused}
+          <Pressable accessibilityRole="button" accessibilityLabel={paused ? 'Resume and open queue games' : rewardTrackingAvailable ? "Open queue games for bonus rewards" : "Open queue games"}
+            onPress={onPlayBonus}
             style={({ pressed }) => [styles.playButton, paused && styles.buttonResting, pressed && styles.playButtonPressed]}>
             <Text style={[styles.playButtonText, paused && styles.buttonRestingText]}>{playLabel}</Text>
           </Pressable>

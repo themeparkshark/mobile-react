@@ -7,6 +7,7 @@
  * coin and tighter gaps. Each page is a framed window (PageScroll) that stays
  * put above the rail while its content scrolls inside.
  */
+import type { GameIconName } from '../../ui/iconNames';
 
 /** Usable height (between the safe areas) under which the screen tightens up. iPhone SE is 647; the 17 Pro is 778. */
 export const SHORT_LINE_SCREEN = 700;
@@ -71,8 +72,8 @@ export function stripTrailFits(viewHeight: number): boolean {
   return viewHeight >= 5 * 2 + CHAPTER_STRIP + STRIP_TRAIL_GAP + STRIP_TRAIL_ROW;
 }
 
-/** The strip with its name and the 3 mini bubbles (18 pt) under it, inside the gold button. */
-export const STRIP_WITH_DOTS = 66;
+/** The strip with its name and the 3 mini bubbles (16 pt on a 20 pt navy capsule) under it, inside the gold button. */
+export const STRIP_WITH_DOTS = 68;
 /** Too short for the bubbles row, tall enough for the mini bubbles inside the strip (Details open on an SE). */
 export function stripDotsFit(viewHeight: number): boolean {
   return viewHeight >= 5 * 2 + STRIP_WITH_DOTS;
@@ -342,12 +343,12 @@ export function foldGap(viewHeight: number, foldBottom: number, nextHeight: numb
   return Math.max(normalGap, Math.ceil(viewHeight - foldBottom) + 2);
 }
 
-/** What the chapter page's PLAY NOW opens: the first unplayed clue, then the crew relay, then Crew Prompts. */
 /** The chapter's 3 clue page ids, in order (trivia, field note, finale). */
 export function chapterMissionIds(chapter: { readonly id: string; readonly finale: { readonly idSuffix: string } }): string[] {
   return [`${chapter.id}-trivia`, `${chapter.id}-field-note`, `${chapter.id}-${chapter.finale.idSuffix}`];
 }
 
+/** What the chapter page's PLAY NOW opens: the first unplayed clue, then the crew relay, then Crew Prompts. */
 export function chapterPlayNow(chapter: {
   readonly id: string; readonly missionNames: readonly string[];
   readonly finale: { readonly idSuffix: string }; readonly relay: { readonly title: string };
@@ -373,4 +374,24 @@ export function railNextIndex(pageIds: readonly string[], visibleIndex: number, 
   const next = step(visibleIndex);
   if (playNowId == null || count <= 2 || pageIds[next] !== playNowId) return next;
   return step(next);
+}
+
+/**
+ * A small picture for each page, beside the rail's "Next: ..." so a kid who can't read yet still follows.
+ * The magnifier is the clue page's alone: the board's hint button wears the "turn this tile" picture.
+ */
+export function railPageIcon(kind: string | undefined): GameIconName | undefined {
+  switch (kind) {
+    case 'chapter_intro': return 'map';
+    case 'crew_grid': return 'sparkle';
+    case 'circuit': return 'wrench';
+    case 'crew_relay': return 'shark';
+    case 'signal': return 'map';
+    case 'puzzle': return 'lock';
+    case 'trivia': return 'info';
+    case 'lore': return 'search';
+    case 'prediction': return 'timer';
+    case 'minigame': return 'star';
+    default: return undefined;
+  }
 }
