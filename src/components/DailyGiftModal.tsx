@@ -455,7 +455,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
           </Pressable>}
         </View>
         <RewardBurst progress={burst} x={width * 0.47} y={height * 0.36} />
-        {walletFly && <WalletChip at={walletFly.to} start={walletFly.start} amount={amount} landed={landed} count={walletFly.count} />}
+        {walletFly && <WalletChip at={walletFly.to} start={walletFly.start} amount={amount} landed={landed} count={walletFly.count}
+          caughtUp={(player?.coins ?? 0) >= walletFly.start + amount} />}
         {walletFly && Array.from({ length: walletFly.count }, (_, i) => (
           <WalletCoin key={i} index={i} from={walletFly.from} to={walletFly.to} onLand={() => onCoinLand(i, walletFly.count)} />
         ))}
@@ -473,7 +474,8 @@ export function walletCoins(amount: number): number {
 /** The chest gold fan, as a multiple of the chest art (rays visible to about 0.74 x half of this). */
 export const CHEST_GOLD_SCALE = 2.4;
 const WALLET_COIN = 42;
-const WALLET_CHIP_HOLD = 700;
+const WALLET_CHIP_HOLD = 500;
+const WALLET_CHIP_MAX = 5000;
 const WALLET_STAGGER = 110;
 const WALLET_FLIGHT = 520;
 
@@ -511,8 +513,10 @@ function WalletCoin({ index, from, to, onLand }: {
  * under the navy scrim), so a kid sees the coins land in the wallet and the number go up. It counts
  * up one step per landing coin, then fades once the real chip has the new balance.
  */
-function WalletChip({ at, start, amount, landed, count }: {
+function WalletChip({ at, start, amount, landed, count, caughtUp }: {
   readonly at: { x: number; y: number }; readonly start: number; readonly amount: number; readonly landed: number; readonly count: number;
+  /** The real header chip already shows the new balance (the player refresh came back). */
+  readonly caughtUp: boolean;
 }) {
   const show = useSharedValue(0);
   const bump = useSharedValue(1);
@@ -524,8 +528,15 @@ function WalletChip({ at, start, amount, landed, count }: {
   useEffect(() => {
     if (landed <= 0) return;
     bump.value = withSequence(withTiming(1.16, { duration: 70 }), withSpring(1, SPRING.pop));
-    if (done) show.value = withDelay(WALLET_CHIP_HOLD, withTiming(0, { duration: DURATION.quick }));
-  }, [landed, done, bump, show]);
+  }, [landed, bump]);
+  // It fades only once the real chip has caught up (a slow refresh must never flash the old number back),
+  // or after WALLET_CHIP_MAX if the refresh never answers.
+  useEffect(() => {
+    if (!done) return undefined;
+    if (caughtUp) { show.value = withDelay(WALLET_CHIP_HOLD, withTiming(0, { duration: DURATION.quick })); return undefined; }
+    const t = setTimeout(() => { show.value = withTiming(0, { duration: DURATION.quick }); }, WALLET_CHIP_MAX);
+    return () => clearTimeout(t);
+  }, [done, caughtUp, show]);
   const style = useAnimatedStyle(() => ({ opacity: show.value, transform: [{ scale: bump.value }] }));
   const value = start + Math.round(amount * Math.min(1, landed / Math.max(1, count)));
   // The real chip registers its container centre; its pill starts 14 pt in (marginLeft), so it is centred 7 pt right.

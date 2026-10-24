@@ -380,8 +380,8 @@ const styles = StyleSheet.create({
 
 const BACKDROP = ['#0d5bb0', '#08408c', '#042a62'] as const;
 /** How much of the deep-water gradient covers the blurred world art (the rest of the world shows through). */
-const WORLD_VEIL = 0.8;
-const WORLD_BLUR = 18;
+const WORLD_VEIL = 0.82;
+const WORLD_BLUR = 36;
 
 const CONFETTI_COLORS = ['#ffcf3b', '#ffffff', '#38bdf8', '#fb923c', '#ffe27a'];
 const PIECES = Array.from({ length: 28 }, (_, i) => {

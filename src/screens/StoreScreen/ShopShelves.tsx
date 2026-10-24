@@ -871,7 +871,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
           onClose={closeTryOn} onLeaving={leavingTryOn} onWish={wish} onPurchased={onPurchased} onWorn={onWorn}
           checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={rewardPendingFor(reveals, open.item.shop?.set?.slug)} secret={secret}
           onHandOff={startInlineReveal}
-          handOff={inlineReveal && reveal ? <SetCompleteReveal key={reveal.reward.slug} inline bridged reward={reveal.reward} set={reveal.set}
+          handOff={inlineReveal && reveal ? <SetCompleteReveal key={reveal.reward.slug} inline reward={reveal.reward} set={reveal.set}
             still={still} onDone={finishReveal} onShown={revealShown} /> : null} />
       )}
       {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still}

@@ -355,7 +355,8 @@ export default function CoinLevelingModal({
         } else {
           coinPop.value = uiSequence(uiTiming(1.35, { duration: 140, easing: EASE.out }), uiSpring(1, SPRING.pop));
           successIn.value = 0;
-          successIn.value = uiSpring(1, SPRING.pop);
+          // The whole card stamps in (one small overshoot); the coin above it does the big pop.
+          successIn.value = uiSpring(1, SPRING.stamp);
         }
 
         // The server upgrade is already confirmed. A profile refresh failure must not

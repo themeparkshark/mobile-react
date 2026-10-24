@@ -328,11 +328,12 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   }, []);
   const closeAnimated = useCallback(() => {
     if (handedOff.current) return;
-    const toReveal = rewardPendingRef.current && !!onHandOffRef.current;
-    const after = toReveal ? handOffNow : leave;
+    // A set reward waiting: the reveal mounts over the sheet right now and fades in across it (no slide,
+    // no navy dusk), so the landing cross-fades straight into the Set Complete stage.
+    if (rewardPendingRef.current && onHandOffRef.current) { handOffNow(); return; }
     if (rewardPendingRef.current) dusk.value = withTiming(1, { duration: still ? 0 : 200 });
-    if (still) { after(); return; }
-    drag.value = withTiming(SHEET_H, { duration: DURATION.exit, easing: EASE.in }, done => { if (done) runOnJS(after)(); });
+    if (still) { leave(); return; }
+    drag.value = withTiming(SHEET_H, { duration: DURATION.exit, easing: EASE.in }, done => { if (done) runOnJS(leave)(); });
   }, [still, leave, handOffNow]);
   const closeRef = useRef(closeAnimated);
   closeRef.current = closeAnimated;
