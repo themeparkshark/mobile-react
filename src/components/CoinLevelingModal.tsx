@@ -157,6 +157,8 @@ export default function CoinLevelingModal({
   const sparkle2 = useSharedValue(0);
   const shine = useSharedValue(0);
   const bloomOut = useSharedValue(0);
+  // The big fan's size for the level being reached (screen widths), set when the level-up starts.
+  const [fanScale, setFanScale] = useState(1.5);
   const budget = usePowerBudget();
   const [slowServer, setSlowServer] = useState(false);
   const stopUiShow = () => { [charge, gold, bloom, sparkle, sparkle2, shine, ringPulse, bloomOut, slow, coinShake].forEach(value => cancelUi(value)); };
@@ -288,6 +290,7 @@ export default function CoinLevelingModal({
     const plan = levelUpFx(nextLevel, rideCoin.parts_to_next_level, { reducedMotion, dimFlashingLights: isDimFlashingLightsEnabled() });
     const payoff = levelUpPayoff(nextLevel);
     setFx(plan);
+    setFanScale(payoff.fanScale);
 
     // Phase 1: Coin shakes and charges up. The shake lasts exactly as long as the charge
     // (it used to run 20 loops, 1.6 s, and held the burst back behind it).
@@ -472,10 +475,11 @@ export default function CoinLevelingModal({
       }}>
         {/* Behind the card: the big gold fan reaches past its edges on the success beat. */}
         {anchor && (state === 'leveling' || state === 'success') && (
-          <View pointerEvents="none" style={{ position: 'absolute', left: anchor.x - SCREEN_W * 0.75, top: anchor.y - SCREEN_W * 0.75,
-            width: SCREEN_W * 1.5, height: SCREEN_W * 1.5, alignItems: 'center', justifyContent: 'center', zIndex: 5 }}>
-            {/* Never turns: a card left open must not spin a 1.5x screen layer (the small fan on the coin does). */}
-            <GoldBurst size={SCREEN_W * 1.5} amount={bloomOut} bloom={bloom} spin={false} reduced={reducedMotion} />
+          <View pointerEvents="none" style={{ position: 'absolute', left: anchor.x - SCREEN_W * fanScale / 2, top: anchor.y - SCREEN_W * fanScale / 2,
+            width: SCREEN_W * fanScale, height: SCREEN_W * fanScale, alignItems: 'center', justifyContent: 'center', zIndex: 5 }}>
+            {/* Never turns: a card left open must not spin a screen-sized layer (the small fan on the coin does).
+                Its size grows with the tier, so Legendary throws rays well past the card while the kid reads it. */}
+            <GoldBurst size={SCREEN_W * fanScale} amount={bloomOut} bloom={bloom} spin={false} reduced={reducedMotion} />
           </View>
         )}
         {/* Above the card: sparkles fly out over its edges and the new tier's ring pulses outward. */}
