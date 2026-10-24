@@ -122,7 +122,7 @@ export function NewChip({ index, label, face, foil, stamp, reducedMotion, dark, 
             : face ? <FaceThumb face={face} w={40} h={50} foil={foil} /> : null}
         </Animated.View>
       </View>
-      <Text style={[styles.newLabel, dark && { color: MM.navyText }, foil && { color: MM.goldDeep }]}>{label}</Text>
+      <Text style={[styles.newLabel, dark && { color: MM.navyText }, foil && { color: dark ? MM.goldDeep : MM.gold }]}>{label}</Text>
     </View>
   );
 }

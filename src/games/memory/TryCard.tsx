@@ -6,14 +6,15 @@
  * white DONE inside the card. Pictures, not sentences: the pair coins say how
  * far you got (the words are spoken), and the tries left are small retry
  * marks under TRY AGAIN (no "tries on this Ticket" sentence next to the ride's
- * own Ticket card).
+ * own Ticket card). They sit as flat dots inside TRY AGAIN, never as round
+ * marks that look like more buttons.
  *
  * A short, sequenced moment on the 232ms grid the results card uses:
  *   0      card rises (opacity + lift only: a scaled, shadowed layer smears on iOS)
  *   0      Alex's ribbon slams in with the title, a hit + haptic
  *   +232   pair pips fill one by one, each a pop, a rising twinkle and a tick;
  *          the last found pip throws a small capped star puff
- *   +232   TRY AGAIN lands (with a retry mark per try left) and starts a slow breathe
+ *   +232   TRY AGAIN lands (with a dot per try left inside it) and starts a slow breathe
  * Everything runs on the UI thread; Reduce Motion shows the final state at
  * once with no sound ladder. Nothing loops once the card is gone.
  */
@@ -132,15 +133,12 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
               accessibilityRole="button" accessibilityLabel={`Try again. ${triesLeftLine(left)}`}>
               <GameIcon name="retry" size={26} />
               <Text style={styles.btnText}>TRY AGAIN</Text>
+              {/* Tries left as flat dots inside the button (one per try; the words
+                  are spoken). Inside it, they can never look like more buttons. */}
+              <View style={styles.leftDots} importantForAccessibility="no-hide-descendants">
+                {Array.from({ length: left }, (_, i) => <View key={i} style={styles.leftDot} />)}
+              </View>
             </Pressable>
-          ) : null}
-          {canRetry ? (
-            // Tries left as pictures: one small retry mark per try (the words are spoken on TRY AGAIN).
-            <View style={[styles.leftRow, compact && styles.leftRowCompact]} importantForAccessibility="no-hide-descendants">
-              {Array.from({ length: left }, (_, i) => (
-                <View key={i} style={styles.tryMark}><GameIcon name="retry" size={16} /></View>
-              ))}
-            </View>
           ) : null}
           <Pressable onPress={onDone} hitSlop={8} style={({ pressed }) => [canRetry ? [styles.done, compact && styles.doneCompact] : styles.btn, pressed && styles.down]}
             accessibilityRole="button" accessibilityLabel="Done">
@@ -192,7 +190,6 @@ const styles = StyleSheet.create({
   spark: { position: 'absolute', width: 7, height: 7, borderRadius: 4, backgroundColor: MM.gold, borderWidth: 1.5, borderColor: '#ffffff' },
   cardCompact: { paddingBottom: 10 },
   btnCompact: { paddingVertical: 9 },
-  leftRowCompact: { marginTop: 6 },
   doneCompact: { marginTop: 6 },
   actions: { alignItems: 'center', alignSelf: 'stretch' },
   btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ffcf3b', borderRadius: 14,
@@ -200,9 +197,8 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch' },
   down: { transform: [{ translateY: 2 }, { scale: 0.97 }] },
   btnText: { fontFamily: 'Shark', fontSize: 24, color: '#05346e' },
-  leftRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  tryMark: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#ffffff', borderWidth: 2.5, borderColor: '#05346e',
-    alignItems: 'center', justifyContent: 'center' },
+  leftDots: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4 },
+  leftDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#05346e' },
   done: { marginTop: 10, alignSelf: 'stretch', minHeight: 48, borderRadius: 14, borderWidth: 3, borderColor: '#05346e', borderBottomWidth: 5,
     backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
   doneText: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },

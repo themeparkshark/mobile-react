@@ -67,9 +67,10 @@ test('results: ribbon on the first frame, card rises, visible PERFECT burst, kid
   assert.match(game, /`\+\$\{xp\} XP`/);
 });
 
-test('round 3 timing: banner visible on frame 0, short flash, upward burst, results saved while the coin flies', () => {
-  assert.match(src, /useSharedValue\(reducedMotion \? 1 : 0\.6\)/);
-  assert.match(src, /withTiming\(0\.8, \{ duration: 16 \}\), withTiming\(0, \{ duration: 110 \}\)/);
+test('round 3 timing: the card lands with a hit, the family ribbon slams after the last star, upward burst, results saved while the coin flies', () => {
+  assert.match(src, /at\(sched\.banner, \(\) => \{ Haptic\.hitMedium\(\); GameAudio\.play\('fx\.hit'/);
+  assert.match(src, /const titleAt = reducedMotion \? 0 : data\.stars > 0 \? \(sched\.crowns\[sched\.crowns\.length - 1\] \?\? 0\) \+ 160 : sched\.headline;/);
+  assert.match(src, /<ResultsRibbon title=\{title\} reducedMotion=\{reducedMotion\} delayMs=\{titleAt\} style=\{styles\.ribbon\} \/>/);
   assert.match(src, /const a = Math\.PI \+ \(k \/ \(PERFECT_COINS - 1\)\) \* Math\.PI;/);
   assert.match(game, /later\(420, \(\) => finishRun\(won\)\);/);
 });
@@ -111,4 +112,24 @@ test('faces draw from one shared decoded sheet per board, with a preload fallbac
   assert.equal(m.sharedReady({ main: { src: A, img: null }, extra: null }), false);
   assert.equal(m.sharedSheetFor(ready, B).id, 'b');
   assert.equal(m.sharedSheetFor(ready, 9), null);
+});
+
+test('one results language: Memory\'s end card is the blue family card (ribbon, stars, NEW BEST pill, gold then white DONE)', () => {
+  assert.match(src, /export const FAMILY = \{ card: '#0768b9', border: '#ffffff', gold: '#ffcf3b', navy: '#05346e'/);
+  assert.match(src, /card: \{\s*width: '90%', maxWidth: 400, backgroundColor: FAMILY\.card, borderRadius: 26, borderWidth: 4, borderColor: FAMILY\.border,/);
+  assert.doesNotMatch(src, /results_banner\.png|crown\.png|MM\.cream/, 'no Memory-only banner, crowns or cream card');
+  assert.match(src, /<GameIcon name="star" size=\{index === 1 \? 60 : 48\} mono=\{on \? undefined : FAMILY\.starOff\} \/>/);
+  assert.match(src, /<Text style=\{styles\.newBestText\}>NEW BEST!<\/Text>/);
+  // One exit word: DONE (never CLOSE or an underlined Close link).
+  assert.doesNotMatch(src, /'CLOSE'|'Close'|'CONTINUE'|closeText/);
+  assert.match(src, /<Text style=\{styles\.bigBtnText\}>DONE<\/Text>/);
+  assert.match(src, /<Text style=\{styles\.doneText\}>DONE<\/Text>/);
+  // STATS, ALBUM, SHARE, CHALLENGE are white family chips; their panels open on cream so navy words keep contrast.
+  assert.match(src, /iconBtn: \{ flex: 1, maxWidth: 110, minHeight: 56, borderRadius: 14, borderWidth: 3, borderColor: FAMILY\.navy, borderBottomWidth: 5, backgroundColor: '#ffffff'/);
+  assert.match(src, /panel: \{ alignSelf: 'stretch', alignItems: 'center', marginTop: 8, backgroundColor: FAMILY\.panel/);
+  assert.match(src, /cardBack: \{ position: 'absolute', padding: 16, alignItems: 'center', backgroundColor: FAMILY\.panel \}/);
+  // New cards keep a readable label on blue (white, foil gold).
+  const extras = fs.readFileSync(path.join(root, 'src/games/memory/MemoryExtras.tsx'), 'utf8');
+  assert.match(extras, /foil && \{ color: dark \? MM\.goldDeep : MM\.gold \}/);
+  assert.doesNotMatch(src, /reducedMotion=\{reducedMotion\} dark startMs/);
 });

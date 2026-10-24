@@ -1,21 +1,24 @@
 /**
  * MemoryResults.tsx: one results surface, sequenced on 8ths (design v8 6.10).
  *
- * One card, always, on a 70% white scrim; nothing behind it shows through and
- * no modal ever opens on top of another. Its parts reveal 232ms apart (129 BPM
- * 8ths):
- *   1 banner    the pipeline gold ribbon with the title in Shark lettering, a
- *               1-frame white impact and a dust puff
+ * It wears the one results look every game shares (Whack, Boss, the Duel,
+ * Sharky and Memory's own try card): the blue card with a white border,
+ * Alex's ribbon over its top edge, stars that stamp, a gold NEW BEST pill,
+ * a gold first button and white buttons under it. No modal ever opens on
+ * top of another. Its parts reveal 232ms apart (129 BPM 8ths):
+ *   1 hit       the card rises with a hit; Alex's ribbon slams in with the
+ *               title once the last star has stamped (the title never gives
+ *               the stars away)
  *   2 headline  RECALL % on a gold plate (Ride Sprint: the coin edition medallion)
- *   3 crowns    slam 1.8 -> 1.0 one per 8th; the third hangs 232ms first
+ *   3 stars     slam 1.8 -> 1.0 one per 8th; the third hangs 232ms first
  *   4 numbers   Time Attack tally (operands jiggle, digit shake), Ride Sprint
  *               turns, charged time, PB, cash-out and the honest luck chip
  *   5 grades    Memory, Speed, Chain stamp in 116ms apart, then one tip
  *   6 rewards   NEW CARD / NEW FOIL / NEW STAMP / UPGRADED flips
- *   7 actions   PLAY AGAIN (or TRY AGAIN) big and gold, ALBUM / SHARE /
- *               CHALLENGE icon buttons, Close as text
+ *   7 actions   PLAY AGAIN (or TRY AGAIN) big and gold, STATS / ALBUM / SHARE /
+ *               CHALLENGE white chips, then a white DONE
  * SHARE flips this same card over in place to the share grid; ALBUM and
- * CHALLENGE replace the action row with an inline panel (DONE returns).
+ * CHALLENGE replace the action row with an inline cream panel (DONE returns).
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -38,11 +41,12 @@ import { faceFor } from './faces';
 import { AlbumBody, ChallengeBody, NewChip, ShareBack, type DailySummary, type RunRewards } from './MemoryExtras';
 import { MM } from './theme';
 import { bestAwareTitle } from '../../gamekit/results/feelings';
+import { ResultsRibbon } from '../../gamekit/results/ResultsRibbon';
 
-const BANNER = require('../../assets/games/memory/v8/results_banner.png');
-const CROWN = require('../../assets/games/memory/studio/crown.png');
 const COIN = require('../../assets/games/memory/studio/coin_alex.png');
-const DUST = require('../../assets/games/memory/v8/fx/cloud_puff_2.png');
+
+/** The shared results card colors (gamekit ResultsCard, TryCard, Sharky). */
+export const FAMILY = { card: '#0768b9', border: '#ffffff', gold: '#ffcf3b', navy: '#05346e', panel: '#fff8e4', starOff: '#9cc9ec' } as const;
 
 export const EIGHTH_MS = 232;
 
@@ -154,6 +158,10 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
   const frontSt = useAnimatedStyle(() => ({ opacity: flip.value < 0.5 ? 1 : 0, transform: [{ perspective: 900 }, { rotateY: `${flip.value * 180}deg` }] }));
   const backSt = useAnimatedStyle(() => ({ opacity: flip.value >= 0.5 ? 1 : 0, transform: [{ perspective: 900 }, { rotateY: `${flip.value * 180 - 180}deg` }] }));
 
+  // The title slams in after the last star stamps, like every other results card.
+  const titleAt = reducedMotion ? 0 : data.stars > 0 ? (sched.crowns[sched.crowns.length - 1] ?? 0) + 160 : sched.headline;
+  const title = bestAwareTitle(data.banner, data.stars, data.newBest) ?? data.banner;
+
   const canAlbum = !!data.rewards;
   const canStats = data.numbers.length > 0 || !!data.grades;
   const canShare = !!data.daily;
@@ -165,34 +173,44 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
       <LinearGradient pointerEvents="none" style={StyleSheet.absoluteFill}
         colors={['rgba(4,38,86,0.08)', 'rgba(4,38,86,0.08)', 'rgba(4,38,86,0.62)']} locations={[0, 0.3, 0.42]} />
       {/* Tall phones: the card sits lower so the barker's celebration stays in view above it. */}
-      <Animated.View style={[styles.card, { maxHeight: win.height * 0.8, marginTop: win.height > 800 ? 90 : 0 }, riseSt, frontSt]} pointerEvents={flipped ? 'none' : 'auto'}>
+      <Animated.View style={[styles.card, { maxHeight: win.height * 0.8, marginTop: (win.height > 800 ? 90 : 0) + RIBBON_LIFT_PT }, riseSt, frontSt]} pointerEvents={flipped ? 'none' : 'auto'}>
+        {/* Alex's ribbon over the card's top edge (the family title). */}
+        <ResultsRibbon title={title} reducedMotion={reducedMotion} delayMs={titleAt} style={styles.ribbon} />
         <ScrollView contentContainerStyle={styles.cardInner} showsVerticalScrollIndicator={false} bounces={false}>
           {/* Every section is laid out from frame 0 and revealed in place on its
               beat, so the card never grows or re-centers while a kid reads it.
-              Front: banner, one big number, crowns, new cards, one button.
-              The stat chips and grades live behind STATS. */}
-          {/* A personal best never sits under SO CLOSE! or NICE TRY!. */}
-          <Banner text={bestAwareTitle(data.banner, data.stars, data.newBest) ?? data.banner} show={step >= 1} reducedMotion={reducedMotion} />
-          <Headline data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.headline} />
-          <View style={styles.crownRow}>
+              Front: the ribbon, stars, one big number, new cards, one button.
+              The stat chips and grades live behind STATS.
+              A personal best never sits under SO CLOSE! or NICE TRY! (title above). */}
+          <View style={styles.starRow} accessible accessibilityLabel={`${data.stars} of 3 stars`}>
             {[0, 1, 2].map((i) => (
-              <Crown key={i} on={i < data.stars} delay={reducedMotion ? 0 : (sched.crowns[i] ?? 0)} hang={i === 2} reducedMotion={reducedMotion} />
+              <Star key={i} index={i} on={i < data.stars} delay={reducedMotion ? 0 : (sched.crowns[i] ?? 0)} hang={i === 2} reducedMotion={reducedMotion} />
             ))}
           </View>
+          <Headline data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.headline} />
           {data.crownHint ? <Reveal show={step >= 3}><Text style={styles.crownHint}>{data.crownHint}</Text></Reveal> : null}
-          {data.newBest ? <Reveal show={step >= 3}><Text style={styles.newBest}>NEW BEST</Text></Reveal> : null}
+          {data.newBest ? (
+            <Reveal show={step >= 3}>
+              <View style={styles.newBest}>
+                <GameIcon name="crown" size={22} />
+                <Text style={styles.newBestText}>NEW BEST!</Text>
+              </View>
+            </Reveal>
+          ) : null}
           {data.tally ? <Reveal show={step >= 3}>{step >= 3 ? <Numbers data={data} reducedMotion={reducedMotion} tallyOnly /> : <Numbers data={data} reducedMotion tallyOnly />}</Reveal> : null}
           <Reveal show={step >= 5}><Rewards data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.rewards} /></Reveal>
           <Reveal show={step >= 6}>{(
             panel === 'actions' ? (
               <View style={styles.actions}>
+                {/* Gold first, white under it: the same buttons as every other results card. */}
                 {again && data.againLabel ? (
-                  <Pressable onPress={() => { Haptic.tapLight(); again(); }} style={({ pressed }) => [styles.bigBtn, pressed && styles.pressed]} accessibilityRole="button">
+                  <Pressable onPress={() => { Haptic.tapLight(); again(); }} style={({ pressed }) => [styles.bigBtn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={data.againLabel.toLowerCase()}>
+                    <GameIcon name="retry" size={26} />
                     <Text style={styles.bigBtnText}>{data.againLabel}</Text>
                   </Pressable>
                 ) : (
-                  <Pressable onPress={() => { Haptic.tapLight(); claim(); }} style={({ pressed }) => [styles.bigBtn, pressed && styles.pressed]} accessibilityRole="button">
-                    <Text style={styles.bigBtnText}>{data.won ? 'CONTINUE' : 'CLOSE'}</Text>
+                  <Pressable onPress={() => { Haptic.tapLight(); claim(); }} style={({ pressed }) => [styles.bigBtn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Done">
+                    <Text style={styles.bigBtnText}>DONE</Text>
                   </Pressable>
                 )}
                 {canStats || canAlbum || canShare || canChallenge ? (
@@ -204,13 +222,16 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
                   </View>
                 ) : null}
                 {again && data.againLabel ? (
-                  <Pressable onPress={claim} hitSlop={10} accessibilityRole="button"><Text style={styles.closeText}>{data.won ? 'Continue' : 'Close'}</Text></Pressable>
+                  <Pressable onPress={() => { Haptic.tapLight(); claim(); }} hitSlop={8} style={({ pressed }) => [styles.doneBtn, pressed && styles.pressed]}
+                    accessibilityRole="button" accessibilityLabel="Done">
+                    <Text style={styles.doneText}>DONE</Text>
+                  </Pressable>
                 ) : null}
               </View>
             ) : panel === 'album' && data.rewards ? (
               <View style={styles.panel}>
                 <AlbumBody album={data.rewards.album} focusDeck={data.rewards.deckId} compact />
-                <Pressable style={styles.bigBtn} onPress={() => setPanel('actions')} accessibilityRole="button"><Text style={styles.bigBtnText}>DONE</Text></Pressable>
+                <Pressable style={[styles.bigBtn, styles.panelBtn]} onPress={() => setPanel('actions')} accessibilityRole="button"><Text style={styles.bigBtnText}>DONE</Text></Pressable>
               </View>
             ) : panel === 'challenge' && data.daily ? (
               <View style={styles.panel}>
@@ -220,7 +241,7 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
               <View style={styles.panel}>
                 <Numbers data={data} reducedMotion={reducedMotion} statsOnly />
                 {data.grades ? <Grades g={data.grades} tip={data.tip} reducedMotion={reducedMotion} /> : null}
-                <Pressable style={[styles.bigBtn, { marginTop: 10 }]} onPress={() => setPanel('actions')} accessibilityRole="button"><Text style={styles.bigBtnText}>DONE</Text></Pressable>
+                <Pressable style={[styles.bigBtn, styles.panelBtn]} onPress={() => setPanel('actions')} accessibilityRole="button"><Text style={styles.bigBtnText}>DONE</Text></Pressable>
               </View>
             ) : null
           )}</Reveal>
@@ -268,29 +289,6 @@ function BurstCoin({ k, t }: { k: number; t: import('react-native-reanimated').S
       { rotateZ: `${t.value * 360 * (k % 2 ? 1 : -1)}deg` }, { scale: 0.6 + (1 - t.value) * 0.5 }],
   }));
   return <Animated.Image source={COIN} style={[styles.burstCoin, st]} resizeMode="contain" />;
-}
-
-function Banner({ text, show, reducedMotion }: { text: string; show: boolean; reducedMotion: boolean }) {
-  // Visible on the card's first frame (never an empty card), then it slams.
-  const drop = useSharedValue(reducedMotion ? 1 : 0.6);
-  const impact = useSharedValue(0);
-  useEffect(() => {
-    if (!show || reducedMotion) return;
-    drop.value = withSequence(withTiming(1.08, { duration: 140, easing: Easing.in(Easing.quad) }), withTiming(1, { duration: 80 }));
-    // A 1-2 frame white impact, so PERFECT! never looks washed out.
-    impact.value = withDelay(140, withSequence(withTiming(0.8, { duration: 16 }), withTiming(0, { duration: 110 })));
-  }, [show, reducedMotion, drop, impact]);
-  const st = useAnimatedStyle(() => ({ opacity: drop.value > 0 ? 1 : 0, transform: [{ translateY: (1 - Math.min(1, drop.value)) * -40 }, { scale: drop.value || 1 }] }));
-  const flash = useAnimatedStyle(() => ({ opacity: impact.value }));
-  const dust = useAnimatedStyle(() => ({ opacity: impact.value * 0.9, transform: [{ scale: 1 + (1 - impact.value) * 0.4 }] }));
-  return (
-    <Animated.View style={[styles.banner, st]}>
-      <Animated.Image source={DUST} style={[styles.dust, dust]} resizeMode="contain" />
-      <Image source={BANNER} style={styles.bannerImg} resizeMode="stretch" />
-      <Animated.View style={[styles.bannerFlash, flash]} />
-      <Text style={styles.bannerText} numberOfLines={1} adjustsFontSizeToFit>{text}</Text>
-    </Animated.View>
-  );
 }
 
 const EDITION_TINT: Record<string, string> = { bronze: '#C87533', silver: '#DCE9F5', gold: '#FFD23F' };
@@ -350,11 +348,12 @@ function Headline({ data, reducedMotion, startMs = 0 }: { data: MemoryResultsDat
   );
 }
 
-function Crown({ on, delay, hang, reducedMotion }: { on: boolean; delay: number; hang: boolean; reducedMotion: boolean }) {
+/** One star slot, the family star art (lit gold, or the pale blue empty star). */
+function Star({ index, on, delay, hang, reducedMotion }: { index: number; on: boolean; delay: number; hang: boolean; reducedMotion: boolean }) {
   const v = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
     if (!on || reducedMotion) return;
-    // The third crown rises and hangs 232ms before it slams.
+    // The third star rises and hangs 232ms before it slams.
     v.value = hang
       ? withDelay(delay - EIGHTH_MS, withSequence(withTiming(0.4, { duration: 120 }), withDelay(EIGHTH_MS - 120, withTiming(1, { duration: 140, easing: Easing.in(Easing.quad) }))))
       : withDelay(delay, withTiming(1, { duration: 140, easing: Easing.in(Easing.quad) }));
@@ -365,8 +364,8 @@ function Crown({ on, delay, hang, reducedMotion }: { on: boolean; delay: number;
     return { opacity: on ? Math.min(1, k * 2) : 1, transform: [{ scale: on ? s : 1 }, { translateY: k > 0.35 && k < 0.45 ? -10 : 0 }] };
   });
   return (
-    <Animated.View style={[styles.crownWrap, st]}>
-      <Image source={CROWN} style={[styles.crown, !on && styles.crownOff]} resizeMode="contain" />
+    <Animated.View style={[styles.starWrap, index === 1 && styles.starMiddle, st]}>
+      <GameIcon name="star" size={index === 1 ? 60 : 48} mono={on ? undefined : FAMILY.starOff} />
     </Animated.View>
   );
 }
@@ -449,7 +448,7 @@ function Rewards({ data, reducedMotion, startMs = 0 }: { data: MemoryResultsData
       {chips.length ? (
         <View style={styles.chipRow}>
           {chips.slice(0, 4).map((c, i) => (
-            <NewChip key={c.key} index={i} label={c.label} reducedMotion={reducedMotion} dark startMs={startMs}
+            <NewChip key={c.key} index={i} label={c.label} reducedMotion={reducedMotion} startMs={startMs}
               face={c.face != null && deck ? faceFor(deck, c.face) : null} foil={c.label === 'NEW FOIL'} stamp={!!c.stamp} />
           ))}
         </View>
@@ -469,50 +468,45 @@ function IconBtn({ icon, label, onPress }: { icon: 'chest' | 'camera' | 'swords'
   );
 }
 
+/** How far Alex's ribbon rises over the card's top edge (room kept above the card). */
+export const RIBBON_LIFT_PT = 34;
+
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center' },
-  // Navy, not milky white: the shark and board stay readable behind a win.
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4,38,86,0.62)' },
   reveal: { alignSelf: 'stretch', alignItems: 'center' },
   burst: { position: 'absolute', left: 0, right: 0, top: -10, height: 50, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
   burstCoin: { position: 'absolute', width: 38, height: 38 },
+  // The one results surface every game shares: the blue card with a white border.
   card: {
-    width: '90%', maxWidth: 400, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
+    width: '90%', maxWidth: 400, backgroundColor: FAMILY.card, borderRadius: 26, borderWidth: 4, borderColor: FAMILY.border,
     backfaceVisibility: 'hidden',
   },
-  cardBack: { position: 'absolute', padding: 16, alignItems: 'center' },
-  cardInner: { alignItems: 'center', paddingHorizontal: 14, paddingBottom: 16 },
-  banner: { width: '108%', height: 92, marginTop: -26, alignItems: 'center', justifyContent: 'center' },
-  bannerImg: { position: 'absolute', width: '100%', height: '100%' },
-  bannerFlash: { position: 'absolute', width: '80%', height: '60%', backgroundColor: '#ffffff', borderRadius: 30 },
-  bannerText: {
-    fontFamily: 'Shark', fontSize: 32, color: '#ffffff', marginTop: -10, paddingHorizontal: 54,
-    textShadowColor: MM.ink, textShadowOffset: { width: 2, height: 3 }, textShadowRadius: 1,
-  },
-  dust: { position: 'absolute', bottom: -6, width: '70%', height: 40 },
-  headlineSlot: { height: 56 },
-  headline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginTop: 2 },
+  // The share side keeps a light face so the share grid reads the way it is posted.
+  cardBack: { position: 'absolute', padding: 16, alignItems: 'center', backgroundColor: FAMILY.panel },
+  cardInner: { alignItems: 'center', paddingHorizontal: 14, paddingTop: 44, paddingBottom: 16 },
+  ribbon: { position: 'absolute', top: -RIBBON_LIFT_PT - 2, left: -14, right: -14, zIndex: 3 },
+  headline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginTop: 4 },
   medal: { width: 54, height: 50, marginRight: 8, borderRadius: 27, overflow: 'hidden' },
   medalTint: { ...StyleSheet.absoluteFillObject, opacity: 0.35, borderRadius: 27 },
   medalBand: { position: 'absolute', left: -10, right: -10, height: 7, transform: [{ rotateZ: '-20deg' }] },
-  recallPlate: { flexDirection: 'row', alignItems: 'baseline', backgroundColor: MM.gold, borderRadius: 14, borderWidth: 2.5, borderColor: '#ffffff', paddingHorizontal: 14, paddingVertical: 4 },
-  pairPlate: { flexDirection: 'row', gap: 5, backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 2.5, borderColor: MM.ink,
+  recallPlate: { flexDirection: 'row', alignItems: 'baseline', backgroundColor: FAMILY.gold, borderRadius: 14, borderWidth: 3, borderColor: FAMILY.navy, paddingHorizontal: 14, paddingVertical: 4 },
+  pairPlate: { flexDirection: 'row', gap: 5, backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 3, borderColor: FAMILY.navy,
     paddingHorizontal: 10, paddingVertical: 6 },
   pairPip: { width: 26, height: 26, borderRadius: 13, borderWidth: 2.5, borderColor: '#9cc3e4', backgroundColor: '#e3eff9',
     alignItems: 'center', justifyContent: 'center' },
   pairCoin: { position: 'absolute', width: 30, height: 30 },
-  recallLabel: { fontFamily: 'Knockout', fontSize: 15, color: MM.navyText, marginRight: 6, letterSpacing: 1 },
-  recallValue: { fontFamily: 'Shark', fontSize: 30, color: MM.navyText },
-  editionText: { width: '100%', textAlign: 'center', fontFamily: 'Shark', fontSize: 13, color: MM.goldDeep, marginTop: 2 },
-  crownRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 6, height: 44 },
-  crownWrap: { marginHorizontal: 6 },
-  crown: { width: 44, height: 40 },
-  crownOff: { opacity: 0.2 },
-  crownHint: { fontFamily: 'Knockout', fontSize: 15, color: MM.navyText, marginTop: 2, textAlign: 'center' },
+  recallLabel: { fontFamily: 'Knockout', fontSize: 15, color: FAMILY.navy, marginRight: 6, letterSpacing: 1 },
+  recallValue: { fontFamily: 'Shark', fontSize: 30, color: FAMILY.navy },
+  editionText: { width: '100%', textAlign: 'center', fontFamily: 'Shark', fontSize: 14, color: FAMILY.gold, marginTop: 4 },
+  // Stars: the family row (bigger middle star, raised a little).
+  starRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', height: 70 },
+  starWrap: { marginHorizontal: 4 },
+  starMiddle: { marginBottom: 10 },
+  crownHint: { fontFamily: 'Knockout', fontSize: 15, color: '#e4f7ff', marginTop: 6, textAlign: 'center' },
   numbers: { alignSelf: 'stretch', alignItems: 'center', marginTop: 4 },
   tally: { alignItems: 'center', marginBottom: 4 },
-  tallyParts: { fontFamily: 'Shark', fontSize: 16, color: MM.ink },
-  tallyTotal: { fontFamily: 'Shark', fontSize: 34, color: MM.navyText },
+  tallyParts: { fontFamily: 'Shark', fontSize: 16, color: '#e4f7ff' },
+  tallyTotal: { fontFamily: 'Shark', fontSize: 34, color: FAMILY.gold, textShadowColor: FAMILY.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   numRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6 },
   num: { minWidth: 76, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: '#cfe3f7', paddingHorizontal: 8, paddingVertical: 3, alignItems: 'center' },
   numHot: { borderColor: MM.gold },
@@ -520,8 +514,10 @@ const styles = StyleSheet.create({
   numValue: { fontFamily: 'Shark', fontSize: 18, color: MM.navyText },
   luckChip: { marginTop: 6, backgroundColor: '#ffffff', borderRadius: 10, borderWidth: 1.5, borderColor: MM.ink, paddingHorizontal: 8, paddingVertical: 2 },
   luckText: { fontFamily: 'Knockout', fontSize: 12, color: MM.ink },
-  newBest: { fontFamily: 'Shark', fontSize: 16, color: '#ffffff', marginTop: 4, backgroundColor: MM.coral, borderWidth: 2.5,
-    borderColor: MM.ink, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 1, overflow: 'hidden', transform: [{ rotateZ: '-4deg' }] },
+  // The family NEW BEST pill: gold, navy border, a crown.
+  newBest: { flexDirection: 'row', alignItems: 'center', backgroundColor: FAMILY.gold, borderRadius: 999, borderWidth: 3,
+    borderColor: FAMILY.navy, paddingHorizontal: 12, paddingVertical: 2, marginTop: 8 },
+  newBestText: { fontFamily: 'Shark', fontSize: 18, color: FAMILY.navy, marginLeft: 6 },
   grades: { alignItems: 'center', marginTop: 8 },
   gradeRow: { flexDirection: 'row', gap: 18 },
   grade: { alignItems: 'center' },
@@ -531,15 +527,25 @@ const styles = StyleSheet.create({
   tip: { fontFamily: 'Knockout', fontSize: 14, color: MM.navyText, textAlign: 'center', marginTop: 6, paddingHorizontal: 6 },
   rewards: { alignItems: 'center', marginTop: 8 },
   chipRow: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
-  extraReward: { fontFamily: 'Shark', fontSize: 15, color: '#ffffff', backgroundColor: MM.ink, borderRadius: 10, overflow: 'hidden',
+  extraReward: { fontFamily: 'Shark', fontSize: 15, color: FAMILY.navy, backgroundColor: FAMILY.gold, borderRadius: 10, overflow: 'hidden',
     paddingHorizontal: 10, paddingVertical: 2, marginTop: 4 },
   actions: { alignSelf: 'stretch', alignItems: 'center', marginTop: 10 },
-  bigBtn: { alignSelf: 'stretch', backgroundColor: MM.gold, borderRadius: 16, paddingVertical: 13, alignItems: 'center', borderBottomWidth: 4, borderBottomColor: MM.goldDeep, minHeight: 54 },
-  bigBtnText: { fontFamily: 'Shark', fontSize: 24, color: '#075083' },
-  pressed: { transform: [{ scale: 0.97 }] },
-  iconRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  iconBtn: { width: 92, minHeight: 56, borderRadius: 14, borderWidth: 2.5, borderColor: MM.ink, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', paddingVertical: 4 },
-  iconLabel: { fontFamily: 'Shark', fontSize: 12, color: MM.navyText, marginTop: 2 },
-  closeText: { fontFamily: 'Knockout', fontSize: 15, color: MM.ink, marginTop: 10, textDecorationLine: 'underline' },
-  panel: { alignSelf: 'stretch', alignItems: 'center', marginTop: 8 },
+  // The family primary button: gold, navy border, thick bottom edge.
+  bigBtn: { alignSelf: 'stretch', flexDirection: 'row', gap: 8, backgroundColor: FAMILY.gold, borderRadius: 14, paddingVertical: 13, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 3, borderColor: FAMILY.navy, borderBottomWidth: 6, minHeight: 56 },
+  bigBtnText: { fontFamily: 'Shark', fontSize: 24, color: FAMILY.navy },
+  panelBtn: { marginTop: 10 },
+  pressed: { transform: [{ translateY: 2 }, { scale: 0.97 }] },
+  iconRow: { flexDirection: 'row', gap: 8, marginTop: 10, alignSelf: 'stretch', justifyContent: 'center' },
+  // The family secondary chip: white, navy border, thick bottom edge.
+  iconBtn: { flex: 1, maxWidth: 110, minHeight: 56, borderRadius: 14, borderWidth: 3, borderColor: FAMILY.navy, borderBottomWidth: 5, backgroundColor: '#ffffff',
+    alignItems: 'center', justifyContent: 'center', paddingVertical: 4 },
+  iconLabel: { fontFamily: 'Shark', fontSize: 13, color: FAMILY.navy, marginTop: 2 },
+  doneBtn: { marginTop: 10, alignSelf: 'stretch', minHeight: 48, borderRadius: 14, borderWidth: 3, borderColor: FAMILY.navy, borderBottomWidth: 5,
+    backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  doneText: { fontFamily: 'Shark', fontSize: 20, color: FAMILY.navy },
+  // Album, challenge and stats open on a cream panel inside the blue card, so
+  // their navy words keep the contrast they were drawn for.
+  panel: { alignSelf: 'stretch', alignItems: 'center', marginTop: 8, backgroundColor: FAMILY.panel, borderRadius: 16, borderWidth: 3,
+    borderColor: FAMILY.navy, paddingVertical: 10, paddingHorizontal: 8 },
 });
