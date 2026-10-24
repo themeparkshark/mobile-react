@@ -58,7 +58,9 @@ export function coinAt(t: number, i: number, n: number, from: Point, to: Point):
   return { x, y, scale, rot: (i % 2 ? 1 : -1) * 220 * t };
 }
 
-type Flight = { id: number; from: Point; to: Point; count: number; size: number; onLand?: (i: number) => void; onDone?: () => void };
+type Flight = { id: number; from: Point; to: Point; count: number; size: number; onLand?: (i: number) => void; onDone?: () => void;
+  /** The moment the coins really start moving (the host mounted the flight), to time what answers them. */
+  onStart?: () => void };
 let nextId = 1;
 const hosts = new Set<(f: Flight) => void>();
 
@@ -108,6 +110,7 @@ function FlightRun({ flight, onDone }: { readonly flight: Flight; readonly onDon
   useEffect(() => {
     // One clock for the whole flight; each coin reads its own window of it.
     p.value = withTiming(total, { duration: total }, finished => { if (finished) runOnJS(onDone)(); });
+    flight.onStart?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return <>{Array.from({ length: flight.count }, (_, i) => <FlyingCoin key={i} clock={p} i={i} flight={flight} />)}</>;

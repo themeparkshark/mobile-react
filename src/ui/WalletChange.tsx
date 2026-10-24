@@ -180,23 +180,24 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
       if (!path) { lead.current = WALLET_FX.rollAfterMs; setReleased(value); playLocal(); return; }
       setLocal(false);
       const go = () => {
-        const flew = flyCoins({ from: path.from, to: path.to, count: flightN });
-        if (!flew) { lead.current = WALLET_FX.rollAfterMs; setReleased(value); playLocal(); return; }
-        // The pill squashes on each coin: as each one leaves (spend) or lands (gain).
-        const hits = Array.from({ length: flightN }, (_, i) => i * COIN_FLIGHT.staggerMs + (spend ? 30 : COIN_FLIGHT.flyMs));
-        const seq: number[] = [];
-        let t = 0;
-        hits.forEach(at => { seq.push(at - t); t = at + 60; });
-        squash.value = withSequence(...hits.flatMap((_, i) => [
-          withDelay(Math.max(0, seq[i]), withTiming(1, { duration: 30, easing: EASE.out })),
-          withTiming(0, { duration: 30, easing: EASE.in }),
-        ]), withSpring(0, HUD_BUMP.spring));
-        // The digits start rolling with the first hit and land a beat after the last coin.
-        lead.current = hits[0];
-        setReleased(value);
-        const settleAt = hits[0] + COUNT.ms;
-        bump.value = withDelay(settleAt - 40, withSequence(
-          withTiming(COUNT.finalBump, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring)));
+        // Everything that answers the coins starts when they really start moving (on a busy JS thread the
+        // flight can mount a beat late): the pill squashes on each coin and the digits roll under them.
+        const onStart = () => {
+          const hits = Array.from({ length: flightN }, (_, i) => i * COIN_FLIGHT.staggerMs + (spend ? 30 : COIN_FLIGHT.flyMs));
+          const seq: number[] = [];
+          let t = 0;
+          hits.forEach(at => { seq.push(at - t); t = at + 60; });
+          squash.value = withSequence(...hits.flatMap((_, i) => [
+            withDelay(Math.max(0, seq[i]), withTiming(1, { duration: 30, easing: EASE.out })),
+            withTiming(0, { duration: 30, easing: EASE.in }),
+          ]), withSpring(0, HUD_BUMP.spring));
+          lead.current = hits[0];
+          setReleased(value);
+          bump.value = withDelay(hits[0] + COUNT.ms - 40, withSequence(
+            withTiming(COUNT.finalBump, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring)));
+        };
+        const flew = flyCoins({ from: path.from, to: path.to, count: flightN, onStart });
+        if (!flew) { lead.current = WALLET_FX.rollAfterMs; setReleased(value); playLocal(); }
       };
       if (wait > 0) setTimeout(go, wait); else go();
     });

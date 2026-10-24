@@ -160,6 +160,9 @@ test('coins fly to where they live: an arc from the tap into the wallet, a squas
   assert.match(src, /registerCoinTarget\('wallet', measureChip, onCoinHit\)/, 'reward toasts can send coins to the chip, which squashes on each');
   assert.match(src, /Date\.now\(\) - arrivedAt\.current < WALLET_FX\.arrivedMs/, 'coins a toast already flew in never fly twice');
   assert.match(read('src/components/Toast.tsx'), /count: coins, onLand: onHit \}\)/);
+  assert.match(src, /flyCoins\(\{ from: path\.from, to: path\.to, count: flightN, onStart \}\)/,
+    'the pill and the digits answer when the coins really start moving, even on a busy JS thread');
+  assert.match(read('src/ui/CoinFlight.tsx'), /flight\.onStart\?\.\(\);/);
   assert.match(read('src/Root.tsx'), /<CoinFlightHost \/>/);
 });
 
