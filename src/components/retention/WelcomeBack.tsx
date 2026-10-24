@@ -100,7 +100,7 @@ export default function WelcomeBack({ cards, reducedMotion, onDone }: {
 
 function Drop({ v, children }: { readonly v: SharedValue<number>; readonly children: React.ReactNode }) {
   const style = useAnimatedStyle(() => ({ opacity: Math.min(1, v.value * 2), transform: [{ translateY: -44 * (1 - v.value) }, { scale: 0.85 + 0.15 * v.value }] }));
-  return <Animated.View style={[{ flex: 1 }, style]}>{children}</Animated.View>;
+  return <Animated.View style={[{ flex: 1, maxWidth: 150 }, style]}>{children}</Animated.View>;
 }
 
 /** One picture tile: a big picture, then one number or short word. The sentence is for screen readers. */
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   abs: { position: 'absolute' },
   center: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },
   splash: { position: 'absolute', width: 180, height: 180, borderRadius: 90, borderWidth: 6, borderColor: BRAND.white },
-  tiles: { alignSelf: 'stretch', flexDirection: 'row', gap: 8 },
+  tiles: { alignSelf: 'stretch', flexDirection: 'row', justifyContent: 'center', gap: 8 },
   tile: { alignItems: 'center', gap: 6, backgroundColor: BRAND.white, borderRadius: 18, paddingTop: 10, paddingBottom: 10,
     borderBottomWidth: 4, borderBottomColor: '#a9cdea' },
   pic: { width: 78, height: 78, alignItems: 'center', justifyContent: 'center' },
