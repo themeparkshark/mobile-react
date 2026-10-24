@@ -1,6 +1,6 @@
-// wow-sound round 4 (Oct 24 2026): the counter rolls up with the stamp instead of trickling, heat
-// climbs in the hand as well as the ear, the lucky count moves day to day, Battery Saver keeps only
-// the primary and one pulse, and the delayed-roll cooldown. Everything runs the real engine on the
+// wow-sound round 4 (Oct 24 2026): heat climbs in the hand as well as the ear, Battery Saver keeps only
+// the primary and one pulse, and the delayed-start cooldown. (Round 4's counter roll and daily lucky
+// count were replaced in round 5: see wow-sound-r5.test.cjs.) Everything runs the real engine on the
 // silent TraceBackend on a virtual clock. Nothing here can make a sound.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -45,50 +45,18 @@ async function liveLikeCatch(e, { slow = 1 } = {}) {
   return { t0, list, haptics: e.haptics.filter((h) => h.t >= t0).map((h) => ({ t: h.t - t0, intent: h.intent })) };
 }
 
-test('fix 3: the counter rolls up with the stamp and is done inside 300 ms, even when the cascade crawls', async () => {
-  const e = traceEngine();
-  e.Catch.resetCatchSoundForTests();
-  await e.GameAudio.init();
-  const { list, haptics } = await liveLikeCatch(e, { slow: 1 });
-  const land = list.find((s) => s.name.startsWith('moment:catch.land:'));
-  assert.ok(land, 'the stamp plays');
-  const ticks = list.filter((s) => s.name.startsWith('moment:ui.counterTick:'));
-  const rungs = ticks.map((s) => Number(s.name.split('#l')[1]));
-  for (let i = 1; i < rungs.length; i++) assert.ok(rungs[i] > rungs[i - 1], `the counter only climbs (${rungs.join(' ')})`);
-  assert.equal(rungs[rungs.length - 1], 12, 'it lands on the top rung');
-  const last = Math.max(...ticks.map((s) => s.t));
-  assert.ok(last - land.t <= 300, `the last counter tick is ${last - land.t} ms after the stamp (spec: within 300)`);
-  assert.ok(!ticks.some((s) => s.t > land.t + 300), 'the crawling cascade and bar tick add no sound seconds later');
-  assert.ok(!haptics.some((h) => h.t > 1500 + 400 && h.intent === 'tickSelection'), 'and no late bar buzz with no sound');
-  const before = ticks.filter((s) => s.t < land.t).length;
-  assert.equal(before, 4, 'the coin-stream ticks still climb as the coins fly in (the last two, 40 ms apart, merge under the 45 ms cooldown)');
-});
-
-test('fix 3: the roll is three ticks scheduled from one call (audio clock), 70 ms apart, the last one louder', async () => {
-  const e = traceEngine();
-  e.Catch.resetCatchSoundForTests();
-  await e.GameAudio.init();
-  const { list } = await liveLikeCatch(e);
-  const land = list.find((s) => s.name.startsWith('moment:catch.land:'));
-  const roll = list.filter((s) => s.name.startsWith('moment:ui.counterTick:') && s.t > land.t);
-  assert.equal(roll.length, 3);
-  assert.deepEqual(plain(roll.map((s) => s.t - land.t).map((d) => Math.round(d / 10) * 10)), [70, 140, 210]);
-  const marks = e.Trace.traceEvents().filter((x) => x.kind === 'mark' && x.name === 'catch-roll');
-  assert.equal(marks.length, 1, 'one roll per catch');
-});
-
 test('fix 4: heat climbs in the hand: wobble buzzes go one rung heavier at heat 2 and two at heat 4, plus a second thump', async () => {
   const { a } = await fiftyCatches();
   const c = (n) => a.perCatch[n - 1];
+  // Round 5: catch 1 is wow-map's full show (three wobbles), later catches its short show (two wobbles, burst at 450).
   assert.deepEqual(plain(c(1).wobbleIntents), ['tickSelection', 'tapLight', 'hitMedium'], 'a calm catch buzzes exactly as wow-map planned');
-  assert.deepEqual(plain(c(2).wobbleIntents), ['tickSelection', 'tapLight', 'hitMedium'], 'heat 1 is still calm');
-  assert.deepEqual(plain(c(3).wobbleIntents), ['tapLight', 'hitMedium', 'hitMedium'], 'heat 2: one rung heavier, never past medium');
-  assert.deepEqual(plain(c(5).wobbleIntents), ['hitMedium', 'hitMedium', 'hitMedium'], 'heat 4: medium all the way');
+  assert.deepEqual(plain(c(2).wobbleIntents), ['tickSelection', 'hitMedium'], 'heat 1 is still calm');
+  assert.deepEqual(plain(c(3).wobbleIntents), ['tapLight', 'hitMedium'], 'heat 2: one rung heavier, never past medium');
+  assert.deepEqual(plain(c(5).wobbleIntents), ['hitMedium', 'hitMedium'], 'heat 4: medium all the way');
   for (const n of [1, 2, 3, 4]) assert.ok(c(n).thumpMs < 0, `#${n} has no second thump`);
-  for (const n of [5, 6, 7]) assert.equal(c(n).thumpMs, 760, `#${n} lands a crisp second thump 90 ms after the 670 ms burst`);
-  assert.deepEqual(plain(c(8).wobbleIntents), ['tickSelection', 'tapLight', 'hitMedium'], 'a walk cools it back down');
+  for (const n of [5, 6, 7]) assert.equal(c(n).thumpMs, 540, `#${n} lands a crisp second thump 90 ms after the 450 ms burst`);
+  assert.deepEqual(plain(c(8).wobbleIntents), ['tickSelection', 'hitMedium'], 'a walk cools it back down');
 });
-
 test('fix 4: heat brightens the burst from heat 5 (a glockenspiel layer), and wow-map can read the same number', async () => {
   const { a } = await fiftyCatches();
   const hot = a.perCatch.filter((x) => x.hot).map((x) => x.heat);
@@ -119,34 +87,6 @@ test('off means today: with the switch off the catch buzzes exactly as planned (
     assert.ok(!r.haptics.some((h) => h.intent === 'hitRigid'), 'no thump');
     assert.equal(r.list.filter((s) => s.name.startsWith('moment:')).length, 0, 'no studio moment');
   }
-});
-
-test('fix 5: the lucky count moves day to day inside 10..14, the same for everyone, never random', () => {
-  const plan = loadTs('src/gamekit/audio/catchSoundPlan.ts');
-  const seen = new Map();
-  const d0 = new Date(2026, 0, 1).getTime();
-  const values = [];
-  for (let i = 0; i < 365; i++) {
-    const key = plan.localDayKey(d0 + i * 86_400_000 + 3_600_000);
-    const n = plan.luckyEvery(key);
-    assert.ok(n >= 10 && n <= 14, `${key}: ${n}`);
-    assert.equal(plan.luckyEvery(key), n, 'deterministic');
-    values.push(n);
-    seen.set(n, (seen.get(n) ?? 0) + 1);
-  }
-  assert.equal(seen.size, 5, 'every value in the range turns up');
-  for (const [n, count] of seen) assert.ok(count > 40, `${n} appears ${count} times in a year`);
-  let same = 0;
-  for (let i = 1; i < values.length; i++) if (values[i] === values[i - 1]) same++;
-  assert.ok(same < 120, `the count changes most days (${same} repeats in 365)`);
-  // Milestones win over a lucky coin on the same count.
-  let s = plan.EMPTY_RUN;
-  const day = new Date(2026, 9, 24, 9, 0, 0).getTime();
-  const out = [];
-  for (let i = 1; i <= 50; i++) { const r = plan.burstMoment(s, day + i * 300_000); s = r.state; out.push(r.moment); }
-  assert.equal(out[24], 'catch.milestone');
-  assert.equal(out[49], 'catch.milestone');
-  assert.deepEqual(out.map((m, i) => (m === 'catch.lucky' ? i + 1 : 0)).filter(Boolean), [11, 22, 33, 44]);
 });
 
 test('fix 6: Battery Saver keeps the moment but plays only its primary and one pulse (no layers, no shaped pattern)', async () => {
@@ -211,7 +151,14 @@ test('the stamp buzz lands with the stamp, never held behind a coin-stream tick 
     const land = e.haptics.find((h) => h.intent === 'success');
     assert.equal(land.t - t, 0, `trace ${trace}: the stamp buzz is in the same call as the stamp sound`);
     const after = e.haptics.filter((h) => h.t > t && h.intent === 'tickSelection');
-    assert.equal(after.length, 1);
-    assert.equal(after[0].t - t, 120, 'the gate is back right after the stamp');
+    // Round 5: while the catch is open a pulse on top of a beat is dropped (it would buzz 120 ms later on nothing).
+    assert.equal(after.length, 0, 'the tick bunched onto the stamp is dropped, not held');
+    e.Catch.catchMark('done');
+    e.Catch.catchHaptic('tickSelection', 1);
+    e.Catch.catchHaptic('tickSelection', 1);
+    e.clock.advance(300);
+    const gated = e.haptics.filter((h) => h.t > t + 300 && h.intent === 'tickSelection');
+    assert.equal(gated.length, 2);
+    assert.equal(gated[1].t - gated[0].t, 120, 'after the catch the shared gate is back');
   }
 });

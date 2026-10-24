@@ -107,6 +107,8 @@ interface AvVoice {
   busyUntil: number;
   token: number;
   stopTimer: ReturnType<typeof setTimeout> | null;
+  /** A delayed start still waiting (stop() cancels it, so a cut voice never starts late). */
+  startTimer?: ReturnType<typeof setTimeout> | null;
 }
 
 /**
@@ -200,9 +202,12 @@ export class ExpoAvBackend implements AudioBackend {
     this.tokens.set(token, voice);
     if (voice.stopTimer) clearTimeout(voice.stopTimer);
     voice.stopTimer = null;
+    if (voice.startTimer) clearTimeout(voice.startTimer);
+    voice.startTimer = null;
     voice.busyUntil = now + a.delayMs + (a.durationMs > 0 ? a.durationMs : 1500);
     const v = voice;
     const start = () => {
+      v.startTimer = null;
       v.sound
         .setStatusAsync({
           shouldPlay: true,
@@ -219,7 +224,7 @@ export class ExpoAvBackend implements AudioBackend {
         }, a.durationMs / Math.max(0.25, a.rate));
       }
     };
-    if (a.delayMs > 0) setTimeout(start, a.delayMs);
+    if (a.delayMs > 0) v.startTimer = setTimeout(start, a.delayMs);
     else start();
     return token;
   }
@@ -227,6 +232,8 @@ export class ExpoAvBackend implements AudioBackend {
   stop(token: number): void {
     const v = this.tokens.get(token);
     if (!v) return;
+    if (v.startTimer) clearTimeout(v.startTimer);
+    v.startTimer = null;
     v.sound.pauseAsync().catch(() => undefined);
     v.busyUntil = 0;
     this.tokens.delete(token);

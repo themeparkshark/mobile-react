@@ -11,7 +11,7 @@
  */
 
 import { AV_ONLY_TYPES, assetMeta, assetType, type AudioBackend, type MusicArgs, type PlayArgs } from './backends';
-import { traceEvent } from './studioTrace';
+import { cancelTraceEvent, traceEvent } from './studioTrace';
 
 /**
  * Where an asset lives in the repo (Metro's dev path, for example
@@ -41,6 +41,8 @@ export class TraceBackend implements AudioBackend {
   private latency = new Map<string, number>();
   private loaded = new Set<string>();
   private nextToken = 1;
+  /** Scheduled starts by token, so stop() can cancel a sound that has not started yet. */
+  private pending = new Map<number, { key: string; at: number }>();
   private decks = new Map<string, { key: string; startedAt: number }>();
   private readonly t0 = Date.now();
 
@@ -74,12 +76,26 @@ export class TraceBackend implements AudioBackend {
     const db = args.gain > 0 ? (20 * Math.log10(args.gain)).toFixed(1) : '-inf';
     const semis = args.rate > 0 ? (12 * Math.log2(args.rate)).toFixed(1) : '0';
     traceEvent('sound', key, `gain ${db} dB, pitch ${semis}`, at);
-    return this.nextToken++;
+    const token = this.nextToken++;
+    if (at > Date.now()) {
+      this.pending.set(token, { key, at });
+      if (this.pending.size > 64) this.pending.delete(this.pending.keys().next().value as number);
+    }
+    return token;
   }
 
-  stop(): void {}
+  /** A sound stopped before it started is taken back out of the trace (it would never be heard). */
+  stop(token: number): void {
+    const p = this.pending.get(token);
+    this.pending.delete(token);
+    if (p && p.at > Date.now()) cancelTraceEvent('sound', p.key, p.at);
+  }
 
-  stopAll(): void {}
+  stopAll(): void {
+    const now = Date.now();
+    this.pending.forEach((p) => { if (p.at > now) cancelTraceEvent('sound', p.key, p.at); });
+    this.pending.clear();
+  }
 
   musicStart(deck: string, key: string, args: MusicArgs): void {
     this.decks.set(deck, { key, startedAt: Date.now() - args.fromMs });

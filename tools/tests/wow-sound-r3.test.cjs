@@ -49,8 +49,11 @@ test('catch haptics: inside the beat window they never wait; outside it they use
   e.Catch.catchHaptic('success', 4); // the land, long after the beats: gated
   e.clock.advance(300);
   const at = e.haptics.map((h) => h.t - t0);
-  assert.deepEqual(at.slice(0, 3), [0, 0, 200], 'tap and wobble on their beats');
-  assert.equal(at[4] - at[3], 120, 'after the window the shared gate is back');
+  // Round 5: the map's own press buzz is the tap's pulse (no second pulse in the same ms), then the wobble on its beat.
+  assert.deepEqual(at.slice(0, 2), [0, 200], 'one pulse for the touch, the wobble on its beat');
+  // The first wobble beat plans the other two on the show's spacing (wow-map's own beats would land on the same times).
+  assert.deepEqual(at.slice(1, 4), [200, 350, 480], 'the rest of the wobble lands on its spacing');
+  assert.equal(at[at.length - 1] - at[at.length - 2], 120, 'after the window the shared gate is back');
 });
 
 test('duckSegment: one straight piece at a time, the hold is flat, the deepest duck wins', () => {
