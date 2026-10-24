@@ -55,6 +55,12 @@ export interface ResultStat {
   pips?: readonly [number, number];
   /** A picture under the value in place of the label word (the label is still read aloud). */
   icon?: GameIconName;
+  /**
+   * The picture is the headline: `on` lit icons out of `of` (1 to 3 bolts for
+   * NICE, GREAT, LIGHTNING), with the value word small under it. A kid who
+   * cannot read still sees "three bolts beats one".
+   */
+  iconRow?: { name: GameIconName; on: number; of: number };
 }
 
 /** A next-star bar a game works out itself (stars that are not points). */
@@ -111,6 +117,12 @@ export interface ResultsCardProps {
   wrapReason?: 'boarding' | 'left-queue' | 'session-ended' | null;
   /** Fired once when the NEW BEST badge slams in (the shell bursts confetti). */
   onNewBestLanded?: () => void;
+  /**
+   * The decision buttons (PLAY AGAIN, DONE), drawn inside the card at the
+   * bottom like Sharky, the Duel and the Boss, so every game's card is one
+   * piece. Passed as children.
+   */
+  children?: React.ReactNode;
 }
 
 /** Below this window height (points) the card goes compact (iPhone SE is 667). */
@@ -128,7 +140,7 @@ export function defaultMessage(stars: number, near: boolean, newBest = false): s
 
 export function ResultsCard({
   score, stars, message, thresholds, personalBest, maxCombo, stats, note, reducedMotion = false, onRevealed, rival,
-  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer, onNewBestLanded, wrapUp = false, starGoal, wrapReason = null,
+  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer, onNewBestLanded, wrapUp = false, starGoal, wrapReason = null, children: actions,
 }: ResultsCardProps) {
   // The ride came up (or the kid left the line) before any points: a happy
   // send-off (HAVE FUN! stamp), never three empty stars and a big 0.
@@ -230,11 +242,11 @@ export function ResultsCard({
         </View>
       ) : null}
 
-      {sendOff ? null : <>
-        <Text style={styles.label}>SCORE</Text>
+      {/* The score is the gold hero number every card uses (Sharky, Boss): no SCORE word over it. */}
+      {sendOff ? null : <View accessible accessibilityLabel={`Score ${formatScore(score)}`} style={styles.scoreWrap}>
         <CountUpText value={score} from={0} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
           onTick={() => GameAudio.play(SCORE_TICK_CUE, { volume: 0.3 })} style={[styles.score, short && styles.scoreShort]} />
-      </>}
+      </View>}
 
       {/* The row keeps its height only when something will land in it (no empty gap on a plain card). */}
       {sendOff ? null : best.isNewBest || showBest ? <Animated.View style={[styles.bestRow, bestStyle]}>
@@ -273,12 +285,26 @@ export function ResultsCard({
       {footer && !plain ? <View style={styles.footer}>{footer}</View> : null}
 
       {note && !sendOff ? <Text style={styles.note}>{note}</Text> : null}
+
+      {actions ? <View style={styles.actions}>{actions}</View> : null}
     </View>
   );
 }
 
 /** One brag chip (cream, navy ink), shared by every results card. */
-export function ResultChip({ label, value, pips, icon }: ResultStat) {
+export function ResultChip({ label, value, pips, icon, iconRow }: ResultStat) {
+  if (iconRow) {
+    return (
+      <View style={styles.chip} accessible accessibilityLabel={`${value} ${label}`}>
+        <View style={styles.iconRow}>
+          {Array.from({ length: Math.max(1, iconRow.of) }, (_, i) => (
+            <GameIcon key={i} name={iconRow.name} size={i < iconRow.on ? 26 : 20} mono={i < iconRow.on ? undefined : '#9cc9ec'} />
+          ))}
+        </View>
+        <Text style={styles.chipLabel} numberOfLines={1}>{value}</Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.chip} accessible accessibilityLabel={pips ? `${pips[0]} ${label}` : `${value} ${label}`}>
       {pips ? (
@@ -401,13 +427,15 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
   },
   cardShort: { paddingTop: 38, paddingBottom: 12 },
-  scoreShort: { fontSize: 40, lineHeight: 46 },
+  scoreShort: { fontSize: 42, lineHeight: 48 },
+  actions: { width: '100%', marginTop: 4 },
   ribbonWrap: { position: 'absolute', top: -34, left: -14, right: -14 },
   starRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 4, marginBottom: 6 },
   star: { marginHorizontal: 6 },
   starMiddle: { marginBottom: 10 },
-  label: { fontFamily: 'Knockout', fontSize: 15, color: '#cdeaff', letterSpacing: 2, marginTop: 4 },
-  score: { fontSize: 46, lineHeight: 54, minWidth: 180 },
+  scoreWrap: { marginTop: 2 },
+  score: { fontFamily: 'Shark', fontSize: 50, lineHeight: 58, minWidth: 180, color: '#ffcf3b',
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 0 },
   bestRow: { height: 34, justifyContent: 'center', alignItems: 'center' },
   bestGap: { height: 6 },
   newBest: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffcf3b', borderRadius: 999, borderWidth: 3,
@@ -429,6 +457,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4, margin: 4, alignItems: 'center', minWidth: 86 },
   chipValue: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },
   chipIcon: { marginTop: 1 },
+  iconRow: { flexDirection: 'row', alignItems: 'center', height: 28, gap: 1 },
   chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#3d5f8c', letterSpacing: 1 },
   nearPop: { maxWidth: '100%', marginBottom: 4 },
   nearLine: { borderRadius: 999, borderWidth: 3, borderColor: '#05346e', backgroundColor: '#e4f7ff', paddingHorizontal: 14,

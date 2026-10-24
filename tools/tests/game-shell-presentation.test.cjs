@@ -96,7 +96,7 @@ test('changing motion preference keeps the countdown deadline and settles a resu
   view.change({ result: { score: 400, stars: 1 } });
   assert.equal(view.timers.size, 0);
   assert.equal(view.tree.props.animationType, 'none');
-  const card = view.find(node => node.type === 'ReanimatedView' && node.props.style?.[0]?.width === '86%' && node.props.style?.[1]?.opacity !== undefined);
+  const card = view.find(node => node.type === 'ReanimatedView' && node.props.style?.[0]?.width === '90%' && node.props.style?.[1]?.opacity !== undefined);
   assert.equal(card.props.style[1].opacity, 1);
   // The scale lives on its own inner wrapper, so the fade safety net never snaps it.
   const inner = view.find(node => node.type === 'ReanimatedView' && Array.isArray(node.props.style?.transform));

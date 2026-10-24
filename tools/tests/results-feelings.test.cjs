@@ -452,7 +452,7 @@ test('a ride-up or left-line end is never a loss, even at 0 points', () => {
   assert.match(shell, /wrapReason=\{wrap\?\.reason \?\? null\}/);
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /const sendOff = wrapUp && stars === 0 && !saved && !\(score > 0\);/);
-  assert.match(card, /\{sendOff \? null : <>\n\s+<Text style=\{styles\.label\}>SCORE<\/Text>/, 'no SCORE 0 on a send-off');
+  assert.match(card, /\{sendOff \? null : <View accessible accessibilityLabel=\{`Score \$\{formatScore\(score\)\}`\}/, 'no score 0 on a send-off');
   assert.match(card, /wrapReason === 'boarding' \? 'HAVE FUN!' : 'SEE YOU SOON!'/);
   assert.match(card, /\{chips\.length && !sendOff \? \(/, 'no brag chip (a lone burst dot) on a 0-point send-off');
 });
@@ -854,7 +854,7 @@ test('duel banners and the Big Final chip keep their fill: the pop rides a wrapp
   assert.doesNotMatch(duel, /scaleY: 2 - Math\.max/, 'no squash and stretch on a filled pill');
   // The Best Moment polaroid leaves the tree after it pops away (never parked at scale 0 over the banners).
   assert.match(duel, /const \[polGone, setPolGone\] = useState\(!model\.best \|\| reducedMotion\);/);
-  assert.match(duel, /setTimeout\(\(\) => setPolGone\(true\), beatMs \* 2 \+ 1500 \+ 320\)/);
+  assert.match(duel, /setTimeout\(\(\) => setPolGone\(true\), polAt \+ 1500 \+ 320\)/);
   assert.match(duel, /\{model\.best && !polGone \? \(/);
   // The capture screen can show the won duel card with every banner without beating Fin.
   const capture = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
@@ -901,7 +901,7 @@ test('star words never give the stars away: the ribbon waits for the last stamp'
 test('the Duel card hugs its content, a loss bar is never solid red, and RANK UP lights the new hat', () => {
   const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
   assert.doesNotMatch(duel, /minHeight: model\.ride \? undefined : height - 8/, 'no fixed full-height card');
-  assert.match(duel, /<Animated\.View style=\{\[styles\.card, cardStyle\]\} onLayout=\{onCardLayout \?/);
+  assert.match(duel, /<Animated\.View style=\{\[styles\.card, cardStyle\]\} onLayout=\{\(e\) => \{\s*const h = Math\.round\(e\.nativeEvent\.layout\.height\);\s*setCardH\(h\);\s*onCardLayout\?\.\(h\);/);
   // 0 points: no gap bar at all; otherwise Fin's lead is navy on a sky track.
   assert.match(duel, /!model\.ride && !model\.won && model\.myScore > 0 && model\.oppScore > model\.myScore/);
   assert.match(duel, /gapSeg: \{ backgroundColor: GAP_NAVY \}/);

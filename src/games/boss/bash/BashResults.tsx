@@ -168,7 +168,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       </View>}
 
       <View style={styles.raid}>
-        {/* Won: the stamp and "Boss down!" say it; an empty pale bar read as broken. */}
+        {/* Won: the stamp and the KO pill say it; an empty pale bar read as broken. */}
         {/* A health bar that empties, in pictures: the red next to the boss's
             face is all it has left (red is HP only, never a reward). What got
             knocked out is light: your swords sit on your chunk (white) and a
@@ -191,7 +191,12 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
             </View>
           </View>
         </View>}
-        {won ? <Text style={styles.raidLine} numberOfLines={1}>Boss down!</Text> : null}
+        {/* Won: the KO crown pill, the same picture as the finisher's star slot
+            and the loot strip (no sentence to read). */}
+        {won ? <View style={styles.koPill} accessible accessibilityLabel="Boss knocked out">
+          <View style={styles.lootKo}><GameIcon name="crown" size={26} /><Text style={styles.koTag} maxFontSizeMultiplier={1}>KO</Text></View>
+          <Text style={styles.koPillText} maxFontSizeMultiplier={1}>KO!</Text>
+        </View> : null}
       </View>
 
       {rewards && <View style={styles.loot} accessible accessibilityLabel={won ? `Yours: ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`
@@ -217,10 +222,11 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
         </View>
       </View>}
 
-      {receipt && !noHits && <View style={[styles.receipt, receipt === 'error' && styles.receiptErr]} accessibilityLiveRegion="polite">
+      {receipt && !noHits && <View style={[styles.receipt, receipt === 'error' && styles.receiptErr]} accessibilityLiveRegion="polite"
+        accessible accessibilityLabel={receipt === 'saved' ? 'Saved for the team' : undefined}>
         <GameIcon name={receipt === 'saved' ? 'check' : receipt === 'error' ? 'info' : 'timer'} size={18} />
         <Text style={[styles.receiptText, receipt === 'error' && styles.receiptTextErr]} maxFontSizeMultiplier={1.3}>
-          {receipt === 'saved' ? 'SAVED FOR THE TEAM!' : receipt === 'saving' ? 'SENDING...' : receiptNote ?? 'Not saved yet. We will keep trying.'}</Text>
+          {receipt === 'saved' ? 'SAVED!' : receipt === 'saving' ? 'SENDING...' : receiptNote ?? 'Not saved yet. We will keep trying.'}</Text>
       </View>}
       {/* Brags only on a new best (the card stays a one-glance read): the
           shared chips, two at most, a zero is never a chip. */}
@@ -294,7 +300,9 @@ const styles = StyleSheet.create({
   hpTrack: { height: 20, borderRadius: 10, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.sky, overflow: 'hidden' },
   hpMine: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.white },
   hpLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.red, transformOrigin: 'left' },
-  raidLine: { marginTop: 4, fontFamily: 'Shark', fontSize: 15, color: BRAND.white, textAlign: 'center' },
+  koPill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, marginTop: 4, backgroundColor: BRAND.gold, borderRadius: 999,
+    borderWidth: 3, borderColor: BRAND.navy, paddingLeft: 8, paddingRight: 14, paddingVertical: 1 },
+  koPillText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
   loot: { marginTop: 10, backgroundColor: BRAND.white, borderRadius: 16, borderWidth: 2, borderColor: BRAND.sky, paddingVertical: 8, alignItems: 'center' },
   warm: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 14,
     borderWidth: 2, borderColor: BRAND.navy, backgroundColor: BRAND.gold },

@@ -202,21 +202,34 @@ export interface WagerSuggestion {
 }
 
 /**
- * 5.5 suggestWager (the gold-glow chip; doing nothing takes it):
+ * 5.5 suggestWager (the gold-glow chip; doing nothing takes it). A miss only
+ * takes half the chip (missLoss), so the glow follows the softer rule:
+ *  0. already won either way: the BIGGEST chip a miss still cannot lose
+ *     (you - half the chip > 2 x opp + 350), so a sure win scores big;
  *  1. a chip that makes you unbeatable when right (you + 100m + stake > 2 x opp + 350): the smallest one;
  *  2. else trailing: GO BIG;
- *  3. else (leading or tied): the smallest chip with you + 100m + stake > 2 x opp + 100, else SAFE.
+ *  3. else (leading or tied), of the chips that stay ahead if they get it
+ *     (you + 100m + stake > 2 x opp + 100): the biggest one a miss still
+ *     leaves you in the lead with (you - half the chip > opp), else the smallest;
+ *  4. else SAFE.
  * `m` is the multiplier your streak would carry into a right answer.
  */
 export function suggestWager(me: number, opp: number, m: number): WagerSuggestion {
   const stakes = wagerStakes(me);
   const right = (k: number) => me + Math.round(POINTS.base * m) + stakes[k];
+  const afterMiss = (k: number) => me - missLoss(stakes[k]);
+  for (let k = stakes.length - 1; k > 0; k--) {
+    if (stakes[k] > 0 && afterMiss(k) > 2 * opp + WAGER.lockMargin) return { index: k, reason: 'Wins it either way.', kind: 'win' };
+  }
   for (let k = 0; k < stakes.length; k++) {
     if (right(k) > 2 * opp + WAGER.lockMargin) return { index: k, reason: "Wins it if you're right.", kind: 'win' };
   }
   if (me < opp) return { index: stakes.length - 1, reason: 'You need it all.', kind: 'go' };
-  for (let k = 0; k < stakes.length; k++) {
-    if (right(k) > 2 * opp + WAGER.coverMargin) return { index: k, reason: 'Stays ahead if they get it.', kind: 'stay' };
+  const cover: number[] = [];
+  for (let k = 0; k < stakes.length; k++) if (right(k) > 2 * opp + WAGER.coverMargin) cover.push(k);
+  if (cover.length) {
+    const safeBig = cover.filter((k) => k > 0 && afterMiss(k) > opp).pop();
+    return { index: safeBig ?? cover[0], reason: 'Stays ahead if they get it.', kind: 'stay' };
   }
   return { index: 0, reason: 'Keeps the lead if they miss.', kind: 'keep' };
 }

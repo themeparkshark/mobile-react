@@ -72,6 +72,8 @@ interface Props {
   dropPx?: number;
   /** Live drop (UI thread): wins over dropPx, so the scene can ease onto a measured results card. */
   dropSv?: SharedValue<number>;
+  /** Results zoom (UI thread, 1 = none): a short card zooms the dropped scene a little around the podiums. */
+  zoomSv?: SharedValue<number>;
   actors: StageActors;
   /** 'fin' draws Captain Fin; a shark look draws a ghost/rival shark. */
   opponent: 'fin' | SharkLook;
@@ -121,7 +123,7 @@ const STAGE_ART = {
   podium: require('../../../assets/games/trivia-duel/stage_podium.png'),
 };
 
-export const Stage = React.memo(function Stage({ width: W, height: FULL, bandH, dropPx, dropSv, actors: a, opponent, ghost, meLook = 'classic', stripes, sunburstSpeed, reducedMotion }: Props) {
+export const Stage = React.memo(function Stage({ width: W, height: FULL, bandH, dropPx, dropSv, zoomSv, actors: a, opponent, ghost, meLook = 'classic', stripes, sunburstSpeed, reducedMotion }: Props) {
   const H = bandH ?? FULL;
   const drop = dropPx ?? (FULL - H) * TAKEOVER_DROP;
   const finImgs = FIN_POSE_ORDER.map((p) => useImage(FIN_POSES[p])); // eslint-disable-line react-hooks/rules-of-hooks
@@ -271,7 +273,8 @@ export const Stage = React.memo(function Stage({ width: W, height: FULL, bandH, 
   const rig = useDerivedValue(() => [
     { translateX: a.pushX.value + Math.sin(a.t.value / 955) * (reducedMotion ? 0 : 4) },
     { translateY: a.takeover.value * (dropSv ? dropSv.value : drop) },
-    { scale: a.push.value },
+    // The results zoom grows in with the takeover, so the match camera is untouched.
+    { scale: a.push.value * (1 + a.takeover.value * ((zoomSv ? zoomSv.value : 1) - 1)) },
   ]);
 
   const breath = useDerivedValue(() => (reducedMotion ? 0 : Math.sin((a.t.value / 1600) * Math.PI * 2)));

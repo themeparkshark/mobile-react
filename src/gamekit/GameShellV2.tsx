@@ -63,6 +63,8 @@ import { ShellFrameContext } from './ShellFrameContext';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
 import { ResultsCard, type ResultStat, type ResultStarGoal } from './results/ResultsCard';
+import { ResultsPodium } from './results/ResultsPodium';
+import { initialWindowMetrics } from 'react-native-safe-area-context';
 import { endFeel } from './results/feelings';
 import { compareBest, starsFor, type StarThresholds } from './core/scoring';
 import {
@@ -1072,8 +1074,13 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </View>
           ) : null}
           {showSharedCard ? (
-            <View style={styles.overlay} pointerEvents="box-none">
-              <Animated.View style={[{ width: '86%' }, resultsSafe ? styles.resultsShown : resultsFadeStyle]}>
+            // One results language on every game: the scene (the shark on its
+            // podium for a star or a new best) stands on the card, the card
+            // sits at the bottom with its buttons inside, like Sharky, the
+            // Duel and the Boss.
+            <View style={[styles.overlay, styles.sharedStage]} pointerEvents="box-none">
+              <ResultsPodium cheer={stars > 0 || (!saved && compareBest(effectiveResult?.score ?? score, personalBest).isNewBest)} reducedMotion={reducedMotion} />
+              <Animated.View style={[{ width: '90%' }, resultsSafe ? styles.resultsShown : resultsFadeStyle]}>
                 <Animated.View style={resultsScaleStyle}>
                   <ResultsCard
                     score={effectiveResult?.score ?? score}
@@ -1097,8 +1104,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                     wrapUp={wrap != null}
                     wrapReason={wrap?.reason ?? null}
                     reducedMotion={reducedMotion}
-                  />
-                  {resultExtras ?? resultsExtra ?? null}
+                  >
                   <View style={styles.actions}>
                     <TouchableOpacity
                       style={[styles.sheetBtn, styles.primaryBtn, styles.bigBtn]}
@@ -1138,6 +1144,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                       </TouchableOpacity>
                     ) : null}
                   </View>
+                  </ResultsCard>
+                  {resultExtras ?? resultsExtra ?? null}
                 </Animated.View>
               </Animated.View>
             </View>
@@ -1238,6 +1246,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(8,56,128,0.45)',
   },
   scrimLight: { backgroundColor: 'rgba(255,255,255,0.3)' },
+  // The shared card stands at the bottom with the scene above it.
+  sharedStage: { justifyContent: 'flex-end', paddingTop: (initialWindowMetrics?.insets.top ?? 20) + 56,
+    paddingBottom: Math.max(10, initialWindowMetrics?.insets.bottom ?? 0) + 6 },
   scrimNone: { backgroundColor: 'transparent' },
   overlayLight: {
     ...StyleSheet.absoluteFillObject,

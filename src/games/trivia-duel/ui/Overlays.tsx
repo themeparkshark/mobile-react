@@ -294,7 +294,8 @@ function Chip({ i, label, stake, ifRight, picked, suggested, hint, onPick }: { i
       <Pressable onPress={() => onPick(i)} style={[styles.chip, { backgroundColor: colors[i] ?? C.cream }, picked && styles.chipPicked]} accessibilityRole="button" accessibilityLabel={miss === 0 ? `${label}. ${ifRight} if right, nothing taken away if wrong` : `${label}. ${ifRight} if right, ${miss} points taken away if wrong`}>
         <Text style={styles.chipLabel}>{label}</Text>
         <Text style={[styles.chipIfRight, suggested && styles.chipIfRightBig]}>{ifRight}</Text>
-        {miss === 0 ? <Text style={styles.chipStake}>KEEP ALL</Text> : (
+        {/* SAFE takes nothing on a miss: a lock picture (the words are spoken). */}
+        {miss === 0 ? <View style={styles.chipSafe}><GameIcon name="lock" size={18} /></View> : (
           <View style={styles.chipMiss}>
             <GameIcon name="arrow" size={14} style={styles.chipMissArrow} />
             <Text style={styles.chipMissText}>{miss}</Text>
@@ -496,6 +497,7 @@ const styles = StyleSheet.create({
   catLabel: { fontFamily: 'Shark', fontSize: 28, color: C.navy, textAlign: 'center' },
   chipPicked: { borderColor: C.goldDeep, borderWidth: 5, borderBottomWidth: 8 },
   chipLabel: { fontFamily: 'Shark', fontSize: 24, color: C.navy },
+  chipSafe: { height: 20, alignItems: 'center', justifyContent: 'center' },
   chipStake: { fontFamily: 'Knockout', fontSize: 14, color: C.navy, opacity: 0.6 },
   // What a miss takes away: the same red arrow-down chip as the results card's BIG FINAL row.
   chipMiss: { flexDirection: 'row', alignItems: 'center', gap: 1, backgroundColor: C.coral, borderRadius: 8, borderWidth: 1.5, borderColor: C.ink, paddingLeft: 1, paddingRight: 5, marginTop: 1 },

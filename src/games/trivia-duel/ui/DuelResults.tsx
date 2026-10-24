@@ -20,6 +20,10 @@ import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { feelingChips, type FeelingStat } from '../../../gamekit/results/feelings';
 import GameIcon, { type GameIconName } from '../../../ui/GameIcon';
 
+/** The polaroid sits this far above the card's top edge (root paddingBottom + a gap clear of the ribbon). */
+const POL_BOTTOM_PAD = 10;
+const POL_GAP = 34;
+
 /** The shared results card blue (ResultsCard): one surface on every results card. */
 const CARD_BLUE = '#0768b9';
 /** Fin's lead on the loss gap bar (navy, never red). */
@@ -57,6 +61,19 @@ export function duelChipIcon(label: string): GameIconName | undefined {
   return CHIP_ICONS[label];
 }
 
+/** The best answer speed as bolts: NICE 1, GREAT 2, LIGHTNING 3 (0 for anything else). */
+export function speedBolts(word: string): number {
+  const w = word.replace(/!/g, '').trim().toUpperCase();
+  return w === 'LIGHTNING' ? 3 : w === 'GREAT' ? 2 : w === 'NICE' ? 1 : 0;
+}
+
+/** The speed chip leads with the picture: lit bolts out of 3, the word small under them. */
+export function duelChipIconRow(label: string, value: string): { name: GameIconName; on: number; of: number } | undefined {
+  if (label !== 'BEST ANSWER') return undefined;
+  const on = speedBolts(value);
+  return on > 0 ? { name: 'rush', on, of: 3 } : undefined;
+}
+
 /** Ride card star stamps: star k (1..3) pops at STAR_AT + k x STAR_GAP. */
 export const RIDE_STAR_AT = 500;
 export const RIDE_STAR_GAP = 220;
@@ -72,6 +89,21 @@ export function rideRibbonDelay(stars: number, reducedMotion: boolean): number {
 
 /** The loss gap pulse plays this many beats, then rests. */
 export const GAP_BEATS = 4;
+
+/** Banner k pops at BANNER_AT + k x BANNER_GAP; the RANK UP badge at RANK_UP_AT. */
+export const BANNER_AT = 700;
+export const BANNER_GAP = 180;
+export const RANK_UP_AT = 1100;
+/**
+ * When the Best Moment polaroid drops: after FIN BEATEN, NEW BEST and the
+ * RANK UP badge have popped (it never lands while they do), and never before
+ * two beats. It drops above the card, over the stage, so it covers no badge.
+ */
+export function polaroidAt(beatMs: number, banners: number, rankUp: boolean): number {
+  const lastBanner = banners > 0 ? BANNER_AT + (banners - 1) * BANNER_GAP + 260 : 0;
+  const lastRank = rankUp ? RANK_UP_AT + 420 : 0;
+  return Math.max(beatMs * 2, lastBanner, lastRank);
+}
 
 export interface ResultsModel {
   won: boolean;
@@ -119,6 +151,9 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   // mounted at scale 0 over the card, it drew the banners under it hollow
   // (FIN BEATEN and RANK UP lost their gold; NEW BEST, outside its box, kept it).
   const [polGone, setPolGone] = useState(!model.best || reducedMotion);
+  // The polaroid drops above the card (over the stage), never over its badges.
+  const [cardH, setCardH] = useState(0);
+  const polAt = polaroidAt(beatMs, model.banners.length, model.banners.includes('RANK UP'));
 
   useEffect(() => {
     if (reducedMotion) cardO.value = withTiming(1, { duration: 300 });
@@ -129,12 +164,12 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
     }
     if (!reducedMotion && onRematch) pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: beatMs * 0.25 }), withTiming(1, { duration: beatMs * 0.75 })), 3);
     if (model.best && !reducedMotion) {
-      polY.value = withDelay(beatMs * 2, withSequence(
+      polY.value = withDelay(polAt, withSequence(
         withSpring(0, { damping: 10, stiffness: 220 }),
       ));
       // Then it pops away instead of tucking over the card's words.
-      polS.value = withDelay(beatMs * 2 + 1500, withTiming(0, { duration: 260, easing: Easing.in(Easing.quad) }));
-      const gone = setTimeout(() => setPolGone(true), beatMs * 2 + 1500 + 320);
+      polS.value = withDelay(polAt + 1500, withTiming(0, { duration: 260, easing: Easing.in(Easing.quad) }));
+      const gone = setTimeout(() => setPolGone(true), polAt + 1500 + 320);
       return () => clearTimeout(gone);
     } else {
       polS.value = 0;
@@ -164,7 +199,11 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
       {/* The card hugs what it shows, anchored at the bottom like Sharky and
           Boss, so the stage acts above it (a fixed full height left an empty
           blue band under DONE on a loss). */}
-      <Animated.View style={[styles.card, cardStyle]} onLayout={onCardLayout ? (e) => onCardLayout(Math.round(e.nativeEvent.layout.height)) : undefined}>
+      <Animated.View style={[styles.card, cardStyle]} onLayout={(e) => {
+        const h = Math.round(e.nativeEvent.layout.height);
+        setCardH(h);
+        onCardLayout?.(h);
+      }}>
         {/* The one results title every game shares: Alex's ribbon over the card's top edge.
             On the ride card it waits for the last star, like Sharky and Boss. */}
         <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} delayMs={model.ride ? rideRibbonDelay(model.stars, reducedMotion) : 0} />
@@ -204,7 +243,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
           ) : null}
         {chips.length ? (
           <View style={styles.rows}>
-            {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} pips={c.pips} icon={duelChipIcon(c.label)} />)}
+            {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} pips={c.pips} icon={duelChipIcon(c.label)} iconRow={duelChipIconRow(c.label, c.value)} />)}
           </View>
         ) : null}
         {/* Fin's rank, only after a win (a loss makes no rank progress, so it
@@ -212,6 +251,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             needed (gold for each one won) and the bigger, gold-trimmed hat
             those wins unlock. */}
         {model.rank && rankUp ? <RankUpRow from={Math.max(0, (model.rank.stripes ?? 1) - 1)} to={model.rank.stripes ?? 1} label={model.rank.label} reducedMotion={reducedMotion} />
+          : model.rank && model.won && !model.rank.next ? <TopRankRow stripes={model.rank.stripes ?? 0} label={model.rank.label} reducedMotion={reducedMotion} />
           : model.rank && model.won ? (
           <View style={styles.rankRow} accessible
             accessibilityLabel={model.rank.next ? `${model.rank.label} now. ${Math.max(0, (model.rank.need ?? 0) - (model.rank.wins ?? 0))} more wins to face ${model.rank.next}` : `${model.rank.label}, the top rank`}>
@@ -245,7 +285,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
         </View>
       </Animated.View>
       {model.best && !polGone ? (
-        <Animated.View style={[styles.polaroid, polStyle]} pointerEvents="none">
+        <Animated.View style={[styles.polaroid, { bottom: POL_BOTTOM_PAD + cardH + POL_GAP }, polStyle]} pointerEvents="none">
           <Image source={ART.polaroid} style={styles.polImg} resizeMode="contain" />
           <View style={styles.polCaption}>
             <Text style={styles.polTitle}>BEST MOMENT</Text>
@@ -311,10 +351,11 @@ function GoalDot({ on, k, reducedMotion }: { on: boolean; k: number; reducedMoti
  * winning toward is bigger and sits on a gold badge, so "that one is better"
  * reads with zero words.
  */
-function RankHat({ stripes, big = false, dim = false, star = false }: { stripes: number; big?: boolean; dim?: boolean; star?: boolean }) {
+function RankHat({ stripes, big = false, dim = false, star = false, crown = false }: { stripes: number; big?: boolean; dim?: boolean; star?: boolean; crown?: boolean }) {
   return (
     <View style={[styles.rankHat, big && styles.rankHatBig, dim && styles.rankHatDim]}>
       {star ? <View style={styles.rankHatStar} pointerEvents="none"><GameIcon name="star" size={22} /></View> : null}
+      {crown ? <View style={styles.rankHatCrown} pointerEvents="none"><GameIcon name="crown" size={30} /></View> : null}
       <Image source={ART.hat} style={big ? styles.rankHatImgBig : styles.rankHatImg} resizeMode="contain" />
       <View style={styles.rankStripes}>
         {Array.from({ length: Math.max(0, Math.min(3, stripes)) }, (_, k) => <View key={k} style={[styles.rankStripe, big && styles.rankStripeBig]} />)}
@@ -350,6 +391,28 @@ function GoalPop({ k, reducedMotion, children }: { k: number; reducedMotion: boo
 }
 
 /**
+ * Fin at his top rank: one centered gold badge (his hat with every stripe and
+ * a gold crown on its corner), never a hat, an empty gap and a crown at the
+ * far edges. It pops in with a sparkle like the RANK UP badge.
+ */
+function TopRankRow({ stripes, label, reducedMotion }: { stripes: number; label: string; reducedMotion: boolean }) {
+  const pop = useSharedValue(reducedMotion ? 1 : 0);
+  useEffect(() => {
+    if (reducedMotion) return;
+    pop.value = withDelay(RANK_UP_AT, withSequence(withTiming(1.25, { duration: 130, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 8, stiffness: 300 })));
+  }, [pop, reducedMotion]);
+  const st = useAnimatedStyle(() => ({ opacity: pop.value > 0.02 ? 1 : 0, transform: [{ scale: pop.value }] }));
+  return (
+    <View style={[styles.rankRow, styles.rankUpRow]} accessible accessibilityLabel={`${label}, the top rank`}>
+      <Animated.View style={st}>
+        <RankHat stripes={stripes} big crown />
+        <View style={styles.rankSparkL} pointerEvents="none"><GameIcon name="sparkle" size={20} /></View>
+      </Animated.View>
+    </View>
+  );
+}
+
+/**
  * RANK UP, as a picture a 7-year-old can point at: two badges the same size,
  * side by side in the middle of the card. The old one is pale (grey border,
  * fewer gold stripes); the new one is bright on a gold border with more gold
@@ -361,8 +424,8 @@ function RankUpRow({ from, to, label, reducedMotion }: { from: number; to: numbe
   const spark = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
     if (reducedMotion) return;
-    pop.value = withDelay(1100, withSequence(withTiming(1.35, { duration: 140, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 7, stiffness: 280 })));
-    spark.value = withDelay(1180, withSequence(withTiming(1, { duration: 160 }), withDelay(500, withTiming(0.7, { duration: 300 }))));
+    pop.value = withDelay(RANK_UP_AT, withSequence(withTiming(1.35, { duration: 140, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 7, stiffness: 280 })));
+    spark.value = withDelay(RANK_UP_AT + 80, withSequence(withTiming(1, { duration: 160 }), withDelay(500, withTiming(0.7, { duration: 300 }))));
   }, [pop, spark, reducedMotion]);
   const popSt = useAnimatedStyle(() => ({ opacity: pop.value > 0.02 ? 1 : 0, transform: [{ scale: pop.value }] }));
   const sparkSt = useAnimatedStyle(() => ({ opacity: spark.value, transform: [{ scale: 0.6 + spark.value * 0.4 }] }));
@@ -413,7 +476,7 @@ function Banner({ text, i, reducedMotion }: { text: string; i: number; reducedMo
   const sx = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
     if (reducedMotion) return;
-    sx.value = withDelay(700 + i * 180, withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 300 })));
+    sx.value = withDelay(BANNER_AT + i * BANNER_GAP, withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 300 })));
   }, [sx, i, reducedMotion]);
   // One even scale, like the rank fins and coin dots. The old squash and
   // stretch (scaleX against scaleY) drew FIN BEATEN and RANK UP hollow, with
@@ -493,6 +556,7 @@ const styles = StyleSheet.create({
   rankUpArrow: { marginHorizontal: 12 },
   rankHatDim: { borderColor: '#9cc9ec', backgroundColor: '#cfe3f5', opacity: 0.6 },
   rankHatStar: { position: 'absolute', right: -11, top: -11, zIndex: 2 },
+  rankHatCrown: { position: 'absolute', right: -16, top: -16, zIndex: 2, transform: [{ rotate: '14deg' }] },
   rankSparkL: { position: 'absolute', left: -14, top: -10 },
   rankSparkR: { position: 'absolute', right: -10, bottom: -6 },
   fact: { flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2.5, borderColor: C.ink, paddingHorizontal: 10, paddingVertical: 6 },
@@ -533,7 +597,7 @@ const styles = StyleSheet.create({
   btnRow: { flexDirection: 'row', justifyContent: 'space-between' },
   half: { width: '48.5%' },
   full: { width: '100%' },
-  polaroid: { position: 'absolute', alignSelf: 'center', top: 0, alignItems: 'center' },
+  polaroid: { position: 'absolute', alignSelf: 'center', alignItems: 'center' },
   polImg: { width: 200, height: 152 },
   polCaption: { position: 'absolute', bottom: 18, alignItems: 'center' },
   polTitle: { fontFamily: 'Shark', fontSize: 14, color: C.navy },

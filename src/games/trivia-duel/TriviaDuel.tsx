@@ -78,7 +78,7 @@ import { BOARD_H, QuestionCard, ROPE_H } from './ui/Card';
 import { TILE_COMPACT_CHARS, Tile, type TileState } from './ui/Tile';
 import { Bark, BuzzBell, CategoryPick, ClosestSlider, LifelineButton, OutlinedText, Stamp, VsIntro, WagerChips, type StampSpec } from './ui/Overlays';
 import { DuelResults, type ResultsModel } from './ui/DuelResults';
-import { takeoverDrop } from './engine/takeover';
+import { takeoverDrop, takeoverZoom } from './engine/takeover';
 import { DeskFront } from './ui/DeskFront';
 import { RideCoinCrate } from './ui/RideCoinCrate';
 
@@ -237,6 +237,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
    * backdrop's own sky (Stage), so rail to card reads as one picture.
    */
   const resultsDrop = useCallback((cardH: number) => takeoverDrop({ H, cardH, stageTop: STAGE_TOP, band: STAGE_BAND, full: STAGE_FULL }), [H, STAGE_TOP, STAGE_BAND, STAGE_FULL]);
+  /** A short card zooms the dropped scene a little (capped), so empty sky never fills a third of the screen. */
+  const resultsZoom = useCallback((cardH: number) => takeoverZoom({ H, cardH, stageTop: STAGE_TOP, band: STAGE_BAND, full: STAGE_FULL }), [H, STAGE_TOP, STAGE_BAND, STAGE_FULL]);
   const railScore = { x: 92, y: 46 };
 
   // -- Match state ------------------------------------------------------------------
@@ -383,6 +385,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const retract = useSharedValue(0);
   /** How far a takeover drops the scene (UI thread, eased when the card measures itself). */
   const dropSv = useSharedValue(0);
+  const zoomSv = useSharedValue(1);
   /** 1 = the camera-locked set (railing, marquee strip, desk) has stepped away for the results. */
   const fgHide = useSharedValue(0);
   const lastCardH = useRef(0);
@@ -792,6 +795,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       setVs({ ms: vsMs });
       if (vsMs >= CEREMONY.vsFirstMs && !reducedMotion) {
         dropSv.value = DROP_PX;
+        zoomSv.value = 1;
         retract.value = withTiming(1, { duration: beatMs(), easing: Easing.out(Easing.cubic) });
         takeover.value = withTiming(1, { duration: beatMs(), easing: Easing.out(Easing.cubic) });
       }
@@ -1468,17 +1472,22 @@ export function TriviaDuel(props: TriviaDuelProps) {
     const d = reducedMotion ? 300 : beatMs();
     retract.value = withTiming(on ? 1 : 0, { duration: d, easing: Easing.out(Easing.cubic) });
     // Until the card has measured itself, drop for a typical card; it eases to the real one.
-    if (on) dropSv.value = resultsDrop(lastCardH.current || Math.round(H * 0.42));
+    if (on) {
+      dropSv.value = resultsDrop(lastCardH.current || Math.round(H * 0.42));
+      zoomSv.value = resultsZoom(lastCardH.current || Math.round(H * 0.42));
+    }
     takeover.value = withTiming(on ? 1 : 0, { duration: d, easing: Easing.out(Easing.cubic) });
     // The railing, marquee strip and desk front step away with the board, so
     // the dropped scene never shows a cut where the set used to sit.
     fgHide.value = withTiming(on ? 1 : 0, { duration: d });
-  }, [retract, takeover, dropSv, fgHide, resultsDrop, H, reducedMotion]);
+  }, [retract, takeover, dropSv, zoomSv, fgHide, resultsDrop, resultsZoom, H, reducedMotion]);
   const onCardLayout = useCallback((cardH: number) => {
     lastCardH.current = cardH;
     const to = resultsDrop(cardH);
+    const z = resultsZoom(cardH);
     dropSv.value = reducedMotion ? to : withTiming(to, { duration: 240, easing: Easing.out(Easing.cubic) });
-  }, [resultsDrop, dropSv, reducedMotion]);
+    zoomSv.value = reducedMotion ? z : withTiming(z, { duration: 240, easing: Easing.out(Easing.cubic) });
+  }, [resultsDrop, resultsZoom, dropSv, zoomSv, reducedMotion]);
   const fgStyle = useAnimatedStyle(() => ({ opacity: 1 - fgHide.value }));
 
   const finishMatch = useCallback(async () => {
@@ -1901,6 +1910,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
               bandH={STAGE_BAND}
               dropPx={DROP_PX}
               dropSv={dropSv}
+              zoomSv={zoomSv}
               actors={actors}
               opponent={opponentLook}
               ghost={!!ghost}
