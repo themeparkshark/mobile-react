@@ -192,7 +192,14 @@ const MATCH_CUE_RATIO = 512 / 361;
 function WarmupSky({ g }: { g: BoothGeo }) {
   // The sky band: from the top of the field to Finn's hat / the HUD plates.
   const floor = Math.min(g.barker.y + 18, g.hud.y - 4);
-  if (floor < 110) return null;
+  if (floor < 110) {
+    // Short phones (iPhone SE): no sky band, but the two-card cue still shows, right of Finn, above the HUD plates.
+    // Finn's art fills the left ~40 %, the HUD plates sit lower on the right.
+    const cueH = Math.min(48, g.hud.y - 20);
+    if (cueH < 30) return null;
+    const cueW = cueH / MATCH_CUE_RATIO;
+    return <MatchCue top={Math.max(6, (g.hud.y - cueH) / 2 - 4)} left={g.W * 0.72 - (cueW * 2 + 10) / 2} h={cueH} />;
+  }
   const w = g.W * 0.94;
   const h = Math.min(w * (341 / 1024), floor * 0.5);
   const bw = h * (1024 / 341);
@@ -218,12 +225,19 @@ function WarmupSky({ g }: { g: BoothGeo }) {
         <Image source={SKY_BUNTING} resizeMode="contain"
           style={{ position: 'absolute', left: (g.W - bw) / 2, top, width: bw, height: h }} />
       </View>
-      {/* Two of the same card, side by side: the whole rule as one picture. */}
-      <View accessible accessibilityRole="image" accessibilityLabel="Find two cards that match"
-        style={{ position: 'absolute', top: cueTop, left: (g.W - cueW * 2 - 10) / 2, flexDirection: 'row', gap: 10 }}>
-        <Image source={MATCH_CUE_CARD} resizeMode="contain" style={{ width: cueW, height: cueH, transform: [{ rotate: '-8deg' }] }} />
-        <Image source={MATCH_CUE_CARD} resizeMode="contain" style={{ width: cueW, height: cueH, transform: [{ rotate: '8deg' }] }} />
-      </View>
+      <MatchCue top={cueTop} left={(g.W - cueW * 2 - 10) / 2} h={cueH} />
+    </View>
+  );
+}
+
+/** Two of the same card, side by side: the warm-up's whole rule as one picture. */
+function MatchCue({ top, left, h }: { top: number; left: number; h: number }) {
+  const w = h / MATCH_CUE_RATIO;
+  return (
+    <View accessible accessibilityRole="image" accessibilityLabel="Find two cards that match" pointerEvents="none"
+      style={{ position: 'absolute', top, left, flexDirection: 'row', gap: 10 }}>
+      <Image source={MATCH_CUE_CARD} resizeMode="contain" style={{ width: w, height: h, transform: [{ rotate: '-8deg' }] }} />
+      <Image source={MATCH_CUE_CARD} resizeMode="contain" style={{ width: w, height: h, transform: [{ rotate: '8deg' }] }} />
     </View>
   );
 }

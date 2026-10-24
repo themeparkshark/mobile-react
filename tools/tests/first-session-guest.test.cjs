@@ -701,10 +701,11 @@ test('warm-up sky: four outlined clouds and a two-card picture cue replace the s
   const game = read('src/games/memory/MemoryGame.tsx');
   assert.match(game, /mode === 'warmup' \? undefined : deck\.label;/);
   assert.doesNotMatch(game, /Match 4 pairs with Finn/);
-  const sky = game.slice(game.indexOf('function WarmupSky'), game.indexOf('const JINGLE'));
+  const sky = game.slice(game.indexOf('function WarmupSky'), game.indexOf('function MatchCue'));
   assert.equal((sky.match(/src: SKY_CLOUD(_SMALL)?,/g) ?? []).length, 4, 'four clouds');
-  assert.equal((sky.match(/<Image source=\{MATCH_CUE_CARD\}/g) ?? []).length, 2, 'two matching cards');
-  assert.match(sky, /accessibilityLabel="Find two cards that match"/);
+  assert.equal((game.match(/<Image source=\{MATCH_CUE_CARD\}/g) ?? []).length, 2, 'two matching cards');
+  assert.equal((sky.match(/<MatchCue /g) ?? []).length, 2, 'the cue shows on tall phones and, right of Finn, on short ones');
+  assert.match(game, /accessibilityLabel="Find two cards that match"/);
   assert.doesNotMatch(sky, /withTiming|withRepeat|useSharedValue/, 'still images only');
 });
 
