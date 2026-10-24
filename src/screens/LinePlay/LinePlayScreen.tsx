@@ -808,8 +808,7 @@ export default function LinePlayScreen() {
   const onDetailsChange = useCallback((open: boolean) => {
     dipPages(() => setDetailsOpen(open));
   }, [dipPages]);
-  /** The crew row is lent to the board page on a short phone (see crewRowLent). */
-  const [boardLent, setBoardLent] = useState(false);
+
   /** "Back to games" and "Tap to play": Details closes so the pages get their room back. */
   const closeDetails = useCallback(() => onDetailsChange(false), [onDetailsChange]);
   useEffect(() => () => {
@@ -925,21 +924,6 @@ export default function LinePlayScreen() {
   }, [snapshot.playlist.length]);
 
 
-  // A short phone lends the crew row to the navigation board's page (crewRowLent): set when the dip lands.
-  const wantBoardLent = fit.short
-    && isBoardPage(activityPages[Math.min(pageIndex, Math.max(0, activityPages.length - 1))], snapshot.chapter);
-  const wantBoardLentRef = useRef(wantBoardLent);
-  wantBoardLentRef.current = wantBoardLent;
-  const lendPending = useRef(false);
-  useEffect(() => {
-    if (wantBoardLent === boardLent && !lendPending.current) return;
-    // Applied when the dip lands, with the latest wish (a quick swipe back and forth never sticks).
-    const apply = () => { lendPending.current = false; setBoardLent(wantBoardLentRef.current); };
-    lendPending.current = true;
-    // Details already lends the row: just follow along without a second dip.
-    if (detailsOpen) apply(); else dipPages(apply);
-  }, [wantBoardLent]);
-
   if (!ride) {
     return (
       <SafeAreaView style={styles.centered}>
@@ -974,8 +958,9 @@ export default function LinePlayScreen() {
   /** The navigation board (the first story clue on a space ride, or a free-play circuit). */
   const boardPage = isBoardPage(visibleItem, snapshot.chapter);
   // A short phone lends the crew row to a board page (as it does to Details), so the whole puzzle fits.
-  // The window dips while it grows, like Details (the effect below), so the page never jumps.
-  const crewLent = crewRowLent(fit.short, detailsOpen, boardLent);
+  // It goes in the same render as the page change, while the page slides in: the row fades out
+  // and the board page lays out once, at its final size (no dimmed in-between frame).
+  const crewLent = crewRowLent(fit.short, detailsOpen, boardPage);
   // One gold button per screen: the chapter page has PLAY NOW and the board page is the game itself
   // (its "Tap to play" and "Next signal" are gold), so there the rail's Next is a quiet white button.
   const railQuiet = visibleItem?.kind === 'chapter_intro' || boardPage;
@@ -1137,8 +1122,11 @@ export default function LinePlayScreen() {
 
         {/* A short phone reading Details lends the crew row's space to the activity page; it comes back on Hide.
             The row fades and the pages glide (Reanimated layout animations, UI thread), so nothing pops. */}
+        {/* A short phone removes the row at once (no exit fade), so the page gets its room in the same
+            frame it changes: an exiting view keeps its space until its fade ends, which showed the board
+            squeezed for a moment. */}
         {!crewLent && <Reanimated.View entering={reducedFx ? undefined : FadeIn.duration(200)}
-          exiting={reducedFx ? undefined : FadeOut.duration(140)}
+          exiting={reducedFx || fit.short ? undefined : FadeOut.duration(140)}
           onLayout={event => setCrewRowHeight(Math.round(event.nativeEvent.layout.height))}>{groupPlay.strip}</Reanimated.View>}
 
         {/* Activity area (bottom) */}

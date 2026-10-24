@@ -70,7 +70,7 @@ test('every LinePlay page is a framed window that stays put above the rail', () 
   assert.match(screen, /coinSize=\{fit\.coinSize\}/);
   assert.match(screen, /marginTop: fit\.activityGap/);
   assert.match(screen, /compact=\{fit\.short\}/, 'a short phone gets the one-line mission header');
-  assert.match(screen, /const crewLent = crewRowLent\(fit\.short, detailsOpen, boardLent\);/);
+  assert.match(screen, /const crewLent = crewRowLent\(fit\.short, detailsOpen, boardPage\);/);
   assert.match(screen, /\{!crewLent && <Reanimated\.View/, 'a short phone reading Details (or on the board page) lends the crew row to the page');
 });
 
@@ -86,7 +86,8 @@ test('on a short phone the chapter page puts PLAY NOW on screen: one-line header
 test('PLAY NOW is always whole: the page leads with it, shrinks it to one row, or the window steps aside', () => {
   const m = layout();
   // The page's real height decides (it shrinks while Details is open), on every phone.
-  assert.equal(m.chapterPageFit(400, false), 'full', 'Pro Max, roomy page: header, then the big PLAY NOW');
+  assert.equal(m.chapterPageFit(440, false), 'full', 'a roomy page: header, then the big PLAY NOW, then the named trail');
+  assert.equal(m.chapterPageFit(364, false), 'compact', 'Pro Max: the named trail would end in the fade, so PLAY NOW leads');
   assert.equal(m.chapterPageFit(227, false), 'compact', '17 Pro: PLAY NOW first, then a one-line header');
   assert.equal(m.chapterPageFit(149, false), 'compact', '17 Pro reading Details: PLAY NOW still first and whole');
   assert.equal(m.chapterPageFit(400, true), 'compact', 'a short phone always leads with PLAY NOW');
@@ -126,7 +127,7 @@ test('the navigation board fits a short page whole, above the fade', () => {
   assert.equal(nav.boardSideFor({ width: 366, height: 700 }, 92), 286, 'a roomy page is limited by width');
   assert.equal(nav.boardSideFor({ width: 366, height: 82 }, 60), 110, 'never smaller than the floor');
   const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
-  assert.match(card, /contentStyle=\{\[styles\.card, tight && styles\.cardTight\]\}/);
+  assert.match(card, /contentStyle=\{\[styles\.card, tight && styles\.cardTight, viewport\.height <= 0 && styles\.unmeasured\]\}/);
   assert.match(card, /<KidText style=\{styles\.kicker\} numberOfLines=\{1\}>\{kicker\}<\/KidText>/);
 });
 
@@ -137,7 +138,7 @@ test('Details opens smoothly: one commit, the crew row fades and the page window
   assert.equal((card.match(/onPress=\{toggleDetails\}/g) ?? []).length, 2);
   assert.match(card, /entering=\{reducedMotion \? undefined : FadeIn\.delay\(100\)\.duration\(180\)\}/);
   const screen = read(SCREEN);
-  assert.match(screen, /exiting=\{reducedFx \? undefined : FadeOut\.duration\(140\)\}\n\s*onLayout=\{event => setCrewRowHeight\(Math\.round\(event\.nativeEvent\.layout\.height\)\)\}>\{groupPlay\.strip\}<\/Reanimated\.View>/);
+  assert.match(screen, /exiting=\{reducedFx \|\| fit\.short \? undefined : FadeOut\.duration\(140\)\}\n\s*onLayout=\{event => setCrewRowHeight\(Math\.round\(event\.nativeEvent\.layout\.height\)\)\}>\{groupPlay\.strip\}<\/Reanimated\.View>/);
   // No glide through a square clip (it cut glyphs mid-move), and no blink: the window dips to 35%
   // (never 0), takes its new size inside its own rounded frame, then rises once it has its new size.
   assert.equal((screen.match(/LinearTransition/g) ?? []).length, 2, 'only the rail glides (import + one use)');
@@ -310,7 +311,7 @@ test('an iPhone SE navigation page: the whole board fits BESIDE its header, no s
   assert.match(card, /\{!tight && <Text style=\{styles\.footer\}>/, 'a tight page ends on the board: no arrow pointing at padding');
 });
 
-test('a short phone lends the crew row to the board page, and the window dips while it grows', () => {
+test('a short phone lends the crew row to the board page as the page changes', () => {
   const m = layout();
   assert.equal(m.crewRowLent(true, false, true), true, 'SE board page');
   assert.equal(m.crewRowLent(true, true, false), true, 'SE reading Details');
@@ -319,8 +320,10 @@ test('a short phone lends the crew row to the board page, and the window dips wh
   const screen = read(SCREEN);
   assert.match(screen, /return item\.kind === 'circuit' \|\| \(!!chapter\?\.navigationPanel && item\.kind === 'trivia' && item\.id === `\$\{chapter\.id\}-trivia`\);/);
   assert.match(screen, /const boardPage = isBoardPage\(visibleItem, snapshot\.chapter\);/);
-  assert.ok(screen.indexOf('const wantBoardLent') < screen.indexOf('  if (!ride) {'), 'every hook runs before the no-ride return');
-  assert.match(screen, /if \(detailsOpen\) apply\(\); else dipPages\(apply\);/);
+  assert.doesNotMatch(screen, /boardLent/, 'the row is lent in the same render as the page change: no dimmed in-between frame');
+  const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
+  assert.match(card, /viewport\.height <= 0 && styles\.unmeasured\]\}/,
+    'the board never flashes in the wrong layout before it is measured');
 });
 
 test('the window stepped aside: the rail stays put and the crew row comes back into the free band', () => {
@@ -364,6 +367,9 @@ test('the chapter page ends on whole blocks: the crew row starts below the windo
   assert.equal(m.foldGap(150, 176, 52, 12), 12, 'the bubbles themselves are below the window');
   const chapter = read('src/screens/LinePlay/components/ChapterCard.tsx');
   assert.match(chapter, /marginTop: foldGap\(viewHeight, trailBottom, crewHeight, CREW_ROW_GAP\)/);
+  // Details open on a 17 Pro: the bubbles would peek under PLAY NOW and the header, so they start below the window too.
+  assert.match(chapter, /marginTop: foldGap\(viewHeight, leadBottom, trailHeight, compact \? TRAIL_GAP_COMPACT : TRAIL_GAP\)/);
+  assert.equal(m.foldGap(149, 130, 44, 8), 21, '17 Pro reading Details: bubbles below the window, not a sliver');
 });
 
 test('the coin has no box: the halo canvas reaches past the ring and no plank shadow sits in the ring', () => {
