@@ -380,6 +380,7 @@ export default function DefendMiniGameModal({
           {/* Ready State */}
           {gameState === 'ready' && (
             <Animated.View entering={FadeIn.duration(300)} style={styles.readyContent}>
+              <View style={styles.lightCard}>
               <Image
                 source={require('../../../assets/images/shield.png')}
                 style={styles.readyShield}
@@ -387,8 +388,8 @@ export default function DefendMiniGameModal({
               />
               <Text style={styles.readyTitle}>DEFEND YOUR TEAM!</Text>
               <Text style={styles.readySubtitle}>
-                Tap the shield as fast as you can{'\n'}
-                25 seconds. The more taps, the more points!
+                Tap the shield as fast as you can for 25 seconds.{'\n'}
+                More taps, more points!
               </Text>
               <TouchableOpacity style={styles.startButton} onPress={startGame}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name="swords" size={24} /><Text style={styles.startButtonText}>READY FOR BATTLE</Text></View>
@@ -396,6 +397,7 @@ export default function DefendMiniGameModal({
               <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
                 <Text style={styles.cancelButtonText}>Not now</Text>
               </TouchableOpacity>
+              </View>
             </Animated.View>
           )}
 
@@ -491,13 +493,14 @@ export default function DefendMiniGameModal({
           {/* Finished State */}
           {gameState === 'finished' && result && (
             <Animated.View entering={ZoomIn.duration(400)} style={styles.finishedContent}>
+              <View style={styles.lightCard}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name="trophy" size={34} /><Text style={styles.resultTitle}>DEFENDED!</Text></View>
               <Image
                 source={require('../../../assets/images/shield.png')}
                 style={styles.resultShield}
                 contentFit="contain"
               />
-              <Text style={styles.resultTier}>{getTierName(totalPoints)}</Text>
+              <Text style={styles.resultTier}>{totalPoints < 50 ? 'GOOD TRY!' : getTierName(totalPoints)}</Text>
               <Text style={styles.resultTaps}>{taps} taps</Text>
               {multiplier > 1 && (
                 <Text style={styles.resultBonus}>x{multiplier} bonus in the final 7s!</Text>
@@ -509,6 +512,7 @@ export default function DefendMiniGameModal({
               <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
                 <Text style={styles.doneButtonText}>NICE!</Text>
               </TouchableOpacity>
+              </View>
             </Animated.View>
           )}
         </ImageBackground>
@@ -534,47 +538,67 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
-    backgroundColor: 'rgba(5, 52, 110, 0.5)',
+    padding: 24,
+    backgroundColor: 'rgba(7, 104, 185, 0.18)',
+  },
+
+  // Alex-style light card for the start and result screens: cream face,
+  // thick navy outline, flat drop. Keeps Defend bright (no dark scrim).
+  lightCard: {
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    backgroundColor: '#FFF8E6',
+    borderRadius: 28,
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    paddingHorizontal: 22,
+    paddingVertical: 22,
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 0,
   },
   readyShield: {
-    width: 180,
-    height: 180,
-    marginBottom: 24,
+    width: 150,
+    height: 150,
+    marginBottom: 14,
   },
   readyTitle: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '900',
-    color: '#FFD700',
+    color: '#0768B9',
     textAlign: 'center',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 8,
-    marginBottom: 12,
+    textShadowColor: '#FFD700',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 0,
+    marginBottom: 10,
     letterSpacing: 2,
   },
+
   readySubtitle: {
     fontSize: 16,
-    color: 'white',
+    fontWeight: '600',
+    color: '#123A6B',
     textAlign: 'center',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
-    marginBottom: 32,
-    lineHeight: 24,
+    marginBottom: 24,
+    lineHeight: 23,
   },
+
   startButton: {
     backgroundColor: '#FFD700',
-    paddingHorizontal: 32,
-    paddingVertical: 16,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
     borderRadius: 30,
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
-    elevation: 10,
-    marginBottom: 16,
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 0,
+    marginBottom: 8,
   },
+
   startButtonText: {
     color: '#05346e',
     fontSize: 18,
@@ -585,31 +609,33 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   cancelButtonText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 14,
+    color: '#4B6584',
+    fontSize: 15,
+    fontWeight: '700',
   },
+
   // Countdown state
   countdownContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(5, 52, 110, 0.6)',
+    backgroundColor: 'rgba(7, 104, 185, 0.28)',
   },
   countdownNumber: {
     fontSize: 150,
     fontWeight: '900',
-    color: '#FFD700',
-    textShadowColor: '#FF6B00',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 30,
+    color: '#FFFFFF',
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 0, height: 6 },
+    textShadowRadius: 0,
   },
   countdownLabel: {
     fontSize: 28,
     fontWeight: '800',
     color: 'white',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 0,
     marginTop: 16,
     letterSpacing: 4,
   },
@@ -773,7 +799,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(5, 52, 110, 0.6)',
+    backgroundColor: 'rgba(7, 104, 185, 0.28)',
   },
   submittingShield: {
     width: 120,
@@ -783,52 +809,50 @@ const styles = StyleSheet.create({
   submittingText: {
     fontSize: 20,
     color: 'white',
-    fontWeight: '700',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
+    fontWeight: '800',
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 0,
   },
   // Finished state
   finishedContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
-    backgroundColor: 'rgba(5, 52, 110, 0.6)',
+    padding: 24,
+    backgroundColor: 'rgba(7, 104, 185, 0.18)',
   },
+
   resultTitle: {
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '900',
-    color: '#FFD700',
-    textShadowColor: '#FF6B00',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 20,
-    marginBottom: 16,
+    color: '#0768B9',
+    textShadowColor: '#FFD700',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 0,
+    marginBottom: 12,
     letterSpacing: 2,
   },
+
   resultShield: {
-    width: 140,
-    height: 140,
-    marginBottom: 16,
+    width: 120,
+    height: 120,
+    marginBottom: 10,
   },
   resultTaps: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.8)',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    color: '#123A6B',
     marginBottom: 4,
   },
+
   resultBonus: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#FF8800',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    color: '#B4400A',
     marginBottom: 8,
   },
+
   resultMultiplier: {
     fontSize: 32,
     fontWeight: '900',
@@ -838,34 +862,33 @@ const styles = StyleSheet.create({
     textShadowRadius: 6,
   },
   resultTier: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '900',
-    color: '#FF6B00',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
-    marginTop: 8,
+    color: '#B4400A',
+    marginTop: 4,
   },
+
   resultPoints: {
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: '800',
-    color: '#4ADE80',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
-    marginTop: 16,
-    marginBottom: 32,
+    color: '#15803D',
+    marginTop: 12,
+    marginBottom: 24,
   },
+
   doneButton: {
     backgroundColor: '#FFD700',
     paddingHorizontal: 50,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 30,
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 0,
   },
+
   doneButtonText: {
     color: '#05346e',
     fontSize: 24,

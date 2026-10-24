@@ -31,3 +31,14 @@ test('the Join a Team prompt is never under a tower', () => {
   assert.match(noTeam, /<View style=\{StyleSheet\.absoluteFill\} pointerEvents="box-none" collapsable=\{false\}>\s*\{pillarOrder\.map/);
   assert.match(src, /noTeamOverlay: \{[^}]*justifyContent: 'flex-end',[^}]*paddingBottom: 104,/);
 });
+
+// The start and result screens sat under a dark navy scrim. They now use a
+// light cream card with a navy outline, and every text colour clears 4.5:1 on it.
+test('Defend start and result screens are light cards, not dark scrims', () => {
+  const src = read('src/components/GymBattle/DefendMiniGameModal.tsx');
+  assert.equal((src.match(/<View style=\{styles\.lightCard\}>/g) || []).length, 2);
+  assert.doesNotMatch(src, /rgba\(5, 52, 110, 0\.[56]\)/, 'no dark navy scrim');
+  assert.match(src, /lightCard: \{[^}]*backgroundColor: '#FFF8E6'/);
+  assert.match(src, /for 25 seconds\./);
+  assert.match(src, /totalPoints < 50 \? 'GOOD TRY!'/);
+});
