@@ -404,7 +404,7 @@ export default function DefendMiniGameModal({
           {gameState === 'countdown' && (
             <View style={styles.countdownContent}>
               <Animated.Text style={[styles.countdownNumber, countdownAnimStyle]}>
-                {countdown}
+                {countdown > 0 ? countdown : 'GO!'}
               </Animated.Text>
               <Text style={styles.countdownLabel}>GET READY!</Text>
             </View>

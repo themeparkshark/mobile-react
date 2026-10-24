@@ -42,3 +42,7 @@ test('Defend start and result screens are light cards, not dark scrims', () => {
   assert.match(src, /for 25\{'\\u00A0'\}seconds\. More taps, more points!/);
   assert.match(src, /totalPoints < 50 \? 'GOOD TRY!'/);
 });
+
+test('the Defend countdown ends on GO!, never a 0', () => {
+  assert.match(read('src/components/GymBattle/DefendMiniGameModal.tsx'), /\{countdown > 0 \? countdown : 'GO!'\}/);
+});
