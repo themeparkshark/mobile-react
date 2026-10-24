@@ -20,6 +20,7 @@ import GameRichText from './GameRichText';
 import GameText from './GameText';
 import SharkLoader from './SharkLoader';
 import WalletChange from './WalletChange';
+import { useToast } from '../components/Toast';
 import { GENERATED_ICON_NAMES, ORIGINAL_ICON_NAMES, type GameIconName } from './iconNames';
 import { TEXT_PRESET_NAMES } from './TextPresets';
 import { BRAND, OUTLINE, RADIUS, SPACE } from './tokens';
@@ -97,6 +98,7 @@ export default function UiKitGym({ route }: { route?: { params?: { section?: Sec
   const [loaderState, setLoaderState] = useState<'loading' | 'empty' | 'error'>('loading');
   const [busy, setBusy] = useState(false);
   const [wallet, setWallet] = useState(350);
+  const { showToast } = useToast();
 
   const pageColor = section === 'dialogs' && backdrop === 'blue' ? BRAND.blueBright : BRAND.cream;
 
@@ -197,6 +199,11 @@ export default function UiKitGym({ route }: { route?: { params?: { section?: Sec
             <View style={{ flex: 1 }}><GameButton label="+480" size="compact" onPress={() => setWallet(v => v + 480)} /></View>
             <View style={{ flex: 1 }}><GameButton label="-140" size="compact" variant="danger" onPress={() => setWallet(v => Math.max(0, v - 140))} /></View>
           </View>
+          {/* A reward toast and the gain it pays: the toast's coins fly into this chip and its number ticks under them. */}
+          <View style={{ marginTop: 6 }}><GameButton label="Toast +25" size="compact" variant="secondary" onPress={() => {
+            showToast?.({ type: 'reward', message: '+25 coins for your first ride today', duration: 3200 });
+            setWallet(v => v + 25);
+          }} /></View>
         </Panel>
         <Panel title="Text presets">
           {TEXT_PRESET_NAMES.map(name => <GameText key={name} preset={name}>{name} Park Coins 42</GameText>)}
