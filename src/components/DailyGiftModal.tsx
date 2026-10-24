@@ -357,6 +357,16 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     opacity: prize.value, transform: [{ translateY: (1 - prize.value) * -36 }, { scale: 0.5 + prize.value * 0.5 }],
   }));
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: cardShake.value }] }));
+  // Light pours out of the open chest with the lid pop (bright over the pile on a non-coin day).
+  const mouthStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, prize.value * 1.4) * (kind === 'coins' ? 0.55 : 0.9),
+    transform: [{ scaleY: 0.6 + Math.min(1.1, prize.value) * 0.4 }],
+  }));
+  // The prize climbs out of the chest mouth with a springy overshoot, then rests just above it.
+  const riseStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, prize.value * 2),
+    transform: [{ translateY: (1 - prize.value) * 40 }, { scale: 0.4 + prize.value * 0.6 }],
+  }));
   // The Ticket falls from above tilted, squashes on impact, then settles.
   const ticketStyle = useAnimatedStyle(() => {
     const p = punch.value;
@@ -375,8 +385,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   }));
 
   const chestSize = Math.min(width * 0.52, 230);
-  // Only a coin day opens onto the pile of coins; other prizes rise from the chest.
-  const openArt = kind === 'coins' ? CHEST_OPEN : CHEST_CLOSED;
+  // A coin day opens onto the pile of coins. Any other day never shows coins it did not pay: the lid pops,
+  // light bursts out from under it and the prize itself climbs out and stays above the chest.
+  const coinDay = kind === 'coins';
 
   return (
     <Modal isVisible={visible} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
@@ -417,8 +428,27 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               <GoldBurst size={chestSize * CHEST_GOLD_SCALE} amount={gold} bloom={goldBloom} reduced={reducedMotion} />
             </View>
             <Animated.View style={chestStyle}>
-              <Image source={phase === 'open' ? openArt : CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
+              {phase === 'open' && !coinDay && (
+                // Light bursting out from under the popped lid, behind the chest (no coins it did not pay).
+                <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 1.1, height: chestSize * 0.7,
+                  left: -chestSize * 0.05, top: -chestSize * 0.22 }, mouthStyle]}>
+                  <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff3b0" />
+                </Animated.View>
+              )}
+              <Image source={phase === 'open' && coinDay ? CHEST_OPEN : CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
+              {phase === 'open' && coinDay && (
+                <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 0.8, height: chestSize * 0.42,
+                  left: chestSize * 0.12, top: chestSize * 0.1 }, mouthStyle]}>
+                  <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff3b0" />
+                </Animated.View>
+              )}
             </Animated.View>
+            {phase === 'open' && !coinDay && !ticketDay && (
+              // The prize rises out of the open chest and stays there, so the settled card shows what came out.
+              <Animated.View pointerEvents="none" style={[styles.risePrize, { top: chestSize * 0.02 }, riseStyle]}>
+                <GameIcon name={PRIZE[kind].icon} size={chestSize * 0.4} />
+              </Animated.View>
+            )}
             {phase === 'open' && ticketDay && (
               <Animated.View style={[styles.ticketPunch, ticketStyle]} pointerEvents="none">
                 <GameIcon name="ticket" size={chestSize * 0.62} />
@@ -612,6 +642,8 @@ const styles = StyleSheet.create({
   streakText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold },
   stage: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginTop: 6 },
   goldWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  mouthGlow: { position: 'absolute' },
+  risePrize: { position: 'absolute', alignSelf: 'center', alignItems: 'center' },
   walletCoin: { position: 'absolute', left: 0, top: 0 },
   walletBump: { position: 'absolute', width: 80, height: 80 },
   walletChip: { position: 'absolute', width: 86, height: 30, borderRadius: 15, borderWidth: 2, borderColor: BRAND.white,

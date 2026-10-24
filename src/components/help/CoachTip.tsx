@@ -39,7 +39,8 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.body}>{body}</Text>
         </View>
-        <Text style={styles.ok}>OK</Text>
+        {/* The whole tip is the button; OK looks like one (a big gold pill), so nobody hunts for a tiny link. */}
+        <View style={styles.okPill}><Text style={styles.ok}>OK</Text></View>
       </Pressable>
     </Animated.View>
   );
@@ -55,5 +56,7 @@ const styles = StyleSheet.create({
   copy: { flex: 1 },
   title: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, marginBottom: 2 },
   body: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 19, color: BRAND.navySoft },
-  ok: { fontFamily: 'Shark', fontSize: 15, color: BRAND.blue, marginLeft: 8 },
+  okPill: { marginLeft: 8, minWidth: 52, minHeight: 40, paddingHorizontal: 12, borderRadius: 999, backgroundColor: BRAND.gold,
+    borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  ok: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, paddingTop: 2 },
 });
