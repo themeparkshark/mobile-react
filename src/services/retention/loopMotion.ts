@@ -203,6 +203,71 @@ export const FREEZE_FX = {
   fallMs: 600,
 } as const;
 
+/**
+ * Next Up: the bar toward the next level chest. Close (80 percent) shines and
+ * peeks; very close (90 percent) wiggles; a gain surges; reaching it pops.
+ */
+export const NEXT_UP_FX = {
+  shineEveryMs: 5000,
+  wiggleEveryMs: 3000,
+  reachPop: 1.4,
+  surgeCue: 'fx.coin',
+  reachCue: 'fx.reveal',
+} as const;
+
+/** How close the next chest is: far, close (80 percent), very close (90 percent). */
+export function nextUpTease(pct: number): 'far' | 'close' | 'veryClose' {
+  const p = Number(pct) || 0;
+  if (p >= 0.9) return 'veryClose';
+  if (p >= 0.8) return 'close';
+  return 'far';
+}
+
+/** Welcome back after time away (ms): splash at 0, Finn at 200, cards from 500, 90 ms apart. */
+export const WELCOME_FX = {
+  minDaysAway: 3,
+  finnAt: 200,
+  cardsAt: 500,
+  cardStep: 90,
+  cue: 'fx.reward',
+} as const;
+
+export type WelcomeCard =
+  | { readonly kind: 'goals'; readonly text: string }
+  | { readonly kind: 'chest'; readonly text: string }
+  | { readonly kind: 'levelChest'; readonly text: string }
+  | { readonly kind: 'saved'; readonly text: string }
+  | { readonly kind: 'flame'; readonly n: number; readonly text: string }
+  | { readonly kind: 'ember'; readonly text: string };
+
+/** Whole local days between two moments (calendar days on this phone), never negative. */
+export function daysAway(lastOpenMs: number | null, nowMs: number): number {
+  if (!lastOpenMs || !Number.isFinite(lastOpenMs) || lastOpenMs > nowMs) return 0;
+  const a = new Date(lastOpenMs); const b = new Date(nowMs);
+  const da = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  const db = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((db - da) / 86400000);
+}
+
+/**
+ * The "new since you left" cards, from real data only, at most three: today's
+ * Daily 3, the flame told kindly (kept by a freeze, still going, or ready to
+ * light again), and a chest that is waiting. No missed-day counts, no loss words.
+ */
+export function welcomeCards(s: Pick<DailyThreeState, 'goals' | 'streak'> | null | undefined, extra: { readonly levelChest?: number | null } = {}): WelcomeCard[] {
+  const out: WelcomeCard[] = [];
+  if (!s) return out;
+  const open = s.goals.filter(g => !g.done).length;
+  if (open > 0) out.push({ kind: 'goals', text: open === 3 ? '3 new goals for today!' : `${open} goals left today!` });
+  const days = Math.max(0, Number(s.streak?.days) || 0);
+  if ((s.streak?.freeze_saved ?? 0) > 0 && days > 0) out.push({ kind: 'saved', text: `A freeze kept your ${days}-day flame!` });
+  else if (days > 0) out.push({ kind: 'flame', n: days, text: `Your flame is at ${days}. Keep it growing!` });
+  else out.push({ kind: 'ember', text: 'Light a new flame today!' });
+  if (extra.levelChest) out.push({ kind: 'levelChest', text: `Your Level ${extra.levelChest} chest is waiting!` });
+  else if (s.goals.some(g => g.kind === 'chest' && !g.done)) out.push({ kind: 'chest', text: 'Your daily chest is waiting!' });
+  return out.slice(0, 3);
+}
+
 /** The shared small-moment tokens (src/ui/motion.ts), re-exported so loop code has one import. */
 export { COUNT, HUD_BUMP, PRESS, STAGGER } from '../../ui/motion';
 

@@ -215,3 +215,43 @@ test('loop copy stays kind: no loss words in the new moments', () => {
     for (const t of strings) assert.ok(L.kidSafeCopy(t), `${file}: "${t}"`);
   }
 });
+
+test('welcome back: only after 3+ days, real cards only, kind words, at most three', () => {
+  const day = 86400000;
+  const now = new Date(2026, 9, 24, 15, 0).getTime();
+  assert.equal(L.daysAway(null, now), 0);
+  assert.equal(L.daysAway(now - day, now), 1);
+  assert.equal(L.daysAway(now - 5 * day, now), 5);
+  assert.equal(L.daysAway(now + day, now), 0);
+  assert.ok(L.WELCOME_FX.minDaysAway === 3);
+  const goals = [{ key: 'chest', kind: 'chest', done: false }, { key: 'catch', kind: 'catch', done: false }, { key: 'bonus', kind: 'look', done: false }];
+  const ember = plain(L.welcomeCards({ goals, streak: { days: 0 } }));
+  assert.deepEqual(ember.map(c => c.kind), ['goals', 'ember', 'chest']);
+  const saved = plain(L.welcomeCards({ goals, streak: { days: 9, freeze_saved: 2 } }, { levelChest: 4 }));
+  assert.deepEqual(saved.map(c => c.kind), ['goals', 'saved', 'levelChest']);
+  for (const c of [...ember, ...saved]) assert.ok(L.kidSafeCopy(c.text), c.text);
+  for (const c of [...ember, ...saved]) assert.doesNotMatch(c.text, /miss|away|days ago/i);
+  assert.equal(L.welcomeCards(null).length, 0);
+});
+
+test('next up: the chest shines when close and wiggles when very close', () => {
+  assert.equal(L.nextUpTease(0.5), 'far');
+  assert.equal(L.nextUpTease(0.8), 'close');
+  assert.equal(L.nextUpTease(0.95), 'veryClose');
+  assert.equal(L.NEXT_UP_FX.shineEveryMs, 5000);
+  assert.equal(L.NEXT_UP_FX.wiggleEveryMs, 3000);
+  const rail = read('src/components/nextUp/NextUpRail.tsx');
+  assert.match(rail, /useAmbientLoop\(/);
+  assert.match(rail, /experienceProgress\(player\)/);
+  assert.doesNotMatch(rail, /useNativeDriver:\s*false/);
+});
+
+test('freezes: earned shields fly home, a saved flame cracks its ice, an ended flame becomes an ember (kind, no store)', () => {
+  const src = read('src/components/retention/FreezeMoments.tsx');
+  assert.match(src, /useAmbientLoop\(/);
+  assert.match(src, /momentParticles\(FREEZE_FX\.frost/);
+  assert.doesNotMatch(src, /navigate|Store|price/);
+  assert.equal(L.FREEZE_FX.glintEveryMs, 6000);
+  assert.equal(L.FREEZE_FX.fallMs, 600);
+  for (const t of ['Your freeze saved your flame!', 'Start a new flame today!']) assert.ok(L.kidSafeCopy(t));
+});

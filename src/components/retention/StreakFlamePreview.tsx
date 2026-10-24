@@ -11,7 +11,7 @@ import TomorrowCard from './TomorrowCard';
 import RewardReveal from './RewardReveal';
 import FlameUpRow from './FlameUpRow';
 import { EmberCard, FreezeSavedCard, FreezeSlots } from './FreezeMoments';
-import { ICON_SOURCES } from '../../ui';
+import { GameIcon, ICON_SOURCES } from '../../ui';
 import type { PaidRewards } from '../../api/endpoints/retention';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
@@ -104,7 +104,8 @@ export default function StreakFlamePreview() {
               <RewardReveal key={stage.n} reducedMotion={false} rewards={stage.rewards} opening={stage.opening} onOpen={openChest} onDone={() => setStage(null)}
                 subtitle={stage.src === 'daily' ? 'All three goals done!' : 'You reached Level 4!'} dropIn={stage.src === 'level'}
                 autoOpen={stage.src === 'daily'} fullSet={stage.src === 'daily'}
-                expectRows={stage.src === 'daily' ? { small: 4, big: 0 } : undefined}
+                expectRows={stage.src === 'daily' ? { small: 4, big: 0 } : { small: 3, big: 1 }}
+                preview={<GymPreview level={stage.src === 'level'} />}
                 closedArt={stage.src === 'daily' ? ICON_SOURCES.chest : LEVEL_CHEST} openArt={stage.src === 'daily' ? ICON_SOURCES.chestOpen : LEVEL_CHEST_OPEN}
                 footer={stage.src === 'daily' ? <FlameUpRow from={8} to={9} grow reducedMotion={false} /> : undefined} />
             ) : stage.k === 'saved' ? <FreezeSavedCard streak={stage.streak} days={1} reducedMotion={false} onDone={() => setStage(null)} />
@@ -112,6 +113,21 @@ export default function StreakFlamePreview() {
             : <TomorrowCard prize={tomorrowPrize(FIXTURE(stage.days, stage.days === 6))} reducedMotion={false} onDone={() => setStage(null)} />}
         </View>
       )}
+    </View>
+  );
+}
+
+/** The gym's "what is inside" chips (fixture amounts). */
+function GymPreview({ level }: { readonly level: boolean }) {
+  const chips: [ 'coins' | 'ticket' | 'energy' | 'xp', number][] = level ? [['coins', 120], ['ticket', 2], ['energy', 30]]
+    : [['coins', 15], ['ticket', 1], ['energy', 20], ['xp', 35]];
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+      {chips.map(([icon, n]) => (
+        <View key={icon} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5 }}>
+          <GameIcon name={icon} size={30} /><Text style={{ fontFamily: 'Shark', fontSize: 20, color: BRAND.white }}>{n}</Text>
+        </View>
+      ))}
     </View>
   );
 }

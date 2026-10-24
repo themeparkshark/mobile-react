@@ -48,7 +48,7 @@ export function FreezeSlots({ freezes, cap, arrive = 0, from, reducedMotion, onE
           : (
             <Pressable key={i} onPress={emptyPressable ? onEmptyPress : undefined} disabled={!emptyPressable} hitSlop={4}
               accessibilityRole="button" accessibilityLabel="Empty freeze slot"
-              style={[styles.slot, { width: size, height: size }, emptyPressable && styles.slotBuy]}>
+              style={[styles.slot, { width: size, height: size }, emptyPressable && styles.slotOpen]}>
               {emptyPressable && <Text style={styles.plus}>+</Text>}
             </Pressable>
           );
@@ -134,7 +134,7 @@ function Puff({ p, progress }: { readonly p: { dx: number; dy: number; s: number
 /**
  * A freeze kept the flame going: the flame sits inside a thin ice shell, a crack
  * draws across it, the two halves fall away gently (600 ms) and the flame
- * breathes out warm again. Finn gives a happy fin. No timers, no store.
+ * breathes out warm again. Finn gives a happy fin. No timers, no shop.
  */
 export function FreezeSavedCard({ streak, days, reducedMotion, onDone }: {
   readonly streak: number;
@@ -272,7 +272,7 @@ export function EmberCard({ was, reducedMotion, onDone }: {
 const styles = StyleSheet.create({
   slots: { gap: 4, alignItems: 'center' },
   slot: { borderRadius: 10, borderWidth: 2.5, borderStyle: 'dashed', borderColor: '#9fd2f5', alignItems: 'center', justifyContent: 'center' },
-  slotBuy: { borderColor: BRAND.gold, backgroundColor: 'rgba(255, 207, 59, 0.15)' },
+  slotOpen: { borderColor: BRAND.gold, backgroundColor: 'rgba(255, 207, 59, 0.15)' },
   plus: { fontFamily: 'Shark', fontSize: 22, color: BRAND.gold, marginTop: -2 },
   puffOrigin: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },
   card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,

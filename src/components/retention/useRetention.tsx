@@ -18,7 +18,9 @@ import * as RootNavigation from '../../RootNavigation';
 import { enablePush } from '../../services/push';
 import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
-import { FULL_SET, dailyChain, flameMomentFor, mayAskAfterChain, tomorrowPrize, type FlameMoment } from '../../services/retention/loopMotion';
+import {
+  FULL_SET, WELCOME_FX, dailyChain, daysAway, flameMomentFor, mayAskAfterChain, tomorrowPrize, welcomeCards, type FlameMoment, type WelcomeCard,
+} from '../../services/retention/loopMotion';
 import { mayAskForPush, notePushAsked } from '../../services/retention/pushAsk';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../../ui';
 import { useModalLayer } from '../../ui/modalLayers';
@@ -29,6 +31,7 @@ import TomorrowCard from './TomorrowCard';
 import Daily3Sheet, { type GoalTap } from './Daily3Sheet';
 import FlameUpRow from './FlameUpRow';
 import { EmberCard, FreezeSavedCard } from './FreezeMoments';
+import WelcomeBack from './WelcomeBack';
 import RewardReveal from './RewardReveal';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
@@ -51,6 +54,8 @@ const FLAME_SEEN_KEY = 'tps.retention.flameSeen.v1';
 const TOMORROW_SEEN_KEY = 'tps.retention.tomorrowSeen.v1';
 /** The modal steps aside while the chest's prizes fly into the HUD in plain sight, then the next card (if any). */
 const FLY_GAP_MS = 950;
+/** When this phone last opened the map for this player (for the welcome back). */
+const LAST_OPEN_KEY = 'tps.retention.lastOpen.v1';
 
 type View_ =
   | { k: 'sheet'; all?: boolean; freezeArrive?: number }
@@ -64,6 +69,8 @@ type View_ =
   | { k: 'freezeSaved'; days: number; streak: number }
   /** The streak ended: the flame settles into a warm ember, once. */
   | { k: 'ember'; was: number }
+  /** Back after 3 or more days: Finn and what is new (real data only), once. */
+  | { k: 'welcome'; cards: readonly WelcomeCard[] }
   | { k: 'push' };
 
 export interface RetentionOptions {
@@ -197,8 +204,35 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   // A level-up chest presents itself as soon as the map is free; then a freeze that saved the streak says so once.
   const pendingChest = flags?.levelChests ? nextLevelChest(chests) : null;
   const freezeSaved = daily?.streak.freeze_saved ?? 0;
+  // The welcome back is checked once per app open (and again after the app comes back to the front).
+  const welcomeChecked = useRef(false);
+  const [welcomeDone, setWelcomeDone] = useState(false);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', st => { if (st === 'active') { welcomeChecked.current = false; setWelcomeDone(false); } });
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (!daily || !o.enabled || welcomeChecked.current || !player?.id) return;
+    welcomeChecked.current = true;
+    const key = `${LAST_OPEN_KEY}:${player.id}`;
+    void AsyncStorage.getItem(key).then(v => {
+      const away = daysAway(v ? Number(v) : null, Date.now());
+      void AsyncStorage.setItem(key, String(Date.now())).catch(() => undefined);
+      if (!mounted.current) return;
+      if (away >= WELCOME_FX.minDaysAway) welcomeCards_.current = welcomeCards(daily, { levelChest: pendingChest?.level ?? null });
+      setWelcomeDone(true);
+    }).catch(() => setWelcomeDone(true));
+  }, [daily, o.enabled, player?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const welcomeCards_ = useRef<WelcomeCard[] | null>(null);
   useEffect(() => {
     if (view || !o.screenFree || !o.mapFocused || !o.enabled) return;
+    // Back after a few days: the welcome goes first (it tells the flame and the chest kindly), once.
+    if (welcomeDone && welcomeCards_.current?.length) {
+      const cards = welcomeCards_.current;
+      const timer = setTimeout(() => { welcomeCards_.current = null; setView(v => v ?? { k: 'welcome', cards }); }, 500);
+      return () => clearTimeout(timer);
+    }
+    if (!welcomeDone) return;
     if (pendingChest) {
       const timer = setTimeout(() => {
         setView(v => v ?? { k: 'reveal', src: 'level', level: pendingChest.level, rewards: null, opening: false });
@@ -222,7 +256,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       }, 700);
       return () => { live = false; clearTimeout(timer); };
     }
-  }, [pendingChest?.level, freezeSaved, daily?.streak.days, view, o.screenFree, o.mapFocused, o.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pendingChest?.level, freezeSaved, daily?.streak.days, view, o.screenFree, o.mapFocused, o.enabled, welcomeDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openSheet = () => {
     setView({ k: 'sheet' });
@@ -421,11 +455,14 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     if (!__DEV__) return;
     (globalThis as Record<string, unknown>).__tpsLoops = {
       refresh: () => { lastRead.current = 0; void refresh(true); },
+      refreshPlayer: () => { void refreshPlayer?.(); },
       land: (index: number, done: number) => setLanding(l => ({ index, done, key: (l?.key ?? 0) + 1 })),
       flame: (days: number, from?: number) => setView({ k: 'flame', moment: flameMomentFor(from ?? days - 1, days, true) as Exclude<FlameMoment, { kind: 'none' }> }),
       tomorrow: () => setView({ k: 'tomorrow' }),
       saved: (streak: number, days = 1) => setView({ k: 'freezeSaved', streak, days }),
       ember: (was: number) => setView({ k: 'ember', was }),
+      welcome: () => { if (daily) setView({ k: 'welcome', cards: welcomeCards(daily, { levelChest: pendingChest?.level ?? null }) }); },
+      setLastOpen: (daysAgo: number) => { if (player?.id) void AsyncStorage.setItem(`${LAST_OPEN_KEY}:${player.id}`, String(Date.now() - daysAgo * 86400000)); },
       freezeIn: (n = 1) => setView({ k: 'sheet', freezeArrive: n }),
       sheet: (all?: boolean) => setView({ k: 'sheet', all: !!all }),
       forgetFlame: () => { void AsyncStorage.removeItem(seenKey); },
@@ -441,7 +478,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     if (view?.k === 'sheet' && view.all) return;
     if (view?.k === 'sheet') setCelebrate([]);
     if (view?.k === 'push') void notePushAsked();
-    if (view?.k === 'freezeSaved') void markFreezeSeen().then(r => applyDaily(r.state)).catch(() => undefined);
+    if (view?.k === 'freezeSaved' || (view?.k === 'welcome' && view.cards.some(c => c.kind === 'saved'))) {
+      void markFreezeSeen().then(r => applyDaily(r.state)).catch(() => undefined);
+    }
+    // The welcome already told an ended flame kindly: no second ember card.
+    if (view?.k === 'welcome' && view.cards.some(c => c.kind === 'ember')) writeSeen(0);
     setView(null);
   };
 
@@ -500,6 +541,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     );
   } else if (view?.k === 'reveal') {
     const r = view;
+    const levelPreview = r.src === 'level' ? chests.find(c => c.level === r.level)?.preview ?? null : null;
     title = r.src === 'level' ? `Level ${r.level}!` : r.src === 'weekly' ? 'Weekly Box' : r.auto ? 'All 3 done!' : 'Daily 3 done!';
     const footer = r.src === 'level' ? nextLevel(r.level ?? 1)
       : r.src === 'weekly' ? (
@@ -524,8 +566,9 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
           : r.src === 'weekly' ? 'A whole week of flames. Tap the box!' : r.auto ? 'All three goals done!' : 'All three goals done. Tap your chest!'}
         closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? WEEKLY : ICON_SOURCES.chest}
         openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? WEEKLY_OPEN : ICON_SOURCES.chestOpen}
-        autoOpen={!!r.auto} fullSet={!!r.auto} expectRows={r.src === 'daily' && daily ? dailyRowCount(daily) : undefined}
-        preview={r.src === 'daily' && daily ? <DailyPreview state={daily} /> : undefined}
+        autoOpen={!!r.auto} fullSet={!!r.auto}
+        expectRows={r.src === 'daily' && daily ? dailyRowCount(daily) : levelPreview ? levelRowCount(levelPreview) : undefined}
+        preview={r.src === 'daily' && daily ? <DailyPreview state={daily} /> : levelPreview ? <LevelPreview p={levelPreview} /> : undefined}
         onWear={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('Inventory'); }}
         onPins={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('PinCollections'); }}
         onOpen={() => { void openReveal(); }} onDone={() => finishReveal(r.rewards, r.src, r.state ?? null, r.moment)} />
@@ -557,6 +600,9 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   } else if (view?.k === 'freezeSaved') {
     title = 'Saved!';
     content = <FreezeSavedCard streak={view.streak} days={view.days} reducedMotion={reducedMotion} onDone={close} />;
+  } else if (view?.k === 'welcome') {
+    title = 'Welcome back!';
+    content = <WelcomeBack cards={view.cards} reducedMotion={reducedMotion} onDone={close} />;
   } else if (view?.k === 'ember') {
     title = 'New day!';
     content = <EmberCard was={view.was} reducedMotion={reducedMotion} onDone={close} />;
@@ -601,6 +647,28 @@ function dailyRowCount(d: DailyThreeState): { small: number; big: number } {
   const r = d.reward;
   const m = d.claimable_milestone;
   return { small: [r.coins, r.tickets, r.energy, r.xp].filter(n => n > 0).length, big: (m?.gear ? 1 : 0) + (m && m.mystery_boxes > 0 ? 1 : 0) };
+}
+
+type LevelPreviewData = LevelChest['preview'];
+function levelRowCount(p: LevelPreviewData): { small: number; big: number } {
+  return { small: [p.coins, p.tickets, p.energy, p.bonus_coins ?? 0].filter(n => n > 0).length, big: (p.item ? 1 : 0) + (p.mystery_boxes > 0 ? 1 : 0) };
+}
+
+/** What is inside a level chest (exact amounts from the server, gear shown as a present): zero reading. */
+function LevelPreview({ p }: { readonly p: LevelPreviewData }) {
+  const chips = ([['coins', p.coins], ['ticket', p.tickets], ['energy', p.energy]] as const).filter(([, n]) => n > 0);
+  return (
+    <>
+      <View style={styles.previewRow}>
+        {chips.map(([icon, n]) => (
+          <View key={icon} style={styles.previewChip}><GameIcon name={icon} size={30} /><Text style={styles.previewText}>{n}</Text></View>
+        ))}
+      </View>
+      {p.item && (
+        <View style={[styles.previewChip, styles.previewGear]}><GameIcon name="gift" size={30} /><Text style={styles.previewGearText}>NEW GEAR</Text></View>
+      )}
+    </>
+  );
 }
 
 /** What is inside the Daily 3 chest (the server's preview), shown while it gathers: icons and numbers, zero reading. */

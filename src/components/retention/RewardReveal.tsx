@@ -126,8 +126,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     shake.value = withSequence(...LEVEL_CHEST.rattles.map((r, i) => withDelay(i === 0 ? L : r.at - LEVEL_CHEST.rattles[i - 1].at - LEVEL_CHEST.rattleMs,
       withSequence(withTiming(r.deg, { duration: 60, easing: EASE.out }), withTiming(-r.deg, { duration: 80 }),
         withTiming(r.deg * 0.5, { duration: 50 }), withTiming(0, { duration: 50 })))));
-    leak.value = withDelay(L, withTiming(0.8, { duration: LEVEL_CHEST.rattles[2].at + LEVEL_CHEST.rattleMs, easing: EASE.charge }));
-    gold.value = withDelay(L, withTiming(0.3, { duration: LEVEL_CHEST.rattles[2].at + LEVEL_CHEST.rattleMs, easing: EASE.charge }));
+    leak.value = withDelay(L, withTiming(1, { duration: LEVEL_CHEST.rattles[2].at + LEVEL_CHEST.rattleMs, easing: EASE.charge }));
+    gold.value = withDelay(L, withTiming(0.45, { duration: LEVEL_CHEST.rattles[2].at + LEVEL_CHEST.rattleMs, easing: EASE.charge }));
     LEVEL_CHEST.rattles.forEach((r, i) => later(() => { queueHaptic(rattleHaptics[i]); playSfx('ui.button', 0.5 + i * 0.2); }, L + r.at));
     later(() => setShowTap(true), L + LEVEL_CHEST.handAt);
     tapRing.value = withDelay(L + LEVEL_CHEST.handAt, withRepeat(withTiming(1, { duration: 900, easing: EASE.out }), 3, false));
@@ -266,8 +266,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
         <Animated.View style={chestStyle}>
           <Image source={swapped ? openArt : closedArt} style={{ width: size, height: size }} contentFit="contain" transition={0} />
           {/* Light leaking from the lid seam while a level chest rattles. */}
-          <Animated.View pointerEvents="none" style={[styles.leak, { width: size * 0.8, height: size * 0.22, top: size * 0.33, left: size * 0.1 }, leakStyle]}>
-            <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor="#FFE58A" transition={0} />
+          <Animated.View pointerEvents="none" style={[styles.leak, { width: size * 1.05, height: size * 0.36, top: size * 0.24, left: -size * 0.025 }, leakStyle]}>
+            <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor="#FFF4B8" transition={0} />
           </Animated.View>
         </Animated.View>
         <View style={styles.center} pointerEvents="none">
