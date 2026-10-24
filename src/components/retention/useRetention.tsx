@@ -135,6 +135,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   useEffect(() => () => { if (chainTimer.current) clearTimeout(chainTimer.current); }, []);
   const mounted = useRef(true);
   const viewRef = useRef<View_ | null>(null);
+  /** A Daily 3 claim whose answer was lost (slow connection): the claim date to open as soon as a read shows it. */
+  const pendingDaily = useRef<string | null>(null);
+  const readSeenRef = useRef<(() => Promise<number | null>) | null>(null);
+  const writeSeenRef = useRef<((n: number) => void) | null>(null);
   /** A welcome back is waiting for the first fresh Daily 3 read after the app opened. */
   const welcomeWaiting = useRef(false);
   const refreshRef = useRef<((force?: boolean) => Promise<void>) | null>(null);
@@ -191,6 +195,18 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     prevGoals.current = next.goals;
     // Identical answers never re-render the map.
     setDaily(prev => (prev && sameJson(prev, next) ? prev : next));
+    // A Daily 3 chest whose claim answer was lost opens now, with exactly what the server paid.
+    const lost = pendingDaily.current;
+    if (lost && next.claimed_rewards && next.claimed_rewards.date === lost && !viewRef.current) {
+      pendingDaily.current = null;
+      const paid = next.claimed_rewards;
+      void readSeenRef.current?.().then(seen => {
+        const moment = flameMomentFor(seen, next.streak.days, next.streak.counted_today);
+        if (next.streak.counted_today) writeSeenRef.current?.(next.streak.days);
+        flameRef.current = moment.kind === 'milestone' ? moment : null;
+        if (!viewRef.current) setView({ k: 'reveal', src: 'daily', claimDate: lost, rewards: paid, opening: false, state: next, moment });
+      });
+    }
     // A welcome back waits for a fresh read after the app opens (never yesterday's goals or flame).
     if (welcomeWaiting.current) { welcomeWaiting.current = false; setFreshDaily(n => n + 1); }
     if (fresh.length) {
@@ -377,6 +393,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     try { const v = await AsyncStorage.getItem(seenKey); return v === null ? null : Number(v) || 0; } catch { return null; }
   };
   const writeSeen = (n: number) => { void AsyncStorage.setItem(seenKey, String(n)).catch(() => undefined); };
+  readSeenRef.current = readSeen;
+  writeSeenRef.current = writeSeen;
 
   const tomorrowKey = `${TOMORROW_SEEN_KEY}:${player?.id ?? 0}`;
   const tomorrowSeen = useRef<boolean | null>(null);
@@ -524,6 +542,13 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         return;
       }
       setView(null);
+      if (current.src === 'daily' && current.claimDate) {
+        // A slow connection: the chest opens by itself as soon as the next read shows what was paid (never a lost show).
+        pendingDaily.current = current.claimDate;
+        void refresh(true);
+        gameAlert('Almost there!', 'Your chest is safe. It opens as soon as your phone catches up.');
+        return;
+      }
       void refresh(true);
       gameAlert('Could not open it yet', 'Your reward is safe. Check your internet and try again.');
     } finally {
