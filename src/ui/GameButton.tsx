@@ -17,7 +17,7 @@
  * motion dims on press instead of moving.
  */
 import { useEffect, useState } from 'react';
-import { Image, ImageBackground, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Dimensions, Image, ImageBackground, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -105,9 +105,12 @@ export default function GameButton({
 }: GameButtonProps) {
   const reducedMotion = useUiReducedMotion();
   const pulse = useSharedValue(1);
-  const [labelAreaHeight, setLabelAreaHeight] = useState(0);
   const inactive = disabled || loading;
   const look = buttonLook(variant, size);
+  // A first-frame estimate of the label area (the button's likely width over the art's label ratio), so
+  // the label is on the very first frame a dialog pops in; onLayout then refines it.
+  const [labelAreaHeight, setLabelAreaHeight] = useState(() =>
+    look.art ? Math.min(look.maxWidth, Dimensions.get('window').width * 0.7) / BUTTON.labelAspectRatio : 0);
   // No squash on a button with nothing to do (busy or display-only).
   const press = usePressScale({ disabled: inactive || !onPress, haptic: haptics ? 'tapLight' : false });
 

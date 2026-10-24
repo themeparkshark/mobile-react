@@ -85,14 +85,22 @@ function Bubble({ rise, x, size, delay }: { rise: SharedValue<number>; x: number
  * <Breathe>: the one way forward on a quiet screen breathes 1.0 to 1.03 every AMBIENT.breathMs.
  * Ambient budget only (useAmbientLoop and screen focus); still with Reduce Motion.
  */
-export function Breathe({ children }: { readonly children: ReactNode }) {
+export function Breathe({ children, amount = 0.03, periodMs = AMBIENT.breathMs, active = true }: {
+  readonly children: ReactNode;
+  /** How much it grows at the top of a breath (0.03 = 3 percent). */
+  readonly amount?: number;
+  /** One full breath, in and out (ms). */
+  readonly periodMs?: number;
+  /** False holds it still (for example while the thing it opens is open). */
+  readonly active?: boolean;
+}) {
   const reduced = useUiReducedMotion();
   const focused = useScreenFocused();
   const b = useSharedValue(0);
   useAmbientLoop(() => {
     b.value = 0;
-    b.value = withRepeat(withTiming(1, { duration: AMBIENT.breathMs / 2, easing: Easing.inOut(Easing.sin) }), -1, true);
-  }, () => { cancelAnimation(b); b.value = withTiming(0, { duration: 300 }); }, focused && !reduced);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.03 * b.value }] }));
+    b.value = withRepeat(withTiming(1, { duration: periodMs / 2, easing: Easing.inOut(Easing.sin) }), -1, true);
+  }, () => { cancelAnimation(b); b.value = withTiming(0, { duration: 300 }); }, focused && !reduced && active);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: 1 + amount * b.value }] }));
   return <Animated.View style={style}>{children}</Animated.View>;
 }

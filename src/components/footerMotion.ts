@@ -6,12 +6,12 @@
  * values: the new footer picks up the same hop, glow and spin mid-flight on the
  * UI thread, and it reads as one footer that never left.
  *
- * Pick a tab: the icon hops 6 pt and pops 1 to 1.25 to 1 (SPRING.pop), its label
+ * Pick a tab: the icon hops 11 pt and pops 1 to 1.25 to 1 (SPRING.pop), its label
  * lifts into place, a warm sunlight glow slides from the old tab to the new one
  * (SPRING.settle) and fades out, a thin gold ring pulses off the new icon, and the
  * old icon dips to 0.92 and back. The big compass (the map) gets its own flourish:
  * a squash (anticipation), the pop, a small wobble that pivots on its base (its
- * baked shadow never swings), a white glint and six gold star sparkles. Tapping
+ * baked shadow never swings), a white glint and nine gold star sparkles that clear its rim. Tapping
  * the tab you are on gives a small wiggle instead. At rest every value is
  * identity, so the footer looks exactly as it always has.
  */
@@ -24,13 +24,15 @@ export const COMPASS_INDEX = 2;
 
 /** The footer choreography numbers (pure data, unit tested). */
 export const FOOTER_MOTION = {
-  hopPt: 6,
+  /** Small icons hop high enough to feel (10 to 12 pt); the big compass hops less, it squashes and wobbles too. */
+  hopPt: 11,
+  compassHopPt: 8,
   popScale: 1.25,
   sinkScale: 0.92,
   labelLiftPt: 2,
   labelMs: DURATION.quick,
-  glowPeak: 0.85,
-  glowHoldMs: 380,
+  glowPeak: 1,
+  glowHoldMs: 520,
   glowFadeMs: 300,
   /** Compass anticipation: squash wide and short before the pop. */
   compassSquashMs: 80,
@@ -43,7 +45,7 @@ export const FOOTER_MOTION = {
   ringFrom: 0.8,
   ringTo: 1.5,
   /** Sparkles off the compass (before the power budget). */
-  compassSparkles: 6,
+  compassSparkles: 9,
   glintDelayMs: 160,
   glintMs: 500,
   wiggleScale: 1.08,
@@ -82,7 +84,17 @@ export const footerMotion = {
   /** The compass sparkle burst (0 to 1, one shot). */
   burst: makeMutable(0),
   glint: makeMutable(0),
+  /** The rare extra burst: every RARE_EVERY-th compass pick throws a wider ring of stars. */
+  burstRare: makeMutable(0),
 };
+
+/** Every this many compass picks, the flourish is a little bigger (a small surprise on the tenth tap). */
+export const RARE_EVERY = 5;
+let compassPicks = 0;
+/** Whether compass pick number n (1-based) is a rare one. Pure (unit tested). */
+export function isRareCompassPick(n: number): boolean {
+  return n > 0 && n % RARE_EVERY === 0;
+}
 
 /** Start the footer bounce for a tap on tab `to` from tab `from`. Does nothing with Reduce Motion. */
 export function playFooterTap(from: number, to: number, reduced: boolean): void {
@@ -132,7 +144,7 @@ export function playFooterTap(from: number, to: number, reduced: boolean): void 
     m.compassSquash.value = withSequence(
       withTiming(1, { duration: F.compassSquashMs, easing: EASE.charge }), withSpring(0, SPRING.pop));
     m.hopY.value = withDelay(F.compassSquashMs, withSequence(
-      withTiming(-F.hopPt, { duration: 110, easing: EASE.out }), withSpring(0, SPRING.pop)));
+      withTiming(-F.compassHopPt, { duration: 110, easing: EASE.out }), withSpring(0, SPRING.pop)));
     m.hopScale.value = withDelay(F.compassSquashMs, withSequence(
       withTiming(F.popScale, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
     const w = F.compassWobbleDeg;
@@ -145,5 +157,11 @@ export function playFooterTap(from: number, to: number, reduced: boolean): void 
     }));
     m.burst.value = 0;
     m.burst.value = withDelay(F.compassSquashMs + 60, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
+    compassPicks += 1;
+    cancelAnimation(m.burstRare);
+    m.burstRare.value = 0;
+    if (isRareCompassPick(compassPicks)) {
+      m.burstRare.value = withDelay(F.compassSquashMs + 120, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
+    }
   }
 }

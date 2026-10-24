@@ -9,7 +9,9 @@
  *   </View>
  *
  * As you pull, the shark dives in from the top and grows from 0.6 to full size with the pull. At the
- * threshold it flips (a quick turn and a bubble) with a selection tick: let go now and it refreshes.
+ * threshold it flips (a quick turn and a bubble) with a selection tick: let go now and it refreshes,
+ * with a splash ring as it drops into the gap. It always stays in the gap the pull opens, above the
+ * first row (never on top of a list's art).
  * While the list reloads it swims a small loop. When the new rows are in, a splash ring and a gold
  * check pop (SPRING.pop) and it swims away up. The native spinner stays (tinted transparent) so the
  * refresh itself is the system's own, with the same feel and the same accessibility.
@@ -39,6 +41,12 @@ export const PULL_SHOW = {
   fromScale: 0.6,
   /** Where the shark rests while the list reloads (the native refresh gap is about 60 pt). */
   restY: 30,
+  /** Its size while it rests in that gap, so it never sits on the first row's art. */
+  restScale: 0.78,
+  /** The shark always stays this far above the top of the pulled-down content (pt). */
+  clearPt: 4,
+  /** The splash ring when you let go (ms). */
+  splashMs: 460,
   /** One small swim loop while refreshing (ms). */
   swimMs: 900,
   /** The done beat: splash ring and check (ms), then the swim away. */
@@ -50,12 +58,13 @@ export const PULL_SHOW = {
 export function pullLook(pull: number): { scale: number; opacity: number; y: number } {
   'worklet';
   const t = Math.min(1, Math.max(0, pull / PULL_SHOW.thresholdPt));
-  return {
-    scale: PULL_SHOW.fromScale + (1 - PULL_SHOW.fromScale) * t,
-    opacity: Math.min(1, Math.max(0, pull / 24)),
-    // Dives in from above the top edge and settles in the middle of the gap.
-    y: -PULL_SHOW.artPt + (pull / 2 + PULL_SHOW.artPt) * Math.min(1, t * 1.1),
-  };
+  const A = PULL_SHOW.artPt;
+  const scale = PULL_SHOW.fromScale + (1 - PULL_SHOW.fromScale) * t;
+  // Dives in from above the top edge toward the middle of the gap the pull opens, and its drawn
+  // bottom edge (the box scales about its center) never reaches below the content's top.
+  const dive = -A + (pull / 2 + A / 2) * Math.min(1, t * 1.1);
+  const clear = pull - PULL_SHOW.clearPt - (A * (1 + scale)) / 2;
+  return { scale, opacity: Math.min(1, Math.max(0, pull / 24)), y: Math.min(dive, clear) };
 }
 
 export interface SharkRefresh {
@@ -65,6 +74,7 @@ export interface SharkRefresh {
   readonly swim: SharedValue<number>;
   readonly done: SharedValue<number>;
   readonly busy: SharedValue<number>;
+  readonly splash: SharedValue<number>;
   readonly reduced: boolean;
 }
 
@@ -75,6 +85,7 @@ export function useSharkRefresh(refreshing: boolean): SharkRefresh {
   const swim = useSharedValue(0);
   const done = useSharedValue(0);
   const busy = useSharedValue(0);
+  const splash = useSharedValue(0);
   const armed = useSharedValue(0);
   const was = useRef(refreshing);
   const tick = () => queueHaptic('tickSelection');
@@ -99,6 +110,9 @@ export function useSharkRefresh(refreshing: boolean): SharkRefresh {
       busy.value = 1;
       done.value = 0;
       if (!reduced) {
+        // Let go: a splash ring off the shark as it drops into the gap.
+        splash.value = 0;
+        splash.value = withTiming(1, { duration: PULL_SHOW.splashMs, easing: Easing.out(Easing.quad) });
         swim.value = 0;
         swim.value = withRepeat(withTiming(1, { duration: PULL_SHOW.swimMs, easing: Easing.linear }), -1, false);
       }
@@ -111,14 +125,14 @@ export function useSharkRefresh(refreshing: boolean): SharkRefresh {
       if (reduced) { busy.value = 0; armed.value = 0; flip.value = 0; done.value = 0; }
     }
     was.current = refreshing;
-  }, [refreshing, reduced, swim, done, busy, armed, flip]);
+  }, [refreshing, reduced, swim, done, busy, armed, flip, splash]);
 
-  return { onScroll, pull, flip, swim, done, busy, reduced };
+  return { onScroll, pull, flip, swim, done, busy, splash, reduced };
 }
 
 /** Draw the shark over the top of the list (pointer events pass through). Put it after the list. */
 export function SharkRefreshOverlay({ shark, top = 0 }: { readonly shark: SharkRefresh; readonly top?: number }) {
-  const { pull, flip, swim, done, busy, reduced } = shark;
+  const { pull, flip, swim, done, busy, splash, reduced } = shark;
   const A = PULL_SHOW.artPt;
   const doneShare = PULL_SHOW.doneMs / (PULL_SHOW.doneMs + PULL_SHOW.leaveMs);
   const sharkStyle = useAnimatedStyle(() => {
@@ -126,7 +140,7 @@ export function SharkRefreshOverlay({ shark, top = 0 }: { readonly shark: SharkR
     const d = done.value;
     const leaving = d > doneShare ? (d - doneShare) / (1 - doneShare) : 0;
     const resting = busy.value === 1;
-    const y = resting ? Math.max(look.y, PULL_SHOW.restY - A / 2) : look.y;
+    const y = resting ? PULL_SHOW.restY - A / 2 : look.y;
     if (reduced) return { opacity: resting || pull.value >= PULL_SHOW.thresholdPt ? 1 - leaving : 0, transform: [{ translateY: PULL_SHOW.restY - A / 2 }] };
     const a = swim.value * Math.PI * 2;
     const f = flip.value;
@@ -137,7 +151,7 @@ export function SharkRefreshOverlay({ shark, top = 0 }: { readonly shark: SharkR
         { translateY: y + Math.sin(a * 2) * 3 - leaving * 46 },
         // The flip: a quick half turn on its side and back, like a happy roll in the water.
         { rotate: `${Math.sin(f * Math.PI) * -24 + Math.cos(a) * 6 * (resting ? 1 : 0)}deg` },
-        { scale: resting ? 1 : look.scale },
+        { scale: resting ? PULL_SHOW.restScale : look.scale },
       ],
     };
   });
@@ -153,6 +167,11 @@ export function SharkRefreshOverlay({ shark, top = 0 }: { readonly shark: SharkR
     if (d <= 0 || d >= 1 || reduced) return { opacity: 0 };
     return { opacity: 1 - d, transform: [{ scale: 0.5 + d * 1.3 }] };
   });
+  const splashStyle = useAnimatedStyle(() => {
+    const k = splash.value;
+    if (k <= 0 || k >= 1 || reduced) return { opacity: 0 };
+    return { opacity: 0.9 * (1 - k), transform: [{ scaleX: 0.6 + k * 1.6 }, { scaleY: 0.3 + k * 0.5 }] };
+  });
   const checkStyle = useAnimatedStyle(() => {
     const d = done.value;
     if (d <= 0) return { opacity: 0 };
@@ -163,6 +182,7 @@ export function SharkRefreshOverlay({ shark, top = 0 }: { readonly shark: SharkR
   return (
     <View pointerEvents="none" style={[styles.wrap, { top }]}>
       <Animated.View style={[styles.ring, ringStyle, { top: PULL_SHOW.restY - 30 }]} />
+      <Animated.View style={[styles.splash, splashStyle, { top: PULL_SHOW.restY + 10 }]} />
       <Animated.View style={[{ width: A, height: A }, sharkStyle]}>
         <Image source={SHARK_ART} style={{ width: A, height: A }} contentFit="contain" cachePolicy="memory-disk" />
         <Animated.View style={[styles.bubble, bubbleStyle]} />
@@ -178,6 +198,8 @@ const styles = StyleSheet.create({
   wrap: { position: 'absolute', left: 0, right: 0, height: 120, alignItems: 'center' },
   ring: { position: 'absolute', width: 60, height: 60, borderRadius: 30, borderWidth: 3, borderColor: BRAND.white,
     backgroundColor: 'rgba(191, 229, 255, 0.35)' },
+  splash: { position: 'absolute', width: 70, height: 26, borderRadius: 35, borderWidth: 3, borderColor: BRAND.white,
+    backgroundColor: 'rgba(191, 229, 255, 0.3)' },
   bubble: { position: 'absolute', right: 2, top: 6, width: 12, height: 12, borderRadius: 6, borderWidth: 1.5,
     borderColor: BRAND.white, backgroundColor: 'rgba(191, 229, 255, 0.5)' },
   check: { position: 'absolute', marginLeft: 44, width: 28, height: 28, borderRadius: 14, backgroundColor: GOLD_FX.core },

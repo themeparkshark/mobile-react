@@ -73,18 +73,21 @@ const CARD_EXIT = 0.94;
 /** Each part (ribbon, body, buttons) fades and rises over PART_MS, STAGGER.stepMs after the one above. */
 const PART_MS = DURATION.base;
 const PARTS_MS = PART_MS + 2 * STAGGER.stepMs;
+/** Where each part's fade starts: half there on the card's first visible frame. */
+export const PART_FROM_OPACITY = 0.5;
 /** Part i of the card at time `clock` (ms): fades and rises 8 pt into place. */
 function partStyle(clock: number, i: number, reduced: boolean) {
   'worklet';
   if (reduced) return {};
   const t = Math.min(1, Math.max(0, (clock - i * STAGGER.stepMs) / PART_MS));
-  return { opacity: t, transform: [{ translateY: (1 - t) * 8 }] };
+  // Parts start half there, so the card is never an empty blue box on its first frames.
+  return { opacity: PART_FROM_OPACITY + (1 - PART_FROM_OPACITY) * t, transform: [{ translateY: (1 - t) * 8 }] };
 }
 /** The ribbon drops this far (pt) and stamps down from this scale. */
 const RIBBON_DROP = 24;
 const RIBBON_STAMP_FROM = 1.18;
-/** The ribbon lands this long after the card starts (the card leads, the title stamps). */
-const RIBBON_AT = 60;
+/** The ribbon stamps from the card's first visible frame (an empty card never shows). */
+export const RIBBON_AT = 0;
 /** Where the ribbon's tails are (the ribbon spans the card's width, 85% of the screen up to 380 pt). */
 const CARD_W = Math.min(380, Dimensions.get('window').width * 0.85);
 const RIBBON_TAIL = { left: CARD_W * 0.06, right: CARD_W * 0.94, y: 30 } as const;
@@ -206,7 +209,7 @@ export function GameDialog({
       ribbon.value = reducedMotion ? 1 : withDelay(RIBBON_AT, withSpring(1, SPRING.stamp));
       tails.value = 0;
       if (celebrates && !reducedMotion) {
-        tails.value = withDelay(RIBBON_AT + 90, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
+        tails.value = withDelay(RIBBON_AT + 120, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
       }
       if (hapticKind !== 'none') haptic(hapticKind);
       else queueHaptic('tickSelection');
@@ -250,7 +253,7 @@ export function GameDialog({
   const ribbonStyle = useAnimatedStyle(() => {
     if (reducedMotion) return {};
     const r = ribbon.value;
-    return { opacity: Math.min(1, r * 3), transform: [{ translateY: -RIBBON_DROP * (1 - r) },
+    return { opacity: Math.min(1, 0.6 + r * 3), transform: [{ translateY: -RIBBON_DROP * (1 - r) },
       { scale: RIBBON_STAMP_FROM + (1 - RIBBON_STAMP_FROM) * r }] };
   });
   const bodyStyle = useAnimatedStyle(() => partStyle(parts.value, 1, reducedMotion));

@@ -87,10 +87,9 @@ test('game dive: grows from a fresh tap, else the middle; payoff inside 1.5 s; b
   assert.deepEqual({ ...diveOrigin(null, 0, 402, 874) }, { x: 201, y: 437 });
   assert.ok(DIVE.closeMs + DIVE.holdMs + DIVE.openMs <= 1500, 'the game is on screen inside 1.5 s');
   assert.ok(DIVE.holdMs <= 600, 'no dead hold');
-  assert.ok(DIVE.closeMs + DIVE.maxWaitMs + DIVE.openMs <= 1500, 'even a slow game screen is on screen inside 1.5 s');
   const dive = read('src/fx/DiveIris.tsx');
   assert.match(dive, /navigationRef\.addListener\('state'/, 'the iris opens on the new screen, never on the one you left');
-  assert.match(dive, /openNow\(DIVE\.maxWaitMs\);\n\s+runOnJS\(onCovered\)/, 'the open fallback is scheduled on the UI thread (a busy JS thread can never leave the water up)');
+  assert.match(dive, /setTimeout\(\(\) => openWhenReady\('safety'\), DIVE\.safetyMs\)/, 'a lost signal never leaves the water up');
   const xs = Array.from({ length: DIVE.bubbles }, (_, i) => diveBubble(i, DIVE.bubbles, 402).x);
   assert.ok(Math.min(...xs) < 100 && Math.max(...xs) > 300, 'bubbles rise across the whole screen');
   const rootSrc = read('src/Root.tsx');

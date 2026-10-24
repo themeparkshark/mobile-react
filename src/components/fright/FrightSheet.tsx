@@ -4,6 +4,7 @@
  * badge; "I'm in line", "Play in line", "I survived it!"; the reefs; and the
  * Spooky effects toggle. Night palette. No free text anywhere.
  */
+import { diveNavigate } from '../../fx/DiveIris';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import type { FrightSpot } from '../../api/endpoints/fright';
@@ -120,7 +121,7 @@ export default function FrightSheet({ night, engine }: { readonly night: FrightN
                     <NightButton label={COPY.playInLine} variant="ghost" icon="play"
                       onPress={() => {
                         close();
-                        RootNavigation.navigate('LinePlay', { ride: frightLinePlayRide(spot, event.park_id, Date.now()) });
+                        diveNavigate('LinePlay', { ride: frightLinePlayRide(spot, event.park_id, Date.now()) });
                       }} />
                   </View>
                   {!open && !done && blocked && <Text style={styles.blocked}>{blocked}</Text>}

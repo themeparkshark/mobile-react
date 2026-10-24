@@ -1,4 +1,5 @@
 import { FlashList } from '@shopify/flash-list';
+import { diveNavigate } from '../fx/DiveIris';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
@@ -312,7 +313,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
       const postedWait = rideOperating ? postedStandbyWait(entry) : null;
       const ride = await resolveRideContextOrOffline(selectedPark, entry.name, postedWait,
         rideOperating ? lastUpdated || null : null, entry.id);
-      (navigation as any).navigate('LinePlay', { ride: rideOperating
+      diveNavigate('LinePlay', { ride: rideOperating
         ? ride : { ...ride, lineRewardsReady: false } });
     },
     [navigation, selectedPark, lastUpdated, previewEntries],

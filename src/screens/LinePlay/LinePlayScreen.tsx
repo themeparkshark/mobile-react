@@ -17,12 +17,13 @@
  * Route params: { ride: RideContext }. Wire via Root.tsx Stack.Screen "LinePlay".
  */
 
+import { notifyDiveLanded, useDiveSettled } from '../../fx/DiveIris';
 import { playSfx } from '../../gamekit/SFX';
 import { haptic } from '../../gamekit/Haptics';
 import { openAppSettings } from '../../services/external';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, FlatList, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { Image } from 'expo-image';
@@ -165,6 +166,11 @@ export default function LinePlayScreen() {
   const ride: RideContext | undefined = route.params?.ride;
 
   const { session, snapshot } = useLinePlaySession();
+  const diveSettled = useDiveSettled();
+  // The dive covers the way in (an instant push); the way out is a soft fade.
+  useEffect(() => {
+    if (diveSettled) navigation.setOptions({ animation: 'fade' } as object);
+  }, [diveSettled, navigation]);
   const { latestLocationSampleRef } = useContext(LocationStatusContext);
   const { player, refreshPlayer } = useContext(AuthContext);
   const prediction = snapshot.prediction;
@@ -843,6 +849,10 @@ export default function LinePlayScreen() {
     );
   }
 
+  // The game dive opens on a light first frame (the same gradient and the two skeleton cards), so the
+  // water's open never waits on a big first mount; the whole screen mounts the moment the water is gone.
+  if (!diveSettled) return <DiveLanding rideName={ride.rideName} night={snapshot.chapter?.palette === 'night'} />;
+
   // The shared signal selects an actual next game. Its page is appended when
   // available so a live unlock does not shift the activity under a player.
   const playSignalGame = (routeChoice: 'route_a' | 'route_b') => {
@@ -1364,6 +1374,21 @@ export default function LinePlayScreen() {
 
 
 // -- skeletons ---------------------------------------------------------------
+
+/** What the game dive opens onto: the screen's own colors and skeleton cards, nothing heavy. */
+function DiveLanding({ rideName, night }: { rideName: string; night: boolean }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.root, night && { backgroundColor: '#2B2350' }]} onLayout={notifyDiveLanded}>
+      <LinearGradient colors={night ? ['#3B2A6B', '#2B2350', '#1E1838'] : ['#0a7dd1', '#07569e', '#073e87']}
+        style={StyleSheet.absoluteFill} />
+      <View style={{ paddingTop: insets.top + 78 }}>
+        <View style={styles.waitWrap}><WaitCardSkeleton rideName={rideName} /></View>
+        <View style={{ marginTop: spacing.lg }}><ActivitySkeleton /></View>
+      </View>
+    </View>
+  );
+}
 
 function WaitCardSkeleton({ rideName }: { rideName: string }) {
   return <LinearGradient colors={['#159ee2', '#0873bd', '#064780']} style={styles.waitSkeleton}>

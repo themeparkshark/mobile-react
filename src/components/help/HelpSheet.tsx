@@ -32,6 +32,7 @@ import { playSfx } from '../../gamekit/SFX';
 import type { HelpPage, HelpSheetSpec } from '../../services/help/helpSheets';
 import { BRAND, GameButton, GameIcon, SharkLoader } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import { DURATION, SPRING } from '../../ui/motionEasing';
 import { useModalLayer } from '../../ui/modalLayers';
 import HelpHero, { type HeroData } from './HelpHero';
 import { markUserActivity } from '../../hooks/useUserIdle';
@@ -52,8 +53,11 @@ export type HelpSheetContent = Omit<HelpSheetSpec, 'pages'> & { readonly pages: 
 let tapHintShown = false;
 const POINTER = require('../../../assets/images/howto/pointer.webp');
 
-const SPRING_IN = { damping: 16, stiffness: 260, mass: 0.85 } as const;
-const OUT_MS = 190;
+/** One spring for every sheet in the app (src/ui/motion.ts): settle in with no wobble, leave faster on EASE.in. */
+const SPRING_IN = SPRING.settle;
+const OUT_MS = DURATION.exit;
+/** Past the top, the sheet follows half the finger (a rubber band). */
+const RUBBER = 0.5;
 const seatTick = () => { void Haptics.selectionAsync().catch(() => undefined); };
 const SIDE = 16;
 /** The sheet's white side border; pages are exactly the space inside it, so a swiped page lands centered. */
@@ -197,13 +201,13 @@ function SheetBody({ sheet, open, drag, reveal, reduced, active, onClose, state,
     .activeOffsetY([-12, 12])
     .failOffsetX([-14, 14])
     .onUpdate(event => {
-      drag.value = event.translationY > 0 ? event.translationY : event.translationY * 0.15;
+      drag.value = event.translationY > 0 ? event.translationY : event.translationY * RUBBER;
     })
     .onEnd(event => {
       if (event.translationY > 110 || event.velocityY > 900) {
         runOnJS(close)();
       } else {
-        drag.value = withSpring(0, { damping: 18, stiffness: 260 });
+        drag.value = withSpring(0, SPRING.settle);
       }
     }), [close, drag]);
 

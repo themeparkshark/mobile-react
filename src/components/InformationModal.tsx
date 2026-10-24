@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, Text } from 'react-native';
-import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { useState } from 'react';
+import { Text, View } from 'react-native';
 import { helpSheetForInfoModal, type HelpSheetId } from '../services/help/helpSheets';
 import { BRAND } from '../ui';
+import { Breathe } from '../ui/AmbientSwim';
+import PressableScale from '../ui/PressableScale';
 import HelpSheet from './help/HelpSheet';
 
 /**
@@ -17,32 +18,24 @@ export default function InformationModal({ id, sheet }: {
   readonly sheet?: HelpSheetId;
 }) {
   const [visible, setVisible] = useState(false);
-  const reduced = useReducedGameMotion();
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (reduced || visible) return;
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(pulseAnim, { toValue: 1.1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [pulseAnim, reduced, visible]);
 
   const content = helpSheetForInfoModal(id, sheet ?? 'basics');
 
   return (
     <>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${content.name} help`} hitSlop={8}
+      {/* The "?" calls softly (a 10 percent breath every 3 s) through the ambient budget: it sleeps off
+          screen, in the background, when idle and with Reduce Motion. The press is the shared squish. */}
+      <PressableScale accessibilityLabel={`${content.name} help`} hitSlop={8} haptic="tickSelection"
         onPress={() => setVisible(true)}>
-        <Animated.View style={{
-          transform: [{ scale: pulseAnim }], width: 35, height: 35, borderRadius: 999, backgroundColor: BRAND.blueBright,
-          justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: BRAND.white,
-        }}>
-          <Text style={{ fontFamily: 'Shark', fontSize: 20, color: 'white', textAlign: 'center', lineHeight: 22 }}>?</Text>
-        </Animated.View>
-      </Pressable>
+        <Breathe amount={0.1} periodMs={3000} active={!visible}>
+          <View style={{
+            width: 35, height: 35, borderRadius: 999, backgroundColor: BRAND.blueBright,
+            justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: BRAND.white,
+          }}>
+            <Text style={{ fontFamily: 'Shark', fontSize: 20, color: 'white', textAlign: 'center', lineHeight: 22 }}>?</Text>
+          </View>
+        </Breathe>
+      </PressableScale>
       <HelpSheet visible={visible} sheet={content} onClose={() => setVisible(false)} />
     </>
   );

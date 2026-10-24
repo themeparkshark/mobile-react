@@ -94,7 +94,7 @@ test('footer: tab order matches the bar, taps pick or re-pick', () => {
 
 test('footer: the bounce follows the director numbers and everything returns to rest', () => {
   const F = footer.FOOTER_MOTION;
-  assert.equal(F.hopPt, 6);
+  assert.equal(F.hopPt, 11);
   assert.equal(F.popScale, 1.25);
   assert.equal(F.sinkScale, 0.92);
   assert.equal(F.compassSquashMs, 80, 'the compass squashes before it pops (anticipation)');

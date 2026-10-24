@@ -19,27 +19,28 @@ import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay,
 import { usePowerBudget } from '../power/PowerProvider';
 import GameIcon from './GameIcon';
 import RollingNumber from './RollingNumber';
-import { DURATION, EASE, HUD_BUMP, momentParticles } from './motionEasing';
+import { COUNT, DURATION, EASE, HUD_BUMP, momentParticles } from './motionEasing';
 import useUiReducedMotion from './useUiReducedMotion';
 
 /** The coin beat (pure data, unit tested). */
 export const WALLET_FX = {
   /** Coins thrown or caught per change, before the power budget. */
-  coins: 5,
+  coins: 6,
   /** The coins move this long (ms). */
   flyMs: 620,
   /** The number starts rolling this long after the coins start (the coins lead the eye). */
   rollAfterMs: 160,
   /** A held change waits this long after the hold lifts (the sheet finishes leaving). */
   afterHoldMs: 220,
-  coinSize: 16,
+  /** Big enough to read as coins on a phone (18 to 22 pt). */
+  coinSize: 20,
 } as const;
 
 /** Where coin i of n flies: spends tumble down and out, gains come up from below. Pure. */
 export function walletCoinPath(i: number, n: number, spend: boolean): { dx: number; dy: number; spin: number; delay: number } {
   const t = n > 1 ? i / (n - 1) : 0.5;
-  const dx = -46 + 64 * t + (i % 2 ? 6 : -6);
-  const dy = spend ? 34 + (i % 3) * 10 : 46 + (i % 3) * 8;
+  const dx = -64 + 96 * t + (i % 2 ? 8 : -8);
+  const dy = spend ? 46 + (i % 3) * 14 : 56 + (i % 3) * 10;
   return { dx, dy, spin: (i % 2 ? 1 : -1) * (160 + 40 * (i % 3)), delay: i * 45 };
 }
 
@@ -52,9 +53,9 @@ function Coin({ progress, i, n, spend }: { readonly progress: SharedValue<number
     if (spend) {
       // Pops up out of the chip, then tumbles down and away with gravity, fading.
       const x = path.dx * p;
-      const y = -18 * Math.sin(p * Math.PI * 0.9) + path.dy * p * p;
+      const y = -28 * Math.sin(p * Math.PI * 0.9) + path.dy * p * p;
       return { opacity: p < 0.7 ? 1 : 1 - (p - 0.7) / 0.3,
-        transform: [{ translateX: x }, { translateY: y }, { rotate: `${path.spin * p}deg` }, { scale: 1 - 0.3 * p }] };
+        transform: [{ translateX: x }, { translateY: y }, { rotate: `${path.spin * p}deg` }, { scale: 1.1 - 0.35 * p }] };
     }
     // A gain: flies up from below on an arc and drops into the chip.
     const q = 1 - p;
@@ -63,7 +64,7 @@ function Coin({ progress, i, n, spend }: { readonly progress: SharedValue<number
         { scale: 0.8 + 0.2 * p }] };
   });
   return (
-    <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 4, top: 4 }, style]}>
+    <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0 }, style]}>
       <GameIcon name="coin" size={WALLET_FX.coinSize} />
     </Animated.View>
   );
@@ -106,8 +107,13 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
     fly.value = 0;
     fly.value = withDelay(wait, withTiming(1, { duration: WALLET_FX.flyMs + 5 * 45, easing: EASE.out }));
     // The chip bumps as the coins leave (or as the first one lands).
-    bump.value = withDelay(wait + (spendRef.current ? 40 : WALLET_FX.flyMs * 0.6),
-      withSequence(withTiming(HUD_BUMP.peak, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring)));
+    // Then it bumps again when the roll lands on the new number (COUNT.finalBump), so the pill itself says "done".
+    const first = spendRef.current ? 40 : WALLET_FX.flyMs * 0.6;
+    const landAt = WALLET_FX.rollAfterMs + COUNT.ms;
+    bump.value = withDelay(wait + first, withSequence(
+      withTiming(HUD_BUMP.peak, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring),
+      withDelay(Math.max(0, landAt - first - 360), withSequence(
+        withTiming(COUNT.finalBump, { duration: DURATION.tap, easing: EASE.out }), withSpring(1, HUD_BUMP.spring)))));
   }, [value, hold, fly, bump]);
 
   const chipStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));

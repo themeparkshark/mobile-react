@@ -265,7 +265,8 @@ test("GameButton: Dustin's own button art and YellowButton's label, sized from t
   const style = label(view).props.style;
   for (const [key, value] of Object.entries({ fontFamily: 'Shark', color: 'white', textTransform: 'uppercase',
     textShadowColor: 'rgba(0, 0, 0, .5)', textShadowRadius: 0 })) assert.equal(style[key], value, `label ${key}`);
-  assert.equal(labelArea(view).props.style.opacity, 0, 'label hidden for the frame before layout');
+  assert.equal(labelArea(view).props.style.opacity, 1, 'label on the first frame (estimated size; a dialog never pops in with a blank button)');
+  assert.ok(label(view).props.style.fontSize > 0 && label(view).props.style.fontSize < 72, 'first-frame size is estimated, not the 72 pt ceiling');
   labelArea(view).props.onLayout({ nativeEvent: { layout: { height: 52 } } });
   view.render();
   assert.equal(label(view).props.style.fontSize, 24, 'label size follows the measured label area');

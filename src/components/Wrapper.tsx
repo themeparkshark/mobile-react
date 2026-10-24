@@ -161,7 +161,7 @@ export default function Wrapper({
           >
             {/* Warm sunlight that slides to the picked tab and fades (never lit at rest). Pale cream
                 rings stacked into a soft radial, no shadow pass: over the blue bar it reads as light, never olive. */}
-            <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: -14, width: GLOW, height: GLOW,
+            <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: -21, width: GLOW, height: GLOW,
               alignItems: 'center', justifyContent: 'center' }, glowStyle]}>
               {GLOW_RINGS.map(r => <View key={r.size} style={{ position: 'absolute', width: r.size, height: r.size,
                 borderRadius: r.size / 2, backgroundColor: r.color }} />)}
@@ -255,12 +255,13 @@ export default function Wrapper({
 }
 
 /** The sunlight behind a picked tab: soft cream rings stacked into a radial (pure data). */
-const GLOW = 78;
+const GLOW = 92;
 const GLOW_RINGS = [
-  { size: 78, color: 'rgba(255, 250, 232, 0.16)' },
-  { size: 64, color: 'rgba(255, 248, 225, 0.2)' },
-  { size: 50, color: 'rgba(255, 246, 214, 0.28)' },
-  { size: 36, color: 'rgba(255, 251, 234, 0.42)' },
+  { size: 92, color: 'rgba(255, 246, 214, 0.14)' },
+  { size: 76, color: 'rgba(255, 240, 190, 0.2)' },
+  { size: 60, color: 'rgba(255, 233, 166, 0.26)' },
+  { size: 44, color: 'rgba(255, 244, 205, 0.35)' },
+  { size: 28, color: 'rgba(255, 252, 238, 0.45)' },
 ] as const;
 
 /**
@@ -318,7 +319,10 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
         </View>}
       </Animated.View>
       {compass && <SparkleBurst progress={footerMotion.burst} count={F.compassSparkles} x={size / 2} y={44}
-        spread={[-175, -5]} dist={[42, 62]} size={[15, 21]} gravity={16} seed={2} />}
+        spread={[-180, 0]} dist={[58, 82]} size={[16, 22]} gravity={18} seed={2} />}
+      {/* Every fifth compass pick: a wider second ring of stars (the footer still surprises on the tenth tap). */}
+      {compass && <SparkleBurst progress={footerMotion.burstRare} count={3} x={size / 2} y={44}
+        spread={[-160, -20]} dist={[86, 110]} size={[18, 24]} gravity={14} seed={7} />}
     </View>
   );
 }

@@ -31,7 +31,7 @@ import SharkDropHandler from './components/SharkDropHandler';
 import OfflineBanner from './components/OfflineBanner';
 import FeedbackHost from './components/Feedback/FeedbackHost';
 import { GameDialogHost } from './ui';
-import { DIVE, DiveIrisHost, recordTouch } from './fx/DiveIris';
+import { DIVE, DiveIrisHost, recordTouch, registerDivePrewarm } from './fx/DiveIris';
 import { DURATION } from './ui/motion';
 import { isStandalonePreviewMode } from './utils/standalonePreview';
 import { ShareStudioHost } from './share';
@@ -39,6 +39,9 @@ import { DEV_SCREENS, devInitialRoute } from './devRoutes';
 import { releaseNativeSplash } from './nativeSplash';
 import { addBreadcrumb } from './services/telemetry';
 import { markUserTouch } from './hooks/useUserIdle';
+// A game screen's module loads on the JS thread while the dive's water closes on the UI thread.
+registerDivePrewarm('LinePlay', () => require('./screens/LinePlay/LinePlayScreen'), { landing: true });
+registerDivePrewarm('GymBattle', () => require('./screens/GymBattle'));
 
 const Stack = createNativeStackNavigator();
 
@@ -172,8 +175,10 @@ export default function App() {
             parkId: linePlayPreviewBigThunder ? 8 : 2,
             postedWaitMinutes: 35, postedWaitObservedAt: Date.now(), lineRewardsReady: false,
           } } : undefined}
-          // The way in is the water dive (DiveIris covers the push); the way out is a soft fade.
-          options={{ animation: 'fade', animationDuration: DIVE.screenFadeMs, gestureEnabled: false }}
+          // The way in is the water dive (DiveIris covers the push, so the push itself is instant and the
+          // water opens straight onto LinePlay, never a cross-fade with the screen you left). Once the
+          // dive settles, LinePlay switches its own way out to a soft fade (setOptions).
+          options={{ animation: 'none', animationDuration: DIVE.screenFadeMs, gestureEnabled: false }}
         />
         {/* Fin-ister Nights: the Deep Lantern card, a night's Marquee, and the tutorial replay. */}
         <Stack.Screen name="FrightCard" getComponent={() => require('./components/fright/FrightCardScreen').default} />

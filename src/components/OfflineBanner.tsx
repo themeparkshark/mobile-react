@@ -72,6 +72,16 @@ function probe(): Promise<unknown> {
  * The copy promises nothing about cached data: only crumbs, currencies and
  * the theme are kept last-good, so the park view itself may not load.
  */
+/**
+ * The card (full banner) and the chip at shrink s (0 = card, 1 = chip): the card is gone by 0.45,
+ * the chip starts at 0.55, so they are never both above 0.1 at once. Pure (unit tested).
+ */
+export function bannerCrossFade(s: number): { card: number; chip: number } {
+  'worklet';
+  const k = Math.min(1, Math.max(0, s));
+  return { card: Math.max(0, 1 - k / 0.45), chip: Math.max(0, (k - 0.55) / 0.45) };
+}
+
 export default function OfflineBanner() {
   const catchOpen = useCatchOpen();
   const reduceMotion = useReducedMotion();
@@ -197,13 +207,15 @@ export default function OfflineBanner() {
     };
   });
   const iconStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
+  // The card and the chip cross-fade with a dead zone in the middle (bannerCrossFade), so the chip's
+  // wifi icon is never drawn over the card's words.
   const fullStyle = useAnimatedStyle(() => ({
-    opacity: 1 - shrink.value,
-    transform: reduceMotion ? [] : [{ scale: 1 - 0.18 * shrink.value }],
+    opacity: bannerCrossFade(shrink.value).card,
+    transform: reduceMotion ? [] : [{ scale: 1 - 0.18 * Math.min(1, Math.max(0, shrink.value)) }],
   }));
   const chipStyle = useAnimatedStyle(() => ({
-    opacity: shrink.value,
-    transform: reduceMotion ? [] : [{ scale: 0.6 + 0.4 * shrink.value }],
+    opacity: bannerCrossFade(shrink.value).chip,
+    transform: reduceMotion ? [] : [{ scale: 0.6 + 0.4 * Math.min(1, Math.max(0, shrink.value)) }],
   }));
 
   // A catch moment owns the screen, and the offline screen shows its own mark: the banner waits (its probe keeps running).

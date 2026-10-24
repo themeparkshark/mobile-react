@@ -51,6 +51,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  // Dev only: the lane captures fire toasts over the debugger.
+  useEffect(() => {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) (globalThis as { __showToast?: typeof showToast }).__showToast = showToast;
+  }, [showToast]);
+
   // Bridge: listen for global toast events from non-React code (e.g. axios interceptor)
   useEffect(() => {
     const unsub = onToast((event) => {
