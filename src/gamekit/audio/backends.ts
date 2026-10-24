@@ -590,6 +590,15 @@ export class AudioApiBackend implements AudioBackend {
 
 export const AV_ONLY_TYPES = new Set(['m4a', 'aac', 'caf', 'mp4']);
 
+/** Metro's metadata for a bundled asset (name, type, dev folder or URI); never its bytes. */
+export function assetMeta(src: number): { name?: string; type?: string; httpServerLocation?: string; uri?: string } | null {
+  try {
+    return Asset.fromModule(src) as unknown as { name?: string; type?: string; httpServerLocation?: string; uri?: string };
+  } catch {
+    return null;
+  }
+}
+
 export function assetType(src: number): string {
   try {
     return (Asset.fromModule(src).type || '').toLowerCase();

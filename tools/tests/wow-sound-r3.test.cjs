@@ -147,3 +147,27 @@ test('Core Haptics: a binary with the TpsCoreHaptics module turns the shaped pat
     assert.ok(Array.isArray(ahap.Pattern) && ahap.Pattern.length > 0, `${name}.ahap is a playable pattern`);
   }
 });
+
+test('later catches (wow-map tap-repeat) open the studio catch too, and coin ticks just after done keep the ladder', () => {
+  const e = traceEngine();
+  e.Catch.resetCatchSoundForTests();
+  e.Catch.catchMark('tap');
+  e.clock.advance(700); e.Catch.catchMark('burst'); e.clock.advance(1500); e.Catch.catchMark('done');
+  e.clock.advance(20_000);
+  e.Trace.clearTrace();
+  e.Catch.catchMark('tap-repeat');
+  e.Catch.catchHaptic('tapLight', 3);
+  e.clock.advance(150); e.Catch.catchHaptic('tickSelection', 2);
+  e.clock.advance(140); e.Catch.catchHaptic('hitMedium', 2);
+  e.clock.advance(160); e.Catch.catchMark('burst');
+  e.clock.advance(950); e.Catch.catchMark('done');
+  e.clock.advance(300); e.Catch.catchSound('tick', { pitch: 4, volume: 0.45 });
+  e.clock.advance(800); e.Catch.catchSound('tick', { pitch: 6, volume: 0.45 });
+  e.clock.advance(100);
+  const moments = e.Trace.traceEvents().filter((x) => x.kind === 'moment').map((x) => x.name.split(' ')[1]);
+  assert.ok(moments.includes('catch.tap'), 'the repeat plucks');
+  assert.equal(moments.filter((m) => m === 'catch.wobble').length, 2, 'two wobble ticks for the two-wobble repeat');
+  assert.ok(moments.includes('catch.repeat'), 'and rings the short repeat');
+  const ticks = e.Trace.traceEvents().filter((x) => x.kind === 'moment' && x.name.includes('ui.counterTick'));
+  assert.equal(ticks.length, 1, 'a coin tick 300 ms after done keeps the studio ladder; one 1.1 s later is back to the shared sound');
+});

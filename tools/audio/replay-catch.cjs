@@ -26,6 +26,12 @@ const quick = Number(arg('--quick', '0'));
 const coins = Number(arg('--coins', '10'));
 const T0 = Number(arg('--t0', '0'));
 
+const fs = require('node:fs');
+const path = require('node:path');
+if (!fs.existsSync(path.resolve(__dirname, '../../src/components/map/alive/mapWow.ts'))) {
+  console.error('replay-catch needs the map catch plan (src/components/map/alive/mapWow.ts from claude/p23-wow-map): merge it first.');
+  process.exit(2);
+}
 const wow = loadTs('src/components/map/alive/mapWow.ts');
 
 async function main() {

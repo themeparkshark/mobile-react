@@ -129,7 +129,7 @@ const DONE_TAIL_MS = 700;
  * thread together (a separate timer drifted 50 to 130 ms under load). No wobble haptics (Reduce Motion
  * skips the wobble) means no ticks.
  */
-let session: { until: number; wobbles: ReturnType<typeof setTimeout>[]; haptics: number; ticks: number; burst: boolean; heat: number } | null = null;
+let session: { until: number; wobbles: ReturnType<typeof setTimeout>[]; haptics: number; ticks: number; burst: boolean; heat: number; done?: boolean } | null = null;
 const WOBBLE_INTENTS = new Set<HapticIntent>(['tickSelection', 'tapLight', 'hitMedium']);
 let run: CatchRunState = EMPTY_RUN;
 let primed = false;
@@ -166,7 +166,8 @@ function endSession(): void {
 }
 
 function keepSession(): void {
-  if (session) session.until = Date.now() + SESSION_IDLE_MS;
+  // After 'done' only the short tail runs out; nothing stretches it.
+  if (session && !session.done) session.until = Date.now() + SESSION_IDLE_MS;
 }
 
 function onCatchMark(name: string): void {
@@ -203,7 +204,7 @@ function onCatchMark(name: string): void {
   } else if (name === 'done') {
     // The coin stream can still be landing in the counter: its ticks keep the ladder for a short tail.
     session?.wobbles.forEach(clearTimeout);
-    if (session) { session.burst = true; session.until = Date.now() + DONE_TAIL_MS; }
+    if (session) { session.burst = true; session.done = true; session.until = Date.now() + DONE_TAIL_MS; }
   }
 }
 

@@ -10,8 +10,7 @@
  * latency of the backend the phone would use.
  */
 
-import { Asset } from 'expo-asset';
-import { AV_ONLY_TYPES, assetType, type AudioBackend, type MusicArgs, type PlayArgs } from './backends';
+import { AV_ONLY_TYPES, assetMeta, assetType, type AudioBackend, type MusicArgs, type PlayArgs } from './backends';
 import { traceEvent } from './studioTrace';
 
 /**
@@ -21,7 +20,7 @@ import { traceEvent } from './studioTrace';
  */
 export function assetPath(src: unknown): string {
   try {
-    const a = Asset.fromModule(src as number) as { name?: string; type?: string; httpServerLocation?: string; uri?: string };
+    const a = assetMeta(src as number);
     if (!a?.name) return String(src);
     // Metro dev: the folder is in httpServerLocation, or in the dev server URI (/assets/<repo path>/<file>?platform=...).
     const fromUri = /^https?:\/\/[^/]+(\/assets\/[^?]*)\//.exec(a.uri ?? '')?.[1];
