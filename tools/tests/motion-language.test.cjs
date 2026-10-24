@@ -514,7 +514,9 @@ test('wave 3 rerun round 2: the daily chest card keeps one height from the tap t
   const chest = read('src/components/DailyGiftModal.tsx');
   assert.ok(!/bodyBandStyle/.test(chest), 'the body copy is never hidden, so it never draws late');
   assert.ok(/<View style=\{styles\.footerSlot\}>\s*<Animated\.View[^>]*>\s*<Pressable onPress=\{dismiss\} disabled=\{phase !== 'open'\}/.test(chest), 'Awesome! is laid out from the start');
-  assert.ok(/<Animated\.View style=\{phase === 'open' \? revealInStyle : styles\.waiting\}>\s*<Pressable onPress=\{dismiss\}/.test(chest), 'it stays hidden until the lid pops');
+  assert.ok(/<Animated\.View style=\{revealInStyle\}>\s*<Pressable onPress=\{dismiss\}/.test(chest), 'it stays hidden until the lid pops (its fade is always attached)');
+  assert.ok(/<Animated\.Text style=\{\[styles\.subtitle, revealOutStyle\]\}/.test(chest) && /<Animated\.Text style=\{\[styles\.subtitle, styles\.over, revealInStyle\]\}/.test(chest), 'both subtitle lines keep their fades attached');
+  assert.ok(/if \(phase !== 'closed'\) return;\s*cancelAnimation\(reveal\); reveal\.value = 0;/.test(chest), 'a shut chest always starts with today\'s words');
   assert.ok(/styles\.laterButton, styles\.laterInSlot/.test(chest), 'Back to map sits in the same spot while the chest is shut');
   assert.ok(!/\{phase === 'open' && \(\s*<Pressable onPress=\{dismiss\}/.test(chest), 'no button mounts at the payoff');
 });

@@ -323,6 +323,11 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     playSfx('win'); playSfx('coin', 0.9);
   };
 
+  // A shut chest always starts with today's words and no Awesome! (the card can stay mounted from one day to the next).
+  useEffect(() => {
+    if (phase !== 'closed') return;
+    cancelAnimation(reveal); reveal.value = 0; cancelAnimation(hintOut); hintOut.value = 0;
+  }, [phase]);
   const pendingCelebrate = useRef<boolean | null>(null);
   const celebrateRef = useRef(celebrate);
   celebrateRef.current = celebrate;
@@ -483,15 +488,17 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       <Animated.View ref={wrapRef} collapsable={false} style={[styles.wrap, cardStyle]}>
         <Ribbon text="Daily Chest" />
         <View style={styles.card}>
+          {/* Both lines are always laid out with their fades attached (a fade attached to a view mid-show drew a frame late),
+              and the pop swaps them on the UI thread. */}
           <View>
-            <Animated.Text style={[styles.subtitle, phase === 'open' && revealInStyle]}>
-              {phase === 'open' ? `Day ${day} collected!` : `Today’s chest: day ${day} of ${ladder.length}`}
+            <Animated.Text style={[styles.subtitle, revealOutStyle]} accessibilityElementsHidden={phase === 'open'}
+              importantForAccessibility={phase === 'open' ? 'no-hide-descendants' : 'auto'}>
+              {`Today’s chest: day ${day} of ${ladder.length}`}
             </Animated.Text>
-            {phase === 'open' && (
-              <Animated.Text style={[styles.subtitle, styles.over, revealOutStyle]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                {`Today’s chest: day ${day} of ${ladder.length}`}
-              </Animated.Text>
-            )}
+            <Animated.Text style={[styles.subtitle, styles.over, revealInStyle]} accessibilityElementsHidden={phase !== 'open'}
+              importantForAccessibility={phase === 'open' ? 'auto' : 'no-hide-descendants'}>
+              {`Day ${day} collected!`}
+            </Animated.Text>
           </View>
 
           <View style={[styles.ladder, styles.aboveGold]}>
@@ -610,13 +617,13 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               milestone line and Awesome! are laid out from the start, shown once the chest is open, and Back to map sits
               in Awesome!'s spot while the chest is shut. */}
           {next && (
-            <Animated.Text style={[styles.next, phase === 'open' ? revealInStyle : styles.waiting]} accessibilityElementsHidden={phase !== 'open'}
+            <Animated.Text style={[styles.next, revealInStyle]} accessibilityElementsHidden={phase !== 'open'}
               importantForAccessibility={phase === 'open' ? 'auto' : 'no-hide-descendants'}>
               {`${next.days_away} more day${next.days_away === 1 ? '' : 's'} to your ${next.label}`}
             </Animated.Text>
           )}
           <View style={styles.footerSlot}>
-            <Animated.View style={phase === 'open' ? revealInStyle : styles.waiting}>
+            <Animated.View style={revealInStyle}>
               <Pressable onPress={dismiss} disabled={phase !== 'open'} pointerEvents={phase === 'open' ? 'auto' : 'none'}
                 accessibilityElementsHidden={phase !== 'open'} importantForAccessibility={phase === 'open' ? 'auto' : 'no-hide-descendants'}
                 accessibilityRole="button" style={styles.button}>

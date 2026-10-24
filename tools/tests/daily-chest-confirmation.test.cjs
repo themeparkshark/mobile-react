@@ -98,7 +98,8 @@ function chest({ reconciled = null, reduced = false } = {}) {
     open() { find(tree, node => node.type === 'Pressable' && node.props.accessibilityLabel?.startsWith('Open today')).props.onPress(); render(); },
     get disabled() { return find(tree, node => node.type === 'Pressable' && node.props.accessibilityLabel)?.props.disabled; },
     get visible() { return tree.props.isVisible; },
-    get celebrated() { return !!find(tree, node => node.type === 'Text' && typeof node.props.children === 'string' && node.props.children.includes('collected!')); },
+    // The "collected" line is always laid out (hidden until the pop); it is shown, and read out, only once the chest is open.
+    get celebrated() { return !!find(tree, node => node.type === 'Text' && typeof node.props.children === 'string' && node.props.children.includes('collected!') && node.props.accessibilityElementsHidden === false); },
     async settle() { await new Promise(resolve => setImmediate(resolve)); render(); },
     reveal() { for (let i = 0; i < 60 && timers.size; i++) { const due = [...timers.values()]; timers.clear(); due.forEach(fn => fn()); render(); } },
     dismiss() { find(tree, node => node.type === 'Pressable' && node.props.accessibilityRole === 'button' && !node.props.accessibilityLabel).props.onPress(); render(); },
