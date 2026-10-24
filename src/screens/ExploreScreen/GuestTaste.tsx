@@ -129,7 +129,7 @@ export default function GuestTaste() {
         : styles.bridgeIdle} />}
     {/* Finn's boater picture is drawn (hidden) while the game is up, so the shelf step's Finn is never late. */}
     {step === 'play' && <Image source={FINN_BOATER} pointerEvents="none" style={styles.bridgeIdle} />}
-    {step === 'save' && <SaveCard reduced={reduced} onPlayMore={() => setArcadeOpen(true)} />}
+    {step === 'save' && <SaveCard reduced={reduced} compact={short} onPlayMore={() => setArcadeOpen(true)} />}
 
     {/* Finn walks the whole taste with the same four dots: find, play, coin, save. */}
     {step === 'coin' && <TeacherShark title={COPY.coin.title} text="" sharkSource={FINN_BOATER} mood="celebrating" position="bottom-center"
@@ -347,11 +347,11 @@ function ShelfCoinLanding({ active, reduced, compact, rowWidth, handoff, onCoinS
 }
 
 /** The ask, after the fun: make your own shark (a grown-up signs in), or keep playing. */
-function SaveCard({ reduced, onPlayMore }: { reduced: boolean; onPlayMore: () => void }) {
+function SaveCard({ reduced, compact, onPlayMore }: { reduced: boolean; compact: boolean; onPlayMore: () => void }) {
   return <View style={styles.center}>
     {/* Reduce Motion: no entering animation. With the system setting on, FadeIn left the
         card at its first frame (opacity 0): a guest saw an empty sea and never the sign-in ask. */}
-    <Animated.View entering={reduced ? undefined : FadeIn.duration(260)} style={styles.card}>
+    <Animated.View entering={reduced ? undefined : FadeIn.duration(260)} style={[styles.card, !compact && styles.cardCentred]}>
       {/* The same boater Finn from the warm-up, the win and the shelf, waving: one mascot
           look from the win through the ask (the graduate Finn takes over after sign-in). */}
       <View style={styles.saveFinnWrap} accessible accessibilityLabel="Finn waving">
@@ -444,6 +444,9 @@ const styles = StyleSheet.create({
   bridgeIdle: { position: 'absolute', left: 0, top: 0, width: 40, height: 40, opacity: 0 },
   socketUnder: { position: 'absolute' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  // Finn waves 92 pt above the card, which layout does not count. In this centred column a top
+  // margin moves the card down by half of it, so Finn plus card sit mid-sea (short phones keep 0: no room).
+  cardCentred: { marginTop: 80 },
   card: { width: '100%', maxWidth: 360, alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: 26,
     borderWidth: 4, borderColor: BRAND.white, paddingTop: 58, paddingHorizontal: 20, paddingBottom: 14, ...SHADOW.lifted },
   saveFinnWrap: { position: 'absolute', top: -92, width: 112, height: 148 },

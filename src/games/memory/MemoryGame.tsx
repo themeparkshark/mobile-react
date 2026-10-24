@@ -23,6 +23,7 @@
  */
 
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import TapHint, { TAP_HINT_SIZE } from '../../components/TapHint';
 import { Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -169,6 +170,8 @@ const TIDE_ARROW = require('../../assets/games/memory/studio/tide_arrow.png');
 const HALO = require('../../assets/games/memory/v8/fx/glow_halo_2.png');
 // Existing carnival art reused for the warm-up sky (no new art): Sharky's bunting and this game's own
 // outlined cloud (the same line art as Finn's dust puffs, not a flat blob).
+/** How long the warm-up waits for a first tap before the pointing hand shows. */
+export const WARMUP_HINT_DELAY_MS = 2000;
 const SKY_BUNTING = require('../../assets/games/sharky/tide/v71/gate_rush_bunting.png');
 const SKY_CLOUD = require('../../assets/games/memory/v8/fx/cloud_puff_2.png');
 /** cloud_puff_2 is 192 x 172. */
@@ -2212,12 +2215,18 @@ export default function MemoryGame({
     }
   }, [applyEvents, gameNow, send, syncHud]);
 
+  // Finn's warm-up: a pointing hand on a card until the first tap, so a kid who cannot read
+  // the header still knows what to do (TapHint waits 2 s, so a quick kid never sees it).
+  const [warmHint, setWarmHint] = useState(mode === 'warmup');
+  const warmHintRef = useRef(mode === 'warmup');
   const tapSlotRef = useRef<(slot: number, pipelined?: boolean) => void>(() => undefined);
   const tapSlot = useCallback((slot: number, pipelined = false) => {
     const r = runRef.current;
     if (!r) return;
     if (r.finalAt && !r.ended) { skipFinal(); return; }
     if (!r.playing || r.ended || r.pausedAt != null || slot < 0) return;
+    // The warm-up's pointing hand leaves on the kid's first real tap.
+    if (warmHintRef.current) { warmHintRef.current = false; setWarmHint(false); }
     // A tap during a pending reveal is buffered (one), sent the moment it's legal.
     if (r.pending) {
       if (r.eng.up.indexOf(slot) < 0) r.buffered = slot;
@@ -2539,6 +2548,11 @@ export default function MemoryGame({
               style={[styles.abs, { top: tideAt.y - g.ch * 0.32, width: g.cw * 1.1, height: g.ch * 0.64 }, tideStyle]} />
 
             <FxStage ref={fx} width={g.W} height={g.H} reducedMotion={reducedMotion} style={StyleSheet.absoluteFill} />
+            {mode === 'warmup' && warmHint && !resultData ? (
+              // Fingertip (bottom centre of the hand) on the middle of the top row's second card.
+              <TapHint delay={WARMUP_HINT_DELAY_MS} style={{ left: g.grid.x + g.cw * 1.5 + g.gap - TAP_HINT_SIZE.width / 2,
+                top: g.grid.y + g.ch * 0.55 - TAP_HINT_SIZE.height }} />
+            ) : null}
 
             {/* One tap gesture over the whole felt. */}
             <GestureDetector gesture={tap}>

@@ -590,3 +590,19 @@ test('first hunt: the map shows only the treats (footsteps, no metres, no Saved 
   const marker = read('src/screens/ExploreScreen/PrepItem.tsx');
   assert.match(marker, /!inRange && !far && <Image source=\{FOOTSTEPS\}/, 'footsteps alone when there is no number');
 });
+
+test('warm-up: a pointing hand sits on a card until the first real tap, for a kid who cannot read the header', () => {
+  const game = read('src/games/memory/MemoryGame.tsx');
+  assert.match(game, /const \[warmHint, setWarmHint\] = useState\(mode === 'warmup'\);/);
+  assert.match(game, /if \(warmHintRef\.current\) \{ warmHintRef\.current = false; setWarmHint\(false\); \}/);
+  const tap = game.slice(game.indexOf('const tapSlot = useCallback'));
+  assert.ok(tap.indexOf('warmHintRef.current = false') > tap.indexOf("if (!r.playing || r.ended"), 'only a real, legal tap clears it');
+  assert.match(game, /mode === 'warmup' && warmHint && !resultData \? \(\s*\/\/[^\n]*\n\s*<TapHint delay=\{WARMUP_HINT_DELAY_MS\}/);
+});
+
+test('sign-in card: Finn plus card sit mid-sea on tall phones (his overhang counted), never pushed down on short ones', () => {
+  const taste = read('src/screens/ExploreScreen/GuestTaste.tsx');
+  assert.match(taste, /<SaveCard reduced=\{reduced\} compact=\{short\}/);
+  assert.match(taste, /style=\{\[styles\.card, !compact && styles\.cardCentred\]\}/);
+  assert.match(taste, /cardCentred: \{ marginTop: 80 \}/);
+});
