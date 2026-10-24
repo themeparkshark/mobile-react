@@ -67,8 +67,8 @@ function MapCoverSky({ done = false, fill: drivenFill }: {
         const { width: w, height: h } = e.nativeEvent.layout;
         setBox(current => (current && current.width === w && current.height === h ? current : { width: w, height: h }));
       }}>
-      {/* Clouds wait for the cover's own size, so they never jump from window spots to cover spots. */}
-      {box && COVER_CLOUDS.map((c, i) => <CoverCloud key={i} t={t} cloud={c} width={width} height={height} />)}
+      {/* Clouds sit at percentages of the cover (native layout, no JS measuring), so they show on the first frame and never jump. */}
+      {COVER_CLOUDS.map((c, i) => <CoverCloud key={i} t={t} cloud={c} width={width} />)}
       <View style={styles.center}>
         <Animated.View style={sharkStyle}>
           <Image source={SHARK} style={{ width: sharkSize, height: sharkSize }} contentFit="contain" />
@@ -84,16 +84,15 @@ function MapCoverSky({ done = false, fill: drivenFill }: {
   );
 }
 
-function CoverCloud({ t, cloud, width, height }: {
+function CoverCloud({ t, cloud, width }: {
   readonly t: ReturnType<typeof useSharedValue<number>>;
   readonly cloud: (typeof COVER_CLOUDS)[number];
   readonly width: number;
-  readonly height: number;
 }) {
   const w = Math.round(width * cloud.w);
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: t.value * cloud.drift }] }));
   return (
-    <Animated.View style={[{ position: 'absolute', left: width * cloud.x, top: height * cloud.y }, style]}>
+    <Animated.View style={[{ position: 'absolute', left: `${cloud.x * 100}%`, top: `${cloud.y * 100}%` }, style]}>
       <Image source={CLOUD} style={{ width: w, height: Math.round(w * 155 / 232) }} contentFit="contain" />
     </Animated.View>
   );

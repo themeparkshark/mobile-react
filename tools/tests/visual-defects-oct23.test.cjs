@@ -434,7 +434,7 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   assert.match(cover, /transform: \[\{ scaleX: /);
   assert.doesNotMatch(cover, /width: `\$\{fill\.value/);
   assert.match(cover, /transformOrigin: 'left'/);
-  assert.match(cover, /\{box && COVER_CLOUDS\.map\(/, 'clouds wait for the measured cover');
+  assert.match(cover, /top: `\$\{cloud\.y \* 100\}%`/, 'clouds sit at percentages: on the first frame, no jump');
   // The Loading screen draws the Splash art under its video: no blank blue first frame.
   assert.match(read('src/screens/LoadingScreen.tsx'), /<Image source=\{SPLASH_ART\} transition=\{0\} contentFit="cover"/);
   // One bar from launch to map: the splash fills LAUNCH_HANDOFF_SHARE, the cover fills the rest.
@@ -494,6 +494,7 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   assert.match(cover, /fill\.value = withTiming\(1, \{ duration: remaining/);
   assert.match(cover, /<MapCoverSky fill=\{fill\} \/>/);
   assert.match(cover, /\}, \[plan\.version\]\);/);
+  assert.match(cover, /useLayoutEffect\(\(\) => \{\s*const tok = plan\.token;/);
   // The store never times the lift on the JS thread (only a safety net for React state).
   assert.doesNotMatch(store, /react-native-reanimated/);
   assert.match(store, /safety = setTimeout\(\(\) => coverLifted\(tok\), wait\);/);

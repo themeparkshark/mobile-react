@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useLayoutEffect, useState } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import MapCoverSky, { MAP_COVER_SKY } from './MapCoverSky';
@@ -34,7 +34,9 @@ function CoverSky({ plan, style, blockTouches }: {
 }) {
   const opacity = useSharedValue(1);
   const fill = useSharedValue(plan.share ?? LAUNCH_HANDOFF_SHARE);
-  useEffect(() => {
+  // A layout effect: the animations reach the UI thread in the same commit that mounts the cover,
+  // before the screen's own (slower) effects run.
+  useLayoutEffect(() => {
     const tok = plan.token;
     const done = (finished?: boolean) => { 'worklet'; if (finished) runOnJS(coverLifted)(tok); };
     cancelAnimation(opacity);
