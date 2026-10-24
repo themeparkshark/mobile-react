@@ -24,7 +24,7 @@ const capture = loadTs('src/share/capture.ts', {
   },
   'react-native-view-shot': { captureRef: async () => 'file:///tmp/card.jpg' },
   // The grown-up gate passes here; its own tests cover a no.
-  '../services/external': { shareExternal: async () => shared.result, shareFileExternal: async () => true },
+  '../services/external': { SHARE_TIMED_OUT: 'timeout', shareExternal: async () => shared.result, shareFileExternal: async () => true },
 });
 
 const MONTHS = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d/i;
@@ -140,6 +140,12 @@ test('the iOS share sheet reports the destination as a short label; dismissal is
   assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { shared: true, activity: 'instagram' });
   shared.result = { action: 'dismissedAction' };
   assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { shared: false, activity: null });
+  // A sheet that never answered is its own outcome, never logged as a cancel.
+  shared.result = 'timeout';
+  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { shared: null, activity: null, timedOut: true });
+  const host = require('node:fs').readFileSync(require('node:path').resolve(__dirname, '../../src/share/ShareStudioHost.tsx'), 'utf8');
+  assert.ok(host.indexOf('if (outcome.timedOut) return;') > 0 && host.indexOf('if (outcome.timedOut) return;') < host.indexOf("event('dismissed')"),
+    'a timeout returns before the dismissed event');
   assert.equal(capture.activityLabel('com.apple.UIKit.activity.SaveToCameraRoll'), 'save_photo');
   assert.equal(capture.activityLabel('com.zhiliaoapp.musically.ShareExtension'), 'tiktok');
   assert.equal(capture.activityLabel('com.apple.UIKit.activity.Message'), 'messages');
@@ -218,6 +224,15 @@ test('Park Day shares only coin counts and coin art: never park, day, rides, mom
   assert.match(card, /shareFlex\('park_day', parkDayFlexPayload\(recap\), \{ surface: 'park_day' \}\)/);
   assert.doesNotMatch(card, /AuthContext|username|avatar_url|captureRef|ParkDayShareCard/);
   assert.equal(card.match(/shareFlex\(/g).length, 1);
+  // The coin art is warmed into the same cache the card reads as soon as the day loads.
+  assert.match(card, /ArtImage\.prefetch\(urls, 'memory-disk'\)/);
+});
+
+test('the Current Quest share card says true only when the share really went', () => {
+  const code = fs.readFileSync(pathMod.join(repo, 'src/games/current-quest/ShareCard.tsx'), 'utf8');
+  assert.match(code, /'Current Quest'\)\) === 'shared';/);
+  assert.match(code, /result !== SHARE_TIMED_OUT && result\.action === Share\.sharedAction/);
+  assert.doesNotMatch(code, /!== 'declined'/);
 });
 
 test('park-identifying reveals wait until the player leaves the park; re-share never waits', () => {
@@ -339,7 +354,7 @@ test('the newest mounted host shows requests; unmounting a modal hands them back
 });
 
 test('a sheet that never shows is dropped after the watchdog, so the queue never wedges', () => {
-  const host = fs.readFileSync(pathMod.join(repo, 'src/share/ShareStudioHost.tsx'), 'utf8');
+  const host = require('node:fs').readFileSync(require('node:path').resolve(__dirname, '../../src/share/ShareStudioHost.tsx'), 'utf8');
   assert.match(host, /SHOW_WATCHDOG_MS = 1500/);
   assert.match(host, /onShow=\{onShow\}[\s\S]*onShow=\{onShow\}/, 'both the sheet and the reveal report onShow');
   assert.match(host, /if \(shown\.current\) return;[\s\S]*finishFlex\(request\.id\)/);
@@ -374,7 +389,7 @@ test('the count-up starts at 1, never 0, and ends on the number', () => {
   const big = r.countSteps(1840);
   assert.equal(big[0] > 0, true); assert.equal(big[big.length - 1], 1840); assert.ok(big.length <= 10);
   assert.deepEqual(r.countSteps(0), []); assert.deepEqual(r.countSteps(null), []);
-  const host = fs.readFileSync(pathMod.join(repo, 'src/share/ShareStudioHost.tsx'), 'utf8');
+  const host = require('node:fs').readFileSync(require('node:path').resolve(__dirname, '../../src/share/ShareStudioHost.tsx'), 'utf8');
   assert.match(host, /useState<number \| null>\(null\)/);
   assert.match(host, /opacity: bigIn\.value/);
 });
@@ -412,7 +427,7 @@ test('art is warmed per kind when a share-eligible screen or a share asks, never
   assert.deepEqual([...store.warmKinds()], ['park_day']);
   store.warmFlex('coin_level'); store.warmFlex('coin_level');
   assert.deepEqual([...store.warmKinds()].sort(), ['coin_level', 'park_day']);
-  const host = fs.readFileSync(pathMod.join(repo, 'src/share/ShareStudioHost.tsx'), 'utf8');
+  const host = require('node:fs').readFileSync(require('node:path').resolve(__dirname, '../../src/share/ShareStudioHost.tsx'), 'utf8');
   assert.doesNotMatch(host, /setTimeout\(\(\) => setPhase\('warm'\), 3000\)/);
 });
 

@@ -373,7 +373,7 @@ test('a share sheet that never answers frees the button at SHARE_SHEET_WAIT_MS',
     await settle();
     await tick(external.SHARE_SHEET_WAIT_MS);
     assert.equal(text.done, true);
-    assert.equal(text.value, null);
+    assert.equal(text.value, external.SHARE_TIMED_OUT, `${os}: a text sheet that never answered is a timeout, not a cancel`);
   }
 });
 
@@ -477,7 +477,57 @@ test('a grown-up no shares nothing and copies nothing', async () => {
   await settle();
   assert.equal(done.value, 'declined');
   assert.equal(calls.share.length, 0);
-  assert.equal(calls.copy.length, 0);
+  assert.equal(calls.rnShare.length, 0);
+});
+
+test('the named copy is made while the grown-up answers, and a no leaves nothing held open', async () => {
+  const clock = fakeClock();
+  const calls = { copy: [], del: [] };
+  const dirs = new Set();
+  let answer;
+  const external = loadTs('src/services/external.ts', {
+    'expo-file-system': {
+      cacheDirectory: 'file:///cache/',
+      readDirectoryAsync: async () => [...dirs],
+      deleteAsync: async path => { calls.del.push(path); dirs.delete(path.replace('file:///cache/share-card/', '').replace(/\/$/, '')); },
+      makeDirectoryAsync: async dir => { dirs.add(dir.replace('file:///cache/share-card/', '').replace(/\/$/, '')); },
+      copyAsync: async ({ from, to }) => { calls.copy.push([from, to]); },
+    },
+    'expo-sharing': { isAvailableAsync: async () => true, shareAsync: async () => undefined },
+    'expo-web-browser': { openBrowserAsync: async () => undefined },
+    'react-native': {
+      Platform: { OS: 'ios' }, Linking: {},
+      Share: { sharedAction: 'sharedAction', dismissedAction: 'dismissedAction', share: async () => ({ action: 'dismissedAction' }) },
+    },
+    '../components/GrownUpGate': { askGrownUp: () => new Promise(resolve => { answer = resolve; }) },
+  }, { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout });
+  const settle = async () => { for (let k = 0; k < 12; k++) await new Promise(resolve => setImmediate(resolve)); };
+  const no = track(external.shareFileExternal('file:///tmp/a.png', undefined, 'Ride Photo'));
+  await settle();
+  assert.equal(calls.copy.length, 1, 'the copy is ready before the grown-up answers');
+  assert.equal(no.done, false);
+  answer(false);
+  await settle();
+  assert.equal(no.value, 'declined');
+  // The next share sweeps the declined copy: a no never pins a file.
+  const flex = track(external.shareExternal({ url: '/private/var/tmp/b.jpg' }, undefined, 'Golden Churro'));
+  await settle();
+  assert.equal(calls.copy.length, 2, 'the flex card copy is made during the gate too');
+  answer(true);
+  await settle();
+  assert.deepEqual(flex.value, { action: 'dismissedAction' });
+  assert.equal(calls.del.length, 1, 'only the declined copy was cleared');
+  assert.equal(dirs.size, 1);
+});
+
+test('the old-copy sweep runs after the copy, never between OK and the sheet', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const code = fs.readFileSync(path.join(__dirname, '..', '..', 'src/services/external.ts'), 'utf8');
+  const body = code.slice(code.indexOf('async function namedShareCopy'), code.indexOf('async function sweepShareCopies'));
+  assert.doesNotMatch(body, /await\s+FileSystem\.readDirectoryAsync/, 'no directory read on the share path');
+  assert.match(body, /void sweepShareCopies\(root\)/);
+  assert.ok(body.indexOf('liveShareDirs.add(slot)') < body.indexOf('makeDirectoryAsync'), 'the slot is held before it is made');
 });
 
 test('the ride card share sheets keep their buttons reachable: the backdrop and panel are not one big accessible element', () => {

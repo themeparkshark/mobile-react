@@ -169,6 +169,8 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
       for (let waited = 0; waited < FLEX_CAPTURE_WAIT_MS && !readyRef.current; waited += 100) await new Promise(r => setTimeout(r, 100));
       const uri = await captureFlex(cardRef, format);
       const outcome = await openShareSheet(uri, flexCopy(request.kind, request.payload).title);
+      // A sheet that never answered (it may still be up) is neither a cancel nor a share: record nothing.
+      if (outcome.timedOut) return;
       if (outcome.shared === false) event('dismissed');
       else {
         event('shared', outcome.activity);
