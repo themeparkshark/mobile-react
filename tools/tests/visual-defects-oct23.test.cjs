@@ -644,7 +644,7 @@ test('PLAY RIDE is one piece: the pill, its label and the ride chip appear toget
   // A press that turns disabled mid-press (or Reduce Motion) never leaves the pill at 0.97.
   assert.match(button, /if \(disabled \|\| reducedMotion\) \{ animated\.stopAnimation\(\); animated\.setValue\(1\); \}/);
   assert.match(button, /return \(\) => animated\.stopAnimation\(\);/);
-  assert.match(button, /onLoadEnd=\{markArtReady\}/);
+  assert.match(button, /onLoadEnd=\{markArtLoaded\}/);
   assert.match(button, /if \(reported\.current \|\| !artReady \|\| labelAreaHeight <= 0\) return;/, 'reports once, only when the art drew and the label has its size');
   assert.match(button, /setTimeout\(markArtReady, pillArtSeen \? 120 : 800\)/, 'a safety if the image never reports');
   const redeem = read('src/components/RedeemModal.tsx');
@@ -704,7 +704,7 @@ test('first seconds on the map: pins arrive in the cover fade, late pins land in
   assert.match(explore, /const MAP_CALM_MS = 5000;/);
   assert.match(explore, /const parkTipReady = !mapCovered && mapCalm && mapTipReady\(\{/);
   const map = read('src/components/Map.tsx');
-  assert.match(map, /\{!covered && !tileWaitOver && <TileWaitSheet drawn=\{tilesDrawn\} \/>\}/);
+  assert.match(map, /\{!tileWaitOver && <TileWaitSheet drawn=\{tilesDrawn\} armed=\{!covered\} \/>\}/);
   assert.match(map, /setTimeout\(\(\) => \{ setTileWaitOver\(true\); mapTilesShown\(coverToken\.current\); \}, TILE_WAIT_MAX_MS \+ 500\)/);
   assert.match(map, /onDidFinishRenderingFrameFully=\{covered \|\| !tilesDrawn \? revealMap : undefined\}/);
   const sheet = read('src/components/map/TileWaitSheet.tsx');
@@ -1037,4 +1037,14 @@ test('Trail Boxes: the flag is read only once signed in, and a check with no ans
   assert.match(src, /const FLAG_RETRY_MS = \[4_000, 15_000, 45_000\] as const;/);
   assert.match(src, /if \(attempt < FLAG_RETRY_MS\.length\) timer = setTimeout\(\(\) => check\(attempt \+ 1\), FLAG_RETRY_MS\[attempt\]\);/);
   assert.doesNotMatch(src, /TRAILDBG/);
+});
+
+test('launch: the sky sheet waits under the cover from the first frame, PLAY RIDE never shows words on the bare map', () => {
+  const sheet = read('src/components/map/TileWaitSheet.tsx');
+  assert.match(sheet, /if \(!drawn && !armed\) return;/, 'its 6 s wait starts only when the cover has lifted');
+  const button = read('src/components/YellowButton.tsx');
+  assert.match(button, /\{!artLoaded && <View pointerEvents="none" style=\{STAND_IN_PILL\} \/>\}/);
+  assert.match(button, /const \[artLoaded, setArtLoaded\] = useState\(pillArtSeen\);/);
+  assert.doesNotMatch(button.slice(button.indexOf('const markArtReady'), button.indexOf('const markArtLoaded')), /pillArtSeen = true/,
+    'the safety never claims the picture is cached');
 });

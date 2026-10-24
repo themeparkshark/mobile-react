@@ -5,6 +5,11 @@ import { artButtonFontSize } from '../ui/artButtonText';
 
 /** Set once the pill art has drawn anywhere: later buttons know it is in the image cache. */
 let pillArtSeen = false;
+/** The pill drawn in code (gold, warm rim), under the label while the picture is still decoding. */
+const STAND_IN_PILL = {
+  position: 'absolute', left: '3%', right: '3%', top: '8%', bottom: '12%', borderRadius: 999,
+  backgroundColor: '#ffc928', borderWidth: 3, borderColor: '#b86a0c',
+} as const;
 
 export default function YellowButton({
   disabled = false,
@@ -25,11 +30,19 @@ export default function YellowButton({
   // The label never draws on its own: it waits for the pill art, so a kid never sees words with no button.
   const [artReady, setArtReady] = useState(false);
   const readyRef = useRef(onArtReady); readyRef.current = onArtReady;
+  // The art itself has drawn (not just the safety below): until then a drawn gold pill sits under
+  // the label, so words never show on the bare map, even when the picture is slow to decode.
+  const [artLoaded, setArtLoaded] = useState(pillArtSeen);
   const markArtReady = () => {
-    pillArtSeen = true;
     setArtReady(true);
   };
-  // A safety: if the image never reports (an old cache), show the button anyway after a beat.
+  const markArtLoaded = () => {
+    pillArtSeen = true;
+    setArtLoaded(true);
+    setArtReady(true);
+  };
+  // A safety: if the image never reports (an old cache), show the button anyway after a beat
+  // (on its drawn stand-in pill).
   useEffect(() => {
     const t = setTimeout(markArtReady, pillArtSeen ? 120 : 800);
     return () => clearTimeout(t);
@@ -99,9 +112,10 @@ export default function YellowButton({
           ],
         }}
       >
+        {!artLoaded && <View pointerEvents="none" style={STAND_IN_PILL} />}
         <ImageBackground
           source={require('../../assets/images/yellow_button.png')}
-          onLoadEnd={markArtReady}
+          onLoadEnd={markArtLoaded}
           style={{
             width: '100%',
             aspectRatio: 3.8,

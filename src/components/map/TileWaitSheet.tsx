@@ -15,16 +15,23 @@ const FADE_MS = 320;
  * Reduce Motion), so a slow map never looks blank or frozen. It never blocks a tap, and it never
  * stays longer than TILE_WAIT_MAX_MS.
  */
-function TileWaitSheet({ drawn }: { readonly drawn: boolean }) {
-  // Already drawn when the cover lifted: nothing to hide, never mount.
+function TileWaitSheet({ drawn, armed = true }: {
+  readonly drawn: boolean;
+  /** The loading cover has lifted: the sheet's wait starts counting now (under the cover it just waits). */
+  readonly armed?: boolean;
+}) {
+  // Already drawn when it would mount: nothing to hide, never mount.
   const [gone, setGone] = useState(drawn);
   const opacity = useSharedValue(1);
   useEffect(() => {
     if (gone) return;
+    // Tiles drew: fade now (under the cover, unseen). Not yet: once the cover has lifted, wait for
+    // them at most TILE_WAIT_MAX_MS.
+    if (!drawn && !armed) return;
     const hide = (finished?: boolean) => { 'worklet'; if (finished) runOnJS(setGone)(true); };
     opacity.value = withDelay(drawn ? 0 : TILE_WAIT_MAX_MS,
       withTiming(0, { duration: FADE_MS, easing: Easing.out(Easing.quad) }, hide));
-  }, [drawn, gone, opacity]);
+  }, [drawn, armed, gone, opacity]);
   const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
   if (gone) return null;
   return (

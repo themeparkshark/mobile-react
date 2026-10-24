@@ -1009,7 +1009,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}
       </MapView>
       </DeclutterContext.Provider>
-      {!covered && !tileWaitOver && <TileWaitSheet drawn={tilesDrawn} />}
+      {/* Mounted under the cover from the map's first frame (not after the lift), so a cover that
+          fades before a busy JS thread catches up never shows a bare map for even a frame. */}
+      {!tileWaitOver && <TileWaitSheet drawn={tilesDrawn} armed={!covered} />}
       {/* Light, cloud shadows, gulls and fireflies: above the map, under the controls and the shark. */}
       {viewSize && <MapLightOverlay width={viewSize.width} height={viewSize.height} />}
       {viewSize && <MapSkyOverlay width={viewSize.width} height={viewSize.height} />}
