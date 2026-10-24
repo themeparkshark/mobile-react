@@ -469,9 +469,10 @@ function startWobbles(intent: HapticIntent): void {
   const s = session;
   if (s && sessionOpen() && studioReady('catch.tap') && !s.burst) {
     const now = Date.now();
+    // Each delay is measured from `now` (a slow JS thread can take a few ms over the three calls).
     s.wobbleVoices = b.offsets.map((off, k) => {
-      const delayMs = off - base;
-      return { id: playMoment('catch.wobble', { step: s.heat + k, delayMs }), at: now + delayMs };
+      const delayMs = Math.max(0, off - base - (Date.now() - now));
+      return { id: playMoment('catch.wobble', { step: s.heat + k, delayMs }), at: now + off - base };
     }).filter((v) => v.id > 0);
   }
 }

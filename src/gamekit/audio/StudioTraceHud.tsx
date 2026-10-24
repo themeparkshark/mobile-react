@@ -61,12 +61,19 @@ function short(e: TraceEvent): string {
   return `${e.kind === 'sound' ? 'SND' : e.kind === 'haptic' ? 'HAP' : e.kind === 'mark' ? 'MRK' : e.kind.toUpperCase().slice(0, 3)} ${n}`.slice(0, 34);
 }
 
+/** Text lines re-render at most this often (the lights are per frame on the UI thread). */
+const LINE_FLUSH_MS = 250;
+/** Captures can move the HUD clear of the find (EXPO_PUBLIC_STUDIO_TRACE_HUD_TOP, points) and drop its frame graph
+ * when the screen already shows one (EXPO_PUBLIC_STUDIO_TRACE_HUD_PERF=0). Dev trace builds only. */
+const HUD_TOP = Number(process.env.EXPO_PUBLIC_STUDIO_TRACE_HUD_TOP) || 250;
+const HUD_PERF = process.env.EXPO_PUBLIC_STUDIO_TRACE_HUD_PERF !== '0';
+
 export default function StudioTraceHud() {
   const snd = useSharedValue(0);
   const hap = useSharedValue(0);
   const mrk = useSharedValue(0);
   const [lines, setLines] = useState<string[]>([]);
-  const probe = usePerfProbe();
+  const probe = usePerfProbe(HUD_PERF);
   const batch = useSharedValue<number[]>([]);
   const acc = useSharedValue(0);
   useFrameCallback((info) => {
@@ -82,13 +89,26 @@ export default function StudioTraceHud() {
       runOnJS(addFrames)(out);
     }
   });
-  useEffect(() => onTrace((e) => {
-    const v = e.kind === 'sound' ? snd : e.kind === 'haptic' ? hap : e.kind === 'mark' ? mrk : null;
-    if (!v) return;
-    v.value = 1;
-    v.value = withTiming(0, { duration: FADE_MS });
-    setLines((prev) => [short(e), ...prev].slice(0, 5));
-  }), [snd, hap, mrk]);
+  useEffect(() => {
+    // The lights flip on the UI thread on the event's own frame; the text lines re-render at most four
+    // times a second (round 5: one React render per trace event was JS work in the middle of a catch).
+    let pending: string[] = [];
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const off = onTrace((e) => {
+      const v = e.kind === 'sound' ? snd : e.kind === 'haptic' ? hap : e.kind === 'mark' ? mrk : null;
+      if (!v) return;
+      v.value = 1;
+      v.value = withTiming(0, { duration: FADE_MS });
+      pending = [short(e), ...pending].slice(0, 5);
+      timer ??= setTimeout(() => {
+        timer = null;
+        const add = pending;
+        pending = [];
+        setLines((prev) => [...add, ...prev].slice(0, 5));
+      }, LINE_FLUSH_MS);
+    });
+    return () => { off(); if (timer) clearTimeout(timer); };
+  }, [snd, hap, mrk]);
   return (
     <View pointerEvents="none" style={styles.wrap}>
       <View style={styles.lights}>
@@ -99,14 +119,14 @@ export default function StudioTraceHud() {
       {lines.map((l, i) => (
         <Text key={`${i}-${l}`} style={[styles.line, i === 0 && styles.lineNew]} numberOfLines={1} allowFontScaling={false}>{l}</Text>
       ))}
-      <PerfOverlay probe={probe} style={styles.perf} />
+      {HUD_PERF ? <PerfOverlay probe={probe} style={styles.perf} /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   // Top left, under the header chips: clear of the map buttons and the footer.
-  wrap: { position: 'absolute', left: 6, top: 250, width: 150, zIndex: 99999, elevation: 99999 },
+  wrap: { position: 'absolute', left: 6, top: HUD_TOP, width: 150, zIndex: 99999, elevation: 99999 },
   lights: { flexDirection: 'row', gap: 4, marginBottom: 3 },
   light: { width: 40, height: 22, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#0b2a4a' },
   lightText: { color: '#0b2a4a', fontSize: 10, fontWeight: '800' },
