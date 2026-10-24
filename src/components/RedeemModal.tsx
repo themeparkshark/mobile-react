@@ -49,6 +49,9 @@ export default function RedeemModal({
   const reducedMotion = useReducedGameMotion();
   const lastAnnounced = useRef<string | null>(null);
   const animated = useRef(new Animated.Value(0)).current;
+  // PLAY RIDE is one piece: the yellow pill, its label and the ride chip under it stay hidden until
+  // the pill art has drawn, then slide up together (never words or a chip on the bare map first).
+  const [pillReady, setPillReady] = useState(false);
 
   const openChange = useRef(onOpenChange); openChange.current = onOpenChange;
   useEffect(() => { openChange.current?.(modalVisible); }, [modalVisible]);
@@ -62,7 +65,7 @@ export default function RedeemModal({
   // Standing at a ride that is not open: the same spot says why (and when it is back), never a blank.
   const closedReason = !otherSelected && !available ? nearbyRideClosedReason(redeemable, liveStatus) : null;
   const closedLabel = closedReason ? closedRideCopy(closedReason) : null;
-  const shown = available || !!closedLabel;
+  const shown = (available && pillReady) || !!closedLabel;
   const identity = redeemable ? `${redeemable.type}:${redeemable.model.id}` : null;
   useEffect(() => {
     if (available && identity !== lastAnnounced.current) {
@@ -83,6 +86,7 @@ export default function RedeemModal({
       {redeemable && available && (
         <Animated.View
           style={{
+            opacity: pillReady ? 1 : 0,
             transform: [
               {
                 translateY: animated,
@@ -91,6 +95,7 @@ export default function RedeemModal({
           }}
         >
           <YellowButton
+            onArtReady={() => setPillReady(true)}
             onPress={async () => {
               setOpenedRedeemable(redeemable);
               setModalVisible(true);

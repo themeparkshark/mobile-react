@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  COVER_FADE_MS, COVER_FINISH_MS, coverCanLift, coverDeadline, coverHoldDeadline, coverStartShare,
+  COVER_FADE_MS, COVER_FINISH_MS, LATER_COVER_SHARE, coverCeiling, coverLiftAt,
 } from '../../constants/launchHandoff';
 
 /**
@@ -11,8 +11,9 @@ import {
  * (a withDelay fade and the bar on the same clock) the moment it commits, so a busy JS thread
  * (the map screen mounting) can never hold the cover past its deadline. The cover's own shared
  * values start at full opacity, so its first frame is always the sky.
- * The screen draws the cover above its whole HUD (header and footer stay on top): a kid sees sky,
- * shark and bar, then the map and every button arrive in one fade.
+ * The app's first cover is the launch scene over the whole screen (header and footer too); a later
+ * cover (walking into a park) is the light sky under the header. Either way the map and every
+ * button arrive in one fade, and never onto a map whose tiles have not drawn.
  */
 export interface CoverPlan {
   readonly up: boolean;
@@ -24,11 +25,18 @@ export interface CoverPlan {
   readonly deadline: number;
   /** Where the bar starts; null keeps the bar going from where it is (never jumps back). */
   readonly share: number | null;
+  /** How far the bar may creep before the next real step (honest progress). */
+  readonly ceiling: number;
   /** The map has drawn: finish the bar and fade now. */
   readonly lifting: boolean;
+  /**
+   * The app's first cover: it shows the launch scene (the splash art and the one launch bar) over
+   * the whole screen, header and footer included, so launch reads as one splash, then the game.
+   */
+  readonly launch: boolean;
 }
 
-let plan: CoverPlan = { up: false, version: 0, token: 0, deadline: 0, share: null, lifting: false };
+let plan: CoverPlan = { up: false, version: 0, token: 0, deadline: 0, share: null, ceiling: 0, lifting: false, launch: false };
 let startedAt = 0;
 let mapMounted = false;
 let firstCover = true;
@@ -57,9 +65,14 @@ export function coverLifted(tok: number) {
   publish({ ...plan, up: false, lifting: false, share: null });
 }
 
-function lift() {
+/** Re-plan the lift from what is true now: lift at once, or wait (bar creeping to the next step). */
+function replan(now: number, notify = true) {
   if (!plan.up || plan.lifting) return;
-  publish({ ...plan, lifting: true, share: null });
+  const at = coverLiftAt({ now, startedAt, drawn, held });
+  if (at <= now) { publish({ ...plan, lifting: true, share: null }, notify); return; }
+  const ceiling = Math.max(plan.ceiling, coverCeiling(mapMounted, held));
+  if (at === plan.deadline && ceiling === plan.ceiling) return;
+  publish({ ...plan, deadline: at, ceiling, share: null }, notify);
 }
 
 /**
@@ -72,9 +85,12 @@ export function armMapCover(now = Date.now()) {
   startedAt = now;
   mapMounted = false;
   drawn = false;
-  const share = coverStartShare(firstCover, false, 0);
+  const launch = firstCover;
   firstCover = false;
-  publish({ up: true, token: plan.token + 1, deadline: coverDeadline(now, null, false), share, lifting: false }, false);
+  publish({
+    up: true, token: plan.token + 1, deadline: coverLiftAt({ now, startedAt, drawn, held }),
+    share: launch ? null : LATER_COVER_SHARE, ceiling: coverCeiling(false, held), lifting: false, launch,
+  }, false);
 }
 
 /**
@@ -82,38 +98,45 @@ export function armMapCover(now = Date.now()) {
  * the map passes back to mapCoverDrawn and releaseMapCover.
  */
 export function beginMapCover(now = Date.now()): number {
-  const continuing = plan.up && !plan.lifting && plan.deadline > now;
-  if (!continuing) { startedAt = now; mapMounted = false; }
-  const deadline = coverDeadline(now, continuing ? { up: true, deadline: plan.deadline, startedAt, mapMounted } : null, true);
+  const continuing = plan.up && !plan.lifting;
+  const launch = continuing ? plan.launch : firstCover;
+  if (!continuing) { startedAt = now; firstCover = false; }
   mapMounted = true;
-  const share = continuing ? null : coverStartShare(firstCover, false, 0);
-  firstCover = false;
   drawn = false;
-  publish({ up: true, token: plan.token + 1, deadline, share, lifting: false });
+  publish({
+    up: true, token: plan.token + 1, deadline: coverLiftAt({ now, startedAt, drawn, held }),
+    share: continuing || launch ? null : LATER_COVER_SHARE,
+    ceiling: Math.max(continuing ? plan.ceiling : 0, coverCeiling(true, held)), lifting: false, launch,
+  });
+  if (__DEV__) coverLog('map mounted', now);
   return plan.token;
 }
 
-/** The map with this token has fully drawn: lift early unless the screen is still deciding which map to show. */
+/** The map with this token has drawn its tiles: lift now, or as soon as the screen has picked its map. */
 export function mapCoverDrawn(tok: number) {
-  if (tok !== plan.token) return;
+  // Called on every fully drawn frame while the cover is up: only the first one counts.
+  if (tok !== plan.token || drawn) return;
   drawn = true;
-  if (coverCanLift(drawn, held)) lift();
+  if (__DEV__) coverLog('map drawn', Date.now());
+  replan(Date.now());
 }
 
-/** The screen holds the cover (never past the hard cap) while it is still picking home or park. */
+/** The screen holds the cover (never past COVER_MAX_MS once the map drew) while it is still picking home or park. */
 export function holdMapCover(hold: boolean, now = Date.now()) {
   if (held === hold) return;
   held = hold;
-  if (!plan.up || plan.lifting) return;
-  if (coverCanLift(drawn, held)) { lift(); return; }
-  const next = coverHoldDeadline(held, now, { startedAt, deadline: plan.deadline });
-  if (next !== plan.deadline) publish({ ...plan, deadline: next, share: null });
+  if (__DEV__) coverLog(hold ? 'picking home or park' : 'map picked', now);
+  replan(now);
 }
 
 /** The map with this token unmounted. A map that replaces it in the same commit keeps the cover. */
 export function releaseMapCover(tok: number) {
   if (tok !== plan.token) return;
-  setTimeout(() => { if (tok === plan.token) { drawn = true; lift(); } }, 0);
+  setTimeout(() => { if (tok === plan.token) { drawn = true; replan(Date.now()); } }, 0);
+}
+
+function coverLog(step: string, now: number) {
+  console.log(`[launch-cover] ${step} at +${now - startedAt} ms (lift at +${plan.deadline - startedAt} ms${plan.lifting ? ', lifting' : ''})`);
 }
 
 export function isMapCovered(): boolean {

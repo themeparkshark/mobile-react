@@ -3,19 +3,42 @@ import { useEffect, useRef, useState } from 'react';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { artButtonFontSize } from '../ui/artButtonText';
 
+/** Set once the pill art has drawn anywhere: later buttons know it is in the image cache. */
+let pillArtSeen = false;
+
 export default function YellowButton({
   disabled = false,
   text,
   onPress,
+  onArtReady,
 }: {
   readonly disabled?: boolean;
   readonly text: string;
   readonly onPress?: () => void;
+  /** The pill art has drawn: a caller can show the button, its label and anything under it together. */
+  readonly onArtReady?: () => void;
 }) {
   const animated = useRef(new Animated.Value(1)).current;
   const reducedMotion = useReducedGameMotion();
   // Label size follows the button's height so every label on this button matches (was a fixed 72pt shrink-to-fit).
   const [labelAreaHeight, setLabelAreaHeight] = useState(0);
+  // The label never draws on its own: it waits for the pill art, so a kid never sees words with no button.
+  const [artReady, setArtReady] = useState(false);
+  const readyRef = useRef(onArtReady); readyRef.current = onArtReady;
+  const reported = useRef(false);
+  const markArtReady = () => {
+    if (reported.current) return;
+    reported.current = true;
+    pillArtSeen = true;
+    setArtReady(true);
+    readyRef.current?.();
+  };
+  // A safety: if the image never reports (an old cache), show the button anyway after a beat.
+  useEffect(() => {
+    const t = setTimeout(markArtReady, pillArtSeen ? 120 : 800);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (disabled || reducedMotion) { animated.stopAnimation(); animated.setValue(1); }
     return () => animated.stopAnimation();
@@ -70,6 +93,7 @@ export default function YellowButton({
       >
         <ImageBackground
           source={require('../../assets/images/yellow_button.png')}
+          onLoadEnd={markArtReady}
           style={{
             width: '100%',
             aspectRatio: 3.8,
@@ -89,7 +113,7 @@ export default function YellowButton({
               adjustsFontSizeToFit={true}
               maxFontSizeMultiplier={1.2}
               style={{
-                opacity: labelAreaHeight > 0 ? 1 : 0,
+                opacity: labelAreaHeight > 0 && artReady ? 1 : 0,
                 textAlign: 'center',
                 fontSize: artButtonFontSize(labelAreaHeight),
                 color: 'white',

@@ -90,12 +90,13 @@ test('park names are uppercased in code so iOS never clips them', () => {
 });
 
 test('launch screens sit on the splash blue with the video poster: no dark navy flash', () => {
-  for (const file of ['src/screens/Auth/LoginScreen.tsx', 'src/screens/LoadingScreen.tsx']) {
-    const src = read(file);
-    assert.doesNotMatch(src, /backgroundColor: '#09268f'/, file);
-    assert.match(src, /SPLASH_BLUE = '#0768B9'/, file);
-    assert.match(src, /posterSource=\{SPLASH_POSTER\}/, file);
-  }
+  const login = read('src/screens/Auth/LoginScreen.tsx');
+  assert.doesNotMatch(login, /backgroundColor: '#09268f'/);
+  assert.match(login, /SPLASH_BLUE = '#0768B9'/);
+  assert.match(login, /posterSource=\{SPLASH_POSTER\}/);
+  // The Loading screen is the launch scene: the native splash's own art on the native splash blue.
+  assert.doesNotMatch(read('src/screens/LoadingScreen.tsx'), /#09268f/);
+  assert.match(read('src/components/launch/LaunchScene.tsx'), /export const LAUNCH_BLUE = '#0768B9';/);
   assert.ok(fs.existsSync(path.join(ROOT, 'assets/images/screens/login/splash-loop-poster.jpg')));
 });
 
@@ -450,49 +451,37 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   assert.doesNotMatch(cover, /width: `\$\{fill\.value/);
   assert.match(cover, /transformOrigin: 'left'/);
   assert.match(cover, /top: `\$\{cloud\.y \* 100\}%`/, 'clouds sit at percentages: on the first frame, no jump');
-  // The Loading screen draws the Splash art under its video: no blank blue first frame.
-  assert.match(read('src/screens/LoadingScreen.tsx'), /<Image source=\{SPLASH_ART\} transition=\{0\} contentFit="cover"/);
-  // One bar from launch to map: the splash fills LAUNCH_HANDOFF_SHARE, the cover fills the rest.
-  assert.match(read('src/screens/LoadingScreen.tsx'), /<Progress progress=\{Math\.max\(SPLASH_ROUTE_SHARE \* 100, progress \* LAUNCH_HANDOFF_SHARE\)\} initial=\{SPLASH_ROUTE_SHARE \* 100\} \/>/);
-  // The Splash route shows the same bar from its first frame (progress from the first second).
-  assert.match(read('src/screens/SplashScreen.tsx'), /<Progress progress=\{SPLASH_ROUTE_SHARE \* 100\} duration=\{SPLASH_CREEP_MS\} \/>/);
-  const progressSrc = read('src/components/Progress.tsx');
-  assert.match(progressSrc, /useNativeDriver: true/, 'the launch bar moves on the native driver');
-  assert.match(progressSrc, /transform: \[\{ scaleX: fill \}\]/);
+  // One launch scene from the native splash to the map: the Splash route, the Loading screen and the
+  // map's first cover all draw it, and all fill the same shared bar (it never restarts or jumps back).
+  assert.match(read('src/screens/LoadingScreen.tsx'), /return <LaunchScene active=\{focused\} fact=\{fact\} \/>;/);
+  assert.match(read('src/screens/LoadingScreen.tsx'), /moveLaunchBar\(\(progress \/ 100\) \* LAUNCH_HANDOFF_SHARE, 250\)/);
+  assert.match(read('src/screens/SplashScreen.tsx'), /moveLaunchBar\(SPLASH_ROUTE_SHARE, SPLASH_CREEP_MS\)/);
+  const scene = read('src/components/launch/LaunchScene.tsx');
+  assert.match(scene, /export const launchFill: SharedValue<number> = makeMutable\(0\);/);
+  assert.match(scene, /if \(to <= launchFill\.value\) return;/, 'the launch bar never moves back');
+  assert.match(scene, /transform: \[\{ scaleX: Math\.max\(0, Math\.min\(1, launchFill\.value\)\) \}\]/);
+  assert.match(scene, /transformOrigin: 'left'/);
+  // The fact is picked once per launch, so the cover shows the same words as the Loading screen.
+  assert.match(scene, /if \(!launchFact && fact\) launchFact = fact;/);
   const k = loadTs('src/constants/launchHandoff.ts');
   assert.ok(k.LAUNCH_HANDOFF_SHARE > 0.5 && k.LAUNCH_HANDOFF_SHARE < 0.9);
-  assert.ok(k.COVER_MAX_MS <= 2500, 'the cover never holds longer than 2.5 s');
   assert.ok(k.SPLASH_ROUTE_SHARE > 0 && k.SPLASH_ROUTE_SHARE < k.LAUNCH_HANDOFF_SHARE / 2);
-  assert.equal(k.coverStartShare(true, false, 0), k.LAUNCH_HANDOFF_SHARE, 'launch picks up the splash bar');
-  assert.equal(k.coverStartShare(false, true, 0.83), 0.83, 'a map swapped in under the cover never restarts the bar');
-  assert.equal(k.coverStartShare(false, false, 0.5), k.LATER_COVER_SHARE);
-  // A home map swapped for the park map keeps the first deadline: the cover never outlives its cap.
-  // The screen's first frame raises the cover (hard cap only, in case no map ever mounts).
-  assert.equal(k.coverDeadline(1000, null, false), 1000 + k.COVER_HARD_MAX_MS);
-  const armed = { up: true, deadline: 1000 + k.COVER_HARD_MAX_MS, startedAt: 1000, mapMounted: false };
-  // The map mounts a few frames later (a phone): the cover is up COVER_MAX_MS from its first frame.
-  assert.equal(k.coverDeadline(1050, armed, true), 1000 + k.COVER_MAX_MS);
-  // A busy phone mounts the map late: it still gets a moment to draw, never past the hard cap.
-  assert.equal(k.coverDeadline(3000, armed, true), 3000 + k.COVER_MAP_MIN_MS);
-  assert.equal(k.coverDeadline(4900, armed, true), 1000 + k.COVER_HARD_MAX_MS);
-  // A home map swapped for the park map keeps the first deadline: the cover never outlives its cap.
-  const mapped = { up: true, deadline: 3400, startedAt: 1000, mapMounted: true };
-  assert.equal(k.coverDeadline(2500, mapped, true), 3400);
-  assert.equal(k.coverDeadline(5000, mapped, true), 5000 + k.COVER_MAX_MS, 'a later cover is a new cover');
-  assert.equal(k.coverDeadline(2500, { ...mapped, up: false }, true), 2500 + k.COVER_MAX_MS);
+  assert.ok(k.COVER_MAX_MS <= 1500, 'a drawn map waits at most 1.5 s for the home-or-park choice');
   assert.ok(k.COVER_HARD_MAX_MS <= 4000);
-  // Picking home or park at launch holds the one cover, but never past COVER_MAX_MS once a map is up:
-  // a slow park lookup never keeps a kid on the sky; it lifts onto whichever map has drawn.
-  assert.equal(k.coverHoldDeadline(true, 1500, { startedAt: 1000, deadline: 1000 + k.COVER_MAX_MS }), 1000 + k.COVER_MAX_MS);
-  assert.equal(k.coverHoldDeadline(true, 1500, { startedAt: 1000, deadline: 1200 }), 1000 + k.COVER_MAX_MS);
-  assert.equal(k.coverHoldDeadline(true, 1500, { startedAt: 1000, deadline: 1000 + k.COVER_HARD_MAX_MS }), 1000 + k.COVER_HARD_MAX_MS, 'no map yet: only the hard cap');
-  assert.equal(k.coverHoldDeadline(false, 1500, { startedAt: 1000, deadline: 6000 }), 1000 + k.COVER_MAX_MS);
-  assert.equal(k.coverHoldDeadline(false, 3000, { startedAt: 1000, deadline: 6000 }), Math.min(1000 + k.COVER_HARD_MAX_MS, 3000 + k.COVER_SWAP_MIN_MS));
-  assert.ok(k.COVER_MAX_MS + k.COVER_SWAP_MIN_MS <= 3000, 'a late map choice keeps the cover under 3 s');
-  assert.equal(k.coverHoldDeadline(false, 5800, { startedAt: 1000, deadline: 6000 }), 1000 + k.COVER_HARD_MAX_MS);
-  assert.equal(k.coverCanLift(true, false), true);
-  assert.equal(k.coverCanLift(true, true), false, 'held while the screen picks home or park');
-  assert.equal(k.coverCanLift(false, false), false);
+  // Never onto a map with no tiles: no draw yet means only the hard cap (a safety) can lift it.
+  assert.equal(k.coverLiftAt({ now: 1500, startedAt: 1000, drawn: false, held: false }), 1000 + k.COVER_HARD_MAX_MS);
+  assert.equal(k.coverLiftAt({ now: 1500, startedAt: 1000, drawn: false, held: true }), 1000 + k.COVER_HARD_MAX_MS);
+  // Drawn and the map is picked: lift now (the splash bar finishes straight into the map).
+  assert.equal(k.coverLiftAt({ now: 1300, startedAt: 1000, drawn: true, held: false }), 1300);
+  // Drawn but still picking home or park: wait until COVER_MAX_MS, then lift onto the map that drew.
+  assert.equal(k.coverLiftAt({ now: 1300, startedAt: 1000, drawn: true, held: true }), 1000 + k.COVER_MAX_MS);
+  assert.equal(k.coverLiftAt({ now: 3000, startedAt: 1000, drawn: true, held: true }), 3000);
+  assert.equal(k.coverLiftAt({ now: 9000, startedAt: 1000, drawn: true, held: true }), 1000 + k.COVER_HARD_MAX_MS);
+  // Honest progress: each real step raises how far the bar may get; the rest fills only when tiles drew.
+  assert.ok(k.coverCeiling(false, false) > k.LAUNCH_HANDOFF_SHARE);
+  assert.ok(k.coverCeiling(true, true) > k.coverCeiling(false, false));
+  assert.ok(k.coverCeiling(true, false) > k.coverCeiling(true, true));
+  assert.ok(k.coverCeiling(true, false) < 1);
   // Clouds: about a quarter of the width (a cloud, not an empty speech balloon), never beside the shark's head.
   const clouds = loadTs('src/components/map/MapCoverSky.tsx', {
     react: { memo: (c) => c, useEffect() {}, useState: (v) => [v, () => {}] },
@@ -522,13 +511,13 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   // plan into a UI-thread withDelay fade with the bar on the same clock.
   assert.match(cover, /const opacity = useSharedValue\(1\);/);
   assert.match(cover, /opacity\.value = withDelay\(remaining, withTiming\(0/);
-  assert.match(cover, /withTiming\(BAR_WAIT_SHARE, \{ duration: remaining/, 'never full while the sky still waits');
-  assert.match(cover, /export const BAR_WAIT_SHARE = 0\.95;/);
-  assert.match(cover, /<MapCoverSky fill=\{fill\} \/>/);
+  assert.match(cover, /withTiming\(Math\.max\(fill\.value, ceiling\), \{ duration: Math\.max\(250, remaining\)/, 'the bar creeps only to the next real step');
+  assert.match(cover, /\{launch \? <LaunchScene \/> : <MapCoverSky fill=\{fill\} \/>\}/);
+  assert.match(cover, /const fill = launch \? launchFill : ownFill;/, 'the launch cover fills the one launch bar');
   assert.match(cover, /\}, \[plan\.version\]\);/);
   assert.match(cover, /useLayoutEffect\(\(\) => \{\s*const tok = plan\.token;/);
   // The UI thread works out the time left itself, so a UI thread busy with the map's first mount never pushes the lift late.
-  assert.match(cover, /runOnUI\(\(deadline: number, share: number \| null, lifting: boolean\) => \{\s*'worklet';/);
+  assert.match(cover, /runOnUI\(\(deadline: number, share: number \| null, ceiling: number, lifting: boolean\) => \{\s*'worklet';/);
   assert.match(cover, /const remaining = Math\.max\(0, deadline - Date\.now\(\)\);/);
   // Header icons have no big-coin placeholder (it drew as a flat gold square while a 36 pt icon decoded).
   const currencySrc = read('src/components/Topbar/Currency.tsx');
@@ -550,8 +539,14 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   // The sky is up on the map screen's first frame, before any map mounts (no bare blue page with buttons).
   assert.match(cover, /useState\(\(\) => \{ if \(armOnMount\) armMapCover\(\); return 0; \}\);\s*const plan = useCoverPlan\(\);/);
   const explore = read('src/screens/ExploreScreen.tsx');
-  // Above every HUD widget (zIndex up to 40) and under the header; taps on the hidden HUD are swallowed.
-  assert.match(explore, /<MapLaunchCover armOnMount blockTouches style=\{\{ top: 70 \+ \(Constants\.statusBarHeight \?\? 0\), zIndex: 45 \}\} \/>/);
+  // A later sky sits above every HUD widget (zIndex up to 40) and under the header; the app's first
+  // cover is the launch scene over the whole screen (header and footer too). Taps on the hidden HUD are swallowed.
+  assert.match(explore, /<MapLaunchCover variant="sky" blockTouches style=\{\{ top: 70 \+ \(Constants\.statusBarHeight \?\? 0\), zIndex: 45 \}\} \/>/);
+  assert.match(explore, /<\/Wrapper>\s*\{\/\*[^]*?\*\/\}\s*<MapLaunchCover variant="launch" armOnMount blockTouches style=\{\{ zIndex: 100 \}\} \/>\s*<\/>/);
+  assert.match(store, /const launch = firstCover;/);
+  // The HUD row waits for both its sources, then fades in once (no title swap after the cover lifts).
+  assert.match(explore, /<MapStatusStack entries=\{statusEntries\} settled=\{statusSettled\} \/>/);
+  assert.match(explore, /const statusSourcesIn = !!rideControl && raidLoaded;/);
   assert.match(explore, /<Map onPress=\{[^\n]*\n\s*coverHost="screen"/);
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /<Map coverHost="screen" /);
   // Tips, tutorials, the home intro and the adventure slam wait for the cover to lift.
@@ -593,7 +588,8 @@ test('the Splash route keeps the launch art and framing (no server splash fading
   // Decided: the bundled splash is permanent, so the dead theme field is gone from the app model too.
   assert.doesNotMatch(read('src/models/theme-type.ts'), /readonly splash_screen_url/);
   assert.doesNotMatch(read('src/api/defaults/theme.json'), /splash_screen_url/);
-  assert.match(src, /source=\{SPLASH_ART\}/);
+  assert.match(src, /return <LaunchScene active=\{focused\} \/>;/);
+  assert.match(read('src/components/launch/LaunchScene.tsx'), /<Image source=\{LAUNCH_ART\} transition=\{0\} contentFit="cover"/);
 });
 
 test('one coin rule: the coin stack is the coin you spend, the gold fin coin means ride coins only', () => {
@@ -635,4 +631,18 @@ test('plain ride names: no trademark marks from the wait-times feed or the ride 
   assert.match(read('src/api/endpoints/me/current-redeemables.js'), /return withPlainTaskNames\(data\.data\);/);
   assert.match(read('src/api/endpoints/parks/getTasks.ts'), /withPlainNames\(data\.data\)/);
   assert.match(read('src/api/endpoints/parks/getSecretTasks.ts'), /withPlainNames\(data\.data\)/);
+});
+
+test('PLAY RIDE is one piece: the pill, its label and the ride chip appear together once the pill art has drawn', () => {
+  const button = read('src/components/YellowButton.tsx');
+  // The label never draws before the pill art (words with no button).
+  assert.match(button, /opacity: labelAreaHeight > 0 && artReady \? 1 : 0,/);
+  assert.match(button, /onLoadEnd=\{markArtReady\}/);
+  assert.match(button, /if \(reported\.current\) return;/, 'reports once');
+  assert.match(button, /setTimeout\(markArtReady, pillArtSeen \? 120 : 800\)/, 'a safety if the image never reports');
+  const redeem = read('src/components/RedeemModal.tsx');
+  // The whole group (pill, label, chip) stays hidden and only slides up once the art is ready.
+  assert.match(redeem, /const shown = \(available && pillReady\) \|\| !!closedLabel;/);
+  assert.match(redeem, /opacity: pillReady \? 1 : 0,/);
+  assert.match(redeem, /onArtReady=\{\(\) => setPillReady\(true\)\}/);
 });

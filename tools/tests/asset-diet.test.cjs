@@ -56,7 +56,9 @@ test('the unused 3D avatar, its model and its GL stack are gone from the binary'
 });
 
 test('the JS splash and the native launch screen use the same art', () => {
-  assert.match(read('src/screens/SplashScreen.tsx'), /assets\/images\/splash-bg\.png/);
+  // The Splash route, the Loading screen and the map's first cover all draw the one launch scene.
+  assert.match(read('src/screens/SplashScreen.tsx'), /return <LaunchScene active=\{focused\} \/>;/);
+  assert.match(read('src/components/launch/LaunchScene.tsx'), /assets\/images\/splash-bg\.png/);
   assert.ok(!fs.existsSync(path.join(root, 'assets/splash.png')), 'the old black 1-bit splash.png is gone');
 });
 

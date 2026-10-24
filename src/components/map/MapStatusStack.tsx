@@ -40,8 +40,14 @@ export interface StatusEntry {
   readonly tone?: StatusTone;
 }
 
-export default function MapStatusStack({ entries, defaultOpen = false }: {
+export default function MapStatusStack({ entries, defaultOpen = false, settled = true }: {
   readonly entries: readonly StatusEntry[];
+  /**
+   * The row's sources (today's standings, the park's live events) have answered. Until then the
+   * row keeps its space but stays hidden, then fades in once, so a kid never reads one title and
+   * sees it swapped for another a second later.
+   */
+  readonly settled?: boolean;
   /** Development previews: start expanded and stay open (captures). */
   readonly defaultOpen?: boolean;
 }) {
@@ -69,6 +75,11 @@ export default function MapStatusStack({ entries, defaultOpen = false }: {
     return () => clearTimeout(timer);
   }, [open, defaultOpen]);
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
+  const shown = useSharedValue(settled ? 1 : 0);
+  useEffect(() => {
+    if (settled) shown.value = reduced ? 1 : withTiming(1, { duration: 220 });
+  }, [settled, reduced, shown]);
+  const shownStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
   if (!lead) return null;
   const tone = lead.tone ?? TONES.park;
   const toggle = () => { haptic('tapLight'); setOpen(value => !value); };
@@ -76,7 +87,7 @@ export default function MapStatusStack({ entries, defaultOpen = false }: {
     <>
       {open && <Pressable testID="status-stack-scrim" accessibilityLabel="Close the status list" onPress={() => setOpen(false)}
         style={styles.scrim} />}
-      <View style={styles.wrap} pointerEvents="box-none">
+      <Animated.View style={[styles.wrap, shownStyle]} pointerEvents={settled ? 'box-none' : 'none'}>
         {/* Open, the pills sit on one solid card: nothing on the map peeks between them. */}
         {open && <View pointerEvents="none" style={styles.backing} />}
         <View style={styles.row} pointerEvents="box-none">
@@ -103,7 +114,7 @@ export default function MapStatusStack({ entries, defaultOpen = false }: {
             {entry.node}
           </Animated.View>
         ))}
-      </View>
+      </Animated.View>
     </>
   );
 }

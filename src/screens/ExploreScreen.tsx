@@ -166,6 +166,9 @@ const PARKED_TIME = '2000-01-01T00:00:00Z';
 // Friends drawn as ghost sharks at most (the closest).
 const GHOST_CAP = 5;
 
+/** How long the HUD row waits for its sources before it shows what it has. */
+const STATUS_ROW_WAIT_MS = 4000;
+
 function ExploreScreen() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const mapFocused = useIsFocused();
@@ -498,7 +501,7 @@ function ExploreScreen() {
   // Ride Control: poll the park's team map while at a park, and after wins.
   const { control: rideControl, refresh: refreshRideControl } = useRideControlMap({ playerId: player?.id ?? null, parkId: park?.id ?? null, focused: mapFocused, idle: mapIdle });
   // Boss raids: a co-op boss surfaces at a ride at set times each park day.
-  const { raid, setState: setRaidState, link: raidLink, retryLink: retryRaidLink, refresh: refreshRaid } = useParkRaid(park?.id, { focused: mapFocused, idle: mapIdle });
+  const { raid, loaded: raidLoaded, setState: setRaidState, link: raidLink, retryLink: retryRaidLink, refresh: refreshRaid } = useParkRaid(park?.id, { focused: mapFocused, idle: mapIdle });
   const [bossOpen, setBossOpen] = useState(false);
   const [bossOccluded, setBossOccluded] = useState(false);
   const bossMap = useBossMapMoment({ playerId: player?.id ?? null, parkId: park?.id ?? null, control: rideControl,
@@ -1143,6 +1146,17 @@ function ExploreScreen() {
   const declutter = useMemo<MapDeclutterInput | null>(() => park ? { store: declutterStore, items: declutterItems, insets: declutterInsets } : null,
     [park, declutterStore, declutterItems, declutterInsets]);
 
+  // The HUD row shows once today's standings and the park's live events have both answered (or after
+  // a few seconds offline), so it never says one thing and swaps to another as the second one lands.
+  const statusSourcesIn = !!rideControl && raidLoaded;
+  const [statusWaitedOut, setStatusWaitedOut] = useState(false);
+  useEffect(() => {
+    setStatusWaitedOut(false);
+    if (!park?.id) return;
+    const timer = setTimeout(() => setStatusWaitedOut(true), STATUS_ROW_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [park?.id]);
+  const statusSettled = statusSourcesIn || statusWaitedOut;
   // The one HUD row: the most urgent status leads, the rest wait behind "+N".
   const statusEntries: StatusEntry[] = player && park ? statusOrder({
     live: busyLiveSlot, show: nightPill ? (nightShow.phase === 'live' ? 'live' : 'teaser') : null,
@@ -1171,6 +1185,7 @@ function ExploreScreen() {
   }) : [];
 
   return (
+    <>
     <Wrapper>
       <Topbar>
         {/* Topbar currencies — only for signed-in users */}
@@ -1478,7 +1493,7 @@ function ExploreScreen() {
               : { position: 'absolute', left: 12, right: 12, top: 132, zIndex: 40 }} />
         )}
         {/* One HUD row floats over the map (the map runs right up to the header). */}
-        {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} />}
+        {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} settled={statusSettled} />}
         {/* The "what now" rail: one row in the suggestion slot, only while no suggestion card holds it. */}
         {railShowing && <View pointerEvents="box-none" style={{ position: 'absolute', top: slotTop, left: 12, right: 12, zIndex: 38 }}>
           <NextUpRail item={nextUp.item} onAction={handleNextUp} />
@@ -1677,9 +1692,9 @@ function ExploreScreen() {
         </Map>
       </View>
       )}
-      {/* The map's loading sky sits above every map button, card and tip (under the header and
-          footer), so a kid sees one loading bar finish, then the map and its buttons in one fade. */}
-      <MapLaunchCover armOnMount blockTouches style={{ top: 70 + (Constants.statusBarHeight ?? 0), zIndex: 45 }} />
+      {/* A later loading sky (walking into a park) sits above every map button, card and tip (under
+          the header and footer), so a kid sees one loading bar finish, then the map and its buttons in one fade. */}
+      <MapLaunchCover variant="sky" blockTouches style={{ top: 70 + (Constants.statusBarHeight ?? 0), zIndex: 45 }} />
 
       {/* Community Center Modal */}
       <CommunityCenterModal
@@ -1703,6 +1718,11 @@ function ExploreScreen() {
       {/* Fin-ister Nights overlays (sheet, rank card, tutorial, exit moment, Marquee); outside the park block on purpose. */}
       {player && <FrightLayer night={frightNight} engine={frightEngine} top={slotTop + 64} />}
     </Wrapper>
+    {/* The app's first cover: the launch scene over the whole screen, header and footer included,
+        so the splash and its one bar carry on until the park map has drawn, then the whole game
+        (map, header, footer, buttons) arrives in one fade with no label swapping underneath. */}
+    <MapLaunchCover variant="launch" armOnMount blockTouches style={{ zIndex: 100 }} />
+    </>
   );
 }
 

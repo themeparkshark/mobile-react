@@ -799,6 +799,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           }
           onPress?.();
         }}
+        // The cover lifts on the first frame drawn with every visible tile loaded (the map never idles
+        // while its markers animate, so "map fully rendered" can come many seconds late). Only while
+        // the cover is up: after that the per-frame event is switched off.
+        onDidFinishLoadingMap={revealMap}
+        onDidFinishRenderingFrameFully={covered ? revealMap : undefined}
         onDidFinishRenderingMapFully={() => { refreshDecorations(); revealMap(); cam.resync();
           void mapViewRef.current?.getZoom().then(zoom => {
             if (Number.isFinite(zoom)) { setCameraZoom(zoom); onZoomChange?.(zoom); }
