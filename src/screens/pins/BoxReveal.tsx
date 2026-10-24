@@ -818,7 +818,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, golden && styles.flashGold, flashStyle]} />
 
         {(phase === 'show' || phase === 'summary') && (
-          <View style={[styles.footer, { paddingBottom: insets.bottom + (short ? 10 : 18) }, short && { gap: 6 }]}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + (short ? 14 : 18) }, short && { gap: 6 }]}>
             {pulls.length > 1 && phase === 'show' && (
               <View style={styles.pips} accessible accessibilityLabel={`Box ${index + 1} of ${pulls.length}`}>
                 {pulls.map((p, i) => <View key={p.id} style={[styles.pip, i <= index && styles.pipOn, p.is_chaser && i <= index && styles.pipGold]} />)}
