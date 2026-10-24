@@ -124,7 +124,7 @@ function playedActivityName(id: string, playlist: readonly ActivityItem[], chapt
   if (item?.kind === 'minigame') return GAME_NAMES[item.gameId] ?? 'Mini-game';
   if (item?.kind === 'crew_grid') return 'Crew Prompts';
   if (item?.kind === 'circuit') return 'Signal Repair';
-  if (item?.kind === 'trivia') return chapter?.navigationPanel && id === `${chapter.id}-trivia`
+  if (item?.kind === 'trivia') return chapter && id === `${chapter.id}-trivia`
     ? chapter.missionNames[0] : 'Ride trivia';
   if (item?.kind === 'lore') return chapter?.fieldNotes[item.seed % chapter.fieldNotes.length]?.title ?? 'Queue clue';
   if (item?.kind === 'prediction') return 'Wait guess';
@@ -145,13 +145,21 @@ function pageName(item: ActivityItem | { kind: 'signal' | 'puzzle'; id: string }
     case 'crew_relay': return 'Crew Relay';
     case 'signal': return 'Crew Route';
     case 'puzzle': return 'Codebreaker';
-    // The board mission keeps the chapter's own name, so PLAY NOW, the rail and the board header match.
-    case 'trivia': return chapter?.navigationPanel && item.id === `${chapter.id}-trivia` ? chapter.missionNames[0] : 'Shark Trivia';
+    // Clue 1 keeps the chapter's own mission name (the board on a space chapter, trivia on the others),
+    // so PLAY, the bubble, the rail and the page header all say one name.
+    case 'trivia': return chapter && item.id === `${chapter.id}-trivia` ? chapter.missionNames[0] : 'Shark Trivia';
     // The chapter's clue 2 keeps its mission name too (the bubble, the rail and the page say one name).
     case 'lore': return chapter && item.id === `${chapter.id}-field-note` ? chapter.missionNames[1] : 'Field Note';
     case 'prediction': return 'Wait Guess';
     case 'minigame': return item.title ?? GAME_NAMES[item.gameId] ?? 'Arcade round';
   }
+}
+
+/** A chapter clue page's mission name (clue 1 or 2), the same name its bubble and the rail use. */
+function chapterMissionTitle(chapter: LinePlayChapter | null | undefined, id: string): string | undefined {
+  if (!chapter) return undefined;
+  const index = chapterMissionIds(chapter).indexOf(id);
+  return index === 0 || index === 1 ? chapter.missionNames[index] : undefined;
 }
 
 function tabLabel(screen: string): string {
@@ -1344,6 +1352,7 @@ export default function LinePlayScreen() {
                       onNavigationReplay={() => session.startNextNavigationRound(item.id)}
                       onNavigationMakeRoom={detailsOpen ? closeDetails : undefined}
                       navigationTitle={snapshot.chapter?.navigationPanel ? snapshot.chapter.missionNames[0] : undefined}
+                      missionTitle={chapterMissionTitle(snapshot.chapter, item.id)}
                       navigationTargetHeight={boardTargetHeight ?? pageViewHeight}
                       onNavigationNext={() => item.kind === 'circuit'
                         ? jumpToPage(index + 1 < activityPages.length ? index + 1 : 0)

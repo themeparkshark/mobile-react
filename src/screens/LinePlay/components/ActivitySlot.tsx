@@ -56,6 +56,8 @@ export interface ActivitySlotProps {
   readonly onNavigationMakeRoom?: () => void;
   /** The chapter's name for its board mission ("Fix the signal"), so PLAY NOW, the rail and the board say one phrase. */
   readonly navigationTitle?: string;
+  /** A chapter clue page's own mission name, so PLAY, the bubble, the rail and the page say one name. */
+  readonly missionTitle?: string;
   /** The board page's height once the crew row lends its room (an iPhone SE), so the board starts at its final size. */
   readonly navigationTargetHeight?: number;
   /** Ride-themed dressing for free-play circuit rounds. */
@@ -124,6 +126,7 @@ export default function ActivitySlot({
   onNavigationNext,
   onNavigationMakeRoom,
   navigationTitle,
+  missionTitle,
   navigationTargetHeight,
   circuitTheme,
   nextLabel,
@@ -144,9 +147,9 @@ export default function ActivitySlot({
         return <NavigationPanelCard seed={item.seed} title={navigationTitle} targetHeight={navigationTargetHeight}
           progress={navigationProgress} completed={completed} paused={paused}
           onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} onMakeRoom={onNavigationMakeRoom} />;
-      return <TriviaSlot rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed} completed={completed} paused={paused} onAnswered={() => onActivityCompleted(item.id)} />;
+      return <TriviaSlot title={missionTitle} rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed} completed={completed} paused={paused} onAnswered={() => onActivityCompleted(item.id)} />;
     case 'lore':
-      return <LoreSlot navigator={navigationPanel && item.id === `${chapterId}-field-note`} rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed}
+      return <LoreSlot title={missionTitle} navigator={navigationPanel && item.id === `${chapterId}-field-note`} rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed}
         selectedClue={savedLoreChoice} completed={completed} paused={paused}
         onChoose={(choice) => onChooseLore?.(item.id, choice)}
         onCompleted={() => onActivityCompleted(item.id)} />;
@@ -214,6 +217,7 @@ function MiniGameSlot({
 // -- trivia ------------------------------------------------------------------
 
 function TriviaSlot({
+  title,
   rideId,
   parkId,
   chapterId,
@@ -222,6 +226,7 @@ function TriviaSlot({
   paused,
   onAnswered,
 }: {
+  title?: string;
   rideId?: number;
   parkId?: number;
   chapterId?: string;
@@ -276,7 +281,7 @@ function TriviaSlot({
 
   return (
     <PageScroll fill={CARD_FILL}>
-      <ActivityHero kicker={chapterId ? 'RIDE MISSION' : 'PARK CHALLENGE'} title="Shark Trivia" teacher />
+      <ActivityHero kicker={chapterId ? 'RIDE MISSION' : 'PARK CHALLENGE'} title={title ?? 'Shark Trivia'} teacher />
       <Text style={styles.question}>{q.question}</Text>
       {picked != null && <Animated.Text style={[styles.answerFeedback,
         picked === q.correctIndex ? styles.feedbackCorrect : styles.feedbackWrong, {
@@ -330,6 +335,7 @@ function TriviaSlot({
 // -- lore --------------------------------------------------------------------
 
 function LoreSlot({
+  title,
   navigator,
   rideId,
   parkId,
@@ -341,6 +347,7 @@ function LoreSlot({
   onChoose,
   onCompleted,
 }: {
+  title?: string;
   navigator: boolean;
   rideId?: number;
   parkId?: number;
@@ -368,7 +375,7 @@ function LoreSlot({
 
   return (
     <PageScroll fill={CARD_FILL}>
-      <ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE QUEST'} title={navigator ? 'Spot the clue' : 'Field Note'} navigator={navigator} />
+      <ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE QUEST'} title={title ?? (navigator ? 'Spot the clue' : 'Field Note')} navigator={navigator} />
       <Text style={styles.loreTitle}>{lore.title}</Text>
       <Text style={styles.loreBody}>{lore.body}</Text>
       {factSourceLine(lore.source) ? <Text style={styles.loreSource}>{factSourceLine(lore.source)}</Text> : null}

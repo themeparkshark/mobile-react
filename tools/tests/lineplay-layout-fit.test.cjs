@@ -593,7 +593,7 @@ test('an iPhone SE board shows tiles of at least 44 pt (not only touch areas)', 
 test('a space clue page says its own mission name and no second count (the rail bubbles own it)', () => {
   const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
   assert.doesNotMatch(slot, /MISSION \d OF 3/);
-  assert.match(slot, /title=\{navigator \? 'Spot the clue' : 'Field Note'\}/);
+  assert.match(slot, /title=\{title \?\? \(navigator \? 'Spot the clue' : 'Field Note'\)\}/);
   const rail = read('src/screens/LinePlay/components/ActivityPageRail.tsx');
   assert.match(rail, /numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.7\}>/, 'a long next name shrinks a little, never cut');
 });
@@ -666,4 +666,17 @@ test('paused, the chapter PLAY and clue buttons are never a dead tap: one tap ru
   assert.match(screen, /if \(snapshot\.state !== 'active'\) return;\n\s+jumpToPage\(index\);/);
   assert.match(screen, /const page = pageAfterResume\.current;\n\s+pageAfterResume\.current = null;\n\s+if \(page != null\) jumpToPage\(page\);/);
   assert.match(screen, /pageAfterResume\.current = null; session\.pause\('manual'\)/, 'pausing again forgets the queued page');
+});
+
+test('one name per clue on every chapter: PLAY, the bubble, the rail, the page header and the recap say the mission name', () => {
+  const screen = read(SCREEN);
+  assert.match(screen, /case 'trivia': return chapter && item\.id === `\$\{chapter\.id\}-trivia` \? chapter\.missionNames\[0\] : 'Shark Trivia';/);
+  assert.match(screen, /if \(item\?\.kind === 'trivia'\) return chapter && id === `\$\{chapter\.id\}-trivia`\n\s+\? chapter\.missionNames\[0\]/);
+  assert.match(screen, /missionTitle=\{chapterMissionTitle\(snapshot\.chapter, item\.id\)\}/);
+  assert.match(screen, /return index === 0 \|\| index === 1 \? chapter\.missionNames\[index\] : undefined;/);
+  const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
+  assert.match(slot, /<TriviaSlot title=\{missionTitle\}/);
+  assert.match(slot, /title=\{title \?\? 'Shark Trivia'\} teacher \/>/);
+  assert.match(slot, /<LoreSlot title=\{missionTitle\}/);
+  assert.match(slot, /title=\{title \?\? \(navigator \? 'Spot the clue' : 'Field Note'\)\}/);
 });
