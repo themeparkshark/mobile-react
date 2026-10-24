@@ -352,7 +352,7 @@ test('wave 3 round 2: the level-up card never empties, collapses or mounts the n
   assert.ok(modal.includes("(state === 'preview' || state === 'confirm' || state === 'leveling') && !isMaxLevel"), 'the card body stays during the charge');
   assert.ok(!modal.includes('LEVELING STATE'), 'no separate short charging card');
   assert.ok(modal.includes('<OneTimeTip id="coin_card" ready={visible && state === \'preview\'} compact instantExit'), 'the card tip leaves at once at the tap (no stray fading pill over the coin)');
-  assert.ok(read('src/components/help/CoachTip.tsx').includes('exiting={reduced || instantExit ? undefined'), 'CoachTip can leave without a fade');
+  assert.ok(read('src/components/help/CoachTip.tsx').includes('exiting={reduced || instantExit ? undefined') && read('src/components/help/CoachTip.tsx').includes('entering={reduced || instantExit ? undefined'), 'CoachTip can skip its layout animation');
   assert.ok(modal.includes('setLockedHeight(contentHeight.current)') && modal.includes('minHeight: (state === \'leveling\' || state === \'success\') && lockedHeight > 0'), 'the card keeps its height through the success card');
   assert.ok(/level=\{nextLevel\}[\s\S]{0,300}animate=\{state === 'success'\}/.test(modal), 'the next tier is mounted (still) before the burst');
   assert.ok(modal.includes('windupWobble(windup.value, CHARGE_MS') && modal.includes('<GatherRings progress={gatherRing}'), 'the charge visibly builds');

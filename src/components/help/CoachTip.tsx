@@ -20,8 +20,9 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
   /** No Finn art, for tips inside cards and sheets. */
   readonly compact?: boolean;
   /**
-   * Leave at once instead of fading: for a tip inside a card whose layout changes as it leaves (an iOS fade-out
-   * of a view whose siblings reflow is drawn at a stale spot, a white pill shrinking over the coin).
+   * No layout animation at all (it appears and leaves at once): for a tip inside a card whose layout changes as
+   * it leaves. A layout-animated view removed while its siblings reflow was drawn at a stale spot on iOS (a
+   * cream pill shrinking over the charging coin).
    */
   readonly instantExit?: boolean;
 }) {
@@ -35,7 +36,7 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <Animated.View pointerEvents="box-none" entering={reduced ? undefined : FadeIn.duration(220)}
+    <Animated.View pointerEvents="box-none" entering={reduced || instantExit ? undefined : FadeIn.duration(220)}
       exiting={reduced || instantExit ? undefined : FadeOut.duration(150)} style={style}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${body}`} accessibilityHint="Closes the tip"
         onPress={onDismiss} style={[styles.card, compact && styles.compactCard]}>
