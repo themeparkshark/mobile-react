@@ -136,6 +136,15 @@ function trace(kind: string, name: string, extra = '') {
  * landing in the counter climbs the counter ladder. Switch off: none of this runs and nothing changes.
  */
 const SESSION_IDLE_MS = 4000;
+/**
+ * Before the burst the catch can hold on the wobble while the server answers (wow-map holds its clock at
+ * the hit-stop), so the studio catch stays open this long from the tap, not just SESSION_IDLE_MS: on a
+ * slow park connection the burst, flight and stamp still speak the studio vocabulary instead of falling
+ * back to today's sounds halfway through.
+ */
+const PRE_BURST_MS = 20_000;
+/** The burst, its success pulse and a beam impact are beats whenever they come (a slow server delays them). */
+const BURST_BEAT_MS = 400;
 /** After 'done', counter ticks from coins still landing keep the studio ladder this long. */
 const DONE_TAIL_MS = 700;
 /**
@@ -254,8 +263,8 @@ function endSession(): void {
 }
 
 function keepSession(): void {
-  // After 'done' only the short tail runs out; nothing stretches it.
-  if (session && !session.done) session.until = Date.now() + SESSION_IDLE_MS;
+  // After 'done' only the short tail runs out; nothing stretches it. Before the burst the server hold keeps it open.
+  if (session && !session.done) session.until = Math.max(session.until, Date.now() + SESSION_IDLE_MS);
 }
 
 /**
@@ -286,12 +295,13 @@ function onCatchMark(name: string): void {
     preloadCatchMoments();
     primeCatchState();
     endSession();
-    session = { until: now + SESSION_IDLE_MS, burst: false, heat: heatNow, repeatPlan, beam: false, wobbleVoices: [], rung: -1, lastTickAt: -Infinity, burstBuzzed: false };
+    session = { until: now + PRE_BURST_MS, burst: false, heat: heatNow, repeatPlan, beam: false, wobbleVoices: [], rung: -1, lastTickAt: -Infinity, burstBuzzed: false };
     if (session.heat > 0) traceEvent('mark', 'catch-heat', `+${session.heat}`);
     playMoment('catch.tap');
     return;
   }
   if (name === 'hitstop' || name === 'burst' || name === 'miss' || name === 'skip' || name === 'beam') closeBeats();
+  if (name === 'hitstop' || name === 'burst' || name === 'beam') beatUntil = Math.max(beatUntil, Date.now() + BURST_BEAT_MS);
   if (name === 'done' || name === 'miss') beatUntil = 0;
   if (name === 'burst' && !sessionOpen()) {
     // Switch off: the run still counts (heat for the visuals), nothing plays and nothing is stored.
@@ -313,6 +323,7 @@ function onCatchMark(name: string): void {
   } else if (name === 'burst') {
     cutWobbles();
     s.burst = true;
+    s.until = Date.now() + SESSION_IDLE_MS;
     const next = burstMoment(run, Date.now(), { repeatPlan: s.repeatPlan, beam: s.beam });
     const stored = encodeDay(next.state);
     if (stored) void AsyncStorage.setItem(DAY_KEY, stored).catch(() => undefined);

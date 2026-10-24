@@ -199,3 +199,19 @@ test('dev builds do not log every moment to Metro unless a sound trace was asked
   const src = fs.readFileSync(path.join(repo, 'src/gamekit/audio/playMoment.ts'), 'utf8');
   assert.doesNotMatch(src, /else console\.log\(out\)/, 'no per-moment console.log in ordinary dev builds');
 });
+
+test('a slow park connection: the catch holds on the wobble for 5 s, then the burst, flight and stamp still speak the studio vocabulary on their beats', async () => {
+  const e = await engine();
+  // wow-map holds its clock at the hit-stop until the server answers; the JS thread is free, the beats just come late.
+  const r = await wowMapCatch(e, { stalls: [{ after: 'wobble3', ms: 5000 }] });
+  const v = view(e, r);
+  const got = Object.fromEntries(r.delivered.map((d) => [d.name, d.at]));
+  assert.ok(got.burst > 5000, `the burst comes after the hold (${got.burst})`);
+  const burst = v.starts('moment:catch.firstOfDay:primary')[0] ?? v.starts('moment:catch.burst:primary')[0];
+  assert.ok(burst && burst.t - got.burst === 20, 'the studio burst, on its beat');
+  assert.ok(v.starts('moment:catch.fly:').length === 1 && v.starts('moment:catch.land:').length === 1, 'the flight and the stamp stay studio');
+  assert.equal(v.sounds.filter((s) => !s.name.startsWith('moment:')).length, 0, `no fallback to today's sounds halfway through (${v.sounds.filter((s) => !s.name.startsWith('moment:')).map((s) => s.name).join(',')})`);
+  const heavy = v.haptics.find((h) => h.intent === 'comboHeavy');
+  assert.equal(heavy.t, got.burst, 'the heavy buzz on the burst frame (a beat, not held by the shared gate)');
+  assert.equal(v.haptics.find((h) => h.intent === 'success').t - heavy.t, 180, 'and the golden pair keeps its spacing');
+});
