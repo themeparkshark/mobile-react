@@ -433,7 +433,7 @@ test('a bare shark has no look to share; the ride story is one hero stat; the he
 test('on a short phone (iPhone SE) the reveals keep Wear, Done and Share on screen', () => {
   const box = src('src/screens/pins/BoxReveal.tsx');
   assert.match(box, /const short = height < 740;\s*const centerY = height \* \(short \? 0\.41 : 0\.45\);/);
-  assert.match(box, /paddingBottom: insets\.bottom \+ \(short \? 10 : 18\) \}, short && \{ gap: 6 \}/);
+  assert.match(box, /paddingBottom: insets\.bottom \+ \(short \? 14 : 18\) \}, short && \{ gap: 6 \}/);
   const set = src('src/screens/StoreScreen/SetCompleteReveal.tsx');
   assert.match(set, /const SHORT = H < 740;\s*const STAGE = Math\.min\(W - 40, H \* \(SHORT \? 0\.3 : 0\.4\)\);/);
   // The Whack picture leads with the run: the ribbon already names the game.
