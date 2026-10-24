@@ -1,6 +1,6 @@
 import { memo, useLayoutEffect, useState } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, cancelAnimation, runOnJS, runOnUI, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
 import MapCoverSky, { MAP_COVER_SKY } from './MapCoverSky';
 import { armMapCover, coverLifted, useCoverPlan, type CoverPlan } from './mapCover';
 import { COVER_FADE_MS, COVER_FINISH_MS, LAUNCH_HANDOFF_SHARE } from '../../constants/launchHandoff';
@@ -37,27 +37,31 @@ function CoverSky({ plan, style, blockTouches }: {
 }) {
   const opacity = useSharedValue(1);
   const fill = useSharedValue(plan.share ?? LAUNCH_HANDOFF_SHARE);
-  // A layout effect: the animations reach the UI thread in the same commit that mounts the cover,
-  // before the screen's own (slower) effects run.
+  // A layout effect: the plan reaches the UI thread in the same commit that mounts the cover. The
+  // UI thread works out the time left itself (from the plan's wall-clock deadline), so a busy UI
+  // thread (the map screen's first mount) that runs this late never pushes the lift past its deadline.
   useLayoutEffect(() => {
     const tok = plan.token;
     const done = (finished?: boolean) => { 'worklet'; if (finished) runOnJS(coverLifted)(tok); };
-    cancelAnimation(opacity);
-    cancelAnimation(fill);
-    if (plan.lifting) {
-      fill.value = withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) });
-      opacity.value = withDelay(COVER_FINISH_MS, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) }, done));
-      return;
-    }
-    // One clock: the bar eases to BAR_WAIT_SHARE by the deadline and its last bit fills as the fade
-    // starts, so it never sits full on a sky that is still waiting (a later plan just keeps it moving).
-    const remaining = Math.max(0, plan.deadline - Date.now());
-    if (plan.share !== null) fill.value = plan.share;
-    opacity.value = 1;
-    fill.value = withSequence(
-      withTiming(BAR_WAIT_SHARE, { duration: remaining, easing: Easing.out(Easing.cubic) }),
-      withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) }));
-    opacity.value = withDelay(remaining, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) }, done));
+    runOnUI((deadline: number, share: number | null, lifting: boolean) => {
+      'worklet';
+      cancelAnimation(opacity);
+      cancelAnimation(fill);
+      if (lifting) {
+        fill.value = withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) });
+        opacity.value = withDelay(COVER_FINISH_MS, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) }, done));
+        return;
+      }
+      // One clock: the bar eases to BAR_WAIT_SHARE by the deadline and its last bit fills as the fade
+      // starts, so it never sits full on a sky that is still waiting (a later plan just keeps it moving).
+      const remaining = Math.max(0, deadline - Date.now());
+      if (share !== null) fill.value = share;
+      opacity.value = 1;
+      fill.value = withSequence(
+        withTiming(BAR_WAIT_SHARE, { duration: remaining, easing: Easing.out(Easing.cubic) }),
+        withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) }));
+      opacity.value = withDelay(remaining, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) }, done));
+    })(plan.deadline, plan.share, plan.lifting);
   // One set of animations per plan.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan.version]);

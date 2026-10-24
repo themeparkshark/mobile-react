@@ -119,9 +119,9 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
   assert.match(cc, /kioskFace: \{[^}]*borderWidth: 4/s);
   assert.equal(KIOSK_COLORS.edge, '#05346e');
   assert.match(cc, /kioskFace: \{[^}]*\.\.\.SHADOW\.card/s);
-  // Only the green pill shows: the art's stone foot and gem are cropped off.
+  // Alex's whole button shows (pill, gold rim, stone base, gem); only the loose glow under it is cropped.
   assert.match(cc, /leaveGiftCrop: \{[^}]*overflow: 'hidden'/s);
-  assert.ok(LEAVE_GIFT_PILL_SHARE < 0.7);
+  assert.ok(LEAVE_GIFT_PILL_SHARE >= 0.89 && LEAVE_GIFT_PILL_SHARE <= 0.92);
   // The plaque also covers the painted pedestal gem (about 0.813 of the art) under the slot.
   assert.ok(loadTs('src/screens/CommunityCenter/leaveGiftLayout.ts').KIOSK_FACE.bottom >= 0.816);
   for (const [phone, w] of [['SE', 375], ['17 Pro', 402], ['Pro Max', 440]]) {
@@ -136,7 +136,7 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
     assert.ok(Math.abs(padL - padR) <= 1, `${phone}: LEAVE GIFT centered (${padL} / ${padR})`);
     // The dark side strip hides the painted slot's end in the gutter, from under the plaque to the edge.
     assert.ok(k.cap.left < k.face.left + k.face.width && k.cap.left + k.cap.width === w, `${phone}: side strip reaches the edge`);
-    assert.ok(k.cap.top <= artH * PAINTED_PRICE.top && k.cap.top + k.cap.height >= artH * PAINTED_SLOT.bottom, `${phone}: side strip covers the painted slot's end`);
+    assert.ok(k.cap.top <= artH * PAINTED_SLOT.top && k.cap.top + k.cap.height >= artH * PAINTED_SLOT.bottom, `${phone}: side strip covers the painted slot's end`);
     // The baked label is about a quarter of the art's height: 90+ pt wide keeps it about 14 pt.
     assert.ok(k.button.width >= 90, `${phone}: LEAVE GIFT label stays about 14 pt (${k.button.width} pt wide)`);
     assert.ok(k.face.top <= artH * PAINTED_PRICE.top && k.face.top + k.face.height >= artH * PAINTED_SLOT.bottom + 6, `${phone}: painted price and slot covered`);
@@ -526,6 +526,16 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   assert.match(cover, /<MapCoverSky fill=\{fill\} \/>/);
   assert.match(cover, /\}, \[plan\.version\]\);/);
   assert.match(cover, /useLayoutEffect\(\(\) => \{\s*const tok = plan\.token;/);
+  // The UI thread works out the time left itself, so a UI thread busy with the map's first mount never pushes the lift late.
+  assert.match(cover, /runOnUI\(\(deadline: number, share: number \| null, lifting: boolean\) => \{\s*'worklet';/);
+  assert.match(cover, /const remaining = Math\.max\(0, deadline - Date\.now\(\)\);/);
+  // Header icons have no big-coin placeholder (it drew as a flat gold square while a 36 pt icon decoded).
+  const currencySrc = read('src/components/Topbar/Currency.tsx');
+  assert.doesNotMatch(currencySrc, /placeholder=\{FALLBACK_ICON\}/);
+  assert.match(currencySrc, /onError=\{\(\) => setIconFailed\(true\)\}/);
+  assert.match(read('src/components/Wrapper.tsx'), /cachePolicy="memory-disk"\s*priority="high"\s*transition=\{0\}/);
+  // The launch map comes from the phone's recent fix when there is one (a fresh fix can take seconds).
+  assert.match(read('src/context/LocationProvider.tsx'), /getLastKnownPositionAsync\(\{ maxAge: 5 \* 60 \* 1000, requiredAccuracy: 200 \}\)/);
   // PLAY RIDE and its ride chip wait for the cover to lift (their wrapper can draw above the cover on iOS).
   assert.match(read('src/screens/ExploreScreen.tsx'), /redeemable=\{mapFocused && !mapCovered \? activeRedeemable : undefined\}/);
   // The header coin, key and ticket and the five footer icons are decoded into memory before the hand-off.

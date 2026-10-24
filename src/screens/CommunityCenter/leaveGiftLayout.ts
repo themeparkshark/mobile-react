@@ -23,16 +23,20 @@ export const KIOSK_FACE = { left: 0.67, top: 0.706, bottom: 0.818 } as const;
 /**
  * The painted kiosk's dark face runs past the plaque to the art's edge. A strip in that same dark
  * paint, tucked under the plaque, hides the last bit of the painted green slot in the gutter, so
- * the gutter reads as the pedestal's shaded side, never a second green button.
+ * the gutter reads as the painted dark face running on, never a second green button.
  */
-export const KIOSK_CAP = { top: PAINTED_PRICE.top - 0.004, bottom: PAINTED_SLOT.bottom + 0.004, tuck: 10 } as const;
+export const KIOSK_CAP = { top: PAINTED_SLOT.top - 0.004, bottom: PAINTED_SLOT.bottom + 0.004, tuck: 10 } as const;
 
 /** The plaque's colors: warm-white card, navy rim and price, the dark paint of the side strip. Never dark slate on the plaque. */
 export const KIOSK_COLORS = { face: '#fff7e6', edge: '#05346e', ink: '#05346e', side: '#2b2f35' } as const;
 
-/** The LEAVE GIFT art (842 x 375) and the share of its height that is the green pill (its stone foot and gem are cropped). */
+/**
+ * The LEAVE GIFT art (842 x 375) and the share of its height we show: Alex's whole button (green
+ * pill, gold rim, stone base and its blue gem), without the loose gold glow painted under it.
+ * Cutting it at the pill sliced the gold rim and the gem in half.
+ */
 export const LEAVE_GIFT_ART_ASPECT = 842 / 375;
-export const LEAVE_GIFT_PILL_SHARE = 0.685;
+export const LEAVE_GIFT_PILL_SHARE = 0.905;
 export const SCREEN_GUTTER = 16;
 /** The plaque's own gutter from the screen edge. */
 export const FACE_EDGE_INSET = 14;

@@ -357,6 +357,16 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     };
   }, [compassOn, permissionGranted]);
 
+  /** The phone's last fix if it is recent and close enough to pick a park (never a stale fix from elsewhere). */
+  const recentFix = async (): Promise<LocationType | null> => {
+    try {
+      const last = await Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000, requiredAccuracy: 200 });
+      return last ? { latitude: last.coords.latitude, longitude: last.coords.longitude } : null;
+    } catch {
+      return null;
+    }
+  };
+
   const getCurrentLocation = async () => {
     // In dev mode, return the mock location
     if (devMode && simulationAllowed) {
@@ -449,6 +459,14 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     const known = lastLocationRef.current ?? location;
     if (known) {
       await lookupParkAt(known);
+      return;
+    }
+    // Launch: the phone's own recent fix answers "which map?" right away (a fresh high-accuracy fix
+    // can take seconds), so the map opens on the right park instead of a home map swapped out later.
+    // It only picks the map: the GPS stream publishes the real position and re-checks the park.
+    const recent = (devMode && simulationAllowed) ? null : await recentFix();
+    if (recent) {
+      await lookupParkAt(recent);
       return;
     }
     const fresh = await getCurrentLocation();

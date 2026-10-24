@@ -165,6 +165,10 @@ export default function Wrapper({
                         }}
                         source={item.icon}
                         contentFit="contain"
+                        // Warmed into memory on the launch screen: drawn on the map's first frame.
+                        cachePolicy="memory-disk"
+                        priority="high"
+                        transition={0}
                       />
                     </Button>
                     {/* Capped: past 1.2x the five labels run into each other ("NEWSSTANDINGS") and over the page. */}

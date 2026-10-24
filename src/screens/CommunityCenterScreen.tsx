@@ -1030,7 +1030,7 @@ export default function CommunityCenterScreen() {
                 disabled={giving}
                 activeOpacity={0.8}
               >
-                {/* Just the green pill: the art's stone foot and its gem are cropped off on the plaque. */}
+                {/* Alex's whole button (pill, gold rim, stone base, gem); only the loose glow under it is cropped. */}
                 <View style={styles.leaveGiftCrop}>
                   <Image
                     source={require('../../assets/images/screens/community-center-leave-gift.png')}

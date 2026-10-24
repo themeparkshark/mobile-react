@@ -71,7 +71,8 @@ function MapCoverSky({ done = false, fill: drivenFill }: {
       {COVER_CLOUDS.map((c, i) => <CoverCloud key={i} cloud={c} width={width} still={reduced} />)}
       <View style={styles.center}>
         <Animated.View style={sharkStyle}>
-          <Image source={SHARK} style={{ width: sharkSize, height: sharkSize }} contentFit="contain" />
+          <Image source={SHARK} style={{ width: sharkSize, height: sharkSize }} contentFit="contain"
+            cachePolicy="memory-disk" priority="high" transition={0} />
         </Animated.View>
         {/* The splash's bar (white rim, navy fill), so the launch reads as one bar finishing. */}
         <View style={[styles.barRim, { width: barWidth }]}>
@@ -106,7 +107,8 @@ function CoverCloud({ cloud, width, still }: {
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: d.value * cloud.drift }] }));
   return (
     <Animated.View style={[{ position: 'absolute', left: `${cloud.x * 100}%`, top: `${cloud.y * 100}%` }, style]}>
-      <Image source={CLOUD} style={{ width: w, height: Math.round(w * 155 / 232) }} contentFit="contain" />
+      <Image source={CLOUD} style={{ width: w, height: Math.round(w * 155 / 232) }} contentFit="contain"
+        cachePolicy="memory-disk" priority="high" transition={0} />
     </Animated.View>
   );
 }

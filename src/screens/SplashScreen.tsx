@@ -37,6 +37,8 @@ export default function SplashScreen() {
       <Image
         source={SPLASH_ART}
         transition={0}
+        cachePolicy="memory-disk"
+        priority="high"
         contentFit="cover"
         style={{
           width: Dimensions.get('window').width,

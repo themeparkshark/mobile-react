@@ -166,7 +166,7 @@ export default function LoadingScreen() {
   const hasUsername = !!player?.username;
   const hasNavigated = useRef(false);
   
-  // Safe navigate — prevents double navigation race condition
+  // Safe navigate: prevents double navigation race condition
   const safeNavigate = async () => {
     if (hasNavigated.current) return;
     hasNavigated.current = true;
@@ -246,7 +246,7 @@ export default function LoadingScreen() {
     <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: SPLASH_BLUE }}>
       {/* Under everything: the Splash route's own art (in memory already), so while the video's poster
           and the logo decode, the frame still shows the title and sharks, never a blank blue sheet. */}
-      <Image source={SPLASH_ART} transition={0} contentFit="cover" accessible={false}
+      <Image source={SPLASH_ART} transition={0} contentFit="cover" accessible={false} cachePolicy="memory-disk" priority="high"
         style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT }} />
       {/* Looping video background, exact screen dimensions */}
       <Video
@@ -260,7 +260,7 @@ export default function LoadingScreen() {
         isMuted
         style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
       />
-      {/* Logo — gentle float */}
+      {/* Logo: gentle float */}
       <Animated.View
         style={{
           position: 'absolute',
