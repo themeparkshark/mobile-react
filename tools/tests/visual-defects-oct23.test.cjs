@@ -491,7 +491,8 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   // plan into a UI-thread withDelay fade with the bar on the same clock.
   assert.match(cover, /const opacity = useSharedValue\(1\);/);
   assert.match(cover, /opacity\.value = withDelay\(remaining, withTiming\(0/);
-  assert.match(cover, /fill\.value = withTiming\(1, \{ duration: remaining/);
+  assert.match(cover, /withTiming\(BAR_WAIT_SHARE, \{ duration: remaining/, 'never full while the sky still waits');
+  assert.match(cover, /export const BAR_WAIT_SHARE = 0\.95;/);
   assert.match(cover, /<MapCoverSky fill=\{fill\} \/>/);
   assert.match(cover, /\}, \[plan\.version\]\);/);
   assert.match(cover, /useLayoutEffect\(\(\) => \{\s*const tok = plan\.token;/);

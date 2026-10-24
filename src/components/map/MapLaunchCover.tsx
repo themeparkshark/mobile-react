@@ -1,6 +1,6 @@
 import { memo, useLayoutEffect, useState } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
 import MapCoverSky, { MAP_COVER_SKY } from './MapCoverSky';
 import { armMapCover, coverLifted, useCoverPlan, type CoverPlan } from './mapCover';
 import { COVER_FADE_MS, COVER_FINISH_MS, LAUNCH_HANDOFF_SHARE } from '../../constants/launchHandoff';
@@ -27,6 +27,9 @@ function MapLaunchCover({ style, blockTouches = false, armOnMount = false }: {
   return <CoverSky plan={plan} style={style} blockTouches={blockTouches} />;
 }
 
+/** How full the bar gets while the sky still waits; the rest fills as it lifts. */
+export const BAR_WAIT_SHARE = 0.95;
+
 function CoverSky({ plan, style, blockTouches }: {
   readonly plan: CoverPlan;
   readonly style?: StyleProp<ViewStyle>;
@@ -46,11 +49,14 @@ function CoverSky({ plan, style, blockTouches }: {
       opacity.value = withDelay(COVER_FINISH_MS, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) }, done));
       return;
     }
-    // One clock: the bar reaches full exactly as the fade starts.
+    // One clock: the bar eases to BAR_WAIT_SHARE by the deadline and its last bit fills as the fade
+    // starts, so it never sits full on a sky that is still waiting (a later plan just keeps it moving).
     const remaining = Math.max(0, plan.deadline - Date.now());
     if (plan.share !== null) fill.value = plan.share;
     opacity.value = 1;
-    fill.value = withTiming(1, { duration: remaining, easing: Easing.out(Easing.cubic) });
+    fill.value = withSequence(
+      withTiming(BAR_WAIT_SHARE, { duration: remaining, easing: Easing.out(Easing.cubic) }),
+      withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) }));
     opacity.value = withDelay(remaining, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) }, done));
   // One set of animations per plan.
   // eslint-disable-next-line react-hooks/exhaustive-deps
