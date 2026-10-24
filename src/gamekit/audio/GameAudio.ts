@@ -106,6 +106,9 @@ class GameAudioEngine {
   /** Pick and start a backend. Safe to call many times. */
   init(choice: BackendChoice = 'auto'): Promise<void> {
     if (this.initPromise) return this.initPromise;
+    // Sound effects and music both off: leave the audio hardware asleep (battery, and a stuck audio
+    // device can never stall a muted player). Not cached, so turning sound back on starts it then.
+    if (!this.sfxEnabled && !this.musicEnabled) return Promise.resolve();
     this.initPromise = (async () => {
       let backend: AudioBackend | null = null;
       if (choice !== 'expo-av' && audioApiAvailable()) {
@@ -180,9 +183,11 @@ class GameAudioEngine {
     if (pending) return pending;
     const p = (async () => {
       await this.init();
-      const ok = await this.backend!.load(key, src, voices);
+      const backend = this.backend;
+      if (!backend) { this.loading.delete(key); return false; }
+      const ok = await backend.load(key, src, voices);
       if (ok) this.loaded.add(key);
-      else if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn(`[GameAudio] ${this.backend!.name} could not load ${key}`);
+      else if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn(`[GameAudio] ${backend.name} could not load ${key}`);
       this.loading.delete(key);
       return ok;
     })();
@@ -192,6 +197,9 @@ class GameAudioEngine {
 
   /** Decode/prepare cues (all registered cues when names is omitted). */
   async preload(names?: string[]): Promise<void> {
+    // Sound effects off: never wake the audio hardware for cues nobody will hear (battery, and a
+    // stuck audio device can never stall a muted player). play() loads lazily if sound comes back on.
+    if (!this.sfxEnabled) return;
     await this.init();
     const list = names ?? Array.from(this.cues.keys());
     await Promise.all(list.map(async (name) => {

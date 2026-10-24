@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { AuthContext } from './AuthProvider';
 import { SFX } from '../gamekit/SFX';
+import { GameAudio } from '../gamekit/audio/GameAudio';
 
 export interface SoundEffectContextType {
   readonly playSound: (pendingSound: any, options?: { volume?: number; rate?: number }) => void;
@@ -27,7 +28,10 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
 
   useEffect(() => {
     SFX.setEnabled(!(isReady && !player?.enabled_sound_effects));
-  }, [isReady, player?.enabled_sound_effects]);
+    // The studio engine follows the music setting too (games still set their own), so a player with
+    // both off never starts the audio hardware at all.
+    GameAudio.setMusicEnabled(!(isReady && !player?.enabled_music));
+  }, [isReady, player?.enabled_sound_effects, player?.enabled_music]);
 
   useEffect(() => {
     mounted.current = true;
