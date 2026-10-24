@@ -446,3 +446,12 @@ test('round 5: kid clarity: gear without art is a gift (never a bare shark), the
   assert.match(read('src/components/retention/StreakMoment.tsx'), /<TomorrowGoal days=\{to\} prize=\{prize\}/);
   assert.match(read('src/components/retention/FlameUpRow.tsx'), /<TomorrowGoal days=\{to\} prize=\{prize\}/);
 });
+
+test('round 5: a return to the app knows the days away at once, and a level chest card ends under its button', () => {
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /const lastOpenMem = new Map<string, number>\(\);/);
+  assert.match(hook, /const last = id \? lastOpenMem\.get\(String\(id\)\) : undefined;/);
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  assert.match(reveal, /known && !!footer && styles\.bottomKnown/);
+  assert.match(reveal, /styles\.floor/);
+});

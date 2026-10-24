@@ -66,6 +66,8 @@ const TOMORROW_SEEN_KEY = 'tps.retention.tomorrowSeen.v1';
 const CHEST_OPENS_KEY = 'tps.retention.chestOpens.v1';
 /** When this phone last opened the map for this player (for the welcome back). */
 const LAST_OPEN_KEY = 'tps.retention.lastOpen.v1';
+/** The same last-open times kept in memory too, so a return to the app knows the days away at once (no storage read). */
+const lastOpenMem = new Map<string, number>();
 
 type View_ =
   | { k: 'sheet'; all?: boolean; freezeArrive?: number }
@@ -305,11 +307,31 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const freezeSaved = daily?.streak.freeze_saved ?? 0;
   // The welcome back is checked once per app open (and again after the app comes back to the front).
   const welcomeChecked = useRef(false);
+  const playerIdRef = useRef(player?.id);
+  playerIdRef.current = player?.id;
+  const enabledRef = useRef(o.enabled);
+  enabledRef.current = o.enabled;
   const [welcomeDone, setWelcomeDone] = useState(false);
   const [reopen, setReopen] = useState(0);
   useEffect(() => {
     const sub = AppState.addEventListener('change', st => {
-      if (st === 'active') { welcomeChecked.current = false; welcomeShown.current = false; awayDays.current = null; setWelcomeDone(false); setReopen(n => n + 1); }
+      if (st !== 'active') return;
+      welcomeChecked.current = false; welcomeShown.current = false; awayDays.current = null; setWelcomeDone(false); setReopen(n => n + 1);
+      // Back in the app: the days away are known at once from memory, so Finn can say hello in the same render.
+      const id = playerIdRef.current;
+      const last = id ? lastOpenMem.get(String(id)) : undefined;
+      if (!id || last === undefined || !enabledRef.current) return;
+      const away = daysAway(last, Date.now());
+      lastOpenMem.set(String(id), Date.now());
+      void AsyncStorage.setItem(`${LAST_OPEN_KEY}:${id}`, String(Date.now())).catch(() => undefined);
+      awayDays.current = away;
+      if (away >= WELCOME_FX.minDaysAway) {
+        setWelcomePending(true);
+        welcomeWaiting.current = true;
+        lastRead.current = 0;
+        void refreshRef.current?.(true);
+      }
+      setAwayKnown(n => n + 1);
     });
     return () => sub.remove();
   }, []);
@@ -326,6 +348,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     const key = `${LAST_OPEN_KEY}:${player.id}`;
     void AsyncStorage.getItem(key).then(v => {
       const away = daysAway(v ? Number(v) : null, Date.now());
+      lastOpenMem.set(String(player.id), Date.now());
       void AsyncStorage.setItem(key, String(Date.now())).catch(() => undefined);
       if (!mounted.current) return;
       awayDays.current = away;
@@ -748,7 +771,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       ember: (was: number) => setView({ k: 'ember', was }),
       welcome: () => { if (daily) setView({ k: 'welcome', cards: welcomeCards(daily, { levelChest: pendingChest?.level ?? null }) }); },
       perf: (on: boolean) => { (globalThis as Record<string, unknown>).__loopsPerfOn = !!on; setPerfOn(!!on); },
-      setLastOpen: (daysAgo: number) => { if (player?.id) void AsyncStorage.setItem(`${LAST_OPEN_KEY}:${player.id}`, String(Date.now() - daysAgo * 86400000)); },
+      setLastOpen: (daysAgo: number) => {
+        if (!player?.id) return;
+        lastOpenMem.set(String(player.id), Date.now() - daysAgo * 86400000);
+        void AsyncStorage.setItem(`${LAST_OPEN_KEY}:${player.id}`, String(Date.now() - daysAgo * 86400000));
+      },
       freezeIn: (n = 1) => setView({ k: 'sheet', freezeArrive: n }),
       sheet: (all?: boolean) => setView({ k: 'sheet', all: !!all }),
       forgetFlame: () => { void AsyncStorage.removeItem(seenKey); },

@@ -479,6 +479,9 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
           </Animated.View>
         )}
         <GoldBurst size={size * 2.5} amount={goldAll} bloom={bloomAll} reduced={reducedMotion} style={styles.abs} />
+        {/* A warm pool of light on the floor under the chest, so it sits on a stage (never floats in a blue void). */}
+        <Image source={SOFT} pointerEvents="none" transition={0} contentFit="fill" tintColor="#FFE07A"
+          style={[styles.floor, { width: size * 1.5, height: size * 0.34, top: stageH / 2 + size * 0.3 }]} />
         <RadialFlash flash={flash} size={size * 1.6} />
         <Animated.View pointerEvents="none" style={[styles.dust, { width: size * 1.1, height: size * 0.28, top: stageH / 2 + size * 0.36 }, dustStyle]}>
           <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor="#ffffff" transition={0} />
@@ -524,7 +527,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
           </Animated.View>
         </View>
       </Pressable>
-      <View style={[styles.bottom, known && styles.bottomKnown]}>
+      {/* The tall footer slot is only for the Daily 3 flame row: a level chest's card ends right under its button. */}
+      <View style={[styles.bottom, known && !!footer && styles.bottomKnown]}>
         {revealed ? <DoneArea footer={footer} label={doneLabel ?? 'AWESOME!'} onDone={done} appear={doneIn} /> : null}
       </View>
       {stage && budget.animate && budget.particleScale >= 0.5 && <RewardBurst progress={burst} x={stage.x} y={stage.y + heroDY} />}
@@ -758,6 +762,7 @@ const styles = StyleSheet.create({
   abs: { position: 'absolute' },
   center: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },
   dust: { position: 'absolute' },
+  floor: { position: 'absolute', opacity: 0.55 },
   leak: { position: 'absolute' },
   tapRing: { position: 'absolute', borderWidth: 5, borderColor: BRAND.white },
   // Few prizes sit in the middle of the rows area, not at the top of an empty panel.
