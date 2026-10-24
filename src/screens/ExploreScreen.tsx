@@ -1381,8 +1381,10 @@ function ExploreScreen() {
               width: '50%',
             }}
           >
+            {/* PLAY RIDE and its ride chip slide up only after the loading cover lifts: on iOS this
+                wrapper's native slide can draw above the cover, so it waits for the map. */}
             <RedeemModal
-              redeemable={mapFocused ? activeRedeemable : undefined}
+              redeemable={mapFocused && !mapCovered ? activeRedeemable : undefined}
               park={park}
               selectedTaskId={selectedTask?.id ?? null}
               liveStatus={activeLiveStatus}

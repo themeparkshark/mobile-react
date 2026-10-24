@@ -20,7 +20,7 @@ import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import { GameButton, GameIcon, gameAlert, SharkLoader } from '../../ui';
 import { withNumberFont, NUMBER_FONT } from '../../ui/numberText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { scoreText, riderWords, COMPACT_COMMUNITY_LOGS, RIDE_DETAIL_HEADER } from './rideDetailModel';
+import { scoreText, ratingCount, riderSharksCaption, COMPACT_COMMUNITY_LOGS, RIDE_DETAIL_HEADER } from './rideDetailModel';
 import { plainRideName } from '../../helpers/plainRideName';
 
 export { scoreText, COMPACT_COMMUNITY_LOGS, RIDE_DETAIL_HEADER } from './rideDetailModel';
@@ -166,7 +166,7 @@ export default function RideDetailScreen() {
   const [shareEntry, setShareEntry] = useState<PlayerRideType | null>(null);
   const [imageError, setImageError] = useState(false);
   const toastOpacity = useRef(new Animated.Value(0)).current;
-  const toastY = useRef(new Animated.Value(10)).current;
+  const toastY = useRef(new Animated.Value(-10)).current;
   const [toastText, setToastText] = useState('');
   const [loadError, setLoadError] = useState(false);
   const loadedOnce = useRef(false);
@@ -203,7 +203,7 @@ export default function RideDetailScreen() {
   const showToast = useCallback((text: string) => {
     setToastText(text);
     toastOpacity.setValue(0);
-    toastY.setValue(10);
+    toastY.setValue(-10);
     Animated.parallel([
       Animated.timing(toastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
       Animated.timing(toastY, { toValue: 0, duration: 200, useNativeDriver: true }),
@@ -310,20 +310,20 @@ export default function RideDetailScreen() {
               </View>
               {community?.avg_rating != null && (
                 <View style={s.statCard} accessible
-                  accessibilityLabel={`Rider sharks: ${scoreText(community.avg_rating)}, ${riderWords(community.unique_riders)}`}>
+                  accessibilityLabel={`Rider sharks: ${scoreText(community.avg_rating)}, ${riderSharksCaption(community)}`}>
                   <View style={s.statValRow}>
                     <View style={s.statIcon}><GameIcon name="shark" size={20} /></View>
                     <Text style={s.statVal}>{scoreText(community.avg_rating)}</Text>
                   </View>
                   <Text style={s.statLabel}>Rider sharks</Text>
-                  <Text style={s.statCaption}>{withNumberFont(riderWords(community.unique_riders))}</Text>
+                  <Text style={s.statCaption}>{withNumberFont(riderSharksCaption(community))}</Text>
                 </View>
               )}
             </View>
 
             {/* Community ratings: one row for a few logs, the five-bar chart once there are enough */}
             {/* With only a log or two, the Rider sharks tile says it all ("from 1 rider"): no card for one line. */}
-            {community && community.total_logs >= COMPACT_COMMUNITY_LOGS && (
+            {community && ratingCount(community.rating_distribution) >= COMPACT_COMMUNITY_LOGS && (
               <View style={s.card}>
                 <Text style={[s.sectionTitle, s.cardTitle]}>WHAT RIDERS SAY</Text>
                 {[5, 4, 3, 2, 1].map(r => (
@@ -357,7 +357,7 @@ export default function RideDetailScreen() {
             <Text style={s.emptyTitle}>You haven't ridden this yet!</Text>
             <Text style={s.emptyHint}>Rode it? Tap Log this ride.</Text>
             {/* The shark waits by the ride, so the empty page is not a blank sheet (the riders' chart fills it otherwise). */}
-            {!(community && community.total_logs >= COMPACT_COMMUNITY_LOGS) &&
+            {!(community && ratingCount(community.rating_distribution) >= COMPACT_COMMUNITY_LOGS) &&
               <View style={s.emptyArt} accessible={false}><GameIcon name="shark" size={130} /></View>}
           </View>
         }
@@ -382,6 +382,8 @@ export default function RideDetailScreen() {
         pointerEvents="none"
         style={[s.toast, { opacity: toastOpacity, transform: [{ translateY: toastY }] }]}
       >
+        {/* A little point up at the header star it confirms. */}
+        <View style={s.toastPoint} />
         <GameIcon name="star" size={22} />
         <Text style={s.toastText}>{toastText}</Text>
       </Animated.View>
@@ -503,10 +505,11 @@ const s = StyleSheet.create({
   modalClose: { marginTop: 12 },
 
   // ─── Toast ───
+  // Hangs from the header star (top right, just under the header), never over the page's shark.
   toast: {
     position: 'absolute',
-    bottom: FOOTER_CLEARANCE,
-    alignSelf: 'center',
+    top: 10,
+    right: 12,
     // The game's own toast: a white card with a navy rim, a gold star and navy Shark words.
     backgroundColor: B.white,
     borderRadius: 16,
@@ -524,4 +527,9 @@ const s = StyleSheet.create({
     elevation: 6,
   },
   toastText: { color: B.navy, fontSize: 16, fontFamily: 'Shark' },
+  // A navy diamond peeking out of the card's top edge, under the star's center (12 pt pad + 22 pt to the star's middle).
+  toastPoint: {
+    position: 'absolute', top: -8, right: 15, width: 13, height: 13, backgroundColor: B.white,
+    borderColor: B.navy, borderLeftWidth: 3, borderTopWidth: 3, transform: [{ rotate: '45deg' }],
+  },
 });

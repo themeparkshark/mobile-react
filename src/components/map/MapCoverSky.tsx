@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
-import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import config from '../../config';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { COVER_MAX_MS, LAUNCH_HANDOFF_SHARE } from '../../constants/launchHandoff';
@@ -18,9 +18,9 @@ const SHARK = require('../../../assets/icons/game/shark.png');
  * top third and the lower corners, never beside the shark's head or behind a map button.
  */
 export const COVER_CLOUDS = [
-  { x: 0.05, y: 0.06, w: 0.28, drift: 14 },
-  { x: 0.66, y: 0.17, w: 0.26, drift: -12 },
-  { x: 0.08, y: 0.74, w: 0.26, drift: 10 },
+  { x: 0.05, y: 0.06, w: 0.28, drift: 14, periodMs: 11000, phase: 0.15 },
+  { x: 0.66, y: 0.17, w: 0.26, drift: -12, periodMs: 9000, phase: 0.6 },
+  { x: 0.08, y: 0.74, w: 0.26, drift: 10, periodMs: 10000, phase: 0.35 },
 ] as const;
 
 /**
@@ -68,7 +68,7 @@ function MapCoverSky({ done = false, fill: drivenFill }: {
         setBox(current => (current && current.width === w && current.height === h ? current : { width: w, height: h }));
       }}>
       {/* Clouds sit at percentages of the cover (native layout, no JS measuring), so they show on the first frame and never jump. */}
-      {COVER_CLOUDS.map((c, i) => <CoverCloud key={i} t={t} cloud={c} width={width} />)}
+      {COVER_CLOUDS.map((c, i) => <CoverCloud key={i} cloud={c} width={width} still={reduced} />)}
       <View style={styles.center}>
         <Animated.View style={sharkStyle}>
           <Image source={SHARK} style={{ width: sharkSize, height: sharkSize }} contentFit="contain" />
@@ -84,13 +84,26 @@ function MapCoverSky({ done = false, fill: drivenFill }: {
   );
 }
 
-function CoverCloud({ t, cloud, width }: {
-  readonly t: ReturnType<typeof useSharedValue<number>>;
+/**
+ * One cloud drifting on its own slow linear clock (9 to 11 s, each starting at a different point),
+ * like weather: never in step with the shark's bob, never with each other. UI thread; still under
+ * Reduce Motion.
+ */
+function CoverCloud({ cloud, width, still }: {
   readonly cloud: (typeof COVER_CLOUDS)[number];
   readonly width: number;
+  readonly still: boolean;
 }) {
   const w = Math.round(width * cloud.w);
-  const style = useAnimatedStyle(() => ({ transform: [{ translateX: t.value * cloud.drift }] }));
+  const d = useSharedValue<number>(cloud.phase);
+  useEffect(() => {
+    if (still) { cancelAnimation(d); d.value = cloud.phase; return; }
+    d.value = withSequence(
+      withTiming(1, { duration: Math.round((1 - cloud.phase) * cloud.periodMs), easing: Easing.linear }),
+      withRepeat(withTiming(0, { duration: cloud.periodMs, easing: Easing.linear }), -1, true));
+    return () => cancelAnimation(d);
+  }, [still, cloud, d]);
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: d.value * cloud.drift }] }));
   return (
     <Animated.View style={[{ position: 'absolute', left: `${cloud.x * 100}%`, top: `${cloud.y * 100}%` }, style]}>
       <Image source={CLOUD} style={{ width: w, height: Math.round(w * 155 / 232) }} contentFit="contain" />

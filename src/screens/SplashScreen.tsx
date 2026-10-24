@@ -1,10 +1,12 @@
 import { Image } from 'expo-image';
 import { useContext, useRef } from 'react';
-import { Dimensions, View } from 'react-native';
+import { Dimensions, SafeAreaView, View } from 'react-native';
 import { useEffectOnceWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import { CrumbContext } from '../context/CrumbProvider';
+import Progress from '../components/Progress';
+import { SPLASH_CREEP_MS, SPLASH_ROUTE_SHARE } from '../constants/launchHandoff';
 
 const SPLASH_ART = require('../../assets/images/splash-bg.png');
 
@@ -41,6 +43,17 @@ export default function SplashScreen() {
           height: Dimensions.get('window').height,
         }}
       />
+      {/* The launch bar from this screen's first frame, in the same spot as the Loading screen's
+          bar: it creeps while sign-in and the game's words load, and the Loading screen picks it
+          up from SPLASH_ROUTE_SHARE, so a kid sees one bar moving from the first second. */}
+      <SafeAreaView pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'flex-end' }}>
+        <View style={{ marginBottom: 32, marginLeft: 'auto', marginRight: 'auto', width: '80%' }}>
+          <View style={{ borderRadius: 50, borderColor: 'white', borderWidth: 3 }}
+            accessible accessibilityRole="progressbar" accessibilityLabel="Loading">
+            <Progress progress={SPLASH_ROUTE_SHARE * 100} duration={SPLASH_CREEP_MS} />
+          </View>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }

@@ -17,3 +17,20 @@ export function withPlainNames<T extends { name: string }>(rows: readonly T[]): 
     return plain === row.name ? row : { ...row, name: plain };
   });
 }
+
+/**
+ * The map's opportunities (/me/current-redeemables): ride coins and secret coins carry ride names
+ * that label the map, so they go through the same plain-name path as every other ride list.
+ */
+export function withPlainTaskNames<T>(data: T): T {
+  if (!data || typeof data !== 'object') return data;
+  const out: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+  for (const key of ['tasks', 'secret_tasks']) {
+    const rows = out[key];
+    if (Array.isArray(rows)) {
+      out[key] = rows.map((row) => (row && typeof row === 'object' && typeof (row as { name?: unknown }).name === 'string'
+        ? withPlainNames([row as { name: string }])[0] : row));
+    }
+  }
+  return out as T;
+}

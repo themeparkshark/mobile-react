@@ -999,6 +999,8 @@ export default function CommunityCenterScreen() {
             
             {/* The drawn kiosk face over the painted price and slot: our price with the coin stack
                 (the coin you spend everywhere) and LEAVE GIFT 16 pt from the screen edge. */}
+            <View pointerEvents="none" style={[styles.kioskSide, {
+              left: KIOSK.cap.left, top: KIOSK.cap.top + KIOSK_NUDGE, width: KIOSK.cap.width, height: KIOSK.cap.height }]} />
             <View pointerEvents="none" style={[styles.kioskFace, {
               left: KIOSK.face.left, top: KIOSK.face.top + KIOSK_NUDGE, width: KIOSK.face.width, height: KIOSK.face.height }]} />
             <View pointerEvents="none" accessible accessibilityLabel={`A gift costs ${GIFT_COST} coins`}
@@ -1485,11 +1487,15 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
   },
+  kioskSide: {
+    position: 'absolute',
+    backgroundColor: KIOSK_COLORS.side,
+  },
   kioskFace: {
     position: 'absolute',
     backgroundColor: KIOSK_COLORS.face,
     borderColor: KIOSK_COLORS.edge,
-    borderWidth: 3,
+    borderWidth: 4,
     borderRadius: 14,
     ...SHADOW.card,
   },

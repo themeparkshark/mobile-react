@@ -114,8 +114,9 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
   assert.match(cc, /const KIOSK = kioskLayout\(SCREEN_WIDTH, SCALED_HEIGHT\);/);
   assert.match(cc, /LEAVE_GIFT_LEFT = KIOSK\.button\.left;/);
   const { kioskLayout, PAINTED_SLOT, PAINTED_PRICE, SCREEN_GUTTER, KIOSK_COLORS, LEAVE_GIFT_PILL_SHARE } = loadTs('src/screens/CommunityCenter/leaveGiftLayout.ts');
-  // The plaque is the game's white card with a navy rim, never code-drawn dark slate.
-  assert.equal(KIOSK_COLORS.face, '#ffffff');
+  // The plaque is the game's warm-white card with a thick navy rim, never code-drawn dark slate.
+  assert.equal(KIOSK_COLORS.face, '#fff7e6');
+  assert.match(cc, /kioskFace: \{[^}]*borderWidth: 4/s);
   assert.equal(KIOSK_COLORS.edge, '#05346e');
   assert.match(cc, /kioskFace: \{[^}]*\.\.\.SHADOW\.card/s);
   // Only the green pill shows: the art's stone foot and gem are cropped off.
@@ -128,8 +129,14 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
     const k = kioskLayout(w, artH);
     assert.ok(w - (k.button.left + k.button.width) >= SCREEN_GUTTER, `${phone}: LEAVE GIFT is 16 pt from the edge`);
     assert.ok(k.face.left <= w * PAINTED_SLOT.left - 8, `${phone}: the face covers the painted slot's left rim`);
-    assert.ok(k.face.left + k.face.width >= Math.floor(w * PAINTED_SLOT.right), `${phone}: the plaque covers the painted slot to its right end`);
-    assert.ok(k.face.left + k.face.width <= w, `${phone}: the plaque ends on screen`);
+    // A 14 pt gutter like every card, LEAVE GIFT centered in it (same padding left and right).
+    assert.ok(w - (k.face.left + k.face.width) >= 14, `${phone}: the plaque keeps a 14 pt gutter`);
+    const padL = k.button.left - k.face.left;
+    const padR = k.face.left + k.face.width - (k.button.left + k.button.width);
+    assert.ok(Math.abs(padL - padR) <= 1, `${phone}: LEAVE GIFT centered (${padL} / ${padR})`);
+    // The dark side strip hides the painted slot's end in the gutter, from under the plaque to the edge.
+    assert.ok(k.cap.left < k.face.left + k.face.width && k.cap.left + k.cap.width === w, `${phone}: side strip reaches the edge`);
+    assert.ok(k.cap.top <= artH * PAINTED_PRICE.top && k.cap.top + k.cap.height >= artH * PAINTED_SLOT.bottom, `${phone}: side strip covers the painted slot's end`);
     // The baked label is about a quarter of the art's height: 90+ pt wide keeps it about 14 pt.
     assert.ok(k.button.width >= 90, `${phone}: LEAVE GIFT label stays about 14 pt (${k.button.width} pt wide)`);
     assert.ok(k.face.top <= artH * PAINTED_PRICE.top && k.face.top + k.face.height >= artH * PAINTED_SLOT.bottom + 6, `${phone}: painted price and slot covered`);
@@ -372,7 +379,15 @@ test('Ride Detail title fits by measured width; scores read as numbers with a sh
   for (const key of ['statVal', 'ratingBarLabel', 'ratingBarCount', 'topReactionItem']) {
     assert.match(src, new RegExp(`${key}: \\{[^}]*fontFamily: NUMBER_FONT`), key);
   }
-  assert.match(src, /withNumberFont\(riderWords\(community\.unique_riders\)\)/);
+  // The tile counts the same ratings the chart adds up (Astro Orbitor: 3 logs, 2 ratings -> "from 2 ratings").
+  assert.match(src, /withNumberFont\(riderSharksCaption\(community\)\)/);
+  assert.equal(m.ratingCount({ 5: 0, 4: 2, 3: 0, 2: 0, 1: 0 }), 2);
+  assert.equal(m.riderSharksCaption({ rating_distribution: { 4: 2 }, unique_riders: 3 }), 'from 2 ratings');
+  assert.equal(m.riderSharksCaption({ rating_distribution: { 5: 1 }, unique_riders: 1 }), 'from 1 rating');
+  assert.equal(m.riderSharksCaption({ rating_distribution: {}, unique_riders: 3 }), 'from 3 riders');
+  // The favorites toast hangs from the header star (top right), never over the page's shark.
+  assert.match(src, /toast: \{\s*position: 'absolute',\s*top: 10,\s*right: 12,/);
+  assert.match(src, /<View style=\{s\.toastPoint\} \/>/);
   // One heading face app-wide (navy Shark, like Settings), one tile icon treatment, the game's own toast.
   assert.match(src, /sectionTitle: \{[^}]*color: B\.navy, fontSize: 17,[^}]*fontFamily: 'Shark'/s);
   assert.equal((src.match(/<View style=\{\[?s\.statIcon/g) || []).length, 3);
@@ -401,7 +416,7 @@ test('withNumberFont draws digit runs in the number face and leaves words alone'
 test('Ride Detail on an SE: a small community count is one row and the empty line sits close under the button', () => {
   const src = read('src/screens/RideTracker/RideDetailScreen.tsx');
   // A log or two: no community card (the Rider sharks tile says "from 1 rider"); the chart once there are enough.
-  assert.match(src, /\{community && community\.total_logs >= COMPACT_COMMUNITY_LOGS && \(/);
+  assert.match(src, /\{community && ratingCount\(community\.rating_distribution\) >= COMPACT_COMMUNITY_LOGS && \(/);
   assert.match(src, /<GameIcon name="shark" size=\{130\} \/>/, 'the empty page has the shark, not a blank sheet');
   // The empty page fills the space under the button: an arrow up at LOG THIS RIDE, the line, the shark.
   assert.match(src, /emptyWrap: \{ flexGrow: 1, alignItems: 'center', justifyContent: 'center'/);
@@ -438,10 +453,16 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   // The Loading screen draws the Splash art under its video: no blank blue first frame.
   assert.match(read('src/screens/LoadingScreen.tsx'), /<Image source=\{SPLASH_ART\} transition=\{0\} contentFit="cover"/);
   // One bar from launch to map: the splash fills LAUNCH_HANDOFF_SHARE, the cover fills the rest.
-  assert.match(read('src/screens/LoadingScreen.tsx'), /<Progress progress=\{progress \* LAUNCH_HANDOFF_SHARE\} \/>/);
+  assert.match(read('src/screens/LoadingScreen.tsx'), /<Progress progress=\{Math\.max\(SPLASH_ROUTE_SHARE \* 100, progress \* LAUNCH_HANDOFF_SHARE\)\} initial=\{SPLASH_ROUTE_SHARE \* 100\} \/>/);
+  // The Splash route shows the same bar from its first frame (progress from the first second).
+  assert.match(read('src/screens/SplashScreen.tsx'), /<Progress progress=\{SPLASH_ROUTE_SHARE \* 100\} duration=\{SPLASH_CREEP_MS\} \/>/);
+  const progressSrc = read('src/components/Progress.tsx');
+  assert.match(progressSrc, /useNativeDriver: true/, 'the launch bar moves on the native driver');
+  assert.match(progressSrc, /transform: \[\{ scaleX: fill \}\]/);
   const k = loadTs('src/constants/launchHandoff.ts');
   assert.ok(k.LAUNCH_HANDOFF_SHARE > 0.5 && k.LAUNCH_HANDOFF_SHARE < 0.9);
-  assert.ok(k.COVER_MAX_MS <= 3200, 'the cover never holds longer than about 3 s');
+  assert.ok(k.COVER_MAX_MS <= 2500, 'the cover never holds longer than 2.5 s');
+  assert.ok(k.SPLASH_ROUTE_SHARE > 0 && k.SPLASH_ROUTE_SHARE < k.LAUNCH_HANDOFF_SHARE / 2);
   assert.equal(k.coverStartShare(true, false, 0), k.LAUNCH_HANDOFF_SHARE, 'launch picks up the splash bar');
   assert.equal(k.coverStartShare(false, true, 0.83), 0.83, 'a map swapped in under the cover never restarts the bar');
   assert.equal(k.coverStartShare(false, false, 0.5), k.LATER_COVER_SHARE);
@@ -452,19 +473,22 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   // The map mounts a few frames later (a phone): the cover is up COVER_MAX_MS from its first frame.
   assert.equal(k.coverDeadline(1050, armed, true), 1000 + k.COVER_MAX_MS);
   // A busy phone mounts the map late: it still gets a moment to draw, never past the hard cap.
-  assert.equal(k.coverDeadline(3800, armed, true), 3800 + k.COVER_MAP_MIN_MS);
-  assert.equal(k.coverDeadline(5500, armed, true), 1000 + k.COVER_HARD_MAX_MS);
+  assert.equal(k.coverDeadline(3000, armed, true), 3000 + k.COVER_MAP_MIN_MS);
+  assert.equal(k.coverDeadline(4900, armed, true), 1000 + k.COVER_HARD_MAX_MS);
   // A home map swapped for the park map keeps the first deadline: the cover never outlives its cap.
-  const mapped = { up: true, deadline: 4200, startedAt: 1000, mapMounted: true };
-  assert.equal(k.coverDeadline(2500, mapped, true), 4200);
+  const mapped = { up: true, deadline: 3400, startedAt: 1000, mapMounted: true };
+  assert.equal(k.coverDeadline(2500, mapped, true), 3400);
   assert.equal(k.coverDeadline(5000, mapped, true), 5000 + k.COVER_MAX_MS, 'a later cover is a new cover');
   assert.equal(k.coverDeadline(2500, { ...mapped, up: false }, true), 2500 + k.COVER_MAX_MS);
-  assert.ok(k.COVER_HARD_MAX_MS <= 5000);
-  // Picking home or park at launch holds the one cover (never past the hard cap), then the normal deadline is back.
-  assert.equal(k.coverHoldDeadline(true, 1500, { startedAt: 1000, deadline: 4200 }), 1000 + k.COVER_HARD_MAX_MS);
+  assert.ok(k.COVER_HARD_MAX_MS <= 4000);
+  // Picking home or park at launch holds the one cover, but never past COVER_MAX_MS once a map is up:
+  // a slow park lookup never keeps a kid on the sky; it lifts onto whichever map has drawn.
+  assert.equal(k.coverHoldDeadline(true, 1500, { startedAt: 1000, deadline: 1000 + k.COVER_MAX_MS }), 1000 + k.COVER_MAX_MS);
+  assert.equal(k.coverHoldDeadline(true, 1500, { startedAt: 1000, deadline: 1200 }), 1000 + k.COVER_MAX_MS);
+  assert.equal(k.coverHoldDeadline(true, 1500, { startedAt: 1000, deadline: 1000 + k.COVER_HARD_MAX_MS }), 1000 + k.COVER_HARD_MAX_MS, 'no map yet: only the hard cap');
   assert.equal(k.coverHoldDeadline(false, 1500, { startedAt: 1000, deadline: 6000 }), 1000 + k.COVER_MAX_MS);
-  assert.equal(k.coverHoldDeadline(false, 3900, { startedAt: 1000, deadline: 6000 }), Math.min(6000, 3900 + k.COVER_MAP_MIN_MS));
-  assert.equal(k.coverHoldDeadline(false, 5800, { startedAt: 1000, deadline: 6000 }), 6000);
+  assert.equal(k.coverHoldDeadline(false, 3000, { startedAt: 1000, deadline: 6000 }), Math.min(1000 + k.COVER_HARD_MAX_MS, 3000 + k.COVER_MAP_MIN_MS));
+  assert.equal(k.coverHoldDeadline(false, 5800, { startedAt: 1000, deadline: 6000 }), 1000 + k.COVER_HARD_MAX_MS);
   assert.equal(k.coverCanLift(true, false), true);
   assert.equal(k.coverCanLift(true, true), false, 'held while the screen picks home or park');
   assert.equal(k.coverCanLift(false, false), false);
@@ -473,12 +497,18 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
     react: { memo: (c) => c, useEffect() {}, useState: (v) => [v, () => {}] },
     'react-native': { StyleSheet: { create: (x) => x, absoluteFill: {}, absoluteFillObject: {} }, View: 'View', useWindowDimensions: () => ({ width: 402, height: 874 }) },
     'expo-image': { Image: 'Image' },
-    'react-native-reanimated': { default: { View: 'View' }, Easing: {}, cancelAnimation() {}, useAnimatedStyle() {}, useSharedValue() {}, withRepeat() {}, withTiming() {} },
+    'react-native-reanimated': { default: { View: 'View' }, Easing: {}, cancelAnimation() {}, useAnimatedStyle() {}, useSharedValue() {}, withRepeat() {}, withSequence() {}, withTiming() {} },
     '../../config': { default: { primary: '#09268f' } },
     '../../ui/useUiReducedMotion': { default: () => false },
     'react/jsx-runtime': { jsx() {}, jsxs() {} },
   }).COVER_CLOUDS;
+  // Each cloud drifts on its own slow clock (not the shark's 1.3 s bob), starting at its own point.
+  const coverSrc = read('src/components/map/MapCoverSky.tsx');
+  assert.match(coverSrc, /<CoverCloud key=\{i\} cloud=\{c\} width=\{width\} still=\{reduced\} \/>/);
+  assert.equal(new Set(clouds.map((c) => c.periodMs)).size, clouds.length);
+  assert.equal(new Set(clouds.map((c) => c.phase)).size, clouds.length);
   for (const c of clouds) {
+    assert.ok(c.periodMs >= 8000 && c.periodMs <= 12000, `cloud period ${c.periodMs}`);
     assert.ok(c.w >= 0.24 && c.w <= 0.3, `cloud width ${c.w}`);
     assert.ok(c.y + c.w * 0.67 * 0.46 < 0.36 || c.y > 0.66, `cloud at y ${c.y} stays clear of the shark and bar`);
   }
@@ -496,6 +526,13 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   assert.match(cover, /<MapCoverSky fill=\{fill\} \/>/);
   assert.match(cover, /\}, \[plan\.version\]\);/);
   assert.match(cover, /useLayoutEffect\(\(\) => \{\s*const tok = plan\.token;/);
+  // PLAY RIDE and its ride chip wait for the cover to lift (their wrapper can draw above the cover on iOS).
+  assert.match(read('src/screens/ExploreScreen.tsx'), /redeemable=\{mapFocused && !mapCovered \? activeRedeemable : undefined\}/);
+  // The header coin, key and ticket and the five footer icons are decoded into memory before the hand-off.
+  const warmSrc = read('src/helpers/launchArt.ts');
+  assert.match(warmSrc, /Image\.prefetch\(bundled, 'memory-disk'\)/);
+  assert.match(warmSrc, /RNImage\.resolveAssetSource\(mod\)/);
+  assert.match(read('src/screens/LoadingScreen.tsx'), /currencies\.map\(\(c\) => c\.icon_url\)/);
   // The store never times the lift on the JS thread (only a safety net for React state).
   assert.doesNotMatch(store, /react-native-reanimated/);
   assert.match(store, /safety = setTimeout\(\(\) => coverLifted\(tok\), wait\);/);
@@ -577,4 +614,14 @@ test('plain ride names: no trademark marks from the wait-times feed or the ride 
   assert.match(read('src/api/endpoints/parks/queue-times/getWikiTimes.ts'), /return withPlainNames\(data\.liveData\.filter/);
   assert.match(read('src/api/endpoints/rides/index.ts'), /withPlainNames\(data\.data as RideType\[\]\)/);
   assert.match(read('src/screens/RideTracker/RideDetailScreen.tsx'), /const name = plainRideName\(/);
+  // The map's ride coins and secret coins use the same path, so a mark from server data never labels the map.
+  const { withPlainTaskNames } = loadTs('src/helpers/plainRideName.ts');
+  const map = withPlainTaskNames({ tasks: [{ id: 1, name: 'Indiana Jones\u2122 Adventure' }], secret_tasks: [{ id: 2, name: 'Space Mountain\u00AE' }], coins: [{ id: 3 }] });
+  assert.equal(map.tasks[0].name, 'Indiana Jones Adventure');
+  assert.equal(map.secret_tasks[0].name, 'Space Mountain');
+  assert.deepEqual(map.coins, [{ id: 3 }]);
+  assert.equal(withPlainTaskNames(null), null);
+  assert.match(read('src/api/endpoints/me/current-redeemables.js'), /return withPlainTaskNames\(data\.data\);/);
+  assert.match(read('src/api/endpoints/parks/getTasks.ts'), /withPlainNames\(data\.data\)/);
+  assert.match(read('src/api/endpoints/parks/getSecretTasks.ts'), /withPlainNames\(data\.data\)/);
 });

@@ -4,19 +4,27 @@
  * tiles draw, so a kid sees one bar finish, never a second, frozen loading screen.
  */
 export const LAUNCH_HANDOFF_SHARE = 0.7;
+/**
+ * The Splash route (waiting on sign-in and the game's words) shows the same bar from its first
+ * frame and creeps it to this share, so the launch shows progress from its first second. The
+ * Loading screen's bar starts here, so the bar only ever moves forward.
+ */
+export const SPLASH_ROUTE_SHARE = 0.15;
+/** How long the Splash route's bar takes to creep to SPLASH_ROUTE_SHARE. */
+export const SPLASH_CREEP_MS = 2400;
 /** A cover that starts later (walking into a park mid-session) starts its bar here. */
 export const LATER_COVER_SHARE = 0.2;
 /** The cover never stays up longer than this from its first frame, whatever the map is doing. */
-export const COVER_MAX_MS = 3200;
+export const COVER_MAX_MS = 2400;
 /** How long the bar takes to finish once the map has drawn, before the cover fades. */
 export const COVER_FINISH_MS = 200;
 /** The cover's fade (the map and its buttons arrive together under it). */
 export const COVER_FADE_MS = 380;
 
 /** A map that mounts under the cover always gets at least this long to draw. */
-export const COVER_MAP_MIN_MS = 1200;
+export const COVER_MAP_MIN_MS = 1000;
 /** Never longer than this from the cover's first frame (a phone too busy to mount the map in time). */
-export const COVER_HARD_MAX_MS = 5000;
+export const COVER_HARD_MAX_MS = 4000;
 
 /**
  * When the cover lifts.
@@ -37,13 +45,15 @@ export function coverDeadline(now: number, current: {
 }
 
 /**
- * The screen holds the cover while it still picks the home map or the park map at launch: the one
- * cover (one bar, never restarted) may then wait up to the hard cap. Once the choice is made, the
- * normal deadline is back, and the map still gets COVER_MAP_MIN_MS to draw.
+ * While the screen still picks the home map or the park map at launch, the one cover (one bar,
+ * never restarted) holds, but never past COVER_MAX_MS from its first frame: a kid never waits on
+ * a slow park lookup. At that point it lifts onto whichever map has drawn (a park map that arrives
+ * later gets its own short cover). Once the choice is made, the normal deadline is back, and a map
+ * still gets COVER_MAP_MIN_MS to draw.
  */
 export function coverHoldDeadline(held: boolean, now: number, current: { readonly startedAt: number; readonly deadline: number }): number {
   const hard = current.startedAt + COVER_HARD_MAX_MS;
-  if (held) return Math.max(current.deadline, hard);
+  if (held) return Math.min(hard, Math.max(current.deadline, current.startedAt + COVER_MAX_MS));
   return Math.min(hard, Math.max(current.startedAt + COVER_MAX_MS, now + COVER_MAP_MIN_MS));
 }
 

@@ -124,13 +124,14 @@ const BUBBLES = [
 import { useAsyncEffect, useEffectOnceWhen, useTimeoutWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import Progress from '../components/Progress';
-import { LAUNCH_HANDOFF_SHARE } from '../constants/launchHandoff';
+import { LAUNCH_HANDOFF_SHARE, SPLASH_ROUTE_SHARE } from '../constants/launchHandoff';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationStatusContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 import { warmLaunchArt } from '../helpers/launchArt';
+import { CurrencyContext } from '../context/CurrencyProvider';
 export default function LoadingScreen() {
   const logoFloat = useRef(new Animated.Value(0)).current;
   // This screen stays mounted under the map for the whole session. Its video,
@@ -154,6 +155,12 @@ export default function LoadingScreen() {
     useContext(LocationStatusContext);
   const { labels } = useCrumbs();
   const { theme } = useContext(ThemeContext);
+  const { currencies } = useContext(CurrencyContext);
+  // The header pills' coin and key art (server icons), decoded as soon as the list arrives.
+  const currencyIcons = currencies.map((c) => c.icon_url).filter(Boolean).join('|');
+  useEffect(() => {
+    if (currencyIcons) warmLaunchArt(currencyIcons.split('|'), 0).catch(() => undefined);
+  }, [currencyIcons]);
   const [progress, setProgress] = useState<number>(0);
   const [fact, setFact] = useState<string>();
   const hasUsername = !!player?.username;
@@ -192,7 +199,7 @@ export default function LoadingScreen() {
   // actual work, and a short floor keeps the art on screen long enough to land.
   // It fills only LAUNCH_HANDOFF_SHARE of the bar: the map's sky cover fills the rest.
   const mountedAt = useRef(Date.now());
-  const MIN_SHOW_MS = 1200;
+  const MIN_SHOW_MS = 900;
   useAsyncEffect(async () => {
     if (!isReady || !hasUsername) {
       return;
@@ -314,7 +321,7 @@ export default function LoadingScreen() {
               borderWidth: 3,
             }}
           >
-            <Progress progress={progress * LAUNCH_HANDOFF_SHARE} />
+            <Progress progress={Math.max(SPLASH_ROUTE_SHARE * 100, progress * LAUNCH_HANDOFF_SHARE)} initial={SPLASH_ROUTE_SHARE * 100} />
           </View>
         </View>
       </SafeAreaView>
