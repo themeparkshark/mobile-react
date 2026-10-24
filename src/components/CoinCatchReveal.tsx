@@ -195,8 +195,10 @@ export default function CoinCatchReveal({
       flip.value = withTiming(1, { duration: 480, easing: EASE.out });
       scale.value = withSequence(
         withTiming(0.8, { duration: 480, easing: EASE.out }),
-        // The coin draws in a little (the squash before the pop), then punches past full size.
-        withDelay(T.burst - 480 - 240, withTiming(0.72, { duration: 240, easing: EASE.in })),
+        // The wind-up: the coin keeps swelling while it wobbles and the gold gathers (never a still hold),
+        // then draws in a little (the squash before the pop) and punches past full size.
+        withTiming(0.9, { duration: Math.max(0, T.burst - 480 - 240), easing: EASE.charge }),
+        withTiming(0.72, { duration: 240, easing: EASE.in }),
         withTiming(1.28, { duration: 110, easing: Easing.out(Easing.quad) }),
         withSpring(1, SPRING.pop),
       );
@@ -341,9 +343,12 @@ export default function CoinCatchReveal({
           <GoldBurst size={coinSize * 2.9} amount={rays} bloom={bloom} reduced={reducedFx} />
         </Animated.View>
         <Animated.View style={[{ width: coinSize, height: coinSize, alignItems: 'center', justifyContent: 'center' }, coinStyle]}>
+          {/* The reveal never waits on the network: a brand-new coin's art is often not downloaded yet, so the
+              house coin shows from the first frame and the real art fades in over it the moment it arrives. */}
           {coinUrl && !artFailed
-            ? <Image source={coinUrl} style={{ width: coinSize, height: coinSize }} contentFit="contain" onError={() => setArtFailed(true)} />
-            : <Image source={require('../../assets/icons/game/coin.png')} style={{ width: coinSize, height: coinSize }} contentFit="contain" />}
+            ? <Image source={coinUrl} placeholder={GENERIC_COIN} placeholderContentFit="contain" transition={180}
+              cachePolicy="memory-disk" style={{ width: coinSize, height: coinSize }} contentFit="contain" onError={() => setArtFailed(true)} />
+            : <Image source={GENERIC_COIN} style={{ width: coinSize, height: coinSize }} contentFit="contain" />}
           {!reducedFx && <ShineSweep progress={shine} size={coinSize * 0.86} />}
         </Animated.View>
         {!reducedFx && <SparkleBurst progress={sparkle} radius={coinSize * 0.95}
@@ -380,6 +385,7 @@ const styles = StyleSheet.create({
   },
 });
 
+const GENERIC_COIN = require('../../assets/icons/game/coin.png');
 const BACKDROP = ['#0d5bb0', '#08408c', '#042a62'] as const;
 /** How much of the deep-water gradient covers the blurred world art: the water tint shows through, its props (a window grid, the chest, a laurel) no longer read as shapes. */
 const WORLD_VEIL = 0.9;

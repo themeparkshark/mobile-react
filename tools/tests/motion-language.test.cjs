@@ -180,7 +180,10 @@ test('the chaser escalates past the Golden Box', () => {
   assert.ok(/pinBackGold/.test(src) && /pinBack: \{[^}]*borderColor: BRAND\.navy/.test(src), 'the pin back is outlined metal, never a grey disc');
   const pin = read('src/screens/pinTrading/EnamelPin.tsx');
   assert.ok(!/blendMode="color"/.test(pin), 'no flat colour swap that turns the chaser into a plain gold disc');
-  assert.ok(/<ColorMatrix matrix=\{metalMatrix\(tint\)\} \/>/.test(pin) && /TINT_EDGE/.test(pin), 'a gold duotone of the art plus a metal edge: reads gold, keeps the art');
+  assert.ok(!/ColorMatrix/.test(pin), 'no recolour of the art: the chaser keeps its own light-blue enamel');
+  assert.ok(/FOIL_EDGE/.test(pin) && /FOIL_LIP/.test(pin) && /colors=\{foilStops\(tint\)\}/.test(pin), 'a polished gold foil rim with a pale inner lip frames the untouched art');
+  assert.ok(/<Twinkles radius=\{pinSize \* 0\.58\} on=\{phase === 'show' && !still && ambient\}/.test(src), 'twinkles wink around the chaser only while ambient motion is allowed');
+  assert.ok(/p\?\.is_chaser && ambient\s*\n?\s*\? withDelay\(450, withRepeat/.test(src), 'the chaser glint repeats only while ambient motion is allowed');
   assert.ok(!/blendMode="overlay"/.test(pin), 'no faint overlay that leaves the chaser looking blue');
   assert.ok(!/LIMITED \\u00b7 #/.test(src), 'the serial shows twice (stamp and badge), not three times');
   // The serial stamp slams from oversize and never dips below its own size (no underdamped spring through an open interpolate).
@@ -274,19 +277,18 @@ test('the daily chest wallet counts up from the balance before the claim', () =>
   assert.ok(src.includes('start: Math.max(0, walletBefore.current ?? (player?.coins ?? 0))'), 'the chip starts from it');
 });
 
-test('the gold chaser is a contrast-stretched gold duotone: dark outlines stay dark, faces turn bright gold', () => {
-  const { metalMatrix } = loadTs('src/screens/pinTrading/EnamelPin.tsx', {
+test('the gold chaser foil: bright to deep gold across the rim, the art itself untouched', () => {
+  const { foilStops } = loadTs('src/screens/pinTrading/EnamelPin.tsx', {
     '@shopify/react-native-skia': {}, 'expo-image': {}, react: { memo: (c) => c }, 'react-native': { StyleSheet: { absoluteFill: {} } },
     'react-native-reanimated': {}, './pinImageCache': {}, 'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'f' },
   });
-  const m = metalMatrix('#f2b72c');
-  const apply = (r, g, b) => [0, 1, 2].map(row => Math.max(0, Math.min(1, m[row * 5] * r + m[row * 5 + 1] * g + m[row * 5 + 2] * b + m[row * 5 + 4])));
-  const face = apply(0.66, 0.85, 0.94);   // the pale blue planet face
-  const outline = apply(0.1, 0.15, 0.3);  // a navy outline
-  assert.ok(face[0] > 0.85 && face[1] > 0.7 && face[2] < face[1] - 0.15, `the face reads bright gold (${face.map(v => v.toFixed(2))})`);
-  assert.ok(face[0] > face[2] + 0.25, 'warm, not blue');
-  assert.ok(outline.every((v, i) => v < face[i] - 0.4), 'outlines stay dark, so every line of the art survives');
-  assert.equal(m.slice(15).join(','), '0,0,0,1,0', 'alpha untouched: the die-cut shape stays');
+  const stops = foilStops('#f2b72c');
+  const lum = (hex) => { const n = parseInt(hex.slice(1), 16); return 0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255); };
+  assert.equal(stops.length, 4);
+  assert.equal(stops[1], '#f2b72c', 'the tint itself in the middle');
+  assert.ok(lum(stops[0]) > lum(stops[1]) && lum(stops[1]) > lum(stops[2]), 'light catches the top-left, the edge goes deep');
+  stops.forEach(c => { const n = parseInt(c.slice(1), 16); assert.ok((n >> 16) > (n & 255) + 40, `${c} stays warm gold, never grey`); });
+  assert.ok(motion.DURATION.twinkle >= 1800 && motion.DURATION.glintGap >= 1000, 'resting gold moves slowly (no busy flicker)');
 });
 
 test('coin reveal backdrop: a pre-softened small copy of the water world under a strong veil, no runtime blur', () => {
@@ -296,4 +298,33 @@ test('coin reveal backdrop: a pre-softened small copy of the water world under a
   const veil = Number((src.match(/const WORLD_VEIL = ([0-9.]+);/) || [])[1]);
   assert.ok(veil >= 0.88 && veil < 1, `props stop reading as shapes, the water tint stays (${veil})`);
   assert.ok(fs.statSync(path.join(root, 'assets/images/reveal/water-soft.webp')).size < 8000, 'tiny asset');
+});
+
+test('wave 3: no big moment waits on the network or reflows at its payoff', () => {
+  const reveal = read('src/components/CoinCatchReveal.tsx');
+  assert.ok(/placeholder=\{GENERIC_COIN\}/.test(reveal), 'a cold coin image shows the house coin from frame 1, then the real art fades in');
+  assert.ok(/withTiming\(0\.9, \{ duration: Math\.max\(0, T\.burst - 480 - 240\), easing: EASE\.charge \}\)/.test(reveal), 'the pre-burst hold is a visible wind-up');
+  const win = read('src/components/PostWinRewardsModal.tsx');
+  assert.ok(/Image\.prefetch\(\[taskCoinUrl\], 'memory-disk'\)/.test(win), 'the coin art is warmed while the game is played');
+  const modal = read('src/components/CoinLevelingModal.tsx');
+  const success = modal.slice(modal.indexOf("{state === 'success' && (\n                  <Reanimated.View"), modal.indexOf('MAX LEVEL STATE'));
+  assert.ok(!success.includes('OneTimeTip'), 'the first level-up tip never mounts inside the card (no layout jump)');
+  assert.ok(/bottom: 18 \}\}>\s*<OneTimeTip id="first_level_up"/.test(modal), 'it floats under the card instead');
+  const tip = read('src/components/help/CoachTip.tsx');
+  assert.ok(/okPill: \{[^}]*minHeight: 40/.test(tip), 'OK is a real gold button');
+  const demo = read('src/components/CoinUpgradeDemo.tsx');
+  const movers = demo.slice(demo.indexOf('function GlowDot'), demo.indexOf('/** A light ray'));
+  assert.ok(!/shadowRadius/.test(movers), 'no iOS shadow on any orbiting dot (recomputed every frame)');
+  const chest = read('src/components/DailyGiftModal.tsx');
+  assert.ok(/<GameIcon name=\{PRIZE\[kind\]\.icon\} size=\{chestSize \* 0\.4\} \/>/.test(chest), 'a non-coin prize climbs out of the chest and stays');
+});
+
+test('wave 3: the level-up card says each prize with a picture and a number, in plain words', () => {
+  const m = loadTs('src/components/coin/progressionModel.ts');
+  const fx = loadTs('src/components/coin/previewFixtures.ts');
+  const badges = m.revealBadges(fx.previewUnlocks(6), 80);
+  assert.equal(JSON.stringify(badges.map(b => [b.icon, b.label])), JSON.stringify([['xp', '+80'], ['coins', '+100']]));
+  assert.equal(m.revealCard(fx.previewUnlocks(5), 60).line, 'More Parts when you play in line', 'no grown-up maths for a kid');
+  const modal = read('src/components/CoinLevelingModal.tsx');
+  assert.ok(/\{state !== 'success' && <View style=\{\{\s*flexDirection: 'row'/.test(modal), 'the success card does not repeat the tier a third time');
 });
