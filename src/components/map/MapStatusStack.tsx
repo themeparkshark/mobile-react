@@ -7,9 +7,9 @@
  * (a Rush, a boss) simply takes the lead; one landing behind the button makes
  * it pulse once.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInUp, FadeOutUp, runOnJS, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeOutUp, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../../gamekit/Haptics';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { NIGHT } from '../../services/fright/theme';
@@ -49,17 +49,19 @@ export default function MapStatusStack({ entries, defaultOpen = false }: {
   const reduced = useReducedGameMotion();
   const keys = entries.map(entry => entry.key).join('|');
   // The row is whole from the first map frame. When a different status takes the lead (a live event
-  // answering after the standings, a Rush starting), the lead pill cross-fades: out 120 ms, in 180 ms.
+  // answering after the standings, a Rush starting), the new lead swaps in on the same render and fades
+  // up from 0.2 on the UI thread: never a blank slot while a busy JS thread catches up.
   const lead = entries[0];
-  const [leadKey, setLeadKey] = useState(lead?.key);
   const leadIn = useSharedValue(1);
-  useEffect(() => {
-    if (!lead || lead.key === leadKey) { leadIn.value = withTiming(1, { duration: 180 }); return; }
-    if (reduced || leadKey === undefined) { setLeadKey(lead.key); return; }
-    leadIn.value = withTiming(0, { duration: 120 }, done => { if (done) runOnJS(setLeadKey)(lead.key); });
-  }, [lead?.key, leadKey, reduced, leadIn]);
+  const lastLead = useRef(lead?.key);
+  useLayoutEffect(() => {
+    if (!lead || lead.key === lastLead.current) return;
+    lastLead.current = lead.key;
+    if (reduced) return;
+    leadIn.value = 0.2;
+    leadIn.value = withTiming(1, { duration: 220 });
+  }, [lead?.key, reduced, leadIn]);
   const leadStyle = useAnimatedStyle(() => ({ opacity: leadIn.value }));
-  const shownLead = entries.find(entry => entry.key === leadKey) ?? lead;
   const rest = entries.slice(1);
   // A different lead or set of statuses folds the stack (nothing moves under a finger for long).
   const lastKeys = useRef(keys);
@@ -81,7 +83,7 @@ export default function MapStatusStack({ entries, defaultOpen = false }: {
   }, [open, defaultOpen]);
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   if (!lead) return null;
-  const tone = (shownLead ?? lead).tone ?? TONES.park;
+  const tone = lead.tone ?? TONES.park;
   const toggle = () => { haptic('tapLight'); setOpen(value => !value); };
   return (
     <>
@@ -91,7 +93,7 @@ export default function MapStatusStack({ entries, defaultOpen = false }: {
         {/* Open, the pills sit on one solid card: nothing on the map peeks between them. */}
         {open && <View pointerEvents="none" style={styles.backing} />}
         <View style={styles.row} pointerEvents="box-none">
-          <Animated.View style={[styles.lead, leadStyle]}>{(shownLead ?? lead).node}</Animated.View>
+          <Animated.View style={[styles.lead, leadStyle]}>{lead.node}</Animated.View>
           {rest.length > 0 && (
             <Animated.View style={pulseStyle}>
               <Pressable accessibilityRole="button" onPress={toggle} hitSlop={6}

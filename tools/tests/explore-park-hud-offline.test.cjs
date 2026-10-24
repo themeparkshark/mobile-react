@@ -53,7 +53,7 @@ test('while the rides have not loaded, the status bar never claims every ride is
   assert.doesNotMatch(bar, /EVERY RIDE IS OPEN/);
   assert.match(read('src/screens/ExploreScreen.tsx'), /hideAllOpen=\{hideEveryRideOpen\(/);
   // Before standings load the title already says the no-leader line; a leader then cross-fades in.
-  assert.match(bar, /const \[shownHeadline, setShownHeadline\] = useState\(headline\);/);
+  assert.match(bar, /const lastHeadline = useRef\(headline\);/);
   assert.match(bar, /<Animated\.Text style=\{\[styles\.kicker, titleStyle\]\}/);
 });
 

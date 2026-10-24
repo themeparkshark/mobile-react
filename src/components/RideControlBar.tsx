@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
-import Animated, { cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { RideControlPark } from '../api/endpoints/parks/rideControl';
 import { applyTeamNames, TEAM_ORDER, TEAMS, teamName, teamShortName, type TeamId } from '../constants/teams';
 import { haptic } from '../gamekit/Haptics';
@@ -83,17 +83,20 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
   // With no leader yet, say what it really means: no team has won a ride today.
   // Before today's standings answer, the bar already says the plain no-leader line with three zero
   // shields (so the HUD row is whole from the first map frame). If the standings then name a leader,
-  // the title cross-fades to it (out 140 ms, in 200 ms): never a blank strip, never a hard swap.
+  // the new title swaps in on the same render and fades up from 0.2 on the UI thread: never a blank
+  // strip, never a hard swap, even while the JS thread is busy at launch.
   const headline = hideAllOpen ? 'RIDE CONTROL'
     : leader ? `${teamName(leader, names).toUpperCase()} LEADS` : NO_LEADER_HEADLINE;
   const reduced = useReducedGameMotion();
-  const [shownHeadline, setShownHeadline] = useState(headline);
   const titleIn = useSharedValue(1);
-  useEffect(() => {
-    if (headline === shownHeadline) { titleIn.value = withTiming(1, { duration: 200 }); return; }
-    if (reduced) { setShownHeadline(headline); return; }
-    titleIn.value = withTiming(0, { duration: 140 }, done => { if (done) runOnJS(setShownHeadline)(headline); });
-  }, [headline, shownHeadline, reduced, titleIn]);
+  const lastHeadline = useRef(headline);
+  useLayoutEffect(() => {
+    if (headline === lastHeadline.current) return;
+    lastHeadline.current = headline;
+    if (reduced) return;
+    titleIn.value = 0.2;
+    titleIn.value = withTiming(1, { duration: 220 });
+  }, [headline, reduced, titleIn]);
   const titleStyle = useAnimatedStyle(() => ({ opacity: titleIn.value }));
 
   return (
@@ -103,7 +106,7 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
         onPress={() => setOpen(true)} style={[styles.barWrap, compact && styles.barWrapCompact, inline && styles.inline]}>
         <LinearGradient colors={[BRAND.blueBright, BRAND.blue, BRAND.blueLip]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
           style={[styles.bar, compact && styles.barCompact]}>
-          {!compact && <Animated.Text style={[styles.kicker, titleStyle]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shownHeadline}</Animated.Text>}
+          {!compact && <Animated.Text style={[styles.kicker, titleStyle]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{headline}</Animated.Text>}
           <View style={styles.chips}>
             {TEAM_ORDER.map(team => <TeamChip key={team} team={team} count={held[team]} yours={yours === team} leading={leader === team} />)}
           </View>

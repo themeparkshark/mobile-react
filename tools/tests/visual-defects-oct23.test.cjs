@@ -927,11 +927,14 @@ test('Finn tips at the park: the welcome stops short of the right buttons, the c
 test('the HUD row is whole from the first frame and cross-fades a lead or title change', () => {
   const stack = read('src/components/map/MapStatusStack.tsx');
   assert.doesNotMatch(stack, /settled/);
-  assert.match(stack, /leadIn\.value = withTiming\(0, \{ duration: 120 \}, done => \{ if \(done\) runOnJS\(setLeadKey\)\(lead\.key\); \}\);/);
+  // The new lead swaps in on the same render and fades up on the UI thread (no blank slot while JS is busy).
+  assert.match(stack, /leadIn\.value = 0\.2;\s*leadIn\.value = withTiming\(1, \{ duration: 220 \}\);/);
+  assert.match(stack, /\{lead\.node\}<\/Animated\.View>/);
+  assert.doesNotMatch(stack, /runOnJS/);
   const bar = read('src/components/RideControlBar.tsx');
   assert.doesNotMatch(bar, /STANDINGS_WAIT_MS|waitedOut/);
-  assert.match(bar, /titleIn\.value = withTiming\(0, \{ duration: 140 \}, done => \{ if \(done\) runOnJS\(setShownHeadline\)\(headline\); \}\);/);
-  assert.match(bar, />\{shownHeadline\}<\/Animated\.Text>/);
+  assert.match(bar, /titleIn\.value = 0\.2;\s*titleIn\.value = withTiming\(1, \{ duration: 220 \}\);/);
+  assert.match(bar, />\{headline\}<\/Animated\.Text>/);
 });
 
 test('small fixes: Wait Times says "Checked just now", the Community Center wallet and bubble are light cards, no dark sliver', () => {
