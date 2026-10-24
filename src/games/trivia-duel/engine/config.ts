@@ -90,9 +90,9 @@ export const FIN_BUZZ_SHARE: Record<FinRank, number> = { deckhand: 0.5, firstmat
  */
 export const WAGER = {
   percents: [0, 0.5, 1] as const,
-  labels: ['SAFE', 'HALF', 'ALL IN'] as const,
+  labels: ['SAFE', 'HALF', 'GO BIG'] as const,
   pickMs: 4000,
-  /** suggestWager thresholds: "unbeatable when right" and "covers their best bet". */
+  /** suggestWager thresholds: "unbeatable when right" and "stays ahead if they get it". */
   lockMargin: 350,
   coverMargin: 100,
 } as const;

@@ -130,6 +130,20 @@ function gateProgress(s: SimState, mode: number): number | null {
   return sharkyGateProgress(s.dist >> 8, s.gateX);
 }
 
+/** TIME! in a moving line holds this long before the card (ride and rally finishes keep their longer beat). */
+export const QUEUE_FINISH_HOLD_MS = 650;
+
+/**
+ * How long the finish word (TIME!, RIDE GATE!, FINISH!) holds before the
+ * results card. In a queue run the line keeps moving, so the beat is short;
+ * a ride gate or a rally finish keeps its longer moment. A wipeout is quick.
+ */
+export function finishHoldMs(reason: number, mode: number): number {
+  const finishWord = reason === END_TIME || reason === END_GATE || reason === END_FINISH;
+  if (!finishWord) return 450;
+  return mode === MODE_QUEUE ? QUEUE_FINISH_HOLD_MS : 1100;
+}
+
 /** One title rule for every results card: a finish word, or the shared feeling title (never WIPEOUT!). */
 export function sharkyHeadline(reason: number, mode: number, score: number, stars: number): string {
   const near = mode !== MODE_RIDE && nextStarGoal(score, QUEUE_STARS).near;
@@ -331,7 +345,7 @@ export function SharkySwim({
           duration: elapsed, swimProof: proof, walking: walk.walking, fps_p5: perf.summary().fpsP5,
         },
       });
-    }, reason === END_TIME || reason === END_GATE || reason === END_FINISH ? 1100 : 450);
+    }, finishHoldMs(reason, cfg.mode));
   }, [engine.log, cfg, prog, runMode, rideId, walk.walking, perf, liveRally, round, rally.transport]);
 
   const scoreAt = useCallback(() => ({ x: 40, y: Math.max(6, Math.min(12, layoutRef.current.skyH * 0.05)) + 20 }), []);

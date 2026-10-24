@@ -37,6 +37,7 @@ import { SFX } from '../../gamekit/SFX';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { silenceForCapture } from '../../gamekit/audio/captureSilence';
 import { Haptic, hapticTrace } from '../../gamekit/Haptics';
+import { CUE_LOG_CAP, cueName, finishCueLine, finishCues } from '../../gamekit/results/cueLog';
 import { WhackAShark } from '../../games/whack';
 import { SharkySwim } from '../../games/sharky';
 import { RhythmTapGame } from '../../games/rhythm';
@@ -132,27 +133,47 @@ export default function QueueResultsCaptureScreen() {
 
   // What the run asked to hear and feel (names only; the volume stays at 0).
   const cues = useRef<string[]>([]);
+  /** Where the last finish haptic landed in `cues`: the End line starts there. */
+  const finishAt = useRef(-1);
+  const pushCue = (c: string) => {
+    const next = [...cues.current, c];
+    const drop = Math.max(0, next.length - CUE_LOG_CAP);
+    cues.current = next.slice(drop);
+    finishAt.current = finishAt.current >= 0 ? Math.max(0, finishAt.current - drop) : -1;
+  };
+  const pushCueRef = useRef(pushCue);
+  pushCueRef.current = pushCue;
   useEffect(() => {
     // The capture never plays a sound, so it never touches the native audio
     // stack either (a stuck simulator audio server freezes the app).
     const unsilence = silenceForCapture();
     SFX.setMasterVolume(0);
     const play = GameAudio.play;
+    // Only the cue a game asked for is logged: a muted cue that falls back to
+    // another (GameAudio.play calls itself) is still one sound, not two.
+    let depth = 0;
     GameAudio.play = (name, opts) => {
-      cues.current = [...cues.current, name].slice(-12);
-      return play.call(GameAudio, name, opts);
+      if (depth === 0) pushCueRef.current(cueName(name, opts as { pitch?: number } | undefined));
+      depth += 1;
+      try {
+        return play.call(GameAudio, name, opts);
+      } finally {
+        depth -= 1;
+      }
     };
     const feel = { ...Haptic };
     (['success', 'failBuzz', 'hitSoft', 'softBump'] as const).forEach((k) => {
       Haptic[k] = () => {
-        cues.current = [...cues.current, `haptic ${k}`].slice(-12);
+        // The shell's one finish haptic: the End line starts here.
+        finishAt.current = cues.current.length;
+        pushCueRef.current(`haptic ${k}`);
         // The shell's one finish haptic marks the results reveal: measure it.
         measureRevealRef.current();
         feel[k]();
       };
     });
     // Named patterns too (the star slams, the RUN SAVED stamp's tap).
-    hapticTrace.listener = (name) => { cues.current = [...cues.current, `pattern ${name}`].slice(-12); };
+    hapticTrace.listener = (name) => { pushCueRef.current(`pattern ${name}`); };
     return () => {
       SFX.setMasterVolume(1);
       unsilence();
@@ -183,8 +204,8 @@ export default function QueueResultsCaptureScreen() {
   }), [queueEnded, run?.groupTurn]);
 
   const end = (line: string) => {
-    // The last few cues are the finish: what the results card sounded like.
-    note(`End: ${cues.current.slice(-6).join(', ') || 'silent'}`);
+    // Every cue from the finish haptic on: what the results card sounded like.
+    note(`End: ${finishCueLine(finishCues(cues.current, finishAt.current))}`);
     note(line);
     setRun(null);
     setQueueEnded(null);
@@ -209,7 +230,7 @@ export default function QueueResultsCaptureScreen() {
         </TouchableOpacity>
         {CHOICES.map((c, i) => (
           <TouchableOpacity key={c.label} accessibilityRole="button" style={styles.btn}
-            onPress={() => { cues.current = []; setQueueEnded(null); setRun({ ...c.run, key: Date.now() % 100000 + i }); }}>
+            onPress={() => { cues.current = []; finishAt.current = -1; setQueueEnded(null); setRun({ ...c.run, key: Date.now() % 100000 + i }); }}>
             <Text style={styles.btnText}>{c.label}</Text>
           </TouchableOpacity>
         ))}

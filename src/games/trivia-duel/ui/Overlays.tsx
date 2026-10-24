@@ -14,6 +14,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { ART, C, FIN_POSES, SHARKS, type SharkLook } from '../art';
 import { babble, type BabbleVoice } from '../audio';
+import GameIcon from '../../../ui/GameIcon';
 
 const OUTLINE = { textShadowColor: C.ink, textShadowRadius: 0.01 };
 Animated.addWhitelistedNativeProps({ text: true });
@@ -213,12 +214,14 @@ export function Ribbon({ text, holdMs, ribbonKey, reducedMotion }: { text: strin
   );
 }
 
-// -- Wager chips (5.5, rev 7) ------------------------------------------------------
+// -- Big Final chips (5.5, rev 7) --------------------------------------------------
 
 /**
- * Three chips in the tile grid: SAFE / HALF / ALL IN. Each chip shows one
- * number: your score if you're right with base points. The suggested chip
- * glows gold with a one-line reason; doing nothing takes it.
+ * Three chips in the tile grid: SAFE / HALF / GO BIG. Each chip shows one big
+ * number: your score if you're right with base points, and under it the
+ * points a miss takes away (a red arrow down, never a betting word: this is
+ * a kids' quiz, not a bet). The suggested chip glows gold with a one-line
+ * reason; doing nothing takes it.
  */
 export function WagerChips({ stakes, labels, picked, suggested, reason, ifRight, onPick, secondsLeft, category, height }: {
   stakes: number[]; labels: readonly string[]; picked: number; suggested: number; reason: string; ifRight: number[];
@@ -226,7 +229,7 @@ export function WagerChips({ stakes, labels, picked, suggested, reason, ifRight,
 }) {
   return (
     <View style={[styles.wager, { height }]}>
-      <Text style={styles.wagerTitle} numberOfLines={1}>{`BET ON ${category.toUpperCase()}`}</Text>
+      <Text style={styles.wagerTitle} numberOfLines={1}>{`BIG FINAL: ${category.toUpperCase()}`}</Text>
       <View style={styles.chipRow}>
         {stakes.map((s, i) => (
           <Chip key={i} i={i} label={labels[i]} stake={s} ifRight={ifRight[i]} picked={picked === i} suggested={suggested === i} onPick={onPick} />
@@ -255,10 +258,15 @@ function Chip({ i, label, stake, ifRight, picked, suggested, onPick }: { i: numb
   return (
     <Animated.View style={[styles.chipCell, st]}>
       <Animated.View pointerEvents="none" style={[styles.chipGlow, glowSt]} />
-      <Pressable onPress={() => onPick(i)} style={[styles.chip, { backgroundColor: colors[i] ?? C.cream }, picked && styles.chipPicked]} accessibilityRole="button" accessibilityLabel={`${label}, stake ${stake}, ${ifRight} if right`}>
+      <Pressable onPress={() => onPick(i)} style={[styles.chip, { backgroundColor: colors[i] ?? C.cream }, picked && styles.chipPicked]} accessibilityRole="button" accessibilityLabel={stake === 0 ? `${label}. ${ifRight} if right, nothing taken away if wrong` : `${label}. ${ifRight} if right, ${stake} points taken away if wrong`}>
         <Text style={styles.chipLabel}>{label}</Text>
         <Text style={[styles.chipIfRight, suggested && styles.chipIfRightBig]}>{ifRight}</Text>
-        <Text style={styles.chipStake}>{stake === 0 ? 'no risk' : `bet ${stake}`}</Text>
+        {stake === 0 ? <Text style={styles.chipStake}>KEEP ALL</Text> : (
+          <View style={styles.chipMiss}>
+            <GameIcon name="arrow" size={14} style={styles.chipMissArrow} />
+            <Text style={styles.chipMissText}>{stake}</Text>
+          </View>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -441,6 +449,10 @@ const styles = StyleSheet.create({
   chipPicked: { borderColor: C.goldDeep, borderWidth: 5, borderBottomWidth: 8 },
   chipLabel: { fontFamily: 'Shark', fontSize: 24, color: C.navy },
   chipStake: { fontFamily: 'Knockout', fontSize: 14, color: C.navy, opacity: 0.6 },
+  // What a miss takes away: the same red arrow-down chip as the results card's BIG FINAL row.
+  chipMiss: { flexDirection: 'row', alignItems: 'center', gap: 1, backgroundColor: C.coral, borderRadius: 8, borderWidth: 1.5, borderColor: C.ink, paddingLeft: 1, paddingRight: 5, marginTop: 1 },
+  chipMissArrow: { transform: [{ rotate: '90deg' }] },
+  chipMissText: { fontFamily: 'Shark', fontSize: 13, color: '#ffffff' },
   bellWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 20 },
   bell: { width: 150, height: 150, alignItems: 'center', justifyContent: 'center' },
   bellImg: { width: 120, height: 120 },

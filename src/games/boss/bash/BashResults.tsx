@@ -17,6 +17,7 @@ import { BRAND } from '../../../ui/tokens';
 import GameIcon from '../../../ui/GameIcon';
 import { BASH_ART } from './art';
 import { ResultsRibbon } from '../../../gamekit/results/ResultsRibbon';
+import { bestAwareTitle } from '../../../gamekit/results/feelings';
 import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { ResultSecondaryButton } from '../../../gamekit/results/ResultButtons';
 
@@ -110,9 +111,10 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const pct = (v: number) => `${Math.min(100, (Math.max(0, v) / Math.max(1, hpMax)) * 100)}%` as `${number}%`;
+  // The boss's health drains on the UI thread as a scale, never a width (no layout per frame).
   const fill = useAnimatedStyle(() => {
     const v = startHp - (startHp - hpAfter) * drain.value;
-    return { width: `${Math.min(100, (Math.max(0, v) / Math.max(1, hpMax)) * 100)}%` as `${number}%` };
+    return { transform: [{ scaleX: startHp > 0 ? Math.max(0, Math.min(1, v / startHp)) : 0 }] };
   });
   const s0 = useAnimatedStyle(() => ({ transform: [{ scale: starsIn[0].value }], opacity: starsIn[0].value > 0 ? 1 : 0 }));
   const s1 = useAnimatedStyle(() => ({ transform: [{ scale: starsIn[1].value }], opacity: starsIn[1].value > 0 ? 1 : 0 }));
@@ -124,7 +126,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   return (
     <View style={styles.card} accessibilityViewIsModal>
       {/* The one results title every game shares: Alex's ribbon over the card's top edge. */}
-      <ResultsRibbon title={won ? (ko && !noHits ? 'YOU FINISHED IT!' : 'TEAM WON!') : noHits ? 'GOOD TRY!' : 'STILL FIGHTING!'}
+      <ResultsRibbon title={bestAwareTitle(won ? (ko && !noHits ? 'YOU FINISHED IT!' : 'TEAM WON!') : noHits ? 'GOOD TRY!' : 'STILL FIGHTING!', stars, best && !noHits) ?? 'GOOD TRY!'}
         reducedMotion={reduced} style={styles.ribbonWrap} />
       <View style={styles.head}>
         <View>
@@ -132,11 +134,14 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           {won && <View style={styles.stamp}><Text style={styles.stampText} maxFontSizeMultiplier={1}>BOSS{'\n'}DOWN</Text></View>}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.kicker}>{noHits ? 'NO HITS THIS TIME' : `YOU HIT ${bossName.toUpperCase()} FOR`}</Text>
-          {noHits ? <View style={styles.kept} accessible accessibilityLabel="No Energy was spent">
+          {/* Pictures, not a sentence: swords (your hits) next to the big number. */}
+          {noHits ? <View style={styles.kept} accessible accessibilityLabel="No hits this time. No Energy was spent">
             <GameIcon name="energy" size={24} /><Text style={styles.zero}>ENERGY KEPT</Text></View>
             : <View accessible accessibilityLabel={`You hit ${bossName} for ${damage.toLocaleString()}${teamDamage > 0 ? `. Your team has done ${(teamDamage + damage).toLocaleString()}` : ''}${rate < 1 ? `. From home you hit at ${Math.round(rate * 100)} percent power` : ''}${capped ? '. That is the most one shark can do to this boss' : ''}`}>
-              <CountUpText value={damage} delayMs={reduced ? 0 : 200} durationMs={reduced ? 1 : 700} style={styles.dmg} />
+              <View style={styles.dmgRow}>
+                <GameIcon name="swords" size={34} />
+                <CountUpText value={damage} delayMs={reduced ? 0 : 200} durationMs={reduced ? 1 : 700} style={styles.dmg} />
+              </View>
             </View>}
           {/* The same gold crown NEW BEST! pill every results card uses. */}
           {best && !noHits ? <View style={styles.newBest}><GameIcon name="crown" size={20} /><Text style={styles.newBestText}>NEW BEST!</Text></View> : null}
@@ -163,18 +168,22 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
 
       <View style={styles.raid}>
         {/* Won: the stamp and "Boss down!" say it; an empty pale bar read as broken. */}
-        {/* The HP bar in pictures: the boss's face marks what it has left (red),
-            your fin sits on your hits (your blue), and the team's earlier hits
-            are gold. */}
+        {/* A health bar that empties, in pictures: the red next to the boss's
+            face is all it has left (red is HP only, never a reward). What got
+            knocked out is light: your swords sit on your chunk (white) and a
+            shark on the team's earlier chunk (sky). */}
         {!won && <View style={styles.hpRow} importantForAccessibility="no-hide-descendants">
           <Image source={portrait ?? BOSS_ART[boss]} style={styles.hpBoss} contentFit="contain" />
           <View style={styles.hpWrap}>
-            {!noHits && startHp > hpAfter ? <View style={[styles.hpFin, { left: pct((startHp + hpAfter) / 2) }]}>
-              <GameIcon name="fin" size={18} />
+            {!noHits && startHp > hpAfter ? <View style={[styles.hpMark, { left: pct((startHp + hpAfter) / 2) }]}>
+              <GameIcon name="swords" size={18} />
+            </View> : null}
+            {hpMax - startHp >= hpMax * 0.12 ? <View style={[styles.hpMark, { left: pct((hpMax + startHp) / 2) }]}>
+              <GameIcon name="shark" size={18} />
             </View> : null}
             <View style={styles.hpTrack}>
               <View style={[styles.hpMine, { width: pct(startHp) }]} />
-              <Animated.View style={[styles.hpRed, fill]} />
+              <Animated.View style={[styles.hpLeft, { width: pct(startHp) }, fill]} />
             </View>
           </View>
         </View>}
@@ -185,7 +194,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <View style={styles.raidIcons} accessible
             accessibilityLabel={`${hpAfter.toLocaleString()} HP left${left ? `, ${left} minutes left` : ''}${fighters > 0 ? `, ${fighters} sharks fighting` : ''}`}>
             {left ? <View style={styles.raidIcon}><GameIcon name="timer" size={20} /><Text style={styles.raidNum}>{left}</Text><Text style={styles.raidUnit}>MIN</Text></View> : null}
-            {fighters > 0 ? <View style={styles.raidIcon}><GameIcon name="fin" size={20} /><Text style={styles.raidNum}>{fighters}</Text></View> : null}
+            {fighters > 0 ? <View style={styles.raidIcon}><GameIcon name="shark" size={20} /><Text style={styles.raidNum}>{fighters}</Text></View> : null}
           </View>
         )}
       </View>
@@ -207,8 +216,9 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
         <Text style={[styles.receiptText, receipt === 'error' && styles.receiptTextErr]} maxFontSizeMultiplier={1.3}>
           {receipt === 'saved' ? 'SAVED FOR THE TEAM!' : receipt === 'saving' ? 'SENDING...' : receiptNote ?? 'Not saved yet. We will keep trying.'}</Text>
       </View>}
-      {/* Brags only, the shared chips: two at most, a zero is never a chip. */}
-      {chips.length ? <View style={styles.chips}>
+      {/* Brags only on a new best (the card stays a one-glance read): the
+          shared chips, two at most, a zero is never a chip. */}
+      {best && chips.length ? <View style={styles.chips}>
         {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} />)}
       </View> : null}
 
@@ -218,17 +228,13 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
       </View>}
       {!won && !noHits && n.can && onAgain ? <>
         <Pressable accessibilityRole="button" onPress={once(onAgain)} style={({ pressed: p }) => [styles.again, p && { transform: [{ scale: 0.97 }] }]}
-          accessibilityLabel={`Attack again for ${next?.energyCost} Energy${warmNext ? ', with a free head start fin' : ''}. You have ${n.energyAfter} Energy.`}>
+          accessibilityLabel={`Attack again for ${next?.energyCost} Energy${warmNext ? ', with a free head start fin' : ''}. You have ${n.energyAfter} Energy and ${n.attacksAfter} ${n.attacksAfter === 1 ? 'attack' : 'attacks'} left.`}>
           {warmNext && <Image source={BASH_ART.finFull} style={styles.againFin} contentFit="contain" />}
           <Text style={[styles.againText, { color: BRAND.navy }]}>ATTACK AGAIN</Text>
           <View style={styles.cost}><GameIcon name="energy" size={22} /><Text style={styles.costText}>{next?.energyCost}</Text></View>
         </Pressable>
-        {/* Your Energy and the attacks left as pictures; the sentence is spoken. */}
-        <View style={styles.walletRow} accessible
-          accessibilityLabel={`You have ${n.energyAfter} Energy and ${n.attacksAfter} ${n.attacksAfter === 1 ? 'attack' : 'attacks'} left`}>
-          <View style={styles.tag}><GameIcon name="energy" size={18} /><Text style={styles.walletNum}>{n.energyAfter}</Text></View>
-          <View style={styles.tag}><GameIcon name="swords" size={18} /><Text style={styles.walletNum}>{n.attacksAfter}</Text></View>
-        </View>
+        {/* Your Energy and the attacks left are spoken on the button, not
+            drawn: its cost is the one number a kid needs here. */}
         <ResultSecondaryButton label="DONE" onPress={once(claim)} style={styles.doneBtn} />
       </> : <>
         {!noHits && n.reason && <Text style={styles.wallet}>{n.reason}</Text>}
@@ -271,8 +277,8 @@ const styles = StyleSheet.create({
   stamp: { position: 'absolute', right: -10, top: -6, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 2, borderColor: BRAND.red, borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.85)', transform: [{ rotate: '-14deg' }] },
   stampText: { fontFamily: 'Shark', fontSize: 11, lineHeight: 11, color: BRAND.red, textAlign: 'center' },
-  kicker: { fontFamily: 'Shark', fontSize: 14, color: '#cdeaff', letterSpacing: 0.4 },
-  dmg: { alignSelf: 'stretch', textAlign: 'left', fontFamily: 'Shark', fontSize: 48, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0, padding: 0 },
+  dmgRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dmg: { flex: 1, textAlign: 'left', fontFamily: 'Shark', fontSize: 48, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0, padding: 0 },
   zero: { fontFamily: 'Shark', fontSize: 20, color: BRAND.white, marginTop: 4 },
   stars: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 4 },
   starSlot: { width: 46, height: 46 },
@@ -280,11 +286,11 @@ const styles = StyleSheet.create({
   hpRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
   hpBoss: { width: 30, height: 30 },
   hpWrap: { flex: 1, paddingTop: 16 },
-  hpFin: { position: 'absolute', top: 0, marginLeft: -9 },
+  hpMark: { position: 'absolute', top: 0, marginLeft: -9 },
   // Track = the team's earlier hits (gold); your hits are your blue; the red is what the boss has left.
-  hpTrack: { height: 20, borderRadius: 10, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.gold, overflow: 'hidden' },
-  hpMine: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#6fd0ff' },
-  hpRed: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.red },
+  hpTrack: { height: 20, borderRadius: 10, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.sky, overflow: 'hidden' },
+  hpMine: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.white },
+  hpLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.red, transformOrigin: 'left' },
   raidLine: { marginTop: 4, fontFamily: 'Shark', fontSize: 15, color: BRAND.white, textAlign: 'center' },
   loot: { marginTop: 10, backgroundColor: BRAND.white, borderRadius: 16, borderWidth: 2, borderColor: BRAND.sky, paddingVertical: 8, alignItems: 'center' },
   warm: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 14,
@@ -304,7 +310,6 @@ const styles = StyleSheet.create({
   tag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.sky,
     paddingHorizontal: 8, paddingVertical: 2 },
   tagText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
-  walletRow: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 8 },
   doneBtn: { flex: 0, minHeight: 52, marginTop: 10 },
   // Gold first, like every results card's big button.
   again: { marginTop: 14, minHeight: 64, borderRadius: 20, backgroundColor: BRAND.gold, borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 7,
@@ -314,7 +319,6 @@ const styles = StyleSheet.create({
   cost: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: BRAND.cream, borderRadius: 14, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
   costText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
   wallet: { marginTop: 6, fontFamily: 'Knockout', fontSize: 15, color: BRAND.white, textAlign: 'center' },
-  walletNum: { fontFamily: 'Shark', color: BRAND.navy },
 });
 
 /** Team win: the loot chest pops open over the loot row (a reason to come back to the next raid). The shell's own

@@ -231,6 +231,15 @@ interface GameShellV2Props {
   pauseExtras?: React.ReactNode;
   /** Hide the header score (the game draws its own, e.g. Trivia's rail). */
   hideHeaderScore?: boolean;
+  /**
+   * The game drew its own results card inside the play field while the shell
+   * is still 'playing' (Line Trivia). Set it to that card's DONE: the header
+   * steps back exactly as it does in the shell's own results (title and score
+   * hidden, a dimmed close X), the X does what DONE does, and nothing can
+   * open a pause sheet over a finished game (a tap, the app going to the
+   * background, or the line moving).
+   */
+  ownResultsDone?: (() => void) | null;
   /** Replace the header score with a game-owned node (Current Quest's run bar chip). */
   headerScore?: React.ReactNode;
   /** Start count style. Default 'full'. */
@@ -302,6 +311,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       ownCelebration = false,
       pauseExtras,
       hideHeaderScore = false,
+      ownResultsDone = null,
       headerScore,
       countdownStyle: countdownStyleProp,
       introCountdown,
@@ -615,9 +625,13 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       }
     }, [sessionKey, getSnapshot, gameId, title]);
 
+    const ownResultsDoneRef = useRef(ownResultsDone);
+    ownResultsDoneRef.current = ownResultsDone;
     const doHold = useCallback(
       (reason: HoldReason, label?: string) => {
         if (phase !== 'playing' && phase !== 'countdown' && phase !== 'resuming') return;
+        // A finished game showing its own card never pauses behind it.
+        if (ownResultsDoneRef.current) return;
         if (phase === 'countdown') clearCountdown();
         if (phase === 'resuming') clearResume();
         setPhase('paused');
@@ -853,6 +867,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     }, [onQuit, onClose, resumeAfterQuitCancel]);
 
     const handleExit = useCallback(() => {
+      // The game's own results card is up: the X is that card's DONE.
+      if (ownResultsDoneRef.current) { ownResultsDoneRef.current(); return; }
       if (phase === 'playing' || phase === 'resuming') doHold('manual');
       else if (phase === 'results') handleClaim();
       else {
@@ -929,6 +945,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
     if (!visible) return null;
 
+    // The HUD steps back behind any results card: the shell's own, or one the game draws itself.
+    const hudBack = phase === 'results' || !!ownResultsDone;
 
     const gameContent = (
         <View style={styles.root}>
@@ -938,15 +956,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               works, a safe way out if a card ever stalls). */}
           <View style={styles.header}>
             <TouchableOpacity
-              style={[styles.iconBtn, phase === 'results' && styles.headerDim]}
+              style={[styles.iconBtn, hudBack && styles.headerDim]}
               onPress={handleExit}
               hitSlop={12}
               accessibilityRole="button"
-              accessibilityLabel={phase === 'playing' ? 'Pause' : 'Close'}
+              accessibilityLabel={phase === 'playing' && !hudBack ? 'Pause' : 'Close'}
             >
-              <GameIcon name={phase === 'playing' ? 'pause' : 'close'} size={26} />
+              <GameIcon name={phase === 'playing' && !hudBack ? 'pause' : 'close'} size={26} />
             </TouchableOpacity>
-            <View style={[styles.headerCenter, phase === 'results' && styles.headerHidden]} importantForAccessibility={phase === 'results' ? 'no-hide-descendants' : 'auto'}>
+            <View style={[styles.headerCenter, hudBack && styles.headerHidden]} importantForAccessibility={hudBack ? 'no-hide-descendants' : 'auto'}>
               <Text style={styles.title} numberOfLines={1}>
                 {title}
               </Text>
@@ -957,7 +975,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               ) : null}
             </View>
             {hideHeaderScore ? null : (
-              <View style={[styles.headerScore, phase === 'results' && styles.headerHidden]} importantForAccessibility={phase === 'results' ? 'no-hide-descendants' : 'auto'}>
+              <View style={[styles.headerScore, hudBack && styles.headerHidden]} importantForAccessibility={hudBack ? 'no-hide-descendants' : 'auto'}>
                 {headerScore ?? (
                   <ScoreDisplay
                     score={score}

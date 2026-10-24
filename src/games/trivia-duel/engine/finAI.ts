@@ -166,8 +166,8 @@ export const BARKS = {
   youCorrect: ['Nice one, {name}!', 'Sharp shark!', 'You know your stuff!', 'Right on the nose!', 'Spot on, {name}!'],
   finWrong: ['Oops, my bad!', 'Barnacles! Missed it.', 'Well, that was not it!', 'Your round, {name}!'],
   finCorrect: ['Got it!', 'Easy for the captain!', 'Knew that one!', 'Captain scores!'],
-  finalLead: ['Big wager time!', 'Let us make it count!', 'Bet smart, {name}!'],
-  finalTrail: ['All or nothing, eh?', 'Still anyone\'s game!', 'Your move, {name}!'],
+  finalLead: ['Big Final time!', 'Let us make it count!', 'Think hard, {name}!'],
+  finalTrail: ['One big question left!', 'Still anyone\'s game!', 'Your move, {name}!'],
   finWins: ['Good game! Again?', 'Close one! Rematch?', 'Great duel, {name}!'],
   finLoses: ['You got me! Great game!', 'Captain overboard! GG!', 'Well played, {name}!'],
   buzz: ['Hands on the bell!', 'Who rings first?', 'Bell is live, {name}!'],
@@ -179,7 +179,7 @@ export const BARKS = {
   bullseye: ['Bullseye! Spot on!', 'Right on the number!', 'Dead on, {name}!'],
   categoryPick: ['Your pick, matey!', 'Choose wisely, {name}!'],
   categoryFin: ['I will pick this one!', 'My pick, {name}!'],
-  allIn: ['ALL IN? Bold shark!', 'Going big, I like it!'],
+  allIn: ['GO BIG? Bold shark!', 'Going big, I like it!'],
   rematch: ['Back for more? Yes!', 'Round two, {name}!'],
 } as const;
 

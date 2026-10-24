@@ -37,6 +37,7 @@ import { deckById } from './decks';
 import { faceFor } from './faces';
 import { AlbumBody, ChallengeBody, NewChip, ShareBack, type DailySummary, type RunRewards } from './MemoryExtras';
 import { MM } from './theme';
+import { bestAwareTitle } from '../../gamekit/results/feelings';
 
 const BANNER = require('../../assets/games/memory/v8/results_banner.png');
 const CROWN = require('../../assets/games/memory/studio/crown.png');
@@ -164,7 +165,8 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
               beat, so the card never grows or re-centers while a kid reads it.
               Front: banner, one big number, crowns, new cards, one button.
               The stat chips and grades live behind STATS. */}
-          <Banner text={data.banner} show={step >= 1} reducedMotion={reducedMotion} />
+          {/* A personal best never sits under SO CLOSE! or NICE TRY!. */}
+          <Banner text={bestAwareTitle(data.banner, data.stars, data.newBest) ?? data.banner} show={step >= 1} reducedMotion={reducedMotion} />
           <Headline data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.headline} />
           <View style={styles.crownRow}>
             {[0, 1, 2].map((i) => (

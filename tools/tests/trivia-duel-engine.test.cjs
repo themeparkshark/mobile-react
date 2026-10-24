@@ -125,7 +125,7 @@ test('Closest Number: accuracy, 0.8 counts as correct, 0.97 is a bullseye', () =
   assert.equal(partial.points, 50);
 });
 
-test('wager (rev 7, S0-3): SAFE / HALF / ALL IN, always a share of what you hold, no fixed stakes, never above the score', () => {
+test('Big Final chips (rev 7, S0-3): SAFE / HALF / GO BIG, always a share of what you hold, no fixed stakes, never above the score', () => {
   assert.deepEqual(plain(sc.wagerStakes(800)), [0, 400, 800]);
   assert.deepEqual(plain(sc.wagerStakes(150)), [0, 75, 150], 'no fixed stakes under 200');
   assert.deepEqual(plain(sc.wagerStakes(0)), [0, 0, 0], 'ALL IN at 0 is worth nothing');
@@ -162,7 +162,7 @@ test('suggestWager: every branch of 5.5', () => {
   assert.equal(s.reason, 'Keeps the lead if they miss.');
   s = sc.suggestWager(520, 500, 1); // cover 1100: 620 / 880 / 1140 -> ALL IN covers
   assert.equal(s.index, 2);
-  assert.equal(s.reason, 'Covers their best bet.');
+  assert.equal(s.reason, 'Stays ahead if they get it.');
   s = sc.suggestWager(900, 700, 1.5); // lock 1750: 1050/1500/1950 -> ALL IN locks
   assert.equal(s.index, 2);
   s = sc.suggestWager(800, 600, 1); // lock 1550: 900/1300/1700 -> ALL IN; check cover not reached first
@@ -491,7 +491,7 @@ test('near-miss finds the smallest single change', () => {
   const results = plan.rounds.map(() => ({ me: { correct: true, speed: 20, stake: 0, points: 120, streak: { streak: 1 } }, opp: {} }));
   const out = nm.nearMiss(plan, t, results);
   assert.equal(out.kind, 'speed');
-  assert.match(out.line, /^Lost by 35\. A GREAT answer on question 1 wins it\.$/);
+  assert.match(out.line, /^Just 35 away! A GREAT answer on question 1 wins it\.$/);
   t.opp.score = 499;
   assert.equal(nm.nearMiss(plan, t, results).kind, 'none');
 });

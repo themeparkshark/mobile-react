@@ -184,7 +184,7 @@ export function closestPoints(guess: number, truth: number, tol: number, t: numb
 }
 
 /**
- * 5.5 wager stakes (rev 7): SAFE 0, HALF round5(score / 2), ALL IN = score.
+ * 5.5 wager stakes (rev 7): SAFE 0, HALF round5(score / 2), GO BIG = score.
  * Always a share of what you hold, so a stake can never exceed your score
  * and no stake is ever free (S0-3: the old fixed stakes under 200 are gone).
  */
@@ -201,7 +201,7 @@ export interface WagerSuggestion {
 /**
  * 5.5 suggestWager (the gold-glow chip; doing nothing takes it):
  *  1. a chip that makes you unbeatable when right (you + 100m + stake > 2 x opp + 350): the smallest one;
- *  2. else trailing: ALL IN;
+ *  2. else trailing: GO BIG;
  *  3. else (leading or tied): the smallest chip with you + 100m + stake > 2 x opp + 100, else SAFE.
  * `m` is the multiplier your streak would carry into a right answer.
  */
@@ -213,7 +213,7 @@ export function suggestWager(me: number, opp: number, m: number): WagerSuggestio
   }
   if (me < opp) return { index: stakes.length - 1, reason: 'You need it all.' };
   for (let k = 0; k < stakes.length; k++) {
-    if (right(k) > 2 * opp + WAGER.coverMargin) return { index: k, reason: 'Covers their best bet.' };
+    if (right(k) > 2 * opp + WAGER.coverMargin) return { index: k, reason: 'Stays ahead if they get it.' };
   }
   return { index: 0, reason: 'Keeps the lead if they miss.' };
 }

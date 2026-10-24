@@ -59,7 +59,7 @@ import {
   suddenDeathRound,
   type GhostRecord, type MatchPlan, type MatchTally, type PlannedRound, type RoundResult, type SideInput,
 } from './engine/match';
-import { finalBetLost, nearMiss, rideNearMiss } from './engine/nearMiss';
+import { finalPointsLost, nearMiss, rideNearMiss } from './engine/nearMiss';
 import {
   bellValue, duelStars, flameTier, rideStars, rideWon, speedPoints, streakMult, suggestWager, wagerStakes,
 } from './engine/scoring';
@@ -1562,7 +1562,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       },
       // A missed Final bet is why right answers can still end on a low score:
       // the card shows it, so every number agrees with every other number.
-      lostBet: finalBetLost(p, resultsLog.current),
+      finalLost: finalPointsLost(p, resultsLog.current),
       best: t.me.fastestMs >= 0 ? { label: `${fastest} on Q${Math.max(0, fastestIdx) + 1}` } : null,
     });
     later(beatMs() * 2, () => setPhase('results'));
@@ -1809,7 +1809,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const finalTopic = plan?.rounds[roundIdx]?.question.category ?? '';
   const boardText = phase === 'finalIntro' ? "Fin's Final is next"
     : phase === 'category' ? (catPick?.picker === 'me' ? 'You pick the topic' : `${oppName} picks the topic`)
-    : phase === 'wager' ? `Topic: ${finalTopic}. Place your bet.`
+    : phase === 'wager' ? `Topic: ${finalTopic}. Pick how big.`
     : preview ? '' : q?.prompt ?? '';
 
   return (
@@ -1840,6 +1840,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
         </View>
       ) : undefined}
       hideHeaderScore
+      // Line Trivia draws its own results in the field: the HUD steps back and the X is DONE.
+      ownResultsDone={results && phase === 'results' && !isRide ? onContinue : null}
       pauseExtras={<RelaxedToggle on={relaxed} onToggle={toggleRelaxed} />}
     >
       <GestureHandlerRootView style={styles.field} onLayout={onLayout}>

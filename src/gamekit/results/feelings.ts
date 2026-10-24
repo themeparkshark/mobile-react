@@ -127,7 +127,8 @@ export function feelingLine(input: {
 /** The big title when a game did not pick one. Never "you lost". */
 export function feelingTitle(stars: number, near: boolean, newBest = false): string {
   if (stars >= 3) return 'INCREDIBLE!';
-  if (stars === 2) return near ? 'SO CLOSE!' : 'GREAT!';
+  // A personal best is never "so close": it is a win.
+  if (stars === 2) return near && !newBest ? 'SO CLOSE!' : 'GREAT!';
   if (stars === 1) return 'NICE!';
   if (newBest) return BEST_YET_TITLE;
   return near ? 'SO CLOSE!' : 'GOOD TRY!';
@@ -137,16 +138,23 @@ export function feelingTitle(stars: number, near: boolean, newBest = false): str
 export const BEST_YET_TITLE = 'YOUR BEST YET!';
 
 /** 0-star "try again" titles a personal best replaces (finish words like TIME! stay). */
-const SOFT_TRY_TITLES = new Set(['GOOD TRY!', 'SO CLOSE!', 'KEEP MARCHING!', 'THE PARADE NEEDS YOU!', 'KEEP SWIMMING!', 'NICE TRY!']);
+const SOFT_TRY_TITLES = new Set(['GOOD TRY!', 'SO CLOSE!', 'KEEP MARCHING!', 'THE PARADE NEEDS YOU!', 'KEEP SWIMMING!', 'NICE TRY!', 'GOOD START!', 'TRY AGAIN', 'TRY AGAIN!', 'STILL FIGHTING!']);
+
+/** True for a "go again" title that a personal best should replace. */
+export function isSoftTryTitle(title: string | undefined): boolean {
+  return !!title && SOFT_TRY_TITLES.has(title.trim().toUpperCase());
+}
 
 /**
- * A personal best always reads as a win, even with 0 stars: a soft "try
- * again" title becomes YOUR BEST YET!. Real info titles (YOUR RIDE'S UP!,
- * TIME!, NEW FINN) are kept.
+ * A personal best always reads as a win: a soft "try again" title (GOOD TRY!,
+ * SO CLOSE!, NICE TRY!) never sits next to NEW BEST!. With 0 stars it becomes
+ * YOUR BEST YET!; with stars it becomes the plain star title (NICE!, GREAT!,
+ * INCREDIBLE!). Real info titles (YOUR RIDE'S UP!, TIME!, NEW FINN) are kept.
  */
 export function bestAwareTitle(title: string | undefined, stars: number, isNewBest: boolean): string | undefined {
-  if (stars > 0 || !isNewBest) return title;
-  if (!title || SOFT_TRY_TITLES.has(title.trim().toUpperCase())) return BEST_YET_TITLE;
+  if (!isNewBest) return title;
+  if (stars > 0) return title && isSoftTryTitle(title) ? feelingTitle(stars, false, true) : title;
+  if (!title || isSoftTryTitle(title)) return BEST_YET_TITLE;
   return title;
 }
 
@@ -172,10 +180,16 @@ export function endFeel(input: { stars: number; isNewBest: boolean; saved: boole
  * The next-star bar's one word, read with the bar and a star at its end, so a
  * kid who cannot read big numbers still sees how close the star is.
  */
+/** Bar share from which the next-star word reads GETTING CLOSE! (ALMOST! starts at the near mark, 0.85). */
+export const NEXT_STAR_CLOSE = 0.65;
+
 export function nextStarWord(goal: { nextStar: number; progress: number; near: boolean } | null | undefined): string {
   if (!goal) return '';
   if (!goal.nextStar) return 'ALL 3 STARS!';
   if (goal.near) return 'ALMOST!';
+  // Between halfway and almost, the bar is clearly past the middle: a bar at
+  // 75% never says HALFWAY THERE.
+  if (goal.progress >= NEXT_STAR_CLOSE) return 'GETTING CLOSE!';
   if (goal.progress >= 0.5) return 'HALFWAY THERE';
   return 'KEEP GOING';
 }
