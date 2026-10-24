@@ -91,6 +91,20 @@ export const AHAP_LIBRARY = {
   // Banana Core Haptics request (WS9)
   bananaPufferHit: [T(0, 1, 0.7), C(0, 200, 0.6, 0.2, 0, 0.1)],
   bananaGoldenHour: [C(0, 600, 0.5, 0.2, 0.8, 0.9)],
+  // Moments (wow-sound lane, Oct 24 2026; audio/momentMap.ts `ahap`). Shaped to the studio cue
+  // envelopes: t = 0 is the cue's first transient, so the buzz lands on the same frame as the sound.
+  /** Catch: three rising wobble taps, the burst (heavy) at 700 ms, then a 120 ms soft sparkle. */
+  momentCatch: [T(0, 0.3, 0.4), T(220, 0.45, 0.5), T(440, 0.6, 0.6), T(700, 1, 0.7), C(700, 120, 0.45, 0.9, 0.1, 0.9)],
+  /** Combo tier / level-up: a stamp, a brighter second tap, a short shimmer tail. */
+  momentComboTier: [T(0, 0.8, 0.6), T(60, 1, 0.8), C(60, 160, 0.5, 0.7, 0, 0.5)],
+  /** Fever start: a swell that rises into one big hit (sh_fever_start peaks near 350 ms). */
+  momentFeverStart: [C(0, 350, 0.2, 0.3, 1, 0.9), T(350, 1, 0.8)],
+  /** Streak ignite: a warm whoomp, a rumble that fades, a crackle (tv_flame_ignite). */
+  momentStreakIgnite: [T(0, 0.6, 0.3), C(0, 450, 0.7, 0.2, 0.15, 0.1), T(300, 0.55, 0.85)],
+  /** Chest open: the lid pops, coins spill (cq_chest_open + sh_coin_shower). */
+  momentChestOpen: [T(0, 1, 0.6), C(30, 260, 0.5, 0.95, 0, 0.8), T(140, 0.5, 0.9), T(230, 0.4, 0.95)],
+  /** Park arrival: three rising beats, a swell under the fanfare, a final sparkle. */
+  momentParkArrival: [T(0, 0.4, 0.4), T(120, 0.65, 0.5), T(240, 1, 0.6), C(240, 500, 0.6, 0.3, 0, 0.2), T(800, 0.8, 0.9)],
 } satisfies Record<string, HapticPatternDef>;
 
 export type AhapPatternName = keyof typeof AHAP_LIBRARY;
@@ -113,6 +127,13 @@ export const FALLBACK_STEPS: Partial<Record<AhapPatternName, HapticStep[]>> = {
   bossBreak: [{ at: 0, p: 'heavy' }],
   bossEasySlam: [{ at: 0, p: 'heavy' }],
   bossFinRefill: [{ at: 0, p: 'selection' }, { at: 120, p: 'selection' }, { at: 240, p: 'selection' }],
+  // Moments: re-timed to >= 110 ms so every pulse plays on expo-haptics until the native player ships.
+  momentCatch: [{ at: 0, p: 'selection' }, { at: 220, p: 'selection' }, { at: 440, p: 'light' }, { at: 700, p: 'heavy' }, { at: 880, p: 'success' }],
+  momentComboTier: [{ at: 0, p: 'heavy' }, { at: 120, p: 'rigid' }],
+  momentFeverStart: [{ at: 0, p: 'soft' }, { at: 350, p: 'heavy' }],
+  momentStreakIgnite: [{ at: 0, p: 'heavy' }, { at: 150, p: 'soft' }, { at: 300, p: 'light' }],
+  momentChestOpen: [{ at: 0, p: 'heavy' }, { at: 140, p: 'light' }, { at: 260, p: 'selection' }],
+  momentParkArrival: [{ at: 0, p: 'light' }, { at: 120, p: 'medium' }, { at: 240, p: 'heavy' }, { at: 800, p: 'success' }],
 };
 
 /** Smallest gap between consecutive steps (ms); Infinity for one step. */

@@ -89,6 +89,17 @@ export function studioBedIds(game: string): string[] {
   return Array.from(new Set([...Object.keys(STUDIO_BEDS[game] ?? {}), ...Object.keys(devBeds[game] ?? {})])).sort();
 }
 
+/**
+ * One studio cue by game and id ('shared', 'sh_ding'): the approved (shipping)
+ * definition first, then the dev candidate (__DEV__ only). Used by
+ * playMoment.ts, which registers each moment under its own key so two games
+ * that share an id (shared/coin_tick has 13 rungs, trivia/coin_tick has 6)
+ * never overwrite each other.
+ */
+export function studioCueDef(game: string, id: string): CueDef | undefined {
+  return STUDIO_CUES[game]?.[id] ?? devCues[game]?.[id];
+}
+
 /** Hook: register a game's library and preload the listed cues on mount. */
 export function useStudioAudio(game: string, preload: string[] = []): void {
   const key = preload.join('|');

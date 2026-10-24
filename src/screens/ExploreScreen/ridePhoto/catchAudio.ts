@@ -1,6 +1,8 @@
 import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { createSfxLimiter } from '../../../audio/sfxLimiter';
 import { queueHaptic, type HapticIntent } from '../../../gamekit/Haptics';
+import { studioMoment } from '../../../gamekit/audio/playMoment';
+import type { MomentName } from '../../../gamekit/audio/momentMap';
 
 /**
  * The catch's own audio channel: real camera sounds (licensed, Epidemic Sound),
@@ -68,6 +70,8 @@ const CUES: Record<string, { src: unknown; gainDb?: number; bus: 'sfx' | 'stinge
 /** Borrowed house cues for the small beats. */
 const HOUSE: Partial<Record<CatchSound, string>> = { tick: 'ui.select', chime: 'fx.coin', sparkle: 'fx.reveal', aww: 'fx.nopeShort', whoosh: 'fx.whoosh',
   riser: 'fx.whooshRev', coinTick: 'fx.coinTick', stamp: 'ui.confirm', reward: 'fx.reward', firework: 'fx.firework' };
+/** Studio sound on (wow-sound switch): the house beats speak the app's moment vocabulary. Off: unchanged. */
+const MOMENT: Partial<Record<CatchSound, MomentName>> = { chime: 'catch.burst', coinTick: 'catch.count', sparkle: 'reward.reveal', stamp: 'reward.stamp' };
 // The chime is the fanfare that rides with the crowd; only the long tails queue.
 const STINGERS = new Set<CatchSound>(['cheer', 'sparkle', 'reward']);
 const PRIORITY: Partial<Record<CatchSound, number>> = { shutter: 4, flash: 3, cheer: 3, badge: 3, chime: 3, sparkle: 3, reward: 3, stamp: 3, firework: 3, coinTick: 1 };
@@ -124,6 +128,8 @@ export function catchSound(name: CatchSound, opts: { volume?: number; pitch?: nu
       try {
         if (!registered) await preloadCatchAudio();
         if (!GameAudio.backend) await GameAudio.init();
+        const moment = MOMENT[name];
+        if (moment && studioMoment(moment, { volume: opts.volume })) return;
         GameAudio.play(cue, { volume: opts.volume, pitch: opts.pitch });
       } catch {
         // Sound is decoration; never break the catch.

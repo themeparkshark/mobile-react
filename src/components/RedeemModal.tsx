@@ -8,6 +8,7 @@ import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
+import { studioMoment } from '../gamekit/audio/playMoment';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { ParkType } from '../models/park-type';
 import { RedeemableType } from '../models/redeemable-type';
@@ -67,7 +68,7 @@ export default function RedeemModal({
   useEffect(() => {
     if (available && identity !== lastAnnounced.current) {
       lastAnnounced.current = identity;
-      void playSound(require('../../assets/sounds/in_redeem_zone.mp3'));
+      if (!studioMoment('coin.inRange')) void playSound(require('../../assets/sounds/in_redeem_zone.mp3'));
     } else if (!available) {
       lastAnnounced.current = null;
     }
