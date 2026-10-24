@@ -791,23 +791,28 @@ export default function GymBattleScreen({ navigation, route }: Props) {
           {particles.map((p) => <FloatingParticle key={p.id} delay={p.delay} startX={p.x} color={p.color} />)}
           {sparkles.map((s) => <Sparkle key={s.id} x={s.x} y={s.y} delay={s.delay} />)}
           
-          {/* Show pillars anyway */}
-          {pillarOrder.map((team, idx) => (
-            <AnimatedPillar
-              key={team}
-              team={team}
-              isWinner={hasWinner && idx === 1}
-              position={idx === 0 ? 'left' : idx === 1 ? 'center' : 'right'}
-              score={gymData?.scores?.[team] ?? 0}
-              onTap={(t) => {
-                const teamName = TEAM_NAMES[t as keyof typeof TEAM_NAMES];
-                const pts = gymData?.scores?.[t as keyof typeof gymData.scores] ?? 0;
-                setPillarToast(`${teamName}: ${pts.toLocaleString()} pts`);
-                setTimeout(() => setPillarToast(null), 2000);
-              }}
-            />
-          ))}
-          
+          {/* Show pillars anyway, in their own layer under the prompt, so
+              "Join a Team!" and its button are never covered and always
+              tappable. collapsable={false} keeps the layer: a flattened
+              wrapper would hand the towers' zIndex back to this level. */}
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none" collapsable={false}>
+            {pillarOrder.map((team, idx) => (
+              <AnimatedPillar
+                key={team}
+                team={team}
+                isWinner={hasWinner && idx === 1}
+                position={idx === 0 ? 'left' : idx === 1 ? 'center' : 'right'}
+                score={gymData?.scores?.[team] ?? 0}
+                onTap={(t) => {
+                  const teamName = TEAM_NAMES[t as keyof typeof TEAM_NAMES];
+                  const pts = gymData?.scores?.[t as keyof typeof gymData.scores] ?? 0;
+                  setPillarToast(`${teamName}: ${pts.toLocaleString()} pts`);
+                  setTimeout(() => setPillarToast(null), 2000);
+                }}
+              />
+            ))}
+          </View>
+
           <View style={styles.noTeamOverlay}>
             <BlurView intensity={30} style={styles.noTeamBlur}>
               <View style={styles.noTeamBox}>
@@ -1343,8 +1348,11 @@ const styles = StyleSheet.create({
   },
   noTeamOverlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
+    // Sits on the arena floor just above BACK, so the towers stay in view
+    // on tall phones and only their bases tuck behind it on an SE.
+    justifyContent: 'flex-end',
     alignItems: 'center',
+    paddingBottom: 104,
   },
   noTeamBlur: {
     borderRadius: 24,

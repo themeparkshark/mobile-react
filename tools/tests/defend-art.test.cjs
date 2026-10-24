@@ -21,3 +21,13 @@ test('the Defend score sits on a light plaque drawn in code', () => {
   assert.match(src, /<View style=\{styles\.scorePlaque\}>\s*<View style=\{styles\.scorePlaqueInner\}>\s*<Text style=\{styles\.tapCountBig\}>/);
   assert.match(src, /scorePlaqueInner: \{[^}]*backgroundColor: '#FFF8E6'/);
 });
+
+// The no-team arena drew the towers over "Join a Team!" and the middle tower
+// swallowed taps on PICK YOUR TEAM. The towers now sit in their own unflattened
+// layer under the prompt, and the prompt rests on the floor above BACK.
+test('the Join a Team prompt is never under a tower', () => {
+  const src = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  const noTeam = src.slice(src.indexOf('// No team prompt'), src.indexOf('<View style={styles.noTeamOverlay}>'));
+  assert.match(noTeam, /<View style=\{StyleSheet\.absoluteFill\} pointerEvents="box-none" collapsable=\{false\}>\s*\{pillarOrder\.map/);
+  assert.match(src, /noTeamOverlay: \{[^}]*justifyContent: 'flex-end',[^}]*paddingBottom: 104,/);
+});
