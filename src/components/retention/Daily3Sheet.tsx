@@ -1,11 +1,16 @@
 import { Image } from 'expo-image';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, Easing, LinearTransition, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import type { DailyGoal, DailyThreeState, WeekDayState } from '../../api/endpoints/retention';
-import { haptic } from '../../gamekit/Haptics';
+import { haptic, queueHaptic } from '../../gamekit/Haptics';
+import { playSfx } from '../../gamekit/SFX';
+import { FULL_SET, LOOP_CUES } from '../../services/retention/loopMotion';
+import { DURATION, SPRING } from '../../ui/motion';
+import { EASE } from '../../ui/motionEasing';
+import FlameArt from './FlameArt';
 import {
   doneCount, goalAction, milestoneLine, resetLabel, showsBar, streakSubline, tomorrowLine, weekdayLetter, weeklyLine,
 } from '../../services/retention/logic';
@@ -28,7 +33,7 @@ export type GoalTap = 'chest' | 'closet' | 'friends' | 'snack' | 'ride';
  * Every number on it comes from the server.
  */
 export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyFreeze, onGoal, onClose, onReminders, busy, coins,
-  celebrate, reducedMotion, coach, onCoachDone }: {
+  celebrate, celebrateAll = false, onAutoClaim, reducedMotion, coach, onCoachDone }: {
   readonly state: DailyThreeState;
   readonly now: number;
   readonly onClaim: () => void;
@@ -41,6 +46,10 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
   readonly coins: number;
   /** Goal keys that just turned done: they stamp in when the card opens. */
   readonly celebrate: readonly string[];
+  /** The third goal just landed: the checks bounce in a row, then the chest opens by itself. */
+  readonly celebrateAll?: boolean;
+  /** Called at the chest beat of the full-set celebration. */
+  readonly onAutoClaim?: () => void;
   readonly reducedMotion: boolean;
   /** First open: a three-line "how it works" card over the sheet. */
   readonly coach: boolean;
@@ -52,6 +61,27 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
   const canBuyFreeze = s.freezes < s.freeze_cap && coins >= s.freeze_price;
   const tease = milestoneLine(state);
   const reminders = state.reminders !== false;
+  // Done goals glide down to the done group once their checks have stamped (fresh ones start where they were).
+  const sorted = useMemo(() => [...state.goals.filter(g => !g.done), ...state.goals.filter(g => g.done)], [state.goals]);
+  const before = useMemo(() => [...state.goals.filter(g => !g.done || celebrate.includes(g.key)),
+    ...state.goals.filter(g => g.done && !celebrate.includes(g.key))], [state.goals, celebrate]);
+  const [settled, setSettled] = useState(celebrate.length === 0 || reducedMotion);
+  useEffect(() => {
+    if (settled) return;
+    const t = setTimeout(() => setSettled(true), celebrateAll ? FULL_SET.chestAt - 200 : 350 + celebrate.length * 260 + 420);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // The full set: three checks bounce 120 ms apart on a rising tick, then the chest opens by itself.
+  useEffect(() => {
+    if (!celebrateAll) return;
+    const timers = FULL_SET.tickSteps.map((step, i) => setTimeout(() => {
+      queueHaptic('tickSelection');
+      playSfx(LOOP_CUES.checkBounce.fallback, 0.5 + step / 16);
+    }, reducedMotion ? 0 : FULL_SET.checksAt + i * FULL_SET.checkStep));
+    timers.push(setTimeout(() => onAutoClaim?.(), reducedMotion ? 500 : FULL_SET.chestAt));
+    return () => timers.forEach(clearTimeout);
+  }, [celebrateAll]); // eslint-disable-line react-hooks/exhaustive-deps
+  const order = settled ? sorted : before;
   return (
     <View style={styles.card}>
       <View style={styles.hero}>
@@ -80,13 +110,17 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
       </View>
 
       <View style={styles.goals}>
-        {state.goals.map((g, i) => (
-          <GoalRow key={g.key} goal={g} index={i} pop={celebrate.includes(g.key)} reducedMotion={reducedMotion}
-            onPress={() => { const a = goalAction(g); if (a) onGoal(a); }} />
+        {order.map((g, i) => (
+          <Animated.View key={g.key} layout={reducedMotion ? undefined : LinearTransition.springify().damping(SPRING.settle.damping)
+            .stiffness(SPRING.settle.stiffness)}>
+            <GoalRow goal={g} index={i} pop={celebrate.includes(g.key)} reducedMotion={reducedMotion}
+              bounceAt={celebrateAll ? FULL_SET.checksAt + state.goals.findIndex(x => x.key === g.key) * FULL_SET.checkStep : null}
+              onPress={() => { const a = goalAction(g); if (a) onGoal(a); }} />
+          </Animated.View>
         ))}
       </View>
 
-      <ChestBlock state={state} done={done} busy={busy} onClaim={onClaim} reducedMotion={reducedMotion} />
+      <ChestBlock state={state} done={done} busy={busy} onClaim={onClaim} reducedMotion={reducedMotion} charging={celebrateAll} />
 
       <View style={styles.week}>
         <View style={styles.weekDays}>
@@ -150,19 +184,9 @@ function CoachLine({ icon, text }: { readonly icon: React.ReactNode; readonly te
 }
 
 function Flame({ days, reducedMotion }: { readonly days: number; readonly reducedMotion: boolean }) {
-  const t = useSharedValue(0);
-  const lit = days > 0;
-  const ambient = useAmbient();
-  useEffect(() => {
-    if (reducedMotion || !lit || !ambient) { t.value = 0; return; }
-    t.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.sin) }), -1, true);
-    return () => cancelAnimation(t);
-  }, [lit, reducedMotion, ambient, t]);
-  const style = useAnimatedStyle(() => ({ transform: [{ scaleY: 1 + t.value * 0.07 }, { rotate: `${(t.value - 0.5) * 6}deg` }] }));
   return (
     <View style={styles.flameWrap}>
-      <View style={styles.flameHalo} />
-      <Animated.View style={style}><GameIcon name="streak" size={66} /></Animated.View>
+      <FlameArt days={days} size={84} reducedMotion={reducedMotion} />
       <View style={styles.flameNum}><Text style={styles.flameNumText}>{days}</Text></View>
     </View>
   );
@@ -176,30 +200,46 @@ function goalIcon(g: DailyGoal) {
   return <GameIcon name="shark" size={38} />;
 }
 
-function GoalRow({ goal, index, pop, onPress, reducedMotion }: {
+function GoalRow({ goal, index, pop, onPress, reducedMotion, bounceAt }: {
   readonly goal: DailyGoal; readonly index: number; readonly pop: boolean; readonly onPress: () => void; readonly reducedMotion: boolean;
+  /** Full set: this row's check bounces at this many ms after the sheet opens. */
+  readonly bounceAt?: number | null;
 }) {
-  const stamp = useSharedValue(goal.done && !pop ? 1 : 0);
+  const fresh = goal.done && pop && !reducedMotion;
+  const stamp = useSharedValue(goal.done && !fresh ? 1 : 0);
+  const strike = useSharedValue(goal.done && !fresh ? 1 : 0);
+  const bounce = useSharedValue(1);
   useEffect(() => {
-    if (!goal.done) { stamp.value = 0; return; }
-    if (!pop || reducedMotion) { stamp.value = 1; return; }
-    // The check stamps in, one goal after another.
-    stamp.value = withDelay(350 + index * 260, withSpring(1, { damping: 8, stiffness: 220 }));
-    const timer = setTimeout(() => haptic('success'), 350 + index * 260);
+    if (!goal.done) { stamp.value = 0; strike.value = 0; return; }
+    if (!fresh) { stamp.value = 1; strike.value = 1; return; }
+    // The check stamps in from oversize (one goal after another), the title strikes through left to right.
+    const at = 350 + index * 260;
+    stamp.value = withDelay(at, withSpring(1, SPRING.stamp));
+    strike.value = withDelay(at + 120, withTiming(1, { duration: DURATION.base, easing: EASE.out }));
+    const timer = setTimeout(() => queueHaptic('hitMedium'), at);
     return () => clearTimeout(timer);
-  }, [goal.done, pop, index, reducedMotion, stamp]);
-  const checkStyle = useAnimatedStyle(() => ({ opacity: stamp.value, transform: [{ scale: 1.8 - stamp.value * 0.8 }] }));
+  }, [goal.done, fresh, index, stamp, strike]);
+  useEffect(() => {
+    if (bounceAt == null || reducedMotion || !goal.done) return;
+    bounce.value = withDelay(bounceAt, withSequence(withTiming(1.35, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
+  }, [bounceAt, reducedMotion, goal.done, bounce]);
+  const checkStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, stamp.value * 1.6),
+    transform: [{ scale: (1.7 - stamp.value * 0.7) * bounce.value }, { rotate: `${(1 - stamp.value) * -14}deg` }] }));
+  const strikeStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: strike.value }] }));
   const actionable = !goal.done && goalAction(goal) !== null;
   const pct = Math.min(1, goal.progress / Math.max(1, goal.target));
   return (
     <Pressable onPress={actionable ? onPress : undefined} disabled={!actionable} accessibilityRole="button"
       accessibilityLabel={`${goal.title}. ${goal.done ? 'Done' : goal.hint}`}
       style={({ pressed }) => [styles.goal, goal.done && styles.goalDone, pressed && styles.goalPressed]}>
-      <View style={styles.goalIcon}>{goalIcon(goal)}</View>
+      <View style={[styles.goalIcon, goal.done && styles.goalIconDone]}>{goalIcon(goal)}</View>
       <View style={styles.goalText}>
-        <Text style={[styles.goalTitle, goal.done && styles.goalTitleDone]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-          {goal.title}
-        </Text>
+        <View style={styles.titleBox}>
+          <Text style={[styles.goalTitle, goal.done && styles.goalTitleDone]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+            {goal.title}
+          </Text>
+          {goal.done && <Animated.View pointerEvents="none" style={[styles.strike, strikeStyle]} />}
+        </View>
         {goal.done ? <Text style={styles.goalHintDone} numberOfLines={1}>Done!</Text> : showsBar(goal) ? (
           <View style={styles.bar}><View style={[styles.barFill, { width: `${pct * 100}%` }]} />
             <Text style={styles.barText}>{`${goal.progress}/${goal.target}`}</Text></View>
@@ -207,28 +247,37 @@ function GoalRow({ goal, index, pop, onPress, reducedMotion }: {
       </View>
       <View style={styles.goalEnd}>
         {goal.done ? (
-          <Animated.View style={checkStyle}><GameIcon name="check" size={34} accessibilityLabel="Done" /></Animated.View>
+          <Animated.View style={[styles.doneCheck, checkStyle]} accessibilityLabel="Done">
+            <GameIcon name="check" size={34} />
+          </Animated.View>
         ) : actionable ? <View style={styles.go}><Text style={styles.goText}>GO</Text></View> : null}
       </View>
     </Pressable>
   );
 }
 
-function ChestBlock({ state, done, busy, onClaim, reducedMotion }: {
+function ChestBlock({ state, done, busy, onClaim, reducedMotion, charging = false }: {
   readonly state: DailyThreeState; readonly done: number; readonly busy: boolean; readonly onClaim: () => void; readonly reducedMotion: boolean;
+  /** Full set: the chest starts rattling before it opens itself. */
+  readonly charging?: boolean;
 }) {
   const bob = useSharedValue(0);
   const ready = state.claimable;
   const ambient = useAmbient();
   useEffect(() => {
+    if (charging && !reducedMotion) {
+      // A rising rattle from the ribbon beat to the hand-off (anticipation).
+      bob.value = withDelay(FULL_SET.ribbonAt - 100, withRepeat(withSequence(withTiming(-4, { duration: 50 }), withTiming(4, { duration: 50 })), 6, true));
+      return () => cancelAnimation(bob);
+    }
     if (!ready || reducedMotion || !ambient) { bob.value = 0; return; }
     bob.value = withRepeat(withSequence(
       withTiming(-6, { duration: 700, easing: Easing.inOut(Easing.sin) }),
       withTiming(0, { duration: 700, easing: Easing.inOut(Easing.sin) }),
     ), -1);
     return () => cancelAnimation(bob);
-  }, [ready, reducedMotion, ambient, bob]);
-  const chestStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bob.value }, { rotate: `${bob.value * 0.6}deg` }] }));
+  }, [ready, reducedMotion, ambient, bob, charging]);
+  const chestStyle = useAnimatedStyle(() => ({ transform: [{ translateY: charging ? 0 : bob.value }, { rotate: `${bob.value * (charging ? 2.2 : 0.6)}deg` }] }));
   const r = state.reward;
   const opened = state.claimed && !ready;
   const prize = state.claimable_milestone;
@@ -298,8 +347,7 @@ const styles = StyleSheet.create({
     paddingTop: 20, paddingBottom: 10, paddingHorizontal: 12, alignItems: 'stretch', overflow: 'hidden' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 18, padding: 8 },
-  flameWrap: { width: 78, height: 78, alignItems: 'center', justifyContent: 'center' },
-  flameHalo: { position: 'absolute', width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255, 226, 92, 0.28)' },
+  flameWrap: { width: 84, height: 84, alignItems: 'center', justifyContent: 'center' },
   flameNum: { position: 'absolute', bottom: -2, right: -2, minWidth: 30, height: 30, borderRadius: 15, paddingHorizontal: 6,
     backgroundColor: BRAND.white, borderWidth: 2.5, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   flameNumText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginTop: 1 },
@@ -318,15 +366,21 @@ const styles = StyleSheet.create({
   goals: { gap: 6 },
   goal: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BRAND.white, borderRadius: 16, padding: 6,
     borderBottomWidth: 4, borderBottomColor: '#a9cdea', minHeight: 60 },
-  goalDone: { backgroundColor: '#e8f8ec', borderBottomColor: '#9ad4a8' },
+  // Done is gold and white (never green): the row turns warm cream with a gold lip.
+  goalDone: { backgroundColor: '#fff7d8', borderBottomColor: '#e9c55a' },
+  goalIconDone: { backgroundColor: '#ffe9a6' },
+  titleBox: { alignSelf: 'flex-start', maxWidth: '100%', justifyContent: 'center' },
+  strike: { position: 'absolute', left: -2, right: -2, height: 3, borderRadius: 2, top: '52%', backgroundColor: BRAND.goldLip,
+    transformOrigin: 'left' },
+  doneCheck: { alignItems: 'center', justifyContent: 'center' },
   goalPressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2 },
   goalIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: BRAND.sky, alignItems: 'center', justifyContent: 'center' },
   goalImg: { width: 38, height: 38 },
   goalText: { flex: 1 },
   goalTitle: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
-  goalTitleDone: { color: '#2c7a43' },
+  goalTitleDone: { color: BRAND.navySoft },
   goalHint: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
-  goalHintDone: { fontFamily: 'Knockout', fontSize: 14, color: '#2c7a43' },
+  goalHintDone: { fontFamily: 'Shark', fontSize: 14, color: '#b07a00' },
   bar: { height: 16, borderRadius: 8, backgroundColor: BRAND.sky, overflow: 'hidden', justifyContent: 'center', marginTop: 2, marginRight: 4 },
   barFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.gold, borderRadius: 8 },
   barText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.navy, textAlign: 'center' },

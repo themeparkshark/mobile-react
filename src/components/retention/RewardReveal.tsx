@@ -5,7 +5,9 @@ import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import type { PaidRewards } from '../../api/endpoints/retention';
-import { haptic } from '../../gamekit/Haptics';
+import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
+import { haptic, playHaptic } from '../../gamekit/Haptics';
+import { FLASH_MAX_OPACITY } from '../../ui/motion';
 import { playSfx } from '../../gamekit/SFX';
 import { doneDelay, isBigReward, rewardRows, rowSchedule, type RewardRow } from '../../services/retention/logic';
 import { BRAND, GameIcon } from '../../ui';
@@ -28,7 +30,7 @@ const STALL_MS = 6000;
  * Shows only what the server paid.
  */
 export default function RewardReveal({ subtitle, closedArt, openArt, rewards, opening, onOpen, onDone, onWear, onPins,
-  reducedMotion, doneLabel, footer, dropIn = false }: {
+  reducedMotion, doneLabel, footer, dropIn = false, autoOpen = false }: {
   readonly subtitle: string;
   readonly closedArt: ImageSource | number;
   readonly openArt: ImageSource | number;
@@ -45,6 +47,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   readonly footer?: React.ReactNode;
   /** The chest drops in when it appears (level-ups). */
   readonly dropIn?: boolean;
+  /** Open by itself on arrival (the full Daily 3 set flows straight into its chest). */
+  readonly autoOpen?: boolean;
 }) {
   const ambient = useAmbient();
   const { width, height } = useWindowDimensions();
@@ -84,6 +88,9 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     drop.value = withSpring(0, { damping: 9, stiffness: 140 });
     later(() => { haptic('hitMedium'); playSfx('fx.hit', 0.8); }, 260);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The full set hands straight into the chest: it starts opening on the first frame.
+  useEffect(() => { if (autoOpen && !revealed && !opening) onOpen(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Idle: a gentle bob and glow, so it asks to be tapped.
   useEffect(() => {
@@ -133,12 +140,14 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     }
     // Squash, flash, swap behind the flash, overshoot.
     squash.value = withSequence(withTiming(0.82, { duration: 90, easing: Easing.in(Easing.quad) }), withSpring(1, { damping: 6, stiffness: 240 }));
-    flash.value = withDelay(80, withSequence(withTiming(1, { duration: 60 }), withTiming(0, { duration: 260 })));
+    // The swap flash hides the art change; capped like every flash (none with Dim Flashing Lights).
+    flash.value = withDelay(80, withSequence(withTiming(isDimFlashingLightsEnabled() ? 0.12 : FLASH_MAX_OPACITY, { duration: 60 }),
+      withTiming(0, { duration: 260 })));
     later(() => setSwapped(true), 120);
     pop.value = withDelay(110, withSequence(withTiming(1.18, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 })));
     burst.value = 0;
     burst.value = withDelay(120, withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }));
-    later(() => { haptic('success'); playSfx('fx.reward'); }, 120);
+    later(() => { playHaptic('golden'); playSfx('fx.reward'); }, 120);
     const schedule = rowSchedule(rows);
     later(() => setButtonReady(true), (schedule[schedule.length - 1] ?? 400) + doneDelay(rows));
     schedule.forEach((ms, i) => later(() => {
@@ -192,7 +201,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
           showsVerticalScrollIndicator={false}>
           {!revealed ? (
             <View style={[styles.hintBox, { height: rowsHeight - 8 }]}>
-              <Text style={styles.hint}>{stalled ? 'Still opening...' : opening ? 'Opening...' : 'Tap to open!'}</Text>
+              <Text style={styles.hint}>{stalled ? 'Still opening...' : opening || autoOpen ? 'Opening...' : 'Tap to open!'}</Text>
             </View>
           ) : rows.map((row, i) => (
             <Row key={row.kind} row={row} shown={i < landed} reducedMotion={reducedMotion} compact={compact}

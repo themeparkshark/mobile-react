@@ -106,6 +106,22 @@ test('retention flags: absent reads as off, a failed read is retried; only a tru
   assert.deepEqual(plain(await F.loadRetentionFlags(async () => ({ flags: { daily_three: true, level_chests: 'yes' } }))), { dailyThree: true, levelChests: false });
 });
 
+test('retention flags: an off answer read before sign-in never sticks to the player (preview flags are per player)', async () => {
+  const F = load('src/services/retention/flags.ts');
+  const off = async () => ({ flags: {} });
+  const on = async () => ({ flags: { daily_three: true, level_chests: true } });
+  assert.equal((await F.loadRetentionFlags(off, '', 1000)).dailyThree, false);
+  // Same run, now signed in as player 35: read again.
+  assert.equal((await F.loadRetentionFlags(on, 35, 2000)).dailyThree, true);
+  // An on answer is kept for the run.
+  assert.equal((await F.loadRetentionFlags(off, 35, 999999)).dailyThree, true);
+  F.resetRetentionFlagsForTests();
+  // An off answer for the same player is re-read after a minute (a flag just turned on).
+  assert.equal((await F.loadRetentionFlags(off, 35, 0)).dailyThree, false);
+  assert.equal((await F.loadRetentionFlags(on, 35, 30000)).dailyThree, false, 'kept inside the minute');
+  assert.equal((await F.loadRetentionFlags(on, 35, 61000)).dailyThree, true);
+});
+
 test('weekly line is honest about what is still reachable this week', () => {
   const days = states => states.map((state, i) => ({ date: `2026-10-${12 + i}`, state }));
   const wk = (over) => state({ week: { ...state().week, ...over } });

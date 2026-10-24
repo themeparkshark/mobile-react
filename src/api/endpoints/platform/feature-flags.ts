@@ -24,11 +24,17 @@ export type FeatureFlagsPayload = {
   readonly app_store_url: string;
 };
 
-export default async function getFeatureFlags(): Promise<FeatureFlagsPayload> {
+/**
+ * `viewer` (the signed-in player id) makes the URL per player: the signed-out answer is
+ * public for 60 s and varies only on App-Version, so the phone's URL cache could otherwise
+ * hand a signed-out "off" to a preview player for a minute after launch.
+ */
+export default async function getFeatureFlags(viewer?: string | number): Promise<FeatureFlagsPayload> {
   // Sent here as well as by the shared client: update_required depends on it.
   const { data } = await client.get<{ data: FeatureFlagsPayload }>('/feature-flags', {
     timeout: 8000,
     headers: appVersionHeaders(),
+    ...(viewer !== undefined && viewer !== '' ? { params: { viewer: String(viewer) } } : {}),
   });
   const payload = data?.data;
   if (!payload || typeof payload.flags !== 'object' || payload.flags === null) {

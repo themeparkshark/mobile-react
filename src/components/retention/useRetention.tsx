@@ -17,12 +17,15 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import * as RootNavigation from '../../RootNavigation';
 import { enablePush } from '../../services/push';
 import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
-import { buttonState, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
+import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
+import { flameMomentFor, tomorrowPrize, type FlameMoment } from '../../services/retention/loopMotion';
 import { mayAskForPush, notePushAsked } from '../../services/retention/pushAsk';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../../ui';
 import { useModalLayer } from '../../ui/modalLayers';
-import Ribbon from '../Ribbon';
-import Daily3MapButton from './Daily3MapButton';
+import Daily3MapButton, { type CheckLanding } from './Daily3MapButton';
+import StampRibbon from './StampRibbon';
+import StreakMoment from './StreakMoment';
+import TomorrowCard from './TomorrowCard';
 import Daily3Sheet, { type GoalTap } from './Daily3Sheet';
 import RewardReveal from './RewardReveal';
 
@@ -32,15 +35,23 @@ const WEEKLY = require('../../../assets/images/retention/weekly-box-closed.png')
 const WEEKLY_OPEN = require('../../../assets/images/retention/weekly-box-open.png');
 const FREEZE = require('../../../assets/images/retention/freeze.png');
 const BOX = require('../../../assets/images/retention/mystery-box.png');
-const ART = [LEVEL_CHEST, LEVEL_CHEST_OPEN, WEEKLY, WEEKLY_OPEN, FREEZE, BOX];
+// The loop moments' art too (flame, crown, Finn, the gold), so the flame never pops in late.
+const ART = [LEVEL_CHEST, LEVEL_CHEST_OPEN, WEEKLY, WEEKLY_OPEN, FREEZE, BOX,
+  require('../../../assets/icons/game/streak.png'), require('../../assets/games/banana-basket/v2/crown.png'),
+  require('../../assets/games/banana-basket/v2/shark_cheer.png'), require('../../../assets/images/reveal/soft-spot.webp')];
 
 /** Reads are cheap but not free: focus and app-resume reads wait at least 15 s; real events read at once. */
 const MIN_REFRESH_MS = 15000;
 const COACH_KEY = 'tps.retention.coach.v1';
+/** The last streak number this phone celebrated (per player), so a flame moment plays once. */
+const FLAME_SEEN_KEY = 'tps.retention.flameSeen.v1';
 
 type View_ =
-  | { k: 'sheet' }
-  | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; claimDate?: string | null; rewards: PaidRewards | null; opening: boolean }
+  | { k: 'sheet'; all?: boolean }
+  | { k: 'flame'; moment: Exclude<FlameMoment, { kind: 'none' }> }
+  | { k: 'tomorrow' }
+  | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; claimDate?: string | null; rewards: PaidRewards | null; opening: boolean;
+      auto?: boolean }
   | { k: 'freeze' }
   | { k: 'freezeSaved'; days: number; streak: number }
   | { k: 'push' };
@@ -80,21 +91,25 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const [chests, setChests] = useState<readonly LevelChest[]>([]);
   const [view, setView] = useState<View_ | null>(null);
   const [busy, setBusy] = useState(false);
-  const [pop, setPop] = useState<{ index: number | null; key: number }>({ index: null, key: 0 });
+  const [landing, setLanding] = useState<CheckLanding | null>(null);
   const [celebrate, setCelebrate] = useState<string[]>([]);
   const [coach, setCoach] = useState(false);
   const lastRead = useRef(0);
+  const seenInit = useRef<number | null>(null);
   const lastChestRead = useRef(-1);
   const prevGoals = useRef<DailyThreeState['goals'] | null>(null);
   const opening = useRef(false);
   const mounted = useRef(true);
+  const viewRef = useRef<View_ | null>(null);
+  viewRef.current = view;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   // Read the switches; a failed read (offline, slow server) is retried on the next map focus.
   useEffect(() => {
-    if (!o.enabled || flags) return;
-    void loadRetentionFlags().then(f => { if (mounted.current && f) setFlags(f); });
-  }, [o.enabled, o.mapFocused, o.refreshKey, flags]);
+    // An all-off answer is checked again on the next focus (a read that raced sign-in, or a flag just turned on).
+    if (!o.enabled || (flags && (flags.dailyThree || flags.levelChests))) return;
+    void loadRetentionFlags(undefined, player?.id ?? '').then(f => { if (mounted.current && f && !sameJson(f, flags)) setFlags(f); });
+  }, [o.enabled, o.mapFocused, o.refreshKey, flags, player?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Warm the art once the features are on, so the first reveal never pops in.
   useEffect(() => {
@@ -107,11 +122,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     // Identical answers never re-render the map.
     setDaily(prev => (prev && sameJson(prev, next) ? prev : next));
     if (fresh.length) {
+      // The map button flies the check in (its own haptic and sound); a card that is open just updates.
       const index = next.goals.findIndex(g => g.key === fresh[fresh.length - 1]);
-      setPop(p => ({ index, key: p.key + 1 }));
       setCelebrate(c => [...new Set([...c, ...fresh])]);
-      haptic('success');
-      playSfx(next.claimable ? 'fx.reveal' : 'fx.coinTick');
+      if (!viewRef.current) setLanding(l => ({ index, done: doneCount(next.goals), key: (l?.key ?? 0) + 1 }));
     }
   }, []);
 
@@ -129,7 +143,14 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         wantChests ? getLevelChests() : Promise.resolve(null),
       ]);
       if (!mounted.current) return;
-      if (d && d.enabled) applyDaily(d); else if (d) setDaily(null);
+      if (d && d.enabled) {
+        applyDaily(d);
+        // A phone that has never celebrated a flame starts from today's number (no fake celebration of an old streak).
+        if (seenInit.current !== (player?.id ?? 0)) {
+          seenInit.current = player?.id ?? 0;
+          void readSeen().then(v => { if (v === null) writeSeen(d.streak.days); });
+        }
+      } else if (d) setDaily(null);
       if (c) {
         lastChestRead.current = level;
         const list = c.enabled ? c.chests : [];
@@ -195,10 +216,41 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     send('energy', paid.energy, 'energy', 160);
   };
 
-  const finishReveal = async (paid: PaidRewards | null) => {
+  /** The streak number this phone last celebrated (null on a fresh install: no fake celebration). */
+  const seenKey = `${FLAME_SEEN_KEY}:${player?.id ?? 0}`;
+  const readSeen = async (): Promise<number | null> => {
+    try { const v = await AsyncStorage.getItem(seenKey); return v === null ? null : Number(v) || 0; } catch { return null; }
+  };
+  const writeSeen = (n: number) => { void AsyncStorage.setItem(seenKey, String(n)).catch(() => undefined); };
+
+  /** After the reveal: the flame grows (once per new streak day), then tomorrow's present, then the reminders ask. */
+  const afterReveal = async (src: 'daily' | 'weekly' | 'level', state: DailyThreeState | null) => {
+    if (src === 'daily' && state) {
+      const seen = await readSeen();
+      const moment = flameMomentFor(seen, state.streak.days, state.streak.counted_today);
+      if (state.streak.counted_today) writeSeen(state.streak.days);
+      if (moment.kind !== 'none') { setView({ k: 'flame', moment }); return; }
+      setView({ k: 'tomorrow' }); return;
+    }
+    if (await mayAskForPush()) { setView({ k: 'push' }); return; }
+    setView(null);
+  };
+
+  const finishReveal = async (paid: PaidRewards | null, src: 'daily' | 'weekly' | 'level' = 'level') => {
     if (paid) fly(paid);
     void refreshPlayer?.();
-    void refresh(true);
+    let state = daily;
+    if (src === 'daily') {
+      try { const d = await getDailyThree(); if (d.enabled) { applyDaily(d); state = d; } } catch { /* keep what we had */ }
+    } else {
+      void refresh(true);
+    }
+    if (!mounted.current) return;
+    await afterReveal(src, state);
+  };
+
+  const afterFlame = () => { setView({ k: 'tomorrow' }); };
+  const afterTomorrow = async () => {
     // Right after a win is the one good moment to ask about reminders.
     if (await mayAskForPush()) { setView({ k: 'push' }); return; }
     setView(null);
@@ -236,7 +288,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         : await openLevelChest(current.level ?? 0);
       // Let the shake build before the lid pops (anticipation reads at 450 ms+).
       // The Weekly Box shakes longest (900 ms): the week's biggest moment earns the longest wind-up.
-      const wait = reducedMotion ? 0 : Math.max(0, (current.src === 'weekly' ? 900 : 560) - (Date.now() - started));
+      // The Daily 3 chest follows the chest beats (420 ms of shake, then the held frame); the Weekly Box winds up longest.
+      const wait = reducedMotion ? 0 : Math.max(0, (current.src === 'weekly' ? 900 : current.src === 'daily' ? 420 : 560) - (Date.now() - started));
       setTimeout(() => { if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards }); }, wait);
       if (result.state?.goals) applyDaily(result.state);
       if (current.src === 'level') setChests(cs => cs.map(c => (c.level === current.level ? { ...c, opened: true, rewards: result.rewards } : c)));
@@ -295,6 +348,29 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     }
   };
 
+  // The third check landed on the map: open the card in full-set mode (checks bounce, ribbon stamps, chest opens by itself).
+  const onFullSet = () => {
+    if (viewRef.current || !daily?.claimable) return;
+    setView({ k: 'sheet', all: true });
+  };
+
+  // Dev only: drive the loop moments from the lane tools (CDP) on the live scratch data.
+  useEffect(() => {
+    if (!__DEV__) return;
+    (globalThis as Record<string, unknown>).__tpsLoops = {
+      refresh: () => { lastRead.current = 0; void refresh(true); },
+      land: (index: number, done: number) => setLanding(l => ({ index, done, key: (l?.key ?? 0) + 1 })),
+      flame: (days: number, from?: number) => setView({ k: 'flame', moment: flameMomentFor(from ?? days - 1, days, true) as Exclude<FlameMoment, { kind: 'none' }> }),
+      tomorrow: () => setView({ k: 'tomorrow' }),
+      sheet: (all?: boolean) => setView({ k: 'sheet', all: !!all }),
+      forgetFlame: () => { void AsyncStorage.removeItem(seenKey); },
+      setSeen: (n: number) => writeSeen(n),
+      debug: () => ({ enabled: o.enabled, focused: o.mapFocused, flags, daily: daily ? { done: doneCount(daily.goals), streak: daily.streak.days } : null,
+        view: view?.k ?? null }),
+      reloadFlags: () => { void loadRetentionFlags(undefined, player?.id ?? '', Date.now() + 120_000).then(f => { if (mounted.current && f) setFlags(f); }); },
+    };
+  });
+
   const close = () => {
     if (view?.k === 'sheet') setCelebrate([]);
     if (view?.k === 'push') void notePushAsked();
@@ -309,8 +385,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   if (flags?.dailyThree && daily) {
     const b = buttonState(daily, new Date().getHours());
     button = (
-      <Daily3MapButton pips={b.pips} streak={b.streak} attention={b.attention} popIndex={pop.index} popKey={pop.key}
-        active={o.mapFocused && !o.mapCovered && !visible} reducedMotion={reducedMotion}
+      <Daily3MapButton pips={b.pips} streak={b.streak} attention={b.attention}
+        active={o.mapFocused && !o.mapCovered && !visible} reducedMotion={reducedMotion} landing={landing} onFullSet={onFullSet}
         onPress={() => { playSfx('ui.tap'); openSheet(); }} />
     );
   }
@@ -333,9 +409,22 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
 
   let title = 'Daily 3';
   let content: ReactNode = null;
+  const [allRibbon, setAllRibbon] = useState(false);
+  const fullSetSheet = view?.k === 'sheet' && !!view.all;
+  useEffect(() => {
+    if (!fullSetSheet) { setAllRibbon(false); return; }
+    const t = setTimeout(() => setAllRibbon(true), reducedMotion ? 0 : 700);
+    return () => clearTimeout(t);
+  }, [fullSetSheet, reducedMotion]);
   if (view?.k === 'sheet' && daily) {
+    if (allRibbon) title = 'All 3 done!';
     content = (
       <Daily3Sheet state={daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
+        celebrateAll={!!view.all} onAutoClaim={() => {
+          if (!daily.claimable) return;
+          setCelebrate([]);
+          setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false, auto: true });
+        }}
         reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone}
         onReminders={on => { void toggleReminders(on); }}
         onClaim={() => setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false })}
@@ -344,7 +433,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     );
   } else if (view?.k === 'reveal') {
     const r = view;
-    title = r.src === 'level' ? `Level ${r.level}!` : r.src === 'weekly' ? 'Weekly Box' : 'Daily 3 done!';
+    title = r.src === 'level' ? `Level ${r.level}!` : r.src === 'weekly' ? 'Weekly Box' : r.auto ? 'All 3 done!' : 'Daily 3 done!';
     const footer = r.src === 'level' ? nextLevel(r.level ?? 1)
       : r.src === 'weekly' ? (
         <View style={styles.nextRow}>
@@ -365,10 +454,17 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
           : r.src === 'weekly' ? 'A whole week of flames. Tap the box!' : 'All three goals done. Tap your chest!'}
         closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? WEEKLY : ICON_SOURCES.chest}
         openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? WEEKLY_OPEN : ICON_SOURCES.chestOpen}
-        onWear={() => { void finishReveal(r.rewards).then(() => RootNavigation.navigate('Inventory')); }}
-        onPins={() => { void finishReveal(r.rewards).then(() => RootNavigation.navigate('PinCollections')); }}
-        onOpen={() => { void openReveal(); }} onDone={() => { void finishReveal(r.rewards); }} />
+        autoOpen={!!r.auto}
+        onWear={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('Inventory'); }}
+        onPins={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('PinCollections'); }}
+        onOpen={() => { void openReveal(); }} onDone={() => { void finishReveal(r.rewards, r.src); }} />
     );
+  } else if (view?.k === 'flame') {
+    title = view.moment.kind === 'milestone' ? 'Big flame!' : 'Flame up!';
+    content = <StreakMoment key={JSON.stringify(view.moment)} moment={view.moment} reducedMotion={reducedMotion} onDone={afterFlame} />;
+  } else if (view?.k === 'tomorrow') {
+    title = 'See you tomorrow';
+    content = <TomorrowCard prize={tomorrowPrize(daily)} reducedMotion={reducedMotion} onDone={() => { void afterTomorrow(); }} />;
   } else if (view?.k === 'freeze' && daily) {
     title = 'Streak Freeze';
     content = (
@@ -417,7 +513,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     );
   }
 
-  const revealing = view?.k === 'reveal';
+  // Moments that must finish (a chest mid-open, the flame) ignore backdrop taps; their button moves on.
+  const revealing = view?.k === 'reveal' || view?.k === 'flame' || (view?.k === 'sheet' && !!view.all);
   const overlay = (
     <Modal isVisible={visible && front && !!content} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
       animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'} animationInTiming={reducedMotion ? 120 : 240}
@@ -425,7 +522,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       onBackdropPress={revealing ? undefined : close} onBackButtonPress={revealing ? undefined : close}
       useNativeDriver useNativeDriverForBackdrop hideModalContentWhileAnimating={false}>
       <View style={styles.wrap}>
-        <Ribbon text={title} />
+        <StampRibbon text={title} reducedMotion={reducedMotion} />
         {content}
       </View>
     </Modal>
