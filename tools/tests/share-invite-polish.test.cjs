@@ -407,7 +407,8 @@ test('every full-screen reveal uses the one share pill, under its main button', 
   assert.match(ride, /<ShareFace size="reveal"/);
   assert.doesNotMatch(ride, /shareBtn/);
   for (const file of ['src/screens/RideTracker/RideHistoryScreen.tsx', 'src/screens/RideTracker/RideDetailScreen.tsx']) {
-    assert.match(src(file), /<GameButton label=\{CLOSE_WORD\} variant="ghost" tone="onBlue"/, file);
+    // The hotfix Close button (its own accessible element), saying the one close word.
+    assert.match(src(file), /accessibilityLabel="Close">\s*<Text style=\{\w+\.modalCloseText\}>\{CLOSE_WORD\}<\/Text>/, file);
   }
   assert.match(src('src/share/closeWord.ts'), /export const CLOSE_WORD = 'Nice!';/);
 });

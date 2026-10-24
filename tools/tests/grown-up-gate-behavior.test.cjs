@@ -324,9 +324,13 @@ test('the share sheet shows a readable file name, never the capture UUID', async
   assert.equal(external.shareFileName('Space Mountain Ride Card', 'jpg'), 'Space-Mountain-Ride-Card.jpg');
   assert.equal(external.shareFileName("Pirates' Lair: Tom & Becky", 'png'), 'Pirates-Lair-Tom-Becky.png');
   assert.equal(external.shareFileName('***', 'png'), 'Theme-Park-Shark.png');
+  // view-shot's bare iOS path is copied too.
+  await external.shareFileExternal('/private/var/tmp/ABC.jpg', undefined, 'Ride Photo');
+  assert.deepEqual(calls.copy.at(-1), ['file:///private/var/tmp/ABC.jpg', 'file:///cache/share-card/Ride-Photo.jpg']);
+  assert.equal(calls.share.at(-1)[0], 'file:///cache/share-card/Ride-Photo.jpg');
   // No name: the capture is shared as is.
   await external.shareFileExternal('file:///tmp/x.png');
-  assert.equal(calls.share[1][0], 'file:///tmp/x.png');
+  assert.equal(calls.share.at(-1)[0], 'file:///tmp/x.png');
 });
 
 test('a grown-up no shares nothing and copies nothing', async () => {
@@ -336,4 +340,15 @@ test('a grown-up no shares nothing and copies nothing', async () => {
   assert.equal(done.value, false);
   assert.equal(calls.share.length, 0);
   assert.equal(calls.copy.length, 0);
+});
+
+test('the ride card share sheets keep their buttons reachable: the backdrop and panel are not one big accessible element', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  for (const file of ['src/screens/RideTracker/RideDetailScreen.tsx', 'src/screens/RideTracker/RideHistoryScreen.tsx']) {
+    const code = fs.readFileSync(path.join(__dirname, '..', '..', file), 'utf8');
+    assert.match(code, /style=\{\w+\.modalOverlay\} onPress=\{\(\) => set\w+\(null\)\} accessible=\{false\}>/, file);
+    assert.match(code, /style=\{\w+\.modalContent\} onPress=\{\(\) => \{\}\} accessible=\{false\}>/, file);
+    assert.match(code, /style=\{\w+\.modalClose\} accessibilityRole="button" accessibilityLabel="Close">/, file);
+  }
 });

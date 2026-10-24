@@ -277,13 +277,16 @@ export default function RideHistoryScreen() {
       {/* Share Modal */}
       <Modal visible={!!shareRide} animationType={reducedMotion ? 'fade' : 'slide'} transparent
         onRequestClose={closeShare}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShareRide(null)}>
-          <Pressable style={styles.modalContent} onPress={() => {}}>
+        {/* Not accessible themselves, so VoiceOver reaches Share Ride Card and Close one by one. */}
+        <Pressable style={styles.modalOverlay} onPress={() => setShareRide(null)} accessible={false}>
+          <Pressable style={styles.modalContent} onPress={() => {}} accessible={false}>
             {shareRide && (
               <>
                 <ShareableRideCard ride={shareRide} onShare={closeShare} />
                 {/* The one close word of every share sheet (Share Studio uses it too). */}
-                <GameButton label={CLOSE_WORD} variant="ghost" tone="onBlue" onPress={() => setShareRide(null)} accessibilityLabel="Close" style={{ marginTop: 4 }} />
+                <Pressable onPress={() => setShareRide(null)} style={styles.modalClose} accessibilityRole="button" accessibilityLabel="Close">
+                  <Text style={styles.modalCloseText}>{CLOSE_WORD}</Text>
+                </Pressable>
               </>
             )}
           </Pressable>
