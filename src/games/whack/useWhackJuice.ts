@@ -29,7 +29,7 @@ import { whackLayerLevel } from '../../gamekit/core/beatLayers';
 import type { BeatLayerPlayer } from '../../gamekit/audio/BeatLayers';
 import { WHACK_PRIO } from '../../gamekit/core/hapticBus';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
-import { configureHaptics, playPattern } from '../../gamekit/Haptics';
+import { configureHaptics, playHaptic, playPattern } from '../../gamekit/Haptics';
 import { createFlurry, flurryHit, flurryResolve, FLURRY_GROW, FLURRY_START, type FlurryState } from '../../gamekit/core/scoring';
 import {
   E_BREAK, E_BRUISER, E_BUTTER, E_COIN_BUBBLE, E_DECOY, E_DOUBLE, E_EMERGE, E_ESCAPE, E_FEVER, E_FEVER_READY, E_FREEZE, E_HELMET, E_HIT,
@@ -39,6 +39,7 @@ import { E_HAT_BOUNCE } from './useWhackRuntime';
 import { G_CRIT, G_GOOD, G_QUICK, K_ANGLER, K_BRUISER, K_FINN, K_GOLDEN, K_HELMET, K_PUFFER, K_TENTACLE, K_TWIN, MULT_CAP, SIXTEENTH_MS, TIER_AT, TIER_MULT } from './waves';
 import type { BoardLayout } from './render/layout';
 import type { WhackRuntime } from './useWhackRuntime';
+import { calloutAdmit, comboTierRank, comboTierStyle, createCalloutGate } from '../../gamekit/core/gameMoments';
 
 const GOLD = '#ffcf3b';
 const CORAL = '#ff6b5c';
@@ -190,12 +191,16 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     double: { sfx: cues.double, pattern: 'whackCrit', priority: WHACK_PRIO.golden, localStop: 80, burst: [{ emitter: 'bubbles', count: 8 }, { emitter: 'stars', count: 6 }],
       flyUp: { size: 'lg', color: '#7fd6ff' } },
     whiff: { sfx: cues.whiff, volume: 0.32, burst: [{ emitter: 'puff', count: 4 }] },
-    butter: { sfx: cues.breakCue, pattern: [{ t: 0, kind: 'transient', i: 0.6, s: 0.2 }, { t: 70, kind: 'transient', i: 0.4, s: 0.2 }], priority: WHACK_PRIO.decoy,
-      flyUp: { size: 'md', color: CORAL } },
+    // A mash is a gag, never a scolding: one soft bump, one white 'Too fast!' that replaces any callout up (key).
+    butter: { sfx: cues.whiff, volume: 0.5, pattern: [{ t: 0, kind: 'transient', i: 0.35, s: 0.1 }], priority: WHACK_PRIO.decoy,
+      burst: [{ emitter: 'puff', count: 5 }], flyUp: { size: 'md', color: '#ffffff', key: 'callout', rise: 36 } },
     escape: { sfx: cues.duck, volume: 0.5, spatial: true },
-    tierUp: { sfx: cues.tier, ladder: true, pattern: 'tierUp', priority: WHACK_PRIO.golden, burst: [{ emitter: 'confetti', count: 16 }] },
+    // Tier-up: the haptic and sparkles climb with the tier look (x2 goodHit 8, x3 crit 10, x5 feverStart 12); fired in E_TIER.
+    tierUp: { sfx: cues.tier, ladder: true, priority: WHACK_PRIO.golden },
     tierDrop: { sfx: cues.comboDrop, volume: 0.7, pattern: 'tierDrop', priority: WHACK_PRIO.flow },
-    comboBreak: { sfx: cues.breakCue, pattern: [{ t: 0, kind: 'transient', i: 0.6, s: 0.2 }, { t: 70, kind: 'transient', i: 0.4, s: 0.2 }], priority: WHACK_PRIO.decoy },
+    // A break is a soft puff, never a scolding: the medallion cracks into shards that fall and fade, one soft bump.
+    comboBreak: { sfx: cues.breakCue, volume: 0.45, pattern: [{ t: 0, kind: 'transient', i: 0.3, s: 0.1 }], priority: WHACK_PRIO.decoy,
+      burst: [{ emitter: 'shards', count: 4 }, { emitter: 'puff', count: 4 }] },
     feverReady: { sfx: cues.tier, pattern: 'tierUp', priority: WHACK_PRIO.golden, burst: [{ emitter: 'sparkles', count: 10 }], flyUp: { size: 'lg', color: GOLD } },
     fever: { prio: 4, sfx: cues.feverStart, pattern: 'tierUp', priority: WHACK_PRIO.golden, hitStop: 80, hitStopSim: true, forceStop: true,
       flash: { color: '#ffffff', peak: 0.4, ms: 160 }, burst: [{ emitter: 'speedLines', count: 16 }, { emitter: 'confetti', count: 26 }],
@@ -223,6 +228,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
   const flurry = useRef(createFlurry(900, 3));
   const lastHit = useRef({ x: 0, y: 0, mult: 1 });
   const busy = useRef(new Set<number>());
+  const callouts = useRef(createCalloutGate());
   const ripeHit = useRef(-1);
   const ripeWord = useRef('GOLDEN!');
   const hud = useMemo(() => ({ x: width / 2, y: 34 }), [width]);
@@ -377,7 +383,9 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         feel('whiff', { ...holeXY(a) });
         return true;
       case E_BUTTER:
-        feel('butter', { ...holeXY(a), text: 'BUTTERFINGERS!' });
+        // One callout at a time (audit defect 2): the same word waits 600 ms, a newer word replaces the old.
+        if (calloutAdmit(callouts.current, 'Too fast!', now)) feel('butter', { ...holeXY(a), text: 'Too fast!' });
+        else feel('whiff', { ...holeXY(a) });
         return true;
       case E_DECOY:
         busy.current.delete(a);
@@ -405,11 +413,21 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         feel('double', { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2, text: 'DOUBLE BONK!' });
         return true;
       }
-      case E_TIER:
+      case E_TIER: {
+        const before = comboTierRank(multNow());
         tier.current = a;
-        if (G) feel('tierUp', { x: G.w / 2, y: 40, step: a - 1 });
+        const look = comboTierStyle(multNow());
+        if (G) {
+          feel('tierUp', { x: G.w / 2, y: 40, step: a - 1 });
+          fx.current?.burst('sparkles', G.w / 2, 34, { count: Math.max(6, look.sparkles) });
+        }
+        // The buzz grows with the tier; walking drops it one rung.
+        const rank = comboTierRank(multNow());
+        const buzz = rank > before ? look.haptic : 'tap';
+        playHaptic(walking && buzz !== 'tap' ? (buzz === 'feverStart' ? 'crit' : buzz === 'crit' ? 'goodHit' : 'tap') : buzz);
         syncLayers();
         return true;
+      }
       case E_TIER_DROP:
         tier.current = a;
         streak.current = b;
@@ -417,7 +435,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         syncLayers();
         return true;
       case E_BREAK:
-        if (a >= 5) feel('comboBreak');
+        if (a >= 5 && G) feel('comboBreak', { x: G.w / 2, y: 34 });
         streak.current = 0;
         tier.current = 0;
         syncLayers();

@@ -59,7 +59,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
   // Shared app hooks that every poll uses run for real in the component's realm.
   const realModules = { useLivePoll: 'src/hooks/useLivePoll.ts', livePollPolicy: 'src/hooks/livePollPolicy.ts',
     gpsWatchPolicy: 'src/context/gpsWatchPolicy.ts', positionFilter: 'src/context/positionFilter.ts', useUserIdle: 'src/hooks/useUserIdle.ts', powerPolicy: 'src/power/powerPolicy.ts', appActive: 'src/hooks/appActive.ts',
-    matchLink: 'src/services/match/matchLink.ts', useMatchLink: 'src/hooks/useMatchLink.ts' };
+    matchLink: 'src/services/match/matchLink.ts', useMatchLink: 'src/hooks/useMatchLink.ts', gameMoments: 'src/gamekit/core/gameMoments.ts' };
   const realCache = new Map();
   let sandbox;
   const loadReal = name => {
@@ -114,6 +114,10 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)services\/money\/vipPerks$/.test(name)) return { warmVipPerks: async () => undefined, vipRideMultiplierNow: () => null };
       // Shark Events: no event, no Star Rides (the flag is off on an old server).
       if (/(^|\/)services\/liveEvents\/useLiveEvent$/.test(name)) return { useStarRides: () => new Set(), resetLiveEvent() {} };
+      // The in-game moment layer (wow-games): sound, buzz and the drawn count and last-5 are plain nodes.
+      if (/(^|\/)audio\/gameMomentSound$/.test(name)) return { playGameMoment() {}, playGameHaptic() {}, setGameMomentStudio() {}, gameMomentStudioOn: () => false };
+      if (/(^|\/)fx\/CountdownStage$/.test(name)) return { CountdownStage: 'CountdownStage' };
+      if (/(^|\/)fx\/FinalSeconds$/.test(name)) return { FinalSeconds: 'FinalSeconds' };
       if (name.includes('assets/')) return name;
       return { default: name };
     },

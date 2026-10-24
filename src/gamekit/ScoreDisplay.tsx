@@ -23,7 +23,9 @@ import Animated, {
   Easing,
   cancelAnimation,
 } from 'react-native-reanimated';
-import { GAME_COLORS, SCORE_TWEEN_MS, COMBO_TIER_COLORS, JUICE } from './theme';
+import { GAME_COLORS, SCORE_TWEEN_MS, JUICE } from './theme';
+import { comboTierRank, comboTierStyle, TIER_STAMP_FROM } from './core/gameMoments';
+import { COUNT, SLAM_SQUASH, SPRING } from '../ui/motion';
 
 interface ScoreDisplayProps {
   /** Target score. Animates up (or down) from the previous value. */
@@ -96,11 +98,19 @@ export function ScoreDisplay({
     if (prevScore.current === target && generation.current === epoch) setDisplay(value);
   }, []);
 
-  // Sample the tweened value into React state for the <Text>.
+  // Sample the tweened value into React state for the <Text>: at most COUNT.maxTicks text updates per
+  // roll plus the exact final value (no per-frame setState on the JS thread).
+  const lastSample = useSharedValue(Number.NaN);
+  const stepRef = useRef(1);
+  if (score !== prevScore.current) stepRef.current = Math.max(1, Math.abs(score - prevScore.current) / COUNT.maxTicks);
+  const stepSize = stepRef.current;
   useDerivedValue(() => {
     const rounded = Math.round(animated.value);
+    if (rounded !== score && Math.abs(rounded - lastSample.value) < stepSize) return;
+    if (rounded === lastSample.value) return;
+    lastSample.value = rounded;
     runOnJS(sampleScore)(rounded, score, sampleGeneration.value);
-  }, [animated, score, sampleScore, sampleGeneration]);
+  }, [animated, score, sampleScore, sampleGeneration, stepSize]);
 
   // Personal-best delta flash — one-shot when score first passes PB.
   useEffect(() => {
@@ -116,15 +126,20 @@ export function ScoreDisplay({
     if (reducedMotion) { cancelAnimation(pbFlash); pbFlash.value = beatenPB.current ? 1 : 0; }
   }, [score, personalBest, reducedMotion, pbFlash]);
 
-  // Pop the badge whenever the multiplier changes.
+  // The badge stamps in from 1.8 with a squash when the combo tier's look changes (x2 sky, x3 gold,
+  // x5 white-hot gold); a plain multiplier change inside a tier is a small pop.
+  const squash = useSharedValue(0);
   useEffect(() => {
     if (reducedMotion) { cancelAnimation(badgeScale); badgeScale.value = 1; }
-    else if (prevMultiplier.current !== multiplier) badgeScale.value = withSequence(
-      withTiming(1.35, { duration: 90 }),
-      withSpring(1, JUICE.popSpring),
-    );
+    else if (prevMultiplier.current !== multiplier) {
+      const up = comboTierRank(multiplier) > comboTierRank(prevMultiplier.current);
+      badgeScale.value = up
+        ? withSequence(withTiming(TIER_STAMP_FROM, { duration: 0 }), withSpring(1, SPRING.stamp))
+        : withSequence(withTiming(1.25, { duration: 90 }), withSpring(1, JUICE.popSpring));
+      if (up) squash.value = withSequence(withTiming(0, { duration: 110 }), withTiming(1, { duration: 0 }), withTiming(0, { duration: 60 }));
+    }
     prevMultiplier.current = multiplier;
-  }, [multiplier, reducedMotion, badgeScale]);
+  }, [multiplier, reducedMotion, badgeScale, squash]);
   useEffect(() => () => { [animated, punch, badgeScale, pbFlash].forEach(cancelAnimation); },
     [animated, punch, badgeScale, pbFlash]);
 
@@ -137,12 +152,16 @@ export function ScoreDisplay({
     transform: [{ translateY: (1 - pbFlash.value) * 8 }],
   }));
 
+  const tier = comboTierStyle(multiplier);
+  const tierSize = tier.size;
   const badgeStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: badgeScale.value }],
+    transform: [
+      { scaleX: badgeScale.value * tierSize * (1 + SLAM_SQUASH * squash.value) },
+      { scaleY: badgeScale.value * tierSize * (1 - SLAM_SQUASH * squash.value) },
+    ],
   }));
 
-  const tierColor =
-    (COMBO_TIER_COLORS as Record<number, string>)[multiplier] ?? GAME_COLORS.blue;
+  const tierColor = tier.fill;
   const showBadge = multiplier > 1 || showMultiplierAtOne;
   const numberColor = fever ? GAME_COLORS.gold : GAME_COLORS.text;
 
@@ -168,7 +187,8 @@ export function ScoreDisplay({
               badgeStyle,
             ]}
           >
-            <Text style={styles.badgeText}>x{multiplier}</Text>
+            {tier.core ? <View style={styles.badgeCore} /> : null}
+            <Text style={[styles.badgeText, { color: tier.text }]}>x{multiplier}</Text>
           </Animated.View>
         ) : null}
       </View>
@@ -218,6 +238,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.7,
     shadowRadius: 8,
     elevation: 4,
+  },
+  badgeCore: {
+    position: 'absolute', left: 4, right: 4, top: 2, height: '55%', borderRadius: 8, backgroundColor: 'rgba(255,251,234,0.85)',
   },
   badgeText: {
     color: '#fff',

@@ -340,6 +340,8 @@ export default function MemoryGame({
   const [score, setScore] = useState(0);
   const [personalBest, setPersonalBest] = useState(0);
   const [result, setResult] = useState<GameResult | null>(null);
+  // The last 5 seconds on the shell (gold edge, stamped seconds, TIME!); the game keeps its own tick sound.
+  const [finalLeft, setFinalLeft] = useState<number | null>(null);
   const [resultData, setResultData] = useState<MemoryResultsData | null>(null);
   const [hud, setHud] = useState({
     seconds: null as number | null, urgent: false, chain: 0, gauge: 0, showtime: false, showLeft: 0, showWarn: false,
@@ -1866,6 +1868,8 @@ export default function MemoryGame({
           break;
         }
         case 'second': {
+          const nextLeft = ev.left <= 5 && ev.left > 0 && e.cfg.clockMs != null ? ev.left : null;
+          setFinalLeft((v) => (v === nextLeft ? v : nextLeft));
           if (ev.left <= 5 && ev.left > 0 && e.cfg.clockMs != null) {
             GameAudio.play('mm_clock_tick');
             Haptic.tickSelection();
@@ -1984,6 +1988,8 @@ export default function MemoryGame({
           break;
         }
         case 'timeout':
+          setFinalLeft(0);
+          later(1400, () => setFinalLeft((v) => (v === 0 ? null : v)));
           if (r.race) { endRace(gameNow()); break; }
           if (r.mode === 'timeAttack') {
             r.busy = true;
@@ -2336,7 +2342,10 @@ export default function MemoryGame({
       multiplier={hud.chain >= 3 ? 2 : hud.chain === 2 ? 1.5 : 1}
       fever={hud.showtime}
       personalBest={personalBest}
-      objective={mode === 'ride' ? (r?.signal ? 'Low signal: clear in 24 turns' : 'Clear the board') : mode === 'daily' ? 'Two slips and you are out' : mode === 'race' ? 'Same board, four sharks. First to clear wins.' : mode === 'warmup' ? 'Find the pairs. Remember where you saw them.' : 'Race the clock. Chain the cards you remember.'}
+      secondsLeft={finalLeft}
+      finalSecondsFeedback={false}
+      countdownY={0.62}
+      objective={mode === 'ride' ? (r?.signal ? 'Low signal: clear in 24 turns' : 'Clear the board') : mode === 'daily' ? 'Two slips and you are out' : mode === 'race' ? 'Same board, four sharks. First to clear wins.' : mode === 'warmup' ? 'Find the pairs. Remember where you saw them.' : 'Find the pairs. Beat the clock!'}
       result={result}
       gameId="memory"
       onStart={onStart}

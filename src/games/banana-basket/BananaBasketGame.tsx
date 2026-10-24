@@ -49,7 +49,7 @@ import { deckIdForRideName } from '../../services/rideTheme';
 
 import {
   BASKET_MAX, BASKET_MIN, CARD_SET_BASE, DRAG_GAIN_Q8, FIELD_H, FIELD_W, G_GOLD_POP, G_PERFECT, G_POP, K_BUNCH, K_COIN,
-  K_LUCKY, K_PUFFER, LANE_Y, R_INTRO, R_RIDE, RULES_NAMES, TWIST_NAMES,
+  K_LUCKY, K_PUFFER, LANE_Y, QUEUE_SETS, R_INTRO, R_RIDE, RULES_NAMES, TWIST_NAMES,
 } from './constants';
 import {
   EV_BALL_LOST, EV_BALL_POP, EV_BALL_TOSS, EV_BONK, EV_BOUNCE, EV_BREAK, EV_CARD, EV_CATCH, EV_CLOSE, EV_COIN,
@@ -820,6 +820,22 @@ function BananaRun({
     };
   }, [mode, heat, visible, cfg, running, sim, strip]);
 
+  // -- the last 5 seconds of the run (shell: gold edge, stamped seconds, TIME!) --------------------
+  const [finalLeft, setFinalLeft] = useState<number | null>(null);
+  useEffect(() => {
+    if (!visible || mode === 'heat') return undefined;
+    const id = setInterval(() => {
+      const s = sim.value;
+      const queue = s.mode === MODE_QUEUE;
+      const lastSet = !queue || s.set === QUEUE_SETS - 1;
+      const leftSteps = s.setStart + s.setLen - s.clock;
+      const left = !running.value || s.done || !lastSet ? null : Math.ceil(leftSteps / 60);
+      const next = s.done && lastSet && leftSteps <= 0 ? 0 : left != null && left <= 5 && left >= 1 ? left : null;
+      setFinalLeft((v) => (v === next ? v : next));
+    }, 200);
+    return () => clearInterval(id);
+  }, [visible, mode, sim, running]);
+
   // -- finish -----------------------------------------------------------------------------------
   const deliver = useCallback((s: SimState) => {
     if (endedRef.current) return;
@@ -945,10 +961,10 @@ function BananaRun({
   const images = useFieldImages();
   const twistName = cfg.twist && (mode === 'heat' || (mode === 'queue' && cfg.unlock >= 3)) ? TWIST_NAMES[cfg.twist] : '';
   const objective = mode === 'ride'
-    ? 'CATCH! AIM! DODGE! Lift your thumb any time to pause.'
+    ? 'Catch! Aim! Dodge!'
     : mode === 'heat'
       ? `Same line, same race. ${twistName ? `Today: ${twistName}.` : ''}`
-      : `Three quick sets. Lift your thumb any time.${twistName ? ` Park Twist: ${twistName}.` : ''}`;
+      : `Three quick sets. Catch them all!${twistName ? ` Twist: ${twistName}.` : ''}`;
   const subtitle = mode === 'queue'
     ? (cfg.unlock >= 3 ? `Queue${twistName ? `: ${twistName}` : ''}` : cfg.unlock === 2 ? 'Queue: Gull Set run' : 'Queue run 1')
     : mode === 'heat' ? 'Line Heat' : cfg.rules === R_INTRO ? 'Ride Challenge: first ride' : 'Ride Challenge';
@@ -969,6 +985,8 @@ function BananaRun({
       sessionKey={`banana:${rideId ?? 'x'}:${cfg.seed}`}
       getSnapshot={() => ({ score: scoreRef.current, state: { seed: cfg.seed, mode } })}
       onWrapUp={onWrapUp}
+      secondsLeft={finalLeft}
+      finalSecondsFeedback={false}
       resumeStyle="countdown"
       countdownStyle={mode === 'heat' ? 'none' : undefined}
       resultExtras={extras ? <ResultsRows x={extras} /> : undefined}

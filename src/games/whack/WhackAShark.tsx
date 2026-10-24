@@ -215,6 +215,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const [tl, setTl] = useState<Timeline | null>(null);
   const [fever, setFever] = useState(false);
   const [shellScore, setShellScore] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [result, setResult] = useState<GameResult | null>(null);
   const [banner, setBanner] = useState<{ text: string | null; sub?: string | null; color?: string; stamp: number }>({ text: null, stamp: 0 });
   const [breather, setBreather] = useState<null | {
@@ -437,6 +438,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           break;
         }
         case E_END:
+          // TIME! slams as the burst ends (the shell's last-5 layer), then clears for the breather.
+          setSecondsLeft(0);
+          setTimeout(() => setSecondsLeft((v) => (v === 0 ? null : v)), 1400);
           void onBurstEnd(a === 1);
           break;
         default:
@@ -462,7 +466,12 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         const G = Lref.current;
         if (!t || m.ended) return;
         const left = Math.ceil((t.lengthMs - m.t) / 1000);
-        if (left <= 3 && left >= 1 && left !== lastPip && !m.frozen) {
+        // The shell draws the last 5 (gold edge, stamped seconds, TIME!); the game keeps its own ticks.
+        setSecondsLeft((prev) => {
+          const next = left <= 5 && left >= 0 ? left : null;
+          return prev === next ? prev : next;
+        });
+        if (left <= 5 && left >= 1 && left !== lastPip && !m.frozen) {
           lastPip = left;
           GameAudio.play(cues.tick, { volume: 0.6 });
           // Countdown ticks never buzz while targets are up (11.2).
@@ -540,6 +549,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           if (k >= 1) clearInterval(iv);
         }, 16);
         flash(BOSS_NAMES[t.bossKind], t.callout ?? 'BONK THE TENTACLES', GOLD, 1600);
+      } else if (bi === 0) {
+        // The first burst's banner waits for the shell's GO burst to clear (one callout at a time).
+        setTimeout(() => flash(t.banner, t.callout, '#ffffff', 1300), 520);
       } else {
         flash(t.banner, t.callout, '#ffffff', 1500);
       }
@@ -934,12 +946,13 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   }, [reducedMotion, runtime.rt]);
 
   const rivalName = props.lineDay?.rivals?.length ? props.lineDay.rivals[props.lineDay.rivals.length - 1].name.split(' ')[0].toUpperCase() : null;
+  // Countdown pill copy: six words or fewer, one name per thing (audit G6).
   const objective = ride
-    ? `Bonk ${RIDE_WIN_NOTCHES} sharks to fill the Coin Meter. Skip anything with teeth. Bonk before the ring closes for QUICK!`
-    : format === 'duel' ? `Bonk Battle vs ${duel?.rival.name ?? 'Captain Fin'}: best of 3 Bursts. Goldens send candy splats!`
-      : format === 'raid' ? 'Crew Raid: bonk the tentacles, swipe the ink, take the boss down together.'
-        : lineRun ? 'Line of the Day: everyone in this line today plays this board. Beat the sharks just above you!'
-          : 'Bonk the sharks. Skip anything with teeth. Fill the meter, then GO FEVER. Look up any time. The game waits for you.';
+    ? `Bonk ${RIDE_WIN_NOTCHES} sharks. Skip the teeth!`
+    : format === 'duel' ? `Beat ${duel?.rival.name ?? 'Captain Fin'}! Skip the teeth!`
+      : format === 'raid' ? 'Bonk the tentacles together!'
+        : lineRun ? 'Beat the sharks above you!'
+          : 'Bonk sharks. Skip the teeth!';
   const capacity = Math.min(Math.max(48, Math.round(140 * tierScale.particles)), thermalScale.particleCap);
 
   return (
@@ -960,6 +973,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       sessionKey={`whack:${format}:${baseSeed}:${runIndex}`}
       getSnapshot={() => ({ score: shellScore, state: { burstIdx, runIndex, banked: bankedRef.current.map((b) => b.score), carry: carryRef.current } })}
       onWrapUp={onWrapUp as never}
+      secondsLeft={secondsLeft}
+      finalSecondsFeedback={false}
       onStart={handleStart}
       onPause={handlePause}
       onResume={handleResume}

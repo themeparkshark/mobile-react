@@ -29,7 +29,8 @@ import {
   FRAME_COUNT, F_ANGLER, F_ANGLER_ANGRY, F_ANGLER_PEEK, F_BRUISER, F_BRUISER_DAZED, F_CONTACT, F_DAZED, F_DUCK, F_GLANCE, F_GOLDEN,
   F_GOLDEN_DAZED, F_HATOFF, F_PEEK, F_POP, F_PUFFED, F_PUFFER, F_SPIRAL, F_TONGUE, type RenderState,
 } from './renderState';
-import { TIER_COLORS, TIER_MULT, MULT_CAP } from '../waves';
+import { TIER_MULT, MULT_CAP } from '../waves';
+import { comboTierRank, comboTierStyle, timerPulse } from '../../../gamekit/core/gameMoments';
 
 const NAVY = '#0b3a66';
 const GOLD = '#ffcf3b';
@@ -314,24 +315,62 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
     p.addArc(rect(tcx - tr, tcy - tr, tr * 2, tr * 2), -90, 360 * left);
     return p;
   });
-  const timerColor = useDerivedValue(() => {
+  // The last 5 seconds turn the clock gold and pulse it once a second (never red: tension without fear).
+  const timerColor = useDerivedValue(() => (tick.value, GOLD));
+  const timerHot = useDerivedValue(() => {
+    tick.value;
+    const left = sim.value.len - sim.value.t;
+    return left > 0 && left <= 5000;
+  });
+  const timerT = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
     const left = s.len - s.t;
-    return left < 3000 && Math.floor(left / 500) % 2 === 0 ? CORAL : GOLD;
+    const sc = left > 0 && left <= 5000 ? timerPulse(1000 - (left % 1000 || 1000)) : 1;
+    return [{ translateX: tcx }, { translateY: tcy }, { scale: sc }, { translateX: -tcx }, { translateY: -tcy }];
   });
+  const timerFace = useDerivedValue(() => (timerHot.value ? GOLD : '#0a6fc2'));
+  const timerNum = useDerivedValue(() => (timerHot.value ? NAVY : '#ffffff'));
   const timerText = useDerivedValue(() => (tick.value, `${Math.ceil(Math.max(0, sim.value.len - sim.value.t) / 1000)}`));
   const timerTextX = useDerivedValue(() => tcx - (fontM ? fontM.measureText(timerText.value).width / 2 : 8));
   // Combo medallion (52pt): streak, multiplier, tier colour; slams on tier-up, shakes on a tier drop.
   const mr = 26;
   const mcx = W / 2;
   const mcy = py + ph / 2;
+  // Combo tiers climb in size and colour (core/gameMoments): x1 white, x2 sky, x3 gold, fever (x5) white-hot gold with a flame ring.
+  const medMult = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    return Math.min(MULT_CAP, TIER_MULT[s.tier] * (s.fever ? 2 : 1));
+  });
   const medT = useDerivedValue(() => {
     tick.value;
     const r = rs.value;
-    return [{ translateX: mcx + r.medShake }, { translateY: mcy }, { scale: r.medSlam }];
+    return [{ translateX: mcx + r.medShake }, { translateY: mcy }, { scale: r.medSlam * comboTierStyle(medMult.value).size }];
   });
-  const tierColor = useDerivedValue(() => (tick.value, TIER_COLORS[sim.value.tier] ?? '#ffffff'));
+  const tierColor = useDerivedValue(() => comboTierStyle(medMult.value).fill);
+  const medCore = useDerivedValue(() => (comboTierStyle(medMult.value).core ? 0.9 : 0));
+  const flamePath = useDerivedValue(() => {
+    const p = Skia.Path.Make();
+    if (comboTierRank(medMult.value) < 3) return p;
+    const t = rs.value.tick * 0.11;
+    // Three flickering tongues over the medallion (cartoon flame, code-drawn, gold and white).
+    for (let k = 0; k < 3; k++) {
+      const a = -Math.PI / 2 + (k - 1) * 0.62;
+      const h = mr * (0.62 + 0.18 * Math.sin(t * (1.3 + k * 0.4) + k * 2.1)) * (k === 1 ? 1.25 : 1);
+      const bx = Math.cos(a) * (mr + 1);
+      const by = Math.sin(a) * (mr + 1);
+      const tx = Math.cos(a) * (mr + h) + Math.sin(t * 1.7 + k) * 3;
+      const ty = Math.sin(a) * (mr + h);
+      const nx = -Math.sin(a) * 9;
+      const ny = Math.cos(a) * 9;
+      p.moveTo(bx + nx, by + ny);
+      p.quadTo((bx + tx) / 2 + nx * 1.1, (by + ty) / 2 + ny * 1.1, tx, ty);
+      p.quadTo((bx + tx) / 2 - nx * 1.1, (by + ty) / 2 - ny * 1.1, bx - nx, by - ny);
+      p.close();
+    }
+    return p;
+  });
   const streakText = useDerivedValue(() => (tick.value, `${sim.value.streak}`));
   const streakX = useDerivedValue(() => -(fontL ? fontL.measureText(streakText.value).width / 2 : 10));
   const multText = useDerivedValue(() => {
@@ -341,7 +380,7 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
     return `x${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}`;
   });
   const multX = useDerivedValue(() => -(fontS ? fontS.measureText(multText.value).width / 2 : 8));
-  const medText = useDerivedValue(() => (tick.value, sim.value.tier === 0 ? NAVY : '#ffffff'));
+  const medText = useDerivedValue(() => comboTierStyle(medMult.value).text);
   const readyGlow = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
@@ -358,7 +397,7 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
     if (s.fever) return mW * (s.feverLeft / 7000);
     return mW * Math.min(1, s.meter / 100);
   });
-  const meterColor = useDerivedValue(() => (tick.value, sim.value.fever ? CORAL : GOLD));
+  const meterColor = useDerivedValue(() => (tick.value, sim.value.fever ? '#ffe07a' : GOLD));
   const meterLabel = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
@@ -382,17 +421,22 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
       <RoundedRect x={px} y={py} width={pw} height={ph} r={14} color={NAVY} style="stroke" strokeWidth={2.5} />
       {hud.compact ? null : (
         <Group>
-          <Circle cx={tcx} cy={tcy} r={tr + 3} color={NAVY} />
-          <Circle cx={tcx} cy={tcy} r={tr} color="#0a6fc2" />
-          <Path path={timerPath} style="stroke" strokeWidth={5} strokeCap="round" color={timerColor} />
-          {fontM ? <Text x={timerTextX} y={tcy + 7} text={timerText} font={fontM} color="#ffffff" /> : null}
+          <Group transform={timerT}>
+            <Circle cx={tcx} cy={tcy} r={tr + 3} color={NAVY} />
+            <Circle cx={tcx} cy={tcy} r={tr} color={timerFace} />
+            <Path path={timerPath} style="stroke" strokeWidth={5} strokeCap="round" color={timerColor} />
+            {fontM ? <Text x={timerTextX} y={tcy + 7} text={timerText} font={fontM} color={timerNum} /> : null}
+          </Group>
           {fontS ? <Text x={labelX} y={tcy + 5} text={hud.burstLabel} font={fontS} color={NAVY} /> : null}
         </Group>
       )}
       <Group transform={medT}>
+        <Path path={flamePath} color={GOLD} />
+        <Path path={flamePath} color="#ffffff" style="stroke" strokeWidth={2} opacity={0.85} />
         <Circle cx={0} cy={0} r={mr + 7} color={GOLD} opacity={readyGlow} />
         <Circle cx={0} cy={0} r={mr + 3} color={NAVY} />
         <Circle cx={0} cy={0} r={mr} color={tierColor} />
+        <Circle cx={0} cy={-3} r={mr * 0.55} color="#fffbea" opacity={medCore} />
         {fontL ? <Text x={streakX} y={5} text={streakText} font={fontL} color={medText} /> : null}
         {fontS ? <Text x={multX} y={19} text={multText} font={fontS} color={medText} /> : null}
       </Group>

@@ -50,6 +50,7 @@ import Animated, {
   withSequence,
   Easing,
   cancelAnimation,
+  runOnJS,
 } from 'react-native-reanimated';
 import { GAME_COLORS, COUNTDOWN, JUICE, LINE_MOVING_TOAST } from './theme';
 import { ScoreDisplay } from './ScoreDisplay';
@@ -73,6 +74,12 @@ import {
 } from './core/session';
 import { clearSnapshot, saveSnapshot } from './session/snapshotStore';
 import { GameAudio } from './audio/GameAudio';
+import { playGameHaptic, playGameMoment } from './audio/gameMomentSound';
+import { CountdownStage } from './fx/CountdownStage';
+import { FinalSeconds } from './fx/FinalSeconds';
+import { COUNT_END_MS, GO_AT_MS, GO_SPARKLES, countPose, countSteps, finalSecondsBeat } from './core/gameMoments';
+import { momentParticles } from '../ui/motion';
+import { usePowerBudget } from '../power';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -159,6 +166,18 @@ interface GameShellV2Props {
   personalBest?: number;
   /** Short objective line shown under the countdown. */
   objective?: string;
+  /**
+   * Whole seconds left on a timed round. From 5 down the clock turns gold, a
+   * soft gold edge breathes and each second stamps in; 0 slams TIME! (the
+   * game still owns its own end). Pass only while the round runs.
+   */
+  secondsLeft?: number | null;
+  /** Where the last-5 stamps land (pt from the top of the screen). Default 30% down. */
+  finalStampY?: number;
+  /** Where the 3-2-1-GO lands, as a fraction of the screen height (default 0.5): put it in the stage's clear space. */
+  countdownY?: number;
+  /** The shell plays the last-5 tick, haptic and TIME! whistle (default). False when the game owns its own ticks. */
+  finalSecondsFeedback?: boolean;
   /** Ride-challenge goal ("10 SHARKS"). */
   goal?: { current: number; target: number; label: string };
   /** Set when the round is over: shell transitions to results. */
@@ -226,6 +245,12 @@ interface GameShellV2Props {
 
 const DEFAULT_STAR_MULT: Record<number, number> = { 0: 0, 1: 1, 2: 1.5, 3: 2 };
 const RESUME_STEP_MS = 300;
+// One frame later (requestAnimationFrame where the platform has it; a 16 ms timer otherwise).
+const nextFrame = (fn: () => void): unknown => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : setTimeout(fn, 16));
+const cancelFrame = (id: unknown): void => {
+  if (typeof cancelAnimationFrame === 'function' && typeof id === 'number') cancelAnimationFrame(id);
+  else clearTimeout(id as ReturnType<typeof setTimeout>);
+};
 const RESUME_GO_MS = 220;
 const HEADS_UP_MS = 2600;
 
@@ -268,6 +293,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       sessionKey,
       getSnapshot,
       onWrapUp,
+      secondsLeft,
+      finalStampY,
+      finalSecondsFeedback = true,
+      countdownY = 0.5,
       children,
     },
     ref,
@@ -368,29 +397,90 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       );
     }, [countScale]);
 
+    // The start (core/gameMoments): 3, 2, 1 slam in at 0, 700, 1400 ms, GO bursts at 2100 and play
+    // opens on that frame; the GO tail (sparkles, scrim fade) clears by 2600 over live play.
+    const cdClock = useSharedValue(-1);
+    const [goTail, setGoTail] = useState(false);
+    const walkingRef = useRef(false);
+    walkingRef.current = !!linePlayMovement?.moving;
+    const endCountStage = useCallback(() => {
+      cdClock.value = -1;
+      setGoTail(false);
+    }, [cdClock]);
+    const stopCountStage = useCallback(() => {
+      cancelAnimation(cdClock);
+      endCountStage();
+    }, [cdClock, endCountStage]);
+    // The tail ends on the UI clock itself (no JS timer outlives a skip or a close).
+    const runCountStage = useCallback((fromMs: number) => {
+      cancelAnimation(cdClock);
+      cdClock.value = fromMs;
+      cdClock.value = withTiming(COUNT_END_MS, { duration: COUNT_END_MS - fromMs, easing: Easing.linear }, (finished) => {
+        'worklet';
+        if (finished) runOnJS(endCountStage)();
+      });
+      setGoTail(true);
+    }, [cdClock, endCountStage]);
+    const fireCountStep = useCallback((step: ReturnType<typeof countSteps>[number]) => {
+      // Re-sync the drawn count to the step that just fired, so the number on screen and the frame
+      // play opens never drift apart on a busy phone (the JS timer is the truth for input).
+      runCountStage(step.at);
+      setCountText(step.label);
+      // Walking in a line drops the buzz one rung (the count still reads with the eyes and ears).
+      const walking = walkingRef.current;
+      const buzz = walking ? (step.haptic === 'incoming' ? 'tap' : 'tick') : step.haptic;
+      playGameHaptic(buzz);
+      playGameMoment(step.cue, step.variant, step.sfx);
+    }, [runCountStage]);
+
+    // The count reads the latest callbacks through refs, so a game re-rendering during the count
+    // (a new onStart each render) never restarts it from 3.
+    const beginPlayRef = useRef(beginPlay);
+    beginPlayRef.current = beginPlay;
+    const fireStepRef = useRef(fireCountStep);
+    fireStepRef.current = fireCountStep;
     useEffect(() => {
       if (phase !== 'countdown' || !visible) return;
       clearCountdown();
       if (countdownStyle === 'none') {
-        beginPlay();
+        beginPlayRef.current();
         return;
       }
-      const steps = countdownStyle === 'go' ? ['GO!'] : ['3', '2', '1', 'GO!'];
-      steps.forEach((label, i) => {
-        const t = setTimeout(() => {
-          setCountText(label);
-          punchCount();
-          Haptic.tickSelection();
-          playSfx(label === 'GO!' ? 'go' : 'countdown');
-        }, i * COUNTDOWN.stepMs);
-        countdownTimers.current.push(t);
+      const steps = countSteps(countdownStyle);
+      const from = steps[0].at;
+      // Start once the game has drawn its first frames (never count over a blank stage).
+      let raf2: unknown = 0;
+      const raf1 = nextFrame(() => {
+        raf2 = nextFrame(() => {
+          steps.forEach((step) => {
+            countdownTimers.current.push(setTimeout(() => {
+              fireStepRef.current(step);
+              if (step.at >= GO_AT_MS) beginPlayRef.current();
+            }, step.at - from));
+          });
+        });
       });
-      const done = setTimeout(() => {
-        beginPlay();
-      }, steps.length * COUNTDOWN.stepMs - (COUNTDOWN.stepMs - COUNTDOWN.goMs));
-      countdownTimers.current.push(done);
-      return clearCountdown;
-    }, [phase, visible, beginPlay, clearCountdown, punchCount, countdownStyle]);
+      return () => {
+        cancelFrame(raf1);
+        cancelFrame(raf2);
+        clearCountdown();
+      };
+    }, [phase, visible, clearCountdown, countdownStyle]);
+
+    // The last 5 seconds: one tick, one soft buzz and one stamp per second, TIME! at 0 (core/gameMoments).
+    const lastFinal = useRef<number | null>(null);
+    useEffect(() => {
+      if (phase !== 'playing' || !visible) { lastFinal.current = null; return; }
+      const beat = finalSecondsBeat(secondsLeft);
+      if (beat.second == null) { lastFinal.current = null; return; }
+      if (beat.second === lastFinal.current) return;
+      lastFinal.current = beat.second;
+      if (!finalSecondsFeedback) return;
+      if (beat.haptic) playGameHaptic(walkingRef.current && beat.haptic === 'finisher' ? 'tap' : beat.haptic);
+      playGameMoment(beat.cue, beat.variant, beat.sfx, { volume: 0.7 });
+    }, [secondsLeft, phase, visible, finalSecondsFeedback]);
+
+    const budget = usePowerBudget();
 
     // -- Play again: the game cleared its result, so run a fresh start count. --
     const hadResultRef = useRef(false);
@@ -461,7 +551,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const doHold = useCallback(
       (reason: HoldReason, label?: string) => {
         if (phase !== 'playing' && phase !== 'countdown' && phase !== 'resuming') return;
-        if (phase === 'countdown') clearCountdown();
+        if (phase === 'countdown') { clearCountdown(); stopCountStage(); }
         if (phase === 'resuming') clearResume();
         setPhase('paused');
         setPauseReason(label);
@@ -473,7 +563,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         }
         Haptic.tickSelection();
       },
-      [onPause, phase, clearCountdown, clearResume, persist],
+      [onPause, phase, clearCountdown, clearResume, persist, stopCountStage],
     );
 
     const finishResume = useCallback(() => {
@@ -650,12 +740,16 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       }
     }, [phase, doHold, handleClaim, requestQuit]);
 
+    // Tap anywhere skips straight to GO (the burst still plays over live play).
     const skipCountdown = useCallback(() => {
-      if (phase === 'countdown') {
-        clearCountdown();
-        beginPlay();
-      }
-    }, [phase, clearCountdown, beginPlay]);
+      if (phase !== 'countdown') return;
+      clearCountdown();
+      const steps = countSteps(countdownStyle === 'none' ? 'go' : countdownStyle);
+      const go = steps[steps.length - 1];
+      runCountStage(GO_AT_MS);
+      fireCountStep(go);
+      beginPlay();
+    }, [phase, clearCountdown, beginPlay, countdownStyle, runCountStage, fireCountStep]);
 
     // Paid games share the ride flow's native presentation. Opening another
     // native Modal inside it races both dismissals against the coin reward.
@@ -676,6 +770,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       transform: [{ scale: countScale.value }],
     }));
     const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value * 0.35 }));
+    const calmMotion = reducedMotion || !!linePlayMovement?.moving;
+    // GO's screen kick (KICK.maxPt, none while walking or reduced) and the scrim fading out over live play.
+    const kickStyle = useAnimatedStyle(() => ({ transform: [{ translateY: countPose(cdClock.value, reducedMotion, calmMotion).kick }] }));
+    const cdScrimStyle = useAnimatedStyle(() => ({ opacity: countPose(cdClock.value, reducedMotion, calmMotion).scrim }));
 
     const stars = effectiveResult?.stars ?? 0;
     const won = stars > 0;
@@ -724,7 +822,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           {goal ? <GoalMeter {...goal} reducedMotion={reducedMotion} /> : null}
 
           {/* Play field */}
-          <View style={styles.field}>{children}</View>
+          <Animated.View style={[styles.field, kickStyle]}>{children}</Animated.View>
+
+          {/* The last 5 seconds: gold edge, stamped seconds, TIME!. */}
+          <FinalSeconds secondsLeft={secondsLeft} width={SCREEN_W} height={SCREEN_H} stampY={finalStampY ?? SCREEN_H * 0.3}
+            reduced={reducedMotion} active={phase === 'playing'} />
 
           {/* Heads-up: the line advanced a lot. Never pauses, never buzzes. */}
           <Animated.View pointerEvents="none" style={[styles.edgeGlow, glowStyle]} />
@@ -735,15 +837,28 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </View>
           ) : null}
 
-          {/* Countdown overlay */}
+          {/* Countdown: scrim (fades at GO), the bubble numbers, the instruction pill, tap anywhere to skip. */}
+          {goTail ? (
+            <Animated.View pointerEvents="none" style={[styles.cdScrim,
+              countdownScrim === 'light' ? styles.scrimLight : countdownScrim === 'none' ? styles.scrimNone : null, cdScrimStyle]} />
+          ) : null}
+          {goTail ? (
+            <CountdownStage clock={cdClock} width={SCREEN_W} height={SCREEN_H} centerY={SCREEN_H * countdownY}
+              reduced={reducedMotion} calm={calmMotion} sparkles={momentParticles(GO_SPARKLES, budget, reducedMotion)} />
+          ) : null}
           {phase === 'countdown' ? (
             <Pressable
-              style={[styles.overlay, countdownScrim === 'light' ? styles.scrimLight : countdownScrim === 'none' ? styles.scrimNone : null]}
+              style={styles.cdTouch}
               onPress={skipCountdown}
+              accessibilityRole="button"
+              accessibilityLabel={`Starting in ${countText}. Tap to skip.`}
             >
-              {goal ? <Text style={styles.goalHeadline}>{`${goal.target} ${goal.label}`}</Text> : null}
-              <Animated.Text style={[styles.count, countStyle]}>{countText}</Animated.Text>
-              {objective ? <Text style={styles.objective}>{objective}</Text> : null}
+              {goal || objective ? (
+                <View style={styles.cdPill} pointerEvents="none">
+                  {goal ? <Text style={styles.goalHeadline}>{`${goal.target} ${goal.label}`}</Text> : null}
+                  {objective ? <Text style={styles.cdPillText} numberOfLines={2}>{objective}</Text> : null}
+                </View>
+              ) : null}
               <Text style={styles.skipHint}>tap to skip</Text>
             </Pressable>
           ) : null}
@@ -956,7 +1071,15 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 0,
   },
-  skipHint: { color: '#e4f7ff', fontSize: 13, marginTop: 18, letterSpacing: 1, fontFamily: 'Knockout' },
+  skipHint: { position: 'absolute', bottom: 64, alignSelf: 'center', color: '#ffffff', fontSize: 15, letterSpacing: 1, fontFamily: 'Knockout',
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  cdScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,56,128,0.38)' },
+  cdTouch: { ...StyleSheet.absoluteFillObject },
+  // The instruction sits in a pill near the top so the number lands in clear space (audit defect 7).
+  cdPill: { position: 'absolute', top: 188, alignSelf: 'center', maxWidth: '88%', backgroundColor: '#fff8e4', borderRadius: 22,
+    borderWidth: 3, borderColor: '#05346e', paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center',
+    shadowColor: '#05346e', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 0, elevation: 3 },
+  cdPillText: { color: '#05346e', fontSize: 18, lineHeight: 22, fontFamily: 'Knockout', textAlign: 'center' },
   edgeGlow: {
     ...StyleSheet.absoluteFillObject,
     borderWidth: 6,
