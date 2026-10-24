@@ -350,7 +350,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   /** Wall clock when FINISH! fired (-1 none): the next card enters at FINISH_HANDOFF_MS after it. */
   const finishWall = useRef(-1);
   // Dev capture (EXPO_PUBLIC_FINISH_HOLD_MS): the next card waits out the held FINISH! frame.
-  const captureHold = __DEV__ && process.env.EXPO_PUBLIC_FINISH_HOLD_MS ? Number(process.env.EXPO_PUBLIC_CAPTURE_HOLD_FOR_MS || 6000) : 0;
+  const captureHold = __DEV__ && process.env.EXPO_PUBLIC_FINISH_HOLD_MS ? Number(process.env.EXPO_PUBLIC_DEV_HOLD_FOR_MS || 6000) : 0;
   const handoffWait = useCallback(() => (finishWall.current < 0 ? 0 : Math.max(0, FINISH_HANDOFF_MS + captureHold - (Date.now() - finishWall.current))), [captureHold]);
   const budget = usePowerBudget();
   /** UI-thread arrivals of fly-to-score labels: the header pill bumps on that frame. */

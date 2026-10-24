@@ -87,8 +87,8 @@ import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 
 /** Dev capture only: hold the drawn count on this clock time (ms) for 6 s. Never set in release. */
 const COUNT_HOLD_MS = __DEV__ ? Number(process.env.EXPO_PUBLIC_COUNT_HOLD_MS || -1) : -1;
-/** Dev capture only: how long a capture hold lasts (EXPO_PUBLIC_CAPTURE_HOLD_FOR_MS, default 6 s). */
-const CAPTURE_HOLD_FOR = __DEV__ ? Number(process.env.EXPO_PUBLIC_CAPTURE_HOLD_FOR_MS || 6000) : 6000;
+/** Dev capture only: how long a capture hold lasts (EXPO_PUBLIC_DEV_HOLD_FOR_MS, default 6 s). */
+const CAPTURE_HOLD_FOR = __DEV__ ? Number(process.env.EXPO_PUBLIC_DEV_HOLD_FOR_MS || 6000) : 6000;
 import { EASE } from '../ui/motionEasing';
 import { usePowerBudget } from '../power';
 

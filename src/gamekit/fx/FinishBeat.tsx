@@ -73,8 +73,8 @@ function sparkleStar() {
   return p;
 }
 
-/** Dev capture only: how long a capture hold lasts (EXPO_PUBLIC_CAPTURE_HOLD_FOR_MS, default 6 s). */
-const CAPTURE_HOLD_FOR = __DEV__ ? Number(process.env.EXPO_PUBLIC_CAPTURE_HOLD_FOR_MS || 6000) : 6000;
+/** Dev capture only: how long a capture hold lasts (EXPO_PUBLIC_DEV_HOLD_FOR_MS, default 6 s). */
+const CAPTURE_HOLD_FOR = __DEV__ ? Number(process.env.EXPO_PUBLIC_DEV_HOLD_FOR_MS || 6000) : 6000;
 const HOLD = HOLD_MS > 0 && HOLD_MS < FINISH_BEAT_MS;
 
 /** Start the beat's clock (worklet: runs on the trigger frame, or from JS through the shared value). */
