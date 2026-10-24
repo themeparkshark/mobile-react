@@ -483,7 +483,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               <GoldBurst size={chestSize * CHEST_GOLD_SCALE} amount={gold} bloom={goldBloom} reduced={reducedMotion} />
             </View>
             <Animated.View style={chestStyle}>
-              {phase === 'open' && !coinDay && (
+              {phase !== 'closed' && !coinDay && (
                 // Light bursting out from under the popped lid, behind the chest (no coins it did not pay).
                 <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 1.1, height: chestSize * 0.7,
                   left: -chestSize * 0.05, top: -chestSize * 0.22 }, mouthStyle]}>
@@ -504,7 +504,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                       <Image source={CHEST_CLOSED} style={{ position: 'absolute', top: -chestSize * LID_CUT, width: chestSize, height: chestSize }}
                         contentFit="contain" transition={0} />
                     </View>
-                    {phase === 'open' && (
+                    {phase !== 'closed' && (
                       // The light fills the open gap while the lid is up (it hides the cut), then goes back in.
                       <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 1.05, height: chestSize * 0.34,
                         left: -chestSize * 0.025, top: chestSize * (LID_CUT - 0.2) }, seamStyle]}>
@@ -525,7 +525,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                 </Animated.View>
               )}
             </Animated.View>
-            {phase === 'open' && !coinDay && !ticketDay && (
+            {phase !== 'closed' && !coinDay && !ticketDay && (
               // The prize rises out of the open chest and stays there, so the settled card shows what came out.
               <Animated.View pointerEvents="none" style={[styles.risePrize, { top: chestSize * 0.02 }, riseStyle]}>
                 <GameIcon name={PRIZE[kind].icon} size={chestSize * 0.4} />

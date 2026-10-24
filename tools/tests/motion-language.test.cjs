@@ -527,3 +527,10 @@ test('wave 3 rerun round 2: "Opening your chest" fades on the UI thread as the l
   assert.ok(/cancelAnimation\(hintOut\); hintOut\.value = 0;\s*setPhase\('opening'\);/.test(chest), 'every claim starts with the words showing');
   assert.ok(!/useLayoutEffect/.test(chest), 'the pop still starts at once on the UI thread');
 });
+
+test('wave 3 rerun round 2: the chest light and prize views mount at the tap, so the reveal commit never resets the popping chest', () => {
+  const chest = read('src/components/DailyGiftModal.tsx');
+  assert.ok(/\{phase !== 'closed' && !coinDay && \(\s*\/\/ Light bursting out/.test(chest), 'the light behind the chest is mounted from the tap (hidden at 0)');
+  assert.ok(/\{phase !== 'closed' && \(\s*\/\/ The light fills the open gap/.test(chest), 'the gap light too');
+  assert.ok(/\{phase !== 'closed' && !coinDay && !ticketDay && \(\s*\/\/ The prize rises/.test(chest), 'and the rising prize');
+});
