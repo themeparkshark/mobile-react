@@ -938,12 +938,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             crashes MapLibre's subview insert (-[MLRNMapView insertReactSubview:atIndex:]). */}
         {(
           <ShapeSource id="tps-lamps" shape={light.lamps >= 0.05 ? lampPoints : NO_FEATURES}>
-            <CircleLayer id="tps-lamp-glow" style={{ circleColor: '#ffc95e', circleBlur: 1,
-              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 7, 17, 13, 19, 34],
-              circleOpacity: 0.7 * light.lamps, circlePitchAlignment: 'map' }} />
-            <CircleLayer id="tps-lamp-core" style={{ circleColor: '#fff3c4', circleBlur: 0.4,
-              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 1, 17, 1.6, 19, 3.6],
-              circleOpacity: 0.9 * light.lamps }} />
+            {/* Small crisp gold glints, not big orange smudges (they read as dirt on the night map). */}
+            <CircleLayer id="tps-lamp-glow" style={{ circleColor: '#ffd23f', circleBlur: 0.85,
+              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 4, 17, 7, 19, 18],
+              circleOpacity: 0.6 * light.lamps, circlePitchAlignment: 'map' }} />
+            <CircleLayer id="tps-lamp-core" style={{ circleColor: '#fffbe6', circleBlur: 0.15,
+              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 1.2, 17, 2, 19, 4.2],
+              circleOpacity: 0.95 * light.lamps }} />
           </ShapeSource>
         )}
         {/* Crowd haze: static GL heatmap (no per-frame cost), warm where the lines are long. */}
