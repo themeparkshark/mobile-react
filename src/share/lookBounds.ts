@@ -4,8 +4,11 @@
  *
  * The bare shark's body runs from about 0.18 to 0.82 of the paper's width. WIDE_PAPERS lists every
  * outfit paper in the catalog whose paint goes past that (measured from the alpha channel of each
- * production paper, 345 papers, Oct 24 2026), keyed by the paper's file name, as [left, right].
- * A paper not in the table stays inside the body box.
+ * production paper, 346 papers, Oct 24 2026), keyed by the paper's file name, as [left, right].
+ * NARROW_PAPERS lists the first 10 letters of every other catalog paper (they stay inside the body box).
+ * A paper in neither list is new to the catalog: it counts as UNKNOWN_EXTENT (as wide as a ghost sheet
+ * and a tall hat together) until tools/share-studio/measure-look-bounds.py measures it, so a new wide
+ * costume can never silently cover the prize. Re-run that script (with --check) after a catalog drop.
  */
 import type { InventoryType } from '../models/inventory-type';
 
@@ -41,6 +44,7 @@ export const WIDE_PAPERS: Readonly<Record<string, readonly [number, number]>> = 
   'HDGM1Sd9VkFCtdlshZs4IfDZDfxcf0khIAQwUZrg': [0.372, 0.84], // head 386
   'I6Gd94RVUs8uzrmo91aexUFypJXVpgAVJwJUSo0I': [0.496, 0.857], // head 166
   'IRJvNAUI97PgAZ7QPU5QxzBZVcnkCPu4JIYKpM5o': [0.356, 0.941], // neck 29
+  'JmO2NMbED939ryF7SsTNUjffRyej1iggXPgEzPjT': [0.0, 1.0], // head 296 (a 561x419 paper, stretched over the whole canvas)
   'KJkDn8jk61FTzPfeHRUaXdbHT14RVtAjMB8v4wy7': [0.595, 0.886], // neck 488
   'OYZIszU1ip2sIk4nW0oIbUFwtLxUu1iJzi6WaHE5': [0.591, 0.851], // neck 195
   'Q1MGeAyk7ABhYms13CeFo4fAuFKD3xyB4hrBii5U': [0.597, 0.84], // neck 196
@@ -71,6 +75,14 @@ export const WIDE_PAPERS: Readonly<Record<string, readonly [number, number]>> = 
   'zkomm0zlltvR3DR4q43r5cexrVKa2rPRD3JzbIpl': [0.13, 0.341], // hand 442
 };
 
+/** First 10 letters of every catalog outfit paper that stays inside the body box (298 papers). */
+export const NARROW_PAPERS = '02M7eLopeG 0GZfeWrAdS 0JDVDDHFYk 0KIERSKr5y 17XaYqxcdu 1NGMkB6Fu1 1QldiU3IG9 1iKsS9NHtH 2RzwlhwBTF 3A7cVVcZ4N 3dAzSo6J9b 3y8ZAMPCaP 44Poy7dgZe 4DMzauONap 4TBuLfwS6m 4WE52PZr84 4syfINLxED 560eroyWJZ 5AbgHNPZGi 5B1SDzvmJc 5BcEjefCn6 5QHkgGY4Wt 5cRzFIMxDV 5dspA50WQM 63Z80KzmnL 65wIGu7G0j 6CSoSJGgGA 6ErVLEBSDk 6YcJfDjWFa 6jQQcfjTNn 76219T64UV 7GK9qIpRrT 7IkvqsAXqH 7ZlmsGteHR 7x9vkii2MK 88emoJzxTQ 8H0zAoGKPV 8QfZilhV7Q 8Z7O6Di8N1 8tXDVGUSPJ 9C9bWZqT4X 9FccxYRFQf 9gH8dwqpRG 9jynVMxgIV 9o6kXTmsya 9wWBkEzSbK A1ZgKghSxO AE9MqlmuXK AF9Fkaf53Y AfM1o3qWCn AlGcYG1MUu B4wqt2mu3I BEXlN4aDff BOWkKAK8Tf BSYfMamDrs BaAMFd8iuw BdXA3vG9ay BiIdip13Ez C562jtV0eD CEM4RU37zo CiHruUqmL1 CoqvmQx5cd D1vn138CGQ D3L6lPWC9i DG3Cf1IJWS DTUjlsnYhv Ds4oTmH9Mm DseczUPgwO E3HzJsZkAs E8yCX5Opg6 EIbKxOUH3i EQSETOcFaU Ef7dDSQkvH Fd0k5Diwke FiqQx9zfC7 FmdUCKlxMs FqDfPGb1kk Fr4cJTaV3a Fx4TUggEk0 GVVgd7yFL7 GfIG8n08Oe GgF11ICmW0 HB7hv1HC4U HIK6Z7NW8p HiV5nNJn7g HlUvKnTou3 HmtU4D7ZBe HrsT39QuYW HtbCTpU4ov I0Dml7a3Sa I6GBkPF126 I9mMjJ12gk IOsd2BuSdw IejYbiXAUk IhH9iYgdN8 JDY68BrZb8 JEEG5Kr7lT JKztegwAvp JTzrnYyyvO JXfYqoSuPy Jmsx4xLIfp K3qS7gcnvm KJqrsdCgKA KN1NQYD3lD KZPdIYPGNZ Kh7X9DzmCZ KiPYyWBzTr KmXhs1CyTj KsrjNAE5o1 LAQ0lY2HSP LAjBRZnnK7 LF4O35bm2F LMrBUIjM2j LW5v5oOWEB LiFB2FwDca LijD0m44v6 LjTW2W3ocR LrC7gyRFlo M2YMMblrVH M3hcMIpXV7 MaHtih6x4Q NDepsGj8V7 NN3cOpqPYX NTQUr2UhxW NXZwnanFtD NgmTVyreKU O7yZ6pei47 OOuG9SWQ7v OgqdgjjHRg OsdnkEMVz7 PlfgfnUdek PvOtv8CQ5c QQa5waFKyL QWNBT1qkdp QWqZ87Rqq7 QjaKpFzxel R1mWiRGkAs RBqEsUEkQb RLF7VBMrua RSNXKv8RtL Rbzs5og54k Rpisl5mgRv S57plFxAvL SDNcrrx3Ql SGemmVvyk1 SOnt5Yzdlq SWqpYHhtdJ SegdxbHOYQ SnhMR2AtFM TACgZTMx2i TF3QrzneDv TQw7EXAlMx ThTh7D8CA8 TmZ4U0xqC8 U04mjTdF10 U4ZV9vYq30 UDuGv3kSGR UF5CPzg7fQ UVVJZ7U5vi UYjLrFddiH UbolQrf6G1 Ubx93v6qES UtFDSJY5pp UzdEJ9CnV1 V63sUUZXVN VaNhvW1fIf VjcsAsCwL7 VuvXkyumLf WpKt3KoXGy WrOlOam3vu WwCOXJ7rMp XrYZlKgMHX YZPmaFHaW8 YimcxTJsCH ZHmbiOUVwP ZKLU7XaoMj Za3y2NIAi4 ZbZAn1GIcQ ZdTpTbdHOt a25nkUPb6A a5HnDR3JHX aAjccSKPEf aDjJXsxdh3 aMEvkfokQE aPldv2sUfT aXDUNP9oaR aXoGiNMebu bUl86DlR20 bumNgkPl62 bwVAMGoVfO byzjyUvqbw c3zbLg6JvT cINn2xScwN cLXRTUzz0R cOchcVY0HB cTqAdgzo3G ceoKslZbDI dB5pBUcRDC dGAnwk1XX6 dLclumjehN dOI7ORCZtY dQpFYNGM2X e7BUvAVu8p f5eendQpU2 f9UOTuK25r fSbGr7niVF fUZgHhf6CM fahflAuUbR fgM8FNngZC fiuLQDvYTB fl8KhGKSxy fmSAUWCt6I fz41UpSwas g3xjJJiliP gC0l7SWAtk gS74j6nxoZ gbVYuRSBVf gv0WZpFWiY hAGYDyFkO7 hIRFdHxEN7 hLJKeKF4Fr hahztVq6ye i3Y72pA6mq iAravqkZGi iBreLgCGw7 iSBHnwM03G isDx0QNKZn itvtlYeMfR j0mY5LWuvl jo7AK9grps joYpZyhGy4 k9jxQLLpRI kHfHjHTsBn krAts1nsAK l0Ps7XzH2t lbGOW8z2mc lqF2ztc0vK lyxWptR5x3 mLYkUAQSMt mfGLqvG0Vo moHhRVmykX myUFgQWS8r nAq1Qf0SlX nXKg0K89fR nxZ2vbR6uU o3EaxfPnuE oQi4oC4uE8 oT8G3pdWZV oayPsxQ47H oqY6lAwXQL pwE3FJ75xv pyqaHLHBbW q0ySOQRUlV q5vSK0EgcE qAgerViSk0 qLM3r7It0G qqBIwDHIXP qr9agWOTtM qy46w6AkKU r2BR7ofr74 rXH6FSEo55 rcDwx0v3Bo rzxockcYPl s3LHYcR1Hp sHPcAC3YIO shiYksAQCO tFaTvqnaki tKaO6By2ZV tRb5qFGv3N tc9RmV6pYu tf7uJFihNA tgfOJJMTop tlpozFFfNF tvoKPWPCpe uJys5pBBvC uz88ygnTyy vBPohGwDbW vd28gpqGJE vmTypRzZ06 wHw2QLCc0z wV3BWUvMb5 wfD8ILlkWa wp4eyS67JQ x3n9TlsEHE xExUHXYATx xO2ZzP6bT1 xPLkCqGyyR xbx34xH6eN xj1k4vSGkC xlBwxmlSR0 xvpE3Ogi1B y5wPGEQuCx yodKkKLYuw z82ieMoYky zVnImUOQpo zgHBTIRmfB zuUBTYHe3w zv05cEZHlG';
+const NARROW = new Set(NARROW_PAPERS.split(' '));
+const NARROW_PREFIX = 10;
+
+/** A paper new to the catalog (in neither list): as wide as the widest looks, until it is measured. */
+export const UNKNOWN_EXTENT: LookExtent = { left: 0, right: 0.95 };
+
 /** The paper's file name without folder or extension ("sOub...TQO"). Exported for tests. */
 export function paperKey(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -78,13 +90,17 @@ export function paperKey(url: string | null | undefined): string | null {
   return m ? m[1] : null;
 }
 
-/** The painted reach of a dressed shark: the body box, widened by any wide outfit paper it wears. */
+/**
+ * The painted reach of a dressed shark: the body box, widened by any wide outfit paper it wears. A
+ * paper the tables do not know yet counts as UNKNOWN_EXTENT. Local art (no URL) keeps the body box.
+ */
 export function lookExtent(inventory: InventoryType | null | undefined): LookExtent {
   let { left, right } = BODY_EXTENT;
   if (!inventory) return BODY_EXTENT;
   for (const slot of OUTFIT_SLOTS) {
     const key = paperKey(inventory[slot]?.paper_url);
-    const wide = key ? WIDE_PAPERS[key] : undefined;
+    if (!key) continue;
+    const wide = WIDE_PAPERS[key] ?? (NARROW.has(key.slice(0, NARROW_PREFIX)) ? undefined : [UNKNOWN_EXTENT.left, UNKNOWN_EXTENT.right]);
     if (wide) { left = Math.min(left, wide[0]); right = Math.max(right, wide[1]); }
   }
   return left === BODY_EXTENT.left && right === BODY_EXTENT.right ? BODY_EXTENT : { left, right };

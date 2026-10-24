@@ -22,8 +22,9 @@ const COINS = [
   COIN('5u5ygBhsuGZtaYIK1JExUSbItVbCoJT19pYuUaXg'),
 ];
 
-/** A dressed sample shark: tee, shades and a camera (real production papers). */
+/** A dressed sample shark: tee, shades and a camera (real production papers), on the classic skin (a shop set card needs one). */
 export const SAMPLE_INVENTORY = {
+  skin_item: { id: 2, name: 'Classic shark', paper_url: `${PROD}/HX7UIrHDV28b7e5VGzBxt86jQ0eradyh8hsldNmR.png` },
   body_item: { id: 9001, name: 'Tee', paper_url: `${PROD}/WwCOXJ7rMpwaUGjQwvG0TDNEW2EC4sdQwQZskaVC.png` },
   face_item: { id: 9002, name: 'Shades', paper_url: `${PROD}/63Z80KzmnLJLLZOO3xolJ0IMkd0tnYirHzOjiCPe.png` },
   neck_item: { id: 9003, name: 'Camera', paper_url: `${PROD}/EIbKxOUH3iQftK6iTkGzXaQtir5hOz94AqVqdaBp.png` },
@@ -34,6 +35,7 @@ export const SAMPLE_INVENTORY = {
  * the widest look in the catalog. EXPO_PUBLIC_SHARE_STUDIO_LOOK=ghost renders every sample in it.
  */
 export const GHOST_INVENTORY = {
+  skin_item: { id: 2, name: 'Classic shark', paper_url: `${PROD}/HX7UIrHDV28b7e5VGzBxt86jQ0eradyh8hsldNmR.png` },
   head_item: { id: 27, name: 'Witch Hat', paper_url: `${PROD}/oQi4oC4uE8tVRBP97LkCag19XCDCt4O6BLg04bwf.png` },
   body_item: { id: 219, name: 'Ghost Costume', paper_url: `${PROD}/sOubrLKHE8xVFwmWtG7xiHsd2IayiuZpzgnb3TQO.png` },
   hand_item: { id: 434, name: 'Ghost Blaster', paper_url: `${PROD}/2IPHn8UVfl5hHN2wdayZWq8ZiqZTEmKwnMv5pkIn.png` },

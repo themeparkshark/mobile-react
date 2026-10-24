@@ -614,7 +614,7 @@ test('every wear choice uses one look: yellow primary, quiet ghost secondary', (
 test('square look card: the dressed shark is the hero, at most 3 tiles, words centered', () => {
   const card = src('src/share/FlexCard.tsx');
   assert.match(card, /export const SQUARE_LOOK_SHARK_H = 196;/);
-  assert.match(card, /sharkH=\{SQUARE_LOOK_SHARK_H\} tile=\{36\} maxTiles=\{3\}/);
+  assert.match(card, /sharkH=\{SQUARE_LOOK_SHARK_H\} tile=\{44\} maxTiles=\{3\} room=\{box\.h\} width=\{box\.w\}/);
   assert.match(card, /\.slice\(0, maxTiles\)/);
   assert.match(card, /<View style=\{\[styles\.squareWordsRow, centered && styles\.squareWordsLook\]\}>/);
   assert.match(card, /const centered = look \|\| !big;/);
@@ -732,7 +732,7 @@ test('the shop set picture is the dressed shark, no prop and no medallion', () =
   const card = src('src/share/FlexCard.tsx');
   assert.match(card, /look: isLookSet\(kind, payload\) && !!shark\?\.skin_item/);
   assert.match(card, /export const LOOK_SHARK_H = 232;/);
-  assert.match(card, /<FlexShark inventory=\{inventory\} height=\{sharkH\} prop=\{null\} \/>/);
+  assert.match(card, /<FlexShark inventory=\{inventory\} height=\{place\.shark\} prop=\{null\} \/>/);
   assert.match(card, /\{look \? <LookHero[^\n]*sharkH=\{size\.look\}/);
   const { flexCopy } = loadTs('src/share/copy.ts', {});
   const set = flexCopy('set_complete', { setName: 'Spooky Squad', badgeUrl: 'x', found: 3, total: 3, source: 'shop' });
@@ -941,7 +941,8 @@ test('a dressed look knows how wide its paint reaches: the ghost costume and bla
   assert.ok(ghost.right >= 0.89, 'the blaster reaches past the tail');
   assert.equal(lookExtent(TEE), BODY_EXTENT);
   assert.equal(lookExtent(null), BODY_EXTENT);
-  assert.equal(lookExtent({ body_item: { paper_url: `${PROD}/not-in-the-table.png` } }), BODY_EXTENT);
+  // A paper new to the catalog counts as wide until it is measured (round 4 fix 4).
+  assert.deepEqual(lookExtent({ body_item: { paper_url: `${PROD}/not-in-the-table.png` } }), lookBounds.UNKNOWN_EXTENT);
   for (const [key, [l, r]] of Object.entries(WIDE_PAPERS)) {
     assert.match(key, /^[A-Za-z0-9]{40}$/);
     assert.ok(l >= 0 && r <= 1 && l < r && (l < 0.17 || r > 0.83), `${key} is really wider than the body`);
@@ -968,7 +969,7 @@ test('the prize stays readable under any costume: the paint covers only the tile
       }
     }
   }
-  assert.match(src('src/share/FlexCard.tsx'), /storyStage\(box\.h, box\.w, lift, lookExtent\(inventory\)\)/);
+  assert.match(src('src/share/FlexCard.tsx'), /storyStage\(box\.h, box\.w, lift, lookExtent\(inventory\), stickerW\)/);
 });
 
 test('square cards: the kicker sits 8 pt or more below the tile on every square, and the shark is a third of the card', () => {
@@ -1046,4 +1047,124 @@ test('the Shark Pass proof sample uses the real Snowflake Beanie art, and the gh
   for (const f of ['src/share/stage.ts', 'src/share/lookBounds.ts', 'src/share/StoryShareFrame.tsx', 'src/games/memory/MemoryExtras.tsx', 'src/share/samples.ts']) {
     assert.doesNotMatch(src(f), new RegExp(String.fromCharCode(0x2014)), `${f}: no em dashes`);
   }
+});
+
+/* ------------------------------------------------------------- wave 3 round 4 */
+
+const { flexCopy: copyOf } = loadTs('src/share/copy.ts', {});
+const ASPECT4 = 1353 / 1530;
+/** Every sample's big number and label, plus the longest numbers and labels any card prints. */
+const STICKERS = [
+  ['7', 'RIDE COINS'], ['6', 'HAUNTS SURVIVED'], ['7/10', 'IN THE SET'], ['3%', 'OF PLAYERS HAVE ONE'], ['4%', 'OF PLAYERS HAVE IT'],
+  ['LV 10', null], ['TOP 18%', 'OF ALL PLAYERS'], ['#2', 'THIS WEEK'], ['37', 'HAUNTS SURVIVED'], ['x4', 'TIMES THROUGH'],
+  ['75%', "OF THIS PARK'S COINS"], ['14', 'DAYS IN A ROW'], ['12/12', 'COLLECTED'], ['KO!', null], ['100/100', 'IN THE SET'],
+];
+/** Every wide outfit in the catalog, the body, the ghost look and an outfit the tables do not know yet. */
+const LOOKS = () => [lookBounds.BODY_EXTENT, lookBounds.lookExtent(GHOST), lookBounds.UNKNOWN_EXTENT,
+  ...Object.values(lookBounds.WIDE_PAPERS).map(([l, r]) => ({ left: Math.min(0.18, l), right: Math.max(0.82, r) }))];
+
+test('story stat sticker: on every look, room and number it sits 4 pt or more inside the card (never cut off)', () => {
+  const { storyStage, stickerWidth, STICKER_TILT, CARD_INSET, STICKER_MAX_W } = stageMod;
+  assert.equal(CARD_INSET, 16, 'the hero box sits 20 pt in from the card: 16 of it, and 4 pt stay clear');
+  let checked = 0;
+  for (const [big, label] of STICKERS) {
+    const sw = stickerWidth(big, label);
+    assert.ok(sw >= 44 && sw <= STICKER_MAX_W, `${big}: box ${sw}`);
+    for (const look of LOOKS()) {
+      for (const room of [130, 150, 190, 230]) {
+        for (const lift of [18, 36]) {
+          const z = storyStage(room, 320, lift, look, sw);
+          const paintL = z.stickerLeft - STICKER_TILT;
+          assert.ok(paintL >= -CARD_INSET - 0.5, `${big} look ${look.left}-${look.right} room ${room}: sticker paint at ${paintL} (card edge -20)`);
+          const w = z.shark * ASPECT4;
+          assert.ok(z.sharkLeft + w * look.right <= 320 + 1, `${big}: the whole look stays on the card`);
+          checked++;
+        }
+      }
+    }
+  }
+  assert.ok(checked > 1000);
+  // The ghost park day and fright night stories that clipped in round 3.
+  for (const [big, label] of [['7', 'RIDE COINS'], ['6', 'HAUNTS SURVIVED']]) {
+    const z = storyStage(150, 320, 36, lookBounds.lookExtent(GHOST), stickerWidth(big, label));
+    assert.ok(z.stickerLeft - STICKER_TILT >= -16, `${big}: on the card`);
+  }
+});
+
+test('story prize: the stat sticker plus the shark paint cover 20% or less of the prize art, on every look', () => {
+  const { storyStage, stickerWidth, STICKER_TILT, PRIZE_EDGE, TILE_BAND } = stageMod;
+  assert.equal(TILE_BAND, 0.12);
+  // The prize kinds' real numbers (Golden Hour 7/10, Golden Churro 3%, Rocket 3/8), plus the longest.
+  for (const [big, label] of [['7/10', 'IN THE SET'], ['3%', 'OF PLAYERS HAVE ONE'], ['3/8', 'IN THE SET'], ['100/100', 'IN THE SET']]) {
+    const sw = stickerWidth(big, label);
+    for (const look of LOOKS()) {
+      for (const room of [130, 150, 190, 230]) {
+        for (const lift of [18, 36]) {
+          const z = storyStage(room, 320, lift, look, sw);
+          const w = z.shark * ASPECT4;
+          const artL = z.tileLeft + z.tile * TILE_BAND;
+          const artR = z.tileLeft + z.tile * (1 - TILE_BAND);
+          const art = artR - artL;
+          // The sticker's painted right edge (its -6deg tilt adds STICKER_TILT) and the shark's front.
+          const stickerR = z.stickerLeft + sw + STICKER_TILT;
+          const paintL = z.sharkLeft + w * look.left;
+          const bySticker = Math.max(0, Math.min(artR, stickerR) - artL) / art;
+          const byShark = Math.max(0, artR - Math.max(artL, paintL)) / art;
+          assert.ok(bySticker <= 0.01, `${big}: sticker covers ${Math.round(bySticker * 100)}% of the art`);
+          assert.ok(bySticker + byShark <= 0.2 + 0.01, `${big} look ${look.left}-${look.right} room ${room}: ${Math.round((bySticker + byShark) * 100)}% of the prize art covered`);
+          assert.ok(stickerR > z.tileLeft, 'the sticker still overlaps the tile frame (it belongs to the tile)');
+          assert.ok(paintL < z.tileLeft + z.tile && z.tileLeft + z.tile - paintL <= z.tile * PRIZE_EDGE + 1);
+        }
+      }
+    }
+  }
+  // The card copy really prints these numbers.
+  assert.equal(copyOf('find', { itemName: 'Giant Dragon Plush', artUrl: 'x', rarity: 5, goldenHour: true, setName: 'Souvenirs', setFound: 7, setTotal: 10 }).big, '7/10');
+  const card = src('src/share/FlexCard.tsx');
+  assert.match(card, /const stickerW = look \? 0 : stickerWidth\(copy\.big, copy\.bigLabel\);/);
+  assert.match(card, /left: stage\.stickerLeft, top: stage\.tileTop, width: stickerW, height: stage\.tile/);
+  assert.match(card, /marginRight: STICKER_TILT - Math\.floor\(size\.tile \* TILE_BAND\)/, 'no shark: the sticker stands beside the tile the same way');
+  assert.doesNotMatch(card, /storyBig: \{ left: -22/);
+});
+
+test('the look card: 3 pieces are 64 pt or more on a sky blue fill, and the paint keeps clear of the tiles and the 3/3 sticker', () => {
+  const { lookStage, LOOK_BIG_COL, LOOK_ROW_GAP } = stageMod;
+  const card = src('src/share/FlexCard.tsx');
+  assert.match(card, /sharkH=\{size\.look\} tile=\{72\} room=\{box\.h\} width=\{box\.w\}/);
+  assert.match(card, /export const LOOK_TILE_FILL = \['#e3f4ff', '#b5ddff'\] as const;/);
+  for (const look of LOOKS()) {
+    // The story look hero measures about 220 pt (the w3r4 render: 66 pt tiles at a 76 pt pitch).
+    for (const room of [218, 230, 250]) {
+      const z = lookStage(room, 320, 3, 232, 72, look);
+      assert.ok(z.tile >= 64, `room ${room}: piece tile ${z.tile}`);
+      assert.ok(3 * z.tile + 2 * z.gap <= room, 'the three tiles fit the hero');
+      const w = z.shark * ASPECT4;
+      // Row: tiles, gap, paper (margins tuck its clear sides), gap, sticker column.
+      const paint = w * (look.right - look.left);
+      assert.ok(Math.abs((w + z.marginLeft + z.marginRight) - paint) <= 1, 'only the clear sides tuck away');
+      assert.ok(z.tile + LOOK_ROW_GAP + paint + LOOK_ROW_GAP + LOOK_BIG_COL <= 320 + 1, `look ${look.left}-${look.right}: the row fits, the paint never meets the 3/3`);
+    }
+  }
+  // Square keeps its smaller pieces, still bigger than before.
+  assert.ok(lookStage(150, 320, 3, 196, 44).tile >= 40);
+});
+
+test('lookBounds knows every catalog paper: wide ones by extent, the rest by name, and the measuring tool is in the repo', () => {
+  const { NARROW_PAPERS, WIDE_PAPERS, lookExtent, BODY_EXTENT, UNKNOWN_EXTENT } = lookBounds;
+  const narrow = NARROW_PAPERS.split(' ');
+  assert.equal(narrow.length, 298);
+  assert.equal(Object.keys(WIDE_PAPERS).length, 47);
+  for (const k of narrow) assert.match(k, /^[A-Za-z0-9]{10}$/);
+  assert.equal(new Set(narrow).size, narrow.length);
+  for (const k of Object.keys(WIDE_PAPERS)) assert.ok(!narrow.includes(k.slice(0, 10)), `${k} is in one list only`);
+  // The sample look (tee, shades, camera) is narrow; the witch hat is too; an unknown paper is wide.
+  for (const key of ['WwCOXJ7rMpwaUGjQwvG0TDNEW2EC4sdQwQZskaVC', '63Z80KzmnLJLLZOO3xolJ0IMkd0tnYirHzOjiCPe', 'EIbKxOUH3iQftK6iTkGzXaQtir5hOz94AqVqdaBp', 'oQi4oC4uE8tVRBP97LkCag19XCDCt4O6BLg04bwf']) {
+    assert.equal(lookExtent({ head_item: { paper_url: `${PROD}/${key}.png` } }), BODY_EXTENT, key);
+  }
+  assert.deepEqual(lookExtent({ hand_item: { paper_url: `${PROD}/BrandNewCostume0000000000000000000000000.png` } }), UNKNOWN_EXTENT);
+  assert.ok(UNKNOWN_EXTENT.left <= 0.01 && UNKNOWN_EXTENT.right >= 0.94);
+  const tool = src('tools/share-studio/measure-look-bounds.py');
+  assert.match(tool, /--check/);
+  assert.match(tool, /NARROW_PAPERS = '/);
+  assert.match(tool, /ALPHA = 24/);
 });

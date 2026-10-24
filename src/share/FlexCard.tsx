@@ -26,7 +26,7 @@ import { FlexShark, SHARK_ASPECT } from './FlexShark';
 import { lookExtent } from './lookBounds';
 import {
   SQUARE_PRIZE_COL, SQUARE_PRIZE_TILE, STORY_HERO, STORY_HERO_SOLO, STORY_ROW_PAD,
-  STORY_WORDS_LIFT, STORY_WORDS_LIFT_PIN, prizeSquareShark, squareStage, storyStage,
+  STORY_WORDS_LIFT, STORY_WORDS_LIFT_PIN, LOOK_BIG_COL, LOOK_ROW_GAP, STICKER_SIZE, STICKER_TILT, TILE_BAND, lookStage, prizeSquareShark, squareStage, stickerWidth, storyStage,
 } from './stage';
 
 import { FLEX_SIZE } from './formats';
@@ -129,39 +129,45 @@ export function isLookSet(kind: FlexKind, payload: FlexPayload): boolean {
  */
 export const LOOK_SHARK_H = 232;
 const LOOK_BLEED = 0.13;
-const LOOK_SIDE = 0.04;
 
 /**
  * "My Complete Look": the dressed shark big in the middle, the set's pieces as a small column of
  * tiles beside it, and the giant "3/3" as a sticker. No medallion, no prop: the look is the brag.
  */
-function LookHero({ payload, copy, frame, inventory, motion, sharkH, tile, maxTiles = 4 }: {
+function LookHero({ payload, copy, frame, inventory, motion, sharkH, tile, maxTiles = 4, room, width }: {
   readonly payload: FlexPayload; readonly copy: FlexCopy; readonly frame: FlexFrame; readonly inventory: InventoryType | null | undefined;
+  /** The biggest the shark may be (by height) and the biggest a piece tile may be. */
   readonly motion: FlexCardMotion; readonly sharkH: number; readonly tile: number; readonly maxTiles?: number;
+  /** The measured hero box. */
+  readonly room: number; readonly width: number;
 }) {
   const arts = ((payload as FlexPayloads['set_complete']).artUrls ?? []).slice(0, maxTiles);
+  const place = lookStage(room, width, arts.length, sharkH, tile, lookExtent(inventory), !!copy.big);
   return (
-    <View style={styles.lookRow}>
-      <View style={[styles.lookTiles, { width: tile, gap: Math.round(tile * 0.15) }]}>
-        {/* Cream, not white: a white piece (a ghost sheet) still reads on it. */}
+    <View style={[styles.lookRow, { gap: LOOK_ROW_GAP }]}>
+      <View style={[styles.lookTiles, { width: place.tile, gap: place.gap }]}>
+        {/* Sky blue, not white or cream: a white piece (a ghost sheet) and a gold one both read on it. */}
         {arts.map((art, i) => (
-          <Panel key={i} size={tile} colors={['#fff1cc', '#ffe2a0']} lip="#d9b25a" rim={frame.rim === '#ffffff' ? '#ffcf3b' : frame.rim} radius={tile * 0.22}>
-            <FlexArtwork id={`look${i}`} art={art} fallback={HERO_ART.gift} style={{ width: tile * 0.74, height: tile * 0.74 }} />
+          <Panel key={i} size={place.tile} colors={LOOK_TILE_FILL} lip="#5d9fd6" rim={frame.rim === '#ffffff' ? '#ffcf3b' : frame.rim} radius={place.tile * 0.22}>
+            <FlexArtwork id={`look${i}`} art={art} fallback={HERO_ART.gift} style={{ width: place.tile * 0.78, height: place.tile * 0.78 }} />
           </Panel>
         ))}
       </View>
-      {/* The paper has clear space at its sides too, so the tiles and the sticker may tuck into it. */}
-      <Animated.View style={[{ width: sharkH * SHARK_ASPECT, height: sharkH, marginVertical: -sharkH * LOOK_BLEED / 2, marginHorizontal: -sharkH * LOOK_SIDE }, motion.sharkStyle]}>
-        <FlexShark inventory={inventory} height={sharkH} prop={null} />
+      {/* Only the paper's clear sides tuck away, so the paint keeps LOOK_ROW_GAP from the tiles and the sticker. */}
+      <Animated.View style={[{ width: place.shark * SHARK_ASPECT, height: place.shark, marginVertical: -place.shark * LOOK_BLEED / 2, marginLeft: place.marginLeft, marginRight: place.marginRight }, motion.sharkStyle]}>
+        <FlexShark inventory={inventory} height={place.shark} prop={null} />
       </Animated.View>
       {!!copy.big && (
-        <View style={[styles.lookBigCol, { width: tile + 18 }]}>
-          <BigNumber copy={copy} frame={frame} size={44} width={tile + 40} text={motion.bigText} labelSide="bottom" inline style={[styles.lookBig, motion.bigStyle]} />
+        <View style={[styles.lookBigCol, { width: LOOK_BIG_COL }]}>
+          <BigNumber copy={copy} frame={frame} size={44} width={LOOK_BIG_COL - 6} text={motion.bigText} labelSide="bottom" inline style={[styles.lookBig, motion.bigStyle]} />
         </View>
       )}
     </View>
   );
 }
+
+/** The look card's piece tiles: light sky blue with a blue lip (Alex's blue/white/gold). */
+export const LOOK_TILE_FILL = ['#e3f4ff', '#b5ddff'] as const;
 
 /**
  * Sizes for a story hero without the tile-and-shark stage (a look card, or no shark). Never bigger
@@ -182,9 +188,11 @@ function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion,
   const size = storyHeroSizes(box.h, showShark, look);
   const staged = showShark && !look;
   const lift = staged ? (chestPin ? STORY_WORDS_LIFT_PIN : STORY_WORDS_LIFT) : 0;
-  const stage = staged ? storyStage(box.h, box.w, lift, lookExtent(inventory)) : null;
-  const big = !!copy.big && <BigNumber copy={copy} frame={frame} size={56} width={200} text={motion.bigText}
-    labelSide={LABEL_BESIDE.has(kind) ? 'right' : 'top'} style={[styles.storyBig, motion.bigStyle]} />;
+  // The stat sticker stands beside the tile's lower left corner, over its frame band only (never the prize).
+  const stickerW = look ? 0 : stickerWidth(copy.big, copy.bigLabel);
+  const stage = staged ? storyStage(box.h, box.w, lift, lookExtent(inventory), stickerW) : null;
+  const big = !!copy.big && <BigNumber copy={copy} frame={frame} size={STICKER_SIZE} width={stickerW} text={motion.bigText}
+    labelLines={2} inline style={motion.bigStyle} />;
   return (
     <>
       <StoryBands frame={frame} />
@@ -192,7 +200,7 @@ function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion,
         <Ribbon text={copy.ribbon} width={STORY_RIBBON_W} />
         <View style={[styles.storyHero, look && styles.storyHeroLook]}
           onLayout={e => setBox({ h: Math.round(e.nativeEvent.layout.height), w: Math.round(e.nativeEvent.layout.width) })}>
-          {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={size.look} tile={40} /> : stage ? (
+          {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={size.look} tile={72} room={box.h} width={box.w} /> : stage ? (
             <>
               <Animated.View style={[styles.stagePiece, { left: stage.tileLeft, top: stage.tileTop, width: stage.tile, height: stage.tile }, motion.heroStyle]}>
                 <FlexHero kind={kind} payload={payload} frame={frame} size={stage.tile} inventory={inventory} />
@@ -202,18 +210,22 @@ function StoryLayout({ kind, payload, copy, frame, showShark, inventory, motion,
               <Animated.View style={[styles.stagePiece, styles.storyShark, { left: stage.sharkLeft, top: stage.sharkTop }, motion.sharkStyle]}>
                 <FlexShark inventory={inventory} height={stage.shark} prop={null} pin={chestPin} />
               </Animated.View>
-              {/* The giant number stays on top of the shark, so it always reads. */}
+              {/* The giant number stays on top, beside the tile's lower left corner: it overlaps only the frame band. */}
               {big && (
-                <View pointerEvents="none" style={[styles.stagePiece, styles.storyBigOver, { left: stage.tileLeft, top: stage.tileTop, width: stage.tile, height: stage.tile }]}>
+                <View pointerEvents="none" style={[styles.stagePiece, styles.storyBigOver, styles.stickerSlot, { left: stage.stickerLeft, top: stage.tileTop, width: stickerW, height: stage.tile }]}>
                   {big}
                 </View>
               )}
             </>
           ) : (
             <View style={styles.storyHeroRow}>
+              {big && (
+                <View pointerEvents="none" style={[styles.storyBigOver, styles.stickerSlot, { width: stickerW, height: size.tile, marginRight: STICKER_TILT - Math.floor(size.tile * TILE_BAND) }]}>
+                  {big}
+                </View>
+              )}
               <Animated.View style={[{ width: size.tile, height: size.tile }, motion.heroStyle]}>
                 <FlexHero kind={kind} payload={payload} frame={frame} size={size.tile} inventory={inventory} />
-                {big}
               </Animated.View>
             </View>
           )}
@@ -245,7 +257,6 @@ export function kickerOutline(frame: Pick<FlexFrame, 'ink' | 'outline'>): string
 }
 
 /** Heroes that are grids of art: the number's caption sits beside it, never across the grid. */
-const LABEL_BESIDE: ReadonlySet<FlexKind> = new Set<FlexKind>(['fright_night', 'park_day']);
 
 /**
  * Story chrome bands (y 0..240 and 1440..1920 px, STORY_SAFE) sit under Instagram's and
@@ -381,7 +392,7 @@ function PlainSquare({ kind, payload, copy, frame, showShark, inventory, motion,
       <View style={[styles.squareStage, look && styles.squareStageLook]}
         onLayout={e => setBox({ h: Math.round(e.nativeEvent.layout.height), w: Math.round(e.nativeEvent.layout.width) })}>
         <Rays frame={frame} size={360} />
-        {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={SQUARE_LOOK_SHARK_H} tile={36} maxTiles={3} /> : box.h > 0 && (
+        {look ? <LookHero payload={payload} copy={copy} frame={frame} inventory={inventory} motion={motion} sharkH={SQUARE_LOOK_SHARK_H} tile={44} maxTiles={3} room={box.h} width={box.w} /> : box.h > 0 && (
           <>
             <Animated.View style={[styles.stagePiece, { left: place.tileLeft, top: place.tileTop, width: place.tile, height: place.tile }, motion.heroStyle]}>
               <FlexHero kind={kind} payload={payload} frame={frame} size={place.tile} inventory={inventory} />
@@ -419,8 +430,10 @@ function PlainSquare({ kind, payload, copy, frame, showShark, inventory, motion,
 export const SQUARE_LOOK_SHARK_H = 196;
 
 /** The giant brag number: a tilted outlined sticker (over the hero on Story), caption above, beside or under it. */
-function BigNumber({ copy, frame, size, width, text, style, labelSide = 'top', inline = false }: {
+function BigNumber({ copy, frame, size, width, text, style, labelSide = 'top', inline = false, labelLines = 1 }: {
   readonly copy: FlexCopy; readonly frame: FlexFrame; readonly size: number; readonly width: number;
+  /** A top label may wrap to this many lines (the story sticker's box is narrow). */
+  readonly labelLines?: number;
   readonly text?: string; readonly style?: StyleProp<ViewStyle>;
   readonly labelSide?: 'top' | 'right' | 'bottom';
   /** In the layout flow (Square) instead of an absolute sticker. */
@@ -428,7 +441,7 @@ function BigNumber({ copy, frame, size, width, text, style, labelSide = 'top', i
 }) {
   const label = copy.bigLabel ? (
     <View style={[styles.bigLabel, labelSide === 'right' && styles.bigLabelRight, labelSide === 'bottom' && styles.bigLabelBottom, { backgroundColor: frame.outline }]}>
-      <Text style={[styles.bigLabelText, { fontSize: size >= 50 ? 11 : 9 }]} numberOfLines={labelSide === 'bottom' ? 2 : 1}>{copy.bigLabel}</Text>
+      <Text style={[styles.bigLabelText, { fontSize: size >= 50 ? 11 : 9 }]} numberOfLines={labelSide === 'bottom' ? 2 : labelLines}>{copy.bigLabel}</Text>
     </View>
   ) : null;
   const number = (
@@ -591,7 +604,8 @@ const styles = StyleSheet.create({
   storyFooter: { position: 'absolute', left: 20, right: 20, bottom: STORY_FOOTER_BOTTOM },
   storyShark: { zIndex: 2 },
   storyBigOver: { zIndex: 3 },
-  storyBig: { left: -22, bottom: 2, transform: [{ rotate: '-8deg' }] },
+  // The sticker sits at the bottom of a slot the tile's height (its box never passes the tile's bottom).
+  stickerSlot: { justifyContent: 'flex-end', alignItems: 'flex-start' },
   // zIndex: the words ride over the shark's feet.
   words: { alignItems: 'center', width: '100%', marginTop: 4, zIndex: 4 },
   kicker: { fontFamily: 'Shark', fontSize: 17, textAlign: 'center' },
