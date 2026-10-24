@@ -5,7 +5,7 @@
  * (wow-sound lane, Oct 24 2026), with the studio switch off (what the app plays
  * today) or on (the studio vocabulary), and print the trace as [studio-trace]
  * lines with times relative to the tap. The calls and their times follow the
- * map catch on claude/p23-wow-map cb614f50 (HomeCatchMoment's onBeat on the
+ * map catch on claude/p23-wow-map 00100bd0 (HomeCatchMoment's onBeat on the
  * UI-thread catch clock, through tools/audio/wowmap-catch-beats.cjs): the tap,
  * the wobble beats, the beam (--beam), hitstop, burst (heavy, success 180 ms
  * later, the chime), fly (whoosh), each coin landing in the counter, the stamp,
@@ -35,7 +35,7 @@ async function main() {
   e.Catch.resetCatchSoundForTests();
   if (!on) e.Switch.setStudioSoundOverride(false);
   await e.GameAudio.init();
-  // The map catch's calls (wow-map cb614f50: the tap, then the UI-thread clock's beats; tools/audio/wowmap-catch-beats.cjs).
+  // The map catch's calls (wow-map 00100bd0: the tap, then the UI-thread clock's beats; tools/audio/wowmap-catch-beats.cjs).
   const one = async (isRepeat, isBeam = false) => {
     const r = await wowMapCatch(e, { repeat: isRepeat, beam: isBeam, coins, isNew: true });
     return { t0: r.t0 };
@@ -44,7 +44,8 @@ async function main() {
   // Keep the file names (each cue names its file once, when it loads).
   const loaded = e.Trace.traceEvents().filter((x) => x.kind === 'legacy' && x.name === 'file');
   e.Trace.clearTrace();
-  const { t0 } = await one(repeat || quick > 0, beam);
+  // A beam catch (the 10th, the 25th) is the full show since wow-map round 5.
+  const { t0 } = await one(!beam && (repeat || quick > 0), beam);
   const lines = [...loaded.map((x) => ({ ...x, t: t0 })), ...e.Trace.traceEvents()].sort((a, b) => a.t - b.t)
     .map((x) => `[studio-trace] ${x.t - t0 + T0} ${x.kind} ${x.name}${x.detail ? ` ${x.detail}` : ''}`);
   process.stdout.write(lines.join('\n') + '\n');
