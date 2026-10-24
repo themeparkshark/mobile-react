@@ -33,7 +33,8 @@ test('the build is skippable, plays once per day, and waits for Reduce Motion', 
   assert.doesNotMatch(src, /withRepeat/, 'nothing loops');
   assert.match(src, /playHaptic\('golden'\)/);
   const card = read('src/screens/ParkDayRecapCard.tsx');
-  assert.match(card, /onTouchStart=\{build\.instant \? undefined : build\.skip\}/, 'a tap skips to the full card');
+  assert.match(card, /onTouchEnd=\{build\.instant \? undefined : onTouchEnd\}/, 'a tap skips to the full card');
+  assert.match(card, /Math\.abs\(event\.nativeEvent\.pageY - at\.y\) < 10\) build\.skip\(\)/, 'a scroll that starts on the card never skips the build');
   assert.match(card, /useRecapBuild\(recap && !selectedDay/, 'earlier days just show');
 });
 

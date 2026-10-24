@@ -1,6 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import { parkDayLabel } from '../services/collection/parkDayLabel';
 import GameIcon from '../ui/GameIcon';
 import GameRichText from '../ui/GameRichText';
@@ -30,6 +30,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   // Today's story builds itself once (stat by stat); an earlier day just shows.
   const cardRef = useRef<View>(null);
+  const touchAt = useRef<{ x: number; y: number } | null>(null);
   const build = useRecapBuild(recap && !selectedDay && recap.moments.length > 0 ? `${parkId}:${recap.park_day}` : null, cardRef);
   // Tomorrow's honest next step (the Daily 3 flame), only for today's card.
   const tomorrow = useRecapTomorrow(!!recap && !selectedDay && recap.moments.length > 0);
@@ -68,7 +69,18 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
 
   const polaroid = hasActivity ? bestCoin(recap.coins) : null;
   // A tap anywhere on a building card jumps to the finished card (buttons still work).
-  return <View ref={cardRef} collapsable={false} style={styles.card} onTouchStart={build.instant ? undefined : build.skip}>
+  // A tap (not a scroll that starts on the card) jumps a building card to the end: a kid scrolling past
+  // still sees the day build itself.
+  const onTouchStart = (event: GestureResponderEvent) => {
+    touchAt.current = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
+  };
+  const onTouchEnd = (event: GestureResponderEvent) => {
+    const at = touchAt.current;
+    touchAt.current = null;
+    if (!build.instant && at && Math.abs(event.nativeEvent.pageX - at.x) < 10 && Math.abs(event.nativeEvent.pageY - at.y) < 10) build.skip();
+  };
+  return <View ref={cardRef} collapsable={false} style={styles.card}
+    onTouchStart={build.instant ? undefined : onTouchStart} onTouchEnd={build.instant ? undefined : onTouchEnd}>
     <View style={styles.header}>
       {hasActivity && <RecapSky build={build} />}
       <View style={styles.headerCopy}>
