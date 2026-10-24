@@ -145,6 +145,9 @@ const SESSION_IDLE_MS = 4000;
 const PRE_BURST_MS = 20_000;
 /** The burst, its success pulse and a beam impact are beats whenever they come (a slow server delays them). */
 const BURST_BEAT_MS = 400;
+/** Until then the burst's own buzzes (heavy, success, the hot thump) are beats; coin ticks bunched with them are not. */
+let burstBeatUntil = 0;
+const BURST_INTENTS = new Set<HapticIntent>(['comboHeavy', 'success', 'hitRigid']);
 /** After 'done', counter ticks from coins still landing keep the studio ladder this long. */
 const DONE_TAIL_MS = 700;
 /**
@@ -283,6 +286,7 @@ function onCatchMark(name: string): void {
     const now = Date.now();
     const repeatPlan = name === 'tap-repeat';
     beatUntil = now + BEAT_WINDOW_MS;
+    catchLive = true;
     closeBeats();
     beats = {
       n: 0, seen: 0, fired: [], timers: [], closed: false,
@@ -301,8 +305,8 @@ function onCatchMark(name: string): void {
     return;
   }
   if (name === 'hitstop' || name === 'burst' || name === 'miss' || name === 'skip' || name === 'beam') closeBeats();
-  if (name === 'hitstop' || name === 'burst' || name === 'beam') beatUntil = Math.max(beatUntil, Date.now() + BURST_BEAT_MS);
-  if (name === 'done' || name === 'miss') beatUntil = 0;
+  if (name === 'hitstop' || name === 'burst' || name === 'beam') burstBeatUntil = Date.now() + BURST_BEAT_MS;
+  if (name === 'done' || name === 'miss') { beatUntil = 0; burstBeatUntil = 0; catchLive = false; }
   if (name === 'burst' && !sessionOpen()) {
     // Switch off: the run still counts (heat for the visuals), nothing plays and nothing is stored.
     run = burstMoment(run, Date.now(), { repeatPlan: beats?.offsets === REPEAT_WOBBLE_TICKS_MS }).state;
@@ -362,7 +366,10 @@ export function resetCatchSoundForTests(): void {
   primed = true;
   beatUntil = 0;
   landBeatUntil = 0;
+  burstBeatUntil = 0;
   burstBuzzAt = -Infinity;
+  beatLaneAt = -Infinity;
+  catchLive = false;
 }
 
 /** While a map catch is open (studio on): what the catch's own sounds become. */
@@ -397,14 +404,35 @@ function sessionSound(name: CatchSound, opts: { volume?: number; pitch?: number 
   return false;
 }
 
-/** Fire a beat haptic, never under MIN_BEAT_GAP_MS after the last pulse (a bunched beat waits, unless the beats closed). */
-function spacedBeat(intent: HapticIntent, wobble: boolean): void {
-  const gap = Date.now() - lastAppHapticAt();
-  if (gap >= MIN_BEAT_GAP_MS) { beatHaptic(intent); return; }
+/**
+ * The catch's beat lane (every player): the latest beat pulse fired or already planned. A beat that would
+ * land under MIN_BEAT_GAP_MS after it waits its turn instead of flamming (only the burst's heavy buzz never
+ * waits: it is the peak), and while a catch is open any other pulse that would land on top of a beat is
+ * dropped (a coin tick bunched with the burst is decoration).
+ */
+let beatLaneAt = -Infinity;
+/** Between the tap and 'done' / 'miss'. */
+let catchLive = false;
+
+function laneLast(): number {
+  return Math.max(lastAppHapticAt(), beatLaneAt);
+}
+
+/** Fire a beat haptic now, or at the lane's next free slot; `wobble` beats are dropped once the gather closes. */
+function laneBeat(intent: HapticIntent, wobble = false): void {
+  const now = Date.now();
+  const gap = now - laneLast();
+  if (gap >= MIN_BEAT_GAP_MS) { beatLaneAt = now; beatHaptic(intent); return; }
+  const at = laneLast() + MIN_BEAT_GAP_MS;
+  beatLaneAt = at;
+  traceEvent('mark', 'catch-beat-spaced', `${intent} +${at - now} ms`);
   const b = beats;
-  if (!b) { beatHaptic(intent); return; }
-  traceEvent('mark', 'catch-beat-spaced', `${intent} +${MIN_BEAT_GAP_MS - gap} ms`);
-  b.timers.push(setTimeout(() => { if (!(wobble && b.closed) && beats === b) beatHaptic(intent); }, MIN_BEAT_GAP_MS - gap));
+  const t = setTimeout(() => { if (!(wobble && (b?.closed || beats !== b))) beatHaptic(intent); }, at - now);
+  if (wobble && b) b.timers.push(t);
+}
+
+function spacedBeat(intent: HapticIntent, wobble: boolean): void {
+  laneBeat(intent, wobble);
 }
 
 /** Heat lifts a wobble buzz (studio on only; Battery Saver keeps the plain one). */
@@ -480,28 +508,44 @@ export function catchHaptic(intent: HapticIntent, priority = 2): void {
       if (s && s.burst && !s.burstBuzzed && !s.done) {
         // The burst's own buzz. At heat tier 2 a second, crisper thump follows it (Battery Saver: one pulse).
         s.burstBuzzed = true;
-        if (heatTier(s.heat) >= 2 && now < beatUntil && !momentSaver()) {
+        if (heatTier(s.heat) >= 2 && (now < beatUntil || now < burstBeatUntil) && !momentSaver()) {
           traceEvent('mark', 'catch-thump', `+${s.heat}`);
-          setTimeout(() => { if (Date.now() < beatUntil) beatHaptic('hitRigid'); }, HOT_THUMP_MS);
+          setTimeout(() => { if (Date.now() < Math.max(beatUntil, burstBeatUntil)) beatHaptic('hitRigid'); }, HOT_THUMP_MS);
         }
       }
     }
   } catch { /* sound is decoration */ }
-  if (now < beatUntil) {
+  const burstBeat = now < burstBeatUntil && BURST_INTENTS.has(intent);
+  if (now < beatUntil || burstBeat) {
     const b = beats;
-    if (intent === 'comboHeavy' && b?.closed) burstBuzzAt = now;
-    // A stalled thread delivers the burst and its success together: the success still waits its 180 ms.
-    if (intent === 'success' && now - burstBuzzAt < GOLDEN_SUCCESS_MS - 30) {
-      const wait = GOLDEN_SUCCESS_MS - (now - burstBuzzAt);
-      traceEvent('mark', 'catch-beat-spaced', `success +${wait} ms`);
-      burstBuzzAt = -Infinity;
-      setTimeout(() => beatHaptic('success'), wait);
+    if (intent === 'comboHeavy' && b?.closed) {
+      // The peak: always on its frame, never waits.
+      burstBuzzAt = now;
+      beatLaneAt = Math.max(beatLaneAt, now);
+      beatHaptic(intent);
       return;
     }
-    beatHaptic(intent);
+    // A stalled thread delivers the burst and its success together: the success still waits its 180 ms.
+    if (intent === 'success' && now - burstBuzzAt < GOLDEN_SUCCESS_MS - 30) {
+      const at = burstBuzzAt + GOLDEN_SUCCESS_MS;
+      traceEvent('mark', 'catch-beat-spaced', `success +${at - now} ms`);
+      burstBuzzAt = -Infinity;
+      beatLaneAt = Math.max(beatLaneAt, at);
+      setTimeout(() => beatHaptic('success'), at - now);
+      return;
+    }
+    laneBeat(intent);
+  } else if (now < landBeatUntil) {
+    // The stamp is on its frame, unless it arrived in the same JS turn as another beat (a frozen screen
+    // delivering everything at once) or a beat is still planned: then it takes the lane's next slot.
+    landBeatUntil = 0;
+    if (now - lastAppHapticAt() < LAND_BEAT_MS || beatLaneAt > now) laneBeat(intent);
+    else { beatLaneAt = now; beatHaptic(intent); }
+  } else if (catchLive && beatLaneAt > now - MIN_BEAT_GAP_MS) {
+    traceEvent('mark', 'catch-pulse-dropped', intent);
+  } else {
+    queueHaptic(intent, priority);
   }
-  else if (now < landBeatUntil) { landBeatUntil = 0; beatHaptic(intent); }
-  else queueHaptic(intent, priority);
 }
 
 export function catchSound(name: CatchSound, opts: { volume?: number; pitch?: number } = {}): void {

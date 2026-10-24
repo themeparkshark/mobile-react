@@ -215,3 +215,14 @@ test('a slow park connection: the catch holds on the wobble for 5 s, then the bu
   assert.equal(heavy.t, got.burst, 'the heavy buzz on the burst frame (a beat, not held by the shared gate)');
   assert.equal(v.haptics.find((h) => h.intent === 'success').t - heavy.t, 180, 'and the golden pair keeps its spacing');
 });
+
+test('a frozen screen delivers every beat at once: only the burst\'s own buzzes are forced, the coin ticks wait their turn in the shared gate', async () => {
+  const e = await engine();
+  // The SE simulator's live run (round 5): the UI thread froze, then every beat from the wobble to done arrived in one JS turn.
+  const r = await wowMapCatch(e, { stalls: [{ at: 150, ms: 3000 }] });
+  const v = view(e, r);
+  for (let i = 1; i < v.haptics.length; i++) {
+    const gap = v.haptics[i].t - v.haptics[i - 1].t;
+    assert.ok(gap >= 90 || v.haptics[i].intent === 'comboHeavy', `no flam (${v.haptics.map((h) => `${h.intent}@${h.t}`).join(' ')})`);
+  }
+});

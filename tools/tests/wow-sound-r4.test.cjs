@@ -151,7 +151,14 @@ test('the stamp buzz lands with the stamp, never held behind a coin-stream tick 
     const land = e.haptics.find((h) => h.intent === 'success');
     assert.equal(land.t - t, 0, `trace ${trace}: the stamp buzz is in the same call as the stamp sound`);
     const after = e.haptics.filter((h) => h.t > t && h.intent === 'tickSelection');
-    assert.equal(after.length, 1);
-    assert.equal(after[0].t - t, 120, 'the gate is back right after the stamp');
+    // Round 5: while the catch is open a pulse on top of a beat is dropped (it would buzz 120 ms later on nothing).
+    assert.equal(after.length, 0, 'the tick bunched onto the stamp is dropped, not held');
+    e.Catch.catchMark('done');
+    e.Catch.catchHaptic('tickSelection', 1);
+    e.Catch.catchHaptic('tickSelection', 1);
+    e.clock.advance(300);
+    const gated = e.haptics.filter((h) => h.t > t + 300 && h.intent === 'tickSelection');
+    assert.equal(gated.length, 2);
+    assert.equal(gated[1].t - gated[0].t, 120, 'after the catch the shared gate is back');
   }
 });
