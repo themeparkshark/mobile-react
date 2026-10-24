@@ -169,6 +169,13 @@ const COUNTER_HEAT_MAX = 4;
 const BEAT_WINDOW_MS = 1200;
 let beatUntil = 0;
 /**
+ * The stamp is a beat too: the haptic that follows the badge sound in the same frame (wow-map's arrive()
+ * plays catchSound('badge') then catchHaptic) fires with it, never held behind a coin-stream tick buzz
+ * in the 120 ms window (the replay showed the stamp buzz 70 ms late). One pulse, every player.
+ */
+const LAND_BEAT_MS = 40;
+let landBeatUntil = 0;
+/**
  * The counter roll (COUNT tokens in src/ui/motion.ts: at most 12 ticks, a final bump of 1.12): when the
  * coin stamps into the badge, the rest of the counter ladder rolls up in ROLL_TICKS_MAX quick ticks
  * ROLL_STEP_MS apart and lands on the top rung, so the count is over within 300 ms of the stamp. The
@@ -282,6 +289,7 @@ export function resetCatchSoundForTests(): void {
   momentsReady = false;
   primed = true;
   beatUntil = 0;
+  landBeatUntil = 0;
 }
 
 /** While a map catch is open (studio on): what the catch's own sounds become. */
@@ -366,12 +374,15 @@ export function catchHaptic(intent: HapticIntent, priority = 2): void {
       }
     }
   } catch { /* sound is decoration */ }
-  if (Date.now() < beatUntil) beatHaptic(intent);
+  const now = Date.now();
+  if (now < beatUntil) beatHaptic(intent);
+  else if (now < landBeatUntil) { landBeatUntil = 0; beatHaptic(intent); }
   else queueHaptic(intent, priority);
 }
 
 export function catchSound(name: CatchSound, opts: { volume?: number; pitch?: number } = {}): void {
   const cue = HOUSE[name] ?? `ride.${name}`;
+  if (name === 'badge') landBeatUntil = Date.now() + LAND_BEAT_MS;
 
   const fire = () => {
     trace('sound', name, opts.pitch ? ` pitch=${opts.pitch}` : '');

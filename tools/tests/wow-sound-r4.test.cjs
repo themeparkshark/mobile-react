@@ -192,3 +192,26 @@ test('engine: the cooldown compares scheduled starts, so a queued roll is not me
   assert.equal(mix.allocateVoice([], { ...base, lastPlayedAt: 980 }, 8).action, 'drop', 'no `at`: exactly the old rule');
   assert.equal(mix.allocateVoice([], { ...base, lastPlayedAt: 900 }, 8).action, 'play');
 });
+
+test('the stamp buzz lands with the stamp, never held behind a coin-stream tick buzz (every player)', () => {
+  for (const trace of [true, false]) {
+    const e = traceEngine({ trace });
+    e.Catch.resetCatchSoundForTests();
+    e.Catch.catchMark('tap');
+    e.clock.advance(1590);
+    e.Catch.catchHaptic('tickSelection', 1); // a coin-stream tick buzz just before the stamp (outside the beat window)
+    e.clock.advance(50);
+    const t = e.clock.now;
+    e.Catch.catchSound('badge');
+    e.Catch.catchHaptic('success', 4);
+    e.clock.advance(5);
+    // Only that one pulse skips the window: the next one waits as before.
+    e.Catch.catchHaptic('tickSelection', 1);
+    e.clock.advance(300);
+    const land = e.haptics.find((h) => h.intent === 'success');
+    assert.equal(land.t - t, 0, `trace ${trace}: the stamp buzz is in the same call as the stamp sound`);
+    const after = e.haptics.filter((h) => h.t > t && h.intent === 'tickSelection');
+    assert.equal(after.length, 1);
+    assert.equal(after[0].t - t, 120, 'the gate is back right after the stamp');
+  }
+});
