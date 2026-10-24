@@ -19,7 +19,7 @@ import { enablePush } from '../../services/push';
 import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
 import {
-  FULL_SET, WELCOME_FX, dailyChain, daysAway, flameMomentFor, mayAskAfterChain, tomorrowPrize, welcomeCards, type FlameMoment, type WelcomeCard,
+  FULL_SET, STREAK_MILESTONES, WELCOME_FX, dailyChain, daysAway, flameMomentFor, mayAskAfterChain, tomorrowPrize, welcomeCards, type FlameMoment, type WelcomeCard,
 } from '../../services/retention/loopMotion';
 import { mayAskForPush, notePushAsked } from '../../services/retention/pushAsk';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../../ui';
@@ -666,7 +666,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
 function dailyRowCount(d: DailyThreeState): { small: number; big: number } {
   const r = d.reward;
   const m = d.claimable_milestone;
-  return { small: [r.coins, r.tickets, r.energy, r.xp].filter(n => n > 0).length, big: (m?.gear ? 1 : 0) + (m && m.mystery_boxes > 0 ? 1 : 0) };
+  // A streak milestone day pays gear even when the preview has not said so yet: keep a hero slot for it.
+  const milestoneDay = d.streak.counted_today && (STREAK_MILESTONES as readonly number[]).includes(d.streak.days);
+  const gear = m?.gear || (!m && milestoneDay) ? 1 : 0;
+  return { small: [r.coins, r.tickets, r.energy, r.xp].filter(n => n > 0).length, big: gear + (m && m.mystery_boxes > 0 ? 1 : 0) };
 }
 
 type LevelPreviewData = LevelChest['preview'];
