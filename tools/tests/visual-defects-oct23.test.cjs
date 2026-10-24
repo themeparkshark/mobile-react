@@ -352,7 +352,7 @@ test('Finn catches up by the clock, so a slow first frame never leaves one word 
 test('Ride Detail star: a drawn white-rim star when off, the full gold star when on, never a faded olive star', () => {
   const src = read('src/screens/RideTracker/RideDetailScreen.tsx');
   assert.doesNotMatch(src, /opacity: 0\.45/);
-  assert.match(src, /<FavoriteStar on=\{wishlisted\} size=\{34\} \/>/);
+  assert.match(src, /<FavoriteStar on=\{wishlisted\} size=\{34\} taps=\{starTaps\} \/>/);
   assert.match(src, /<GameIcon name="star" size=\{size\} mono=\{B\.white\} \/>/);
   assert.match(src, /Animated\.spring\(pop/, 'saving pops the star');
 });
