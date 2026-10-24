@@ -43,3 +43,9 @@ test('Loading and Login open on the loop art, never a dark flash', () => {
     assert.ok(src.indexOf('source={SPLASH_POSTER}') < src.indexOf('<Video'), `${file} draws the poster under the video`);
   }
 });
+
+test('the splash decodes the Loading art ahead, under the launch art', () => {
+  const splash = read('src/screens/SplashScreen.tsx');
+  assert.match(splash, /NEXT_SCREEN_ART = \[\s*require\('..\/..\/assets\/images\/splash-loop-poster\.jpg'\),\s*require\('..\/..\/assets\/images\/screens\/login\/logo\.png'\),/);
+  assert.ok(splash.indexOf('NEXT_SCREEN_ART.map') < splash.indexOf('source={LAUNCH_ART}'), 'hidden under the launch art');
+});
