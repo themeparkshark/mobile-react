@@ -70,7 +70,7 @@ test('every LinePlay page is a framed window that stays put above the rail', () 
   assert.match(screen, /coinSize=\{fit\.coinSize\}/);
   assert.match(screen, /marginTop: fit\.activityGap/);
   assert.match(screen, /compact=\{fit\.short\}/, 'a short phone gets the one-line mission header');
-  assert.match(screen, /const crewLent = crewRowLent\(fit\.short, detailsOpen, boardLent\);/);
+  assert.match(screen, /const crewLent = crewRowLent\(fit\.short, detailsOpen, boardPage\);/);
   assert.match(screen, /\{!crewLent && <Reanimated\.View/, 'a short phone reading Details (or on the board page) lends the crew row to the page');
 });
 
@@ -127,7 +127,7 @@ test('the navigation board fits a short page whole, above the fade', () => {
   assert.equal(nav.boardSideFor({ width: 366, height: 700 }, 92), 286, 'a roomy page is limited by width');
   assert.equal(nav.boardSideFor({ width: 366, height: 82 }, 60), 110, 'never smaller than the floor');
   const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
-  assert.match(card, /contentStyle=\{\[styles\.card, tight && styles\.cardTight\]\}/);
+  assert.match(card, /contentStyle=\{\[styles\.card, tight && styles\.cardTight, viewport\.height <= 0 && styles\.unmeasured\]\}/);
   assert.match(card, /<KidText style=\{styles\.kicker\} numberOfLines=\{1\}>\{kicker\}<\/KidText>/);
 });
 
@@ -311,7 +311,7 @@ test('an iPhone SE navigation page: the whole board fits BESIDE its header, no s
   assert.match(card, /\{!tight && <Text style=\{styles\.footer\}>/, 'a tight page ends on the board: no arrow pointing at padding');
 });
 
-test('a short phone lends the crew row to the board page, and the window dips while it grows', () => {
+test('a short phone lends the crew row to the board page as the page changes', () => {
   const m = layout();
   assert.equal(m.crewRowLent(true, false, true), true, 'SE board page');
   assert.equal(m.crewRowLent(true, true, false), true, 'SE reading Details');
@@ -320,8 +320,10 @@ test('a short phone lends the crew row to the board page, and the window dips wh
   const screen = read(SCREEN);
   assert.match(screen, /return item\.kind === 'circuit' \|\| \(!!chapter\?\.navigationPanel && item\.kind === 'trivia' && item\.id === `\$\{chapter\.id\}-trivia`\);/);
   assert.match(screen, /const boardPage = isBoardPage\(visibleItem, snapshot\.chapter\);/);
-  assert.ok(screen.indexOf('const wantBoardLent') < screen.indexOf('  if (!ride) {'), 'every hook runs before the no-ride return');
-  assert.match(screen, /if \(detailsOpen\) apply\(\); else dipPages\(apply\);/);
+  assert.doesNotMatch(screen, /boardLent/, 'the row is lent in the same render as the page change: no dimmed in-between frame');
+  const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
+  assert.match(card, /viewport\.height <= 0 && styles\.unmeasured\]\}/,
+    'the board never flashes in the wrong layout before it is measured');
 });
 
 test('the window stepped aside: the rail stays put and the crew row comes back into the free band', () => {

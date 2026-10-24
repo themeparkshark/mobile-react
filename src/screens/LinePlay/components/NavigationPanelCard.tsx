@@ -378,7 +378,10 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
     </PageScroll>;
   }
 
-  return <PageScroll ref={scroll} fill={BRAND.cream} contentStyle={[styles.card, tight && styles.cardTight]}
+  // Not measured yet: the content is invisible for that one layout pass, so the board never
+  // flashes in the wrong layout before it picks beside or top.
+  return <PageScroll ref={scroll} fill={BRAND.cream}
+    contentStyle={[styles.card, tight && styles.cardTight, viewport.height <= 0 && styles.unmeasured]}
     onLayout={onLayout}
     onContentSizeChange={scrollPayoff}>
     <View onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}>
@@ -413,6 +416,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
 const styles = StyleSheet.create({
   card: { padding: 12, paddingBottom: 12 },
   cardTight: { padding: 8, paddingBottom: 10 },
+  unmeasured: { opacity: 0 },
   hero: { minHeight: 92, borderRadius: 16, flexDirection: 'row', alignItems: 'center', overflow: 'hidden',
     paddingLeft: 14, borderWidth: 3, borderColor: BRAND.navy },
   heroCompact: { minHeight: 0, paddingRight: 8 },
