@@ -60,6 +60,18 @@ export interface CatchPlan {
   readonly exitAt: number;
   readonly exitMs: number;
   readonly doneAt: number;
+  /** Round 3. Reduce Motion (a fade, no travel). */
+  readonly reduced: boolean;
+  /** After the burst the find holds on stage at this size (its hero size); burstScale is the overshoot past it. */
+  readonly heroScale: number;
+  /** The find's size when it lands in its badge slot (the sticker). */
+  readonly landScale: number;
+  /** Alex's inked burst: snaps out, holds (the screenshot frame), fades; the gold rays hold this long. */
+  readonly inkMs: number;
+  readonly goldHoldMs: number;
+  /** The badge enters only once the ink burst has started to fade (one celebration at a time). */
+  readonly badgeAt: number;
+  readonly badgeInMs: number;
 }
 
 /**
@@ -74,43 +86,51 @@ export function catchPlan(options: { readonly reduced: boolean; readonly calm?: 
     const landAt = DURATION.quick;
     return { squashMs: 0, squashTo: 1, anticipationMs: 0, risePt: 0, wobbles: [], hitStopAt: 0, burstAt: 0, burstScale: 1,
       gatherSparkles: 0, burstSparkles: 0, flyAt: 0, flyMs: DURATION.quick, arcPt: 0, landAt, kickPt: 0,
-      repeat: !!options.repeat, coinsAt: 0, barMs: 1, tickAt: landAt, exitAt: landAt + 900, exitMs: DURATION.quick, doneAt: landAt + 900 + DURATION.quick };
+      repeat: !!options.repeat, coinsAt: 0, barMs: 1, tickAt: landAt, exitAt: landAt + 900, exitMs: DURATION.quick, doneAt: landAt + 900 + DURATION.quick,
+      reduced: true, heroScale: 1, landScale: 1, inkMs: 1, goldHoldMs: 0, badgeAt: 0, badgeInMs: DURATION.quick };
   }
   const squashMs = DURATION.tap;
   const kickPt = options.calm || options.walking ? 0 : 3;
   if (options.repeat) {
+    // Repeat: burst at 450, the badge slides in as the ink fades at 750, the find is home at 1130,
+    // the bar ticks and the badge is gone by about 1.44 s.
     const hitStopAt = 380;
     const burstAt = hitStopAt + DURATION.hitStop;
-    const flyAt = 560;
-    const flyMs = 440;
+    const flyAt = 750;
+    const flyMs = 380;
     const landAt = flyAt + flyMs;
-    const barMs = 240;
-    const exitMs = 150;
-    const exitAt = landAt + 250;
+    const barMs = 140;
+    const exitMs = 140;
+    const exitAt = landAt + barMs + 30;
     return {
       squashMs, squashTo: 0.86, anticipationMs: hitStopAt - squashMs, risePt: 18,
       wobbles: [{ at: 90, deg: 10 }, { at: 240, deg: 14 }],
       hitStopAt, burstAt, burstScale: 1.25,
       gatherSparkles: 4, burstSparkles: 8,
       flyAt, flyMs, arcPt: 60, landAt, kickPt,
-      repeat: true, coinsAt: burstAt, barMs, tickAt: landAt + barMs, exitAt, exitMs, doneAt: exitAt + exitMs,
+      repeat: true, coinsAt: burstAt, barMs, tickAt: landAt + barMs + 10, exitAt, exitMs, doneAt: exitAt + exitMs,
+      reduced: false, heroScale: 1.5, landScale: 0.95, inkMs: 520, goldHoldMs: 120, badgeAt: burstAt + 300, badgeInMs: 200,
     };
   }
+  // First catch: tap 0, wobbles to 580, held frame 600, burst 670 (the find pops to about 2x on a gold
+  // stage, Alex's ink holds full size to about 1055), the badge rises at 1070 as the ink fades, the find
+  // flies home 1100 to 1640, the bar fills and ticks gold at 2000, the badge leaves 2250, done 2450.
   const hitStopAt = 600;
   const burstAt = hitStopAt + DURATION.hitStop;
-  const flyAt = 900;
-  const flyMs = 600;
+  const flyAt = 1100;
+  const flyMs = 540;
   const landAt = flyAt + flyMs;
-  const barMs = 420;
+  const barMs = 340;
   const exitMs = DURATION.exit;
   const exitAt = 2250;
   return {
     squashMs, squashTo: 0.86, anticipationMs: hitStopAt - squashMs, risePt: 24,
     wobbles: [{ at: 90, deg: 8 }, { at: 260, deg: 12 }, { at: 430, deg: 16 }],
-    hitStopAt, burstAt, burstScale: 1.35,
+    hitStopAt, burstAt, burstScale: 1.24,
     gatherSparkles: 8, burstSparkles: PARTICLES.sparkles,
     flyAt, flyMs, arcPt: 80, landAt, kickPt,
     repeat: false, coinsAt: burstAt, barMs, tickAt: landAt + barMs + 20, exitAt, exitMs, doneAt: exitAt + exitMs,
+    reduced: false, heroScale: 1.7, landScale: 0.95, inkMs: 700, goldHoldMs: 160, badgeAt: burstAt + 400, badgeInMs: DURATION.enter,
   };
 }
 
@@ -119,12 +139,13 @@ export function catchPlan(options: { readonly reduced: boolean; readonly calm?: 
  * each arcs into the counter 40 ms after the last. `landAt[i]` is when coin i lands (ms after coinsAt):
  * the first landing starts the counter's roll, every landing punches its icon, the last one bumps it.
  */
-export const COIN_STREAM = { max: 8, staggerMs: 40, sprayMs: 160, flightMs: 520, sprayPt: 46, arcPt: 70 } as const;
+export const COIN_STREAM = { max: 8, staggerMs: 40, sprayMs: 200, flightMs: 520, sprayPt: 68, arcPt: 70 } as const;
 
-export function coinStreamPlan(coins: number, reduced: boolean): { readonly count: number; readonly landAt: readonly number[] } {
+/** `cap` thins the stream with the power budget (Battery Saver keeps 3 or 4 coins). */
+export function coinStreamPlan(coins: number, reduced: boolean, cap: number = COIN_STREAM.max): { readonly count: number; readonly landAt: readonly number[] } {
   if (!(coins > 0)) return { count: 0, landAt: [] };
   if (reduced) return { count: 0, landAt: [0] };
-  const count = Math.min(COIN_STREAM.max, Math.max(1, Math.floor(coins)));
+  const count = Math.min(COIN_STREAM.max, Math.max(1, Math.floor(cap)), Math.max(1, Math.floor(coins)));
   const landAt = Array.from({ length: count }, (_, i) => i * COIN_STREAM.staggerMs + COIN_STREAM.sprayMs + COIN_STREAM.flightMs);
   return { count, landAt };
 }
@@ -348,4 +369,170 @@ export const MERGE_GAINS_MS = 600;
 /** The roll's length: 650 ms up, 400 ms down (a spend is quiet). */
 export function rollMs(from: number, to: number): number {
   return to >= from ? COUNT.ms : 400;
+}
+
+/* ------------------------------------------------- the catch's UI-thread clock */
+// Kept at the end of the file: worklets capture the helpers they call when they are created, so every
+// helper (wobbleAt included) must already exist above them.
+
+function clamp01(x: number): number {
+  'worklet';
+  return x < 0 ? 0 : x > 1 ? 1 : x;
+}
+function easeOut3(x: number): number {
+  'worklet';
+  const u = 1 - clamp01(x);
+  return 1 - u * u * u;
+}
+function easeIn2(x: number): number {
+  'worklet';
+  const u = clamp01(x);
+  return u * u;
+}
+function easeInOut3(x: number): number {
+  'worklet';
+  const u = clamp01(x);
+  return u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+}
+/** A spring settling from 1 to 0 over u 0..1 with one small visible overshoot (worklet). */
+function settle(u: number, waves = 2.5): number {
+  'worklet';
+  if (u >= 1) return 0;
+  if (u <= 0) return 1;
+  return Math.exp(-4 * u) * Math.cos(waves * Math.PI * u) * (1 - u);
+}
+
+/** Every visual channel of a common catch at clock time `t` (ms from the tap). */
+export interface CatchFrame {
+  /** Press squash 0..1 (negative is the small rebound). */
+  readonly squash: number;
+  /** Gather strength 0..1 (halo, inward sparkles). */
+  readonly charge: number;
+  /** Rise 0..1 (risePt) and glide 0..1 from the find's spot to the stage point. */
+  readonly lift: number;
+  readonly glide: number;
+  /** Wobble (degrees). */
+  readonly wobble: number;
+  /** Flash 0..1 (times flashPeak). */
+  readonly flash: number;
+  /** The find's size (1 at rest on the map). */
+  readonly scale: number;
+  /** Progress 0..1 of the inked burst, the gold rays' amount, the bloom, sparkles, ring; -1 means not now. */
+  readonly ink: number;
+  readonly gold: number;
+  readonly bloom: number;
+  readonly fx: number;
+  readonly ring: number;
+  /** The flight home 0..1 and the fade once landed. */
+  readonly fly: number;
+  readonly gone: number;
+  /** The badge 0..1, its sticker kick (scale), the landing ring, the bar fill 0..1, its gold tick, the NEW pill. */
+  readonly badge: number;
+  readonly kick: number;
+  readonly landRing: number;
+  readonly bar: number;
+  readonly barGlow: number;
+  readonly newPop: number;
+}
+
+/**
+ * The catch as one function of the UI-thread clock (round 3). One withTiming drives the clock, every view
+ * derives from it, so a busy JS thread can never stretch or desync the beats (round 2 chained JS timers).
+ * Worklet-safe and pure, so the frames are unit tested.
+ */
+export function catchFrame(t: number, p: CatchPlan): CatchFrame {
+  'worklet';
+  if (p.reduced) {
+    const badge = t < p.exitAt ? clamp01(t / p.badgeInMs) : 1 - clamp01((t - p.exitAt) / p.exitMs);
+    return { squash: 0, charge: 0, lift: 0, glide: 0, wobble: 0, flash: 0, scale: 1, ink: -1, gold: 0, bloom: 0, fx: -1, ring: -1,
+      fly: 0, gone: clamp01(t / p.landAt), badge, kick: 1, landRing: -1, bar: t >= p.landAt ? 1 : 0, barGlow: 0, newPop: t >= p.landAt ? 1 : 0 };
+  }
+  const sq = p.squashMs;
+  const squash = t < 0 ? 0 : t < sq ? easeOut3(t / sq) : settle((t - sq) / 180, 3);
+  const antic = clamp01((t - sq) / (p.hitStopAt - sq));
+  const b = t - p.burstAt;
+  const charge = b < 0 ? antic * antic : 1 - easeOut3(b / 260);
+  const lift = easeOut3(antic);
+  const glide = easeInOut3(antic);
+  const wobble = t < p.hitStopAt ? wobbleAt(t, p.wobbles) : 0;
+  const h = t - p.hitStopAt;
+  const flash = h < 0 || h >= DURATION.flash ? 0 : h < 40 ? h / 40 : 1 - easeIn2((h - 40) / (DURATION.flash - 40));
+  // The find: grows a touch while it gathers, pops past its hero size on the burst, settles there, then
+  // shrinks into its sticker slot as it flies.
+  const peak = p.heroScale * p.burstScale;
+  const fly = easeInOut3((t - p.flyAt) / p.flyMs);
+  let scale: number;
+  if (b < 0) scale = 1 + 0.12 * charge;
+  else if (b < 90) scale = 1.12 + (peak - 1.12) * easeOut3(b / 90);
+  else scale = p.heroScale + (peak - p.heroScale) * settle((b - 90) / 420);
+  if (t >= p.flyAt) scale = scale + (p.landScale - scale) * fly;
+  const ink = b < 0 || b >= p.inkMs ? -1 : b / p.inkMs;
+  const goldFade = p.repeat ? 300 : 420;
+  const gold = b < 0 ? 0 : b < 120 ? easeOut3(b / 120) : b < 120 + p.goldHoldMs ? 1 : 1 - easeIn2((b - 120 - p.goldHoldMs) / goldFade);
+  const bloom = b < 0 ? 0 : b < 140 ? b / 140 : clamp01(1 - (b - 140) / (DURATION.bloom - 140));
+  const fx = b < 0 || b >= DURATION.sparkle ? -1 : b / DURATION.sparkle;
+  const ring = b < 0 || b >= DURATION.bloom ? -1 : b / DURATION.bloom;
+  const gone = t < p.landAt ? 0 : clamp01((t - p.landAt) / 80);
+  const badge = t < p.badgeAt ? 0 : t < p.exitAt ? easeOut3((t - p.badgeAt) / p.badgeInMs) : 1 - easeIn2((t - p.exitAt) / p.exitMs);
+  const l = t - p.landAt;
+  const k = t - p.tickAt;
+  let kick = 1;
+  if (l >= 0) kick += l < 100 ? 0.22 * (l / 100) : 0.22 * settle((l - 100) / 320);
+  if (k >= 0) kick += k < 80 ? 0.1 * (k / 80) : 0.1 * settle((k - 80) / 240);
+  const landRing = l < 0 || l >= 520 ? -1 : l / 520;
+  const bar = l < 0 ? 0 : easeOut3(l / p.barMs);
+  const barGlow = k < 0 ? 0 : k < 90 ? k / 90 : 1 - easeIn2((k - 90) / 420);
+  const n = l - 60;
+  const newPop = n < 0 ? 0 : n >= 300 ? 1 : 1 - Math.exp(-5 * (n / 300)) * Math.cos(3 * Math.PI * (n / 300));
+  return { squash, charge, lift, glide, wobble, flash, scale, ink, gold, bloom, fx, ring, fly, gone, badge, kick, landRing, bar, barGlow, newPop };
+}
+
+/**
+ * Where the find stages its burst (Pokemon GO centres the catch): it glides from its map spot toward a point
+ * that keeps the whole inked burst on screen, at least 12 pt inside the edges, below the header and above
+ * the badge. A find already in a good spot barely moves.
+ */
+export function catchStage(from: { x: number; y: number }, risePt: number,
+  area: { readonly width: number; readonly top: number; readonly bottom: number }, radius: number): { x: number; y: number } {
+  const margin = 12;
+  const loX = radius + margin, hiX = area.width - radius - margin;
+  const x = loX > hiX ? area.width / 2 : Math.min(hiX, Math.max(loX, from.x));
+  const loY = area.top + radius * 0.9 + margin, hiY = area.bottom - radius - margin;
+  const y = loY > hiY ? (loY + hiY) / 2 : Math.min(hiY, Math.max(loY, from.y - risePt));
+  return { x, y };
+}
+
+/**
+ * The HUD chip during a coin stream, from the same clock (worklets): the icon punches on every landing
+ * (the last one the full HUD_BUMP), the gold glow and "+N" start with the first landing.
+ */
+export function hudPunch(t: number, lands: readonly number[]): number {
+  'worklet';
+  let i = -1;
+  for (let j = 0; j < lands.length; j++) if (lands[j] <= t) i = j;
+  if (i < 0) return 1;
+  const d = t - lands[i];
+  const peak = i === lands.length - 1 ? 0.22 : 0.11;
+  return 1 + (d < 60 ? peak * (d / 60) : peak * settle((d - 60) / 280));
+}
+
+export function hudGlow(t: number, land0: number): number {
+  'worklet';
+  const d = t - land0;
+  if (d < 0 || d >= DURATION.bloom) return 0;
+  return d < 160 ? 0.5 * (d / 160) : 0.5 * (1 - easeIn2((d - 160) / (DURATION.bloom - 160)));
+}
+
+/**
+ * One odometer column on the stream clock: holds `from` until `startAt`, rolls to `to` over `ms` with a small
+ * overshoot (EASE.out, then back), then rests. `to` may be past 9 (a roll through 9 to 0). Worklet-safe.
+ */
+export function rollPos(t: number, startAt: number, from: number, to: number, ms: number): number {
+  'worklet';
+  const u = (t - startAt) / ms;
+  if (u <= 0) return from;
+  if (u >= 1) return to;
+  const over = to > from ? 0.09 : 0;
+  if (u < 0.82) return from + (to + over - from) * easeOut3(u / 0.82);
+  return to + over * (1 - easeInOut3((u - 0.82) / 0.18));
 }

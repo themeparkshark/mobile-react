@@ -200,15 +200,15 @@ test('round 2: the coin stream bursts out of the find and lands one coin after a
 
 test('round 2: a common catch never moves the header or the tab bar, can be skipped, and the halo never blinks', () => {
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
-  const effect = src.slice(src.indexOf('const { item, pivotId } = request;'), src.indexOf("catchMark('fly')"));
+  const effect = src.slice(src.indexOf('const { item, pivotId } = request;'), src.indexOf('A new request (or a retry'));
   const rideBranch = effect.slice(effect.indexOf("if (catchStyleFor(item.rarity) === 'ride_photo')"), effect.indexOf('dimCatchChrome(true)'));
   assert.match(rideBranch, /showCatchChrome\(true\)/, 'only the full-screen viewfinder slides the chrome away');
   const commonPart = effect.slice(effect.indexOf('dimCatchChrome(true)'));
   assert.ok(!/showCatchChrome\(true\)/.test(commonPart), 'a common keeps the header where the coins land');
-  assert.match(src, /Math\.max\(0\.4 \* started\.value/, 'the halo holds a floor once the catch starts');
+  assert.match(src, /Math\.max\(0\.4 \* on/, 'the halo holds a floor once the catch starts');
   assert.match(src, /onPress=\{onSkip\}/, 'tap anywhere skips after the burst');
   assert.match(src, /targetRef\.current/, 'the stable callbacks read the badge spot through a ref (no stale top-left start)');
-  assert.match(src, /streamCoins\(settled\.data/, 'coins leave from the find on the burst');
+  assert.match(commonPart, /streamHud\('coins'/, 'coins leave from the find on the burst');
   const wrapper = read('src/components/Wrapper.tsx');
   assert.match(wrapper, /1 - 0\.4 \* catchDim\.value/, 'the tab bar softens in place');
   const chip = read('src/components/Topbar/Currency.tsx');
@@ -228,4 +228,121 @@ test('round 2: the shark has character beats (fin flick, a look toward a find, a
   assert.match(map, /mood === 'flick'/);
   assert.match(map, /lookRef\.current/);
   assert.match(map, /sharkHop > hopSeen\.current/);
+});
+
+// Round 3 (panel blockers): one UI-thread clock drives every beat, the pin never blinks, the counter never
+// rewinds, the burst stays on screen and the badge waits for it.
+const sample = (plan, step = 8) => {
+  const out = [];
+  for (let t = 0; t <= plan.doneAt; t += step) out.push({ t, f: wow.catchFrame(t, plan) });
+  return out;
+};
+
+test('round 3: the catch is one function of the clock: squash, wobbles, held flash, a 2x hero pop, home, settled by 2.6 s', () => {
+  const plan = wow.catchPlan({ reduced: false });
+  const f0 = wow.catchFrame(0, plan);
+  assert.equal(f0.squash, 0, 'the copy starts exactly as the pin looked');
+  assert.ok(Math.abs(wow.catchFrame(plan.squashMs, plan).squash - 1) < 1e-6, 'full squash at 90 ms');
+  const w = plan.wobbles.map(x => Math.round(wow.catchFrame(x.at + 75, plan).wobble));
+  assert.deepEqual(plain(w), [8, -12, 16], 'three growing wobbles, alternating');
+  assert.ok(wow.catchFrame(plan.hitStopAt + 40, plan).flash > 0.99, 'the flash peaks on the held frame');
+  const hero = wow.catchFrame(plan.burstAt + 90, plan).scale;
+  assert.ok(hero > 2 && hero < 2.2, `the find pops to about 2x on the burst (${hero})`);
+  assert.ok(Math.abs(wow.catchFrame(plan.flyAt - 1, plan).scale - plan.heroScale) < 0.05, 'it settles at its hero size before flying');
+  assert.ok(Math.abs(wow.catchFrame(plan.landAt, plan).scale - plan.landScale) < 1e-6, 'it lands at sticker size');
+  assert.ok(plan.burstAt <= 1500 && plan.doneAt <= 2600, 'payoff inside 1.5 s, settled inside 2.6 s');
+  const r = wow.catchPlan({ reduced: false, repeat: true });
+  assert.ok(r.doneAt <= 1450, `the repeat is about 1.4 s (${r.doneAt})`);
+});
+
+test('round 3: one celebration at a time: the badge rises only once the inked burst fades, and is in before the find lands', () => {
+  for (const plan of [wow.catchPlan({ reduced: false }), wow.catchPlan({ reduced: false, repeat: true })]) {
+    assert.ok(plan.burstAt + 0.42 * plan.inkMs <= plan.badgeAt, 'the ink starts fading before the badge moves');
+    assert.match(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /p < 0\.42 \? 1/);
+    assert.ok(plan.badgeAt + plan.badgeInMs <= plan.landAt, 'the slot is there when the find arrives');
+    assert.equal(wow.catchFrame(plan.badgeAt - 1, plan).badge, 0);
+    assert.ok(wow.catchFrame(plan.landAt, plan).badge > 0.99);
+  }
+});
+
+test('round 3: never a still hold over 600 ms between the tap and done', () => {
+  for (const plan of [wow.catchPlan({ reduced: false }), wow.catchPlan({ reduced: false, repeat: true })]) {
+    const frames = sample(plan);
+    let still = 0, worst = 0;
+    for (let i = 1; i < frames.length; i++) {
+      const a = frames[i - 1].f, b = frames[i].f;
+      const moved = Object.keys(a).some(k => Math.abs(a[k] - b[k]) > 1e-4);
+      still = moved ? 0 : still + 8;
+      worst = Math.max(worst, still);
+    }
+    assert.ok(worst <= 600, `longest still stretch ${worst} ms`);
+  }
+});
+
+test('round 3: the stage keeps the whole burst on screen (never cut off at an edge)', () => {
+  const area = { width: 402, top: 100, bottom: 700 };
+  const r = 141;
+  const left = wow.catchStage({ x: 20, y: 400 }, 24, area, r);
+  assert.ok(left.x - r >= 12 && left.x + r <= area.width - 12, 'clamped inside the left and right edges');
+  const high = wow.catchStage({ x: 200, y: 110 }, 24, area, r);
+  assert.ok(high.y - r * 0.9 >= area.top, 'below the header');
+  const low = wow.catchStage({ x: 200, y: 690 }, 24, area, r);
+  assert.ok(low.y + r <= area.bottom, 'above the badge');
+  const mid = wow.catchStage({ x: 201, y: 400 }, 24, area, r);
+  assert.deepEqual(plain(mid), { x: 201, y: 376 }, 'a find already in a good spot simply rises');
+});
+
+test('round 3: the counter rolls on the same clock, starts on the first landing and never shows a lower number', () => {
+  const lands = [700, 740, 780];
+  assert.equal(wow.hudPunch(699, lands), 1, 'still before the first coin');
+  assert.ok(wow.hudPunch(700 + 30, lands) > 1.05, 'the first coin punches');
+  assert.ok(Math.abs(wow.hudPunch(780 + 60, lands) - 1.22) < 1e-6, 'the last coin lands the full HUD bump');
+  assert.equal(wow.rollPos(600, 700, 6, 7, 650), 6, 'holds the old digit until the first coin lands');
+  let prev = 6;
+  for (let t = 700; t <= 1400; t += 10) {
+    const v = wow.rollPos(t, 700, 6, 7, 650);
+    assert.ok(v >= 6, 'never below the old digit');
+    if (t < 700 + 650 * 0.82) assert.ok(v >= prev - 1e-9, 'rolls forward');
+    prev = v;
+  }
+  assert.ok(wow.rollPos(700 + 200, 700, 6, 7, 650) > 6.3 && wow.rollPos(700 + 200, 700, 6, 7, 650) < 7, 'a visible partial digit mid-roll');
+  assert.equal(wow.rollPos(2000, 700, 6, 7, 650), 7);
+  assert.ok(wow.hudGlow(700 + 160, 700) > 0.49 && wow.hudGlow(699, 700) === 0, 'the gold glow starts with the first coin');
+});
+
+test('round 3: no JS timer paces the catch; the pin hides only after the layer drew it; the chip plans its roll from the stream', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /useDerivedValue\(\(\) => catchFrame\(cc\.value, planSV\.value\)\)/, 'every view derives from one clock');
+  assert.match(src, /runOnUI\(startClock\)/);
+  assert.match(src, /runOnJS\(onBeat\)/, 'haptics and sounds come off the clock');
+  const effect = src.slice(src.indexOf('const { item, pivotId } = request;'), src.indexOf('A new request (or a retry'));
+  const caught = effect.slice(effect.indexOf('const data = settled.data;'));
+  assert.ok(!/await (wait|pause)\(/.test(caught), 'no awaited JS waits between the answer and done');
+  assert.ok(!/setTimeout\(\(\) => \{ if \(i === 0\)/.test(src), 'no per-coin JS timers');
+  const explore = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.ok(!/hidden=\{catchingPivot === /.test(explore), 'the pin is not hidden on the tap commit');
+  assert.match(src, /catchHidePivot\.value = pivot/, 'the pin hides on the UI thread when the copy starts moving');
+  assert.match(src, /onDisplay=\{onCopyShown\}/, 'the clock waits for the copy to draw');
+  assert.match(read('src/screens/ExploreScreen/PrepItem.tsx'), /catchHidePivot\.value === myPivot/);
+  const marker = read('src/screens/ExploreScreen/HomeFindMarker.tsx');
+  assert.match(marker, /squashFind\(item\.pivot_id\)/, 'the pin itself squishes on the tap frame');
+  const chip = read('src/components/Topbar/Currency.tsx');
+  assert.match(chip, /event\.kind === 'stream'/);
+  assert.match(chip, /hudPunch\(hudClock\.value/);
+  const digits = read('src/components/Topbar/RollingDigits.tsx');
+  assert.ok(!/pos\.value % 10/.test(digits), 'the roll never starts from a live read of the column (the 370, 360, 370 rewind)');
+  assert.match(digits, /rollPos\(hudClock\.value/);
+  const find = read('src/screens/ExploreScreen/PrepItem.tsx');
+  assert.match(find, /mapGlowColor\(prepItem\.rarity\)/, 'map glows stay in the house palette');
+  const pres = loadTs('src/screens/ExploreScreen/findPresentation.ts');
+  for (const c of Object.values(pres.MAP_GLOW_COLORS)) {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+    assert.ok(!(r > 150 && b > 150 && g < 120), `${c} is not purple or magenta`);
+  }
+});
+
+test('round 3: Battery Saver thins the coin stream to 3 or 4 coins', () => {
+  assert.equal(wow.coinStreamPlan(10, false, 3).count, 3);
+  assert.equal(wow.coinStreamPlan(10, false).count, 8);
+  assert.equal(wow.coinStreamPlan(2, false, 4).count, 2);
 });

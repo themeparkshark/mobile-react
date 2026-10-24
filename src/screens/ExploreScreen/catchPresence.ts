@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Easing, makeMutable, withTiming } from 'react-native-reanimated';
+import { Easing, makeMutable, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 
 /**
  * Whether a catch moment owns the screen. Two layers:
@@ -61,3 +61,20 @@ export function useCatchOpen(): boolean {
   }, []);
   return value;
 }
+
+/**
+ * Round 3: the find squishes under the finger on the tap's own frame (the map marker itself, before any
+ * React state for the catch commits), then springs back while the catch layer takes over. One shared value
+ * for the whole map: only the tapped find reads a non-zero squash.
+ */
+export const tapPivot = makeMutable(-1);
+export const tapSquash = makeMutable(0);
+
+export function squashFind(pivotId: number | null | undefined): void {
+  if (pivotId == null) return;
+  tapPivot.value = pivotId;
+  tapSquash.value = withSequence(withTiming(1, { duration: 90, easing: Easing.out(Easing.cubic) }), withSpring(0, { damping: 11, stiffness: 300 }));
+}
+
+/** The pin the catch layer has taken over (hidden on the UI thread from the layer's first moving frame). */
+export const catchHidePivot = makeMutable(-1);

@@ -63,7 +63,7 @@ if (__DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1') LogBox.ignor
 // The preview is the Ride Photo harness: the server's switch (player_stats.ride_photo_enabled) is on here.
 if (__DEV__) setRidePhotoServerEnabled(true);
 // Captures: `lane.sh eval '__wowResetCatch()'` makes the next catch the first of a session again (the full show).
-if (__DEV__) (globalThis as { __wowResetCatch?: () => void }).__wowResetCatch = resetCatchSessionForPreview;
+if (__DEV__) (globalThis as { __wowResetCatch?: (count?: number) => void }).__wowResetCatch = resetCatchSessionForPreview;
 
 type ScriptStep = { index: number; kind: RideKind; sky: Sky; shots: number[]; rarity?: number; owned?: boolean; reduced?: boolean; skip?: boolean;
   /** The server's Legendary roll says no: the find rides by (409). */ escape?: boolean;
@@ -196,6 +196,14 @@ function HomeCatchPreview() {
   const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(catchShown.value, catchDim.value) * 1.6) }));
   // The dev frame graph on every capture (UI fps, p5): the wow clips carry their own frame-rate proof.
   const perf = usePerfProbe(!STILL);
+  // Showcase captures hide the frame graph (`lane.sh eval '__wowPerf(false)'`); perf captures keep it.
+  const [showPerf, setShowPerf] = useState(true);
+  useEffect(() => {
+    if (!__DEV__) return undefined;
+    const g = globalThis as { __wowPerf?: (on: boolean) => void };
+    g.__wowPerf = on => setShowPerf(on);
+    return () => { delete g.__wowPerf; };
+  }, []);
 
   const items: PrepItemType[] = useMemo(() => FIXTURES.map((fixture, index) => ({
     id: 900 + index, pivot_id: 9000 + index, name: fixture.name, variant_slug: null, description: null,
@@ -393,7 +401,7 @@ function HomeCatchPreview() {
         {/* Each fixture keeps its own index after a catch (a caught find no longer shifts the others' range). */}
         {items.map((item, index) => caught.has(item.pivot_id!) ? null : (
           <HomeFindMarker key={item.pivot_id} item={item} distance={Math.round(Math.hypot(FIXTURES[index].north, FIXTURES[index].east) / 5) * 5} inRange={FIXTURES[index].inRange}
-            animated={!STILL && index < 4} hidden={request?.pivotId === item.pivot_id} onTap={tapFind} onExpire={noop}
+            animated={!STILL && index < 4} hidden={false} onTap={tapFind} onExpire={noop}
             fingerSide={sides[item.pivot_id!] ?? 'right'} showFinger={index === nearestInRange}
             chromeless={BARE || cascadeOn && !!points.current.get(item.pivot_id!) && bannerCovers(points.current.get(item.pivot_id!)!, size, BOTTOM_SLOT)} />
         ))}
@@ -441,7 +449,7 @@ function HomeCatchPreview() {
           catches.current += 1;
           if (autoplay && catches.current < SCRIPT.length) setTimeout(() => runStep(catches.current), 2600);
         }} />
-      {!STILL && <PerfOverlay probe={perf} style={styles.perf} />}
+      {!STILL && showPerf && <PerfOverlay probe={perf} style={styles.perf} />}
     </View>
     </View></Wrapper>
   );

@@ -1,13 +1,13 @@
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Text, View, TouchableOpacity, StyleSheet } from 'react-native';
+import { Animated, Image as RNImage, Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { DURATION, EASE, HUD_BUMP } from '../../ui/motionEasing';
 import { GOLD_FX } from '../../ui/motion';
-import { rollMs } from '../map/alive/mapWow';
-import RollingDigits from './RollingDigits';
-import { onHudPulse } from './hudPulse';
+import { hudGlow, hudPunch, rollMs } from '../map/alive/mapWow';
+import RollingDigits, { type DigitStream } from './RollingDigits';
+import { hudClock, hudStreamId, onHudPulse } from './hudPulse';
 import shortenNumber from '../../helpers/shorten-number';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { useHelp } from '../help/HelpProvider';
@@ -74,7 +74,8 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
   // punches to HUD_BUMP when a coin lands, a soft gold glow says "you got more" and "+N" floats up.
   // A spend just rolls down quietly. A coin flying in holds the roll until it lands (hudPulse).
   const reduced = useReducedGameMotion();
-  const [shown, setShown] = useState({ value: count, prev: count });
+  const [shown, setShownState] = useState<{ value: number; prev: number; stream?: DigitStream | null; key: number }>({ value: count, prev: count, key: 0 });
+  const setShown = useCallback((next: { value: number; prev: number; stream?: DigitStream | null }) => setShownState(cur => ({ ...next, key: cur.key + 1 })), []);
   const shownRef = useRef(shown.value);
   shownRef.current = shown.value;
   const holdUntil = useRef(0);
@@ -84,6 +85,9 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
   const glow = useSharedValue(0);
   const plus = useSharedValue(0);
   const [plusText, setPlusText] = useState('');
+  // Round 3: a coin stream on the catch's clock (its id and landing times), read by the worklets below.
+  const streamId = useSharedValue(0);
+  const streamLands = useSharedValue<number[]>([]);
   const celebrate = useCallback((gain: number) => {
     if (gain <= 0) return;
     if (reduced) { bump.value = 1; return; }
@@ -96,10 +100,12 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
   const rollTo = useCallback((next: number, landed: boolean) => {
     const from = shownRef.current;
     if (next === from) return;
+    // A plain roll (a spend, a gain with nothing flying in) leaves any finished coin stream behind.
+    streamId.value = 0;
     setShown({ value: next, prev: from });
     if (next > from) celebrate(next - from);
     else if (landed) celebrate(0);
-  }, [celebrate]);
+  }, [celebrate, streamId, setShown]);
   useEffect(() => {
     if (count === shownRef.current) return;
     // A coin is on its way in: the number waits for it (at most the hold), then rolls on landing.
@@ -119,6 +125,23 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     if (!flyTarget) return undefined;
     const off = onHudPulse(flyTarget, event => {
       if (event.kind === 'hold') { holdUntil.current = Math.max(holdUntil.current, event.untilMs); return; }
+      if (event.kind === 'stream') {
+        // The coins are on their way on the shared clock: the roll, the punches, the glow and "+N" are all
+        // planned now and play on the UI thread exactly as each coin lands (no JS timer can stretch them).
+        const { stream } = event;
+        if (stream.gain <= 0 || stream.lands.length === 0) return;
+        holdUntil.current = 0;
+        pending.current = null;
+        if (release.current) { clearTimeout(release.current); release.current = null; }
+        const from = shownRef.current;
+        const next = from + stream.gain;
+        shownRef.current = next;
+        streamLands.value = [...stream.lands];
+        streamId.value = stream.id;
+        setPlusText(`+${countText(stream.gain)}`);
+        setShown({ value: next, prev: from, stream: reduced ? null : { id: stream.id, startAt: stream.lands[0] } });
+        return;
+      }
       if (event.kind === 'punch') {
         // A stream's later coins: a small punch each, the full bump on the last one (the roll is already going).
         if (reduced) return;
@@ -134,11 +157,20 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     });
     return () => { off(); if (release.current) clearTimeout(release.current); };
   }, [flyTarget, rollTo, reduced, bump]);
-  const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
-  const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scaleX: 1 + 0.12 * glow.value }] }));
+  const iconStyle = useAnimatedStyle(() => {
+    const live = streamId.value > 0 && hudStreamId.value === streamId.value && !reduced;
+    return { transform: [{ scale: bump.value * (live ? hudPunch(hudClock.value, streamLands.value) : 1) }] };
+  });
+  const glowStyle = useAnimatedStyle(() => {
+    const live = streamId.value > 0 && hudStreamId.value === streamId.value && !reduced && streamLands.value.length > 0;
+    const g = Math.max(glow.value, live ? hudGlow(hudClock.value, streamLands.value[0]) : 0);
+    return { opacity: g, transform: [{ scaleX: 1 + 0.12 * g }] };
+  });
   // "+N" pops in under the chip, rises into place, holds about 400 ms so it can be read, then fades.
   const plusStyle = useAnimatedStyle(() => {
-    const p = plus.value;
+    const live = streamId.value > 0 && hudStreamId.value === streamId.value && !reduced && streamLands.value.length > 0;
+    // In a stream "+N" pops on the frame the first coin lands (the same clock as the coins).
+    const p = live ? (hudClock.value - streamLands.value[0]) / 1100 : plus.value;
     const a = p <= 0 || p >= 1 ? 0 : p < 0.12 ? p / 0.12 : p < 0.7 ? 1 : 1 - (p - 0.7) / 0.3;
     return { opacity: a, transform: [{ translateY: 12 * (1 - Math.min(1, p / 0.25)) - 6 * Math.max(0, p - 0.7) / 0.3 },
       { scale: p < 0.12 ? 0.6 + 0.6 * (p / 0.12) : p < 0.3 ? 1.2 - 0.2 * ((p - 0.12) / 0.18) : 1 }] };
@@ -161,7 +193,7 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
         <View style={styles.currencyRow}>
           {/* The soft gold underglow on a gain: the map's glow texture tinted gold, opacity only (no live shadow pass). */}
           <Reanimated.View pointerEvents="none" style={[styles.gainGlow, glowStyle]}>
-            <Image source={GLOW_TEX} tintColor={GOLD_FX.glow} style={styles.glowFill} contentFit="fill" transition={0} />
+            <RNImage source={GLOW_TEX} style={[styles.glowFill, { tintColor: GOLD_FX.glow }]} resizeMode="stretch" fadeDuration={0} />
           </Reanimated.View>
           <Reanimated.View style={[styles.iconWrap, iconStyle]}>
             <Image
@@ -173,7 +205,7 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
           </Reanimated.View>
           <View style={styles.countBox}>
             <RollingDigits text={shortenNumber(shown.value)} previous={shortenNumber(shown.prev)} up={up}
-              ms={rollMs(shown.prev, shown.value)} fontSize={COUNT_FONT} textStyle={styles.countText} reduced={reduced} />
+              ms={rollMs(shown.prev, shown.value)} fontSize={COUNT_FONT} textStyle={styles.countText} reduced={reduced} stream={shown.stream ?? null} rollKey={shown.key} />
           </View>
           <Reanimated.Text allowFontScaling={false} style={[styles.plus, plusStyle]}>{plusText}</Reanimated.Text>
         </View>

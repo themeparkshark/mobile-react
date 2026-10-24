@@ -4,8 +4,32 @@
  * number rolls exactly when the coin arrives (Monopoly GO: the counter waits for the coins). A balance
  * that goes up with nothing flying in rolls at once. No React, no timers per frame: a tiny listener set.
  */
+import { makeMutable } from 'react-native-reanimated';
+
+export interface HudStream {
+  /** Matches hudStreamId while this stream is the live one. */
+  readonly id: number;
+  readonly gain: number;
+  /** Clock times (ms, on hudClock) when each coin lands; the roll starts on the first. */
+  readonly lands: readonly number[];
+}
+
 type Listener = (event: { readonly kind: 'hold'; readonly untilMs: number } | { readonly kind: 'land'; readonly gain: number | null }
-  | { readonly kind: 'punch'; readonly last: boolean }) => void;
+  | { readonly kind: 'punch'; readonly last: boolean } | { readonly kind: 'stream'; readonly stream: HudStream }) => void;
+
+/**
+ * Round 3: the catch's UI-thread clock, shared with the counter. The catch drives hudClock with one
+ * withTiming; the chip's digits, punches, glow and "+N" are worklets of the same clock, so the number
+ * starts rolling on the exact frame the first coin touches the chip, however busy the JS thread is.
+ */
+export const hudClock = makeMutable(0);
+export const hudStreamId = makeMutable(0);
+let streamSeq = 0;
+/** A new stream id (the old stream's columns rest at their final digits from this frame). */
+export function nextHudStreamId(): number {
+  streamSeq += 1;
+  return streamSeq;
+}
 
 const listeners = new Map<string, Set<Listener>>();
 
@@ -33,4 +57,12 @@ export function pulseHud(target: string, gain: number | null = null): void {
  */
 export function punchHud(target: string, last: boolean): void {
   listeners.get(target)?.forEach(l => l({ kind: 'punch', last }));
+}
+
+/** Coins are on their way on the shared clock: the chip plans its roll, punches and "+N" from it. */
+export function streamHud(target: string, stream: HudStream): boolean {
+  const set = listeners.get(target);
+  if (!set || set.size === 0) return false;
+  set.forEach(l => l({ kind: 'stream', stream }));
+  return true;
 }

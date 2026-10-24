@@ -506,6 +506,10 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
   }, [catching]);
 
   const catchingPivot = catchRequest?.pivotId ?? catching?.pivotId ?? null;
+  // During a catch the pin hides on the UI thread (catchPresence.catchHidePivot) on the frame the catch
+  // layer's copy starts moving, after its art has drawn (round 2 hid it on the tap's commit, before the layer
+  // drew it, so the find blinked out under the finger). A caught find then stays hidden here.
+  const [caughtPivots, setCaughtPivots] = useState<ReadonlySet<number>>(() => new Set());
 
   // A new find in range: the shark gives one happy hop (Map reads the bump; nothing repeats).
   const [sharkHop, setSharkHop] = useState(0);
@@ -624,6 +628,9 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
     callbacks.current.onPrepItemNearby(item, pivotId, 'tap');
   }, []);
   const onDoneStable = useCallback((caught: boolean) => {
+    const done = callbacks.current.catchRequest?.pivotId;
+    // A caught find stays hidden even if the list refresh lands a beat later, and the shark cheers it.
+    if (caught && done != null) { setCaughtPivots(current => new Set(current).add(done)); setSharkHop(n => n + 1); }
     setCatchRequest(null);
     callbacks.current.onCatchDone?.(caught);
   }, []);
@@ -694,7 +701,7 @@ export default function HomeExplore({ onPrepItemNearby, catching = null, onCatch
             // Rounded so GPS jitter does not re-render every marker.
             distance={distance == null ? null : Math.round(distance / 5) * 5} inRange={inRange}
             animated={animatedPivots.has(prepItem.pivot_id)}
-            hidden={catchingPivot === prepItem.pivot_id || findGroups.hidden.includes(prepItem.pivot_id ?? -1) || isRodeOff(prepItem)}
+            hidden={caughtPivots.has(prepItem.pivot_id ?? -1) || findGroups.hidden.includes(prepItem.pivot_id ?? -1) || isRodeOff(prepItem)}
             count={findGroups.counts[prepItem.pivot_id ?? -1] ?? 1}
             chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1) || (cascadeOn && underBanner(prepItem.pivot_id))}
             onTap={tapFind} onExpire={handlePrepItemExpire}

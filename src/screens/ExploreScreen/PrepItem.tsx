@@ -1,6 +1,6 @@
 import { Image, ImageSource } from 'expo-image';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image as RNImage, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
 import { BAND_FADE_MS, BAND_LOOK, SPAWN, bookSpawn, findBand, hopAt, newSpawnClock, ringAt } from '../../components/map/alive/mapWow';
@@ -14,7 +14,16 @@ import { BRAND, GameIcon } from '../../ui';
 import { catchStyleFor } from './ridePhoto';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { formatFindDistance, msUntilLeavesInChanges } from './homeFindCopy';
-import { findImageOrder, findLook, rarityColor } from './findPresentation';
+import { findImageOrder, findLook, mapGlowColor } from './findPresentation';
+import { catchHidePivot, tapPivot, tapSquash } from './catchPresence';
+
+/**
+ * A tinted glow or sparkle. React Native's own Image applies tintColor every time; expo-image sometimes drew
+ * the cached glow texture untinted (its natural blue) after a relaunch, so gold halos showed up blue.
+ */
+function Tinted({ source, tint, fit = 'stretch' }: { source: number; tint: string; fit?: 'stretch' | 'contain' }) {
+  return <RNImage source={source} style={[styles.fill, { tintColor: tint }]} resizeMode={fit} fadeDuration={0} />;
+}
 
 // Local churro images map - React Native requires static imports
 const CHURRO_IMAGES: Record<string, ImageSource> = {
@@ -144,7 +153,7 @@ function SpawnSparkle({ angle, t }: { angle: number; t: ReturnType<typeof useSha
     return { opacity: 1 - p, transform: [{ translateX: Math.sin(rad) * 26 * out }, { translateY: -Math.cos(rad) * 18 * out - 6 * out }, { scale: 0.6 + 0.5 * (1 - p) }] };
   });
   // Tint on a plain image inside the animated view: an animated style on the image itself can drop its tint.
-  return <Animated.View style={[styles.spawnSpark, style]}><Image source={MAP_SPARKLE} tintColor={GOLD_FX.raysSoft} style={styles.fill} contentFit="contain" transition={0} /></Animated.View>;
+  return <Animated.View style={[styles.spawnSpark, style]}><Tinted source={MAP_SPARKLE} tint={GOLD_FX.raysSoft} fit="contain" /></Animated.View>;
 }
 
 /** "2 min" in the final five minutes, null before; calls onExpire once it is gone. Only ticks while the map is live. */
@@ -216,7 +225,8 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   const tag = [far || null, leavingSoon].filter(Boolean).join(' · ');
   const imageSource = useMemo(() => findImageSource(prepItem),
     [prepItem.icon_url, prepItem.variant_slug, prepItem.name]); // eslint-disable-line react-hooks/exhaustive-deps
-  const color = rarityColor(prepItem.rarity);
+  // Map glows stay in the house palette (gold and TPS blue tiers, never the neon purple of the rarity chips).
+  const color = mapGlowColor(prepItem.rarity);
   const look = findLook(prepItem.rarity, inRange);
   const tier = Math.max(1, Math.min(5, Math.round(prepItem.rarity || 1)));
   const ridePhoto = catchStyleFor(prepItem.rarity) === 'ride_photo';
@@ -333,32 +343,38 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
     pulseV.value = 0;
     pulseV.value = withSequence(withTiming(1, { duration: 220 }), withTiming(0, { duration: 420 }));
   }, [pulseKey, pulseV]);
-  const pulseArt = useAnimatedStyle(() => ({ transform: [{ scale: reduced ? 1 : 1 + 0.35 * pulseV.value }] }), [reduced]);
+  // The tap squish (catchPresence.squashFind) lands on this marker on the tap's frame, before the catch layer draws.
+  const myPivot = prepItem.pivot_id ?? -2;
+  // The catch layer takes over on the UI thread: this pin hides on the same frame the layer's copy starts
+  // moving (after its art has drawn), never a frame before (no blink) or after (no double).
+  const handOff = useAnimatedStyle(() => ({ opacity: catchHidePivot.value === myPivot ? 0 : 1 }), [myPivot]);
+  const pulseArt = useAnimatedStyle(() => ({ transform: [{ scale: reduced ? 1 : 1 + 0.35 * pulseV.value },
+    { scale: tapPivot.value === myPivot ? 1 - 0.14 * tapSquash.value : 1 }] }), [reduced, myPivot]);
   const pulseRing = useAnimatedStyle(() => ({ opacity: pulseV.value, transform: [{ scale: 0.8 + 0.6 * pulseV.value }] }));
   const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${moving ? (clock.value * 24) % 360 : 0}deg` }] }), [moving]);
 
   return (
-    <View style={[styles.box, hidden && styles.hidden]} pointerEvents="box-none">
+    <Animated.View style={[styles.box, hidden && styles.hidden, handOff]} pointerEvents="box-none">
       <Animated.View style={[styles.scaled, bandStyle]}>
         <Animated.View style={[styles.spawnRing, spawnRingStyle]} pointerEvents="none" />
         <Animated.View style={[styles.scaled, styles.overlay, spawnStyle]}>
         <View style={styles.groundShadow} />
         {/* Getting warmer: a gold halo that breathes faster up close, and two gold rings calling in range. */}
         <Animated.View style={[styles.groundGlow, halo]} pointerEvents="none">
-          <Image source={GLOW} tintColor={GOLD_FX.glow} style={styles.fill} contentFit="fill" transition={0} />
+          <Tinted source={GLOW} tint={GOLD_FX.glow} />
         </Animated.View>
         <Animated.View style={[styles.callRing, ring0]} pointerEvents="none" />
         <Animated.View style={[styles.callRing, ring1]} pointerEvents="none" />
         {/* Commons glow warm gold in range (never the grey that read as a loading bar). */}
         {inRange && <Animated.View style={[styles.groundGlow, pulse]} pointerEvents="none">
-          <Image source={GLOW} tintColor={tier === 1 ? BRAND.gold : color} style={styles.fill} contentFit="fill" transition={0} />
+          <Tinted source={GLOW} tint={tier === 1 ? BRAND.gold : color} />
         </Animated.View>}
         {look.rays && <Animated.View style={[styles.rays, rays]} pointerEvents="none">
           {[0, 45, 90, 135].map(angle => <View key={angle}
             style={[styles.ray, { backgroundColor: color, transform: [{ rotate: `${angle}deg` }] }]} />)}
         </Animated.View>}
         {look.aura && <Animated.View style={[styles.aura, pulse]} pointerEvents="none">
-          <Image source={GLOW} tintColor={color} style={styles.fill} contentFit="fill" transition={0} />
+          <Tinted source={GLOW} tint={color} />
         </Animated.View>}
         <Animated.View style={[styles.pulseRing, { borderColor: color }, pulseRing]} pointerEvents="none" />
         <Animated.View style={pulseArt}>
@@ -395,7 +411,7 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         {far ? <Image source={FOOTSTEPS} style={styles.tagSteps} contentFit="contain" transition={0} /> : null}
         {leavingSoon && <GameIcon name="timer" size={12} />}<Text style={styles.timeText}>{tag}</Text>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
