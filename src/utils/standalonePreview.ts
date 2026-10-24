@@ -1,6 +1,7 @@
 /** Development-only screens that intentionally own their initial navigation. */
 export function isStandalonePreviewMode(): boolean {
-  if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1') return true;
+  // Release-like capture or share walks only (store builds set neither): the preview stays put, no sign-in redirect.
+  if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1' || process.env.EXPO_PUBLIC_SHARE_WALK === '1') return true;
   return __DEV__ && (
     process.env.EXPO_PUBLIC_MAP_ALIVE_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_STREAK_FLAME_PREVIEW === '1' ||
