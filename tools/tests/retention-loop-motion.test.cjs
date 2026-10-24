@@ -365,3 +365,9 @@ test('one chest reveal, no strobe: one render starts it, the lid and every row r
   // The chest's preview and size never change mid-gather when the claim's answer updates the goals.
   assert.match(ret, /revealDaily\.current/);
 });
+
+test('a waiting layer knows its own id before listeners hear it (no one-frame flip that hid a just-opened card)', () => {
+  const layers = read('src/ui/modalLayers.ts');
+  assert.match(layers, /add\(claim\?: \(id: number\) => void\): number \{\s*const id = nextId\+\+;\s*claim\?\.\(id\);/);
+  assert.match(layers, /const me = id \?\? mineRef\.current;/);
+});
