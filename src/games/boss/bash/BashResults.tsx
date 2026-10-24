@@ -16,6 +16,7 @@ import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { BRAND } from '../../../ui/tokens';
 import GameIcon from '../../../ui/GameIcon';
 import { BASH_ART } from './art';
+import { ResultsRibbon } from '../../../gamekit/results/ResultsRibbon';
 
 const CHEST_OPEN = require('../../../../assets/images/daily/chest-open.png');
 
@@ -28,10 +29,11 @@ export interface BashNext {
 }
 export interface BashRewards { readonly coins: number; readonly xp: number; readonly energy: number; readonly parts: number }
 
-function clock(endsAt: string | undefined, now: number) {
+/** Minutes left in the raid (null when over or unknown). */
+export function raidMinutesLeft(endsAt: string | undefined, now: number): number | null {
   if (!endsAt) return null;
   const ms = new Date(endsAt).getTime() - now;
-  return ms <= 0 ? null : `${Math.max(1, Math.ceil(ms / 60000))} min left`;
+  return ms <= 0 ? null : Math.max(1, Math.ceil(ms / 60000));
 }
 
 /** Next-attack state after this round's charge. Pure (tested). */
@@ -111,14 +113,14 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
   const s0 = useAnimatedStyle(() => ({ transform: [{ scale: starsIn[0].value }], opacity: starsIn[0].value > 0 ? 1 : 0 }));
   const s1 = useAnimatedStyle(() => ({ transform: [{ scale: starsIn[1].value }], opacity: starsIn[1].value > 0 ? 1 : 0 }));
   const s2 = useAnimatedStyle(() => ({ transform: [{ scale: starsIn[2].value }], opacity: starsIn[2].value > 0 ? 1 : 0 }));
-  const left = clock(endsAt, Date.now());
+  const left = raidMinutesLeft(endsAt, Date.now());
   const once = (f?: () => void) => () => { if (pressed.current || !f) return; pressed.current = true; f(); };
 
   return (
     <View style={styles.card} accessibilityViewIsModal>
-      <View style={[styles.banner, won && styles.bannerWin]} accessibilityRole="header">
-        <Text style={styles.bannerText}>{won ? (ko && !noHits ? 'YOU FINISHED IT!' : 'TEAM WON!') : noHits ? 'GOOD TRY!' : 'STILL FIGHTING'}</Text>
-      </View>
+      {/* The one results title every game shares: Alex's ribbon over the card's top edge. */}
+      <ResultsRibbon title={won ? (ko && !noHits ? 'YOU FINISHED IT!' : 'TEAM WON!') : noHits ? 'GOOD TRY!' : 'STILL FIGHTING!'}
+        reducedMotion={reduced} style={styles.ribbonWrap} />
       {best && !noHits && <View style={styles.best}><Text style={styles.bestText}>NEW BEST!</Text></View>}
       <View style={styles.head}>
         <View>
@@ -127,7 +129,8 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.kicker}>{noHits ? 'NO HITS THIS TIME' : `YOU HIT ${bossName.toUpperCase()} FOR`}</Text>
-          {noHits ? <Text style={styles.zero}>No Energy was spent.</Text>
+          {noHits ? <View style={styles.kept} accessible accessibilityLabel="No Energy was spent">
+            <GameIcon name="energy" size={24} /><Text style={styles.zero}>ENERGY KEPT</Text></View>
             : <CountUpText value={damage} delayMs={reduced ? 0 : 200} durationMs={reduced ? 1 : 700} style={styles.dmg} />}
           {rate < 1 && !noHits && <Text style={styles.rate}>From home, {Math.round(rate * 100)}% power</Text>}
           {!noHits && teamDamage > 0 && <Text style={styles.rate}>You {damage.toLocaleString()}  ·  Team {(teamDamage + damage).toLocaleString()}</Text>}
@@ -152,9 +155,15 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <View style={[styles.hpGold, { width: pct(startHp) }]} />
           <Animated.View style={[styles.hpRed, fill]} />
         </View>}
-        <Text style={styles.raidLine} numberOfLines={1}>
-          {won ? 'Boss down!' : `${hpAfter.toLocaleString()} HP left`}{left && !won ? `  ·  ${left}` : ''}{fighters > 0 && !won ? `  ·  ${fighters} fighting` : ''}
-        </Text>
+        {/* Pictures, not a sentence: the bar is the HP, then a clock and the
+            sharks still fighting. The numbers are spoken in full. */}
+        {won ? <Text style={styles.raidLine} numberOfLines={1}>Boss down!</Text> : (
+          <View style={styles.raidIcons} accessible
+            accessibilityLabel={`${hpAfter.toLocaleString()} HP left${left ? `, ${left} minutes left` : ''}${fighters > 0 ? `, ${fighters} sharks fighting` : ''}`}>
+            {left ? <View style={styles.raidIcon}><GameIcon name="timer" size={20} /><Text style={styles.raidNum}>{left}</Text></View> : null}
+            {fighters > 0 ? <View style={styles.raidIcon}><GameIcon name="swords" size={20} /><Text style={styles.raidNum}>{fighters}</Text></View> : null}
+          </View>
+        )}
       </View>
 
       {rewards && <View style={styles.loot} accessible accessibilityLabel={`If your team beats it you get ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`}>
@@ -217,12 +226,13 @@ function Chip({ label, value }: { label: string; value: number | string }) {
 }
 
 const styles = StyleSheet.create({
-  card: { width: '92%', backgroundColor: BRAND.cream, borderRadius: 26, borderWidth: 4, borderColor: BRAND.navy, padding: 16, paddingTop: 24 },
-  banner: { position: 'absolute', top: -20, alignSelf: 'center', backgroundColor: BRAND.blue, borderRadius: 16, borderWidth: 3, borderColor: BRAND.navy,
-    paddingHorizontal: 16, paddingVertical: 4 },
-  bannerWin: { backgroundColor: BRAND.gold },
-  bannerText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.white, letterSpacing: 0.6, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  best: { position: 'absolute', right: 12, top: 18, backgroundColor: BRAND.red, borderRadius: 10, borderWidth: 2, borderColor: BRAND.white,
+  card: { width: '92%', backgroundColor: BRAND.cream, borderRadius: 26, borderWidth: 4, borderColor: BRAND.navy, padding: 16, paddingTop: 44, marginTop: 30 },
+  ribbonWrap: { position: 'absolute', top: -36, left: -14, right: -14 },
+  kept: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  raidIcons: { flexDirection: 'row', justifyContent: 'center', gap: 18, marginTop: 6 },
+  raidIcon: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  raidNum: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
+  best: { position: 'absolute', right: 12, top: 36, backgroundColor: BRAND.red, borderRadius: 10, borderWidth: 2, borderColor: BRAND.white,
     paddingHorizontal: 8, paddingVertical: 2, transform: [{ rotate: '8deg' }] },
   bestText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
   head: { flexDirection: 'row', alignItems: 'center', gap: 10 },

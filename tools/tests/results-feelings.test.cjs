@@ -532,4 +532,17 @@ test('Trivia Duel ends on the shared ribbon and brag chips: dots for right answe
   assert.deepEqual(chips.map((c) => c.label), ['RIGHT ANSWERS', 'BEST ANSWER']);
   assert.deepEqual([...chips[0].pips], [3, 3], 'only the earned dots');
   assert.equal(m.exports.duelChips([{ label: 'Correct', value: '0/5' }, { label: 'Fastest answer', value: 'NONE' }]).length, 0);
+  assert.deepEqual(m.exports.duelChips([{ label: 'Correct', value: '2/5' }, { label: 'Streak', value: '6' }]).map((c) => c.label), ['RIGHT ANSWERS'], 'no carried-in streak beside 2 right answers');
+  assert.deepEqual(m.exports.duelChips([{ label: 'Correct', value: '5/5' }, { label: 'Streak', value: '5' }]).map((c) => c.value), ['5', 'x5']);
+});
+
+test('Boss results share the ribbon and read the raid in pictures, not a data line', () => {
+  const bash = read('src/games/boss/bash/BashResults.tsx');
+  assert.match(bash, /<ResultsRibbon title=\{won \?/);
+  assert.doesNotMatch(bash, /styles\.bannerText/);
+  assert.doesNotMatch(bash, /HP left\}\{left/, 'no "3,047 HP left · 18 min left · 6 fighting" line');
+  assert.match(bash, /<GameIcon name="timer" size=\{20\} \/>/);
+  assert.match(bash, /<GameIcon name="swords" size=\{20\} \/>/);
+  assert.match(bash, />ENERGY KEPT</);
+  assert.doesNotMatch(bash, />No Energy was spent\.</);
 });

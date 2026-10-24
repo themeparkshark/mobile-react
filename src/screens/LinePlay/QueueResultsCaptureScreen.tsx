@@ -12,6 +12,9 @@
  *   - SHARKY IN LINE: Sharky's own results card.
  *   - RHYTHM / CURRENT QUEST IN LINE: the other queue games' cards.
  *   - LINE TRIVIA / TRIVIA DUEL: the duel's own results card.
+ *   - RIDE TRY CARD: the map ride challenge's "So Close!" card with the same
+ *     words and buttons RedeemRedeemableModal passes (ticket back, ticket
+ *     spent), since a live miss needs a ticket and a coin in dev.
  *   - SHORT PHONE: makes the window report 375 x 667 (iPhone SE) so cards
  *     that size themselves from the window lay out as on an SE. Capture only.
  * The log line shows what LinePlay would count ("Counted: 0 stars, saved").
@@ -37,6 +40,7 @@ import { RhythmTapGame } from '../../games/rhythm';
 import { CurrentQuestQueueGame } from '../../games/current-quest';
 import { TriviaGame, createLinePlayTriviaSource } from '../../games/trivia';
 import { TriviaDuel } from '../../games/trivia-duel';
+import ChallengeStatusCard from '../../components/rewards/ChallengeStatusCard';
 
 type Run = { game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number };
 
@@ -68,6 +72,7 @@ export default function QueueResultsCaptureScreen() {
   const runRef = useRef(run);
   runRef.current = run;
   const [shortPhone, setShortPhone] = useState(false);
+  const [tryCard, setTryCard] = useState<'back' | 'spent' | null>(null);
   const realWindow = useRef(Dimensions.get('window'));
 
   // SHORT PHONE: the window reports an SE size (cards read it through
@@ -146,10 +151,28 @@ export default function QueueResultsCaptureScreen() {
             <Text style={styles.btnText}>{c.label}</Text>
           </TouchableOpacity>
         ))}
+        <TouchableOpacity accessibilityRole="button" style={styles.btn} onPress={() => setTryCard('back')}>
+          <Text style={styles.btnText}>RIDE TRY CARD, TICKET BACK</Text>
+        </TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" style={styles.btn} onPress={() => setTryCard('spent')}>
+          <Text style={styles.btnText}>RIDE TRY CARD, TICKET SPENT</Text>
+        </TouchableOpacity>
         <View style={styles.log}>
           {log.map((line, i) => <Text key={`${i}:${line}`} style={styles.logText}>{line}</Text>)}
         </View>
       </ScrollView>
+      {tryCard ? (
+        <View style={styles.tryScrim}>
+          {/* The same props RedeemRedeemableModal passes on a miss. */}
+          <ChallengeStatusCard title="So Close!" art="soClose"
+            message={tryCard === 'back' ? 'Your Ticket came back. Try again!' : 'This one got away. 1 Ticket spent.'}
+            primary={tryCard === 'back'
+              ? { label: 'Try Again', onPress: () => { note('Try card: Try Again'); setTryCard(null); } }
+              : { label: 'Continue', onPress: () => { note('Try card: Continue'); setTryCard(null); } }}
+            quiet={tryCard === 'back' ? { label: 'DONE', onPress: () => { note('Try card: DONE'); setTryCard(null); } } : undefined}
+            guardRetry={tryCard === 'back'} />
+        </View>
+      ) : null}
       <LinePlayMovementContext.Provider value={movement}>
         {run && common && run.game === 'tap' ? <WhackAShark key={run.key} {...common} difficulty={2} taskName="Space Mountain" /> : null}
         {run && common && run.game === 'shark' ? <SharkySwim key={run.key} {...common} difficulty={2} /> : null}
@@ -174,6 +197,7 @@ const styles = StyleSheet.create({
   btn: { backgroundColor: '#ffcf3b', borderRadius: 16, borderWidth: 3, borderColor: '#05346e', paddingVertical: 12, marginVertical: 5, alignItems: 'center' },
   btnText: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },
   btnOn: { backgroundColor: '#ffffff' },
+  tryScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5, 52, 110, 0.55)', alignItems: 'center', justifyContent: 'center', padding: 16 },
   log: { marginTop: 12 },
   logText: { fontFamily: 'Knockout', fontSize: 17, color: '#05346e', textAlign: 'center', marginVertical: 2 },
 });

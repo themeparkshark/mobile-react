@@ -27,6 +27,10 @@ import Svg, { Path as SvgPath } from 'react-native-svg';
  */
 export function duelChips(rows: { label: string; value: string }[]): FeelingStat[] {
   const stats: FeelingStat[] = [];
+  // A streak carried in from earlier duels is not this game's brag: "x6 IN A
+  // ROW" next to 2 right answers reads as a mistake, so only a streak this
+  // game could have made shows.
+  const correct = parseInt(rows.find((r) => r.label.trim().toUpperCase() === 'CORRECT')?.value ?? '', 10) || 0;
   for (const r of rows) {
     const label = r.label.trim().toUpperCase();
     if (label === 'CORRECT') {
@@ -36,7 +40,7 @@ export function duelChips(rows: { label: string; value: string }[]): FeelingStat
       if (r.value && r.value !== 'NONE') stats.push({ label: 'BEST ANSWER', value: r.value.toUpperCase() });
     } else if (label === 'STREAK') {
       const n = parseInt(r.value, 10) || 0;
-      if (n >= 3) stats.push({ label: 'IN A ROW', value: `x${n}` });
+      if (n >= 3 && n <= correct) stats.push({ label: 'IN A ROW', value: `x${n}` });
     }
   }
   return feelingChips(stats);
