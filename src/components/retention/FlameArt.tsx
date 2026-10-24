@@ -26,7 +26,7 @@ const CROWN = require('../../assets/games/banana-basket/v2/crown.png');
  *
  * `boost` (0..1) lets a moment swell the flame (a whoosh on +1, a charge on a milestone).
  */
-export default function FlameArt({ days, size, reducedMotion, still = false, boost }: {
+export default function FlameArt({ days, size, reducedMotion, still = false, boost, ghost = false }: {
   readonly days: number;
   /** The box (pt). The art at scale 1 fills about 86 percent of it. */
   readonly size: number;
@@ -34,6 +34,8 @@ export default function FlameArt({ days, size, reducedMotion, still = false, boo
   /** No ambient flicker (lists, ghost flames). */
   readonly still?: boolean;
   readonly boost?: SharedValue<number>;
+  /** Tomorrow's flame: a soft white silhouette (no halo, no sparks), never a muddy see-through flame. */
+  readonly ghost?: boolean;
 }) {
   const look = flameLook(days);
   const clock = useSharedValue(0);
@@ -64,19 +66,22 @@ export default function FlameArt({ days, size, reducedMotion, still = false, boo
   }));
   return (
     <View style={[styles.box, { width: size, height: size }]} pointerEvents="none">
-      <Animated.View style={[styles.layer, { width: size * 1.1, height: size * 1.1 }, haloStyle]}>
-        <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor={GOLD_FX.glow} transition={0} cachePolicy="memory-disk" />
-      </Animated.View>
-      {look.sparks > 0 && !still && !reducedMotion && <Sparks clock={clock} count={look.sparks} size={art} />}
+      {!ghost && (
+        <Animated.View style={[styles.layer, { width: size * 1.1, height: size * 1.1 }, haloStyle]}>
+          <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor={GOLD_FX.glow} transition={0} cachePolicy="memory-disk" />
+        </Animated.View>
+      )}
+      {look.sparks > 0 && !still && !reducedMotion && !ghost && <Sparks clock={clock} count={look.sparks} size={art} />}
       <Animated.View style={[styles.layer, { width: art, height: art }, flameStyle]}>
-        <Image source={FLAME} style={[StyleSheet.absoluteFill, days <= 0 && styles.ember]} contentFit="contain" transition={0} cachePolicy="memory-disk" />
-        {look.core && (
+        <Image source={FLAME} style={[StyleSheet.absoluteFill, days <= 0 && styles.ember]} contentFit="contain" transition={0} cachePolicy="memory-disk"
+          tintColor={ghost ? '#ffffff' : undefined} />
+        {look.core && !ghost && (
           <Animated.View style={[styles.core, { width: art * 0.44, height: art * 0.44, bottom: art * 0.1, left: art * 0.28 }, coreStyle]}>
             <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor={GOLD_FX.core} transition={0} />
           </Animated.View>
         )}
       </Animated.View>
-      {look.crown && (
+      {look.crown && !ghost && (
         <Animated.View style={[styles.layer, { width: art * 0.62, height: art * 0.62 }, crownStyle]}>
           <Image source={CROWN} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} cachePolicy="memory-disk" />
         </Animated.View>

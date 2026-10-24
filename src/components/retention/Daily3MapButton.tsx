@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  cancelAnimation, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { haptic, playHaptic, queueHaptic } from '../../gamekit/Haptics';
@@ -13,18 +13,21 @@ import type { ButtonAttention } from '../../services/retention/logic';
 import { CHECK, FULL_SET, LOOP_CUES, PRESS, arcPoint } from '../../services/retention/loopMotion';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
 import { SparkleBurst } from '../../ui/GoldBurst';
-import { DURATION, SPRING, flashPeak, momentParticles } from '../../ui/motion';
+import { DURATION, GOLD_FX, SPRING, flashPeak, momentParticles } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import FlameArt from './FlameArt';
 import { useAmbient } from './power';
 
 const WEEKLY = require('../../../assets/images/retention/weekly-box-closed.png');
+const SPARK = require('../../../assets/fx/spark.webp');
 
 const SIZE = 54;
 /** The ring canvas around the button (three 120 degree segments, one per goal). */
 const RING = 70;
 const RING_R = 31;
 const RING_W = 5;
+/** The flying check (pt): big enough to read from arm's length. */
+const FLY = 40;
 const GAP_DEG = 9;
 
 /** One goal's segment: starts at 12 o'clock, clockwise, a small gap between segments. */
@@ -111,7 +114,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
   const paths = useMemo(() => [segmentPath(0), segmentPath(1), segmentPath(2)], []);
   const check = useMemo(() => checkPath(40), []);
-  const flyCheck = useMemo(() => checkPath(30), []);
+  const flyCheck = useMemo(() => checkPath(FLY), []);
 
   // Segments follow the server outside a landing (a new day empties the ring).
   const landingKey = landing?.key ?? 0;
@@ -157,9 +160,13 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
       if (full) later(() => onFullSet?.(), 600);
       return;
     }
+    let handed = false;
+    const handOff = full ? () => { if (!handed) { handed = true; onFullSet?.(); } } : null;
     // Every visual beat is scheduled on the UI thread at once (withDelay from the flight start), so a busy JS
     // thread never stretches it; JS timers only fire the haptics, sounds and the hand-off on the same marks.
     const F = CHECK.fly;
+    // A safety net if the ring animation is cancelled (the map was covered mid-fill).
+    if (full) later(() => handOff?.(), F + CHECK.ring + FULL_SET.sheetAt + 400);
     const sparks = momentParticles(full ? CHECK.fullSparkles : CHECK.sparkles, budget, false);
     setSparkCount(sparks);
     anchor.current?.measureInWindow((bx, by, bw, bh) => {
@@ -171,7 +178,11 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
       flyOn.value = withDelay(F, withTiming(0, { duration: 60 }));
       // Arrival: the ring segment fills, the check draws then stamps (scale and fade on separate clocks).
       segs[i].value = 0;
-      segs[i].value = withDelay(F, withTiming(1, { duration: CHECK.ring, easing: EASE.out }));
+      // The third segment's fill hands off to the full set the frame it completes (UI-thread clock, not a JS timer),
+      // so the card opens with the flash, never after a pause on the map.
+      segs[i].value = withDelay(F, withTiming(1, { duration: CHECK.ring, easing: EASE.out }, fin => {
+        if (fin && full && handOff) runOnJS(handOff)();
+      }));
       draw.value = 0;
       draw.value = withDelay(F, withTiming(1, { duration: CHECK.draw, easing: EASE.out }));
       stamp.value = 1;
@@ -185,7 +196,8 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
       pop.value = withDelay(F, withSequence(withTiming(1.12, { duration: 90, easing: EASE.out }), withSpring(1, SPRING.stamp),
         ...(full ? [withTiming(1.28, { duration: 120, easing: EASE.out }), withSpring(1, SPRING.pop)] : [])));
       if (full) {
-        const peak = flashPeak(isDimFlashingLightsEnabled(), reducedMotion) > 0 ? 1 : 0.25;
+        // A gold glow ring, capped like every flash (none with Dim Flashing Lights or Reduce Motion): never a white strobe.
+        const peak = flashPeak(isDimFlashingLightsEnabled(), reducedMotion);
         ringFlash.value = withDelay(burstAt, withSequence(withTiming(peak, { duration: 40 }), withTiming(0, { duration: FULL_SET.flash - 40 })));
       }
       // The "1 of 3" bubble.
@@ -196,10 +208,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
     });
     playSfx(LOOP_CUES.checkFly.fallback, 0.35);
     later(() => { queueHaptic('hitMedium'); playSfx(cue.fallback, 0.9); }, F);
-    if (full) {
-      later(() => { playHaptic('golden'); playSfx(LOOP_CUES.fullSet.fallback, 0.9); }, F + CHECK.ring);
-      later(() => onFullSet?.(), F + CHECK.ring + FULL_SET.sheetAt);
-    }
+    if (full) later(() => { playHaptic('golden'); playSfx(LOOP_CUES.fullSet.fallback, 0.9); }, F + CHECK.ring);
   }, [landingKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const buttonStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bounce.value }, { scale: press.value * pop.value }] }));
@@ -210,6 +219,18 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
   });
   const stampStyle = useAnimatedStyle(() => ({ opacity: stampA.value, transform: [{ scale: stamp.value }] }));
   const flashOpacity = useDerivedValue(() => ringFlash.value);
+  const glowOpacity = useDerivedValue(() => Math.min(1, ringFlash.value * 2));
+  // Two little sparkles trail the flying check along the same arc.
+  const trail1 = useAnimatedStyle(() => {
+    const t = Math.max(0, fly.value - 0.08);
+    const p = arcPoint(t, flyFrom.value, { x: 0, y: 0 }, 90);
+    return { opacity: flyOn.value * (fly.value > 0.08 ? 0.9 : 0), transform: [{ translateX: p.x }, { translateY: p.y }, { scale: 0.8 }] };
+  });
+  const trail2 = useAnimatedStyle(() => {
+    const t = Math.max(0, fly.value - 0.17);
+    const p = arcPoint(t, flyFrom.value, { x: 0, y: 0 }, 90);
+    return { opacity: flyOn.value * (fly.value > 0.17 ? 0.6 : 0), transform: [{ translateX: p.x }, { translateY: p.y }, { scale: 0.55 }] };
+  });
   const bubbleStyle = useAnimatedStyle(() => ({
     opacity: bubbleA.value,
     transform: [{ translateX: (1 - bubble.value) * 14 }, { scale: 0.6 + 0.4 * bubble.value }],
@@ -247,7 +268,8 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
                 <Path path={p} style="stroke" strokeWidth={RING_W} color={BRAND.gold} strokeCap="round" end={segs[i]} />
               </Group>
             ))}
-            <Circle cx={RING / 2} cy={RING / 2} r={RING_R} color={BRAND.white} style="stroke" strokeWidth={RING_W + 3} opacity={flashOpacity} />
+            <Circle cx={RING / 2} cy={RING / 2} r={RING_R} color={GOLD_FX.glow} style="stroke" strokeWidth={RING_W + 9} opacity={glowOpacity} />
+            <Circle cx={RING / 2} cy={RING / 2} r={RING_R} color={BRAND.white} style="stroke" strokeWidth={RING_W + 1} opacity={flashOpacity} />
           </Canvas>
         </View>
         {streak > 0 && !ready && (
@@ -266,11 +288,14 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
         </View>
         <Text style={styles.bubbleText} allowFontScaling={false}>{bubbleDone >= 3 ? 'All 3!' : `${bubbleDone} of 3`}</Text>
       </Animated.View>
+      <Animated.View pointerEvents="none" style={[styles.trail, trail2]}><Image source={SPARK} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} /></Animated.View>
+      <Animated.View pointerEvents="none" style={[styles.trail, trail1]}><Image source={SPARK} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} /></Animated.View>
       <Animated.View pointerEvents="none" style={[styles.flyer, flyStyle]}>
-        <Canvas style={{ width: 30, height: 30 }}>
-          <Circle cx={15} cy={15} r={14} color={BRAND.gold} />
-          <Circle cx={15} cy={15} r={14} color={BRAND.white} style="stroke" strokeWidth={2.5} />
-          <Path path={flyCheck} style="stroke" strokeWidth={4} color={BRAND.white} strokeCap="round" strokeJoin="round" />
+        <Canvas style={{ width: FLY, height: FLY }}>
+          <Circle cx={FLY / 2} cy={FLY / 2} r={FLY / 2 - 1} color={BRAND.gold} />
+          <Circle cx={FLY / 2} cy={FLY / 2} r={FLY / 2 - 1} color={BRAND.white} style="stroke" strokeWidth={3} />
+          <Path path={flyCheck} style="stroke" strokeWidth={8} color={BRAND.navy} strokeCap="round" strokeJoin="round" />
+          <Path path={flyCheck} style="stroke" strokeWidth={4.5} color={BRAND.white} strokeCap="round" strokeJoin="round" />
         </Canvas>
       </Animated.View>
     </View>
@@ -284,7 +309,8 @@ const styles = StyleSheet.create({
   ring: { position: 'absolute', left: (SIZE - RING) / 2, top: (SIZE - RING) / 2, width: RING, height: RING },
   stamp: { position: 'absolute', width: 40, height: 40 },
   center: { position: 'absolute', left: SIZE / 2, top: SIZE / 2, width: 0, height: 0 },
-  flyer: { position: 'absolute', left: SIZE / 2 - 15, top: SIZE / 2 - 15, width: 30, height: 30 },
+  flyer: { position: 'absolute', left: SIZE / 2 - FLY / 2, top: SIZE / 2 - FLY / 2, width: FLY, height: FLY },
+  trail: { position: 'absolute', left: SIZE / 2 - 11, top: SIZE / 2 - 11, width: 22, height: 22 },
   badge: { position: 'absolute', top: -7, right: -9, minWidth: 22, height: 22, paddingHorizontal: 5, borderRadius: 11,
     backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
   badgeText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy, marginTop: 1 },

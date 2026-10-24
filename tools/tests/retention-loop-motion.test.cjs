@@ -104,10 +104,44 @@ test('check-off and full set fit the motion language (payoff inside 1.5 s, settl
   assert.ok(L.FULL_SET.flash <= motion.DURATION.flash);
 });
 
-test('local press, stagger and count tokens match the shared motion additions', () => {
-  assert.deepEqual(plain(L.PRESS), { scale: 0.94, inMs: 70, spring: { damping: 12, stiffness: 420, mass: 0.8 } });
-  assert.deepEqual(plain(L.STAGGER), { stepMs: 35, maxItems: 8, capMs: 400 });
-  assert.deepEqual(plain(L.COUNT), { ms: 650, maxTicks: 12, finalBump: 1.12 });
+test('loop code uses the shared press, stagger and count tokens (one motion language)', () => {
+  assert.deepEqual(plain(L.PRESS), plain(motion.PRESS));
+  assert.deepEqual(plain(L.STAGGER), plain(motion.STAGGER));
+  assert.deepEqual(plain(L.COUNT), plain(motion.COUNT));
+  assert.deepEqual(plain(L.HUD_BUMP), plain(motion.HUD_BUMP));
+});
+
+test('chest rows all land and finish counting inside 1.2 s, and never show +0', () => {
+  const logic = loadTs('src/services/retention/logic.ts');
+  const rows = [{ kind: 'xp' }, { kind: 'energy' }, { kind: 'coins' }, { kind: 'tickets' }];
+  const t = logic.rowSchedule(rows, L.REVEAL_ROWS.beat, L.REVEAL_ROWS.hold, L.REVEAL_ROWS.first);
+  for (const start of t) assert.ok(start + L.rowCountMs(start, motion.COUNT.ms) <= 1200 || L.rowCountMs(start) === 260, `row at ${start}`);
+  assert.ok(t[t.length - 1] + L.rowCountMs(t[t.length - 1]) <= 1200);
+  assert.equal(L.countStart(0), 0);
+  assert.equal(L.countStart(1), 1);
+  assert.ok(L.countStart(15) >= 1 && L.countStart(15) < 15);
+  assert.ok(L.countStart(35) > 0);
+});
+
+test('a normal day is one tap after the chest; big flames and tomorrow cards only when they matter', () => {
+  const chest = { kind: 'chest', flameNext: 9, chips: [{ icon: 'coins', n: 15 }], line: '' };
+  const gear = { ...chest, kind: 'gear' };
+  const plus = { kind: 'plusOne', from: 7, to: 8 };
+  assert.deepEqual(plain(L.dailyChain({ moment: plus, prize: chest, tomorrowSeen: true, milestoneAway: 5 })), []);
+  assert.deepEqual(plain(L.dailyChain({ moment: plus, prize: chest, tomorrowSeen: false })), ['tomorrow']);
+  assert.deepEqual(plain(L.dailyChain({ moment: plus, prize: gear, tomorrowSeen: true })), ['tomorrow']);
+  assert.deepEqual(plain(L.dailyChain({ moment: { kind: 'milestone', day: 7, from: 6 }, prize: chest, tomorrowSeen: true, milestoneAway: 23 })), ['flame']);
+  assert.deepEqual(plain(L.dailyChain({ moment: plus, prize: chest, tomorrowSeen: true, milestoneAway: 1 })), ['tomorrow']);
+  assert.equal(L.mayAskAfterChain([]), true);
+  assert.equal(L.mayAskAfterChain(['tomorrow']), false);
+});
+
+test('the level chest rattles three times, each harder, then a hand, then it opens by itself at 2 s', () => {
+  const r = L.LEVEL_CHEST.rattles;
+  assert.deepEqual(plain(r.map(x => x.at)), [0, 380, 760]);
+  assert.deepEqual(plain(r.map(x => x.deg)), [8, 13, 18]);
+  assert.ok(L.LEVEL_CHEST.handAt > r[2].at && L.LEVEL_CHEST.autoOpenAt === 2000);
+  assert.equal(L.LEVEL_CHEST.rowBeat, 180);
 });
 
 test('the check flight arc starts at the shark and ends on the button', () => {
@@ -141,11 +175,44 @@ test('loop moments run on the UI thread and respect the power budget', () => {
   assert.match(read('src/components/retention/StreakMoment.tsx'), /flashPeak\(isDimFlashingLightsEnabled\(\), false\)/);
 });
 
-test('the full set flows into the chest, the flame, then tomorrow (one modal, never stacked)', () => {
+test('the full set flows into the chest, prizes fly home in sight, then the big flame or tomorrow (one modal, never stacked)', () => {
   const hook = read('src/components/retention/useRetention.tsx');
   assert.match(hook, /setView\(\{ k: 'sheet', all: true \}\)/);
+  // The claim starts when the third check lands, so the chest never waits on the server.
+  assert.match(hook, /claimAhead\.current = claimDailyThree\(\)/);
   assert.match(hook, /src: 'daily', claimDate: daily\.claimable_date, rewards: null, opening: false, auto: true/);
-  assert.match(hook, /setView\(\{ k: 'flame', moment \}\)/);
+  // The modal steps aside while prizes fly into the HUD, then the chain continues one card at a time.
+  assert.match(hook, /setView\(\{ k: 'flying' \}\)/);
+  assert.match(hook, /setView\(\{ k: 'flame', moment: flameRef\.current \}\)/);
   assert.match(hook, /setView\(\{ k: 'tomorrow' \}\)/);
-  assert.match(read('src/components/retention/RewardReveal.tsx'), /if \(autoOpen && !revealed && !opening\) onOpen\(\)/);
+  assert.match(hook, /dailyChain\(/);
+  // The +1 lives inside the chest card.
+  assert.match(hook, /<FlameUpRow /);
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  assert.match(reveal, /if \(autoOpen && !revealed && !opening\) requestOpen\(\)/);
+  // Never a static "Opening..." line while the claim is in flight; the gold gathers instead.
+  assert.doesNotMatch(reveal, /'Opening\.\.\.'/);
+  assert.match(reveal, /<GoldBurst /);
+  assert.match(reveal, /<RadialFlash /);
+  assert.doesNotMatch(reveal, /flash: \{ backgroundColor: BRAND\.white \}/);
+});
+
+test('done checks are gold and the map ring flash is a capped gold glow (never a white strobe, never green)', () => {
+  const sheet = read('src/components/retention/Daily3Sheet.tsx');
+  assert.match(sheet, /<GoldCheck /);
+  assert.doesNotMatch(sheet, /GameIcon name="check"/);
+  assert.doesNotMatch(sheet, /styles\.strike/);
+  const btn = read('src/components/retention/Daily3MapButton.tsx');
+  assert.doesNotMatch(btn, /\? 1 : 0\.25/);
+  assert.match(btn, /runOnJS\(handOff\)/);
+  // Finn never covers words: he stands beside the button.
+  assert.match(read('src/components/retention/StreakMoment.tsx'), /finn: \{ width: 72, height: 72 \}/);
+});
+
+test('loop copy stays kind: no loss words in the new moments', () => {
+  for (const file of ['FlameUpRow', 'TomorrowCard', 'StreakMoment', 'RewardReveal', 'Daily3Sheet']) {
+    const src = read(`src/components/retention/${file}.tsx`);
+    const strings = [...src.matchAll(/'([^'\n]{6,})'/g)].map(m => m[1]).filter(t => /[a-z] [a-z]/i.test(t));
+    for (const t of strings) assert.ok(L.kidSafeCopy(t), `${file}: "${t}"`);
+  }
 });

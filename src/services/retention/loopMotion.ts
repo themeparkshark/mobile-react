@@ -189,15 +189,72 @@ export function arcPoint(t: number, from: { x: number; y: number }, to: { x: num
   return { x: u * u * from.x + 2 * u * t * cx + t * t * to.x, y: u * u * from.y + 2 * u * t * cy + t * t * to.y };
 }
 
+/** The shared small-moment tokens (src/ui/motion.ts), re-exported so loop code has one import. */
+export { COUNT, HUD_BUMP, PRESS, STAGGER } from '../../ui/motion';
+
 /**
- * Local copies of the shared press / stagger / count tokens that the wow-ui
- * lane is adding to src/ui/motion.ts (same numbers). Swap these imports for
- * the shared ones when that commit lands; never tune them here.
+ * The Daily 3 chest reveal rows: the first prize lands 240 ms after the lid,
+ * then one every 150 ms (a held 380 ms before a hero card), and each number
+ * rolls for at most COUNT.ms, so every row has landed and counted inside 1.2 s.
  */
-export const PRESS = { scale: 0.94, inMs: 70, spring: { damping: 12, stiffness: 420, mass: 0.8 } } as const;
-export const STAGGER = { stepMs: 35, maxItems: 8, capMs: 400 } as const;
-export const COUNT = { ms: 650, maxTicks: 12, finalBump: 1.12 } as const;
-export const HUD_BUMP = { peak: 1.22 } as const;
+export const REVEAL_ROWS = { first: 240, beat: 150, hold: 380, finishBy: 1200 } as const;
+
+/** How long a row's number rolls when it lands at `startMs` (never past REVEAL_ROWS.finishBy, never under 260 ms). */
+export function rowCountMs(startMs: number, countMs: number = 650): number {
+  return Math.max(260, Math.min(countMs, REVEAL_ROWS.finishBy - startMs));
+}
+
+/** The first number a rolling count shows: never "+0", about a third of the way there. */
+export function countStart(target: number): number {
+  const t = Math.max(0, Math.floor(Number(target) || 0));
+  if (t <= 1) return t;
+  return Math.max(1, Math.round(t * 0.35));
+}
+
+/**
+ * The level chest's anticipation (ms after it lands): three rattles that grow
+ * (8, 13, 18 deg), light leaking from the lid seam, then a tap hand. It opens
+ * by itself 2 s after landing if the kid does not tap.
+ */
+export const LEVEL_CHEST = {
+  /** Lands on SPRING.land, then the rattles start. */
+  landMs: 420,
+  rattles: [{ at: 0, deg: 8 }, { at: 380, deg: 13 }, { at: 760, deg: 18 }] as const,
+  /** One rattle (a quick left-right-left). */
+  rattleMs: 240,
+  /** The hand appears after the last rattle. */
+  handAt: 1000,
+  /** Opens by itself this long after landing. */
+  autoOpenAt: 2000,
+  /** Prize rows 180 ms apart. */
+  rowBeat: 180,
+} as const;
+
+/**
+ * After the Daily 3 chest: what plays next. The +1 lives inside the chest card
+ * (its footer flame grows), so a normal day is one tap. A full-screen flame
+ * only for 3, 7, 30 and 100. The tomorrow card only the first time, or when
+ * tomorrow brings gear or a milestone. Never more than two cards after the chest.
+ */
+export function dailyChain(o: {
+  readonly moment: FlameMoment;
+  readonly prize: TomorrowPrize;
+  /** This phone has shown the tomorrow card before. */
+  readonly tomorrowSeen: boolean;
+  /** Days to the next streak milestone (from the server), if known. */
+  readonly milestoneAway?: number | null;
+}): ('flame' | 'tomorrow')[] {
+  const out: ('flame' | 'tomorrow')[] = [];
+  if (o.moment.kind === 'milestone') out.push('flame');
+  const eve = o.prize.kind === 'gear' || o.milestoneAway === 1;
+  if (!o.tomorrowSeen || eve) out.push('tomorrow');
+  return out;
+}
+
+/** The reminders ask may follow a daily chain only when the chain was the chest alone (never stacked nudges). */
+export function mayAskAfterChain(chain: readonly string[]): boolean {
+  return chain.length === 0;
+}
 
 /**
  * Sound for each loop moment: the studio cue to use once the wow-sound switch

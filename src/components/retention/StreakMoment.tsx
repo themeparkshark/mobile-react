@@ -42,7 +42,9 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
   const budget = usePowerBudget();
   const boost = useSharedValue(reducedMotion ? 0 : big ? 0 : -0.35);
   const whoosh = useSharedValue(reducedMotion ? 1 : big ? 0.7 : 0.6);
-  const gold = useSharedValue(0);
+  // Frame 1 is never empty: a milestone opens on a charged flame (0.7) with its gold already glowing.
+  const gold = useSharedValue(big && !reducedMotion ? 0.3 : 0);
+  const plusText = useSharedValue(reducedMotion || big ? 1 : 0);
   const bloom = useSharedValue(0);
   const flash = useSharedValue(0);
   const sparkle = useSharedValue(0);
@@ -76,6 +78,8 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
       boost.value = withSequence(withTiming(0.25, { duration: at, easing: EASE.charge }), withSpring(0, SPRING.pop));
       whoosh.value = withDelay(at, withSequence(withTiming(1.2, { duration: 140, easing: EASE.out }), withSpring(1, SPRING.pop)));
       roll.value = withDelay(at, withTiming(1, { duration: DURATION.base, easing: EASE.out }));
+      // "N days in a row!" waits for the roll to land (it never says 12 while the number still reads 11).
+      plusText.value = withDelay(at + DURATION.base, withSpring(1, SPRING.stamp));
       sparkle.value = withDelay(at, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
       gold.value = withDelay(at, withSequence(withTiming(0.55, { duration: 160 }), withTiming(0.3, { duration: 600 })));
       later(() => { playHaptic('tierUp'); playSfx(cue.fallback); }, at);
@@ -87,7 +91,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
     whoosh.value = withTiming(1, { duration: beats.anticipation, easing: EASE.charge });
     boost.value = withSequence(withTiming(0.55, { duration: beats.anticipation, easing: EASE.charge }),
       withDelay(DURATION.hitStop, withSequence(withTiming(0.8, { duration: 90 }), withSpring(0, SPRING.pop))));
-    gold.value = withSequence(withTiming(0.35, { duration: beats.anticipation, easing: EASE.charge }),
+    gold.value = withSequence(withTiming(0.5, { duration: beats.anticipation, easing: EASE.charge }),
       withDelay(DURATION.hitStop, withTiming(1, { duration: 160, easing: EASE.out })));
     flash.value = withDelay(burst, withSequence(withTiming(flashPeak(isDimFlashingLightsEnabled(), false), { duration: 40 }),
       withTiming(0, { duration: DURATION.flash - 40 })));
@@ -114,6 +118,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
   });
   const rollOld = useAnimatedStyle(() => ({ opacity: 1 - roll.value, transform: [{ translateY: -28 * roll.value }] }));
   const rollNew = useAnimatedStyle(() => ({ opacity: roll.value, transform: [{ translateY: 28 * (1 - roll.value) }] }));
+  const plusTextStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, plusText.value * 1.5), transform: [{ scale: 1.3 - 0.3 * plusText.value }] }));
   const badgeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, badge.value * 2), transform: [{ scale: 1.7 - 0.7 * badge.value }] }));
   const finnStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, finn.value * 2),
@@ -128,7 +133,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
         <GoldBurst size={big ? 330 : 220} amount={gold} bloom={bloom} reduced={reducedMotion} style={styles.abs} />
         <RadialFlash flash={flash} size={260} />
         <Animated.View style={flameStyle}>
-          <FlameArt days={to} size={big ? 168 : 132} reducedMotion={reducedMotion} boost={boost} />
+          <FlameArt days={to} size={big ? 168 : 156} reducedMotion={reducedMotion} boost={boost} />
         </Animated.View>
         <View style={styles.center}><SparkleBurst progress={sparkle} count={sparks} radius={big ? 140 : 90} /></View>
         {big && !reducedMotion && budget.animate && budget.particleScale >= 0.5 && (
@@ -163,17 +168,20 @@ export default function StreakMoment({ moment, reducedMotion, onDone }: {
           </View>
         </Animated.View>
       ) : (
-        <Text style={styles.plusText}>{to === 1 ? 'Your flame is lit!' : `${to} days in a row!`}</Text>
+        <Animated.Text style={[styles.plusText, plusTextStyle]}>{to === 1 ? 'Your flame is lit!' : `${to} days in a row!`}</Animated.Text>
       )}
       {line ? <View style={styles.next}><GameIcon name="streak" size={20} /><Text style={styles.nextText}>{line}</Text></View> : null}
+      {/* Finn stands beside the button, never over the words. */}
       <View style={styles.bottom}>
         {big && (
           <Animated.View style={[styles.finn, finnStyle]} pointerEvents="none">
-            <Image source={FINN_WAVE} style={{ width: 86, height: 86 }} contentFit="contain" />
+            <Image source={FINN_WAVE} style={{ width: 72, height: 72 }} contentFit="contain" />
           </Animated.View>
         )}
-        <DoneButton label={big ? 'YAY!' : 'NICE!'} onPress={ready ? onDone : undefined} reducedMotion={reducedMotion}
-          delay={big ? beats.settledAt : 300 + 420} />
+        <View style={{ flex: 1 }}>
+          <DoneButton label={big ? 'YAY!' : 'NICE!'} onPress={ready ? onDone : undefined} reducedMotion={reducedMotion}
+            delay={big ? beats.settledAt : 300 + 420} />
+        </View>
       </View>
     </Pressable>
   );
@@ -215,7 +223,7 @@ function DoneButton({ label, onPress, reducedMotion, delay }: {
 const styles = StyleSheet.create({
   card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
     paddingTop: 16, paddingBottom: 14, paddingHorizontal: 14, alignItems: 'center', overflow: 'hidden' },
-  stage: { width: '100%', height: 220, alignItems: 'center', justifyContent: 'center' },
+  stage: { width: '100%', height: 230, alignItems: 'center', justifyContent: 'center' },
   stageBig: { height: 270 },
   abs: { position: 'absolute' },
   center: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },
@@ -236,8 +244,8 @@ const styles = StyleSheet.create({
   next: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: BRAND.navy, borderRadius: 12,
     paddingHorizontal: 10, paddingVertical: 4 },
   nextText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold, marginTop: 1 },
-  bottom: { alignSelf: 'stretch', minHeight: 70, justifyContent: 'flex-end', marginTop: 10 },
-  finn: { position: 'absolute', left: -6, bottom: 40 },
+  bottom: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 60, marginTop: 10 },
+  finn: { width: 72, height: 72 },
   buttonWrap: { alignSelf: 'stretch' },
   button: { alignSelf: 'stretch', backgroundColor: BRAND.gold, borderRadius: 16, paddingVertical: 12, alignItems: 'center',
     borderBottomWidth: 4, borderBottomColor: BRAND.goldLip },

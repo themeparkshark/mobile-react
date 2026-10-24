@@ -1,8 +1,9 @@
+import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, LinearTransition, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, Easing, LinearTransition, type SharedValue, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import type { DailyGoal, DailyThreeState, WeekDayState } from '../../api/endpoints/retention';
 import { haptic, queueHaptic } from '../../gamekit/Haptics';
@@ -141,7 +142,7 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
       </View>
       <Text style={styles.weekHint} numberOfLines={1}>{weeklyLine(state)}</Text>
 
-      <Pressable onPress={onClose} accessibilityRole="button" style={styles.later}>
+      <Pressable onPress={onClose} disabled={celebrateAll} accessibilityRole="button" style={[styles.later, celebrateAll && { opacity: 0.4 }]}>
         <Text style={styles.laterText}>BACK TO MAP</Text>
       </Pressable>
       <View style={styles.footer}>
@@ -207,25 +208,25 @@ function GoalRow({ goal, index, pop, onPress, reducedMotion, bounceAt }: {
 }) {
   const fresh = goal.done && pop && !reducedMotion;
   const stamp = useSharedValue(goal.done && !fresh ? 1 : 0);
-  const strike = useSharedValue(goal.done && !fresh ? 1 : 0);
+  const draw = useSharedValue(goal.done && !fresh ? 1 : 0);
   const bounce = useSharedValue(1);
   useEffect(() => {
-    if (!goal.done) { stamp.value = 0; strike.value = 0; return; }
-    if (!fresh) { stamp.value = 1; strike.value = 1; return; }
-    // The check stamps in from oversize (one goal after another), the title strikes through left to right.
+    if (!goal.done) { stamp.value = 0; draw.value = 0; return; }
+    if (!fresh) { stamp.value = 1; draw.value = 1; return; }
+    // The gold check stamps in from oversize (one goal after another) and draws itself; the title stays readable
+    // (no strike-through, which a 7-year-old can read as "cancelled").
     const at = 350 + index * 260;
     stamp.value = withDelay(at, withSpring(1, SPRING.stamp));
-    strike.value = withDelay(at + 120, withTiming(1, { duration: DURATION.base, easing: EASE.out }));
+    draw.value = withDelay(at + 60, withTiming(1, { duration: DURATION.base, easing: EASE.out }));
     const timer = setTimeout(() => queueHaptic('hitMedium'), at);
     return () => clearTimeout(timer);
-  }, [goal.done, fresh, index, stamp, strike]);
+  }, [goal.done, fresh, index, stamp, draw]);
   useEffect(() => {
     if (bounceAt == null || reducedMotion || !goal.done) return;
     bounce.value = withDelay(bounceAt, withSequence(withTiming(1.35, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
   }, [bounceAt, reducedMotion, goal.done, bounce]);
   const checkStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, stamp.value * 1.6),
     transform: [{ scale: (1.7 - stamp.value * 0.7) * bounce.value }, { rotate: `${(1 - stamp.value) * -14}deg` }] }));
-  const strikeStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: strike.value }] }));
   const actionable = !goal.done && goalAction(goal) !== null;
   const pct = Math.min(1, goal.progress / Math.max(1, goal.target));
   return (
@@ -238,9 +239,8 @@ function GoalRow({ goal, index, pop, onPress, reducedMotion, bounceAt }: {
           <Text style={[styles.goalTitle, goal.done && styles.goalTitleDone]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
             {goal.title}
           </Text>
-          {goal.done && <Animated.View pointerEvents="none" style={[styles.strike, strikeStyle]} />}
         </View>
-        {goal.done ? <Text style={styles.goalHintDone} numberOfLines={1}>Done!</Text> : showsBar(goal) ? (
+        {goal.done ? <View style={styles.donePill}><Text style={styles.goalHintDone} numberOfLines={1}>Done!</Text></View> : showsBar(goal) ? (
           <View style={styles.bar}><View style={[styles.barFill, { width: `${pct * 100}%` }]} />
             <Text style={styles.barText}>{`${goal.progress}/${goal.target}`}</Text></View>
         ) : <Text style={styles.goalHint} numberOfLines={1}>{goal.hint}</Text>}
@@ -248,11 +248,32 @@ function GoalRow({ goal, index, pop, onPress, reducedMotion, bounceAt }: {
       <View style={styles.goalEnd}>
         {goal.done ? (
           <Animated.View style={[styles.doneCheck, checkStyle]} accessibilityLabel="Done">
-            <GameIcon name="check" size={34} />
+            <GoldCheck draw={draw} />
           </Animated.View>
         ) : actionable ? <View style={styles.go}><Text style={styles.goText}>GO</Text></View> : null}
       </View>
     </Pressable>
+  );
+}
+
+const CHECK_BOX = 36;
+const CHECK_PATH = (() => {
+  const p = Skia.Path.Make();
+  p.moveTo(CHECK_BOX * 0.25, CHECK_BOX * 0.53);
+  p.lineTo(CHECK_BOX * 0.43, CHECK_BOX * 0.7);
+  p.lineTo(CHECK_BOX * 0.76, CHECK_BOX * 0.32);
+  return p;
+})();
+
+/** The gold done check (the same one that stamps on the map button): gold coin, white rim, a navy-edged white tick. */
+function GoldCheck({ draw }: { readonly draw: SharedValue<number> }) {
+  return (
+    <Canvas style={{ width: CHECK_BOX, height: CHECK_BOX }}>
+      <Circle cx={CHECK_BOX / 2} cy={CHECK_BOX / 2} r={CHECK_BOX / 2 - 1.5} color={BRAND.gold} />
+      <Circle cx={CHECK_BOX / 2} cy={CHECK_BOX / 2} r={CHECK_BOX / 2 - 1.5} color={BRAND.white} style="stroke" strokeWidth={2.5} />
+      <Path path={CHECK_PATH} style="stroke" strokeWidth={7} color={BRAND.navy} strokeCap="round" strokeJoin="round" end={draw} />
+      <Path path={CHECK_PATH} style="stroke" strokeWidth={4} color={BRAND.white} strokeCap="round" strokeJoin="round" end={draw} />
+    </Canvas>
   );
 }
 
@@ -370,17 +391,16 @@ const styles = StyleSheet.create({
   goalDone: { backgroundColor: '#fff7d8', borderBottomColor: '#e9c55a' },
   goalIconDone: { backgroundColor: '#ffe9a6' },
   titleBox: { alignSelf: 'flex-start', maxWidth: '100%', justifyContent: 'center' },
-  strike: { position: 'absolute', left: -2, right: -2, height: 3, borderRadius: 2, top: '52%', backgroundColor: BRAND.goldLip,
-    transformOrigin: 'left' },
   doneCheck: { alignItems: 'center', justifyContent: 'center' },
   goalPressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2 },
   goalIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: BRAND.sky, alignItems: 'center', justifyContent: 'center' },
   goalImg: { width: 38, height: 38 },
   goalText: { flex: 1 },
   goalTitle: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
-  goalTitleDone: { color: BRAND.navySoft },
+  goalTitleDone: { color: BRAND.navy },
   goalHint: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
-  goalHintDone: { fontFamily: 'Shark', fontSize: 14, color: '#b07a00' },
+  goalHintDone: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, marginTop: 1 },
+  donePill: { alignSelf: 'flex-start', backgroundColor: BRAND.gold, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 1, marginTop: 2 },
   bar: { height: 16, borderRadius: 8, backgroundColor: BRAND.sky, overflow: 'hidden', justifyContent: 'center', marginTop: 2, marginRight: 4 },
   barFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.gold, borderRadius: 8 },
   barText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.navy, textAlign: 'center' },

@@ -18,7 +18,7 @@ import * as RootNavigation from '../../RootNavigation';
 import { enablePush } from '../../services/push';
 import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
-import { flameMomentFor, tomorrowPrize, type FlameMoment } from '../../services/retention/loopMotion';
+import { dailyChain, flameMomentFor, mayAskAfterChain, tomorrowPrize, type FlameMoment } from '../../services/retention/loopMotion';
 import { mayAskForPush, notePushAsked } from '../../services/retention/pushAsk';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../../ui';
 import { useModalLayer } from '../../ui/modalLayers';
@@ -27,6 +27,7 @@ import StampRibbon from './StampRibbon';
 import StreakMoment from './StreakMoment';
 import TomorrowCard from './TomorrowCard';
 import Daily3Sheet, { type GoalTap } from './Daily3Sheet';
+import FlameUpRow from './FlameUpRow';
 import RewardReveal from './RewardReveal';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
@@ -45,13 +46,19 @@ const MIN_REFRESH_MS = 15000;
 const COACH_KEY = 'tps.retention.coach.v1';
 /** The last streak number this phone celebrated (per player), so a flame moment plays once. */
 const FLAME_SEEN_KEY = 'tps.retention.flameSeen.v1';
+/** This phone has shown the "come back tomorrow" card (per player): after that it shows only before gear or a milestone. */
+const TOMORROW_SEEN_KEY = 'tps.retention.tomorrowSeen.v1';
+/** The modal steps aside while the chest's prizes fly into the HUD in plain sight, then the next card (if any). */
+const FLY_GAP_MS = 950;
 
 type View_ =
   | { k: 'sheet'; all?: boolean }
   | { k: 'flame'; moment: Exclude<FlameMoment, { kind: 'none' }> }
   | { k: 'tomorrow' }
   | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; claimDate?: string | null; rewards: PaidRewards | null; opening: boolean;
-      auto?: boolean }
+      auto?: boolean; state?: DailyThreeState | null; moment?: FlameMoment }
+  /** Between cards: the modal is away so the prizes fly into the HUD where the kid can see them land. */
+  | { k: 'flying' }
   | { k: 'freeze' }
   | { k: 'freezeSaved'; days: number; streak: number }
   | { k: 'push' };
@@ -99,6 +106,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const lastChestRead = useRef(-1);
   const prevGoals = useRef<DailyThreeState['goals'] | null>(null);
   const opening = useRef(false);
+  /** The full set starts its claim when the third check lands, so the chest never waits on the server. */
+  const claimAhead = useRef<Promise<{ rewards: PaidRewards; state: DailyThreeState }> | null>(null);
+  const chainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (chainTimer.current) clearTimeout(chainTimer.current); }, []);
   const mounted = useRef(true);
   const viewRef = useRef<View_ | null>(null);
   viewRef.current = view;
@@ -223,38 +234,53 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   };
   const writeSeen = (n: number) => { void AsyncStorage.setItem(seenKey, String(n)).catch(() => undefined); };
 
-  /** After the reveal: the flame grows (once per new streak day), then tomorrow's present, then the reminders ask. */
-  const afterReveal = async (src: 'daily' | 'weekly' | 'level', state: DailyThreeState | null) => {
-    if (src === 'daily' && state) {
-      const seen = await readSeen();
-      const moment = flameMomentFor(seen, state.streak.days, state.streak.counted_today);
-      if (state.streak.counted_today) writeSeen(state.streak.days);
-      if (moment.kind !== 'none') { setView({ k: 'flame', moment }); return; }
+  const tomorrowKey = `${TOMORROW_SEEN_KEY}:${player?.id ?? 0}`;
+
+  /**
+   * After a chest: the modal steps aside and the prizes fly into the HUD in plain sight (one celebration at a time),
+   * then, for the Daily 3 chest, the big flame (3, 7, 30, 100 only) and the tomorrow card (first time, or before gear
+   * or a milestone). A normal day ends right here: one tap after the chest.
+   */
+  const finishReveal = (paid: PaidRewards | null, src: 'daily' | 'weekly' | 'level', state: DailyThreeState | null, moment: FlameMoment | undefined) => {
+    setView({ k: 'flying' });
+    if (paid) chainTimer.current = setTimeout(() => fly(paid), 160);
+    const next = async () => {
+      chainTimer.current = null;
+      void refreshPlayer?.();
+      if (src !== 'daily') void refresh(true);
+      if (!mounted.current) return;
+      let chain: ('flame' | 'tomorrow')[] = [];
+      if (src === 'daily' && state) {
+        let seen = false;
+        try { seen = !!(await AsyncStorage.getItem(tomorrowKey)); } catch { /* treat as not seen */ }
+        chain = dailyChain({ moment: moment ?? { kind: 'none' }, prize: tomorrowPrize(state), tomorrowSeen: seen,
+          milestoneAway: state.streak.next_milestone?.days_away ?? null });
+      }
+      chainRef.current = chain;
+      if (chain.length) { showChain(); return; }
+      if (src !== 'daily' && await mayAskForPush()) { setView({ k: 'push' }); return; }
+      if (src === 'daily' && mayAskAfterChain(chain) && await mayAskForPush()) { setView({ k: 'push' }); return; }
+      setView(null);
+    };
+    chainTimer.current = setTimeout(() => { void next(); }, paid ? FLY_GAP_MS : 200);
+  };
+
+  /** The rest of the daily chain, one card at a time. */
+  const chainRef = useRef<('flame' | 'tomorrow')[]>([]);
+  const flameRef = useRef<Exclude<FlameMoment, { kind: 'none' }> | null>(null);
+  const showChain = () => {
+    const step = chainRef.current.shift();
+    if (step === 'flame' && flameRef.current) { setView({ k: 'flame', moment: flameRef.current }); return; }
+    if (step === 'tomorrow') {
+      void AsyncStorage.setItem(tomorrowKey, '1').catch(() => undefined);
       setView({ k: 'tomorrow' }); return;
     }
-    if (await mayAskForPush()) { setView({ k: 'push' }); return; }
+    if (step === 'flame') { showChain(); return; }
     setView(null);
   };
 
-  const finishReveal = async (paid: PaidRewards | null, src: 'daily' | 'weekly' | 'level' = 'level') => {
-    if (paid) fly(paid);
-    void refreshPlayer?.();
-    let state = daily;
-    if (src === 'daily') {
-      try { const d = await getDailyThree(); if (d.enabled) { applyDaily(d); state = d; } } catch { /* keep what we had */ }
-    } else {
-      void refresh(true);
-    }
-    if (!mounted.current) return;
-    await afterReveal(src, state);
-  };
-
-  const afterFlame = () => { setView({ k: 'tomorrow' }); };
-  const afterTomorrow = async () => {
-    // Right after a win is the one good moment to ask about reminders.
-    if (await mayAskForPush()) { setView({ k: 'push' }); return; }
-    setView(null);
-  };
+  const afterFlame = () => { showChain(); };
+  const afterTomorrow = () => { showChain(); };
 
   /** A claim whose answer was lost: read back what the server paid for that exact chest. */
   const recoverPaid = async (src: 'daily' | 'weekly' | 'level', level_: number, claimDate: string | null | undefined, timeoutMs = 6000): Promise<PaidRewards | null> => {
@@ -283,14 +309,26 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     setView({ ...current, opening: true });
     const started = Date.now();
     try {
-      const result: { rewards: PaidRewards; state?: DailyThreeState } = current.src === 'daily' ? await claimDailyThree()
+      const seenP = current.src === 'daily' ? readSeen() : Promise.resolve(null);
+      const ahead = current.src === 'daily' ? claimAhead.current : null;
+      claimAhead.current = null;
+      const result: { rewards: PaidRewards; state?: DailyThreeState } = current.src === 'daily' ? await (ahead ?? claimDailyThree())
         : current.src === 'weekly' ? await claimWeeklyBox()
         : await openLevelChest(current.level ?? 0);
+      // The flame moment comes from the claim's own answer (no second read before the next card).
+      let moment: FlameMoment | undefined;
+      if (current.src === 'daily' && result.state) {
+        moment = flameMomentFor(await seenP, result.state.streak.days, result.state.streak.counted_today);
+        if (result.state.streak.counted_today) writeSeen(result.state.streak.days);
+        flameRef.current = moment.kind === 'milestone' ? moment : null;
+      }
       // Let the shake build before the lid pops (anticipation reads at 450 ms+).
       // The Weekly Box shakes longest (900 ms): the week's biggest moment earns the longest wind-up.
       // The Daily 3 chest follows the chest beats (420 ms of shake, then the held frame); the Weekly Box winds up longest.
-      const wait = reducedMotion ? 0 : Math.max(0, (current.src === 'weekly' ? 900 : current.src === 'daily' ? 420 : 560) - (Date.now() - started));
-      setTimeout(() => { if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards }); }, wait);
+      const wait = reducedMotion ? 0 : Math.max(0, (current.src === 'weekly' ? 900 : current.src === 'daily' ? 420 : 300) - (Date.now() - started));
+      setTimeout(() => {
+        if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards, state: result.state ?? null, moment });
+      }, wait);
       if (result.state?.goals) applyDaily(result.state);
       if (current.src === 'level') setChests(cs => cs.map(c => (c.level === current.level ? { ...c, opened: true, rewards: result.rewards } : c)));
     } catch {
@@ -351,6 +389,9 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   // The third check landed on the map: open the card in full-set mode (checks bounce, ribbon stamps, chest opens by itself).
   const onFullSet = () => {
     if (viewRef.current || !daily?.claimable) return;
+    // Start the claim now: by the chest beat (900 ms later) the server has usually answered, so the lid never waits.
+    claimAhead.current = claimDailyThree();
+    claimAhead.current.catch(() => undefined);
     setView({ k: 'sheet', all: true });
   };
 
@@ -372,6 +413,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   });
 
   const close = () => {
+    // The full set flows into its chest by itself (its claim is already on the way): nothing closes it midway.
+    if (view?.k === 'sheet' && view.all) return;
     if (view?.k === 'sheet') setCelebrate([]);
     if (view?.k === 'push') void notePushAsked();
     if (view?.k === 'freezeSaved') void markFreezeSeen().then(r => applyDaily(r.state)).catch(() => undefined);
@@ -442,7 +485,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
           <View style={styles.pips}>{[0, 1, 2, 3, 4].map(i => <View key={i} style={[styles.pip, i < 5 && styles.pipLit]} />)}</View>
         </View>
       )
-      : daily ? (
+      : r.state && r.moment?.kind !== 'milestone' ? (
+        <FlameUpRow from={r.moment?.kind === 'plusOne' ? r.moment.from : r.state.streak.days} to={r.state.streak.days}
+          grow={r.moment?.kind === 'plusOne'} reducedMotion={reducedMotion} />
+      ) : daily && r.moment?.kind !== 'milestone' ? (
         <View style={styles.nextRow}>
           <GameIcon name="streak" size={26} />
           <Text style={styles.nextText}>{tomorrowLine(daily)}</Text>
@@ -451,20 +497,20 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     content = (
       <RewardReveal reducedMotion={reducedMotion} rewards={r.rewards} opening={r.opening} footer={footer} dropIn={r.src === 'level'}
         subtitle={r.src === 'level' ? `You reached Level ${r.level}! Tap your chest.`
-          : r.src === 'weekly' ? 'A whole week of flames. Tap the box!' : 'All three goals done. Tap your chest!'}
+          : r.src === 'weekly' ? 'A whole week of flames. Tap the box!' : r.auto ? 'All three goals done!' : 'All three goals done. Tap your chest!'}
         closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? WEEKLY : ICON_SOURCES.chest}
         openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? WEEKLY_OPEN : ICON_SOURCES.chestOpen}
-        autoOpen={!!r.auto}
+        autoOpen={!!r.auto} expectRows={r.src === 'daily' && daily ? dailyRowCount(daily) : undefined}
         onWear={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('Inventory'); }}
         onPins={() => { if (r.rewards) fly(r.rewards); void refreshPlayer?.(); setView(null); RootNavigation.navigate('PinCollections'); }}
-        onOpen={() => { void openReveal(); }} onDone={() => { void finishReveal(r.rewards, r.src); }} />
+        onOpen={() => { void openReveal(); }} onDone={() => finishReveal(r.rewards, r.src, r.state ?? null, r.moment)} />
     );
   } else if (view?.k === 'flame') {
     title = view.moment.kind === 'milestone' ? 'Big flame!' : 'Flame up!';
     content = <StreakMoment key={JSON.stringify(view.moment)} moment={view.moment} reducedMotion={reducedMotion} onDone={afterFlame} />;
   } else if (view?.k === 'tomorrow') {
     title = 'See you tomorrow';
-    content = <TomorrowCard prize={tomorrowPrize(daily)} reducedMotion={reducedMotion} onDone={() => { void afterTomorrow(); }} />;
+    content = <TomorrowCard prize={tomorrowPrize(daily)} reducedMotion={reducedMotion} onDone={afterTomorrow} />;
   } else if (view?.k === 'freeze' && daily) {
     title = 'Streak Freeze';
     content = (
@@ -514,7 +560,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   }
 
   // Moments that must finish (a chest mid-open, the flame) ignore backdrop taps; their button moves on.
-  const revealing = view?.k === 'reveal' || view?.k === 'flame' || (view?.k === 'sheet' && !!view.all);
+  const revealing = view?.k === 'reveal' || view?.k === 'flame' || view?.k === 'flying' || (view?.k === 'sheet' && !!view.all);
   const overlay = (
     <Modal isVisible={visible && front && !!content} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
       animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'} animationInTiming={reducedMotion ? 120 : 240}
@@ -529,6 +575,13 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   );
 
   return { button, overlay, occluding: visible };
+}
+
+/** How many prize rows the Daily 3 chest will show (the server's preview), so its card fits them with no empty space. */
+function dailyRowCount(d: DailyThreeState): number {
+  const r = d.reward;
+  const m = d.claimable_milestone;
+  return [r.coins, r.tickets, r.energy, r.xp].filter(n => n > 0).length + (m?.gear ? 1 : 0) + (m && m.mystery_boxes > 0 ? 1 : 0);
 }
 
 function lvOf(p: { experience_level?: { level: number } } | null | undefined): number {
