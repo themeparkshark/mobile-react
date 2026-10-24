@@ -1019,3 +1019,22 @@ test('Community Center top cards glow warm like lit signs', () => {
   assert.match(cc, /const SIGN_GLOW = \{\s*shadowColor: '#ffc95c',/);
   assert.equal((cc.match(/\.\.\.SIGN_GLOW,/g) || []).length, 2);
 });
+
+test('short phones: the map rail puts the chest and Daily 3 beside the compass instead of on the Trail Boxes pill', () => {
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /const railSide = extraCount > 0 && !!viewSize && railFloor > 0\s*&& controlsTop \+ railColumnHeight\(1 \+ Math\.max\(extraCount, RAIL_EXTRAS_PLANNED\)\) \+ RAIL_FLOOR_GAP > viewSize\.height - railFloor;/);
+  assert.match(map, /\{railSide \? <View pointerEvents="box-none" style=\{styles\.railExtras\}>\{extraControls\}<\/View> : extraControls\}/);
+  assert.match(map, /railSide: \{ flexDirection: 'row-reverse', alignItems: 'flex-start' \},/);
+  // The declutter keeps map art out from under the two-column rail too.
+  assert.match(map, /w: 54 \* 2 \+ 8 \+ 12, h: railColumnHeight\(extraCount\) \+ 12/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /railFloor=\{rightColumnHeight > 0 \? 32 \+ rightColumnHeight : 0\}/);
+  assert.match(map, /return buttons <= 0 \? 0 : buttons \* RAIL_BUTTON \+ \(buttons - 1\) \* RAIL_GAP;/);
+});
+
+test('Trail Boxes: the flag is read only once signed in, and a check with no answer tries again', () => {
+  const src = read('src/services/trail/TrailProvider.tsx');
+  assert.match(src, /if \(!player\?\.id\) return undefined;\s*let on = true;/);
+  assert.match(src, /const FLAG_RETRY_MS = \[4_000, 15_000, 45_000\] as const;/);
+  assert.match(src, /if \(attempt < FLAG_RETRY_MS\.length\) timer = setTimeout\(\(\) => check\(attempt \+ 1\), FLAG_RETRY_MS\[attempt\]\);/);
+  assert.doesNotMatch(src, /TRAILDBG/);
+});

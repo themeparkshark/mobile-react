@@ -1670,7 +1670,7 @@ function ExploreScreen() {
           declutter={declutter}
           crowdHaze={parkHaze}
           guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
-          controlsTop={slotTop + (queueRide ? 104 : 76)} extraControls={mapControls} extraControlsCount={mapControlsCount} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
+          controlsTop={slotTop + (queueRide ? 104 : 76)} extraControls={mapControls} extraControlsCount={mapControlsCount} railFloor={rightColumnHeight > 0 ? 32 + rightColumnHeight : 0} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : mapFocusRequest}>

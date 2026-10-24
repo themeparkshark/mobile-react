@@ -123,7 +123,18 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
 /** Stable empty data for always-mounted sources that are off (never a new object per render). */
 const NO_FEATURES: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self' }: {
+/** The map's round buttons: 54 pt, 8 pt apart. */
+const RAIL_BUTTON = 54;
+const RAIL_GAP = 8;
+/** Clear map kept between the rail and the screen's bottom-right buttons. */
+const RAIL_FLOOR_GAP = 8;
+/** The extras the screen can stack under the compass (the daily chest and Daily 3). */
+const RAIL_EXTRAS_PLANNED = 2;
+export function railColumnHeight(buttons: number): number {
+  return buttons <= 0 ? 0 : buttons * RAIL_BUTTON + (buttons - 1) * RAIL_GAP;
+}
+
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, railFloor = 0, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self' }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -149,6 +160,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly extraControls?: ReactNode;
   /** How many 54 pt buttons extraControls stacks (default 1 when present), for the declutter inset. */
   readonly extraControlsCount?: number;
+  /**
+   * Room the screen keeps at the bottom right for its own buttons (Energy, Trail Boxes, the avatar),
+   * in points from the map's bottom edge. When the rail's stack would reach into it (a short phone
+   * with the chest and Daily 3 up), the extra buttons stand in a second column beside the compass.
+   */
+  readonly railFloor?: number;
   /** In-park marker declutter (src/components/map/declutter): footprints, insets and the placement store. */
   readonly declutter?: MapDeclutterInput | null;
   /** A full-screen moment owns the screen: hide the map buttons and the data credit (shown again after). */
@@ -548,6 +565,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   [!!declutter, location?.latitude, location?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
   const hasExtraControls = !!extraControls;
   const extraCount = hasExtraControls ? Math.max(1, extraControlsCount ?? 1) : 0;
+  // A short phone: the one column (compass, then each extra 62 pt lower) would reach the screen's
+  // bottom-right buttons, so the extras stand in a column of their own to the compass's left. It
+  // plans for both extras (the chest and Daily 3), so a chest that shows up later never makes the
+  // buttons jump from one column to two.
+  const railSide = extraCount > 0 && !!viewSize && railFloor > 0
+    && controlsTop + railColumnHeight(1 + Math.max(extraCount, RAIL_EXTRAS_PLANNED)) + RAIL_FLOOR_GAP > viewSize.height - railFloor;
   // Screen-space art over the map is an inset too: the Fin-ister moon (FrightMapLayer draws it
   // at 66 % across, 15 % down, 40 pt glow) and Explore's docked offline chip (OfflineBanner:
   // 44 pt, 16 pt from the right, 43 % down the window) while it shows.
@@ -559,11 +582,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const declutterControls = useMemo<InsetRect[]>(() => {
     if (!declutter || !viewSize) return [];
     // The compass (and chest) column: a hard inset with a 6 pt gap (share 0: no art under a button).
-    const out: InsetRect[] = [{ x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6, w: 54 + 12, h: 54 + extraCount * 62 + 12, share: 0 }];
+    const out: InsetRect[] = [railSide
+      ? { x: viewSize.width - 16 - 54 - 8 - 54 - 6, y: controlsTop - 6, w: 54 * 2 + 8 + 12, h: railColumnHeight(extraCount) + 12, share: 0 }
+      : { x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6, w: 54 + 12, h: 54 + extraCount * 62 + 12, share: 0 }];
     if (frightOn) out.push({ x: Math.round(viewSize.width * 0.66) - 44, y: Math.round(viewSize.height * 0.15) - 44, w: 88, h: 88, share: 0.2 });
     if (offline && viewTop !== null) out.push({ x: viewSize.width - 16 - 44 - 8, y: Math.round(windowHeight * 0.43) - viewTop - 8, w: 60, h: 60, share: 0.2 });
     return out;
-  }, [!!declutter, viewSize?.width, viewSize?.height, controlsTop, extraCount, frightOn, offline, viewTop, windowHeight]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [!!declutter, viewSize?.width, viewSize?.height, controlsTop, extraCount, railSide, frightOn, offline, viewTop, windowHeight]); // eslint-disable-line react-hooks/exhaustive-deps
   // Development overlay (EXPO_PUBLIC_DECLUTTER_DEBUG=1): every footprint and chip box the solver placed.
   const [debugRects, setDebugRects] = useState<Map<string, { body: Rect; tag: Rect | null; point?: { x: number; y: number } }> | null>(null);
   const debugOn = __DEV__ && process.env.EXPO_PUBLIC_DECLUTTER_DEBUG === '1';
@@ -767,7 +792,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           right: 16,
           zIndex: 10,
           gap: 8,
-        }, chromeStyle]}
+        }, railSide && styles.railSide, chromeStyle]}
         onLayout={event => {
           const { x, y, width, height } = event.nativeEvent.layout;
           setRail(prev => (prev && Math.abs(prev.x - x) < 1 && Math.abs(prev.y - y) < 1 && Math.abs(prev.height - height) < 1
@@ -779,7 +804,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           reducedMotion={reducedMotion} hint={compassHint.visible && haveHeading} onHintDone={compassHint.dismiss}
           noCompassFlash={noCompassFlash}
           awayArt={hasDressedShark(lookInventory) ? <View style={styles.awaySharkScale}><MapSharkLook inventory={lookInventory} t={fxClock} kick={fxKick} animate={false} playing={false} /></View> : undefined} />
-        {extraControls}
+        {railSide ? <View pointerEvents="box-none" style={styles.railExtras}>{extraControls}</View> : extraControls}
       </Reanimated.View>
 
       {/* Every marker inside the map (islands, finds, haunts) reads its placement from here. */}
@@ -1090,6 +1115,9 @@ function FrightBearing({ store, children }: { readonly store: BearingStore; read
 }
 
 const styles = StyleSheet.create({
+  // The compass on the right, the extra buttons in their own column to its left (short phones).
+  railSide: { flexDirection: 'row-reverse', alignItems: 'flex-start' },
+  railExtras: { gap: 8 },
   debugBody: { position: 'absolute', borderWidth: 1, borderColor: '#ff3df5', backgroundColor: 'rgba(255,61,245,0.08)' },
   debugTag: { position: 'absolute', borderWidth: 1, borderColor: '#3dffb0' },
   debugPoint: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: '#00e5ff' },
