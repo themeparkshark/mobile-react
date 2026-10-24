@@ -22,7 +22,7 @@ interface ShareableRideCardProps {
   queued?: boolean;
 }
 
-/** How long the "Shared!" check stays on the button. */
+/** How long the "Shared!" check stays on the button. Shown only when iOS says it really went. */
 export const SHARED_STAMP_MS = 2000;
 
 // The card itself (captured by ViewShot)
@@ -120,7 +120,7 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
   const viewShotRef = useRef<ViewShot>(null);
   const busy = useRef(false);
   const [sharing, setSharing] = useState(false);
-  // A gold check and "Shared!" for a moment after the sheet closes; the card stays open.
+  // A gold check and "Shared!" for a moment, only when the share really went (never after a cancel).
   const [shared, setShared] = useState(false);
   useEffect(() => {
     if (!shared) return undefined;
@@ -163,11 +163,10 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
         mimeType: 'image/png',
         dialogTitle: `My ${ride.ride_name} experience on Theme Park Shark!`,
       }, `${ride.ride_name} Ride Card`);
-      // Back on the card after the sheet (even a cancel): a kid who backs out lands on their card.
-      if (outcome === 'closed') {
-        setShared(true);
-        onShare?.();
-      }
+      // Back on the card after the sheet (even a cancel): a kid who backs out lands on their card,
+      // with the plain Share Ride Card button again. The check is only for a share that went.
+      if (outcome === 'shared') setShared(true);
+      if (outcome === 'shared' || outcome === 'closed') onShare?.();
     } catch {
       gameAlert('Could not make your card', 'Your ride is saved. Try sharing it again.');
     } finally {

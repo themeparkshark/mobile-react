@@ -420,3 +420,19 @@ test('the coin sheet Share icon carries a word and the stamp payload must say wh
   assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8'), /size="sm" caption/);
   assert.match(fs.readFileSync(pathMod.join(repo, 'src/share/types.ts'), 'utf8'), /readonly artHasShark: boolean;/);
 });
+
+test('a park day card never goes out with an empty coin frame, and reads "My Park Day"', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const read = f => fs.readFileSync(path.join(__dirname, '..', '..', f), 'utf8');
+  assert.equal(copy.flexCopy('park_day', { coinsCaught: 1, newCoins: 0, coinUrls: [] }).title, 'My Park Day');
+  // No coin art with the day: the plain Ride Coin fills the slot.
+  assert.match(read('src/share/FlexHero.tsx'), /const shown: readonly \(FlexArt \| null\)\[\] = arts\.length \? arts\.slice\(0, 9\) : \[null\];/);
+  // Slow or broken art swaps to its fallback at FLEX_ART_FALLBACK_MS; the share waits past that before capturing.
+  const art = read('src/share/FlexArtwork.tsx');
+  assert.match(art, /export const FLEX_ART_FALLBACK_MS = 4000;/);
+  assert.match(art, /setTimeout\(\(\) => setLate\(true\), FLEX_ART_FALLBACK_MS\)/);
+  const host = read('src/share/ShareStudioHost.tsx');
+  assert.match(host, /export const FLEX_CAPTURE_WAIT_MS = FLEX_ART_FALLBACK_MS \+ 2000;/);
+  assert.match(host, /for \(let waited = 0; waited < FLEX_CAPTURE_WAIT_MS && !readyRef\.current; waited \+= 100\)/);
+});

@@ -29,6 +29,7 @@ import * as Haptics from '../helpers/haptics';
 import { BRAND, GameButton, gameAlert } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { captureFlex, openShareSheet } from './capture';
+import { FLEX_ART_FALLBACK_MS } from './FlexArtwork';
 import { flexCopy } from './copy';
 import { CARD_CHROME, FLEX_SIZE, FlexCard } from './FlexCard';
 import { HERO_ART } from './FlexHero';
@@ -46,6 +47,9 @@ import { useDevAutoPress } from './devDrive';
 import { trackShare } from './track';
 import { GrownUpGateSlot } from '../components/GrownUpGate';
 import type { FlexFormat, FlexPayload, FlexRequest } from './types';
+
+/** The longest a share waits for the card's art: past the fallback swap, plus time for the fallback to draw. */
+export const FLEX_CAPTURE_WAIT_MS = FLEX_ART_FALLBACK_MS + 2000;
 
 export const REVEAL_TAP_GUARD_MS = 900;
 /** A sheet that hasn't appeared by now never will (e.g. presented over a modal): drop it. */
@@ -160,7 +164,9 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
       // The link (with its per-kind campaign, never a player id) goes on the clipboard,
       // so it can be pasted as an Instagram link sticker.
       void Clipboard.setStringAsync(shareUrl(request.kind)).then(() => setLinkCopied(true)).catch(() => undefined);
-      for (let i = 0; i < 30 && !readyRef.current; i++) await new Promise(r => setTimeout(r, 100));
+      // Wait for every piece of art. Slow or broken art swaps to its bundled fallback at
+      // FLEX_ART_FALLBACK_MS, so this waits past that: a card never goes out with an empty slot.
+      for (let waited = 0; waited < FLEX_CAPTURE_WAIT_MS && !readyRef.current; waited += 100) await new Promise(r => setTimeout(r, 100));
       const uri = await captureFlex(cardRef, format);
       const outcome = await openShareSheet(uri, flexCopy(request.kind, request.payload).title);
       if (outcome.shared === false) event('dismissed');
