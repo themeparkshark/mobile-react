@@ -90,6 +90,9 @@ test('PLAY NOW is always whole: the page leads with it, shrinks it to one row, o
   assert.equal(m.chapterPageFit(149, false), 'compact', '17 Pro reading Details: PLAY NOW still first and whole');
   assert.equal(m.chapterPageFit(400, true), 'compact', 'a short phone always leads with PLAY NOW');
   assert.equal(m.chapterPageFit(82, true), 'strip', 'SE: a one-row PLAY NOW strip that fits whole');
+  // A real iPhone SE closed page is 112 to 116 pt (it moves a few points with the coin chip): always the strip,
+  // never a flip to compact with the header's title sliced by the fade.
+  for (const view of [110, 112, 115, 116, 120]) assert.equal(m.chapterPageFit(view, true), 'strip', `SE closed at ${view}`);
   assert.equal(m.chapterPageFit(0, false), 'full', 'before layout nothing jumps');
   // PLAY NOW (64 pt, after 6 pt padding) always clears the fade in compact.
   for (const view of [m.CHAPTER_COMPACT_PAGE, 149, 200, 261]) assert.ok(6 + 64 <= view - m.fadeHeight(view), `compact at ${view}`);

@@ -50,8 +50,13 @@ export function fadeHeight(viewHeight: number): number {
 export type ChapterPageFit = 'full' | 'compact' | 'strip';
 /** Header (100) + gap + PLAY NOW with its hint line (about 112) + padding + the fade. */
 export const CHAPTER_FULL_PAGE = 262;
-/** The 64 pt PLAY NOW card + padding + the fade under it. */
-export const CHAPTER_COMPACT_PAGE = 112;
+/**
+ * The 64 pt PLAY NOW card + padding + the fade, plus enough of the header that it
+ * reads as a header melting into the mist, never a title sliced mid-line. Below
+ * this (an iPhone SE, Details open or closed) the page is the one-row strip, so
+ * the SE closed page is always the same layout.
+ */
+export const CHAPTER_COMPACT_PAGE = 130;
 /** The one-row strip: 40 pt play icon, borders and padding. */
 export const CHAPTER_STRIP = 54;
 
