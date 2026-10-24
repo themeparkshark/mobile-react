@@ -30,6 +30,11 @@ class SfxManager {
     return GameAudio.isSfxEnabled();
   }
 
+  /** Game music on/off (the player's Music setting). With music and SFX both off the engine never starts. */
+  setMusicEnabled(value: boolean): void {
+    GameAudio.setMusicEnabled(value);
+  }
+
   /** 0..1 master volume applied to every voice. */
   setMasterVolume(v: number): void {
     GameAudio.setMasterVolume(v);

@@ -290,3 +290,31 @@ test('studio audio sync: infers ladders and lanes, converts one-shots to WAV, sp
   assert.equal(probe, 'pcm_s16le,2', 'panned lane files stay stereo WAV');
   fs.rmSync(tmp, { recursive: true, force: true });
 });
+
+test('GameAudio: with sound effects and music both off nothing starts the audio engine (battery, no audio session to fail)', async () => {
+  const { GameAudio, calls } = loadAudioEngine();
+  GameAudio.setSfxEnabled(false);
+  GameAudio.setMusicEnabled(false);
+  assert.equal(GameAudio.wantsAudio(), false);
+  await GameAudio.init();
+  assert.equal(GameAudio.backend, null, 'no backend while all sound is off');
+  await GameAudio.preload(['fx.coin']);
+  await GameAudio.preloadBeds(['mm_loop_main']);
+  assert.equal(GameAudio.play('fx.coin'), 0);
+  await GameAudio.music.play('mm_loop_main', 0);
+  assert.equal(GameAudio.backend, null);
+  assert.deepEqual(calls.loads, [], 'nothing decoded');
+  // Sound back on: the next load starts the engine as before.
+  GameAudio.setSfxEnabled(true);
+  await GameAudio.preload(['fx.coin']);
+  assert.ok(GameAudio.backend, 'engine starts once sound is on');
+  assert.ok(calls.loads.length > 0);
+  assert.ok(GameAudio.play('fx.coin') > 0);
+});
+
+test('the player\'s Music setting reaches the game audio engine, like Sound Effects', () => {
+  const provider = fs.readFileSync(path.join(root, 'src/context/SoundEffectProvider.tsx'), 'utf8');
+  assert.match(provider, /SFX\.setEnabled\(!\(isReady && !player\?\.enabled_sound_effects\)\);/);
+  assert.match(provider, /SFX\.setMusicEnabled\(!\(isReady && !player\?\.enabled_music\)\);/);
+  assert.match(fs.readFileSync(path.join(root, 'src/gamekit/SFX.ts'), 'utf8'), /setMusicEnabled\(value: boolean\): void \{\s*GameAudio\.setMusicEnabled\(value\);/);
+});

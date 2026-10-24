@@ -103,9 +103,19 @@ class GameAudioEngine {
     this.music = new MusicDirector(this);
   }
 
-  /** Pick and start a backend. Safe to call many times. */
+  /**
+   * True while the player has sound effects or music on. With both off nothing starts
+   * the audio engine: no battery spent on a silent audio session, and no session start
+   * that can fail. Turning either back on starts it on the next play or load.
+   */
+  wantsAudio(): boolean {
+    return this.sfxEnabled || this.musicEnabled;
+  }
+
+  /** Pick and start a backend. Safe to call many times. Resolves with no backend while all sound is off. */
   init(choice: BackendChoice = 'auto'): Promise<void> {
     if (this.initPromise) return this.initPromise;
+    if (!this.wantsAudio()) return Promise.resolve();
     this.initPromise = (async () => {
       let backend: AudioBackend | null = null;
       if (choice !== 'expo-av' && audioApiAvailable()) {
@@ -180,7 +190,8 @@ class GameAudioEngine {
     if (pending) return pending;
     const p = (async () => {
       await this.init();
-      const ok = await this.backend!.load(key, src, voices);
+      if (!this.backend) { this.loading.delete(key); return false; }
+      const ok = await this.backend.load(key, src, voices);
       if (ok) this.loaded.add(key);
       else if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn(`[GameAudio] ${this.backend!.name} could not load ${key}`);
       this.loading.delete(key);
@@ -193,6 +204,7 @@ class GameAudioEngine {
   /** Decode/prepare cues (all registered cues when names is omitted). */
   async preload(names?: string[]): Promise<void> {
     await this.init();
+    if (!this.backend) return;
     const list = names ?? Array.from(this.cues.keys());
     await Promise.all(list.map(async (name) => {
       const def = this.cues.get(name);
@@ -203,6 +215,7 @@ class GameAudioEngine {
 
   async preloadBeds(names: string[]): Promise<void> {
     await this.init();
+    if (!this.backend) return;
     await Promise.all(names.map(async (name) => {
       const def = this.beds.get(name);
       if (!def) return;

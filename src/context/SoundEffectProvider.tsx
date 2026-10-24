@@ -28,6 +28,11 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
   useEffect(() => {
     SFX.setEnabled(!(isReady && !player?.enabled_sound_effects));
   }, [isReady, player?.enabled_sound_effects]);
+  // Game music follows the player's Music setting too (each game's useGameMusic agrees), so a
+  // player with both off never starts the audio engine (GameAudio.wantsAudio).
+  useEffect(() => {
+    SFX.setMusicEnabled(!(isReady && !player?.enabled_music));
+  }, [isReady, player?.enabled_music]);
 
   useEffect(() => {
     mounted.current = true;
