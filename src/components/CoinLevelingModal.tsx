@@ -1056,7 +1056,8 @@ export default function CoinLevelingModal({
                     nothing in the card moves from the tap to the settled card. */}
                 {(state === 'success' || (!showEditions && !isMaxLevel && (state === 'preview' || state === 'confirm' || state === 'leveling'))) && (
                   <View style={{ alignSelf: 'stretch', height: CTA_HEIGHT, justifyContent: 'center' }}>
-                    <View style={{ opacity: state === 'leveling' ? 0 : 1 }} pointerEvents={state === 'leveling' ? 'none' : 'auto'}>
+                    {/* Never hidden: the charge bar covers it instead (an iOS image under a hidden parent drew late once shown again). */}
+                    <View pointerEvents={state === 'leveling' ? 'none' : 'auto'}>
                       <YellowButton
                         estimatedWidth={SUCCESS_CTA_WIDTH}
                         text={state === 'success' ? 'Awesome!' : canLevelUp || !missingAction ? 'Level Up!' : missingAction.label}
@@ -1075,7 +1076,8 @@ export default function CoinLevelingModal({
                       />
                     </View>
                     {state === 'leveling' && (
-                      <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}
+                      <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center',
+                        backgroundColor: '#D9F5FF' }}
                         accessible accessibilityLiveRegion="polite"
                         accessibilityLabel={slowServer ? 'Almost there' : 'Powering up your coin'}>
                         {/* A dark track with a bright gold fill: easy to see on the pale card. */}
