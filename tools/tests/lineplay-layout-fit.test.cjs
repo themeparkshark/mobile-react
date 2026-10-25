@@ -886,6 +886,10 @@ test('the arcade sheet slides in already full: its pictures are decoded while Li
   assert.match(sheet, /warmup: \{ position: 'absolute', left: 0, top: 0, width: 72, opacity: 0 \}/);
   assert.match(sheet, /pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden/);
   assert.match(read(SCREEN), /\n\s+<ArcadeIconWarmup \/>\n/);
+  // Every tile is there from the sheet's first frame (no tile zooms in from nothing); they only settle 88% to 100%.
+  assert.doesNotMatch(sheet, /ZoomIn/);
+  assert.match(sheet, /initialValues: \{ transform: \[\{ scale: 0\.88 \}\] \}/);
+  assert.match(sheet, /entering=\{visible && !reducedMotion \? tileSettle\(60 \+ order \* 45\) : undefined\}/);
 });
 
 test('one name per idea on the chapter page: the header is the park and the shark while clues are left', () => {

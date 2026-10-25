@@ -1,12 +1,13 @@
 /**
  * Queue Arcade: every queue game one tap away. Each tile shows your best stars
- * this wait, or a NEW pill for a game you have not played, and the tiles pop
- * in with a short stagger when the sheet opens (reduced motion: no pop).
+ * this wait, or a NEW pill for a game you have not played. The sheet slides in
+ * already full (every tile and picture is there from its first frame), and the
+ * tiles settle with a small staggered bounce (reduced motion: no bounce).
  */
 import { Image } from 'expo-image';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
-import Animated, { ZoomIn } from 'react-native-reanimated';
+import Animated, { withDelay, withSpring, type EntryAnimationsValues } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../../ui';
 
@@ -30,6 +31,17 @@ const ICONS: Record<string, number> = {
   current: require('../../../../assets/images/screens/lineplay/arcade/quest.png'),
   showdown: require('../../../../assets/images/screens/lineplay/arcade/showdown.png'),
 };
+
+/** A tile's settle as the sheet opens: present from the first frame at 88%, then a staggered spring to full size (UI thread). */
+function tileSettle(delay: number) {
+  return (_values: EntryAnimationsValues) => {
+    'worklet';
+    return {
+      initialValues: { transform: [{ scale: 0.88 }] },
+      animations: { transform: [{ scale: withDelay(delay, withSpring(1, { damping: 11, stiffness: 260 })) }] },
+    };
+  };
+}
 
 const ARCADE_HEADER_ICON = require('../../../../assets/images/screens/social/arcade.png');
 
@@ -90,7 +102,7 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
         <Text style={styles.intro}>{intro}</Text>
         <ScrollView contentContainerStyle={styles.games}>
           {choices.map((choice, order) => <Animated.View key={choice.id} style={styles.gameCell}
-            entering={visible && !reducedMotion ? ZoomIn.delay(90 + order * 60).springify().damping(12) : undefined}>
+            entering={visible && !reducedMotion ? tileSettle(60 + order * 45) : undefined}>
             <Pressable accessibilityRole="button"
               accessibilityLabel={`${choice.completed ? 'Replay' : 'Play'} ${choice.title}.${choice.bestStars == null
                 ? showNew ? ` ${newLabel}` : '' : ` Best ${choice.bestStars} of 3 stars.`}`}
