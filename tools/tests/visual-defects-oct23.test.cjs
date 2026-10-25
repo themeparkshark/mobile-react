@@ -1068,7 +1068,9 @@ test('launch cover: once its fade has begun no newer plan snaps it back to full 
   const cover = read('src/components/map/MapLaunchCover.tsx');
   assert.match(cover, /if \(liftStarted\.value === 1 \|\| opacity\.value < 1\) \{ liftStarted\.value = 1; liftAskedAt\.value = -1; return; \}/);
   assert.doesNotMatch(cover, /opacity\.value = 1;/, 'nothing raises the cover back up mid-lift');
-  assert.match(cover, /runOnJS\(coverLifted\)\(liftToken\.value\)/, 'the fade reports the newest plan, so the cover leaves when it ends');
+  assert.match(cover, /runOnJS\(faded\)\(liftToken\.value\)/, 'the fade reports the newest plan, so the cover leaves when it ends');
+  assert.match(cover, /const faded = useCallback\(\(tok: number\) => \{ setGone\(true\); coverLifted\(tok\); \}, \[\]\);/, 'drawn transparent by React before it leaves');
+  assert.match(cover, /lift, gone && styles\.gone\]\}>/);
 });
 
 test('launch cover covers a slow park pick: no lift onto a bare map, then a second sky loading screen', () => {
@@ -1192,7 +1194,7 @@ test('PLAY RIDE stand-in: the art\'s own layers and colors, cross-faded out over
 test('launch cover: its animated view never re-renders while up, so no frame snaps back to the full splash', () => {
   const cover = read('src/components/map/MapLaunchCover.tsx');
   assert.match(cover, /return useMemo\(\(\) => \(\s*<Animated\.View testID="map-launch-cover"/);
-  assert.match(cover, /\), \[launch, blockTouches, style\]\);/);
+  assert.match(cover, /\), \[launch, blockTouches, style, gone\]\);/);
   // The cover is memoized, so the screen's re-renders never reach it (its style objects are made once).
   assert.match(cover, /export default memo\(MapLaunchCover\);/);
   const explore = read('src/screens/ExploreScreen.tsx');

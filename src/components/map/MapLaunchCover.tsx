@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   Easing, cancelAnimation, runOnJS, runOnUI, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withSequence, withTiming,
@@ -49,6 +49,12 @@ function CoverSky({ plan, style, blockTouches, launch }: {
   readonly launch: boolean;
 }) {
   const opacity = useSharedValue(1);
+  // Once its fade has ended, the view is drawn transparent by React too, before the plan lets the
+  // screen move on: any commit after that (the screen waking up, the cover leaving) can only ever
+  // draw it at 0, never at its mount-time full opacity (a release launch showed the whole splash
+  // flash back for two frames right as it left).
+  const [gone, setGone] = useState(false);
+  const faded = useCallback((tok: number) => { setGone(true); coverLifted(tok); }, []);
   // While this cover is on screen, the store's JS safety waits for it to report its own fade's end.
   useLayoutEffect(() => { noteCoverMounted(true); return () => noteCoverMounted(false); }, []);
   const ownFill = useSharedValue(plan.share ?? LAUNCH_HANDOFF_SHARE);
@@ -79,7 +85,7 @@ function CoverSky({ plan, style, blockTouches, launch }: {
     // The last stretch of the bar fills only now, as the map arrives, then the cover fades.
     fill.value = withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) });
     opacity.value = withDelay(COVER_FINISH_MS, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) },
-      (finished) => { 'worklet'; if (finished) runOnJS(coverLifted)(liftToken.value); }));
+      (finished) => { 'worklet'; if (finished) runOnJS(faded)(liftToken.value); }));
   }, false);
   // A layout effect: the plan reaches the UI thread in the same commit that mounts the cover. The
   // UI thread works out the time left itself (from the plan's wall-clock deadline), so a busy UI
@@ -111,7 +117,7 @@ function CoverSky({ plan, style, blockTouches, launch }: {
         withTiming(Math.max(fill.value, ceiling), { duration: Math.max(250, creep), easing: Easing.linear }),
         withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) }));
       opacity.value = withDelay(remaining, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) },
-        (finished) => { 'worklet'; if (finished) runOnJS(coverLifted)(liftToken.value); }));
+        (finished) => { 'worklet'; if (finished) runOnJS(faded)(liftToken.value); }));
     })(plan.deadline, plan.share, plan.ceiling, plan.lifting);
   // One set of animations per plan.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -127,16 +133,17 @@ function CoverSky({ plan, style, blockTouches, launch }: {
   return useMemo(() => (
     <Animated.View testID="map-launch-cover" pointerEvents={blockTouches ? 'auto' : 'none'}
       accessibilityLabel="Loading the map" accessibilityRole="progressbar"
-      style={[StyleSheet.absoluteFill, launch ? styles.launch : styles.sky, style, lift]}>
+      style={[StyleSheet.absoluteFill, launch ? styles.launch : styles.sky, style, lift, gone && styles.gone]}>
       {launch ? <LaunchScene /> : <MapCoverSky fill={fill} />}
     </Animated.View>
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [launch, blockTouches, style]);
+  ), [launch, blockTouches, style, gone]);
 }
 
 const styles = StyleSheet.create({
   sky: { backgroundColor: MAP_COVER_SKY },
   launch: { backgroundColor: LAUNCH_BLUE },
+  gone: { opacity: 0 },
 });
 
 export default memo(MapLaunchCover);
