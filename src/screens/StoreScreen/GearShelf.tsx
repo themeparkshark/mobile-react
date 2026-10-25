@@ -277,12 +277,22 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
 
   const onWorn = useCallback((item: ShopItem) => setToast(`Now wearing ${item.display_name || item.name}!`), [setToast]);
   const todayIds = useMemo(() => items.map(i => i.id), [items]);
+  // The first paint mounts only the Shop Pick and the first screenful (light, so the drop-in starts at once); the
+  // cells below it mount once the fill has landed (they were waiting for it anyway).
+  const [allIn, setAllIn] = useState(still);
+  useEffect(() => {
+    if (allIn || !items.length) return undefined;
+    const t = setTimeout(() => setAllIn(true), GRID_STAGGER.capMs + 120);
+    return () => clearTimeout(t);
+  }, [allIn, items.length]);
+  const cells = shelf.filter(i => (filter !== 'all' || i.id !== star?.id) && passesFilter(i, filter, balance));
+  const shownCells = allIn || filter !== 'all' ? cells : cells.slice(0, GRID_STAGGER.maxItems);
 
   return (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 48 }]} showsVerticalScrollIndicator={false} scrollEventThrottle={64}
         // A shelf shorter than the screen still asks for the next page (performance r8: page 2 never loaded).
-        onContentSizeChange={(_, h) => { if (h < winH + 240 && !nearEnd.current) { nearEnd.current = true; onEndReached?.(); } else if (h >= winH + 240) nearEnd.current = false; }}
+        onContentSizeChange={(_, h) => { if (!allIn) return; if (h < winH + 240 && !nearEnd.current) { nearEnd.current = true; onEndReached?.(); } else if (h >= winH + 240) nearEnd.current = false; }}
         onTouchStart={wake} onScrollBeginDrag={wake}
         onScroll={e => {
           const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
@@ -338,7 +348,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
                   <StarTile item={star as ShopItem} balance={balance} still={still || !focused || !!open || covered || idle} onOpen={openItem} onWish={wish} />
                 </Animated.View>
               )}
-              {shelf.filter(i => (filter !== 'all' || i.id !== star?.id) && passesFilter(i, filter, balance)).map((item, i) => (
+              {shownCells.map((item, i) => (
                 <Animated.View key={`${filter}:${item.id}`} entering={still ? undefined : !firstIds.current?.has(item.id) || filter !== 'all' ? FadeIn.duration(160)
                   : gridRiseIn(i, { leadMs: star ? GRID_AFTER_HERO_MS : GRID_STAGGER.headerLeadMs }) ?? FadeIn.delay(GRID_STAGGER.capMs).duration(160)}>
                   <ShopTile item={item as ShopItem} width={TILE_W} still={still} vipLocked={!!item.is_member_item && !vip}

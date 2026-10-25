@@ -14,10 +14,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import getCatalog from '../api/endpoints/catalogs/get';
 import getItems from '../api/endpoints/catalogs/items';
-import getStore from '../api/endpoints/stores/get';
-import getStores from '../api/endpoints/stores/stores';
 import getStoreRotation, { StoreRotation } from '../api/endpoints/stores/rotation';
 import getShopToday from '../api/endpoints/stores/today';
 import { ShopToday } from '../models/shop-today';
@@ -51,10 +48,10 @@ import { StoreType } from '../models/store-type';
 import { AWAY_LINE, HALLOWEEN_SHOP_NAME, awayMessage, isEventShop } from '../components/fright/halloweenShop';
 import { useTutorial } from '../components/Tutorial';
 import { SECRET_THEME } from '../fx/secretTheme';
-import { loadSecretShopFlag } from '../services/secretShopFlag';
 import Item from './StoreScreen/Item';
 import SuppliesShop, { type SuppliesFocus } from './StoreScreen/SuppliesShop';
 import GearShelf from './StoreScreen/GearShelf';
+import { CATALOG_PAGE, loadShop, takePendingShop, takeShop, type ShopLoad } from './StoreScreen/shopPrefetch';
 import { useBudgetedPoll } from '../power';
 import { SecretRoomSkeleton } from './StoreScreen/SecretShowroom';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -62,7 +59,6 @@ import type { ParamListBase } from '@react-navigation/native';
 
 const SCREEN_W = Dimensions.get('window').width;
 /** Items per catalog page (the server's simplePaginate default). */
-const CATALOG_PAGE = 15;
 
 /** Bobbing + tilting shark shopkeeper — perfect symmetric loops */
 function AnimatedShark({ imageUrl, still }: { imageUrl: string | undefined; still: boolean }) {
@@ -335,24 +331,29 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
     /** Wishlist push deep link: open this item's try-on. */
     focus_item?: number;
   };
+  // Profile read the shop ahead (shopPrefetch): the first render already has its shelf, so there is no loading
+  // screen and the shelf drops in at once.
+  const ahead = useRef<ShopLoad | null | undefined>(undefined);
+  if (ahead.current === undefined) ahead.current = takeShop(store);
+  const pre = ahead.current;
   const [tab, setTab] = useState<'gear' | 'supplies'>(initialTab ?? 'gear');
-  const [currentStore, setCurrentStore] = useState<StoreType>();
-  const [catalog, setCatalog] = useState<CatalogType>();
-  const [items, setItems] = useState<ItemType[]>([]);
-  const [status, setStatus] = useState<'loading' | 'error' | 'ready' | 'away'>('loading');
+  const [currentStore, setCurrentStore] = useState<StoreType | undefined>(pre?.store);
+  const [catalog, setCatalog] = useState<CatalogType | undefined>(pre?.catalog);
+  const [items, setItems] = useState<ItemType[]>(pre?.firstPage ?? []);
+  const [status, setStatus] = useState<'loading' | 'error' | 'ready' | 'away'>(pre ? 'ready' : 'loading');
   /** Why the server kept this player out of the event-only Halloween Shop (403 only_at_event). */
   const [awayReason, setAwayReason] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(pre ? pre.firstPage.length >= CATALOG_PAGE : true);
   const [attempt, setAttempt] = useState(0);
   const reducedMotion = useReducedGameMotion();
   const { player } = useContext(AuthContext);
   const { labels } = useCrumbs();
   const { currencies } = useContext(CurrencyContext);
   const { startTutorial, hasCompleted } = useTutorial();
-  const [today, setToday] = useState<ShopToday | null>(null);
-  const storeIdRef = useRef<number | null>(null);
+  const [today, setToday] = useState<ShopToday | null>(pre?.today ?? null);
+  const storeIdRef = useRef<number | null>(pre?.id ?? null);
   // Server clock minus device clock: timers never trust a changed device clock.
-  const [clockSkew, setClockSkew] = useState(0);
+  const [clockSkew, setClockSkew] = useState(() => (pre?.today ? clockOffset(pre.today.server_time, Date.now()) : 0));
   const [wishlistOpen, setWishlistOpen] = useState(false);
   // Wishlist push or My Wishlist: a new nonce opens the try-on, even for the same item twice.
   const [focusRequest, setFocusRequest] = useState<{ id: number; nonce: number } | null>(
@@ -360,7 +361,7 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
   const shopStill = useReducedGameMotion();
   const [shopHandoff, setShopHandoff] = useState(false);
   // Secret Shop v2 (secret-shop/DESIGN.md): the secret store on the shop engine, behind secret_shop_v2.
-  const [secretV2, setSecretV2] = useState(false);
+  const [secretV2, setSecretV2] = useState(pre?.secretV2 ?? false);
   // The title bar folds into the tab row after 40pt of shop scroll.
   const scrollY = useSharedValue(0);
   const collapse = useDerivedValue(() => (shopStill ? (scrollY.value > 40 ? 1 : 0) : Math.min(1, Math.max(0, scrollY.value / 40))));
@@ -398,7 +399,7 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       return () => clearTimeout(timer);
     }
   }, []);
-  const [rotation, setRotation] = useState<StoreRotation | null>(null);
+  const [rotation, setRotation] = useState<StoreRotation | null>(pre?.rotation ?? null);
   const [restockPending, setRestockPending] = useState(false);
 
   // At zero the server restocks on its hourly job: check the timer each minute
@@ -414,42 +415,36 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
     }
   }, 60_000, { enabled: restockPending && !!currentStore, immediate: false });
 
+  /** Apply a finished shop read to the screen. */
+  const applyShop = (load: ShopLoad) => {
+    storeIdRef.current = load.id;
+    if (load.today) setClockSkew(clockOffset(load.today.server_time, Date.now()));
+    setToday(load.today);
+    setSecretV2(load.secretV2);
+    setCurrentStore(load.store);
+    setRotation(load.rotation);
+    setCatalog(load.catalog);
+    setItems(load.firstPage);
+    setPage(1);
+    setHasMore(load.firstPage.length >= CATALOG_PAGE);
+    setStatus('ready');
+  };
   // One load path with an end state: the shop never spins forever.
   useEffect(() => {
     let live = true;
     const silent = silentReload.current;
     silentReload.current = false;
+    if (attempt === 0 && ahead.current) {
+      // Already on screen from the first render.
+      ahead.current = null;
+      return () => { live = false; };
+    }
     if (!silent) setStatus('loading');
     (async () => {
-      // 'shark-shop' opens the global Shark Shop without knowing its id.
-      const id = typeof store === 'number' ? store
-        : Number((await getStores()).find(s => s.name === 'Shark Shop')?.id) || undefined;
-      if (!id) throw new Error('Shark Shop not found');
-      const nextStore = await getStore(id);
-      storeIdRef.current = id;
-      // The secret store only asks for shelves while secret_shop_v2 is on (the server checks it too).
-      const nextSecretV2 = !!nextStore.is_secret_store && await loadSecretShopFlag();
-      const [nextRotation, nextCatalog, nextToday] = await Promise.all([
-        getStoreRotation(id).catch(() => null),
-        getCatalog(nextStore.current_catalog_id),
-        // Shop v2 shelves; null on an older backend, which keeps the classic grid. The Secret Shop
-        // with its flag on never falls back to the legacy grid on a hiccup: a failed day is an error
-        // with a retry (getShopToday answers null only for "this store doesn't rotate").
-        nextStore.is_secret_store && !nextSecretV2 ? Promise.resolve(null)
-          : nextSecretV2 ? getShopToday(id) : getShopToday(id).catch(() => null),
-      ]);
-      const firstPage = nextToday ? [] : await getItems(nextCatalog.id, 1);
+      // A read already under way (Profile asked just before the tap) is waited for, never asked twice.
+      const load = await (attempt === 0 ? takePendingShop(store) ?? loadShop(store) : loadShop(store));
       if (!live) return;
-      if (nextToday) setClockSkew(clockOffset(nextToday.server_time, Date.now()));
-      setToday(nextToday);
-      setSecretV2(nextSecretV2 && !!nextToday);
-      setCurrentStore(nextStore);
-      setRotation(nextRotation);
-      setCatalog(nextCatalog);
-      setItems(firstPage);
-      setPage(1);
-      setHasMore(firstPage.length >= CATALOG_PAGE);
-      setStatus('ready');
+      applyShop(load);
     // A failed background restock keeps the shelves the player is browsing.
     })().catch((error: unknown) => {
       // The Halloween Shop opens only at a Fin-ister event: say so, never offer a buy button.

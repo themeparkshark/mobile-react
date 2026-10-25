@@ -116,9 +116,9 @@ test('dialog: an underwater backdrop that keeps colours clean, a prize on gold r
     'wave 5: the middle band is a pale sky haze that lightens (never a dark tint that turns cream grey-green)');
   assert.match(src, /DIALOG_SCRIM_AT = \[0, 0\.2, 0\.82, 1\]/, 'and it covers most of the screen');
   assert.ok(stops[0] >= 0.4 && stops[3] >= 0.4, 'the edges read underwater');
-  assert.match(src, /celebrates && <GoldBurst size=\{DIALOG_PRIZE\.raysPt\}/);
+  assert.match(src, /celebrates && <GoldBurst size=\{DIALOG_PRIZE\.raysPt\} amount=\{s\.prizeGlow\}/);
   assert.match(src, /export const DIALOG_PRIZE = \{ iconPt: 124,/, 'wave 5: the prize is about twice the size, rays past the card edge');
-  assert.match(src, /stampArmed\.value === 1 && iconPop\.value >= ICON_STAMP\.peak - 0\.02/, 'wave 5: the buzz fires from the UI thread on the stamp frame');
+  assert.match(src, /s\.stampArmed\.value === 1 && s\.iconPop\.value >= ICON_STAMP\.peak - 0\.02/, 'wave 5: the buzz fires from the UI thread on the stamp frame');
   assert.match(src, /if \(hapticKind !== 'none'\) haptic\(hapticKind\); else queueHaptic\('hitMedium'\);/);
 });
 

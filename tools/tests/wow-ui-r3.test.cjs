@@ -27,11 +27,12 @@ function loadDive() {
   });
 }
 
-test('dive: once the game screen is there, the water opens after a short breath and is gone 560 to 700 ms after the cover', () => {
+test('dive: once the game screen is there, the water opens after a short breath and is gone 500 to 700 ms after the cover', () => {
   const { DIVE, diveTiming } = loadDive();
   const first = diveTiming(0);
   const coverToOpen = first.holdMs + first.openMs;
-  assert.ok(coverToOpen >= 560 && coverToOpen <= 700, `cover to fully open ${coverToOpen} ms`);
+  // Wave 5 round 3: a quicker iris (360 ms) so splash to play lands under 1.2 s; the held breath is a plunge, not a pose.
+  assert.ok(coverToOpen >= 500 && coverToOpen <= 700, `cover to fully open ${coverToOpen} ms`);
   assert.ok(first.closeMs + first.holdMs + first.openMs <= 1000, 'the whole first dive is under a second on a phone');
   assert.ok(DIVE.sharkPt >= 220 && DIVE.sharkPt <= 260, 'the shark is big enough to be the frame');
   assert.ok(DIVE.safetyMs <= 2600, 'a game already in the stack opens by its route inside the settle cap');

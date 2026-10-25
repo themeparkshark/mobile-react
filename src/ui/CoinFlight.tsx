@@ -13,7 +13,7 @@
  */
 import { memo, useEffect, useState } from 'react';
 import { Image as RNImage, StyleSheet, View } from 'react-native';
-import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withTiming,
+import Animated, { Easing, makeMutable, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withTiming,
   type SharedValue } from 'react-native-reanimated';
 import CoinTrails from '../fx/CoinTrails';
 import { ICON_SOURCES, type GameIconName } from './GameIcon';
@@ -55,6 +55,23 @@ export const COIN_FLIGHT = {
   /** A prize going to the shelf: a low arc (it heads for the shelf at once, never up and away first). */
   prizeArcPt: 44,
 } as const;
+
+/**
+ * A prize from a reward dialog on its way to the shelf (GameDialog): it leaves the card's icon spot at the card icon's
+ * size (EASE.out, so it moves at once), arcs low (arcPt), swells a little mid-air, tilts, and lands endScale of its
+ * size in the Profile icon, pulling a trail of trailDots shrinking gold dots trailStep behind it.
+ */
+export const PRIZE_FLIGHT = { arcPt: 60, swell: 0.12, tiltDeg: 12, endScale: 0.3, trailDots: 6, trailStep: 0.05, trailPt: 9 } as const;
+
+/** The prize at flight progress raw (0 to 1) from `from` to `to` (window points). Pure worklet (unit tested). */
+export function prizeAt(raw: number, from: Point, to: Point): { x: number; y: number; scale: number; rot: number } {
+  'worklet';
+  const r = Math.min(1, Math.max(0, raw));
+  const t = PRIZE_OUT(r);
+  const at = coinAt(t, 0, 1, from, to, true, PRIZE_FLIGHT.arcPt);
+  const swell = 1 + PRIZE_FLIGHT.swell * Math.sin(Math.PI * t);
+  return { x: at.x, y: at.y, scale: swell * (1 - (1 - PRIZE_FLIGHT.endScale) * t), rot: -PRIZE_FLIGHT.tiltDeg * Math.sin(Math.PI * t) };
+}
 
 /** Where coin i of n starts and lands (it leaves i * staggerMs late). Pure (unit tested). */
 export function coinLandTimes(n: number, startAt = 0): number[] {
@@ -153,6 +170,16 @@ export function measureShelfTarget(done: (p: Point | null, landed?: SharedValue<
   const top = shelves[shelves.length - 1];
   if (!top) { done(null); return; }
   top.measure(p => done(p, top.landed));
+}
+
+/**
+ * Counted up on the UI thread each time a prize from a reward dialog lands on the shelf: the footer on screen squashes
+ * its Profile icon and pops gold stars off it on that exact frame (the dialog draws the flight itself, above its backdrop).
+ */
+let shelfHits: SharedValue<number> | null = null;
+export function shelfHitsValue(): SharedValue<number> {
+  if (!shelfHits) shelfHits = makeMutable(0);
+  return shelfHits;
 }
 
 /** How long a flight of n coins takes from its first coin leaving to its last coin landing (ms). Pure. */

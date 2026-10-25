@@ -3,11 +3,11 @@ import { ReactNode, RefObject, useContext, useEffect, useRef, useState } from 'r
 import { Dimensions, Image as RNImage, ImageBackground, Text, View } from 'react-native';
 import Animated, { interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withSequence, withSpring,
   withTiming, type SharedValue } from 'react-native-reanimated';
-import { registerShelfTarget } from '../ui/CoinFlight';
+import { registerShelfTarget, shelfHitsValue } from '../ui/CoinFlight';
 import { useScreenFocused } from '../ui/AmbientSwim';
-import { HUD_BUMP } from '../ui/motionEasing';
+import { DURATION, EASE, HUD_BUMP } from '../ui/motionEasing';
 import { queueHaptic } from '../gamekit/Haptics';
-import { COMPASS_INDEX, FOOTER_MOTION, footerIndex, footerMotion, playFooterTap, rarePickCount, rareSeed } from './footerMotion';
+import { COMPASS_INDEX, FOOTER_MOTION, footerIndex, footerMotion, footerSwimAt, playFooterTap, rarePickCount, rareSeed } from './footerMotion';
 import { SHARK_ART } from '../ui/SharkRefresh';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { BRAND } from '../ui/tokens';
@@ -98,10 +98,24 @@ export default function Wrapper({
     }, shelfLanded);
   }, [previewMode, focused, shelfLanded]);
   const shelfBuzz = () => queueHaptic('tapLight');
-  useAnimatedReaction(() => shelfLanded.value, (now, before) => {
-    if (before === null || now <= before) return;
+  /** Gold stars that pop off the Profile icon as a prize lands in it. */
+  const shelfStars = useSharedValue(0);
+  // Only the footer on screen answers a prize from a dialog (screens further down the stack keep still).
+  const shelfLive = useSharedValue(0);
+  useEffect(() => { shelfLive.value = !previewMode && focused ? 1 : 0; }, [previewMode, focused, shelfLive]);
+  const prizeHits = shelfHitsValue();
+  const landOnShelf = () => {
+    'worklet';
     shelfHit.value = withSequence(withTiming(1, { duration: 60 }), withSpring(0, HUD_BUMP.spring));
+    shelfStars.value = 0;
+    shelfStars.value = withTiming(1, { duration: DURATION.sparkle, easing: EASE.out });
     runOnJS(shelfBuzz)();
+  };
+  useAnimatedReaction(() => shelfLanded.value, (now, before) => {
+    if (before !== null && now > before) landOnShelf();
+  });
+  useAnimatedReaction(() => prizeHits.value, (now, before) => {
+    if (before !== null && now > before && shelfLive.value === 1) landOnShelf();
   });
   const glowStyle = useAnimatedStyle(() => {
     const c = centers.value;
@@ -206,8 +220,6 @@ export default function Wrapper({
               justifyContent: 'space-between',
             }}
           >
-            {/* The alternate rare compass pick: the little shark swims along the wave behind the icons. */}
-            {!previewMode && <FooterSwim />}
             {/* Warm sunlight that slides to the picked tab and fades (never lit at rest). Pale cream
                 rings stacked into a soft radial, no shadow pass: over the blue bar it reads as light, never olive. */}
             <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: -21, width: GLOW, height: GLOW,
@@ -241,7 +253,7 @@ export default function Wrapper({
                       onPressSound={item.sound}
                     >
                       <FooterIcon index={key} anchor={key === PROFILE_INDEX ? profileRef : undefined}
-                        hit={key === PROFILE_INDEX ? shelfHit : undefined}>
+                        hit={key === PROFILE_INDEX ? shelfHit : undefined} stars={key === PROFILE_INDEX ? shelfStars : undefined}>
                         <Image
                           style={{
                             width: item.size === 'normal' ? 50 : 100,
@@ -286,6 +298,8 @@ export default function Wrapper({
                 </View>
               );
             })}
+            {/* The alternate rare compass pick: the shark leaps out of the wave and swims along its crest over the icons. */}
+            {!previewMode && <FooterSwim />}
           </View>
         </ImageBackground>
       </Animated.View>
@@ -312,11 +326,13 @@ const GLOW_RINGS = [
  * ring pulses off it. The compass squashes first, wobbles on its base (transformOrigin bottom, so its
  * baked shadow stays under it), gets a white glint across its face and throws six gold sparkles.
  */
-function FooterIcon({ index, children, anchor, hit }: { readonly index: number; readonly children: ReactNode;
+function FooterIcon({ index, children, anchor, hit, stars }: { readonly index: number; readonly children: ReactNode;
   /** The view a prize flies to (the Profile tab). */
   readonly anchor?: RefObject<View>;
   /** 0 to 1: the squash as a prize lands in this icon. */
   readonly hit?: SharedValue<number>;
+  /** 0 to 1: gold stars popping off this icon as a prize lands in it. */
+  readonly stars?: SharedValue<number>;
 }) {
   const compass = index === COMPASS_INDEX;
   const size = compass ? 100 : 50;
@@ -421,6 +437,8 @@ function FooterIcon({ index, children, anchor, hit }: { readonly index: number; 
       {compass && <RareFans size={size} />}
       {!compass && <SparkleBurst progress={smallBurst} count={F.smallSparkles} x={size / 2} y={size / 2}
         spread={[-175, -5]} dist={F.smallDist} size={F.smallSize} gravity={10} seed={index + 11} />}
+      {stars && <SparkleBurst progress={stars} count={10} x={size / 2} y={size / 2} spread={[-200, 20]} dist={[30, 58]}
+        size={[16, 24]} gravity={14} seed={index + 31} />}
     </View>
   );
 }
@@ -449,25 +467,39 @@ function RareFans({ size }: { readonly size: number }) {
 }
 
 /**
- * The alternate rare compass pick: a little TPS shark swims along the footer wave, behind the compass and above
- * the small icons, bobbing as it goes (one pass, UI thread, existing art; nothing at rest).
+ * The alternate rare compass pick: a TPS shark leaps out of the footer wave near the left edge with a splash ring,
+ * swims along the crest over the icons, bobbing, and dives back in near the right edge with a second splash
+ * (one pass, UI thread, existing art; nothing at rest).
  */
 function FooterSwim() {
   const width = Dimensions.get('window').width;
   const pt = FOOTER_MOTION.swimPt;
   const style = useAnimatedStyle(() => {
     const p = footerMotion.swim.value;
-    if (p <= 0 || p >= 1) return { opacity: 0 };
-    const x = -pt + (width + pt) * p;
-    const bob = Math.sin(p * Math.PI * 4) * 7;
-    return { opacity: p < 0.06 ? p / 0.06 : p > 0.94 ? (1 - p) / 0.06 : 1,
-      transform: [{ translateX: x }, { translateY: -pt * 0.75 + bob }, { rotate: `${Math.cos(p * Math.PI * 4) * -10}deg` }] };
+    if (p <= 0 || p >= 1) return { opacity: 0, transform: [{ translateX: -pt }, { translateY: 0 }, { rotate: '0deg' }] };
+    const at = footerSwimAt(p, width, pt);
+    return { opacity: at.opacity, transform: [{ translateX: at.x - pt / 2 }, { translateY: at.y - pt / 2 }, { rotate: `${at.rot}deg` }] };
   });
-  return (
+  return <>
+    <SwimSplash at={FOOTER_MOTION.swimEnter * width} from={0} />
+    <SwimSplash at={FOOTER_MOTION.swimLeave * width} from={1 - FOOTER_MOTION.swimSplashSpan} />
     <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0, width: pt, height: pt }, style]}>
       <Image source={SHARK_ART} style={{ width: pt, height: pt }} contentFit="contain" cachePolicy="memory-disk" />
     </Animated.View>
-  );
+  </>;
+}
+
+/** A white splash ring on the wave where the swim-by shark leaps out or dives back in (UI thread). */
+function SwimSplash({ at, from }: { readonly at: number; readonly from: number }) {
+  const size = FOOTER_MOTION.swimPt * 1.1;
+  const style = useAnimatedStyle(() => {
+    const r = (footerMotion.swim.value - from) / FOOTER_MOTION.swimSplashSpan;
+    if (r <= 0 || r >= 1) return { opacity: 0, transform: [{ scaleX: 0.3 }, { scaleY: 0.3 }] };
+    const grow = 1 - (1 - r) * (1 - r);
+    return { opacity: 0.95 * (1 - r), transform: [{ scaleX: 0.35 + 1.15 * grow }, { scaleY: (0.35 + 1.15 * grow) * 0.42 }] };
+  });
+  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: at - size / 2, top: FOOTER_MOTION.swimCrestY - size / 2,
+    width: size, height: size, borderRadius: size / 2, borderWidth: 4, borderColor: BRAND.white }, style]} />;
 }
 
 /** A footer label: lifts 2 pt into place and fades up when its tab is picked. */

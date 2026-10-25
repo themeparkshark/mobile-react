@@ -133,11 +133,12 @@ test('coin flight: a big gain is bigger coins in a wider, higher fan with a shor
 test('reward dialog: the rays reach past the card behind the ribbon, and OK flies the prize to the shelf', () => {
   const src = read('src/ui/GameDialog.tsx');
   assert.match(src, /outerRaysPt: 660,/);
-  assert.match(src, /<GoldBurst size=\{DIALOG_PRIZE\.outerRaysPt\} amount=\{prizeGlow\} bloom=\{prizeBloom\} reduced=\{reducedMotion\} raysOnly \/>/);
+  assert.match(src, /<GoldBurst size=\{DIALOG_PRIZE\.outerRaysPt\} amount=\{s\.prizeGlow\} bloom=\{s\.prizeBloom\} reduced=\{reduced\} raysOnly \/>/);
   // The wide fan is drawn first inside the card's column: behind the ribbon (zIndex 2) and the card body.
   const col = src.slice(src.indexOf('<Animated.View ref={outerRef}'));
   assert.ok(col.indexOf('outerRaysStyle') < col.indexOf('<Ribbon'), 'behind the ribbon');
-  assert.match(src, /flyCoins\(\{ from: \{ x: x \+ w \/ 2, y: y \+ h \/ 2 \}, to, count: 1, icon, size: DIALOG_PRIZE\.flyPt, big: true,/);
+  // Round 3: the dialog flies the prize itself, above its backdrop, from shared values (OK never mounts a view).
+  assert.match(src, /s\.prize\.value = withTiming\(1, \{ duration: DIALOG_PRIZE\.flyMs, easing: Easing\.linear \}/);
   assert.match(src, /if \(!button \|\| button\.style === 'cancel' \|\| button\.style === 'destructive'\) return;/, 'only taking the prize flies it');
   const wrapper = read('src/components/Wrapper.tsx');
   assert.match(wrapper, /registerShelfTarget\(done => \{/, 'the focused footer is the shelf');
@@ -146,13 +147,13 @@ test('reward dialog: the rays reach past the card behind the ribbon, and OK flie
 
 test('queued dialogs: one backdrop for the queue, the card swaps (the bare screen never flashes), and cards open solid', () => {
   const src = read('src/ui/GameDialog.tsx');
-  assert.match(src, /handing\.value = 1;\n\s+exit\.value = withTiming\(1, \{ duration: DIALOG_CLOSE\.cardMs, easing: EASE\.in \}\);\n\s+return;/);
-  assert.match(src, /useAnimatedReaction\(\(\) => handing\.value === 1 && exit\.value >= HANDOFF_AT/, 'the next card is asked for mid-shrink');
+  // Round 3: the next card is drawn hidden under the open one and pops in on the UI thread at HANDOFF_AT of the shrink.
+  assert.match(src, /s\.exit\.value = withTiming\(HANDOFF_AT, \{ duration: DIALOG_CLOSE\.cardMs \* HANDOFF_AT, easing: EASE\.in \}, done => \{\n\s+if \(!done\) return;\n\s+openSlot\(back, opts\);/);
   assert.match(src, /if \(!handedOver\) scrim\.value = withTiming\(1,/, 'the backdrop only fades in for the first dialog');
-  assert.match(src, /fade\.value = handedOver \? 1 : withTiming\(1, \{ duration: reducedMotion \? MOTION\.fadeMs : CARD_SOLID_MS/);
+  assert.match(src, /s\.fade\.value = o\.handedOver \? 1 : withTiming\(1, \{ duration: o\.reduced \? MOTION\.fadeMs : CARD_SOLID_MS/);
   assert.match(src, /<GameDialog contentKey=\{request\.id\} visible=\{visible\}/, 'the host keeps one dialog for the queue');
   assert.doesNotMatch(src, /<GameDialog key=\{request\.id\}/);
-  assert.match(src, /handOff=\{\(\) => store\.pending\(\) > 1\}/);
+  assert.match(src, /runButtonHandlers=\{false\} next=\{next\}/, 'the host hands the dialog the request waiting behind');
 });
 
 test('store: the coin pile bounces in first, then the Shop Pick, then the shelf row by row', () => {
@@ -193,5 +194,5 @@ test('goal glance: coins home or a prize on the shelf give the Daily 3 button on
   const d3 = read('src/components/retention/Daily3MapButton.tsx');
   assert.match(d3, /\{ scale: reducedMotion \? 1 : 1 \+ GOAL_GLANCE\.scale \* goalGlance\.value \}/);
   assert.match(read('src/ui/WalletChange.tsx'), /onDone: spend \? undefined : glanceGoal/);
-  assert.match(read('src/ui/GameDialog.tsx'), /landed, onDone: glanceGoal,/);
+  assert.match(read('src/ui/GameDialog.tsx'), /if \(landed\) glanceGoal\(\);/, 'a prize landing on the shelf glances at the goal');
 });

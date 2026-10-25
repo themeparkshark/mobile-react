@@ -7,6 +7,7 @@ import {
   Animated,
   Dimensions,
   ImageBackground,
+  InteractionManager,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -29,6 +30,7 @@ import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
 import ProfileShortcuts, { type ProfileShortcut } from '../components/profile/ProfileShortcuts';
 import { profileStores } from '../components/profile/profileStores';
+import { prefetchShop } from './StoreScreen/shopPrefetch';
 import { loadSecretShopFlag, secretShopFlagNow } from '../services/secretShopFlag';
 import StatusBadges from '../components/profile/StatusBadges';
 import TitlePill from '../components/profile/TitlePill';
@@ -221,6 +223,16 @@ export default function ProfileScreen() {
     void loadSecretShopFlag().then(on => { if (live) setSecretV2(on); });
     return () => { live = false; };
   }, []);
+
+  // The Shark Shop opens already stocked: once Profile settles, its shelf is read ahead (shopPrefetch), so a tap on
+  // the shop lands on the shelf dropping in, never a blank loading screen.
+  useEffect(() => {
+    if (!focused || isProfilePreview || !player) return undefined;
+    const { sharkShop } = profileStores(stores);
+    if (!sharkShop && stores.length) return undefined;
+    const task = InteractionManager.runAfterInteractions(() => prefetchShop(sharkShop ? Number(sharkShop.id) : 'shark-shop'));
+    return () => task.cancel();
+  }, [focused, isProfilePreview, player?.id, stores]);
 
   const shortcuts = useMemo<ProfileShortcut[]>(() => {
     const { sharkShop, others } = profileStores(stores);

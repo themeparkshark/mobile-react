@@ -8,7 +8,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { useAmbient } from './power';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
 import type { ButtonAttention } from '../../services/retention/logic';
-import { GOAL_GLANCE, goalGlanceValue } from '../../ui/goalGlance';
+import { GOAL_GLANCE, goalGlanceValue, goalGlint, goalGlintValue } from '../../ui/goalGlance';
 
 const WEEKLY = require('../../../assets/images/retention/weekly-box-closed.png');
 
@@ -70,6 +70,16 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, popI
   const goalGlance = goalGlanceValue();
   const buttonStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bounce.value },
     { scale: reducedMotion ? 1 : 1 + GOAL_GLANCE.scale * goalGlance.value }] }));
+  // With it, a gold ring rings out off the button and a white glint crosses its face (UI thread, once per glance).
+  const glint = goalGlintValue();
+  const ringStyle = useAnimatedStyle(() => {
+    const g = goalGlint(reducedMotion ? 0 : glint.value);
+    return { opacity: g.ringOpacity, transform: [{ scale: g.ringScale }] };
+  });
+  const glintStyle = useAnimatedStyle(() => {
+    const g = goalGlint(reducedMotion ? 0 : glint.value);
+    return { opacity: g.glintOpacity, transform: [{ translateX: g.glintX * 44 }, { rotate: '20deg' }] };
+  });
   const flameStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + flicker.value * 0.12 }, { rotate: `${(flicker.value - 0.5) * 8}deg` }] }));
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pop.value * 0.9 }] }));
   const done = pips.filter(Boolean).length;
@@ -78,6 +88,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, popI
 
   return (
     <Animated.View style={buttonStyle}>
+      <Animated.View pointerEvents="none" style={[styles.ring, ringStyle]} />
       <Pressable onPress={() => { haptic('tapLight'); onPress(); }} accessibilityRole="button" accessibilityLabel={label}
         hitSlop={6} style={({ pressed }) => [styles.button, ready && styles.buttonReady, pressed && styles.pressed]}>
         <Animated.View style={flameStyle}>
@@ -85,6 +96,9 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, popI
             ? <Image source={WEEKLY} style={{ width: 36, height: 36 }} contentFit="contain" />
             : <GameIcon name={ready ? 'chest' : 'streak'} size={ready ? 34 : 30} />}
         </Animated.View>
+        <View pointerEvents="none" style={styles.glintClip}>
+          <Animated.View style={[styles.glint, glintStyle]} />
+        </View>
         <View style={styles.pips} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           {pips.map((on, i) => (
             <Animated.View key={i} style={[styles.pip, on && styles.pipOn, i === popIndex && popStyle]} />
@@ -105,6 +119,9 @@ const styles = StyleSheet.create({
   button: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center',
     backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },
   buttonReady: { borderColor: BRAND.gold },
+  ring: { position: 'absolute', left: 0, top: 0, width: 54, height: 54, borderRadius: 27, borderWidth: 4, borderColor: BRAND.gold },
+  glintClip: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, borderRadius: 27, overflow: 'hidden' },
+  glint: { position: 'absolute', top: -10, left: 21, width: 12, height: 74, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.85)' },
   pressed: { transform: [{ scale: 0.94 }] },
   pips: { position: 'absolute', bottom: -6, flexDirection: 'row', gap: 3 },
   pip: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#9fc9ea', borderWidth: 2, borderColor: BRAND.white },

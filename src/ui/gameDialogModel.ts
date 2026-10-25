@@ -136,7 +136,9 @@ export function createDialogStore(nativeFallback: NativeFallback) {
   let nextId = 1;
 
   const current = () => queue[0] ?? null;
-  const notify = () => { const host = hosts[hosts.length - 1]; host?.(current()); };
+  /** Each host's second listener: told which request waits right behind the one showing. */
+  const behind: (((next: DialogRequest | null) => void) | undefined)[] = [];
+  const notify = () => { const host = hosts[hosts.length - 1]; host?.(current()); behind[behind.length - 1]?.(queue[1] ?? null); };
 
   function show(options: GameDialogOptions): Promise<number | null> {
     return new Promise(resolve => {
@@ -150,6 +152,9 @@ export function createDialogStore(nativeFallback: NativeFallback) {
       }
       queue.push({ ...options, id: nextId++, resolve });
       if (queue.length === 1) notify();
+      // The host also hears about the second request, to draw it hidden under the first, ready to pop in the moment
+      // the first is answered.
+      else if (queue.length === 2) behind[behind.length - 1]?.(queue[1] ?? null);
     });
   }
 
@@ -186,19 +191,26 @@ export function createDialogStore(nativeFallback: NativeFallback) {
    * When the last host detaches mid-dialog, the queue falls back to the
    * native alert so no request is left unresolved.
    */
-  function attach(listener: Listener) {
+  function attach(listener: Listener, onNext?: (next: DialogRequest | null) => void) {
     hosts[hosts.length - 1]?.(null);
+    behind[behind.length - 1]?.(null);
     hosts.push(listener);
+    behind.push(onNext);
+    onNext?.(queue[1] ?? null);
     listener(current());
     return () => {
       const at = hosts.lastIndexOf(listener);
       if (at < 0) return;
       const wasTop = at === hosts.length - 1;
       hosts.splice(at, 1);
+      behind.splice(at, 1);
       if (!hosts.length) { drainToNative(); return; }
       if (wasTop) notify();
     };
   }
 
-  return { show, answer, attach, pending: () => queue.length, hostCount: () => hosts.length };
+  /** The request i places behind the one showing (1 is the next one), or null. */
+  const peek = (i: number): DialogRequest | null => queue[i] ?? null;
+
+  return { show, answer, attach, peek, pending: () => queue.length, hostCount: () => hosts.length };
 }

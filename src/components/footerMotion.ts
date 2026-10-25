@@ -66,9 +66,19 @@ export const FOOTER_MOTION = {
   rareFanTo: 72,
   rareDist: [62, 96] as readonly [number, number],
   rareSize: [32, 40] as readonly [number, number],
-  /** The alternate rare: a little TPS shark swims along the footer wave behind the compass (ms across). */
-  swimMs: 1700,
-  swimPt: 46,
+  /**
+   * The alternate rare: a TPS shark leaps out of the footer wave at swimEnter (share of the width) with a splash
+   * ring, swims along the crest over the icons and dives back in at swimLeave with a second splash (ms across).
+   */
+  swimMs: 1900,
+  swimPt: 60,
+  swimEnter: 0.08,
+  swimLeave: 0.92,
+  /** The wave's crest (pt from the top of the icon row) and how high over it the shark swims. */
+  swimCrestY: -4,
+  swimLiftPt: 26,
+  /** Each splash ring grows and fades over this share of the swim. */
+  swimSplashSpan: 0.18,
   /** The rare pick's shock ring grows this far (times its size) and a sun glow blooms under the compass. */
   rareRingTo: 3.6,
   rareSunPeak: 0.85,
@@ -145,6 +155,22 @@ export function isRareCompassPick(n: number): boolean {
   for (let k = 0; at < n; k++) at += RARE_GAPS[k % RARE_GAPS.length];
   return at === n;
 }
+/**
+ * The swim-by shark at swim progress p (0 to 1): its centre (pt, in the icon row), tilt and opacity. Under the crest
+ * at both ends (it leaps out, nose up, and dives back in, nose down), over it in between, with a small bob.
+ * Pure worklet (unit tested).
+ */
+export function footerSwimAt(p: number, width: number, pt: number): { x: number; y: number; rot: number; opacity: number } {
+  'worklet';
+  const F = FOOTER_MOTION;
+  const x = width * (F.swimEnter + (F.swimLeave - F.swimEnter) * p);
+  const up = Math.min(1, Math.sin(Math.PI * p) * 1.8);
+  const y = F.swimCrestY + pt * 0.35 - (pt * 0.35 + F.swimLiftPt) * up + Math.sin(p * Math.PI * 6) * 5 * up;
+  const rot = -28 * Math.cos(Math.PI * p) + Math.cos(p * Math.PI * 6) * 6 * up;
+  const opacity = p <= 0 || p >= 1 ? 0 : p < 0.06 ? p / 0.06 : p > 0.94 ? (1 - p) / 0.06 : 1;
+  return { x, y, rot, opacity };
+}
+
 /** What rare pick number r (1-based) is: every third one is the shark swimming by, the rest are star fans. Pure. */
 export function rareKind(r: number): 'stars' | 'swim' {
   return r > 0 && r % 3 === 0 ? 'swim' : 'stars';

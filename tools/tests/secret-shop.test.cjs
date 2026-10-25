@@ -395,11 +395,12 @@ test('the Secret Shop is drawn only while secret_shop_v2 is on (absent or error 
     async () => ({ secret_shop_v2: true, preview: true })), true, 'a failed read does not pin the shop off');
   assert.match(src('src/context/AuthProvider.tsx'), /resetSecretShopFlag\(\)/, 'sign-out forgets the per-player answer');
 
-  const store = src('src/screens/StoreScreen.tsx');
+  // The shop's read lives in shopPrefetch (Profile reads it ahead; the screen uses the same read).
+  const store = src('src/screens/StoreScreen/shopPrefetch.ts');
   assert.match(store, /const nextSecretV2 = !!nextStore\.is_secret_store && await loadSecretShopFlag\(\);/);
   assert.match(store, /nextStore\.is_secret_store && !nextSecretV2 \? Promise\.resolve\(null\)\s*: nextSecretV2 \? getShopToday\(id\)/,
     'with the flag off the secret store never asks for shelves');
-  assert.match(store, /secret=\{secretShelves\}/);
+  assert.match(src('src/screens/StoreScreen.tsx'), /secret=\{secretShelves\}/);
 });
 
 test('non-members window-shop: the Profile tile opens the Secret Shop when the flag is on', () => {
@@ -600,7 +601,7 @@ test('a store switch never reuses one Store screen: keyed by store, one screen p
 });
 
 test('the Secret Shop never falls back to the legacy grid on a network hiccup', () => {
-  const screen = src('src/screens/StoreScreen.tsx');
+  const screen = src('src/screens/StoreScreen/shopPrefetch.ts');
   // With the flag on, a failed shop day is an error with a retry (not .catch(() => null) into the old grid).
   assert.match(screen, /: nextSecretV2 \? getShopToday\(id\) : getShopToday\(id\)\.catch\(\(\) => null\),/);
 });

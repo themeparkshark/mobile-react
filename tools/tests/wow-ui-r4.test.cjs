@@ -106,7 +106,7 @@ test('dialog: parts are fully opaque from the first frame and only move; the ico
   assert.match(src, /export const PART_FROM_SCALE = 0\.9;/);
   assert.match(src, /export const CARD_FADE_MS = DURATION\.tap;/, 'the card is fully visible inside 90 ms');
   assert.match(src, /export const ICON_STAMP = \{ at: 110, from: 0\.4, peak: 1\.22 \}/);
-  assert.match(src, /celebrates && <SparkleBurst progress=\{iconSpark\}/);
+  assert.match(src, /celebrates && <SparkleBurst progress=\{s\.iconSpark\}/);
   assert.doesNotMatch(src, /BlurView/);
   assert.match(src, /DIALOG_SCRIM_STOPS = \['rgba\(6,96,206,0\.46\)'/, 'an underwater blue backdrop (round 5: light in the middle band), never a grey wash');
 });

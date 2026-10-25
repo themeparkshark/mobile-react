@@ -112,11 +112,13 @@ test('dialog close: the card shrinks to 0.92 and stays solid, the backdrop leave
   const { closeOpacity } = { closeOpacity: e => 1 - e * e * e * e };
   assert.match(src, /return 1 - e \* e \* e \* e;/);
   assert.ok(closeOpacity(0.5) > 0.9 && closeOpacity(0.75) > 0.65, 'solid for most of the shrink');
-  assert.match(src, /opacity: fade\.value \* closeOpacity\(exit\.value\)/);
+  assert.match(src, /opacity: s\.shown\.value \* s\.fade\.value \* closeOpacity\(s\.exit\.value\)/);
   const close = src.slice(src.indexOf('const close = (index: number | null) => {'), src.indexOf('useEffect(() => {\n    if (!visible && mounted'));
-  assert.match(close, /scrim\.value = withDelay\(DIALOG_CLOSE\.scrimDelayMs, withTiming\(0, \{ duration: DIALOG_CLOSE\.scrimMs, easing: EASE\.in \}, done => \{\n\s+if \(done\) runOnJS\(finish\)\(\);/,
-    'the modal unmounts only after the backdrop has left');
-  assert.doesNotMatch(src, /setTimeout/, 'no JS timers gate what the kid sees');
+  assert.match(close, /scrim\.value = withDelay\(DIALOG_CLOSE\.scrimDelayMs, withTiming\(0, \{ duration: DIALOG_CLOSE\.scrimMs, easing: EASE\.in \}, done => \{\n\s+if \(done\) runOnJS\(scrimGone\)\(\);/,
+    'the modal unmounts only after the backdrop has left (and a prize in flight has landed)');
+  // Round 3: the only timer is a backstop that frees the dialog if a flight never reports back; nothing visible waits on it.
+  assert.equal((src.match(/setTimeout/g) ?? []).length, 1, 'no JS timers gate what the kid sees');
+  assert.match(src, /setTimeout\(\(\) => prizeLanded\(id, false\), DIALOG_PRIZE\.flyMs \+ 1500\)/);
 });
 
 test('store fill: the Shop Pick hero lands first, then row by row, spread over 450 to 600 ms, no orphan cell ahead', () => {

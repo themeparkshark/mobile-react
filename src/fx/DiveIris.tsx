@@ -87,6 +87,13 @@ export const DIVE = {
    * across the water once per loop. It starts after the held breath plus startMs and blends in over rampMs.
    */
   loop: { radiusPt: 64, ms: 1500, startMs: 220, rampMs: 280, sweepPeak: 0.2 },
+  /**
+   * The held breath is a move, never a pose: the shark plunges in from the surface head first (nose down, stretched
+   * along its dive) and levels out in the middle, over the water's close plus moveMs (repeatMoveMs on a repeat dive).
+   * A ring of bubbles bursts where it breaks in and a band of sunlight sweeps across with it.
+   */
+  plunge: { moveMs: 520, repeatMoveMs: 360, dropPt: 0.62, backPt: 0.14, noseDeg: 62, stretch: 0.22, burst: 10, burstPt: 120,
+    sweepPeak: 0.24 },
   /** If the water has not covered the screen this long after its close should have ended, go anyway (ms). */
   watchdogMs: 1200,
   /** How often the water re-checks after safetyMs (ms). */
@@ -99,10 +106,10 @@ export const DIVE = {
   rimGoldRise: 0.14,
   /** Battery Saver: thinner water (powerPolicy calm). */
   saver: { rays: 2, trail: 4 },
-  openMs: 400,
+  openMs: 360,
   swimMs: 900,
   /** Every dive after the first in a session: the same trip, quick. */
-  repeat: { closeMs: 150, holdMs: 40, openMs: 260, swimMs: 520 } as DiveTiming,
+  repeat: { closeMs: 150, holdMs: 40, openMs: 240, swimMs: 520 } as DiveTiming,
   /** The stack fade the game screens use, in and out. */
   screenFadeMs: DURATION.exit,
   bubbles: 6,
@@ -328,6 +335,19 @@ export function sharkLoop(p: number, amt: number, fromLeft: boolean, radius: num
     squash: amt * 0.07 * Math.cos(a) };
 }
 
+/**
+ * The plunge at progress e (0 to 1, eased): how far the shark still is from where it levels out (up and back
+ * towards the surface), its extra nose-down tilt and its stretch along the dive. Pure worklet (unit tested).
+ */
+export function sharkPlunge(e: number, fromLeft: boolean, w: number, h: number): { dx: number; dy: number; rot: number; stretch: number } {
+  'worklet';
+  const k = 1 - Math.min(1, Math.max(0, e));
+  const dir = fromLeft ? 1 : -1;
+  return { dx: -dir * DIVE.plunge.backPt * w * k, dy: -DIVE.plunge.dropPt * h * k, rot: dir * DIVE.plunge.noseDeg * k * k,
+    // Long and thin while it shoots down, round again as it levels out.
+    stretch: DIVE.plunge.stretch * Math.sin(Math.PI * Math.min(1, k * 1.2)) };
+}
+
 export function DiveIrisHost() {
   const [dive, setDive] = useState<Dive | null>(null);
   useEffect(() => {
@@ -357,6 +377,8 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
   /** The loop-the-loop while the water waits: its phase and how much of it shows. */
   const loop = useSharedValue(0);
   const loopAmt = useSharedValue(0);
+  /** The head-first plunge from the surface (0 to 1, from the tap): the held breath is a move. */
+  const plunge = useSharedValue(0);
   const [holding, setHolding] = useState(false);
   /** A tap while the water is up skips the rest of the held breath (never the wait for the game screen). */
   const skipRef = useRef<() => void>(() => {});
@@ -486,12 +508,16 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     close.value = withTiming(1, { duration: T.closeMs, easing: EASE.in }, done => {
       if (done) runOnJS(onCovered)(Date.now());
     });
+    // The plunge runs with the water from the tap and on through the held breath (UI thread).
+    const repeatDive = T.holdMs < DIVE.holdMs * devSlow();
+    plunge.value = withTiming(1, { duration: T.closeMs + (repeatDive ? DIVE.plunge.repeatMoveMs : DIVE.plunge.moveMs) * devSlow(),
+      easing: Easing.out(Easing.quad) });
     mark('close-start');
     // The game screen's module loads on the JS thread while the water closes on the UI thread (it used to load
     // before the water's first frame, which held the splash back by the length of the require).
     timers.push(setTimeout(loadPrewarm, 0));
     cleanups.push(() => { landedListeners.delete(onLanded); laidOutListeners.delete(onLaidOut); });
-    cleanups.push(() => { cancelAnimation(clock); cancelAnimation(loop); cancelAnimation(loopAmt); });
+    cleanups.push(() => { cancelAnimation(clock); cancelAnimation(loop); cancelAnimation(loopAmt); cancelAnimation(plunge); });
     return () => { alive = false; timers.forEach(clearTimeout); cleanups.forEach(c => c()); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -576,12 +602,13 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     if (close.value < 0.2) return p;
     const at = sharkAt(swim.value, fromLeft, w, h);
     const lp = sharkLoop(loop.value, loopAmt.value, fromLeft, DIVE.loop.radiusPt);
+    const pl = sharkPlunge(plunge.value, fromLeft, w, h);
     const dir = fromLeft ? 1 : -1;
-    const bob = Math.sin(clock.value * Math.PI * 4) * 8 * (1 - loopAmt.value);
+    const bob = Math.sin(clock.value * Math.PI * 4) * 8 * (1 - loopAmt.value) * plunge.value;
     // A stream of bubbles rising off the tail: each one drifts up and back, then starts again.
-    const heading = ((at.rot + lp.rot) * Math.PI) / 180;
-    const tailX = at.x + lp.dx - dir * DIVE.sharkPt * 0.36 * Math.cos(heading);
-    const tailY = at.y + lp.dy + bob + DIVE.sharkPt * 0.12 - dir * DIVE.sharkPt * 0.36 * Math.sin(heading);
+    const heading = ((at.rot + lp.rot + pl.rot) * Math.PI) / 180;
+    const tailX = at.x + lp.dx + pl.dx - dir * DIVE.sharkPt * 0.36 * Math.cos(heading);
+    const tailY = at.y + lp.dy + pl.dy + bob + DIVE.sharkPt * 0.12 - dir * DIVE.sharkPt * 0.36 * Math.sin(heading);
     for (let k = 0; k < look.trail; k++) {
       const life = (clock.value * 2.2 + k / look.trail) % 1;
       const r = 3 + ((k * 7) % 5) + life * 3;
@@ -598,6 +625,35 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     return p;
   });
   const sweepOpacity = useDerivedValue(() => DIVE.loop.sweepPeak * loopAmt.value);
+  // Where the shark breaks in: a ring of bubbles bursts out and up from that spot as it plunges.
+  const burst = useDerivedValue<SkPath>(() => {
+    const p = Skia.Path.Make();
+    const e = plunge.value;
+    if (e <= 0.02 || e >= 0.98 || close.value < 0.2) return p;
+    const start = sharkAt(DIVE.lingerAt, fromLeft, w, h);
+    const pl = sharkPlunge(0, fromLeft, w, h);
+    const cx = start.x + pl.dx * 0.55;
+    const cy = start.y + pl.dy * 0.55;
+    const n = look.clock ? DIVE.plunge.burst : 5;
+    for (let i = 0; i < n; i++) {
+      // A ring that bursts out all round, each bubble a little further or nearer, drifting up as it goes.
+      const a = (Math.PI * 2 * i) / n + 0.3;
+      const d = DIVE.plunge.burstPt * (0.5 + (0.5 * ((i * 7) % 5)) / 4) * e;
+      p.addCircle(cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.8 - 36 * e * e, (5 + (i % 3) * 2.5) * (1 - 0.4 * e));
+    }
+    return p;
+  });
+  const burstOpacity = useDerivedValue(() => Math.max(0, 1 - plunge.value * 1.1));
+  // A band of sunlight sweeps across the water with the plunge.
+  const plungeSweep = useDerivedValue<SkPath>(() => {
+    const p = Skia.Path.Make();
+    const e = plunge.value;
+    if (e <= 0 || e >= 1) return p;
+    const x = (fromLeft ? -0.4 + 1.9 * e : 1.4 - 1.9 * e) * w;
+    p.moveTo(x, 0); p.lineTo(x + w * 0.2, 0); p.lineTo(x - w * 0.16, h); p.lineTo(x - w * 0.36, h); p.close();
+    return p;
+  });
+  const plungeSweepOpacity = useDerivedValue(() => DIVE.plunge.sweepPeak * Math.sin(Math.PI * Math.min(1, Math.max(0, plunge.value))));
   const sceneOpacity = useDerivedValue(() => (open.value > 0 ? Math.max(0, 1 - open.value * 1.4) : close.value));
 
   const bubbles = Array.from({ length: DIVE.bubbles }, (_, i) => diveBubble(i, DIVE.bubbles, w));
@@ -606,17 +662,18 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     const t = swim.value;
     const at = sharkAt(t, fromLeft, w, h);
     const lp = sharkLoop(loop.value, loopAmt.value, fromLeft, DIVE.loop.radiusPt);
-    const calm = 1 - loopAmt.value;
+    const pl = sharkPlunge(plunge.value, fromLeft, w, h);
+    const calm = (1 - loopAmt.value) * plunge.value;
     const bob = Math.sin(clock.value * Math.PI * 4) * 8 * calm;
-    // Entry squash: long along the swim, then springs round by a quarter of the way.
+    // Entry squash: long along the swim, then springs round by a quarter of the way; long and thin while it plunges.
     const k = Math.min(1, t / 0.28);
     const stretch = (1 - k) * (1 - k);
-    const sx = 1 + 0.26 * stretch - 0.05 * Math.sin(k * Math.PI) + lp.squash;
-    const sy = 1 - 0.2 * stretch + 0.05 * Math.sin(k * Math.PI) - lp.squash;
+    const sx = 1 + 0.26 * stretch - 0.05 * Math.sin(k * Math.PI) + lp.squash + pl.stretch;
+    const sy = 1 - 0.2 * stretch + 0.05 * Math.sin(k * Math.PI) - lp.squash - pl.stretch * 0.7;
     return {
       opacity: close.value < 0.2 ? 0 : open.value > 0.3 ? Math.max(0, 1 - (open.value - 0.3) / 0.3) : 1,
-      transform: [{ translateX: at.x + lp.dx - DIVE.sharkPt / 2 }, { translateY: at.y + lp.dy - DIVE.sharkPt / 2 + bob },
-        { rotate: `${at.rot + lp.rot + Math.cos(clock.value * Math.PI * 4) * 4 * calm}deg` },
+      transform: [{ translateX: at.x + lp.dx + pl.dx - DIVE.sharkPt / 2 }, { translateY: at.y + lp.dy + pl.dy - DIVE.sharkPt / 2 + bob },
+        { rotate: `${at.rot + lp.rot + pl.rot + Math.cos(clock.value * Math.PI * 4) * 4 * calm}deg` },
         // The art faces right: flip it when it swims left, so it always swims head first.
         { scaleX: (fromLeft ? 1 : -1) * sx }, { scaleY: sy }],
     };
@@ -641,11 +698,18 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
                 <Path path={rays} opacity={0.75}>
                   <LinearGradient start={vec(0, 0)} end={vec(0, h * 0.82)} colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']} />
                 </Path>
+                <Path path={plungeSweep} opacity={plungeSweepOpacity}>
+                  <LinearGradient start={vec(0, 0)} end={vec(w, 0)} colors={['rgba(255,255,255,0)', '#ffffff', 'rgba(255,255,255,0)']} />
+                </Path>
                 <Path path={sweep} opacity={sweepOpacity}>
                   <LinearGradient start={vec(0, 0)} end={vec(w, 0)} colors={['rgba(255,255,255,0)', '#ffffff', 'rgba(255,255,255,0)']} />
                 </Path>
                 {look.ripple && <Path path={ripple} style="stroke" strokeWidth={12} strokeCap="round" color="rgba(255,255,255,0.14)" />}
                 {look.ripple && <Path path={ripple} style="stroke" strokeWidth={5} strokeCap="round" color="rgba(255,255,255,0.3)" />}
+                <Group opacity={burstOpacity}>
+                  <Path path={burst} color="rgba(214,240,255,0.6)" />
+                  <Path path={burst} style="stroke" strokeWidth={2} color="#ffffff" />
+                </Group>
                 <Path path={trail} color="rgba(255,255,255,0.78)" />
                 <Path path={trail} style="stroke" strokeWidth={1.5} color="#ffffff" />
               </Group>

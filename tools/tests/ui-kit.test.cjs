@@ -364,6 +364,23 @@ function dialogView(props, reduced = false) {
   {}, { exportName: 'GameDialog' });
 }
 
+/** One dialog card (GameDialog draws the showing card and the one waiting under it with DialogCard). */
+function cardView(content, reduced = false) {
+  const slot = new Proxy({}, { get: (t, k) => (t[k] ??= { value: 0 }) });
+  return runtime('src/ui/GameDialog.tsx', {
+    './useUiReducedMotion': { default: () => reduced },
+    '../gamekit/Haptics': { haptic: kind => dialogHaptics.push(kind), queueHaptic: kind => dialogHaptics.push(kind) },
+    './GameButton': { default: 'GameButton' },
+    './GameIcon': { default: 'GameIcon' },
+    './GameText': { default: 'GameText' },
+    '../components/Ribbon': { default: 'Ribbon' },
+    './gameDialogModel': dialogModel,
+    './tokens': tokens,
+    './modalLayers': { useModalLayer: () => true, modalLayers: { count: () => 0 } },
+  }, { s: slot, content: { key: 1, title: 'Leave the line?', buttons: [{ text: 'Stay', style: 'cancel' }, { text: 'Leave' }], ...content },
+    role: 'front', reduced, onChoose() {}, registerMeasure() {}, onMeasured() {} }, {}, { exportName: 'DialogCard' });
+}
+
 test('GameDialog: mounting open springs when motion is on, fades under reduced motion', () => {
   dialogHaptics.length = 0;
   const open = dialogView({});
@@ -383,9 +400,9 @@ test('GameDialog: short titles sit in the ribbon, long Alert titles wrap on the 
   assert.equal(dialogModel.dialogTitleLayout(long).placement, 'card');
   assert.equal(dialogModel.dialogTitleLayout('Play while your phone is locked').placement, 'card');
 
-  const short = dialogView({});
+  const short = cardView({});
   assert.equal(short.find(n => n.type === 'Ribbon').props.text, 'Leave the line?');
-  const wrapped = dialogView({ title: long });
+  const wrapped = cardView({ title: long });
   assert.equal(wrapped.find(n => n.type === 'Ribbon'), undefined, 'a long title never shrinks inside the one-line ribbon');
   const heading = wrapped.find(n => n.type === 'GameText' && n.props.children === long);
   assert.ok(heading, 'the long title is a wrapping heading on the card');
