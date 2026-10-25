@@ -53,12 +53,16 @@ export const CARD_CHROME = {
  * decoration (rays, stars, bubbles).
  */
 export const STORY_SAFE = { top: 80, bottom: 160 } as const;
-/** The footer's bottom edge sits on the safe line (y 1440 px), never in the band. */
-export const STORY_FOOTER_BOTTOM = STORY_SAFE.bottom;
+/**
+ * The footer's bottom edge sits 4 pt (12 px) above the safe line, so even the link's descenders end by
+ * y 1428 px with room to spare, never touching the band.
+ */
+export const STORY_FOOTER_LIFT = 4;
+export const STORY_FOOTER_BOTTOM = STORY_SAFE.bottom + STORY_FOOTER_LIFT;
 /** The story footer's height (wordmark, CTA, link beside a 56 pt QR); the body pads above it. */
 export const STORY_FOOTER_H = 68;
-/** The body's bottom padding: the safe line, the footer and a small gap above it. */
-export const STORY_BODY_BOTTOM = STORY_FOOTER_BOTTOM + STORY_FOOTER_H + 8;
+/** The body's bottom padding: the safe line, the footer and a small gap above it (the lift comes out of the gap, so the body keeps its room). */
+export const STORY_BODY_BOTTOM = STORY_FOOTER_BOTTOM + STORY_FOOTER_H + 8 - STORY_FOOTER_LIFT;
 /** The story ribbon: a touch smaller than the square's room allows, so the hero gets the space. */
 export const STORY_RIBBON_W = 188;
 /** TikTok's right rail (like, comment, share buttons) over the story's right edge, in pt. */

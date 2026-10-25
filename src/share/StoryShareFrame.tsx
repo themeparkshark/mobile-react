@@ -102,7 +102,7 @@ export const StoryShareFrame = forwardRef<View, StoryShareFrameProps>(function S
           <FlexShark inventory={player?.inventory} height={peek.shark} prop={null} />
         </View>
       )}
-      {/* The footer ends on the safe line (y 1440 px), like every Flex card: the band below is decoration only. */}
+      {/* The footer ends 12 px above the safe line (y 1428 px), like every Flex card: the band below is decoration only. */}
       <View style={styles.footer}>
         <CardFooter cta={cta} qrArt={QR_BY_CAMPAIGN[campaign]} frame={FRAME} logoWidth={108} qr={56} story />
       </View>

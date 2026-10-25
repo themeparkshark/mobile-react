@@ -802,9 +802,10 @@ test('story cards: nothing readable above y 230 px or below y 1440 px; the shark
   // 3x export: 1080x1920 px from 360x640 pt.
   assert.ok(top * 3 >= 230, `top band ${top * 3} px`);
   assert.ok((640 - bottom) * 3 <= 1440, `bottom line ${(640 - bottom) * 3} px`);
-  assert.match(card, /export const STORY_FOOTER_BOTTOM = STORY_SAFE\.bottom;/, 'the footer ends on the safe line');
+  assert.match(card, /export const STORY_FOOTER_LIFT = 4;/, 'the footer sits 4 pt (12 px) above the safe line');
+  assert.match(card, /export const STORY_FOOTER_BOTTOM = STORY_SAFE\.bottom \+ STORY_FOOTER_LIFT;/, 'the footer ends above the safe line');
   assert.match(card, /storyFooter: \{ position: 'absolute', left: 20, right: 20, bottom: STORY_FOOTER_BOTTOM \}/);
-  assert.match(card, /export const STORY_BODY_BOTTOM = STORY_FOOTER_BOTTOM \+ STORY_FOOTER_H \+ 8;/);
+  assert.match(card, /export const STORY_BODY_BOTTOM = STORY_FOOTER_BOTTOM \+ STORY_FOOTER_H \+ 8 - STORY_FOOTER_LIFT;/, 'the body keeps its room (236 pt)');
   assert.match(card, /storyBody: \{[^}]*paddingBottom: STORY_BODY_BOTTOM/);
   // The QR stays left of TikTok's right rail.
   assert.match(card, /footerStory: \{ marginTop: 0, paddingRight: STORY_RAIL_W \}/);
@@ -1009,7 +1010,7 @@ test('the Memory story card stays big: the peeking shark is drawn outside its sc
     react: { forwardRef: f => f, useState: v => [v, () => {}], useContext: () => ({}) }, 'react/jsx-runtime': { jsx() { return null; }, jsxs() { return null; } },
     'react-native': { StyleSheet: { create: s => s }, View: 'View' }, './campaignQr': { QR_BY_CAMPAIGN: {} },
     '../context/AuthProvider': { AuthContext: {} }, './FlexShark': { FlexShark: 'FlexShark', SHARK_ASPECT: 1353 / 1530 },
-    './FlexCard': { STORY_SAFE: { top: 80, bottom: 160 }, STORY_FOOTER_BOTTOM: 160, STORY_BODY_BOTTOM: 236, STORY_RIBBON_W: 188 },
+    './FlexCard': { STORY_SAFE: { top: 80, bottom: 160 }, STORY_FOOTER_BOTTOM: 164, STORY_BODY_BOTTOM: 236, STORY_RIBBON_W: 188 },
     './formats': { FLEX_SIZE: { story: { width: 360, height: 640 } } }, './frames': { FRAMES: { common: { bg: ['#1aa3f0', '#0768b9'] } } },
   });
   const { peekLayout, PEEK } = frameMod;
