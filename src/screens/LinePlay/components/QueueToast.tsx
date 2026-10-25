@@ -22,7 +22,11 @@ export interface QueueToastMessage {
 
 const HOLD_MS = 3200;
 
-export default function QueueToast({ message, onDone }: { message: QueueToastMessage | null; onDone: () => void }) {
+export default function QueueToast({ message, onDone, top }: {
+  message: QueueToastMessage | null; onDone: () => void;
+  /** Where the toast lands (LinePlay: just under the wait card, so it never covers its ride name or buttons). */
+  top?: number;
+}) {
   const reducedMotion = useReducedGameMotion();
   const drop = useSharedValue(0);
   const wiggle = useSharedValue(0);
@@ -54,7 +58,7 @@ export default function QueueToast({ message, onDone }: { message: QueueToastMes
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value}deg` }] }));
 
   if (!message) return null;
-  return <View pointerEvents="none" style={styles.wrap}>
+  return <View pointerEvents="none" style={[styles.wrap, top != null && { top }]}>
     <Animated.View style={[styles.toast, toastStyle]} accessibilityLiveRegion="polite">
       <Animated.View style={[styles.iconWell, iconStyle]}><GameIcon name={message.icon} size={34} /></Animated.View>
       <View style={styles.copy}>

@@ -13,7 +13,7 @@
  * in and out on the UI thread, and scrolling is watched on the UI thread too:
  * the JS thread hears about it only when "more below" flips.
  */
-import { forwardRef, useCallback, useRef, useState, type ReactNode } from 'react';
+import { createContext, forwardRef, useCallback, useRef, useState, type ReactNode } from 'react';
 import {
   Pressable, StyleSheet, View,
   type LayoutChangeEvent, type ScrollView, type StyleProp, type ViewStyle,
@@ -25,6 +25,9 @@ import { GameIcon } from '../../../ui';
 import { fadeHeight, frameFade, moreBelow } from '../../../services/lineplay/lineLayout';
 
 const RIM = 3;
+
+/** The page window's measured height (0 before layout), so a page can fit its first screen to it. */
+export const PageHeightContext = createContext(0);
 const ARROW = 22;
 
 export interface PageScrollProps {
@@ -102,7 +105,7 @@ const PageScroll = forwardRef<ScrollView, PageScrollProps>(function PageScroll(
             check();
             onContentSizeChange?.(width, height);
           }}>
-          {children}
+          <PageHeightContext.Provider value={viewHeight}>{children}</PageHeightContext.Provider>
         </Animated.ScrollView>
         {more && <Animated.View pointerEvents="none" entering={FadeIn.duration(160)} exiting={fadeOut ? FadeOut.duration(160) : undefined}
           style={[styles.fade, { height: fadeHeight(viewHeight) }]}>

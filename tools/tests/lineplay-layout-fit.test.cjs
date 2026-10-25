@@ -716,12 +716,13 @@ test('the resume countdown shows 3, 2 and 1 on the UI thread, so neither a busy 
   const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
   assert.match(countdown, /const MAX_STEP_MS = 34;/);
   assert.match(countdown, /before \+ Math\.min\(info\.timeSincePreviousFrame \?\? 16, MAX_STEP_MS\) \/ STEP_MS/, 'one frame moves the clock at most 34 ms');
-  assert.match(countdown, /if \(before < 3 && after >= 3\) runOnJS\(finish\)\(\);/, 'the game comes back once, after the 1');
+  assert.match(countdown, /if \(before < HANDOVER_AT && after >= HANDOVER_AT\) runOnJS\(finish\)\(\);/, 'the game comes back once, under the 1');
   assert.match(countdown, /if \(Math\.floor\(after\) > Math\.floor\(before\) && after < 3\) runOnJS\(tick\)\(\);/, 'the 2 and the 1 tick when they appear');
   assert.match(countdown, /\[3, 2, 1\]\.map\(\(value, index\) => <CountNumber/);
   assert.match(countdown, /const shown = t >= 0 && \(t < 1 \|\| index === 2\);/, 'each number shows only during its own step; the 1 holds until the game is back');
   assert.doesNotMatch(countdown, /setTimeout|setCount\(/, 'no JS timer or JS state drives the number');
-  assert.match(countdown, /onPress=\{finish\}/, 'a tap still skips it');
+  assert.match(countdown, /onPress=\{skip\}/, 'a tap still skips it');
+  assert.match(countdown, /const skip = useCallback\(\(\) => \{\n\s+clock\.value = Math\.max\(clock\.value, 3\);\n\s+finish\(\);/);
 });
 
 test('clue 3 (the finale game) says its mission name on the rail, the page and the recap, never a second title', () => {
@@ -738,11 +739,13 @@ test('after the 3 2 1, the arcade or the page follows the 1 with no live-board g
   const screen = read(SCREEN);
   // The countdown stays up (still on the 1) while it hands over.
   assert.match(screen, /<ResumeCountdown active=\{resuming \|\| resumeHandoff != null\}/);
-  assert.match(screen, /const \[resumeHandoff, setResumeHandoff\] = useState<'arcade' \| 'page' \| null>\(null\);/);
+  assert.match(screen, /const \[resumeHandoff, setResumeHandoff\] = useState<'arcade' \| 'page' \| 'done' \| null>\(null\);/);
+  assert.match(screen, /released=\{resumeHandoff === 'done'\}/, 'the fade waits for the result');
+  assert.match(screen, /else setResumeHandoff\('done'\);\n\s+\}\} released=\{resumeHandoff === 'done'\} onHidden=\{\(\) => setResumeHandoff\(null\)\} \/>/, 'a plain resume lets go at once; it unmounts when its fade ends');
   // The arcade: the countdown lets go on the frame the sheet starts coming in (both sheets report it).
   assert.match(screen, /const ARCADE_PRESENT_FRAMES = 3;/);
   assert.match(screen, /const onArcadeShowing = useCallback\(\(\) => \{\n\s+let frames = ARCADE_PRESENT_FRAMES;/);
-  assert.match(screen, /else setResumeHandoff\(current => current === 'arcade' \? null : current\);/,
+  assert.match(screen, /else setResumeHandoff\(current => current === 'arcade' \? 'done' : current\);/,
     'the 1 stays up through the frames the native sheet takes to land, so the board never shows live in between');
   assert.equal([...screen.matchAll(/onShowing=\{onArcadeShowing\}/g)].length, 2, 'QueueArcadeSheet and BonusPicker');
   const sheet = read('src/screens/LinePlay/components/QueueArcadeSheet.tsx');
@@ -750,21 +753,41 @@ test('after the 3 2 1, the arcade or the page follows the 1 with no live-board g
   assert.match(sheet, /useNativeDriver hideModalContentWhileAnimating/, 'the slide runs on the UI thread, so a busy JS thread never holds it');
   assert.match(read('src/screens/LinePlay/components/BonusPicker.tsx'), /onModalWillShow=\{onShowing\}/);
   // The page: jumped to with no scroll animation under the 1, released two frames later, once it is painted.
-  assert.match(screen, /frameId = requestAnimationFrame\(\(\) => \{ frameId = requestAnimationFrame\(\(\) => setResumeHandoff\(null\)\); \}\);/);
+  assert.match(screen, /frameId = requestAnimationFrame\(\(\) => \{ frameId = requestAnimationFrame\(\(\) => letGo\('page'\)\); \}\);/);
   // Never stuck: a fallback lets go after RESUME_HANDOFF_MAX_MS.
   assert.match(screen, /const RESUME_HANDOFF_MAX_MS = 1500;/);
-  assert.match(screen, /const fallback = setTimeout\(\(\) => setResumeHandoff\(null\), RESUME_HANDOFF_MAX_MS\);/);
-  // The countdown: its frame clock stops at the 1 (a hold costs no frame work), and it fades out on the UI thread.
+  assert.match(screen, /const fallback = setTimeout\(\(\) => letGo\(resumeHandoff\), RESUME_HANDOFF_MAX_MS\);/);
+  assert.match(screen, /const unstick = setTimeout\(\(\) => setResumeHandoff\(current => current === 'done' \? null : current\), RESUME_DONE_MAX_MS\);/,
+    'and the fade can never stick either');
+  // The countdown: its frame clock sleeps while it holds on the 1 (a hold costs no frame work), and it fades out on the UI thread.
   const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
-  assert.match(countdown, /finished\.current = true;\n\s+\/\/[^\n]*\n\s+frameRef\.current\?\.setActive\(false\);/);
-  assert.match(countdown, /exiting=\{reducedMotion \? undefined : FadeOut\.duration\(EXIT_FADE_MS\)\}/);
+  assert.match(countdown, /if \(!releasedSv\.value && !sleeping\.value\) \{ sleeping\.value = true; runOnJS\(sleep\)\(\); \}/);
+  assert.match(countdown, /if \(!releasedRef\.current\) frameRef\.current\?\.setActive\(false\);/, 'a late sleep never stops a released fade');
+  assert.match(countdown, /opacity: clock\.value <= 3 \? 1 : Math\.max\(0, 1 - \(clock\.value - 3\) \/ FADE_UNITS\)/);
+  assert.doesNotMatch(countdown, /FadeOut/, 'no JS-mounted exit animation that could start back at full opacity');
   assert.match(countdown, /const EXIT_FADE_MS = 140;/);
   assert.ok(140 < 250, 'the fade ends before the clock resets, so the closing frames keep the 1');
 });
 
+test('3, 2 and 1 each get one even beat: the game comes back under the 1, which still gets its full step', () => {
+  const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
+  const step = Number(countdown.match(/const STEP_MS = (\d+);/)[1]);
+  const handover = Number(countdown.match(/const HANDOVER_AT = ([\d.]+);/)[1]);
+  assert.ok(handover > 2 && handover < 3, 'the hand-over happens while the 1 is up');
+  assert.ok((3 - handover) * step >= 180, `JS has at least 180 ms under the 1 to bring the game back (${(3 - handover) * step} ms)`);
+  // The clock holds at 3 (the end of the 1's step) until released, then runs on through the fade.
+  assert.match(countdown, /const cap = releasedSv\.value \? END : 3;/);
+  assert.match(countdown, /const END = 3 \+ FADE_UNITS;/);
+  assert.match(countdown, /if \(before < END && after >= END\) runOnJS\(hidden\)\(\);/);
+  // Reduced motion: no fade, the scrim leaves in one frame after the 1.
+  assert.match(countdown, /const after = before >= 3 && reducedMotion \? cap\n/);
+});
+
 test('the chapter page never shows a live-looking button that does nothing (detected, ending, complete)', () => {
   const screen = read(SCREEN);
-  assert.match(screen, /locked=\{snapshot\.state !== 'active' && snapshot\.state !== 'paused'\}/);
+  assert.match(screen, /locked=\{\(snapshot\.state !== 'active' && snapshot\.state !== 'paused'\) \|\| previewLocked\}/);
+  // The dev capture toggle exists only in dev JS.
+  assert.match(screen, /if \(!__DEV__\) return undefined;\n\s+const holder = globalThis as \{ __linePlayPreviewLocked\?/);
   const chapter = read('src/screens/LinePlay/components/ChapterCard.tsx');
   assert.match(chapter, /const off = \{ disabled: locked, accessibilityState: \{ disabled: locked \} \} as const;/);
   // Every mission button (PLAY, the strip, the 3 bubbles in both layouts, the crew chips, Crew Prompts) takes it.
@@ -809,4 +832,68 @@ test('the crew row in the free band is a full 44 pt with no top margin, so it si
   assert.equal([...strip.matchAll(/compact && styles\.compactChip, band && styles\.bandChip/g)].length, 2);
   const hook = read('src/screens/LinePlay/group/useGroupPlay.tsx');
   assert.match(hook, /const bandStrip: ReactNode = showStrip \? <GroupStrip group=\{group\} compact=\{compact\} band onEdit=\{onEditCrew\} \/> : null;/);
+});
+
+test('one message asks at a time: the idle nudge never shows over a one-time tip, the 3 2 1 or a sheet', () => {
+  const gate = loadTs('src/services/help/tipGate.ts');
+  const calm = { busy: false, tipUp: false, appActive: true, alreadyNudged: false, quietMs: 26_000 };
+  assert.equal(gate.lineNudgeReady(calm), true);
+  assert.equal(gate.lineNudgeReady({ ...calm, tipUp: true }), false, 'the Welcome tip is up');
+  assert.equal(gate.lineNudgeReady({ ...calm, busy: true }), false, 'a sheet, the arcade or the countdown');
+  assert.equal(gate.lineNudgeReady({ ...calm, quietMs: 24_000 }), false);
+  assert.equal(gate.lineNudgeReady({ ...calm, alreadyNudged: true }), false);
+  assert.equal(gate.lineNudgeReady({ ...calm, appActive: false }), false);
+  const screen = read(SCREEN);
+  assert.match(screen, /if \(!lineNudgeReady\(\{ busy: sheetOpenRef\.current, tipUp: tipsUp\.current\.size > 0,/);
+  assert.match(screen, /sheetOpenRef\.current = somethingAsks;/);
+  assert.match(screen, /const somethingAsks = groupPlay\.sheetOpen \|\| arcadeOpen \|\| projectOpen \|\| waitEndPrompt != null \|\| boardingAsk \|\| lineDone \|\| resuming \|\|\n\s+resumeHandoff != null;/);
+  assert.match(screen, /onVisibleChange=\{onIntroTip\}/);
+  assert.match(screen, /onVisibleChange=\{onPartTip\}/);
+  const tip = read('src/components/help/OneTimeTip.tsx');
+  assert.match(tip, /onVisibleChange\(visible\);\n\s+return visible \? \(\) => onVisibleChange\(false\) : undefined;/, 'it reports hiding too, even on unmount');
+});
+
+test('a queue toast lands inside the wait card between its top row and Details, never over its buttons', () => {
+  const m = layout();
+  // iPhone SE card (measured): top 92, bottom 315. Top row ends at 148, Details starts at 273.
+  const top = m.queueToastTop(92, 315);
+  assert.ok(top >= 92 + m.WAIT_CARD_TOP_ROW, 'below the ride name, ARCADE and pause');
+  assert.ok(top + m.QUEUE_TOAST_H <= 315 - m.WAIT_CARD_DETAILS_ROW, 'above Details');
+  assert.equal(m.queueToastTop(92, 200), 206, 'a card too short for the band: just under it');
+  assert.equal(m.queueToastTop(null, 315), null, 'not measured yet: the default spot');
+  assert.match(read(SCREEN), /<QueueToast message=\{toast\} onDone=\{\(\) => setToast\(null\)\} top=\{queueToastTop\(waitCardTop, waitCardBottom\) \?\? undefined\} \/>/);
+  assert.match(read('src/screens/LinePlay/components/QueueToast.tsx'), /style=\{\[styles\.wrap, top != null && \{ top \}\]\}/);
+});
+
+test('the arcade sheet slides in already full: its pictures are decoded while LinePlay is up', () => {
+  const sheet = read('src/screens/LinePlay/components/QueueArcadeSheet.tsx');
+  assert.match(sheet, /export function ArcadeIconWarmup\(\)/);
+  assert.match(sheet, /\{Object\.keys\(ICONS\)\.map\(key => <Image key=\{key\} source=\{ICONS\[key\]\} style=\{styles\.gameIcon\} contentFit="contain" \/>\)\}/,
+    'every tile picture, at tile size, so the cache holds exactly what the sheet draws');
+  assert.match(sheet, /<Image source=\{ARCADE_HEADER_ICON\} style=\{styles\.arcadeIcon\} contentFit="contain" \/>/);
+  assert.match(sheet, /warmup: \{ position: 'absolute', left: 0, top: 0, width: 72, opacity: 0 \}/);
+  assert.match(sheet, /pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden/);
+  assert.match(read(SCREEN), /\n\s+<ArcadeIconWarmup \/>\n/);
+});
+
+test('one name per idea on the chapter page: the header is the park and the shark while clues are left', () => {
+  const chapter = read('src/screens/LinePlay/components/ChapterCard.tsx');
+  const header = chapter.slice(chapter.indexOf('const header = ('), chapter.indexOf('const playNow = ('));
+  assert.doesNotMatch(header, /chapter\.title/, 'the story name never sits beside a mission name');
+  assert.match(header, /\{done === 3 \? <>/);
+  assert.match(header, /\{chapter\.completedTitle\}/, 'finished, it celebrates');
+  assert.match(header, /accessibilityLabel=\{chapterKicker\(chapter\)\}>\{chapterPageKicker\(chapter\)\}<\/KidText>\}/);
+});
+
+test('on a short window (iPhone SE) a page banner is one slim row and the clue page leads with what to do', () => {
+  const m = layout();
+  assert.equal(m.heroSlim(113), true, 'SE clue page window');
+  assert.equal(m.heroSlim(0), false, 'before layout');
+  assert.equal(m.heroSlim(260), false, 'taller phones keep the full banner');
+  const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
+  assert.match(slot, /const slim = heroSlim\(useContext\(PageHeightContext\)\);/);
+  assert.match(slot, /heroSlim: \{ height: 46, marginBottom: spacing\.sm \}/);
+  assert.match(slot, /return <>\{hero\}\{short \? <>\{action\}\{story\}<\/> : <>\{story\}\{action\}<\/>\}<\/>;/);
+  assert.match(slot, /<ActionFirstWhenShort\n\s+hero=\{<ActivityHero kicker=\{navigator \? 'STARPORT' : 'QUEUE QUEST'\}/);
+  assert.match(read('src/screens/LinePlay/components/PageScroll.tsx'), /<PageHeightContext\.Provider value=\{viewHeight\}>\{children\}<\/PageHeightContext\.Provider>/);
 });

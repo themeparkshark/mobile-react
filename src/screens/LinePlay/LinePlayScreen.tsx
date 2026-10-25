@@ -82,7 +82,7 @@ import CrewPuzzleCard from './components/CrewPuzzleCard';
 import ChapterCard from './components/ChapterCard';
 import CrewRelayCard from './components/CrewRelayCard';
 import ProjectMissionModal from './components/ProjectMissionModal';
-import QueueArcadeSheet from './components/QueueArcadeSheet';
+import QueueArcadeSheet, { ArcadeIconWarmup } from './components/QueueArcadeSheet';
 import BonusPicker from './components/BonusPicker';
 import BonusPartFlight, { type FlightPoint } from './components/BonusPartFlight';
 import type { RailChip } from './components/LinePlayLiveRail';
@@ -113,6 +113,8 @@ const NIGHT_BACKDROP = ['#3B2A6B', '#2B2350', '#1E1838'] as const;
 const WELCOME_BACK_AFTER_MS = 20_000;
 /** The longest the resume countdown waits on the 1 for the arcade or the page it is handing over to. */
 const RESUME_HANDOFF_MAX_MS = 1500;
+/** The countdown's own fade reports when it is done; this only unsticks it if that report never comes. */
+const RESUME_DONE_MAX_MS = 900;
 /**
  * Frames the 1 stays up after the arcade sheet starts presenting. The native sheet lands about 3 to 4
  * frames after onModalWillShow (measured on release JS), so the scrim fades only once the sheet is moving.
@@ -183,9 +185,9 @@ import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLive
 
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
-import { linePlayTipReady } from '../../services/help/tipGate';
+import { lineNudgeReady, linePlayTipReady } from '../../services/help/tipGate';
 import { chapterMissionIds, chapterPlayNow, railPageIcon, crewRowInBand, PAGE_FRAME_V, railBackAction, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIM_HOLD_MAX_MS, PAGES_DIP_MS, PAGES_DIP_OPACITY,
-  PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS } from '../../services/lineplay/lineLayout';
+  PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS, queueToastTop } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
 
@@ -257,7 +259,16 @@ export default function LinePlayScreen() {
    * After the 1, the countdown stays up (still on the 1) until what the tap asked for is on screen:
    * the arcade sheet starting its entrance, or the page in place. No frame shows the board live in between.
    */
-  const [resumeHandoff, setResumeHandoff] = useState<'arcade' | 'page' | null>(null);
+  // Dev only: shows the chapter page's locked look (a wait that cannot be played) without a real ride
+  // detection, for device captures (`globalThis.__linePlayPreviewLocked(true)` from the debugger).
+  const [previewLocked, setPreviewLocked] = useState(false);
+  useEffect(() => {
+    if (!__DEV__) return undefined;
+    const holder = globalThis as { __linePlayPreviewLocked?: (on: boolean) => void };
+    holder.__linePlayPreviewLocked = setPreviewLocked;
+    return () => { delete holder.__linePlayPreviewLocked; };
+  }, []);
+  const [resumeHandoff, setResumeHandoff] = useState<'arcade' | 'page' | 'done' | null>(null);
   const [toast, setToast] = useState<QueueToastMessage | null>(null);
   const toastKey = useRef(0);
   const showToastRef = useRef<((message: Omit<QueueToastMessage, 'key'>) => void) | null>(null);
@@ -509,7 +520,12 @@ export default function LinePlayScreen() {
   // Never idle: a quiet 25 s in an active line (no game open, app in front) gets one soft nudge
   // toward the next activity. Any touch resets it; one nudge per quiet stretch.
   const lastTouch = useRef(Date.now());
+  // Anything already asking the kid (a sheet, the arcade, a dialog, the 3 2 1 or its hand-off): no nudge on top.
   const sheetOpenRef = useRef(false);
+  // A one-time tip is up (they stay until tapped): the nudge waits for it, so only one message asks at a time.
+  const tipsUp = useRef(new Set<string>());
+  const onIntroTip = useCallback((up: boolean) => { if (up) tipsUp.current.add('intro'); else tipsUp.current.delete('intro'); }, []);
+  const onPartTip = useCallback((up: boolean) => { if (up) tipsUp.current.add('part'); else tipsUp.current.delete('part'); }, []);
   // Finishing a line files its shark adventure in the player's collection (recap: "Adventures found").
   const [adventuresFound, setAdventuresFound] = useState<{ count: number; isNew: boolean } | null>(null);
   useEffect(() => {
@@ -520,8 +536,8 @@ export default function LinePlayScreen() {
   useEffect(() => {
     if (snapshot.state !== 'active' || activeGame != null) return undefined;
     const id = setInterval(() => {
-      // A sheet (Who's in line?, a crew turn) is already asking the kid something: no nudge on top.
-      if (nudged.current || sheetOpenRef.current || AppState.currentState !== 'active' || Date.now() - lastTouch.current < 25_000) return;
+      if (!lineNudgeReady({ busy: sheetOpenRef.current, tipUp: tipsUp.current.size > 0, appActive: AppState.currentState === 'active',
+        alreadyNudged: nudged.current, quietMs: Date.now() - lastTouch.current })) return;
       nudged.current = true;
       haptic('tapLight');
       showToastRef.current?.({ icon: 'queue', title: 'Next adventure is ready!', body: 'Swipe or tap Play to keep the fun going.' });
@@ -793,12 +809,13 @@ export default function LinePlayScreen() {
     openTurn: openGroupTurn,
     compact: fit.short,
   });
-  sheetOpenRef.current = groupPlay.sheetOpen;
   groupPlayRef.current = groupPlay;
+  const somethingAsks = groupPlay.sheetOpen || arcadeOpen || projectOpen || waitEndPrompt != null || boardingAsk || lineDone || resuming ||
+    resumeHandoff != null;
+  sheetOpenRef.current = somethingAsks;
   const lineTipReady = linePlayTipReady({
     screenReady: snapshot.state === 'active', gameOpen: activeGame != null, lineMoving: snapshot.moving,
-    sheetOpen: groupPlay.sheetOpen || arcadeOpen || projectOpen || waitEndPrompt != null || boardingAsk || lineDone || resuming ||
-      resumeHandoff != null,
+    sheetOpen: somethingAsks,
     finished: false,
   });
 
@@ -880,13 +897,19 @@ export default function LinePlayScreen() {
   }, []);
   // The countdown's hand-off: the page is painted in place two frames after the jump; the arcade lets go
   // once its sheet is on screen and moving (onArcadeShowing). Never longer than RESUME_HANDOFF_MAX_MS.
+  // 'done' lets the countdown fade once the 1 has had its full step; it unmounts when the fade ends.
   useEffect(() => {
     if (resumeHandoff == null) return undefined;
-    let frameId: number | null = null;
-    if (resumeHandoff === 'page') {
-      frameId = requestAnimationFrame(() => { frameId = requestAnimationFrame(() => setResumeHandoff(null)); });
+    if (resumeHandoff === 'done') {
+      const unstick = setTimeout(() => setResumeHandoff(current => current === 'done' ? null : current), RESUME_DONE_MAX_MS);
+      return () => clearTimeout(unstick);
     }
-    const fallback = setTimeout(() => setResumeHandoff(null), RESUME_HANDOFF_MAX_MS);
+    let frameId: number | null = null;
+    const letGo = (from: 'arcade' | 'page') => setResumeHandoff(current => current === from ? 'done' : current);
+    if (resumeHandoff === 'page') {
+      frameId = requestAnimationFrame(() => { frameId = requestAnimationFrame(() => letGo('page')); });
+    }
+    const fallback = setTimeout(() => letGo(resumeHandoff), RESUME_HANDOFF_MAX_MS);
     return () => {
       if (frameId != null) cancelAnimationFrame(frameId);
       clearTimeout(fallback);
@@ -897,7 +920,7 @@ export default function LinePlayScreen() {
     const step = () => {
       frames -= 1;
       if (frames > 0) requestAnimationFrame(step);
-      else setResumeHandoff(current => current === 'arcade' ? null : current);
+      else setResumeHandoff(current => current === 'arcade' ? 'done' : current);
     };
     requestAnimationFrame(step);
   }, []);
@@ -956,11 +979,14 @@ export default function LinePlayScreen() {
   const [partTarget, setPartTarget] = useState<FlightPoint>({ x: 48, y: 140 });
   /** The wait card's bottom edge: the welcome tip sits just under the card it explains, never on its Details button. */
   const [waitCardBottom, setWaitCardBottom] = useState<number | null>(null);
+  /** Its top edge: a queue toast lands inside the card, under its top row and above Details. */
+  const [waitCardTop, setWaitCardTop] = useState<number | null>(null);
   const measureWaitCard = useCallback(() => {
     waitCardRef.current?.measureInWindow((x, y, _width, height) => {
       if (Number.isFinite(x) && Number.isFinite(y)) {
         setPartTarget({ x: x + 44, y: y + height / 2 });
         if (Number.isFinite(height)) setWaitCardBottom(Math.round(y + height));
+        setWaitCardTop(Math.round(y));
       }
     });
   }, []);
@@ -1368,7 +1394,7 @@ export default function LinePlayScreen() {
                     <ChapterCard chapter={snapshot.chapter} completedIds={completedActivityIds} compact={fit.short}
                       windowHeight={pageViewHeight}
                       crewRelay={snapshot.crewRelay} paused={snapshot.state !== 'active'}
-                      locked={snapshot.state !== 'active' && snapshot.state !== 'paused'}
+                      locked={(snapshot.state !== 'active' && snapshot.state !== 'paused') || previewLocked}
                       chapterClue={chapterClue}
                       signalAvailable={sharedPages.length > 0}
                       onChooseMission={(id) => {
@@ -1469,6 +1495,8 @@ export default function LinePlayScreen() {
         </View>
       </Wrapper>
 
+      {/* The arcade's pictures, decoded ahead of time, so the sheet slides in already full. */}
+      <ArcadeIconWarmup />
       {bonus ? <BonusPicker
         visible={arcadeOpen && snapshot.state === 'active'}
         onShowing={onArcadeShowing}
@@ -1565,12 +1593,14 @@ export default function LinePlayScreen() {
       {/* Never shown before the card is measured, so not one frame sits at a guessed spot over Details. */}
       {/* While the page window has stepped aside (an iPhone SE reading long Details), a tip waits: it would sit over the rail's one button. */}
       <OneTimeTip id="lineplay_intro" ready={lineTipReady && pagesShown && waitCardBottom != null} autoHideMs={0}
-        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} />
+        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} onVisibleChange={onIntroTip} />
       <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending && pagesShown && waitCardBottom != null} autoHideMs={0}
-        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} />
+        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} onVisibleChange={onPartTip} />
 
-      <QueueToast message={toast} onDone={() => setToast(null)} />
+      {/* Toasts land inside the wait card between its top row and Details: never over the ride name, ARCADE, pause or PLAY. */}
+      <QueueToast message={toast} onDone={() => setToast(null)} top={queueToastTop(waitCardTop, waitCardBottom) ?? undefined} />
 
+      {/* The game comes back under the 1; the 1 gets its full step, like the 3 and the 2, then fades. */}
       <ResumeCountdown active={resuming || resumeHandoff != null} onDone={() => {
         setResuming(false);
         session.resume();
@@ -1579,7 +1609,8 @@ export default function LinePlayScreen() {
         // The 1 stays up until the arcade starts coming in, or the page is in place under it (no scroll to watch).
         if (arcadeAfterResume.current) { arcadeAfterResume.current = false; setArcadeOpen(true); setResumeHandoff('arcade'); }
         else if (page != null) { jumpToPage(page, false); setResumeHandoff('page'); }
-      }} />
+        else setResumeHandoff('done');
+      }} released={resumeHandoff === 'done'} onHidden={() => setResumeHandoff(null)} />
 
       {/* End by hand: one branded sheet (header End, back, or a footer tab). */}
       <GameDialog

@@ -31,6 +31,21 @@ const ICONS: Record<string, number> = {
   showdown: require('../../../../assets/images/screens/lineplay/arcade/showdown.png'),
 };
 
+const ARCADE_HEADER_ICON = require('../../../../assets/images/screens/social/arcade.png');
+
+/**
+ * The arcade's pictures, drawn once out of sight while the screen is up, so the image cache already holds
+ * them decoded at tile size. The sheet then slides in already full: no blank tile waits for its picture.
+ * Static images only, no animation, nothing to tap.
+ */
+export function ArcadeIconWarmup() {
+  return <View pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden
+    style={styles.warmup}>
+    <Image source={ARCADE_HEADER_ICON} style={styles.arcadeIcon} contentFit="contain" />
+    {Object.keys(ICONS).map(key => <Image key={key} source={ICONS[key]} style={styles.gameIcon} contentFit="contain" />)}
+  </View>;
+}
+
 export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, onHidden, onShowing,
   kicker = 'LINEPLAY', title = 'QUEUE ARCADE', intro = 'Pick a quick game while you wait.',
   note = 'Your wait still counts while you play.', newLabel = 'New this wait.', showNew = true }: {
@@ -62,8 +77,7 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
         onPress={onClose} style={StyleSheet.absoluteFill} />
       <View style={styles.panel}>
         <View style={styles.header}>
-          <Image source={require('../../../../assets/images/screens/social/arcade.png')}
-            style={styles.arcadeIcon} contentFit="contain" />
+          <Image source={ARCADE_HEADER_ICON} style={styles.arcadeIcon} contentFit="contain" />
           <View style={styles.headerCopy}>
             <Text style={styles.kicker}>{kicker}</Text>
             <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{title}</Text>
@@ -102,6 +116,7 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
 
 const styles = StyleSheet.create({
   gameIcon: { width: 72, height: 72, alignSelf: 'center', marginBottom: 4 },
+  warmup: { position: 'absolute', left: 0, top: 0, width: 72, opacity: 0 },
   gameCell: { width: '48%' },
   newPill: { position: 'absolute', top: 6, right: 6, zIndex: 1, paddingHorizontal: 8, paddingVertical: 2,
     borderRadius: 999, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy },

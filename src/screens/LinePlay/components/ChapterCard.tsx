@@ -105,13 +105,17 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
   const header = (
     <Animated.View key="header" entering={rise(compact ? 1 : 0)} style={[styles.header, compact && styles.headerCompact]}
       onLayout={event => { if (compact) setLeadBottom(layoutBottom(event)); }}>
+      {/* One name per idea: while clues are left, the header is the park and the shark, never the story's name
+          (The Lost Star Chart next to Rebuild the star chart read as two names for one thing). The missions
+          below are the only names. Finished, it celebrates with the completed line. */}
       <View style={styles.headerCopy}>
-        <KidText style={[styles.kicker, compact && styles.kickerCompact]} numberOfLines={1}
-          adjustsFontSizeToFit minimumFontScale={0.8} accessibilityLabel={chapterKicker(chapter)}>{chapterPageKicker(chapter)}</KidText>
-        <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={compact ? 1 : undefined}
-          adjustsFontSizeToFit={compact} minimumFontScale={0.8}>
-          {done === 3 ? chapter.completedTitle : chapter.title}
-        </Text>
+        {done === 3 ? <>
+          <KidText style={[styles.kicker, compact && styles.kickerCompact]} numberOfLines={1}
+            adjustsFontSizeToFit minimumFontScale={0.8} accessibilityLabel={chapterKicker(chapter)}>{chapterPageKicker(chapter)}</KidText>
+          <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={compact ? 1 : undefined}
+            adjustsFontSizeToFit={compact} minimumFontScale={0.8}>{chapter.completedTitle}</Text>
+        </> : <KidText style={[styles.title, styles.parkTitle, compact && styles.titleCompact]} numberOfLines={1}
+          adjustsFontSizeToFit minimumFontScale={0.7} accessibilityLabel={chapterKicker(chapter)}>{chapterPageKicker(chapter)}</KidText>}
       </View>
       <Image source={chapter.navigationPanel
         ? SPACE_NAVIGATOR_ART
@@ -298,6 +302,7 @@ const styles = StyleSheet.create({
   title: { color: '#fff', fontFamily: 'Shark', fontSize: 23, lineHeight: 27, marginTop: 4,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   titleCompact: { fontSize: 19, lineHeight: 22, marginTop: 1 },
+  parkTitle: { marginTop: 0 },
   playNow: { flexDirection: 'row', alignItems: 'center', minHeight: 96, marginTop: spacing.md,
     paddingLeft: spacing.md, paddingRight: spacing.sm, paddingVertical: spacing.sm, borderRadius: borderRadius.lg,
     borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 6, backgroundColor: BRAND.gold },

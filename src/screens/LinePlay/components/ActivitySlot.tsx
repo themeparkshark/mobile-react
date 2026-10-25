@@ -6,7 +6,7 @@
  * loaders. Everything is one-thumb and portrait.
  */
 
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   spacing,
@@ -24,7 +24,8 @@ import {
 import { SoundEffectContext } from '../../../context/SoundEffectProvider';
 import HapticPatterns from '../../../helpers/hapticPatterns';
 import NavigationPanelCard from './NavigationPanelCard';
-import PageScroll from './PageScroll';
+import PageScroll, { PageHeightContext } from './PageScroll';
+import { heroSlim } from '../../../services/lineplay/lineLayout';
 import type { NavigationPanelProgress } from '../../../services/lineplay/navigationPanel';
 import type { CircuitTheme } from '../../../services/lineplay/circuitTheme';
 import { factSourceLine } from '../../../services/lineplay/labels';
@@ -92,15 +93,18 @@ const GAME_PREVIEWS: Record<string, string> = {
 
 function ActivityHero({ kicker, title, teacher = false, navigator = false }: { kicker: string; title: string; teacher?: boolean; navigator?: boolean }) {
   const [artFailed, setArtFailed] = useState(false);
-  return <View style={styles.hero}>
+  // A short window (iPhone SE): one slim row with the name and a small shark, so what to do shows below it.
+  const slim = heroSlim(useContext(PageHeightContext));
+  return <View style={[styles.hero, slim && styles.heroSlim]}>
     <View style={styles.heroCopy}>
-      <Text style={styles.heroKicker}>{kicker}</Text>
-      <Text style={styles.heroTitle}>{title}</Text>
+      {!slim && <Text style={styles.heroKicker}>{kicker}</Text>}
+      <Text style={[styles.heroTitle, slim && styles.heroTitleSlim]} numberOfLines={slim ? 1 : undefined}
+        adjustsFontSizeToFit={slim} minimumFontScale={0.85}>{title}</Text>
     </View>
     <Image source={navigator && !artFailed ? SPACE_NAVIGATOR_ART : teacher
       ? require('../../../../assets/images/tutorial/teacher-shark.png')
       : require('../../../../assets/images/screens/pin-collections/shark.png')}
-      resizeMode="contain" onError={() => setArtFailed(true)} style={styles.shark}
+      resizeMode="contain" onError={() => setArtFailed(true)} style={[styles.shark, slim && styles.sharkSlim]}
       accessibilityLabel={navigator ? 'Your shark navigator' : 'Theme Park Shark mascot'} />
   </View>;
 }
@@ -337,6 +341,16 @@ function TriviaSlot({
 
 // -- lore --------------------------------------------------------------------
 
+/**
+ * A page's first screen: on a short window (iPhone SE) what to do (the prompt and its first choice) comes right
+ * under the slim banner, before the story, so a non-reader sees an action without scrolling. Taller windows
+ * keep the story first.
+ */
+function ActionFirstWhenShort({ hero, story, action }: { hero: ReactNode; story: ReactNode; action: ReactNode }) {
+  const short = heroSlim(useContext(PageHeightContext));
+  return <>{hero}{short ? <>{action}{story}</> : <>{story}{action}</>}</>;
+}
+
 function LoreSlot({
   title,
   navigator,
@@ -378,46 +392,51 @@ function LoreSlot({
 
   return (
     <PageScroll fill={CARD_FILL}>
-      <ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE QUEST'} title={title ?? (navigator ? 'Spot the clue' : 'Field Note')} navigator={navigator} />
-      <Text style={styles.loreTitle}>{lore.title}</Text>
-      <Text style={styles.loreBody}>{lore.body}</Text>
-      {factSourceLine(lore.source) ? <Text style={styles.loreSource}>{factSourceLine(lore.source)}</Text> : null}
-      {lore.challenge && !completed && selectedClue == null && (
-        <View style={styles.clueChallenge}>
-          <Text style={styles.cluePrompt}>{lore.challenge.prompt}</Text>
-          {lore.challenge.options.map((option, index) => (
-            <Pressable key={`${lore.id}-${index}`} accessibilityRole="button"
-              disabled={paused} onPress={() => onChoose(index)}
-              style={[styles.choice, styles.clueChoice, paused && styles.disabled]}>
-              <Text style={styles.choiceText}>{option.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
-      {lore.challenge && selectedClue != null && (
-        <View style={styles.clueChallenge}>
-          <Text style={styles.cluePrompt}>{lore.challenge.options[selectedClue]?.label}</Text>
-          <Text style={styles.loreBody}>{lore.challenge.options[selectedClue]?.task}</Text>
-          <Text style={styles.clueFinish}>{lore.challenge.finish}</Text>
-          {!completed && <>
-            <Pressable accessibilityRole="button" disabled={paused} onPress={onCompleted}
-              style={[styles.primaryBtn, paused && styles.disabled]}>
-              <Text style={styles.primaryBtnText}>Clue found</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" disabled={paused} onPress={() => onChoose(-1)}
-              style={[styles.clueBack, paused && styles.disabled]}>
-              <Text style={styles.clueBackText}>Choose another clue</Text>
-            </Pressable>
-          </>}
-        </View>
-      )}
-      {(!lore.challenge || completed) && (
-        <Pressable accessibilityRole="button"
-          disabled={completed || paused} onPress={onCompleted}
-          style={[styles.primaryBtn, (completed || paused) && styles.disabled]}>
-          <Text style={styles.primaryBtnText}>{completed ? 'Clue logged' : 'Clue explored'}</Text>
-        </Pressable>
-      )}
+      <ActionFirstWhenShort
+        hero={<ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE QUEST'} title={title ?? (navigator ? 'Spot the clue' : 'Field Note')} navigator={navigator} />}
+        story={<>
+          <Text style={styles.loreTitle}>{lore.title}</Text>
+          <Text style={styles.loreBody}>{lore.body}</Text>
+          {factSourceLine(lore.source) ? <Text style={styles.loreSource}>{factSourceLine(lore.source)}</Text> : null}
+        </>}
+        action={<>
+          {lore.challenge && !completed && selectedClue == null && (
+            <View style={styles.clueChallenge}>
+              <Text style={styles.cluePrompt}>{lore.challenge.prompt}</Text>
+              {lore.challenge.options.map((option, index) => (
+                <Pressable key={`${lore.id}-${index}`} accessibilityRole="button"
+                  disabled={paused} onPress={() => onChoose(index)}
+                  style={[styles.choice, styles.clueChoice, paused && styles.disabled]}>
+                  <Text style={styles.choiceText}>{option.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {lore.challenge && selectedClue != null && (
+            <View style={styles.clueChallenge}>
+              <Text style={styles.cluePrompt}>{lore.challenge.options[selectedClue]?.label}</Text>
+              <Text style={styles.loreBody}>{lore.challenge.options[selectedClue]?.task}</Text>
+              <Text style={styles.clueFinish}>{lore.challenge.finish}</Text>
+              {!completed && <>
+                <Pressable accessibilityRole="button" disabled={paused} onPress={onCompleted}
+                  style={[styles.primaryBtn, paused && styles.disabled]}>
+                  <Text style={styles.primaryBtnText}>Clue found</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" disabled={paused} onPress={() => onChoose(-1)}
+                  style={[styles.clueBack, paused && styles.disabled]}>
+                  <Text style={styles.clueBackText}>Choose another clue</Text>
+                </Pressable>
+            </>}
+          </View>
+        )}
+        {(!lore.challenge || completed) && (
+          <Pressable accessibilityRole="button"
+            disabled={completed || paused} onPress={onCompleted}
+            style={[styles.primaryBtn, (completed || paused) && styles.disabled]}>
+            <Text style={styles.primaryBtnText}>{completed ? 'Clue logged' : 'Clue explored'}</Text>
+          </Pressable>
+        )}
+        </>} />
     </PageScroll>
   );
 }
@@ -507,6 +526,9 @@ const styles = StyleSheet.create({
     margin: -6, marginBottom: spacing.md, borderRadius: 16, paddingLeft: 14, backgroundColor: '#0875c9' },
   heroCopy: { flex: 1, zIndex: 1 },
   shark: { width: 110, height: 110, marginRight: -7 },
+  heroSlim: { height: 46, marginBottom: spacing.sm },
+  heroTitleSlim: { fontSize: 19, lineHeight: 23, marginTop: 2 },
+  sharkSlim: { width: 52, height: 52, marginRight: -2 },
   heroKicker: { color: '#c8efff', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1 },
   heroTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 22, lineHeight: 27, marginTop: 5,
     textShadowColor: '#034471', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
