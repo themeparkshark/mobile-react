@@ -9,7 +9,7 @@ import { memo, useEffect } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import { EASE } from '../../ui/motionEasing';
-import { digitCellOpacity, digitColumns, rollPos } from '../map/alive/mapWow';
+import { digitCellPose, digitColumns, rollPos } from '../map/alive/mapWow';
 import { hudClock, hudStreamId } from './hudPulse';
 
 
@@ -23,8 +23,8 @@ export interface DigitStream {
 /**
  * One odometer column. Round 5: the digits no longer rely on the column's overflow clip (on this Fabric build the
  * rolling strip drew outside the pill, above and below its rim: the r4 "4 2 +10" frames). Each digit that takes
- * part in the roll is its own cell that slides AND fades with its distance from the window, so a leaving digit is
- * gone before it reaches the rim and the incoming one fades up from inside the pill. A column that does not roll
+ * part in the roll is its own cell. Wave 5: only the nearest cell shows, sliding a short way and squashing at the
+ * swap (digitCellPose), so every frame reads as a whole number inside the pill. A column that does not roll
  * is a plain Text (no worklet at all).
  */
 function Column({ ch, from, delay, rolls, up, ms, lineHeight, width, textStyle, reduced, stream }: {
@@ -75,8 +75,9 @@ function Cell({ at, start, end, ms, sid, sAt, pos, lineHeight, width, textStyle 
     // starts from the old digit there (the UI thread takes over on the next frame).
     const onUi = (globalThis as { _WORKLET?: boolean })._WORKLET === true;
     const v = !onUi ? start : sid > 0 && hudStreamId.value === sid ? rollPos(hudClock.value, sAt, start, end, ms) : sid > 0 ? end : pos.value;
-    const d = at - v;
-    return { opacity: digitCellOpacity(d), transform: [{ translateY: d * lineHeight }] };
+    // Wave 5: one whole digit at a time (digitCellPose), never two half-faded ones.
+    const pose = digitCellPose(at - v);
+    return { opacity: pose.opacity, transform: [{ translateY: pose.y * lineHeight }, { scaleY: pose.sy }] };
   });
   return <Animated.Text allowFontScaling={false} style={[textStyle, styles.cell, styles.abs, { lineHeight, height: lineHeight, width }, style]}>{String(at % 10)}</Animated.Text>;
 }

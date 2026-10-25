@@ -465,8 +465,51 @@ test('round 5: odometer digits fade inside the pill instead of relying on a clip
   assert.equal(wow.digitCellOpacity(0.6), 0, 'a digit half a line away is already gone (well inside the rim)');
   assert.equal(wow.digitCellOpacity(-1), 0);
   const src = fs.readFileSync(path.join(root, 'src/components/Topbar/RollingDigits.tsx'), 'utf8');
-  assert.match(src, /digitCellOpacity\(d\)/, 'each rolling cell fades with its distance');
+  assert.match(src, /digitCellPose\(at - v\)/, 'each rolling cell takes its pose from its distance (wave 5)');
   assert.doesNotMatch(src, /const STRIP/, 'no 20-digit strip that can draw past the pill');
+});
+
+// Wave 5, round 1: the counter never shows a half digit, it pops once when it lands, and the next goal is big enough to read.
+test('wave 5: exactly one whole digit shows on every frame of a roll', () => {
+  for (let v = 5; v <= 6; v += 0.01) {
+    let shown = 0;
+    for (let at = 4; at <= 7; at++) {
+      const pose = wow.digitCellPose(at - v);
+      if (pose.opacity > 0) { shown += 1; assert.equal(pose.opacity, 1, 'never a faded digit'); }
+      assert.ok(Math.abs(pose.y) <= 0.21 && pose.sy >= 0.75, 'a short squashed slide that stays inside the pill');
+    }
+    assert.ok(shown <= 1, `at most one digit at ${v.toFixed(2)}`);
+    if (Math.abs(v - Math.round(v) - 0.5) > 1e-9) assert.equal(shown, 1, `a digit is always readable at ${v.toFixed(2)}`);
+  }
+});
+
+test('wave 5: the counter pops once on the frame its roll ends', () => {
+  assert.equal(wow.countLandPop(999, 1000), 1);
+  assert.ok(Math.abs(wow.countLandPop(1120, 1000) - 1.12) < 1e-6, 'peaks at COUNT.finalBump');
+  assert.equal(wow.countLandPop(1240, 1000), 1);
+  const src = read('src/components/Topbar/Currency.tsx');
+  assert.match(src, /countLandPop\(hudClock\.value, streamRollEnd\.value\)/);
+  assert.match(src, /streamRollEnd\.value = stream\.lands\[0\] \+ rollMs\(from, next\) \+ lastDelay/);
+});
+
+test('wave 5: the next goal is sticker size and on screen about half a second on repeats', () => {
+  const r = wow.catchPlan({ reduced: false, repeat: true });
+  assert.ok(r.exitAt - r.nextAt >= 420, `repeat next goal on screen ${r.exitAt - r.nextAt} ms`);
+  const t = wow.catchPlan({ reduced: false, repeat: true, treat: true });
+  assert.ok(t.exitAt - t.nextAt >= 420 && t.doneAt <= 1450);
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /nextArt: \{ width: 42, height: 42/);
+});
+
+test('wave 5: release-like captures log every catch frame (beam, gold, ink) and never ship that probe', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /const CATCH_PROBE = process\.env\.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';/);
+  assert.match(src, /if \(!CATCH_PROBE \|\| t < 0\) return;/);
+  const audio = read('src/screens/ExploreScreen/ridePhoto/catchAudio.ts');
+  assert.match(audio, /if \(!__DEV__ && !CAPTURE_TRACE\) return;/);
+  // The beam is driven by a flag set from JS on the tap; JS never reads beamOn back.
+  assert.doesNotMatch(src, /if \(beamOn\.value\)/);
+  assert.match(src, /if \(current\.beam\) list\.push\(\{ at: plan\.hitStopAt, kind: BEAT\.beam/);
 });
 
 test('round 5: "+N" hangs off an anchor after the pill, never over the digits', () => {

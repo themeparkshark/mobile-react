@@ -100,8 +100,10 @@ export function preloadCatchAudio(): Promise<void> {
 /** Development: every sound and haptic is logged with a timestamp, for AUDIO_TIMELINE.md and sync review. */
 /** Preview recordings in a Release build (no console there) read the trace from this buffer. */
 export const catchTraceBuffer: string[] = [];
+/** Release-like capture of the map catch (lane tooling, never set in store builds): the marks are kept too. */
+const CAPTURE_TRACE = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';
 function trace(kind: string, name: string, extra = '') {
-  if (!__DEV__) return;
+  if (!__DEV__ && !CAPTURE_TRACE) return;
   const line = `[catch-av] ${Date.now()} ${kind} ${name}${extra}`;
   console.log(line);
   if (catchTraceBuffer.length < 5000) catchTraceBuffer.push(line);

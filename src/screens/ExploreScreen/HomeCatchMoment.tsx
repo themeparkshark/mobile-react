@@ -45,7 +45,7 @@ import { GRADE_LABEL, GRADE_STARS, catchStyleFor, type PhotoGrade } from './ride
 import { Sunburst } from '../../gamekit/fx/ShaderFx';
 import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, setRidePhotoPlayer, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
-import { catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
+import { catchHaptic, catchMark, catchSound, catchTraceBuffer } from './ridePhoto/catchAudio';
 import { touchHeal, useCommitHeal } from '../../components/map/alive/commitHeal';
 import { catchDim, catchHidePivot, catchKickX, catchKickY, dimCatchChrome, setCatchOpen, showCatchChrome } from './catchPresence';
 import reportRideOff from '../../api/endpoints/me/prep-items/ride-off';
@@ -131,6 +131,11 @@ const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms
  * catchPlan repeat), so the tenth catch is still quick and fun, never a long hold.
  */
 let sessionCatches = 0;
+/** Lane tooling only (EXPO_PUBLIC_MOTION_CAPTURE, never set in store builds): the per-frame catch probe. */
+const CATCH_PROBE = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';
+function flushProbe(rows: string): void {
+  if (catchTraceBuffer.length < 20000) catchTraceBuffer.push(rows.trimEnd());
+}
 /** Development previews: the next catch plays as the first of a session again. */
 export function resetCatchSessionForPreview(count = 0): void { sessionCatches = count; }
 /** The catch reveal's fade onto the map before the print flies (CatchReveal fades in 220 ms). */
@@ -688,6 +693,29 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   // The coin stream's own clock is the same clock, from the burst.
   const coinT = useDerivedValue(() => cc.value - planSV.value.coinsAt);
   // The burst kicks the map layer away from the find (catchPresence.catchKickX/Y, read by Map.tsx). UI thread only.
+  // Release-like capture only (lane tooling, never in store builds): every UI frame of a catch logs its clock, the
+  // beam's drop, the gold and the ink as the Skia burst draws them, and the frame's gap, so the burst's hold and the
+  // beam can be proven from the app itself (a busy simulator recorder drops frames the app really drew).
+  const probeRows = useSharedValue('');
+  const probeN = useSharedValue(0);
+  const probeLast = useSharedValue(0);
+  useAnimatedReaction(() => (CATCH_PROBE && clockOn.value ? cc.value : -1), t => {
+    if (!CATCH_PROBE || t < 0) return;
+    const now = Date.now();
+    const dt = probeLast.value > 0 ? now - probeLast.value : 0;
+    probeLast.value = now;
+    const p = planSV.value;
+    const f = frame.value;
+    const b = beamOn.value ? beamAt(t, p) : null;
+    const gold = f.gold <= 0 ? 0 : Math.min(1, f.gold * 1.1) * (f.suck < 0.6 ? 1 : 1 - (f.suck - 0.6) / 0.4);
+    const ink = f.ink < 0 ? 0 : (f.suck < 0.7 ? 1 : Math.max(0, 1 - (f.suck - 0.7) / 0.3));
+    probeRows.value = `${probeRows.value}[probe] ${now} t=${Math.round(t)} dt=${dt} beam=${b ? (b.drop * (1 - b.fade)).toFixed(2) : '-'} gold=${gold.toFixed(2)} ink=${ink.toFixed(2)} grand=${grandSV.value}\n`;
+    probeN.value += 1;
+    if (probeN.value >= 30 || t >= endAt.value) {
+      runOnJS(flushProbe)(probeRows.value);
+      probeRows.value = ''; probeN.value = 0;
+    }
+  });
   useAnimatedReaction(() => (clockOn.value ? frame.value.shake : 0), (k, prev) => {
     if (k === prev) return;
     catchKickX.value = k * kickDirX.value;
@@ -1211,6 +1239,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       const current = runRef.current;
       if (!current || current.token !== token) return;
       current.data = data; current.next = next;
+      catchMark('answer');
       setSummary(next);
       setBadgeOn(true);
       latest.current.onCascade?.(true);
@@ -1881,11 +1910,12 @@ const styles = StyleSheet.create({
   spark: { position: 'absolute', left: -4, top: -4, width: 8, height: 8, borderRadius: 2 },
   item: { position: 'absolute', left: 0, top: 0, width: FIND_ART_SIZE, height: FIND_ART_SIZE },
   itemArt: { width: FIND_ART_SIZE, height: FIND_ART_SIZE },
-  nextAt: { position: 'absolute', right: -34, top: (BADGE_HEIGHT - 44) / 2, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  nextRing: { position: 'absolute', width: 44, height: 44, borderRadius: 22, borderWidth: 3, borderColor: GOLD_FX.rays },
-  nextDisc: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ffffff', borderWidth: 3, borderColor: GOLD_FX.rays,
+  // Wave 5: the next goal at sticker size (it was a 28 pt shadow that barely registered).
+  nextAt: { position: 'absolute', right: -34, top: (BADGE_HEIGHT - 60) / 2, width: 60, height: 60, alignItems: 'center', justifyContent: 'center' },
+  nextRing: { position: 'absolute', width: 60, height: 60, borderRadius: 30, borderWidth: 3, borderColor: GOLD_FX.rays },
+  nextDisc: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#ffffff', borderWidth: 3, borderColor: GOLD_FX.rays,
     alignItems: 'center', justifyContent: 'center' },
-  nextArt: { width: 28, height: 28, opacity: 0.88 },
+  nextArt: { width: 42, height: 42, opacity: 0.88 },
   itemRim: { position: 'absolute', left: -18, top: -18, width: FIND_ART_SIZE + 36, height: FIND_ART_SIZE + 36, opacity: 0.85 },
   itemFallback: { width: FIND_ART_SIZE, height: FIND_ART_SIZE, borderRadius: FIND_ART_SIZE / 2, alignItems: 'center', justifyContent: 'center' },
   badge: { position: 'absolute', width: BADGE_WIDTH, height: BADGE_HEIGHT, borderRadius: BADGE_HEIGHT / 2,

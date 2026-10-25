@@ -5,7 +5,7 @@ import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, wit
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { DURATION, EASE, HUD_BUMP } from '../../ui/motionEasing';
 import { GOLD_FX } from '../../ui/motion';
-import { hudGlow, hudPunch, rollMs } from '../map/alive/mapWow';
+import { countLandPop, digitColumns, hudGlow, hudPunch, rollMs } from '../map/alive/mapWow';
 import { touchHeal, useCommitHeal } from '../map/alive/commitHeal';
 import RollingDigits, { type DigitStream } from './RollingDigits';
 import { hudClock, hudStreamId, onHudPulse } from './hudPulse';
@@ -91,6 +91,7 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
   // Round 3: a coin stream on the catch's clock (its id and landing times), read by the worklets below.
   const streamId = useSharedValue(0);
   const streamLands = useSharedValue<number[]>([]);
+  const streamRollEnd = useSharedValue(0);
   const celebrate = useCallback((gain: number) => {
     if (gain <= 0) return;
     if (reduced) { bump.value = 1; return; }
@@ -140,6 +141,9 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
         const next = from + stream.gain;
         shownRef.current = next;
         streamLands.value = [...stream.lands];
+        // Wave 5: the number pops once on the frame its roll ends (the last column's stagger included).
+        const lastDelay = digitColumns(shortenNumber(from), shortenNumber(next)).reduce((m, c) => Math.max(m, c.delay), 0);
+        streamRollEnd.value = stream.lands[0] + rollMs(from, next) + lastDelay;
         streamId.value = stream.id;
         setPlusText(`+${countText(stream.gain)}`);
         setShown({ value: next, prev: from, stream: reduced ? null : { id: stream.id, startAt: stream.lands[0] } });
@@ -162,6 +166,11 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
   }, [flyTarget, rollTo, reduced, bump]);
   // Round 5: the chip re-renders when a stream starts; its icon, glow and "+N" re-send for a moment after (commitHeal).
   const heal = useCommitHeal();
+  const countPopStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
+    const live = streamId.value > 0 && hudStreamId.value === streamId.value && !reduced;
+    return { transform: [{ scale: live ? countLandPop(hudClock.value, streamRollEnd.value) : 1 }] };
+  });
   const iconStyle = useAnimatedStyle(() => {
     touchHeal(heal);
     const live = streamId.value > 0 && hudStreamId.value === streamId.value && !reduced;
@@ -217,10 +226,10 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
               contentFit="contain"
             />
           </Reanimated.View>
-          <View style={styles.countBox}>
+          <Reanimated.View style={[styles.countBox, countPopStyle]}>
             <RollingDigits text={shortenNumber(shown.value)} previous={shortenNumber(shown.prev)} up={up}
               ms={rollMs(shown.prev, shown.value)} fontSize={COUNT_FONT} textStyle={styles.countText} reduced={reduced} stream={shown.stream ?? null} rollKey={shown.key} />
-          </View>
+          </Reanimated.View>
         </View>
       </TouchableOpacity>
       {/* "+N" hangs off a zero-width anchor laid out right after the pill, so it always starts past the pill's

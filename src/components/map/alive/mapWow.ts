@@ -115,7 +115,8 @@ export function catchPlan(options: { readonly reduced: boolean; readonly calm?: 
     const landAt = flyAt + flyMs;
     const barMs = 120;
     const exitMs = 130;
-    const exitAt = landAt + barMs + 20;
+    // Wave 5: the badge stays 40 ms longer and the next goal pops 100 ms sooner, so the silhouette reads (about 450 ms).
+    const exitAt = landAt + barMs + 60;
     return {
       squashMs, squashTo: 0.86, anticipationMs: hitStopAt - squashMs, risePt: 18,
       wobbles: [{ at: 90, deg: 10 }, { at: 220, deg: 14 }],
@@ -124,7 +125,7 @@ export function catchPlan(options: { readonly reduced: boolean; readonly calm?: 
       flyAt, flyMs, arcPt: 60, landAt, kickPt,
       repeat: true, coinsAt: burstAt, barMs, tickAt: landAt + barMs + 10, exitAt, exitMs, doneAt: exitAt + exitMs,
       reduced: false, heroScale: 1.5, landScale: 0.95, inkMs: suckAt + suckMs - burstAt, goldHoldMs: 120, badgeAt: flyAt, badgeInMs: 200,
-      suckAt, suckMs, nextAt: flyAt + 160,
+      suckAt, suckMs, nextAt: flyAt + 60,
     };
   }
   // First catch (round 4): tap 0, wobbles to 580, held frame 600, burst 670 (the find pops to about 2x on a gold
@@ -662,6 +663,26 @@ export function digitCellOpacity(d: number): number {
   if (a <= 0.15) return 1;
   if (a >= 0.6) return 0;
   return 1 - (a - 0.15) / 0.45;
+}
+
+/**
+ * Wave 5: an odometer cell's pose from its distance to the window (in digit heights). Exactly one digit shows at
+ * a time (the nearest one, |d| under 0.5), so a mid-roll frame never reads as a half digit ("3_0"): it slides
+ * only 0.42 of its offset and squashes to 0.75 tall at the swap, a quick flip that stays inside the pill.
+ */
+export function digitCellPose(d: number): { opacity: number; y: number; sy: number } {
+  'worklet';
+  const a = Math.abs(d);
+  if (a >= 0.5) return { opacity: 0, y: 0, sy: 1 };
+  return { opacity: 1, y: d * 0.42, sy: 1 - 0.5 * a };
+}
+
+/** Wave 5: the counter's one landing pop when its roll ends (scale over 240 ms, peak COUNT.finalBump 1.12). */
+export function countLandPop(t: number, rollEnd: number): number {
+  'worklet';
+  const d = t - rollEnd;
+  if (d <= 0 || d >= 240) return 1;
+  return 1 + 0.12 * Math.sin(Math.PI * (d / 240));
 }
 
 /**
