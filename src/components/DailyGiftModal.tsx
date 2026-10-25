@@ -151,6 +151,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   // the UI thread (the open card is committed a frame before the pop, hidden, so no React update lands mid-pop).
   const hintOut = useSharedValue(0);
   const reveal = useSharedValue(0);
+  // Coin day: 0 shows the closed chest, 1 the open chest of coins. Flipped on the UI thread on the pop's first frame,
+  // so the open art (mounted hidden from the start) never shows before the burst and never leaves an empty frame.
+  const coinOpen = useSharedValue(0);
   const punch = useSharedValue(0);
   const cardShake = useSharedValue(0);
   const spark = useSharedValue(0);
@@ -278,7 +281,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     }, reducedMotionRef.current ? 120 : RESYNC_AFTER_POP_MS);
     if (reducedMotionRef.current) {
       shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1; punch.value = 1; gold.value = 0.8; hop.value = 0; seam.value = 0; lid.value = 0;
-      hintOut.value = 1; reveal.value = 1;
+      hintOut.value = 1; reveal.value = 1; coinOpen.value = 1;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       playSfx('win');
       return;
@@ -307,6 +310,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     hintOut.value = withTiming(1, { duration: 90 });
     // One clean hand-off for the line under the ribbon: today's words fade out first, then "Day N collected!" rises in.
     reveal.value = withTiming(1, { duration: REVEAL_MS, easing: EASE.out });
+    coinOpen.value = 1;
     prize.value = withDelay(120, withSpring(1, { damping: 9, stiffness: 150 }));
     stamp.value = withDelay(650, withSpring(1, { damping: 8, stiffness: 220 }));
     if (isTicket) {
@@ -340,7 +344,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   // A shut chest always starts with today's words and no Awesome! (the card can stay mounted from one day to the next).
   useEffect(() => {
     if (phase !== 'closed') return;
-    cancelAnimation(reveal); reveal.value = 0; cancelAnimation(hintOut); hintOut.value = 0;
+    cancelAnimation(reveal); reveal.value = 0; cancelAnimation(hintOut); hintOut.value = 0; coinOpen.value = 0;
   }, [phase]);
   const pendingCelebrate = useRef<boolean | null>(null);
   const celebrateRef = useRef(celebrate);
@@ -358,7 +362,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     claiming.current = true;
     resyncLive.current = true;
     walletBefore.current = player?.coins ?? null;
-    cancelAnimation(hintOut); hintOut.value = 0; cancelAnimation(reveal); reveal.value = 0;
+    cancelAnimation(hintOut); hintOut.value = 0; cancelAnimation(reveal); reveal.value = 0; coinOpen.value = 0;
     setPhase('opening');
     const startedAt = Date.now();
     if (!reducedMotion) {
@@ -448,6 +452,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const revealInStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(reveal.value, resync.value) }));
   // The line under the ribbon swaps in two steps, never two lines on top of each other: the old line is gone by
   // SUBTITLE_SWAP of the way, then the new one fades in rising 6 pt.
+  const openCoinStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(coinOpen.value, resync.value) }));
+  const closedCoinStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(1 - coinOpen.value, resync.value) }));
   const subtitleOutStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(subtitleOut(reveal.value), resync.value) }));
   const subtitleInStyle = useAnimatedStyle(() => {
     const t = subtitleIn(reveal.value);
@@ -554,20 +560,17 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                 </Animated.View>
               )}
               <View style={{ width: chestSize, height: chestSize }}>
-              {/* A coin day's open chest is mounted (hidden) from the start, so its art is decoded before the pop and the
-                  swap from the closed chest is one commit with no empty frame. */}
+              {/* A coin day's open chest is mounted (hidden) from the start, so its art is decoded before the pop, and the
+                  pop swaps the two on the UI thread on its first frame (coinOpen): no empty frame, never early. */}
               {coinDay && (
-                <View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: phase === 'open' ? 1 : 0 }]}>
+                <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, openCoinStyle]}>
                   <Image source={CHEST_OPEN} style={{ width: chestSize, height: chestSize }} contentFit="contain" transition={0} />
-                </View>
+                </Animated.View>
               )}
-              {phase === 'open' && coinDay
-                ? null
-                : (
-                  // A non-coin day never shows coins it did not pay, so the chest stays Alex's whole closed picture. On the
-                  // pop its lid (a clipped copy of the same art, drawn only while it is up) jumps open, light and the
-                  // prize burst out of the gap, and it slams shut again: the settled chest has no cut edge.
-                  <View style={{ width: chestSize, height: chestSize }}>
+              {/* A non-coin day never shows coins it did not pay, so the chest stays Alex's whole closed picture. On the
+                  pop its lid (a clipped copy of the same art, drawn only while it is up) jumps open, light and the
+                  prize burst out of the gap, and it slams shut again: the settled chest has no cut edge. */}
+                  <Animated.View style={[{ width: chestSize, height: chestSize }, coinDay ? closedCoinStyle : undefined]}>
                     <Animated.View style={[StyleSheet.absoluteFill, wholeChestStyle]}>
                       <Image source={CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" transition={0} />
                     </Animated.View>
@@ -587,8 +590,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                       <Image source={CHEST_CLOSED} style={{ position: 'absolute', top: 0, width: chestSize, height: chestSize }}
                         contentFit="contain" transition={0} />
                     </Animated.View>
-                  </View>
-                )}
+                  </Animated.View>
               </View>
               {phase === 'open' && coinDay && (
                 <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 0.8, height: chestSize * 0.42,
