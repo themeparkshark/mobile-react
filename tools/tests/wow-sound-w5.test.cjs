@@ -256,3 +256,16 @@ test('live release run (load 100): a late thump timer never pulls the golden suc
   assert.ok(success.t - thump.t >= 90, `success ${success.t - thump.t} ms after the thump`);
   assert.ok(minGap(v.haptics) >= 90, v.haptics.map((h) => `${h.intent}@${h.t}`).join(' '));
 });
+
+test('live release run (load 100): a 250 ms freeze right after the grand burst still buzzes the success (key beats are kept, never after done)', async () => {
+  const e = await engine();
+  const r = await wowMapCatch(e, { n: 25, stalls: [{ at: 700, ms: 260 }] });
+  const v = view(e, r);
+  const burst = r.delivered.find((d) => d.name === 'burst').at;
+  const done = r.delivered.find((d) => d.name === 'done').at;
+  const after = v.haptics.filter((h) => h.t > burst);
+  assert.ok(after.some((h) => h.intent === 'success'), `the success buzzes (${v.haptics.map((h) => `${h.intent}@${h.t}`).join(' ')})`);
+  assert.equal(after.filter((h) => h.intent === 'comboHeavy').length, 1, 'and the grand second heavy');
+  assert.ok(minGap(v.haptics) >= 90, v.haptics.map((h) => `${h.intent}@${h.t}`).join(' '));
+  assert.ok(!v.haptics.some((h) => h.t > done + 5), 'nothing after done');
+});

@@ -401,6 +401,13 @@ function mergeCounterAtDone(s: NonNullable<typeof session>): void {
 
 /** When the last catch settled ('done'), every player: coin buzzes after it are covered by the settle. */
 let settledAt = -Infinity;
+/**
+ * A key beat (heavy, success, stamp) still buzzes when a frozen JS turn handed it over together with 'done' (the
+ * player saw nothing yet), but never more than two beat gaps after the settle.
+ */
+function pastSettle(): boolean {
+  return Number.isFinite(settledAt) && Date.now() > settledAt + 2 * MIN_BEAT_GAP_MS;
+}
 /** The coins' own pulses (the counter's tick buzz); the stamp and the burst are never dropped. */
 const COIN_PULSE: HapticIntent = 'tickSelection';
 function afterSettle(intent: HapticIntent, now: number): boolean {
@@ -652,6 +659,8 @@ function laneBeat(intent: HapticIntent, wobble = false, keep = false): void {
     // A coin pulse that waited its turn past the settle is covered by it (wave 4: nothing after 'done').
     if (afterSettle(intent, Date.now())) { traceEvent('mark', 'catch-pulse-after-done', intent); return; }
     if (keep) {
+      // A kept beat never trails the settle by more than its own spacing (a frozen turn can hand 'done' over with it).
+      if (pastSettle()) { traceEvent('mark', 'catch-pulse-after-done', intent); return; }
       // Something buzzed on its own frame meanwhile: wait one more gap instead of flamming.
       if (Date.now() - lastAppHapticAt() < MIN_BEAT_GAP_MS - 10) { laneBeat(intent, false, true); return; }
       beatLaneAt = Math.max(beatLaneAt, Date.now());
@@ -780,10 +789,16 @@ export function catchHaptic(intent: HapticIntent, priority = 2): void {
       traceEvent('mark', 'catch-beat-spaced', `success +${at - now} ms`);
       burstBuzzAt = -Infinity;
       beatLaneAt = Math.max(beatLaneAt, at);
-      setTimeout(() => { if (!stale(at, 'success')) beatHaptic('success'); }, at - now);
+      // Wave 5: the success is a key beat: a starved timer still buzzes it (live: a 254 ms freeze lost it), never after done.
+      setTimeout(() => {
+        if (pastSettle()) return;
+        if (Date.now() - lastAppHapticAt() < MIN_BEAT_GAP_MS - 10) { laneBeat('success', false, true); return; }
+        beatHaptic('success');
+      }, at - now);
       return;
     }
-    laneBeat(intent);
+    // Wave 5: the heavies and the success are key beats (kept however late their turn comes); the rest is decoration.
+    laneBeat(intent, false, intent === 'success' || intent === 'comboHeavy');
   } else if (now < landBeatUntil) {
     // The stamp is on its frame, unless it arrived in the same JS turn as another beat (a frozen screen
     // delivering everything at once) or a beat is still planned: then it takes the lane's next slot.
