@@ -113,6 +113,11 @@ const NIGHT_BACKDROP = ['#3B2A6B', '#2B2350', '#1E1838'] as const;
 const WELCOME_BACK_AFTER_MS = 20_000;
 /** The longest the resume countdown waits on the 1 for the arcade or the page it is handing over to. */
 const RESUME_HANDOFF_MAX_MS = 1500;
+/**
+ * Frames the 1 stays up after the arcade sheet starts presenting. The native sheet lands about 3 to 4
+ * frames after onModalWillShow (measured on release JS), so the scrim fades only once the sheet is moving.
+ */
+const ARCADE_PRESENT_FRAMES = 3;
 /** The crew row's height in the free band above the rail (GroupStrip band: a full 44 pt). */
 const CREW_BAND_ROW = 44;
 const QUEUE_RECAP_SHARK = require('../../../assets/images/screens/lineplay/queue-recap-shark.png');
@@ -874,7 +879,7 @@ export default function LinePlayScreen() {
     if (revealTimer.current) clearTimeout(revealTimer.current);
   }, []);
   // The countdown's hand-off: the page is painted in place two frames after the jump; the arcade lets go
-  // when its sheet starts coming in (onArcadeShowing). Never longer than RESUME_HANDOFF_MAX_MS.
+  // once its sheet is on screen and moving (onArcadeShowing). Never longer than RESUME_HANDOFF_MAX_MS.
   useEffect(() => {
     if (resumeHandoff == null) return undefined;
     let frameId: number | null = null;
@@ -888,7 +893,13 @@ export default function LinePlayScreen() {
     };
   }, [resumeHandoff]);
   const onArcadeShowing = useCallback(() => {
-    setResumeHandoff(current => current === 'arcade' ? null : current);
+    let frames = ARCADE_PRESENT_FRAMES;
+    const step = () => {
+      frames -= 1;
+      if (frames > 0) requestAnimationFrame(step);
+      else setResumeHandoff(current => current === 'arcade' ? null : current);
+    };
+    requestAnimationFrame(step);
   }, []);
   // The window coming back after Hide on a short phone fades in too, never pops.
   const wasShown = useRef(pagesShown);

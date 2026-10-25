@@ -740,7 +740,10 @@ test('after the 3 2 1, the arcade or the page follows the 1 with no live-board g
   assert.match(screen, /<ResumeCountdown active=\{resuming \|\| resumeHandoff != null\}/);
   assert.match(screen, /const \[resumeHandoff, setResumeHandoff\] = useState<'arcade' \| 'page' \| null>\(null\);/);
   // The arcade: the countdown lets go on the frame the sheet starts coming in (both sheets report it).
-  assert.match(screen, /const onArcadeShowing = useCallback\(\(\) => \{\n\s+setResumeHandoff\(current => current === 'arcade' \? null : current\);/);
+  assert.match(screen, /const ARCADE_PRESENT_FRAMES = 3;/);
+  assert.match(screen, /const onArcadeShowing = useCallback\(\(\) => \{\n\s+let frames = ARCADE_PRESENT_FRAMES;/);
+  assert.match(screen, /else setResumeHandoff\(current => current === 'arcade' \? null : current\);/,
+    'the 1 stays up through the frames the native sheet takes to land, so the board never shows live in between');
   assert.equal([...screen.matchAll(/onShowing=\{onArcadeShowing\}/g)].length, 2, 'QueueArcadeSheet and BonusPicker');
   const sheet = read('src/screens/LinePlay/components/QueueArcadeSheet.tsx');
   assert.match(sheet, /onModalWillShow=\{onShowing\}/);
