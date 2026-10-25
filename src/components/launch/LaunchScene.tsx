@@ -42,7 +42,14 @@ export const launchFill: SharedValue<number> = makeMutable(0);
 /** Move the launch bar forward to `share` (0 to 1) over `ms`. Never moves it back. */
 export function moveLaunchBar(share: number, ms: number, creep?: { readonly to: number; readonly ms: number }) {
   const to = Math.max(0, Math.min(1, share));
-  if (to <= launchFill.value) return;
+  if (to <= launchFill.value) {
+    // The bar is already past this step (the Splash route's creep got there first): it still creeps
+    // on toward the step's ceiling, instead of resting at the Splash route's own cap.
+    if (creep && creep.to > launchFill.value) {
+      launchFill.value = withTiming(Math.min(1, creep.to), { duration: creep.ms, easing: Easing.out(Easing.quad) });
+    }
+    return;
+  }
   const step = withTiming(to, { duration: ms, easing: ms > 600 ? Easing.out(Easing.cubic) : Easing.inOut(Easing.quad) });
   // Then, until the next real step moves it on, the bar keeps creeping (on the UI thread, easing out
   // so the creep shows right away), so a busy JS thread (the map screen mounting) never leaves it parked.

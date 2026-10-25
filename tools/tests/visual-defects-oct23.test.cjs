@@ -459,7 +459,7 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   assert.match(read('src/screens/SplashScreen.tsx'), /withTiming\(SPLASH_ROUTE_SHARE, \{ duration: SPLASH_CREEP_MS/);
   const scene = read('src/components/launch/LaunchScene.tsx');
   assert.match(scene, /export const launchFill: SharedValue<number> = makeMutable\(0\);/);
-  assert.match(scene, /if \(to <= launchFill\.value\) return;/, 'the launch bar never moves back');
+  assert.match(scene, /if \(to <= launchFill\.value\) \{/, 'the launch bar never moves back');
   assert.match(scene, /transform: \[\{ scaleX: Math\.max\(0, Math\.min\(1, launchFill\.value\)\) \}\]/);
   assert.match(scene, /transformOrigin: 'left'/);
   // The fact is picked once per launch, so the cover shows the same words as the Loading screen.
@@ -1238,7 +1238,7 @@ test('launch bar: between real steps it keeps creeping on the UI thread (the par
   assert.match(loading, /\? \{ to: 0\.9 \* LAUNCH_HANDOFF_SHARE, ms: LOADING_CREEP_MS \} : \{ to: COVER_STEPS\.armed, ms: COVER_LAUNCH_MAX_MS \}\);/);
   const scene = read('src/components/launch/LaunchScene.tsx');
   assert.match(scene, /\? withSequence\(step, withTiming\(Math\.min\(1, creep\.to\), \{ duration: creep\.ms, easing: Easing\.out\(Easing\.quad\) \}\)\)/);
-  assert.match(scene, /if \(to <= launchFill\.value\) return;/, 'the bar never moves back');
+  assert.match(scene, /if \(to <= launchFill\.value\) \{/, 'the bar never moves back');
   const k = loadTs('src/constants/launchHandoff.ts');
   assert.ok(k.COVER_STEPS.armed > k.LAUNCH_HANDOFF_SHARE && 0.9 * k.LAUNCH_HANDOFF_SHARE > 0.5 * k.LAUNCH_HANDOFF_SHARE);
 });
@@ -1482,4 +1482,9 @@ test('wave 5 round 3: the loading cover waits (within its cap) for the park ride
   // Art (and now the ride list) pending never holds the cover past its hard cap.
   const now = 1000, startedAt = 0;
   assert.equal(k.coverLiftAt({ now, startedAt, drawn: true, held: false, artPending: true, launch: true, mountedAt: 0 }), Math.min(k.COVER_LAUNCH_MAX_MS, k.COVER_HARD_MAX_MS));
+});
+
+test('wave 5 round 3: a launch step the bar already passed still keeps it creeping to that step ceiling', () => {
+  const scene = read('src/components/launch/LaunchScene.tsx');
+  assert.match(scene, /if \(to <= launchFill\.value\) \{\s*[^]*?if \(creep && creep\.to > launchFill\.value\) \{\s*launchFill\.value = withTiming\(Math\.min\(1, creep\.to\), \{ duration: creep\.ms, easing: Easing\.out\(Easing\.quad\) \}\);\s*\}\s*return;/);
 });
