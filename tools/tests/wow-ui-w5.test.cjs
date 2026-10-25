@@ -151,3 +151,10 @@ test('rare compass pick: inked gold stars in two low fans along the footer, a ne
   assert.match(burst, /backgroundColor: BRAND\.goldLip/, 'the ink outline is the house dark gold');
   assert.match(burst, /const fill = FILL\[inked \? 'gold' : color\];/, 'inked stars are all gold, never white');
 });
+
+test('rolling number: no re-layout when a roll lands (it re-committed a stale wheel for a frame), except a dropped column', () => {
+  const src = read('src/ui/RollingNumber.tsx');
+  const landed = src.slice(src.indexOf('const landedJs = '), src.indexOf('const startRoll = '));
+  assert.match(landed, /format\(r\.to\)\.length < format\(Math\.max\(r\.from, r\.to\)\)\.length\) \{ roll\.current = null; setSettled/);
+  assert.match(src, /const WheelFace = memo\(function WheelFace/, 'the rolling face never re-renders with its sizing');
+});

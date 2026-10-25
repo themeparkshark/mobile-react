@@ -205,8 +205,8 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
   const target = useSharedValue(value);
   const rising = useRef(true);
   const previous = useRef<number | null>(null);
-  // The roll's wheels: from where the wheels are now to the new value. Settles to the new number's own
-  // columns when the roll lands (so a 1,000 that rolled down to 990 drops its comma column).
+  // The roll's wheels: from where the wheels are now to the new value. They stay laid out for that roll
+  // until the next change, except a roll down that dropped a column (1,000 to 990), which settles.
   const roll = useRef<{ from: number; to: number } | null>(null);
   const [, setSettled] = useState(0);
 
@@ -232,7 +232,11 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
   const landedJs = (gain: boolean, landedValue: number) => {
     if (celebrate && gain) queueHaptic('tickSelection');
     onLanded?.();
-    if (roll.current && roll.current.to === landedValue) { roll.current = null; setSettled(n => n + 1); }
+    // The wheels keep their roll layout after landing (a re-layout here re-committed a stale wheel
+    // transform for one frame: 714 after 715). Only a roll down that dropped a column (1,000 to 990)
+    // re-lays out, so no blank wheel is left on the left.
+    const r = roll.current;
+    if (r && r.to === landedValue && format(r.to).length < format(Math.max(r.from, r.to)).length) { roll.current = null; setSettled(n => n + 1); }
   };
 
   const startRoll = (to: number, delay: number, gain: boolean) => {
