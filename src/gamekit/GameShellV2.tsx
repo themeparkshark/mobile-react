@@ -678,6 +678,12 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       return () => back.remove();
     }, [visible, rideChallenge, handleExit]);
 
+    // Reduce Motion shows the results card with a plain still style, never the
+    // animated one. The animated style takes its first frame when the card
+    // mounts; in Reduce Motion the value jumps 0 -> 1 with no animation, and when
+    // that jump lands between the first frame and the style's UI-thread hookup it
+    // was never applied: the card stayed at opacity 0 over a cleared board (the
+    // first-win freeze, most warm-ups in release JS with Reduce Motion on).
     const resultsStyle = useAnimatedStyle(() => ({
       opacity: resultsOpacity.value,
       transform: [{ scale: resultsScale.value }],
@@ -786,7 +792,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           {/* Results */}
           {phase === 'results' && renderResults && effectiveResult ? (
             <View style={[styles.overlay, resultsScrim === 'light' ? styles.scrimLight : resultsScrim === 'none' ? styles.scrimNone : null]} pointerEvents="box-none">
-              <Animated.View style={[{ width: '100%', alignItems: 'center' }, resultsStyle]}>
+              <Animated.View style={[{ width: '100%', alignItems: 'center' }, reducedMotion ? styles.resultsStill : resultsStyle]}>
                 {renderResults({
                   result: effectiveResult,
                   stars,
@@ -802,7 +808,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           ) : null}
           {phase === 'results' && !(renderResults && effectiveResult) ? (
             <View style={styles.overlay} pointerEvents="box-none">
-              <Animated.View style={[{ width: '86%' }, resultsStyle]}>
+              <Animated.View style={[{ width: '86%' }, reducedMotion ? styles.resultsStill : resultsStyle]}>
                 <ResultsCard
                   score={effectiveResult?.score ?? score}
                   stars={stars}
@@ -898,6 +904,7 @@ function GoalMeter({ current, target, label, reducedMotion }: { current: number;
 }
 
 const styles = StyleSheet.create({
+  resultsStill: { opacity: 1, transform: [{ scale: 1 }] },
   root: {
     flex: 1,
     backgroundColor: '#0879ca',

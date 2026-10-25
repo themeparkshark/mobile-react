@@ -11,6 +11,15 @@ import { showToast } from '../utils/toast';
 let signingOut = false;
 let consecutive500Count = 0;
 
+/** True when the failed request carried a sign-in token (axios headers or a plain object). */
+export function requestHadToken(error: Pick<AxiosError, 'config'> | null | undefined): boolean {
+  const headers = error?.config?.headers as unknown as
+    { get?: (name: string) => unknown; Authorization?: unknown; authorization?: unknown } | undefined;
+  if (!headers) return false;
+  const value = typeof headers.get === 'function' ? headers.get('Authorization') : headers.Authorization ?? headers.authorization;
+  return typeof value === 'string' ? value.trim().length > 0 : Boolean(value);
+}
+
 export const SERVER_TROUBLE_TOAST = 'The Shark servers are busy. Hang tight and try again in a moment.';
 
 /**
@@ -46,7 +55,10 @@ export const useAxiosSetup = () => {
       (error: AxiosError) => {
         const status = error?.response?.status;
         // Dev previews render fixture players over the live API without a token: keep them on screen.
-        if (status === 401 && !isStandalonePreviewMode()) {
+        // Only a request sent with a token can mean "your sign-in ran out". A guest
+        // has nothing to sign out of: their 401 just means "sign in for this",
+        // so they keep playing instead of being thrown back to the Login screen.
+        if (status === 401 && requestHadToken(error) && !isStandalonePreviewMode()) {
           // Sign-out clears storage; a failure there must not become an
           // unhandled rejection on every 401.
           // Parallel requests with an expired token sign out once, not once each.

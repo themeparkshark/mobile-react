@@ -21,6 +21,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
+  cancelAnimation,
   Easing,
   useAnimatedStyle,
   useSharedValue,
@@ -30,11 +31,14 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import SparkleBurst from '../../components/SparkleBurst';
+import TapHint from '../../components/TapHint';
 import { GameAudio, Haptic } from '../../gamekit';
 import GameIcon from '../../ui/GameIcon';
 import type { CoinEdition, Grade } from './engine';
 import { deckById } from './decks';
 import { faceFor } from './faces';
+import { setFirstWinCoinSpot } from './firstWinHandoff';
 import { AlbumBody, ChallengeBody, NewChip, ShareBack, type DailySummary, type RunRewards } from './MemoryExtras';
 import { MM } from './theme';
 
@@ -115,8 +119,11 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
 }) {
   const win = useWindowDimensions();
   const sched = useMemo(() => revealSchedule(data.stars), [data.stars]);
+  // Finn's warm-up is a first win: one banner and one big CONTINUE, all there
+  // from the first frame. No mastery %, crowns or STATS that mean nothing yet.
+  const firstWin = data.mode === 'warmup' && data.won;
   // Step 1 (the ribbon) from the first frame: never an empty card.
-  const [step, setStep] = useState(reducedMotion ? 99 : 1);
+  const [step, setStep] = useState(reducedMotion || firstWin ? 99 : 1);
   const rise = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
     if (!reducedMotion) rise.value = withSpring(1, { damping: 11, stiffness: 210 });
@@ -129,6 +136,7 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
 
   useEffect(() => {
     if (reducedMotion) return undefined;
+    if (firstWin) return undefined; // FirstWinCard plays its own fanfare
     const at = (ms: number, fn: () => void) => timers.current.push(setTimeout(fn, ms));
     const marks = [sched.banner, sched.headline, sched.numbers, sched.grades, sched.rewards, sched.actions];
     marks.forEach((ms, i) => at(ms, () => setStep((s) => Math.max(s, i + 1))));
@@ -138,7 +146,7 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
       GameAudio.playLadder('mm_sharp_twinkle', 4 + i, { volume: 0.8 });
     }));
     return () => timers.current.forEach(clearTimeout);
-  }, [sched, reducedMotion]);
+  }, [sched, reducedMotion, firstWin]);
 
   const doFlip = (on: boolean) => {
     setFlipped(on);
@@ -150,9 +158,12 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
   const canAlbum = !!data.rewards;
   // The first-session warm-up card is one tap to the map: no STATS panel for a stray
   // late tap to open over CLEARED (a kid still tapping the board lands right there).
+  // This covers firstWin too (firstWin is a won warm-up).
   const canStats = data.mode !== 'warmup' && (data.numbers.length > 0 || !!data.grades);
   const canShare = !!data.daily;
   const canChallenge = !!data.daily?.ranked;
+
+  if (firstWin) return <FirstWinCard banner={data.banner} claim={claim} reducedMotion={reducedMotion} />;
 
   return (
     <View style={[styles.wrap, { width: win.width, height: win.height }]} pointerEvents="box-none">
@@ -167,12 +178,14 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
               Front: banner, one big number, crowns, new cards, one button.
               The stat chips and grades live behind STATS. */}
           <Banner text={data.banner} show={step >= 1} reducedMotion={reducedMotion} />
-          <Headline data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.headline} />
-          <View style={styles.crownRow}>
-            {[0, 1, 2].map((i) => (
-              <Crown key={i} on={i < data.stars} delay={reducedMotion ? 0 : (sched.crowns[i] ?? 0)} hang={i === 2} reducedMotion={reducedMotion} />
-            ))}
-          </View>
+          {firstWin ? null : <>
+            <Headline data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.headline} />
+            <View style={styles.crownRow}>
+              {[0, 1, 2].map((i) => (
+                <Crown key={i} on={i < data.stars} delay={reducedMotion ? 0 : (sched.crowns[i] ?? 0)} hang={i === 2} reducedMotion={reducedMotion} />
+              ))}
+            </View>
+          </>}
           {data.crownHint ? <Reveal show={step >= 3}><Text style={styles.crownHint}>{data.crownHint}</Text></Reveal> : null}
           {data.newBest ? <Reveal show={step >= 3}><Text style={styles.newBest}>NEW BEST</Text></Reveal> : null}
           {data.tally ? <Reveal show={step >= 3}>{step >= 3 ? <Numbers data={data} reducedMotion={reducedMotion} tallyOnly /> : <Numbers data={data} reducedMotion tallyOnly />}</Reveal> : null}
@@ -229,6 +242,200 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
       ) : null}
     </View>
   );
+}
+
+/**
+ * Finn's warm-up win: the very first win of a new player, and the biggest beat
+ * of the first minute. A staged celebration on the underwater scene: Finn pops
+ * in with a squash and stretch, the ribbon unfurls, a one-shot shower of
+ * bubbles, sparkles and coins falls from the top, and the card is full by
+ * its first frame: a ride car with its coin (what comes next, no reading needed)
+ * and one big CONTINUE (one pulse at 1.1 s, a tapping hand at 3 s). CONTINUE
+ * takes taps once it is fully shown. Finn keeps a small cheer for a few
+ * seconds, then stands still. On CONTINUE the coin hops and its screen spot is
+ * handed to the shelf step, which flies that same coin onto the shelf.
+ * Transforms and opacity only.
+ */
+// Two words: the ride car and coin picture carries the meaning for a non-reader.
+export const FIRST_WIN_COPY = { next: 'Ride coins!', a11y: 'Next, win ride coins!' } as const;
+// The same Finn the kid just played with (boater and striped vest, the warm-up
+// host), pumping his fist: no costume swap between the board and the win.
+// Existing barker art from the memory booth.
+const FINN_CHEER = require('../../assets/games/memory/studio/barker_fist_pump.png');
+const FIRST_WIN_COIN = require('../../../assets/images/coingold.png');
+/** Existing game icon art: a ride car on its track, so 'ride coins' reads without reading. */
+const FIRST_WIN_RIDE = require('../../../assets/icons/game/ride.png');
+const FIRST_WIN_BACKDROP = require('../../../assets/images/screens/park/background-new.png');
+const SHOWER_BUBBLE = require('../../../assets/images/map/fx/bubble.png');
+const SHOWER_SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
+/**
+ * Every picture on the first-win card. Finn's warm-up mounts them (invisible) while the kid plays, so the card's
+ * first frame already has Finn, the ribbon, the ride car and the coin (no empty cream or blank sea while they load).
+ */
+export const FIRST_WIN_ART = [FINN_CHEER, FIRST_WIN_COIN, FIRST_WIN_RIDE, FIRST_WIN_BACKDROP, BANNER, SHOWER_BUBBLE, SHOWER_SPARKLE] as const;
+/** When each beat lands, in ms from the card's first frame. */
+// Every part of the card is on it from the first frame (no empty cream while a
+// kid looks); the ribbon unfurls and the rows settle on their beats. CONTINUE
+// only takes taps from 0.65 s (live), so a mashing kid cannot skip the win in
+// its first frames.
+/** How much of Finn's height rises above the first-win card. */
+export const FIRST_WIN_FINN_OVERHANG = 0.62;
+export const FIRST_WIN_BEATS = { finn: 0, ribbon: 120, shower: 120, next: 200, button: 320, live: 650, pulse: 1100, hand: 3000, coinLift: 160 } as const;
+const SHOWER = 20;
+function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim: () => void; reducedMotion: boolean }) {
+  const win = useWindowDimensions();
+  const pop = useSharedValue(reducedMotion ? 1 : 0);
+  const squash = useSharedValue(0);
+  const cheer = useSharedValue(0);
+  const ring = useSharedValue(0);
+  const ribbon = useSharedValue(reducedMotion ? 1 : 0);
+  const shower = useSharedValue(0);
+  const next = useSharedValue(reducedMotion ? 1 : 0);
+  const btn = useSharedValue(reducedMotion ? 1 : 0);
+  const pulse = useSharedValue(0);
+  const fly = useSharedValue(0);
+  const [hand, setHand] = useState(false);
+  const [live, setLive] = useState(false);
+  const leaving = useRef(false);
+  const coinRef = useRef<View>(null);
+  const claimTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (claimTimer.current) clearTimeout(claimTimer.current); }, []);
+  useEffect(() => {
+    Haptic.hitMedium();
+    GameAudio.play('fx.hit', { volume: 0.5 });
+    const timers = [0, 1, 2].map((i) => setTimeout(() => {
+      Haptic.hitRigid();
+      GameAudio.playLadder('mm_sharp_twinkle', 4 + i, { volume: 0.8 });
+    }, 260 + i * 150));
+    timers.push(setTimeout(() => setHand(true), FIRST_WIN_BEATS.hand));
+    timers.push(setTimeout(() => setLive(true), FIRST_WIN_BEATS.live));
+    if (!reducedMotion) {
+      const B = FIRST_WIN_BEATS;
+      // Squash and stretch: 0 -> overshoot tall -> squash wide -> settle.
+      pop.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.back(1.8)) });
+      squash.value = withDelay(140, withSequence(withTiming(1, { duration: 100 }), withTiming(-1, { duration: 120 }), withTiming(0, { duration: 160 })));
+      ring.value = withDelay(120, withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) }));
+      ribbon.value = withDelay(B.ribbon, withTiming(1, { duration: 320, easing: Easing.out(Easing.back(1.6)) }));
+      shower.value = withDelay(B.shower, withTiming(1, { duration: 2000, easing: Easing.linear }));
+      next.value = withDelay(B.next, withTiming(1, { duration: 220 }));
+      btn.value = withDelay(B.button, withTiming(1, { duration: 220 }));
+      pulse.value = withDelay(B.pulse, withSequence(withTiming(1, { duration: 160 }), withTiming(0, { duration: 220 })));
+      // A happy cheer for about 3 s (hops, then little wiggles), then still: no endless loop.
+      cheer.value = withDelay(520, withSequence(
+        withTiming(1, { duration: 180 }), withTiming(0, { duration: 220 }),
+        withTiming(1, { duration: 180 }), withTiming(0, { duration: 240 }),
+        withTiming(0.45, { duration: 260 }), withTiming(0, { duration: 260 }),
+        withTiming(0.45, { duration: 260 }), withTiming(0, { duration: 260 }),
+        withTiming(0.3, { duration: 280 }), withTiming(0, { duration: 300 })));
+    }
+    return () => {
+      timers.forEach(clearTimeout);
+      [pop, squash, cheer, ring, ribbon, shower, next, btn, pulse, fly].forEach((v) => cancelAnimation(v));
+    };
+  }, [reducedMotion, pop, squash, cheer, ring, ribbon, shower, next, btn, pulse, fly]);
+  const onContinue = () => {
+    if (leaving.current || !live) return;
+    leaving.current = true;
+    Haptic.tapLight();
+    // Remember where the coin sits: the shelf step flies this same coin from here.
+    const go = () => {
+      if (reducedMotion) { claim(); return; }
+      GameAudio.playLadder('mm_sharp_twinkle', 8, { volume: 0.7 });
+      fly.value = withTiming(1, { duration: FIRST_WIN_BEATS.coinLift, easing: Easing.out(Easing.quad) });
+      claimTimer.current = setTimeout(claim, FIRST_WIN_BEATS.coinLift);
+    };
+    const node = coinRef.current;
+    if (!node) { go(); return; }
+    let sent = false;
+    const once = () => { if (!sent) { sent = true; go(); } };
+    node.measureInWindow((x, y, w, h) => {
+      if (w > 0 && h > 0) setFirstWinCoinSpot({ x, y, size: Math.min(w, h) });
+      once();
+    });
+    // Never wait on the measure.
+    claimTimer.current = setTimeout(once, 120);
+  };
+  const finnSt = useAnimatedStyle(() => ({
+    opacity: pop.value > 0 ? 1 : 0,
+    transform: [{ translateY: -cheer.value * 16 }, { rotate: `${cheer.value * -7}deg` },
+      // Stretch tall on the way up, squash wide on the landing.
+      { scaleX: pop.value * (1 - squash.value * 0.12) }, { scaleY: pop.value * (1 + squash.value * 0.15) }],
+  }));
+  const ringSt = useAnimatedStyle(() => ({ opacity: ring.value > 0 ? 0.9 * (1 - ring.value) : 0, transform: [{ scale: 0.5 + ring.value * 0.9 }] }));
+  // The card pops in with Finn, so it is never an empty frame waiting for its ribbon.
+  const cardSt = useAnimatedStyle(() => ({ opacity: Math.min(1, pop.value * 1.6), transform: [{ scale: 0.9 + 0.1 * Math.min(1, pop.value) }] }));
+  const ribbonSt = useAnimatedStyle(() => ({ opacity: ribbon.value > 0 ? 1 : 0, transform: [{ scaleX: Math.max(0.05, ribbon.value) }] }));
+  // The next line and CONTINUE are on the card from its first frame (never an empty
+  // cream card); on their beat they settle with a small pop.
+  const nextSt = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - next.value) * 6 }, { scale: 0.94 + next.value * 0.06 }] }));
+  const btnSt = useAnimatedStyle(() => ({ transform: [{ scale: (0.92 + btn.value * 0.08) * (1 + pulse.value * 0.08) }] }));
+  // The coin gives a little hop on CONTINUE; the shelf step then flies this same coin from its spot.
+  const coinSt = useAnimatedStyle(() => ({
+    transform: [{ translateY: -Math.sin(fly.value * Math.PI) * 10 }, { scale: 1 + fly.value * 0.18 }],
+  }));
+  const finn = Math.min(232, win.height * 0.26);
+  // Finn rises above the card's outer edge by his overhang (0.62 of his height, less the
+  // card's 6 pt top padding and 3 pt border), which layout does not count, so the block sat
+  // high with empty sea below. In this centred column a top margin moves the card down by
+  // half its size, so a margin of the whole overhang centres Finn plus card on the screen
+  // (on screen, 17 Pro: equal sea above Finn's hat and below the card).
+  const lift = Math.max(0, finn * FIRST_WIN_FINN_OVERHANG - 9);
+  return (
+    <View style={[styles.wrap, { width: win.width, height: win.height }]}>
+      <LinearGradient pointerEvents="none" style={StyleSheet.absoluteFill}
+        colors={['#0a5a9e', '#04305f']} />
+      <Image source={FIRST_WIN_BACKDROP} style={[StyleSheet.absoluteFill, { width: win.width, height: win.height }]} resizeMode="cover" />
+      {reducedMotion ? null : <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        {Array.from({ length: SHOWER }, (_, k) => <ShowerBit key={k} k={k} t={shower} w={win.width} h={win.height} />)}
+      </View>}
+      <Animated.View style={[styles.firstWinCard, { marginTop: lift }, cardSt]}>
+        <View style={[styles.firstWinFinn, { width: finn, height: finn, marginTop: -finn * FIRST_WIN_FINN_OVERHANG }]} pointerEvents="none">
+          {reducedMotion ? null : <Animated.View style={[styles.firstWinRing, { borderRadius: finn / 2 }, ringSt]} />}
+          {reducedMotion ? null : <SparkleBurst size={finn * 1.3} delay={120} />}
+          <Animated.Image source={FINN_CHEER} style={[{ width: finn, height: finn }, finnSt]} resizeMode="contain" />
+        </View>
+        <Animated.View accessible accessibilityRole="header" accessibilityLabel={`${banner} ${FIRST_WIN_COPY.a11y}`} style={[styles.firstWinHead, ribbonSt]}>
+          <Banner text={banner} show reducedMotion={reducedMotion} />
+        </Animated.View>
+        <Animated.View style={[styles.firstWinNext, nextSt]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+          {/* A ride car with the coin it gives: coins come from rides, no reading needed. */}
+          <View style={styles.firstWinPic}>
+            <Image source={FIRST_WIN_RIDE} style={styles.firstWinRide} resizeMode="contain" />
+            <View ref={coinRef} collapsable={false} style={styles.firstWinCoinSpot}>
+              <Animated.Image source={FIRST_WIN_COIN} style={[styles.firstWinCoin, coinSt]} resizeMode="contain" />
+            </View>
+          </View>
+          <Text style={styles.firstWinNextText}>{FIRST_WIN_COPY.next}</Text>
+        </Animated.View>
+        <Animated.View style={[styles.firstWinBtnWrap, btnSt]} pointerEvents={live ? 'auto' : 'none'}>
+          <Pressable onPress={onContinue} disabled={!live} style={({ pressed }) => [styles.bigBtn, pressed && styles.pressed]}
+            accessibilityRole="button" accessibilityState={{ disabled: !live }}>
+            <Text style={styles.bigBtnText}>CONTINUE</Text>
+          </Pressable>
+          {hand ? <TapHint delay={0} style={styles.firstWinHand} /> : null}
+        </Animated.View>
+      </Animated.View>
+    </View>
+  );
+}
+
+/** One piece of the one-shot shower: bubbles, sparkles and coins drift down once. */
+function ShowerBit({ k, t, w, h }: { k: number; t: import('react-native-reanimated').SharedValue<number>; w: number; h: number }) {
+  const kind = k % 3;
+  const src = kind === 0 ? SHOWER_BUBBLE : kind === 1 ? SHOWER_SPARKLE : COIN;
+  const size = kind === 0 ? 34 + (k % 4) * 6 : kind === 1 ? 42 : 40;
+  const x = ((k * 37) % 100) / 100 * (w - size);
+  const start = (k % 5) * 0.08;
+  const sway = (k % 2 ? 1 : -1) * (14 + (k % 3) * 8);
+  const st = useAnimatedStyle(() => {
+    const p = t.value <= start ? 0 : Math.min(1, (t.value - start) / (1 - start));
+    return {
+      opacity: p > 0 && p < 1 ? (p > 0.75 ? (1 - p) * 4 : 1) : 0,
+      transform: [{ translateX: x + Math.sin(p * Math.PI * 2) * sway }, { translateY: -size + p * h * 0.9 },
+        { rotateZ: `${p * (kind === 2 ? 360 : 90) * (k % 2 ? 1 : -1)}deg` }],
+    };
+  });
+  return <Animated.Image source={src} style={[{ position: 'absolute', left: 0, top: 0, width: size, height: size }, st]} resizeMode="contain" />;
 }
 
 /** Fades a section in on its beat. It is always laid out, so nothing reflows. */
@@ -458,6 +665,22 @@ const styles = StyleSheet.create({
   reveal: { alignSelf: 'stretch', alignItems: 'center' },
   burst: { position: 'absolute', left: 0, right: 0, top: -10, height: 50, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
   burstCoin: { position: 'absolute', width: 38, height: 38 },
+  // The first win: the ribbon sits fully inside the card (no negative margin), Finn rises above it.
+  firstWinCard: { width: '90%', maxWidth: 380, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
+    alignItems: 'center', paddingHorizontal: 16, paddingBottom: 18, paddingTop: 6 },
+  firstWinFinn: { alignItems: 'center', justifyContent: 'center' },
+  firstWinHead: { alignSelf: 'stretch', alignItems: 'center' },
+  firstWinRing: { ...StyleSheet.absoluteFillObject, borderWidth: 6, borderColor: MM.gold },
+  // The picture leads (a ride car, then the coin it gives, side by side), the line sits under it.
+  firstWinNext: { alignItems: 'center', marginTop: 6, marginBottom: 16 },
+  firstWinPic: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
+  firstWinRide: { width: 88, height: 72 },
+  firstWinCoinSpot: { width: 62, height: 62 },
+  firstWinCoin: { width: 62, height: 62 },
+  firstWinBtnWrap: { alignSelf: 'stretch', alignItems: 'center' },
+  // The fingertip (bottom of the hand) lands on the lower right of CONTINUE.
+  firstWinHand: { right: 26, bottom: 6 },
+  firstWinNextText: { fontFamily: 'Shark', fontSize: 27, color: MM.navyText },
   card: {
     width: '90%', maxWidth: 400, backgroundColor: MM.cream, borderRadius: 26, borderWidth: 3, borderColor: MM.ink,
     backfaceVisibility: 'hidden',

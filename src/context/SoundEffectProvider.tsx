@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { AuthContext } from './AuthProvider';
 import { SFX } from '../gamekit/SFX';
+import { QUIET_CAPTURE, sfxAllowed } from './sfxPolicy';
 
 export interface SoundEffectContextType {
   readonly playSound: (pendingSound: any, options?: { volume?: number; rate?: number }) => void;
@@ -28,17 +29,20 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
   const activeSounds = useRef<Set<Audio.Sound>>(new Set());
   const mounted = useRef(true);
   const { player, isReady } = useContext(AuthContext);
+  // Guests hear the game too; signed-in players follow their setting (sfxPolicy).
+  const allowed = sfxAllowed({ isReady, signedIn: !!player, playerSetting: player?.enabled_sound_effects, quietCapture: QUIET_CAPTURE });
 
   useEffect(() => {
-    SFX.setEnabled(!(isReady && !player?.enabled_sound_effects));
-  }, [isReady, player?.enabled_sound_effects]);
-  // Game music follows the player's Music setting too (each game's useGameMusic agrees), so a
-  // player with both off never starts the audio engine (GameAudio.wantsAudio).
-  // This provider is the only writer of the player's Music setting into the engine; each
-  // game's useGameMusic gates only its own bed.
+    SFX.setEnabled(allowed);
+  }, [allowed]);
+  // Game music follows the player's Music setting too, by the same rule as sound effects
+  // (a guest hears it; dev captures stay quiet), so a player with both off never starts the
+  // audio engine (GameAudio.wantsAudio). This provider is the only writer of the Music
+  // setting into the engine; each game's useGameMusic gates only its own bed.
+  const musicAllowed = sfxAllowed({ isReady, signedIn: !!player, playerSetting: player?.enabled_music, quietCapture: QUIET_CAPTURE });
   useEffect(() => {
-    SFX.setMusicEnabled(!(isReady && !player?.enabled_music));
-  }, [isReady, player?.enabled_music]);
+    SFX.setMusicEnabled(musicAllowed);
+  }, [musicAllowed]);
   useEffect(() => {
     if (isReady) SFX.settingsKnown();
   }, [isReady]);
@@ -65,7 +69,7 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
     <SoundEffectContext.Provider
       value={{
         playSound: async (pendingSound: any, options?: { volume?: number; rate?: number }) => {
-          if (isReady && !player?.enabled_sound_effects) {
+          if (!allowed) {
             return;
           }
           let sound: Audio.Sound | undefined;
