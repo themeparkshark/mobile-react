@@ -88,6 +88,16 @@ test('Defend shield burst is flat and the result has one message', () => {
   assert.doesNotMatch(glow, /shadowRadius/);
   assert.match(glow, /borderColor: '#0B2A5B'/);
   assert.doesNotMatch(styleBlock(src, 'multiplierBanner'), /shadowRadius: [1-9]/);
-  assert.match(src, /\{totalPoints < 50 \? 'GOOD TRY!' : 'DEFENDED!'\}/);
-  assert.match(src, /\{totalPoints >= 50 && <Text style=\{styles\.resultTier\}>/);
+  assert.match(src, /\{result\.failed \? 'OOPS!' : totalPoints < 50 \? 'GOOD TRY!' : 'DEFENDED!'\}/);
+  assert.match(src, /\{!result\.failed && totalPoints >= 50 && <Text style=\{styles\.resultTier\}>/);
+  for (const m of src.matchAll(/(?:text)?[sS]hadowRadius: (\d+(?:\.\d+)?)/g)) assert.equal(Number(m[1]), 0, 'every Defend shadow is a hard drop');
+});
+
+test('Defend result never claims a bonus or points that did not happen, and shows a failed send in kid words', () => {
+  const src = read('src/components/GymBattle/DefendMiniGameModal.tsx');
+  assert.match(src, /\{multiplier > 1 && totalPoints > taps && \(/);
+  assert.match(src, /failed: true,/);
+  assert.match(src, /result\.failed \? \(\s*<Text style=\{styles\.resultError\}>\{result\.message\}<\/Text>/);
+  assert.match(src, /result\.points > 0 \? `\+\$\{result\.points\} points for your team!` : 'Tap faster next time to score for your team!'/);
+  assert.match(src, /<Animated\.View style=\{\[styles\.shieldGlowWrap, glowAnimStyle\]\}>\s*<View style=\{styles\.shieldGlow\}>/, 'the scale runs on a plain wrapper, never on the bordered ring');
 });

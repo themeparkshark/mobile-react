@@ -110,7 +110,7 @@ export default function DefendMiniGameModal({
   const [taps, setTaps] = useState(0);
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [countdown, setCountdown] = useState(3);
-  const [result, setResult] = useState<{ points: number; message: string } | null>(null);
+  const [result, setResult] = useState<{ points: number; message: string; failed?: boolean } | null>(null);
   const [floatingPlusOnes, setFloatingPlusOnes] = useState<Array<{ id: number; x: number; y: number; value: number }>>([]);
   const plusOneIdRef = useRef(0);
   const [multiplier, setMultiplier] = useState<1 | 2 | 3>(1);
@@ -318,6 +318,7 @@ export default function DefendMiniGameModal({
       setResult({
         points: 0,
         message: friendlyActionError(error, 'That didn’t work. Check your internet and try again.'),
+        failed: true,
       });
       setGameState('finished');
     }
@@ -354,7 +355,7 @@ export default function DefendMiniGameModal({
   // Flat burst behind the shield: a solid ring that breathes a little in
   // scale (UI thread). glowIntensity runs 0.3 to 0.6.
   const glowAnimStyle = useAnimatedStyle(() => ({
-    opacity: 0.55 + glowIntensity.value * 0.75,
+    opacity: 0.7 + glowIntensity.value * 0.5,
     transform: [{ scale: 0.93 + (glowIntensity.value - 0.3) * 0.3 }],
   }));
 
@@ -457,8 +458,12 @@ export default function DefendMiniGameModal({
                 onPress={handleTap}
               >
                 {/* Glow behind shield */}
-                <Animated.View style={[styles.shieldGlow, glowAnimStyle]}>
-                  <View style={styles.shieldGlowInner} />
+                {/* The scale runs on a plain wrapper: a bordered view that is
+                    scaled directly draws its outline out of step with its fill. */}
+                <Animated.View style={[styles.shieldGlowWrap, glowAnimStyle]}>
+                  <View style={styles.shieldGlow}>
+                    <View style={styles.shieldGlowInner} />
+                  </View>
                 </Animated.View>
                 
                 {/* The Shield */}
@@ -502,21 +507,26 @@ export default function DefendMiniGameModal({
           {gameState === 'finished' && result && (
             <Animated.View entering={ZoomIn.duration(400)} style={styles.finishedContent}>
               <View style={styles.lightCard}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name={totalPoints < 50 ? 'trophyBronze' : 'trophy'} size={34} /><Text style={styles.resultTitle}>{totalPoints < 50 ? 'GOOD TRY!' : 'DEFENDED!'}</Text></View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{!result.failed && <GameIcon name={totalPoints < 50 ? 'trophyBronze' : 'trophy'} size={34} />}<Text style={styles.resultTitle}>{result.failed ? 'OOPS!' : totalPoints < 50 ? 'GOOD TRY!' : 'DEFENDED!'}</Text></View>
               <Image
                 source={require('../../../assets/images/shield.png')}
                 style={styles.resultShield}
                 contentFit="contain"
               />
               {/* One message per score: a low score already says GOOD TRY! up top. */}
-              {totalPoints >= 50 && <Text style={styles.resultTier}>{getTierName(totalPoints)}</Text>}
+              {!result.failed && totalPoints >= 50 && <Text style={styles.resultTier}>{getTierName(totalPoints)}</Text>}
               <Text style={styles.resultTaps}>{taps} taps</Text>
-              {multiplier > 1 && (
+              {/* Only claim the bonus when bonus taps really landed. */}
+              {multiplier > 1 && totalPoints > taps && (
                 <Text style={styles.resultBonus}>x{multiplier} bonus in the final 7s!</Text>
               )}
-              <Text style={styles.resultPoints}>
-                +{result.points} points for your team!
-              </Text>
+              {result.failed ? (
+                <Text style={styles.resultError}>{result.message}</Text>
+              ) : (
+                <Text style={styles.resultPoints}>
+                  {result.points > 0 ? `+${result.points} points for your team!` : 'Tap faster next time to score for your team!'}
+                </Text>
+              )}
               
               <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
                 <Text style={styles.doneButtonText}>NICE!</Text>
@@ -664,24 +674,24 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '900',
     color: '#FFD700',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
+    textShadowColor: '#0B2A5B',
+    textShadowOffset: { width: 2, height: 3 },
+    textShadowRadius: 0,
     letterSpacing: 3,
   },
   timer: {
     fontSize: 48,
     fontWeight: '900',
     color: 'white',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
+    textShadowColor: '#0B2A5B',
+    textShadowOffset: { width: 2, height: 3 },
+    textShadowRadius: 0,
     marginTop: 8,
   },
   timerUrgent: {
     color: '#FF4444',
-    textShadowColor: '#FF0000',
-    textShadowRadius: 20,
+    textShadowColor: '#7F1D1D',
+    textShadowRadius: 0,
   },
   tapArea: {
     flex: 1,
@@ -690,8 +700,12 @@ const styles = StyleSheet.create({
   },
   // Alex-style flat burst: gold ring with a hard navy outline around a cream
   // disc. No soft shadow (cheaper to draw, and no glow-filter look).
-  shieldGlow: {
+  shieldGlowWrap: {
     position: 'absolute',
+    width: SHIELD + 50,
+    height: SHIELD + 50,
+  },
+  shieldGlow: {
     width: SHIELD + 50,
     height: SHIELD + 50,
     borderRadius: (SHIELD + 50) / 2,
@@ -720,9 +734,9 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: '900',
     color: '#FFD700',
-    textShadowColor: '#FF6B00',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+    textShadowColor: '#B4400A',
+    textShadowOffset: { width: 1.5, height: 2 },
+    textShadowRadius: 0,
     zIndex: 100,
   },
   defenseContainer: {
@@ -809,9 +823,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: 'rgba(255,255,255,0.8)',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    textShadowColor: '#0B2A5B',
+    textShadowOffset: { width: 1, height: 1.5 },
+    textShadowRadius: 0,
   },
   // Submitting state
   centerContent: {
@@ -865,6 +879,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 
+  resultError: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#123A6B',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
   resultBonus: {
     fontSize: 17,
     fontWeight: '700',
@@ -876,9 +897,9 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '900',
     color: '#FFD700',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
+    textShadowColor: '#0B2A5B',
+    textShadowOffset: { width: 2, height: 3 },
+    textShadowRadius: 0,
   },
   resultTier: {
     fontSize: 26,
@@ -891,6 +912,7 @@ const styles = StyleSheet.create({
     fontSize: 21,
     fontWeight: '800',
     color: '#15803D',
+    textAlign: 'center',
     marginTop: 12,
     marginBottom: 24,
   },
