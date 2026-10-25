@@ -1515,3 +1515,8 @@ test('wave 5 round 3: the loading cover waits (within its cap) for the first in-
   assert.match(explore, /useCoverArt\(!!park && !!player && !!redeemables && !!location\?\.latitude && !rangeChecked\);/);
   assert.match(explore, /void checkForRedeemable\(\)\.then\(redeemable => \{\s*setRangeChecked\(true\);/);
 });
+
+test('wave 5 round 3: the slow-tile sheet has no shark of its own (the player shark stands at the middle already)', () => {
+  const sky = read('src/components/map/MapCoverSky.tsx');
+  assert.match(sky, /\{bar && \(\s*<Animated\.View style=\{sharkStyle\}>/);
+});

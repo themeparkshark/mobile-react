@@ -89,10 +89,14 @@ function MapCoverSky({ done = false, fill: drivenFill, bar = true }: {
       {(bar ? COVER_CLOUDS : SHEET_CLOUDS.filter(c => height >= c.minSheet)).map((c, i) => <CoverCloud key={i} cloud={c}
         width={width} still={reduced} opacity={bar ? 1 : SHEET_CLOUD_OPACITY} />)}
       <View style={styles.center}>
-        <Animated.View style={sharkStyle}>
-          <Image source={SHARK} style={{ width: sharkSize, height: sharkSize }} contentFit="contain"
-            cachePolicy="memory-disk" priority="high" transition={0} />
-        </Animated.View>
+        {/* The sheet over a map still drawing (bar off) has no shark of its own: the player's shark
+            already stands at the middle of the map, and two sharks there overlapped (iPhone SE). */}
+        {bar && (
+          <Animated.View style={sharkStyle}>
+            <Image source={SHARK} style={{ width: sharkSize, height: sharkSize }} contentFit="contain"
+              cachePolicy="memory-disk" priority="high" transition={0} />
+          </Animated.View>
+        )}
         {/* The splash's bar (white rim, navy fill), so the launch reads as one bar finishing. */}
         {bar && (
           <View style={[styles.barRim, { width: barWidth }]}>
