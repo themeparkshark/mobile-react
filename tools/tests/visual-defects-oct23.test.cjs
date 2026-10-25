@@ -1276,19 +1276,23 @@ test("wave 5 round 2: Finn's coin card shows only once Finn and all three pictur
   assert.match(read('src/ui/GameIcon.tsx'), /onLoad=\{onLoad\} onError=\{onLoad\}/);
 });
 
-test('wave 5 round 2: the offline chip docks under the whole planned rail, or beside it on a short phone', () => {
+test('wave 5 round 2: the offline chip docks under the compass column (the whole rail on a tall phone), never on a rail button', () => {
   const { offlineChipDock } = loadTs('src/components/map/offlineDock.ts', { react: { useEffect() {}, useState: (v) => [typeof v === 'function' ? v() : v, () => {}] } });
   const column = 3 * 54 + 2 * 8;
   // iPhone 17 Pro shape: rail from 160 pt in a 680 pt map, Energy column 210 pt.
   const pro = offlineChipDock({ viewTop: 120, viewHeight: 680, controlsTop: 160, railHeight: column, railWidth: 54, railFloor: 210 });
   assert.equal(pro.top, 120 + 160 + column + 8, 'at least 8 pt under the third rail slot');
   assert.equal(pro.right, 21, 'centred under the compass');
-  // A short phone with no room under the rail: beside it, clear of both rail columns.
+  // iPhone SE shape: the extras stand beside the compass, so the chip takes the free slot under the compass.
+  const seUnder = offlineChipDock({ viewTop: 78, viewHeight: 589, controlsTop: 157, railHeight: 54, railWidth: 116, railFloor: 218 });
+  assert.equal(seUnder.top, 78 + 157 + 54 + 8);
+  assert.equal(seUnder.right, 21);
+  // A phone with no room under the rail: beside it, clear of both rail columns.
   const se = offlineChipDock({ viewTop: 90, viewHeight: 500, controlsTop: 150, railHeight: 116, railWidth: 116, railFloor: 220 });
   assert.equal(se.right, 16 + 116 + 8);
   assert.equal(se.top, 90 + 150 + 5);
   const map = read('src/components/Map.tsx');
-  assert.match(map, /railHeight: railSide \? railColumnHeight\(RAIL_EXTRAS_PLANNED\) : railColumnHeight\(1 \+ RAIL_EXTRAS_PLANNED\),/);
+  assert.match(map, /railHeight: railSide \? RAIL_BUTTON : railColumnHeight\(1 \+ RAIL_EXTRAS_PLANNED\),/);
   assert.match(map, /publishOfflineChipDock\(dockOwner, chipDock\)/);
   const banner = read('src/components/OfflineBanner.tsx');
   assert.match(banner, /const mapDock = useOfflineChipDock\(\);/);

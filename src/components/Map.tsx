@@ -586,11 +586,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   useEffect(() => onConnectivityChange(setOffline), []);
   const [viewTop, setViewTop] = useState<number | null>(null);
   const frightOn = !!fright?.active;
-  // The offline chip's dock: under the whole planned rail (or beside it on a short phone), so going
-  // offline never puts the chip on the compass, Daily 3 or the chest. OfflineBanner reads it.
+  // The offline chip's dock: under the whole planned rail, so going offline never puts the chip on the
+  // compass, Daily 3 or the chest. On a short phone (extras in their own column) it takes the free
+  // slot under the compass, beside the chest. OfflineBanner reads it.
   const chipDock = useMemo(() => (viewSize && viewTop !== null ? offlineChipDock({
     viewTop, viewHeight: viewSize.height, controlsTop, railFloor,
-    railHeight: railSide ? railColumnHeight(RAIL_EXTRAS_PLANNED) : railColumnHeight(1 + RAIL_EXTRAS_PLANNED),
+    railHeight: railSide ? RAIL_BUTTON : railColumnHeight(1 + RAIL_EXTRAS_PLANNED),
     railWidth: railSide ? RAIL_BUTTON * 2 + RAIL_GAP : RAIL_BUTTON,
   }) : null), [viewSize?.height, viewTop, controlsTop, railFloor, railSide]); // eslint-disable-line react-hooks/exhaustive-deps
   const dockOwner = useRef({}).current;

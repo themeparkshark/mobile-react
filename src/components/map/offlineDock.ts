@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Where the offline chip docks on the map screen: under the map's whole button rail (the compass,
- * Daily 3 and the chest, planned for all three so a late chest never collides with it), centred
- * under the compass. When a short phone has no room there, it stands to the rail's left instead.
+ * Where the offline chip docks on the map screen: under the compass column (on a tall phone that is
+ * the whole rail: the compass, Daily 3 and the chest, planned for all three so a late chest never
+ * collides with it; on a short phone the extras stand in their own column, so it is the slot under
+ * the compass, beside the chest), centred under the compass. With no room there, it stands to the
+ * rail's left instead.
  * Map publishes it from its own layout; OfflineBanner reads it, so the chip never touches a button.
  */
 export type OfflineChipDock = { readonly top: number; readonly right: number };
@@ -19,7 +21,7 @@ export function offlineChipDock({ viewTop, viewHeight, controlsTop, railHeight, 
   readonly viewHeight: number;
   /** The rail's top, from the map view's top. */
   readonly controlsTop: number;
-  /** The rail's planned height (every button it can hold). */
+  /** The compass column's planned height (every button it can hold). */
   readonly railHeight: number;
   /** The rail's width (one column, or two on a short phone). */
   readonly railWidth: number;
