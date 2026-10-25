@@ -19,7 +19,7 @@
  * pose with no hop.
  */
 import React, { useEffect, useState } from 'react';
-import { Image, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Image, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 
 const ART = {
@@ -48,18 +48,25 @@ export const PEEK_HEADROOM_PT = 48;
 /** The zone must keep at least this much room for the peek to show. */
 export const PEEK_MIN_ROOM_PT = 12;
 
-/** How big the peeking shark draws in a zone of height h (0 = no peek): it never climbs past the safe top. */
-export function peekScale(h: number): number {
+/** Phones at least this tall keep the stage's top padding clear of the status bar, so the peek may use it all. */
+export const PEEK_TALL_PHONE_PT = 740;
+
+/**
+ * How big the peeking shark draws in a zone of height h (0 = no peek): it never climbs past the safe top.
+ * On a tall phone (iPhone 17 Pro, 874 pt) a card that fills the stage (a big Whack win with a new Finn)
+ * still gets the smallest peek inside the stage's top padding, so the best runs keep their cheering shark.
+ */
+export function peekScale(h: number, tallPhone = false): number {
   // No room at all (the card already reaches the top padding, as on an SE): no peek.
-  if (!(h >= PEEK_MIN_ROOM_PT)) return 0;
+  if (!(h >= (tallPhone ? 0 : PEEK_MIN_ROOM_PT))) return 0;
   const k = Math.min(PEEK_SCALE, (Math.max(0, h) + PEEK_HEADROOM_PT) / 160);
   return k >= PEEK_MIN_SCALE ? Math.floor(k * 100) / 100 : 0;
 }
 
 /** How the scene draws in a zone of height h: the podium, the peek over the ribbon, or nothing. */
-export function podiumMode(h: number, cheer: boolean): 'podium' | 'peek' | 'none' {
+export function podiumMode(h: number, cheer: boolean, tallPhone = false): 'podium' | 'peek' | 'none' {
   if (podiumScale(h) > 0) return 'podium';
-  return cheer && peekScale(h) > 0 ? 'peek' : 'none';
+  return cheer && peekScale(h, tallPhone) > 0 ? 'peek' : 'none';
 }
 
 /** How big the scene draws in a zone of height h (0 = hidden). */
@@ -76,8 +83,9 @@ export function ResultsPodium({ cheer, reducedMotion = false, delayMs = 120, onP
   onPeek?: (scale: number) => void;
 }) {
   const [zoneH, setZoneH] = useState(-1);
-  const mode = zoneH < 0 ? 'none' : podiumMode(zoneH, cheer);
-  const peekK = mode === 'peek' ? peekScale(zoneH) : 0;
+  const tallPhone = useWindowDimensions().height >= PEEK_TALL_PHONE_PT;
+  const mode = zoneH < 0 ? 'none' : podiumMode(zoneH, cheer, tallPhone);
+  const peekK = mode === 'peek' ? peekScale(zoneH, tallPhone) : 0;
   const k = mode === 'podium' ? podiumScale(zoneH) : 0;
   const onPeekRef = React.useRef(onPeek);
   onPeekRef.current = onPeek;

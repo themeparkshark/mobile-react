@@ -116,6 +116,11 @@ test('the new Finn tile is compact (72 pt) so a tall Whack win keeps room for th
   assert.match(finn, /export const FINN_TILE_PT = 72;/);
   assert.match(finn, /card: \{ width: FINN_TILE_PT, height: FINN_TILE_PT,/);
   assert.doesNotMatch(finn, /width: 92/);
+  // A tall phone keeps the smallest peek even when the card fills the stage; an SE keeps none.
+  const podium = read('src/gamekit/results/ResultsPodium.tsx');
+  assert.match(podium, /export const PEEK_TALL_PHONE_PT = 740;/);
+  assert.match(podium, /if \(!\(h >= \(tallPhone \? 0 : PEEK_MIN_ROOM_PT\)\)\) return 0;/);
+  assert.match(podium, /const tallPhone = useWindowDimensions\(\)\.height >= PEEK_TALL_PHONE_PT;/);
 });
 
 test('the live pace chip writes thousands commas and says it races the best Burst', () => {
