@@ -83,3 +83,30 @@ test('fix 4: the beam lands on its slam beat: buzz, star-slam sound and landing 
   assert.match(mw, /landLeadMs: 50/);
   assert.match(plan, /export const BEAM_SLAM_BUZZ_LEAD_MS = 50;/, 'the slam buzz lead and the beam landing lead stay equal');
 });
+
+test('fix 5: a mono file decoded to two identical channels is kept as one (half the cache and half of every voice), a stereo bed is kept as it is', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const B = loadTs('src/gamekit/audio/backends.ts', {
+    'expo-av': { Audio: {} }, 'expo-asset': { Asset: {} }, 'expo-file-system': {},
+    'react-native': { Platform: { OS: 'ios' } },
+  });
+  const made = [];
+  const ctx = { createBuffer: (ch, len, sr) => { const data = Array.from({ length: ch }, () => new Float32Array(len)); const b = { numberOfChannels: ch, length: len, sampleRate: sr, data,
+    getChannelData: (c) => data[c], copyToChannel: (src, c, at) => data[c].set(src.subarray(0, len - at), at) }; made.push(b); return b; } };
+  const decoded = (l, r) => ({ numberOfChannels: 2, length: l.length, sampleRate: 48000, getChannelData: (c) => (c ? r : l) });
+  const tone = Float32Array.from({ length: 4801 }, (_, i) => Math.sin(i / 7));
+  const mono = B.dualMonoToMono(ctx, decoded(tone, Float32Array.from(tone)));
+  assert.ok(mono, 'dual mono becomes mono');
+  assert.equal(mono.numberOfChannels, 1);
+  assert.equal(mono.length, tone.length);
+  assert.deepEqual(Array.from(mono.data[0]), Array.from(tone), 'sample for sample the same sound');
+  const wide = Float32Array.from(tone, (v, i) => (i % 5 ? v : -v));
+  assert.equal(B.dualMonoToMono(ctx, decoded(tone, wide)), null, 'a real stereo file is kept');
+  const lastOnly = Float32Array.from(tone); lastOnly[tone.length - 1] = 9;
+  assert.equal(B.dualMonoToMono(ctx, decoded(tone, lastOnly)), null);
+  assert.equal(B.dualMonoToMono(ctx, { numberOfChannels: 1, length: 3, getChannelData: () => tone }), null, 'already mono: nothing to do');
+  assert.equal(B.dualMonoToMono({}, decoded(tone, tone)), null, 'no createBuffer: nothing changes');
+  assert.equal(B.dualMonoToMono(ctx, { numberOfChannels: 2, length: 10, getChannelData: () => { throw new Error('gone'); } }), null, 'never throws');
+  const src = fs.readFileSync(path.join(root, 'src/gamekit/audio/backends.ts'), 'utf8');
+  assert.match(src, /const buffer = dualMonoToMono\(this\.ctx, decoded\) \?\? decoded;/);
+});

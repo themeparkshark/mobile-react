@@ -16,6 +16,7 @@
 
 import { Audio } from 'expo-av';
 import { Asset } from 'expo-asset';
+import { captureLine, captureTraceOn } from './studioTrace';
 
 /**
  * react-native-audio-api 0.6 AudioParam automation is unsafe from JS: the
@@ -382,6 +383,36 @@ async function localPath(src: number): Promise<string | null> {
 /** A voice is released this long after it must have ended, if its end event never came. */
 const VOICE_RELEASE_SLACK_MS = 300;
 
+/**
+ * Wave 5 round 3 (memory): react-native-audio-api 0.6.5 always decodes to two channels (its miniaudio decoder is set
+ * to 2), so a mono file (399 of the 400 studio files, and Chris's bank) comes back as two identical channels. Every
+ * voice then copies both (AudioBufferSourceNode::setBuffer) and sizes its buses and time stretcher for two channels.
+ * When the two channels are sample-for-sample identical, keep one: the engine up-mixes a mono voice to both speakers
+ * at the same level (AudioBus speakers rule: left = right = mono), so it sounds exactly the same, with half the
+ * decoded cache and half of every voice's native allocations. A true stereo file (a bed) differs on its first
+ * samples and is kept as it is. Returns null when nothing changed (or anything about the buffer is unexpected).
+ */
+export function dualMonoToMono(ctx: AnyNode, buffer: AnyNode): AnyNode {
+  try {
+    if (!ctx || !buffer || buffer.numberOfChannels !== 2 || typeof ctx.createBuffer !== 'function') return null;
+    const length = buffer.length as number;
+    if (!(length > 0)) return null;
+    // Views over the decoded buffer's own memory, read only here while `buffer` is held (no copy).
+    const left = buffer.getChannelData(0) as Float32Array;
+    const right = buffer.getChannelData(1) as Float32Array;
+    if (left.length !== length || right.length !== length) return null;
+    // Every third sample (a few ms of JS per second of audio, once per cue): a real stereo file differs almost
+    // everywhere, a mono file decoded to two channels never does.
+    for (let i = 0; i < length; i += 3) if (left[i] !== right[i]) return null;
+    if (left[length - 1] !== right[length - 1]) return null;
+    const mono = ctx.createBuffer(1, length, buffer.sampleRate);
+    mono.copyToChannel(left, 0, 0);
+    return mono;
+  } catch {
+    return null;
+  }
+}
+
 export class AudioApiBackend implements AudioBackend {
   readonly name = 'audio-api' as const;
   readonly supportsPan = true;
@@ -397,6 +428,8 @@ export class AudioApiBackend implements AudioBackend {
   private voices = new Map<number, { src: AnyNode; gain: AnyNode; pan: AnyNode; timer: ReturnType<typeof setTimeout> | null }>();
   private decks = new Map<string, { src: AnyNode; gain: AnyNode; startedAt: number; offset: number; loopMs: number }>();
   private nextToken = 1;
+  /** How many decoded cues were kept as one channel (dualMonoToMono); read by the capture summary. */
+  monoKeys = 0;
 
   constructor() {
     this.mod = loadAudioApi();
@@ -448,8 +481,12 @@ export class AudioApiBackend implements AudioBackend {
       const path = await localPath(src);
       if (!path) return false;
       try {
-        const buffer = await this.ctx.decodeAudioDataSource(path);
+        const decoded = await this.ctx.decodeAudioDataSource(path);
+        // A mono file comes back as two identical channels: keep one (see dualMonoToMono).
+        const buffer = dualMonoToMono(this.ctx, decoded) ?? decoded;
+        if (buffer !== decoded) this.monoKeys += 1;
         this.buffers.set(key, buffer);
+        if (captureTraceOn()) captureLine(`[audio-decode] ${Date.now()} ${key} ch=${buffer.numberOfChannels} mono=${this.monoKeys}/${this.buffers.size}`);
         return true;
       } catch (e) {
         if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[GameAudio] decode failed', path, String(e));
