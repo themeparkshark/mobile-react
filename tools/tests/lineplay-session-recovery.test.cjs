@@ -991,3 +991,21 @@ test('a 2+ star run steps the next round up, and the best stars feed NEW pills',
   assert.equal(calls.written.at(-1).gameBestStars.memory, 3);
   session.dispose();
 });
+
+test('a signed-out guest plays the whole wait locally: no server start, no checkpoint, no queued credit', async () => {
+  const { Session, calls } = makeHarness(null, server);
+  const session = new Session();
+  const sample = { latitude: 1, longitude: 2, timestamp: Date.now() };
+  await session.start(ride, sample, undefined, { guest: true });
+  const snap = session.snapshot();
+  assert.equal(snap.state, 'active', 'never stuck on Opening your ride chapter');
+  assert.ok(snap.playlist.length > 0);
+  assert.equal(snap.rewardConnectionIssue, 'sign_in');
+  await session.heartbeat(sample);
+  assert.equal(calls.start, 0, 'a guest never opens a reward session');
+  await session.endNow(true);
+  assert.equal(calls.start, 0); assert.equal(calls.complete, 0);
+  assert.equal(calls.queued.length, 0, 'nothing waits to be credited later');
+  assert.equal(calls.written.length, 0, 'no checkpoint without an account');
+  session.dispose();
+});

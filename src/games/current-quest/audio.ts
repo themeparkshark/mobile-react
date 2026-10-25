@@ -262,8 +262,8 @@ export function useCqMusic(bed: string | null, startBar: number): void {
   const { player } = useContext(AuthContext);
   const musicOn = player?.enabled_music !== false;
   const started = useRef<string | null>(null);
+  // The Music setting itself reaches the engine from SoundEffectProvider only.
   useEffect(() => {
-    GameAudio.setMusicEnabled(musicOn);
     GameAudio.music.setAppMusicBridge({
       suspend: () => { try { void app?.stopMusic?.(); } catch { /* optional */ } },
       restore: () => { try { void app?.restoreMusic?.(); } catch { /* optional */ } },

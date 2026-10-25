@@ -65,6 +65,8 @@ function provider({ login, me, failCache = false, apiCheck } = {}) {
       async clearCache() { events.push(['clearAccountCache']); },
     },
     '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
+    // The launch effect is not run here (useAsyncEffect is a no-op); launch-profile.test.cjs drives it.
+    './launchProfile': { loadLaunchProfile: async () => ({ kind: 'failed', error: new Error('launch not driven here') }) },
     // Standings v2: sign-out and account switches drop every cached board.
     '../screens/LeaderboardsScreen/standingsCache': { endStandingsSession: () => events.push(['standings-session-ended']) },
     '../screens/SetCollection/dexCache': { clearBook() {} },
@@ -181,7 +183,9 @@ function button({ apple, login, crumbs = { labels: {}, warnings: {} } }) {
     './signInErrors': load('src/components/signInErrors.ts', {}),
   }).default;
   const tree = Component({});
-  return { press: tree.props.children.props.children[0].props.onPress, states, alerts };
+  // The Apple button is found by type: a door above it (Play now, a caption) may come first.
+  const appleButton = [].concat(tree.props.children.props.children).find(child => child && child.type === 'apple');
+  return { press: appleButton.props.onPress, states, alerts };
 }
 test('button awaits backend, suppresses duplicate presses, shows friendly failure, and allows retry', async () => {
   let appleCalls = 0;

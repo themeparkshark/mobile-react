@@ -224,7 +224,7 @@ export function ShareBack({ daily, onBack }: { daily: DailySummary; onBack: () =
     setBusy(true);
     try {
       const uri = await captureRef(ref, { format: 'png', quality: 1, result: 'tmpfile' });
-      if (await Sharing.isAvailableAsync()) await shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: 'Share your Daily' });
+      if (await Sharing.isAvailableAsync()) await shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: 'Share your Daily' }, `Memory Daily ${daily.day}`);
     } catch {
       // The share sheet was dismissed or view-shot failed: nothing is sent.
     } finally {
