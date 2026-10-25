@@ -82,6 +82,11 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (name === 'react-native-reanimated') { const transition = { duration() { return this; }, delay() { return this; } }; return { default: { View: 'ReanimatedView', createAnimatedComponent: type => type }, FadeIn: transition, FadeOut: transition, SlideOutDown: transition,
         useSharedValue: value => react.useRef({ value }).current, makeMutable: value => ({ value }), useAnimatedStyle: fn => fn(),
         useDerivedValue: fn => react.useEffect(fn),
+        // A frame callback runs its frames at once (16 ms apart) while it is active: no real display here.
+        useFrameCallback: fn => { const ref = react.useRef(null); if (!ref.current) { const h = { isActive: false, running: false, setActive(on) {
+          h.isActive = on; if (!on || h.running) return; h.running = true;
+          for (let i = 0; i < 2000 && h.isActive; i++) h.fn({ timestamp: i * 16, timeSincePreviousFrame: i === 0 ? null : 16, timeSinceFirstFrame: i * 16 });
+          h.running = false; } }; ref.current = h; } ref.current.fn = fn; return ref.current; },
         Easing: native.Easing, cancelAnimation: value => cancelled.push(value),
         runOnJS: fn => (...args) => { jsCalls.push({ fn, args }); return fn(...args); },
         withTiming: value => { motions.push('timing'); return value; }, withSpring: value => { motions.push('spring'); return value; }, withDelay: (ms, value) => value,

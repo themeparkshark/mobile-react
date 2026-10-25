@@ -138,6 +138,19 @@ export function countStartsOf(gameId: string): number {
 export const COACH_LEAD_MS = 1100;
 /** The pill shrinks out over this, under the 3's own entrance. */
 export const COACH_EXIT_MS = 160;
+/**
+ * w5r3: the start runs on one anchored UI-thread clock. One frame can move it on by at most this much,
+ * so a stalled or throttled frame clock slows the count instead of skipping a number or GO (each number
+ * holds for COUNT_STEP_MS, so it is always drawn on several frames).
+ */
+export const COUNT_MAX_STEP_MS = 100;
+/** Safety only: if the UI thread never ticks, JS opens play this long after three times the count's own length. */
+export const COUNT_WATCHDOG_MS = 4000;
+/** One frame of the anchored start clock: on by the frame's real time, never more than COUNT_MAX_STEP_MS. */
+export function advanceCountClock(t: number, frameMs: number | null | undefined): number {
+  'worklet';
+  return t + Math.min(COUNT_MAX_STEP_MS, Math.max(0, frameMs ?? 0));
+}
 /** Test hook. */
 export function resetCountStarts(): void {
   for (const k of Object.keys(countStarts)) delete countStarts[k];

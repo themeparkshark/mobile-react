@@ -42,6 +42,8 @@ function overlayHelpers() {
     grab(/export const BONK_HEADS = \d+;/),
     grab(/export const BONKS_PER_HEAD = \d+;/),
     grab(/export function bonkHeadsLit\(bonks: number\): number \{[\s\S]*?\n\}/),
+    grab(/export const FLAME_SIZES = \[[^\]]*\] as const;/).replace(' as const', ''),
+    grab(/export function streakFlameTier\(streak: number\): number \{[\s\S]*?\n\}/),
     grab(/export function streakFlameSize\(streak: number\): number \{[\s\S]*?\n\}/),
   ].join('\n').replace(/\((\w+): number\): number/g, '($1)');
   // eslint-disable-next-line no-new-func

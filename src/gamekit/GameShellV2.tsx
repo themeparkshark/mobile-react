@@ -52,8 +52,9 @@ import Animated, {
   Easing,
   cancelAnimation,
   runOnJS,
-  ReduceMotion,
   withRepeat,
+  useFrameCallback,
+  type FrameInfo,
   type SharedValue,
 } from 'react-native-reanimated';
 import { GAME_COLORS, COUNTDOWN, JUICE, LINE_MOVING_TOAST } from './theme';
@@ -82,7 +83,7 @@ import { GameAudio } from './audio/GameAudio';
 import { playGameHaptic, playGameMoment } from './audio/gameMomentSound';
 import { CountdownStage } from './fx/CountdownStage';
 import { FinalSeconds } from './fx/FinalSeconds';
-import { COACH_EXIT_MS, COACH_LEAD_MS, COUNT_END_MS, GO_AT_MS, GO_SPARKLES, RARE_GO_SPARKLES, STAGE_READY_MAX_MS, countPose, countStartsOf, countSteps, finalSecondsBeat, isRareGo, noteCountStart } from './core/gameMoments';
+import { COACH_EXIT_MS, COACH_LEAD_MS, COUNT_END_MS, COUNT_WATCHDOG_MS, advanceCountClock, GO_AT_MS, GO_SPARKLES, type CountStep, RARE_GO_SPARKLES, STAGE_READY_MAX_MS, countPose, countStartsOf, countSteps, finalSecondsBeat, isRareGo, noteCountStart } from './core/gameMoments';
 import { AMBIENT, DURATION, flashPeak, momentParticles } from '../ui/motion';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 
@@ -277,8 +278,8 @@ interface GameShellV2Props {
 const DEFAULT_STAR_MULT: Record<number, number> = { 0: 0, 1: 1, 2: 1.5, 3: 2 };
 const RESUME_STEP_MS = 300;
 // The count clock always runs: Reduce Motion is handled by the drawing (fades, no travel), and
-// Reanimated's own reduce-motion jump would end the clock at once and hide the numbers.
-const CLOCK_ALWAYS = ReduceMotion ? ReduceMotion.Never : undefined;
+/** No demo pill exit on this start (the anchored count clock's sentinel). */
+const NO_PILL_EXIT = -1e9;
 // One frame later (requestAnimationFrame where the platform has it; a 16 ms timer otherwise).
 const nextFrame = (fn: () => void): unknown => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : setTimeout(fn, 16));
 const cancelFrame = (id: unknown): void => {
@@ -436,51 +437,37 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     }, [countScale]);
 
     // The start (core/gameMoments): 3, 2, 1 slam in at 0, 700, 1400 ms, GO bursts at 2100 and play
-    // opens on that frame; the GO tail (sparkles, scrim fade) clears by 2600 over live play.
+    // opens on that frame; the GO tail (sparkles, scrim fade) clears by 2700 over live play.
+    // w5r3: ONE anchored clock on the UI thread runs the whole start: the demo pill's exit, every number,
+    // GO and the tail. Each frame moves it on by that frame's real time, capped at COUNT_MAX_STEP_MS, and
+    // each step (its sound, buzz and text, and play itself on GO) fires from the very frame that draws it.
+    // A stalled frame clock now slows the count instead of skipping 1 and GO (w5r2 release: 3, 2, then a
+    // Burst already 2 s in), and the game's Burst clock starts on GO's own frame.
     const cdClock = useSharedValue(-1);
+    const cdT = useSharedValue(-1);
+    const cdAts = useSharedValue<number[]>([]);
+    const cdNext = useSharedValue(0);
+    const cdFrom = useSharedValue(0);
+    const cdLive = useSharedValue(false);
+    const cdHeld = useSharedValue(0);
+    const cdPillExitAt = useSharedValue(NO_PILL_EXIT);
+    const cdReduced = useSharedValue(reducedMotion);
+    useEffect(() => { cdReduced.value = reducedMotion; }, [reducedMotion, cdReduced]);
+    // w5r2, one callout at a time: a game's picture demo (countdownDemo) plays alone in its pill on the first
+    // start, then shrinks away BEFORE the 3 lands (w5r3: no frame shows the pill and a number together); a
+    // repeat start never shows it (the kid already knows the game).
+    const pillOut = useSharedValue(0);
     const [goTail, setGoTail] = useState(false);
     const walkingRef = useRef(false);
     walkingRef.current = !!linePlayMovement?.moving;
-    const endCountStage = useCallback(() => {
-      cdClock.value = -1;
-      setGoTail(false);
-    }, [cdClock]);
-    const stopCountStage = useCallback(() => {
-      cancelAnimation(cdClock);
-      endCountStage();
-    }, [cdClock, endCountStage]);
-    // The tail ends on the UI clock itself (no JS timer outlives a skip or a close).
-    const runCountStage = useCallback((fromMs: number) => {
-      cancelAnimation(cdClock);
-      cdClock.value = fromMs;
-      const done = (finished?: boolean) => {
-        'worklet';
-        if (finished) runOnJS(endCountStage)();
-      };
-      // Dev capture only (EXPO_PUBLIC_COUNT_HOLD_MS): the drawn count pauses on one pose for 6 s so a
-      // screenshot shows an exact frame on a loaded machine (play still opens on time).
-      if (COUNT_HOLD_MS > fromMs && COUNT_HOLD_MS < COUNT_END_MS) {
-        cdClock.value = withSequence(
-          withTiming(COUNT_HOLD_MS, { duration: COUNT_HOLD_MS - fromMs, easing: Easing.linear, reduceMotion: CLOCK_ALWAYS }),
-          withTiming(COUNT_HOLD_MS + 0.01, { duration: CAPTURE_HOLD_FOR, easing: Easing.linear, reduceMotion: CLOCK_ALWAYS }),
-          withTiming(COUNT_END_MS, { duration: COUNT_END_MS - COUNT_HOLD_MS, easing: Easing.linear, reduceMotion: CLOCK_ALWAYS }, done),
-        );
-      } else {
-        cdClock.value = withTiming(COUNT_END_MS, { duration: COUNT_END_MS - fromMs, easing: Easing.linear, reduceMotion: CLOCK_ALWAYS }, done);
-      }
-      setGoTail(true);
-    }, [cdClock, endCountStage]);
     const fireCountStep = useCallback((step: ReturnType<typeof countSteps>[number]) => {
-      // Re-sync the drawn count to the step that just fired, so the number on screen and the frame
-      // play opens never drift apart on a busy phone (the JS timer is the truth for input).
-      runCountStage(step.at);
       setCountText(step.label);
       // Walking in a line drops the buzz one rung (the count still reads with the eyes and ears).
       const walking = walkingRef.current;
       const buzz = walking ? (step.haptic === 'incoming' ? 'tap' : 'tick') : step.haptic;
       playGameHaptic(buzz);
       playGameMoment(step.cue, step.variant, step.sfx);
-    }, [runCountStage]);
+    }, []);
 
     // The count reads the latest callbacks through refs, so a game re-rendering during the count
     // (a new onStart each render) never restarts it from 3.
@@ -488,6 +475,91 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     beginPlayRef.current = beginPlay;
     const fireStepRef = useRef(fireCountStep);
     fireStepRef.current = fireCountStep;
+    const countStepsRef = useRef<readonly CountStep[]>([]);
+    const hasDemo = !!countdownDemo;
+    const hasDemoRef = useRef(hasDemo);
+    hasDemoRef.current = hasDemo;
+    const [pillGone, setPillGone] = useState(() => hasDemo && countStartsOf(gameId ?? 'game') > 0);
+    const [demoRun, setDemoRun] = useState(0);
+    // Runs on JS from the frame that drew step i.
+    const onCountStep = useCallback((i: number) => {
+      const step = countStepsRef.current[i];
+      if (!step) return;
+      if (i === 0 && hasDemoRef.current) setPillGone(true);
+      fireStepRef.current(step);
+      if (step.at >= GO_AT_MS) beginPlayRef.current();
+    }, []);
+    const countFrameRef = useRef<{ setActive: (on: boolean) => void } | null>(null);
+    const onCountDone = useCallback(() => {
+      countFrameRef.current?.setActive(false);
+      setGoTail(false);
+    }, []);
+    const countFrameFn = useCallback((frame: FrameInfo) => {
+      'worklet';
+      if (!cdLive.value) return;
+      let t = cdT.value;
+      // Dev capture only (EXPO_PUBLIC_COUNT_HOLD_MS): the whole start pauses on one pose for a few seconds,
+      // so a screenshot shows an exact frame on a loaded machine.
+      if (COUNT_HOLD_MS >= 0 && t >= COUNT_HOLD_MS && cdHeld.value < CAPTURE_HOLD_FOR) cdHeld.value = advanceCountClock(cdHeld.value, frame.timeSincePreviousFrame);
+      else t = advanceCountClock(t, frame.timeSincePreviousFrame);
+      cdT.value = t;
+      const exitAt = cdPillExitAt.value;
+      if (exitAt > NO_PILL_EXIT) {
+        const p = Math.min(1, Math.max(0, (t - exitAt) / COACH_EXIT_MS));
+        pillOut.value = cdReduced.value ? (p > 0 ? 1 : 0) : p * p;
+      }
+      cdClock.value = t >= cdFrom.value && t < COUNT_END_MS ? t : -1;
+      const ats = cdAts.value;
+      const i = cdNext.value;
+      // At most one step per frame, so every number and GO is drawn on its own frame.
+      if (i < ats.length && t >= ats[i]) {
+        cdNext.value = i + 1;
+        runOnJS(onCountStep)(i);
+      }
+      if (t >= COUNT_END_MS && cdNext.value >= ats.length) {
+        cdLive.value = false;
+        cdClock.value = -1;
+        runOnJS(onCountDone)();
+      }
+    }, [cdLive, cdT, cdHeld, cdPillExitAt, cdReduced, pillOut, cdClock, cdFrom, cdAts, cdNext, onCountStep, onCountDone]);
+    const countFrame = useFrameCallback(countFrameFn, false);
+    countFrameRef.current = countFrame;
+    // Start the anchored clock `lead` ms before the first step (the demo pill's time, then its exit).
+    const startCount = useCallback((steps: readonly CountStep[], lead: number) => {
+      if (steps.length === 0) return;
+      const from = steps[0].at;
+      countStepsRef.current = steps;
+      cdAts.value = steps.map((s) => s.at);
+      cdNext.value = 0;
+      cdFrom.value = from;
+      cdHeld.value = 0;
+      cdPillExitAt.value = lead > 0 ? from - COACH_EXIT_MS : NO_PILL_EXIT;
+      cdT.value = from - lead;
+      cdClock.value = -1;
+      cdLive.value = true;
+      setGoTail(true);
+      countFrame.setActive(true);
+      // Safety only: if the UI thread never ticks (it always does in the foreground), JS opens play.
+      const expected = lead + (steps[steps.length - 1].at - from);
+      countdownTimers.current.push(setTimeout(() => {
+        if (startedRef.current) return;
+        cdLive.value = false;
+        countFrame.setActive(false);
+        cdClock.value = -1;
+        setGoTail(false);
+        const last = steps[steps.length - 1];
+        fireStepRef.current(last);
+        beginPlayRef.current();
+      }, expected * 3 + COUNT_WATCHDOG_MS));
+    }, [cdAts, cdNext, cdFrom, cdHeld, cdPillExitAt, cdT, cdClock, cdLive, countFrame]);
+    // Stop the start where it is (a hold, a close): nothing keeps ticking.
+    const stopCountStage = useCallback(() => {
+      cdLive.value = false;
+      countFrame.setActive(false);
+      cdClock.value = -1;
+      setGoTail(false);
+    }, [cdLive, countFrame, cdClock]);
+
     // The stage reports ready (art drawn); a stage that never does still counts after a cap.
     const [readyCap, setReadyCap] = useState(false);
     useEffect(() => {
@@ -504,14 +576,6 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // A repeat start of the same game (play again, a second burst of play) counts 2-1-GO; now and
     // then GO throws gold confetti (never on a first play).
     const [rareGo, setRareGo] = useState(false);
-    // w5r2, one callout at a time: a game's picture demo (countdownDemo) plays alone in its pill on the first
-    // start, then shrinks away as the 3 lands; a repeat start never shows it (the kid already knows the game).
-    const hasDemo = !!countdownDemo;
-    const hasDemoRef = useRef(hasDemo);
-    hasDemoRef.current = hasDemo;
-    const pillOut = useSharedValue(0);
-    const [pillGone, setPillGone] = useState(() => hasDemo && countStartsOf(gameId ?? 'game') > 0);
-    const [demoRun, setDemoRun] = useState(0);
     useEffect(() => {
       if (phase !== 'countdown' || !visible || !stageOn) return;
       clearCountdown();
@@ -523,8 +587,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       const quick = n > 1;
       setRareGo(isRareGo(n, Math.random()) || (__DEV__ && process.env.EXPO_PUBLIC_RARE_GO === '1'));
       const steps = countSteps(countdownStyle, quick);
-      const from = steps[0].at;
-      const lead = hasDemoRef.current && !quick ? COACH_LEAD_MS : 0;
+      // The demo pill plays alone for COACH_LEAD_MS, then shrinks away over COACH_EXIT_MS, then the 3 lands.
+      const lead = hasDemoRef.current && !quick ? COACH_LEAD_MS + COACH_EXIT_MS : 0;
       if (hasDemoRef.current) {
         cancelAnimation(pillOut);
         pillOut.value = lead > 0 ? 0 : 1;
@@ -535,25 +599,14 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       // Start once the game has drawn its first frames (never count over a blank stage).
       let raf2: unknown = 0;
       const raf1 = nextFrame(() => {
-        raf2 = nextFrame(() => {
-          if (lead > 0) {
-            countdownTimers.current.push(setTimeout(() => {
-              pillOut.value = reducedMotionRef.current ? 1 : withTiming(1, { duration: COACH_EXIT_MS, easing: EASE.in });
-            }, lead));
-            countdownTimers.current.push(setTimeout(() => setPillGone(true), lead + COACH_EXIT_MS + 40));
-          }
-          steps.forEach((step) => {
-            countdownTimers.current.push(setTimeout(() => {
-              fireStepRef.current(step);
-              if (step.at >= GO_AT_MS) beginPlayRef.current();
-            }, step.at - from + lead));
-          });
-        });
+        raf2 = nextFrame(() => startCount(steps, lead));
       });
       return () => {
         cancelFrame(raf1);
         cancelFrame(raf2);
         clearCountdown();
+        // Play opened on GO: the GO tail keeps running on its own clock over live play.
+        if (!startedRef.current) stopCountStage();
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [phase, visible, clearCountdown, countdownStyle, stageOn]);
@@ -848,10 +901,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       clearCountdown();
       const steps = countSteps(countdownStyle === 'none' ? 'go' : countdownStyle);
       const go = steps[steps.length - 1];
-      runCountStage(GO_AT_MS);
-      fireCountStep(go);
-      beginPlay();
-    }, [phase, clearCountdown, beginPlay, countdownStyle, runCountStage, fireCountStep]);
+      // Straight to GO on the same anchored clock: the next frame draws GO, fires its cue and opens play.
+      if (hasDemoRef.current) { cancelAnimation(pillOut); pillOut.value = 1; setPillGone(true); }
+      startCount([go], 0);
+    }, [phase, clearCountdown, countdownStyle, startCount, pillOut]);
 
     // Paid games share the ride flow's native presentation. Opening another
     // native Modal inside it races both dismissals against the coin reward.

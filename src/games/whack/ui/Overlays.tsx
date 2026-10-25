@@ -14,8 +14,10 @@ import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { Canvas, Path, Skia, rect } from '@shopify/react-native-skia';
+import { LinearGradient } from 'expo-linear-gradient';
 import { CountUpText } from '../../../gamekit/fx/CountUpText';
-import GameIcon from '../../../ui/GameIcon';
+import GameIcon, { ICON_SOURCES } from '../../../ui/GameIcon';
+import { GoldBurst, SparkleBurst } from '../../../ui/GoldBurst';
 import { DURATION, SPRING } from '../../../ui/motion';
 import { EASE } from '../../../ui/motionEasing';
 import { ART, BOSS_ART, THEMED_SHARK_FRAMES, type WhackTheme } from '../assets';
@@ -25,6 +27,8 @@ const GOLD = '#ffcf3b';
 const BLUE = '#0768b9';
 const CREAM = '#fff8e4';
 const CORAL = '#ff6b5c';
+/** The +N's middle, from the card's top edge (border, padding, the pip row, half the score row): where coins land. */
+const COIN_TARGET_Y = 4 + 14 + 20 + 34;
 
 /**
  * Banner: one short callout at a time, in the bubble-font look of the big stamps (round 4): the words sit
@@ -122,6 +126,19 @@ export interface BreatherProps {
   bonks?: number;
   /** Best combo this Burst: drawn as a flame that grows with it. */
   bestStreak?: number;
+  /**
+   * Your biggest flame ever (0..3, streakFlameTier). The chip shows the next size up as a pale flame to grow
+   * into (the come-back goal); a card whose flame beats it is a special card.
+   */
+  flameRecord?: number | null;
+  /** This card beat something of yours (ahead of your best, or a new biggest flame): it gets a rare extra. */
+  special?: boolean;
+  /** Coins that fly from the bowing sharks into the +N as the card lands (already budgeted; 0 = none). */
+  coinFly?: number;
+  /** Flash ceiling (flashPeak: 0 with Dim Flashing Lights or Reduce Motion): scales the gold fan's white bloom. */
+  flash?: number;
+  /** Battery Saver or nothing may animate: no fan, no coins, no pad shine (the card still lands and rolls). */
+  lite?: boolean;
 }
 
 /** The banked roll (r6): starts as the card lands, never on 0, and climbs long enough to read. */
@@ -129,8 +146,13 @@ export interface BreatherProps {
 // its first value for about 300 ms in release captures).
 export const BREATHER_ROLL = { landMs: 0, ms: 720, fromShare: 0.2, punch: 1.22 } as const;
 export const BREATHER_ROLL_QUICK = { landMs: 0, ms: 460, fromShare: 0.2, punch: 1.18 } as const;
-/** The gold rim flash as the card lands (ms after it starts rising): the card's money frame. */
-export const RIM_FLASH = { at: 90, inMs: 70, outMs: 420 } as const;
+/**
+ * w5r3, the card's money frame: a gold ray fan opens behind the +N as the card lands (the house GoldBurst,
+ * the same rays as FINISH! and GO, no spin), then fades. It replaces the hard gold rectangle of w5r2.
+ */
+export const CARD_FAN = { at: 60, inMs: 140, holdMs: 120, outMs: 380, amount: 0.8, size: 320 } as const;
+/** Coins fly from the bowing sharks on the board into the +N while it climbs (UI thread, one clock). */
+export const COIN_FLY = { max: 8, staggerMs: 45, flightMs: 380 } as const;
 /** The flame chip puffs up after the last shark head (ms after the heads start). */
 export const FLAME_PUFF_AFTER_MS = 60;
 /** The GO pad's one-time shine sweep, after it pops in (finite: nothing loops while the card waits). */
@@ -138,6 +160,10 @@ export const PAD_SHINE = { delayMs: 240, ms: 560 } as const;
 /** The veil under the card: a light frost that keeps the board in its own blue, white and gold (never grey). */
 export const BREATHER_VEIL = 'rgba(236,248,255,0.16)';
 const ROLL_EASE = Easing.out(Easing.quad);
+/** The pad shine: a soft white band, clear at both edges (w5r3: was a flat white bar). */
+const SHINE_COLORS = ['rgba(255,255,255,0)', 'rgba(255,255,255,0.7)', 'rgba(255,255,255,0)'] as const;
+const SHINE_START = { x: 0, y: 0.5 } as const;
+const SHINE_END = { x: 1, y: 0.5 } as const;
 /** Gold sparkles in the roll's end pop (capped; none with Reduce Motion). */
 const POP_SPARKS = 6;
 
@@ -153,8 +179,17 @@ export function bonkHeadsLit(bonks: number): number {
   return bonks <= 0 ? 0 : Math.min(BONK_HEADS, Math.ceil(bonks / BONKS_PER_HEAD));
 }
 /** The best combo as a flame that grows with it: 4 sizes (pt), the combo badge's own tiers (3, 6, 10). */
+export const FLAME_SIZES = [18, 23, 28, 34] as const;
+export function streakFlameTier(streak: number): number {
+  return streak >= 10 ? 3 : streak >= 6 ? 2 : streak >= 3 ? 1 : 0;
+}
 export function streakFlameSize(streak: number): number {
-  return streak >= 10 ? 34 : streak >= 6 ? 28 : streak >= 3 ? 23 : 18;
+  return FLAME_SIZES[streakFlameTier(streak)];
+}
+/** The pale flame to grow into: one size above your biggest flame ever (none once you have the biggest). */
+export function nextFlameGoal(record: number | null | undefined): number | null {
+  const r = record == null ? 0 : Math.max(0, Math.min(3, Math.floor(record)));
+  return r >= 3 ? null : FLAME_SIZES[r + 1];
 }
 /** The heads light one by one while the roll climbs (UI thread), starting this long after the card lands. */
 export const HEADS_START_MS = 200;
@@ -225,6 +260,32 @@ function NextPreview({ shape, theme, boss }: { shape?: string; theme: WhackTheme
   );
 }
 
+/** Where each flying coin starts, as an offset from the +N (below the card, over the board's holes). */
+function coinStart(k: number, n: number): { x: number; y: number; bend: number } {
+  const spread = n > 1 ? k / (n - 1) : 0.5;
+  return { x: -150 + 300 * spread + ((k * 37) % 23) - 11, y: 300 + ((k * 53) % 5) * 34, bend: (k % 2 ? 1 : -1) * (40 + ((k * 29) % 30)) };
+}
+
+/** One coin of the land: up from a shark on an arc into the +N, shrinking as it lands (UI thread). */
+function FlyCoin({ k, n, fly }: { k: number; n: number; fly: SharedValue<number> }) {
+  const s = coinStart(k, n);
+  const delay = k * COIN_FLY.staggerMs;
+  const total = (n - 1) * COIN_FLY.staggerMs + COIN_FLY.flightMs;
+  const style = useAnimatedStyle(() => {
+    const ms = fly.value * total - delay;
+    const t = Math.max(0, Math.min(1, ms / COIN_FLY.flightMs));
+    if (ms <= 0 || t >= 1) return { opacity: 0, transform: [{ scale: 0 }] };
+    const e = 1 - (1 - t) * (1 - t);
+    const x = s.x * (1 - e) + s.bend * Math.sin(Math.PI * t);
+    const y = s.y * (1 - e) - 60 * Math.sin(Math.PI * t);
+    return {
+      opacity: t < 0.85 ? 1 : (1 - t) / 0.15,
+      transform: [{ translateX: x }, { translateY: y }, { rotate: `${(1 - t) * (k % 2 ? 200 : -200)}deg` }, { scale: 1.1 - 0.55 * t }],
+    };
+  });
+  return <Animated.Image source={ICON_SOURCES.coin} style={[styles.flyCoin, style]} resizeMode="contain" />;
+}
+
 /** One gold sparkle of the roll's end pop: out from the number on the pop clock, then gone (UI thread). */
 function PopSpark({ k, pop }: { k: number; pop: SharedValue<number> }) {
   const ang = (k / POP_SPARKS) * Math.PI * 2 - Math.PI / 2;
@@ -243,8 +304,14 @@ export function Breather(p: BreatherProps) {
   const pad = useSharedValue(0);
   const enter = useSharedValue(0);
   const pop = useSharedValue(0);
-  const rim = useSharedValue(0);
+  const fan = useSharedValue(0);
+  const fanBloom = useSharedValue(0);
+  const fly = useSharedValue(0);
+  const extra = useSharedValue(0);
   const shine = useSharedValue(0);
+  const fancy = !p.reduced && !p.lite;
+  const coins = fancy && p.burstScore > 0 ? Math.max(0, Math.min(COIN_FLY.max, p.coinFly ?? 0)) : 0;
+  const flash = Math.max(0, p.flash ?? 0);
   // How long until the card lands, fixed at mount (the parent mounts the card early, hidden).
   const enterIn = React.useRef(Math.max(0, (p.enterAt ?? 0) - Date.now())).current;
   const rollFrom = React.useRef(breatherRollFrom(p.burstScore)).current;
@@ -255,22 +322,38 @@ export function Breather(p: BreatherProps) {
     enter.value = withDelay(enterIn, p.reduced ? withTiming(1, { duration: DURATION.quick }) : withSpring(1, SPRING.settle));
     // The roll's payoff: a gold ring and a few sparkles burst from the number on its last digit.
     if (!p.reduced && p.burstScore > 0) pop.value = withDelay(enterIn + roll.landMs + roll.ms, withTiming(1, { duration: 460, easing: EASE.out }));
-    // The money frame: a gold rim flashes round the card as it lands, then fades (UI thread, finite).
-    if (!p.reduced) {
-      rim.value = withDelay(enterIn + RIM_FLASH.at, withSequence(
-        withTiming(1, { duration: RIM_FLASH.inMs, easing: EASE.out }),
-        withTiming(2, { duration: RIM_FLASH.outMs, easing: EASE.out }),
+    // w5r3, the money frame: the house gold ray fan opens behind the +N as the card lands and fades (finite, no
+    // spin), and the coins fly up from the bowing sharks into the number while it climbs (one UI clock each).
+    if (fancy && p.burstScore > 0) {
+      fan.value = withDelay(enterIn + CARD_FAN.at, withSequence(
+        withTiming(CARD_FAN.amount, { duration: CARD_FAN.inMs, easing: EASE.out }),
+        withDelay(CARD_FAN.holdMs, withTiming(0, { duration: CARD_FAN.outMs, easing: EASE.in })),
       ));
+      // The fan's white swell scales with the flash ceiling (none with Dim Flashing Lights).
+      if (flash > 0) {
+        fanBloom.value = withDelay(enterIn + CARD_FAN.at, withSequence(
+          withTiming(1, { duration: CARD_FAN.inMs, easing: EASE.out }),
+          withTiming(0, { duration: CARD_FAN.holdMs + CARD_FAN.outMs, easing: EASE.out }),
+        ));
+      }
+      if (coins > 0) {
+        const flight = (coins - 1) * COIN_FLY.staggerMs + COIN_FLY.flightMs;
+        fly.value = withDelay(enterIn, withTiming(1, { duration: flight, easing: Easing.linear }));
+      }
+      // The rare extra (a new biggest flame, or ahead of your best): a second fan and gold confetti on the pop.
+      if (p.special) {
+        extra.value = withDelay(enterIn + roll.landMs + roll.ms, withTiming(1, { duration: 900, easing: Easing.linear }));
+      }
     }
-  }, [enter, pop, rim, enterIn, roll, p.reduced, p.burstScore]);
-  const rimStyle = useAnimatedStyle(() => {
-    const r = rim.value;
-    return { opacity: r <= 0 || r >= 2 ? 0 : r <= 1 ? r : 2 - r, transform: [{ scale: 1 + 0.035 * Math.min(1, r) + 0.02 * Math.max(0, r - 1) }] };
-  });
-  const glowStyle = useAnimatedStyle(() => {
-    const r = rim.value;
-    return { opacity: r <= 0 || r >= 2 ? 0 : 0.45 * (r <= 1 ? r : 2 - r), transform: [{ scale: 1 + 0.06 * r }] };
-  });
+  }, [enter, pop, fan, fanBloom, fly, extra, enterIn, roll, p.reduced, p.burstScore, fancy, flash, coins, p.special]);
+  const extraFan = useSharedValue(0);
+  useEffect(() => {
+    if (!fancy || !p.special || p.burstScore <= 0) return;
+    extraFan.value = withDelay(enterIn + roll.landMs + roll.ms, withSequence(
+      withTiming(1, { duration: 160, easing: EASE.out }),
+      withDelay(180, withTiming(0, { duration: 520, easing: EASE.in })),
+    ));
+  }, [extraFan, fancy, p.special, p.burstScore, enterIn, roll]);
   const ringStyle = useAnimatedStyle(() => ({
     opacity: pop.value <= 0 || pop.value >= 1 ? 0 : 0.95 * (1 - pop.value),
     transform: [{ scale: 0.5 + 1.3 * pop.value }],
@@ -282,18 +365,19 @@ export function Breather(p: BreatherProps) {
     if (!p.readyEnabled) { pad.value = 0; shine.value = 0; return; }
     if (p.reduced) { pad.value = withTiming(1, { duration: DURATION.quick }); return; }
     // One shine sweeps across the pad once it is ready (w5r2: a landed pad never looks dead; finite).
+    // Battery Saver skips it (w5r3), like the contact ring.
     shine.value = 0;
-    shine.value = withDelay(PAD_SHINE.delayMs, withTiming(1, { duration: PAD_SHINE.ms, easing: EASE.inOut }));
+    if (!p.lite) shine.value = withDelay(PAD_SHINE.delayMs, withTiming(1, { duration: PAD_SHINE.ms, easing: EASE.inOut }));
     pad.value = 0.8;
     pad.value = withSequence(
       withSpring(1, SPRING.pop),
       withDelay(2600, withTiming(1.06, { duration: 260, easing: EASE.out })),
       withTiming(1, { duration: 260, easing: EASE.inOut }),
     );
-  }, [p.readyEnabled, p.reduced, pad, shine]);
+  }, [p.readyEnabled, p.reduced, p.lite, pad, shine]);
   const shineStyle = useAnimatedStyle(() => {
     const v = shine.value;
-    return { opacity: v <= 0 || v >= 1 ? 0 : 0.55, transform: [{ translateX: -70 + v * 340 }, { rotate: '20deg' }] };
+    return { opacity: v <= 0 || v >= 1 ? 0 : 1, transform: [{ translateX: -70 + v * 340 }, { rotate: '20deg' }] };
   });
   const padStyle = useAnimatedStyle(() => ({
     opacity: p.reduced ? pad.value : pad.value < 0.79 ? 0 : 1,
@@ -310,6 +394,9 @@ export function Breather(p: BreatherProps) {
   const showRun = p.runScore !== p.burstScore;
   const chips = p.stats.filter((s) => STAT_ICON[s.label] && s.value !== '0').slice(0, showRun ? 2 : 3);
   const walkOn = p.showWalk !== false && (p.walkPct > 0.01 || !!p.boostReady);
+  // The pale goal flame: one size above your biggest flame ever, counting this card.
+  const goalFlame = p.flameRecord === undefined ? null
+    : nextFlameGoal(Math.max(p.flameRecord ?? 0, streakFlameTier(p.bestStreak ?? 0)));
   const best = p.goalStar && p.goalStar.best != null ? Math.max(0.02, Math.min(0.98, p.goalStar.best)) : null;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -317,7 +404,6 @@ export function Breather(p: BreatherProps) {
       <Animated.View style={[styles.dim, dimStyle]} pointerEvents="none" />
       {/* The animated layer carries only the motion; the bordered cream card is a plain view inside it. */}
       <Animated.View style={[cardStyle, { marginTop: p.top ?? 14 }]}>
-      {p.reduced ? null : <Animated.View pointerEvents="none" style={[styles.rimGlow, glowStyle]} />}
       <View style={styles.card} accessibilityLabel={`Burst ${p.burstNumber} of ${p.bursts} banked. ${p.burstScore} points.`}>
         {/* Bursts as pips: banked ones are gold with a check (no words). */}
         <View style={styles.pips}>
@@ -328,12 +414,20 @@ export function Breather(p: BreatherProps) {
           ))}
         </View>
         <View style={styles.scoreRow}>
+          {/* The money frame: the gold ray fan behind the +N (a second one on a special card's pop). */}
+          {fancy && p.burstScore > 0 ? (
+            <View pointerEvents="none" style={styles.fanAnchor}>
+              <GoldBurst size={CARD_FAN.size} amount={fan} bloom={fanBloom} spin={false} />
+              {p.special ? <View style={StyleSheet.absoluteFill}><GoldBurst size={CARD_FAN.size} amount={extraFan} spin={false} /></View> : null}
+            </View>
+          ) : null}
           <Animated.View pointerEvents="none" style={[styles.popRing, ringStyle]} />
           {p.reduced || p.burstScore <= 0 ? null : Array.from({ length: POP_SPARKS }, (_, k) => <PopSpark key={k} k={k} pop={pop} />)}
           <GameIcon name="coins" size={34} />
           <CountUpText value={p.burstScore} fromValue={rollFrom} reducedMotion={p.reduced} prefix="+" delayMs={enterIn + roll.landMs}
             durationMs={roll.ms} easing={ROLL_EASE} punch={roll.punch} punchAt="end" tickEvery={tickEvery} onTick={p.onCountTick}
             onDone={p.onRollDone} style={styles.cardScore} />
+          {p.special && fancy && p.burstScore > 0 ? <SparkleBurst progress={extra} count={10} radius={130} /> : null}
         </View>
         {p.bonks != null ? (
           // w5 picture stats: a row of shark heads for the sharks bonked, a flame that grows with the best combo.
@@ -349,6 +443,13 @@ export function Breather(p: BreatherProps) {
                 <FlamePuff size={streakFlameSize(p.bestStreak ?? 0)} reduced={p.reduced}
                   at={enterIn + HEADS_START_MS + BONK_HEADS * HEAD_STEP_MS + FLAME_PUFF_AFTER_MS} />
                 <Text style={styles.flameValue}>{p.bestStreak}</Text>
+                {/* The come-back goal: your next flame size, pale, to grow into on a later run (no words, no clock). */}
+                {goalFlame != null ? (
+                  <View style={styles.goalFlame} accessibilityLabel="Your next flame size to grow">
+                    <GameIcon name="arrow" size={12} />
+                    <View style={styles.goalFlameArt}><GameIcon name="streak" size={goalFlame} /></View>
+                  </View>
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -404,7 +505,12 @@ export function Breather(p: BreatherProps) {
           <NextPreview shape={p.nextShape} theme={theme} boss={p.nextBoss} />
         </View>
       </View>
-      {p.reduced ? null : <Animated.View pointerEvents="none" style={[styles.rim, rimStyle]} />}
+      {/* Coins from the bowing sharks into the +N: drawn over the card so nothing on it hides them. */}
+      {coins > 0 ? (
+        <View pointerEvents="none" style={styles.coinAnchor}>
+          {Array.from({ length: coins }, (_, k) => <FlyCoin key={k} k={k} n={coins} fly={fly} />)}
+        </View>
+      ) : null}
       </Animated.View>
       <View style={styles.thumbZone}>
         {p.feverReady && p.onFever ? (
@@ -413,13 +519,13 @@ export function Breather(p: BreatherProps) {
                 shark with the flame, so a non-reader can tell save the fever from use it. */}
             <Pressable accessibilityRole="button" accessibilityLabel="Go and save the fever" onPress={p.readyEnabled ? p.onReady : undefined}
               style={styles.go}>
-              {p.reduced ? null : <View pointerEvents="none" style={styles.shineClip}><Animated.View style={[styles.shine, shineStyle]} /></View>}
+              {p.reduced ? null : <View pointerEvents="none" style={styles.shineClip}><Animated.View style={[styles.shine, shineStyle]}><LinearGradient colors={SHINE_COLORS} start={SHINE_START} end={SHINE_END} style={StyleSheet.absoluteFill} /></Animated.View></View>}
               <Image source={THEMED_SHARK_FRAMES[theme][1]} style={styles.padShark} resizeMode="contain" />
               <Text style={styles.goText}>GO</Text>
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Go with fever, 7 seconds of double points" onPress={p.readyEnabled ? p.onFever : undefined}
               style={styles.goFever}>
-              {p.reduced ? null : <View pointerEvents="none" style={styles.shineClip}><Animated.View style={[styles.shine, shineStyle]} /></View>}
+              {p.reduced ? null : <View pointerEvents="none" style={styles.shineClip}><Animated.View style={[styles.shine, shineStyle]}><LinearGradient colors={SHINE_COLORS} start={SHINE_START} end={SHINE_END} style={StyleSheet.absoluteFill} /></Animated.View></View>}
               <Image source={ART.golden} style={styles.padShark} resizeMode="contain" />
               <GameIcon name="streak" size={34} />
               <Text style={styles.goText}>GO</Text>
@@ -430,7 +536,7 @@ export function Breather(p: BreatherProps) {
           <Animated.View style={padStyle}>
             <Pressable accessibilityRole="button" accessibilityLabel="Ready for the next Burst" onPress={p.readyEnabled ? p.onReady : undefined}
               style={styles.ready}>
-              {p.reduced ? null : <View pointerEvents="none" style={styles.shineClip}><Animated.View style={[styles.shine, shineStyle]} /></View>}
+              {p.reduced ? null : <View pointerEvents="none" style={styles.shineClip}><Animated.View style={[styles.shine, shineStyle]}><LinearGradient colors={SHINE_COLORS} start={SHINE_START} end={SHINE_END} style={StyleSheet.absoluteFill} /></Animated.View></View>}
               <Text style={styles.readyText}>GO</Text>
             </Pressable>
           </Animated.View>
@@ -438,8 +544,8 @@ export function Breather(p: BreatherProps) {
         {p.canBank ? (
           <Animated.View style={padStyle}>
             <Pressable accessibilityRole="button" accessibilityLabel="Keep your points and finish" onPress={p.onBank} style={styles.bank} hitSlop={10}>
-              <GameIcon name="trophy" size={28} />
-              <GameIcon name="check" size={24} />
+              <GameIcon name="trophy" size={32} />
+              <View style={styles.bankCheck}><GameIcon name="check" size={18} /></View>
             </Pressable>
           </Animated.View>
         ) : null}
@@ -516,12 +622,15 @@ const styles = StyleSheet.create({
   multBadge: { position: 'absolute', top: -10, right: -8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 3, borderColor: NAVY, paddingHorizontal: 7, paddingVertical: 1 },
   multText: { fontFamily: 'Shark', fontSize: 18, color: NAVY },
   dim: { ...StyleSheet.absoluteFillObject, backgroundColor: BREATHER_VEIL },
-  rim: { position: 'absolute', left: 12, right: 12, top: -4, bottom: -4, borderRadius: 26, borderWidth: 5, borderColor: GOLD },
-  rimGlow: { position: 'absolute', left: 6, right: 6, top: -10, bottom: -10, borderRadius: 32, backgroundColor: '#fff3c4' },
+  fanAnchor: { position: 'absolute', left: '50%', top: '50%', width: CARD_FAN.size, height: CARD_FAN.size, marginLeft: -CARD_FAN.size / 2, marginTop: -CARD_FAN.size / 2 },
+  coinAnchor: { position: 'absolute', left: '50%', top: COIN_TARGET_Y, width: 0, height: 0 },
+  flyCoin: { position: 'absolute', left: -15, top: -15, width: 30, height: 30 },
+  goalFlame: { flexDirection: 'row', alignItems: 'center', marginLeft: 6, opacity: 0.4 },
+  goalFlameArt: { marginLeft: 1 },
   flameBox: { alignItems: 'center', justifyContent: 'center' },
   puff: { position: 'absolute', width: 34, height: 34, borderRadius: 17, backgroundColor: '#ffffff' },
   shineClip: { ...StyleSheet.absoluteFillObject, borderRadius: 40, overflow: 'hidden' },
-  shine: { position: 'absolute', top: -20, bottom: -20, left: 0, width: 26, backgroundColor: '#ffffff' },
+  shine: { position: 'absolute', top: -20, bottom: -20, left: 0, width: 40 },
   card: {
     marginHorizontal: 16, backgroundColor: CREAM, borderRadius: 22, borderWidth: 4, borderColor: NAVY,
     paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center',
@@ -568,8 +677,11 @@ const styles = StyleSheet.create({
   readyText: { fontFamily: 'Shark', fontSize: 40, color: NAVY },
   readySub: { fontFamily: 'Knockout', fontSize: 13, color: NAVY, marginTop: -4 },
   // r6: a real 56 pt button with the pads' chunky bottom edge (was a small chip).
-  bank: { marginTop: 14, minHeight: 56, minWidth: 104, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 22,
-    borderRadius: 28, backgroundColor: '#ffffff', borderWidth: 4, borderBottomWidth: 7, borderColor: NAVY },
+  // w5r3: a 60 pt round button, set clear of the GO pads (a trophy with a check badge, no words).
+  bank: { marginTop: 18, width: 60, height: 60, alignItems: 'center', justifyContent: 'center',
+    borderRadius: 30, backgroundColor: '#ffffff', borderWidth: 4, borderBottomWidth: 7, borderColor: NAVY },
+  bankCheck: { position: 'absolute', right: -6, bottom: -6, width: 26, height: 26, borderRadius: 13, backgroundColor: GOLD,
+    borderWidth: 3, borderColor: NAVY, alignItems: 'center', justifyContent: 'center' },
   bankText: { fontFamily: 'Shark', fontSize: 17, color: NAVY },
   duel: { marginTop: 10, alignSelf: 'stretch', backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 3, borderColor: NAVY, padding: 10, alignItems: 'center' },
   duelTitle: { fontFamily: 'Shark', fontSize: 22, color: NAVY },

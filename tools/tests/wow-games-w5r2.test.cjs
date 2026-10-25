@@ -60,10 +60,9 @@ test('first start: one callout at a time (the demo alone, then it shrinks away a
   assert.equal(gm.countStartsOf('whack'), 1);
   gm.resetCountStarts();
   const shell = read('src/gamekit/GameShellV2.tsx');
-  assert.match(shell, /const lead = hasDemoRef\.current && !quick \? COACH_LEAD_MS : 0;/, 'repeat starts skip the demo');
-  assert.match(shell, /\}, step\.at - from \+ lead\)\);/, 'the 3 waits for the demo');
-  assert.match(shell, /pillOut\.value = reducedMotionRef\.current \? 1 : withTiming\(1, \{ duration: COACH_EXIT_MS, easing: EASE\.in \}\);\n\s+\}, lead\)\);/,
-    'the pill leaves on the same beat the 3 fires');
+  // w5r3: the lead now also covers the pill's exit, so the 3 lands only once the pill is gone (one anchored UI clock).
+  assert.match(shell, /const lead = hasDemoRef\.current && !quick \? COACH_LEAD_MS \+ COACH_EXIT_MS : 0;/, 'repeat starts skip the demo');
+  assert.match(shell, /cdPillExitAt\.value = lead > 0 \? from - COACH_EXIT_MS : NO_PILL_EXIT;/, 'the pill leaves just before the 3');
   assert.match(shell, /const pillShown = phase === 'countdown' && !\(hasDemo && pillGone\);/);
   assert.match(shell, /\{pillShown \? \(/, 'once gone, the demo is unmounted (its loop stops)');
   assert.match(shell, /if \(!pillShown \|\| !visible \|\| reducedMotion\) \{ cancelAnimation\(pillT\);/, 'the pill breath stops with it');
@@ -85,7 +84,7 @@ test('breather: the card lands as an event and the number climbs from its first 
   const ov = read('src/games/whack/ui/Overlays.tsx');
   assert.match(ov, /BREATHER_ROLL = \{ landMs: 0, ms: 720/);
   assert.match(ov, /BREATHER_ROLL_QUICK = \{ landMs: 0, ms: 460/);
-  assert.match(ov, /rim\.value = withDelay\(enterIn \+ RIM_FLASH\.at, withSequence\(/, 'the gold rim flash runs on the card\'s UI clock');
+  assert.match(ov, /fan\.value = withDelay\(enterIn \+ CARD_FAN\.at, withSequence\(/, 'the gold fan (w5r3, was a rim) runs on the card\'s UI clock');
   assert.match(ov, /<FlamePuff size=\{streakFlameSize\(p\.bestStreak \?\? 0\)\} reduced=\{p\.reduced\}\n\s+at=\{enterIn \+ HEADS_START_MS \+ BONK_HEADS \* HEAD_STEP_MS \+ FLAME_PUFF_AFTER_MS\} \/>/,
     'the flame puffs after the last head');
   assert.match(ov, /cardScore: \{ fontFamily: 'Shark', fontSize: 54,/);
@@ -98,11 +97,11 @@ test('breather: the card lands as an event and the number climbs from its first 
   assert.match(ov, /dim: \{ \.\.\.StyleSheet\.absoluteFillObject, backgroundColor: BREATHER_VEIL \}/);
   // Everything on the card is finite: no loops while it waits.
   assert.doesNotMatch(ov, /withRepeat/);
-  assert.match(ov, /shine\.value = withDelay\(PAD_SHINE\.delayMs, withTiming\(1, \{ duration: PAD_SHINE\.ms/);
+  assert.match(ov, /if \(!p\.lite\) shine\.value = withDelay\(PAD_SHINE\.delayMs, withTiming\(1, \{ duration: PAD_SHINE\.ms/);
   assert.equal((ov.match(/<View pointerEvents="none" style=\{styles\.shineClip\}>/g) || []).length, 3, 'each pad shines once, clipped inside its own edge');
-  // The rim and the roll both land inside the first 800 ms of the card.
-  const rim = /RIM_FLASH = \{ at: (\d+), inMs: (\d+), outMs: (\d+) \}/.exec(ov).slice(1).map(Number);
-  assert.ok(rim[0] + rim[1] + rim[2] <= 800);
+  // The gold fan (w5r3, was the rim) and the roll both land inside the first 800 ms of the card.
+  const fan = /CARD_FAN = \{ at: (\d+), inMs: (\d+), holdMs: (\d+), outMs: (\d+),/.exec(ov).slice(1).map(Number);
+  assert.ok(fan[0] + fan[1] + fan[2] + fan[3] <= 800);
 });
 
 test('Whack: the idle-card probe window opens after every finite card beat, and no 4 Hz poll runs under a card', () => {

@@ -461,10 +461,7 @@ test('shell: countdownStyle none starts at once (Parade Beat counts in itself); 
 test('shell: header score hide / replace, scrim none, hold-sheet extras, results note and extras, challenge label', () => {
   const { view } = shell({ hideHeaderScore: true, countdownScrim: 'none', pauseExtras: 'RELAXED PACE', resultExtras: 'ALBUM ROW', challengeLabel: 'Race a friend', onChallenge() {}, onRematch() {} });
   assert.equal(view.find((n) => n.type === 'ScoreDisplay'), undefined);
-  // The count starts two frames after mount; run those frames and the 3, then the scrim layer is up.
-  for (let round = 0; round < 2; round++) { const t = Array.from(view.timers.values()); view.timers.clear(); t.forEach((f) => f()); view.render(); }
-  const three = Array.from(view.delays.entries()).find(([id, ms]) => ms === 0 && view.timers.has(id));
-  view.timers.get(three[0])(); view.timers.delete(three[0]); view.render();
+  // The scrim layer is mounted for the whole count (w5r3: the count itself runs on one UI-thread frame clock).
   const layer = view.find((n) => n.type === 'ReanimatedView' && Array.isArray(n.props?.style) && n.props.style[1]?.backgroundColor === 'transparent');
   assert.ok(layer, 'countdownScrim none draws no scrim colour');
   const scrim = view.find((n) => n.type === 'Pressable');

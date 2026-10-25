@@ -169,10 +169,10 @@ test('the shell wires the countdown, the GO frame and the last 5 seconds', () =>
   assert.match(shell, /<FinalSeconds /);
   assert.match(shell, /if \(step\.at >= GO_AT_MS\) beginPlayRef\.current\(\)/, 'play opens on the GO frame');
   assert.match(shell, /\}, \[phase, visible, clearCountdown, countdownStyle, stageOn\]\);/, 'a re-rendering game never restarts the count');
-  assert.match(shell, /runCountStage\(GO_AT_MS\)/, 'tap skips straight to GO');
+  assert.match(shell, /startCount\(\[go\], 0\);/, 'tap skips straight to GO');
   assert.match(shell, /secondsLeft\?: number \| null/);
   assert.match(shell, /cdPill/, 'the instruction sits in a pill, the number in clear space');
-  assert.match(shell, /reduceMotion: CLOCK_ALWAYS/, 'Reduce Motion fades the numbers; the clock itself never jumps to the end');
+  assert.match(shell, /const countFrame = useFrameCallback\(countFrameFn, false\);/, 'one frame-stepped clock: Reduce Motion fades the numbers, the clock itself never jumps to the end');
   assert.match(read('src/gamekit/fx/FinalSeconds.tsx'), /reduceMotion: ReduceMotion\.Never/);
   const stage = read('src/gamekit/fx/CountdownStage.tsx');
   assert.match(stage, /useDerivedValue\(\(\) => countPose\(clock\.value/, 'one UI-thread clock');
@@ -809,7 +809,7 @@ test('r6: last-5 cues get 320 ms of lead; Battery Saver drops the contact ring; 
   const ov = read('src/games/whack/ui/Overlays.tsx');
   assert.match(ov, /<Image source=\{THEMED_SHARK_FRAMES\[theme\]\[1\]\} style=\{styles\.padShark\}/, 'plain GO is the blue shark');
   assert.match(ov, /<Image source=\{ART\.golden\} style=\{styles\.padShark\}/, 'GO x2 is the golden shark');
-  assert.match(ov, /bank: \{ marginTop: 14, minHeight: 56,/, 'the exit pad is a real 56 pt button');
+  assert.match(ov, /bank: \{ marginTop: 18, width: 60, height: 60,/, 'the exit pad is a real 60 pt round button');
   // The pads fit an SE inside the 16 pt gutters.
   assert.ok(132 + 12 + 196 <= 375 - 32);
 });

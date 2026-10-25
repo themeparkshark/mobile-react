@@ -73,7 +73,7 @@ import { CURTAIN_SHORT, THEME_FX, curtainEndMs, curtainKindFor } from './render/
 import { ShareCardButton, TILE_DECOY, TILE_QUICK } from './ui/ShareCard';
 import { WhackBoard, WhackHud, useBoardImages } from './render/WhackBoard';
 import { useWhackRuntime } from './useWhackRuntime';
-import { Banner, Breather, DuelCard } from './ui/Overlays';
+import { Banner, Breather, DuelCard, COIN_FLY, streakFlameTier } from './ui/Overlays';
 import { duelTimeline } from './net/duel';
 import { ghostFromRun, paceAt, pbGhostKey } from './net/ghost';
 import { mapGhostHole } from './formations';
@@ -165,6 +165,8 @@ const PADS_SETTLED_MS = 3600;
 const AUTO_GO_MS = (__DEV__ || WHACK_CAPTURE) && Number(process.env.EXPO_PUBLIC_WHACK_AUTO_GO_MS) > 0 ? Number(process.env.EXPO_PUBLIC_WHACK_AUTO_GO_MS) : 3500;
 const LIFETIME_KEY = '@whack/lifetime_bursts';
 const RUN_OF_DAY_KEY = '@whack/run_of_day';
+/** Your biggest best-combo flame ever (0..3): the breather shows the next size as a goal to grow into. */
+const FLAME_RECORD_KEY = '@whack/flame_record';
 const CARDS_KEY = '@whack/finn_cards';
 const MASTERY_KEY = '@whack/mastery';
 const PB_KEY = '@whack_a_shark/best';
@@ -273,7 +275,14 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     enterAt: number;
     /** The repeat card of a middle Burst (a quicker roll and pads). */
     quick: boolean;
+    /** Your biggest flame before this card (null while it loads). */
+    flameRecord: number | null;
+    /** This card beat a record of yours (a new biggest flame, or it just passed your best run). */
+    special: boolean;
   }>(null);
+  /** Your biggest flame ever (null until read), and whether this run has already passed your best. */
+  const flameRecordRef = useRef<number | null>(null);
+  const passedBestRef = useRef(false);
   /** Ghost split (6.11): this Run's banked total minus the PB ghosts' totals over the same Bursts. */
   const splitRef = useRef({ mine: 0, best: 0, known: true });
   const tilesRef = useRef<number[]>([]);
@@ -318,6 +327,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       AsyncStorage.getItem(LIFETIME_KEY).then((v) => { if (alive) setLifetime(v ? parseInt(v, 10) || 0 : 0); }).catch(() => alive && setLifetime(0));
     }
     AsyncStorage.getItem(pbKeyFor(format)).then((v) => { if (alive && v) setBest(parseInt(v, 10) || 0); }).catch(() => undefined);
+    AsyncStorage.getItem(FLAME_RECORD_KEY).then((v) => {
+      if (alive) flameRecordRef.current = Math.max(flameRecordRef.current ?? 0, v ? parseInt(v, 10) || 0 : 0);
+    }).catch(() => { if (alive && flameRecordRef.current == null) flameRecordRef.current = 0; });
     return () => { alive = false; };
   }, [props.unlockLevel, format]);
 
@@ -950,10 +962,25 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     // curtain) and its entrance runs on a UI-thread delay to enterAt (r6: no empty board, no dead hold).
     const enterAt = cardAt();
     const mountIn = Math.max(0, enterAt - CARD_MOUNT_LEAD_MS - Date.now());
+    // A special card (w5r3, the 10th run's surprise): a new biggest flame, or the first card that passes your best.
+    const flameTier = streakFlameTier(b.result.maxStreak);
+    const flameRecord = flameRecordRef.current;
+    const newFlame = flameRecord != null && flameTier > flameRecord;
+    if (flameRecord != null && newFlame) {
+      flameRecordRef.current = flameTier;
+      AsyncStorage.setItem(FLAME_RECORD_KEY, String(flameTier)).catch(() => undefined);
+    }
+    const sp0 = splitRef.current;
+    const aheadNow = !ride && format !== 'duel' && sp0.known && sp0.best > 0 && sp0.mine - sp0.best >= 0;
+    const passedBest = aheadNow && !passedBestRef.current;
+    if (aheadNow) passedBestRef.current = true;
     setTimeout(() => {
       bankTick.current = 0;
       const landIn = Math.max(0, enterAt - Date.now());
       setBreather({
+        flameRecord,
+        // Dev capture only (EXPO_PUBLIC_WHACK_SPECIAL=1): every card is special, to film the rare extra.
+        special: newFlame || passedBest || (__DEV__ && process.env.EXPO_PUBLIC_WHACK_SPECIAL === '1'),
         enterAt,
         quick: repeatBurst(curtainKind.current),
         burstScore: b.score,
@@ -1040,6 +1067,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const handleStart = useCallback(() => {
     finishing.current = false;
     runToken.current += 1;
+    passedBestRef.current = false;
     bankedRef.current = [];
     carryRef.current = NO_CARRY;
     boostedRunRef.current = false;
@@ -1099,6 +1127,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     restBoard(false);
     const nextRun = runIndex + 1;
     setRunIndex(nextRun);
+    passedBestRef.current = false;
     bankedRef.current = [];
     carryRef.current = NO_CARRY;
     boostedRunRef.current = false;
@@ -1339,6 +1368,11 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
               onRollDone={onBankRollDone}
               enterAt={breather.enterAt}
               quick={breather.quick}
+              flameRecord={breather.flameRecord}
+              special={breather.special}
+              coinFly={momentParticles(COIN_FLY.max, budget, reducedMotion)}
+              flash={flashPeak(isDimFlashingLightsEnabled(), reducedMotion)}
+              lite={budget.lowPower || !budget.animate}
               walkPct={Math.min(1, ((metersNow() - walkBaseRef.current) * WALK_PCT_PER_M) / 100)}
               walkMeters={metersNow() - walkBaseRef.current}
               boostReady={breather.boost ? 'GOLDEN START' : null}
