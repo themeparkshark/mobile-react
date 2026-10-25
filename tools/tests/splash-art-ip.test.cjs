@@ -89,3 +89,25 @@ test('Login keeps the title where the splash left it', () => {
   assert.match(src, /const logoScale = useRef\(new Animated\.Value\(1\)\)\.current;/);
   assert.match(src, /const logoOpacity = useRef\(new Animated\.Value\(1\)\)\.current;/);
 });
+
+// The title sits where the native launch art draws it (cover fit), so it holds
+// still from the first native frame through Splash, Loading and Login.
+test('the shared title frame matches the launch art title on every phone size', () => {
+  const ts = require('typescript');
+  const src = read('src/screens/splashFrame.tsx');
+  const start = src.indexOf('const LAUNCH_ART_SIZE');
+  const end = src.indexOf('/**', start);
+  const js = ts.transpileModule(src.slice(start, end) + '\nmodule.exports = { splashLogoFrame };', { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const m = { exports: {} };
+  new Function('module', 'exports', js)(m, m.exports);
+  const { splashLogoFrame } = m.exports;
+  for (const [w, h] of [[375, 667], [402, 874], [440, 956]]) {
+    const f = splashLogoFrame(w, h);
+    const k = Math.max(w / 1080, h / 2500);
+    assert.ok(Math.abs(f.width - 1052 * k) < 0.01, `${w}x${h} width`);
+    assert.ok(Math.abs(f.top - ((h - 2500 * k) / 2 + 380 * k)) < 0.01, `${w}x${h} top`);
+    assert.ok(Math.abs(f.width / f.height - 1284 / 322) < 0.02, 'logo aspect kept');
+    assert.ok(f.top > 20 && f.left >= 0 && f.left + f.width <= w, `${w}x${h} title on screen`);
+  }
+  assert.match(src, /onDisplay=\{done\}/, 'fades only once both images are on screen');
+});

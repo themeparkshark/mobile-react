@@ -20,7 +20,7 @@ const LAUNCH_ART = require('../../assets/images/splash-bg.png');
 // over the launch art, and the later fade to Loading changes nothing on screen.
 
 export const SPLASH_FADE_MS = 250;
-const FADE_SAFETY_MS = 600;
+const FADE_SAFETY_MS = 1000;
 
 export default function SplashScreen() {
   const { theme } = useContext(ThemeContext);
