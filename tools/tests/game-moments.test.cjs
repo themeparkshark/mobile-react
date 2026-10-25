@@ -574,7 +574,7 @@ test('round 4: the breather and the count read with zero words (pictures, a UI-t
   assert.match(ov, /<NextPreview shape=\{p\.nextShape\}/);
   assert.match(ov, /<GameIcon name="streak" size=\{34\} \/>/, 'the fever pad is a flame');
   const shell = read('src/gamekit/GameShellV2.tsx');
-  assert.match(shell, /\{countdownDemo \?\? \(objective \?/);
+  assert.match(shell, /\{countdownDemo \? <React\.Fragment key=\{demoRun\}>\{countdownDemo\}<\/React\.Fragment> : \(objective \?/);
   const coach = read('src/games/whack/ui/CoachDemo.tsx');
   assert.doesNotMatch(coach, /<Text/, 'the demo has no words');
   assert.doesNotMatch(coach, /#ff6b5c|'red'|coral/i, 'the X is navy on white, never red');
@@ -664,7 +664,7 @@ test('round 5: the breather sits below the HUD, shows at most 3 picture stats an
   assert.match(whack, /setTimeout\(\(\) => setReadyOn\(true\), landIn \+ padsAfter\(curtainKind\.current\)\)/, 'the pads arrive as the last beat of the card');
   assert.match(whack, /countdownPillFieldY=\{L \? L\.hudH \+ 8 : undefined\}/, 'the coach card sits below the HUD');
   const shell = read('src/gamekit/GameShellV2.tsx');
-  assert.match(shell, /opacity: fieldIn\.value, transform: \[\{ scale: 1 \+ 0\.03 \* pillT\.value \}\]/, 'the pill arrives with the stage, never over a blank frame');
+  assert.match(shell, /opacity: fieldIn\.value \* \(1 - pillOut\.value\),/, 'the pill arrives with the stage, never over a blank frame');
 });
 
 test('round 5: every bonk reads at arm\'s length (bigger stars, a contact ring), thinned by the power budget', () => {
@@ -727,7 +727,7 @@ test('r6: the breather lands as the curtain\'s last sharks duck, timed from FINI
 test('r6: the +N roll never shows +0 for points you earned and runs on the UI clock with an end pop', () => {
   const ov = read('src/games/whack/ui/Overlays.tsx');
   assert.match(ov, /return total > 0 \? Math\.max\(1, Math\.round\(total \* BREATHER_ROLL\.fromShare\)\) : 0;/);
-  assert.match(ov, /BREATHER_ROLL = \{ landMs: 160, ms: 720, fromShare: 0\.2, punch: 1\.22 \}/);
+  assert.match(ov, /BREATHER_ROLL = \{ landMs: 0, ms: 720, fromShare: 0\.2, punch: 1\.22 \}/);
   assert.match(ov, /punchAt="end"/);
   assert.match(ov, /onDone=\{p\.onRollDone\}/);
   const cu = read('src/gamekit/fx/CountUpText.tsx');
@@ -737,8 +737,8 @@ test('r6: the +N roll never shows +0 for points you earned and runs on the UI cl
   const whack = read('src/games/whack/WhackAShark.tsx');
   assert.match(whack, /GameAudio\.play\(cues\.tally, \{ volume: 0\.85, pitch: Math\.min\(12, bankTick\.current \+ 1\) \}\);/, 'a gold pop a step above the tick ladder');
   // The roll lands inside the card's first second (full card) and quicker on a repeat card.
-  assert.ok(160 + 720 <= 1000);
-  assert.match(ov, /BREATHER_ROLL_QUICK = \{ landMs: 110, ms: 460/);
+  assert.ok(0 + 720 <= 800);
+  assert.match(ov, /BREATHER_ROLL_QUICK = \{ landMs: 0, ms: 460/);
 });
 
 test('r6: an idle card is a still frame (board at rest, no per-frame writes when nothing moves)', () => {
@@ -747,10 +747,10 @@ test('r6: an idle card is a still frame (board at rest, no per-frame writes when
   assert.match(rt, /r\.running = true;\n\s+r\.rest = false;/, 'every Burst start wakes the board');
   assert.match(rt, /rt\.value\.rest = false;\n\s+const a = an\.value;\n\s+a\.curtainAt = -1;/, 'GO wakes the board');
   const whack = read('src/games/whack/WhackAShark.tsx');
-  assert.match(whack, /if \(runToken\.current === token && !finishing\.current && !NO_REST\) runtime\.setRest\(true\);/);
+  assert.match(whack, /if \(runToken\.current === token && !finishing\.current && !NO_REST\) restBoard\(true\);/);
   assert.match(whack, /const NO_REST = \(__DEV__ \|\| WHACK_CAPTURE\) && process\.env\.EXPO_PUBLIC_WHACK_NO_REST === '1';/, 'the A\/B switch exists only in dev and the capture');
   assert.match(whack, /if \(phase !== 'breather' \|\| finishing\.current\) return;\n\s+clearRest\(\);/, 'GO cancels a pending rest');
-  assert.match(whack, /runtime\.setRest\(false\);/, 'the rematch count plays over a live board');
+  assert.match(whack, /restBoard\(false\);/, 'the rematch count plays over a live board');
   // Clock and layers only write shared values when something changed.
   assert.match(read('src/gamekit/useGameClock.ts'), /if \(simMs\.value !== c\.simMs\) simMs\.value = c\.simMs;/);
   const st = read('src/gamekit/fx/StampLayer.tsx');

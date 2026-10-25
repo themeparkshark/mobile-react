@@ -127,6 +127,17 @@ export function noteCountStart(gameId: string): number {
   countStarts[gameId] = (countStarts[gameId] ?? 0) + 1;
   return countStarts[gameId];
 }
+/** How many starts a game has had this app session (0 = it has not started yet). */
+export function countStartsOf(gameId: string): number {
+  return countStarts[gameId] ?? 0;
+}
+/**
+ * One callout at a time on a first start (w5r2): a game's picture demo plays alone in its pill for this long, then
+ * the pill shrinks away as the 3 slams in. Repeat starts skip the demo and count straight away.
+ */
+export const COACH_LEAD_MS = 1100;
+/** The pill shrinks out over this, under the 3's own entrance. */
+export const COACH_EXIT_MS = 160;
 /** Test hook. */
 export function resetCountStarts(): void {
   for (const k of Object.keys(countStarts)) delete countStarts[k];

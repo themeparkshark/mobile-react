@@ -125,8 +125,18 @@ export interface BreatherProps {
 }
 
 /** The banked roll (r6): starts as the card lands, never on 0, and climbs long enough to read. */
-export const BREATHER_ROLL = { landMs: 160, ms: 720, fromShare: 0.2, punch: 1.22 } as const;
-export const BREATHER_ROLL_QUICK = { landMs: 110, ms: 460, fromShare: 0.2, punch: 1.18 } as const;
+// w5r2: landMs 0, so the number is already climbing on the card's first visible frame (it used to sit on
+// its first value for about 300 ms in release captures).
+export const BREATHER_ROLL = { landMs: 0, ms: 720, fromShare: 0.2, punch: 1.22 } as const;
+export const BREATHER_ROLL_QUICK = { landMs: 0, ms: 460, fromShare: 0.2, punch: 1.18 } as const;
+/** The gold rim flash as the card lands (ms after it starts rising): the card's money frame. */
+export const RIM_FLASH = { at: 90, inMs: 70, outMs: 420 } as const;
+/** The flame chip puffs up after the last shark head (ms after the heads start). */
+export const FLAME_PUFF_AFTER_MS = 60;
+/** The GO pad's one-time shine sweep, after it pops in (finite: nothing loops while the card waits). */
+export const PAD_SHINE = { delayMs: 240, ms: 560 } as const;
+/** The veil under the card: a light frost that keeps the board in its own blue, white and gold (never grey). */
+export const BREATHER_VEIL = 'rgba(236,248,255,0.16)';
 const ROLL_EASE = Easing.out(Easing.quad);
 /** Gold sparkles in the roll's end pop (capped; none with Reduce Motion). */
 const POP_SPARKS = 6;
@@ -159,6 +169,31 @@ function BonkHead({ lit, at, src, reduced }: { lit: boolean; at: number; src: nu
   }, [lit, at, reduced, v]);
   const style = useAnimatedStyle(() => ({ opacity: lit ? Math.min(1, v.value * 2) : 1, transform: [{ scale: lit ? v.value : 1 }] }));
   return <Animated.Image source={src} style={[styles.head, lit ? null : styles.headOff, style]} resizeMode="contain" />;
+}
+
+/** The best-combo flame: it puffs up on the card's UI clock after the heads, with a soft white puff behind it. */
+function FlamePuff({ size, at, reduced }: { size: number; at: number; reduced?: boolean }) {
+  const v = useSharedValue(reduced ? 1 : 0);
+  useEffect(() => {
+    if (reduced) return;
+    v.value = withDelay(at, withTiming(1, { duration: 420, easing: Easing.linear }));
+  }, [at, reduced, v]);
+  const flameStyle = useAnimatedStyle(() => {
+    const t = v.value;
+    // 0.6 -> 1.4 in the first quarter, then settle to 1 (one overshoot, no wobble).
+    const k = t < 0.25 ? 0.6 + 0.8 * (t / 0.25) : 1.4 - 0.4 * Math.min(1, (t - 0.25) / 0.45);
+    return { transform: [{ scale: reduced ? 1 : k }] };
+  });
+  const puffStyle = useAnimatedStyle(() => {
+    const t = v.value;
+    return { opacity: t <= 0 || t >= 1 ? 0 : 0.8 * (1 - t), transform: [{ scale: 0.5 + 1.1 * t }] };
+  });
+  return (
+    <View style={styles.flameBox}>
+      {reduced ? null : <Animated.View pointerEvents="none" style={[styles.puff, puffStyle]} />}
+      <Animated.View style={flameStyle}><GameIcon name="streak" size={size} /></Animated.View>
+    </View>
+  );
 }
 
 /** Stat label to a picture (no reading): the value sits next to its icon. */
@@ -208,6 +243,8 @@ export function Breather(p: BreatherProps) {
   const pad = useSharedValue(0);
   const enter = useSharedValue(0);
   const pop = useSharedValue(0);
+  const rim = useSharedValue(0);
+  const shine = useSharedValue(0);
   // How long until the card lands, fixed at mount (the parent mounts the card early, hidden).
   const enterIn = React.useRef(Math.max(0, (p.enterAt ?? 0) - Date.now())).current;
   const rollFrom = React.useRef(breatherRollFrom(p.burstScore)).current;
@@ -218,7 +255,22 @@ export function Breather(p: BreatherProps) {
     enter.value = withDelay(enterIn, p.reduced ? withTiming(1, { duration: DURATION.quick }) : withSpring(1, SPRING.settle));
     // The roll's payoff: a gold ring and a few sparkles burst from the number on its last digit.
     if (!p.reduced && p.burstScore > 0) pop.value = withDelay(enterIn + roll.landMs + roll.ms, withTiming(1, { duration: 460, easing: EASE.out }));
-  }, [enter, pop, enterIn, roll, p.reduced, p.burstScore]);
+    // The money frame: a gold rim flashes round the card as it lands, then fades (UI thread, finite).
+    if (!p.reduced) {
+      rim.value = withDelay(enterIn + RIM_FLASH.at, withSequence(
+        withTiming(1, { duration: RIM_FLASH.inMs, easing: EASE.out }),
+        withTiming(2, { duration: RIM_FLASH.outMs, easing: EASE.out }),
+      ));
+    }
+  }, [enter, pop, rim, enterIn, roll, p.reduced, p.burstScore]);
+  const rimStyle = useAnimatedStyle(() => {
+    const r = rim.value;
+    return { opacity: r <= 0 || r >= 2 ? 0 : r <= 1 ? r : 2 - r, transform: [{ scale: 1 + 0.035 * Math.min(1, r) + 0.02 * Math.max(0, r - 1) }] };
+  });
+  const glowStyle = useAnimatedStyle(() => {
+    const r = rim.value;
+    return { opacity: r <= 0 || r >= 2 ? 0 : 0.45 * (r <= 1 ? r : 2 - r), transform: [{ scale: 1 + 0.06 * r }] };
+  });
   const ringStyle = useAnimatedStyle(() => ({
     opacity: pop.value <= 0 || pop.value >= 1 ? 0 : 0.95 * (1 - pop.value),
     transform: [{ scale: 0.5 + 1.3 * pop.value }],
@@ -227,15 +279,22 @@ export function Breather(p: BreatherProps) {
     // r5: the pads are the last beat of the card stagger. They never sit ghosted: hidden until they can be
     // pressed, then they pop in at full strength on SPRING.pop with one pulse to draw the eye (and one more
     // after a quiet moment). Finite, so nothing loops while the card waits or the app is in the background.
-    if (!p.readyEnabled) { pad.value = 0; return; }
+    if (!p.readyEnabled) { pad.value = 0; shine.value = 0; return; }
     if (p.reduced) { pad.value = withTiming(1, { duration: DURATION.quick }); return; }
+    // One shine sweeps across the pad once it is ready (w5r2: a landed pad never looks dead; finite).
+    shine.value = 0;
+    shine.value = withDelay(PAD_SHINE.delayMs, withTiming(1, { duration: PAD_SHINE.ms, easing: EASE.inOut }));
     pad.value = 0.8;
     pad.value = withSequence(
       withSpring(1, SPRING.pop),
       withDelay(2600, withTiming(1.06, { duration: 260, easing: EASE.out })),
       withTiming(1, { duration: 260, easing: EASE.inOut }),
     );
-  }, [p.readyEnabled, p.reduced, pad]);
+  }, [p.readyEnabled, p.reduced, pad, shine]);
+  const shineStyle = useAnimatedStyle(() => {
+    const v = shine.value;
+    return { opacity: v <= 0 || v >= 1 ? 0 : 0.55, transform: [{ translateX: -70 + v * 340 }, { rotate: '20deg' }] };
+  });
   const padStyle = useAnimatedStyle(() => ({
     opacity: p.reduced ? pad.value : pad.value < 0.79 ? 0 : 1,
     transform: [{ scale: p.reduced ? 1 : Math.max(0.8, pad.value) }],
@@ -258,6 +317,7 @@ export function Breather(p: BreatherProps) {
       <Animated.View style={[styles.dim, dimStyle]} pointerEvents="none" />
       {/* The animated layer carries only the motion; the bordered cream card is a plain view inside it. */}
       <Animated.View style={[cardStyle, { marginTop: p.top ?? 14 }]}>
+      {p.reduced ? null : <Animated.View pointerEvents="none" style={[styles.rimGlow, glowStyle]} />}
       <View style={styles.card} accessibilityLabel={`Burst ${p.burstNumber} of ${p.bursts} banked. ${p.burstScore} points.`}>
         {/* Bursts as pips: banked ones are gold with a check (no words). */}
         <View style={styles.pips}>
@@ -286,7 +346,8 @@ export function Breather(p: BreatherProps) {
             </View>
             {(p.bestStreak ?? 0) > 0 ? (
               <View style={[styles.chip, styles.flameChip]} accessibilityLabel={`Best combo: ${p.bestStreak}`}>
-                <GameIcon name="streak" size={streakFlameSize(p.bestStreak ?? 0)} />
+                <FlamePuff size={streakFlameSize(p.bestStreak ?? 0)} reduced={p.reduced}
+                  at={enterIn + HEADS_START_MS + BONK_HEADS * HEAD_STEP_MS + FLAME_PUFF_AFTER_MS} />
                 <Text style={styles.flameValue}>{p.bestStreak}</Text>
               </View>
             ) : null}
@@ -343,6 +404,7 @@ export function Breather(p: BreatherProps) {
           <NextPreview shape={p.nextShape} theme={theme} boss={p.nextBoss} />
         </View>
       </View>
+      {p.reduced ? null : <Animated.View pointerEvents="none" style={[styles.rim, rimStyle]} />}
       </Animated.View>
       <View style={styles.thumbZone}>
         {p.feverReady && p.onFever ? (
@@ -351,11 +413,13 @@ export function Breather(p: BreatherProps) {
                 shark with the flame, so a non-reader can tell save the fever from use it. */}
             <Pressable accessibilityRole="button" accessibilityLabel="Go and save the fever" onPress={p.readyEnabled ? p.onReady : undefined}
               style={styles.go}>
+              {p.reduced ? null : <View pointerEvents="none" style={styles.shineClip}><Animated.View style={[styles.shine, shineStyle]} /></View>}
               <Image source={THEMED_SHARK_FRAMES[theme][1]} style={styles.padShark} resizeMode="contain" />
               <Text style={styles.goText}>GO</Text>
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Go with fever, 7 seconds of double points" onPress={p.readyEnabled ? p.onFever : undefined}
               style={styles.goFever}>
+              {p.reduced ? null : <View pointerEvents="none" style={styles.shineClip}><Animated.View style={[styles.shine, shineStyle]} /></View>}
               <Image source={ART.golden} style={styles.padShark} resizeMode="contain" />
               <GameIcon name="streak" size={34} />
               <Text style={styles.goText}>GO</Text>
@@ -366,6 +430,7 @@ export function Breather(p: BreatherProps) {
           <Animated.View style={padStyle}>
             <Pressable accessibilityRole="button" accessibilityLabel="Ready for the next Burst" onPress={p.readyEnabled ? p.onReady : undefined}
               style={styles.ready}>
+              {p.reduced ? null : <View pointerEvents="none" style={styles.shineClip}><Animated.View style={[styles.shine, shineStyle]} /></View>}
               <Text style={styles.readyText}>GO</Text>
             </Pressable>
           </Animated.View>
@@ -450,20 +515,26 @@ const styles = StyleSheet.create({
   xBar: { position: 'absolute', width: 12, height: 3, borderRadius: 2, backgroundColor: NAVY },
   multBadge: { position: 'absolute', top: -10, right: -8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 3, borderColor: NAVY, paddingHorizontal: 7, paddingVertical: 1 },
   multText: { fontFamily: 'Shark', fontSize: 18, color: NAVY },
-  dim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(191,229,255,0.35)' },
+  dim: { ...StyleSheet.absoluteFillObject, backgroundColor: BREATHER_VEIL },
+  rim: { position: 'absolute', left: 12, right: 12, top: -4, bottom: -4, borderRadius: 26, borderWidth: 5, borderColor: GOLD },
+  rimGlow: { position: 'absolute', left: 6, right: 6, top: -10, bottom: -10, borderRadius: 32, backgroundColor: '#fff3c4' },
+  flameBox: { alignItems: 'center', justifyContent: 'center' },
+  puff: { position: 'absolute', width: 34, height: 34, borderRadius: 17, backgroundColor: '#ffffff' },
+  shineClip: { ...StyleSheet.absoluteFillObject, borderRadius: 40, overflow: 'hidden' },
+  shine: { position: 'absolute', top: -20, bottom: -20, left: 0, width: 26, backgroundColor: '#ffffff' },
   card: {
     marginHorizontal: 16, backgroundColor: CREAM, borderRadius: 22, borderWidth: 4, borderColor: NAVY,
     paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center',
   },
   cardKicker: { fontFamily: 'Knockout', fontSize: 15, letterSpacing: 1.5, color: BLUE },
-  cardScore: { fontFamily: 'Shark', fontSize: 48, color: GOLD, marginLeft: 6, minWidth: 120, textAlign: 'left',
+  cardScore: { fontFamily: 'Shark', fontSize: 54, color: GOLD, marginLeft: 6, minWidth: 120, textAlign: 'left',
     textShadowColor: '#7a4300', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   cardRun: { fontFamily: 'Shark', fontSize: 18, color: BLUE, marginLeft: 6 },
   chips: { flexDirection: 'row', marginTop: 10 },
   chip: { flexDirection: 'row', backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 3, borderColor: NAVY, paddingHorizontal: 10, paddingVertical: 4, marginHorizontal: 4, alignItems: 'center' },
   chipValue: { fontFamily: 'Shark', fontSize: 18, color: NAVY, marginLeft: 5 },
   headsChip: { paddingHorizontal: 6, height: 44 },
-  head: { width: 26, height: 26, marginHorizontal: 1 },
+  head: { width: 29, height: 29, marginHorizontal: 1 },
   headOff: { opacity: 0.22 },
   flameChip: { height: 44, paddingLeft: 6, paddingRight: 10 },
   flameValue: { fontFamily: 'Shark', fontSize: 15, color: NAVY, marginLeft: 3 },

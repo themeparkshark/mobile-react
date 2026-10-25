@@ -412,6 +412,7 @@ export function useWhackRuntime(opts: {
   return useMemo<WhackRuntime>(() => ({
     sim, rs, an, tick, rt, liveScore, endTick, clock, gesture,
     start: (s: WhackSim, bot: boolean, logTaps = false, scoreBase = 0, curtainKind = 0) => {
+      clock.setActive(true);
       runOnUI((next: WhackSim, b: boolean, lt: boolean, base: number, ck: number) => {
         'worklet';
         sim.value = next;
@@ -422,6 +423,8 @@ export function useWhackRuntime(opts: {
         an.value.curtainKind = ck;
         r.running = true;
         r.rest = false;
+        // A fresh wall stamp: the first frame after a rest never carries the card's idle time.
+        r.frameWall = 0;
         r.logTaps = lt;
         r.acc = 0;
         r.easeT = 600;
@@ -451,6 +454,7 @@ export function useWhackRuntime(opts: {
       })();
     },
     wake: (stepMs: number) => {
+      clock.setActive(true);
       runOnUI((step: number) => {
         'worklet';
         rt.value.rest = false;
@@ -488,10 +492,13 @@ export function useWhackRuntime(opts: {
       })(on, easeIn);
     },
     setRest: (on: boolean) => {
+      // At rest the clock's frame callback stops too, so an idle card asks the UI thread for nothing.
+      if (!on) clock.setActive(true);
       runOnUI((v: boolean) => {
         'worklet';
         rt.value.rest = v;
       })(on);
+      if (on) clock.setActive(false);
     },
     ghostTap: (hole: number, color: number) => {
       runOnUI((h: number, c: number) => {

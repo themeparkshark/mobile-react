@@ -63,7 +63,7 @@ test('breather: the shark-head row and the combo flame replace the number chips;
   const ov = read('src/games/whack/ui/Overlays.tsx');
   assert.match(ov, /p\.bonks != null \? \(/);
   assert.match(ov, /accessibilityLabel=\{`Sharks bonked: \$\{p\.bonks\}`\}/);
-  assert.match(ov, /<GameIcon name="streak" size=\{streakFlameSize\(p\.bestStreak \?\? 0\)\} \/>/);
+  assert.match(ov, /<FlamePuff size=\{streakFlameSize\(p\.bestStreak \?\? 0\)\}/);
   assert.match(ov, /at=\{enterIn \+ HEADS_START_MS \+ i \* HEAD_STEP_MS\}/, 'heads pop on the UI-thread delay from the card landing');
   assert.match(ov, /v\.value = withDelay\(at, withSequence\(/);
   const wh = read('src/games/whack/WhackAShark.tsx');

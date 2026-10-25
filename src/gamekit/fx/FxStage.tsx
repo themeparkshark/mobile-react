@@ -325,13 +325,15 @@ export interface FxStageProps {
   onFlyUpArrive?: (count: number) => void;
   /** UI-thread twin of onFlyUpArrive: bumped on the frame a fly-to-score label lands (a HUD bump with no JS hop). */
   flyArrived?: SharedValue<number>;
+  /** True stops the stage's frame callback (a game at rest under a card, every effect already done). */
+  asleep?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
 const SIZE_SCALE = { sm: 20 / FLY_FONT_PX, md: 26 / FLY_FONT_PX, lg: 30 / FLY_FONT_PX, xl: 40 / FLY_FONT_PX };
 
 export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(function FxStage(
-  { width, height, capacity = 200, layerBudget, timeScale, paused, atlasImage, reducedMotion = false, flashCap = 0.6, onArrive, onFlyUpArrive, flyArrived, style, textMinY = 0 },
+  { width, height, capacity = 200, layerBudget, timeScale, paused, atlasImage, reducedMotion = false, flashCap = 0.6, onArrive, onFlyUpArrive, flyArrived, style, textMinY = 0, asleep = false },
   ref,
 ) {
   const state = useSharedValue<FxState>(createFxState(capacity, layerBudget));
@@ -355,7 +357,7 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
   const notifyFly = useMemo(() => (n: number) => onFlyUpArrive?.(n), [onFlyUpArrive]);
   const wantFly = !!onFlyUpArrive;
 
-  useFrameCallback((info) => {
+  const frame = useFrameCallback((info) => {
     'worklet';
     const raw = info.timeSincePreviousFrame;
     if (raw == null) return;
@@ -387,6 +389,9 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
     }
     if (busy) tick.value = tick.value + 1;
   });
+  useEffect(() => {
+    frame.setActive(!asleep);
+  }, [asleep, frame]);
 
   // -- Particles: one Atlas draw --------------------------------------------
   const cap = capacity;

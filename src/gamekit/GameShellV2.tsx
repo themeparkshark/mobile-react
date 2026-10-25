@@ -82,7 +82,7 @@ import { GameAudio } from './audio/GameAudio';
 import { playGameHaptic, playGameMoment } from './audio/gameMomentSound';
 import { CountdownStage } from './fx/CountdownStage';
 import { FinalSeconds } from './fx/FinalSeconds';
-import { COUNT_END_MS, GO_AT_MS, GO_SPARKLES, RARE_GO_SPARKLES, STAGE_READY_MAX_MS, countPose, countSteps, finalSecondsBeat, isRareGo, noteCountStart } from './core/gameMoments';
+import { COACH_EXIT_MS, COACH_LEAD_MS, COUNT_END_MS, GO_AT_MS, GO_SPARKLES, RARE_GO_SPARKLES, STAGE_READY_MAX_MS, countPose, countStartsOf, countSteps, finalSecondsBeat, isRareGo, noteCountStart } from './core/gameMoments';
 import { AMBIENT, DURATION, flashPeak, momentParticles } from '../ui/motion';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 
@@ -504,6 +504,14 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // A repeat start of the same game (play again, a second burst of play) counts 2-1-GO; now and
     // then GO throws gold confetti (never on a first play).
     const [rareGo, setRareGo] = useState(false);
+    // w5r2, one callout at a time: a game's picture demo (countdownDemo) plays alone in its pill on the first
+    // start, then shrinks away as the 3 lands; a repeat start never shows it (the kid already knows the game).
+    const hasDemo = !!countdownDemo;
+    const hasDemoRef = useRef(hasDemo);
+    hasDemoRef.current = hasDemo;
+    const pillOut = useSharedValue(0);
+    const [pillGone, setPillGone] = useState(() => hasDemo && countStartsOf(gameId ?? 'game') > 0);
+    const [demoRun, setDemoRun] = useState(0);
     useEffect(() => {
       if (phase !== 'countdown' || !visible || !stageOn) return;
       clearCountdown();
@@ -516,15 +524,29 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       setRareGo(isRareGo(n, Math.random()) || (__DEV__ && process.env.EXPO_PUBLIC_RARE_GO === '1'));
       const steps = countSteps(countdownStyle, quick);
       const from = steps[0].at;
+      const lead = hasDemoRef.current && !quick ? COACH_LEAD_MS : 0;
+      if (hasDemoRef.current) {
+        cancelAnimation(pillOut);
+        pillOut.value = lead > 0 ? 0 : 1;
+        setPillGone(lead <= 0);
+        // The demo restarts as the pill shows, so its first beat (the bonk) plays in full.
+        if (lead > 0) setDemoRun((r) => r + 1);
+      }
       // Start once the game has drawn its first frames (never count over a blank stage).
       let raf2: unknown = 0;
       const raf1 = nextFrame(() => {
         raf2 = nextFrame(() => {
+          if (lead > 0) {
+            countdownTimers.current.push(setTimeout(() => {
+              pillOut.value = reducedMotionRef.current ? 1 : withTiming(1, { duration: COACH_EXIT_MS, easing: EASE.in });
+            }, lead));
+            countdownTimers.current.push(setTimeout(() => setPillGone(true), lead + COACH_EXIT_MS + 40));
+          }
           steps.forEach((step) => {
             countdownTimers.current.push(setTimeout(() => {
               fireStepRef.current(step);
               if (step.at >= GO_AT_MS) beginPlayRef.current();
-            }, step.at - from));
+            }, step.at - from + lead));
           });
         });
       });
@@ -855,6 +877,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const countStyle = useAnimatedStyle(() => ({
       transform: [{ scale: countScale.value }],
     }));
+    const resultsScrimStyle = useAnimatedStyle(() => ({ opacity: resultsOpacity.value }));
     const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value * 0.35 }));
     const calmMotion = reducedMotion || !!linePlayMovement?.moving;
     // GO's screen kick (KICK.maxPt, none while walking or reduced) and the scrim fading out over live play.
@@ -863,15 +886,20 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const fieldInStyle = useAnimatedStyle(() => ({ opacity: fieldIn.value }));
     // The pill breathes while the stage loads, so the start never holds still (no dead frame).
     const pillT = useSharedValue(0);
+    const pillShown = phase === 'countdown' && !(hasDemo && pillGone);
     useEffect(() => {
-      if (phase !== 'countdown' || !visible || reducedMotion) { cancelAnimation(pillT); pillT.value = 0; return undefined; }
+      if (!pillShown || !visible || reducedMotion) { cancelAnimation(pillT); pillT.value = 0; return undefined; }
       pillT.value = 0;
       pillT.value = withRepeat(withTiming(1, { duration: AMBIENT.breathMs / 2, easing: EASE.inOut }), -1, true);
       return () => cancelAnimation(pillT);
-    }, [phase, visible, reducedMotion, pillT]);
+    }, [pillShown, visible, reducedMotion, pillT]);
     // r5: the pill arrives with the stage (it fades in on the field's own fade), so a coach card never floats
     // over an empty blue frame while the art loads.
-    const pillBreath = useAnimatedStyle(() => ({ opacity: fieldIn.value, transform: [{ scale: 1 + 0.03 * pillT.value }] }));
+    // w5r2: on its way out the demo pill shrinks and drops toward the count, then the 3 owns the frame.
+    const pillBreath = useAnimatedStyle(() => ({
+      opacity: fieldIn.value * (1 - pillOut.value),
+      transform: [{ translateY: 36 * pillOut.value }, { scale: (1 + 0.03 * pillT.value) * (1 - 0.45 * pillOut.value) }],
+    }));
     // The walking chip pulses 1.0 to 1.08 every 1200 ms (still with Reduce Motion: it holds at 1).
     const walkT = useSharedValue(0);
     const walking = !!linePlayMovement?.moving && phase === 'playing';
@@ -978,11 +1006,13 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               accessibilityRole="button"
               accessibilityLabel={`${objective ? `${objective} ` : ""}Starting in ${countText}. Tap to skip.`}
             >
+              {pillShown ? (
               <Animated.View style={[styles.cdPill, countdownPillFieldY != null && fieldY > 0 ? { top: Math.max(188, fieldY + countdownPillFieldY) } : null, pillBreath]} pointerEvents="none">
                 {goal ? <Text style={styles.goalHeadline}>{`${goal.target} ${goal.label}`}</Text> : null}
-                {countdownDemo ?? (objective ? <Text style={styles.cdPillText} numberOfLines={2}>{objective}</Text> : null)}
+                {countdownDemo ? <React.Fragment key={demoRun}>{countdownDemo}</React.Fragment> : (objective ? <Text style={styles.cdPillText} numberOfLines={2}>{objective}</Text> : null)}
                 {countdownDemo ? null : <Text style={styles.skipHint}>tap to skip</Text>}
               </Animated.View>
+              ) : null}
             </Pressable>
           ) : null}
 
@@ -1013,7 +1043,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
           {/* Results */}
           {phase === 'results' && renderResults && effectiveResult ? (
-            <View style={[styles.overlay, resultsScrim === 'light' ? styles.scrimLight : resultsScrim === 'none' ? styles.scrimNone : null]} pointerEvents="box-none">
+            <View style={[styles.overlay, styles.scrimNone]} pointerEvents="box-none">
+              {/* w5r2: the scrim fades in with the card (it used to land a frame early: a navy board with no card). */}
+              <Animated.View pointerEvents="none" style={[styles.scrimFill, resultsScrim === 'light' ? styles.scrimLight : resultsScrim === 'none' ? styles.scrimNone : null,
+                reducedMotion ? null : resultsScrimStyle]} />
               <Animated.View style={[{ width: '100%', alignItems: 'center' }, reducedMotion ? styles.resultsStill : resultsStyle]}>
                 {renderResults({
                   result: effectiveResult,
@@ -1162,6 +1195,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(8,56,128,0.45)',
   },
+  scrimFill: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,56,128,0.45)' },
   scrimLight: { backgroundColor: 'rgba(255,255,255,0.3)' },
   scrimNone: { backgroundColor: 'transparent' },
   overlayLight: {

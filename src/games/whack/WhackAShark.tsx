@@ -213,10 +213,15 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const fx = useRef<FxStageHandle>(null);
   const stamps = useRef<StampLayerHandle>(null);
   const perf = usePerfProbe(visible, PERF_GRAPH);
+  /**
+   * The board is asleep under a settled card (w5r2): the game clock, camera, particle stage, stamp layer and
+   * the perf and heat samplers all stop their frame callbacks, so an idle card is as quiet as a still screen.
+   */
+  const [asleep, setAsleep] = useState(false);
   // Perf tier (full / lite / min) and the thermal ladder: an older or hot phone keeps 60fps by thinning particles, never by dropping a tell.
-  const perfTier = usePerfTier({ active: visible });
+  const perfTier = usePerfTier({ active: visible && !asleep });
   const tierScale = TIER_SCALES[perfTier.tierJs] ?? TIER_SCALES[0];
-  const thermal = useThermal({ active: visible });
+  const thermal = useThermal({ active: visible && !asleep });
   const thermalScale = THERMAL_SCALES[thermal.levelJs] ?? THERMAL_SCALES[0];
   const thermalMax = useRef(0);
   thermalMax.current = Math.max(thermalMax.current, thermal.levelJs);
@@ -367,12 +372,17 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     return walk.state.current.steps * 0.7;
   }, [walkMeters, walk.state]);
   // v5 8.12: board-only shake at 16pt max with a 250 ms linear decay; walking never calms feedback shakes.
-  const camera = useCamera({ width: field?.w ?? 390, height: field?.h ?? 700, timeScale: undefined, reducedMotion, walking: false, config: CAMERA_PRESETS.whack });
+  const camera = useCamera({ width: field?.w ?? 390, height: field?.h ?? 700, timeScale: undefined, reducedMotion, walking: false, config: CAMERA_PRESETS.whack, active: !asleep });
 
   // ---------------------------------------------------------------- sim events (JS)
   const onEventsRef = useRef<(batch: number[]) => void>(() => undefined);
   const onEvents = useCallback((batch: number[]) => onEventsRef.current(batch), []);
   const runtime = useWhackRuntime({ geo, boxes, poseScale, themeFx, onEvents });
+  /** Rest the board under a card (or wake it): the runtime stops drawing and every frame callback sleeps. */
+  const restBoard = useCallback((on: boolean) => {
+    runtime.setRest(on);
+    setAsleep(on);
+  }, [runtime]);
   const bossFx = useSharedValue({ rise: 0, flinch: 0, flash: 0, ghost: 1, sink: 0 });
   const pace = useSharedValue(0);
   // The picture-first chase (round 3): the star fills toward the next star and pops when it lights.
@@ -403,6 +413,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const clearRest = useCallback(() => {
     if (restTimer.current) clearTimeout(restTimer.current);
     restTimer.current = null;
+    setAsleep(false);
   }, []);
   const budget = usePowerBudget();
   /** UI-thread arrivals of fly-to-score labels: the header pill bumps on that frame. */
@@ -990,14 +1001,14 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       const token = runToken.current;
       restTimer.current = setTimeout(() => {
         restTimer.current = null;
-        if (runToken.current === token && !finishing.current && !NO_REST) runtime.setRest(true);
+        if (runToken.current === token && !finishing.current && !NO_REST) restBoard(true);
         // Frame graph captures only: start a fresh window, so the idle card's numbers are the idle card's alone.
         if (PERF_GRAPH) perf.reset();
       }, landIn + CARD_SETTLE_MS);
       // Autoplay saves a banked fever for the finale (the expert line).
       if (autoplay) setTimeout(() => onReadyRef.current(feverReady && next === totalBursts - 1), landIn + AUTO_GO_MS);
     }, mountIn);
-  }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay, cardAt, clearRest, runtime, perf]);
+  }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay, cardAt, clearRest, runtime, perf, restBoard]);
 
   const onReady = useCallback((goFever: boolean) => {
     if (phase !== 'breather' || finishing.current) return;
@@ -1012,9 +1023,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   // Under the results card the board is a still frame too, once the final curtain has bowed.
   useEffect(() => {
     if (!result) return undefined;
-    const t = setTimeout(() => runtime.setRest(true), CARD_SETTLE_MS + 700);
+    const t = setTimeout(() => restBoard(true), CARD_SETTLE_MS + 700);
     return () => clearTimeout(t);
-  }, [result, runtime]);
+  }, [result, restBoard]);
   useEffect(() => () => clearRest(), [clearRest]);
 
   const onBankExit = useCallback(() => {
@@ -1041,6 +1052,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     chaseEarned.value = 0;
     // GO wakes the board: each well ripples in turn on the UI clock (STAGGER, no JS timers), and one
     // splash per well lands on the GO frame, so the frame after GO is never an empty board.
+    setAsleep(false);
     runtime.wake(STAGGER.stepMs);
     const G0 = Lref.current;
     if (G0) for (let h = 0; h < G0.cx.length; h++) fx.current?.burst('splash', G0.cx[h], G0.my[h] - 4, { count: 2, size: 0.8 });
@@ -1081,7 +1093,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     runToken.current += 1;
     clearRest();
     // The rematch count plays over a live board (its wells breathe again), not the frozen results frame.
-    runtime.setRest(false);
+    restBoard(false);
     const nextRun = runIndex + 1;
     setRunIndex(nextRun);
     bankedRef.current = [];
@@ -1095,7 +1107,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     showTimerLen(buildTimeline(0, nextRun).lengthMs);
     // The shell runs the fresh count (2-1-GO on a repeat) and calls onStart at GO, which starts the
     // burst: no second READY/GO slam and no burst running under the count (one start, one callout).
-  }, [runIndex, showTimerLen, buildTimeline, runtime, clearRest]);
+  }, [runIndex, showTimerLen, buildTimeline, runtime, clearRest, restBoard]);
 
   // Wrap-up (boarding / left the queue): bank the live Burst from a coherent snapshot.
   const wrapMirror = useRef<{ score: number } | null>(null);
@@ -1294,8 +1306,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
               chase={{ star: chaseStar, starPop: chasePop, earned: chaseEarned, showStar: !ride && format !== 'raid' && format !== 'duel' }} />
           ) : null}
           {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={capacity} textMinY={L.hudH + 6}
-            flyArrived={flyArrived} onArrive={onCoinsArrive} /> : null}
-          {L ? <StampLayer ref={stamps} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} queue={{ maxLive: 1, spacingMs: 150 }} minY={L.hudH + 8} /> : null}
+            flyArrived={flyArrived} onArrive={onCoinsArrive} asleep={asleep} /> : null}
+          {L ? <StampLayer ref={stamps} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} queue={{ maxLive: 1, spacingMs: 150 }} minY={L.hudH + 8} asleep={asleep} /> : null}
           {/* r6: FINISH! stays mounted for the whole Run (idle it draws nothing and never redraws: its clock is
               still), so the beat never depends on JS. Arming it from JS (the last 2 s) failed under load: a stalled
               JS thread mounted the canvas after the beat was over and FINISH! never showed. */}

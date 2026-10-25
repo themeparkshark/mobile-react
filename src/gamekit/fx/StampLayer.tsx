@@ -68,6 +68,8 @@ export interface StampLayerProps {
   /** Keep stamps inside this band (Trivia: the stage band). */
   minY?: number;
   maxY?: number;
+  /** True stops the layer's frame callback (a game at rest under a card, no stamp on screen). */
+  asleep?: boolean;
 }
 
 interface SlotData {
@@ -77,7 +79,7 @@ interface SlotData {
 }
 
 export const StampLayer = React.memo(forwardRef<StampLayerHandle, StampLayerProps>(function StampLayer(
-  { width, height, timeScale, queue, reducedMotion = false, minY = 40, maxY },
+  { width, height, timeScale, queue, reducedMotion = false, minY = 40, maxY, asleep = false },
   ref,
 ) {
   const font = useFont(require('../../../assets/fonts/shark-random-funnyness-2.ttf'), FONT_PX);
@@ -95,7 +97,7 @@ export const StampLayer = React.memo(forwardRef<StampLayerHandle, StampLayerProp
   // The layer's own time runs every frame, but the drawing clock moves only while a stamp is on screen (plus
   // one frame to land its end pose): an empty layer never redraws its canvas (an idle breather stayed busy).
   const layerT = useSharedValue(0);
-  useFrameCallback((info) => {
+  const layerFrame = useFrameCallback((info) => {
     'worklet';
     const raw = info.timeSincePreviousFrame;
     if (raw == null) return;
@@ -110,6 +112,9 @@ export const StampLayer = React.memo(forwardRef<StampLayerHandle, StampLayerProp
     // Frames are capped at 50 ms, so the last live frame always lands past the stamp's end (its done pose).
     if (live && clock.value !== t) clock.value = t;
   });
+  useEffect(() => {
+    layerFrame.setActive(!asleep);
+  }, [asleep, layerFrame]);
 
   const start = useCallback((item: StampItem, now: number) => {
     let slot = slotEnds.current.findIndex((e) => e <= now);
