@@ -247,14 +247,6 @@ function GatherSparkle({ index, count, charge }: { index: number; count: number;
  * A star flung from the burst (bigger than a sparkle, so it reads even at 10 frames a second). Round 4: a pool
  * of BURST_STARS_MAX, of which `count` fly this catch (the burst variant), fanned evenly over the top.
  */
-/** Wave 5 round 3: one sparkle of a treat star's gold trail, `lag` ms behind the star. Worklet. */
-function homeTrail(p: number, lag: number, index: number, home: number, count: number, to: { x: number; y: number }) {
-  'worklet';
-  const h = home && p > 0 && p < 1 && index < count ? homeStarAt(p * DURATION.sparkle - lag, index, count, to) : null;
-  if (!h) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }] };
-  return { opacity: lag > 50 ? 0.45 : 0.75, transform: [{ translateX: h.x }, { translateY: h.y }, { scale: h.scale * (lag > 50 ? 0.45 : 0.65) }] };
-}
-
 function BurstStar({ index, t, count, home, to }: { index: number; t: SharedValue<number>; count: SharedValue<number>;
   /** Wave 5 round 2: 1 on the 5th-catch treat: the stars arc into the coin counter at `to` (pt from the find). */
   home: SharedValue<number>; to: SharedValue<{ x: number; y: number }> }) {
@@ -262,11 +254,8 @@ function BurstStar({ index, t, count, home, to }: { index: number; t: SharedValu
     const p = t.value;
     const n = count.value;
     if (p <= 0 || p >= 1 || index >= n) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }, { rotate: '0deg' }] };
-    if (home.value) {
-      const h = homeStarAt(p * DURATION.sparkle, index, n, to.value);
-      if (!h) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }, { rotate: '0deg' }] };
-      return { opacity: 1, transform: [{ translateX: h.x }, { translateY: h.y }, { scale: h.scale }, { rotate: `${(index % 2 ? -1 : 1) * p * 300}deg` }] };
-    }
+    // The 5th-catch treat's stars are drawn by the layer's HomeStar pool (big, trailed, in layer points).
+    if (home.value) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }, { rotate: '0deg' }] };
     const spread = n > 4 ? 0.62 : 0.9;
     const angle = -Math.PI / 2 + (index - (n - 1) / 2) * spread;
     const reach = (index % 2 ? 96 : 120) + (n > 4 ? 30 : 0);
@@ -277,22 +266,42 @@ function BurstStar({ index, t, count, home, to }: { index: number; t: SharedValu
         { scale: (p < 0.12 ? p / 0.12 : 1) * (1.15 - 0.45 * p) }, { rotate: `${(index % 2 ? -1 : 1) * p * 220}deg` }],
     };
   });
-  // Wave 5 round 3: a treat star leaves a short gold trail (two sparkles 35 and 70 ms behind it) on its way home.
-  // (A module-level worklet: a function declared inside the component is not hoisted once the worklet plugin rewrites it.)
-  const trailA = useAnimatedStyle(() => homeTrail(t.value, 35, index, home.value, count.value, to.value));
-  const trailB = useAnimatedStyle(() => homeTrail(t.value, 70, index, home.value, count.value, to.value));
+  return <Animated.View pointerEvents="none" style={[styles.burstStar, style]}>
+    <RNImage source={MINI_STAR} style={styles.fxFill} resizeMode="contain" fadeDuration={0} />
+  </Animated.View>;
+}
+
+/**
+ * Wave 5 round 3: one star of the 5th-catch treat, drawn like the stream's coins (always mounted at the layer, in layer
+ * points, still until a treat throws it): it flings out of the find, hangs a beat at the tips, then flies home into the
+ * coin counter with a short gold trail, so a kid sees each star land (the counter punches once per star).
+ */
+const HomeStar = memo(function HomeStar({ index, clock, plan, on, count, sx, sy, to }: { index: number; clock: SharedValue<number>;
+  plan: SharedValue<CatchPlan>; on: SharedValue<number>; count: SharedValue<number>; sx: SharedValue<number>; sy: SharedValue<number>;
+  to: SharedValue<{ x: number; y: number }> }) {
+  const pose = (lag: number, k: number) => {
+    'worklet';
+    const h = on.value && index < count.value ? homeStarAt(clock.value - plan.value.burstAt - lag, index, count.value, to.value) : null;
+    if (!h) return { opacity: 0, transform: [{ translateX: -200 }, { translateY: -200 }, { scale: 0 }, { rotate: '0deg' }] };
+    return { opacity: lag ? (lag > 50 ? 0.5 : 0.8) : 1, transform: [{ translateX: sx.value + h.x - HOME_STAR / 2 }, { translateY: sy.value + h.y - HOME_STAR / 2 },
+      { scale: (h.scale / 1.45) * k }, { rotate: `${(index % 2 ? -1 : 1) * (clock.value - plan.value.burstAt) * 0.3}deg` }] };
+  };
+  const star = useAnimatedStyle(() => pose(0, 1));
+  const trailA = useAnimatedStyle(() => pose(40, 0.6));
+  const trailB = useAnimatedStyle(() => pose(80, 0.4));
   return <>
-    <Animated.View pointerEvents="none" style={[styles.burstStar, trailB]}>
+    <Animated.View pointerEvents="none" style={[styles.homeStar, trailB]}>
       <RNImage source={MAP_SPARKLE} style={[styles.fxFill, { tintColor: GOLD_FX.rays }]} resizeMode="contain" fadeDuration={0} />
     </Animated.View>
-    <Animated.View pointerEvents="none" style={[styles.burstStar, trailA]}>
+    <Animated.View pointerEvents="none" style={[styles.homeStar, trailA]}>
       <RNImage source={MAP_SPARKLE} style={[styles.fxFill, { tintColor: GOLD_FX.raysSoft }]} resizeMode="contain" fadeDuration={0} />
     </Animated.View>
-    <Animated.View pointerEvents="none" style={[styles.burstStar, style]}>
+    <Animated.View pointerEvents="none" style={[styles.homeStar, star]}>
       <RNImage source={MINI_STAR} style={styles.fxFill} resizeMode="contain" fadeDuration={0} />
     </Animated.View>
   </>;
-}
+});
+const HOME_STAR = 40;
 
 /**
  * Round 4: the milestone beam, drawn once with Skia (static, no per-frame redraw) and moved only by its
@@ -2211,6 +2220,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       {layer.width > 0 && <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         {Array.from({ length: COIN_STREAM.max }, (_, index) => (
           <StreamCoin key={index} index={index} t={coinT} count={coinN} geo={coinGeo} source={STREAM_COIN_ART} />))}
+        {Array.from({ length: BURST_STARS_MAX }, (_, index) => (
+          <HomeStar key={`s${index}`} index={index} clock={cc} plan={planSV} on={homeSV} count={starN} sx={stageX} sy={stageY} to={starTo} />))}
       </View>}
     </View>
   );
@@ -2228,6 +2239,7 @@ const styles = StyleSheet.create({
   flash: { position: 'absolute', left: 0, top: 0, width: 220, height: 220 },
   burstSparkle: { position: 'absolute' },
   burstStar: { position: 'absolute', left: -14, top: -14, width: 28, height: 28 },
+  homeStar: { position: 'absolute', left: 0, top: 0, width: HOME_STAR, height: HOME_STAR },
   waterRing: { position: 'absolute', left: 0, top: 0, width: WATER_W, height: WATER_H },
   streamCoin: { position: 'absolute', left: 0, top: 0, width: STREAM_COIN, height: STREAM_COIN },
   coinTrail: { position: 'absolute', left: 0, top: 0, width: 18, height: 18 },

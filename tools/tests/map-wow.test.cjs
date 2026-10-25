@@ -751,8 +751,8 @@ test('wave 5 r3: the 5th-catch stars are big, fling out, then land in the counte
   assert.ok(wow.homeStarLand(0) - wow.HOME_STARS.flyMs >= treat.suckAt - treat.burstAt, 'they fly home once the gold is sucking back (over the map, not gold on gold)');
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.match(src, /const lands = \[\.\.\.starLands, \.\.\.coinLands\]\.sort/, 'star landings punch the counter too');
-  assert.match(src, /homeTrail\(t\.value, 35, index/, 'a short gold trail behind each star');
-  assert.match(src, /^function homeTrail\(/m, 'a module-level worklet (a nested function declaration is not hoisted after the worklet plugin)');
+  assert.match(src, /const trailA = useAnimatedStyle\(\(\) => pose\(40, 0\.6\)\);/, 'a short gold trail behind each star');
+  assert.match(src, /<HomeStar key=\{`s\$\{index\}`\}/, 'drawn at the layer like the coins (always mounted, layer points)');
 });
 
 test('wave 5 r2: where to walk next: only once nothing is in range, a new find first, its edge arrow when off screen', () => {
