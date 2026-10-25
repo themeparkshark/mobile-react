@@ -37,7 +37,7 @@ import FlameUpRow from './FlameUpRow';
 import { EmberCard, FreezeSavedCard } from './FreezeMoments';
 import WelcomeBack from './WelcomeBack';
 import RewardReveal, { type PrizeOrigin } from './RewardReveal';
-import LoopPerf, { LOOPS_PERF_CAPTURE, loopPerfOn } from './LoopPerf';
+import LoopPerf, { LOOPS_PERF_CAPTURE, loopPerfMapStyle, loopPerfOn } from './LoopPerf';
 import CardSurface from './CardSurface';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
@@ -996,7 +996,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         buttonBox.current?.measureInWindow((x, y, w, h) => { if (Number.isFinite(x) && w > 0) buttonCenter.current = { x: x + w / 2, y: y + h / 2 }; });
       }}>
       {/* Release-like perf captures only (never in store builds): the same frame graph over the idle map. */}
-      {LOOPS_PERF_CAPTURE && !visible && <LoopPerf />}
+      {LOOPS_PERF_CAPTURE && !visible && <LoopPerf style={loopPerfMapStyle} />}
       <Daily3MapButton ringDone={ringDone} pips={b.pips} streak={b.streak} attention={b.attention}
         active={o.mapFocused && !o.mapCovered && !visible} reducedMotion={reducedMotion} landing={landing} onFullSet={onFullSet}
         onPress={() => { playSfx('ui.tap'); openSheet(); }} />

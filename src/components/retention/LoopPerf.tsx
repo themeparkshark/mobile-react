@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { useEffect } from 'react';
 import { PerfOverlay, usePerfProbe } from '../../gamekit/perf/PerfOverlay';
 
@@ -7,14 +7,14 @@ import { PerfOverlay, usePerfProbe } from '../../gamekit/perf/PerfOverlay';
  * when a lane tool turns it on (it never ships on screen), and it reports its numbers to the lane tools through
  * globalThis.__loopsPerf (summary, reset).
  */
-export default function LoopPerf() {
+export default function LoopPerf({ style }: { readonly style?: StyleProp<ViewStyle> } = {}) {
   const probe = usePerfProbe(true);
   useEffect(() => {
     const g = globalThis as Record<string, unknown>;
     g.__loopsPerf = { summary: () => probe.summary(), reset: () => probe.reset() };
     return () => { delete g.__loopsPerf; };
   }, [probe]);
-  return <PerfOverlay probe={probe} visible style={styles.at} />;
+  return <PerfOverlay probe={probe} visible style={style ?? styles.at} />;
 }
 
 /**
@@ -28,4 +28,9 @@ export function loopPerfOn(): boolean {
   return LOOPS_PERF_CAPTURE || (__DEV__ && !!(globalThis as Record<string, unknown>).__loopsPerfOn);
 }
 
-const styles = StyleSheet.create({ at: { position: 'absolute', left: 6, bottom: 34, top: undefined, right: undefined } });
+const styles = StyleSheet.create({
+  at: { position: 'absolute', left: 6, bottom: 34, top: undefined, right: undefined },
+  /** Beside the Daily 3 map button (the idle-map capture), fully on screen. */
+  map: { position: 'absolute', right: 72, top: 0, left: undefined, bottom: undefined },
+});
+export const loopPerfMapStyle = styles.map;

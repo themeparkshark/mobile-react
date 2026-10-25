@@ -503,7 +503,7 @@ test('the loops frame graph shows only in dev or a release-like perf capture fla
   assert.match(perf, /export const LOOPS_PERF_CAPTURE = process\.env\.EXPO_PUBLIC_LOOPS_PERF === '1';/);
   assert.match(perf, /return LOOPS_PERF_CAPTURE \|\| \(__DEV__ && /);
   const hook = read('src/components/retention/useRetention.tsx');
-  assert.match(hook, /\{LOOPS_PERF_CAPTURE && !visible && <LoopPerf \/>\}/);
+  assert.match(hook, /\{LOOPS_PERF_CAPTURE && !visible && <LoopPerf style=\{loopPerfMapStyle\} \/>\}/);
   for (const f of ['eas.json', 'app.config.js']) {
     if (fs.existsSync(path.join(root, f))) assert.doesNotMatch(read(f), /EXPO_PUBLIC_LOOPS_PERF/);
   }
