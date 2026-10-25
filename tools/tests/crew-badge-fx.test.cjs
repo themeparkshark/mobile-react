@@ -42,7 +42,9 @@ test('round 5: the +1 and the hearts read at a glance and the bubble never wraps
 test('round 6: three solid gold hearts, 28 to 32 pt with a white outline, pop past full size and fan out; a sparkle on the badge', () => {
   const size = Number(/HEART_SIZE = (\d+)/.exec(src)[1]);
   assert.ok(size >= 28 && size <= 32, `heart size ${size}`);
-  assert.match(src, /mono=\{BRAND\.white\}/, 'a white heart behind the gold one is the outline');
+  assert.match(src, /Skia\.Path\.MakeFromSVGString\('M16 29/, 'a real heart shape, not the round heart badge tinted into a disc');
+  assert.match(src, /color=\{BRAND\.white\} style="stroke"/, 'a white rim');
+  assert.doesNotMatch(src, /<GameIcon name="heart"/);
   assert.match(src, /const pop = k < 0\.12 \? 0\.4 \+ 0\.85/, 'pops to 1.25 then settles');
   assert.match(src, /opacity: k < 0\.08 \? k \/ 0\.08 : k < 0\.7 \? 1/, 'solid, not half see-through');
   assert.match(src, /HEART_FAN/);

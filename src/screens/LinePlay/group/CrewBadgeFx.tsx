@@ -17,6 +17,7 @@
  * the strip looks the same at rest. UI thread only (Reanimated); one-shot, no
  * loops. Reduce Motion: no travel, the badge is simply there.
  */
+import { Canvas, Group, Oval, Path, Skia } from '@shopify/react-native-skia';
 import { memo, useEffect, useRef, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -130,10 +131,29 @@ function Heart({ index, t }: { readonly index: number; readonly t: SharedValue<n
   });
   // A solid gold heart on a white one a little bigger: a clean white outline that reads on the blue rail.
   return <Animated.View style={[styles.heart, style]}>
-    <GameIcon name="heart" size={HEART_SIZE + HEART_OUTLINE * 2} mono={BRAND.white} />
-    <View style={styles.heartInk}><GameIcon name="heart" size={HEART_SIZE} mono={HEART_GOLD} /></View>
+    <HeartArt />
   </Animated.View>;
 }
+
+/**
+ * A real heart shape (the app's heart icon is a heart inside a round badge, which a gold tint turned into a plain gold
+ * disc): code-drawn in one static Skia canvas, a thick white rim, a solid gold heart, a thin navy ink line like Alex's
+ * outlines and a white shine on its upper left. Drawn once; only the wrapping view animates.
+ */
+const HEART_PATH = Skia.Path.MakeFromSVGString('M16 29 C 6 21.5, 1 15.5, 1 9.8 C 1 5.2, 4.6 2, 8.6 2 C 11.6 2, 14.2 3.8, 16 6.6 C 17.8 3.8, 20.4 2, 23.4 2 C 27.4 2, 31 5.2, 31 9.8 C 31 15.5, 26 21.5, 16 29 Z');
+const HeartArt = memo(function HeartArt() {
+  const box = HEART_SIZE + HEART_OUTLINE * 2;
+  const k = HEART_SIZE / 32;
+  if (!HEART_PATH) return null;
+  return <Canvas style={{ width: box, height: box }} pointerEvents="none">
+    <Group transform={[{ translateX: HEART_OUTLINE }, { translateY: HEART_OUTLINE }, { scale: k }]}>
+      <Path path={HEART_PATH} color={BRAND.white} style="stroke" strokeWidth={(HEART_OUTLINE * 2) / k} strokeJoin="round" />
+      <Path path={HEART_PATH} color={HEART_GOLD} />
+      <Path path={HEART_PATH} color={BRAND.navy} style="stroke" strokeWidth={1.4} strokeJoin="round" />
+      <Oval x={6} y={5} width={7} height={5} color="rgba(255,255,255,0.85)" />
+    </Group>
+  </Canvas>;
+});
 
 /** Gold, never red (red reads as a miss). Big enough to read at a glance (and on a contact sheet). */
 const HEART_GOLD = '#ffc928';
@@ -155,6 +175,5 @@ const styles = StyleSheet.create({
     shadowColor: BRAND.navy, shadowOpacity: 0.35, shadowOffset: { width: 0, height: 2 }, shadowRadius: 0 },
   plusText: { fontFamily: 'Shark', fontSize: PLUS_FONT, lineHeight: 23, color: BRAND.navy },
   heart: { position: 'absolute', top: -14, alignItems: 'center', justifyContent: 'center' },
-  heartInk: { position: 'absolute' },
   spark: { position: 'absolute', right: -8, top: -8 },
 });
