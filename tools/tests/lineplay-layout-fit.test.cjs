@@ -690,7 +690,8 @@ test('a one-time tip waits while the page window has stepped aside, so it never 
 
 test('the resume countdown always opens on 3, never on the last run\'s 1', () => {
   const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
-  assert.match(countdown, /clock\.value = 0;\n\s+clock\.value = withTiming\(3,/, 'the clock restarts from 0 (the 3) every time');
+  assert.match(countdown, /finished\.current = false;\n\s+clock\.value = 0;/, 'the clock restarts from 0 (the 3) every time');
+  assert.match(countdown, /clock\.value = withDelay\(RESET_DELAY_MS, withTiming\(0, \{ duration: 0 \}\)\);/, 'back at 0 once hidden: the closing frame keeps the 1 (no 3 flash) and the next run never opens on the 1');
 });
 
 test('paused, the board PLAY strip is never a tap that only hides Details: it rests in pale blue and runs the 3 2 1', () => {
@@ -703,12 +704,14 @@ test('paused, the board PLAY strip is never a tap that only hides Details: it re
   assert.match(screen, /const onBoardPlay = useCallback\(\(\) => \{\n\s+closeDetails\(\);\n\s+if \(snapshot\.state === 'paused' && !resuming\) \{\n\s+setResuming\(true\);/);
 });
 
-test('the resume countdown shows 3, 2 and 1 on the UI thread, so a busy JS thread never skips a number', () => {
+test('the resume countdown shows 3, 2 and 1 on the UI thread, so neither a busy JS thread nor a long frame skips a number', () => {
   const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
-  assert.match(countdown, /clock\.value = withTiming\(3, \{ duration: 3 \* STEP_MS, easing: Easing\.linear \}, done => \{\n\s+if \(done\) runOnJS\(finish\)\(\);/);
+  assert.match(countdown, /const MAX_STEP_MS = 34;/);
+  assert.match(countdown, /before \+ Math\.min\(info\.timeSincePreviousFrame \?\? 16, MAX_STEP_MS\) \/ STEP_MS/, 'one frame moves the clock at most 34 ms');
+  assert.match(countdown, /if \(before < 3 && after >= 3\) runOnJS\(finish\)\(\);/, 'the game comes back once, after the 1');
+  assert.match(countdown, /if \(Math\.floor\(after\) > Math\.floor\(before\) && after < 3\) runOnJS\(tick\)\(\);/, 'the 2 and the 1 tick when they appear');
   assert.match(countdown, /\[3, 2, 1\]\.map\(\(value, index\) => <CountNumber/);
   assert.match(countdown, /const shown = t >= 0 && \(t < 1 \|\| index === 2\);/, 'each number shows only during its own step; the 1 holds until the game is back');
-  assert.doesNotMatch(countdown, /setCount\(/, 'no JS state drives the number');
+  assert.doesNotMatch(countdown, /setTimeout|setCount\(/, 'no JS timer or JS state drives the number');
   assert.match(countdown, /onPress=\{finish\}/, 'a tap still skips it');
-  assert.match(countdown, /return \(\) => \{ ticks\.current\.forEach\(clearTimeout\); ticks\.current = \[\]; cancelAnimation\(clock\); \};/);
 });
