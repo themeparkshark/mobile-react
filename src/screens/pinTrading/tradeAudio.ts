@@ -20,7 +20,8 @@ let preloaded: Promise<void> | null = null;
 
 /** Decode the trading cues once (call when the screen opens). */
 export function preloadTradeAudio(): void {
-  preloaded ??= GameAudio.preload([...TRADE_CUES]).catch(() => undefined);
+  // Not kept while sound is off (no engine), so turning Sound on preloads normally.
+  preloaded ??= GameAudio.preload([...TRADE_CUES]).then(ok => { if (!ok) preloaded = null; }, () => undefined);
 }
 
 /** One beat: a sound, then (optionally) its haptic a moment later. Never throws. */

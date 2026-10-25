@@ -100,7 +100,8 @@ test('S0-2: no ride or park name reaches Trivia Duel chrome (header, rail, resul
   assert.ok(duels.length >= 2);
   for (const d of duels) {
     assert.ok(!/taskName/.test(d), `TriviaDuel props must not carry taskName: ${d}`);
-    assert.ok(/subtitle="(Ride Challenge: 2 of 3 to win|Queue Duel)"/.test(d), d);
+    // The Home Arcade says so at home (Oct 23 first session); still never a ride or park name.
+    assert.ok(/subtitle=(?:"(Ride Challenge: 2 of 3 to win|Queue Duel)"|\{homeArcade \? 'Home Arcade' : 'Queue Duel'\})/.test(d), d);
   }
   void block;
   const duel = fs.readFileSync(path.join(__dirname, '../../src/games/trivia-duel/TriviaDuel.tsx'), 'utf8');

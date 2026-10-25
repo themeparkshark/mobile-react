@@ -12,11 +12,13 @@ const CANVAS = { width: 2170, height: 725 };
 /** Fit the visible sprite, including its supports and lock, into the original slot.
  * Generated files retain their original alpha canvas; no destructive crop is needed.
  */
-export default function ParkShelfArtwork({ variant = 'normal', height = 55 }: {
+export default function ParkShelfArtwork({ variant = 'normal', height = 55, initialWidth = 0 }: {
   readonly variant?: keyof typeof ART;
   readonly height?: number;
+  /** The row width when the parent already knows it: the shelf draws on its first frame instead of after layout. */
+  readonly initialWidth?: number;
 }) {
-  const [width, setWidth] = useState(0);
+  const [width, setWidth] = useState(initialWidth > 0 ? initialWidth : 0);
   const art = ART[variant];
   const visibleHeight = art.bottom - art.top;
   const scale = Math.min(width / CANVAS.width, height / visibleHeight);

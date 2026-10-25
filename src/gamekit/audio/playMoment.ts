@@ -329,9 +329,13 @@ export function studioMoment(name: MomentName, opts: MomentOptions = {}): boolea
   }
 }
 
-/** Decode a set of moments ahead of time (no-op while the switch is off: Chris's bank is preloaded elsewhere). */
-export function preloadMoments(names: readonly MomentName[]): Promise<void> {
-  if (!isStudioSoundOn() || !GameAudio.isSfxEnabled()) return Promise.resolve();
+/**
+ * Decode a set of moments ahead of time (no-op while the switch is off: Chris's bank is preloaded elsewhere).
+ * Resolves true once the cues are decoded, false when nothing loaded (switch off, sound effects off, or no engine
+ * yet because the player's settings are not in): a caller that caches its preload tries again on its next call.
+ */
+export function preloadMoments(names: readonly MomentName[]): Promise<boolean> {
+  if (!isStudioSoundOn() || !GameAudio.isSfxEnabled()) return Promise.resolve(false);
   const keys: string[] = [];
   for (const name of names) {
     const def = MOMENTS[name] as MomentDef | undefined;
@@ -346,7 +350,7 @@ export function preloadMoments(names: readonly MomentName[]): Promise<void> {
       });
     }
   }
-  return GameAudio.preload(keys).catch(() => undefined);
+  return GameAudio.preload(keys).catch(() => false);
 }
 
 /** Tests only. */

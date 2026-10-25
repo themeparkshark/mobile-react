@@ -32,6 +32,21 @@ class SfxManager {
     return GameAudio.isSfxEnabled();
   }
 
+  /** Hold the audio engine until the player's sound settings are known (app start). */
+  holdUntilSettings(): void {
+    GameAudio.holdUntilSettings();
+  }
+
+  /** The player's sound settings are in. */
+  settingsKnown(): void {
+    GameAudio.settingsKnown();
+  }
+
+  /** Game music on/off (the player's Music setting). With music and SFX both off the engine never starts. */
+  setMusicEnabled(value: boolean): void {
+    GameAudio.setMusicEnabled(value);
+  }
+
   /** 0..1 master volume applied to every voice. */
   setMasterVolume(v: number): void {
     GameAudio.setMasterVolume(v);

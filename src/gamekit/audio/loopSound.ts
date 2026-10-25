@@ -123,7 +123,9 @@ export function preloadLoopMoments(): void {
   try {
     if (preloaded || !studioReady('chest.open')) return;
     preloaded = true;
-    void preloadMoments(LOOP_MOMENTS);
+    // Nothing loaded (muted at the time, or before the player's settings are in, so no engine): drop the flag, so
+    // the next call once sound is on decodes for real instead of the day's first check decoding on first play.
+    void preloadMoments(LOOP_MOMENTS).then((ok) => { if (!ok) preloaded = false; }, () => { preloaded = false; });
   } catch { /* sound is decoration */ }
 }
 /** Tests only. */

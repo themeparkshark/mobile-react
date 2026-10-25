@@ -31,8 +31,18 @@ const ICONS: Record<string, number> = {
   showdown: require('../../../../assets/images/screens/lineplay/arcade/showdown.png'),
 };
 
-export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, onHidden }: {
+export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, onHidden,
+  kicker = 'LINEPLAY', title = 'QUEUE ARCADE', intro = 'Pick a quick game while you wait.',
+  note = 'Your wait still counts while you play.', newLabel = 'New this wait.', showNew = true }: {
   readonly visible: boolean;
+  /** Header and helper lines; the defaults are the queue's. The home arcade passes its own. */
+  readonly kicker?: string;
+  readonly title?: string;
+  readonly intro?: string;
+  readonly note?: string | null;
+  readonly newLabel?: string;
+  /** The NEW pill on unplayed games (off at home, where every game is always open). */
+  readonly showNew?: boolean;
   readonly choices: readonly QueueArcadeChoice[];
   readonly onChoose: (index: number) => void;
   readonly onClose: () => void;
@@ -45,32 +55,32 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
     animationInTiming={reducedMotion ? 120 : 260} animationOutTiming={reducedMotion ? 120 : 180}
     onBackButtonPress={onClose} onModalHide={onHidden}>
     <View style={styles.scrim}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close queue arcade"
+      <Pressable accessibilityRole="button" accessibilityLabel={`Close ${title.toLowerCase()}`}
         onPress={onClose} style={StyleSheet.absoluteFill} />
       <View style={styles.panel}>
         <View style={styles.header}>
           <Image source={require('../../../../assets/images/screens/social/arcade.png')}
             style={styles.arcadeIcon} contentFit="contain" />
           <View style={styles.headerCopy}>
-            <Text style={styles.kicker}>LINEPLAY</Text>
-            <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>QUEUE ARCADE</Text>
+            <Text style={styles.kicker}>{kicker}</Text>
+            <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{title}</Text>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close queue arcade"
+          <Pressable accessibilityRole="button" accessibilityLabel={`Close ${title.toLowerCase()}`}
             onPress={onClose} style={styles.close} hitSlop={8}>
             <GameIcon name="close" size={40} />
           </Pressable>
         </View>
-        <Text style={styles.intro}>Pick a quick game while you wait.</Text>
+        <Text style={styles.intro}>{intro}</Text>
         <ScrollView contentContainerStyle={styles.games}>
           {choices.map((choice, order) => <Animated.View key={choice.id} style={styles.gameCell}
             entering={visible && !reducedMotion ? ZoomIn.delay(90 + order * 60).springify().damping(12) : undefined}>
             <Pressable accessibilityRole="button"
-              accessibilityLabel={`${choice.completed ? 'Replay' : 'Play'} ${choice.title}. ${choice.bestStars == null
-                ? 'New this wait.' : `Best ${choice.bestStars} of 3 stars.`}`}
+              accessibilityLabel={`${choice.completed ? 'Replay' : 'Play'} ${choice.title}.${choice.bestStars == null
+                ? showNew ? ` ${newLabel}` : '' : ` Best ${choice.bestStars} of 3 stars.`}`}
               onPress={() => onChoose(choice.index)}
               style={({ pressed }) => [styles.game, pressed && { backgroundColor: '#FFF3C7',
                 borderColor: '#E4B238', transform: [{ scale: reducedMotion ? 1 : 0.96 }] }]}>
-              {choice.bestStars == null && <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View>}
+              {showNew && choice.bestStars == null && <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View>}
               {!!choice.gameId && ICONS[choice.gameId] != null &&
                 <Image source={ICONS[choice.gameId]} style={styles.gameIcon} contentFit="contain" />}
               <Text style={styles.gameTitle} numberOfLines={2}>{choice.title}</Text>
@@ -81,7 +91,7 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
             </Pressable>
           </Animated.View>)}
         </ScrollView>
-        <Text style={styles.note}>Your wait still counts while you play.</Text>
+        {!!note && <Text style={styles.note}>{note}</Text>}
       </View>
     </View>
   </Modal>;

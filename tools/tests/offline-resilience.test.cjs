@@ -120,6 +120,8 @@ test('useAxiosSetup registers once, reads fresh callbacks and has no em dash toa
   effects[0][0]();
   refs[1].current = () => toasts.push('fresh-logout');
   handlers.bad({ response: { status: 401 } }).catch(() => {});
+  assert.deepEqual(toasts, [], 'a guest request (no token) never signs anyone out');
+  handlers.bad({ config: { headers: { Authorization: 'Bearer t' } }, response: { status: 401 } }).catch(() => {});
   assert.deepEqual(toasts, ['fresh-logout']);
   for (let i = 0; i < 3; i += 1) handlers.bad({ response: { status: 502 } }).catch(() => {});
   assert.equal(toasts[1], mod.SERVER_TROUBLE_TOAST);
@@ -313,4 +315,30 @@ test('offline icon provenance points at the saved raw outputs and review sheet',
   const source = read('src/components/OfflineBanner.tsx');
   assert.match(source, /art-pilot\/raw\/ws9\/offline-v2/);
   assert.doesNotMatch(source, /art-ws9\/review-sheet-1/);
+});
+
+test('a 401 signs out only a request that carried a token (guests keep playing)', async () => {
+  const realAxios = require(path.join(root, 'node_modules/axios'));
+  const { requestHadToken } = loadTs('src/hooks/useAxiosSetup.ts', {
+    react: { useContext: () => ({}), useRef: v => ({ current: v }), useEffect() {} },
+    '../api/client': {}, '../context/AuthProvider': { AuthContext: {} }, '../context/BroadcastProvider': { BroadcastContext: {} },
+    '../utils/toast': { showToast() {} }, '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
+    '../api/broadcastFilter': loadTs('src/api/broadcastFilter.ts'),
+  });
+  // The real axios build: a 401 from a client with and without a default token.
+  const failed = async token => {
+    const client = realAxios.create({ adapter: async config => {
+      throw Object.assign(new Error('401'), { config, response: { status: 401, config } });
+    } });
+    if (token) client.defaults.headers.common.Authorization = `Bearer ${token}`;
+    try { await client.get('/me'); } catch (error) { return error; }
+    throw new Error('expected a 401');
+  };
+  assert.equal(requestHadToken(await failed('abc')), true, 'signed in: the session ran out');
+  assert.equal(requestHadToken(await failed(null)), false, 'guest: nothing to sign out of');
+  assert.equal(requestHadToken({ config: { headers: { get: name => name === 'Authorization' ? 'Bearer x' : undefined } } }), true);
+  assert.equal(requestHadToken({ config: { headers: { authorization: 'Bearer abc' } } }), true);
+  assert.equal(requestHadToken({ config: { headers: { Authorization: '' } } }), false);
+  assert.equal(requestHadToken({}), false);
+  assert.equal(requestHadToken(undefined), false);
 });

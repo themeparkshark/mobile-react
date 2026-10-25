@@ -24,6 +24,7 @@ import RewardBurst from './RewardBurst';
 import { GoldBurst } from '../ui/GoldBurst';
 import shortenNumber from '../helpers/shorten-number';
 import { DURATION, EASE, SPRING } from '../ui/motionEasing';
+import TapHint from './TapHint';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
@@ -79,7 +80,7 @@ export function countStart(amount: number): number {
 export function prizeBlockHeight(extraLines: number, hasMilestone: boolean, ticketDay: boolean): number {
   return (ticketDay ? 0 : 60) + 38 + extraLines * 24 + (hasMilestone ? 24 : 0);
 }
-export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', claim = update }: {
+export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', claim = update, simple = false }: {
   readonly dailyGift: DailyGiftType;
   readonly onMapOcclusionChange?: (busy: boolean) => void;
   /** After the card has gone: whether today's chest was claimed (false for "Back to map"). */
@@ -88,6 +89,11 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   readonly autoOpen?: boolean;
   /** The claim call (the release-like hook capture opens a local chest without the server). */
   readonly claim?: typeof update;
+  /**
+   * A brand new player's first visit: one big chest to tap, no 7-day strip,
+   * streak or day count to read. The ladder shows from the next visit on.
+   */
+  readonly simple?: boolean;
 }) {
   const occlusion = useRef(onMapOcclusionChange); occlusion.current = onMapOcclusionChange;
   const closed = useRef(onClosed); closed.current = onClosed;
@@ -395,7 +401,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     transform: [{ scale: 0.6 + spark.value * 0.7 }, { rotate: `${spark.value * 25}deg` }],
   }));
 
-  const chestSize = Math.min(width * 0.52, 230);
+  const chestSize = simple ? Math.min(width * 0.62, 260) : Math.min(width * 0.52, 230);
   // A coin day opens onto the pile of coins. Any other day never shows coins it did not pay: the lid pops,
   // light bursts out from under it and the prize itself climbs out and stays above the chest.
   const coinDay = kind === 'coins';
@@ -414,15 +420,15 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       <Animated.View ref={wrapRef} collapsable={false} style={[styles.wrap, cardStyle]}>
         <Ribbon text="Daily Chest" />
         <View style={styles.card}>
-          <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Today’s chest: day ${day} of ${ladder.length}`}</Text>
+          {simple ? null : <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Today’s chest: day ${day} of ${ladder.length}`}</Text>}
 
-          <View style={[styles.ladder, styles.aboveGold]}>
+          {simple ? null : <View style={[styles.ladder, styles.aboveGold]}>
             {ladder.map((r) => (
               <LadderDay key={r.day} reward={r} state={r.day < day ? 'done' : r.day === day ? 'today' : 'future'}
                 stamp={r.day === day ? stamp : undefined} />
             ))}
-          </View>
-          {(displayedGift.streak ?? 0) > 1 && (
+          </View>}
+          {!simple && (displayedGift.streak ?? 0) > 1 && (
             <View style={styles.streakRow}>
               <GameIcon name="streak" size={18} />
               <Text style={styles.streakText}>{`${displayedGift.streak} day streak`}</Text>
@@ -468,6 +474,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                 </Animated.View>
               </Animated.View>
             )}
+            {/* First visit: a hand taps the chest, no reading needed. */}
+            {simple && phase === 'closed' && <TapHint delay={1400} style={{ right: '22%', bottom: chestSize * 0.18 }} />}
           </Pressable>
 
           <View style={[styles.prizeSlot, { height: prizeBlockHeight(extras.length, !!milestone, ticketDay) }]}>
@@ -485,7 +493,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
           )}
           </View>
 
-          {phase === 'open' && next && (
+          {phase === 'open' && next && !simple && (
             <Text style={styles.next}>{`${next.days_away} more day${next.days_away === 1 ? '' : 's'} to your ${next.label}`}</Text>
           )}
 

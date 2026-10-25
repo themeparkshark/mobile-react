@@ -34,7 +34,7 @@ test('trace mode is dev only: a release build ignores EXPO_PUBLIC_STUDIO_TRACE',
   const e = traceEngine({ dev: false });
   assert.equal(e.Trace.studioTraceOn(), false);
   assert.equal(e.Switch.isStudioSoundOn(), false);
-  assert.match(read('src/context/SoundEffectProvider.tsx'), /if \(studioTraceOn\(\)\) \{[\s\S]{0,560}return;\n\s+\}\n\s+if \(isReady && !player\?\.enabled_sound_effects\)/,
+  assert.match(read('src/context/SoundEffectProvider.tsx'), /if \(studioTraceOn\(\)\) \{[\s\S]{0,560}return;\n\s+\}\n\s+if \(!allowed\)/,
     'legacy expo-av sounds return before createAsync in trace mode');
   assert.match(read('src/gamekit/audio/GameAudio.ts'), /if \(this\.traceMode\) \{[\s\S]{0,200}new TraceBackend[\s\S]{0,120}return;/, 'no native backend is built in trace mode');
 });
