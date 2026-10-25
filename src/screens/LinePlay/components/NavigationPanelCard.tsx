@@ -50,7 +50,7 @@ interface Props {
   /** Label for the next action in free play, e.g. the next page's name. */
   readonly nextLabel?: string;
   /**
-   * Details is open. A page too short for the whole board shows one "Tap to play"
+   * Details is open. A page too short for the whole board shows one PLAY
    * strip instead of a board with a row peeking under the fade; the tap closes Details.
    */
   readonly onMakeRoom?: () => void;
@@ -293,7 +293,7 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   };
 
   // Details open on a page too short for a whole board: the mission's header (when it fits) and one
-  // "Tap to play" strip, like the chapter's PLAY NOW strip. The tap closes Details so the board has room.
+  // PLAY strip, like the chapter's PLAY strip. The tap closes Details so the board has room.
   if (onMakeRoom && layout === 'strip') {
     const title = trace.solved ? look.solvedTitle : look.repairTitle;
     const withHeader = navStripHeader(room.height);
@@ -311,18 +311,23 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
           </View>
         </View>
       </LinearGradient>}
+      {/* PLAY, the same word as the chapter's strip. Paused, it rests in pale blue like the paused
+          chapter PLAY and ARCADE, and one tap runs the same 3 2 1 as the play button (never a tap
+          that only hides Details while the game stays paused). */}
       <Pressable accessibilityRole="button" onPress={onMakeRoom}
-        accessibilityLabel={`${title}. Tap to play. Hides the details.`}
-        style={({ pressed }) => [styles.playStrip, !withHeader && styles.playStripFill, pressed && !reducedMotion && styles.pressed]}>
-        {withHeader ? <Text style={[styles.playStripTitle, styles.playStripCtaBig]}>TAP TO PLAY</Text> : <>
+        accessibilityLabel={`${paused ? 'Resume and play' : 'Play'} ${title}. Hides the details.`}
+        style={({ pressed }) => [styles.playStrip, !withHeader && styles.playStripFill, paused && styles.playStripResting,
+          pressed && !reducedMotion && styles.pressed]}>
+        {withHeader ? <Text style={[styles.playStripTitle, styles.playStripCtaBig]}>PLAY</Text> : <>
           <View style={styles.playStripCopy}>
-            <Text style={styles.playStripTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{title}</Text>
+            <Text style={styles.playStripTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+              <Text style={styles.playStripCta}>{'PLAY  '}</Text>{title}
+            </Text>
             <View style={styles.relayRow}>
               {[0, 1, 2].map(slot => <GameIcon key={slot} name="star" size={14}
                 mono={slot < trace.signals ? undefined : '#9db7cf'} />)}
             </View>
           </View>
-          <Text style={styles.playStripCta}>TAP TO PLAY</Text>
         </>}
         <GameIcon name="play" size={40} />
       </Pressable>
@@ -537,7 +542,7 @@ const styles = StyleSheet.create({
   statusRowAbove: { height: BESIDE_STATUS_ROW, justifyContent: 'center', paddingHorizontal: 2 },
   kickerOnCream: { color: BRAND.navy, fontSize: 15, lineHeight: 19 },
   heroBesideRoomy: { justifyContent: 'center', gap: 10 },
-  // The one-row "Tap to play" strip (Details open on a short page).
+  // The one-row PLAY strip (Details open on a short page).
   contentStrip: { flexGrow: 1, justifyContent: 'center', padding: 5, paddingBottom: 5 },
   playStrip: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingLeft: 12, paddingRight: 4,
     paddingVertical: 1, borderRadius: 16, borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 5,
@@ -550,6 +555,8 @@ const styles = StyleSheet.create({
   playStripCtaBig: { flex: 1, fontSize: 20 },
   playStripTitle: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 18, lineHeight: 22 },
   playStripCta: { color: '#7c4200', fontFamily: 'Knockout', fontSize: 14, letterSpacing: 0.8 },
+  // Paused: the strip rests like the paused chapter PLAY (pale blue, navy outline), still live.
+  playStripResting: { backgroundColor: '#e8f6ff', borderColor: '#0b4f8a' },
   success: { marginTop: 12, padding: 12, borderWidth: 3, borderColor: BRAND.gold, borderRadius: 18,
     backgroundColor: BRAND.white, alignItems: 'center', gap: 4 },
   starsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, marginBottom: 2 },

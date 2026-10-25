@@ -254,9 +254,10 @@ test('Details open on a 17 Pro: the navigation page is one "Tap to play" strip, 
   assert.match(card, /<PageScroll fill=\{BRAND\.cream\} contentStyle=\{\[styles\.contentStrip, withHeader && styles\.contentStripHeader\]\}\n\s*onLayout=\{onLayout\} still>/);
   assert.equal(m.navStripHeader(147), true, 'a 17 Pro reading Details keeps the mission header over the strip');
   assert.equal(m.navStripHeader(90), false, 'a shorter page is just the strip');
-  assert.match(card, />TAP TO PLAY<\/Text>/);
+  assert.match(card, />PLAY<\/Text>/);
+  assert.doesNotMatch(card, /TAP TO PLAY/, 'PLAY, the one word the chapter strip uses too');
   const screen = read(SCREEN);
-  assert.match(screen, /onNavigationMakeRoom=\{detailsOpen \? closeDetails : undefined\}/,
+  assert.match(screen, /onNavigationMakeRoom=\{detailsOpen \? onBoardPlay : undefined\}/,
     'only while Details is open; with Details closed the board always shows');
   const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
   assert.equal((slot.match(/onMakeRoom=\{onNavigationMakeRoom\}/g) ?? []).length, 2);
@@ -600,7 +601,7 @@ test('a space clue page says its own mission name and no second count (the rail 
 
 test('the board page "Tap to play" strip with no header fills its window (no cream band on an SE)', () => {
   const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
-  assert.match(card, /\[styles\.playStrip, !withHeader && styles\.playStripFill, pressed && !reducedMotion && styles\.pressed\]/);
+  assert.match(card, /\[styles\.playStrip, !withHeader && styles\.playStripFill, paused && styles\.playStripResting,\n\s+pressed && !reducedMotion && styles\.pressed\]/);
   assert.match(card, /playStripFill: \{ flexGrow: 1, maxHeight: 112 \}/);
 });
 
@@ -690,4 +691,14 @@ test('a one-time tip waits while the page window has stepped aside, so it never 
 test('the resume countdown always opens on 3, never on the last run\'s 1', () => {
   const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
   assert.match(countdown, /useEffect\(\(\) => \{\n\s+if \(!active\) setCount\(3\);\n\s+\}, \[active\]\);/);
+});
+
+test('paused, the board PLAY strip is never a tap that only hides Details: it rests in pale blue and runs the 3 2 1', () => {
+  const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
+  assert.match(card, /paused && styles\.playStripResting/);
+  assert.match(card, /playStripResting: \{ backgroundColor: '#e8f6ff', borderColor: '#0b4f8a' \}/);
+  assert.match(card, /accessibilityLabel=\{`\$\{paused \? 'Resume and play' : 'Play'\} \$\{title\}\. Hides the details\.`\}/);
+  assert.match(card, /<Text style=\{styles\.playStripCta\}>\{'PLAY  '\}<\/Text>\{title\}/, 'one row: PLAY and the mission name, like the chapter strip');
+  const screen = read(SCREEN);
+  assert.match(screen, /const onBoardPlay = useCallback\(\(\) => \{\n\s+closeDetails\(\);\n\s+if \(snapshot\.state === 'paused' && !resuming\) \{\n\s+setResuming\(true\);/);
 });

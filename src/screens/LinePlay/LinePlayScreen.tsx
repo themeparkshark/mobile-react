@@ -797,7 +797,7 @@ export default function LinePlayScreen() {
     pagesFade.value = withTiming(1, { duration: PAGES_RISE_MS });
   }, [pagesFade]);
   // The window has its new size; the page inside measures it and switches its content on the next
-  // frame or two (a board becomes "Tap to play"), so the rise waits two frames: no squeezed old page.
+  // frame or two (a board becomes the PLAY strip), so the rise waits two frames: no squeezed old page.
   const revealPages = useCallback(() => {
     if (!revealPending.current) return;
     requestAnimationFrame(() => requestAnimationFrame(rise));
@@ -830,7 +830,7 @@ export default function LinePlayScreen() {
     });
   }, [detailsOpen]);
 
-  /** "Back to games" and "Tap to play": Details closes so the pages get their room back. */
+  /** "Show games" and the board's PLAY strip: Details closes so the pages get their room back. */
   const closeDetails = useCallback(() => onDetailsChange(false), [onDetailsChange]);
   /**
    * The rail's one button while the window has stepped aside. Paused by hand, it is Play: one tap
@@ -841,6 +841,17 @@ export default function LinePlayScreen() {
     closeDetails();
     if (railBack === 'play' && !resuming) setResuming(true);
   }, [closeDetails, railBack, resuming]);
+  /**
+   * The board's PLAY strip (Details open on a short page): Details closes so the board has room.
+   * Paused, the same tap also runs the resume 3 2 1, so PLAY always plays.
+   */
+  const onBoardPlay = useCallback(() => {
+    closeDetails();
+    if (snapshot.state === 'paused' && !resuming) {
+      setResuming(true);
+      void Haptics.selectionAsync();
+    }
+  }, [closeDetails, snapshot.state, resuming]);
   useEffect(() => () => {
     if (revealTimer.current) clearTimeout(revealTimer.current);
   }, []);
@@ -1000,7 +1011,7 @@ export default function LinePlayScreen() {
   // Every page's scroll height from the window's own height (known the frame it changes).
   const pageViewHeight = pagesHeight > PAGE_FRAME_V ? pagesHeight - PAGE_FRAME_V : undefined;
   // One gold button per screen: the chapter page has PLAY NOW and the board page is the game itself
-  // (its "Tap to play" and "Next signal" are gold), so there the rail's Next is a quiet white button.
+  // (its PLAY strip and "Next signal" are gold), so there the rail's Next is a quiet white button.
   const railQuiet = visibleItem?.kind === 'chapter_intro' || boardPage;
   const jumpToPage = (index: number) => {
     if (index < 0 || index >= activityPages.length) return;
@@ -1350,7 +1361,7 @@ export default function LinePlayScreen() {
                       navigationProgress={snapshot.navigationPanels?.[item.id]}
                       onNavigationTurn={(index) => session.rotateNavigationPanel(item.id, index)}
                       onNavigationReplay={() => session.startNextNavigationRound(item.id)}
-                      onNavigationMakeRoom={detailsOpen ? closeDetails : undefined}
+                      onNavigationMakeRoom={detailsOpen ? onBoardPlay : undefined}
                       navigationTitle={snapshot.chapter?.navigationPanel ? snapshot.chapter.missionNames[0] : undefined}
                       missionTitle={chapterMissionTitle(snapshot.chapter, item.id)}
                       navigationTargetHeight={boardTargetHeight ?? pageViewHeight}

@@ -52,7 +52,7 @@ export interface ActivitySlotProps {
   readonly onNavigationTurn?: (index: number) => void;
   readonly onNavigationReplay?: () => void;
   readonly onNavigationNext?: () => void;
-  /** Details is open: a page too short for the whole board offers "Tap to play", which closes Details. */
+  /** Details is open: a page too short for the whole board offers a PLAY strip, which closes Details (and resumes a paused game). */
   readonly onNavigationMakeRoom?: () => void;
   /** The chapter's name for its board mission ("Fix the signal"), so PLAY NOW, the rail and the board say one phrase. */
   readonly navigationTitle?: string;

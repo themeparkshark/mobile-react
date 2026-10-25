@@ -196,10 +196,10 @@ export function boardSideFor(viewport: { width: number; height: number }, header
 
 /**
  * The page is too short for even the smallest whole board (Details is open):
- * the page shows its header and one "Tap to play" strip instead of a board
+ * the page shows its header and one PLAY strip instead of a board
  * with a row peeking under the fade. Before layout it assumes the board fits.
  */
-/** The "Tap to play" page keeps the mission header above its strip when the page has this much room. */
+/** The PLAY strip page keeps the mission header above its strip when the page has this much room. */
 export const NAV_STRIP_HEADER_PAGE = 140;
 export function navStripHeader(viewHeight: number): boolean {
   return viewHeight >= NAV_STRIP_HEADER_PAGE;
@@ -267,7 +267,7 @@ export function boardBesideDrawn(viewport: { width: number; height: number }): n
  * - 'top': the header, then the whole board under it (roomy pages).
  * - 'beside': the header is a column beside the board (short pages: an iPhone SE,
  *   a 17 Pro, or any phone reading Details).
- * - 'strip': Details is open and neither fits: one "Tap to play" strip.
+ * - 'strip': Details is open and neither fits: one PLAY strip.
  * Before layout it assumes 'top', so nothing jumps.
  */
 export type NavBoardLayout = 'top' | 'beside' | 'strip';
@@ -276,7 +276,7 @@ export function navBoardLayout(viewport: { width: number; height: number }, head
   if (viewport.width <= 0 || viewport.height <= 0) return 'top';
   const top = boardFits(viewport, headerHeight) ? boardSideFor(viewport, headerHeight) ?? 0 : 0;
   const beside = boardBesideSide(viewport);
-  // Too short for both: with Details open, the "Tap to play" strip. With Details closed this is only
+  // Too short for both: with Details open, the PLAY strip. With Details closed this is only
   // the moment the page slides in before the crew row's room arrives: keep the beside layout (the
   // board at its floor) so it just grows, never a one-row board in the wrong layout.
   if (beside < BESIDE_FLOOR) return top > 0 ? 'top' : detailsOpen ? 'strip' : 'beside';
