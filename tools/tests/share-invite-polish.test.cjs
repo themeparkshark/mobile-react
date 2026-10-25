@@ -134,7 +134,7 @@ test('every campaign QR encodes its own counted link', () => {
 
 test('a Share Studio sheet fades out before the grown-up gate, and is a layer while up', () => {
   const host = src('src/share/ShareStudioHost.tsx');
-  assert.match(host, /const uri = await captureFlex\(cardRef, format\);[\s\S]{0,400}setStage\('leaving'\);[\s\S]{0,200}const outcome = await openShareSheet\(uri, shareMessage\(flexShareUrl\(request\.kind, request\.payload\)\), flexCopy\(request\.kind, request\.payload\)\.title\);/,
+  assert.match(host, /const uri = await captureFlex\(cardRef, format\);[\s\S]{0,400}setStage\('leaving'\);[\s\S]{0,700}const outcome = await openShareSheet\(uri, shareMessage\(link\), flexCopy\(request\.kind, request\.payload\)\.title, copyLink\);/,
     'the picture is made first, then the sheet leaves, then the gate and share sheet');
   assert.match(host, /useModalLayer\(stage !== 'gone', 'show'\)/, 'Root dialogs and the gate wait for the sheet');
   assert.equal((host.match(/visible=\{visible\} onShow=\{onShow\} onDismiss=\{onDismiss\}/g) || []).length, 2, 'sheet and moment both hand off');
@@ -780,7 +780,7 @@ test('Shark Pass and member prize cards have their own campaign link and QR', ()
     assert.match(qr, new RegExp(`  ${c}: require\\('../../assets/images/share/qr/campaign-${c}.png'\\)`));
     assert.ok(fs.existsSync(path.join(root, `assets/images/share/qr/campaign-${c}.png`)));
   }
-  assert.match(src('src/share/ShareStudioHost.tsx'), /Clipboard\.setStringAsync\(flexShareUrl\(request\.kind, request\.payload\)\)/);
+  assert.match(src('src/share/ShareStudioHost.tsx'), /const link = flexShareUrl\(request\.kind, request\.payload\);\n\s*const copyLink = \(\) => Clipboard\.setStringAsync\(link\)/);
   assert.match(src('src/share/FlexCard.tsx'), /return campaign \? QR_BY_CAMPAIGN\[campaign\] : QR_BY_KIND\[kind\];/);
 });
 
@@ -903,7 +903,8 @@ test('Whack and Memory story pictures show the player\'s own shark peeking over 
 
 test('Android shares put the line with the link on the clipboard and say so on the sheet', () => {
   const cap = src('src/share/capture.ts');
-  assert.match(cap, /if \(message\) await Clipboard\.setStringAsync\(message\)\.catch\(\(\) => undefined\);/);
+  assert.match(cap, /const androidAfterYes = async \(\) => \{\n\s*if \(message\) await Clipboard\.setStringAsync\(message\)\.catch\(\(\) => undefined\);/);
+  assert.match(cap, /dialogTitle: androidShareTitle\(message\) \}, name, androidAfterYes\)/, 'the copy waits for the grown-up');
   assert.match(cap, /dialogTitle: androidShareTitle\(message\)/);
   assert.match(cap, /return message \? 'Share \(the link is copied too\)' : 'Share';/);
 });
@@ -1168,4 +1169,43 @@ test('lookBounds knows every catalog paper: wide ones by extent, the rest by nam
   assert.match(tool, /--check/);
   assert.match(tool, /NARROW_PAPERS = '/);
   assert.match(tool, /ALPHA = 24/);
+});
+
+test('the link goes on the clipboard only after the grown-up says yes (a Not now changes nothing)', async () => {
+  const studio = src('src/share/ShareStudioHost.tsx');
+  const shareBody = studio.slice(studio.indexOf('const share = useCallback'), studio.indexOf('const offscreen ='));
+  assert.equal((shareBody.match(/Clipboard\.setStringAsync/g) || []).length, 1);
+  assert.ok(shareBody.indexOf('Clipboard.setStringAsync') > shareBody.indexOf('captureFlex('), 'no copy before the picture and the gate');
+  assert.match(shareBody, /openShareSheet\(uri, shareMessage\(link\), flexCopy\(request\.kind, request\.payload\)\.title, copyLink\)/);
+  for (const os of ['ios', 'android']) {
+    for (const yes of [false, true]) {
+      const order = [];
+      const external = loadTs('src/services/external.ts', {
+        'expo-file-system': { cacheDirectory: 'file:///cache/', readDirectoryAsync: async () => [], deleteAsync: async () => undefined,
+          makeDirectoryAsync: async () => undefined, copyAsync: async () => undefined },
+        'expo-sharing': { isAvailableAsync: async () => true, shareAsync: async () => { order.push('sheet'); } },
+        'expo-web-browser': { openBrowserAsync: async () => undefined },
+        'react-native': { Platform: { OS: os }, Linking: {}, Share: { sharedAction: 'sharedAction', dismissedAction: 'dismissedAction',
+          share: async () => { order.push('sheet'); return { action: 'sharedAction' }; } } },
+        '../components/GrownUpGate': { askGrownUp: async () => { order.push('gate'); return yes; } },
+      });
+      const afterYes = async () => { order.push('copy'); };
+      if (os === 'ios') await external.shareExternal({ url: 'file:///tmp/a.jpg', message: 'm' }, undefined, 'Golden Churro', afterYes);
+      else await external.shareFileExternal('file:///tmp/a.jpg', undefined, 'Golden Churro', afterYes);
+      assert.deepEqual(order, yes ? ['gate', 'copy', 'sheet'] : ['gate'], `${os} yes=${yes}`);
+    }
+  }
+  // A failing copy never blocks the sheet.
+  const order = [];
+  const external = loadTs('src/services/external.ts', {
+    'expo-file-system': { cacheDirectory: 'file:///cache/', readDirectoryAsync: async () => [], deleteAsync: async () => undefined,
+      makeDirectoryAsync: async () => undefined, copyAsync: async () => undefined },
+    'expo-sharing': { isAvailableAsync: async () => true, shareAsync: async () => undefined },
+    'expo-web-browser': { openBrowserAsync: async () => undefined },
+    'react-native': { Platform: { OS: 'ios' }, Linking: {}, Share: { sharedAction: 'sharedAction', dismissedAction: 'dismissedAction',
+      share: async () => { order.push('sheet'); return { action: 'dismissedAction' }; } } },
+    '../components/GrownUpGate': { askGrownUp: async () => true },
+  });
+  await external.shareExternal({ url: 'file:///tmp/a.jpg' }, undefined, 'X', async () => { throw new Error('clipboard'); });
+  assert.deepEqual(order, ['sheet']);
 });

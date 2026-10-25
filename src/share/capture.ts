@@ -63,14 +63,15 @@ export function activityLabel(activity: string | null | undefined): string | nul
 export const SHARE_FILE_NAME = 'Theme Park Shark';
 
 /**
- * The OS share sheet for a card picture, after the grown-up gate. `message` (a short line with the
+ * The OS share sheet for a card picture, after the grown-up gate. `afterYes` runs only once the
+ * grown-up said yes, before the sheet opens. `message` (a short line with the
  * app link) rides along so Messages and chat apps get the link without a paste; photo-only targets
  * drop it. `name` titles the file in the share sheet ("Golden Churro" becomes Golden-Churro.jpg),
  * never a UUID (services/external names the copy).
  */
-export async function openShareSheet(uri: string, message?: string, name: string = SHARE_FILE_NAME): Promise<ShareOutcome> {
+export async function openShareSheet(uri: string, message?: string, name: string = SHARE_FILE_NAME, afterYes?: () => Promise<void> | void): Promise<ShareOutcome> {
   if (Platform.OS === 'ios') {
-    const result = await shareExternal(message ? { url: uri, message } : { url: uri }, undefined, name);
+    const result = await shareExternal(message ? { url: uri, message } : { url: uri }, undefined, name, afterYes);
     if (!result) return { ended: 'declined', opened: false, shared: false, activity: null };
     // A sheet that never answered in time (it may still be up): opened, so nothing presents over it,
     // and neither a share nor a cancel.
@@ -81,9 +82,12 @@ export async function openShareSheet(uri: string, message?: string, name: string
   if (!await Sharing.isAvailableAsync()) throw new Error('share sheet unavailable');
   // Android's file share carries the picture only (expo-sharing sends no text; a native share with
   // the text is in the native queue). The picture's QR already scans to the link; the line with the
-  // link also goes on the clipboard, and the sheet's title says so.
-  if (message) await Clipboard.setStringAsync(message).catch(() => undefined);
-  const ended = await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: androidShareTitle(message) }, name);
+  // link also goes on the clipboard (only after the grown-up's yes), and the sheet's title says so.
+  const androidAfterYes = async () => {
+    if (message) await Clipboard.setStringAsync(message).catch(() => undefined);
+    await afterYes?.();
+  };
+  const ended = await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: androidShareTitle(message) }, name, androidAfterYes);
   // A timeout may still have the sheet up: count it as opened, so nothing presents over it.
   if (ended === 'declined') return { ended, opened: false, shared: false, activity: null };
   return { ended, opened: true, shared: null, timedOut: ended === 'timeout', activity: null };

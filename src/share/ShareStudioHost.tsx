@@ -200,9 +200,6 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
     // try again or tap Nice!; only a real share, a closed share sheet or a failure ends it.
     let reopen = false;
     try {
-      // The link (with its per-kind or prize campaign, never a player id) goes on the clipboard,
-      // so it can be pasted as an Instagram link sticker.
-      void Clipboard.setStringAsync(flexShareUrl(request.kind, request.payload)).then(() => setLinkCopied(true)).catch(() => undefined);
       // Wait for every piece of art. Slow or broken art swaps to its bundled fallback at
       // FLEX_ART_FALLBACK_MS, so this waits past that: a card never goes out with an empty slot.
       for (let waited = 0; waited < FLEX_CAPTURE_WAIT_MS && !readyRef.current; waited += 100) await new Promise(r => setTimeout(r, 100));
@@ -214,7 +211,11 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
         setTimeout(onDismiss, HANDOFF_MS);
       });
       // The card's title names the file in the share sheet ("Golden-Churro.jpg"), never a UUID.
-      const outcome = await openShareSheet(uri, shareMessage(flexShareUrl(request.kind, request.payload)), flexCopy(request.kind, request.payload).title);
+      // After the grown-up's yes (never before, so a "Not now" changes nothing), the link (with its
+      // per-kind or prize campaign, never a player id) goes on the clipboard for an Instagram link sticker.
+      const link = flexShareUrl(request.kind, request.payload);
+      const copyLink = () => Clipboard.setStringAsync(link).then(() => setLinkCopied(true)).catch(() => undefined);
+      const outcome = await openShareSheet(uri, shareMessage(link), flexCopy(request.kind, request.payload).title, copyLink);
       if (!outcome.opened) { reopen = true; event('dismissed'); }
       // A sheet that never answered (it may still be up) is neither a cancel nor a share: record nothing.
       else if (outcome.timedOut) return;
