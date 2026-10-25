@@ -630,7 +630,7 @@ test('every picture on the board page means one thing: the hint is the turn-tile
 test('paused, ARCADE is never a dead tap: one tap runs the resume 3 2 1, then the arcade opens', () => {
   const screen = read(SCREEN);
   assert.match(screen, /if \(snapshot\.state === 'paused' \|\| resuming\) \{\n\s+arcadeAfterResume\.current = true;\n\s+if \(!resuming\) setResuming\(true\);\n\s+void Haptics\.selectionAsync\(\);/);
-  assert.match(screen, /if \(arcadeAfterResume\.current\) \{ arcadeAfterResume\.current = false; setArcadeOpen\(true\); setResumeHandoff\('arcade'\); return false; \}/);
+  assert.match(screen, /if \(arcadeAfterResume\.current\) \{ arcadeAfterResume\.current = false; setArcadeOpen\(true\); setResumeHandoff\('arcade'\); \}/);
   assert.match(screen, /arcadeAfterResume\.current = false; pageAfterResume\.current = null; setResumeHandoff\(null\); session\.pause\('manual'\)/, 'pausing again forgets the queued arcade');
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.doesNotMatch(card, /onPress=\{onPlayBonus\} disabled=\{paused\}/, 'no disabled ARCADE while paused');
@@ -673,7 +673,7 @@ test('paused, the chapter PLAY and clue buttons are never a dead tap: one tap ru
   assert.match(screen, /pageAfterResume\.current = index;\n\s+if \(!resuming\) setResuming\(true\);/);
   assert.match(screen, /if \(snapshot\.state !== 'active'\) return;\n\s+jumpToPage\(index\);/);
   assert.match(screen, /const page = pageAfterResume\.current;\n\s+pageAfterResume\.current = null;/);
-  assert.match(screen, /if \(page != null\) \{ jumpToPage\(page, false\); setResumeHandoff\('page'\); return false; \}/);
+  assert.match(screen, /else if \(page != null\) \{ jumpToPage\(page, false\); setResumeHandoff\('page'\); \}/);
   assert.match(screen, /pageAfterResume\.current = null; setResumeHandoff\(null\); session\.pause\('manual'\)/, 'pausing again forgets the queued page');
 });
 
@@ -698,10 +698,8 @@ test('a one-time tip waits while the page window has stepped aside, so it never 
 
 test('the resume countdown always opens on 3, never on the last run\'s 1', () => {
   const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
-  // Each activation mounts a fresh run (new key), so its clock starts at 0 (the 3) on its very first frame.
-  assert.match(countdown, /if \(active && !wasActive\.current\) run\.current \+= 1;/);
-  assert.match(countdown, /return <CountdownRun key=\{run\.current\} onDone=\{onDone\} onHidden=\{onHidden\} \/>;/);
-  assert.match(countdown, /function CountdownRun\(\{ onDone, onHidden \}: CountdownProps\) \{\n\s+const reducedMotion = useReducedGameMotion\(\);\n\s+\/\*\*[^\n]*\*\/\n\s+const clock = useSharedValue\(0\);/);
+  assert.match(countdown, /finished\.current = false;\n\s+clock\.value = 0;/, 'the clock restarts from 0 (the 3) every time');
+  assert.match(countdown, /clock\.value = withDelay\(RESET_DELAY_MS, withTiming\(0, \{ duration: 0 \}\)\);/, 'back at 0 once hidden: the closing frame keeps the 1 (no 3 flash) and the next run never opens on the 1');
 });
 
 test('paused, the board PLAY strip is never a tap that only hides Details: it rests in pale blue and runs the 3 2 1', () => {
@@ -718,13 +716,12 @@ test('the resume countdown shows 3, 2 and 1 on the UI thread, so neither a busy 
   const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
   assert.match(countdown, /const MAX_STEP_MS = 34;/);
   assert.match(countdown, /before \+ Math\.min\(info\.timeSincePreviousFrame \?\? 16, MAX_STEP_MS\) \/ STEP_MS/, 'one frame moves the clock at most 34 ms');
-  assert.match(countdown, /if \(before < HANDOVER_AT && after >= HANDOVER_AT\) runOnJS\(finish\)\(\);/, 'the game comes back once, under the 1');
+  assert.match(countdown, /if \(before < 3 && after >= 3\) runOnJS\(finish\)\(\);/, 'the game comes back once, after the 1');
   assert.match(countdown, /if \(Math\.floor\(after\) > Math\.floor\(before\) && after < 3\) runOnJS\(tick\)\(\);/, 'the 2 and the 1 tick when they appear');
   assert.match(countdown, /\[3, 2, 1\]\.map\(\(value, index\) => <CountNumber/);
   assert.match(countdown, /const shown = t >= 0 && \(t < 1 \|\| index === 2\);/, 'each number shows only during its own step; the 1 holds until the game is back');
   assert.doesNotMatch(countdown, /setTimeout|setCount\(/, 'no JS timer or JS state drives the number');
-  assert.match(countdown, /onPress=\{skip\}/, 'a tap still skips it');
-  assert.match(countdown, /const skip = useCallback\(\(\) => \{\n\s+clock\.value = 3;\n\s+finish\(\);/);
+  assert.match(countdown, /onPress=\{finish\}/, 'a tap still skips it');
 });
 
 test('clue 3 (the finale game) says its mission name on the rail, the page and the recap, never a second title', () => {
@@ -741,7 +738,7 @@ test('after the 3 2 1, the arcade or the page follows the 1 with no live-board g
   const screen = read(SCREEN);
   // The countdown stays up (still on the 1) while it hands over.
   assert.match(screen, /<ResumeCountdown active=\{resuming \|\| resumeHandoff != null\}/);
-  assert.match(screen, /const \[resumeHandoff, setResumeHandoff\] = useState<'arcade' \| 'page' \| 'plain' \| null>\(null\);/);
+  assert.match(screen, /const \[resumeHandoff, setResumeHandoff\] = useState<'arcade' \| 'page' \| null>\(null\);/);
   // The arcade: the countdown lets go on the frame the sheet starts coming in (both sheets report it).
   assert.match(screen, /const ARCADE_PRESENT_FRAMES = 3;/);
   assert.match(screen, /const onArcadeShowing = useCallback\(\(\) => \{\n\s+let frames = ARCADE_PRESENT_FRAMES;/);
@@ -753,37 +750,16 @@ test('after the 3 2 1, the arcade or the page follows the 1 with no live-board g
   assert.match(sheet, /useNativeDriver hideModalContentWhileAnimating/, 'the slide runs on the UI thread, so a busy JS thread never holds it');
   assert.match(read('src/screens/LinePlay/components/BonusPicker.tsx'), /onModalWillShow=\{onShowing\}/);
   // The page: jumped to with no scroll animation under the 1, released two frames later, once it is painted.
-  assert.match(screen, /frameId = requestAnimationFrame\(\(\) => \{ frameId = requestAnimationFrame\(\(\) => letGo\('page'\)\); \}\);/);
+  assert.match(screen, /frameId = requestAnimationFrame\(\(\) => \{ frameId = requestAnimationFrame\(\(\) => setResumeHandoff\(null\)\); \}\);/);
   // Never stuck: a fallback lets go after RESUME_HANDOFF_MAX_MS.
   assert.match(screen, /const RESUME_HANDOFF_MAX_MS = 1500;/);
-  assert.match(screen, /const fallback = setTimeout\(\(\) => letGo\(resumeHandoff\), RESUME_HANDOFF_MAX_MS\);/);
-  // The countdown: its frame clock stops at the end of the 1 (a hold costs no frame work), and it fades out on the UI thread.
+  assert.match(screen, /const fallback = setTimeout\(\(\) => setResumeHandoff\(null\), RESUME_HANDOFF_MAX_MS\);/);
+  // The countdown: its frame clock stops at the 1 (a hold costs no frame work), and it fades out on the UI thread.
   const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
-  assert.match(countdown, /if \(after >= 3\) \{\n\s+runOnJS\(sleep\)\(\);/);
+  assert.match(countdown, /finished\.current = true;\n\s+\/\/[^\n]*\n\s+frameRef\.current\?\.setActive\(false\);/);
   assert.match(countdown, /exiting=\{reducedMotion \? undefined : FadeOut\.duration\(EXIT_FADE_MS\)\}/);
   assert.match(countdown, /const EXIT_FADE_MS = 140;/);
   assert.ok(140 < 250, 'the fade ends before the clock resets, so the closing frames keep the 1');
-});
-
-test('3, 2 and 1 each get one even beat: the game comes back under the 1, which still gets its full step', () => {
-  const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
-  const step = Number(countdown.match(/const STEP_MS = (\d+);/)[1]);
-  const punch = Number(countdown.match(/const PUNCH_SHARE = ([\d.]+);/)[1]);
-  assert.match(countdown, /const HANDOVER_AT = 2 \+ PUNCH_SHARE;/, 'the hand-over waits for the 1\'s punch to settle');
-  assert.ok((1 - punch) * step >= 180, `JS has at least 180 ms under the 1 to bring the game back (${(1 - punch) * step} ms)`);
-  // No prop of the countdown changes when that render lands: the punch is done and the 1 stays shown.
-  assert.match(countdown, /const punch = reducedMotion \|\| !shown \? 1 : 1 \+ 0\.3 \* Math\.max\(0, 1 - t \/ PUNCH_SHARE\);/);
-  // A plain resume hides itself when the 1's step ends (UI clock), with a render of only the countdown,
-  // and tells the parent a frame later, so the screen's big render never delays the beat.
-  assert.match(countdown, /if \(after >= 3\) \{\n\s+runOnJS\(sleep\)\(\);\n\s+if \(plain\.value\) runOnJS\(hideSelf\)\(\);/);
-  assert.match(countdown, /if \(clock\.value >= 3\) hideSelf\(\);/, 'a late JS thread hides it at once');
-  assert.match(countdown, /if \(hiddenSelf\) return null;/);
-  assert.match(countdown, /const id = requestAnimationFrame\(\(\) => hiddenRef\.current\(\)\);/);
-  const screen = read(SCREEN);
-  assert.match(screen, /setResumeHandoff\('plain'\);\n\s+return true;\n\s+\}\} onHidden=\{\(\) => setResumeHandoff\(current => current === 'plain' \? null : current\)\} \/>/);
-  assert.match(screen, /const unstick = setTimeout\(\(\) => setResumeHandoff\(current => current === 'plain' \? null : current\), RESUME_HANDOFF_MAX_MS\);/);
-  // It renders only when it starts or hides, so no render mid-count hands a number a stale value.
-  assert.match(countdown, /export default memo\(ResumeCountdown, \(a, b\) => a\.active === b\.active\);/);
 });
 
 test('the chapter page never shows a live-looking button that does nothing (detected, ending, complete)', () => {

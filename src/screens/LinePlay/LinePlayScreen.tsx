@@ -266,7 +266,7 @@ export default function LinePlayScreen() {
     holder.__linePlayPreviewLocked = setPreviewLocked;
     return () => { delete holder.__linePlayPreviewLocked; };
   }, []);
-  const [resumeHandoff, setResumeHandoff] = useState<'arcade' | 'page' | 'plain' | null>(null);
+  const [resumeHandoff, setResumeHandoff] = useState<'arcade' | 'page' | null>(null);
 
   const [toast, setToast] = useState<QueueToastMessage | null>(null);
   const toastKey = useRef(0);
@@ -896,20 +896,13 @@ export default function LinePlayScreen() {
   }, []);
   // The countdown's hand-off: the page is painted in place two frames after the jump; the arcade lets go
   // once its sheet is on screen and moving (onArcadeShowing). Never longer than RESUME_HANDOFF_MAX_MS.
-  // A plain resume: the countdown hides itself when the 1's step ends (the game is already back under it)
-  // and then reports it (onHidden); the fallback only unsticks it if that report never comes.
   useEffect(() => {
     if (resumeHandoff == null) return undefined;
-    if (resumeHandoff === 'plain') {
-      const unstick = setTimeout(() => setResumeHandoff(current => current === 'plain' ? null : current), RESUME_HANDOFF_MAX_MS);
-      return () => clearTimeout(unstick);
-    }
     let frameId: number | null = null;
-    const letGo = (from: 'arcade' | 'page') => setResumeHandoff(current => current === from ? null : current);
     if (resumeHandoff === 'page') {
-      frameId = requestAnimationFrame(() => { frameId = requestAnimationFrame(() => letGo('page')); });
+      frameId = requestAnimationFrame(() => { frameId = requestAnimationFrame(() => setResumeHandoff(null)); });
     }
-    const fallback = setTimeout(() => letGo(resumeHandoff), RESUME_HANDOFF_MAX_MS);
+    const fallback = setTimeout(() => setResumeHandoff(null), RESUME_HANDOFF_MAX_MS);
     return () => {
       if (frameId != null) cancelAnimationFrame(frameId);
       clearTimeout(fallback);
@@ -1601,18 +1594,15 @@ export default function LinePlayScreen() {
       {/* Toasts land inside the wait card between its top row and Details: never over the ride name, ARCADE, pause or PLAY. */}
       <QueueToast message={toast} onDone={() => setToast(null)} top={toastSpot?.top} slim={toastSpot?.slim} />
 
-      {/* The game comes back under the 1 (once its punch has settled); the 1 still gets its full step, like the 3 and the 2. */}
       <ResumeCountdown active={resuming || resumeHandoff != null} onDone={() => {
         setResuming(false);
         session.resume();
         const page = pageAfterResume.current;
         pageAfterResume.current = null;
         // The 1 stays up until the arcade starts coming in, or the page is in place under it (no scroll to watch).
-        if (arcadeAfterResume.current) { arcadeAfterResume.current = false; setArcadeOpen(true); setResumeHandoff('arcade'); return false; }
-        if (page != null) { jumpToPage(page, false); setResumeHandoff('page'); return false; }
-        setResumeHandoff('plain');
-        return true;
-      }} onHidden={() => setResumeHandoff(current => current === 'plain' ? null : current)} />
+        if (arcadeAfterResume.current) { arcadeAfterResume.current = false; setArcadeOpen(true); setResumeHandoff('arcade'); }
+        else if (page != null) { jumpToPage(page, false); setResumeHandoff('page'); }
+      }} />
 
       {/* End by hand: one branded sheet (header End, back, or a footer tab). */}
       <GameDialog
