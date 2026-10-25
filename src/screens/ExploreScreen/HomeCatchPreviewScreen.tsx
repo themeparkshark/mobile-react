@@ -356,8 +356,10 @@ function HomeCatchPreview() {
   const autoplay = __DEV__ && process.env.EXPO_PUBLIC_HOME_CATCH_AUTOPLAY === '1';
   // UI-thread frame times while a catch plays, logged once a second (performance review).
   const frameCount = useSharedValue(0), frameSlow = useSharedValue(0), frameWorst = useSharedValue(0), frameSum = useSharedValue(0);
-  const logFrames = (count: number, slow: number, worst: number, sum: number) => {
-    const line = `[catch-perf] ${Date.now()} frames=${count} avg=${(sum / Math.max(1, count)).toFixed(1)}ms worst=${worst.toFixed(1)}ms over25ms=${slow}`;
+  // Wave 5 (wow-sound): frames over 18.2 ms (under 55 fps), so the capture gives a true p5 frame rate.
+  const frameUnder55 = useSharedValue(0);
+  const logFrames = (count: number, slow: number, worst: number, sum: number, under55: number) => {
+    const line = `[catch-perf] ${Date.now()} frames=${count} avg=${(sum / Math.max(1, count)).toFixed(1)}ms worst=${worst.toFixed(1)}ms over25ms=${slow} over18ms=${under55}`;
     console.log(line);
     catchTraceBuffer.push(line);
   };
@@ -369,10 +371,11 @@ function HomeCatchPreview() {
     if (dt > 34) runOnJS(logSlow)(dt, hudClock.value);
     frameCount.value += 1; frameSum.value += dt;
     if (dt > 25) frameSlow.value += 1;
+    if (dt > 18.2) frameUnder55.value += 1;
     if (dt > frameWorst.value) frameWorst.value = dt;
     if (frameSum.value >= 1000) {
-      runOnJS(logFrames)(frameCount.value, frameSlow.value, frameWorst.value, frameSum.value);
-      frameCount.value = 0; frameSlow.value = 0; frameWorst.value = 0; frameSum.value = 0;
+      runOnJS(logFrames)(frameCount.value, frameSlow.value, frameWorst.value, frameSum.value, frameUnder55.value);
+      frameCount.value = 0; frameSlow.value = 0; frameWorst.value = 0; frameSum.value = 0; frameUnder55.value = 0;
     }
   }, true);
   // A Release preview build has no console: the trace is flushed to Documents/catch-trace.log.
