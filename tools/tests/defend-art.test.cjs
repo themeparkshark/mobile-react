@@ -154,8 +154,10 @@ test('the Defend result button says DONE, so the tier is said once', () => {
 
 test('the Defend round clock runs from its start time, so taps cannot stretch it', () => {
   const src = read('src/components/GymBattle/DefendMiniGameModal.tsx');
-  assert.match(src, /GAME_DURATION - Math\.floor\(\(Date\.now\(\) - startedAt\) \/ 1000\)/);
-  assert.match(src, /if \(gameState !== 'playing' \|\| Date\.now\(\) >= endsAtRef\.current\) return;/);
+  assert.match(src, /endsAtRef\.current = Date\.now\(\) \+ GAME_DURATION \* 1000;/);
+  assert.match(src, /Math\.ceil\(\(endsAtRef\.current - Date\.now\(\)\) \/ 1000/);
+  const tap = src.slice(src.indexOf('const handleTap = useCallback'), src.indexOf('// Haptic feedback', src.indexOf('const handleTap = useCallback')));
+  assert.match(tap, /const left = secondsLeft\(\);\s*setTimeLeft\(t => \(t === left \? t : left\)\);\s*if \(left === 0\) return;/, 'every tap refreshes the clock and taps after the buzzer do not count');
   assert.match(src, /timeLeft <= 7 && timeLeft > 0 && !bonusFiredRef\.current/);
   assert.doesNotMatch(src, /setTimeLeft\(t => t - 1\)/);
 });

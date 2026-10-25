@@ -205,32 +205,31 @@ export default function DefendMiniGameModal({
     }
   }, [gameState, countdown]);
 
-  // Round clock: measured from the start time, so a flurry of taps (which
-  // keeps the JS thread busy) can never stretch the 25 seconds.
+  // Round clock: measured from the start time, so a flurry of taps can never
+  // stretch the 25 seconds. A busy JS thread runs timers late, so every tap
+  // also refreshes the clock (the shown seconds never freeze mid-flurry).
   const endsAtRef = useRef(0);
+  const secondsLeft = () =>
+    Math.max(0, Math.ceil((endsAtRef.current - Date.now()) / 1000 - 1e-6));
   useEffect(() => {
     if (gameState !== 'playing') return;
-    const startedAt = Date.now();
-    endsAtRef.current = startedAt + GAME_DURATION * 1000;
-    let shown = GAME_DURATION;
+    endsAtRef.current = Date.now() + GAME_DURATION * 1000;
     const tick = () => {
-      const left = Math.max(0, GAME_DURATION - Math.floor((Date.now() - startedAt) / 1000));
-      if (left !== shown) {
-        shown = left;
-        // Urgency haptics in the last 5 seconds
-        if (left <= 5) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setTimeLeft(left);
-      }
+      const left = secondsLeft();
+      setTimeLeft(t => (t === left ? t : left));
       if (left === 0 && timerRef.current) clearInterval(timerRef.current);
     };
-    timerRef.current = setInterval(tick, 100);
+    timerRef.current = setInterval(tick, 250);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [gameState]);
 
   useEffect(() => {
-    if (gameState === 'playing' && timeLeft === 0) handleGameEnd();
+    if (gameState !== 'playing') return;
+    // Urgency haptics in the last 5 seconds
+    if (timeLeft > 0 && timeLeft <= 5) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (timeLeft === 0) handleGameEnd();
   }, [gameState, timeLeft]);
 
   // Continuous shield glow pulse during play
@@ -254,7 +253,10 @@ export default function DefendMiniGameModal({
   };
 
   const handleTap = useCallback((event: any) => {
-    if (gameState !== 'playing' || Date.now() >= endsAtRef.current) return;
+    if (gameState !== 'playing') return;
+    const left = secondsLeft();
+    setTimeLeft(t => (t === left ? t : left));
+    if (left === 0) return; // after the buzzer: the round is over, the tap does not count
 
     // Haptic feedback - stronger during multiplier
     const intensity = multiplier > 1 ? Haptics.ImpactFeedbackStyle.Heavy :
