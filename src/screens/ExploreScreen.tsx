@@ -808,6 +808,10 @@ export function ExploreScreenBody() {
   ], [redeemables]);
   const mapNow = useMapOpportunityClock(timedOpportunities, refreshMapOpportunities, !!park && !!player);
   useEffect(() => { setMapLoadFailed(false); }, [mapContext]);
+  // Under a loading cover, the lift also waits for the park's ride list (never past the cover's cap),
+  // so the first lifted frame has the ride islands and PLAY RIDE, not a bare park map that fills in
+  // seconds later on a slow server. A failed load lifts at once (the retry note shows instead).
+  useCoverArt(!!park && !!player && !redeemables && !mapLoadFailed);
   const mapRetry = useParkMapRetry(mapLoadFailed && !!park && !!player, mapFocused, refreshMapOpportunities);
   const visibleTasks = useMemo(() => (redeemables?.tasks ?? [])
     .filter(task => opportunityIsActive(task, mapNow)), [redeemables?.tasks, mapNow]);

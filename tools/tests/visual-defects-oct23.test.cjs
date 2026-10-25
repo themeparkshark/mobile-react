@@ -1474,3 +1474,12 @@ test('wave 5 round 3: once the launch cover starts its deadline fade, a map scre
   const launch = read('src/components/map/MapLaunchCover.tsx');
   assert.match(launch, /setTimeout\(\(\) => coverFadeStarted\(tok\), Math\.max\(0, plan\.deadline - Date\.now\(\)\)\)/);
 });
+
+test('wave 5 round 3: the loading cover waits (within its cap) for the park ride list, so the first map frame has its islands', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /useCoverArt\(!!park && !!player && !redeemables && !mapLoadFailed\);/);
+  const k = loadTs('src/constants/launchHandoff.ts');
+  // Art (and now the ride list) pending never holds the cover past its hard cap.
+  const now = 1000, startedAt = 0;
+  assert.equal(k.coverLiftAt({ now, startedAt, drawn: true, held: false, artPending: true, launch: true, mountedAt: 0 }), Math.min(k.COVER_LAUNCH_MAX_MS, k.COVER_HARD_MAX_MS));
+});
