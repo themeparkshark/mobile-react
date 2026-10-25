@@ -14,8 +14,11 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 test('every Duel card (Line Trivia, duel, ride) stamps the same star row, and its title waits for the last star', () => {
   const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
   assert.doesNotMatch(duel, /\{model\.ride \? \(\s*<View style=\{styles\.starRow\}/, 'the star row is not ride-only any more');
-  assert.match(duel, /<View style=\{styles\.starRow\} accessible accessibilityLabel=\{`\$\{model\.stars\} of 3 stars`\}>/);
-  assert.match(duel, /delayMs=\{rideRibbonDelay\(model\.stars, reducedMotion\)\}/);
+  assert.match(duel, /<View style=\{styles\.starRow\} accessible accessibilityLabel=\{`\$\{stars\} of 3 stars`\}>/);
+  assert.match(duel, /delayMs=\{rideRibbonDelay\(stars, reducedMotion\)\}/);
+  // A win never shows three empty stars (it would read like a loss).
+  assert.match(duel, /const stars = model\.won && !model\.ride \? Math\.max\(1, model\.stars\) : model\.stars;/);
+  assert.match(read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx'), /stars: 2, practice: false,/);
   // Scores read like the plate above (1,925 vs 1,628).
   assert.match(duel, /\{model\.myScore\.toLocaleString\(\)\}/);
   assert.match(duel, /\{model\.oppScore\.toLocaleString\(\)\}/);

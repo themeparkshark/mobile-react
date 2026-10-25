@@ -989,7 +989,7 @@ test('Duel ride card: the title lands after its last star; chips are pictures', 
   assert.equal(m.exports.duelChipIcon('RIGHT ANSWERS'), 'check');
   assert.equal(m.exports.duelChipIcon('BEST ANSWER'), 'rush');
   const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
-  assert.match(duel, /delayMs=\{rideRibbonDelay\(model\.stars, reducedMotion\)\}/);
+  assert.match(duel, /delayMs=\{rideRibbonDelay\(stars, reducedMotion\)\}/);
   assert.match(duel, /withDelay\(RIDE_STAR_AT \+ i \* RIDE_STAR_GAP,/);
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /\{icon \? <GameIcon name=\{icon\} size=\{20\} style=\{styles\.chipIcon\} \/> : <Text style=\{styles\.chipLabel\}>\{label\}<\/Text>\}/);

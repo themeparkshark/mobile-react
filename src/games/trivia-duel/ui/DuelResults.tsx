@@ -191,6 +191,9 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   const rankUp = model.banners.includes('RANK UP');
 
   const total = Math.max(1, model.myScore + model.oppScore);
+  // A won duel always lights at least one star: a YOU WIN! over three empty
+  // stars would read like a loss (duelStars gives every win 1 to 3).
+  const stars = model.won && !model.ride ? Math.max(1, model.stars) : model.stars;
   const fact = model.facts[0];
   const title = model.ride ? (model.ride.won ? 'RIDE COIN!' : 'GOOD TRY!')
     : model.practice ? (model.won ? 'PRACTICE WIN!' : 'GOOD PRACTICE!') : model.won ? 'YOU WIN!' : model.tie ? 'DEAD EVEN!' : 'GOOD GAME!';
@@ -206,7 +209,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
       }}>
         {/* The one results title every game shares: Alex's ribbon over the card's top edge.
             It waits for the last star, like Sharky, Whack and Boss. */}
-        <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} delayMs={rideRibbonDelay(model.stars, reducedMotion)} />
+        <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} delayMs={rideRibbonDelay(stars, reducedMotion)} />
         <View style={styles.head}>
           {/* Same number style as the score plate above and every other card (1,925, never 1925). */}
           <View style={styles.scoreRow}>
@@ -221,8 +224,8 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
         {finalLost ? <BigFinalLost points={finalLost} reducedMotion={reducedMotion} /> : null}
         {/* Every Duel card (Line Trivia, a duel, a ride challenge) stamps the same
             star row the other games do, so a win and a miss read as one family. */}
-        <View style={styles.starRow} accessible accessibilityLabel={`${model.stars} of 3 stars`}>
-          {[1, 2, 3].map((k) => <StarPip key={k} on={k <= model.stars} i={k} reducedMotion={reducedMotion} />)}
+        <View style={styles.starRow} accessible accessibilityLabel={`${stars} of 3 stars`}>
+          {[1, 2, 3].map((k) => <StarPip key={k} on={k <= stars} i={k} reducedMotion={reducedMotion} />)}
         </View>
         {/* The gap bar only when you scored: at 0 it would be all Fin, a bar
             that only says "you lost". The score and REMATCH say enough. */}
