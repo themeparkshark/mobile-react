@@ -336,8 +336,7 @@ export default function WaitCard({
     ? 'Paused'
     : !rewardTrackingAvailable
       ? lineRewardsReady === false || rewardUnavailable ? 'PLAY ANYTIME'
-        : rewardConnectionIssue === 'sign_in' ? 'Sign-in needed'
-          : rewardConnectionIssue ? 'Games ready' : 'Checking location…'
+        : rewardConnectionIssue ? 'Games ready' : 'Checking location…'
       : atCap ? 'Max Parts reached'
         : countdown.needsCheck ? 'Checking you’re in line…'
           : countdown.checking ? 'Part on the way…'
@@ -348,7 +347,7 @@ export default function WaitCard({
       ? lineRewardsReady === false || rewardUnavailable
         ? 'Ride Parts aren’t available at this ride right now.'
         : rewardConnectionIssue === 'nearby' ? 'Ride Parts start near this ride.'
-          : rewardConnectionIssue === 'sign_in' ? 'Sign in again to earn Ride Parts.'
+          : rewardConnectionIssue === 'sign_in' ? 'Sign in to earn Ride Parts.'
             : rewardConnectionIssue === 'network' ? 'Games still work. We will try rewards again soon.'
               : 'Play while we check that you are in line.'
       : atCap
