@@ -185,3 +185,15 @@ test('fix 4: the burst\'s heavy leaves before the burst\'s sound work (the grand
   assert.match(s, /case BEAT\.burst:\n\s+run\.burst = true;\n(\s+\/\/.*\n)+\s+catchHaptic\('comboHeavy', 3\);\n\s+catchMark\('burst'\);/);
   assert.match(src('src/screens/ExploreScreen/ridePhoto/catchAudio.ts'), /const heavyAt = burstHeavyDone && Number\.isFinite\(burstBuzzAt\) \? burstBuzzAt : Math\.max\(burstDueAt, Date\.now\(\)\);/);
 });
+
+test('a wobble buzz 30 ms inside the projected burst gap is dropped (a loaded UI thread projects the burst up to 40 ms late)', async () => {
+  const e = await engine();
+  await wowMapCatch(e, { n: 1 }); e.clock.advance(20_000);
+  // The short show: wobble 2 is due at 290, the burst at 430; a 50 ms stall puts wobble 2's timer at about 335.
+  const r = await wowMapCatch(e, { repeat: true, stalls: [{ at: 280, ms: 50 }] });
+  const hs = e.haptics.filter((h) => h.t >= r.t0).map((h) => ({ t: h.t - r.clock0, intent: h.intent }));
+  const heavy = hs.find((h) => h.intent === 'comboHeavy');
+  const before = hs.filter((h) => h.t < heavy.t);
+  assert.ok(heavy.t - before[before.length - 1].t >= 120, `nothing within 120 ms before the heavy: ${hs.map((h) => `${h.intent}@${h.t}`).join(' ')}`);
+  assert.ok(e.Trace.traceEvents().some((x) => x.kind === 'mark' && x.name === 'catch-pulse-dropped' && /near the burst/.test(x.detail ?? '')), 'dropped, not flammed');
+});

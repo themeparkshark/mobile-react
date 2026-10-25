@@ -719,6 +719,13 @@ function heated(intent: HapticIntent): HapticIntent {
   return tier > 0 && at >= 0 ? WOBBLE_LADDER[Math.min(WOBBLE_LADDER.length - 1, at + tier)] : intent;
 }
 
+/**
+ * Round 2: the burst's time is projected from the first wobble's UI-clock time, and a loaded UI thread runs its frame
+ * callbacks late, so the projection can land up to about 40 ms after the real burst (release-like 50-catch run at
+ * f2a33980: projected 746, real 710, and a wobble buzz 83 ms before the heavy). A wobble buzz this much closer than one
+ * beat gap to the projected burst is dropped too (its tick still rings).
+ */
+const WOBBLE_BURST_GUARD_MS = 30;
 /** Wobble k's buzz: once, whichever comes first of its timer and wow-map's own beat. */
 function fireWobble(k: number, intent: HapticIntent): void {
   const b = beats;
@@ -732,7 +739,7 @@ function fireWobble(k: number, intent: HapticIntent): void {
   }
   // Wave 5 (live release run, load 100): a wobble buzz that comes so late it would land under one beat gap before
   // the burst's heavy (which never waits) is dropped, never flammed into it.
-  if (b.due0 !== undefined && Date.now() > b.due0 + (b.burstAt - (b.offsets[0] ?? 0)) - MIN_BEAT_GAP_MS) {
+  if (b.due0 !== undefined && Date.now() > b.due0 + (b.burstAt - (b.offsets[0] ?? 0)) - MIN_BEAT_GAP_MS - WOBBLE_BURST_GUARD_MS) {
     trace('drop', `wobble${k + 1} too near the burst`);
     traceEvent('mark', 'catch-pulse-dropped', `wobble ${k + 1} near the burst`);
     return;
