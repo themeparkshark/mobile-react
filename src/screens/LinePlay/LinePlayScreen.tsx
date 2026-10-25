@@ -160,13 +160,6 @@ import { linePlayTipReady } from '../../services/help/tipGate';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
 
-/**
- * The dive's water waits at most this long after the screen lays out for its wait and first round.
- * Short: the screen's own wait card (with the ride's name) is already there, and a held breath longer
- * than this reads as a stall, so the water opens onto the real screen and the round pops in after.
- */
-export const DIVE_READY_CAP_MS = 450;
-
 export default function LinePlayScreen() {
   const navigation = useNavigation();
   const route = useRoute<any>();
@@ -180,14 +173,14 @@ export default function LinePlayScreen() {
     if (diveSettled) navigation.setOptions({ animation: 'fade' } as object);
   }, [diveSettled, navigation]);
   // The game dive's water is the loader: it opens once this screen has laid out and its wait and first
-  // round are on it (no skeleton under the opening hole), or after DIVE_READY_CAP_MS whatever is there.
+  // round are on it (no loading card under the opening hole; DiveIris DIVE.readyPatienceMs is only a backstop).
   const diveReady = snapshot.startedAt != null && snapshot.playlist.length > 0;
   const laidOut = useRef(false);
   const readyCap = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onRootLayout = useCallback(() => {
     if (__DEV__) (globalThis as { __diveMark?: (w: string) => void }).__diveMark?.(`lp-layout ready=${diveReady}`);
     if (diveReady) { notifyDiveLanded(); return; }
-    // The water opens by itself DIVE_READY_CAP_MS later, timed on the UI thread (DiveIris layoutCapMs).
+    // The water keeps swimming until the first round lands (the effect below says so).
     if (!laidOut.current) notifyDiveLaidOut();
     laidOut.current = true;
   }, [diveReady]);
@@ -1421,11 +1414,10 @@ function ActivitySkeleton() {
   return (
     <View style={styles.page}>
       <View style={styles.activitySkeleton}>
-        <Text style={styles.activitySkeletonKicker}>LINEPLAY · FIRST ROUND</Text>
-        <Text style={styles.activitySkeletonTitle}>A ride story is surfacing</Text>
-        <Text style={styles.activitySkeletonHint}>Your games will open here in a moment.</Text>
+        <Image source={QUEUE_RECAP_SHARK} style={styles.activitySkeletonShark} contentFit="contain"
+          accessibilityLabel="The shark is getting your games" />
+        <Text style={styles.activitySkeletonTitle}>Games coming!</Text>
         <View style={styles.activitySkeletonRule} />
-        <Text style={styles.activitySkeletonFoot}>Play solo or share this phone with your crew.</Text>
       </View>
     </View>
   );
@@ -1489,11 +1481,9 @@ const styles = StyleSheet.create({
     shadowColor: '#003c7a', shadowOpacity: 0.24, shadowOffset: { width: 0, height: 4 },
     shadowRadius: 7, elevation: 4,
   },
-  activitySkeletonKicker: { color: '#0873bd', fontFamily: 'Knockout', fontSize: 13, letterSpacing: 0.5 },
-  activitySkeletonTitle: { color: '#093d77', fontFamily: 'Shark', fontSize: 21, marginTop: 8 },
-  activitySkeletonHint: { color: '#245879', fontFamily: 'Knockout', fontSize: 16, marginTop: 8 },
-  activitySkeletonRule: { width: 72, height: 5, borderRadius: 3, backgroundColor: '#ffcb31', marginTop: 17 },
-  activitySkeletonFoot: { color: '#427694', fontFamily: 'Knockout', fontSize: 14, marginTop: 10 },
+  activitySkeletonTitle: { color: '#093d77', fontFamily: 'Shark', fontSize: 21, marginTop: 8, textAlign: 'center' },
+  activitySkeletonShark: { width: 120, height: 120, alignSelf: 'center' },
+  activitySkeletonRule: { alignSelf: 'center', width: 72, height: 5, borderRadius: 3, backgroundColor: '#ffcb31', marginTop: 17 },
   ghostBtn: {
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,

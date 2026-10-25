@@ -131,7 +131,8 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
   const spendRef = useRef(true);
   const [local, setLocal] = useState(true);
   const iconRef = useRef<View>(null);
-  const gateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The never-strand fallback: runs to 1 on the UI thread by a deadline and opens the gate if no coin did. */
+  const gateBackstop = useSharedValue(0);
 
   const measureChip = (done: (p: Point | null) => void) => {
     const node = iconRef.current;
@@ -175,7 +176,9 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
     if (before === null || now <= before) return;
     if (spendSv.value === 1) hit();
   });
-  useEffect(() => () => { if (gateTimer.current) clearTimeout(gateTimer.current); }, []);
+  useAnimatedReaction(() => gateBackstop.value >= 1, (due, was) => {
+    if (due && !was && gate.value < 1) gate.value = 1;
+  });
 
   useEffect(() => {
     if (hold) { wasHeld.current = true; return; }
@@ -188,9 +191,10 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
     cancelAnimation(fly); cancelAnimation(bump); cancelAnimation(squash); cancelAnimation(gate);
     fly.value = 0;
     spendSv.value = spend ? 1 : 0;
-    if (gateTimer.current) clearTimeout(gateTimer.current);
-    /** Never strand the digits: whatever happens to the coins, the roll opens by `ms`. */
-    const gateBy = (ms: number) => { gateTimer.current = setTimeout(() => { if (gate.value < 1) gate.value = 1; }, ms); };
+    cancelAnimation(gateBackstop);
+    gateBackstop.value = 0;
+    /** Never strand the digits: whatever happens to the coins, the roll opens by `ms` (UI thread). */
+    const gateBy = (ms: number) => { gateBackstop.value = withDelay(ms, withTiming(1, { duration: 0 })); };
     const now = Date.now();
     // Coins a reward toast flew in (or is flying in): no second flight; the roll waits on their next landing.
     if (!spend && (now < incomingUntil.current || now - arrivedAt.current < WALLET_FX.arrivedMs)) {
@@ -233,7 +237,7 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
       };
       if (wait > 0) setTimeout(go, wait); else go();
     });
-  }, [value, hold, fly, bump, squash, gate, landed, left, spendSv, reduced, flightN]);
+  }, [value, hold, fly, bump, squash, gate, gateBackstop, landed, left, spendSv, reduced, flightN]);
 
   const chipStyle = useAnimatedStyle(() => ({ transform: [
     { scaleX: bump.value * (1 + WALLET_FX.hitSquash * squash.value) },

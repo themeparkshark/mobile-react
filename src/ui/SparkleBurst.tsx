@@ -17,6 +17,7 @@ import { View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { usePowerBudget } from '../power/PowerProvider';
 import { GOLD_FX, PARTICLES, momentParticles } from './motion';
+import { BRAND } from './tokens';
 import useUiReducedMotion from './useUiReducedMotion';
 
 export type SparkleColor = 'gold' | 'white' | 'sky';
@@ -81,23 +82,34 @@ export function burstSpecs(count: number, shape: BurstShape = {}): SparkleSpec[]
 
 const FILL: Record<SparkleColor, string> = { gold: GOLD_FX.glow, white: '#ffffff', sky: '#bfe5ff' };
 
-/** A static four-point star: two thin diamonds crossed, a white core. */
-export const StarShape = memo(function StarShape({ size, color = 'gold' }: { readonly size: number; readonly color?: SparkleColor }) {
+/** How much bigger the ink outline star is than the fill (Alex's hand-drawn weight). */
+export const INK_OUTLINE = 1.32;
+
+/** A static four-point star: two thin diamonds crossed, a white core. `inked`: all gold with a dark-gold outline. */
+export const StarShape = memo(function StarShape({ size, color = 'gold', inked = false }: {
+  readonly size: number; readonly color?: SparkleColor; readonly inked?: boolean;
+}) {
   const a = size / Math.SQRT2;
-  const fill = FILL[color];
+  const fill = FILL[inked ? 'gold' : color];
   const core = size * 0.26;
+  const ink = a * INK_OUTLINE;
   return (
     <View pointerEvents="none" style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {inked && <>
+        <View style={{ position: 'absolute', width: ink, height: ink, backgroundColor: BRAND.goldLip, transform: [{ scaleX: 0.44 }, { rotate: '45deg' }] }} />
+        <View style={{ position: 'absolute', width: ink, height: ink, backgroundColor: BRAND.goldLip, transform: [{ scaleY: 0.44 }, { rotate: '45deg' }] }} />
+      </>}
       <View style={{ position: 'absolute', width: a, height: a, backgroundColor: fill, transform: [{ scaleX: 0.34 }, { rotate: '45deg' }] }} />
       <View style={{ position: 'absolute', width: a, height: a, backgroundColor: fill, transform: [{ scaleY: 0.34 }, { rotate: '45deg' }] }} />
-      <View style={{ position: 'absolute', width: core, height: core, backgroundColor: color === 'gold' ? GOLD_FX.core : fill,
+      <View style={{ position: 'absolute', width: core, height: core, backgroundColor: inked || color === 'gold' ? GOLD_FX.core : fill,
         transform: [{ rotate: '45deg' }] }} />
     </View>
   );
 });
 
-function Star({ progress, spec, gravity, x, y }: {
+function Star({ progress, spec, gravity, x, y, inked }: {
   readonly progress: SharedValue<number>; readonly spec: SparkleSpec; readonly gravity: number; readonly x: number; readonly y: number;
+  readonly inked: boolean;
 }) {
   const rad = (spec.angle * Math.PI) / 180;
   const dx = Math.cos(rad) * spec.dist;
@@ -117,7 +129,7 @@ function Star({ progress, spec, gravity, x, y }: {
   });
   return (
     <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - spec.size / 2, top: y - spec.size / 2 }, style]}>
-      <StarShape size={spec.size} color={spec.color} />
+      <StarShape size={spec.size} color={spec.color} inked={inked} />
     </Animated.View>
   );
 }
@@ -132,10 +144,12 @@ export interface SparkleBurstProps extends BurstShape {
   readonly y: number;
   /** How far the stars drop by the end (pt). */
   readonly gravity?: number;
+  /** Every star gold with a dark-gold ink outline (Alex's hand-drawn weight), for the biggest small moments. */
+  readonly inked?: boolean;
 }
 
 /** A capped, budgeted one-shot burst. Renders nothing with Reduce Motion or in the background. */
-function SparkleBurst({ progress, count, x, y, gravity = 10, spread, dist, size, seed }: SparkleBurstProps) {
+function SparkleBurst({ progress, count, x, y, gravity = 10, spread, dist, size, seed, inked = false }: SparkleBurstProps) {
   const budget = usePowerBudget();
   const reduced = useUiReducedMotion();
   const n = momentParticles(count, budget, reduced);
@@ -145,7 +159,7 @@ function SparkleBurst({ progress, count, x, y, gravity = 10, spread, dist, size,
   if (!specs.length) return null;
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, width: 0, height: 0, overflow: 'visible' }}>
-      {specs.map((spec, i) => <Star key={i} progress={progress} spec={spec} gravity={gravity} x={x} y={y} />)}
+      {specs.map((spec, i) => <Star key={i} progress={progress} spec={spec} gravity={gravity} x={x} y={y} inked={inked} />)}
     </View>
   );
 }

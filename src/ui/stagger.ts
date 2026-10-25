@@ -12,40 +12,59 @@ import { Easing, FadeInDown, withDelay, withSpring, withTiming } from 'react-nat
 import { BEZIER, DURATION, SPRING, staggerDelay } from './motion';
 
 /**
- * Grids of prizes (the closet, the shop shelves) fill like a vending machine dropping prizes: each
- * cell, row by row, drops in from GRID_STAGGER.risePt below, pops a little past full size on SPRING.pop
- * and settles, GRID_STAGGER.stepMs after the one before. Only the first screenful does it, all starting
- * inside STAGGER.capMs; later cells, refreshes and Reduce Motion are simply there.
+ * Grids of prizes (the closet, the shop shelves) fill like a vending machine dropping prizes: the hero
+ * (the Shop Pick) drops first with a bigger pop, then each cell, row by row and left to right, drops in
+ * from GRID_STAGGER.risePt below, pops a little past full size on SPRING.pop and settles,
+ * GRID_STAGGER.stepMs after the one before, so the fill reads over about half a second (never all at
+ * once). Only the first screenful does it; cells past it wait for the fill to finish, then fade in
+ * (never an orphan cell ahead of the stagger). Refreshes and Reduce Motion are simply there.
  */
 export const GRID_STAGGER = {
-  stepMs: 45,
+  stepMs: 55,
   maxItems: 9,
   risePt: 20,
   fromScale: 0.86,
   fadeMs: DURATION.quick,
+  /** The hero cell lands first; the grid starts this long after it (ms). */
+  heroLeadMs: 140,
+  /** The hero drops from further and pops bigger. */
+  heroRisePt: 28,
+  heroFromScale: 0.72,
+  /** Every grid start lands inside this (ms): the whole fill reads over about half a second. */
+  capMs: 600,
 } as const;
 
-/** When grid cell `index` starts, or null when it does not animate. Pure (unit tested). */
-export function gridDelay(index: number): number | null {
+/** When grid cell `index` starts (after `leadMs`, e.g. a hero cell), or null when it does not animate. Pure (unit tested). */
+export function gridDelay(index: number, leadMs = 0): number | null {
   if (!(index >= 0) || index >= GRID_STAGGER.maxItems) return null;
-  return Math.min(index * GRID_STAGGER.stepMs, 400 - GRID_STAGGER.stepMs);
+  return Math.min(leadMs + index * GRID_STAGGER.stepMs, GRID_STAGGER.capMs - GRID_STAGGER.stepMs);
 }
 
-/** The grid cell rise as a Reanimated entering animation (UI thread), or undefined when it should not animate. */
-export function gridRiseIn(index: number, options: { readonly reduced?: boolean } = {}) {
-  if (options.reduced) return undefined;
-  const delay = gridDelay(index);
-  if (delay === null) return undefined;
+function riseIn(delay: number, risePt: number, fromScale: number) {
   return () => {
     'worklet';
     return {
-      initialValues: { opacity: 0, transform: [{ translateY: GRID_STAGGER.risePt }, { scale: GRID_STAGGER.fromScale }] },
+      initialValues: { opacity: 0, transform: [{ translateY: risePt }, { scale: fromScale }] },
       animations: {
         opacity: withDelay(delay, withTiming(1, { duration: GRID_STAGGER.fadeMs })),
         transform: [{ translateY: withDelay(delay, withSpring(0, SPRING.pop)) }, { scale: withDelay(delay, withSpring(1, SPRING.pop)) }],
       },
     };
   };
+}
+
+/** The grid cell rise as a Reanimated entering animation (UI thread), or undefined when it should not animate. */
+export function gridRiseIn(index: number, options: { readonly reduced?: boolean; readonly leadMs?: number } = {}) {
+  if (options.reduced) return undefined;
+  const delay = gridDelay(index, options.leadMs ?? 0);
+  if (delay === null) return undefined;
+  return riseIn(delay, GRID_STAGGER.risePt, GRID_STAGGER.fromScale);
+}
+
+/** The hero cell (the Shop Pick): first in, from further down, with a bigger pop. */
+export function heroRiseIn(options: { readonly reduced?: boolean } = {}) {
+  if (options.reduced) return undefined;
+  return riseIn(0, GRID_STAGGER.heroRisePt, GRID_STAGGER.heroFromScale);
 }
 
 const OUT = Easing.bezierFn(BEZIER.out[0], BEZIER.out[1], BEZIER.out[2], BEZIER.out[3]);

@@ -25,7 +25,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { formatCoins, slotWord, passesFilter, restockPill, shelfFilters, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
 import { useAnyModalLayer } from '../../ui/modalLayers';
-import { gridRiseIn } from '../../ui/stagger';
+import { GRID_STAGGER, gridRiseIn, heroRiseIn } from '../../ui/stagger';
 import Playercard from '../../components/Playercard';
 import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import { previewLook } from './TryOnSheet';
@@ -191,7 +191,8 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
   const nearEnd = useRef(false);
   // Only the first screenful staggers in; tiles from later pages just appear.
   const firstIds = useRef<Set<number> | null>(null);
-  if (!firstIds.current && items.length) firstIds.current = new Set(items.slice(0, 9).map(i => i.id));
+  // The first paint's items (the hero plus a screenful): they fill in the stagger; anything later just fades.
+  if (!firstIds.current && items.length) firstIds.current = new Set(items.slice(0, GRID_STAGGER.maxItems + 4).map(i => i.id));
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   const winH = Dimensions.get('window').height;
@@ -329,12 +330,13 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
           ) : (
             <View style={styles.grid}>
               {star && filter === 'all' && (
-                <Animated.View key={`star-${star.id}`} entering={still ? undefined : FadeIn.delay(40).duration(180)} style={{ width: 2 * TILE_W + GAP }}>
+                <Animated.View key={`star-${star.id}`} entering={still ? undefined : heroRiseIn()} style={{ width: 2 * TILE_W + GAP }}>
                   <StarTile item={star as ShopItem} balance={balance} still={still || !focused || !!open || covered || idle} onOpen={openItem} onWish={wish} />
                 </Animated.View>
               )}
               {shelf.filter(i => (filter !== 'all' || i.id !== star?.id) && passesFilter(i, filter, balance)).map((item, i) => (
-                <Animated.View key={`${filter}:${item.id}`} entering={still ? undefined : !firstIds.current?.has(item.id) || filter !== 'all' ? FadeIn.duration(160) : gridRiseIn(i) ?? FadeIn.duration(160)}>
+                <Animated.View key={`${filter}:${item.id}`} entering={still ? undefined : !firstIds.current?.has(item.id) || filter !== 'all' ? FadeIn.duration(160)
+                  : gridRiseIn(i, { leadMs: star ? GRID_STAGGER.heroLeadMs : 0 }) ?? FadeIn.delay(GRID_STAGGER.capMs).duration(160)}>
                   <ShopTile item={item as ShopItem} width={TILE_W} still={still} vipLocked={!!item.is_member_item && !vip}
                     affordable={balance >= item.cost} balance={balance} justBought={bought.includes(item.id)} onOpen={openItem} onWish={wish} />
                 </Animated.View>

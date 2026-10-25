@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
-import { ReactNode, useContext, useEffect, useRef } from 'react';
+import { ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { Dimensions, Image as RNImage, ImageBackground, Text, View } from 'react-native';
-import Animated, { interpolate, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
+import Animated, { interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
 import { queueHaptic } from '../gamekit/Haptics';
-import { COMPASS_INDEX, FOOTER_MOTION, RARE_HAPTIC_AT, footerIndex, footerMotion, playFooterTap } from './footerMotion';
+import { COMPASS_INDEX, FOOTER_MOTION, RARE_HAPTIC_AT, footerIndex, footerMotion, playFooterTap, rarePickCount, rareSeed } from './footerMotion';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { BRAND } from '../ui/tokens';
 import { GOLD_FX } from '../ui/motion';
@@ -381,13 +381,29 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
       </Animated.View>
       {compass && <SparkleBurst progress={footerMotion.burst} count={F.compassSparkles} x={size / 2} y={44}
         spread={[-180, 0]} dist={[58, 82]} size={[16, 22]} gravity={18} seed={2} />}
-      {/* Every fifth compass pick: one big burst of twelve stars high over the footer wave (the footer still surprises on the tenth tap). */}
-      {compass && <SparkleBurst progress={footerMotion.burstRare} count={F.rareSparkles} x={size / 2} y={44}
-        spread={[-200, 20]} dist={F.rareDist} size={F.rareSize} gravity={22} seed={7} />}
+      {/* Every fifth compass pick: twelve inked gold stars in two low fans out along the footer wave (never up over the cards),
+          laid out differently on each rare pick. */}
+      {compass && <RareFans size={size} />}
       {!compass && <SparkleBurst progress={smallBurst} count={F.smallSparkles} x={size / 2} y={size / 2}
         spread={[-175, -5]} dist={F.smallDist} size={F.smallSize} gravity={10} seed={index + 11} />}
     </View>
   );
+}
+
+/** The rare compass pick's two low fans of inked gold stars; the layout changes with each rare pick. */
+function RareFans({ size }: { readonly size: number }) {
+  const [seed, setSeed] = useState(() => rareSeed(rarePickCount.value));
+  useAnimatedReaction(() => rarePickCount.value, (n, before) => {
+    if (before !== null && n !== before) runOnJS(setSeed)(rareSeed(n));
+  });
+  const half = Math.round(FOOTER_MOTION.rareSparkles / 2);
+  const fan = FOOTER_MOTION.rareFanDeg;
+  return <>
+    <SparkleBurst progress={footerMotion.burstRare} count={half} x={size / 2} y={44} inked
+      spread={[-180 + 2, -180 + fan]} dist={FOOTER_MOTION.rareDist} size={FOOTER_MOTION.rareSize} gravity={16} seed={seed} />
+    <SparkleBurst progress={footerMotion.burstRare} count={half} x={size / 2} y={44} inked
+      spread={[-fan, -2]} dist={FOOTER_MOTION.rareDist} size={FOOTER_MOTION.rareSize} gravity={16} seed={seed + 3} />
+  </>;
 }
 
 /** A footer label: lifts 2 pt into place and fades up when its tab is picked. */

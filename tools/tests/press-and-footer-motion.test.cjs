@@ -132,23 +132,15 @@ test('footer: positions and sizes of the five icons are unchanged (motion only)'
   assert.match(source, /transformOrigin: 'bottom'/, 'the compass wobbles on its base');
 });
 
-test('rolling number: digits roll the short way up for gains and down for losses, ones column first', () => {
-  const { planRoll, defaultFormat } = loadTs('src/ui/RollingNumber.tsx', {
+test('rolling number: one geared roll from the old to the new number (wheel plan in wow-ui-w5.test.cjs)', () => {
+  const { wheelColumns, defaultFormat } = loadTs('src/ui/RollingNumber.tsx', {
     react: { memo: c => c }, 'react/jsx-runtime': {}, 'react-native': {}, 'react-native-reanimated': {},
     './motionEasing': easing, './useUiReducedMotion': {}, '../gamekit/Haptics': { queueHaptic() {} },
   });
   assert.equal(defaultFormat(12345), '12,345');
-  const up = JSON.parse(JSON.stringify(planRoll('375', '855', true, false)));
-  assert.deepEqual(up.map(c => [c.from, c.to]), [[3, 8], [7, 15], [5, 5]], 'tens rolls 7 up through 9 to 5');
-  assert.ok(up[1].delay < up[0].delay, 'each column to the left starts later');
-  assert.equal(up[2].delay, 0);
-  const down = JSON.parse(JSON.stringify(planRoll('855', '715', false, false)));
-  assert.deepEqual(down.map(c => [c.from, c.to]), [[8, 7], [5, 1], [5, 5]]);
-  const comma = JSON.parse(JSON.stringify(planRoll('999', '1,024', true, false)));
-  assert.equal(comma[1].from, null, 'commas never roll');
-  assert.equal(comma[0].from, 0, 'a new column rolls up from 0');
-  const big = JSON.parse(JSON.stringify(planRoll('100', '25,100', true, true)));
-  assert.deepEqual(big.filter(c => c.from !== null && c.from !== c.to).length, 2, 'a big jump rolls only the top columns');
+  const comma = JSON.parse(JSON.stringify(wheelColumns('999', '1,024', 999, 1024)));
+  assert.equal(comma[1].kind, 'sep', 'commas never roll');
+  assert.equal(comma[0].place, 1000, 'a new wheel turns up on the left');
 });
 
 test('toasts: one at a time, a calm wait, a win buzzes and a problem never error-buzzes', () => {

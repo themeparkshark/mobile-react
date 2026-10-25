@@ -1,22 +1,26 @@
 /**
- * <RollingNumber>: a number that rolls like an odometer instead of jumping.
+ * <RollingNumber>: a number that rolls like a real odometer instead of jumping.
  *
  *   <RollingNumber value={coins} style={styles.coinsText} />
- *   <RollingNumber value={xp} format={n => `${n} XP`} />
  *
- * On a change every digit column rolls to its new digit on the UI thread (COUNT.ms, EASE.out),
- * the ones column first and each column to its left COUNT.digitStaggerMs later, then the
- * number lands with a COUNT.finalBump on SPRING.stamp. Gains roll up, losses roll down.
- * A big jump (over 10,000) rolls only the top columns; the rest snap.
+ * One value rolls, never separate columns: on a change a single number `v` runs from the old value
+ * to the new one on the UI thread (COUNT.ms, EASE.out), and every digit wheel is worked out from
+ * `v` the way a car odometer's wheels are geared together. The ones wheel turns with `v`; a wheel to
+ * its left only moves while every wheel to its right is turning over from 9 to 0, on the same frame.
+ * So every frame reads as a number between the old and the new value (690 to 715 passes 699, 700,
+ * 701, never 603), and a gain never looks like a loss.
+ * Whole digits hold for most of every step, then slide (an odometer tick); sliding digits stretch a
+ * little with speed. A change that arrives mid-roll carries on from where the wheels are (one longer
+ * roll, never a restart from the old number). The number lands with a COUNT.finalBump on SPRING.stamp.
  * The first value on screen never rolls (a screen load is silent and still).
- * Each column clips to the digit's own height (no neighbour digits peeking above or below a pill),
- * and the rolling digits stretch a little with speed, like a real odometer wheel.
- * `celebrate`: the rolling digits of a gain the player just earned glow gold and land with a selection
- * tick; a loss glows a calm sky blue (never red) and lands quietly. Digits only: no box behind them.
- * `hold`: keep showing the last number (for example while a sheet covers the wallet); when the
- * hold lifts, it rolls to the new number where the kid can see it.
- * Reduce Motion: the new number is simply there.
- * Transforms and opacity only (no per-frame React render, no layout animation).
+ * `celebrate`: the digits of a gain the player just earned glow gold and land with a selection tick;
+ * a loss glows a calm sky blue (never red) and lands quietly. Digits only: no box behind them.
+ * `hold`: keep showing the last number (for example while a sheet covers the wallet); when the hold
+ * lifts, it rolls to the new number where the kid can see it.
+ * `gate`: roll only once it reaches 1 (set on the UI thread, for example by the first coin landing).
+ * Formats that are not plain whole numbers with separators (12.4K) never roll: they change in place
+ * with the bump. Reduce Motion: the new number is simply there.
+ * Transforms and opacity only, all timing on the UI thread (no per-frame React render, no JS timers).
  */
 import { memo, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
@@ -70,53 +74,52 @@ export const ROLL_LOOK = {
 
 export const defaultFormat = (value: number) => Math.round(value).toLocaleString('en-US');
 
-export interface RollColumn {
-  /** The character shown at rest in this slot. */
-  readonly char: string;
-  /** For digits: where the strip starts and ends (0 to 19, two stacked 0-9 runs). Null for commas and letters. */
-  readonly from: number | null;
-  readonly to: number | null;
-  /** When this column starts rolling (ms). */
-  readonly delay: number;
-}
-
 const isDigit = (c: string) => c >= '0' && c <= '9';
 
 /**
- * Plan the roll from one printed number to another, right-aligned so the ones column lines up.
- * Pure, so it is unit tested. Columns that do not change do not move.
+ * True when `format` prints whole numbers place by place (digits plus separators such as commas),
+ * so the wheels can be geared to the value. 12.4K or -5 are not: those change in place. Pure.
  */
-export function planRoll(fromText: string, toText: string, rising: boolean, bigJump: boolean): RollColumn[] {
-  const width = toText.length;
-  const padded = fromText.length >= width ? fromText.slice(fromText.length - width) : fromText.padStart(width, ' ');
-  const digitsTotal = [...toText].filter(isDigit).length;
-  let digitIndexFromRight = 0;
-  const out: RollColumn[] = new Array(width);
-  for (let i = width - 1; i >= 0; i--) {
-    const c = toText[i];
-    if (!isDigit(c)) { out[i] = { char: c, from: null, to: null, delay: 0 }; continue; }
-    const d1 = Number(c);
-    const prev = padded[i];
-    const d0 = isDigit(prev) ? Number(prev) : 0;
-    const k = digitIndexFromRight++;
-    // A big jump rolls only the top two columns; the rest snap to their new digit.
-    const rolls = d0 !== d1 && (!bigJump || k >= digitsTotal - 2);
-    let from = d0;
-    let to = d1;
-    if (rolls) {
-      // Gains roll up through 9 to 0, losses roll down: the strip has two runs of 0-9.
-      if (rising) { if (to < from) to += 10; } else if (from < to) from += 10;
-    } else { from = d1; to = d1; }
-    out[i] = { char: c, from, to, delay: rolls ? k * COUNT.digitStaggerMs : 0 };
+export function positionalFormat(format: (value: number) => string, values: readonly number[]): boolean {
+  return values.every(v => Number.isInteger(v) && v >= 0 && format(v).replace(/[^0-9]/g, '') === String(v)
+    && /^[0-9][0-9,.\s ']*$/.test(format(v)));
+}
+
+export interface WheelColumn {
+  /** 'digit' wheels show the value at `place` (1, 10, 100...); 'sep' is a separator such as a comma. */
+  readonly kind: 'digit' | 'sep';
+  readonly char: string;
+  /** Digit: its own place. Separator: the place of the digit just to its left (it shows when that digit does). */
+  readonly place: number;
+  /** Digit: this wheel turns during the roll (its whole-number part changes), so it is sized for any digit. */
+  readonly turns: boolean;
+}
+
+/**
+ * The wheels for a roll between two values: the longer of the two printed numbers, right-aligned.
+ * Pure (unit tested).
+ */
+export function wheelColumns(fromText: string, toText: string, from: number, to: number): WheelColumn[] {
+  const text = fromText.length > toText.length ? fromText : toText;
+  const out: WheelColumn[] = new Array(text.length);
+  let place = 1;
+  let lastDigitPlace = 1;
+  for (let i = text.length - 1; i >= 0; i--) {
+    const c = text[i];
+    if (isDigit(c)) {
+      out[i] = { kind: 'digit', char: c, place, turns: Math.floor(from / place) !== Math.floor(to / place) };
+      lastDigitPlace = place;
+      place *= 10;
+    } else {
+      out[i] = { kind: 'sep', char: c, place: lastDigitPlace * 10, turns: false };
+    }
   }
   return out;
 }
 
-const STRIP = '01234567890123456789'.split('');
-
 /**
- * Where the strip sits for a rolling position p: whole digits hold, then slide quickly to the next
- * (an odometer tick). Pure worklet (unit tested): tickPos(3.2) is 3, tickPos(3.9) is between 3 and 4.
+ * The odometer tick: a step holds its whole digit for ROLL_LOOK.holdShare of the way, then slides
+ * on a smoothstep. Pure worklet: tickPos(3.2) is 3, tickPos(3.9) is between 3 and 4.
  */
 const HOLD_SHARE: number = ROLL_LOOK.holdShare;
 export function tickPos(p: number, holdShare?: number): number {
@@ -138,6 +141,53 @@ export function tickSlide(p: number, holdShare?: number): number {
   return Math.sin(u * Math.PI);
 }
 
+/**
+ * Where the wheel for `place` sits when the whole number reads `v` (0 to 10 on the strip; 9.4 is a
+ * 9 sliding toward the next 0). Geared like a car odometer: the wheel only moves while every wheel
+ * to its right is on its last step (9 turning over to 0), and it moves exactly with the ones wheel.
+ * Pure worklet (unit tested).
+ */
+/**
+ * The shared slide of the carried wheels, snapped to 1/4096 (far under a pixel; a power of two, so
+ * 9 + slide and 0 + slide round the same way and every carried wheel turns over on the same frame).
+ */
+function wheelSlide(f: number): number {
+  'worklet';
+  return Math.round(tickPos(f) * 4096) / 4096;
+}
+
+export function wheelPos(v: number, place: number): number {
+  'worklet';
+  // Whole-number maths for the gearing (exact), and one shared fraction for every carried wheel, so
+  // all of them slide on exactly the same frame.
+  const n = Math.floor(v);
+  const q = Math.floor(n / place);
+  const carrying = n - q * place === place - 1;
+  return (q % 10) + (carrying ? wheelSlide(v - n) : 0);
+}
+
+/** A leading wheel (or the separator next to it) fades in as its 1 turns up, like a blank wheel. Pure worklet. */
+export function wheelOpacity(v: number, place: number): number {
+  'worklet';
+  const n = Math.floor(v);
+  if (place <= 1 || n >= place) return 1;
+  return n === place - 1 ? wheelSlide(v - n) : 0;
+}
+
+/** The number a kid reads off the wheels at `v` ('floor': the digit leaving, 'round': the one mostly showing). Pure, for tests. */
+export function readWheels(v: number, columns: readonly WheelColumn[], mode: 'floor' | 'round'): number {
+  let n = 0;
+  for (const col of columns) {
+    if (col.kind !== 'digit' || wheelOpacity(v, col.place) < 0.5) continue;
+    const p = wheelPos(v, col.place);
+    const d = (mode === 'floor' ? Math.floor(p) : Math.round(p)) % 10;
+    n += d * col.place;
+  }
+  return n;
+}
+
+const STRIP = '01234567890'.split('');
+
 function RollingNumber({ value: incoming, format = defaultFormat, style, maxFontSizeMultiplier = 1.3, bump = true, onLanded,
   celebrate = false, hold = false, startDelayMs = 0, gate }: RollingNumberProps) {
   const reduced = useUiReducedMotion();
@@ -146,165 +196,161 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
   if (!hold) heldValue.current = incoming;
   const value = hold ? heldValue.current : incoming;
   const text = format(value);
+  /** The whole number the wheels show, rolled on the UI thread. */
+  const v = useSharedValue(value);
   const flash = useSharedValue(0);
-  const rising = useRef(true);
-  const previous = useRef<{ text: string; value: number } | null>(null);
-  const plan = useRef<RollColumn[]>([]);
-  const rollId = useRef(0);
   const scale = useSharedValue(1);
-  // After a roll lands, the columns go back to their resting width (a rolling column is as wide as the
-  // wider of its old and new digit, so a wide 9 never squeezes into a narrow 1's slot mid-roll).
+  /** A gated roll waits here (1) until the gate opens; then it rolls from the UI thread. */
+  const armed = useSharedValue(0);
+  const target = useSharedValue(value);
+  const rising = useRef(true);
+  const previous = useRef<number | null>(null);
+  // The roll's wheels: from where the wheels are now to the new value. Settles to the new number's own
+  // columns when the roll lands (so a 1,000 that rolled down to 990 drops its comma column).
+  const roll = useRef<{ from: number; to: number } | null>(null);
   const [, setSettled] = useState(0);
-  const settledText = useRef<string | null>(null);
-  const settle = (t: string) => { settledText.current = t; setSettled(n => n + 1); };
 
   const flat = StyleSheet.flatten(style) ?? {};
   const fontSize = flat.fontSize ?? 16;
   const lineHeight = flat.lineHeight ?? Math.round(fontSize * 1.25);
 
-  // Work out this render's roll before the columns render, so they start where the old number was.
-  if (previous.current === null) {
-    plan.current = [...text].map(char => ({ char, from: isDigit(char) ? Number(char) : null, to: isDigit(char) ? Number(char) : null, delay: 0 }));
-  } else if (previous.current.text !== text) {
-    rising.current = value >= previous.current.value;
-    const big = Math.abs(value - previous.current.value) > 10_000;
-    plan.current = reduced
-      ? [...text].map(char => ({ char, from: isDigit(char) ? Number(char) : null, to: isDigit(char) ? Number(char) : null, delay: 0 }))
-      : planRoll(previous.current.text, text, rising.current, big)
-        .map(col => (col.from !== null && col.from !== col.to ? { ...col, delay: col.delay + startDelayMs } : col));
-    rollId.current += 1;
-    settledText.current = null;
-  } else if (settledText.current === text && plan.current.some(c => c.from !== c.to)) {
-    plan.current = [...text].map(char => ({ char, from: isDigit(char) ? Number(char) : null, to: isDigit(char) ? Number(char) : null, delay: 0 }));
+  const changed = previous.current !== null && previous.current !== value;
+  const positional = positionalFormat(format, [value, previous.current ?? value]);
+  if (changed && positional && !reduced) {
+    // Mid-roll: carry on from wherever the wheels are (one longer roll, never a restart).
+    const from = roll.current ? Math.round(v.value) : previous.current!;
+    rising.current = value >= from;
+    roll.current = { from, to: value };
+  } else if (changed) {
+    rising.current = value >= (previous.current ?? value);
+    roll.current = null;
   }
+  const columns = roll.current
+    ? wheelColumns(format(Math.max(roll.current.from, roll.current.to)), text, roll.current.from, roll.current.to)
+    : positional ? wheelColumns(text, text, value, value) : null;
 
-  // A gated roll: the bump and the glow start on the gate's frame too (UI thread).
-  const pendingLanding = useSharedValue(0);
-  const longestSv = useSharedValue(0);
-  const landTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const landedLater = (ms: number) => {
-    if (landTimer.current) clearTimeout(landTimer.current);
-    const gain = rising.current;
-    const landedText = text;
-    landTimer.current = setTimeout(() => {
-      if (celebrate && gain) queueHaptic('tickSelection');
-      onLanded?.();
-      settle(landedText);
-    }, ms + 60);
+  const landedJs = (gain: boolean, landedValue: number) => {
+    if (celebrate && gain) queueHaptic('tickSelection');
+    onLanded?.();
+    if (roll.current && roll.current.to === landedValue) { roll.current = null; setSettled(n => n + 1); }
   };
-  useEffect(() => () => { if (landTimer.current) clearTimeout(landTimer.current); }, []);
-  useAnimatedReaction(() => (gate ? gate.value >= 1 && pendingLanding.value === 1 : false), (ready, was) => {
+
+  const startRoll = (to: number, delay: number, gain: boolean) => {
+    'worklet';
+    const landing = () => {
+      'worklet';
+      if (bump) scale.value = withSequence(withTiming(COUNT.finalBump, { duration: 90 }), withSpring(1, HUD_BUMP.spring));
+      if (celebrate) flash.value = withTiming(0, { duration: 360, easing: EASE.in });
+      runOnJS(landedJs)(gain, to);
+    };
+    if (celebrate) flash.value = withDelay(delay, withTiming(1, { duration: 120, easing: EASE.out }));
+    v.value = withDelay(delay, withTiming(to, { duration: COUNT.ms, easing: EASE.out }, done => {
+      if (done) landing();
+    }));
+  };
+
+  useAnimatedReaction(() => (gate ? gate.value >= 1 && armed.value === 1 : false), (ready, was) => {
     if (!ready || was) return;
-    pendingLanding.value = 0;
-    const longest = longestSv.value;
-    runOnJS(landedLater)(longest);
-    if (bump) scale.value = withDelay(longest - 60, withSequence(withTiming(COUNT.finalBump, { duration: 90 }), withSpring(1, HUD_BUMP.spring)));
-    if (celebrate) flash.value = withSequence(withTiming(1, { duration: 120, easing: EASE.out }),
-      withDelay(Math.max(0, longest - 120), withTiming(0, { duration: 360, easing: EASE.in })));
+    armed.value = 0;
+    startRoll(target.value, 0, target.value >= v.value);
   });
 
   useEffect(() => {
     const first = previous.current === null;
-    const changed = !first && previous.current!.text !== text;
-    previous.current = { text, value };
-    if (!changed || reduced) return undefined;
-    const longest = plan.current.reduce((m, c) => Math.max(m, c.delay), 0) + COUNT.ms;
-    if (gate) {
-      cancelAnimation(scale); cancelAnimation(flash);
-      longestSv.value = longest;
-      pendingLanding.value = 1;
-      return undefined;
-    }
-    if (bump) {
-      cancelAnimation(scale);
-      scale.value = withDelay(longest - 60, withSequence(withTiming(COUNT.finalBump, { duration: 90 }), withSpring(1, HUD_BUMP.spring)));
-    }
-    if (celebrate) {
-      cancelAnimation(flash);
-      flash.value = withDelay(startDelayMs, withSequence(withTiming(1, { duration: 120, easing: EASE.out }),
-        withDelay(Math.max(0, longest - startDelayMs - 120), withTiming(0, { duration: 360, easing: EASE.in }))));
-    }
+    const didChange = !first && previous.current !== value;
+    previous.current = value;
+    if (!didChange) return;
     const gain = rising.current;
-    const t = setTimeout(() => {
-      // A gain the player just earned lands with a tick in the hand; losses land quietly.
-      if (celebrate && gain) queueHaptic('tickSelection');
-      onLanded?.();
-      settle(text);
-    }, longest);
-    return () => clearTimeout(t);
+    if (reduced || !roll.current) {
+      // Reduce Motion, or a format that cannot roll: the new number is simply there (a bump says it changed).
+      cancelAnimation(v); armed.value = 0;
+      v.value = value;
+      if (!reduced && bump) {
+        cancelAnimation(scale);
+        scale.value = withSequence(withTiming(COUNT.finalBump, { duration: 90 }), withSpring(1, HUD_BUMP.spring));
+      }
+      landedJs(gain, value);
+      return;
+    }
+    target.value = value;
+    if (gate && gate.value < 1) {
+      // Wait for the gate; a roll already running keeps going toward its old number until then.
+      armed.value = 1;
+      return;
+    }
+    armed.value = 0;
+    startRoll(value, startDelayMs, gain);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, value, reduced, bump, onLanded, scale, celebrate, flash]);
+  }, [value, reduced]);
 
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const flashColor = rising.current ? ROLL_LOOK.gainFlash : ROLL_LOOK.lossFlash;
   // The glow is a second, flash-coloured copy of each digit strip faded in on top (one opacity per column),
-  // never an animated text colour on every digit cell (that was 20 colour updates per column per frame).
+  // never an animated text colour on every digit cell.
   const textStyle: StyleProp<TextStyle> = [style, { lineHeight, includeFontPadding: false }];
 
+  if (!columns) {
+    return (
+      <Animated.View style={[{ flexDirection: 'row', alignItems: 'center' }, bumpStyle]} accessible accessibilityRole="text" accessibilityLabel={text}>
+        <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={textStyle}>{text}</Text>
+      </Animated.View>
+    );
+  }
   return (
     <Animated.View style={[{ flexDirection: 'row', alignItems: 'center' }, bumpStyle]}
       accessible accessibilityRole="text" accessibilityLabel={text}>
-      {plan.current.map((col, i) => col.from === null || col.to === null
-        ? <Text key={`c${plan.current.length - i}`} maxFontSizeMultiplier={maxFontSizeMultiplier} style={textStyle}>{col.char}</Text>
-        : <DigitColumn key={`d${plan.current.length - i}`} col={col} rollId={rollId.current} lineHeight={lineHeight}
-          fontSize={fontSize} textStyle={textStyle} flash={celebrate ? flash : undefined} flashColor={flashColor}
-          maxFontSizeMultiplier={maxFontSizeMultiplier} gate={gate} />)}
+      {columns.map((col, i) => col.kind === 'sep'
+        ? <Separator key={`s${columns.length - i}`} col={col} v={v} textStyle={textStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} />
+        : <DigitWheel key={`d${col.place}`} col={col} v={v} lineHeight={lineHeight} fontSize={fontSize} textStyle={textStyle}
+          flash={celebrate ? flash : undefined} flashColor={flashColor} maxFontSizeMultiplier={maxFontSizeMultiplier} />)}
     </Animated.View>
   );
 }
 
-function DigitColumn({ col, rollId, lineHeight, fontSize, textStyle, flash, flashColor, maxFontSizeMultiplier, gate }: {
-  readonly col: RollColumn; readonly rollId: number; readonly lineHeight: number; readonly fontSize: number;
+function Separator({ col, v, textStyle, maxFontSizeMultiplier }: {
+  readonly col: WheelColumn; readonly v: SharedValue<number>; readonly textStyle: StyleProp<TextStyle>; readonly maxFontSizeMultiplier: number;
+}) {
+  const place = col.place;
+  const fade = useAnimatedStyle(() => ({ opacity: wheelOpacity(v.value, place) }));
+  return <Animated.Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, fade]}>{col.char}</Animated.Text>;
+}
+
+/** Sizing for a wheel that turns: as wide as the widest digit, so no digit is clipped while it passes. */
+const WidestDigit = memo(function WidestDigit({ textStyle, lineHeight, maxFontSizeMultiplier }: {
+  readonly textStyle: StyleProp<TextStyle>; readonly lineHeight: number; readonly maxFontSizeMultiplier: number;
+}) {
+  return (
+    <View style={{ height: lineHeight, overflow: 'hidden', opacity: 0 }}>
+      {STRIP.slice(0, 10).map(d => <Text key={d} maxFontSizeMultiplier={maxFontSizeMultiplier} style={textStyle}>{d}</Text>)}
+    </View>
+  );
+});
+
+function DigitWheel({ col, v, lineHeight, fontSize, textStyle, flash, flashColor, maxFontSizeMultiplier }: {
+  readonly col: WheelColumn; readonly v: SharedValue<number>; readonly lineHeight: number; readonly fontSize: number;
   readonly textStyle: StyleProp<TextStyle>; readonly flash?: SharedValue<number>; readonly flashColor: string;
   readonly maxFontSizeMultiplier: number;
-  readonly gate?: SharedValue<number>;
 }) {
-  const pos = useSharedValue(col.from ?? 0);
-  const lastRoll = useRef(rollId);
-  /** A gated roll waits here (1) until the gate opens; then it rolls from the UI thread. */
-  const armed = useSharedValue(0);
-  const target = useSharedValue(col.to ?? 0);
-  const delay = useSharedValue(col.delay);
-  useEffect(() => {
-    if (col.from === null || col.to === null) return;
-    if (lastRoll.current === rollId && pos.value === col.to) return;
-    lastRoll.current = rollId;
-    cancelAnimation(pos);
-    if (col.from === col.to) { armed.value = 0; pos.value = col.to; return; }
-    pos.value = col.from;
-    target.value = col.to;
-    delay.value = col.delay;
-    if (gate) { armed.value = 1; return; }
-    const rest = col.to % 10;
-    pos.value = withDelay(col.delay, withTiming(col.to, { duration: COUNT.ms, easing: EASE.out }, done => {
-      if (done) pos.value = rest;
-    }));
-  }, [rollId, col.from, col.to, col.delay, pos, armed, target, delay, gate]);
-  // The gate opened (the first coin landed): roll now, on this frame.
-  useAnimatedReaction(() => (gate ? gate.value >= 1 && armed.value === 1 : false), (ready, was) => {
-    if (!ready || was) return;
-    armed.value = 0;
-    const to = target.value;
-    pos.value = withDelay(delay.value, withTiming(to, { duration: COUNT.ms, easing: EASE.out }, done => {
-      if (done) pos.value = to % 10;
-    }));
-  });
+  const place = col.place;
   // The clip is the glyph's own height, centred on the line, so no neighbour digit peeks out of a pill.
   const clipH = Math.min(lineHeight, Math.ceil(fontSize * ROLL_LOOK.clipEm));
   const cell = lineHeight * (1 + ROLL_LOOK.cellGap);
   const inset = (lineHeight - clipH) / 2;
-  // The strip ticks: a whole digit holds, then slides to the next (no blank slot mid-roll).
-  const strip = useAnimatedStyle(() => ({ transform: [{ translateY: -tickPos(pos.value) * cell - (cell - lineHeight) / 2 - inset }] }));
+  const strip = useAnimatedStyle(() => ({ transform: [{ translateY: -wheelPos(v.value, place) * cell - (cell - lineHeight) / 2 - inset }] }));
+  const wheel = useAnimatedStyle(() => {
+    const p = wheelPos(v.value, place);
+    // The digit stretches a little while it slides (a whole digit holds unstretched), like a smear on a spinning wheel.
+    const slide = p - Math.floor(p);
+    return { opacity: wheelOpacity(v.value, place), transform: [{ scaleY: 1 + ROLL_LOOK.stretch * Math.sin(slide * Math.PI) }] };
+  });
   const glowStyle = useAnimatedStyle(() => ({ opacity: flash ? flash.value * ROLL_LOOK.flashPeak : 0 }));
-  // The digit stretches a little while it slides, like a smear on a spinning wheel.
-  const stretch = useAnimatedStyle(() => ({ transform: [{ scaleY: 1 + ROLL_LOOK.stretch * tickSlide(pos.value) }] }));
   return (
     <View style={{ height: lineHeight }}>
-      {/* The resting digit sizes the column (with the old digit too while it rolls, so the wider one fits); the strip rolls over it. */}
-      <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, { opacity: 0 }]}>{col.char}</Text>
-      {col.from !== null && col.from % 10 !== Number(col.char) && <Text maxFontSizeMultiplier={maxFontSizeMultiplier}
-        style={[textStyle, { opacity: 0 }]}>{String(col.from % 10)}</Text>}
-      <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: inset, height: clipH, overflow: 'hidden' }, stretch]}>
+      {/* The resting digit sizes a still wheel; a turning wheel is as wide as the widest digit. The strip rolls over it. */}
+      {col.turns
+        ? <WidestDigit textStyle={textStyle} lineHeight={lineHeight} maxFontSizeMultiplier={maxFontSizeMultiplier} />
+        : <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, { opacity: 0 }]}>{col.char}</Text>}
+      <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: inset, height: clipH, overflow: 'hidden' }, wheel]}>
         <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0 }, strip]}>
           <DigitStrip cell={cell} lineHeight={lineHeight} textStyle={textStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} />
           {flash && <Animated.View style={[StyleSheet.absoluteFill, glowStyle]}>
@@ -316,7 +362,7 @@ function DigitColumn({ col, rollId, lineHeight, fontSize, textStyle, flash, flas
   );
 }
 
-/** The 0 to 19 digit strip (static text; only its parent moves). */
+/** The 0 to 9 then 0 digit strip (static text; only its parent moves). */
 const DigitStrip = memo(function DigitStrip({ cell, lineHeight, textStyle, maxFontSizeMultiplier }: {
   readonly cell: number; readonly lineHeight: number; readonly textStyle: StyleProp<TextStyle>; readonly maxFontSizeMultiplier: number;
 }) {

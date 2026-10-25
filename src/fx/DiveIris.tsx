@@ -73,11 +73,14 @@ export const DIVE = {
   /** The open always waits at least this long (UI thread) after the landing signal, so the screen has drawn. */
   drawMs: 50,
   /**
-   * Once the game screen has laid out under the water, the water opens at most this long later, timed
-   * on the UI thread (a JS timer on a starved JS thread fired seconds late). Its round landing first
-   * opens it sooner.
+   * The water is the loader: once the game screen has laid out under it, the water keeps swimming until
+   * its first round is on screen (notifyDiveLanded), never opening onto a half-built screen. Only if
+   * the round has still not come this long after the layout does it open anyway (timed on the UI thread;
+   * the round is built from local data, so on a phone it lands within a few frames).
    */
-  layoutCapMs: 450,
+  readyPatienceMs: 2500,
+  /** While the water waits, the shark keeps swimming on slowly from lingerAt to here (never parked). */
+  drift: { to: 0.62, ms: 1800 },
   /** If the water has not covered the screen this long after its close should have ended, go anyway (ms). */
   watchdogMs: 1200,
   /** How often the water re-checks after safetyMs (ms). */
@@ -186,8 +189,8 @@ export function notifyDiveLanded(): void {
 }
 
 /**
- * A game screen's root has laid out but its first round is still coming: the water opens by itself
- * DIVE.layoutCapMs later (on the UI thread), or sooner when notifyDiveLanded() follows.
+ * A game screen's root has laid out but its first round is still coming: the water keeps swimming and
+ * opens when notifyDiveLanded() follows (DIVE.readyPatienceMs on the UI thread is only a backstop).
  */
 export function notifyDiveLaidOut(): void {
   laidOutListeners.forEach(l => l());
@@ -332,7 +335,8 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     // The shark swims in to the middle and lingers there (a bob on the clock) until the water opens;
     // then it swims on and out (useAnimatedReaction below). The clock keeps the rays, ripples and
     // bubble stream moving for as long as the hold lasts, so the held breath is never still.
-    swim.value = withTiming(DIVE.lingerAt, { duration: T.swimMs * DIVE.lingerAt, easing: EASE.out });
+    swim.value = withSequence(withTiming(DIVE.lingerAt, { duration: T.swimMs * DIVE.lingerAt, easing: EASE.out }),
+      withTiming(DIVE.drift.to, { duration: DIVE.drift.ms * devSlow(), easing: Easing.inOut(Easing.sin) }));
     if (look.clock) clock.value = withRepeat(withTiming(1, { duration: DIVE.clockMs, easing: Easing.linear }), -1, false);
     else clock.value = withTiming(0.25, { duration: T.swimMs, easing: EASE.out });
     let coveredAt = 0;
@@ -352,6 +356,8 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     // frame so it has drawn), or, for a game that was already in the stack, its route in focus.
     // Anything else keeps the water up and swimming; at the end of its patience it fades out.
     let skipHold = false;
+    /** The screen laid out before its first round: a patience open is armed and the water waits for the round. */
+    let capped = false;
     const decide = (why: string) => {
       if (!alive || decided) return;
       const slow = devSlow();
@@ -372,23 +378,26 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     };
     skipRef.current = () => {
       skipHold = true;
-      if (decided && open.value === 0) openNow(DIVE.drawMs);
+      // Never skips the wait for the first round: a tap only drops the held breath once it is there.
+      if (decided && !(capped && !landed) && open.value === 0) openNow(DIVE.drawMs);
     };
-    /** The laid-out signal already scheduled a capped open on the UI thread; a landing can bring it forward. */
-    let capped = false;
+    /**
+     * The game screen laid out but its first round is not on it yet: the water keeps swimming (no open
+     * onto a half-built screen). A patience open is armed on the UI thread; the round landing opens sooner.
+     */
     const onLaidOut = () => {
       if (!alive || decided || landed) return;
       mark('laid-out');
       decided = true;
       capped = true;
-      setHolding(false);
-      openNow(Math.max(DIVE.layoutCapMs * devSlow(), T.holdMs - (Date.now() - coveredAt)));
+      openNow(Math.max(DIVE.readyPatienceMs * devSlow(), T.holdMs - (Date.now() - coveredAt)));
     };
     const onLanded = () => {
       if (landed) return;
       if (capped) {
         landed = true;
         mark('landed(capped)');
+        setHolding(false);
         // Still under water (the capped open is waiting): open now instead.
         if (open.value === 0) openNow(Math.max(DIVE.drawMs, skipHold ? 0 : T.holdMs - (Date.now() - coveredAt)));
         return;

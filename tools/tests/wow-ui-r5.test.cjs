@@ -109,12 +109,16 @@ test('coin toasts: picture first (coin stack and a big gold amount), coins that 
 test('dialog: an underwater backdrop that keeps colours clean, a prize on gold rays, the buzz on the stamp', () => {
   const src = read('src/ui/GameDialog.tsx');
   const stops = /DIALOG_SCRIM_STOPS = \[([^\]]+)\]/.exec(src)[1].match(/0\.\d+\)/g).map(s => Number(s.slice(0, -1)));
-  assert.ok(stops[1] <= 0.12 && stops[2] <= 0.12, 'the middle band (card and buttons) is only lightly tinted');
+  const band = /DIALOG_SCRIM_STOPS = \[([^\]]+)\]/.exec(src)[1].match(/rgba\((\d+),(\d+),(\d+)/g).slice(1, 3)
+    .map(c => c.slice(5).split(',').map(Number));
+  assert.ok(band.every(([r, g, b]) => r >= 200 && g >= 230 && b >= 250) && stops[1] <= 0.32 && stops[2] <= 0.32,
+    'wave 5: the middle band is a pale sky haze that lightens (never a dark tint that turns cream grey-green)');
   assert.match(src, /DIALOG_SCRIM_AT = \[0, 0\.2, 0\.82, 1\]/, 'and it covers most of the screen');
   assert.ok(stops[0] >= 0.4 && stops[3] >= 0.4, 'the edges read underwater');
   assert.match(src, /celebrates && <GoldBurst size=\{DIALOG_PRIZE\.raysPt\}/);
-  assert.match(src, /export const DIALOG_PRIZE = \{ iconPt: 84,/);
-  assert.match(src, /stampTimer\.current = setTimeout\(\(\) => \{\n\s+if \(kind !== 'none'\) haptic\(kind\); else queueHaptic\('hitMedium'\);/);
+  assert.match(src, /export const DIALOG_PRIZE = \{ iconPt: 124,/, 'wave 5: the prize is about twice the size, rays past the card edge');
+  assert.match(src, /stampArmed\.value === 1 && iconPop\.value >= ICON_STAMP\.peak - 0\.02/, 'wave 5: the buzz fires from the UI thread on the stamp frame');
+  assert.match(src, /if \(hapticKind !== 'none'\) haptic\(hapticKind\); else queueHaptic\('hitMedium'\);/);
 });
 
 test('footer: a crisp bright ring on every pick, a rare compass pick you notice (and feel)', () => {
@@ -134,12 +138,12 @@ test('footer: a crisp bright ring on every pick, a rare compass pick you notice 
 test('grids fill like a vending machine: a further drop and a pop, row by row, first screenful only', () => {
   const stagger = loadTs('src/ui/stagger.ts', { 'react-native-reanimated': { Easing: { bezierFn: () => t => t }, FadeInDown: {} }, './motion': motion });
   const G = stagger.GRID_STAGGER;
-  assert.ok(G.stepMs >= 40 && G.stepMs <= 50);
+  assert.ok(G.stepMs >= 50 && G.stepMs <= 70, 'wave 5: the fill spreads over about half a second');
   assert.ok(G.risePt >= 16 && G.risePt <= 24);
-  for (let i = 0; i < G.maxItems; i++) assert.ok(stagger.gridDelay(i) < motion.STAGGER.capMs, 'every start inside the cap');
+  for (let i = 0; i < G.maxItems; i++) assert.ok(stagger.gridDelay(i, G.heroLeadMs) < G.capMs, 'every start inside the cap');
   assert.equal(stagger.gridDelay(G.maxItems), null);
   assert.equal(stagger.gridRiseIn(0, { reduced: true }), undefined, 'Reduce Motion: simply there');
-  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /gridRiseIn\(i\) \?\? FadeIn\.duration\(160\)/);
+  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /gridRiseIn\(i, \{ leadMs: star \? GRID_STAGGER\.heroLeadMs : 0 \}\) \?\? FadeIn\.delay\(GRID_STAGGER\.capMs\)\.duration\(160\)/);
 });
 
 test('refresh shark: anchored to the content, its bottom edge always clears the first row', () => {
@@ -157,8 +161,8 @@ test('refresh shark: anchored to the content, its bottom edge always clears the 
 
 test('dive: once the game screen lays out, the open is timed on the UI thread (never a late JS timer)', () => {
   const dive = read('src/fx/DiveIris.tsx');
-  assert.match(dive, /layoutCapMs: 450,/);
-  assert.match(dive, /openNow\(Math\.max\(DIVE\.layoutCapMs \* devSlow\(\), T\.holdMs - \(Date\.now\(\) - coveredAt\)\)\);/);
+  assert.match(dive, /readyPatienceMs: 2500,/, 'wave 5: the water waits for the first round; the patience open is only a backstop');
+  assert.match(dive, /openNow\(Math\.max\(DIVE\.readyPatienceMs \* devSlow\(\), T\.holdMs - \(Date\.now\(\) - coveredAt\)\)\);/);
   assert.match(dive, /if \(open\.value === 0\) openNow\(/, 'a round landing first brings the open forward');
   const lp = read('src/screens/LinePlay/LinePlayScreen.tsx');
   assert.match(lp, /if \(!laidOut\.current\) notifyDiveLaidOut\(\);/);

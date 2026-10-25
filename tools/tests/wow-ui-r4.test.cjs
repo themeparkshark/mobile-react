@@ -73,7 +73,7 @@ test('dive: LinePlay is the real screen under the water (no skeleton landing), t
   assert.match(src, /onLayout=\{onRootLayout\}/, 'the real root says when it is laid out');
   assert.match(src, /const diveReady = snapshot\.startedAt != null && snapshot\.playlist\.length > 0;/,
     'the water waits for the wait card and the first round, so no skeleton shows under the opening hole');
-  assert.match(src, /DIVE_READY_CAP_MS = 450/);
+  assert.doesNotMatch(src, /DIVE_READY_CAP_MS/, 'no short cap that opens onto a loading card (wave 5)');
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
   assert.equal((gym.match(/onLayout=\{notifyDiveLanded\}/g) || []).length, 3, 'every GymBattle root tells the water it landed');
   const sheet = read('src/screens/LinePlay/group/WhosInLineSheet.tsx');
@@ -107,7 +107,7 @@ test('dialog: parts are fully opaque from the first frame and only move; the ico
   assert.match(src, /export const ICON_STAMP = \{ at: 110, from: 0\.4, peak: 1\.22 \}/);
   assert.match(src, /celebrates && <SparkleBurst progress=\{iconSpark\}/);
   assert.doesNotMatch(src, /BlurView/);
-  assert.match(src, /DIALOG_SCRIM_STOPS = \['rgba\(6,96,206,0\.42\)'/, 'an underwater blue backdrop (round 5: light in the middle band), never a grey wash');
+  assert.match(src, /DIALOG_SCRIM_STOPS = \['rgba\(6,96,206,0\.46\)'/, 'an underwater blue backdrop (round 5: light in the middle band), never a grey wash');
 });
 
 test('footer: every pick squashes first, a gold disc and ring pulse under it, the rare compass pick is one big burst', () => {
@@ -120,7 +120,7 @@ test('footer: every pick squashes first, a gold disc and ring pulse under it, th
   assert.ok(F.rareDist[0] > 80, 'rare stars clear the footer wave');
   const src = read('src/components/footerMotion.ts');
   assert.match(src, /\/\/ Every pick: a quick squash wide and short \(anticipation\), then the hop and the pop\./);
-  assert.match(src, /if \(rare\) \{\n\s+m\.burstRare\.value = burst;/, 'the rare burst replaces the normal one (never two at once)');
+  assert.match(src, /if \(rare\) \{\n\s+rarePickCount\.value = [^\n]+\n\s+m\.burstRare\.value = burst;/, 'the rare burst replaces the normal one (never two at once)');
   const wrapper = read('src/components/Wrapper.tsx');
   assert.match(wrapper, /const q = picked \? m\.compassSquash\.value : 0;/);
   assert.match(wrapper, /progress=\{smallBurst\} count=\{F\.smallSparkles\}/);

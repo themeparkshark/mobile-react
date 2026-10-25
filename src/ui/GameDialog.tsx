@@ -21,8 +21,9 @@
  * one overshoot (SPRING.pop) while it fades in over DURATION.quick, the ribbon drops in from above and
  * stamps down (SPRING.stamp, from 1.18), then the body and buttons arrive STAGGER.stepMs apart.
  * A celebrating dialog (a reward icon or a success haptic, never a destructive one) throws a pair of
- * gold star sparkles off the ribbon tails as it lands. It leaves quicker than it came: scale 0.94 and fade over
- * DURATION.exit on EASE.in. A selection tick on open. Reduced motion fades.
+ * gold star sparkles off the ribbon tails as it lands. It leaves quicker than it came: the card shrinks to
+ * CARD_EXIT and stays solid until its last frames (DIALOG_CLOSE.cardMs, never a see-through card over the
+ * buttons behind it), and the backdrop leaves last. A selection tick on open. Reduced motion fades.
  * The preference is known on the first render (useUiReducedMotion), so a
  * dialog that mounts already open still springs.
  */
@@ -31,6 +32,7 @@ import { modalLayers, useModalLayer } from './modalLayers';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -71,7 +73,17 @@ export const DIALOG_CARD = {
 } as const;
 /** The card pops in from this scale and leaves to CARD_EXIT. */
 const CARD_FROM = 0.86;
-const CARD_EXIT = 0.94;
+const CARD_EXIT = 0.92;
+/**
+ * The close: a snappy shrink (the card stays solid until its last frames), then the backdrop leaves
+ * last, so the screen behind never shows through a half-faded card.
+ */
+export const DIALOG_CLOSE = { cardMs: 140, scrimDelayMs: 60, scrimMs: 170 } as const;
+/** The card's opacity at close progress e (0 to 1): solid for most of the shrink, gone at the end. Pure worklet. */
+export function closeOpacity(e: number): number {
+  'worklet';
+  return 1 - e * e * e * e;
+}
 /** Each part (ribbon, body, buttons) pops and rises over PART_MS, STAGGER.stepMs after the one above. */
 const PART_MS = DURATION.base;
 const PARTS_MS = PART_MS + 2 * STAGGER.stepMs;
@@ -99,7 +111,7 @@ export const ICON_STAMP = { at: 110, from: 0.4, peak: 1.22 } as const;
  * A celebrating dialog's prize: a bigger icon that stamps onto a fan of gold rays (the house GoldBurst),
  * the brightest thing on the screen, with the buzz on the stamp frame itself.
  */
-export const DIALOG_PRIZE = { iconPt: 84, plainIconPt: 72, raysPt: 230, glowAmount: 1, bloomMs: 420 } as const;
+export const DIALOG_PRIZE = { iconPt: 124, plainIconPt: 72, raysPt: 380, glowAmount: 1, bloomMs: 420 } as const;
 /** The ribbon drops this far (pt) and stamps down from this scale. */
 const RIBBON_DROP = 24;
 const RIBBON_STAMP_FROM = 1.18;
@@ -109,12 +121,13 @@ export const RIBBON_AT = 0;
 const CARD_W = Math.min(380, Dimensions.get('window').width * 0.85);
 const RIBBON_TAIL = { left: CARD_W * 0.06, right: CARD_W * 0.94, y: 30 } as const;
 /**
- * The backdrop: underwater, not dirty. Brand blue, deeper at the top and bottom edges and light in the
- * middle band where the card and most buttons sit, so the colours behind the card stay clean (a heavy
- * even blue over yellow art reads olive). Never black or grey, no blur pass.
+ * The backdrop: underwater daylight, never dirty. Deep brand blue only at the top and bottom edges; across
+ * the middle band (where the card and most buttons sit) a pale sky-blue haze that lightens what is behind
+ * instead of darkening it, so cream reads as clean pale cream and blue as bright water (a dark tint over
+ * cream read grey-green). Never black or grey, no blur pass.
  */
 export const DIALOG_SCRIM = 'rgba(0,88,196,0.30)';
-export const DIALOG_SCRIM_STOPS = ['rgba(6,96,206,0.42)', 'rgba(30,140,235,0.1)', 'rgba(30,140,235,0.1)', 'rgba(4,70,170,0.42)'] as const;
+export const DIALOG_SCRIM_STOPS = ['rgba(6,96,206,0.46)', 'rgba(214,240,255,0.3)', 'rgba(214,240,255,0.3)', 'rgba(4,70,170,0.46)'] as const;
 /** Where the backdrop's light band starts and ends (share of the screen): most of the screen stays nearly clear. */
 export const DIALOG_SCRIM_AT = [0, 0.2, 0.82, 1] as const;
 /** Message copy on the card, as in UnfoundCoinModal. */
@@ -202,8 +215,8 @@ export function GameDialog({
   const shown = visible && front;
   const closing = useRef(false);
   const chosen = useRef<number | null>(null);
-  const stampTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (stampTimer.current) clearTimeout(stampTimer.current); }, []);
+  /** 1 while a prize waits for its stamp frame: the buzz fires from the UI thread on that exact frame. */
+  const stampArmed = useSharedValue(0);
   const scrim = useSharedValue(0);
   const pop = useSharedValue(0);
   const fade = useSharedValue(0);
@@ -224,6 +237,16 @@ export function GameDialog({
       console.warn(`GameDialog: "${title}" is longer than ${RIBBON_TITLE_MAX} characters, so it moves off the ribbon. Pass a short title and put the rest in the message.`);
     }
   }, [visible, title, titleLayout.placement]);
+
+  const buzzStamp = () => {
+    if (hapticKind !== 'none') haptic(hapticKind); else queueHaptic('hitMedium');
+  };
+  // The prize's buzz lands on its stamp frame (the icon reaching its peak), timed on the UI thread.
+  useAnimatedReaction(() => stampArmed.value === 1 && iconPop.value >= ICON_STAMP.peak - 0.02, (now, before) => {
+    if (!now || before) return;
+    stampArmed.value = 0;
+    runOnJS(buzzStamp)();
+  });
 
   useEffect(() => {
     if (shown) {
@@ -260,10 +283,8 @@ export function GameDialog({
       }
       if (celebrates && icon) {
         // A prize buzzes on its stamp frame (the peak of the pop), not on the open.
-        const kind = hapticKind;
-        stampTimer.current = setTimeout(() => {
-          if (kind !== 'none') haptic(kind); else queueHaptic('hitMedium');
-        }, reducedMotion ? 0 : ICON_STAMP.at + DURATION.tap);
+        if (reducedMotion) buzzStamp();
+        else stampArmed.value = 1;
       } else if (hapticKind !== 'none') haptic(hapticKind);
       else queueHaptic('tickSelection');
     }
@@ -283,10 +304,12 @@ export function GameDialog({
     if (closing.current) return;
     closing.current = true;
     chosen.current = index;
-    scrim.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
-    exit.value = withTiming(1, { duration: DURATION.exit, easing: EASE.in }, done => {
+    stampArmed.value = 0;
+    // The card shrinks and goes first (solid until its last frames); the backdrop leaves last.
+    exit.value = withTiming(1, { duration: DIALOG_CLOSE.cardMs, easing: EASE.in });
+    scrim.value = withDelay(DIALOG_CLOSE.scrimDelayMs, withTiming(0, { duration: DIALOG_CLOSE.scrimMs, easing: EASE.in }, done => {
       if (done) runOnJS(finish)();
-    });
+    }));
   };
 
   useEffect(() => {
@@ -296,7 +319,7 @@ export function GameDialog({
 
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.value }));
   const cardStyle = useAnimatedStyle(() => ({
-    opacity: fade.value * (1 - exit.value),
+    opacity: fade.value * closeOpacity(exit.value),
     transform: reducedMotion ? [] : [
       { scale: (CARD_FROM + (1 - CARD_FROM) * pop.value) * (1 - (1 - CARD_EXIT) * exit.value) },
     ],

@@ -57,7 +57,12 @@ export const FOOTER_MOTION = {
   smallSize: [14, 20] as readonly [number, number],
   /** The rare compass pick: one bigger burst (replaces the normal one, so it stays inside the cap). */
   rareSparkles: 12,
-  rareDist: [100, 165] as readonly [number, number],
+  /**
+   * Two low fans of inked gold stars that fly out sideways along the footer wave (never up into the
+   * cards above it): six left, six right, each fan no more than rareFanDeg above the horizon.
+   */
+  rareFanDeg: 32,
+  rareDist: [90, 150] as readonly [number, number],
   rareSize: [24, 32] as readonly [number, number],
   /** The rare pick's shock ring grows this far (times its size) and a sun glow blooms under the compass. */
   rareRingTo: 3.6,
@@ -111,6 +116,12 @@ export const footerMotion = {
 /** Every this many compass picks, the flourish is a little bigger (a small surprise on the tenth tap). */
 export const RARE_EVERY = 5;
 let compassPicks = 0;
+/** Which rare pick this is (1, 2, 3...): each one lays its stars out a little differently, so the 50th still surprises. */
+export const rarePickCount = makeMutable(0);
+/** The star layout seed for rare pick n: a new pattern each time, cycling through a handful. Pure (unit tested). */
+export function rareSeed(n: number): number {
+  return 7 + (Math.max(0, n) % 6) * 5;
+}
 /** Whether compass pick number n (1-based) is a rare one. Pure (unit tested). */
 export function isRareCompassPick(n: number): boolean {
   return n > 0 && n % RARE_EVERY === 0;
@@ -192,6 +203,7 @@ export function playFooterTap(from: number, to: number, reduced: boolean): { rar
     // The rare pick throws one big burst instead of the normal one (never two bursts at once).
     const burst = withDelay(F.compassSquashMs + 60, withTiming(1, { duration: rare ? DURATION.sparkle + 200 : DURATION.sparkle, easing: EASE.out }));
     if (rare) {
+      rarePickCount.value = Math.floor(compassPicks / RARE_EVERY);
       m.burstRare.value = burst;
 
       m.ringRare.value = withDelay(F.compassSquashMs + 100, withTiming(1, { duration: F.ringMs + 240, easing: EASE.out }));
