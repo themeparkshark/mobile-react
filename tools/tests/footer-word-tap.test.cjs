@@ -24,3 +24,16 @@ test('goTo keeps the catch guard, tab reselect and the Profile permission check'
   assert.match(body, /checkPermission\(item\.permission\)/);
   assert.match(body, /onNavigate\(item\.screen\)/);
 });
+
+// The map's PLAY RIDE! holder reaches 50 pt down over the tab bar with zIndex 10. Fabric flattens
+// its plain parent views, so the zIndex lifted the whole holder above the bar: STANDINGS, the map
+// compass and SOCIAL ignored every tap on the map while PLAY RIDE! showed (found on device, Oct 24).
+test('the map PLAY RIDE! holder lets taps through to the tab bar', () => {
+  const explore = fs.readFileSync(path.join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  const at = explore.indexOf('<RedeemModal');
+  assert.ok(at > 0);
+  const holder = explore.slice(explore.lastIndexOf('<View', at), at);
+  assert.match(holder, /bottom: -50/);
+  assert.match(holder, /zIndex: 10/);
+  assert.match(holder, /pointerEvents="box-none"/);
+});
