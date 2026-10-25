@@ -157,6 +157,8 @@ test('the Defend round clock runs from its start time, so taps cannot stretch it
   assert.match(src, /endsAtRef\.current = Date\.now\(\) \+ GAME_DURATION \* 1000;/);
   assert.match(src, /Math\.ceil\(\(endsAtRef\.current - Date\.now\(\)\) \/ 1000/);
   const tap = src.slice(src.indexOf('const handleTap = useCallback'), src.indexOf('// Haptic feedback', src.indexOf('const handleTap = useCallback')));
+  assert.match(src, /roundClock\.value = withTiming\(0, \{\s*duration: GAME_DURATION \* 1000,\s*easing: Easing\.linear,\s*reduceMotion: ReduceMotion\.Never,/, 'the clock runs on the UI thread and is never skipped for Reduce Motion');
+  assert.match(src, /if \(now !== before\) runOnJS\(syncClock\)\(now\);/);
   assert.match(tap, /const left = secondsLeft\(\);\s*setTimeLeft\(t => \(t === left \? t : left\)\);\s*if \(left === 0\) return;/, 'every tap refreshes the clock and taps after the buzzer do not count');
   assert.match(src, /timeLeft <= 7 && timeLeft > 0 && !bonusFiredRef\.current/);
   assert.doesNotMatch(src, /setTimeLeft\(t => t - 1\)/);

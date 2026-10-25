@@ -24,6 +24,9 @@ import Animated, {
   withRepeat,
   runOnJS,
   Easing,
+  ReduceMotion,
+  cancelAnimation,
+  useAnimatedReaction,
   interpolate,
   FadeIn,
   FadeOut,
@@ -205,22 +208,46 @@ export default function DefendMiniGameModal({
     }
   }, [gameState, countdown]);
 
-  // Round clock: measured from the start time, so a flurry of taps can never
-  // stretch the 25 seconds. A busy JS thread runs timers late, so every tap
-  // also refreshes the clock (the shown seconds never freeze mid-flurry).
+  // Round clock. The 25 seconds run on the UI thread (a linear Reanimated
+  // timing, never skipped for Reduce Motion), which ticks the shown seconds
+  // and ends the round. JS timers can run seconds late on a busy phone (dev JS
+  // on a loaded Mac showed one tick every 8 s), so they are only a backup.
+  // The deadline is also kept as a timestamp: every tap refreshes the clock,
+  // and a tap after the buzzer does not count.
   const endsAtRef = useRef(0);
+  const gameStateRef = useRef<GameState>(gameState);
+  gameStateRef.current = gameState;
+  const roundClock = useSharedValue(GAME_DURATION);
   const secondsLeft = () =>
     Math.max(0, Math.ceil((endsAtRef.current - Date.now()) / 1000 - 1e-6));
+  const syncClock = useCallback((uiSeconds: number) => {
+    if (gameStateRef.current !== 'playing') return;
+    const left = Math.min(uiSeconds, secondsLeft());
+    setTimeLeft(t => (t === left ? t : left));
+  }, []);
+  useAnimatedReaction(
+    () => Math.ceil(roundClock.value - 1e-6),
+    (now, before) => {
+      if (now !== before) runOnJS(syncClock)(now);
+    },
+  );
   useEffect(() => {
     if (gameState !== 'playing') return;
     endsAtRef.current = Date.now() + GAME_DURATION * 1000;
+    roundClock.value = GAME_DURATION;
+    roundClock.value = withTiming(0, {
+      duration: GAME_DURATION * 1000,
+      easing: Easing.linear,
+      reduceMotion: ReduceMotion.Never,
+    });
     const tick = () => {
       const left = secondsLeft();
       setTimeLeft(t => (t === left ? t : left));
       if (left === 0 && timerRef.current) clearInterval(timerRef.current);
     };
-    timerRef.current = setInterval(tick, 250);
+    timerRef.current = setInterval(tick, 500);
     return () => {
+      cancelAnimation(roundClock);
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [gameState]);
