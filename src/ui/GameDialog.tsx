@@ -248,11 +248,18 @@ export function GameDialog({
     runOnJS(buzzStamp)();
   });
 
+  // Mount first, then animate: a dialog that waited its turn (queued behind another) mounts its views
+  // in the render after it is shown, and an opening started before its backdrop existed never drew it.
   useEffect(() => {
-    if (shown) {
+    if (shown) setMounted(true);
+    else openedFor.current = false;
+  }, [shown]);
+  const openedFor = useRef(false);
+  useEffect(() => {
+    if (shown && mounted && !openedFor.current) {
+      openedFor.current = true;
       closing.current = false;
       chosen.current = null;
-      setMounted(true);
       exit.value = 0;
       scrim.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : DURATION.base, easing: EASE.out });
       fade.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : CARD_FADE_MS, easing: EASE.out });
@@ -290,7 +297,7 @@ export function GameDialog({
     }
     // Opening only depends on visibility; haptic kind and motion are read at open time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown]);
+  }, [shown, mounted]);
 
   const finish = () => {
     setMounted(false);

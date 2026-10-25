@@ -52,7 +52,8 @@ test('dialogs and the grown-up gate wait their turn instead of stacking', () => 
   const dialog = src('src/ui/GameDialog.tsx');
   assert.match(dialog, /useModalLayer\(visible \|\| mounted, 'wait'\)/);
   assert.match(dialog, /const shown = visible && front;/);
-  assert.match(dialog, /if \(shown\) \{/, 'the dialog opens only once it is the front layer');
+  assert.match(dialog, /if \(shown\) setMounted\(true\);/, 'the dialog mounts only once it is the front layer');
+  assert.match(dialog, /if \(shown && mounted && !openedFor\.current\) \{/, 'and animates open once its views are there');
   const gate = src('src/components/GrownUpGate.tsx');
   assert.match(gate, /const layerFront = useModalLayer\(!!req && !nested, 'wait'\);\s*const front = nested \? !!req : layerFront;/);
   assert.match(gate, /if \(!req \|\| !front\) return hintPill;/, 'nothing but the hint until it is the front layer');
