@@ -78,7 +78,8 @@ const SUCCESS_TEXT_DROP = SHORT_PHONE ? 0 : 22;
  */
 export function standRoom(level: number, success: boolean, shortPhone: boolean): number {
   if (coinTier(level).stand === 'none') return 0;
-  return success ? (shortPhone ? 20 : 18) : 10;
+  // A short phone's success coin on a stand does not grow or drop (tightStand), so it needs only the card's room.
+  return success && !shortPhone ? 18 : 10;
 }
 /** Vertical padding of the success box, the breathing gap it keeps after fitting, and when and how fast it fits. */
 const SUCCESS_BOX_PAD = SHORT_PHONE ? 4 : 10;
@@ -171,9 +172,15 @@ export default function CoinLevelingModal({
   const grow = useSharedValue(0);
   // 0 to 1 on success: the tier plate behind the coin (a metal disc, or rays from Prismatic up) springs out.
   const plate = useSharedValue(0);
+  // On a short phone a coin that lands on a stand (Level 6 and up) keeps its size and place, so the stand fits
+  // above the prize box and Awesome! with nothing cut off (the stand itself already makes it read bigger).
+  const successLevel = rideCoin ? Math.min(rideCoin.current_level + 1, rideCoin.max_level) : 1;
+  const tightStand = SHORT_PHONE && coinTier(successLevel).stand !== 'none';
+  const coinGrow = tightStand ? 1 : COIN_GROW;
+  const coinDrop = tightStand ? 0 : SUCCESS_COIN_DROP;
   const coinStyle = useAnimatedStyle(() => {
     const x = windupWobble(windup.value, CHARGE_MS, 1.5, 6);
-    return { transform: [{ translateY: SUCCESS_COIN_DROP * grow.value }, { scale: coinPop.value * (1 + (COIN_GROW - 1) * grow.value) },
+    return { transform: [{ translateY: coinDrop * grow.value }, { scale: coinPop.value * (1 + (coinGrow - 1) * grow.value) },
       { translateX: x }, { rotate: `${x * 0.9}deg` }] };
   });
   // The success content is on screen from its very first frame (never a blank card while a spring starts

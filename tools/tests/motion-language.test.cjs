@@ -599,9 +599,12 @@ test('wave 5: a coin on a stand (Level 6 and up) keeps its stand clear of "YOUR 
   for (const lvl of [6, 7, 8, 9, 10]) {
     assert.ok(14 + 22 + standRoom(lvl, true, false) >= below + 3, `success Lv${lvl}: the line sits under the stand`);
     assert.ok(14 + standRoom(lvl, false, false) >= 21.6 + 2, `card Lv${lvl}: the stand clears the line`);
-    assert.ok(14 + standRoom(lvl, true, true) >= 120 * 0.03 + 21.6 * 1.06 + 4 + 2, `short phone Lv${lvl}`);
+    assert.ok(14 + standRoom(lvl, true, true) >= 21.6 + 2, `short phone Lv${lvl} (the coin keeps its size on a stand)`);
   }
   const modal = read('src/components/CoinLevelingModal.tsx');
   assert.equal((modal.match(/\+ standRoom\(state === 'success' \? nextLevel : currentLevel, state === 'success', SHORT_PHONE\)/g) || []).length, 2,
     'the coin box and the blue band behind it both grow by it');
+  assert.ok(/const tightStand = SHORT_PHONE && coinTier\(successLevel\)\.stand !== 'none';/.test(modal)
+    && /translateY: coinDrop \* grow\.value \}, \{ scale: coinPop\.value \* \(1 \+ \(coinGrow - 1\) \* grow\.value\)/.test(modal),
+    'on a short phone a coin on a stand keeps its size, so the prize box is not cut off above Awesome!');
 });
