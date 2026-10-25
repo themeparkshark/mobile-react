@@ -638,3 +638,24 @@ test('wave 4: the catch can be captured in release-like JS (motion capture route
   assert.match(read('src/utils/standalonePreview.ts'), /EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview'/);
   assert.match(read('src/screens/ExploreScreen/HomeCatchPreviewScreen.tsx'), /const CAPTURE = process\.env\.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';/);
 });
+
+test('wave 5: the burst canvas redraws only inside the burst window (gold, ink, grand confetti)', () => {
+  const src = read('src/screens/ExploreScreen/CatchBurst.tsx');
+  assert.match(src, /return f\.gold > 0 \|\| f\.ink >= 0 \|\| confettiLive \? t : -1;/);
+  assert.match(src, /\(t, prev\) => \{ if \(t !== prev\) bt\.value = t; \}/, 'written only when it changes');
+  // Inside the derived values nothing reads the per-frame clock or frame (they would redraw every frame).
+  const body = src.slice(src.indexOf('const bf = useDerivedValue'));
+  assert.doesNotMatch(body, /v\.frame\.value|v\.clock\.value/);
+  // Outside the window the plan really shows nothing (so -1 hides nothing that should be seen).
+  for (const plan of [wow.catchPlan({ reduced: false }), wow.catchPlan({ reduced: false, repeat: true }), wow.catchPlan({ reduced: false, milestone: true })]) {
+    for (let t = 0; t < plan.burstAt; t += 5) {
+      const f = wow.catchFrame(t, plan);
+      assert.ok(f.gold === 0 && f.ink < 0, `nothing gold before the burst (${t})`);
+    }
+    const end = plan.suckAt + plan.suckMs;
+    for (let t = end + 1; t < plan.doneAt; t += 5) {
+      const f = wow.catchFrame(t, plan);
+      assert.ok(f.gold === 0 && f.ink < 0, `nothing gold after the suck-back (${t})`);
+    }
+  }
+});
