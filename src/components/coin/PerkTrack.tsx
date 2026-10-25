@@ -12,8 +12,24 @@ import { nextReward, perkNodes, type PerkNode, type PerkTrackRow } from './progr
  */
 const NODE = 30;
 const NEXT = 40;
+/** Space between nodes and the rail's side padding (pt). */
+const GAP = 4;
+const PAD = 8;
 
-function Node({ node, reduced, onPress, selected }: { node: PerkNode; reduced: boolean; onPress: () => void; selected: boolean }) {
+/**
+ * How the rail fits its box: as many WHOLE nodes as fit (never one cut by the edge), each step stretched to fill the
+ * box exactly, and where it starts so the next reward sits in view (the rest is one swipe away, snapping node by node).
+ */
+export function railFit(boxWidth: number, count: number, nextIndex: number): { step: number; shown: number; start: number } {
+  const minStep = NEXT + 6 + GAP;
+  const shown = Math.max(1, Math.min(count, Math.floor((boxWidth - 2 * PAD + GAP) / minStep)));
+  const step = (boxWidth - 2 * PAD + GAP) / shown;
+  const centred = (nextIndex < 0 ? count - 1 : nextIndex) - Math.floor(shown / 2);
+  const start = Math.max(0, Math.min(count - shown, centred));
+  return { step, shown, start };
+}
+
+function Node({ node, reduced, onPress, selected, width }: { node: PerkNode; reduced: boolean; onPress: () => void; selected: boolean; width: number }) {
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!node.isNext || reduced) { pulse.setValue(0); return; }
@@ -28,7 +44,7 @@ function Node({ node, reduced, onPress, selected }: { node: PerkNode; reduced: b
   return (
     <Pressable onPress={onPress} accessibilityRole="button"
       accessibilityLabel={`Level ${node.level}, ${node.name}. ${node.short}. ${node.unlocked ? 'Unlocked' : 'Locked'}`}
-      style={styles.nodeHit}>
+      style={[styles.nodeHit, { width }]}>
       {node.isNext && !reduced && (
         <Animated.View pointerEvents="none" style={[styles.pulse, { width: NEXT + 14, height: NEXT + 14, borderRadius: (NEXT + 14) / 2,
           opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.7, 0] }),
@@ -55,14 +71,28 @@ function Node({ node, reduced, onPress, selected }: { node: PerkNode; reduced: b
 export default function PerkTrack({ track, currentLevel, reduced }: { track: readonly PerkTrackRow[] | null | undefined; currentLevel: number; reduced: boolean }) {
   const nodes = perkNodes(track, currentLevel);
   const [selected, setSelected] = useState<number | null>(null);
+  const [boxWidth, setBoxWidth] = useState(0);
+  const rail = useRef<ScrollView>(null);
+  const placed = useRef(false);
   if (!nodes.length) return null;
   const shown = nodes.find(node => node.level === selected) ?? null;
   const next = nextReward(track, currentLevel);
+  const fit = boxWidth > 0 ? railFit(boxWidth, nodes.length, nodes.findIndex(node => node.isNext)) : null;
   return (
     <View style={styles.card}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
+      <ScrollView ref={rail} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}
+        snapToInterval={fit?.step} decelerationRate="fast"
+        onLayout={event => { const w = event.nativeEvent.layout.width; if (Math.abs(w - boxWidth) > 0.5) { placed.current = false; setBoxWidth(w); } }}
+        onContentSizeChange={width => {
+          // Placed once the rail has its fitted nodes (the content is wide enough to start there), never after a swipe.
+          if (!fit || placed.current || width + 0.5 < fit.start * fit.step + boxWidth) return;
+          placed.current = true;
+          rail.current?.scrollTo({ x: fit.start * fit.step, animated: false });
+        }}
+        style={{ opacity: fit ? 1 : 0 }}>
         <View style={styles.line} />
         {nodes.map(node => <Node key={node.level} node={node} reduced={reduced} selected={selected === node.level}
+          width={fit ? fit.step - GAP : NEXT + 6}
           onPress={() => setSelected(current => (current === node.level ? null : node.level))} />)}
       </ScrollView>
       <Text style={styles.nextLine} numberOfLines={2}>
@@ -75,9 +105,9 @@ export default function PerkTrack({ track, currentLevel, reduced }: { track: rea
 const styles = StyleSheet.create({
   card: { width: '100%', backgroundColor: '#ffffff', borderColor: '#79c7eb', borderWidth: 2, borderRadius: 12,
     paddingVertical: 8, marginBottom: 10 },
-  rail: { alignItems: 'center', paddingHorizontal: 8, gap: 4, minHeight: NEXT + 26 },
+  rail: { alignItems: 'center', paddingHorizontal: PAD, gap: GAP, minHeight: NEXT + 26 },
   line: { position: 'absolute', left: 20, right: 20, top: (NEXT + 14) / 2, height: 3, backgroundColor: '#bfe5ff', borderRadius: 2 },
-  nodeHit: { width: NEXT + 6, alignItems: 'center', justifyContent: 'center', height: NEXT + 26 },
+  nodeHit: { alignItems: 'center', justifyContent: 'center', height: NEXT + 26 },
   pulse: { position: 'absolute', top: 0, borderWidth: 3, borderColor: '#ffcf3b' },
   node: { alignItems: 'center', justifyContent: 'center' },
   eye: { position: 'absolute', top: 0, right: 0 },

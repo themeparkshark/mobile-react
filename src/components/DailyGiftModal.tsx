@@ -686,7 +686,6 @@ export function walletCoins(amount: number): number {
   return amount >= 50 ? 5 : amount >= 20 ? 4 : 3;
 }
 
-/** Where the chest art is cut into lid and body (a share of its height, through the gold band and the lock). */
 /** The words and Awesome! show over this long once the lid pops. */
 export const REVEAL_MS = 180;
 /** The line under the ribbon: the old line is gone by this point of the reveal, then the new one fades in. */
@@ -702,6 +701,7 @@ export function subtitleIn(v: number): number {
 }
 /** The resend guard stops this long after the pop starts (every beat, the Day 7 punch included, has landed). */
 export const RESYNC_AFTER_POP_MS = 1800;
+/** Where the chest art is cut into lid and body (a share of its height, through the gold band and the lock). */
 export const LID_CUT = 0.46;
 /** How far the lid hinges back (degrees around its top edge), lifts (chest sizes) and tilts when it pops. */
 export const LID_HINGE_DEG = 25;
@@ -825,7 +825,9 @@ function LadderDay({ reward, state, stamp }: {
         <GameIcon name={PRIZE[kind].icon} size={24} />
       </View>
       <Text style={styles.dayAmount}>{reward[kind]}</Text>
+      {/* A collected day is one clean green tile (its day, then a big check): the prize under it never shows through. */}
       {(state === 'done' || stamp) && <Animated.View style={[styles.check, checkStyle]}>
+        <Text style={styles.dayLabelDone}>{`DAY ${reward.day}`}</Text>
         <GameIcon name="check" size={26} accessibilityLabel="Collected" />
       </Animated.View>}
     </View>
@@ -847,8 +849,9 @@ const styles = StyleSheet.create({
   dayLabelToday: { color: '#7a3d00' },
   dimmed: { opacity: 0.55, marginVertical: 2 },
   dayAmount: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
-  check: { ...StyleSheet.absoluteFillObject, borderRadius: 10, backgroundColor: 'rgba(60, 184, 92, 0.85)',
-    justifyContent: 'center', alignItems: 'center' },
+  check: { ...StyleSheet.absoluteFillObject, borderRadius: 10, backgroundColor: '#3cb85c', borderWidth: 2, borderColor: '#1f7a3a',
+    justifyContent: 'center', alignItems: 'center', paddingTop: 3, gap: 1 },
+  dayLabelDone: { fontFamily: 'Knockout', fontSize: 10, color: BRAND.white },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
   streakText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold },
   stage: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginTop: 6 },

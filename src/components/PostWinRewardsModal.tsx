@@ -23,10 +23,10 @@ import Animated, {
   withSequence,
   withSpring,
   withTiming,
-  FadeInDown,
   type SharedValue,
 } from 'react-native-reanimated';
 import { GoldBurst } from '../ui/GoldBurst';
+import FadeInOnMount from '../ui/FadeInOnMount';
 import { DURATION, EASE, SPRING } from '../ui/motionEasing';
 import Ribbon from './Ribbon';
 import RewardBurst from './RewardBurst';
@@ -612,7 +612,8 @@ export default function PostWinRewardsModal({
           {(noteSlot || goalNote) && (
             <View style={{ height: 50, alignItems: 'center', justifyContent: 'flex-start' }}>
               {goalNote && (
-                <Animated.View entering={reducedMotion ? undefined : FadeInDown.springify().damping(14)}
+                <FadeInOnMount duration={260} rise={14} instant={reducedMotion}>
+                <Animated.View
                   accessibilityLiveRegion={noteSettled ? 'none' : 'polite'} accessibilityLabel={goalNote.text}
                   style={[goalNoteStyle, { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, height: 42,
                     borderRadius: 21, backgroundColor: goalNote.big ? '#ffcf3b' : '#ffffff', borderWidth: 3,
@@ -620,6 +621,7 @@ export default function PostWinRewardsModal({
                   <GameIcon name={goalNote.big ? 'star' : 'ride'} size={24} />
                   <Text style={{ fontFamily: 'Shark', fontSize: 17, color: '#05346e' }}>{goalNote.text}</Text>
                 </Animated.View>
+                </FadeInOnMount>
               )}
             </View>
           )}

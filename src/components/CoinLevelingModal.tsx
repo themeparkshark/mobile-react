@@ -94,6 +94,12 @@ const SUCCESS_BOX_PAD = SHORT_PHONE ? 4 : 10;
 const TIP_ROOM = 96;
 /** Prize chips: smaller on a short phone so two fit on one row. */
 const CHIP = SHORT_PHONE ? { icon: 22, font: 17, padX: 8 } : { icon: 26, font: 20, padX: 10 };
+/**
+ * The big tier chip on the success card ("SAPPHIRE 6"): a little smaller on a short phone, so a coin on its stand, the
+ * whole prize box with its rounded bottom, and a clear gap above Awesome! all fit on an iPhone SE.
+ */
+export const TIER_CHIP = SHORT_PHONE ? { font: 25, padY: 3, border: 3, badge: 29, badgeFont: 18 }
+  : { font: 30, padY: 6, border: 4, badge: 34, badgeFont: 20 };
 export const SUCCESS_SNUG_GAP = 12;
 /** The card fits its payoff while the success content stamps in (the button is not on screen yet), then Awesome! pops in. */
 export const SUCCESS_SNUG_MS = 180;
@@ -156,9 +162,12 @@ export default function CoinLevelingModal({
     upgradeTimers.current.forEach(clearTimeout); upgradeTimers.current = [];
     upgradeAnimations.current.forEach(animation => animation.stop()); upgradeAnimations.current = [];
   };
+  // On unmount (closing, or a fresh card for the next coin) every UI-thread animation this card started is cancelled
+  // first, so no running animation writes to a view that is going away (the Reanimated 3.16 Fabric crash class).
+  const stopAllUiRef = useRef<() => void>(() => undefined);
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; stopUpgradeEffects(); };
+    return () => { mounted.current = false; stopUpgradeEffects(); stopAllUiRef.current(); };
   }, []);
   const [holoVisible, setHoloVisible] = useState(false);
   const [showEditions, setShowEditions] = useState(false);
@@ -297,6 +306,10 @@ export default function CoinLevelingModal({
     }));
   };
   stopUiShowRef.current = stopUiShow;
+  stopAllUiRef.current = () => {
+    [successIn, grow, plate, held, ctaIn, ringReach, charge, gold, bloom, sparkle, sparkle2, shine, ringPulse, bloomOut, slow,
+      windup, gatherRing, coinPop].forEach(value => cancelUi(value));
+  };
 
   // Staggered resource bar animations
   const energyBarAnim = useRef(new Animated.Value(0)).current;
@@ -1160,13 +1173,14 @@ export default function CoinLevelingModal({
                           a kid who cannot read yet still sees which coin they made. */}
                       <View accessibilityRole="header" accessibilityLabel={`${nextTierName}, Level ${nextLevel}`}
                         style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: coinTier(nextLevel).ring,
-                          borderColor: coinTier(nextLevel).ringDeep, borderWidth: 4, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 6 }}>
-                        <Text style={{ fontFamily: 'Shark', fontSize: 30, color: '#05346e', textTransform: 'uppercase', paddingTop: 3 }}>
+                          borderColor: coinTier(nextLevel).ringDeep, borderWidth: TIER_CHIP.border, borderRadius: 22,
+                          paddingHorizontal: 16, paddingVertical: TIER_CHIP.padY }}>
+                        <Text style={{ fontFamily: 'Shark', fontSize: TIER_CHIP.font, color: '#05346e', textTransform: 'uppercase', paddingTop: 3 }}>
                           {nextTierName}
                         </Text>
-                        <View style={{ backgroundColor: '#05346e', borderRadius: 14, minWidth: 34, height: 34, alignItems: 'center',
+                        <View style={{ backgroundColor: '#05346e', borderRadius: 14, minWidth: TIER_CHIP.badge, height: TIER_CHIP.badge, alignItems: 'center',
                           justifyContent: 'center', paddingHorizontal: 6 }}>
-                          <Text style={{ fontFamily: 'Shark', fontSize: 20, color: '#ffffff', paddingTop: 2 }}>{nextLevel}</Text>
+                          <Text style={{ fontFamily: 'Shark', fontSize: TIER_CHIP.badgeFont, color: '#ffffff', paddingTop: 2 }}>{nextLevel}</Text>
                         </View>
                       </View>
                       {!SHORT_PHONE && (
@@ -1178,8 +1192,8 @@ export default function CoinLevelingModal({
 
                       {/* Progression v2 reveal: the perk or milestone card and its chips (server data). */}
                       {reveal && (
-                        <View style={{ marginTop: 10, width: '100%', backgroundColor: '#ffffff', borderRadius: 12,
-                          borderWidth: 2, borderColor: '#ffcf3b', padding: 10, alignItems: 'center' }}>
+                        <View style={{ marginTop: SHORT_PHONE ? 6 : 10, width: '100%', backgroundColor: '#ffffff', borderRadius: 12,
+                          borderWidth: 2, borderColor: '#ffcf3b', padding: SHORT_PHONE ? 7 : 10, alignItems: 'center' }}>
                           <Text style={{ fontFamily: 'Shark', fontSize: 16, color: '#05346e', textAlign: 'center' }}>{reveal.title}</Text>
                           <Text style={{ fontFamily: 'Knockout', fontSize: 14, color: '#19496B', textAlign: 'center', marginTop: 2 }}>{reveal.line}</Text>
                           {revealBadges(unlocks, levelXp).length > 0 && <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 8 }}>

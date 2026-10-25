@@ -2,7 +2,8 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { cancelAnimation, Easing, FadeIn, ZoomIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import FadeInOnMount from '../../ui/FadeInOnMount';
 import type { EventReward } from '../../api/endpoints/live-events';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
@@ -145,10 +146,10 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
         </View>
         <View style={styles.chips}>
           {open && chips.map((c, i) => (
-            <Animated.View key={c.icon + i} entering={skip || reduced ? FadeIn.delay(skip ? 0 : i * 120) : ZoomIn.delay(350 + i * 260).springify().damping(12)} style={[styles.chip, i === 0 && styles.chipBig]}>
+            <FadeInOnMount key={c.icon + i} duration={300} pop={skip || reduced ? undefined : 0.3} delay={skip ? 0 : reduced ? i * 120 : 350 + i * 260} style={[styles.chip, i === 0 && styles.chipBig]}>
               <PrizeIcon name={c.icon} size={26} />
               <Text style={styles.chipText} numberOfLines={1}>{c.icon === 'gift' ? c.text : <>+<CountUp to={Number(c.text)} delay={skip || reduced ? 0 : 350 + i * 260} still={skip || reduced} /></>}</Text>
-            </Animated.View>
+            </FadeInOnMount>
           ))}
           {open && empty && <Text style={styles.chipText}>Already opened</Text>}
         </View>
@@ -159,11 +160,11 @@ function ChestReveal({ art, rewards, onDone, title = 'You got', already = false,
           </View>
         )}
         {open && (
-          <Animated.View entering={FadeIn.delay(reduced || skip ? 0 : 350 + chips.length * 260)}>
+          <FadeInOnMount duration={300} delay={reduced || skip ? 0 : 350 + chips.length * 260}>
             <Pressable accessibilityRole="button" onPress={done} style={({ pressed }) => [styles.button, pressed && { transform: [{ scale: 0.96 }] }]}>
               <Text style={styles.buttonText}>NICE!</Text>
             </Pressable>
-          </Animated.View>
+          </FadeInOnMount>
         )}
       </View>
     </Pressable>

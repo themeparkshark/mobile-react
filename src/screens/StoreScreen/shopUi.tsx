@@ -42,8 +42,11 @@ export const SHOP_SURFACE = {
   alert: '#b3261b',
 } as const;
 
-/** The Set Complete reveal's backdrop; the buy hand-off bridges into it. */
-export const REVEAL_NAVY = '#0a2350';
+/**
+ * The Set Complete reveal's backdrop; the buy hand-off bridges into it. It is the house panel blue (BRAND.blue, the
+ * daily chest and level-up card blue), not a deep navy, so every reward moment looks like one bright family.
+ */
+export const REVEAL_NAVY = '#0768b9';
 
 /** The night stage sky (reveal, hero). The hero card uses it too, so its stage has no seam. */
 export const NIGHT_SKY = ['#123f80', '#0a2a5c'] as const;

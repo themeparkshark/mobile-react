@@ -8,7 +8,6 @@
 import { Image } from 'expo-image';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Modal, ScrollView, Text, View, useWindowDimensions } from 'react-native';
-import Animated, { FadeIn, FadeInDown, SlideInUp, ZoomIn } from 'react-native-reanimated';
 import { claimHomeHuntResult, type HomeHuntResult } from '../../api/endpoints/me/homeHunt';
 import { HOME_HUNT_COPY } from '../../constants/homeHuntCopy';
 import { AuthContext } from '../../context/AuthProvider';
@@ -17,6 +16,7 @@ import { queueHaptic } from '../../gamekit/Haptics';
 import { showToast } from '../../utils/toast';
 import { BRAND, GameButton, GameIcon, ICON_SOURCES, RADIUS, SHADOW } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import FadeInOnMount, { ModalShownProvider, useModalShown } from '../../ui/FadeInOnMount';
 import Ribbon from '../Ribbon';
 import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost, shouldFlexReveal, type FlexPayload } from '../../share';
 import {
@@ -76,11 +76,12 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
     return () => { timers.forEach(clearTimeout); cancelAnimationFrame(frame); };
   }, [visible, weekKey, reduced]);
 
+  // The podium and rows fade in on the UI thread once iOS has the Modal on screen (never snapped in at full opacity).
+  const modal = useModalShown(visible);
   if (!result) return null;
   const rewards = rewardRows(result);
   const extras = extraRows(result);
   const medal = rank != null && rank <= 3 ? (`medal${rank}` as 'medal1' | 'medal2' | 'medal3') : 'trophy';
-  const enter = <T,>(animation: T) => (reduced ? undefined : animation);
 
   const claim = async () => {
     if (claimLock.current || !canClaim(result)) return;
@@ -110,7 +111,8 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onShow={modal.onShow}>
+      <ModalShownProvider shown={modal.shown}>
       <View style={{ flex: 1, backgroundColor: BRAND.scrim, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
         <View style={{
           width: '100%', maxWidth: 380, maxHeight: '92%', borderRadius: RADIUS.xl, backgroundColor: BRAND.cream,
@@ -122,10 +124,10 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
             </Text>
 
             {/* Podium reveal: the shark rises onto the medal, then the rank counts down onto its place. */}
-            <Animated.View entering={enter(ZoomIn.springify().damping(12))} style={{ alignItems: 'center', marginTop: 6 }}>
+            <FadeInOnMount duration={300} pop={0.3} instant={reduced} style={{ alignItems: 'center', marginTop: 6 }}>
               <GameIcon name={medal} size={64} />
               <GameIcon name="shark" size={72} style={{ marginTop: -8 }} />
-            </Animated.View>
+            </FadeInOnMount>
             {rank != null && (
               <Text accessibilityLabel={`Rank ${rank}`} style={{ fontFamily: 'Shark', fontSize: 44, color: BRAND.navy, fontVariant: ['tabular-nums'] }}>
                 #{phase >= 1 || reduced ? (shownRank ?? rank) : rankCountdownValue(rank, 0)}
@@ -142,16 +144,16 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
             </Text>
 
             {phase >= 2 && (
-              <Animated.View entering={enter(SlideInUp.springify().damping(13))} style={{ width: '100%', marginTop: 8 }}>
+              <FadeInOnMount duration={260} rise={-24} instant={reduced} style={{ width: '100%', marginTop: 8 }}>
                 <Ribbon text={ribbonLabel(result)} />
-              </Animated.View>
+              </FadeInOnMount>
             )}
 
             {held ? (
-              <Animated.View entering={enter(FadeIn)} style={{ marginTop: 8, alignItems: 'center' }}>
+              <FadeInOnMount duration={300} instant={reduced} style={{ marginTop: 8, alignItems: 'center' }}>
                 <GameIcon name="timer" size={44} />
                 <Text style={{ fontFamily: 'Knockout', fontSize: 18, lineHeight: 23, color: BRAND.navy, textAlign: 'center', marginTop: 6 }}>{HELD_COPY}</Text>
-              </Animated.View>
+              </FadeInOnMount>
             ) : (
               <>
                 {phase >= 2 && (
@@ -159,42 +161,43 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
                     style={{ width: 140, height: 120, marginTop: 4 }} accessibilityLabel="Reward chest" />
                 )}
                 {phase >= 4 && rewards.map((row, index) => (
-                  <Animated.View key={row.key} entering={enter(FadeInDown.delay(index * 120).springify())}
+                  <FadeInOnMount key={row.key} duration={260} rise={16} delay={index * 120} instant={reduced}
                     style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', paddingVertical: 4 }}>
                     <GameIcon name={row.icon} size={30} />
                     <Text style={{ flex: 1, marginLeft: 8, fontFamily: 'Knockout', fontSize: 18, color: BRAND.navy }}>{row.label}</Text>
                     <Text style={{ fontFamily: 'Shark', fontSize: 24, color: BRAND.blue, fontVariant: ['tabular-nums'] }}>{row.value}</Text>
-                  </Animated.View>
+                  </FadeInOnMount>
                 ))}
               </>
             )}
 
             {phase >= 4 && extras.map(row => (
-              <Animated.View key={row.key} entering={enter(FadeIn)}
+              <FadeInOnMount key={row.key} duration={300} instant={reduced}
                 style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', paddingVertical: 4 }}>
                 <GameIcon name={row.icon} size={26} />
                 <Text style={{ marginLeft: 8, fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft }}>{row.label}</Text>
                 <Text numberOfLines={2} style={{ flex: 1, textAlign: 'right', fontFamily: 'Shark', fontSize: 16, color: BRAND.navy }}>{row.value}</Text>
-              </Animated.View>
+              </FadeInOnMount>
             ))}
 
             {!!error && <Text style={{ fontFamily: 'Knockout', fontSize: 15, color: BRAND.redLip, marginTop: 6 }}>{error}</Text>}
 
             {phase >= 5 && (
-              <Animated.View entering={enter(FadeIn)} style={{ alignSelf: 'stretch', marginTop: 12 }}>
+              <FadeInOnMount duration={300} instant={reduced} style={{ alignSelf: 'stretch', marginTop: 12 }}>
                 {held ? (
                   <GameButton label={HOME_HUNT_COPY.close} onPress={onClose} />
                 ) : (
                   <GameButton label={claiming ? HOME_HUNT_COPY.claiming : HOME_HUNT_COPY.claim} loading={claiming} onPress={() => void claim()} />
                 )}
                 {SHARE_IN_MODALS && canFlex && flex && <FlexShareButton kind="standings" payload={flex} surface="standings" size="md" style={{ alignSelf: 'center', marginTop: 10 }} />}
-              </Animated.View>
+              </FadeInOnMount>
             )}
           </ScrollView>
         </View>
       </View>
       {/* Share Studio presents from inside this modal (a root sheet can't present over it on iOS). */}
       {SHARE_IN_MODALS && visible && <ShareStudioHost portal />}
+      </ModalShownProvider>
     </Modal>
   );
 }

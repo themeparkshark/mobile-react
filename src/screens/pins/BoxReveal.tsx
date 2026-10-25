@@ -38,10 +38,11 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  Easing, Extrapolation, FadeIn, ZoomIn, cancelAnimation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  Easing, Extrapolation, cancelAnimation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import FadeInOnMount, { ModalShownProvider, useModalShown } from '../../ui/FadeInOnMount';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
@@ -616,6 +617,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const leakStyle = useAnimatedStyle(() => ({ opacity: leak.value * (1 - lid.value), transform: [{ scaleX: 0.7 + leak.value * 0.4 }] }));
   const spotStyle = useAnimatedStyle(() => ({ opacity: 0.55 + settle.value * 0.45, transform: [{ scale: LOWRES }] }));
 
+  // Its fades wait until iOS has the Modal on screen (a fade started at mount could finish unseen, then snap in).
+  const modal = useModalShown(true);
   if (!pull) return null;
   const glowColor = goldStage ? '#ffcf3b' : '#bfe5ff';
   const tag = tagFor ? tagFor(pull) : pull.duplicate
@@ -636,7 +639,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const summarySize = Math.min(104, (width - 100) / 3.3);
 
   return (
-    <Modal transparent visible animationType="fade" statusBarTranslucent onRequestClose={() => (phase === 'show' || phase === 'summary') && next()}>
+    <Modal transparent visible animationType="fade" statusBarTranslucent onShow={modal.onShow} onRequestClose={() => (phase === 'show' || phase === 'summary') && next()}>
+      <ModalShownProvider shown={modal.shown}>
       <Pressable style={styles.scrim} onPress={onBackdrop} accessibilityRole="button"
         accessibilityLabel={phase === 'ready' ? 'Open the box' : 'Mystery box'}>
         {/* A soft spotlight: the stage reads as a stage, not the page behind. */}
@@ -814,13 +818,13 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             </Text>
             <View style={styles.summaryBoard}>
               {pulls.map((p, i) => (
-                <Animated.View key={p.id} entering={still ? undefined : ZoomIn.springify().damping(10).delay(i * 110)} style={styles.summaryItem}>
+                <FadeInOnMount key={p.id} duration={180} pop={0.3} delay={i * 110} instant={still} style={styles.summaryItem}>
                   {p.icon_url && <EnamelPin uri={p.icon_url} size={summarySize} surface="board" tilt={((i * 37) % 13) - 6} flat />}
                   {p.is_chaser && <Image source={PIN_ART.chaser} style={styles.summaryStar} contentFit="contain" />}
                   <View style={[styles.miniTag, p.duplicate ? styles.tagTrader : styles.tagNew]}>
                     <Text maxFontSizeMultiplier={1} style={[styles.miniTagText, p.duplicate && { color: BRAND.white }]}>{p.duplicate ? 'EXTRA' : 'NEW'}</Text>
                   </View>
-                </Animated.View>
+                </FadeInOnMount>
               ))}
             </View>
             {(() => {
@@ -838,7 +842,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
 
         {(phase === 'show' || phase === 'summary') && (
           // The footer fades in over a few frames, so its button never shows a frame as a blank pill before its label draws.
-          <Animated.View entering={still ? undefined : FadeIn.duration(180)} style={[styles.footer, { paddingBottom: insets.bottom + 18 }]}>
+          <FadeInOnMount duration={180} instant={still} style={[styles.footer, { paddingBottom: insets.bottom + 18 }]}>
             {pulls.length > 1 && phase === 'show' && (
               <View style={styles.pips} accessible accessibilityLabel={`Box ${index + 1} of ${pulls.length}`}>
                 {pulls.map((p, i) => <View key={p.id} style={[styles.pip, i <= index && styles.pipOn, p.is_chaser && i <= index && styles.pipGold]} />)}
@@ -877,9 +881,10 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             )}
             <GameButton label={index < pulls.length - 1 ? 'Next box' : pulls.length > 1 && phase === 'show' ? 'See all' : 'Done'}
               icon={index < pulls.length - 1 ? 'gift' : 'check'} onPress={next} />
-          </Animated.View>
+          </FadeInOnMount>
         )}
       </Pressable>
+      </ModalShownProvider>
     </Modal>
   );
 }

@@ -507,13 +507,14 @@ test('wave 3 round 4: the queued or recovered Set Complete times like the inline
   assert.ok(reveal.includes('<FadeInOnMount duration={160} instant={still} style={styles.wearing}>'), 'NOW WEARING fades in on a shared value too');
   assert.ok(!/entering=\{/.test(reveal), 'no layout-animation entering (it snapped in at full opacity on Fabric in release JS)');
   const fade = read('src/ui/FadeInOnMount.tsx');
-  assert.ok(/shown\.value = withTiming\(1, \{ duration, easing: EASE\.out \}\)/.test(fade) && /opacity: shown\.value/.test(fade), 'the fade plays on the UI thread');
+  assert.ok(/withTiming\(1, \{ duration, easing: EASE\.out \}\)/.test(fade) && /shown\.value = delay > 0 \? withDelay\(delay, to\) : to;/.test(fade)
+    && /opacity: pop !== undefined \? Math\.min\(1, p \* 2\) : Math\.min\(1, p\)/.test(fade), 'the fade plays on the UI thread');
 });
 
 test('wave 3 rerun round 2: the box reveal footer fades in, so Done never shows a frame as a blank pill', () => {
   const box = read('src/screens/pins/BoxReveal.tsx');
-  assert.ok(/<Animated\.View entering=\{still \? undefined : FadeIn\.duration\(180\)\} style=\{\[styles\.footer/.test(box), 'the footer fades in on the UI thread');
-  assert.ok(/onPress=\{next\} \/>\s*<\/Animated\.View>/.test(box), 'the Done button sits inside the fading footer');
+  assert.ok(/<FadeInOnMount duration=\{180\} instant=\{still\} style=\{\[styles\.footer/.test(box), 'the footer fades in on the UI thread');
+  assert.ok(/onPress=\{next\} \/>\s*<\/FadeInOnMount>/.test(box), 'the Done button sits inside the fading footer');
 });
 
 test('wave 3 rerun round 2: the daily chest card keeps one height from the tap to the prize', () => {
@@ -632,7 +633,7 @@ test('wave 5 round 2: ray plates stay on the band, stands rest inside it, the ch
   }
   for (const lvl of [1, 2, 3, 6, 7]) assert.equal(plateRoom(lvl, true, false), 0, `Lv${lvl}: no ray room (a disc, or the stand's room)`);
   const plate = read(PLATE);
-  assert.ok(/const tip = reach - r \* rayReach\(look\.reach, look\.rays, i\);/.test(plate) && /top: tip - INK_TIP/.test(plate), 'each ray and its ink edge start lower by the same amount');
+  assert.ok(/const tip = reach - r \* rayReach\(long \? look\.reach : look\.altReach, look\.rays, i\);/.test(plate) && /top: tip - INK_TIP/.test(plate), 'each ray and its ink edge start lower by the same amount');
 
   const LV = 'src/components/CoinLevelingModal.tsx';
   const standFloor = pureFrom(LV, 'standFloor', { coinTier: tiers.coinTier });
@@ -662,4 +663,64 @@ test('wave 5 round 2: ray plates stay on the band, stands rest inside it, the ch
 
   const post = read('src/components/PostWinRewardsModal.tsx');
   assert.ok(/Image\.prefetch\(\[taskCoinUrl\], 'memory-disk'\)/.test(post), 'the coin art is warmed the moment the reward modal mounts (before the game is played)');
+});
+
+test('wave 5 round 3: SE stand tiers fit, the card cancels its animations, Prismatic shines, reward modals never snap in', () => {
+  const LV = 'src/components/CoinLevelingModal.tsx';
+  const modal = read(LV);
+  assert.ok(/export const TIER_CHIP = SHORT_PHONE \? \{ font: 25, padY: 3, border: 3, badge: 29, badgeFont: 18 \}/.test(modal), 'a short phone gets a smaller tier chip');
+  assert.ok(/fontSize: TIER_CHIP\.font/.test(modal) && /paddingVertical: TIER_CHIP\.padY/.test(modal), 'the chip uses it');
+  assert.ok(/padding: SHORT_PHONE \? 7 : 10/.test(modal), 'the prize card is tighter on a short phone');
+  assert.ok(/return \(\) => \{ mounted\.current = false; stopUpgradeEffects\(\); stopAllUiRef\.current\(\); \};/.test(modal), 'unmount cancels every UI-thread value');
+  const stopAll = modal.slice(modal.indexOf('stopAllUiRef.current = () => {'), modal.indexOf('].forEach(value => cancelUi(value));', modal.indexOf('stopAllUiRef.current = () => {')));
+  const values = [...modal.matchAll(/const (\w+) = useSharedValue\(/g)].map(m => m[1]);
+  assert.ok(values.length >= 15);
+  for (const v of values) assert.ok(new RegExp(`\\b${v}\\b`).test(stopAll), `${v} is cancelled on unmount`);
+
+  const tiers = loadTs('src/constants/coinTiers.ts');
+  const PLATE = 'src/components/coin/TierPlate.tsx';
+  const look = pureFrom(PLATE, 'tierPlateLook', { coinTier: tiers.coinTier });
+  const LOW_RAY_TRIM = constFrom(PLATE, 'LOW_RAY_TRIM');
+  const rayReach = pureFrom(PLATE, 'rayReach', { LOW_RAY_TRIM });
+  const prism = look(4), legend = look(5);
+  assert.ok(prism.reach - prism.altReach >= 0.15, 'Prismatic rays alternate long and short');
+  assert.ok(prism.reach - prism.disc >= 0.35, 'its long rays reach well past the plate');
+  assert.equal(prism.glint, '#ffffff', 'a white glint in the long rays (light, not spikes)');
+  assert.ok(rayReach(prism.reach, prism.rays, prism.rays / 2) <= rayReach(legend.reach, legend.rays, legend.rays / 2) + 1e-9,
+    'its lowest ray reaches no lower than Legendary\'s, so the same band room keeps it off the words');
+  assert.ok(legend.reach >= prism.reach && legend.rays > prism.rays, 'Legendary is still the biggest sunburst');
+
+  const track = 'src/components/coin/PerkTrack.tsx';
+  const railFit = pureFrom(track, 'railFit', { NEXT: constFrom(track, 'NEXT'), GAP: constFrom(track, 'GAP'), PAD: constFrom(track, 'PAD') });
+  for (const box of [280, 296, 330, 380]) {
+    for (const next of [0, 3, 6, 9, -1]) {
+      const fit = railFit(box, 10, next);
+      const PAD = constFrom(track, 'PAD'), GAP = constFrom(track, 'GAP');
+      assert.ok(Math.abs(2 * PAD + fit.shown * fit.step - GAP - box) < 1e-6, 'whole nodes exactly fill the box (none cut by the edge)');
+      const idx = next < 0 ? 9 : next;
+      assert.ok(idx >= fit.start && idx < fit.start + fit.shown, `box ${box}: the next reward (${idx}) is in view`);
+    }
+  }
+
+  const DG = read('src/components/DailyGiftModal.tsx');
+  assert.ok(/check: \{ \.\.\.StyleSheet\.absoluteFillObject, borderRadius: 10, backgroundColor: '#3cb85c'/.test(DG), 'a collected day is a solid green tile');
+  assert.ok(DG.indexOf('Where the chest art is cut into lid and body') < DG.indexOf('export const LID_CUT') &&
+    DG.indexOf('Where the chest art is cut into lid and body') > DG.indexOf('export const RESYNC_AFTER_POP_MS'), 'the LID_CUT note sits on LID_CUT');
+
+  const ui = read('src/screens/StoreScreen/shopUi.tsx');
+  const navy = /export const REVEAL_NAVY = '#([0-9a-f]{6})';/.exec(ui)[1];
+  const lum = [0, 2, 4].map(i => parseInt(navy.slice(i, i + 2), 16)).reduce((a, c, i) => a + c * [0.299, 0.587, 0.114][i], 0);
+  assert.ok(lum >= 80, 'the Set Complete backdrop is the bright house blue, not a dark navy');
+
+  const fade = read('src/ui/FadeInOnMount.tsx');
+  assert.ok(/const onScreen = useContext\(ModalShownContext\);/.test(fade) && /if \(started\.current \|\| !onScreen\) return;/.test(fade), 'fades wait for the Modal to be on screen');
+  assert.ok(/useEffect\(\(\) => \(\) => cancelAnimation\(shown\), \[shown\]\);/.test(fade), 'and stop when unmounted');
+  const REWARD_SURFACES = ['src/screens/pins/BoxReveal.tsx', 'src/components/home/HomeHuntResultsModal.tsx', 'src/components/trail/TrailReveal.tsx',
+    'src/components/liveEvents/ChestReveal.tsx', 'src/components/money/moneyUi.tsx', 'src/components/PostWinRewardsModal.tsx',
+    'src/screens/StoreScreen/SetCompleteReveal.tsx', 'src/components/DailyGiftModal.tsx', 'src/components/CoinLevelingModal.tsx'];
+  for (const f of REWARD_SURFACES) assert.ok(!/entering=\{/.test(read(f)), `${f}: no layout-animation entering on a reward surface`);
+  for (const f of ['src/screens/pins/BoxReveal.tsx', 'src/components/home/HomeHuntResultsModal.tsx', 'src/components/money/moneyUi.tsx']) {
+    const code = read(f);
+    assert.ok(/onShow=\{modal\.onShow\}/.test(code) && /<ModalShownProvider shown=\{modal\.shown\}>/.test(code), `${f}: its fades start on the Modal's onShow`);
+  }
 });

@@ -3,10 +3,11 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  Easing, FadeIn, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence,
+  Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence,
   withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import FadeInOnMount from '../../ui/FadeInOnMount';
 import { Canvas, Circle, Path, RadialGradient, Skia, vec } from '@shopify/react-native-skia';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
@@ -225,7 +226,7 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
           ))}
         </View>
         {showRewards && (
-          <Animated.View entering={FadeIn.delay(reduced ? 0 : 300 + rewards.length * 320 + 400)} style={{ width: '100%', alignItems: 'center' }}>
+          <FadeInOnMount duration={300} delay={reduced ? 0 : 300 + rewards.length * 320 + 400} style={{ width: '100%', alignItems: 'center' }}>
             {box.tier !== 'gold' && goldIn != null && (
               <View style={styles.pity} accessible accessibilityLabel={goldIn <= 1 ? 'Your next new box is a Gold Box' : `A new Gold Box is coming within ${goldIn} boxes you earn`}>
                 <Image source={BOX_ART.gold} style={{ width: 26, height: 26 }} contentFit="contain" />
@@ -234,7 +235,7 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
             )}
             {left === 0 && !!nextHint && <Text style={styles.hint}>{nextHint}</Text>}
             <GameButton label={left > 0 ? `Next box (${left})` : 'Nice!'} onPress={next} />
-          </Animated.View>
+          </FadeInOnMount>
         )}
         {phase === 'error' && (
           <View style={{ alignItems: 'center' }}>

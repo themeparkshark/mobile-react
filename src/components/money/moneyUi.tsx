@@ -17,13 +17,14 @@ import { useContext, useEffect, useState, type ReactNode } from 'react';
 import { CountUpText } from '../../gamekit/fx/CountUpText';
 import { Modal, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
-  Easing, FadeIn, FadeInDown, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming,
+  Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming,
 } from 'react-native-reanimated';
 import type { ShopGrants, ShopProduct } from '../../api/endpoints/me/shop';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, FONT, GameButton, GameIcon, type GameIconName } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import FadeInOnMount, { ModalShownProvider, useModalShown } from '../../ui/FadeInOnMount';
 import { useAmbient } from '../../services/money/useAmbient';
 import RealMoneyMark from '../RealMoneyMark';
 import RewardBurst from '../RewardBurst';
@@ -242,29 +243,33 @@ export function GotIt({ grants, art, title = 'You got it!', onDone, picture, cap
     return () => { clearTimeout(coin); cancelAnimation(spin); };
   }, [visible, still, burst, spin, playSound]);
   const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value * 360}deg` }] }));
+  // The prize pops in once iOS has the Modal on screen (a pop started at mount could finish unseen, then snap in).
+  const modal = useModalShown(true);
   if (!grants) return null;
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onDone} statusBarTranslucent>
+    <Modal visible transparent animationType="fade" onRequestClose={onDone} statusBarTranslucent onShow={modal.onShow}>
+      <ModalShownProvider shown={modal.shown}>
       <Pressable style={s.gotScrim} onPress={onDone} accessibilityRole="button" accessibilityLabel={`${title} Tap to continue.`}>
         <View style={s.gotStage}>
           {!still && <Animated.Image source={RAYS} style={[s.gotRays, rays]} resizeMode="contain" />}
-          <Animated.View entering={still ? undefined : ZoomIn.springify().damping(9).stiffness(160)}>
+          <FadeInOnMount duration={300} pop={0.3} instant={still}>
             {picture ?? <Image source={ART[art]} style={s.gotArt} contentFit="contain" />}
-          </Animated.View>
+          </FadeInOnMount>
           {!still && <RewardBurst progress={burst} x={140} y={110} />}
         </View>
-        <Animated.View entering={still ? undefined : FadeInDown.delay(250).springify().damping(14)}>
+        <FadeInOnMount duration={260} rise={16} delay={250} instant={still}>
           <TitleCount title={title} still={still} />
-        </Animated.View>
-        <Animated.View entering={still ? undefined : FadeInDown.delay(420).springify().damping(14)}>
+        </FadeInOnMount>
+        <FadeInOnMount duration={260} rise={16} delay={420} instant={still}>
           {caption ? <Text maxFontSizeMultiplier={MAX_FONT} style={s.gotCaption} numberOfLines={2}>{caption}</Text> : <Contents grants={grants} />}
           {footer}
-        </Animated.View>
-        <Animated.View entering={still ? undefined : FadeIn.delay(700)} style={{ marginTop: 18, width: 240, gap: 8 }}>
+        </FadeInOnMount>
+        <FadeInOnMount duration={300} delay={700} instant={still} style={{ marginTop: 18, width: 240, gap: 8 }}>
           {action && <GameButton label={action.label} icon="pin" onPress={action.onPress} />}
           <GameButton label={doneLabel ?? (action ? 'Later' : 'Awesome')} variant={action && !doneLabel ? 'ghost' : 'primary'} tone="onBlue" onPress={onDone} />
-        </Animated.View>
+        </FadeInOnMount>
       </Pressable>
+      </ModalShownProvider>
     </Modal>
   );
 }

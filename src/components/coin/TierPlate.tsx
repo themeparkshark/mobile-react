@@ -7,15 +7,24 @@ export const PLATE_INK = '#05346e';
 /** How far the ink shows past a ray's sides and its tip (pt). */
 const INK_SIDE = 2.5;
 const INK_TIP = 4;
+/** How far under a long ray's tip its white glint starts (pt), so the blue tip still shows. */
+const GLINT_TIP = 7;
 
-/** How each tier's plate looks: a disc only (Silver, Gold), or rays (count, reach in coin radii, two colours). */
-export function tierPlateLook(level: number): { readonly rays: number; readonly reach: number; readonly colors: readonly [string, string] } {
+/**
+ * How each tier's plate looks: a disc only (Silver, Gold), or rays (count, reach in coin radii, two colours). Prismatic's
+ * rays alternate long and short (altReach) and the long ones carry a white glint down their middle, so it reads as light
+ * shining out, not a spiked collar; its disc is a little smaller so the rays show.
+ */
+export function tierPlateLook(level: number): {
+  readonly rays: number; readonly reach: number; readonly altReach: number; readonly colors: readonly [string, string];
+  readonly glint: string | null; readonly disc: number;
+} {
   const tier = coinTier(level);
-  if (tier.fx === 'starburst') return { rays: 16, reach: 1.5, colors: [tier.ring, '#ffe27a'] };
-  // Prismatic: a few long, chunky rays (a hand-drawn badge), never a fine gear edge.
-  if (tier.fx === 'rays') return { rays: 8, reach: 1.4, colors: [tier.ring, '#ffffff'] };
-  if (tier.level >= 6) return { rays: 10, reach: 1.3, colors: [tier.ring, tier.ringDeep] };
-  return { rays: 0, reach: 1.22, colors: [tier.ring, tier.ringDeep] };
+  if (tier.fx === 'starburst') return { rays: 16, reach: 1.5, altReach: 1.5, colors: [tier.ring, '#ffe27a'], glint: null, disc: 1.2 };
+  // Prismatic: a few long, chunky light rays (a hand-drawn badge), never a fine gear edge.
+  if (tier.fx === 'rays') return { rays: 8, reach: 1.48, altReach: 1.3, colors: [tier.ring, '#ffffff'], glint: '#ffffff', disc: 1.1 };
+  if (tier.level >= 6) return { rays: 10, reach: 1.3, altReach: 1.3, colors: [tier.ring, tier.ringDeep], glint: null, disc: 1.2 };
+  return { rays: 0, reach: 1.22, altReach: 1.22, colors: [tier.ring, tier.ringDeep], glint: null, disc: 1.2 };
 }
 
 /** How much shorter the lowest ray is than the top one (coin radii): the sunburst sits on the card's blue band like a
@@ -49,7 +58,7 @@ export default function TierPlate({ level, size, progress }: {
   const look = tierPlateLook(level);
   const r = size / 2;
   const reach = r * look.reach;
-  const disc = r * 1.2;
+  const disc = r * look.disc;
   const style = useAnimatedStyle(() => ({
     opacity: progress.value <= 0 ? 0 : Math.min(1, progress.value * 2),
     transform: [{ scale: 0.55 + 0.45 * progress.value }, { rotate: `${(1 - Math.min(1, progress.value)) * -40}deg` }],
@@ -62,8 +71,10 @@ export default function TierPlate({ level, size, progress }: {
       alignItems: 'center', justifyContent: 'center' }, style]}>
       {Array.from({ length: look.rays }, (_, i) => {
         // The lower rays are a little shorter: each starts lower in its turned box, so its tip stops nearer the coin.
-        const tip = reach - r * rayReach(look.reach, look.rays, i);
+        const long = i % 2 === 0;
+        const tip = reach - r * rayReach(long ? look.reach : look.altReach, look.rays, i);
         const len = rayLen - tip;
+        const glint = long ? look.glint : null;
         return (
           <View key={i} style={{ position: 'absolute', width: reach * 2, height: reach * 2, alignItems: 'center',
             transform: [{ rotate: `${(360 / look.rays) * i}deg` }] }}>
@@ -73,6 +84,12 @@ export default function TierPlate({ level, size, progress }: {
               borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: PLATE_INK }} />
             <View style={{ marginTop: tip, width: 0, height: 0, borderLeftWidth: rayHalf, borderRightWidth: rayHalf, borderBottomWidth: len,
               borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: look.colors[i % 2] }} />
+            {/* The light: a thin white ray down the middle of a long ray, from just under its tip. */}
+            {glint && (
+              <View style={{ position: 'absolute', top: tip + GLINT_TIP, width: 0, height: 0, borderLeftWidth: rayHalf * 0.34,
+                borderRightWidth: rayHalf * 0.34, borderBottomWidth: len * 0.62, borderLeftColor: 'transparent',
+                borderRightColor: 'transparent', borderBottomColor: glint }} />
+            )}
           </View>
         );
       })}
