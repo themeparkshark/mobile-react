@@ -6,6 +6,7 @@ import { momentSaver, playMoment, preloadMoments, studioMoment, studioReady } fr
 import type { MomentName } from '../../../gamekit/audio/momentMap';
 import { BEAM_SLAM_LATE_MS, burstMoment, burstTakesVoicing, burstVoicing, CATCH_BURST_MS, CATCH_WOBBLE_INTENTS, REPEAT_BURST_MS, counterLift, CATCH_WOBBLE_TICKS_MS, catchHeat, COIN_TICK_GAP_MS, decodeDay, EMPTY_RUN, encodeDay, heatTier, HOT_LAYER_HEAT, MIN_BEAT_GAP_MS, REPEAT_WOBBLE_INTENTS, REPEAT_WOBBLE_TICKS_MS, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
 import { CAPTURE_LINES, captureTraceOn, traceEvent } from '../../../gamekit/audio/studioTrace';
+import { whenSoundMayStart } from '../../../gamekit/audio/studioSwitch';
 
 /**
  * The catch's own audio channel: real camera sounds (licensed, Epidemic Sound),
@@ -98,10 +99,12 @@ export const CATCH_MOMENTS: readonly MomentName[] = [
 let momentsReady = false;
 /** Studio on: decode the catch moments once (a no-op with the switch off). Safe to call often. */
 function preloadCatchMoments(): void {
-  if (momentsReady || !studioReady('catch.tap')) return;
+  if (momentsReady) return;
+  if (!studioReady('catch.tap')) { whenSoundMayStart(preloadCatchMoments); return; }
   momentsReady = true;
-  // Same rule as the cue preload below: nothing loaded (muted, or no engine yet) means try again next time.
-  void preloadMoments(CATCH_MOMENTS).then((ok) => { if (!ok) momentsReady = false; }, () => { momentsReady = false; });
+  // Same rule as the loop's: nothing loaded (muted, or no engine yet) means try again once sound may start.
+  const retry = () => { momentsReady = false; whenSoundMayStart(preloadCatchMoments); };
+  void preloadMoments(CATCH_MOMENTS).then((ok) => { if (!ok) retry(); }, retry);
 }
 
 /** Load every catch sound once per session (called when a Ride Photo find appears). */

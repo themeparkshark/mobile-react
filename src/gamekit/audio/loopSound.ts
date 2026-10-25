@@ -13,6 +13,7 @@
  * Studio off (or a cue not approved): returns false and the caller does exactly what it did before.
  */
 import { momentSaver, playMoment, preloadMoments, studioReady } from './playMoment';
+import { whenSoundMayStart } from './studioSwitch';
 import type { MomentName } from './momentMap';
 import type { HapticPatternName } from '../Haptics';
 
@@ -135,11 +136,15 @@ let preloaded = false;
  */
 export function preloadLoopMoments(): void {
   try {
-    if (preloaded || !studioReady('chest.open')) return;
+    if (preloaded) return;
+    // Too early (the studio flag not read yet): try again once sound may start (round 3).
+    if (!studioReady('chest.open')) { whenSoundMayStart(preloadLoopMoments); return; }
     preloaded = true;
-    // Nothing loaded (muted at the time, or before the player's settings are in, so no engine): drop the flag, so
-    // the next call once sound is on decodes for real instead of the day's first check decoding on first play.
-    void preloadMoments(LOOP_MOMENTS).then((ok) => { if (!ok) preloaded = false; }, () => { preloaded = false; });
+    // Nothing loaded (muted at the time, or before the player's settings are in, so no engine): drop the flag and try
+    // again by itself once sound may start, so the day's first check never decodes on first play (round 3: a surface
+    // that preloads once at mount rang its first check 100 ms late in the w5r3 capture).
+    const retry = () => { preloaded = false; whenSoundMayStart(preloadLoopMoments); };
+    void preloadMoments(LOOP_MOMENTS).then((ok) => { if (!ok) retry(); }, retry);
   } catch { /* sound is decoration */ }
 }
 /** Tests only. */

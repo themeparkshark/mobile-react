@@ -37,7 +37,7 @@ import { AudioApiBackend, ExpoAvBackend, HybridBackend, audioApiAvailable, type 
 import { CHRIS_BEDS, CHRIS_CUES, type BedDef, type CueDef } from './chrisBank';
 import { TraceBackend } from './traceBackend';
 import { studioTraceOn, traceEvent } from './studioTrace';
-import { studioCapture } from './studioSwitch';
+import { soundMayHaveStarted, studioCapture } from './studioSwitch';
 import { routePan, type AudioRoute } from '../core/audioRoute';
 
 export interface PlayOptions {
@@ -142,6 +142,7 @@ class GameAudioEngine {
   /** The player's sound settings are in: the next play or load may start the engine. */
   settingsKnown(): void {
     this.settingsPending = false;
+    soundMayHaveStarted();
   }
 
   /** Pick and start a backend. Safe to call many times. Resolves with no backend while all sound is off. */
@@ -289,6 +290,7 @@ class GameAudioEngine {
     if (this.captureEngine) v = true;
     this.sfxEnabled = v;
     if (!v) this.backend?.stopAll();
+    else soundMayHaveStarted();
   }
 
   isSfxEnabled(): boolean {
