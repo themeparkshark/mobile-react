@@ -37,8 +37,8 @@ const CAPTURE_FROM = Math.max(1, Math.min(9, Number(process.env.EXPO_PUBLIC_COIN
 const CAPTURE_TO = Math.max(CAPTURE_FROM, Math.min(9, Number(process.env.EXPO_PUBLIC_COIN_PREVIEW_LEVEL_TO || 4)));
 const CAPTURE_SERVER_MS = 350;
 const CAPTURE_HOLD_MS = 4200;
-/** Capture only: the first card waits this long (EXPO_PUBLIC_CAPTURE_START_MS), so Metro's download banner has gone. */
-const CAPTURE_START_MS = CAPTURE ? Math.max(0, Number(process.env.EXPO_PUBLIC_CAPTURE_START_MS || 0)) : 0;
+/** Capture only: the first card waits this long (EXPO_PUBLIC_COIN_PREVIEW_START_MS), so Metro's download banner has gone. */
+const CAPTURE_START_MS = CAPTURE ? Math.max(0, Number(process.env.EXPO_PUBLIC_COIN_PREVIEW_START_MS || 0)) : 0;
 
 export default function CoinLevelingPreviewScreen() {
   const [open, setOpen] = useState(CAPTURE_START_MS === 0);
