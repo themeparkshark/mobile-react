@@ -206,7 +206,7 @@ test('fix 8: the hooks get their own shaped buzz: Daily 3 check, the flame\'s ig
   assert.ok(H, 'haptics module loaded');
   const src = (f) => fs.readFileSync(path.join(root, f), 'utf8');
   // Round 2: the surfaces call loopSound (the notes climb, the flame grows with the streak, the chest's short form).
-  assert.match(src('src/components/retention/Daily3MapButton.tsx'), /if \(!playDaily3\(landing\.done, landing\.day \?\? flameDay\(\{ days: streak \}\), \{ syncMs: F, chordAfterMs: CHECK\.fullRing \}\)\) \{/);
+  assert.match(src('src/components/retention/Daily3MapButton.tsx'), /useAnimatedReaction\(\(\) => flyOn\.value, \(v, prev\) => \{ if \(v === 1 && prev !== 1\) runOnJS\(flightStarted\)\(Date\.now\(\)\); \}\);/);
   assert.match(src('src/components/DailyGiftModal.tsx'), /if \(playChestOpen\(\)\) return;/);
   assert.match(src('src/components/retention/RewardReveal.tsx'), /if \(playChestOpen\(\{ rowsFollow: true, delayMs: Math\.max\(0, e \+ pl\.pop - 10 - Date\.now\(\)\) \}\)\) return;\s*later\(\(\) => \{ playHaptic\('golden'\); playSfx\('fx\.reward'\); \}/);
 });

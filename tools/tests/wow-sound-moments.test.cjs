@@ -311,7 +311,7 @@ test('wired call sites keep their legacy sound behind studioMoment', () => {
     // Wave 5 round 2: Daily 3 and the chest play through loopSound (climbing notes, the flame by streak day, the chest's
     // shaped buzz); off, today's success buzz and sound.
     // wow-loops integration (w5r3 preview): the rebuilt map button plays the check when it lands.
-    ['src/components/retention/Daily3MapButton.tsx', /if \(!playDaily3\(landing\.done, landing\.day \?\? flameDay\(\{ days: streak \}\), \{ syncMs: F, chordAfterMs: CHECK\.fullRing \}\)\) \{\n\s+later\(\(\) => \{ queueHaptic\('hitMedium'\); playSfx\(cue\.fallback, 0\.9\); \}, F\);/],
+    ['src/components/retention/Daily3MapButton.tsx', /if \(playDaily3\(p\.done, p\.day, \{ syncMs: left, chordAfterMs: CHECK\.fullRing \}\)\) return;\n\s+later\(\(\) => \{ queueHaptic\('hitMedium'\); playSfx\(LOOP_CUES\.checkLand\.fallback, 0\.9\); \}, left\);/],
     ['src/components/DailyGiftModal.tsx', /if \(playChestOpen\(\)\) return;\n\s+void Haptics\.notificationAsync\(Haptics\.NotificationFeedbackType\.Success\)\.catch\(\(\) => undefined\);\n\s+playSfx\('win'\); playSfx\('coin', 0\.9\);/],
     ['src/components/retention/useRetention.tsx', /haptic\('success'\); if \(!studioMoment\('loop\.freeze'\)\) playSfx\('fx\.purchase'\);/],
   ];

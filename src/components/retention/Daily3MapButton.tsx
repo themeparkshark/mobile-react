@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  cancelAnimation, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
@@ -195,16 +195,13 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
       flyFrom.value = { x: width / 2 - (bx + bw / 2), y: height * 0.49 - (by + bh / 2) };
       if (Number.isFinite(bx) && bw > 0) center.current = { x: bx + bw / 2, y: by + bh / 2 };
       handOff?.();
+      // Sound (wow-sound): played from the UI thread's own start of this flight (flightStarted), so the note lands on
+      // the check's landing (F) and the chord on the full flash (F + fullRing) whatever the JS-to-UI lag. Scheduled from
+      // JS, it rang 34 ms late (a timer at F) or 30 to 60 ms early (a call here) in the w5r3 preview captures.
+      soundFor.current = { done: landing.done, day: landing.day ?? flameDay({ days: streak }), full };
       fly.value = 0;
       flyOn.value = 1;
       fly.value = withTiming(1, { duration: F, easing: EASE.inOut });
-      // Sound (wow-sound): scheduled here, where the flight starts, on the audio clock for the check's landing (F) and
-      // the full flash (F + fullRing). A JS timer at F rang 34 ms late, and a call at the effect 30 to 50 ms early
-      // (measureInWindow answers a frame or more later), in the w5r3 preview captures.
-      if (!playDaily3(landing.done, landing.day ?? flameDay({ days: streak }), { syncMs: F, chordAfterMs: CHECK.fullRing })) {
-        later(() => { queueHaptic('hitMedium'); playSfx(cue.fallback, 0.9); }, F);
-        if (full) later(() => { playHaptic('golden'); playSfx(LOOP_CUES.fullSet.fallback, 0.9); }, F + CHECK.fullRing);
-      }
       flyOn.value = withDelay(F, withTiming(0, { duration: 60 }));
       // Arrival: the ring segment fills, the check draws then stamps (scale and fade on separate clocks).
       segs[i].value = 0;
@@ -249,6 +246,18 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
   useCaptureMark(fly, 'check-arrive', 0.995);
   useCaptureMark(sparkle, 'check-sparkle-start', 0.02);
   useCaptureMark(bounce, 'ready-hop-peak', -6.95, 'down');
+  // The flight's sound, played when the UI thread really starts the flight (its own clock, passed with the call).
+  const soundFor = useRef<{ done: number; day: number; full: boolean } | null>(null);
+  const flightStarted = (uiAt: number) => {
+    const p = soundFor.current;
+    soundFor.current = null;
+    if (!p) return;
+    const left = Math.max(0, CHECK.fly - (Date.now() - uiAt));
+    if (playDaily3(p.done, p.day, { syncMs: left, chordAfterMs: CHECK.fullRing })) return;
+    later(() => { queueHaptic('hitMedium'); playSfx(LOOP_CUES.checkLand.fallback, 0.9); }, left);
+    if (p.full) later(() => { playHaptic('golden'); playSfx(LOOP_CUES.fullSet.fallback, 0.9); }, left + CHECK.fullRing);
+  };
+  useAnimatedReaction(() => flyOn.value, (v, prev) => { if (v === 1 && prev !== 1) runOnJS(flightStarted)(Date.now()); });
   const buttonStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bounce.value }, { scale: press.value * pop.value }] }));
   const flyStyle = useAnimatedStyle(() => {
     const p = arcPoint(fly.value, flyFrom.value, { x: 0, y: 0 }, 90);
