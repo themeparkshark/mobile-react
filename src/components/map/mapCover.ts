@@ -194,7 +194,11 @@ export function useCoverArt(enabled = true): () => void {
     if (!enabled || !plan.up || plan.lifting) return;
     artWaiting.add(key);
     replan(Date.now(), true);
-    return () => { if (artWaiting.delete(key)) replan(Date.now()); };
+    // Re-plan after the commit, not inside it: React runs every layout-effect cleanup of a commit
+    // before any new one, so the screen's "ride list loaded" release ran before the islands that
+    // got their rides in the same commit could register, and the cover lifted onto a map with no
+    // islands (seen in a slow release launch).
+    return () => { if (artWaiting.delete(key)) void Promise.resolve().then(() => replan(Date.now())); };
   }, [enabled, key]);
   return useCallback(() => { if (artWaiting.delete(key)) replan(Date.now()); }, [key]);
 }

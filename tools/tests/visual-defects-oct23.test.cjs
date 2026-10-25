@@ -1488,3 +1488,8 @@ test('wave 5 round 3: a launch step the bar already passed still keeps it creepi
   const scene = read('src/components/launch/LaunchScene.tsx');
   assert.match(scene, /if \(to <= launchFill\.value\) \{\s*[^]*?if \(creep && creep\.to > launchFill\.value\) \{\s*launchFill\.value = withTiming\(Math\.min\(1, creep\.to\), \{ duration: creep\.ms, easing: Easing\.out\(Easing\.quad\) \}\);\s*\}\s*return;/);
 });
+
+test('wave 5 round 3: an art hold released in a commit re-plans after it, so holds added in the same commit still count', () => {
+  const cover = read('src/components/map/mapCover.ts');
+  assert.match(cover, /return \(\) => \{ if \(artWaiting\.delete\(key\)\) void Promise\.resolve\(\)\.then\(\(\) => replan\(Date\.now\(\)\)\); \};/);
+});
