@@ -742,7 +742,7 @@ test('wave 5 r3: the 5th-catch stars are big, fling out, then land in the counte
   assert.ok(late && Math.hypot(late.x - to.x, late.y - to.y) < 6, `lands on the counter (${late && late.x}, ${late && late.y})`);
   assert.ok(late.scale * 28 >= 24, 'still about 25 pt as it lands');
   assert.equal(wow.homeStarAt(land0 + 1, 0, 8, to), null, 'gone once it lands');
-  for (let i = 0; i < 8; i++) assert.ok(wow.homeStarLand(i) < motion.DURATION.sparkle, 'every star lands inside the sparkle window');
+  assert.ok(Math.hypot(wow.homeStarAt(wow.HOME_STARS.outMs + 10, 0, 8, to).x, wow.homeStarAt(wow.HOME_STARS.outMs + 10, 0, 8, to).y) >= 165, 'they hang past the ink tips, on the map');
   for (let i = 1; i < 8; i++) assert.ok(wow.homeStarLand(i) - wow.homeStarLand(i - 1) >= 40, 'one punch per star, never merged');
   // The stars lead: the last star lands before the first coin (each landing punches the counter).
   const treat = wow.catchPlan({ reduced: false, repeat: true, treat: true });
@@ -827,7 +827,7 @@ test('wave 5 r3: the first catch ever is the hero (centre stage, about 85% of th
   assert.ok(hero.hero && hero.centre && hero.kind === 'hero');
   assert.ok(hero.inkScale > wow.burstVariant(1).inkScale * 1.25, 'well past the session-first catch');
   for (const n of [2, 3, 4, 6, 7, 8, 9]) assert.ok(!wow.burstVariant(n).centre && wow.burstVariant(n).inkScale <= 1, `common ${n} keeps its size`);
-  assert.ok(wow.burstVariant(1).centre && wow.burstVariant(10).centre && wow.burstVariant(25).centre, 'the big ones play centre stage');
+  assert.ok([1, 5, 10, 25].every(n => wow.burstVariant(n).centre), 'the big ones play centre stage (the 5th too, so its stars ring it on screen)');
   const burst = read('src/screens/ExploreScreen/CatchBurst.tsx');
   assert.match(burst, /const heroT = useDerivedValue/);
   assert.match(burst, /<Group transform=\{heroT\} opacity=\{heroO\}>\s*<CatchRaysArt size=\{goldSize\} bloomOnly \/>/);

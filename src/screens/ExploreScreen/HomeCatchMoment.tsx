@@ -172,7 +172,8 @@ const GRADE_CHIP: Record<PhotoGrade, [string, string]> = {
 const MAP_SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
 /** House art (already in the app): Alex's inked gold burst, the blue water ring and the gold star. */
 const WATER_RING = require('../../../assets/fx/waterring.webp');
-const MINI_STAR = require('../../../assets/fx/mini-star.webp');
+/** Wave 5 round 3: the gold star as a PNG (the house star the grade chips use); the fx webp star never drew in a native Image here. */
+const MINI_STAR = require('../../../assets/images/screens/pin-collections/star.png');
 const COIN_FALLBACK = require('../../../assets/images/coingold.png');
 /** Round 4: one inked coin (Alex's game coin, dark rim and a white shine) reads over the gold burst; the
  * chip's coin-pile icon read as a gold clump on gold. */
@@ -289,6 +290,8 @@ const HomeStar = memo(function HomeStar({ index, clock, plan, on, count, sx, sy,
   const star = useAnimatedStyle(() => pose(0, 1));
   const trailA = useAnimatedStyle(() => pose(40, 0.6));
   const trailB = useAnimatedStyle(() => pose(80, 0.4));
+  // A soft white glow right behind the star, so a gold star reads over the gold burst and the map alike.
+  const glow = useAnimatedStyle(() => { const r = pose(0, 1.5); return { ...r, opacity: r.opacity * 0.85 }; });
   return <>
     <Animated.View pointerEvents="none" style={[styles.homeStar, trailB]}>
       <RNImage source={MAP_SPARKLE} style={[styles.fxFill, { tintColor: GOLD_FX.rays }]} resizeMode="contain" fadeDuration={0} />
@@ -296,12 +299,16 @@ const HomeStar = memo(function HomeStar({ index, clock, plan, on, count, sx, sy,
     <Animated.View pointerEvents="none" style={[styles.homeStar, trailA]}>
       <RNImage source={MAP_SPARKLE} style={[styles.fxFill, { tintColor: GOLD_FX.raysSoft }]} resizeMode="contain" fadeDuration={0} />
     </Animated.View>
+    <Animated.View pointerEvents="none" style={[styles.homeStar, glow]}>
+      <RNImage source={GLOW_TEX} style={[styles.fxFill, { tintColor: '#ffffff' }]} resizeMode="stretch" fadeDuration={0} />
+    </Animated.View>
     <Animated.View pointerEvents="none" style={[styles.homeStar, star]}>
       <RNImage source={MINI_STAR} style={styles.fxFill} resizeMode="contain" fadeDuration={0} />
     </Animated.View>
   </>;
 });
 const HOME_STAR = 40;
+
 
 /**
  * Round 4: the milestone beam, drawn once with Skia (static, no per-frame redraw) and moved only by its
@@ -1532,7 +1539,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         const chip = latest.current.getTarget('coins');
         const coinLands = stream.landAt.map(ms => plan.coinsAt + ms);
         // The 5th-catch treat: its stars lead the coins into the counter, and the counter punches once per star (wave 5
-        // round 3: the stars land first, 40 ms apart, then the coins spray out and follow).
+        // round 3: the stars land first, 45 ms apart, then the coins spray out and follow).
         let starLands: number[] = [];
         if (chip && motion && variant.homeStars) {
           starTo.value = { x: chip.x - off.x - stage.x, y: chip.y - off.y - stage.y }; homeSV.value = 1;

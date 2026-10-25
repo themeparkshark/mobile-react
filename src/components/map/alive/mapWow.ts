@@ -249,7 +249,7 @@ export function burstVariant(catchNumber: number, options: { readonly firstEver?
   if (options.firstEver) return { ...base, kind: 'hero', inkScale: 1.44, rings: 3, stars: 8, hero: true, centre: true };
   if (n % 25 === 0) return { ...base, kind: 'grand', inkScale: 1.7, rings: 3, stars: 8, beam: true, milestone: true, grand: true, fan: true, counterRing: true, centre: true };
   if (n % 10 === 0) return { ...base, kind: 'beam', inkScale: 1.47, rings: 3, stars: 8, beam: true, milestone: true, fan: true, counterRing: true, centre: true };
-  if (n % 5 === 0) return { ...base, kind: 'stars', inkScale: 1.3, rings: 2, stars: 8, treat: true, homeStars: true };
+  if (n % 5 === 0) return { ...base, kind: 'stars', inkScale: 1.3, rings: 2, stars: 8, treat: true, homeStars: true, centre: true };
   if (n === 1) return { ...base, kind: 'classic', inkScale: 1.05, rings: 2, stars: 4, centre: true, golden: !!options.golden, beam: !!options.golden };
   const fidget = (n % 3) as 0 | 1 | 2;
   // The chime climbs a step with each repeat (four steps, then round again).
@@ -263,15 +263,15 @@ export function burstVariant(catchNumber: number, options: { readonly firstEver?
 
 /**
  * Wave 5 round 3: the 5th-catch treat stars lead the coins home. Star i flings out over the top (outMs), then arcs into
- * the coin counter at `to` (relative pt), 40 ms after the one before (after a short hang at the tips), and lands at homeStarLand(i) ms after the burst
+ * the coin counter at `to` (relative pt), 45 ms after the one before (after a short hang past the tips), and lands at homeStarLand(i) ms after the burst
  * (the counter punches on each landing). Big (about 40 pt to 25 pt), so they read at phone size.
  */
-export const HOME_STARS = { outMs: 140, hangMs: 190, flyMs: 280, staggerMs: 40, from: 1.45, to: 0.9 } as const;
+export const HOME_STARS = { outMs: 140, hangMs: 160, flyMs: 420, staggerMs: 45, from: 1.45, to: 0.9 } as const;
 export function homeStarLand(i: number): number {
   return i * HOME_STARS.staggerMs + HOME_STARS.outMs + HOME_STARS.hangMs + HOME_STARS.flyMs;
 }
 /** Wave 5 round 3: on the treat the coins wait for the stars (they spray out once the burst has sucked back), so every star lands on its own. */
-export const TREAT_COINS_DELAY_MS = 260;
+export const TREAT_COINS_DELAY_MS = 400;
 
 /** A treat star `d` ms after the burst (index i of n), relative to the find, or null when it is not on screen. Worklet. */
 export function homeStarAt(d: number, i: number, n: number, to: { x: number; y: number }): { x: number; y: number; scale: number } | null {
@@ -279,7 +279,8 @@ export function homeStarAt(d: number, i: number, n: number, to: { x: number; y: 
   const local = d - i * HOME_STARS.staggerMs;
   if (local <= 0 || n <= 0 || local >= HOME_STARS.outMs + HOME_STARS.hangMs + HOME_STARS.flyMs) return null;
   const angle = -Math.PI / 2 + (i - (n - 1) / 2) * (n > 4 ? 0.42 : 0.8);
-  const reach = i % 2 ? 96 : 124;
+  // Out past the tips of the 5th's ink burst (about 165 pt), so the stars hang on the map, not gold on gold.
+  const reach = i % 2 ? 168 : 186;
   const ox = Math.cos(angle) * reach, oy = Math.sin(angle) * reach;
   if (local < HOME_STARS.outMs) {
     const u = local / HOME_STARS.outMs;
