@@ -37,10 +37,14 @@ import { defendGym } from '../../api/endpoints/gym-battle';
 import { friendlyActionError } from '../../services/match/matchLink';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-// iPhone SE and other short screens: a smaller shield, a lower score plaque
-// and a higher bonus banner, so nothing overlaps the shield.
+// iPhone SE and other short screens: a smaller shield and a lower score
+// plaque, so nothing overlaps the shield.
 const SHORT = SCREEN_H < 700;
 const SHIELD = SHORT ? 180 : 220;
+// The ring around the shield and how far a +N rises: every +N starts and
+// ends inside the ring, under the header and the bonus pill.
+const RING = SHIELD + 50;
+const FLOAT_RISE = SHORT ? 56 : 72;
 
 interface Props {
   visible: boolean;
@@ -72,7 +76,7 @@ const FloatingPlusOne = ({ id, x, y, value, onComplete }: FloatingPlusOneProps) 
     // Bigger animation for multiplied values
     const targetScale = value > 1 ? 1.5 : 1.2;
     scale.value = withSpring(targetScale, { damping: 6, stiffness: 300 });
-    translateY.value = withTiming(-100, { duration: 700, easing: Easing.out(Easing.quad) });
+    translateY.value = withTiming(-FLOAT_RISE, { duration: 700, easing: Easing.out(Easing.quad) });
     opacity.value = withDelay(400, withTiming(0, { duration: 300 }, () => {
       runOnJS(onComplete)(id);
     }));
@@ -294,13 +298,13 @@ export default function DefendMiniGameModal({
     setTaps(t => t + 1);
     setTotalPoints(p => p + multiplier);
 
-    // Add floating +N at tap location - closer to center (shield area)
-    const { locationX, locationY } = event.nativeEvent;
-    // Keep X centered around shield, Y in middle area
+    // Add a floating +N on the shield. The shield sits in the middle of the
+    // screen; a +N starts in its lower half and rises, so even at its biggest
+    // it stays inside the ring (never into the clock or the bonus pill).
     const centerX = SCREEN_W / 2;
-    const centerY = SCREEN_H * 0.45; // Shield is roughly at 45% from top
-    const offsetX = (Math.random() - 0.5) * 100;
-    const offsetY = (Math.random() - 0.5) * 80;
+    const centerY = SCREEN_H / 2;
+    const offsetX = (Math.random() - 0.5) * RING * 0.4;
+    const offsetY = RING * 0.12 + Math.random() * RING * 0.18;
     const newId = plusOneIdRef.current++;
     setFloatingPlusOnes(prev => [...prev, { 
       id: newId, 
@@ -467,7 +471,18 @@ export default function DefendMiniGameModal({
             <View style={styles.playingContainer}>
               {/* TAP TO DEFEND header */}
               <View style={styles.headerContainer}>
-                <Text style={styles.tapToDefend}>TAP TO DEFEND!</Text>
+                {/* In the last 7 s the bonus pill takes this line's place, so
+                    it never covers the shield or the +N pops. */}
+                <View style={styles.headerLine}>
+                  {multiplier > 1 ? (
+                    <Animated.View entering={ZoomIn.duration(220)} style={styles.multiplierBanner}>
+                      <GameIcon name="streak" size={22} />
+                      <Text style={styles.multiplierBannerText}>x{multiplier} BONUS!</Text>
+                    </Animated.View>
+                  ) : (
+                    <Text style={styles.tapToDefend}>TAP TO DEFEND!</Text>
+                  )}
+                </View>
                 {/* Timer */}
                 <Text style={[
                   styles.timer,
@@ -488,13 +503,6 @@ export default function DefendMiniGameModal({
                   onComplete={removePlusOne}
                 />
               ))}
-
-              {/* Multiplier banner when active */}
-              {multiplier > 1 && (
-                <View style={styles.multiplierBanner}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><GameIcon name="streak" size={22} /><Text style={styles.multiplierBannerText}>x{multiplier} BONUS!</Text></View>
-                </View>
-              )}
 
               {/* Shield tap area */}
               <Pressable
@@ -561,7 +569,7 @@ export default function DefendMiniGameModal({
               {!result.failed && totalPoints >= 50 && <Text style={styles.resultTier}>{getTierName(totalPoints)}</Text>}
               <Text style={styles.resultTaps}>{taps} taps</Text>
               {/* Only claim the bonus when bonus taps really landed. */}
-              {multiplier > 1 && totalPoints > taps && (
+              {!result.failed && multiplier > 1 && totalPoints > taps && (
                 <Text style={styles.resultBonus}>x{multiplier} bonus in the final 7s!</Text>
               )}
               {result.failed ? (
@@ -781,7 +789,7 @@ const styles = StyleSheet.create({
     textShadowColor: '#B4400A',
     textShadowOffset: { width: 1.5, height: 2 },
     textShadowRadius: 0,
-    zIndex: 100,
+    zIndex: 5,
   },
   defenseContainer: {
     position: 'absolute',
@@ -833,16 +841,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
     letterSpacing: 2,
   },
-  multiplierBanner: {
-    position: 'absolute',
-    top: SHORT ? 168 : 220,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(255, 68, 68, 0.9)',
-    paddingVertical: 12,
-    borderRadius: 16,
+  headerLine: {
+    height: 42,
     alignItems: 'center',
-    zIndex: 50,
+    justifyContent: 'center',
+  },
+  // Solid red pill (nothing shows through) in the TAP TO DEFEND! line.
+  multiplierBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E5484D',
+    paddingHorizontal: 18,
+    height: 40,
+    borderRadius: 999,
     borderWidth: 3,
     borderColor: '#123A6B',
     shadowColor: '#123A6B',
@@ -851,7 +863,7 @@ const styles = StyleSheet.create({
     shadowRadius: 0,
   },
   multiplierBannerText: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '900',
     color: 'white',
     letterSpacing: 2,

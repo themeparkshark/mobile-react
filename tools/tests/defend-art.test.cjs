@@ -56,7 +56,6 @@ test('Gym towers and the Defend layout fit a short screen', () => {
   const defend = read('src/components/GymBattle/DefendMiniGameModal.tsx');
   assert.match(defend, /const SHORT = SCREEN_H < 700;/);
   assert.match(defend, /bottom: SHORT \? 64 : 120,/);
-  assert.match(defend, /top: SHORT \? 168 : 220,/);
 });
 
 // Dustin asked to drop the glow-filter look. The Gym winner cue and the
@@ -95,7 +94,7 @@ test('Defend shield burst is flat and the result has one message', () => {
 
 test('Defend result never claims a bonus or points that did not happen, and shows a failed send in kid words', () => {
   const src = read('src/components/GymBattle/DefendMiniGameModal.tsx');
-  assert.match(src, /\{multiplier > 1 && totalPoints > taps && \(/);
+  assert.match(src, /\{!result\.failed && multiplier > 1 && totalPoints > taps && \(/, 'an OOPS card carries one message, never a bonus line');
   assert.match(src, /failed: true,/);
   assert.match(src, /result\.failed \? \(\s*<Text style=\{styles\.resultError\}>\{result\.message\}<\/Text>/);
   assert.match(src, /result\.points > 0 \? `\+\$\{result\.points\} points for your team!` : 'Tap faster next time to score for your team!'/);
@@ -162,4 +161,77 @@ test('the Defend round clock runs from its start time, so taps cannot stretch it
   assert.match(tap, /const left = secondsLeft\(\);\s*setTimeLeft\(t => \(t === left \? t : left\)\);\s*if \(left === 0\) return;/, 'every tap refreshes the clock and taps after the buzzer do not count');
   assert.match(src, /timeLeft <= 7 && timeLeft > 0 && !bonusFiredRef\.current/);
   assert.doesNotMatch(src, /setTimeLeft\(t => t - 1\)/);
+});
+
+// Grader, wave 5 round 2: READY art drew smaller than the cream wait pill
+// beside it (transparent rows in the PNGs), so "come back later" outweighed
+// "go". Ready art is drawn to its visible bounds at one shared height, and a
+// waiting pill is clearly smaller.
+test('a ready arena button is bigger than a waiting one', () => {
+  const src = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  const { PNG } = (() => { try { return require('pngjs'); } catch { return {}; } })();
+  for (const [name, file] of [['defend', 'btn-defend'], ['checkin', 'btn-checkin'], ['battle', 'btn-battle']]) {
+    const m = src.match(new RegExp(`${name}: \\{ src: require\\('\\.\\./\\.\\./\\.\\./assets/images/${file}\\.png'\\), w: (\\d+), h: (\\d+), x: (\\d+), y: (\\d+), vw: (\\d+), vh: (\\d+) \\}`));
+    assert.ok(m, `${name} ready art box`);
+    const [w, h, x, y, vw, vh] = m.slice(1).map(Number);
+    const buf = fs.readFileSync(path.join(root, `assets/images/${file}.png`));
+    assert.equal(buf.readUInt32BE(16), w, `${file} width`);
+    assert.equal(buf.readUInt32BE(20), h, `${file} height`);
+    assert.ok(x + vw <= w && y + vh <= h, `${file} visible box fits the image`);
+    if (PNG) {
+      const png = PNG.sync.read(buf);
+      let top = h, bottom = -1;
+      for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) if (png.data[(yy * w + xx) * 4 + 3] > 20) { top = Math.min(top, yy); bottom = yy; }
+      assert.ok(Math.abs(top - y) <= 1 && Math.abs(bottom + 1 - (y + vh)) <= 1, `${file} visible rows ${top}..${bottom}`);
+    }
+  }
+  assert.match(src, /const READY_H = Math\.min\(\.\.\.Object\.values\(READY_ART\)\.map\(a => ACTION_CELL_W \* a\.vh \/ a\.vw\)\);/);
+  assert.match(src, /const WAIT_H = Math\.max\(34, Math\.round\(READY_H \* 0\.78\)\);/);
+  assert.match(src, /const WAIT_W = Math\.round\(ACTION_CELL_W \* 0\.84\);/);
+  for (const name of ['defend', 'checkin', 'battle']) assert.match(src, new RegExp(`<ReadyArt name="${name}" />`));
+  assert.equal((src.match(/style=\{styles\.waitPill\}/g) || []).length, 4, 'every waiting top-row button is the smaller pill');
+  assert.match(styleBlock(src, 'readySlot'), /height: READY_H,/);
+  // The bob is native-driver and only runs when ambient motion is allowed.
+  assert.match(src, /if \(!ambient\) \{ readyBob\.setValue\(0\); return; \}/);
+  assert.equal((src.match(/style=\{\[styles\.readyStack, readyBobStyle\]\}/g) || []).length, 3);
+});
+
+test('outside the park the arena buttons say GET CLOSER, never READY', () => {
+  const src = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  assert.match(src, /useContext\(LocationStatusContext\)/);
+  assert.match(src, /const awayFromArena = Boolean\(parkLoaded && parkId > 0 &&\s*\(currentPark \? currentPark\.id !== parkId : parkLookupRecord\?\.outcome === 'outside'\)\);/);
+  assert.match(src, /const defendReady = battleActive && !awayFromArena && defendCooldown <= 0/);
+  assert.match(src, /const checkinReady = battleActive && !awayFromArena && canCheckIn;/);
+  assert.match(src, /const battleReady = battleActive && !awayFromArena && canAttack;/);
+  assert.match(src, /awayFromArena \? 'GET CLOSER'/);
+  assert.match(src, /\{battleActive && !hasPlacedToday && !awayFromArena \? \(/);
+  assert.doesNotMatch(src, /line=\{battleActive && checkinCooldown > 0 \? clock\(checkinCooldown\) : 'SOON'\}/, 'a live arena never says SOON for Check In');
+});
+
+test('the tower toast takes the title slot, and the floor specks are gold and stop under the header', () => {
+  const src = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  const slot = styleBlock(src, 'pillarToastSlot');
+  assert.match(slot, /top: 47,/);
+  assert.doesNotMatch(styleBlock(src, 'pillarToast'), /bottom:/);
+  assert.match(src, /opacity: pillarToast \? 0 : 1/);
+  assert.match(styleBlock(src, 'statCrest'), /width: 28,\s*height: 28,/);
+  const speck = styleBlock(src, 'particle');
+  assert.doesNotMatch(speck, /borderWidth|borderColor/);
+  assert.match(src, /color: i % 2 === 0 \? '#FFD54A' : '#FFF1B8',/);
+  assert.match(src, /toValue: HEADER_BOTTOM \+ 10,/);
+  assert.match(src, /const particleCount = ambient \? Math\.round\(14 \*/);
+  assert.match(src, /\.start\(\(\{ finished \}\) => \{ if \(finished\) animate\(\); \}\);/);
+});
+
+test('the Defend bonus pill sits in the header line and every +N stays inside the ring', () => {
+  const src = read('src/components/GymBattle/DefendMiniGameModal.tsx');
+  const header = src.slice(src.indexOf('<View style={styles.headerContainer}>'), src.indexOf('{/* Floating +N popups */}'));
+  assert.match(header, /multiplier > 1 \? \(\s*<Animated\.View entering=\{ZoomIn\.duration\(220\)\} style=\{styles\.multiplierBanner\}>/);
+  assert.match(header, /<Text style=\{styles\.tapToDefend\}>TAP TO DEFEND!<\/Text>/);
+  const banner = styleBlock(src, 'multiplierBanner');
+  assert.doesNotMatch(banner, /position: 'absolute'|rgba/);
+  assert.match(src, /const FLOAT_RISE = SHORT \? 56 : 72;/);
+  assert.match(src, /translateY\.value = withTiming\(-FLOAT_RISE,/);
+  assert.match(src, /const offsetY = RING \* 0\.12 \+ Math\.random\(\) \* RING \* 0\.18;/);
+  assert.match(styleBlock(src, 'floatingPlus'), /zIndex: 5,/);
 });
