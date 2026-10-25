@@ -501,6 +501,10 @@ export default function LinePlayScreen() {
   const lineDone = snapshot.state === 'ending' && snapshot.endReason === 'left_queue' && activeGame == null;
   const boardingAsk = snapshot.boardingSuggested && activeGame == null &&
     (snapshot.state === 'active' || snapshot.state === 'paused');
+  // The wait is about to end (the end sheet, the boarding question or the line-done countdown): decode the recap's art
+  // again now, so "Your ride's up!" opens whole even after a long wait pushed it out of the memory cache.
+  const endingSoon = waitEndPrompt != null || boardingAsk || snapshot.state === 'ending';
+  useEffect(() => { if (endingSoon) warmRecapArt(); }, [endingSoon]);
   useEffect(() => {
     if (lineDone || boardingAsk) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
   }, [lineDone, boardingAsk]);

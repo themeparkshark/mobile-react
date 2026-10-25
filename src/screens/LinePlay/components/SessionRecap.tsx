@@ -7,13 +7,14 @@
  *
  * Only server-confirmed amounts are shown as earned; nothing here grants.
  */
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Image as NativeImage, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import Animated, { FadeInDown, ZoomIn, useDerivedValue, useSharedValue } from 'react-native-reanimated';
+import Animated, { FadeInDown, ZoomIn, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
-import RideUpCelebration, { RIDE_UP, RIDE_UP_REPEAT, RideUpHero, RideUpKicker, RollingValue, rideUpStatStartsAt, type RideUpPlan } from './RideUpCelebration';
+import { createStepStore } from '../../../components/park/mountSteps';
+import RideUpCelebration, { RIDE_UP, RIDE_UP_ART_WAIT_MS, RIDE_UP_REPEAT, RideUpGo, RideUpHero, RideUpKicker, RollingValue, rideUpStatStartsAt, type RideUpPlan } from './RideUpCelebration';
 import { takeRideUpVariant } from './rideUpRepeat';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
 import { BRAND, GameButton, GameIcon, ICON_SOURCES, type GameIconName } from '../../../ui';
@@ -31,24 +32,28 @@ import { parkDayLine, recapRows, type RecapRewardsInput } from '../../../service
 const QUEUE_STAMP_IMAGE = require('../../../../assets/images/stamps/stamp-09.png');
 const QUEUE_RECAP_SHARK = require('../../../../assets/images/screens/lineplay/queue-recap-shark.png');
 
-let recapArtWarm = false;
+let recapArtWarmAt = 0;
 
 /**
  * Decode the recap's art (the celebrating shark, the stamp and the earned-row icons) into memory before the wait
- * ends, so "Your ride's up!" never opens on a card with its shark and icons still blank (round 6: two such frames
- * on a cold first open). LinePlay calls it when the line screen opens; cheap, once per app run, never throws.
+ * ends, so "Your ride's up!" never opens on a card with its shark and icons still blank. LinePlay calls it when the
+ * line screen opens AND again the moment the wait starts to end (the end sheet, the boarding question, the line-done
+ * countdown): a long wait can push the art out of the memory cache (wave 5 round 3: the shark was blank for the first
+ * frames of a real boarded recap 9 minutes in, because the old once-per-run warm-up never ran again). Cheap (a cached
+ * image is a no-op), at most once every 5 s, never throws.
  */
 export function warmRecapArt(): void {
-  if (recapArtWarm) return;
-  recapArtWarm = true;
+  const now = Date.now();
+  if (now - recapArtWarmAt < 5000) return;
+  recapArtWarmAt = now;
   try {
     const icons: GameIconName[] = ['star', 'energy', 'xp', 'parts', 'ticket', 'arrow', 'timer'];
     const uris = [QUEUE_RECAP_SHARK, QUEUE_STAMP_IMAGE, ...icons.map(name => ICON_SOURCES[name])]
       .map(source => NativeImage.resolveAssetSource(source)?.uri)
       .filter((uri): uri is string => typeof uri === 'string' && uri.length > 0);
-    void Image.prefetch(uris, 'memory').catch(() => { recapArtWarm = false; });
+    void Image.prefetch(uris, 'memory').catch(() => { recapArtWarmAt = 0; });
   } catch {
-    recapArtWarm = false;
+    recapArtWarmAt = 0;
   }
 }
 
@@ -212,9 +217,27 @@ export default function SessionRecap({
   // Where the header card's shark is: the confetti cannon fires from it (the card writes it on layout, UI thread only).
   const burstPoint = useSharedValue<{ x: number; y: number } | null>(null);
   const cannonFrom = useDerivedValue(() => (burstPoint.value ? { x: burstPoint.value.x + RECAP_CARD_X, y: burstPoint.value.y } : null));
+  // "Your ride's up!" waits (drawn at an invisible 1%) until the header's shark has decoded, then every beat starts on
+  // the same frame the recap shows (RideUpGo): the first visible frame is the whole card, shark included.
+  const goStore = useRef(createStepStore(rideUp ? 0 : 1)).current;
+  const shown = useSharedValue(rideUp ? 0.012 : 1);
+  const begin = useRef(() => {
+    if (goStore.get() >= 1) return;
+    // One more frame at 1%, so the decoded shark is drawn once before the recap shows.
+    requestAnimationFrame(() => { shown.value = 1; goStore.set(1); });
+  }).current;
+  useEffect(() => {
+    if (goStore.get() >= 1) return undefined;
+    const fallback = setTimeout(begin, heroInventory && onOpenInventory ? 120 : RIDE_UP_ART_WAIT_MS);
+    return () => clearTimeout(fallback);
+    // Once per recap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const shownStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
 
   return (
-    <View style={{ flex: 1 }}>
+    <RideUpGo.Provider value={rideUp ? goStore : null}>
+    <Animated.View style={[{ flex: 1 }, shownStyle]}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.recapCard}>
       {/* "Your ride's up!": the header card itself is the celebration (pop, title stamp, gold bar, rays, burst). */}
       <RideUpHero active={rideUp} plan={rideUpPlan} burstPoint={burstPoint}>{backdrop => (
@@ -238,7 +261,8 @@ export default function SessionRecap({
           </Pressable>
         ) : (
           <Animated.View entering={reducedMotion || rideUp ? undefined : ZoomIn.delay(80).springify().damping(9)} style={styles.recapSharkWrap}>
-            <Image source={QUEUE_RECAP_SHARK} style={styles.recapShark} contentFit="contain"
+            <Image source={QUEUE_RECAP_SHARK} style={styles.recapShark} contentFit="contain" transition={0}
+              onLoad={rideUp ? begin : undefined} onError={rideUp ? begin : undefined}
               accessibilityLabel="Shark celebrating with a ride coin and park ticket" />
           </Animated.View>
         )}
@@ -459,7 +483,8 @@ export default function SessionRecap({
     </ScrollView>
     {/* "Your ride's up!": the app cheers you onto the ride, then gets out of the way. */}
     {rideUp && <RideUpCelebration rideName={rideName} short={rideUpShort} origin={cannonFrom} />}
-    </View>
+    </Animated.View>
+    </RideUpGo.Provider>
   );
 }
 

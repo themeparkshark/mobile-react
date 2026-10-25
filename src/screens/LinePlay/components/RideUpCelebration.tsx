@@ -23,7 +23,7 @@
  * full bar fade in and out, the buzz and the sound stay. Plain ride names only, no logos.
  */
 import { Canvas, PaintStyle, Picture, Skia, createPicture } from '@shopify/react-native-skia';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type StyleProp, type TextStyle } from 'react-native';
 import Animated, {
   Easing, ReduceMotion, cancelAnimation, runOnJS, useAnimatedProps, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue,
@@ -41,7 +41,7 @@ import { RAIN_COLORS, rainPalette } from '../../../components/park/ArrivalFxCanv
 import BurstCanvas from '../../../components/park/BurstCanvas';
 import { withDelay, withSequence, withSpring, withTiming } from '../../../components/park/momentTime';
 import { perfMark } from '../../../components/park/momentPerf';
-import { StepGate, useMountSteps } from '../../../components/park/mountSteps';
+import { StepGate, useMountSteps, type StepStore } from '../../../components/park/mountSteps';
 
 /** The beat sheet (ms), pure numbers so tests can read them. */
 export const RIDE_UP = {
@@ -87,6 +87,23 @@ export const RIDE_UP_REPEAT: RideUpPlan = {
   statMs: 260,
 };
 
+/**
+ * Wave 5 round 3: "go" for the whole ride-up. The recap mounts drawn at an invisible 1% until the header's shark has
+ * decoded (or RIDE_UP_ART_WAIT_MS), and every ride-up beat (the hero, the title slam, the rolling numbers, the cannon)
+ * starts on that same frame, so the first visible frame is the whole card with its shark (a real boarded recap showed
+ * its first frames with a blank shark). A store, not state: going never re-renders the recap, only the few beats that
+ * read it. Outside a ride-up recap there is no store and everything starts at once.
+ */
+export const RideUpGo = createContext<StepStore | null>(null);
+/** The longest the ride-up waits for the shark to decode before it starts anyway (ms). */
+export const RIDE_UP_ART_WAIT_MS = 260;
+const ONE = () => 1;
+const NO_SUB = () => () => undefined;
+export function useRideUpGo(): boolean {
+  const store = useContext(RideUpGo);
+  return useSyncExternalStore(store?.subscribe ?? NO_SUB, store?.get ?? ONE, store?.get ?? ONE) >= 1;
+}
+
 /** Where the burst comes from inside the header card: its shark (the card's right side). */
 const SHARK = { fromRight: 84, fromBottom: 78 };
 const BAR = 9;
@@ -129,6 +146,7 @@ function HeroStage({ reduced, plan: P, burstPoint, children }: {
   readonly children: (backdrop: ReactNode) => ReactNode;
 }) {
   const steps = useMountSteps(reduced ? 0 : HERO_BUILD, step => perfMark(`rideUp.step${step}`));
+  const go = useRideUpGo();
   const budget = usePowerBudget();
   const sparkles = momentParticles(P.sparkles, budget, reduced);
   const peak = flashPeak(isDimFlashingLightsEnabled(), reduced);
@@ -151,6 +169,7 @@ function HeroStage({ reduced, plan: P, burstPoint, children }: {
   }, [reduced]);
 
   useEffect(() => {
+    if (!go) return undefined;
     alive.current = true;
     perfMark('rideUp.start');
     if (reduced) {
@@ -181,9 +200,9 @@ function HeroStage({ reduced, plan: P, burstPoint, children }: {
       if (ok) runOnJS(perfMark)('rideUp.done');
     }));
     return () => { alive.current = false; [pop, glow, ring, punch, flash, burst, leave].forEach(v => cancelAnimation(v)); };
-    // One-shot per mount.
+    // One-shot per mount, from the go frame.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [go]);
 
   const heroStyle = useAnimatedStyle(() => (reduced ? {} : {
     transform: [
@@ -242,9 +261,10 @@ export function RideUpKicker({ active, style, children }: { readonly active: boo
   const punch = useSharedValue(0);
   const alive = useRef(true);
   const cheer = () => { if (alive.current) { playHaptic('winRoll'); playMoment('reward.reveal'); } };
+  const go = useRideUpGo();
   useEffect(() => {
     alive.current = true;
-    if (!active || preference === null) return () => { alive.current = false; };
+    if (!active || preference === null || !go) return () => { alive.current = false; };
     if (preference) { cheer(); return () => { alive.current = false; }; }
     stamp.value = 0;
     stamp.value = withDelay(RIDE_UP.stampAt, withTiming(1, { duration: DURATION.slam, easing: EASE.in }, ok => { if (ok) runOnJS(cheer)(); }));
@@ -252,7 +272,7 @@ export function RideUpKicker({ active, style, children }: { readonly active: boo
       withDelay(DURATION.hitStop, withSpring(0, SPRING.stamp))));
     return () => { alive.current = false; cancelAnimation(stamp); cancelAnimation(punch); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, preference]);
+  }, [active, preference, go]);
   // On screen from frame 1: the title starts oversize (never invisible) and slams down to size.
   const animated = useAnimatedStyle(() => ({
     transform: [{ scale: 1.5 - 0.5 * stamp.value }, { scaleX: 1 + SLAM_SQUASH * punch.value }, { scaleY: 1 - SLAM_SQUASH * punch.value }],
@@ -292,9 +312,11 @@ export function RollingValue({ value, prefix = '', suffix = '', delayMs, duratio
   const pop = useSharedValue(1);
   const alive = useRef(true);
   const landed = () => { if (alive.current && tick) queueHaptic('tickSelection'); };
+  const go = useRideUpGo();
   useEffect(() => {
     alive.current = true;
     if (reduced || value <= 0) { shown.value = value; return () => { alive.current = false; }; }
+    if (!go) { shown.value = 0; return () => { alive.current = false; }; }
     shown.value = 0;
     shown.value = withDelay(delayMs, withTiming(value, { duration: durationMs, easing: EASE.out }, ok => {
       if (ok) runOnJS(landed)();
@@ -302,7 +324,7 @@ export function RollingValue({ value, prefix = '', suffix = '', delayMs, duratio
     pop.value = withDelay(delayMs + durationMs, withSequence(withTiming(1.12, { duration: DURATION.tap }), withSpring(1, SPRING.stamp)));
     return () => { alive.current = false; cancelAnimation(shown); cancelAnimation(pop); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, reduced]);
+  }, [value, reduced, go]);
   const animatedProps = useAnimatedProps(() => {
     const text = prefix + String(Math.round(shown.value)) + suffix;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -346,8 +368,10 @@ export function cannonPieces(count: number): CannonPiece[] {
   return Array.from({ length: Math.max(0, count) }, (_, i) => {
     const u = ((i * 37) % 100) / 100;
     return {
-      a: (-165 + u * 150) * (Math.PI / 180),
-      v: 430 + ((i * 53) % 9) * 38,
+      // Up and a little toward the middle of the sheet (the shark sits on the card's right side), so no piece leaves
+      // the screen sideways: about 150 pt of spread each way, 100 to 170 pt up, then down across the sheet.
+      a: (-150 + u * 80) * (Math.PI / 180),
+      v: 600 + ((i * 53) % 9) * 30,
       spin: (i % 2 ? 1 : -1) * (300 + ((i * 41) % 320)),
       w: 12 + (i % 3) * 4,
       color: [0, 1, 2, 0, 3][i % 5] ?? 0,
@@ -356,18 +380,20 @@ export function cannonPieces(count: number): CannonPiece[] {
     };
   });
 }
-/** Gravity of the cannon's pieces (pt/s per s) and the shower's length (s). */
-const CANNON_G = 980;
+/** Gravity of the cannon's pieces (pt/s per s) and their air drag (per s). */
+const CANNON_G = 700;
+const CANNON_DRAG = 2.2;
+/** Sideways reach is narrower than the climb (the pieces fountain up, then spread as they fall). */
+const CANNON_SPREAD = 0.55;
 
 /** Where cannon piece `p` is `tau` seconds after it fires (relative to the shark); pure, for tests. */
 export function cannonAt(p: CannonPiece, tau: number): { x: number; y: number } {
   'worklet';
   // Air drag eases the launch speed so the pieces float down instead of dropping like stones.
-  const k = 1.6;
-  const travel = (1 - Math.exp(-k * tau)) / k;
+  const travel = (1 - Math.exp(-CANNON_DRAG * tau)) / CANNON_DRAG;
   return {
-    x: Math.cos(p.a) * p.v * travel + p.drift * Math.sin(tau * 9),
-    y: Math.sin(p.a) * p.v * travel + 0.5 * CANNON_G * 0.55 * tau * tau,
+    x: CANNON_SPREAD * Math.cos(p.a) * p.v * travel + p.drift * Math.sin(tau * 9),
+    y: Math.sin(p.a) * p.v * travel + 0.5 * CANNON_G * tau * tau,
   };
 }
 
@@ -379,10 +405,12 @@ function Cannon({ rideName, origin }: { readonly rideName: string; readonly orig
   // The canvas mounts a few frames after the recap's first frame (never in its first commit, one small step of its
   // own); the cannon fires at confettiAt.
   const steps = useMountSteps(CANNON_STEP);
+  const go = useRideUpGo();
   useEffect(() => {
+    if (!go) return undefined;
     rain.value = withDelay(RIDE_UP.confettiAt, withTiming(1, { duration: RIDE_UP.confettiMs, easing: Easing.linear }));
     return () => cancelAnimation(rain);
-  }, [rain]);
+  }, [rain, go]);
   const pieces = useMemo(() => cannonPieces(count), [count]);
   const art = useMemo(() => {
     const paint = Skia.Paint();

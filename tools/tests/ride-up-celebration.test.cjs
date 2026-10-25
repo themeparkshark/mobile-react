@@ -51,7 +51,7 @@ test('the recap\'s own header card is the stage: no veil, no second banner, the 
 
 test('round 5: the earned row is in place from frame 1 and every number lands by about 1.4 s on the UI thread', () => {
   const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
-  assert.doesNotMatch(recap, /function useCountUp|requestAnimationFrame|setTimeout/, 'no JS-thread counting in the recap');
+  assert.doesNotMatch(recap, /function useCountUp|setInterval/, 'no JS-thread counting in the recap');
   assert.match(recap, /entering=\{reducedMotion \|\| rideUp \? undefined/, 'no delayed entrance on the ride-up row');
   assert.match(recap, /<RollingValue value=\{wholeMinutes\}/, 'the minutes roll too');
   assert.match(src, /export function RollingValue/);
@@ -101,7 +101,7 @@ test('wave 5 round 3: the payoff breaks out of the header: a cannon from the sha
   const pieceSrc = fxSrc.slice(fxSrc.indexOf('export function cannonPieces'), fxSrc.indexOf('function Cannon('));
   const mod = { exports: {} };
   const ts = require('typescript');
-  const js = ts.transpileModule(`const CANNON_G = 980;\n${pieceSrc.replace(/export /g, '')}\nmodule.exports = { cannonPieces, cannonAt };`.replace("const CANNON_G = 980;\n", ''), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2019 } }).outputText;
+  const js = ts.transpileModule(`${pieceSrc.replace(/export /g, '')}\nmodule.exports = { cannonPieces, cannonAt };`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2019 } }).outputText;
   new Function('module', 'exports', js)(mod, mod.exports);
   const pieces = mod.exports.cannonPieces(28);
   assert.equal(pieces.length, 28);
@@ -112,6 +112,11 @@ test('wave 5 round 3: the payoff breaks out of the header: a cannon from the sha
   }
   assert.ok(up >= 20, `most pieces fly up out of the card first (${up})`);
   assert.ok(below >= 20, `then fall across the sheet (${below})`);
+  // Never off the sides of a 375 pt phone from a shark about 263 pt in (the card's right side).
+  for (const p of pieces) for (let tau = 0; tau <= 1.5; tau += 0.05) {
+    const x = 263 + mod.exports.cannonAt(p, tau).x;
+    assert.ok(x > 0 && x < 375, `piece stays on screen (${x.toFixed(0)})`);
+  }
   // The rays: the same fan inside the card and behind it, so they run on past the card's edges.
   assert.match(fxSrc, /export function heroRaysSize\(cardHeight: number\): number \{\n  return Math\.max\(340, cardHeight \* 2\.4\);/);
   assert.equal((fxSrc.match(/<GoldBurst size=\{rays\}/g) || []).length, 2);
@@ -161,4 +166,24 @@ test('wave 5 round 2: the second ride of the day skips the confetti and rolls th
   assert.ok(val('leaveAt') + val('leaveMs') <= 1500, 'settled by 1.5 s');
   const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
   assert.match(recap, /takeRideUpVariant\(rideUpKey \?\? `\$\{rideName\}:\$\{elapsedSeconds\}`\) === 'short' \? RIDE_UP_REPEAT : RIDE_UP/);
+});
+
+test('wave 5 round 3: the ride-up starts on the frame the recap shows, once the shark has decoded (never a blank shark)', () => {
+  const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
+  assert.match(recap, /const shown = useSharedValue\(rideUp \? 0\.012 : 1\);/, 'drawn at an invisible 1% until go');
+  assert.match(recap, /onLoad=\{rideUp \? begin : undefined\} onError=\{rideUp \? begin : undefined\}/, 'the shark decoding starts it');
+  assert.match(recap, /setTimeout\(begin, heroInventory && onOpenInventory \? 120 : RIDE_UP_ART_WAIT_MS\)/, 'never held longer than the art wait');
+  assert.match(recap, /requestAnimationFrame\(\(\) => \{ shown\.value = 1; goStore\.set\(1\); \}\)/, 'shows and starts on one frame');
+  assert.match(recap, /<RideUpGo\.Provider value=\{rideUp \? goStore : null\}>/);
+  assert.ok(Number(/RIDE_UP_ART_WAIT_MS = (\d+)/.exec(src)[1]) <= 300);
+  // Every beat waits for go: the hero, the title slam, the rolling numbers and the cannon.
+  assert.equal((src.match(/const go = useRideUpGo\(\);/g) || []).length, 4);
+  assert.match(src, /\}, \[go\]\);/);
+  assert.match(src, /\}, \[active, preference, go\]\);/);
+  assert.match(src, /\}, \[value, reduced, go\]\);/);
+  assert.match(src, /\}, \[rain, go\]\);/);
+  // The art is decoded again as the wait starts to end (a long wait can push it out of the memory cache).
+  const lp = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(lp, /useEffect\(\(\) => \{ if \(endingSoon\) warmRecapArt\(\); \}, \[endingSoon\]\);/);
+  assert.match(recap, /if \(now - recapArtWarmAt < 5000\) return;/);
 });
