@@ -4,7 +4,7 @@ import Animated, {
   Easing, cancelAnimation, runOnJS, runOnUI, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withSequence, withTiming,
 } from 'react-native-reanimated';
 import MapCoverSky, { MAP_COVER_SKY } from './MapCoverSky';
-import { armMapCover, coverLifted, useCoverPlan, type CoverPlan } from './mapCover';
+import { armMapCover, coverLifted, noteCoverMounted, useCoverPlan, type CoverPlan } from './mapCover';
 import {
   COVER_FADE_MS, COVER_FINISH_MS, COVER_SMOOTH_FRAMES, COVER_SMOOTH_WAIT_MS, LAUNCH_HANDOFF_SHARE,
 } from '../../constants/launchHandoff';
@@ -49,6 +49,8 @@ function CoverSky({ plan, style, blockTouches, launch }: {
   readonly launch: boolean;
 }) {
   const opacity = useSharedValue(1);
+  // While this cover is on screen, the store's JS safety waits for it to report its own fade's end.
+  useLayoutEffect(() => { noteCoverMounted(true); return () => noteCoverMounted(false); }, []);
   const ownFill = useSharedValue(plan.share ?? LAUNCH_HANDOFF_SHARE);
   // The launch cover fills the one launch bar the Splash route and Loading screen were filling.
   const fill = launch ? launchFill : ownFill;

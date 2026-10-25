@@ -40,10 +40,15 @@ export const LAUNCH_BLUE = '#0768B9';
 export const launchFill: SharedValue<number> = makeMutable(0);
 
 /** Move the launch bar forward to `share` (0 to 1) over `ms`. Never moves it back. */
-export function moveLaunchBar(share: number, ms: number) {
+export function moveLaunchBar(share: number, ms: number, creep?: { readonly to: number; readonly ms: number }) {
   const to = Math.max(0, Math.min(1, share));
   if (to <= launchFill.value) return;
-  launchFill.value = withTiming(to, { duration: ms, easing: ms > 600 ? Easing.out(Easing.cubic) : Easing.inOut(Easing.quad) });
+  const step = withTiming(to, { duration: ms, easing: ms > 600 ? Easing.out(Easing.cubic) : Easing.inOut(Easing.quad) });
+  // Then, until the next real step moves it on, the bar keeps creeping (linear, on the UI thread), so
+  // a busy JS thread (the map screen mounting) never leaves it parked.
+  launchFill.value = creep && creep.to > to
+    ? withSequence(step, withTiming(Math.min(1, creep.to), { duration: creep.ms, easing: Easing.linear }))
+    : step;
 }
 
 /** The fun fact under the bar: picked once per launch, so it never swaps between screens. */

@@ -55,17 +55,38 @@ const artWaiting = new Set<string>();
 let safety: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<(value: CoverPlan) => void>();
 
+/** Loading covers on screen right now (each one reports its own fade's end). */
+let coversMounted = 0;
+/** A cover mounted or unmounted (MapLaunchCover's animated part). */
+export function noteCoverMounted(on: boolean) {
+  coversMounted = Math.max(0, coversMounted + (on ? 1 : -1));
+}
+/** With a cover on screen, the safety waits this much longer at most for the cover's own report. */
+export const COVER_SAFETY_GRACE_MS = 3000;
+/** How often the safety looks again while a mounted cover is still fading. */
+const SAFETY_RECHECK_MS = 250;
+
 function publish(next: Omit<CoverPlan, 'version'>, notify = true) {
   plan = { ...next, version: plan.version + 1 };
   // A JS safety net for the React state only (tips and cards waiting on the cover), in case no
-  // cover is mounted to report its fade. The fade itself runs on the UI thread.
+  // cover is mounted to report its fade. The fade itself runs on the UI thread. While a cover is
+  // mounted it is left to finish and report its own fade (up to a grace period): on a busy phone the
+  // UI thread runs late, and lifting the plan early unmounted the cover mid-fade, which flashed the
+  // whole splash back for a frame over a half-lifted map (seen in a release launch).
   if (safety) clearTimeout(safety);
   safety = null;
   if (plan.up) {
     const tok = plan.token;
     const wait = (plan.lifting ? COVER_SMOOTH_WAIT_MS + COVER_FINISH_MS : Math.max(0, plan.deadline - Date.now()) + COVER_FINISH_MS)
       + COVER_FADE_MS + 600;
-    safety = setTimeout(() => coverLifted(tok), wait);
+    const giveUpAt = Date.now() + wait + COVER_SAFETY_GRACE_MS;
+    const check = () => {
+      safety = null;
+      if (tok !== plan.token || !plan.up) return;
+      if (coversMounted > 0 && Date.now() < giveUpAt) { safety = setTimeout(check, SAFETY_RECHECK_MS); return; }
+      coverLifted(tok);
+    };
+    safety = setTimeout(check, wait);
   }
   if (notify) listeners.forEach(listener => listener(plan));
 }

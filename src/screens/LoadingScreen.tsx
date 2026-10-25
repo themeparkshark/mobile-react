@@ -4,7 +4,10 @@ import { useContext, useEffect, useState, useRef } from 'react';
 import { useAsyncEffect, useEffectOnceWhen, useTimeoutWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import LaunchScene, { getLaunchFact, moveLaunchBar, setLaunchFact } from '../components/launch/LaunchScene';
-import { LAUNCH_HANDOFF_SHARE } from '../constants/launchHandoff';
+import { COVER_LAUNCH_MAX_MS, COVER_STEPS, LAUNCH_HANDOFF_SHARE } from '../constants/launchHandoff';
+
+/** While the park check runs, the bar creeps from the sign-in step toward the hand-off over this long. */
+const LOADING_CREEP_MS = 8000;
 import { AuthContext } from '../context/AuthProvider';
 import { LocationStatusContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
@@ -106,7 +109,10 @@ export default function LoadingScreen() {
 
   // The one launch bar (shared with the Splash route and the map's cover) moves with real work.
   useEffect(() => {
-    if (progress > 0) moveLaunchBar((progress / 100) * LAUNCH_HANDOFF_SHARE, 250);
+    // Each step keeps creeping toward the next one (the park check; then, while the map screen
+    // mounts, the cover's first step), so the bar never sits still between real steps.
+    if (progress > 0) moveLaunchBar((progress / 100) * LAUNCH_HANDOFF_SHARE, 250, progress < 100
+      ? { to: 0.9 * LAUNCH_HANDOFF_SHARE, ms: LOADING_CREEP_MS } : { to: COVER_STEPS.armed, ms: COVER_LAUNCH_MAX_MS });
   }, [progress]);
 
   useEffect(() => {

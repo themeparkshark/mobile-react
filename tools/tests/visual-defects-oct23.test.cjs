@@ -455,7 +455,7 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   // One launch scene from the native splash to the map: the Splash route, the Loading screen and the
   // map's first cover all draw it, and all fill the same shared bar (it never restarts or jumps back).
   assert.match(read('src/screens/LoadingScreen.tsx'), /return <LaunchScene active=\{focused\} fact=\{fact\} \/>;/);
-  assert.match(read('src/screens/LoadingScreen.tsx'), /moveLaunchBar\(\(progress \/ 100\) \* LAUNCH_HANDOFF_SHARE, 250\)/);
+  assert.match(read('src/screens/LoadingScreen.tsx'), /moveLaunchBar\(\(progress \/ 100\) \* LAUNCH_HANDOFF_SHARE, 250, progress < 100/);
   assert.match(read('src/screens/SplashScreen.tsx'), /withTiming\(SPLASH_ROUTE_SHARE, \{ duration: SPLASH_CREEP_MS/);
   const scene = read('src/components/launch/LaunchScene.tsx');
   assert.match(scene, /export const launchFill: SharedValue<number> = makeMutable\(0\);/);
@@ -538,7 +538,7 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   assert.match(read('src/screens/LoadingScreen.tsx'), /currencies\.map\(\(c\) => c\.icon_url\)/);
   // The store never times the lift on the JS thread (only a safety net for React state).
   assert.doesNotMatch(store, /react-native-reanimated/);
-  assert.match(store, /safety = setTimeout\(\(\) => coverLifted\(tok\), wait\);/);
+  assert.match(store, /safety = setTimeout\(check, wait\);/);
   // The sky is up on the map screen's first frame, before any map mounts (no bare blue page with buttons).
   assert.match(cover, /useState\(\(\) => \{ if \(armOnMount\) armMapCover\(\); return 0; \}\);\s*const plan = useCoverPlan\(\);/);
   const explore = read('src/screens/ExploreScreen.tsx');
@@ -1205,4 +1205,34 @@ test('launch bar: the map cover has room to creep visibly (handoff well under th
   // Over the longest launch wait (9 s) the bar still moves at least 2 points a second toward the first step.
   assert.ok((k.COVER_STEPS.armed - k.LAUNCH_HANDOFF_SHARE) / (k.COVER_LAUNCH_MAX_MS / 1000) >= 0.0199);
   assert.ok(k.SPLASH_LONG_SHARE < k.LAUNCH_HANDOFF_SHARE, 'the bar only ever moves forward at the hand-off');
+});
+
+test('launch cover: the JS safety never lifts the plan while a mounted cover is still fading (no unmount mid-fade, no splash flash)', async () => {
+  const { store } = loadCoverStore();
+  store.armMapCover(Date.now());
+  const tok = store.beginMapCover(Date.now());
+  store.noteCoverMounted(true);
+  store.mapCoverDrawn(tok);
+  // Lifting now (nothing held, nothing pending): the safety would have fired 1.64 s later.
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  await wait(1900);
+  assert.equal(store.isMapCovered(), true, 'a busy UI thread still fading: the cover stays until it reports');
+  store.noteCoverMounted(false);
+  await wait(400);
+  assert.equal(store.isMapCovered(), false, 'no cover left on screen: the safety lifts the plan');
+  const cover = read('src/components/map/MapLaunchCover.tsx');
+  assert.match(cover, /useLayoutEffect\(\(\) => \{ noteCoverMounted\(true\); return \(\) => noteCoverMounted\(false\); \}, \[\]\);/);
+  const src = read('src/components/map/mapCover.ts');
+  assert.match(src, /if \(coversMounted > 0 && Date\.now\(\) < giveUpAt\) \{ safety = setTimeout\(check, SAFETY_RECHECK_MS\); return; \}/);
+  assert.equal(store.COVER_SAFETY_GRACE_MS, 3000, 'still a safety: never stuck on the cover');
+});
+
+test('launch bar: between real steps it keeps creeping on the UI thread (the park check, the map screen mounting)', () => {
+  const loading = read('src/screens/LoadingScreen.tsx');
+  assert.match(loading, /\? \{ to: 0\.9 \* LAUNCH_HANDOFF_SHARE, ms: LOADING_CREEP_MS \} : \{ to: COVER_STEPS\.armed, ms: COVER_LAUNCH_MAX_MS \}\);/);
+  const scene = read('src/components/launch/LaunchScene.tsx');
+  assert.match(scene, /\? withSequence\(step, withTiming\(Math\.min\(1, creep\.to\), \{ duration: creep\.ms, easing: Easing\.linear \}\)\)/);
+  assert.match(scene, /if \(to <= launchFill\.value\) return;/, 'the bar never moves back');
+  const k = loadTs('src/constants/launchHandoff.ts');
+  assert.ok(k.COVER_STEPS.armed > k.LAUNCH_HANDOFF_SHARE && 0.9 * k.LAUNCH_HANDOFF_SHARE > 0.5 * k.LAUNCH_HANDOFF_SHARE);
 });
