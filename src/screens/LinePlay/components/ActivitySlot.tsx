@@ -190,24 +190,30 @@ function MiniGameSlot({
   const label = title ?? item.title ?? (isStarChart ? 'Rebuild the Star Chart' : GAME_LABELS[item.gameId] ?? item.gameId);
   return (
     <PageScroll fill={CARD_FILL}>
-      <ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE ARCADE'} title={label} navigator={navigator} />
-      <View style={styles.bestRow} accessible
-        accessibilityLabel={bestStars == null ? 'New game this wait' : `Best this wait: ${bestStars} of 3 stars`}>
-        {bestStars == null ? <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View>
-          : [1, 2, 3].map(slot => <GameIcon key={slot} name="star" size={24}
-            mono={slot <= bestStars ? undefined : '#b7cfe2'} />)}
-        <Text style={styles.bestLabel}>{bestStars == null ? 'Not played this wait' : 'Your best this wait'}</Text>
-      </View>
-      <View style={styles.gamePlaceholder}>
-        <Text style={styles.gamePlaceholderText}>
-          {item.preview ?? (isStarChart
-            ? 'Match space symbols to restore your shark’s missing chart. Race solo or let your crew call out the pairs.'
-            : GAME_PREVIEWS[item.gameId] ?? 'Play a quick round while you wait.')}
-        </Text>
-      </View>
-      <GameButton label={completed && item.gameId === 'showdown' ? 'Rematch' : completed ? 'Play again' : 'Play'}
-        icon={completed ? 'retry' : 'play'} disabled={paused} fullWidth onPress={() => onPlayGame(item)}
-        accessibilityLabel={`${completed ? 'Play again' : 'Play'}: ${label}`} />
+      {/* A short window (iPhone SE): Play comes right under the slim banner, so a non-reader sees it first. */}
+      <ActionFirstWhenShort
+        hero={<ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE ARCADE'} title={label} navigator={navigator} />}
+        story={<>
+          <View style={styles.bestRow} accessible
+            accessibilityLabel={bestStars == null ? 'New game this wait' : `Best this wait: ${bestStars} of 3 stars`}>
+            {bestStars == null ? <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View>
+              : [1, 2, 3].map(slot => <GameIcon key={slot} name="star" size={24}
+                mono={slot <= bestStars ? undefined : '#b7cfe2'} />)}
+            <Text style={styles.bestLabel}>{bestStars == null ? 'Not played this wait' : 'Your best this wait'}</Text>
+          </View>
+          <View style={styles.gamePlaceholder}>
+            <Text style={styles.gamePlaceholderText}>
+              {item.preview ?? (isStarChart
+                ? 'Match space symbols to restore your shark’s missing chart. Race solo or let your crew call out the pairs.'
+                : GAME_PREVIEWS[item.gameId] ?? 'Play a quick round while you wait.')}
+            </Text>
+          </View>
+        </>}
+        action={<>
+          <GameButton label={completed && item.gameId === 'showdown' ? 'Rematch' : completed ? 'Play again' : 'Play'}
+            icon={completed ? 'retry' : 'play'} disabled={paused} fullWidth onPress={() => onPlayGame(item)}
+            accessibilityLabel={`${completed ? 'Play again' : 'Play'}: ${label}`} />
+        </>} />
       {item.gameId === 'current' && currentQuestBonusStatus && (
         <Text style={styles.note}>
           {currentQuestBonusStatus === 'verified'
@@ -348,7 +354,7 @@ function TriviaSlot({
  */
 function ActionFirstWhenShort({ hero, story, action }: { hero: ReactNode; story: ReactNode; action: ReactNode }) {
   const short = heroSlim(useContext(PageHeightContext));
-  return <>{hero}{short ? <>{action}{story}</> : <>{story}{action}</>}</>;
+  return <>{hero}{short ? <><View style={styles.actionFirst}>{action}</View>{story}</> : <>{story}{action}</>}</>;
 }
 
 function LoreSlot({
@@ -527,6 +533,7 @@ const styles = StyleSheet.create({
   heroCopy: { flex: 1, zIndex: 1 },
   shark: { width: 110, height: 110, marginRight: -7 },
   heroSlim: { height: 46, marginBottom: spacing.sm },
+  actionFirst: { marginBottom: spacing.md },
   heroTitleSlim: { fontSize: 19, lineHeight: 23, marginTop: 2 },
   sharkSlim: { width: 52, height: 52, marginRight: -2 },
   heroKicker: { color: '#c8efff', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1 },

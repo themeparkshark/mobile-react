@@ -21,6 +21,8 @@ export interface QueueToastMessage {
 }
 
 const HOLD_MS = 3200;
+/** How far a toast tucked inside the wait card travels in and out (its band's top margin is larger). */
+const TUCKED_DROP = 6;
 
 export default function QueueToast({ message, onDone, top, slim = false }: {
   message: QueueToastMessage | null; onDone: () => void;
@@ -55,7 +57,10 @@ export default function QueueToast({ message, onDone, top, slim = false }: {
 
   const toastStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, drop.value * 1.4),
-    transform: reducedMotion ? [] : [{ translateY: (1 - drop.value) * -70 }, { scale: 0.92 + drop.value * 0.08 }],
+    // Inside the wait card (a `top` was given) it drops only a little, so its way in and out never
+    // crosses the card's top row (ride name, ARCADE, pause).
+    transform: reducedMotion ? [] : [{ translateY: (1 - drop.value) * (top != null ? -TUCKED_DROP : -70) },
+      { scale: 0.92 + drop.value * 0.08 }],
   }));
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value}deg` }] }));
 

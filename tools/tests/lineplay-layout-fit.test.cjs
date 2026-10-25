@@ -871,6 +871,9 @@ test('a queue toast lands inside the wait card between its top row and Details, 
   const toast = read('src/screens/LinePlay/components/QueueToast.tsx');
   assert.match(toast, /style=\{\[styles\.wrap, top != null && \{ top \}\]\}/);
   assert.match(toast, /toastSlim: \{ height: 54,/);
+  // Its way in and out never crosses the card's top row: it travels 6 pt inside the card, under the band's margin.
+  assert.match(toast, /translateY: \(1 - drop\.value\) \* \(top != null \? -TUCKED_DROP : -70\)/);
+  assert.match(toast, /const TUCKED_DROP = 6;/);
   assert.equal(m.QUEUE_TOAST_SLIM_H, 54);
 });
 
@@ -903,7 +906,8 @@ test('on a short window (iPhone SE) a page banner is one slim row and the clue p
   const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
   assert.match(slot, /const slim = heroSlim\(useContext\(PageHeightContext\)\);/);
   assert.match(slot, /heroSlim: \{ height: 46, marginBottom: spacing\.sm \}/);
-  assert.match(slot, /return <>\{hero\}\{short \? <>\{action\}\{story\}<\/> : <>\{story\}\{action\}<\/>\}<\/>;/);
+  assert.match(slot, /return <>\{hero\}\{short \? <><View style=\{styles\.actionFirst\}>\{action\}<\/View>\{story\}<\/> : <>\{story\}\{action\}<\/>\}<\/>;/);
+  assert.equal([...slot.matchAll(/<ActionFirstWhenShort\n/g)].length, 2, 'the clue page and the mini-game page (Play first)');
   assert.match(slot, /<ActionFirstWhenShort\n\s+hero=\{<ActivityHero kicker=\{navigator \? 'STARPORT' : 'QUEUE QUEST'\}/);
   assert.match(read('src/screens/LinePlay/components/PageScroll.tsx'), /<PageHeightContext\.Provider value=\{viewHeight\}>\{children\}<\/PageHeightContext\.Provider>/);
 });
