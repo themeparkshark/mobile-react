@@ -20,6 +20,7 @@ import GameRichText from './GameRichText';
 import GameText from './GameText';
 import SharkLoader from './SharkLoader';
 import WalletChange from './WalletChange';
+import { diveNavigate } from '../fx/DiveIris';
 import { useToast } from '../components/Toast';
 import { GENERATED_ICON_NAMES, ORIGINAL_ICON_NAMES, type GameIconName } from './iconNames';
 import { TEXT_PRESET_NAMES } from './TextPresets';
@@ -203,6 +204,11 @@ export default function UiKitGym({ route }: { route?: { params?: { section?: Sec
           <View style={{ marginTop: 6 }}><GameButton label="Toast +25" size="compact" variant="secondary" onPress={() => {
             showToast?.({ type: 'reward', message: '+25 coins for your first ride today', duration: 3200 });
             setWallet(v => v + 25);
+          }} /></View>
+          {/* The game dive into a real LinePlay screen (captures time the water against the first round). */}
+          <View style={{ marginTop: 6 }}><GameButton label="Dive into a ride" size="compact" variant="secondary" onPress={() => {
+            diveNavigate('LinePlay', { ride: { rideId: 635, rideName: 'Space Mountain', rideSlug: '8-space-mountain', parkId: 8,
+              postedWaitMinutes: 35, postedWaitObservedAt: Date.now() } });
           }} /></View>
         </Panel>
         <Panel title="Text presets">

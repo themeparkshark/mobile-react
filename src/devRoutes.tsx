@@ -70,6 +70,8 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
           { name: 'PostWinRewardsPreview', getComponent: () => require('./screens/PostWinRewardsPreviewScreen').default },
           { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
           { name: 'CoinLevelingPreview', getComponent: () => require('./screens/CoinLevelingPreviewScreen').default },
+          // The small-moment gym (wallet roll, dialogs, a game dive), for release-like timing captures.
+          { name: 'UiKitGym', getComponent: () => require('./ui/UiKitGym').default },
         ]
       : [];
 
@@ -82,7 +84,7 @@ export function devInitialRoute(): string | null {
     if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1') return 'BossMapPreview';
     const motion = process.env.EXPO_PUBLIC_MOTION_CAPTURE;
     return motion === 'BoxRevealPreview' || motion === 'PostWinRewardsPreview' || motion === 'SetRevealPreview'
-      || motion === 'CoinLevelingPreview' ? motion : null;
+      || motion === 'CoinLevelingPreview' || motion === 'UiKitGym' ? motion : null;
   }
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
