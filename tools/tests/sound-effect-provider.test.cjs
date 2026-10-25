@@ -129,10 +129,15 @@ test('every way the saved-session load can end sets isReady (none can hold the a
   // No saved token, and a keychain read that fails.
   assert.match(auth, /if \(_token\) \{\s*setToken\(_token\);\s*\} else \{[\s\S]{0,120}?setIsReady\(true\);/);
   assert.match(auth, /\}\)\.catch\(\(\) => \{[\s\S]{0,120}?setIsReady\(true\);/);
-  // The profile load: success, 401 (signed out), a cached profile, and any other error.
-  const load = auth.slice(auth.indexOf('const player = await refreshPlayer();'), auth.indexOf('}, [token]);'));
-  assert.equal((load.match(/setIsReady\(true\)/g) || []).length, 4, 'success, 401, cached profile, and every other error');
-  assert.match(load, /\} catch \(error: any\) \{/, 'every error lands in one catch');
+  // The profile load: success, a slow network on the saved profile, 401 (signed out), a cached
+  // profile after an error, and any other error. loadLaunchProfile never rejects (launch-profile.test.cjs),
+  // so every outcome reaches one of these.
+  const load = auth.slice(auth.indexOf('const launch = await loadLaunchProfile(refreshPlayer, readCachedPlayer);'), auth.indexOf('}, [token]);'));
+  assert.ok(load.length > 0);
+  assert.equal((load.match(/setIsReady\(true\)/g) || []).length, 5, 'fresh, slow saved profile, 401, cached profile, and every other error');
+  const launchProfile = fs.readFileSync(path.join(root, 'src/context/launchProfile.ts'), 'utf8');
+  assert.match(launchProfile, /readCached\(\)\.catch\(\(\) => null\)/, 'a broken saved profile read never rejects');
+  assert.match(launchProfile, /fresh\.then\(\s*\(player\)[\s\S]*?\(error\)/, 'a failed /me is an outcome, never a rejection');
   // The profile request cannot hang forever: the API client times out.
   assert.match(fs.readFileSync(path.join(root, 'src/api/client.ts'), 'utf8'), /timeout: 12000,/);
 });
