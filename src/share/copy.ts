@@ -380,7 +380,7 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
     return {
       ribbon: 'PARK DAY!',
       kicker: 'My Ride Coins',
-      title: 'In One Park Day',
+      title: 'My Park Day',
       big: String(n),
       bigLabel: n === 1 ? 'RIDE COIN' : 'RIDE COINS',
       stat: fresh ? `${fresh} new for my shelf` : 'Ridden and won',

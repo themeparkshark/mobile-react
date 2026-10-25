@@ -62,6 +62,13 @@ test('first-time intro: shown in a real modal and ahead of the first auto-opened
   assert.equal(queue.homeIntroMayPresent({ ...base, findOpen: false }), true);
   // Finn's onboarding still gets its finds: the intro is not eligible during it.
   assert.equal(queue.homeIntroMayPresent({ ...base, findOpen: false, tutorialActive: true }), false);
+  // After a catch this visit the kid is already hunting: the reading cards wait for a later visit.
+  assert.equal(queue.homeIntroMayPresent({ ...base, findOpen: false, caughtThisSession: true, firstFindLineDone: true }), false);
+  assert.equal(queue.homeIntroMayPresent({ ...base, findOpen: false, caughtThisSession: true }), false);
+  // Each card says one short line a 7-year-old can read (10 words or fewer).
+  const bodies = [...intro.matchAll(/body: '([^']+)'/g)].map((m) => m[1]);
+  assert.equal(bodies.length, 3);
+  for (const body of bodies) assert.ok(body.split(/\s+/).length <= 10, body);
 });
 
 test('find modal uses the same plain words as the map and card', () => {

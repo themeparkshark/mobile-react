@@ -59,7 +59,11 @@ test('combo callouts are paced and always match the flame', () => {
 });
 
 test('results: ribbon on the first frame, card rises, visible PERFECT burst, kid words', () => {
-  assert.match(src, /useState\(reducedMotion \? 99 : 1\)/);
+  assert.match(src, /useState\(reducedMotion \|\| firstWin \? 99 : 1\)/);
+  // Finn's warm-up is a first win: no mastery %, crowns or STATS (Oct 23 first session).
+  assert.match(src, /const firstWin = data\.mode === 'warmup' && data\.won;/);
+  // STATS is off for every warm-up (hotfix rule), which covers firstWin.
+  assert.match(src, /canStats = data\.mode !== 'warmup' &&/);
   assert.match(src, /riseSt, frontSt/);
   assert.match(src, /data\.banner === 'PERFECT!' && !reducedMotion \? <CoinBurst fire \/>/);
   assert.match(src, /'MEMORY'\}/);
@@ -111,4 +115,8 @@ test('faces draw from one shared decoded sheet per board, with a preload fallbac
   assert.equal(m.sharedReady({ main: { src: A, img: null }, extra: null }), false);
   assert.equal(m.sharedSheetFor(ready, B).id, 'b');
   assert.equal(m.sharedSheetFor(ready, 9), null);
+});
+
+test('hotfix: the first-session warm-up card has no STATS button for a late tap to open over CLEARED', () => {
+  assert.match(src, /const canStats = data\.mode !== 'warmup' && \(/);
 });

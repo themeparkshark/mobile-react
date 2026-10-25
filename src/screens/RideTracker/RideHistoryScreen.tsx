@@ -15,6 +15,7 @@ import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides
 import { getWishlist, WishlistRide } from '../../api/endpoints/rides/wishlist';
 import RideCard from '../../components/RideTracker/RideCard';
 import ShareableRideCard from '../../components/RideTracker/ShareableRideCard';
+import { GrownUpGateSlot } from '../../components/GrownUpGate';
 import { colors } from '../../design-system';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import { Modal } from 'react-native';
@@ -258,18 +259,21 @@ export default function RideHistoryScreen() {
       {/* Share Modal */}
       <Modal visible={!!shareRide} animationType={reducedMotion ? 'fade' : 'slide'} transparent
         onRequestClose={() => setShareRide(null)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShareRide(null)}>
-          <Pressable style={styles.modalContent} onPress={() => {}}>
+        {/* Not accessible themselves, so VoiceOver reaches Share Ride Card and Close one by one. */}
+        <Pressable style={styles.modalOverlay} onPress={() => setShareRide(null)} accessible={false}>
+          <Pressable style={styles.modalContent} onPress={() => {}} accessible={false}>
             {shareRide && (
               <>
-                <ShareableRideCard ride={shareRide} onShare={() => setShareRide(null)} />
-                <Pressable onPress={() => setShareRide(null)} style={styles.modalClose}>
+                <ShareableRideCard ride={shareRide} />
+                <Pressable onPress={() => setShareRide(null)} style={styles.modalClose} accessibilityRole="button" accessibilityLabel="Close">
                   <Text style={styles.modalCloseText}>Close</Text>
                 </Pressable>
               </>
             )}
           </Pressable>
         </Pressable>
+        {/* The grown-up gate for Share shows above this sheet. */}
+        <GrownUpGateSlot />
       </Modal>
     </RideTrackerFrame>
   );

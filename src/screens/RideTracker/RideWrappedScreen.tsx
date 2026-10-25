@@ -137,12 +137,13 @@ export default function RideWrappedScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const uri = await viewShotRef.current?.capture?.();
       if (uri && await Sharing.isAvailableAsync()) {
-        await shareFileExternal(uri, { mimeType: 'image/png' });
+        // The sheet's file name matches the card: My-Ride-Month or My-Ride-Year.
+        await shareFileExternal(uri, { mimeType: 'image/png' }, period === 'monthly' ? 'My Ride Month' : 'My Ride Year');
       }
     } catch (e) {
       console.error('Share error:', e);
     }
-  }, []);
+  }, [period]);
 
   if (loading) {
     return (

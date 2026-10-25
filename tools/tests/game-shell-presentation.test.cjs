@@ -82,6 +82,9 @@ test('changing motion preference keeps the countdown deadline and settles a resu
   view.change({ result: { score: 400, stars: 1 } });
   assert.equal(view.timers.size, 0);
   assert.equal(view.tree.props.animationType, 'none');
+  // The card's look is set by an effect after the card mounts; on device the animated style
+  // applies it on the UI thread, here one more render reads the shared value.
+  view.render();
   const card = view.find(node => node.type === 'ReanimatedView' && node.props.style?.[0]?.width === '86%' && node.props.style?.[1]?.opacity !== undefined);
   assert.equal(card.props.style[1].opacity, 1);
   assert.deepEqual(Array.from(card.props.style[1].transform, entry => entry.scale), [1]);

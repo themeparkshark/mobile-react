@@ -15,22 +15,25 @@ export interface HomeIntroStep {
   readonly badge?: string;
 }
 
-/** Three quick cards: where finds come from, how to grab one, why sets matter. */
+/**
+ * Three quick cards: where treats come from, how to grab one, why sets matter.
+ * Kid-facing copy says 'treats', the same word Finn uses in minute one (the code still says 'find').
+ */
 export const HOME_INTRO_STEPS: readonly HomeIntroStep[] = [
   {
-    title: 'Finds pop up near you',
-    body: 'Snacks and souvenirs appear on the map around you, even at home. Each one leaves after a while.',
+    title: 'Treats pop up near you',
+    body: 'Snacks and toys show up on the map around you.',
     art: require('../../../assets/images/prep-items/churros/churro_18.png'),
   },
   {
     title: 'Walk close, then tap',
-    body: 'A find close to you hops and glows. Tap it to catch it. Small, faded finds are farther away.',
+    body: 'A close treat hops and glows. Tap it!',
     art: require('../../../assets/images/screens/pin-collections/shark.png'),
     badge: 'TAP!',
   },
   {
     title: 'Fill sets for rewards',
-    body: 'Every find goes into a set, like Snack Stand. Finds and finished sets earn Energy and Tickets for your next park day.',
+    body: 'Each treat fills a set. Sets earn Energy and Tickets.',
     art: require('../../../assets/images/screens/profile/pin_collections.png'),
     badge: 'Snack Stand 3/12',
   },
@@ -127,8 +130,8 @@ const styles = StyleSheet.create({
   badgeText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.white },
   badgeTextGold: { color: BRAND.navy },
   title: { marginTop: 22, fontFamily: 'Shark', fontSize: 24, color: BRAND.navy, textAlign: 'center' },
-  // Three lines tall on every step, so the card and its button do not jump between steps.
-  body: { marginTop: 6, minHeight: 63, fontFamily: 'Knockout', fontSize: 16, lineHeight: 21, color: BRAND.navySoft, textAlign: 'center' },
+  // Two lines tall on every step, so the card and its button do not jump between steps.
+  body: { marginTop: 6, minHeight: 42, fontFamily: 'Knockout', fontSize: 16, lineHeight: 21, color: BRAND.navySoft, textAlign: 'center' },
   dots: { flexDirection: 'row', gap: 6, marginTop: 14, marginBottom: 12 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: BRAND.skyDeep },
   dotOn: { width: 22, backgroundColor: BRAND.blueBright },

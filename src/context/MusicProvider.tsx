@@ -220,9 +220,9 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useAsyncEffect(async () => {
     try {
       if (!player) {
-        // Sign-in is still loading (every launch starts here): no login music yet. A returning player
-        // with music off never hears it, and the launch never wakes the audio hardware while the
-        // splash is up. It starts only once we know nobody is signed in.
+        // Only a player who is really signed out hears the login track. While a saved
+        // session is still loading, wait: a player with Music off never hears it start,
+        // and no sound is created only to be stopped a moment later.
         if (!isReady) return;
         // Guard: if already playing/starting login music, don't double-start
         if (loginMusicRef.current) return;

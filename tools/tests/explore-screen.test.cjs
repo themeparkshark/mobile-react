@@ -70,7 +70,7 @@ test('stacked rides: every island stays mounted in a stable order (MapLibre inse
   assert.equal(app.find(label('Play queue games for')), undefined);
 });
 
-test('first minute: the daily chest waits for the first catch; guests get the invitation over the map', async () => {
+test('first minute: the daily chest waits for the first catch; guests play Finn’s taste over the map', async () => {
   const gift = { dailyGift: { redeemed_at: null } };
   const modules = { '../components/Tutorial': { useTutorial: () => ({ startTutorial: () => undefined,
     hasCompleted: id => id === 'onboarding', isReady: true, isActive: false }) } };
@@ -81,7 +81,7 @@ test('first minute: the daily chest waits for the first catch; guests get the in
   await veteran.settle();
   assert.ok(veteran.find(named('DailyGiftModal')));
   const guest = exploreScreen({ contexts: { auth: { player: null, refreshPlayer: async () => undefined } } });
-  assert.ok(guest.find(named('GuestInvite')));
+  assert.ok(guest.find(named('GuestTaste')));
 });
 
 test('Find this coin selects the ride and lays a guide toward it', async () => {

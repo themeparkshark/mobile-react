@@ -35,10 +35,29 @@ import { SharkMood, SharkPosition } from './types';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { BRAND, GameButton } from '../../ui';
 import { REVEAL_START_MS, revealSchedule, splitWords, visibleParts } from './teacherReveal';
+import TapHint from '../TapHint';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const TEACHER_SHARK_IMAGE = require('../../../assets/images/tutorial/teacher-shark.png');
+const WALK_FEET = require('../../../assets/images/trail/steps.png');
+
+/** Two blue feet that take a few small steps, then stand still (no endless loop). */
+function WalkPicture({ reducedMotion }: { reducedMotion: boolean }) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    if (reducedMotion) return undefined;
+    t.value = withDelay(500, withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(-1, { duration: 260 })), 4, false,
+      () => { t.value = withTiming(0, { duration: 160 }); }));
+    return () => cancelAnimation(t);
+  }, [reducedMotion, t]);
+  const st = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.abs(t.value) * 4 }, { rotate: `${t.value * 8}deg` }] }));
+  return (
+    <Animated.View style={[styles.walkPicture, st]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Image source={WALK_FEET} style={styles.walkFeet} resizeMode="contain" />
+    </Animated.View>
+  );
+}
 
 interface TeacherSharkProps {
   title?: string;
@@ -52,9 +71,23 @@ interface TeacherSharkProps {
   stepIndex: number;
   totalSteps: number;
   onNext: () => void;
+  /** The next tap was taken and its activity is opening: the button pulses. */
+  nextLoading?: boolean;
   onSkip?: () => void;
   /** Keep Finn clear of persistent bottom navigation, or park him above a spotlit card. */
   bottomOffset?: number;
+  /** A pointing hand on the button after a short wait (first-session steps a kid cannot read yet). */
+  pointAtNext?: boolean;
+  /** A small picture under the line: 'walk' shows two stepping feet. */
+  picture?: 'walk';
+  /**
+   * Finn stands beside his bubble instead of under it (bottom-center only).
+   * For steps where a find is waiting at the middle of the map: the bubble
+   * stays low, so the find and its pointing hand stay in view above it.
+   */
+  beside?: boolean;
+  /** Another existing Finn picture (for example the boater barker right after his warm-up). */
+  sharkSource?: number;
 }
 
 export default function TeacherShark({
@@ -69,13 +102,19 @@ export default function TeacherShark({
   stepIndex,
   totalSteps,
   onNext,
+  nextLoading = false,
   onSkip,
   bottomOffset = 20,
+  pointAtNext = false,
+  picture,
+  beside = false,
+  sharkSource,
 }: TeacherSharkProps) {
   const reducedMotion = useUiReducedMotion();
   const bobValue = useSharedValue(0);
   const tiltValue = useSharedValue(0);
   const greetingValue = useSharedValue(0);
+  const scanValue = useSharedValue(0);
   const enterValue = useSharedValue(reducedMotion ? 1 : 0);
   const bubbleValue = useSharedValue(reducedMotion ? 1 : 0);
 
@@ -93,9 +132,15 @@ export default function TeacherShark({
       ), -1, false);
       if (mood === 'celebrating' || mood === 'waving') greetingValue.value = withDelay(REVEAL_START_MS, withSequence(
         withTiming(1, { duration: 180 }), withTiming(0, { duration: 220 })));
+      // Thinking: Finn sniffs left and right a few times (looking for a treat), then holds still.
+      if (mood === 'thinking') scanValue.value = withDelay(300, withRepeat(withSequence(
+        withTiming(1, { duration: 380, easing: Easing.inOut(Easing.sin) }),
+        withTiming(-1, { duration: 380, easing: Easing.inOut(Easing.sin) })), 5, false,
+        () => { scanValue.value = withTiming(0, { duration: 200 }); }));
+      else scanValue.value = withTiming(0, { duration: 160 });
     }
-    return () => [bobValue, tiltValue, greetingValue].forEach(value => cancelAnimation(value));
-  }, [reducedMotion, mood, bobValue, tiltValue, greetingValue]);
+    return () => [bobValue, tiltValue, greetingValue, scanValue].forEach(value => cancelAnimation(value));
+  }, [reducedMotion, mood, bobValue, tiltValue, greetingValue, scanValue]);
 
   // Entrance on mount: Finn rises past his mark and settles, then the bubble pops.
   useEffect(() => {
@@ -151,7 +196,8 @@ export default function TeacherShark({
 
   const sharkAnimStyle = useAnimatedStyle(() => ({ transform: [
     { translateY: interpolate(enterValue.value, [0, 1], [110, 0]) + (reducedMotion ? 0 : bobValue.value * -3) },
-    { rotate: `${reducedMotion ? 0 : tiltValue.value}deg` },
+    { translateX: reducedMotion ? 0 : scanValue.value * 6 },
+    { rotate: `${reducedMotion ? 0 : tiltValue.value + scanValue.value * 7}deg` },
     { scale: reducedMotion ? 1 : 1 + greetingValue.value * 0.025 },
   ] }));
   const bubbleStyle = useAnimatedStyle(() => ({
@@ -170,7 +216,10 @@ export default function TeacherShark({
       case 'bottom-right':
         return { bottom: bottomOffset, right: 16 };
       case 'bottom-center':
-        return { bottom: bottomOffset, left: 0, right: 0, alignItems: 'center' as const };
+        // Beside: Finn on the left, his bubble to his right, both low on the screen.
+        if (beside) return { bottom: bottomOffset - 8, left: 8, right: 10, flexDirection: 'row-reverse' as const, alignItems: 'flex-end' as const };
+        // 16 on both sides: with maxWidth = screen - 32 the bubble sits truly centred.
+        return { bottom: bottomOffset, left: 16, right: 16, alignItems: 'center' as const };
       case 'top-left':
         return { top: 100, left: 16 };
       case 'top-right':
@@ -188,7 +237,7 @@ export default function TeacherShark({
     >
       {/* Speech bubble: tap to finish Finn's line. */}
       {/* The pop animates this wrapper only; the card inside keeps its own background and shadow layers. */}
-      <Animated.View style={[styles.bubbleWrap, bubbleStyle]}>
+      <Animated.View style={[styles.bubbleWrap, beside && styles.bubbleWrapBeside, bubbleStyle]}>
       <View style={styles.speechBubble}>
         <Pressable
           onPress={finishLine}
@@ -214,38 +263,40 @@ export default function TeacherShark({
 
           {title && <Text style={styles.title}>{title}</Text>}
 
-          {/* Main text, word by word; hidden words keep their space. */}
-          <Text style={styles.mainText}>
+          {/* Main text, word by word; hidden words keep their space. A title-only bubble has none. */}
+          {text ? <Text style={styles.mainText}>
             {parts.map((part, i) => (
               <Text key={i} style={i < shown ? undefined : styles.hiddenWord}>{part}</Text>
             ))}
-          </Text>
+          </Text> : null}
 
           {subtitle && (
             <Text style={[styles.subtitleText, talking && styles.hiddenWord]}>{subtitle}</Text>
           )}
+          {picture === 'walk' && <WalkPicture reducedMotion={reducedMotion} />}
         </Pressable>
 
         {/* Buttons */}
         <View style={styles.buttonRow}>
           {showNext && (
-            <GameButton label={nextText} onPress={onNext} accessibilityHint="Continues the guide" />
+            <GameButton label={nextText} onPress={onNext} loading={nextLoading} accessibilityHint="Continues the guide" />
           )}
+          {showNext && pointAtNext && <TapHint delay={2200} style={styles.nextHand} />}
           {showSkip && onSkip && (
             <GameButton variant="ghost" label="Skip" onPress={onSkip} accessibilityLabel="Skip this guide" />
           )}
         </View>
 
-        {/* Speech bubble tail */}
-        <View style={styles.bubbleTailBorder} />
-        <View style={styles.bubbleTail} />
+        {/* Speech bubble tail: down to Finn, or left to Finn when he stands beside it. */}
+        <View style={beside ? styles.sideTailBorder : styles.bubbleTailBorder} />
+        <View style={beside ? styles.sideTail : styles.bubbleTail} />
       </View>
       </Animated.View>
 
       {/* Shark Character: Teacher Finn */}
-      <Animated.View style={[styles.sharkContainer, sharkAnimStyle]}>
+      <Animated.View style={[styles.sharkContainer, beside && styles.sharkContainerBeside, sharkAnimStyle]}>
         <Image
-          source={TEACHER_SHARK_IMAGE}
+          source={sharkSource ?? TEACHER_SHARK_IMAGE}
           style={styles.sharkImage}
           resizeMode="contain"
         />
@@ -255,6 +306,8 @@ export default function TeacherShark({
 }
 
 const styles = StyleSheet.create({
+  walkPicture: { alignSelf: 'center', marginTop: 6 },
+  walkFeet: { width: 54, height: 54 },
   title: { fontFamily: 'Shark', fontSize: 23, lineHeight: 28, textAlign: 'center', color: BRAND.navy, marginBottom: 8 },
   container: {
     position: 'absolute',
@@ -264,6 +317,18 @@ const styles = StyleSheet.create({
   bubbleWrap: {
     marginBottom: 12,
     marginHorizontal: 16,
+  },
+  bubbleWrapBeside: { flex: 1, marginHorizontal: 0, marginLeft: 6, marginBottom: 18 },
+  sharkContainerBeside: { alignSelf: 'flex-end', width: 96, height: 120 },
+  sideTailBorder: {
+    position: 'absolute', left: -17, bottom: 26, width: 0, height: 0,
+    borderTopWidth: 13, borderBottomWidth: 13, borderRightWidth: 15,
+    borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRightColor: BRAND.blueBright,
+  },
+  sideTail: {
+    position: 'absolute', left: -11, bottom: 29, width: 0, height: 0,
+    borderTopWidth: 10, borderBottomWidth: 10, borderRightWidth: 12,
+    borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRightColor: BRAND.white,
   },
   speechBubble: {
     backgroundColor: BRAND.white,
@@ -318,6 +383,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 6,
   },
+  // The fingertip lands on the right half of the button, clear of its label.
+  nextHand: { right: '14%', top: -26 },
   buttonRow: {
     alignItems: 'center',
     marginTop: 12,

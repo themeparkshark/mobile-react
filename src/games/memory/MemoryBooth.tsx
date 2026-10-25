@@ -439,7 +439,10 @@ function SignLetter({ ch, x, w, y, size, delay, reducedMotion }: { ch: string; x
       drop.value = withDelay(delay, withTiming(1, { duration: 140, easing: Easing.in(Easing.quad) }));
       sq.value = withDelay(delay + 140, withSequence(withTiming(1.12, { duration: 50 }), withTiming(1, { duration: 80 })));
     }
-    out.value = withDelay(delay + 1100, withTiming(1, { duration: 180 }));
+    // Reduce Motion: Reanimated finishes a timing at once when the system asks
+    // for less motion, so a delayed fade-out would hide the sign on its first
+    // frame. The sign just stays still until SignLetters unmounts it (onDone).
+    if (!reducedMotion) out.value = withDelay(delay + 1100, withTiming(1, { duration: 180 }));
   }, [delay, reducedMotion, drop, sq, out]);
   const st = useAnimatedStyle(() => ({
     opacity: Math.min(1, drop.value * 3) * (1 - out.value),

@@ -974,7 +974,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         <View style={styles.fill} onLayout={onFieldLayout}>
           {L ? (
             <GestureDetector gesture={runtime.gesture}>
-              <Animated.View style={[StyleSheet.absoluteFill, camera.style]}>
+              {/* The board only takes taps while a Burst is live: after the buzzer a kid's
+                  late taps fall through to nothing, so the results card arrives cleanly. */}
+              <Animated.View style={[StyleSheet.absoluteFill, camera.style]} pointerEvents={phase === 'play' ? 'auto' : 'none'}>
                 <WhackBoard L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} images={images} hud={hud} theme={theme}
                   bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} hudOutside />
               </Animated.View>

@@ -39,6 +39,9 @@ export function ArtReadinessProvider({ children, onReadyChange }: {
   return <ReadinessContext.Provider value={value}>{children}</ReadinessContext.Provider>;
 }
 
+/** Remote art that has not drawn by now shows its bundled fallback instead. */
+export const FLEX_ART_FALLBACK_MS = 4000;
+
 export function artSource(art: FlexArt): number | { uri: string } {
   return typeof art === 'number' ? art : { uri: art };
 }
@@ -58,7 +61,7 @@ export function FlexArtwork({ art, fallback, style, contentFit = 'contain', id }
   useEffect(() => { readiness?.register(key); }, [key, readiness]);
   useEffect(() => {
     if (late || loaded) return;
-    const timer = setTimeout(() => setLate(true), 4000);
+    const timer = setTimeout(() => setLate(true), FLEX_ART_FALLBACK_MS);
     return () => clearTimeout(timer);
   }, [late, loaded]);
   const done = () => readiness?.ready(key);

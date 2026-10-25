@@ -62,24 +62,22 @@ export default function LoadingScreen() {
     require('../services/push').openColdStartPush();
   };
 
-  // Brought back on top after it already opened the map (a late "go to Loading" from the launch,
-  // or an account link): go on to the map again, never sit on the launch scene with a full bar.
-  const leftAfterNavigating = useRef(false);
-  useEffect(() => {
-    if (!focused) {
-      if (hasNavigated.current) leftAfterNavigating.current = true;
-      return;
-    }
-    if (!leftAfterNavigating.current) return;
-    leftAfterNavigating.current = false;
-    hasNavigated.current = false;
-    if (isReady && hasUsername) safeNavigate();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focused]);
-
   useEffectOnceWhen(() => {
     RootNavigation.navigate('Welcome');
   }, Boolean(isReady && !hasUsername));
+
+  // This screen stays mounted under the map. If anything brings it back to the top after it
+  // already sent the player on (a sign-in again, a late navigate), it sends them on again
+  // instead of sitting on a full bar forever.
+  const wasFocused = useRef(focused);
+  useEffect(() => {
+    const refocused = focused && !wasFocused.current;
+    wasFocused.current = focused;
+    if (!refocused || !hasNavigated.current || !isReady || !hasUsername) return;
+    hasNavigated.current = false;
+    void safeNavigate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused]);
 
   // Real progress: signed in (50), park check done (100). The bar moves with
   // actual work, and a short floor keeps the art on screen long enough to land.

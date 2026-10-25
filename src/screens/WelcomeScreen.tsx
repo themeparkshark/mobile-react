@@ -21,7 +21,7 @@ import { BRAND, GameButton, GameIcon, textPreset } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 
 // Theme-park-flavored names, all letters/numbers and never over 12 characters.
-const FIRST = ['Churro', 'Fin', 'Coaster', 'Splash', 'Chomp', 'Dole', 'Turkey', 'Castle', 'Rocket', 'Pirate',
+const FIRST = ['Churro', 'Fin', 'Coaster', 'Splash', 'Chomp', 'Snack', 'Turkey', 'Castle', 'Rocket', 'Pirate',
   'Popcorn', 'Loop', 'Drop', 'Wave', 'Tiki', 'Parade'];
 const SECOND = ['Fan', 'Fin', 'Rider', 'Chomp', 'King', 'Boss', 'Shark', 'Queen', 'Hero', 'Pal', 'Buddy', 'Legend'];
 
@@ -48,7 +48,8 @@ function check(name: string): Check {
 }
 
 export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any>) {
-  const [username, setUsername] = useState('');
+  // A kid-safe name is ready from the start, so a 7-year-old can just tap the button (or roll, or type).
+  const [username, setUsername] = useState(rollName);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -159,6 +160,7 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
                       ref={inputRef}
                       style={styles.input}
                       value={username}
+                      selectTextOnFocus
                       onChangeText={t => { setServerError(null); setUsername(t.replace(/\s/g, '')); }}
                       placeholder="SharkName"
                       placeholderTextColor="#9bb4cf"

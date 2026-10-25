@@ -14,6 +14,7 @@ import { getCommunityStats, CommunityStats } from '../../api/endpoints/rides/com
 import { toggleWishlist, getWishlist } from '../../api/endpoints/rides/wishlist';
 import SharkRating from '../../components/RideTracker/SharkRating';
 import ShareableRideCard from '../../components/RideTracker/ShareableRideCard';
+import { GrownUpGateSlot } from '../../components/GrownUpGate';
 import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
 import { Modal } from 'react-native';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
@@ -440,17 +441,20 @@ export default function RideDetailScreen() {
       />
 
       {/* Share Modal */}
-      <Modal visible={!!shareEntry} animationType="slide" transparent>
-        <Pressable style={s.modalOverlay} onPress={() => setShareEntry(null)}>
-          <Pressable style={s.modalContent} onPress={() => {}}>
+      <Modal visible={!!shareEntry} animationType="slide" transparent onRequestClose={() => setShareEntry(null)}>
+        {/* Not accessible themselves, so VoiceOver reaches Share Ride Card and Close one by one. */}
+        <Pressable style={s.modalOverlay} onPress={() => setShareEntry(null)} accessible={false}>
+          <Pressable style={s.modalContent} onPress={() => {}} accessible={false}>
             {shareEntry && (
               <>
-                <ShareableRideCard ride={shareEntry} rideCount={totalRides} onShare={() => setShareEntry(null)} />
+                <ShareableRideCard ride={shareEntry} rideCount={totalRides} />
                 <GameButton label="Close" variant="secondary" onPress={() => setShareEntry(null)} style={s.modalClose} />
               </>
             )}
           </Pressable>
         </Pressable>
+        {/* The grown-up gate for Share shows above this sheet. */}
+        <GrownUpGateSlot />
       </Modal>
 
     </RideTrackerFrame>

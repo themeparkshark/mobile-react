@@ -557,7 +557,7 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   // Tips, tutorials, the home intro and the adventure slam wait for the cover to lift.
   assert.match(explore, /const parkTipReady = !mapCovered && mapCalm && mapTipReady\(\{/);
   assert.match(explore, /if \(!mapOnScreen \|\| !mapCalm \|\| !player/);
-  assert.match(explore, /if \(mapOnScreen && player/);
+  assert.match(explore, /if \(!\(mapOnScreen && player && isReady/);
   assert.match(explore, /introAllowed=\{mapOnScreen && homeIntroAllowed\}/);
   assert.match(explore, /slam=\{mapCovered \? undefined : adventureMoment\.slam\}/);
   // One cover through the home-to-park swap at launch.
@@ -860,7 +860,8 @@ test('launch never strands a kid on the launch scene: Splash moves on only while
   const splash = read('src/screens/SplashScreen.tsx');
   assert.match(splash, /\}, Boolean\(isReady && crumbsLoaded && focused\)\);/);
   const loading = read('src/screens/LoadingScreen.tsx');
-  assert.match(loading, /if \(!leftAfterNavigating\.current\) return;\s*leftAfterNavigating\.current = false;\s*hasNavigated\.current = false;\s*if \(isReady && hasUsername\) safeNavigate\(\);/);
+  assert.match(loading, /if \(!refocused \|\| !hasNavigated\.current \|\| !isReady \|\| !hasUsername\) return;\s*hasNavigated\.current = false;\s*void safeNavigate\(\);/);
+  assert.doesNotMatch(loading, /leftAfterNavigating/, 'one refocus path only');
 });
 
 // Wave 3 round 4.
