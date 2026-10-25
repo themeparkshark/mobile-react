@@ -351,8 +351,11 @@ export default function DefendMiniGameModal({
     transform: [{ scale: countdownScale.value }],
   }));
 
+  // Flat burst behind the shield: a solid ring that breathes a little in
+  // scale (UI thread). glowIntensity runs 0.3 to 0.6.
   const glowAnimStyle = useAnimatedStyle(() => ({
-    opacity: glowIntensity.value,
+    opacity: 0.55 + glowIntensity.value * 0.75,
+    transform: [{ scale: 0.93 + (glowIntensity.value - 0.3) * 0.3 }],
   }));
 
   // Simple tier based on taps (just for fun labels)
@@ -454,7 +457,9 @@ export default function DefendMiniGameModal({
                 onPress={handleTap}
               >
                 {/* Glow behind shield */}
-                <Animated.View style={[styles.shieldGlow, glowAnimStyle]} />
+                <Animated.View style={[styles.shieldGlow, glowAnimStyle]}>
+                  <View style={styles.shieldGlowInner} />
+                </Animated.View>
                 
                 {/* The Shield */}
                 <Animated.View style={[styles.shieldContainer, shieldAnimatedStyle]}>
@@ -497,13 +502,14 @@ export default function DefendMiniGameModal({
           {gameState === 'finished' && result && (
             <Animated.View entering={ZoomIn.duration(400)} style={styles.finishedContent}>
               <View style={styles.lightCard}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name="trophy" size={34} /><Text style={styles.resultTitle}>DEFENDED!</Text></View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name={totalPoints < 50 ? 'trophyBronze' : 'trophy'} size={34} /><Text style={styles.resultTitle}>{totalPoints < 50 ? 'GOOD TRY!' : 'DEFENDED!'}</Text></View>
               <Image
                 source={require('../../../assets/images/shield.png')}
                 style={styles.resultShield}
                 contentFit="contain"
               />
-              <Text style={styles.resultTier}>{totalPoints < 50 ? 'GOOD TRY!' : getTierName(totalPoints)}</Text>
+              {/* One message per score: a low score already says GOOD TRY! up top. */}
+              {totalPoints >= 50 && <Text style={styles.resultTier}>{getTierName(totalPoints)}</Text>}
               <Text style={styles.resultTaps}>{taps} taps</Text>
               {multiplier > 1 && (
                 <Text style={styles.resultBonus}>x{multiplier} bonus in the final 7s!</Text>
@@ -682,16 +688,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // Alex-style flat burst: gold ring with a hard navy outline around a cream
+  // disc. No soft shadow (cheaper to draw, and no glow-filter look).
   shieldGlow: {
     position: 'absolute',
-    width: SHIELD + 60,
-    height: SHIELD + 60,
-    borderRadius: (SHIELD + 60) / 2,
-    backgroundColor: '#FFD700',
-    shadowColor: '#FF6B00',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 60,
+    width: SHIELD + 50,
+    height: SHIELD + 50,
+    borderRadius: (SHIELD + 50) / 2,
+    backgroundColor: '#FFD54A',
+    borderWidth: 4,
+    borderColor: '#0B2A5B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shieldGlowInner: {
+    width: SHIELD + 10,
+    height: SHIELD + 10,
+    borderRadius: (SHIELD + 10) / 2,
+    backgroundColor: '#FFF6DC',
   },
   shieldContainer: {
     width: SHIELD,
@@ -771,10 +785,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     zIndex: 50,
-    shadowColor: '#FF0000',
-    shadowOffset: { width: 0, height: 0 },
+    borderWidth: 3,
+    borderColor: '#0B2A5B',
+    shadowColor: '#0B2A5B',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
-    shadowRadius: 20,
+    shadowRadius: 0,
   },
   multiplierBannerText: {
     fontSize: 28,

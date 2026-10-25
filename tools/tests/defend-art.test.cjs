@@ -52,9 +52,42 @@ test('the Defend countdown ends on GO!, never a 0', () => {
 test('Gym towers and the Defend layout fit a short screen', () => {
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
   assert.match(gym, /const maxWinner = \(SCREEN_H \* 0\.58 - 190\) \/ aspectRatio;/);
-  assert.match(gym, /Math\.min\(SCREEN_W \* 0\.32, winnerSize \* 0\.75\)/);
+  assert.match(gym, /Math\.min\(SCREEN_W \* 0\.32, winnerSize \* sideRatio\)/);
   const defend = read('src/components/GymBattle/DefendMiniGameModal.tsx');
   assert.match(defend, /const SHORT = SCREEN_H < 700;/);
   assert.match(defend, /bottom: SHORT \? 64 : 120,/);
   assert.match(defend, /top: SHORT \? 168 : 220,/);
+});
+
+// Dustin asked to drop the glow-filter look. The Gym winner cue and the
+// Defend shield burst are flat shapes with a hard navy outline, no blur.
+function styleBlock(src, name) {
+  const at = src.indexOf(`  ${name}: {`);
+  assert.ok(at > 0, name);
+  return src.slice(at, src.indexOf('\n  },', at));
+}
+
+test('Gym has no soft glow anywhere', () => {
+  const src = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  for (const m of src.matchAll(/shadowRadius: (\d+(?:\.\d+)?)/g)) assert.equal(Number(m[1]), 0, 'every Gym shadow is a hard drop');
+  for (const m of src.matchAll(/textShadowRadius: (\d+(?:\.\d+)?)/g)) assert.equal(Number(m[1]), 0, 'every Gym text shadow is hard');
+  const glow = styleBlock(src, 'pillarGlow');
+  assert.match(glow, /borderColor: '#0B2A5B'/);
+  assert.match(glow, /shadowOpacity: 0/);
+});
+
+test('Gym score badges carry the team crest so non-readers can tell towers apart', () => {
+  const src = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  assert.match(src, /<Image source=\{TEAMS\[team\]\.badge\} style=\{styles\.scoreCrest\}/);
+  assert.match(src, /const sideRatio = SCREEN_H < 750 \? 0\.9 : 0\.75;/);
+});
+
+test('Defend shield burst is flat and the result has one message', () => {
+  const src = read('src/components/GymBattle/DefendMiniGameModal.tsx');
+  const glow = styleBlock(src, 'shieldGlow');
+  assert.doesNotMatch(glow, /shadowRadius/);
+  assert.match(glow, /borderColor: '#0B2A5B'/);
+  assert.doesNotMatch(styleBlock(src, 'multiplierBanner'), /shadowRadius: [1-9]/);
+  assert.match(src, /\{totalPoints < 50 \? 'GOOD TRY!' : 'DEFENDED!'\}/);
+  assert.match(src, /\{totalPoints >= 50 && <Text style=\{styles\.resultTier\}>/);
 });

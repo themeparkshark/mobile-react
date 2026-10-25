@@ -156,7 +156,10 @@ const AnimatedPillar = ({
     // tower bases (58% down), keeping the winner-to-side size ratio.
     const maxWinner = (SCREEN_H * 0.58 - 190) / aspectRatio;
     const winnerSize = Math.min(SCREEN_W * 0.45, maxWinner);
-    const baseSize = isWinner ? winnerSize : Math.min(SCREEN_W * 0.32, winnerSize * 0.75);
+    // Short screens: side towers stay close to the winner's size so their
+    // crests still read (they sit lower, so they never reach the header).
+    const sideRatio = SCREEN_H < 750 ? 0.9 : 0.75;
+    const baseSize = isWinner ? winnerSize : Math.min(SCREEN_W * 0.32, winnerSize * sideRatio);
     
     switch (position) {
       case 'left':
@@ -265,6 +268,9 @@ const AnimatedPillar = ({
 
         {/* Score badge */}
         <View style={[styles.scoreBadge, { backgroundColor: teamColor }]}>
+          {/* The team crest rides on the score, so a non-reader can tell the
+              three towers apart on any phone size. */}
+          <Image source={TEAMS[team].badge} style={styles.scoreCrest} contentFit="contain" />
           <Text style={styles.scoreText}>{(score ?? 0).toLocaleString()}</Text>
         </View>
       </Animated.View>
@@ -1104,16 +1110,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
   },
+  // Winner cue in Alex's flat style: a hard team-colour disc under the
+  // tower base with a navy outline. No soft glow (Dustin asked to drop the
+  // glow-filter look). The render passes shadowColor; shadowOpacity 0 keeps
+  // it from drawing anything soft.
   pillarGlow: {
     position: 'absolute',
-    top: '10%',
-    left: '10%',
-    right: '10%',
-    bottom: '10%',
-    borderRadius: 100,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 50,
+    bottom: '-3%',
+    left: '14%',
+    right: '14%',
+    height: '9%',
+    borderRadius: 999,
+    borderWidth: 3,
+    borderColor: '#0B2A5B',
+    shadowOpacity: 0,
+    shadowRadius: 0,
   },
   pillarImage: {
     width: '100%',
@@ -1122,45 +1133,50 @@ const styles = StyleSheet.create({
   winnerCrown: {
     position: 'absolute',
     top: -30,
-    fontSize: 40,
-    textShadowColor: '#FFD700',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 15,
   },
   scoreBadge: {
     position: 'absolute',
     top: -25,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingLeft: 4,
+    paddingRight: 12,
+    paddingVertical: 3,
     borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
+    borderWidth: 2.5,
+    borderColor: '#0B2A5B',
+    // Flat navy drop, no blur (Alex style).
+    shadowColor: '#0B2A5B',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  scoreCrest: {
+    width: 26,
+    height: 26,
   },
   scoreText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '900',
     fontFamily: 'Shark',
+    textShadowColor: '#0B2A5B',
+    textShadowOffset: { width: 1, height: 1.5 },
+    textShadowRadius: 0,
   },
   particle: {
     position: 'absolute',
     width: 8,
     height: 8,
     borderRadius: 4,
-    shadowColor: '#fff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#0B2A5B',
   },
   sparkle: {
     position: 'absolute',
     fontSize: 20,
     color: '#FFD700',
-    textShadowColor: '#FFD700',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
   },
   bottomGradient: {
     position: 'absolute',
@@ -1281,9 +1297,9 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#FBBF24',
     fontFamily: 'Shark',
-    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowColor: '#0B2A5B',
     textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+    textShadowRadius: 0,
     marginBottom: 12,
   },
   statsRow: {
@@ -1335,9 +1351,9 @@ const styles = StyleSheet.create({
     color: '#FBBF24',
     fontSize: 24,
     fontWeight: '800',
-    textShadowColor: '#FBBF24',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 20,
+    textShadowColor: '#0B2A5B',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 0,
   },
   goBackBtn: {
     marginTop: 24,
