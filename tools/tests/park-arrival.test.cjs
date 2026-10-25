@@ -234,14 +234,14 @@ test('round 6: no still hold, the cards are home by about 2.45 s and the veil li
 
 test('wave 5 round 2: a cold first arrival builds in small frames, hands off on the UI thread and unmounts in two steps', () => {
   const src = read('src/components/park/ParkArrivalMoment.tsx');
-  assert.match(src, /const MOUNT_STEPS = 3;/);
-  for (const step of [1, 2, 3]) assert.match(src, new RegExp(`\\{step >= ${step} &&`), `layers mount at step ${step}`);
-  assert.match(src, /requestAnimationFrame\(\(\) => setStep\(n => n \+ 1\)\)/, 'one step per frame');
+  assert.match(src, /const MOUNT_STEPS = 8;/);
+  for (const step of [1, 2, 3, 4, 5, 6, 7]) assert.match(src, new RegExp(`\\{step >= ${step} &&`), `layers mount at step ${step}`);
+  assert.match(src, /setTimeout\(\(\) => \{ raf = requestAnimationFrame\(\(\) => setStep\(n => n \+ 1\)\); \}, STEP_GAP_MS\)/, 'one step per UI frame');
   // The flight home is scheduled with the rest of the beat sheet (no JS hop at the handoff); a tap reschedules it.
   assert.match(src, /scheduleLeave\(A\.handoffAt\);\n  \};/);
   assert.match(src, /if \(fromTap\) \{\n      cancelAnimation\(clock\);\n      scheduleLeave\(0\);/);
   assert.match(src, /setFxOn\(false\);\n    requestAnimationFrame\(\(\) => doneRef\.current\(\)\);/, 'the canvas leaves a frame before the stage');
-  assert.match(src, /step >= 3 && fxOn && !reduced/);
+  assert.match(src, /step >= 6 && fxOn && !reduced/);
   const art = read('src/components/park/arrivalArt.ts');
   assert.match(art, /ARRIVAL_ICONS\.map\(name => ICON_SOURCES\[name\]\)/, 'the card and pill icons are decoded with the art');
 });

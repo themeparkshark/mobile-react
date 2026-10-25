@@ -313,9 +313,12 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
 
   // One mount step per frame (see MOUNT_STEPS); the last one lets the moment start.
   useEffect(() => {
+    perfMark(`arrival.step${step}`);
     if (step >= MOUNT_STEPS) { mountedAll.current = true; tryStart(); return undefined; }
-    const raf = requestAnimationFrame(() => setStep(n => n + 1));
-    return () => cancelAnimationFrame(raf);
+    // A gap long enough for the UI thread to finish drawing the last step (one rAF let two steps land in one long frame).
+    let raf = 0;
+    const timer = setTimeout(() => { raf = requestAnimationFrame(() => setStep(n => n + 1)); }, STEP_GAP_MS);
+    return () => { clearTimeout(timer); cancelAnimationFrame(raf); };
     // tryStart reads refs only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
@@ -410,11 +413,11 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
       </Pressable>
       <Animated.View pointerEvents="none" style={[styles.stage, { top: ribbonCenterY - 150, height: 300 }, stageStyle]}>
         {/* Reduce Motion: a soft static glow only (rays pasted behind a faded stage looked stuck on). */}
-        {step >= 1 && !reduced && <GoldBurst size={Math.min(width * 1.85, 760)} amount={gold} bloom={bloom} reduced={reduced} style={styles.absCenter} />}
-        {step >= 1 && <CoreBloom gold={gold} bloom={bloom} width={ribbonWidth} />}
-        {step >= 1 && <RadialFlash flash={flash} size={300} />}
+        {step >= 2 && !reduced && <GoldBurst size={Math.min(width * 1.85, 760)} amount={gold} bloom={bloom} reduced={reduced} style={styles.absCenter} />}
+        {step >= 3 && <CoreBloom gold={gold} bloom={bloom} width={ribbonWidth} />}
+        {step >= 3 && <RadialFlash flash={flash} size={300} />}
         {/* Finn peeks over the ribbon's right end (drawn behind it, so the ribbon holds him up). */}
-        {step >= 1 && <Animated.View style={[styles.finn, { right: Math.max(2, (width - ribbonWidth) / 2 - 6) }, finnStyle]}>
+        {step >= 3 && <Animated.View style={[styles.finn, { right: Math.max(2, (width - ribbonWidth) / 2 - 6) }, finnStyle]}>
           <Image source={FINN_ART[pose % FINN_ART.length]} style={{ width: 100, height: 125 }} contentFit="contain" transition={0} />
           {golden && <View style={styles.finnCrown}><GameIcon name="crown" size={40} /></View>}
         </Animated.View>}
@@ -429,18 +432,18 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
           <Image source={ARRIVAL_ART.ribbon} style={StyleSheet.absoluteFill} contentFit="contain" transition={0}
             onLoad={() => { artReady.current = true; tryStart(); }} onError={() => { artReady.current = true; tryStart(); }} />
           {golden && !reduced && <RibbonShine progress={ribbonShine} width={ribbonWidth} />}
-          <View style={styles.titleRow}>
+          {step >= 1 && <View style={styles.titleRow}>
             {title.split('').map((char, i) => (
               <StampLetter key={`${i}-${char}`} char={char} size={titleSize} at={delays[i] ?? 0} clock={clock} reduced={reduced} />
             ))}
-          </View>
+          </View>}
         </Animated.View>
       </Animated.View>
-      {step >= 3 && fxOn && !reduced && !(__DEV__ && (globalThis as { __tpsNoFxCanvas?: boolean }).__tpsNoFxCanvas) && <ArrivalFxCanvas width={width} height={height} top={fxTop} rain={rain} rain2={rain2}
+      {step >= 6 && fxOn && !reduced && !(__DEV__ && (globalThis as { __tpsNoFxCanvas?: boolean }).__tpsNoFxCanvas) && <ArrivalFxCanvas width={width} height={height} top={fxTop} rain={rain} rain2={rain2}
         pieces={pieces} pieces2={pieces2} burst={burst} sparkles={sparkles}
         burstAt={{ x: width / 2, y: ribbonCenterY }} burstRadius={190}
         fly={fly} targets={targets} froms={froms} stack={{ x: stackX, y: stackY }} />}
-      {step >= 2 && <View pointerEvents="none" style={[styles.cards, { top: cardsTop }]}>
+      {step >= 4 && <View pointerEvents="none" style={[styles.cards, { top: cardsTop }]}>
         {cards.map((card, i) => (
           <TodayCard key={card.kind} card={card} index={i} width={cardWidth} drop={drop[i]} fly={fly[i]} leave={leave}
             shine={shine[i]} flip={card.kind === 'limited' ? flip : undefined}
@@ -448,9 +451,9 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
             targets={targets} stackX={stackX} stackY={stackY} reduced={reduced} />
         ))}
       </View>}
-      {step >= 2 && goal && <GoalStrip goal={goal} progress={goalIn} fly={goalFly} glow={pipGlow} leave={leave} top={cardsTop + 172}
+      {step >= 5 && goal && <GoalStrip goal={goal} progress={goalIn} fly={goalFly} glow={pipGlow} leave={leave} top={cardsTop + 172}
         centerX={width / 2} stackX={stackX} stackY={stackY} reduced={reduced} />}
-      {step >= 3 && !reduced && cards.map((card, i) => (
+      {step >= 7 && !reduced && cards.map((card, i) => (
         <CoinPing key={`ping-${card.kind}`} index={i} targets={targets} stackX={stackX} stackY={stackY} progress={ping[i]} />
       ))}
     </Animated.View>
@@ -720,8 +723,14 @@ const GoalStrip = memo(function GoalStrip({ goal, progress, fly, glow, leave, to
 const GOAL_H = 52;
 
 const PING_MS = 520;
-/** How many one-frame commits the invisible stage is built in (ribbon and name, gold and Finn, cards, particles). */
-const MOUNT_STEPS = 3;
+/**
+ * How many small commits the invisible stage is built in: the veil and the ribbon, the park name's letters, the gold
+ * fan, the glow and Finn, the cards, the Daily 3 pill, the particle canvas, the landing pings. Each one is a short UI
+ * frame (the release capture showed one 95 ms frame when the ribbon and the letters mounted together).
+ */
+const MOUNT_STEPS = 8;
+/** The wait between two mount steps (ms): about two frames, so each step gets its own UI frame. */
+const STEP_GAP_MS = 34;
 
 /**
  * Where a card lands: on a map coin, two gold rings spread and a small gold coin hops out ("it is here");

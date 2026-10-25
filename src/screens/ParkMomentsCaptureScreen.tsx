@@ -14,7 +14,10 @@ import { useContext, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFrameCallback, useSharedValue } from 'react-native-reanimated';
-import { takeCaptureMarks } from '../components/park/momentPerf';
+import { perfMark, takeCaptureMarks } from '../components/park/momentPerf';
+
+/** The tap itself, so a mark list starts at the press (step times read from it). */
+const perfMarkTap = () => perfMark('stage.tap');
 import { getTaskAttempt } from '../api/endpoints/me/task-attempts';
 import { AuthContext } from '../context/AuthProvider';
 import { PerfOverlay, usePerfProbe } from '../gamekit/perf/PerfOverlay';
@@ -66,6 +69,7 @@ export default function ParkMomentsCaptureScreen() {
     runs.current += 1;
     probe.reset();
     takeCaptureMarks();
+    perfMarkTap();
     hitches.value = [];
     since.value = 0;
     startedAt.current = Date.now();
