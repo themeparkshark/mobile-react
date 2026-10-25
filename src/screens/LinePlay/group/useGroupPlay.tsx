@@ -183,7 +183,7 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
   </>;
 
   const strip: ReactNode = live && crew.loaded && crew.chosen
-    ? <GroupStrip group={group} compact={compact} onEdit={() => { if (!group?.active) setEditing(true); }} />
+    ? <GroupStrip group={group} compact={compact} covered={!!mode} onEdit={() => { if (!group?.active) setEditing(true); }} />
     : null;
 
   const recapSlot = (args: {

@@ -121,5 +121,5 @@ test('wave 5 round 2: the second ride of the day skips the confetti and rolls th
   assert.ok(val('burstAt') + 4 * val('statStepMs') + val('statMs') <= 800, 'five numbers rolled by 0.8 s');
   assert.ok(val('leaveAt') + val('leaveMs') <= 1500, 'settled by 1.5 s');
   const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
-  assert.match(recap, /takeRideUpVariant\(`\$\{rideName\}:\$\{elapsedSeconds\}`\) === 'short' \? RIDE_UP_REPEAT : RIDE_UP/);
+  assert.match(recap, /takeRideUpVariant\(rideUpKey \?\? `\$\{rideName\}:\$\{elapsedSeconds\}`\) === 'short' \? RIDE_UP_REPEAT : RIDE_UP/);
 });

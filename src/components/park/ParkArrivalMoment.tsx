@@ -616,10 +616,10 @@ function SunMark() {
   </View>;
 }
 
-/** A number next to a picture of what it counts: a gold coin and the count in one badge. */
+/** A number next to a picture of what it counts: a map coin (the blue fin coin players see on the map) and the count. */
 function CoinCount({ count }: { readonly count: number }) {
   return <View style={styles.coinCount}>
-    <Image source={ARRIVAL_ART.goldCoin} style={styles.coinCountIcon} contentFit="contain" transition={0} />
+    <Image source={ARRIVAL_ART.mapCoin} style={styles.coinCountIcon} contentFit="contain" transition={0} />
     <Text style={styles.coinCountText} allowFontScaling={false}>{count}</Text>
   </View>;
 }
@@ -651,13 +651,13 @@ function CardFace({ card, flip, shine }: { readonly card: ArrivalCard; readonly 
       <CoinCount count={card.count} />
     </>;
   }
-  // Coins still to find here: a map pin with small gold coins around it ("these are on the map, go find them"), and
+  // Coins still to find here: a map pin with small map coins around it ("these are on the map, go find them"), and
   // the count next to a coin.
   return <>
     <View style={styles.art}>
       <View style={styles.orbitRing} />
       {ORBIT.slice(0, Math.max(1, Math.min(4, card.count))).map((o, i) => (
-        <Image key={i} source={ARRIVAL_ART.goldCoin} contentFit="contain" transition={0}
+        <Image key={i} source={ARRIVAL_ART.mapCoin} contentFit="contain" transition={0}
           style={[styles.orbitCoin, { left: 32 + o.x - 10, top: 32 + o.y - 10 }]} />
       ))}
       <View style={styles.findPin}><GameIcon name="pin" size={44} /></View>
@@ -855,14 +855,15 @@ const styles = StyleSheet.create({
     borderRadius: 14, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, justifyContent: 'center' },
   coinCountIcon: { width: 22, height: 22 },
   coinCountText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.gold },
-  plank: { position: 'absolute', left: -4, right: -4, top: 40, height: 12, borderRadius: 4, backgroundColor: BRAND.blue,
-    borderWidth: 2, borderColor: BRAND.navy },
+  // A gold shelf plank (the blue coins stand out on it, like the coin shelf's own boards).
+  plank: { position: 'absolute', left: -4, right: -4, top: 40, height: 12, borderRadius: 4, backgroundColor: GOLD_FX.rays,
+    borderWidth: 2, borderColor: '#b87800' },
   plankTop: { position: 'absolute', left: 2, right: 2, top: 1, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.6)' },
   plankCoin: { position: 'absolute', width: 32, height: 32 },
   newSpark2: { position: 'absolute', left: -6, top: 0, width: 18, height: 18 },
   orbitRing: { position: 'absolute', left: 4, top: 6, width: 56, height: 52, borderRadius: 28, borderWidth: 2, borderStyle: 'dashed',
     borderColor: BRAND.blueBright },
-  orbitCoin: { position: 'absolute', width: 20, height: 20 },
+  orbitCoin: { position: 'absolute', width: 22, height: 22 },
   cardSmall: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy, marginTop: 6 },
   tagTextLight: { color: BRAND.white },
   art: { width: 64, height: 64, marginTop: 4 },

@@ -32,8 +32,13 @@ export default function QueueStampPreviewScreen() {
 }
 
 /** The sample recap (a verified ten-minute wait that boarded): the preview and the park moments capture share it. */
+/** Each showing of the sample is its own ride for the day's ride-up count (the first is the full cheer, later ones the quick one). */
+let sampleShowings = 0;
+
 export function RideUpSample() {
+  const [rideUpKey] = useState(() => `preview:${(sampleShowings += 1)}`);
   return <SessionRecap
+        rideUpKey={rideUpKey}
         elapsedSeconds={786}
         activityCount={3}
         activityNames={['Ride trivia', 'Crew Bingo', 'Memory Match']}

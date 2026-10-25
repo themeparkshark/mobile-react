@@ -19,9 +19,11 @@ export function stripLine(group: LineGroup): string {
   return `${crew} · Tied at the top`;
 }
 
-export default function GroupStrip({ group, onEdit, compact = false }: {
+export default function GroupStrip({ group, onEdit, compact = false, covered = false }: {
   readonly group: LineGroup | null;
   readonly onEdit: () => void;
+  /** The pass-the-phone card is over the strip: the badges hold their hearts until it is gone. */
+  readonly covered?: boolean;
   /** Short phones: a slimmer row (still a 40 pt target with its hitSlop). */
   readonly compact?: boolean;
 }) {
@@ -50,7 +52,8 @@ export default function GroupStrip({ group, onEdit, compact = false }: {
           const id = String(player.id);
           const joinOrder = known && !known.has(id) ? joining++ : null;
           return <View key={player.id} style={index > 0 ? styles.overlap : null}>
-            <CrewBadgeFx joinOrder={joinOrder} starsKey={stars.get(id) ?? 0} reduced={reduced} mine={index === 0}>
+            <CrewBadgeFx joinOrder={joinOrder} starsKey={stars.get(id) ?? 0} reduced={reduced} mine={index === 0}
+              covered={covered} order={index}>
               <PlayerBadge name={player.name} index={index} size={28} kid={player.kid} />
             </CrewBadgeFx>
           </View>;

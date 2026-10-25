@@ -35,6 +35,8 @@ const CARDS: readonly ArrivalCard[] = [
   { kind: 'coins', count: 34 },
   { kind: 'new', count: 7, latitude: null, longitude: null },
 ];
+/** A stage Daily 3 (the scratch server has no retention routes): one of three done, a 2 day flame, a prize tomorrow. */
+const GOAL = { done: 1, total: 3, streak: 2, giftTomorrow: true } as const;
 
 export default function ParkMomentsCaptureScreen() {
   const { player } = useContext(AuthContext);
@@ -107,7 +109,7 @@ export default function ParkMomentsCaptureScreen() {
     <View style={[styles.pathDown, { left: width * 0.42 }]} />
     {playing?.moment === 'arrival' || playing?.moment === 'golden' ? (
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        <ParkArrivalMoment key={playing.key} parkName="Disneyland" cards={CARDS} golden={playing.moment === 'golden'}
+        <ParkArrivalMoment key={playing.key} parkName="Disneyland" cards={CARDS} goal={GOAL} golden={playing.moment === 'golden'}
           pose={playing.key % 3} onDone={() => done(playing.moment)} />
       </View>
     ) : null}
@@ -117,7 +119,7 @@ export default function ParkMomentsCaptureScreen() {
       <RideUpSample />
     </View>}
     {/* Low on the screen, clear of every moment (the ribbons and the arrival live in the top half). */}
-    <View pointerEvents="none" style={[styles.panel, { bottom: insets.bottom + 76 }]}>
+    <View pointerEvents="none" style={[styles.panel, { bottom: insets.bottom + 140 }]}>
       <PerfOverlay probe={probe} visible style={styles.graph} />
       <Text style={styles.last}>{`${saver ? 'SAVER ON' : 'saver off'}  particles x${budget.particleScale}\n`}{last}</Text>
     </View>

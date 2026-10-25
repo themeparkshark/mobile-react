@@ -12,9 +12,10 @@
  * special", and the coin still goes where it lives. Reduce Motion: the ribbon
  * fades in and out, the haptic and the sound stay. UI thread only; one-shot.
  */
+import { Canvas, Path, Skia, TileMode, vec } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing, ReduceMotion, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, type SharedValue,
@@ -222,6 +223,7 @@ function Ribbon({ onDone, reduced, toss, plan: F, short }: {
       {/* One gold ray fan behind the coin only. */}
       {/* A full fan, far bigger than the badge: it shows above and below the ribbon on the slam frame. */}
       {!reduced && <GoldBurst size={RAYS} amount={gold} bloom={core} spin={false} style={styles.rays} />}
+      {!reduced && <SlamFan amount={gold} />}
       {!reduced && <Animated.View style={[styles.core, coreStyle]}>
         <Image source={ARRIVAL_ART.soft} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#ffffff" />
       </Animated.View>}
@@ -248,6 +250,48 @@ function Ribbon({ onDone, reduced, toss, plan: F, short }: {
     {/* Home: out of the slot and down to the shelf button. */}
     {!reduced && to && TRAIL_HOME.map((lag, i) => <Flyer key={`h${i}`} t={home} lag={lag} from={slot} to={to} lift={-70} dot={i} home />)}
     {!reduced && to && <Flyer t={home} lag={0} from={slot} to={to} lift={-70} source={coinSource} home />}
+  </Animated.View>;
+}
+
+/** The crisp fan's reach (pt) and its wedges: they spread right, up and down from the coin, never off the left edge. */
+const FAN_R = 150;
+const FAN_WEDGES = 11;
+/** The fan opens over this arc (degrees), centred on "right", so the rays that would leave the screen are not drawn. */
+const FAN_ARC = 290;
+
+/**
+ * The slam's hand-drawn gold fan behind the crowned coin: bold gold wedges with a white-hot middle and a soft fade at
+ * their tips, opening right, up and down from the coin so the whole fan is on the map (the round image fan above only
+ * glows). Built once (one path, one gradient); only its opacity and size follow the slam's gold.
+ */
+function SlamFan({ amount }: { readonly amount: SharedValue<number> }) {
+  const art = useMemo(() => {
+    const path = Skia.Path.Make();
+    const step = FAN_ARC / FAN_WEDGES;
+    for (let i = 0; i < FAN_WEDGES; i += 1) {
+      const a0 = ((-FAN_ARC / 2 + i * step) * Math.PI) / 180;
+      const a1 = ((-FAN_ARC / 2 + i * step + step * 0.52) * Math.PI) / 180;
+      path.moveTo(FAN_R, FAN_R);
+      path.lineTo(FAN_R + Math.cos(a0) * FAN_R, FAN_R + Math.sin(a0) * FAN_R);
+      path.lineTo(FAN_R + Math.cos(a1) * FAN_R, FAN_R + Math.sin(a1) * FAN_R);
+      path.close();
+    }
+    const fill = Skia.Paint();
+    fill.setAntiAlias(true);
+    fill.setShader(Skia.Shader.MakeRadialGradient(vec(FAN_R, FAN_R), FAN_R,
+      [Skia.Color('rgba(255,255,255,1)'), Skia.Color('rgba(255,214,64,0.95)'), Skia.Color('rgba(255,196,0,0.85)'), Skia.Color('rgba(255,196,0,0)')],
+      [0, 0.22, 0.62, 1], TileMode.Clamp));
+    return { path, fill };
+  }, []);
+  // The canvas is drawn once; the slam's gold drives a plain animated wrapper (opacity and size on the UI thread).
+  const style = useAnimatedStyle(() => ({
+    opacity: Math.min(1, amount.value * 1.05),
+    transform: [{ scale: 0.55 + 0.45 * Math.min(1, amount.value) }],
+  }));
+  return <Animated.View pointerEvents="none" style={[styles.fan, style]}>
+    <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Path path={art.path} paint={art.fill} />
+    </Canvas>
   </Animated.View>;
 }
 
@@ -296,6 +340,7 @@ const styles = StyleSheet.create({
   ribbonWrap: { position: 'absolute', left: RIBBON_LEFT, alignItems: 'center' },
   rays: { position: 'absolute', left: BADGE / 2 - 8 + RAYS_SHIFT - RAYS / 2, top: 33 - RAYS / 2 },
   core: { position: 'absolute', left: BADGE / 2 - 8 - CORE / 2, top: 33 - CORE / 2, width: CORE, height: CORE },
+  fan: { position: 'absolute', left: BADGE / 2 - 8 - FAN_R, top: 33 - FAN_R, width: FAN_R * 2, height: FAN_R * 2 },
   ribbon: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 66, paddingLeft: BADGE - 2, paddingRight: 12,
     borderRadius: 18, borderWidth: 3, borderColor: BRAND.white, backgroundColor: BRAND.gold, alignSelf: 'stretch',
     borderBottomWidth: 6, borderBottomColor: '#d99a00', overflow: 'hidden' },

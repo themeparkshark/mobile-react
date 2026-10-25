@@ -163,6 +163,8 @@ export interface SessionRecapProps {
   nextAdventure?: string | null;
   /** Shark adventures finished across every line: [found, total]. */
   adventuresFound?: readonly [number, number, boolean] | null;
+  /** Names this recap for the day's ride-up count (default: the ride and the time); a preview passes its own per showing. */
+  rideUpKey?: string;
 }
 
 export default function SessionRecap({
@@ -173,6 +175,7 @@ export default function SessionRecap({
   onOpenCoin, onOpenPark, parkAvailable, feedbackEnabled = false, feedback = null, feedbackLoading = false,
   feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine,
   doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null, snackSlot = null, nextAdventure = null, adventuresFound = null,
+  rideUpKey,
 }: SessionRecapProps) {
   const bonusMode = rewardsConfirmed && bonusRecap != null;
   const rows = bonusMode ? recapRows(bonusRecap) : [];
@@ -185,7 +188,7 @@ export default function SessionRecap({
   // The day's first ride gets the full cheer; another ride the same day gets the quick one (rideUpRepeat.ts). Keyed by
   // this recap (ride and time), so a re-render never counts it twice.
   const planRef = useRef<RideUpPlan | null>(null);
-  if (rideUp && planRef.current === null) planRef.current = takeRideUpVariant(`${rideName}:${elapsedSeconds}`) === 'short' ? RIDE_UP_REPEAT : RIDE_UP;
+  if (rideUp && planRef.current === null) planRef.current = takeRideUpVariant(rideUpKey ?? `${rideName}:${elapsedSeconds}`) === 'short' ? RIDE_UP_REPEAT : RIDE_UP;
   const rideUpPlan = planRef.current ?? RIDE_UP;
   const rideUpShort = rideUpPlan === RIDE_UP_REPEAT;
   // "Your ride's up!" lays the page out at once (the shark is on the header from frame 1 and the cards under it
