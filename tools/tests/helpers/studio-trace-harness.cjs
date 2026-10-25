@@ -60,7 +60,7 @@ function virtualClock(start) {
  * Load the engine in trace mode. `start` is the virtual wall clock (ms).
  * Returns the modules plus the trace and haptic logs.
  */
-function traceEngine({ start = Date.UTC(2026, 9, 24, 17, 0, 0), hybrid = true, trace = true, dev = true } = {}) {
+function traceEngine({ start = Date.UTC(2026, 9, 24, 17, 0, 0), hybrid = true, trace = true, dev = true, env = {} } = {}) {
   const clock = virtualClock(start);
   const ids = new Map();
   const exts = new Map();
@@ -101,7 +101,7 @@ function traceEngine({ start = Date.UTC(2026, 9, 24, 17, 0, 0), hybrid = true, t
   };
   const globals = {
     __DEV__: dev,
-    process: { env: { EXPO_PUBLIC_STUDIO_TRACE: trace ? '1' : undefined, EXPO_PUBLIC_STUDIO_MUTE: '1' } },
+    process: { env: { EXPO_PUBLIC_STUDIO_TRACE: trace ? '1' : undefined, EXPO_PUBLIC_STUDIO_MUTE: '1', ...env } },
     Date: clock.Date, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout,
     setInterval: clock.setInterval, clearInterval: clock.clearInterval,
     console: quiet, __assetId,

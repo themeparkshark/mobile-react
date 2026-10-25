@@ -14,6 +14,7 @@ import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { AuthContext } from '../context/AuthProvider';
 import { playSfx } from '../gamekit/SFX';
+import { playMoment, studioReady } from '../gamekit/audio/playMoment';
 import type { DailyGiftAmountsType, DailyGiftRewardType, DailyGiftType } from '../models/daily-gift-type';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../ui';
 import { ws7Preview } from '../dev/ws7Preview';
@@ -286,6 +287,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         playSfx('hit');
       }, 650);
     }
+    // Studio sound (approved Oct 24): the chest's own pop and coin spill, with its shaped buzz (wave 5: lid pop,
+    // heavy land, coins patter) on the lid's frame. Switch off: exactly today's success buzz and sounds.
+    if (studioReady('chest.open')) { playMoment('chest.open', { haptic: true }); return; }
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     playSfx('win'); playSfx('coin', 0.9);
   };

@@ -83,6 +83,16 @@ export const HAPTIC_PATTERNS = {
   triviaWrong: [{ at: 0, p: 'soft' }],
   /** Banana / Rhythm on-beat catch: Light only within the beat window (see onBeatWindow). */
   onBeatLight: [{ at: 0, p: 'light' }],
+  /**
+   * Wave 5 hooks (wow-sound), shaped on their studio sounds until the native Core Haptics player ships. Steps sit
+   * 120 ms or more apart, so the app's shared 120 ms gate never merges them. Kid-safe: no countdown, no loss.
+   * Daily 3 check-off (tv_correct's two rising notes): a tick, then the check.
+   */
+  daily3Check: [{ at: 0, p: 'light' }, { at: 120, p: 'medium' }],
+  /** The flame grows (all 3 done: sh_tier_up, then the coin shower at +160): a soft whoomp swells to a heavy bloom, coins sparkle after. */
+  streakIgnite: [{ at: 0, p: 'soft' }, { at: 120, p: 'medium' }, { at: 240, p: 'heavy' }, { at: 380, p: 'light' }, { at: 500, p: 'selection' }],
+  /** A chest pops (cq_chest_open, coins spill at +80): the lid pops, lands heavy, then the coins patter out. */
+  chestOpen: [{ at: 0, p: 'rigid' }, { at: 120, p: 'heavy' }, { at: 260, p: 'light' }, { at: 380, p: 'selection' }, { at: 500, p: 'selection' }],
 } satisfies Record<string, HapticStep[]>;
 
 export type HapticPatternName = keyof typeof HAPTIC_PATTERNS;

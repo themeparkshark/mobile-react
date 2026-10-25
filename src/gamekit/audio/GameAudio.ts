@@ -37,6 +37,7 @@ import { AudioApiBackend, ExpoAvBackend, HybridBackend, audioApiAvailable, type 
 import { CHRIS_BEDS, CHRIS_CUES, type BedDef, type CueDef } from './chrisBank';
 import { TraceBackend } from './traceBackend';
 import { studioTraceOn, traceEvent } from './studioTrace';
+import { studioCapture } from './studioSwitch';
 import { routePan, type AudioRoute } from '../core/audioRoute';
 
 export interface PlayOptions {
@@ -89,6 +90,11 @@ class GameAudioEngine {
   private musicEnabled = false;
   /** EXPO_PUBLIC_STUDIO_MUTE=1 (lane tooling only, dev and release-like JS) keeps test simulators silent (master gain pinned to 0). */
   private readonly studioMute = process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
+  /**
+   * Wave 5: the muted catch capture's A/B (studioSwitch.studioCapture) runs the engine whatever the scratch player's
+   * setting, so studio on and off are measured doing real audio work; the pinned 0 master gain keeps it silent.
+   */
+  private readonly captureEngine = studioCapture() !== null;
   private masterVolume = this.studioMute ? 0 : 1;
   /**
    * Dev only: EXPO_PUBLIC_STUDIO_TRACE=1 runs the whole engine into TraceBackend, which never touches
@@ -253,6 +259,7 @@ class GameAudioEngine {
 
   setSfxEnabled(v: boolean): void {
     if (this.traceMode) { traceEvent('legacy', 'setting', `sound effects ${v ? 'on' : 'off'} (trace keeps the engine on, silent)`); v = true; }
+    if (this.captureEngine) v = true;
     this.sfxEnabled = v;
     if (!v) this.backend?.stopAll();
   }

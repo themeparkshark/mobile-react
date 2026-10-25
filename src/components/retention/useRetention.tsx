@@ -13,7 +13,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
-import { studioMoment } from '../../gamekit/audio/playMoment';
+import { playMoment, studioMoment, studioReady } from '../../gamekit/audio/playMoment';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import * as RootNavigation from '../../RootNavigation';
 import { enablePush } from '../../services/push';
@@ -111,9 +111,12 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       const index = next.goals.findIndex(g => g.key === fresh[fresh.length - 1]);
       setPop(p => ({ index, key: p.key + 1 }));
       setCelebrate(c => [...new Set([...c, ...fresh])]);
-      haptic('success');
-      // Studio sound (wow-sound switch, off until Dustin's yes): a check ding per goal, all 3 rings the chord.
-      if (!studioMoment(next.claimable ? 'loop.daily3Done' : 'loop.daily3Check')) {
+      // Studio sound (approved Oct 24): a check ding per goal, all 3 rings the chord and grows the flame. Wave 5: the
+      // buzz is the moment's own shaped pattern (a tick then the check; the flame's swell), felt even with sound off.
+      const moment = next.claimable ? 'loop.daily3Done' : 'loop.daily3Check';
+      if (studioReady(moment)) playMoment(moment, { haptic: true });
+      else {
+        haptic('success');
         playSfx(next.claimable ? 'fx.reveal' : 'fx.coinTick');
       }
     }

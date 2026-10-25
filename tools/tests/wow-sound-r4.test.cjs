@@ -52,10 +52,18 @@ test('fix 4: heat climbs in the hand: wobble buzzes go one rung heavier at heat 
   assert.deepEqual(plain(c(1).wobbleIntents), ['tickSelection', 'tapLight', 'hitMedium'], 'a calm catch buzzes exactly as wow-map planned');
   assert.deepEqual(plain(c(2).wobbleIntents), ['tickSelection', 'hitMedium'], 'heat 1 is still calm');
   assert.deepEqual(plain(c(3).wobbleIntents), ['tapLight', 'hitMedium'], 'heat 2: one rung heavier, never past medium');
-  assert.deepEqual(plain(c(5).wobbleIntents), ['hitMedium', 'hitMedium'], 'heat 4: medium all the way');
+  // Wave 5 session: a walk after #4 cools the run, so #9 is heat 4.
+  assert.equal(c(9).heat, 4);
+  assert.deepEqual(plain(c(9).wobbleIntents), ['hitMedium', 'hitMedium'], 'heat 4: medium all the way');
   for (const n of [1, 2, 3, 4]) assert.ok(c(n).thumpMs < 0, `#${n} has no second thump`);
-  for (const n of [5, 6, 7]) assert.equal(c(n).thumpMs, 520, `#${n} lands a crisp second thump 90 ms after the 430 ms burst`);
-  assert.deepEqual(plain(c(8).wobbleIntents), ['tickSelection', 'hitMedium'], 'a walk cools it back down');
+  // Wave 5: the thump is on the beat after the burst on the plan (burst + 90, after any server hold), on every show
+  // with heat tier 2 except the grand one, whose own second heavy takes that beat.
+  for (const x of a.perCatch) {
+    const want = x.heat >= 4 && !x.grand;
+    assert.equal(x.thumpMs > 0, want, `#${x.n} (heat ${x.heat}${x.grand ? ', grand' : ''}) thump ${x.thumpMs}`);
+    if (want) assert.equal(x.thumpMs, x.burstPlanMs + 90, `#${x.n} the thump lands 90 ms after the burst frame`);
+  }
+  assert.deepEqual(plain(c(5).wobbleIntents), ['tickSelection', 'hitMedium'], 'a walk cools it back down');
 });
 test('fix 4: heat brightens the burst from heat 5 (a glockenspiel layer), and wow-map can read the same number', async () => {
   const { a } = await fiftyCatches();

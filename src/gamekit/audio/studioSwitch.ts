@@ -50,12 +50,24 @@ export function studioMuted(): boolean {
   return process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
 }
 
+/**
+ * Wave 5: the release-like catch capture's A/B (lane tooling only: EXPO_PUBLIC_MOTION_CAPTURE=HomeCatchPreview with
+ * EXPO_PUBLIC_STUDIO_CAPTURE=on or off, never in a store or OTA bundle). Only ever inside a muted studio run, whose
+ * master gain is pinned to 0 and whose every expo-av sound is muted, so it can run the real audio engine for a fair
+ * frame-rate comparison without a sound leaving the simulator.
+ */
+export function studioCapture(): 'on' | 'off' | null {
+  if (!studioMuted() || process.env.EXPO_PUBLIC_MOTION_CAPTURE !== 'HomeCatchPreview') return null;
+  const v = process.env.EXPO_PUBLIC_STUDIO_CAPTURE;
+  return v === 'on' || v === 'off' ? v : null;
+}
+
 /** True only when every key is turned. Cheap: safe to call on every play. */
 export function isStudioSoundOn(): boolean {
   // Dev trace only (the engine is on the silent TraceBackend): on, unless a capture flips it off
   // to trace what today's app plays (globalThis.__studioTrace.setSwitch(false)).
   if (studioTraceOn()) return override ?? true;
-  if (studioMuted()) return false;
+  if (studioMuted()) return studioCapture() === 'on';
   if (override !== null && isDev()) return override;
   return STUDIO_SOUND_DEFAULT && (flag?.on ?? false);
 }

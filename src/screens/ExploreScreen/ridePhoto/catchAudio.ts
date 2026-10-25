@@ -1,11 +1,11 @@
 import { GameAudio } from '../../../gamekit/audio/GameAudio';
 import { createSfxLimiter } from '../../../audio/sfxLimiter';
-import { beatHaptic, HAPTIC_GATE_MS, lastAppHapticAt, queueHaptic, type HapticIntent } from '../../../gamekit/Haptics';
+import { beatHaptic, HAPTIC_GATE_MS, lastAppHapticAt, queueHaptic, setHapticTraceListener, type HapticIntent } from '../../../gamekit/Haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { momentSaver, playMoment, preloadMoments, studioMoment, studioReady } from '../../../gamekit/audio/playMoment';
 import type { MomentName } from '../../../gamekit/audio/momentMap';
-import { burstMoment, burstTakesVoicing, burstVoicing, CATCH_WOBBLE_INTENTS, CATCH_WOBBLE_TICKS_MS, catchHeat, COIN_TICK_GAP_MS, decodeDay, EMPTY_RUN, encodeDay, HEAT_MAX, heatTier, HOT_LAYER_HEAT, MIN_BEAT_GAP_MS, REPEAT_WOBBLE_INTENTS, REPEAT_WOBBLE_TICKS_MS, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
-import { traceEvent } from '../../../gamekit/audio/studioTrace';
+import { burstMoment, burstTakesVoicing, burstVoicing, CATCH_WOBBLE_INTENTS, counterLift, CATCH_WOBBLE_TICKS_MS, catchHeat, COIN_TICK_GAP_MS, decodeDay, EMPTY_RUN, encodeDay, heatTier, HOT_LAYER_HEAT, MIN_BEAT_GAP_MS, REPEAT_WOBBLE_INTENTS, REPEAT_WOBBLE_TICKS_MS, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
+import { CAPTURE_LINES, captureTraceOn, traceEvent } from '../../../gamekit/audio/studioTrace';
 
 /**
  * The catch's own audio channel: real camera sounds (licensed, Epidemic Sound),
@@ -119,12 +119,21 @@ export function preloadCatchAudio(): Promise<void> {
 /** Play on the catch channel. A stinger waits for the previous stinger's tail instead of stacking. */
 /** Development: every sound and haptic is logged with a timestamp, for AUDIO_TIMELINE.md and sync review. */
 /** Preview recordings in a Release build (no console there) read the trace from this buffer. */
-export const catchTraceBuffer: string[] = [];
+/**
+ * Wave 5: the same buffer the release-like catch capture writes (studioTrace CAPTURE_LINES: lane tooling only,
+ * EXPO_PUBLIC_MOTION_CAPTURE=HomeCatchPreview, never in a store or OTA bundle), so timing claims come from release JS.
+ */
+export const catchTraceBuffer: string[] = CAPTURE_LINES;
+const CAPTURE_TRACE = captureTraceOn();
 function trace(kind: string, name: string, extra = '') {
-  if (!__DEV__) return;
+  if (!__DEV__ && !CAPTURE_TRACE) return;
   const line = `[catch-av] ${Date.now()} ${kind} ${name}${extra}`;
-  console.log(line);
-  if (catchTraceBuffer.length < 5000) catchTraceBuffer.push(line);
+  if (__DEV__) console.log(line);
+  if (catchTraceBuffer.length < 12_000) catchTraceBuffer.push(line);
+}
+// Release-like capture: every buzz that really fires is logged next to the sounds (the dev trace mode has its own).
+if (CAPTURE_TRACE && !__DEV__) {
+  try { setHapticTraceListener((intent) => trace('fired', intent)); } catch { /* optional */ }
 }
 /**
  * Studio sound for the map catch (wow-sound): the catch's beat marks drive the moment vocabulary, so
@@ -171,8 +180,6 @@ let session: {
   rung: number;
   /** When the last coin tick into the counter starts (audio clock, ms): the next one waits COIN_TICK_GAP_MS. */
   lastTickAt: number;
-  /** The burst's own haptic (the first one after the burst mark) has fired. */
-  burstBuzzed: boolean;
 } | null = null;
 const WOBBLE_INTENTS = new Set<HapticIntent>(['tickSelection', 'tapLight', 'hitMedium']);
 let run: CatchRunState = EMPTY_RUN;
@@ -180,8 +187,6 @@ let primed = false;
 const DAY_KEY = 'tps.sound.lastCatchDay';
 /** Highest rung of the counter ladder (13 steps, 0..12). */
 const COUNTER_TOP = 12;
-/** Most rungs a quick run lifts the badge ticks. */
-const COUNTER_HEAT_MAX = 4;
 /** A tick with this pitch or higher is the progress bar's gold tick (wow-map), not the coin count. */
 const BAR_TICK_PITCH = 14;
 /**
@@ -233,6 +238,59 @@ const HOT_THUMP_MS = 90;
 const GOLDEN_SUCCESS_MS = 180;
 /** When the burst's heavy buzz fired (every player), so a bunched success still lands GOLDEN_SUCCESS_MS after it. */
 let burstBuzzAt = -Infinity;
+/** Wave 5: this catch's marks from wow-map (every player): the gold beam dropped, the grand 25th, a miss. */
+let catchFlags = { beam: false, grand: false, missed: false };
+/** The burst's first heavy buzz (or the beam's) has fired; a later heavy is the grand catch's second hit. */
+let burstHeavyDone = false;
+/** When the burst was due on the UI clock (wall ms), and when its sound started. */
+let burstDueAt = -Infinity;
+let burstSoundAt = -Infinity;
+let thumpTimer: ReturnType<typeof setTimeout> | null = null;
+/** The coin's slide home starts at least this long after the burst's bell (one celebration sound at a time). */
+const FLY_AFTER_BURST_MS = 120;
+/**
+ * Wave 5 (fix 3): the wall time the beat in hand was due on wow-map's UI clock. HomeCatchMoment calls catchBeatAt at
+ * the top of every runOnJS beat, so a JS turn that arrives late still lays the buzzes and sounds that follow the beat
+ * (the wobble ticks, the hot thump) on the plan instead of on its arrival. Valid for the rest of that JS turn only.
+ */
+let beatDue: { at: number; setAt: number } | null = null;
+const BEAT_DUE_TURN_MS = 3;
+const BEAT_DUE_MAX_LATE_MS = 3000;
+export function catchBeatAt(plannedAt: number): void {
+  const now = Date.now();
+  const late = now - plannedAt;
+  beatDue = Number.isFinite(plannedAt) && late >= -20 && late <= BEAT_DUE_MAX_LATE_MS ? { at: Math.min(now, plannedAt), setAt: now } : null;
+  if (beatDue && late > 16) {
+    trace('late', `${Math.round(late)}ms`);
+    traceEvent('mark', 'catch-beat-late', `${Math.round(late)} ms`);
+  }
+}
+/** When the beat in hand was due (its UI-clock time), or now outside a beat. */
+function dueNow(now = Date.now()): number {
+  return beatDue && now - beatDue.setAt <= BEAT_DUE_TURN_MS ? beatDue.at : now;
+}
+
+/**
+ * The hot thump (heat tier 2): one crisp buzz on the beat after the burst (burst + 90 ms on the plan), between the
+ * heavy and the success at +180, on every show (the beam catches too, whose heavy came with the beam). The grand
+ * 25th has its own second heavy on that beat, so it never thumps. A burst that reached JS late buzzes its heavy late,
+ * so the thump keeps its 90 ms after that heavy (and the success its 180), so every beat still buzzes and none flams.
+ */
+function scheduleThump(heat: number): void {
+  if (thumpTimer) clearTimeout(thumpTimer);
+  // The heavy fires in this same turn (or came with the beam, before the burst).
+  const heavyAt = catchFlags.beam ? burstDueAt : Math.max(burstDueAt, Date.now());
+  const due = heavyAt + HOT_THUMP_MS;
+  traceEvent('mark', 'catch-thump', `+${heat}`);
+  thumpTimer = setTimeout(() => {
+    thumpTimer = null;
+    const now = Date.now();
+    if (now >= Math.max(beatUntil, burstBeatUntil) || stale(due, 'hitRigid')) return;
+    if (now - laneLast() < MIN_BEAT_GAP_MS - 10) { traceEvent('mark', 'catch-pulse-dropped', 'hitRigid'); return; }
+    beatLaneAt = now;
+    beatHaptic('hitRigid');
+  }, Math.max(0, due - Date.now()));
+}
 
 function primeCatchState(): void {
   if (primed) return;
@@ -307,7 +365,8 @@ function mergeCounterAtDone(s: NonNullable<typeof session>): void {
   const now = Date.now();
   let top = -1;
   let started = -Infinity;
-  for (const v of s.counterVoices) {
+  // Latest first, so each stop hands the cue's cooldown back to the tick before it.
+  for (const v of s.counterVoices.slice().reverse()) {
     if (v.at > now) {
       try { GameAudio.stop(v.id); } catch { /* optional */ }
       top = Math.max(top, v.step);
@@ -319,12 +378,18 @@ function mergeCounterAtDone(s: NonNullable<typeof session>): void {
   // just before 'done'. Otherwise the counter already finished: nothing to add.
   const sinceLast = now - started;
   if (top < 0 && sinceLast >= 2 * COIN_TICK_GAP_MS) return;
+  // Wave 5 (fix 5): the merged tick sits on the done frame itself, never after it. When a real tick began under
+  // one coin gap ago, that tick is the last one (a second tick now would double it, a later one would trail done).
+  if (sinceLast < COIN_TICK_GAP_MS) {
+    s.rung = COUNTER_TOP;
+    traceEvent('mark', 'catch-counter-final', `the tick ${sinceLast} ms ago is the last`);
+    return;
+  }
   const step = Math.min(COUNTER_TOP, Math.max(top, s.rung + 1));
-  // Never under COIN_TICK_GAP_MS after the tick before it (at most one gap past the done frame).
-  const at = Math.max(now, started + COIN_TICK_GAP_MS);
   s.rung = COUNTER_TOP;
-  traceEvent('mark', 'catch-counter-merged', `l${step}${at > now ? ` +${at - now} ms` : ''}`);
-  studioMoment('ui.counterTick', { step, volume: s.tickVolume, delayMs: at - now });
+  traceEvent('mark', 'catch-counter-merged', `l${step}`);
+  trace('start', 'ui.counterTick', ` merged l${step}`);
+  studioMoment('ui.counterTick', { step, volume: s.tickVolume });
 }
 
 /** When the last catch settled ('done'), every player: coin buzzes after it are covered by the settle. */
@@ -370,6 +435,11 @@ function onCatchMark(name: string): void {
     beatUntil = now + BEAT_WINDOW_MS;
     catchLive = true;
     settledAt = -Infinity;
+    catchFlags = { beam: false, grand: false, missed: false };
+    burstHeavyDone = false;
+    burstDueAt = -Infinity;
+    burstSoundAt = -Infinity;
+    if (thumpTimer) { clearTimeout(thumpTimer); thumpTimer = null; }
     closeBeats();
     beats = {
       n: 0, seen: 0, fired: [], timers: [], closed: false, tapAt: now,
@@ -382,18 +452,23 @@ function onCatchMark(name: string): void {
     preloadCatchMoments();
     primeCatchState();
     endSession();
-    session = { until: now + PRE_BURST_MS, burst: false, heat: heatNow, repeatPlan, beam: false, wobbleVoices: [], counterVoices: [], rung: -1, lastTickAt: -Infinity, burstBuzzed: false };
+    session = { until: now + PRE_BURST_MS, burst: false, heat: heatNow, repeatPlan, beam: false, wobbleVoices: [], counterVoices: [], rung: -1, lastTickAt: -Infinity };
     if (session.heat > 0) traceEvent('mark', 'catch-heat', `+${session.heat}`);
     playMoment('catch.tap');
     return;
   }
+  // Wave 5: wow-map names the grand 25th on the tap; a beam after a miss is a stale beat (never a slam on a boing).
+  if (name === 'grand') { catchFlags.grand = true; return; }
+  if (name === 'miss') catchFlags.missed = true;
+  if (name === 'beam') { if (catchFlags.missed) return; catchFlags.beam = true; }
+  if (name === 'burst') burstDueAt = dueNow();
   if (name === 'hitstop' || name === 'burst' || name === 'miss' || name === 'skip' || name === 'beam') closeBeats();
   if (name === 'hitstop' || name === 'burst' || name === 'beam') burstBeatUntil = Date.now() + BURST_BEAT_MS;
   if (name === 'done' || name === 'miss') { beatUntil = 0; burstBeatUntil = 0; catchLive = false; }
   if (name === 'done') settledAt = Date.now();
   if (name === 'burst' && !sessionOpen()) {
     // Switch off: the run still counts (heat for the visuals), nothing plays and nothing is stored.
-    run = burstMoment(run, Date.now(), { repeatPlan: beats?.offsets === REPEAT_WOBBLE_TICKS_MS }).state;
+    run = burstMoment(run, Date.now(), { repeatPlan: beats?.offsets === REPEAT_WOBBLE_TICKS_MS, beam: catchFlags.beam, grand: catchFlags.grand }).state;
     return;
   }
   if (!sessionOpen()) return;
@@ -412,7 +487,7 @@ function onCatchMark(name: string): void {
     cutWobbles(TICK_GRACE_MS);
     s.burst = true;
     s.until = Date.now() + SESSION_IDLE_MS;
-    const next = burstMoment(run, Date.now(), { repeatPlan: s.repeatPlan, beam: s.beam });
+    const next = burstMoment(run, Date.now(), { repeatPlan: s.repeatPlan, beam: s.beam, grand: catchFlags.grand });
     const stored = encodeDay(next.state);
     if (stored) void AsyncStorage.setItem(DAY_KEY, stored).catch(() => undefined);
     run = next.state;
@@ -421,11 +496,21 @@ function onCatchMark(name: string): void {
     // of a quick run rings higher than catch 2 and no two catches in a row sound the same.
     const voice = burstTakesVoicing(next.moment) ? burstVoicing(run.count, s.heat) : null;
     if (voice) traceEvent('mark', 'catch-voicing', `rr${voice.rr} ${voice.semis >= 0 ? '+' : ''}${voice.semis}`);
-    playMoment(next.moment, voice ? { pitch: voice.semis, volume: voice.volume } : {});
+    // Wave 5: each voicing also swaps its tail (momentMap voicings), so neighbours sound different on a phone speaker.
+    playMoment(next.moment, voice ? { pitch: voice.semis, volume: voice.volume, voicing: voice.rr } : {});
+    burstSoundAt = Date.now();
+    trace('start', next.moment, voice ? ` v${voice.rr} ${voice.semis >= 0 ? '+' : ''}${voice.semis}` : '');
     // A hot run (5 quick catches and up) adds a bright glockenspiel on the burst, in tune with it. Battery Saver: the burst alone.
     if (s.heat >= HOT_LAYER_HEAT && !momentSaver()) playMoment('catch.hot', { delayMs: HOT_LAYER_DELAY_MS, pitch: voice?.semis });
+    // Heat tier 2: the second, crisper thump on the beat after the burst (Battery Saver: one pulse; the grand has its own).
+    if (heatTier(s.heat) >= 2 && !momentSaver() && !catchFlags.grand) scheduleThump(s.heat);
   } else if (name === 'fly') {
-    playMoment('catch.fly');
+    // Wave 5 (fix 4): a slow server or a stalled JS turn can hand the burst and the flight over together; the slide
+    // then waits until the bell's attack has passed, so the two never stack.
+    const wait = Math.max(0, burstSoundAt + FLY_AFTER_BURST_MS - Date.now());
+    if (wait > 0) traceEvent('mark', 'catch-fly-spaced', `+${wait} ms`);
+    playMoment('catch.fly', wait > 0 ? { delayMs: wait } : {});
+    trace('start', 'catch.fly', wait > 0 ? ` +${wait}` : '');
   } else if (name === 'miss') {
     cutWobbles();
     s.burst = true;
@@ -460,6 +545,12 @@ export function resetCatchSoundForTests(): void {
   beatLaneAt = -Infinity;
   catchLive = false;
   settledAt = -Infinity;
+  catchFlags = { beam: false, grand: false, missed: false };
+  burstHeavyDone = false;
+  burstDueAt = -Infinity;
+  burstSoundAt = -Infinity;
+  if (thumpTimer) { clearTimeout(thumpTimer); thumpTimer = null; }
+  beatDue = null;
 }
 
 /** While a map catch is open (studio on): what the catch's own sounds become. */
@@ -469,7 +560,8 @@ function sessionSound(name: CatchSound, opts: { volume?: number; pitch?: number 
   if (name === 'pop' || name === 'chime' || name === 'whoosh') return true; // the marks played these
   const s = session;
   if (!s) return false;
-  const lift = Math.round((s.heat * COUNTER_HEAT_MAX) / HEAT_MAX);
+  // A quick run starts the counter higher (wave 5: one more rung on a hot short catch).
+  const lift = counterLift(s.heat, s.repeatPlan);
   // The stamp is only the stamp: the counter already counted on the coins' own landings (round 5 drops
   // round 4's roll after the stamp, which ticked while the digits had nearly stopped).
   if (name === 'badge') return studioMoment('catch.land', { volume: opts.volume });
@@ -478,7 +570,17 @@ function sessionSound(name: CatchSound, opts: { volume?: number; pitch?: number 
     if (s.done) { traceEvent('mark', 'catch-tick-after-done', 'covered'); return true; }
     if (opts.pitch === undefined) return studioMoment('ui.counterTick', { volume: opts.volume });
     // The progress bar's gold tick (a NEW find): its own top note, whatever the count reached.
-    if (opts.pitch >= BAR_TICK_PITCH) return studioMoment('ui.counterTick', { volume: opts.volume, step: COUNTER_TOP });
+    if (opts.pitch >= BAR_TICK_PITCH) {
+      // Wave 5: spaced on the counter's own lane like the coins, so a frozen turn that hands it over with a coin
+      // tick never loses it to the cue's cooldown (it is the honest "new find" note).
+      const now = Date.now();
+      const at = Math.max(now, s.lastTickAt + COIN_TICK_GAP_MS);
+      if (at - now > 2 * COIN_TICK_GAP_MS) return true;
+      s.lastTickAt = at;
+      const id = playMoment('ui.counterTick', { volume: opts.volume, step: COUNTER_TOP, delayMs: at - now });
+      if (id > 0) s.counterVoices.push({ id, at, step: COUNTER_TOP });
+      return true;
+    }
     // A coin landing in the counter (wow-map plays one on every other coin, on the frame its digits
     // move): one rolling ladder that climbs up to 4 rungs with the run, never steps back or repeats,
     // and is spaced on the audio clock so a bunched beat cannot flam.
@@ -526,7 +628,11 @@ function stale(plannedAt: number, intent: HapticIntent): boolean {
   return true;
 }
 
-function laneBeat(intent: HapticIntent, wobble = false): void {
+/**
+ * `keep` (wave 5): a beat that must buzz (the stamp). It is never dropped as stale; if another buzz took its slot
+ * while it waited, it takes the next free one.
+ */
+function laneBeat(intent: HapticIntent, wobble = false, keep = false): void {
   const now = Date.now();
   const gap = now - laneLast();
   if (gap >= MIN_BEAT_GAP_MS) { beatLaneAt = now; beatHaptic(intent); return; }
@@ -538,7 +644,15 @@ function laneBeat(intent: HapticIntent, wobble = false): void {
     if (wobble && (b?.closed || beats !== b)) return;
     // A coin pulse that waited its turn past the settle is covered by it (wave 4: nothing after 'done').
     if (afterSettle(intent, Date.now())) { traceEvent('mark', 'catch-pulse-after-done', intent); return; }
+    if (keep) {
+      // Something buzzed on its own frame meanwhile: wait one more gap instead of flamming.
+      if (Date.now() - lastAppHapticAt() < MIN_BEAT_GAP_MS - 10) { laneBeat(intent, false, true); return; }
+      beatLaneAt = Math.max(beatLaneAt, Date.now());
+      beatHaptic(intent);
+      return;
+    }
     if (stale(at, intent)) return;
+    if (Date.now() - lastAppHapticAt() < MIN_BEAT_GAP_MS - 10) { traceEvent('mark', 'catch-pulse-dropped', intent); return; }
     beatHaptic(intent);
   }, at - now);
   if (wobble && b) b.timers.push(t);
@@ -574,19 +688,23 @@ function startWobbles(intent: HapticIntent): void {
   const b = beats;
   if (!b) return;
   const base = b.offsets[0] ?? 0;
+  const now = Date.now();
+  // Wave 5: planned from the first wobble's UI-clock time, so a late JS turn does not push the rest late too;
+  // each one still keeps TICK_PULL_GAP_MS after the one before it (never a flam).
+  const due0 = dueNow(now);
+  const plan: number[] = [];
+  b.offsets.forEach((off, k) => plan.push(k === 0 ? now : Math.max(due0 + off - base, plan[k - 1] + TICK_PULL_GAP_MS)));
   fireWobble(0, intent);
   for (let k = 1; k < b.offsets.length; k++) {
-    const at = b.offsets[k] - base;
-    const due = Date.now() + at;
-    b.timers.push(setTimeout(() => { if (!stale(due, b.intents[k] ?? intent)) fireWobble(k, b.intents[k] ?? intent); }, at));
+    const due = plan[k];
+    b.timers.push(setTimeout(() => { if (!stale(due, b.intents[k] ?? intent)) fireWobble(k, b.intents[k] ?? intent); }, Math.max(0, due - Date.now())));
   }
   const s = session;
   if (s && sessionOpen() && studioReady('catch.tap') && !s.burst) {
-    const now = Date.now();
-    // Each delay is measured from `now` (a slow JS thread can take a few ms over the three calls).
-    s.wobbleVoices = b.offsets.map((off, k) => {
-      const delayMs = Math.max(0, off - base - (Date.now() - now));
-      return { id: playMoment('catch.wobble', { step: s.heat + k, delayMs }), at: now + off - base, step: s.heat + k };
+    // Each delay is measured from the clock at its own call (a slow JS thread can take a few ms over the three calls).
+    s.wobbleVoices = plan.map((at, k) => {
+      const delayMs = Math.max(0, at - Date.now());
+      return { id: playMoment('catch.wobble', { step: s.heat + k, delayMs }), at, step: s.heat + k };
     }).filter((v) => v.id > 0);
   }
 }
@@ -623,24 +741,18 @@ export function catchHaptic(intent: HapticIntent, priority = 2): void {
         return;
       }
     }
-    if (sessionOpen() && studioReady('catch.tap')) {
-      const s = session;
-      if (s && s.burst && !s.burstBuzzed && !s.done) {
-        // The burst's own buzz. At heat tier 2 a second, crisper thump follows it (Battery Saver: one pulse).
-        s.burstBuzzed = true;
-        if (heatTier(s.heat) >= 2 && (now < beatUntil || now < burstBeatUntil) && !momentSaver()) {
-          traceEvent('mark', 'catch-thump', `+${s.heat}`);
-          const due = now + HOT_THUMP_MS;
-          setTimeout(() => { if (Date.now() < Math.max(beatUntil, burstBeatUntil) && !stale(due, 'hitRigid')) beatHaptic('hitRigid'); }, HOT_THUMP_MS);
-        }
-      }
-    }
   } catch { /* sound is decoration */ }
   const burstBeat = now < burstBeatUntil && BURST_INTENTS.has(intent);
   if (now < beatUntil || burstBeat) {
     const b = beats;
     if (intent === 'comboHeavy' && b?.closed) {
+      if (burstHeavyDone) {
+        // Wave 5: a second heavy (the grand 25th's, one beat after its burst) is its own beat, never a flam.
+        laneBeat(intent, false, true);
+        return;
+      }
       // The peak: always on its frame, never waits.
+      burstHeavyDone = true;
       burstBuzzAt = now;
       beatLaneAt = Math.max(beatLaneAt, now);
       beatHaptic(intent);
@@ -660,7 +772,8 @@ export function catchHaptic(intent: HapticIntent, priority = 2): void {
     // The stamp is on its frame, unless it arrived in the same JS turn as another beat (a frozen screen
     // delivering everything at once) or a beat is still planned: then it takes the lane's next slot.
     landBeatUntil = 0;
-    if (now - lastAppHapticAt() < LAND_BEAT_MS || beatLaneAt > now) laneBeat(intent);
+    // Wave 5: the stamp always buzzes (never dropped as stale, however late its turn comes).
+    if (now - lastAppHapticAt() < LAND_BEAT_MS || beatLaneAt > now) laneBeat(intent, false, true);
     else { beatLaneAt = now; beatHaptic(intent); }
   } else if (catchLive && beatLaneAt > now - MIN_BEAT_GAP_MS) {
     traceEvent('mark', 'catch-pulse-dropped', intent);

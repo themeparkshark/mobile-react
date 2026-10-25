@@ -33,6 +33,7 @@ import {
   nextRoundRobin,
   parseRef,
   type MomentDef,
+  type MomentLayer,
   type MomentName,
   type SoundRef,
 } from './momentMap';
@@ -47,7 +48,7 @@ import {
   type HapticPrimitive,
   type HapticStep,
 } from '../Haptics';
-import { studioTraceOn, traceEvent } from './studioTrace';
+import { captureLine, captureTraceOn, studioTraceOn, traceEvent } from './studioTrace';
 import { isBatterySaverOn } from '../../power/batterySaver';
 
 /** Battery Saver: the primary sound and one pulse only. Never throws. */
@@ -75,6 +76,8 @@ export interface MomentOptions {
    * ladder rungs (pre-rendered) and by the switch-off fallback (today's sound is never re-pitched).
    */
   pitch?: number;
+  /** Wave 5: the everyday burst's round-robin tail (MomentDef.voicings); omitted = the moment's own layers. */
+  voicing?: number;
 }
 
 /** Output latencies up to this (ms) fire the paired haptic in the same call as the sound. */
@@ -91,6 +94,7 @@ const registered = new Set<string>();
  */
 export const momentTraceBuffer: string[] = [];
 function trace(line: string): void {
+  if (captureTraceOn()) captureLine(`[moment] ${Date.now()} ${line}`);
   if (typeof __DEV__ === 'undefined' || !__DEV__) return;
   if (studioTraceOn()) traceEvent('moment', line);
   if (momentTraceBuffer.length < 2000) momentTraceBuffer.push(`[moment] ${Date.now()} ${line}`);
@@ -230,7 +234,7 @@ function playSound(name: MomentName, def: MomentDef, opts: MomentOptions): { id:
 
   if (!studioReady(name, opts.useVariant)) {
     // Switch off (or not approved yet): Chris's sound, with the ladder as a pitch climb.
-    trace(`fallback ${name} ${def.fallback}${step !== undefined ? ` step=${step}` : ''}`);
+    trace(`fallback ${name} ${def.fallback}${step !== undefined ? ` step=${step}` : ''}${delayMs ? ` +${Math.round(delayMs)}ms` : ''}`);
     return { id: GameAudio.play(def.fallback, { volume, delayMs, pitch: step !== undefined ? Math.min(12, step) : undefined }), cue: def.fallback };
   }
 
@@ -246,27 +250,41 @@ function playSound(name: MomentName, def: MomentDef, opts: MomentOptions): { id:
   if (!k) return { id: GameAudio.play(def.fallback, { volume, delayMs }), cue: def.fallback };
   let id: number;
   if (step !== undefined) {
-    trace(`studio ${name} ${def.primary} step=${step}`);
+    trace(`studio ${name} ${def.primary} step=${step}${delayMs ? ` +${Math.round(delayMs)}ms` : ''}`);
     id = GameAudio.playLadder(k, step, { volume, delayMs });
   } else if (def.rr?.length) {
     const pool = (GameAudio.cue(k)?.variants?.length ?? 0) + 1;
     const rr = nextRoundRobin(pool, lastRr.get(name));
     lastRr.set(name, rr);
-    trace(`studio ${name} ${def.primary} rr=${rr}${pitch ? ` pitch=${pitch}` : ''}`);
+    trace(`studio ${name} ${def.primary} rr=${rr}${pitch ? ` pitch=${pitch}` : ''}${delayMs ? ` +${Math.round(delayMs)}ms` : ''}`);
     id = GameAudio.play(k, { volume, delayMs, variant: rr, pitch });
   } else {
-    trace(`studio ${name} ${def.primary}${pitch ? ` pitch=${pitch}` : ''}`);
+    trace(`studio ${name} ${def.primary}${pitch ? ` pitch=${pitch}` : ''}${opts.voicing !== undefined ? ` v${opts.voicing}` : ''}${delayMs ? ` +${Math.round(delayMs)}ms` : ''}`);
     id = GameAudio.play(k, { volume, delayMs, pitch });
   }
   // Battery Saver: the primary alone carries the moment.
-  if (!momentSaver()) def.layers?.forEach((layer, i) => {
+  const v = voicingIndex(def, opts.voicing);
+  if (!momentSaver()) layersFor(def, v)?.forEach((layer, i) => {
     if (!refPlayable(layer.ref)) return;
-    const lk = ensureCue(name, `layer${i}`, layer.ref, layer.db ?? 0, false);
+    const lk = ensureCue(name, layerSlot(v, i), layer.ref, layer.db ?? 0, false);
     if (!lk) return;
     if (layer.step !== undefined) GameAudio.playLadder(lk, layer.step, { volume, delayMs: delayMs + layer.delayMs });
     else GameAudio.play(lk, { volume, delayMs: delayMs + layer.delayMs, pitch });
   });
   return { id, cue: k };
+}
+
+/** Which voicing's tail plays (0 = the moment's own layers). */
+function voicingIndex(def: MomentDef, voicing: number | undefined): number {
+  const n = def.voicings?.length ?? 0;
+  if (!n || voicing === undefined || !Number.isFinite(voicing)) return 0;
+  return ((Math.floor(voicing) % n) + n) % n;
+}
+function layersFor(def: MomentDef, v: number): readonly MomentLayer[] | undefined {
+  return v > 0 && def.voicings ? def.voicings[v] : def.layers;
+}
+function layerSlot(v: number, i: number): string {
+  return v > 0 ? `v${v}layer${i}` : `layer${i}`;
 }
 
 /**
@@ -314,10 +332,13 @@ export function preloadMoments(names: readonly MomentName[]): Promise<void> {
     if (!def || !refPlayable(def.primary)) continue;
     const k = ensureCue(name, 'primary', def.primary, 0, true);
     if (k) keys.push(k);
-    def.layers?.forEach((layer, i) => {
-      const lk = refPlayable(layer.ref) ? ensureCue(name, `layer${i}`, layer.ref, layer.db ?? 0, false) : null;
-      if (lk) keys.push(lk);
-    });
+    const sets = def.voicings?.length ? def.voicings.map((_, v) => v) : [0];
+    for (const v of sets) {
+      layersFor(def, v)?.forEach((layer, i) => {
+        const lk = refPlayable(layer.ref) ? ensureCue(name, layerSlot(v, i), layer.ref, layer.db ?? 0, false) : null;
+        if (lk) keys.push(lk);
+      });
+    }
   }
   return GameAudio.preload(keys).catch(() => undefined);
 }

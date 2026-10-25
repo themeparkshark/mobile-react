@@ -45,7 +45,7 @@ import { GRADE_LABEL, GRADE_STARS, catchStyleFor, type PhotoGrade } from './ride
 import { Sunburst } from '../../gamekit/fx/ShaderFx';
 import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, setRidePhotoPlayer, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
-import { catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
+import { catchBeatAt, catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
 import { touchHeal, useCommitHeal } from '../../components/map/alive/commitHeal';
 import { catchDim, catchHidePivot, catchKickX, catchKickY, dimCatchChrome, setCatchOpen, showCatchChrome } from './catchPresence';
 import reportRideOff from '../../api/endpoints/me/prep-items/ride-off';
@@ -1006,9 +1006,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   };
 
   /** Sound, haptics and marks on the clock's beats (runOnJS from the UI thread; nothing visual waits on them). */
-  const onBeat = useCallback((kind: number, arg: number) => {
+  const onBeat = useCallback((kind: number, arg: number, plannedAt: number) => {
     const run = runRef.current;
     if (!run) return;
+    // Wave 5 (wow-sound): the wall time this beat was due on the UI clock, so a late JS turn still lays the
+    // buzzes and sounds that follow it on the plan, not on its arrival.
+    catchBeatAt(plannedAt);
     const quiet = skipped.current;
     switch (kind) {
       case BEAT.haptic: if (!quiet) catchHaptic(BEAT_HAPTICS[arg] ?? 'tickSelection', 2); break;
@@ -1023,7 +1026,6 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         catchMark('burst');
         // The beam's impact already gave the heavy buzz; the grand catch adds a second heavy hit and a higher chime.
         if (!run.beam) catchHaptic('comboHeavy', 3);
-        if (run.grand) setTimeout(() => { if (runRef.current === run) catchHaptic('comboHeavy', 3); }, 120);
         catchSound('chime', run.grand ? { volume: 0.9, pitch: 4 } : { volume: 0.8 });
         break;
       case BEAT.success: if (!quiet) catchHaptic('success', 3); break;
@@ -1065,7 +1067,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const list = beats.value;
     for (let i = 0; i < list.length; i++) {
       const b = list[i];
-      if (b.at > last && b.at <= t) runOnJS(onBeat)(b.kind, b.arg);
+      // The beat's due time on the wall clock (the catch clock runs in real ms), so JS can tell how late it is.
+      if (b.at > last && b.at <= t) runOnJS(onBeat)(b.kind, b.arg, Date.now() - (t - b.at));
     }
   });
 
@@ -1165,13 +1168,18 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     inkScale.value = variant.inkScale; ringN.value = variant.rings; starN.value = variant.stars;
     const ladder: Beat[] = catchHaptics(plan).filter(h => h.at > 0 && h.at < plan.hitStopAt)
       .map(h => ({ at: h.at, kind: BEAT.haptic, arg: BEAT_HAPTICS.indexOf(h.intent) }));
-    beats.value = ladder;
+    // Wave 5 (wow-sound): the beam lands on the held frame whether or not the server has answered (the clock holds
+    // there on a slow answer, and a beat added after the clock reached it never fired: the slam and its heavy buzz
+    // were lost on every slow 10th catch). A miss takes it back out below.
+    beats.value = beam ? [...ladder, { at: plan.hitStopAt, kind: BEAT.beam, arg: 0 }] : ladder;
     skipped.current = false;
     runRef.current = { token, item, data: null, next: null, burst: false, beam, grand };
     clockOn.value = 1;
     // A new balance that arrives before the coins waits for them (the stream below takes over the counter).
     holdHud('coins', 3000);
     catchMark(plan.repeat ? 'tap-repeat' : 'tap');
+    // The grand 25th (wow-sound): its burst rings the shower and its second heavy takes the beat after the burst.
+    if (grand) catchMark('grand');
     catchHaptic('tapLight', 3);
     catchSound('pop');
     // The clock starts once the layer's copy of the find has drawn (expo-image decodes a fresh mount off the
@@ -1191,6 +1199,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         // A funny miss, never a sad one: the find boings out of the grab and hops back to its spot.
         runOnUI(markMiss)();
         beamOn.value = 0; grandSV.value = 0;
+        beats.value = ladder;
         catchMark('miss');
         await wait(Math.max(0, plan.hitStopAt - (Date.now() - t0)));
         if (!alive()) return;
@@ -1233,6 +1242,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       if (next.isNew) list.push({ at: plan.tickAt, kind: BEAT.tick, arg: 0 });
       // The beam lands on the held frame: its impact is the heavy buzz (then the burst's success, the golden pair).
       if (current.beam) list.push({ at: plan.hitStopAt, kind: BEAT.beam, arg: 0 });
+      // The grand 25th: a second heavy hit one beat (90 ms) after the burst, on the UI clock, so heavy, heavy and the
+      // success at +180 land evenly and never flam (wave 4 fired it from a JS timer at +120, 60 ms before the success).
+      if (current.grand) list.push({ at: plan.burstAt + 90, kind: BEAT.haptic, arg: BEAT_HAPTICS.indexOf('comboHeavy') });
       if (!data.replayed && data.rewards.tickets > 0) list.push({ at: plan.burstAt + 1, kind: BEAT.tickets, arg: Math.min(data.rewards.tickets, 6) });
       let end = plan.doneAt;
       const coins = data.replayed ? 0 : data.rewards.coins;

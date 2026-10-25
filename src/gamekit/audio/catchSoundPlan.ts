@@ -111,6 +111,11 @@ export interface CatchVisual {
   readonly repeatPlan?: boolean;
   /** The gold beam dropped on this catch (wow-map's 'beam' mark: every 10th catch). */
   readonly beam?: boolean;
+  /**
+   * Wave 5: wow-map's own 'grand' mark (its 25th catch, from its own count). When the map says it, it decides;
+   * without it the 25th beam of this sound session is the grand one, as before.
+   */
+  readonly grand?: boolean;
 }
 
 /**
@@ -125,7 +130,7 @@ export function burstMoment(state: CatchRunState, now: number, visual: CatchVisu
   const dayCount = newDay ? 1 : state.dayCount + 1;
   const quick = now - state.lastCatchAt <= REPEAT_WINDOW_MS;
   const next: CatchRunState = { dayKey: day, lastCatchAt: now, count, dayCount, streak: quick ? state.streak + 1 : 1 };
-  if (visual.beam && count % GRAND_EVERY === 0) return { moment: 'catch.milestone', state: next };
+  if (visual.grand ?? (visual.beam && count % GRAND_EVERY === 0)) return { moment: 'catch.milestone', state: next };
   if (visual.repeatPlan) return { moment: 'catch.repeat', state: next };
   if (newDay) return { moment: 'catch.firstOfDay', state: next };
   return { moment: 'catch.burst', state: next };
@@ -139,11 +144,14 @@ export function burstMoment(state: CatchRunState, now: number, visual: CatchVisu
  * nudges stay under half a semitone, so up to the cap the heat climb always wins: a hotter catch rings higher.
  */
 export const BURST_VOICINGS: readonly { readonly semis: number; readonly volume: number }[] = [
+  // Wave 5: nudges only go up (a hotter catch never rings lower), and each voicing also swaps its tail
+  // (momentMap voicings: sparkle, coin rain, pluck and sparkle, rain and sparkle), so the difference is heard.
   { semis: 0, volume: 1 },
   { semis: 0.4, volume: 0.92 },
-  { semis: -0.3, volume: 0.96 },
-  { semis: 0.2, volume: 0.88 },
+  { semis: 0.15, volume: 0.96 },
+  { semis: 0.25, volume: 0.88 },
 ];
+const BURST_NUDGE_MAX = 0.4;
 /** Most semitones heat lifts the burst (a major third: bright, never chipmunk). */
 export const BURST_HEAT_SEMIS_MAX = 4;
 
@@ -152,7 +160,20 @@ export function burstVoicing(count: number, heat: number): { readonly semis: num
   const rr = ((Math.max(1, Math.floor(count)) - 1) % BURST_VOICINGS.length + BURST_VOICINGS.length) % BURST_VOICINGS.length;
   const v = BURST_VOICINGS[rr];
   const lift = Math.max(0, Math.min(BURST_HEAT_SEMIS_MAX, Math.floor(heat)));
-  return { semis: Math.round((v.semis + lift) * 100) / 100, volume: v.volume, rr };
+  // At the heat cap the pitch holds at its top (the tail and level still rotate), so heat 6 never rings under heat 5.
+  const semis = lift >= BURST_HEAT_SEMIS_MAX ? BURST_HEAT_SEMIS_MAX + BURST_NUDGE_MAX : v.semis + lift;
+  return { semis: Math.round(semis * 100) / 100, volume: v.volume, rr };
+}
+
+/** Most rungs a quick run lifts the counter's coin ticks (plus one on a hot short catch). */
+export const COUNTER_HEAT_MAX = 4;
+/**
+ * How many rungs the counter ladder starts higher on this catch: up to COUNTER_HEAT_MAX with heat, and wave 5 adds
+ * one more on a short catch from heat tier 1, so a hot run of quick catches climbs from a brighter first coin.
+ */
+export function counterLift(heat: number, repeatPlan: boolean): number {
+  const h = Math.max(0, Math.min(HEAT_MAX, Math.floor(heat)));
+  return Math.round((h * COUNTER_HEAT_MAX) / HEAT_MAX) + (repeatPlan && heatTier(h) >= 1 ? 1 : 0);
 }
 
 /** Bursts that get the voicing: the everyday ones. The golden chord and the grand shower stay exactly as written. */

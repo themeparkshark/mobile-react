@@ -308,7 +308,9 @@ test('wired call sites keep their legacy sound behind studioMoment', () => {
     ['src/screens/LinePlay/components/ActivitySlot.tsx', /studioMoment\('game\.correct'\)/],
     ['src/screens/ExploreScreen/ridePhoto/catchAudio.ts', /if \(moment && studioMoment\(moment, \{ volume: opts\.volume \}\)\) return;\n\s+GameAudio\.play\(cue, \{ volume: opts\.volume, pitch: opts\.pitch \}\);/],
     ['src/gamekit/SFX.ts', /const studio = !!moment && studioMoment\(moment, \{ volume: volumeScale \}\);\n\s+const id = studio \? 1 : GameAudio\.play\(cue, \{ volume: volumeScale \}\);/],
-    ['src/components/retention/useRetention.tsx', /if \(!studioMoment\(next\.claimable \? 'loop\.daily3Done' : 'loop\.daily3Check'\)\) \{\n\s+playSfx\(next\.claimable \? 'fx\.reveal' : 'fx\.coinTick'\);/],
+    // Wave 5: Daily 3 plays its moment with the moment's own shaped buzz; off, today's success buzz and sound.
+    ['src/components/retention/useRetention.tsx', /if \(studioReady\(moment\)\) playMoment\(moment, \{ haptic: true \}\);\n\s+else \{\n\s+haptic\('success'\);\n\s+playSfx\(next\.claimable \? 'fx\.reveal' : 'fx\.coinTick'\);/],
+    ['src/components/DailyGiftModal.tsx', /if \(studioReady\('chest\.open'\)\) \{ playMoment\('chest\.open', \{ haptic: true \}\); return; \}\n\s+void Haptics\.notificationAsync\(Haptics\.NotificationFeedbackType\.Success\)\.catch\(\(\) => undefined\);\n\s+playSfx\('win'\); playSfx\('coin', 0\.9\);/],
     ['src/components/retention/useRetention.tsx', /haptic\('success'\); if \(!studioMoment\('loop\.freeze'\)\) playSfx\('fx\.purchase'\);/],
   ];
   for (const [file, re] of sites) assert.match(read(file), re, file);

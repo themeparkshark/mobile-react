@@ -29,6 +29,19 @@ export function studioTraceOn(): boolean {
   return typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_STUDIO_TRACE === '1';
 }
 
+/**
+ * Wave 5: the release-like catch capture (EXPO_PUBLIC_MOTION_CAPTURE=HomeCatchPreview, set only by the lane tooling,
+ * never in a store or OTA bundle) records what the catch would play and buzz, with times, in plain lines that the
+ * preview flushes to Documents/catch-trace.log. Release JS has no console, so this is the only way to prove timing there.
+ */
+export function captureTraceOn(): boolean {
+  return process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';
+}
+export const CAPTURE_LINES: string[] = [];
+export function captureLine(line: string): void {
+  if (CAPTURE_LINES.length < 12_000) CAPTURE_LINES.push(line);
+}
+
 const MAX_EVENTS = 4000;
 const events: TraceEvent[] = [];
 const listeners = new Set<(e: TraceEvent) => void>();

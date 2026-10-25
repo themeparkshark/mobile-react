@@ -86,6 +86,12 @@ export interface MomentDef {
   readonly fallback: string;
   /** Extra layers on the primary (a sparkle on top of the ding). */
   readonly layers?: readonly MomentLayer[];
+  /**
+   * Wave 5: round-robin tails for an everyday burst (index = the voicing, catchSoundPlan.burstVoicing). Each swaps
+   * the layers under the same primary, so catches 2, 5 and 7 sound different on a phone speaker, not only a
+   * fraction of a semitone apart. Voicing 0 is `layers`. Approved studio cues only.
+   */
+  readonly voicings?: readonly (readonly MomentLayer[])[];
   /** Rungs when the primary is a pitch ladder (count, combo tier, warmer). */
   readonly ladder?: number;
   /** Ladder rung range this moment uses (default 0..ladder-1). */
@@ -140,6 +146,12 @@ export const MOMENTS = {
     group: 'catch', label: 'Gold burst: the coin is yours', beat: 'burst',
     primary: 'shared/sh_ding', variant: 'shared/sh_coin_shower', fallback: 'fx.coin',
     layers: [{ ref: 'shared/sh_sparkle', delayMs: 40, db: -4 }],
+    voicings: [
+      [{ ref: 'shared/sh_sparkle', delayMs: 40, db: -4 }],
+      [{ ref: 'shared/sh_coin_shower', delayMs: 60, db: -7 }],
+      [{ ref: 'shared/sh_pluck', delayMs: 0, db: -9 }, { ref: 'shared/sh_sparkle', delayMs: 90, db: -5 }],
+      [{ ref: 'shared/sh_coin_shower', delayMs: 30, db: -9 }, { ref: 'shared/sh_sparkle', delayMs: 120, db: -6 }],
+    ],
     mix: 'fx', gainDb: 0, measuredLufs: -18.8, variantGainDb: 0, duck: DUCK_REVEAL, maxVoices: 2,
     haptic: 'golden', hapticOffsetMs: 0, ahap: 'momentCatch',
     today: 'CoinCollectFlight.tsx:71 LAND_SOUND on landing; ride photo catchSound("chime") -> fx.coin',
@@ -157,6 +169,9 @@ export const MOMENTS = {
   'catch.repeat': m({
     group: 'catch', label: 'Another coin (short catch)', beat: 'burst',
     primary: 'shared/sh_sparkle', variant: 'shared/sh_pluck', fallback: 'fx.coin',
+    // A warm pluck under it, a tiny coin rain, a faint bell: each short catch in a row has its own tail.
+    voicings: [[], [{ ref: 'shared/sh_pluck', delayMs: 0, db: -8 }], [{ ref: 'shared/sh_coin_shower', delayMs: 40, db: -10 }],
+      [{ ref: 'shared/sh_ding', delayMs: 0, db: -11 }]],
     mix: 'fx', gainDb: 0, measuredLufs: -19.6, variantGainDb: 0, maxVoices: 2,
     haptic: 'goodHit', hapticOffsetMs: 0,
     today: 'same as catch.burst today',
@@ -451,7 +466,7 @@ export const MOMENTS = {
     group: 'streak', label: 'Your flame grows', beat: 'burst',
     primary: 'trivia/tv_flame_ignite', variant: 'shared/sh_powerup', fallback: 'fx.reveal',
     mix: 'fx', gainDb: -1.5, measuredLufs: -16.5, variantGainDb: -1.9, duck: DUCK_REVEAL, maxVoices: 1,
-    haptic: 'tierUp', hapticOffsetMs: 0, ahap: 'momentStreakIgnite',
+    haptic: 'streakIgnite', hapticOffsetMs: 0, ahap: 'momentStreakIgnite',
     today: 'wow-loops flame (fx.reveal family)',
     why: 'A warm whoomp makes the flame feel alive and yours.',
   }),
@@ -476,7 +491,7 @@ export const MOMENTS = {
     group: 'streak', label: 'A Daily 3 goal checks off', beat: 'burst',
     primary: 'trivia/tv_correct', variant: 'shared/sh_stamp', fallback: 'ui.confirm',
     mix: 'fx', gainDb: -2.3, measuredLufs: -15.7, variantGainDb: -0.5, maxVoices: 1,
-    haptic: 'goodHit', hapticOffsetMs: 0,
+    haptic: 'daily3Check', hapticOffsetMs: 0,
     today: 'SharkPassScreen.tsx:207 playSfx("coin") -> fx.coin',
     why: 'Checking off a goal gets the right-answer ding: you did it.',
   }),
@@ -485,7 +500,8 @@ export const MOMENTS = {
     primary: 'shared/sh_tier_up', variant: 'memory/mm_board_clear', fallback: 'fx.reward',
     layers: [{ ref: 'shared/sh_coin_shower', delayMs: 160, db: -3 }],
     mix: 'fx', gainDb: 0, measuredLufs: -19, variantGainDb: -1.4, duck: DUCK_REVEAL, maxVoices: 1,
-    haptic: 'golden', hapticOffsetMs: 0,
+    // All three done is the day the flame grows: it gets the ignite's felt swell.
+    haptic: 'streakIgnite', hapticOffsetMs: 0, ahap: 'momentStreakIgnite',
     today: 'playSfx("coin") -> fx.coin',
     why: 'A full Daily 3 rises and showers coins, the biggest moment of a normal day.',
   }),
@@ -504,7 +520,7 @@ export const MOMENTS = {
     primary: 'current-quest/cq_chest_open', variant: 'shared/sh_popper', fallback: 'fx.reward',
     layers: [{ ref: 'shared/sh_coin_shower', delayMs: 80, db: -3 }],
     mix: 'fx', gainDb: -1.8, measuredLufs: -16.2, variantGainDb: 0, duck: DUCK_REVEAL, maxVoices: 1,
-    haptic: 'golden', hapticOffsetMs: 0, ahap: 'momentChestOpen',
+    haptic: 'chestOpen', hapticOffsetMs: 0, ahap: 'momentChestOpen',
     today: 'motion lane daily chest (fx.reward)',
     why: 'The lid creaks open and coins spill out, no slot machine sounds, just treasure.',
   }),

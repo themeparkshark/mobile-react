@@ -49,7 +49,9 @@ test('fix 2: a stalled JS thread can no longer flam the wobble (round 4 live: tw
   assert.equal(ticks.length, 3, `all three rising ticks are heard (${ticks.join(', ')})`);
   const hitstop = got.hitstop;
   assert.ok(ticks.every((t) => t <= hitstop + 20 + 70), 'every tick starts inside the held breath at the latest');
-  assert.ok(v.marks.some((m) => m.name === 'catch-wobble-pulled'), 'the tick that would have rung late was pulled in');
+  // Wave 5: the ticks after a late first beat are laid on the UI clock's plan (100 ms apart at least), so they now
+  // fit before the hit-stop and nothing needs pulling in; none is cut either way.
+  assert.ok(!v.marks.some((m) => m.name === 'catch-wobble-cut'), 'no tick was cut');
   const beforeBurst = v.haptics.filter((h) => h.t < got.burst - 1);
   for (let i = 1; i < beforeBurst.length; i++) {
     assert.ok(beforeBurst[i].t - beforeBurst[i - 1].t >= 90, `no two catch buzzes under 90 ms apart before the burst (${beforeBurst.map((h) => `${h.intent}@${h.t}`).join(' ')})`);

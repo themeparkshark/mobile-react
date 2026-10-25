@@ -89,13 +89,17 @@ test('fix 1: the 10th catch (the beam, full show) is the loudest: slam, duck and
 test('fix 4: the burst never repeats its voicing back to back, and climbs a semitone per heat rung up to a third', async () => {
   const { a } = await fiftyCatches();
   const voiced = a.perCatch.filter((c) => c.burst === 'catch.repeat' || c.burst === 'catch.burst');
+  // Wave 5: neighbours differ in pitch or in their tail (at the heat cap the pitch holds at its top, so a hotter
+  // catch never rings lower; the tail and level still turn).
   for (let i = 1; i < voiced.length; i++) {
-    if (voiced[i].n === voiced[i - 1].n + 1) assert.notEqual(voiced[i].burstPitch, voiced[i - 1].burstPitch, `#${voiced[i].n} differs from #${voiced[i - 1].n}`);
+    if (voiced[i].n === voiced[i - 1].n + 1) {
+      assert.notEqual(`${voiced[i].burstPitch}|${voiced[i].tail}`, `${voiced[i - 1].burstPitch}|${voiced[i - 1].tail}`, `#${voiced[i].n} differs from #${voiced[i - 1].n}`);
+    }
   }
   const c = (n) => a.perCatch[n - 1];
   assert.equal(c(1).burstPitch, 0, 'the golden chord is played as written');
-  assert.ok(c(5).burstPitch > c(2).burstPitch + 2, `heat 4 rings higher than heat 1 (${c(5).burstPitch} vs ${c(2).burstPitch})`);
-  for (const x of a.perCatch) assert.ok(x.burstPitch <= 4.4 && x.burstPitch >= -0.3, `#${x.n} stays inside a third (${x.burstPitch})`);
+  assert.ok(c(9).burstPitch > c(2).burstPitch + 2, `heat 4 rings higher than heat 1 (${c(9).burstPitch} vs ${c(2).burstPitch})`);
+  for (const x of a.perCatch) assert.ok(x.burstPitch <= 4.4 && x.burstPitch >= 0, `#${x.n} stays inside a third and never under the written pitch (${x.burstPitch})`);
   assert.equal(c(25).burstPitch, 0, 'the grand shower is played as written');
   assert.ok(new Set(voiced.map((x) => x.burstPitch)).size >= 8, 'many different voicings across 50 catches');
 });
@@ -114,16 +118,16 @@ test('fix 5: nothing sounds or buzzes after the settle; the counter merges its l
   for (const x of a.perCatch) assert.deepEqual(plain(x.afterDone), [], `#${x.n} after done: ${x.afterDone.join(', ')}`);
   const short = a.perCatch[1];
   assert.equal(short.doneMs, 1290);
-  assert.ok(short.counterMs.every((t) => t <= short.doneMs + 90), `every counter tick by the done frame, the merged one at most a coin gap after (${short.counterMs.join(', ')})`);
-  assert.ok(short.counterMs.length >= 3, 'the short show ends its count with the merged tick');
+  // Wave 5: every counter tick is heard by the done frame (20 ms output latency), the last one included.
+  assert.ok(short.counterMs.every((t) => t <= short.doneMs + 25), `every counter tick by the done frame (${short.counterMs.join(', ')})`);
+  assert.ok(short.counterMs.length >= 2, 'the short show still counts its coins');
   // A frozen screen: the coin beats come bunched just before done; the waiting ticks merge into one.
   const { v, r } = await hotCatch(2, { stalls: [{ at: 1140, ms: 140 }] });
   const done = r.delivered.find((d) => d.name === 'done').at;
   const late = v.sounds.filter((s) => s.t > done + 25 && s.name.startsWith('moment:'));
-  // Only the merged final tick may trail the done frame, by at most one coin gap (so it never flams the tick before it).
-  assert.ok(late.length <= 1 && late.every((s) => s.name.startsWith('moment:ui.counterTick') && s.t <= done + 70 + 20),
-    `nothing after done but the merged tick (${late.map((s) => `${s.name}@${s.t}`).join(' ')})`);
-  assert.ok(v.marks.some((m) => m.name === 'catch-counter-merged'), 'the bunched ticks were merged');
+  // Wave 5: not even the merged tick trails the done frame now.
+  assert.deepEqual(plain(late.map((s) => `${s.name}@${s.t}`)), [], `nothing after done (${late.map((s) => `${s.name}@${s.t}`).join(" ")})`);
+  assert.ok(v.marks.some((m) => m.name === 'catch-counter-merged' || m.name === 'catch-counter-final'), 'the bunched ticks were merged into the last one');
   assert.ok(!v.haptics.some((h) => h.t > done + 5), 'no buzz after done');
 });
 
@@ -182,8 +186,8 @@ test('live heat-5 settle (perf sim, load 690): land, coins-land and done in one 
   e.clock.advance(400);
   await flush();
   const ticks = e.Trace.traceEvents().filter((x) => x.kind === 'sound' && x.name.startsWith('moment:ui.counterTick')).sort((a, b) => a.t - b.t);
-  assert.equal(ticks.length, 2, ticks.map((t) => `${t.name}@${t.t}`).join(' '));
-  assert.ok(ticks[1].t - ticks[0].t >= 70, `the merged tick keeps the gap (${ticks[1].t - ticks[0].t} ms)`);
-  const gain = (t) => Number(/gain (-?[\d.]+) dB/.exec(t.detail)[1]);
-  assert.equal(gain(ticks[1]), gain(ticks[0]), 'same level as the coin ticks');
+  // Wave 5: the tick that started 9 ms before done is the last one: no second tick 70 ms after the done frame.
+  assert.equal(ticks.length, 1, ticks.map((t) => `${t.name}@${t.t}`).join(' '));
+  const doneAt = e.Trace.traceEvents().find((x) => x.kind === 'mark' && x.name === 'catch done').t;
+  assert.ok(ticks[0].t <= doneAt + 25, 'heard by the done frame');
 });

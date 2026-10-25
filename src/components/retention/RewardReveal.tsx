@@ -7,6 +7,7 @@ import Animated, {
 import type { PaidRewards } from '../../api/endpoints/retention';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
+import { playMoment, studioReady } from '../../gamekit/audio/playMoment';
 import { doneDelay, isBigReward, rewardRows, rowSchedule, type RewardRow } from '../../services/retention/logic';
 import { BRAND, GameIcon } from '../../ui';
 import RewardBurst from '../RewardBurst';
@@ -138,7 +139,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     pop.value = withDelay(110, withSequence(withTiming(1.18, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 })));
     burst.value = 0;
     burst.value = withDelay(120, withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }));
-    later(() => { haptic('success'); playSfx('fx.reward'); }, 120);
+    // Studio sound (approved Oct 24): the chest pops with its own sound and shaped buzz (wave 5); off: today's.
+    later(() => { if (studioReady('chest.open')) playMoment('chest.open', { haptic: true }); else { haptic('success'); playSfx('fx.reward'); } }, 120);
     const schedule = rowSchedule(rows);
     later(() => setButtonReady(true), (schedule[schedule.length - 1] ?? 400) + doneDelay(rows));
     schedule.forEach((ms, i) => later(() => {

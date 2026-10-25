@@ -55,7 +55,8 @@ test('50 catches: the golden chord on the full show, the short sparkle after, th
 test('sync: every catch haptic fires on its own beat, with its sound inside the audio-api output latency', async () => {
   const { a } = await fiftyCatches();
   for (const c of a.perCatch) {
-    const p = c.repeat ? { burst: 430, wob: [150, 290] } : { burst: 670, wob: [200, 350, 480] };
+    // Wave 5: the burst after any server hold (the clock waits on the held frame), as the session's own plan says.
+    const p = c.repeat ? { burst: c.burstPlanMs, wob: [150, 290] } : { burst: c.burstPlanMs, wob: [200, 350, 480] };
     assert.ok(c.burstSoundMs !== null && c.burstHapticMs !== null, `#${c.n} has a burst sound and haptic`);
     if (!c.beam) assert.equal(c.burstHapticMs, p.burst, `#${c.n} the burst buzz is on the visual burst frame`);
     const lag = c.burstSoundMs - p.burst;
@@ -71,19 +72,25 @@ test('a quick run gets hotter: the wobble and counter ticks climb one rung per q
   const { a } = await fiftyCatches();
   const c = (n) => a.perCatch[n - 1];
   assert.equal(c(1).heat, 0);
-  for (let n = 2; n <= 7; n++) assert.equal(c(n).heat, n - 1, `catch #${n} in a 25 s run`);
+  // Wave 5 session: 25 s runs, a 2.5 minute walk after #4 (and #29, #49), 6 minutes after #19, a night after #44.
+  for (let n = 2; n <= 4; n++) assert.equal(c(n).heat, n - 1, `catch #${n} in a 25 s run`);
+  for (let n = 6; n <= 12; n++) assert.equal(c(n).heat, Math.min(7, n - 5), `catch #${n} in a 25 s run`);
   assert.deepEqual(plain(c(1).wobbleRungs), ['l0', 'l1', 'l2']);
-  assert.deepEqual(plain(c(7).wobbleRungs), ['l6', 'l7'], 'the 7th quick catch rings six rungs higher, same short show');
-  assert.equal(c(8).heat, 0, 'a 2.5 minute walk resets the run');
-  assert.deepEqual(plain(c(8).wobbleRungs), ['l0', 'l1']);
+  assert.deepEqual(plain(c(11).wobbleRungs), ['l6', 'l7'], 'the 7th quick catch in a row rings six rungs higher, same short show');
+  assert.equal(c(5).heat, 0, 'a 2.5 minute walk resets the run');
+  assert.deepEqual(plain(c(5).wobbleRungs), ['l0', 'l1']);
   for (const x of a.perCatch) {
     const top = Math.max(...x.wobbleRungs.map((r) => Number(r.slice(1))));
     assert.ok(top <= 9, `#${x.n} wobble tops out at rung 9 (${top})`);
     assert.ok(x.heat <= 7);
   }
-  assert.ok(Number(c(7).counterRungs[0].slice(1)) > Number(c(2).counterRungs[0].slice(1)) - 1, 'the counter ticks climb with the run too');
-  for (const x of a.perCatch) assert.equal(new Set(x.counterRungs).size, x.counterRungs.length, `#${x.n} counter ticks never repeat a rung (${x.counterRungs.join(' ')})`);
-  assert.equal(c(7).sounds, c(2).sounds + 1, 'hotter: the 7th quick catch adds only the bright hot layer');
+  assert.ok(Number(c(11).counterRungs[0].slice(1)) > Number(c(2).counterRungs[0].slice(1)), 'the counter ticks climb with the run too');
+  // The progress bar's gold tick (a NEW find) is always the top note; the coins' own ticks never repeat a rung.
+  for (const x of a.perCatch) {
+    const coins = x.counterRungs.filter((_, k) => x.counterMs[k] !== x.barMs);
+    assert.equal(new Set(coins).size, coins.length, `#${x.n} counter ticks never repeat a rung (${x.counterRungs.join(' ')})`);
+  }
+  assert.equal(c(11).coreSounds, c(2).coreSounds + 1, 'hotter: the 7th quick catch adds only the bright hot layer (tails aside)');
   assert.ok(430 + 40 + 540 < 1020, 'and it ends before the coin lands in the short show (burst 430 + 40 ms + 540 ms glock, stamp 1020)');
 });
 
