@@ -110,3 +110,22 @@ test('fix 5: a mono file decoded to two identical channels is kept as one (half 
   const src = fs.readFileSync(path.join(root, 'src/gamekit/audio/backends.ts'), 'utf8');
   assert.match(src, /const buffer = dualMonoToMono\(this\.ctx, decoded\) \?\? decoded;/);
 });
+
+test('fix 3: a redesigned Daily 3 (a ring that fills before the full-set flash) can put the check and the chord on its own frames', async () => {
+  const e = traceEngine();
+  e.Catch.resetCatchSoundForTests(); e.Loop.resetLoopSoundForTests(); e.Power.resetBatterySaver();
+  await e.GameAudio.init();
+  e.Loop.preloadLoopMoments();
+  await run(e, 400);
+  // Defaults unchanged: note on the pop (+20), chord 160 later.
+  assert.equal(JSON.stringify(e.Loop.daily3Plan(3, 3).map((s) => s.at)), '[0,160]');
+  assert.equal(JSON.stringify(e.Loop.daily3Plan(3, 3, { chordAfterMs: 420 }).map((s) => s.at)), '[0,420]');
+  assert.equal(JSON.stringify(e.Loop.daily3Plan(3, 3, { saver: true, chordAfterMs: 420 }).map((s) => s.at)), '[420]');
+  const t0 = e.clock.now;
+  assert.equal(e.Loop.playDaily3(3, 3, { syncMs: 0, chordAfterMs: 420 }), true);
+  await run(e, 700);
+  const note = starts(e, t0, 'moment:loop.daily3Check:primary')[0];
+  const chord = starts(e, t0, 'moment:loop.daily3Done:primary')[0];
+  assert.ok(note && chord, 'both ring');
+  assert.ok(Math.abs(chord.t - note.t - 420) <= 20, `chord ${chord.t - note.t} ms after the note`);
+});

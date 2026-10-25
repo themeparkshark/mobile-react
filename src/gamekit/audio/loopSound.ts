@@ -65,7 +65,8 @@ export interface LoopStep {
  * What a Daily 3 check-off plays: `done` goals now done (1..3), on streak day `day`. Pure (tests, the listening pack).
  * `milestoneReady`: the 7-day flame's cue can play (approved and loaded).
  */
-export function daily3Plan(done: number, day: number, opts: { readonly saver?: boolean; readonly milestoneReady?: boolean } = {}): LoopStep[] {
+export function daily3Plan(done: number, day: number, opts: { readonly saver?: boolean; readonly milestoneReady?: boolean; readonly chordAfterMs?: number } = {}): LoopStep[] {
+  const chordAt = Number.isFinite(opts.chordAfterMs) ? Math.max(0, opts.chordAfterMs as number) : DONE_AFTER_CHECK_MS;
   const n = Math.max(1, Math.min(3, Math.floor(done)));
   const check: LoopStep = { moment: 'loop.daily3Check', at: 0, pitch: CHECK_SEMIS[n - 1] };
   if (n < 3) return [check];
@@ -74,21 +75,34 @@ export function daily3Plan(done: number, day: number, opts: { readonly saver?: b
   const chord: LoopStep = big ? { moment: 'loop.flameMilestone', at: 0 } : { moment: 'loop.daily3Done', at: 0, pitch: flameSemis(day) };
   // Battery Saver: the chord alone, one pulse (its heavy peak, never only the soft start of the swell), still on the
   // pip's pop peak (w5r2 capture: played at once it rang 133 ms before the peak).
-  if (opts.saver) return [{ ...chord, at: DONE_AFTER_CHECK_MS, haptic: big ? undefined : 'tierUp' }];
+  if (opts.saver) return [{ ...chord, at: chordAt, haptic: big ? undefined : 'tierUp' }];
   // The lead-in note keeps one light pulse; the chord swells (the 7th day's ignite keeps its golden pair).
-  return [{ ...check, haptic: 'onBeatLight' }, { ...chord, at: DONE_AFTER_CHECK_MS, haptic: big ? undefined : 'flameSwell' }];
+  return [{ ...check, haptic: 'onBeatLight' }, { ...chord, at: chordAt, haptic: big ? undefined : 'flameSwell' }];
+}
+
+/** Where a surface's own frames put the check and the all-done chord (a redesigned Daily 3, wave 5 round 3). */
+export interface Daily3Timing {
+  /** ms from the call to the check note's frame (default DAILY3_POP_SYNC_MS: the map button pops on its next frame). */
+  readonly syncMs?: number;
+  /**
+   * ms from the check note to the all-done chord (default DONE_AFTER_CHECK_MS). A surface whose full set flashes
+   * later (a ring that fills first) passes its own gap so the chord and its heavy land on the flash. Keep it 120 or
+   * more: the note's light pulse and the chord's swell then never merge in the shared haptic gate.
+   */
+  readonly chordAfterMs?: number;
 }
 
 /**
  * Play a Daily 3 check-off (sound and shaped buzz). Returns false when studio sound cannot play it (the caller then
  * plays today's sound and buzz). Never throws.
  */
-export function playDaily3(done: number, day: number): boolean {
+export function playDaily3(done: number, day: number, timing: Daily3Timing = {}): boolean {
   try {
     if (!studioReady('loop.daily3Check') || !studioReady('loop.daily3Done')) return false;
-    const plan = daily3Plan(done, day, { saver: momentSaver(), milestoneReady: studioReady('loop.flameMilestone') });
+    const sync = Number.isFinite(timing.syncMs) ? Math.max(0, timing.syncMs as number) : DAILY3_POP_SYNC_MS;
+    const plan = daily3Plan(done, day, { saver: momentSaver(), milestoneReady: studioReady('loop.flameMilestone'), chordAfterMs: timing.chordAfterMs });
     for (const step of plan) {
-      playMoment(step.moment, { haptic: true, delayMs: step.at + DAILY3_POP_SYNC_MS || undefined, pitch: step.pitch || undefined, hapticPattern: step.haptic });
+      playMoment(step.moment, { haptic: true, delayMs: step.at + sync || undefined, pitch: step.pitch || undefined, hapticPattern: step.haptic });
     }
     return true;
   } catch {
