@@ -121,7 +121,7 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
 /** Stable empty data for always-mounted sources that are off (never a new object per render). */
 const NO_FEATURES: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, sharkLook = 0, sharkHop = 0, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, chromeHidden = false, fright = null, onUserPan, declutter = null }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, sharkLook = 0, sharkHop = 0, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, chromeHidden = false, fright = null, onUserPan, declutter = null, trailHidden = false }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -165,6 +165,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly sharkHop?: number;
   /** Trail Boxes (steps stream): the box filling as you walk rides on the shark; it hops when one is ready. */
   readonly trail?: MapTrail | null;
+  /** A brand new player's first hunt: the Trail Box stays off the shark's back so the treat is the one thing that pops. */
+  readonly trailHidden?: boolean;
 }) {
   if (__DEV__) probeCount('mapRender');
   const { location, gpsSignal } = useContext(LocationContext);
@@ -1043,7 +1045,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <View style={styles.centerShark} pointerEvents="box-none">
             {sharkArt(overlayStyles, overlayLive, focusedOnPlayer, true)}
             <SharkSparkles burst={sparkleBurst} />
-            <TrailBoxBadge trail={liveTrail} live={lifeOn} />
+            <TrailBoxBadge trail={trailHidden ? null : liveTrail} live={lifeOn} />
             {/* Tap your shark: it hops, twirls and shows off what it is wearing. */}
             <Pressable style={styles.sharkTap} onPress={onSharkTap} disabled={!focusedOnPlayer}
               accessibilityRole="button" accessibilityLabel="Your shark. Tap to say hi." />
