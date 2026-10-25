@@ -743,7 +743,7 @@ test('r6: the +N roll never shows +0 for points you earned and runs on the UI cl
 
 test('r6: an idle card is a still frame (board at rest, no per-frame writes when nothing moves)', () => {
   const rt = read('src/games/whack/useWhackRuntime.ts');
-  assert.match(rt, /r\.frameWall = Date\.now\(\);\n\s+\/\/ At rest under a card[^\n]*\n\s+if \(r\.rest\) return;/, 'no render pass and no tick at rest');
+  assert.match(rt, /r\.frameWall = (?:Date\.now\(\)|now);\n\s+\/\/ At rest under a card[^\n]*\n\s+if \(r\.rest\) return;/, 'no render pass and no tick at rest');
   assert.match(rt, /r\.running = true;\n\s+r\.rest = false;/, 'every Burst start wakes the board');
   assert.match(rt, /rt\.value\.rest = false;\n\s+const a = an\.value;\n\s+a\.curtainAt = -1;/, 'GO wakes the board');
   const whack = read('src/games/whack/WhackAShark.tsx');
