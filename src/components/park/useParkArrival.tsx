@@ -173,12 +173,14 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     tasks: tasks ?? [], nextBoss: bossValue, parkNames: [park?.name, park?.display_name], now: new Date(),
   }), [tasks, park?.name, park?.display_name]);
 
-  // Wave 5 round 3: everything but a free map is in (the coins, the boss answer, today's Daily 3): build the stage now,
-  // invisibly and in its small steps, while the map finishes what it is doing, so it starts on the frame the map is
-  // free (its build used to start only then and added about 0.7 s, more on a busy phone). Nothing is marked seen
-  // until it really plays; the staged stage takes no taps and is hidden from the screen reader.
-  const stageable = due && !playing && parkId !== null && !!tasks && boss?.parkId === parkId && !!playerId && goalSettled === fetchKey;
-  const stagedCards = useMemo(() => (stageable && boss ? cardsFor(boss.value) : null), [stageable, boss, cardsFor]);
+  // Wave 5 round 3: the arrival is due and the park's coins are in: build the stage now, invisibly and in its small
+  // steps, while the boss time and today's Daily 3 load and the map finishes what it is doing, so it starts on the
+  // frame everything is ready (its build used to start only then and added about 0.7 s, 2.5 s on a busy phone). The
+  // boss card and the Daily 3 pill join the waiting stage when they land. Nothing is marked seen until it really
+  // plays; the waiting stage takes no taps and is hidden from the screen reader.
+  const stageable = due && !playing && parkId !== null && !!tasks && !!playerId;
+  const stagedBoss = boss?.parkId === parkId ? boss.value : null;
+  const stagedCards = useMemo(() => (stageable ? cardsFor(stagedBoss) : null), [stageable, stagedBoss, cardsFor]);
   const staged = stagedCards && parkId !== null ? (() => {
     const golden = arrivalIsGolden(arrivals.current + 1);
     return { parkId, cards: stagedCards, goal, replay: false, repeat: arrivalIsRepeat(history.current, parkId, day),

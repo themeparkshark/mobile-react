@@ -327,8 +327,8 @@ test('wave 5 round 3: the Daily 3 pill holds 300 ms past the cards, docks under 
 test('wave 5 round 3: the stage is built ahead while the map is busy and starts the frame the map is free', () => {
   const hook = read('src/components/park/useParkArrival.tsx');
   const src = read('src/components/park/ParkArrivalMoment.tsx');
-  assert.match(hook, /const stageable = due && !playing && parkId !== null && !!tasks && boss\?\.parkId === parkId && !!playerId && goalSettled === fetchKey;/,
-    'staged as soon as everything but a free map is in (no `ready`)');
+  assert.match(hook, /const stageable = due && !playing && parkId !== null && !!tasks && !!playerId;/,
+    'staged as soon as it is due and the coins are in (no `ready`, no waiting on the boss feed)');
   assert.doesNotMatch(hook.slice(hook.indexOf('const stageable'), hook.indexOf('// Start it:')), /setSeen|setItem|arrivals\.current \+= 1/, 'nothing is marked seen while staged');
   assert.match(hook, /cards: stagedCards \?\? cardsFor\(boss\.value\)/, 'the staged cards play as they are');
   assert.match(hook, /const shown = playing \?\? staged;\n  const hold = !playing;/);
