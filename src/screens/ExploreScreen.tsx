@@ -1102,7 +1102,9 @@ export function ExploreScreenBody() {
     return () => clearTimeout(timer);
   }, [huntStartedAt]);
   const firstVisitHold = firstVisitChestWaits({
-    firstVisit: !!firstVisit.current, catchesThisVisit, huntStartedAt, now: chestClock >= 0 ? Date.now() : 0,
+    // The first hunt is the home map's (home catches count it down). In a park there is no home catch
+    // to make, so a park-first new player's chest and Daily 3 never wait on it (they never showed).
+    firstVisit: !!firstVisit.current && !park, catchesThisVisit, huntStartedAt, now: chestClock >= 0 ? Date.now() : 0,
   });
   const chestReady = !firstVisitHold && chestMayPresent({
     // In the half second between the first catch and Finn's "Nice catch!" line, the chest waits too (no flash).

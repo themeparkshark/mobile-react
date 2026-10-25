@@ -1454,3 +1454,13 @@ test('wave 5 round 3: under the launch cover, the map screen body mounts a commi
   const cover = read('src/components/map/mapCover.ts');
   assert.match(cover, /export function launchCoverAhead\(\): boolean \{\s*return firstCover \|\| \(plan\.up && plan\.launch && !plan\.lifting\);/);
 });
+
+test('wave 5 round 3: a park-first new player still gets the daily chest and Daily 3 on the park map', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  // The first-hunt hold counts home catches only; in a park it would hold the rail's chest forever.
+  assert.match(explore, /firstVisit: !!firstVisit\.current && !park, catchesThisVisit, huntStartedAt,/);
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const q = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
+  assert.equal(q.firstVisitChestWaits({ firstVisit: false, catchesThisVisit: 0, huntStartedAt: null, now: 0 }), false);
+  assert.equal(q.firstVisitChestWaits({ firstVisit: true, catchesThisVisit: 0, huntStartedAt: null, now: 0 }), true, 'home first hunt still waits');
+});
