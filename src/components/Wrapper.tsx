@@ -393,8 +393,10 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
 /** The rare compass pick's two low fans of inked gold stars; the layout changes with each rare pick. */
 function RareFans({ size }: { readonly size: number }) {
   const [seed, setSeed] = useState(() => rareSeed(rarePickCount.value));
+  // The seed is worked out on the JS thread (only plain values cross from the UI thread).
+  const takeCount = (n: number) => setSeed(rareSeed(n));
   useAnimatedReaction(() => rarePickCount.value, (n, before) => {
-    if (before !== null && n !== before) runOnJS(setSeed)(rareSeed(n));
+    if (before !== null && n !== before) runOnJS(takeCount)(n);
   });
   const half = Math.round(FOOTER_MOTION.rareSparkles / 2);
   const fan = FOOTER_MOTION.rareFanDeg;

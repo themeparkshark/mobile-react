@@ -120,6 +120,7 @@ let compassPicks = 0;
 export const rarePickCount = makeMutable(0);
 /** The star layout seed for rare pick n: a new pattern each time, cycling through a handful. Pure (unit tested). */
 export function rareSeed(n: number): number {
+  'worklet';
   return 7 + (Math.max(0, n) % 6) * 5;
 }
 /** Whether compass pick number n (1-based) is a rare one. Pure (unit tested). */

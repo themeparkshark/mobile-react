@@ -174,3 +174,12 @@ test('dive: the crew sheet is decided before the water opens and is already in p
   assert.match(sheet, /entering=\{still \? undefined : FadeIn\.duration\(180\)\}/);
   assert.match(read('src/screens/LinePlay/group/useGroupPlay.tsx'), /const crewKnown = crew\.loaded;/);
 });
+
+test('rare fans: no plain JS function is called on the UI thread (a red-box crash on the fifth compass pick)', () => {
+  const wrapper = read('src/components/Wrapper.tsx');
+  const fans = wrapper.slice(wrapper.indexOf('function RareFans'), wrapper.indexOf('/** A footer label'));
+  const reaction = fans.slice(fans.indexOf('useAnimatedReaction('), fans.indexOf('});', fans.indexOf('useAnimatedReaction(')));
+  assert.doesNotMatch(reaction, /rareSeed\(/, 'the seed is computed on the JS thread');
+  assert.match(reaction, /runOnJS\(takeCount\)\(n\)/);
+  assert.match(read('src/components/footerMotion.ts'), /export function rareSeed\(n: number\): number \{\n\s+'worklet';/);
+});
