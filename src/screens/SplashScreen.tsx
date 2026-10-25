@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { useIsFocused } from '@react-navigation/native';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, StyleSheet, View } from 'react-native';
 import { useEffectOnceWhen } from 'rooks';
@@ -50,6 +51,11 @@ export default function SplashScreen() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Splash stays mounted at the bottom of the stack. AuthProvider moves a signed-in player on
+  // by itself, so when the copy (crumbs) arrives late on a slow network, Splash must not
+  // navigate from underneath: navigate('Loading') then popped the map back to a Loading
+  // screen that had already done its one navigate, and the kid sat there for good.
+  const focused = useIsFocused();
 
   // Use useEffectOnceWhen to navigate only once when ready
   useEffectOnceWhen(() => {
@@ -63,7 +69,7 @@ export default function SplashScreen() {
       // User is not authenticated - go to login
       RootNavigation.navigate('Login');
     }
-  }, Boolean(isReady && crumbsLoaded));
+  }, Boolean(isReady && crumbsLoaded && focused));
 
   const size = {
     width: Dimensions.get('window').width,

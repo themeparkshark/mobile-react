@@ -10,18 +10,21 @@ import {
   Dimensions,
   Easing,
   SafeAreaView,
-  Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import reviewLogin from '../../api/endpoints/auth/review-login';
 import SignInButtons from '../../components/SignInButtons';
 import { AuthContext } from '../../context/AuthProvider';
-import { gameAlert } from '../../ui';
+import { gameAlert, GameButton } from '../../ui';
+
+/** The guest door is a real button: play first, sign in to save after the first win. */
+export const GUEST_PLAY_LABEL = 'Play now';
+export const HAVE_SHARK_LABEL = 'I already have a shark';
+/** Both doors share one width, so they read as a pair. */
+const DOOR_WIDTH = 264;
 import config from '../../config';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { ThemeContext } from '../../context/ThemeProvider';
-import useCrumbs from '../../hooks/useCrumbs';
 import { copyrightLine } from '../../api/platform';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -48,17 +51,23 @@ function FloatingBubble({
   const sway = isLarge ? 25 : isTiny ? 8 : 15;
 
   useEffect(() => {
+    // Each rise restarts itself until the bubble unmounts (Login leaves the top).
+    let alive = true;
+    let current: Animated.CompositeAnimation | null = null;
     const loop = () => {
+      if (!alive) return;
       anim.setValue(0);
-      Animated.timing(anim, {
+      current = Animated.timing(anim, {
         toValue: 1,
         duration,
         delay,
         easing: Easing.linear,
         useNativeDriver: true,
-      }).start(() => loop());
+      });
+      current.start(({ finished }) => { if (finished) loop(); });
     };
     loop();
+    return () => { alive = false; current?.stop(); };
   }, []);
 
   return (
@@ -137,7 +146,6 @@ const BUBBLES = [
 ];
 
 export default function LoginScreen({ navigation }: NativeStackScreenProps<any>) {
-  const { labels } = useCrumbs();
   const { theme } = useContext(ThemeContext);
   const { playSound } = useContext(SoundEffectContext);
   const { adoptSession } = useContext(AuthContext);
@@ -261,7 +269,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
         transition={0}
         style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
       />
-      {/* Looping video background — exact screen dimensions */}
+      {/* Looping video background: exact screen dimensions */}
       <Video
         source={SPLASH_VIDEO}
         resizeMode={ResizeMode.COVER}
@@ -270,7 +278,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
         isMuted
         style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
       />
-      {/* Logo — bounces in + gentle float */}
+      {/* Logo: bounces in + gentle float */}
       <Animated.View
         style={{
           position: 'absolute',
@@ -291,7 +299,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
           contentFit="contain"
         />
       </Animated.View>
-      {/* Light overlay for button contrast — only bottom half */}
+      {/* Light overlay for button contrast: only bottom half */}
       <LinearGradient
         colors={['transparent', 'rgba(5,52,110,0.3)']}
         style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: SCREEN_HEIGHT * 0.4 }}
@@ -309,7 +317,8 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
           overflow: 'hidden',
         }}
       >
-        {BUBBLES.map((b, i) => (
+        {/* Only while Login is on top: it stays mounted under the map after sign-in. */}
+        {focused && BUBBLES.map((b, i) => (
           <FloatingBubble key={i} {...b} />
         ))}
       </View>
@@ -341,26 +350,18 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
               transform: [{ translateY: buttonsY }],
             }}
           >
-            <SignInButtons>
-              <TouchableOpacity
-                onPress={() => {
-                  playSound(whooshSound);
-                  navigation.navigate('Explore');
-                }}
-              >
-                <Text
-                  style={{
-                    textAlign: 'center',
-                    fontSize: 15,
-                    paddingTop: 24,
-                    fontFamily: 'Knockout',
-                    color: '#05346e',
-                  }}
-                >
-                  {labels.continue_as_guest}
-                </Text>
-              </TouchableOpacity>
-            </SignInButtons>
+            {/* Play first is the main door: a guest gets Finn's treat and a quick game,
+                then signs in after the first win. Sign in with Apple is for sharks who already have one. */}
+            <SignInButtons width={DOOR_WIDTH} caption={HAVE_SHARK_LABEL} top={
+              <View style={{ width: DOOR_WIDTH }}>
+                <GameButton label={GUEST_PLAY_LABEL} icon="play" fullWidth
+                  accessibilityHint="Play a quick game first. You can sign in after."
+                  onPress={() => {
+                    playSound(whooshSound);
+                    navigation.navigate('Explore');
+                  }} />
+              </View>
+            } />
           </Animated.View>
         </View>
 

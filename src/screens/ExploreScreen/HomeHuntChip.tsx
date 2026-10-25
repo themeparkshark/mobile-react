@@ -11,6 +11,8 @@ export interface HuntChipMessage {
   /** Degrees clockwise from screen-up; draws a direction arrow. */
   readonly arrowDeg?: number | null;
   readonly tone?: 'info' | 'error';
+  /** A leading picture (the retry arrow), drawn big so the chip reads without words. */
+  readonly icon?: 'retry';
   /** Auto-dismiss after this long; 0 keeps it up while the state lasts (status lines). */
   readonly ttlMs?: number;
   readonly onPress?: () => void;
@@ -23,7 +25,7 @@ export const HUNT_CHIP_TTL_MS = 2600;
 /** About how wide a chip's line draws (Shark 14 pt, padding, arrow), capped at the wrap's 320 pt. Errs wide. */
 export function chipWidthFor(message: HuntChipMessage | null): number {
   if (!message) return 320;
-  return Math.min(320, Math.round(36 + message.text.length * 6.6 + (message.arrowDeg != null ? 26 : 0)
+  return Math.min(320, Math.round(36 + message.text.length * 6.6 + (message.arrowDeg != null ? 26 : 0) + (message.icon ? 32 : 0)
     + (message.action ? 20 + message.action.label.length * 6.2 : 0)));
 }
 const noop = () => undefined;
@@ -87,7 +89,7 @@ export default function HomeHuntChip({ message, onDismiss }: {
               <View style={styles.arrowStem} />
             </View>
           )}
-          {error && <GameIcon name="retry" size={16} />}
+          {message.icon === 'retry' ? <GameIcon name="retry" size={24} /> : error && <GameIcon name="retry" size={16} />}
           <Text style={styles.text} numberOfLines={1}>{message.text}</Text>
           {message.action && (
             <Pressable accessibilityRole="button" accessibilityLabel={message.action.hint ?? message.action.label}

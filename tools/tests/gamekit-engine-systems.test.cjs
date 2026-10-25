@@ -290,3 +290,88 @@ test('studio audio sync: infers ladders and lanes, converts one-shots to WAV, sp
   assert.equal(probe, 'pcm_s16le,2', 'panned lane files stay stereo WAV');
   fs.rmSync(tmp, { recursive: true, force: true });
 });
+
+test('GameAudio: with sound effects and music both off nothing starts the audio engine (battery, no audio session to fail)', async () => {
+  const { GameAudio, calls } = loadAudioEngine();
+  GameAudio.setSfxEnabled(false);
+  GameAudio.setMusicEnabled(false);
+  assert.equal(GameAudio.wantsAudio(), false);
+  await GameAudio.init();
+  assert.equal(GameAudio.backend, null, 'no backend while all sound is off');
+  await GameAudio.preload(['fx.coin']);
+  await GameAudio.preloadBeds(['mm_loop_main']);
+  assert.equal(GameAudio.play('fx.coin'), 0);
+  await GameAudio.music.play('mm_loop_main', 0);
+  assert.equal(GameAudio.backend, null);
+  assert.deepEqual(calls.loads, [], 'nothing decoded');
+  // Sound back on: the next load starts the engine as before.
+  GameAudio.setSfxEnabled(true);
+  await GameAudio.preload(['fx.coin']);
+  assert.ok(GameAudio.backend, 'engine starts once sound is on');
+  assert.ok(calls.loads.length > 0);
+  assert.ok(GameAudio.play('fx.coin') > 0);
+});
+
+test('the player\'s Music setting reaches the game audio engine, like Sound Effects', () => {
+  const provider = fs.readFileSync(path.join(root, 'src/context/SoundEffectProvider.tsx'), 'utf8');
+  // Both follow sfxPolicy: signed-in players by their own setting, guests hear the game.
+  assert.match(provider, /sfxAllowed\(\{ isReady, signedIn: !!player, playerSetting: player\?\.enabled_sound_effects/);
+  assert.match(provider, /SFX\.setEnabled\(allowed\);/);
+  assert.match(provider, /musicAllowed = sfxAllowed\(\{ isReady, signedIn: !!player, playerSetting: player\?\.enabled_music/);
+  assert.match(provider, /SFX\.setMusicEnabled\(musicAllowed\);/);
+  assert.match(fs.readFileSync(path.join(root, 'src/gamekit/SFX.ts'), 'utf8'), /setMusicEnabled\(value: boolean\): void \{\s*GameAudio\.setMusicEnabled\(value\);/);
+});
+
+test('login music plays only for a player who is really signed out, never while a saved session loads', () => {
+  const music = fs.readFileSync(path.join(root, 'src/context/MusicProvider.tsx'), 'utf8');
+  assert.match(music, /const \{ player, isReady \} = useContext\(AuthContext\);/);
+  assert.match(music, /if \(!player\) \{[\s\S]{0,400}?if \(!isReady\) return;[\s\S]{0,200}?if \(loginMusicRef\.current\) return;/);
+  assert.match(music, /\}, \[player, player\?\.enabled_music, isReady\]\);/);
+});
+
+test('GameAudio: held until the player\'s sound settings are known, so a muted player never starts the engine before sign-in loads', async () => {
+  const { GameAudio, calls } = loadAudioEngine();
+  GameAudio.holdUntilSettings();
+  assert.equal(GameAudio.wantsAudio(), false, 'sound defaults to on, but nothing starts yet');
+  assert.equal(await GameAudio.preload(['fx.coin']), false, 'a preload in that moment reports nothing loaded');
+  GameAudio.play('fx.coin');
+  await GameAudio.init();
+  assert.equal(GameAudio.backend, null);
+  assert.deepEqual(calls.loads, []);
+  GameAudio.settingsKnown();
+  assert.equal(await GameAudio.preload(['fx.coin']), true, 'sound on: the engine starts and the preload loads');
+  assert.ok(GameAudio.backend);
+});
+
+test('screens that cache a preload drop it when nothing loaded (sound off), so turning Sound on preloads normally', () => {
+  const read = f => fs.readFileSync(path.join(root, f), 'utf8');
+  assert.match(read('src/screens/pins/BoxReveal.tsx'), /preloaded \?\?= GameAudio\.preload\(\[\.\.\.REVEAL_CUES\]\)\.then\(ok => \{ if \(!ok\) preloaded = null; \}/);
+  assert.match(read('src/screens/pinTrading/tradeAudio.ts'), /preloaded \?\?= GameAudio\.preload\(\[\.\.\.TRADE_CUES\]\)\.then\(ok => \{ if \(!ok\) preloaded = null; \}/);
+  assert.match(read('src/screens/ExploreScreen/ridePhoto/catchAudio.ts'), /\.then\(ok => \{ if \(!ok\) ready = null; \}/);
+  const provider = read('src/context/SoundEffectProvider.tsx');
+  assert.match(provider, /^SFX\.holdUntilSettings\(\);$/m, 'held from app start');
+  assert.match(provider, /if \(isReady\) SFX\.settingsKnown\(\);/);
+});
+
+test('SoundEffectProvider is the only writer of the Music setting into the game audio engine', () => {
+  const writers = [];
+  const walk = dir => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(file);
+      else if (/\.(ts|tsx)$/.test(entry.name) && /GameAudio\.setMusicEnabled\(/.test(fs.readFileSync(file, 'utf8'))) writers.push(path.relative(root, file));
+    }
+  };
+  walk(path.join(root, 'src'));
+  assert.deepEqual(writers.sort(), ['src/gamekit/SFX.ts'], 'only SFX.setMusicEnabled (called by SoundEffectProvider) writes it; games gate their own bed');
+});
+
+test('memory QUICK ring: centred on the chain plate, small enough to stay on screen, and a QUICK match fires the gold hit punch', () => {
+  const hud = fs.readFileSync(path.join(root, 'src/games/memory/Hud.tsx'), 'utf8');
+  assert.match(hud, /ringWrap: \{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' \}/);
+  const r = Number(/const RING_MAX_R = (\d+);/.exec(hud)[1]);
+  // The compact plate's centre sits about x 364 on a 402 pt screen.
+  assert.ok(364 + r + 1.25 <= 402, `ring r ${r} stays on screen`);
+  const game = fs.readFileSync(path.join(root, 'src/games/memory/MemoryGame.tsx'), 'utf8');
+  assert.match(game, /if \(parts\.quick\) chainPlate\.current\?\.quickHit\(\);\s*chainPlate\.current\?\.quick\(\);/);
+});
