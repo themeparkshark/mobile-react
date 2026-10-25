@@ -1311,10 +1311,10 @@ test('wave 5 round 2: the slow-tile sheet keeps its clouds in open sky, at least
     'react/jsx-runtime': { jsx() {}, jsxs() {} },
   }).SHEET_CLOUDS;
   // The sheet (the map view) on three phones, in points, with every HUD button and card measured from
-  // the w5 captures (13ca21c2 SE, w5r2 17 Pro and Pro Max), as [x, y, w, h] from the sheet's top left.
+  // the w5 captures (w5r1 and w5r2 SE incl. Finn's card, w5r2 17 Pro and Pro Max), as [x, y, w, h] from the sheet's top left.
   const phones = [
     { name: 'SE', w: 375, h: 589, hud: [[12, 19, 351, 50], [12, 81, 160, 57], [244, 157, 115, 114], [215, 301, 143, 73],
-      [30, 359, 43, 42], [17, 414, 70, 48], [95, 384, 185, 60], [12, 282, 200, 70]] },
+      [30, 359, 43, 42], [17, 414, 70, 48], [95, 384, 185, 60], [12, 262, 186, 90]] },
     { name: '17 Pro', w: 402, h: 769, hud: [[13, 27, 376, 44], [13, 88, 171, 56], [332, 163, 54, 177], [242, 475, 143, 72],
       [29, 535, 44, 42], [17, 585, 70, 71], [101, 557, 200, 90], [12, 440, 208, 88], [280, 599, 67, 68]] },
     { name: 'Pro Max', w: 440, h: 844, hud: [[14, 23, 410, 42], [14, 82, 186, 56], [370, 158, 53, 175], [280, 538, 143, 84],
