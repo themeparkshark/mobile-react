@@ -589,3 +589,19 @@ test('wave 5: the daily chest quiets its own energy banner (it slid over the car
   assert.ok(/\[QUIET_COIN_BROADCAST\]: true, \[QUIET_ENERGY_BROADCAST\]: true/.test(read('src/api/endpoints/daily-gifts/update.ts')), 'the chest claim asks for both');
   assert.ok(/Boolean\(cfg\?\.\[QUIET_ENERGY_BROADCAST\]\)/.test(read('src/hooks/useAxiosSetup.ts')), 'and the interceptor honours it');
 });
+
+test('wave 5: a coin on a stand (Level 6 and up) keeps its stand clear of "YOUR COIN LEVELED UP"', () => {
+  const tiers = loadTs('src/constants/coinTiers.ts');
+  const standRoom = pureFrom('src/components/CoinLevelingModal.tsx', 'standRoom', { coinTier: tiers.coinTier });
+  for (const lvl of [1, 2, 3, 4, 5]) assert.equal(standRoom(lvl, true, false), 0, `no stand at ${lvl}`);
+  // The stand hangs 0.9 x 0.2 x 120 = 21.6 pt below the coin; on success the coin grows 1.18x about its centre and drops 14 pt.
+  const below = 120 * 0.09 + 21.6 * 1.18 + 14;
+  for (const lvl of [6, 7, 8, 9, 10]) {
+    assert.ok(14 + 22 + standRoom(lvl, true, false) >= below + 3, `success Lv${lvl}: the line sits under the stand`);
+    assert.ok(14 + standRoom(lvl, false, false) >= 21.6 + 2, `card Lv${lvl}: the stand clears the line`);
+    assert.ok(14 + standRoom(lvl, true, true) >= 120 * 0.03 + 21.6 * 1.06 + 4 + 2, `short phone Lv${lvl}`);
+  }
+  const modal = read('src/components/CoinLevelingModal.tsx');
+  assert.equal((modal.match(/\+ standRoom\(state === 'success' \? nextLevel : currentLevel, state === 'success', SHORT_PHONE\)/g) || []).length, 2,
+    'the coin box and the blue band behind it both grow by it');
+});

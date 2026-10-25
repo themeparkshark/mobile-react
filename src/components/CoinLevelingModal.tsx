@@ -72,6 +72,14 @@ const COIN_GROW = SHORT_PHONE ? 1.06 : SUCCESS_COIN_SCALE;
 const SUCCESS_COIN_DROP = SHORT_PHONE ? 4 : 14;
 /** On success the line under the coin (and the blue band) move down this far, clear of the bigger coin and its plate. */
 const SUCCESS_TEXT_DROP = SHORT_PHONE ? 0 : 22;
+/**
+ * Extra room under a coin that stands on a plinth (Level 6 and up): the stand hangs about 22 pt below the coin, and
+ * more once the success coin has grown and dropped, so without this it sat over "YOUR COIN LEVELED UP".
+ */
+export function standRoom(level: number, success: boolean, shortPhone: boolean): number {
+  if (coinTier(level).stand === 'none') return 0;
+  return success ? (shortPhone ? 20 : 18) : 10;
+}
 /** Vertical padding of the success box, the breathing gap it keeps after fitting, and when and how fast it fits. */
 const SUCCESS_BOX_PAD = SHORT_PHONE ? 4 : 10;
 /** The first-time tip shows on the success card only when the card has this much spare room for it. */
@@ -672,7 +680,8 @@ export default function CoinLevelingModal({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: ctaPinned ? 4 : 14 }}
           >
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: state === 'success' ? 185 + SUCCESS_TEXT_DROP : 185,
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: (state === 'success' ? 185 + SUCCESS_TEXT_DROP : 185)
+                + standRoom(state === 'success' ? nextLevel : currentLevel, state === 'success', SHORT_PHONE),
               backgroundColor: '#168AD7', borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }} />
             <View style={{ position: 'absolute', top: 16, left: 20, width: 15, height: 15,
               borderRadius: 8, borderWidth: 2, borderColor: '#FFFFFF88' }} />
@@ -691,7 +700,8 @@ export default function CoinLevelingModal({
                     onPress={() => state !== 'leveling' && setHoloVisible(true)}
                   >
                     <View ref={coinRef} collapsable={false} onLayout={() => { if (!anchor) measureAnchor(); }} style={{ alignItems: 'center', justifyContent: 'center', marginTop: (state === 'success' ? nextLevel : currentLevel) >= 10 ? 26 : 0,
-                      marginBottom: (state === 'success' ? nextLevel : currentLevel) >= 6 ? 14 : 0 }}>
+                      marginBottom: ((state === 'success' ? nextLevel : currentLevel) >= 6 ? 14 : 0)
+                        + standRoom(state === 'success' ? nextLevel : currentLevel, state === 'success', SHORT_PHONE) }}>
                       {/* Mounted with the card (hidden at 0), like every burst layer: nothing new mounts on the tap. */}
                       {state !== 'maxed' && (
                         <View pointerEvents="none" style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>
