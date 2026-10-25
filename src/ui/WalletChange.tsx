@@ -17,6 +17,7 @@
  */
 import { memo, useEffect, useRef, useState } from 'react';
 import { flightMs, flyCoins, registerCoinTarget, type Point } from './CoinFlight';
+import { glanceGoal } from './goalGlance';
 import { lastTouch, freshTouch } from './lastTouch';
 import { useScreenFocused } from './AmbientSwim';
 import { View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
@@ -50,7 +51,15 @@ export const WALLET_FX = {
   hitSquash: 0.13,
   /** A gain this soon after a reward toast's coins landed in the chip just rolls (no second flight, ms). */
   arrivedMs: 4000,
+  /** A gain this big (coins) is a big show: bigger coins in a wider fan with gold trails (COIN_FLIGHT.big). */
+  bigGain: 100,
 } as const;
+
+/** How the coins fly for a change from `before` to `after`: a big gain gets the big fan. Pure (unit tested). */
+export function walletFlightKind(before: number, after: number): 'spend' | 'gain' | 'bigGain' {
+  if (after < before) return 'spend';
+  return after - before >= WALLET_FX.bigGain ? 'bigGain' : 'gain';
+}
 
 /** Where the coins fly: from the tap to the chip (gain) or the chip to the tap (spend), or null to fan locally. Pure. */
 export function walletFlight(chip: Point, touch: Point | null, spend: boolean): { from: Point; to: Point } | null {
@@ -123,8 +132,12 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
   const squash = useSharedValue(0);
   /** 1 opens the digit roll (RollingNumber gate). */
   const gate = useSharedValue(1);
-  /** Coins that landed in the chip (gains) and left it (spends), counted on the UI thread. */
+  /**
+   * Coins a reward toast flew into the chip, counted on the UI thread. The chip's own flights count in `ownLanded`,
+   * so its own coins never read as a toast's (a +480 right after a +25 used to roll with no coins at all).
+   */
   const landed = useSharedValue(0);
+  const ownLanded = useSharedValue(0);
   const left = useSharedValue(0);
   /** 1 while this change is a spend (the pill answers coins leaving), 0 for a gain (coins landing). */
   const spendSv = useSharedValue(0);
@@ -172,6 +185,10 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
     if (spendSv.value === 0) hit();
     runOnJS(markArrived)();
   });
+  useAnimatedReaction(() => ownLanded.value, (now, before) => {
+    if (before === null || now <= before) return;
+    if (spendSv.value === 0) hit();
+  });
   useAnimatedReaction(() => left.value, (now, before) => {
     if (before === null || now <= before) return;
     if (spendSv.value === 1) hit();
@@ -183,6 +200,7 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
   useEffect(() => {
     if (hold) { wasHeld.current = true; return; }
     if (value === shown.current) { wasHeld.current = false; return; }
+    const kind = walletFlightKind(shown.current, value);
     spendRef.current = value < shown.current;
     shown.current = value;
     const spend = spendRef.current;
@@ -229,15 +247,15 @@ function WalletChange({ value, format, hold = false, style, textStyle, iconSize 
       const path = chip ? walletFlight(chip, touch, spend) : null;
       if (!path) { playLocal(); return; }
       setLocal(false);
-      const go = () => {
-        const flew = flyCoins({ from: path.from, to: path.to, count: flightN, landed: spend ? undefined : landed,
-          left: spend ? left : undefined, sparkleEnd: !spend });
-        if (!flew) { playLocal(); return; }
-        gateBy(flightMs(flightN) + 600);
-      };
-      if (wait > 0) setTimeout(go, wait); else go();
+      // The coins leave after `wait` on the UI thread (the flight's own delay, never a JS timer).
+      const flew = flyCoins({ from: path.from, to: path.to, count: flightN, landed: spend ? undefined : ownLanded,
+        left: spend ? left : undefined, sparkleEnd: !spend, big: kind === 'bigGain', delayMs: wait,
+        // A gain home in the wallet: today's goals give a small pop a beat later (pointing at what is next).
+        onDone: spend ? undefined : glanceGoal });
+      if (!flew) { playLocal(); return; }
+      gateBy(wait + flightMs(flightN) + 600);
     });
-  }, [value, hold, fly, bump, squash, gate, gateBackstop, landed, left, spendSv, reduced, flightN]);
+  }, [value, hold, fly, bump, squash, gate, gateBackstop, landed, ownLanded, left, spendSv, reduced, flightN]);
 
   const chipStyle = useAnimatedStyle(() => ({ transform: [
     { scaleX: bump.value * (1 + WALLET_FX.hitSquash * squash.value) },

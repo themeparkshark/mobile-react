@@ -13,8 +13,10 @@
  */
 import { memo, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
-import GameIcon from './GameIcon';
+import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withTiming,
+  type SharedValue } from 'react-native-reanimated';
+import CoinTrails from '../fx/CoinTrails';
+import GameIcon, { type GameIconName } from './GameIcon';
 import SparkleBurst from './SparkleBurst';
 import { DURATION, EASE } from './motionEasing';
 import { BEZIER } from './motion';
@@ -23,7 +25,7 @@ import { Z } from './tokens';
 export interface Point { readonly x: number; readonly y: number }
 
 /** EASE.inOut as a plain worklet curve (the coin reads its own window of one shared clock). */
-const IN_OUT = Easing.bezierFn(BEZIER.inOut[0], BEZIER.inOut[1], BEZIER.inOut[2], BEZIER.inOut[3]);
+export const IN_OUT = Easing.bezierFn(BEZIER.inOut[0], BEZIER.inOut[1], BEZIER.inOut[2], BEZIER.inOut[3]);
 
 /** The coin flight (pure data, unit tested). */
 export const COIN_FLIGHT = {
@@ -42,6 +44,11 @@ export const COIN_FLIGHT = {
   midScale: 1.22,
   /** Gold stars that pop where the last coin lands (gains only, through the power budget). */
   endSparkles: 7,
+  /**
+   * A big gain (a hundred coins or more) is a bigger show: bigger coins thrown in a wider fan, each one
+   * pulling a short gold trail, with more stars where they land.
+   */
+  big: { size: 34, spreadPt: 320, arcPt: 130, trailDots: 4, trailStep: 0.045, trailPt: 7, endSparkles: 10 },
 } as const;
 
 /** Where coin i of n starts and lands (it leaves i * staggerMs late). Pure (unit tested). */
@@ -51,12 +58,13 @@ export function coinLandTimes(n: number, startAt = 0): number[] {
 }
 
 /** Coin i of n at flight time t (0 to 1): a quadratic arc from `from` to `to`. Pure worklet (unit tested). */
-export function coinAt(t: number, i: number, n: number, from: Point, to: Point): { x: number; y: number; scale: number; rot: number } {
+export function coinAt(t: number, i: number, n: number, from: Point, to: Point, big = false): { x: number; y: number; scale: number; rot: number } {
   'worklet';
   const spread = n > 1 ? i / (n - 1) - 0.5 : 0;
-  // The control point: above the middle of the line, fanned a little per coin so they read as several.
-  const cx = (from.x + to.x) / 2 + spread * COIN_FLIGHT.spreadPt;
-  const cy = Math.min(from.y, to.y) - COIN_FLIGHT.arcPt - (i % 3) * COIN_FLIGHT.arcStepPt;
+  // The control point: above the middle of the line, fanned a little per coin so they read as several
+  // (a big gain throws a wider, higher fan).
+  const cx = (from.x + to.x) / 2 + spread * (big ? COIN_FLIGHT.big.spreadPt : COIN_FLIGHT.spreadPt);
+  const cy = Math.min(from.y, to.y) - (big ? COIN_FLIGHT.big.arcPt : COIN_FLIGHT.arcPt) - (i % 3) * COIN_FLIGHT.arcStepPt;
   const u = 1 - t;
   const x = u * u * from.x + 2 * u * t * cx + t * t * to.x;
   const y = u * u * from.y + 2 * u * t * cy + t * t * to.y;
@@ -64,7 +72,7 @@ export function coinAt(t: number, i: number, n: number, from: Point, to: Point):
   return { x, y, scale, rot: (i % 2 ? 1 : -1) * 220 * t };
 }
 
-type Flight = { id: number; from: Point; to: Point; count: number; size: number; onLand?: (i: number) => void; onDone?: () => void;
+export type Flight = { id: number; from: Point; to: Point; count: number; size: number; onLand?: (i: number) => void; onDone?: () => void;
   /** The moment the coins really start moving (the host mounted the flight), to time what answers them. */
   onStart?: () => void;
   /** Counted up on the UI thread as each coin lands (the wallet squashes and rolls on the same frame). */
@@ -72,14 +80,23 @@ type Flight = { id: number; from: Point; to: Point; count: number; size: number;
   /** Counted up on the UI thread as each coin leaves. */
   left?: SharedValue<number>;
   /** A little pop of gold stars where the last coin lands (a gain coming home). */
-  sparkleEnd?: boolean };
+  sparkleEnd?: boolean;
+  /** A big gain: bigger coins in a wider fan, each with a gold trail (COIN_FLIGHT.big). */
+  big?: boolean;
+  /** The coins leave this long after the call (timed on the UI thread, never a JS timer). */
+  delayMs?: number;
+  /** Fly this icon instead of a coin (a prize going to the shelf). */
+  icon?: GameIconName;
+  /** The size it lands at, as a share of its size (a big prize shrinks into a small footer icon). */
+  endScale?: number };
 let nextId = 1;
 const hosts = new Set<(f: Flight) => void>();
 
 /** Fly `count` coins from one window point to another. Returns false when no host is mounted. */
 export function flyCoins(f: Omit<Flight, 'id' | 'size'> & { readonly size?: number }): boolean {
   if (!hosts.size || f.count <= 0) return false;
-  const flight: Flight = { ...f, id: nextId++, count: Math.min(COIN_FLIGHT.max, Math.floor(f.count)), size: f.size ?? COIN_FLIGHT.size };
+  const flight: Flight = { ...f, id: nextId++, count: Math.min(COIN_FLIGHT.max, Math.floor(f.count)),
+    size: f.size ?? (f.big ? COIN_FLIGHT.big.size : COIN_FLIGHT.size) };
   hosts.forEach(h => h(flight));
   return true;
 }
@@ -114,6 +131,24 @@ export function announceIncomingCoins(ms: number): void {
   targets[targets.length - 1]?.onIncoming?.(ms);
 }
 
+/**
+ * The shelf: where a prize goes when a kid takes it (the Profile tab, home of the coin shelf). The focused screen's
+ * footer registers it with a landing counter, so its icon squashes on the frame the prize lands.
+ */
+type ShelfTarget = { measure: Measure; landed?: SharedValue<number> };
+const shelves: ShelfTarget[] = [];
+export function registerShelfTarget(measure: Measure, landed?: SharedValue<number>): () => void {
+  const entry: ShelfTarget = { measure, landed };
+  shelves.push(entry);
+  return () => { const i = shelves.indexOf(entry); if (i >= 0) shelves.splice(i, 1); };
+}
+/** Where the shelf is right now (the newest registered footer), or null when no footer is on screen. */
+export function measureShelfTarget(done: (p: Point | null, landed?: SharedValue<number>) => void): void {
+  const top = shelves[shelves.length - 1];
+  if (!top) { done(null); return; }
+  top.measure(p => done(p, top.landed));
+}
+
 /** How long a flight of n coins takes from its first coin leaving to its last coin landing (ms). Pure. */
 export function flightMs(n: number): number {
   const k = Math.max(1, Math.min(COIN_FLIGHT.max, Math.floor(n)));
@@ -141,7 +176,7 @@ function FlightRun({ flight, onDone }: { readonly flight: Flight; readonly onDon
   const total = (flight.count - 1) * COIN_FLIGHT.staggerMs + COIN_FLIGHT.flyMs;
   useEffect(() => {
     // One clock for the whole flight; each coin reads its own window of it.
-    p.value = withTiming(total, { duration: total }, finished => { if (finished) runOnJS(onDone)(); });
+    p.value = withDelay(flight.delayMs ?? 0, withTiming(total, { duration: total }, finished => { if (finished) runOnJS(onDone)(); }));
     flight.onStart?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -152,9 +187,10 @@ function FlightRun({ flight, onDone }: { readonly flight: Flight; readonly onDon
     if (now && !before && flight.sparkleEnd) end.value = withDelay(0, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
   });
   return <>
+    {flight.big && <CoinTrails clock={p} count={flight.count} from={flight.from} to={flight.to} />}
     {Array.from({ length: flight.count }, (_, i) => <FlyingCoin key={i} clock={p} i={i} flight={flight} />)}
-    {flight.sparkleEnd && <SparkleBurst progress={end} count={COIN_FLIGHT.endSparkles} x={flight.to.x} y={flight.to.y}
-      dist={[22, 42]} size={[14, 20]} gravity={14} seed={flight.id} />}
+    {flight.sparkleEnd && <SparkleBurst progress={end} count={flight.big ? COIN_FLIGHT.big.endSparkles : COIN_FLIGHT.endSparkles}
+      x={flight.to.x} y={flight.to.y} dist={flight.big ? [30, 58] : [22, 42]} size={flight.big ? [16, 24] : [14, 20]} gravity={14} seed={flight.id} />}
   </>;
 }
 
@@ -164,6 +200,8 @@ const FlyingCoin = memo(function FlyingCoin({ clock, i, flight }: { readonly clo
   const onLand = flight.onLand;
   const landed = flight.landed;
   const left = flight.left;
+  const prize = flight.icon != null;
+  const endScale = flight.endScale ?? 1;
   useAnimatedReaction(() => clock.value >= i * COIN_FLIGHT.staggerMs + COIN_FLIGHT.flyMs, (now, before) => {
     if (!now || before) return;
     if (landed) landed.value += 1;
@@ -176,15 +214,19 @@ const FlyingCoin = memo(function FlyingCoin({ clock, i, flight }: { readonly clo
     const raw = (clock.value - i * COIN_FLIGHT.staggerMs) / COIN_FLIGHT.flyMs;
     if (raw <= 0 || raw >= 1) return { opacity: 0 };
     const t = IN_OUT(raw);
-    const at = coinAt(t, i, n, flight.from, flight.to);
+    const at = coinAt(t, i, n, flight.from, flight.to, flight.big === true);
+    const shrink = 1 - (1 - endScale) * t;
+    // A prize leaves at full size where it stood (no fade in, no spin); coins fade in and spin.
     return {
-      opacity: raw < 0.08 ? raw / 0.08 : 1,
-      transform: [{ translateX: at.x - half }, { translateY: at.y - half }, { rotate: `${at.rot}deg` }, { scale: at.scale }],
+      opacity: prize || raw >= 0.08 ? 1 : raw / 0.08,
+      transform: [{ translateX: at.x - half }, { translateY: at.y - half }, { rotate: `${prize ? at.rot * 0.15 : at.rot}deg` },
+        { scale: (prize ? 1 + (at.scale - 1) * 0.5 : at.scale) * shrink }],
     };
   });
   return (
     <Animated.View style={[{ position: 'absolute', left: 0, top: 0, width: flight.size, height: flight.size }, style]}>
-      <GameIcon name="coin" size={flight.size} />
+      <GameIcon name={flight.icon ?? 'coin'} size={flight.size} />
     </Animated.View>
   );
 });
+

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LineGroup } from './lineGroup';
-import { loadLastCrew, loadWaitGroup, saveWaitGroup } from './lineGroupStore';
+import { loadLastCrew, loadWaitGroup, peekLineGroup, saveWaitGroup, warmLineGroup } from './lineGroupStore';
 
 export interface LineGroupState {
   /** Storage answered for this wait (so the opener never flashes on a restore). */
@@ -22,6 +22,10 @@ export function useLineGroup(playerId: number | null, waitKey: string | null): L
   const groupRef = useRef<LineGroup | null>(null);
   const target = useRef<{ playerId: number | null; waitKey: string | null }>({ playerId, waitKey });
   target.current = { playerId, waitKey };
+  // Read this account's crew records while the wait is still starting (the screen's first render), so the
+  // render the wait starts on already knows whether to ask "Who's in line?".
+  const warmedFor = useRef<number | null>(null);
+  if (playerId != null && warmedFor.current !== playerId) { warmedFor.current = playerId; void warmLineGroup(playerId); }
 
   useEffect(() => {
     groupRef.current = null;
@@ -54,6 +58,11 @@ export function useLineGroup(playerId: number | null, waitKey: string | null): L
   }, [persist]);
 
   const sameWait = state.key === waitKey;
+  // The wait just started and storage was read ahead: answer on this render (the effect catches up after).
+  const early = !(sameWait && state.loaded) && waitKey && playerId != null ? peekLineGroup(playerId, waitKey) : null;
+  if (early) {
+    return { loaded: true, chosen: early.chosen, group: early.group, lastCrew: lastCrew ?? early.lastCrew, choose: persist, update };
+  }
   return {
     loaded: sameWait && state.loaded,
     chosen: sameWait && state.chosen,

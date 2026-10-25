@@ -118,10 +118,10 @@ test('footer: every pick squashes first, a gold disc and ring pulse under it, th
   assert.ok(Math.abs(1 + F.compassSquashX - 1.15) < 1e-9, '1.15 squash wide');
   assert.ok(F.ringTo >= 1.8, 'the ring clears the icon');
   assert.ok(F.rareSparkles <= motion.PARTICLES.sparkles, 'the rare burst stays inside the sparkle cap');
-  assert.ok(F.rareDist[0] > 80, 'rare stars clear the footer wave');
+  assert.ok(F.rareDist[0] >= 60, 'rare stars clear the compass rim');
   const src = read('src/components/footerMotion.ts');
   assert.match(src, /\/\/ Every pick: a quick squash wide and short \(anticipation\), then the hop and the pop\./);
-  assert.match(src, /if \(rare\) \{\n\s+rarePickCount\.value = [^\n]+\n\s+m\.burstRare\.value = burst;/, 'the rare burst replaces the normal one (never two at once)');
+  assert.match(src, /if \(rareKind\(rarePicks\) === 'swim'\) \{\n\s+m\.burst\.value = burst;[\s\S]*?\} else \{\n\s+m\.burstRare\.value = burst;\n\s+\}/, 'the rare burst replaces the normal one (never two at once)');
   const wrapper = read('src/components/Wrapper.tsx');
   assert.match(wrapper, /const q = picked \? m\.compassSquash\.value : 0;/);
   assert.match(wrapper, /progress=\{smallBurst\} count=\{F\.smallSparkles\}/);
@@ -131,6 +131,7 @@ test('coins fly to where they live: an arc from the tap into the wallet, a squas
   const flight = loadTs('src/ui/CoinFlight.tsx', {
     react: { memo: c => c }, 'react/jsx-runtime': {}, 'react-native': rn, 'react-native-reanimated': reanimated,
     './GameIcon': {}, './motion': motion, './tokens': { Z: { toast: 2000 } }, './SparkleBurst': {}, './motionEasing': easing,
+    '../fx/CoinTrails': {},
   });
   const from = { x: 60, y: 700 }; const to = { x: 340, y: 90 };
   for (let i = 0; i < 5; i++) {
@@ -161,7 +162,7 @@ test('coins fly to where they live: an arc from the tap into the wallet, a squas
   assert.match(src, /registerCoinTarget\('wallet', measureChip, \{\n\s+landed,/, 'reward toasts can send coins to the chip, which squashes on each (UI thread)');
   assert.match(src, /now - arrivedAt\.current < WALLET_FX\.arrivedMs/, 'coins a toast already flew in never fly twice');
   assert.match(read('src/components/Toast.tsx'), /count: coins, onLand: answer\?\.onHit, landed: answer\?\.landed/);
-  assert.match(src, /flyCoins\(\{ from: path\.from, to: path\.to, count: flightN, landed: spend \? undefined : landed,/,
+  assert.match(src, /flyCoins\(\{ from: path\.from, to: path\.to, count: flightN, landed: spend \? undefined : ownLanded,/,
     'round 5: the pill and the digits answer on the frame a coin lands, on the UI thread');
   assert.match(read('src/ui/CoinFlight.tsx'), /flight\.onStart\?\.\(\);/);
   assert.match(read('src/Root.tsx'), /<CoinFlightHost \/>/);

@@ -73,7 +73,7 @@ test('dialog: the ribbon is on the card from its first frame and parts are fully
   const src = read('src/ui/GameDialog.tsx');
   assert.match(src, /export const RIBBON_AT = 0;/);
   assert.match(src, /export const PART_FROM_OPACITY = 1;/);
-  assert.match(src, /opacity: Math\.min\(1, 0\.6 \+ r \* 3\)/, 'the ribbon is never invisible while the card is');
+  assert.match(src, /\/\/ Solid from its first frame \(a stamp\): a see-through ribbon showed the buttons behind it\.\n\s+return \{ transform: \[\{ translateY: -RIBBON_DROP/, 'wave 5 round 2: the ribbon is solid from its first frame');
   const button = read('src/ui/GameButton.tsx');
   assert.match(button, /useState\(\(\) =>\n\s+look\.art \? Math\.min\(look\.maxWidth/, 'button labels are on the first frame (no wait for layout)');
 });
@@ -98,7 +98,8 @@ test('footer: a hop you can feel, a brighter glow, compass stars that clear its 
   const { FOOTER_MOTION, isRareCompassPick, RARE_EVERY } = loadTs('src/components/footerMotion.ts', {
     'react-native-reanimated': { makeMutable: v => ({ value: v }) }, '../ui/motionEasing': easing,
   });
-  assert.equal([1, 2, 3, 4, 5, 6, 10].filter(isRareCompassPick).length, 2, 'every fifth compass pick is the rare one');
+  assert.deepEqual(Array.from({ length: 30 }, (_, i) => i + 1).filter(isRareCompassPick), [4, 11, 16, 22, 26],
+    'wave 5 round 2: rare picks come after 4, 7, 5, 6 picks (fixed for everyone, never a beat to count)');
   assert.equal(RARE_EVERY, 5);
   assert.ok(FOOTER_MOTION.compassSparkles + 3 <= motion.PARTICLES.sparkles, 'even the rare pick stays inside the sparkle cap');
   assert.ok(FOOTER_MOTION.hopPt >= 10 && FOOTER_MOTION.hopPt <= 12);

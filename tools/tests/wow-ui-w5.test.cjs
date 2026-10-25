@@ -122,8 +122,8 @@ test('dialog close: the card shrinks to 0.92 and stays solid, the backdrop leave
 test('store fill: the Shop Pick hero lands first, then row by row, spread over 450 to 600 ms, no orphan cell ahead', () => {
   const stagger = loadTs('src/ui/stagger.ts', { 'react-native-reanimated': { Easing: { bezierFn: () => t => t }, FadeInDown: {} }, './motion': motion });
   const G = stagger.GRID_STAGGER;
-  const starts = Array.from({ length: G.maxItems }, (_, i) => stagger.gridDelay(i, G.heroLeadMs));
-  assert.ok(starts[0] >= G.heroLeadMs, 'the grid waits for the hero');
+  const starts = Array.from({ length: G.maxItems }, (_, i) => stagger.gridDelay(i, stagger.GRID_AFTER_HERO_MS));
+  assert.ok(starts[0] >= G.headerLeadMs + G.heroLeadMs, 'the grid waits for the header and the hero');
   for (let i = 1; i < starts.length; i++) assert.ok(starts[i] > starts[i - 1], 'row by row, left to right');
   const last = starts[starts.length - 1];
   assert.ok(last >= 450 && last <= 600, `the fill reads over about half a second (last start ${last} ms)`);
@@ -139,9 +139,9 @@ test('rare compass pick: inked gold stars in two low fans along the footer, a ne
     'react-native-reanimated': { makeMutable: v => ({ value: v }) }, '../ui/motionEasing': easing,
   });
   const F = fm.FOOTER_MOTION;
-  assert.ok(F.rareFanDeg <= 35, 'the fans stay low (never up over the cards)');
-  const lift = Math.sin((F.rareFanDeg * Math.PI) / 180) * F.rareDist[1];
-  assert.ok(lift <= 90, `the highest star rises at most about 90 pt (got ${lift.toFixed(0)})`);
+  assert.ok(F.rareFanTo <= 75 && F.rareFanFrom >= 25, 'up and out over the wave, never straight up');
+  const lift = Math.sin((F.rareFanTo * Math.PI) / 180) * F.rareDist[1];
+  assert.ok(lift <= 95, `the highest star rises at most about 95 pt, under the cards (got ${lift.toFixed(0)})`);
   const seeds = new Set([1, 2, 3, 4, 5, 6].map(fm.rareSeed));
   assert.equal(seeds.size, 6, 'six different layouts in a row');
   const wrapper = read('src/components/Wrapper.tsx');

@@ -17,7 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated as RNAnimated, Dimensions, Easing as RNEasing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addToWishlist, getWishlist, removeFromWishlist } from '../../api/endpoints/me/wishlist';
@@ -25,7 +25,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { formatCoins, slotWord, passesFilter, restockPill, shelfFilters, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
 import { useAnyModalLayer } from '../../ui/modalLayers';
-import { GRID_STAGGER, gridRiseIn, heroRiseIn } from '../../ui/stagger';
+import { GRID_AFTER_HERO_MS, GRID_STAGGER, gridRiseIn, headerDropIn, heroRiseIn } from '../../ui/stagger';
 import Playercard from '../../components/Playercard';
 import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import { previewLook } from './TryOnSheet';
@@ -294,7 +294,10 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
         }}>
         <View style={styles.stage}>
           {BUBBLES.slice(0, bubbleCount).map((b, i) => <Bubble key={i} {...b} still={stageStill} />)}
-          <Shopkeeper imageUrl={promoUrl} still={stageStill} />
+          {/* The coin pile bounces in first, then the Shop Pick, then the shelf row by row. */}
+          <Animated.View entering={still ? undefined : headerDropIn()} style={{ flex: 1 }}>
+            <Shopkeeper imageUrl={promoUrl} still={stageStill} />
+          </Animated.View>
           {/* The restock day rides on the stage's corner: small, calm, out of the shelf's way. */}
           <View style={styles.restock}>
             <RestockChip nextAt={nextRotationAt} offset={offset} onElapsed={onRestockElapsed} />
@@ -303,7 +306,8 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
               <GameIcon name="check" size={14} /><Text maxFontSizeMultiplier={1.2} style={styles.yoursChipText}>{`${ownedCount} of ${items.length} yours`}</Text></View>}
           </View>
         </View>
-        <Animated.View entering={still ? undefined : FadeInUp.duration(260)} style={styles.panel}>
+        {/* The panel is there at once (a quick fade): its cells drop in one by one, never a whole faded shelf. */}
+        <Animated.View entering={still ? undefined : FadeIn.duration(GRID_STAGGER.fadeMs)} style={styles.panel}>
           {filters.length === 0 && (
             <View style={styles.header}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title} accessibilityRole="header">ON THE SHELF</Text>
@@ -336,7 +340,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
               )}
               {shelf.filter(i => (filter !== 'all' || i.id !== star?.id) && passesFilter(i, filter, balance)).map((item, i) => (
                 <Animated.View key={`${filter}:${item.id}`} entering={still ? undefined : !firstIds.current?.has(item.id) || filter !== 'all' ? FadeIn.duration(160)
-                  : gridRiseIn(i, { leadMs: star ? GRID_STAGGER.heroLeadMs : 0 }) ?? FadeIn.delay(GRID_STAGGER.capMs).duration(160)}>
+                  : gridRiseIn(i, { leadMs: star ? GRID_AFTER_HERO_MS : GRID_STAGGER.headerLeadMs }) ?? FadeIn.delay(GRID_STAGGER.capMs).duration(160)}>
                   <ShopTile item={item as ShopItem} width={TILE_W} still={still} vipLocked={!!item.is_member_item && !vip}
                     affordable={balance >= item.cost} balance={balance} justBought={bought.includes(item.id)} onOpen={openItem} onWish={wish} />
                 </Animated.View>

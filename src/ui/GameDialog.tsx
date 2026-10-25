@@ -46,6 +46,8 @@ import { haptic, queueHaptic } from '../gamekit/Haptics';
 import { DURATION, EASE, SPRING, STAGGER } from './motionEasing';
 import SparkleBurst from './SparkleBurst';
 import { GoldBurst } from './GoldBurst';
+import { flyCoins, measureShelfTarget } from './CoinFlight';
+import { glanceGoal } from './goalGlance';
 import { LinearGradient } from 'expo-linear-gradient';
 import GameButton from './GameButton';
 import GameIcon from './GameIcon';
@@ -111,7 +113,13 @@ export const ICON_STAMP = { at: 110, from: 0.4, peak: 1.22 } as const;
  * A celebrating dialog's prize: a bigger icon that stamps onto a fan of gold rays (the house GoldBurst),
  * the brightest thing on the screen, with the buzz on the stamp frame itself.
  */
-export const DIALOG_PRIZE = { iconPt: 124, plainIconPt: 72, raysPt: 380, glowAmount: 1, bloomMs: 420 } as const;
+export const DIALOG_PRIZE = { iconPt: 124, plainIconPt: 72, raysPt: 380, glowAmount: 1, bloomMs: 420,
+  /** A wider fan of the same rays behind the card and the ribbon, so the burst reaches past the card's edges. */
+  outerRaysPt: 660,
+  /** Taking the prize (OK): it flies from the card to the shelf (the Profile tab) at this size and lands this small. */
+  flyPt: 96, flyEndScale: 0.42 } as const;
+/** A fresh dialog's card is solid inside this (ms): a pop, never a see-through card over the buttons behind it. */
+export const CARD_SOLID_MS = 50;
 /** The ribbon drops this far (pt) and stamps down from this scale. */
 const RIBBON_DROP = 24;
 const RIBBON_STAMP_FROM = 1.18;
@@ -188,6 +196,13 @@ export type GameDialogProps = GameDialogOptions & {
   readonly runButtonHandlers?: boolean;
   /** Lift the card above the keyboard (dialogs whose children include a text field). Default false. */
   readonly avoidKeyboard?: boolean;
+  /**
+   * Which request this is (the host's queue id). When it changes while the dialog is up, the new card pops in on
+   * the same backdrop.
+   */
+  readonly contentKey?: number | string;
+  /** True when another dialog waits right behind this one: the backdrop stays up and only the card swaps. */
+  readonly handOff?: () => boolean;
   readonly testID?: string;
 };
 
@@ -206,6 +221,8 @@ export function GameDialog({
   avoidKeyboard = false,
   testID,
   equalChoices = false,
+  contentKey,
+  handOff,
 }: GameDialogProps) {
   const reducedMotion = useUiReducedMotion();
   const [mounted, setMounted] = useState(() => visible && modalLayers.count() === 0);
@@ -228,6 +245,12 @@ export function GameDialog({
   const iconSpark = useSharedValue(0);
   const prizeGlow = useSharedValue(0);
   const prizeBloom = useSharedValue(0);
+  /** Where the prize sits inside the card (for the wide ray fan behind it), measured on layout; on: 1 once known. */
+  const raysX = useSharedValue(0);
+  const raysY = useSharedValue(0);
+  const raysOn = useSharedValue(0);
+  const outerRef = useRef<View>(null);
+  const iconRef = useRef<View>(null);
   const actions = layoutActions(buttons, equalChoices);
   const celebrates = dialogCelebrates({ icon, haptic: hapticKind, buttons });
   const request = { title, message, icon, buttons, dismissible };
@@ -252,17 +275,25 @@ export function GameDialog({
   // in the render after it is shown, and an opening started before its backdrop existed never drew it.
   useEffect(() => {
     if (shown) setMounted(true);
-    else openedFor.current = false;
+    else openedFor.current = null;
   }, [shown]);
-  const openedFor = useRef(false);
+  /** The request the card was opened for (null while closed). */
+  const openedFor = useRef<number | string | null>(null);
+  const key = contentKey ?? 'one';
   useEffect(() => {
-    if (shown && mounted && !openedFor.current) {
-      openedFor.current = true;
+    if (shown && mounted && openedFor.current !== key) {
+      // A queued dialog taking over an open one: the backdrop is already up, only the card pops in.
+      const handedOver = openedFor.current !== null;
+      openedFor.current = key;
       closing.current = false;
       chosen.current = null;
       exit.value = 0;
-      scrim.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : DURATION.base, easing: EASE.out });
-      fade.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : CARD_FADE_MS, easing: EASE.out });
+      pop.value = 0;
+      // A card that took over keeps the same prize spot unless its layout moved (onLayout re-places it then).
+      if (handedOver && celebrates && icon) placeRays();
+      if (!handedOver) scrim.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : DURATION.base, easing: EASE.out });
+      // Solid from its first frames (a pop, not a fade): never the screen behind ghosting through the card.
+      fade.value = handedOver ? 1 : withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : CARD_SOLID_MS, easing: EASE.out });
       iconPop.value = reducedMotion ? 1 : ICON_STAMP.from;
       if (!reducedMotion) {
         iconPop.value = withDelay(ICON_STAMP.at, withSequence(
@@ -295,9 +326,9 @@ export function GameDialog({
       } else if (hapticKind !== 'none') haptic(hapticKind);
       else queueHaptic('tickSelection');
     }
-    // Opening only depends on visibility; haptic kind and motion are read at open time.
+    // Opening only depends on visibility and which request is shown; haptic kind and motion are read at open time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, mounted]);
+  }, [shown, mounted, key]);
 
   const finish = () => {
     setMounted(false);
@@ -307,11 +338,52 @@ export function GameDialog({
     if (runButtonHandlers) button?.onPress?.();
   };
 
+  /** Another dialog takes over: answer this one and keep the backdrop up for the next card. */
+  const finishHandOff = () => {
+    const index = chosen.current;
+    onAnswer?.(index);
+    const button = index === null ? undefined : (buttons && buttons.length ? buttons : [{ text: 'OK' }])[index];
+    if (runButtonHandlers) button?.onPress?.();
+  };
+
+  /**
+   * Taking a prize (OK on a reward dialog): it flies out of the card, over the backdrop as it leaves, and lands on
+   * the shelf (the Profile tab, which squashes as it arrives), so a kid sees where it went. No shelf on screen
+   * (a game screen), Reduce Motion, or a cancel: nothing flies.
+   */
+  const flyPrize = (index: number | null) => {
+    if (!celebrates || !icon || index === null || reducedMotion) return;
+    const button = (buttons && buttons.length ? buttons : [{ text: 'OK' }])[index] as GameDialogButton | undefined;
+    if (!button || button.style === 'cancel' || button.style === 'destructive') return;
+    const node = iconRef.current;
+    if (!node) return;
+    const askedAt = Date.now();
+    node.measureInWindow((x, y, w, h) => {
+      if (!Number.isFinite(x) || w <= 0) return;
+      measureShelfTarget((to, landed) => {
+        if (!to) return;
+        // It leaves as the card finishes shrinking (timed on the UI thread from here).
+        flyCoins({ from: { x: x + w / 2, y: y + h / 2 }, to, count: 1, icon, size: DIALOG_PRIZE.flyPt, big: true,
+          endScale: DIALOG_PRIZE.flyEndScale, sparkleEnd: true, landed, onDone: glanceGoal,
+          delayMs: Math.max(0, DIALOG_CLOSE.cardMs - 30 - (Date.now() - askedAt)) });
+      });
+    });
+  };
+
   const close = (index: number | null) => {
     if (closing.current) return;
     closing.current = true;
     chosen.current = index;
     stampArmed.value = 0;
+    flyPrize(index);
+    // A dialog waiting right behind this one: the card goes and the backdrop stays for the next card (the bare
+    // screen never flashes between them).
+    if (handOff?.() === true) {
+      exit.value = withTiming(1, { duration: DIALOG_CLOSE.cardMs, easing: EASE.in }, done => {
+        if (done) runOnJS(finishHandOff)();
+      });
+      return;
+    }
     // The card shrinks and goes first (solid until its last frames); the backdrop leaves last.
     exit.value = withTiming(1, { duration: DIALOG_CLOSE.cardMs, easing: EASE.in });
     scrim.value = withDelay(DIALOG_CLOSE.scrimDelayMs, withTiming(0, { duration: DIALOG_CLOSE.scrimMs, easing: EASE.in }, done => {
@@ -336,11 +408,26 @@ export function GameDialog({
   const ribbonStyle = useAnimatedStyle(() => {
     if (reducedMotion) return {};
     const r = ribbon.value;
-    return { opacity: Math.min(1, 0.6 + r * 3), transform: [{ translateY: -RIBBON_DROP * (1 - r) },
+    // Solid from its first frame (a stamp): a see-through ribbon showed the buttons behind it.
+    return { transform: [{ translateY: -RIBBON_DROP * (1 - r) },
       { scale: RIBBON_STAMP_FROM + (1 - RIBBON_STAMP_FROM) * r }] };
   });
   const bodyStyle = useAnimatedStyle(() => partStyle(parts.value, 1, reducedMotion));
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: iconPop.value }] }));
+  // The wide ray fan sits behind the card and the ribbon, centred on the prize, and turns with the card's own fan.
+  const outerRaysStyle = useAnimatedStyle(() => ({ opacity: raysOn.value,
+    transform: [{ translateX: raysX.value - DIALOG_PRIZE.outerRaysPt / 2 }, { translateY: raysY.value - DIALOG_PRIZE.outerRaysPt / 2 }] }));
+  /** Where the prize sits in the card (layout, not transforms): the wide fan centres on it. */
+  const placeRays = () => {
+    const node = iconRef.current;
+    const outer = outerRef.current;
+    if (!node || !outer) return;
+    node.measureLayout(outer, (x, y, w, h) => {
+      raysX.value = x + w / 2;
+      raysY.value = y + h / 2;
+      raysOn.value = 1;
+    }, () => {});
+  };
   const buttonsStyle = useAnimatedStyle(() => partStyle(parts.value, 2, reducedMotion));
 
   if (!mounted) return null;
@@ -358,8 +445,13 @@ export function GameDialog({
           <Pressable accessibilityLabel="Close" accessibilityRole="button" style={{ flex: 1 }}
             disabled={dismiss === null} onPress={() => { if (dismiss !== null) close(dismiss); }} />
         </Animated.View>
-        <Animated.View accessibilityViewIsModal accessibilityRole="alert"
+        <Animated.View ref={outerRef} accessibilityViewIsModal accessibilityRole="alert"
           style={[{ width: '85%', maxWidth: 380, alignItems: 'center' }, cardStyle]}>
+          {/* The prize's rays burst past the card: a wider fan behind the ribbon and the card (the card's own fan is on top). */}
+          {celebrates && icon && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0,
+            width: DIALOG_PRIZE.outerRaysPt, height: DIALOG_PRIZE.outerRaysPt }, outerRaysStyle]}>
+            <GoldBurst size={DIALOG_PRIZE.outerRaysPt} amount={prizeGlow} bloom={prizeBloom} reduced={reducedMotion} raysOnly />
+          </Animated.View>}
           {titleLayout.placement === 'ribbon' && (
             <Animated.View accessible accessibilityRole="header" accessibilityLabel={title} style={[{ width: '100%', zIndex: 2 }, ribbonStyle]}>
               <Ribbon text={titleLayout.text} />
@@ -386,7 +478,8 @@ export function GameDialog({
               <GameText preset="title" tone="onBlue" align="center" accessibilityRole="header"
                 style={{ textTransform: 'uppercase' }}>{titleLayout.text}</GameText>
             )}
-            {icon && <Animated.View style={[{ alignItems: 'center', justifyContent: 'center' }, iconStyle]}>
+            {icon && <Animated.View ref={iconRef} onLayout={celebrates ? placeRays : undefined}
+              style={[{ alignItems: 'center', justifyContent: 'center' }, iconStyle]}>
               {/* A prize stamps onto a fan of gold rays: the brightest thing on the screen. */}
               {celebrates && <GoldBurst size={DIALOG_PRIZE.raysPt} amount={prizeGlow} bloom={prizeBloom} reduced={reducedMotion}
                 style={{ position: 'absolute' }} />}
@@ -425,9 +518,11 @@ export function GameDialogHost() {
     setVisible(!!next);
   }), []);
   if (!request) return null;
-  return <GameDialog key={request.id} visible={visible} title={request.title} message={request.message}
+  // One dialog for the whole queue: a request waiting behind the open one takes over its backdrop (contentKey),
+  // so the bare screen never flashes between two dialogs.
+  return <GameDialog contentKey={request.id} visible={visible} title={request.title} message={request.message}
     icon={request.icon} buttons={request.buttons} dismissible={request.dismissible} haptic={request.haptic} equalChoices={request.equalChoices}
-    runButtonHandlers={false}
+    runButtonHandlers={false} handOff={() => store.pending() > 1}
     onAnswer={index => { if (current.current) store.answer(current.current.id, index); }} />;
 }
 

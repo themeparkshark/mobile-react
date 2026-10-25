@@ -8,6 +8,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { useAmbient } from './power';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
 import type { ButtonAttention } from '../../services/retention/logic';
+import { GOAL_GLANCE, goalGlanceValue } from '../../ui/goalGlance';
 
 const WEEKLY = require('../../../assets/images/retention/weekly-box-closed.png');
 
@@ -65,7 +66,10 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, popI
     pop.value = reducedMotion ? 1 : withSequence(withTiming(1, { duration: 160 }), withDelay(500, withTiming(0, { duration: 260 })));
   }, [popKey, popIndex, reducedMotion, pop]);
 
-  const buttonStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bounce.value }] }));
+  // Coins or a prize just landed: one small pop toward today's goals (no words, nothing about them changes).
+  const goalGlance = goalGlanceValue();
+  const buttonStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bounce.value },
+    { scale: reducedMotion ? 1 : 1 + GOAL_GLANCE.scale * goalGlance.value }] }));
   const flameStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + flicker.value * 0.12 }, { rotate: `${(flicker.value - 0.5) * 8}deg` }] }));
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pop.value * 0.9 }] }));
   const done = pips.filter(Boolean).length;

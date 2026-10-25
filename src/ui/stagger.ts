@@ -8,7 +8,7 @@
  * Rows scrolled into view later, refreshed data and Reduce Motion get no entrance (undefined).
  * Reanimated layout animations run on the UI thread.
  */
-import { Easing, FadeInDown, withDelay, withSpring, withTiming } from 'react-native-reanimated';
+import { Easing, FadeInDown, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { BEZIER, DURATION, SPRING, staggerDelay } from './motion';
 
 /**
@@ -20,19 +20,24 @@ import { BEZIER, DURATION, SPRING, staggerDelay } from './motion';
  * (never an orphan cell ahead of the stagger). Refreshes and Reduce Motion are simply there.
  */
 export const GRID_STAGGER = {
-  stepMs: 55,
+  stepMs: 50,
   maxItems: 9,
   risePt: 20,
   fromScale: 0.86,
   fadeMs: DURATION.quick,
-  /** The hero cell lands first; the grid starts this long after it (ms). */
-  heroLeadMs: 140,
+  /** The stage's header art (the shop's coin pile) bounces in first; the hero lands this long after it (ms). */
+  headerLeadMs: 80,
+  /** The hero cell lands next; the grid starts this long after it (ms). */
+  heroLeadMs: 110,
   /** The hero drops from further and pops bigger. */
   heroRisePt: 28,
   heroFromScale: 0.72,
   /** Every grid start lands inside this (ms): the whole fill reads over about half a second. */
-  capMs: 600,
+  capMs: 650,
 } as const;
+
+/** When the grid starts after the header and the hero (ms). */
+export const GRID_AFTER_HERO_MS = GRID_STAGGER.headerLeadMs + GRID_STAGGER.heroLeadMs;
 
 /** When grid cell `index` starts (after `leadMs`, e.g. a hero cell), or null when it does not animate. Pure (unit tested). */
 export function gridDelay(index: number, leadMs = 0): number | null {
@@ -61,10 +66,30 @@ export function gridRiseIn(index: number, options: { readonly reduced?: boolean;
   return riseIn(delay, GRID_STAGGER.risePt, GRID_STAGGER.fromScale);
 }
 
-/** The hero cell (the Shop Pick): first in, from further down, with a bigger pop. */
+/** The hero cell (the Shop Pick): in right after the header, from further down, with a bigger pop. */
 export function heroRiseIn(options: { readonly reduced?: boolean } = {}) {
   if (options.reduced) return undefined;
-  return riseIn(0, GRID_STAGGER.heroRisePt, GRID_STAGGER.heroFromScale);
+  return riseIn(GRID_STAGGER.headerLeadMs, GRID_STAGGER.heroRisePt, GRID_STAGGER.heroFromScale);
+}
+
+/**
+ * The stage's header art (the shop's coin pile) bounces in first: it drops from above, lands with a squash
+ * (SPRING.land) and pops (SPRING.pop), before the hero and the grid.
+ */
+export function headerDropIn(options: { readonly reduced?: boolean } = {}) {
+  if (options.reduced) return undefined;
+  return () => {
+    'worklet';
+    return {
+      initialValues: { opacity: 0, transform: [{ translateY: -GRID_STAGGER.heroRisePt }, { scaleX: 0.84 }, { scaleY: 0.84 }] },
+      animations: {
+        opacity: withTiming(1, { duration: GRID_STAGGER.fadeMs }),
+        transform: [{ translateY: withSpring(0, SPRING.land) },
+          { scaleX: withSequence(withTiming(1.12, { duration: 150 }), withSpring(1, SPRING.pop)) },
+          { scaleY: withSequence(withTiming(0.92, { duration: 150 }), withSpring(1, SPRING.pop)) }],
+      },
+    };
+  };
 }
 
 const OUT = Easing.bezierFn(BEZIER.out[0], BEZIER.out[1], BEZIER.out[2], BEZIER.out[3]);

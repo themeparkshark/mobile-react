@@ -1,9 +1,14 @@
 import { Image } from 'expo-image';
-import { ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { ReactNode, RefObject, useContext, useEffect, useRef, useState } from 'react';
 import { Dimensions, Image as RNImage, ImageBackground, Text, View } from 'react-native';
-import Animated, { interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
+import Animated, { interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withSequence, withSpring,
+  withTiming, type SharedValue } from 'react-native-reanimated';
+import { registerShelfTarget } from '../ui/CoinFlight';
+import { useScreenFocused } from '../ui/AmbientSwim';
+import { HUD_BUMP } from '../ui/motionEasing';
 import { queueHaptic } from '../gamekit/Haptics';
-import { COMPASS_INDEX, FOOTER_MOTION, RARE_HAPTIC_AT, footerIndex, footerMotion, playFooterTap, rarePickCount, rareSeed } from './footerMotion';
+import { COMPASS_INDEX, FOOTER_MOTION, footerIndex, footerMotion, playFooterTap, rarePickCount, rareSeed } from './footerMotion';
+import { SHARK_ART } from '../ui/SharkRefresh';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { BRAND } from '../ui/tokens';
 import { GOLD_FX } from '../ui/motion';
@@ -79,6 +84,25 @@ export default function Wrapper({
   // Tab centers (x in the row), measured once, so the gold glow can slide between them.
   const centers = useSharedValue<number[]>([]);
   const measured = useRef<(number | undefined)[]>([undefined, undefined, undefined, undefined, undefined]);
+  // The Profile tab is the shelf: a prize a kid takes from a reward dialog flies here and the icon squashes as it lands.
+  const focused = useScreenFocused();
+  const profileRef = useRef<View>(null);
+  const shelfLanded = useSharedValue(0);
+  const shelfHit = useSharedValue(0);
+  useEffect(() => {
+    if (previewMode || !focused) return undefined;
+    return registerShelfTarget(done => {
+      const node = profileRef.current;
+      if (!node) { done(null); return; }
+      node.measureInWindow((x, y, w, h) => done(Number.isFinite(x) && w > 0 ? { x: x + w / 2, y: y + h / 2 } : null));
+    }, shelfLanded);
+  }, [previewMode, focused, shelfLanded]);
+  const shelfBuzz = () => queueHaptic('tapLight');
+  useAnimatedReaction(() => shelfLanded.value, (now, before) => {
+    if (before === null || now <= before) return;
+    shelfHit.value = withSequence(withTiming(1, { duration: 60 }), withSpring(0, HUD_BUMP.spring));
+    runOnJS(shelfBuzz)();
+  });
   const glowStyle = useAnimatedStyle(() => {
     const c = centers.value;
     const m = footerMotion;
@@ -92,10 +116,8 @@ export default function Wrapper({
   const goTo = (item: { screen: string; permission?: PermissionEnums }, key: number) => {
     if (isCatchShown()) return;
     if (!previewMode) {
-      const pick = playFooterTap(footerIndex(RootNavigation.navigationRef.getCurrentRoute()?.name),
-        key, reducedMotion);
-      // The rare compass pick: a bigger answer in the hand on its burst (the press already ticked).
-      if (pick.rare) setTimeout(() => queueHaptic('hitMedium'), RARE_HAPTIC_AT);
+      // The rare compass pick answers in the hand on its burst frame, from the UI thread (footerMotion.rareBuzz, RareFans).
+      playFooterTap(footerIndex(RootNavigation.navigationRef.getCurrentRoute()?.name), key, reducedMotion);
     }
     // Already here: the screen scrolls back to its top (News).
     if (!onNavigate && RootNavigation.navigationRef.getCurrentRoute()?.name === item.screen
@@ -184,6 +206,8 @@ export default function Wrapper({
               justifyContent: 'space-between',
             }}
           >
+            {/* The alternate rare compass pick: the little shark swims along the wave behind the icons. */}
+            {!previewMode && <FooterSwim />}
             {/* Warm sunlight that slides to the picked tab and fades (never lit at rest). Pale cream
                 rings stacked into a soft radial, no shadow pass: over the blue bar it reads as light, never olive. */}
             <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: -21, width: GLOW, height: GLOW,
@@ -216,7 +240,8 @@ export default function Wrapper({
                       onPress={() => goTo(item, key)}
                       onPressSound={item.sound}
                     >
-                      <FooterIcon index={key}>
+                      <FooterIcon index={key} anchor={key === PROFILE_INDEX ? profileRef : undefined}
+                        hit={key === PROFILE_INDEX ? shelfHit : undefined}>
                         <Image
                           style={{
                             width: item.size === 'normal' ? 50 : 100,
@@ -268,6 +293,10 @@ export default function Wrapper({
   );
 }
 
+/** The Profile tab (the shelf a prize flies to) and how hard it squashes as the prize lands. */
+const PROFILE_INDEX = 4;
+const SHELF_SQUASH = 0.22;
+
 /** The sunlight behind a picked tab: soft cream rings stacked into a radial (pure data). */
 const GLOW = 92;
 const GLOW_RINGS = [
@@ -283,7 +312,12 @@ const GLOW_RINGS = [
  * ring pulses off it. The compass squashes first, wobbles on its base (transformOrigin bottom, so its
  * baked shadow stays under it), gets a white glint across its face and throws six gold sparkles.
  */
-function FooterIcon({ index, children }: { readonly index: number; readonly children: ReactNode }) {
+function FooterIcon({ index, children, anchor, hit }: { readonly index: number; readonly children: ReactNode;
+  /** The view a prize flies to (the Profile tab). */
+  readonly anchor?: RefObject<View>;
+  /** 0 to 1: the squash as a prize lands in this icon. */
+  readonly hit?: SharedValue<number>;
+}) {
   const compass = index === COMPASS_INDEX;
   const size = compass ? 100 : 50;
   const F = FOOTER_MOTION;
@@ -294,11 +328,12 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
     const s = picked ? m.hopScale.value : left ? m.sinkScale.value : 1;
     // Every picked icon squashes wide and short first (the anticipation), then hops.
     const q = picked ? m.compassSquash.value : 0;
+    const h = hit ? hit.value : 0;
     return {
       transform: [
         { translateY: picked ? m.hopY.value : 0 },
-        { scaleX: s * (1 + F.compassSquashX * q) },
-        { scaleY: s * (1 - F.compassSquashY * q) },
+        { scaleX: s * (1 + F.compassSquashX * q) * (1 + SHELF_SQUASH * h) },
+        { scaleY: s * (1 - F.compassSquashY * q) * (1 - SHELF_SQUASH * 0.8 * h) },
         { rotate: `${(picked ? m.hopRotate.value : 0) + (compass && picked ? m.compassWobble.value : 0)}deg` },
       ],
     };
@@ -349,7 +384,7 @@ function FooterIcon({ index, children }: { readonly index: number; readonly chil
   const ringSize = compass ? 64 : 46;
   const ringTop = compass ? 14 : (size - ringSize) / 2;
   return (
-    <View>
+    <View ref={anchor} collapsable={false}>
       <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: (size - ringSize) / 2, top: ringTop,
         width: ringSize, height: ringSize, borderRadius: ringSize / 2, backgroundColor: GOLD_FX.glow }, disc]} />
       {compass && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: (size - ringSize) / 2, top: ringTop,
@@ -398,14 +433,41 @@ function RareFans({ size }: { readonly size: number }) {
   useAnimatedReaction(() => rarePickCount.value, (n, before) => {
     if (before !== null && n !== before) runOnJS(takeCount)(n);
   });
+  // The rare pick answers in the hand on its burst frame (every footer reacts; the shared haptic gate keeps it to one).
+  const buzz = () => queueHaptic('hitMedium');
+  useAnimatedReaction(() => footerMotion.rareBuzz.value >= 1, (now, was) => {
+    if (now && !was) runOnJS(buzz)();
+  });
   const half = Math.round(FOOTER_MOTION.rareSparkles / 2);
-  const fan = FOOTER_MOTION.rareFanDeg;
+  const { rareFanFrom: lo, rareFanTo: hi } = FOOTER_MOTION;
   return <>
     <SparkleBurst progress={footerMotion.burstRare} count={half} x={size / 2} y={44} inked
-      spread={[-180 + 2, -180 + fan]} dist={FOOTER_MOTION.rareDist} size={FOOTER_MOTION.rareSize} gravity={16} seed={seed} />
+      spread={[-180 + lo, -180 + hi]} dist={FOOTER_MOTION.rareDist} size={FOOTER_MOTION.rareSize} gravity={16} seed={seed} />
     <SparkleBurst progress={footerMotion.burstRare} count={half} x={size / 2} y={44} inked
-      spread={[-fan, -2]} dist={FOOTER_MOTION.rareDist} size={FOOTER_MOTION.rareSize} gravity={16} seed={seed + 3} />
+      spread={[-hi, -lo]} dist={FOOTER_MOTION.rareDist} size={FOOTER_MOTION.rareSize} gravity={16} seed={seed + 3} />
   </>;
+}
+
+/**
+ * The alternate rare compass pick: a little TPS shark swims along the footer wave, behind the compass and above
+ * the small icons, bobbing as it goes (one pass, UI thread, existing art; nothing at rest).
+ */
+function FooterSwim() {
+  const width = Dimensions.get('window').width;
+  const pt = FOOTER_MOTION.swimPt;
+  const style = useAnimatedStyle(() => {
+    const p = footerMotion.swim.value;
+    if (p <= 0 || p >= 1) return { opacity: 0 };
+    const x = -pt + (width + pt) * p;
+    const bob = Math.sin(p * Math.PI * 4) * 7;
+    return { opacity: p < 0.06 ? p / 0.06 : p > 0.94 ? (1 - p) / 0.06 : 1,
+      transform: [{ translateX: x }, { translateY: -pt * 0.75 + bob }, { rotate: `${Math.cos(p * Math.PI * 4) * -10}deg` }] };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0, width: pt, height: pt }, style]}>
+      <Image source={SHARK_ART} style={{ width: pt, height: pt }} contentFit="contain" cachePolicy="memory-disk" />
+    </Animated.View>
+  );
 }
 
 /** A footer label: lifts 2 pt into place and fades up when its tab is picked. */

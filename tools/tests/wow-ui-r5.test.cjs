@@ -64,6 +64,7 @@ test('wallet coins: a handful of big coins, digits roll on the first landing fra
   const flight = loadTs('src/ui/CoinFlight.tsx', {
     react: { memo: c => c }, 'react/jsx-runtime': {}, 'react-native': rn, 'react-native-reanimated': reanimated,
     './GameIcon': {}, './motion': motion, './tokens': { Z: { toast: 2000 } }, './SparkleBurst': {}, './motionEasing': easing,
+    '../fx/CoinTrails': {},
   });
   const F = flight.COIN_FLIGHT;
   assert.ok(F.size >= 22 && F.size <= 28, 'coins 22 to 28 pt');
@@ -130,7 +131,9 @@ test('footer: a crisp bright ring on every pick, a rare compass pick you notice 
   assert.ok(F.rareSize[0] >= 24 && F.rareRingTo >= 3, 'the rare pick: bold stars and a wide shock ring');
   assert.ok(RARE_HAPTIC_AT > 0);
   const wrapper = read('src/components/Wrapper.tsx');
-  assert.match(wrapper, /if \(pick\.rare\) setTimeout\(\(\) => queueHaptic\('hitMedium'\), RARE_HAPTIC_AT\);/);
+  // Wave 5 round 2: the rare buzz is timed on the UI thread (footerMotion.rareBuzz), never a JS timer.
+  assert.match(wrapper, /useAnimatedReaction\(\(\) => footerMotion\.rareBuzz\.value >= 1/);
+  assert.doesNotMatch(wrapper, /setTimeout\(\(\) => queueHaptic\('hitMedium'\), RARE_HAPTIC_AT\)/);
   assert.match(wrapper, /borderColor: BRAND\.goldLip/, 'a crisp dark-gold outer edge on the ring');
   assert.match(wrapper, /rareRing2/);
 });
@@ -143,7 +146,7 @@ test('grids fill like a vending machine: a further drop and a pop, row by row, f
   for (let i = 0; i < G.maxItems; i++) assert.ok(stagger.gridDelay(i, G.heroLeadMs) < G.capMs, 'every start inside the cap');
   assert.equal(stagger.gridDelay(G.maxItems), null);
   assert.equal(stagger.gridRiseIn(0, { reduced: true }), undefined, 'Reduce Motion: simply there');
-  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /gridRiseIn\(i, \{ leadMs: star \? GRID_STAGGER\.heroLeadMs : 0 \}\) \?\? FadeIn\.delay\(GRID_STAGGER\.capMs\)\.duration\(160\)/);
+  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /gridRiseIn\(i, \{ leadMs: star \? GRID_AFTER_HERO_MS : GRID_STAGGER\.headerLeadMs \}\) \?\? FadeIn\.delay\(GRID_STAGGER\.capMs\)\.duration\(160\)/);
 });
 
 test('refresh shark: anchored to the content, its bottom edge always clears the first row', () => {

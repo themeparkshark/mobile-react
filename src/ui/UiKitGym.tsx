@@ -21,6 +21,13 @@ import GameText from './GameText';
 import SharkLoader from './SharkLoader';
 import WalletChange from './WalletChange';
 import { diveNavigate } from '../fx/DiveIris';
+import * as RootNavigation from '../RootNavigation';
+
+// Timing captures (dev, or EXPO_PUBLIC_MOTION_CAPTURE in release-like JS; this screen never ships in a store build):
+// the debugger can move between screens to time the store fill and the footer from the gym.
+if (__DEV__ || process.env.EXPO_PUBLIC_MOTION_CAPTURE) {
+  (globalThis as { __gymNav?: typeof RootNavigation.navigate }).__gymNav = RootNavigation.navigate;
+}
 import { useToast } from '../components/Toast';
 import { GENERATED_ICON_NAMES, ORIGINAL_ICON_NAMES, type GameIconName } from './iconNames';
 import { TEXT_PRESET_NAMES } from './TextPresets';
@@ -164,6 +171,11 @@ export default function UiKitGym({ route }: { route?: { params?: { section?: Sec
           gameAlert('Second', 'This one waited its turn.', undefined, { icon: 'gift' });
         }} />
         <GameButton label="Controlled dialog" variant="secondary" onPress={() => setControlled(true)} />
+        {/* A reward on a screen with the footer: OK flies the prize to the shelf (the Profile tab). */}
+        <GameButton label="Prize to the shelf" variant="secondary" onPress={() => {
+          RootNavigation.navigate('Explore');
+          setTimeout(() => gameAlert('Nice find!', 'It goes on your shelf.', [{ text: 'OK' }], { icon: 'gift', haptic: 'success' }), 2500);
+        }} />
         <GameDialog visible={controlled} title="Out of Tickets" icon="ticket"
           message="Start a queue adventure to earn your next Ticket."
           buttons={[{ text: 'Got it' }]} onAnswer={() => setControlled(false)} />

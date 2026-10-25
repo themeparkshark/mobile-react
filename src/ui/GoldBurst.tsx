@@ -29,7 +29,7 @@ const RAYS = require('../../assets/images/reveal/rays-gold-fade.webp');
 const SPARK = require('../../assets/fx/spark.webp');
 const TWINKLE = require('../../assets/fx/star-twinkle.webp');
 
-export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, style }: {
+export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, raysOnly = false, style }: {
   /** Diameter of the ray fan. The glow fills about the same circle. */
   readonly size: number;
   /** 0 hidden, about 0.35 while gathering, 1 at full glow. */
@@ -39,6 +39,8 @@ export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, s
   /** Let the rays turn slowly while the moment is on screen. */
   readonly spin?: boolean;
   readonly reduced?: boolean;
+  /** Only the ray fan (no glow, no core): a wider fan drawn behind a card, so the rays reach past its edge. */
+  readonly raysOnly?: boolean;
   readonly style?: StyleProp<ViewStyle>;
 }) {
   const budget = usePowerBudget();
@@ -79,15 +81,15 @@ export function GoldBurst({ size, amount, bloom, spin = true, reduced = false, s
   const core = size * 0.42;
   return (
     <View pointerEvents="none" style={[styles.center, box, style]}>
-      <Animated.View style={[StyleSheet.absoluteFill, glowStyle]}>
+      {!raysOnly && <Animated.View style={[StyleSheet.absoluteFill, glowStyle]}>
         <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor={GOLD_FX.glow} />
-      </Animated.View>
+      </Animated.View>}
       <Animated.View style={[StyleSheet.absoluteFill, raysStyle]}>
         <Image source={RAYS} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor={GOLD_FX.rays} />
       </Animated.View>
-      <Animated.View style={[{ position: 'absolute', width: core, height: core }, coreStyle]}>
+      {!raysOnly && <Animated.View style={[{ position: 'absolute', width: core, height: core }, coreStyle]}>
         <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor={GOLD_FX.core} />
-      </Animated.View>
+      </Animated.View>}
     </View>
   );
 }

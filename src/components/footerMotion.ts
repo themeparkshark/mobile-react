@@ -56,14 +56,19 @@ export const FOOTER_MOTION = {
   smallDist: [32, 52] as readonly [number, number],
   smallSize: [14, 20] as readonly [number, number],
   /** The rare compass pick: one bigger burst (replaces the normal one, so it stays inside the cap). */
-  rareSparkles: 12,
+  rareSparkles: 10,
   /**
-   * Two low fans of inked gold stars that fly out sideways along the footer wave (never up into the
-   * cards above it): six left, six right, each fan no more than rareFanDeg above the horizon.
+   * Two fans of big inked gold stars, up and out over the footer wave (rareFanFrom to rareFanTo degrees above
+   * the horizon), short enough that they stay clear of the STANDINGS label and the Social icon below them and
+   * low enough that they never reach the cards: five left, five right, big enough to read at arm's length.
    */
-  rareFanDeg: 32,
-  rareDist: [90, 150] as readonly [number, number],
-  rareSize: [24, 32] as readonly [number, number],
+  rareFanFrom: 30,
+  rareFanTo: 72,
+  rareDist: [62, 96] as readonly [number, number],
+  rareSize: [32, 40] as readonly [number, number],
+  /** The alternate rare: a little TPS shark swims along the footer wave behind the compass (ms across). */
+  swimMs: 1700,
+  swimPt: 46,
   /** The rare pick's shock ring grows this far (times its size) and a sun glow blooms under the compass. */
   rareRingTo: 3.6,
   rareSunPeak: 0.85,
@@ -111,11 +116,21 @@ export const footerMotion = {
   burstSmall: makeMutable(0),
   /** The rare pick's wide gold shock ring (0 to 1, one shot). */
   ringRare: makeMutable(0),
+  /** The alternate rare: the little shark's swim along the footer (0 to 1, one shot). */
+  swim: makeMutable(0),
+  /** Reaches 1 on the rare pick's burst frame: the footer answers in the hand then (UI thread, no JS timer). */
+  rareBuzz: makeMutable(0),
 };
 
-/** Every this many compass picks, the flourish is a little bigger (a small surprise on the tenth tap). */
+/**
+ * The rare compass pick comes after these many picks in turn (4, then 7, then 5, then 6, and round again):
+ * always the same for everyone (no luck involved), but not a beat a kid can count.
+ */
+export const RARE_GAPS = [4, 7, 5, 6] as const;
+/** The average gap (kept for anything that asks how often). */
 export const RARE_EVERY = 5;
 let compassPicks = 0;
+let rarePicks = 0;
 /** Which rare pick this is (1, 2, 3...): each one lays its stars out a little differently, so the 50th still surprises. */
 export const rarePickCount = makeMutable(0);
 /** The star layout seed for rare pick n: a new pattern each time, cycling through a handful. Pure (unit tested). */
@@ -125,7 +140,14 @@ export function rareSeed(n: number): number {
 }
 /** Whether compass pick number n (1-based) is a rare one. Pure (unit tested). */
 export function isRareCompassPick(n: number): boolean {
-  return n > 0 && n % RARE_EVERY === 0;
+  if (!(n > 0)) return false;
+  let at = 0;
+  for (let k = 0; at < n; k++) at += RARE_GAPS[k % RARE_GAPS.length];
+  return at === n;
+}
+/** What rare pick number r (1-based) is: every third one is the shark swimming by, the rest are star fans. Pure. */
+export function rareKind(r: number): 'stars' | 'swim' {
+  return r > 0 && r % 3 === 0 ? 'swim' : 'stars';
 }
 
 /** Start the footer bounce for a tap on tab `to` from tab `from`. Does nothing with Reduce Motion. */
@@ -204,10 +226,21 @@ export function playFooterTap(from: number, to: number, reduced: boolean): { rar
     // The rare pick throws one big burst instead of the normal one (never two bursts at once).
     const burst = withDelay(F.compassSquashMs + 60, withTiming(1, { duration: rare ? DURATION.sparkle + 200 : DURATION.sparkle, easing: EASE.out }));
     if (rare) {
-      rarePickCount.value = Math.floor(compassPicks / RARE_EVERY);
-      m.burstRare.value = burst;
-
+      rarePicks += 1;
+      rarePickCount.value = rarePicks;
+      // Star fans on most rare picks; every third one, the little shark swims along the footer instead.
+      if (rareKind(rarePicks) === 'swim') {
+        m.burst.value = burst;
+        cancelAnimation(m.swim);
+        m.swim.value = 0;
+        m.swim.value = withDelay(F.compassSquashMs + 80, withTiming(1, { duration: F.swimMs, easing: EASE.inOut }));
+      } else {
+        m.burstRare.value = burst;
+      }
       m.ringRare.value = withDelay(F.compassSquashMs + 100, withTiming(1, { duration: F.ringMs + 240, easing: EASE.out }));
+      cancelAnimation(m.rareBuzz);
+      m.rareBuzz.value = 0;
+      m.rareBuzz.value = withDelay(RARE_HAPTIC_AT, withTiming(1, { duration: 0 }));
     } else {
       m.burst.value = burst;
     }
@@ -220,4 +253,7 @@ export function playFooterTap(from: number, to: number, reduced: boolean): { rar
 export const RARE_HAPTIC_AT = FOOTER_MOTION.compassSquashMs + 60;
 
 // Dev only: the lane captures can play a footer pick over the debugger (the map screen freezes dev JS in a busy simulator).
-if (typeof __DEV__ !== 'undefined' && __DEV__) (globalThis as { __playFooterTap?: typeof playFooterTap }).__playFooterTap = playFooterTap;
+// Release-like timing captures too (EXPO_PUBLIC_MOTION_CAPTURE, never set in store builds).
+if ((typeof __DEV__ !== 'undefined' && __DEV__) || process.env.EXPO_PUBLIC_MOTION_CAPTURE) {
+  (globalThis as { __playFooterTap?: typeof playFooterTap }).__playFooterTap = playFooterTap;
+}

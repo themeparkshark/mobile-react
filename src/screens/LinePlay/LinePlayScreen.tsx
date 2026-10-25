@@ -17,7 +17,7 @@
  * Route params: { ride: RideContext }. Wire via Root.tsx Stack.Screen "LinePlay".
  */
 
-import { notifyDiveLaidOut, notifyDiveLanded, useDiveSettled } from '../../fx/DiveIris';
+import { diveMark, notifyDiveLaidOut, notifyDiveLanded, useDiveSettled } from '../../fx/DiveIris';
 import { playSfx } from '../../gamekit/SFX';
 import { haptic } from '../../gamekit/Haptics';
 import { openAppSettings } from '../../services/external';
@@ -165,7 +165,7 @@ export default function LinePlayScreen() {
   const route = useRoute<any>();
   const ride: RideContext | undefined = route.params?.ride;
 
-  if (__DEV__) (globalThis as { __diveMark?: (w: string) => void }).__diveMark?.('lp-render');
+  diveMark('lp-render');
   const { session, snapshot } = useLinePlaySession();
   const diveSettled = useDiveSettled();
   // The dive covers the way in (an instant push); the way out is a soft fade.
@@ -746,14 +746,14 @@ export default function LinePlayScreen() {
   const laidOut = useRef(false);
   const readyCap = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onRootLayout = useCallback(() => {
-    if (__DEV__) (globalThis as { __diveMark?: (w: string) => void }).__diveMark?.(`lp-layout ready=${diveReady}`);
+    diveMark(`lp-layout ready=${diveReady}`);
     if (diveReady) { notifyDiveLanded(); return; }
     // The water keeps swimming until the first round lands (the effect below says so).
     if (!laidOut.current) notifyDiveLaidOut();
     laidOut.current = true;
   }, [diveReady]);
   useEffect(() => {
-    if (__DEV__ && diveReady) (globalThis as { __diveMark?: (w: string) => void }).__diveMark?.('lp-ready');
+    if (diveReady) diveMark('lp-ready');
     if (!diveReady || !laidOut.current) return undefined;
     if (readyCap.current) clearTimeout(readyCap.current);
     // Straight away (no frame wait on a busy JS thread): the water itself waits a few UI frames before it opens.
@@ -1137,6 +1137,9 @@ export default function LinePlayScreen() {
               data={activityPages}
               keyExtractor={(it) => it.id}
               getItemLayout={(_, index) => ({ length: SCREEN_W, offset: index * SCREEN_W, index })}
+              // The first page and the next one draw with the screen (the game dive opens onto them); the rest
+              // follow in later batches, so the first round is on screen sooner.
+              initialNumToRender={2}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}

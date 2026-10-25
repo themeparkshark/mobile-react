@@ -35,7 +35,7 @@ import { Image } from 'expo-image';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { SHARK_ART } from '../ui/SharkRefresh';
 import { Canvas, Circle, Group, LinearGradient, Path, Skia, vec, type SkPath } from '@shopify/react-native-skia';
-import { cancelAnimation, Easing, runOnJS, useAnimatedReaction, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
+import { cancelAnimation, Easing, executeOnUIRuntimeSync, runOnJS, useAnimatedReaction, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import { queueHaptic } from '../gamekit/Haptics';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 import { usePowerBudget } from '../power/PowerProvider';
@@ -81,6 +81,12 @@ export const DIVE = {
   readyPatienceMs: 2500,
   /** While the water waits, the shark keeps swimming on slowly from lingerAt to here (never parked). */
   drift: { to: 0.66, ms: 2200 },
+  /**
+   * A wait longer than the held breath is a show, never a parked loop: the shark swims a full head-first
+   * loop-the-loop (radius pt, one loop per ms) with its bubble stream, and a band of sunlight sweeps
+   * across the water once per loop. It starts after the held breath plus startMs and blends in over rampMs.
+   */
+  loop: { radiusPt: 64, ms: 1500, startMs: 220, rampMs: 280, sweepPeak: 0.2 },
   /** If the water has not covered the screen this long after its close should have ended, go anyway (ms). */
   watchdogMs: 1200,
   /** How often the water re-checks after safetyMs (ms). */
@@ -220,7 +226,15 @@ export function diveNavigate(name: string, params?: object): void {
   setDiveActive(true);
   listeners.forEach(l => l(current));
   settleListeners.forEach(l => l(false));
-  if (screen) setTimeout(() => { try { screen.load(); } catch { /* the navigate loads it anyway */ } }, 0);
+  prewarmNext = screen ?? null;
+}
+/** The game screen's module to load once the water has started to close (never ahead of the water's own first frame). */
+let prewarmNext: { load: () => unknown } | null = null;
+function loadPrewarm(): void {
+  const screen = prewarmNext;
+  prewarmNext = null;
+  mark('prewarm');
+  if (screen) { try { screen.load(); } catch { /* the navigate loads it anyway */ } }
 }
 
 // Dev only: the lane captures can start a dive over the debugger (the tap origin still comes from the last real touch).
@@ -263,13 +277,19 @@ export function useDiveSettled(): boolean {
 /** Dev only: when each beat of the last dives happened (ms since the dive started), for the lane captures. */
 const devLog: { at: number; what: string }[] = [];
 let devT0 = 0;
+/** The beat log runs in dev and in release-like timing captures (EXPO_PUBLIC_MOTION_CAPTURE, never set in store builds). */
+const DIVE_LOG = (typeof __DEV__ !== 'undefined' && __DEV__) || !!process.env.EXPO_PUBLIC_MOTION_CAPTURE;
 function mark(what: string, at: number = Date.now()): void {
-  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
+  if (!DIVE_LOG) return;
   if (what === 'start') devT0 = at;
   devLog.push({ at: at - devT0, what });
   if (devLog.length > 60) devLog.splice(0, devLog.length - 60);
 }
-if (typeof __DEV__ !== 'undefined' && __DEV__) {
+/** A beat from the game screen (dev and timing captures only). */
+export function diveMark(what: string): void {
+  if (DIVE_LOG) mark(what);
+}
+if (DIVE_LOG) {
   (globalThis as { __diveLog?: typeof devLog }).__diveLog = devLog;
   (globalThis as { __diveMark?: (what: string) => void }).__diveMark = (what: string) => mark(what);
 }
@@ -289,6 +309,23 @@ export function sharkAt(t: number, fromLeft: boolean, w: number, h: number): { x
   const x = x0 + (x1 - x0) * t;
   const y = h * 0.56 - h * 0.12 * Math.sin(t * Math.PI) + h * 0.28 * t * t * t;
   return { x, y, rot: (fromLeft ? 1 : -1) * (8 + 34 * t * t) };
+}
+
+/**
+ * The shark's loop-the-loop offset at loop phase p (0 to 1), blended in by `amt` (0 to 1): up and over
+ * head first, back to where it started. Rotation follows the swim direction. Pure worklet (unit tested).
+ */
+export function sharkLoop(p: number, amt: number, fromLeft: boolean, radius: number): { dx: number; dy: number; rot: number; squash: number } {
+  'worklet';
+  if (amt <= 0) return { dx: 0, dy: 0, rot: 0, squash: 0 };
+  const a = p * Math.PI * 2;
+  const dir = fromLeft ? 1 : -1;
+  const turn = -dir * 360 * p;
+  // The shortest way to the loop's angle, so the blend in and out never spins the long way round.
+  const wrapped = turn - 360 * Math.round(turn / 360);
+  return { dx: amt * dir * radius * Math.sin(a), dy: -amt * radius * (1 - Math.cos(a)), rot: amt * wrapped,
+    // A little stretch on the fast bottom of the loop, round at the top.
+    squash: amt * 0.07 * Math.cos(a) };
 }
 
 export function DiveIrisHost() {
@@ -317,6 +354,9 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
   const fade = useSharedValue(reduced ? 0 : 1);
   const swim = useSharedValue(0);
   const clock = useSharedValue(0);
+  /** The loop-the-loop while the water waits: its phase and how much of it shows. */
+  const loop = useSharedValue(0);
+  const loopAmt = useSharedValue(0);
   const [holding, setHolding] = useState(false);
   /** A tap while the water is up skips the rest of the held breath (never the wait for the game screen). */
   const skipRef = useRef<() => void>(() => {});
@@ -346,11 +386,18 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     let went = false;
     /** The watchdog navigated before the water was up: the landing may come before anyone listens. */
     let forced = false;
-    const openNow = (delay: number) => {
+    const openOnUi = (delay: number) => {
       'worklet';
       open.value = withDelay(delay, withTiming(1, { duration: T.openMs, easing: EASE.inOut }, done => {
         if (done) { runOnJS(markUi)('opened(ui)', Date.now()); runOnJS(finishDive)(); }
       }));
+    };
+    /**
+     * Start the open on the UI thread now. A plain shared-value write from JS waits in Reanimated's batch until the
+     * JS task ends, and the game screen's next render can hold that task for a second; this runs it straight away.
+     */
+    const openNow = (delay: number) => {
+      try { executeOnUIRuntimeSync(openOnUi)(delay); } catch { openOnUi(delay); }
     };
     // The water opens only onto the real game screen: its root laid out (notifyDiveLanded, plus one
     // frame so it has drawn), or, for a game that was already in the stack, its route in focus.
@@ -410,6 +457,13 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     };
     const onCovered = (uiAt: number) => {
       if (!alive) return;
+      // Still under water after the held breath: the shark loops the loop (never a parked bob). UI thread;
+      // an open that comes first blends it straight back out.
+      if (look.clock && open.value === 0) {
+        const at = T.holdMs + DIVE.loop.startMs;
+        loop.value = withDelay(at, withRepeat(withTiming(1, { duration: DIVE.loop.ms * devSlow(), easing: Easing.linear }), -1, false));
+        loopAmt.value = withDelay(at, withTiming(1, { duration: DIVE.loop.rampMs, easing: EASE.inOut }));
+      }
       mark('covered(ui)', uiAt);
       coveredAt = Date.now();
       queueHaptic('hitMedium');
@@ -432,8 +486,12 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     close.value = withTiming(1, { duration: T.closeMs, easing: EASE.in }, done => {
       if (done) runOnJS(onCovered)(Date.now());
     });
+    mark('close-start');
+    // The game screen's module loads on the JS thread while the water closes on the UI thread (it used to load
+    // before the water's first frame, which held the splash back by the length of the require).
+    timers.push(setTimeout(loadPrewarm, 0));
     cleanups.push(() => { landedListeners.delete(onLanded); laidOutListeners.delete(onLaidOut); });
-    cleanups.push(() => cancelAnimation(clock));
+    cleanups.push(() => { cancelAnimation(clock); cancelAnimation(loop); cancelAnimation(loopAmt); });
     return () => { alive = false; timers.forEach(clearTimeout); cleanups.forEach(c => c()); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -442,6 +500,7 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
   useAnimatedReaction(() => open.value > 0, (now, before) => {
     if (now && !before) {
       swim.value = withTiming(1, { duration: T.openMs * 1.2, easing: EASE.in });
+      loopAmt.value = withTiming(0, { duration: DURATION.quick, easing: EASE.out });
       runOnJS(onOpenStart)();
     }
   });
@@ -516,11 +575,13 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     const p = Skia.Path.Make();
     if (close.value < 0.2) return p;
     const at = sharkAt(swim.value, fromLeft, w, h);
+    const lp = sharkLoop(loop.value, loopAmt.value, fromLeft, DIVE.loop.radiusPt);
     const dir = fromLeft ? 1 : -1;
-    const bob = Math.sin(clock.value * Math.PI * 4) * 8;
+    const bob = Math.sin(clock.value * Math.PI * 4) * 8 * (1 - loopAmt.value);
     // A stream of bubbles rising off the tail: each one drifts up and back, then starts again.
-    const tailX = at.x - dir * DIVE.sharkPt * 0.36;
-    const tailY = at.y + bob + DIVE.sharkPt * 0.12;
+    const heading = ((at.rot + lp.rot) * Math.PI) / 180;
+    const tailX = at.x + lp.dx - dir * DIVE.sharkPt * 0.36 * Math.cos(heading);
+    const tailY = at.y + lp.dy + bob + DIVE.sharkPt * 0.12 - dir * DIVE.sharkPt * 0.36 * Math.sin(heading);
     for (let k = 0; k < look.trail; k++) {
       const life = (clock.value * 2.2 + k / look.trail) % 1;
       const r = 3 + ((k * 7) % 5) + life * 3;
@@ -528,6 +589,15 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     }
     return p;
   });
+  // A band of sunlight sweeping across the water once per loop while it waits.
+  const sweep = useDerivedValue<SkPath>(() => {
+    const p = Skia.Path.Make();
+    if (loopAmt.value <= 0) return p;
+    const x = -0.5 * w + loop.value * 2 * w;
+    p.moveTo(x, 0); p.lineTo(x + w * 0.22, 0); p.lineTo(x - w * 0.18, h); p.lineTo(x - w * 0.4, h); p.close();
+    return p;
+  });
+  const sweepOpacity = useDerivedValue(() => DIVE.loop.sweepPeak * loopAmt.value);
   const sceneOpacity = useDerivedValue(() => (open.value > 0 ? Math.max(0, 1 - open.value * 1.4) : close.value));
 
   const bubbles = Array.from({ length: DIVE.bubbles }, (_, i) => diveBubble(i, DIVE.bubbles, w));
@@ -535,16 +605,18 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
     if (reduced) return { opacity: 0 };
     const t = swim.value;
     const at = sharkAt(t, fromLeft, w, h);
-    const bob = Math.sin(clock.value * Math.PI * 4) * 8;
+    const lp = sharkLoop(loop.value, loopAmt.value, fromLeft, DIVE.loop.radiusPt);
+    const calm = 1 - loopAmt.value;
+    const bob = Math.sin(clock.value * Math.PI * 4) * 8 * calm;
     // Entry squash: long along the swim, then springs round by a quarter of the way.
     const k = Math.min(1, t / 0.28);
     const stretch = (1 - k) * (1 - k);
-    const sx = 1 + 0.26 * stretch - 0.05 * Math.sin(k * Math.PI);
-    const sy = 1 - 0.2 * stretch + 0.05 * Math.sin(k * Math.PI);
+    const sx = 1 + 0.26 * stretch - 0.05 * Math.sin(k * Math.PI) + lp.squash;
+    const sy = 1 - 0.2 * stretch + 0.05 * Math.sin(k * Math.PI) - lp.squash;
     return {
       opacity: close.value < 0.2 ? 0 : open.value > 0.3 ? Math.max(0, 1 - (open.value - 0.3) / 0.3) : 1,
-      transform: [{ translateX: at.x - DIVE.sharkPt / 2 }, { translateY: at.y - DIVE.sharkPt / 2 + bob },
-        { rotate: `${at.rot + Math.cos(clock.value * Math.PI * 4) * 4}deg` },
+      transform: [{ translateX: at.x + lp.dx - DIVE.sharkPt / 2 }, { translateY: at.y + lp.dy - DIVE.sharkPt / 2 + bob },
+        { rotate: `${at.rot + lp.rot + Math.cos(clock.value * Math.PI * 4) * 4 * calm}deg` },
         // The art faces right: flip it when it swims left, so it always swims head first.
         { scaleX: (fromLeft ? 1 : -1) * sx }, { scaleY: sy }],
     };
@@ -569,6 +641,9 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
                 <Path path={rays} opacity={0.75}>
                   <LinearGradient start={vec(0, 0)} end={vec(0, h * 0.82)} colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']} />
                 </Path>
+                <Path path={sweep} opacity={sweepOpacity}>
+                  <LinearGradient start={vec(0, 0)} end={vec(w, 0)} colors={['rgba(255,255,255,0)', '#ffffff', 'rgba(255,255,255,0)']} />
+                </Path>
                 {look.ripple && <Path path={ripple} style="stroke" strokeWidth={12} strokeCap="round" color="rgba(255,255,255,0.14)" />}
                 {look.ripple && <Path path={ripple} style="stroke" strokeWidth={5} strokeCap="round" color="rgba(255,255,255,0.3)" />}
                 <Path path={trail} color="rgba(255,255,255,0.78)" />
@@ -579,7 +654,7 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
               <Path path={rim} style="stroke" strokeWidth={DIVE.rimPt * 4} color={GOLD_FX.raysSoft} opacity={goldSoft} />
               <Path path={rim} style="stroke" strokeWidth={DIVE.rimPt * 2} color={GOLD_FX.rays} opacity={goldOpacity} />
               <Path path={rim} style="stroke" strokeWidth={DIVE.rimPt} color="#ffffff" opacity={rimOpacity} />
-              {bubbles.slice(0, look.clock ? DIVE.bubbles : 4).map((b, i) => <Bubble key={i} b={b} h={h} close={close} open={open} />)}
+              {bubbles.slice(0, look.clock ? DIVE.bubbles : 4).map((b, i) => <Bubble key={i} b={b} h={h} close={close} open={open} clock={clock} />)}
             </>}
         </Group>
       </Canvas>
@@ -590,12 +665,18 @@ function DiveRun({ dive }: { readonly dive: Dive }) {
   );
 }
 
-function Bubble({ b, h, close, open }: {
+function Bubble({ b, h, close, open, clock }: {
   readonly b: { x: number; r: number; lag: number }; readonly h: number;
-  readonly close: SharedValue<number>; readonly open: SharedValue<number>;
+  readonly close: SharedValue<number>; readonly open: SharedValue<number>; readonly clock: SharedValue<number>;
 }) {
-  // One rise across the whole dive (close plus open), each bubble a little behind the last.
-  const t = useDerivedValue(() => Math.min(1, Math.max(0, (close.value * 0.4 + open.value * 0.6 - b.lag) / (1 - b.lag))));
+  // Rising through the whole dive (close, the wait's clock, open), each bubble a little behind the last;
+  // a bubble that reaches the top starts again at the bottom, so a long wait never parks them (the clock wraps
+  // by exactly one rise, so a wrap never jumps a bubble).
+  const t = useDerivedValue(() => {
+    if (close.value < 0.05) return 0;
+    const run = close.value * 0.4 + open.value * 0.6 + clock.value - b.lag;
+    return run <= 0 ? 0 : run - Math.floor(run);
+  });
   const cy = useDerivedValue(() => h + b.r - t.value * (h * 0.75));
   const cx = useDerivedValue(() => b.x + Math.sin(t.value * 9) * 6);
   const hx = useDerivedValue(() => cx.value - b.r * 0.35);
