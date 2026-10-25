@@ -72,7 +72,7 @@ test('Gym has no soft glow anywhere', () => {
   for (const m of src.matchAll(/shadowRadius: (\d+(?:\.\d+)?)/g)) assert.equal(Number(m[1]), 0, 'every Gym shadow is a hard drop');
   for (const m of src.matchAll(/textShadowRadius: (\d+(?:\.\d+)?)/g)) assert.equal(Number(m[1]), 0, 'every Gym text shadow is hard');
   const glow = styleBlock(src, 'pillarGlow');
-  assert.match(glow, /borderColor: '#0B2A5B'/);
+  assert.match(glow, /borderColor: '#123A6B'/);
   assert.match(glow, /shadowOpacity: 0/);
 });
 
@@ -86,7 +86,7 @@ test('Defend shield burst is flat and the result has one message', () => {
   const src = read('src/components/GymBattle/DefendMiniGameModal.tsx');
   const glow = styleBlock(src, 'shieldGlow');
   assert.doesNotMatch(glow, /shadowRadius/);
-  assert.match(glow, /borderColor: '#0B2A5B'/);
+  assert.match(glow, /borderColor: '#123A6B'/);
   assert.doesNotMatch(styleBlock(src, 'multiplierBanner'), /shadowRadius: [1-9]/);
   assert.match(src, /\{result\.failed \? 'OOPS!' : totalPoints < 50 \? 'GOOD TRY!' : 'DEFENDED!'\}/);
   assert.match(src, /\{!result\.failed && totalPoints >= 50 && <Text style=\{styles\.resultTier\}>/);
@@ -105,4 +105,11 @@ test('Defend result never claims a bonus or points that did not happen, and show
 test('a very fast Defend round is never refused for too many taps', () => {
   const src = read('src/components/GymBattle/DefendMiniGameModal.tsx');
   assert.match(src, /defendGym\(parkId, Math\.min\(totalPoints, 500\)\)/);
+});
+
+test('Join a Team uses the same bright cream card as Defend', () => {
+  const src = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  assert.match(styleBlock(src, 'noTeamBox'), /backgroundColor: '#FFF8E6'/);
+  assert.match(styleBlock(src, 'noTeamBlur'), /borderColor: '#123A6B'/);
+  assert.match(styleBlock(src, 'noTeamText'), /color: '#123A6B'/);
 });
