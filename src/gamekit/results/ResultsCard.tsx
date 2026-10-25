@@ -271,7 +271,10 @@ export function ResultsCard({
     ));
     return () => cancelAnimation(extrasIn);
   }, [extrasBeat, reducedMotion, settle, extrasIn]);
-  const extrasStyle = useAnimatedStyle(() => ({ opacity: extrasIn.value > 0.02 ? 1 : 0, transform: [{ scale: extrasIn.value }] }));
+  // The panel never sits at scale 0: on iOS a view held at scale 0 came back with its
+  // cream fill missing (only the border drew) for seconds after it popped in. It grows
+  // from 0.6 while hidden, so the pop still reads, and its fill is drawn from the first frame.
+  const extrasStyle = useAnimatedStyle(() => ({ opacity: extrasIn.value > 0.02 ? 1 : 0, transform: [{ scale: 0.6 + 0.4 * extrasIn.value }] }));
 
   return (
     <View style={[styles.card, short && styles.cardShort]}>
