@@ -197,3 +197,54 @@ test('a wobble buzz 30 ms inside the projected burst gap is dropped (a loaded UI
   assert.ok(heavy.t - before[before.length - 1].t >= 120, `nothing within 120 ms before the heavy: ${hs.map((h) => `${h.intent}@${h.t}`).join(' ')}`);
   assert.ok(e.Trace.traceEvents().some((x) => x.kind === 'mark' && x.name === 'catch-pulse-dropped' && /near the burst/.test(x.detail ?? '')), 'dropped, not flammed');
 });
+
+test('fix 7: a finished audio-api voice lets its copy of the sound go (buffer dropped, graph links cut) on its end event, or after its length if the event never comes', () => {
+  const calls = [];
+  const node = (kind) => {
+    const n = { kind, connect() {}, disconnect() { calls.push(`${kind}.disconnect`); }, gain: { value: 1 }, pan: { value: 0 }, playbackRate: { value: 1 } };
+    let buf = null;
+    Object.defineProperty(n, 'buffer', { get: () => buf, set: (v) => { buf = v; if (v === null) calls.push(`${kind}.buffer=null`); } });
+    n.start = () => calls.push(`${kind}.start`);
+    n.stop = () => calls.push(`${kind}.stop`);
+    return n;
+  };
+  class AudioContext {
+    constructor() { this.currentTime = 0; this.destination = node('dest'); }
+    createGain() { return node('gain'); }
+    createBufferSource() { const s = node('src'); this.last = s; return s; }
+    createStereoPanner() { return node('pan'); }
+    createBiquadFilter() { return Object.assign(node('lp'), { frequency: { value: 0 } }); }
+  }
+  let ctxRef = null;
+  const timers = [];
+  const B = require('./helpers/ts-module.cjs').loadTs('src/gamekit/audio/backends.ts', {
+    'expo-av': { Audio: {} }, 'expo-asset': { Asset: {} },
+    'react-native-audio-api': { AudioContext: function C() { ctxRef = new AudioContext(); return ctxRef; } },
+  }, { createAudioContext: () => null, globalThis: { createAudioContext: () => null }, setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: () => undefined });
+  const b = new B.AudioApiBackend();
+  return b.init().then(() => {
+    b.buffers.set('k', { duration: 0.5 });
+    const t1 = b.play('k', { gain: 1, rate: 1, pan: 0, delayMs: 100, startMs: 0, durationMs: 0 });
+    assert.ok(t1 > 0);
+    const src1 = ctxRef.last;
+    assert.equal(timers[timers.length - 1].ms, 100 + 500 + 300, 'the fallback release waits the delay, the sound and 300 ms');
+    src1.onEnded();
+    assert.deepEqual([...calls.filter((c) => c !== 'src.start')], ['src.disconnect', 'gain.disconnect', 'src.buffer=null'], 'released on its end event');
+    assert.equal(src1.onEnded, null);
+    // No end event: the timer releases it.
+    calls.length = 0;
+    b.play('k', { gain: 1, rate: 2, pan: 0, delayMs: 0, startMs: 0, durationMs: 0 });
+    const t = timers[timers.length - 1];
+    assert.equal(t.ms, 250 + 300, 'twice as fast, half as long');
+    t.fn();
+    assert.ok(calls.includes('src.buffer=null') && calls.includes('gain.disconnect'));
+    // A stopped voice goes 60 ms after its stop.
+    calls.length = 0;
+    const t3 = b.play('k', { gain: 1, rate: 1, pan: 0.5, delayMs: 0, startMs: 0, durationMs: 0 });
+    b.stop(t3);
+    assert.ok(calls.includes('src.stop'));
+    assert.equal(timers[timers.length - 1].ms, 60);
+    timers[timers.length - 1].fn();
+    assert.ok(calls.includes('pan.disconnect') && calls.includes('src.buffer=null'));
+  });
+});

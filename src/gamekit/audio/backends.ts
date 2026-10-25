@@ -379,6 +379,9 @@ async function localPath(src: number): Promise<string | null> {
   }
 }
 
+/** A voice is released this long after it must have ended, if its end event never came. */
+const VOICE_RELEASE_SLACK_MS = 300;
+
 export class AudioApiBackend implements AudioBackend {
   readonly name = 'audio-api' as const;
   readonly supportsPan = true;
@@ -391,7 +394,7 @@ export class AudioApiBackend implements AudioBackend {
   private musicBus: AnyNode = null;
   private musicLowpass: AnyNode = null;
   private buffers = new Map<string, AnyNode>();
-  private voices = new Map<number, { src: AnyNode; gain: AnyNode }>();
+  private voices = new Map<number, { src: AnyNode; gain: AnyNode; pan: AnyNode; timer: ReturnType<typeof setTimeout> | null }>();
   private decks = new Map<string, { src: AnyNode; gain: AnyNode; startedAt: number; offset: number; loopMs: number }>();
   private nextToken = 1;
 
@@ -468,8 +471,9 @@ export class AudioApiBackend implements AudioBackend {
       src.playbackRate.value = a.rate;
       const gain = this.ctx.createGain();
       gain.gain.value = a.gain;
+      let pan: AnyNode = null;
       if (a.pan !== 0) {
-        const pan = this.ctx.createStereoPanner();
+        pan = this.ctx.createStereoPanner();
         pan.pan.value = Math.max(-1, Math.min(1, a.pan));
         src.connect(gain);
         gain.connect(pan);
@@ -483,8 +487,11 @@ export class AudioApiBackend implements AudioBackend {
       if (a.durationMs > 0) src.start(when, offset, a.durationMs / 1000);
       else src.start(when, offset);
       const token = this.nextToken++;
-      this.voices.set(token, { src, gain });
-      src.onEnded = () => this.voices.delete(token);
+      // A voice is released once it ends (or, if the end event never comes, a little after it must have ended).
+      const playMs = (a.durationMs > 0 ? a.durationMs : Math.max(0, (buffer.duration ?? 0) * 1000 - a.startMs)) / Math.max(0.25, a.rate || 1);
+      const timer = setTimeout(() => this.release(token), a.delayMs + playMs + VOICE_RELEASE_SLACK_MS);
+      this.voices.set(token, { src, gain, pan, timer });
+      src.onEnded = () => this.release(token);
       return token;
     } catch {
       return 0;
@@ -501,7 +508,29 @@ export class AudioApiBackend implements AudioBackend {
     } catch {
       // Already stopped.
     }
+    // Released once the 15 ms stop has passed (its end event usually comes first).
+    if (v.timer) clearTimeout(v.timer);
+    v.timer = setTimeout(() => this.release(token), 60);
+  }
+
+  /**
+   * Wave 5 round 2: let a finished voice go. react-native-audio-api 0.6.5 gives every buffer source its own copy of
+   * the decoded sound (AudioBufferSourceNode::setBuffer copies the bus) plus a time stretcher, and frees them only when
+   * the JS host object is garbage collected. Hermes collects by JS heap pressure, and these host objects are tiny on
+   * it, so a 50-catch release run held about 3 MB more per catch with studio sound on (RSS +529 MB against +374 MB
+   * off). Dropping the buffer and the graph links when the voice ends frees the copy at once; the small host
+   * objects go whenever the collector runs.
+   */
+  private release(token: number): void {
+    const v = this.voices.get(token);
+    if (!v) return;
     this.voices.delete(token);
+    if (v.timer) clearTimeout(v.timer);
+    try { v.src.onEnded = null; } catch { /* already gone */ }
+    try { v.src.disconnect(); } catch { /* already gone */ }
+    try { v.gain.disconnect(); } catch { /* already gone */ }
+    try { v.pan?.disconnect(); } catch { /* already gone */ }
+    try { v.src.buffer = null; } catch { /* already gone */ }
   }
 
   stopAll(): void {
@@ -553,6 +582,12 @@ export class AudioApiBackend implements AudioBackend {
     } catch {
       // Already stopped.
     }
+    // Round 2: the stopped bed lets its copy of the loop go (see release()).
+    setTimeout(() => {
+      try { d.src.disconnect(); } catch { /* already gone */ }
+      try { d.gain.disconnect(); } catch { /* already gone */ }
+      try { d.src.buffer = null; } catch { /* already gone */ }
+    }, Math.max(20, fadeMs) + VOICE_RELEASE_SLACK_MS);
   }
 
   async musicPosition(deck: string): Promise<number> {
