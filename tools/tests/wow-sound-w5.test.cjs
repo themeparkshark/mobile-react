@@ -206,9 +206,9 @@ test('fix 8: the hooks get their own shaped buzz: Daily 3 check, the flame\'s ig
   assert.ok(H, 'haptics module loaded');
   const src = (f) => fs.readFileSync(path.join(root, f), 'utf8');
   // Round 2: the surfaces call loopSound (the notes climb, the flame grows with the streak, the chest's short form).
-  assert.match(src('src/components/retention/useRetention.tsx'), /if \(!playDaily3\(checked, flameDay\(next\.streak\)\)\) \{/);
+  assert.match(src('src/components/retention/Daily3MapButton.tsx'), /if \(playDaily3\(landing\.done, landing\.day \?\? flameDay\(\{ days: streak \}\), \{ syncMs: 0, chordAfterMs: CHECK\.fullRing \}\)\) return;/);
   assert.match(src('src/components/DailyGiftModal.tsx'), /if \(playChestOpen\(\)\) return;/);
-  assert.match(src('src/components/retention/RewardReveal.tsx'), /if \(!playChestOpen\(\{ rowsFollow: true \}\)\) \{ haptic\('success'\); playSfx\('fx\.reward'\); \}/);
+  assert.match(src('src/components/retention/RewardReveal.tsx'), /if \(!playChestOpen\(\{ rowsFollow: true \}\)\) \{ playHaptic\('golden'\); playSfx\('fx\.reward'\); \}/);
 });
 
 test('HomeCatchMoment hands catchAudio the UI clock: due time per beat, the beam in the tap ladder, the grand mark and its second heavy as a UI beat', () => {

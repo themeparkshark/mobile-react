@@ -10,6 +10,7 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { ws7Preview } from '../dev/ws7Preview';
 import { useHelp } from './help/HelpProvider';
 import type { GlossaryKey } from '../services/help/glossary';
+import useOwnStreak from '../services/retention/useOwnStreak';
 
 /** The one Energy sentence (docs/economy-glossary.md, GET /api/economy). */
 export const ENERGY_RULE = 'Energy powers boss raids and coin upgrades. It never runs out on a timer.';
@@ -72,6 +73,8 @@ function StatItem({ icon, label, value, index, visible, onPress }: StatItemProps
 
 export default function RadialStatsMenu() {
   const { player } = useContext(AuthContext);
+  // One streak number everywhere: with Daily 3 on, the flame's own streak (the same number as the map button and the card).
+  const flame = useOwnStreak();
   const { explain } = useHelp();
   const [isOpen, setIsOpen] = useState(false);
   // Dev visual QA only.
@@ -122,7 +125,7 @@ export default function RadialStatsMenu() {
 
   const energy = player.energy ?? 0;
   const tickets = player.tickets ?? 0;
-  const streak = player.current_streak ?? 0;
+  const streak = flame?.days ?? player.current_streak ?? 0;
   
   // Format large numbers with commas (like Stardust in Pokemon GO)
   const formatNumber = (n: number) => n.toLocaleString();

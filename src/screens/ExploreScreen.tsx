@@ -1056,6 +1056,8 @@ function ExploreScreen() {
     // A brand new player's first hunt stays open map for 30 s (or a real second catch), like the daily chest.
     screenFree: chestScreenFree && !firstVisitHold && !chestShowing && !dailyGiftOccluded && !redeemFlowOpen
       && !(chestUnclaimed && !!dailyGift && !chestDismissed(dailyGift.id)),
+    // The welcome back goes before the daily gift (the gift waits while it is up).
+    welcomeFree: chestScreenFree && !chestShowing && !dailyGiftOccluded && !redeemFlowOpen,
     // Real events that can finish a goal (a ride closing is caught by the next map focus, not here).
     refreshKey: `${dailyGift?.redeemed_at ?? ''}|${homeCollectionVersion}|${collectFlight?.key ?? 0}`,
     mapCovered: redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded || showPrepItemModal,
@@ -1105,7 +1107,7 @@ function ExploreScreen() {
     && !parkTip && !isActive && !liveEvt.event;
   const parkTipReady = mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
-    dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial,
+    dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial || retentionOccluding,
     bossOrChest: bossOpen || bossOccluded || dailyGiftOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
     adventureOpen: adventureOccluded, coinFlying: !!pendingCollect || !!collectFlight,
   });

@@ -14,7 +14,7 @@
  * A dialog drawn inside a sheet's own <Modal> is nested (ModalLayerContext): UIKit
  * presents it from that sheet, so it neither waits nor blocks.
  */
-import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 let nextId = 1;
 let layers: number[] = [];
@@ -22,8 +22,10 @@ const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(l => l());
 
 export const modalLayers = {
-  add(): number {
+  /** `claim` hears the new id before listeners do, so the layer that asked already knows it is its own. */
+  add(claim?: (id: number) => void): number {
     const id = nextId++;
+    claim?.(id);
     layers = [...layers, id];
     emit();
     return id;
@@ -62,18 +64,24 @@ export const ModalLayerContext = createContext(false);
 export function useModalLayer(active: boolean, mode: 'show' | 'wait'): boolean {
   const nested = useContext(ModalLayerContext);
   const [id, setId] = useState<number | null>(null);
+  // The id is known before the store tells listeners, so the render between "added" and setId never reads as
+  // "someone else is up" (that one render used to unmount a just-opened dialog for a frame).
+  const mineRef = useRef<number | null>(null);
   useEffect(() => {
     if (!active || nested) return;
-    const mine = modalLayers.add();
+    const mine = modalLayers.add(n => { mineRef.current = n; });
     setId(mine);
     return () => {
+      mineRef.current = null;
       modalLayers.remove(mine);
       setId(null);
     };
   }, [active, nested]);
   // Before its effect registers it, a waiting layer may show at once only when nothing else is up.
-  const front = useSyncExternalStore(modalLayers.subscribe,
-    () => (id != null ? modalLayers.isFront(id) : modalLayers.count() === 0));
+  const front = useSyncExternalStore(modalLayers.subscribe, () => {
+    const me = id ?? mineRef.current;
+    return me != null ? modalLayers.isFront(me) : modalLayers.count() === 0;
+  });
   if (!active) return false;
   if (nested || mode === 'show') return true;
   return front;

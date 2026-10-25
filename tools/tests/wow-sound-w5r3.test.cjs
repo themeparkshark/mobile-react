@@ -129,3 +129,23 @@ test('fix 3: a redesigned Daily 3 (a ring that fills before the full-set flash) 
   assert.ok(note && chord, 'both ring');
   assert.ok(Math.abs(chord.t - note.t - 420) <= 20, `chord ${chord.t - note.t} ms after the note`);
 });
+
+test('fix 3 (wow-loops integration preview): the rebuilt hooks play through loopSound on their own frames', () => {
+  const M = require('./helpers/ts-module.cjs').loadTs('src/services/retention/loopMotion.ts', {}, {});
+  // The chord lands on the ring's full flash; the note's light pulse and the chord's swell stay a full gate apart.
+  assert.ok(M.CHECK.fullRing >= 120, `fullRing ${M.CHECK.fullRing}`);
+  // The level chest's heavy (pop + 110) is 120 ms or more before its first reward row's buzz.
+  for (const hold of [M.REVEAL_ROWS.heroHold, M.REPEAT_CHEST.heroHold]) {
+    assert.ok(hold + M.REVEAL_ROWS.firstAfterGlide - 110 >= 120, `first row ${hold + M.REVEAL_ROWS.firstAfterGlide} ms after the pop`);
+  }
+  const button = src('src/components/retention/Daily3MapButton.tsx');
+  assert.match(button, /useCaptureMark\(fly, 'check-arrive', 0\.995\);/);
+  assert.match(button, /useCaptureMark\(sparkle, 'check-sparkle-start', 0\.02\);/);
+  assert.match(button, /if \(!playDaily3\(landing\.done, landing\.day \?\? flameDay\(\{ days: streak \}\), \{ syncMs: 0 \}\)\) \{ queueHaptic\('hitMedium'\); playSfx\(cue\.fallback, 0\.8\); \}/, 'Reduce Motion keeps the studio sound');
+  const retention = src('src/components/retention/useRetention.tsx');
+  assert.equal((retention.match(/day: flameDay\(next\.streak\)/g) || []).length, 2, 'every landing carries the flame day');
+  assert.match(retention, /preloadLoopMoments\(\);/);
+  assert.doesNotMatch(retention, /playDaily3\(/, 'the check sound is the button\'s, played once');
+  assert.match(src('src/components/DailyGiftModal.tsx'), /if \(playChestOpen\(\)\) return;/);
+  assert.match(src('src/components/retention/RewardReveal.tsx'), /useCaptureMark\(pop, 'level-chest-lid-peak', 1\.255\);/);
+});

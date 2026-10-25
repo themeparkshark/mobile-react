@@ -27,8 +27,16 @@ import { AppState, FlatList, RefreshControl, Image as RNImage, Pressable, Scroll
 import Playercard from '../components/Playercard';
 import type { InventoryType } from '../models/inventory-type';
 import Animated, {
-  Easing, FadeInDown, FadeInUp, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
+  Easing, FadeInDown, FadeInUp, cancelAnimation, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useSharedValue,
+  withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
+import { queueHaptic } from '../gamekit/Haptics';
+import { usePowerBudget } from '../power';
+import useAmbientLoop from '../power/useAmbientLoop';
+import { SparkleBurst } from '../ui/GoldBurst';
+import { KICK, SPRING, momentParticles } from '../ui/motion';
+import { EASE } from '../ui/motionEasing';
+import { PASS_FX, climbFills } from '../services/money/passMotion';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   buyGoldEdition, claimAllSharkPass, claimSharkPassReward, getSharkPass, markSharkPassSeen, sharkPassErrorCode, wearFrame,
@@ -36,6 +44,8 @@ import {
 } from '../api/endpoints/me/shark-pass';
 import { askGrownUp } from '../components/GrownUpGate';
 import { GotIt, MAX_FONT, PackArt, artSource, type PackArtKey } from '../components/money/moneyUi';
+import PassStepCard from '../components/retention/PassStepCard';
+import LoopPerf, { loopPerfOn } from '../components/retention/LoopPerf';
 import MemberFlex from '../components/money/MemberFlex';
 import { lastSharkPassSeen, noteSharkPassPoints } from '../components/money/SharkPassBanner';
 import { playSfx } from '../gamekit/SFX';
@@ -186,7 +196,10 @@ export default function SharkPassScreen() {
   const buying = useRef(false);
   // A ref, not the busy state: two taps in one frame both see busy unset.
   const claiming = useRef(false);
-  const list = useRef<FlatList<SharkPassTier>>(null);
+  const list = useAnimatedRef<FlatList<SharkPassTier>>();
+  // The track scrolls on the UI thread (a shared value drives scrollTo), so a busy JS thread never stutters it.
+  const scrollX = useSharedValue(-1);
+  useAnimatedReaction(() => scrollX.value, (x, prev) => { if (x >= 0 && x !== prev) scrollTo(list, x, 0, false); });
 
   const [refreshing, setRefreshing] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -245,14 +258,22 @@ export default function SharkPassScreen() {
     if (season.plus_product_id) void loadSharkPassPrice(season.plus_product_id).then(setPlusPrice).catch(() => setPlusPrice(null));
   }, [season?.product_id, premium]);
 
-  // Open on the step the player is on.
+  // Open on the step the player saw last, then glide to the step they are on now (600 ms, EASE.inOut) while the
+  // new points pour into the track; a first look or Reduce Motion simply opens on the current step.
   const scrolled = useRef(false);
+  const climbRef = useRef<{ from: number; to: number } | null>(null);
   useEffect(() => {
     if (scrolled.current || !progress || !tiers.length) return;
     scrolled.current = true;
-    const index = Math.max(0, Math.min(tiers.length - 1, progress.tier - 1));
-    setTimeout(() => list.current?.scrollToOffset({ offset: Math.max(0, index * CELL_W - CELL_W), animated: !reduced }), 350);
-  }, [progress, tiers.length, reduced]);
+    const offsetOf = (tier: number) => Math.max(0, Math.max(0, Math.min(tiers.length - 1, tier - 1)) * CELL_W - CELL_W);
+    const t = setTimeout(() => {
+      const climb = climbRef.current ?? climbSeed.current ?? null;
+      if (!climb || reduced) { scrollX.value = offsetOf(progress.tier); return; }
+      scrollX.value = offsetOf(Math.max(1, climb.from));
+      scrollX.value = withDelay(60, withTiming(offsetOf(climb.to), { duration: PASS_FX.scrollMs, easing: EASE.inOut }));
+    }, PASS_FX.openAt);
+    return () => clearTimeout(t);
+  }, [progress, tiers.length, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const claim = async (tier: SharkPassTier, track: 'free' | 'paid') => {
     const reward = track === 'free' ? tier.free : tier.paid;
@@ -388,7 +409,56 @@ export default function SharkPassScreen() {
   const running = focused && active && !reduced;
 
   // Step-up moment: the first visit after climbing shows the new step once (last seen step kept per season).
-  const [climbed, setClimbed] = useState<{ from: number; to: number } | null>(null);
+  const [climbedState, setClimbed_] = useState<{ from: number; to: number } | null>(null);
+  // The climb is known from the first render that has the server's last-seen step, so the track draws the new
+  // steps unlit from its first frame (never lit, then unlit, then poured when the effect catches up).
+  const climbSeed = useRef<{ from: number; to: number } | null | undefined>(undefined);
+  const climbOver = useRef(false);
+  if (climbSeed.current === undefined && progress && progress.last_seen_tier !== undefined) {
+    const last = progress.last_seen_tier ?? 0;
+    climbSeed.current = progress.tier > last ? { from: last, to: progress.tier } : null;
+  }
+  const climbed = climbedState ?? (climbOver.current ? null : climbSeed.current ?? null);
+  // The "Step N!" card waits until the new steps have filled on the track (it never covers the climb).
+  const [climbCard, setClimbCard] = useState(false);
+  const setClimbed = (c: { from: number; to: number } | null) => {
+    climbRef.current = c;
+    setClimbed_(c);
+    if (!c) { climbOver.current = true; setClimbCard(false); return; }
+    setTimeout(() => setClimbCard(true), reduced ? 0 : climbFills(c.from, c.to, PASS_FX).doneAt + 250);
+  };
+  // The prizes now waiting on the track (free row, and the Shark Pass row when it is yours), for the step card.
+  const waitingPrizes = useMemo(() => tiers.flatMap(t => (!t.unlocked ? [] : [
+    ...(t.free && !t.free_claimed ? [t.free] : []),
+    ...(premium && !t.paid_claimed ? [t.paid] : []),
+  ])), [tiers, premium]);
+  // Each step pop gives the track a small kick, and the last one sends a gold flash along it.
+  const kick = useSharedValue(0);
+  const sweep = useSharedValue(0);
+  useEffect(() => {
+    if (!climbed || reduced) return;
+    const plan = climbFills(climbed.from, climbed.to, PASS_FX);
+    const pops = Object.values(plan.at).map(f => f.at + f.ms).sort((a, b) => a - b).filter((t, i, a) => i === 0 || t !== a[i - 1]);
+    if (!pops.length) return;
+    kick.value = withSequence(...pops.map((t, i) => withDelay(i === 0 ? t : Math.max(0, t - pops[i - 1] - KICK.ms * 2),
+      withSequence(withTiming(KICK.maxPt * 0.75, { duration: KICK.ms / 2, easing: EASE.out }), withSpring(0, SPRING.stamp)))));
+    sweep.value = 0;
+    sweep.value = withDelay(pops[pops.length - 1], withTiming(1, { duration: 520, easing: EASE.inOut }));
+  }, [climbed?.from, climbed?.to, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
+  const kickStyle = useAnimatedStyle(() => ({ transform: [{ translateY: kick.value }] }));
+  const sweepStyle = useAnimatedStyle(() => ({
+    opacity: sweep.value <= 0 || sweep.value >= 1 ? 0 : Math.sin(sweep.value * Math.PI) * 0.85,
+    transform: [{ translateX: -160 + sweep.value * (width + 160) }],
+  }));
+  // Pour times are wall-clock marks, so a step column the list mounts late (virtualised) still pours on its beat.
+  const fills = useMemo(() => {
+    if (!climbed || reduced) return null;
+    const plan = climbFills(climbed.from, climbed.to, PASS_FX);
+    const base = Date.now();
+    const at: Record<number, { at: number; ms: number }> = {};
+    for (const k of Object.keys(plan.at)) { const f = plan.at[Number(k)]; at[Number(k)] = { at: base + f.at, ms: f.ms }; }
+    return { at };
+  }, [climbed?.from, climbed?.to, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!season || !progress) return;
     // The server keeps the last step seen (any device). An older server: this phone's copy.
@@ -534,12 +604,14 @@ export default function SharkPassScreen() {
               <Text maxFontSizeMultiplier={MAX_FONT} style={s.rowLabelFree}>FREE</Text>
               <Text maxFontSizeMultiplier={MAX_FONT} style={s.rowLabelPass}>{premium ? 'SHARK PASS · YOURS' : 'SHARK PASS'}</Text>
             </View>
-            <FlatList ref={list} horizontal data={tiers as SharkPassTier[]} keyExtractor={t => String(t.tier)}
+            <Animated.View style={kickStyle}>
+            <Animated.FlatList ref={list} horizontal data={tiers as SharkPassTier[]} keyExtractor={t => String(t.tier)}
               showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10 }}
               getItemLayout={(_, i) => ({ length: CELL_W, offset: CELL_W * i + 10, index: i })}
               initialNumToRender={8} windowSize={5}
               renderItem={({ item }) => (
-                <TierColumn tier={item} current={progress.tier} premium={premium} busy={busy} pulse={running} burst={climbed?.to === item.tier}
+                <TierColumn tier={item} current={progress.tier} premium={premium} busy={busy} pulse={running} burst={!fills && climbed?.to === item.tier}
+                  fill={fills?.at[item.tier] ?? null} peek={item.unlocked ? 0 : item.tier - progress.tier <= 2 ? item.tier - progress.tier : 0}
                   onClaim={(track) => void claim(item, track)} onLocked={() => {
                     const n = item.tier;
                     // An info tap is a light toast, never a modal a kid has to dismiss.
@@ -548,6 +620,12 @@ export default function SharkPassScreen() {
                     else if (!premium) showToast(`${rewardWords(item.paid)} comes with the Shark Pass.`, 'info');
                   }} />
               )} />
+              {/* A gold flash runs along the track when the climb lands. */}
+              <Animated.View pointerEvents="none" style={[s.sweep, sweepStyle]}>
+                <LinearGradient colors={['rgba(255,214,74,0)', 'rgba(255,236,150,0.9)', 'rgba(255,214,74,0)']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+                  style={StyleSheet.absoluteFill} />
+              </Animated.View>
+            </Animated.View>
 
             {season.ended && (
               <View style={s.ended}>
@@ -796,12 +874,12 @@ export default function SharkPassScreen() {
           </ScrollView>
         )}
       </SafeAreaView>
-      {climbed && !landed && (
-        <GotIt grants={{}} art="gift" title={`Step ${climbed.to}!`} onDone={() => setClimbed(null)}
-          picture={heroLook ? (
-            <View style={{ width: 170, height: 190 }}><Playercard inventory={heroLook} showBackground={false} pinAnchor="body" still={reduced} style={StyleSheet.absoluteFill} /></View>
-          ) : <Image source={EMBLEM} style={{ width: 170, height: 170 }} contentFit="contain" />}
-          caption={`You climbed ${climbed.to - climbed.from} ${climbed.to - climbed.from === 1 ? 'step' : 'steps'}. ${progress?.claimable ? `${progress.claimable} ${progress.claimable === 1 ? 'reward is' : 'rewards are'} ready.` : 'Keep going!'}`} />
+      {loopPerfOn() && <LoopPerf />}
+      {climbed && climbCard && !landed && (
+        // The step card: the steps climbed as gold pips and the prizes now waiting as pictures, one GET THEM! button.
+        <PassStepCard step={climbed.to} climbed={climbed.to - climbed.from} reducedMotion={reduced}
+          prizes={waitingPrizes.map((r, i) => <RewardPicture key={i} reward={r} size={60} />)}
+          onGet={() => { setClimbed(null); void claimAll(); }} onDone={() => setClimbed(null)} />
       )}
       {tryOn && (
         <Pressable style={s.tryScrim} onPress={() => setTryOn(null)} accessibilityRole="button" accessibilityLabel="Close">
@@ -885,8 +963,12 @@ function ProgressBar({ value, reduced }: { value: number; reduced: boolean }) {
   );
 }
 
-const TierColumn = memo(function TierColumn({ tier, current, premium, busy, pulse, burst = false, onClaim, onLocked }: {
+const TierColumn = memo(function TierColumn({ tier, current, premium, busy, pulse, burst = false, fill = null, peek = 0, onClaim, onLocked }: {
   tier: SharkPassTier; current: number; premium: boolean; busy: string | null; pulse: boolean; burst?: boolean;
+  /** A step just climbed: its rail pours full of gold at `at` ms over `ms`, then its node pops. */
+  fill?: { at: number; ms: number } | null;
+  /** The next two locked steps peek ahead (1 bobs, both glint). */
+  peek?: number;
   onClaim: (track: 'free' | 'paid') => void; onLocked: () => void;
 }) {
   const freeReady = tier.unlocked && !!tier.free && !tier.free_claimed;
@@ -898,17 +980,43 @@ const TierColumn = memo(function TierColumn({ tier, current, premium, busy, puls
     if (!burst || reducedMotion) return;
     pop.value = withSequence(withTiming(1, { duration: 250, easing: Easing.out(Easing.back(2)) }), withTiming(0, { duration: 350 }));
   }, [burst, reducedMotion, pop]);
-  const nodePop = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pop.value * 0.45 }] }));
+  // A climbed step: gold pours along its rail, then the node pops to 1.3 on the pop spring with 8 sparkles and a tick.
+  const budget = usePowerBudget();
+  const pour = useSharedValue(fill && !reducedMotion ? 0 : 1);
+  const reach = useSharedValue(0);
+  const spark = useSharedValue(0);
+  const [lit, setLit] = useState(!fill || reducedMotion);
+  const sparks = fill && !reducedMotion ? momentParticles(PASS_FX.sparkles, budget, false) : 0;
+  useEffect(() => {
+    if (!fill || reducedMotion) { pour.value = 1; setLit(true); return undefined; }
+    const wait = Math.max(0, fill.at - Date.now());
+    if (wait + fill.ms <= 0) { pour.value = 1; setLit(true); return undefined; }
+    // The climb arrived after this column first drew: it goes back to unlit and pours in on its beat.
+    setLit(false);
+    pour.value = 0;
+    pour.value = withDelay(wait, withTiming(1, { duration: fill.ms, easing: EASE.out }));
+    const end = wait + fill.ms;
+    reach.value = withDelay(end, withSequence(withTiming(1, { duration: 110, easing: EASE.out }), withSpring(0, SPRING.pop)));
+    spark.value = withDelay(end, withTiming(1, { duration: 900, easing: EASE.out }));
+    const t = setTimeout(() => { setLit(true); queueHaptic('tickSelection'); playSfx('fx.reveal', 0.5); }, end);
+    return () => clearTimeout(t);
+  }, [fill?.at, fill?.ms, reducedMotion]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pourStyle = useAnimatedStyle(() => ({ transform: [{ translateX: -CELL_W / 2 * (1 - pour.value) }, { scaleX: Math.max(0.001, pour.value) }] }));
+  const on = tier.unlocked && lit;
+  const nodePop = useAnimatedStyle(() => ({ transform: [{ scale: (tier.tier === current ? 1.18 : 1) * (1 + pop.value * 0.45) + reach.value * (PASS_FX.nodePop - 1) }] }));
+
   return (
     <View style={[s.col, premium && tier.unlocked && s.colOwned]}>
-      <Cell reward={tier.free} claimed={tier.free_claimed} ready={freeReady} locked={!tier.unlocked} pass={false}
+      <Cell reward={tier.free} claimed={tier.free_claimed} ready={freeReady} locked={!tier.unlocked} pass={false} peek={peek}
         pulse={pulse} busy={busy === `${tier.tier}:free`} onPress={() => (freeReady ? onClaim('free') : onLocked())} />
-      {/* The rail runs through every step: gold up to where the player is. */}
+      {/* The rail runs through every step: gold up to where the player is (a just-climbed step pours in). */}
       <View style={s.railWrap} pointerEvents="none">
-        <View style={[s.rail, tier.unlocked && s.railOn]} />
+        <View style={[s.rail, tier.unlocked && !fill && s.railOn]} />
+        {tier.unlocked && fill && <Animated.View style={[s.rail, s.railOn, s.railPour, pourStyle]} />}
       </View>
-      <Animated.View style={[s.node, tier.unlocked && s.nodeOn, tier.tier === current && s.nodeNow, nodePop]}>
-        <Text maxFontSizeMultiplier={1.1} style={[s.nodeText, tier.unlocked && s.nodeTextOn]}>{tier.tier}</Text>
+      <Animated.View style={[s.node, on && s.nodeOn, tier.tier === current && s.nodeNowRing, nodePop]}>
+        <Text maxFontSizeMultiplier={1.1} style={[s.nodeText, on && s.nodeTextOn]}>{tier.tier}</Text>
+        {sparks > 0 && <View style={s.nodeCenter} pointerEvents="none"><SparkleBurst progress={spark} count={sparks} radius={44} /></View>}
       </Animated.View>
       <Cell reward={tier.paid} claimed={tier.paid_claimed} ready={paidReady} locked={!tier.unlocked || !premium} pass
         pulse={pulse} busy={busy === `${tier.tier}:paid`} onPress={() => (paidReady ? onClaim('paid') : onLocked())} />
@@ -916,11 +1024,23 @@ const TierColumn = memo(function TierColumn({ tier, current, premium, busy, puls
   );
 });
 
-function Cell({ reward, claimed, ready, locked, pass, pulse, busy, onPress }: {
+function Cell({ reward, claimed, ready, locked, pass, pulse, busy, onPress, peek = 0 }: {
   reward: SharkPassReward | null; claimed: boolean; ready: boolean; locked: boolean; pass: boolean; pulse: boolean; busy: boolean; onPress: () => void;
+  peek?: number;
 }) {
   const glow = useSharedValue(0);
   const ambient = useAmbient();
+  // Peeking ahead: the next two locked prizes glint every 4 s, and the very next one bobs 3 pt (ambient budget).
+  const glint = useSharedValue(0);
+  const bob = useSharedValue(0);
+  useAmbientLoop(() => {
+    glint.value = 0;
+    glint.value = withDelay(peek * 600, withRepeat(withSequence(withDelay(PASS_FX.glintEveryMs - 700, withTiming(1, { duration: 700 })), withTiming(0, { duration: 0 })), -1));
+    if (peek === 1) bob.value = withRepeat(withSequence(withTiming(-PASS_FX.bobPt, { duration: 800, easing: EASE.inOut }), withTiming(0, { duration: 800, easing: EASE.inOut })), -1);
+  }, () => { cancelAnimation(glint); cancelAnimation(bob); glint.value = 0; bob.value = 0; }, peek > 0 && pulse && !!reward && !claimed);
+  const peekStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bob.value }] }));
+  const glintStyle = useAnimatedStyle(() => ({ opacity: glint.value > 0 && glint.value < 1 ? 1 : 0,
+    transform: [{ translateX: -40 + (CELL_W + 40) * glint.value }, { rotate: '20deg' }] }));
   useEffect(() => {
     if (!ready || !pulse || !ambient) { cancelAnimation(glow); glow.value = 0; return undefined; }
     glow.value = withRepeat(withSequence(withTiming(1, { duration: 650 }), withTiming(0, { duration: 650 })), -1, false);
@@ -929,7 +1049,7 @@ function Cell({ reward, claimed, ready, locked, pass, pulse, busy, onPress }: {
   const ring = useAnimatedStyle(() => ({ transform: [{ scale: 1 + glow.value * 0.05 }] }));
   if (!reward) return <View style={[s.cell, s.cellEmpty]} />;
   return (
-    <Animated.View style={ready ? ring : undefined}>
+    <Animated.View style={ready ? ring : peek > 0 ? peekStyle : undefined}>
       <Pressable onPress={onPress} accessibilityRole="button"
         accessibilityLabel={`${rewardWords(reward)}. ${claimed ? 'Claimed.' : ready ? 'Tap to claim.' : locked ? (pass ? 'Shark Pass reward.' : 'Keep playing to reach it.') : ''}`}
         style={[s.cell, pass && s.cellPass, pass && !locked && s.cellPassOwned, ready && s.cellReady, claimed && s.cellClaimed]}>
@@ -938,12 +1058,21 @@ function Cell({ reward, claimed, ready, locked, pass, pulse, busy, onPress }: {
         {claimed && <View style={s.badge}><GameIcon name="check" size={22} /></View>}
         {!claimed && locked && <View style={s.badge}><GameIcon name="lock" size={20} /></View>}
         {ready && !busy && <View style={s.claimTag}><Text maxFontSizeMultiplier={1.1} style={s.claimTagText}>CLAIM</Text></View>}
+        {peek > 0 && !claimed && (
+          <View style={s.glintClip} pointerEvents="none">
+            <Animated.View style={[s.glint, glintStyle]}>
+              <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.75)', 'rgba(255,255,255,0)']}
+                start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+            </Animated.View>
+          </View>
+        )}
       </Pressable>
     </Animated.View>
   );
 }
 
 const s = StyleSheet.create({
+  sweep: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 160 },
   root: { flex: 1, backgroundColor: '#0a4f96' },
   top: { height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10 },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
@@ -1012,6 +1141,12 @@ const s = StyleSheet.create({
   node: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(5,52,110,0.7)', borderWidth: 3, borderColor: 'rgba(255,255,255,0.5)', alignItems: 'center', justifyContent: 'center' },
   nodeOn: { backgroundColor: BRAND.gold, borderColor: '#ffffff' },
   nodeNow: { transform: [{ scale: 1.18 }], borderColor: '#7dffb0' },
+  // The current step's ring (its 1.18 size lives in the animated pop so the two never fight).
+  nodeNowRing: { borderColor: '#7dffb0' },
+  nodeCenter: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },
+  railPour: { position: 'absolute', left: 0, right: 0 },
+  glintClip: { ...StyleSheet.absoluteFillObject, borderRadius: 13, overflow: 'hidden' },
+  glint: { position: 'absolute', top: -20, width: 26, height: 150 },
   nodeText: { fontFamily: FONT.display, fontSize: 14, color: '#cfe4fb' },
   nodeTextOn: { color: '#6a3b00' },
   buyLip: { marginHorizontal: 14, borderRadius: 22, backgroundColor: '#5a3a00', paddingBottom: 6 },

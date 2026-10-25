@@ -13,6 +13,7 @@ import shortenNumber from '../../helpers/shorten-number';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { useHelp } from '../help/HelpProvider';
 import { glossaryKeyForName } from '../../services/help/glossary';
+import { counterStep, counterTicks } from '../../services/retention/counterTicks';
 
 interface CurrencyProps {
   /** Remote icon URL or a bundled require(); falls back to the gold coin. */

@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { AuthContext, type AuthContextType } from '../../context/AuthProvider';
 import { setHapticTraceListener } from '../../gamekit/Haptics';
-import { flameDay, playDaily3, preloadLoopMoments } from '../../gamekit/audio/loopSound';
+import { flameDay, preloadLoopMoments } from '../../gamekit/audio/loopSound';
 import { CAPTURE_LINES, captureLine } from '../../gamekit/audio/studioTrace';
 import { setBatterySaver } from '../../power/batterySaver';
 import type { PaidRewards } from '../../api/endpoints/retention';
@@ -13,7 +13,7 @@ import type { PlayerType } from '../../models/player-type';
 import { BRAND } from '../../ui';
 import DailyGiftModal from '../DailyGiftModal';
 import Ribbon from '../Ribbon';
-import Daily3MapButton from './Daily3MapButton';
+import Daily3MapButton, { type CheckLanding } from './Daily3MapButton';
 import RewardReveal from './RewardReveal';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
@@ -42,7 +42,7 @@ const mark = (what: string) => captureLine(`[hook] ${Date.now()} ${what}`);
 export default function HookSoundPreviewScreen() {
   const auth = useContext(AuthContext);
   const [pips, setPips] = useState<boolean[]>([false, false, false]);
-  const [pop, setPop] = useState<{ index: number | null; key: number }>({ index: null, key: 0 });
+  const [landing, setLanding] = useState<CheckLanding | null>(null);
   const [stage, setStage] = useState<'daily3' | 'level' | 'daily' | 'done'>('daily3');
   const [pass, setPass] = useState(0);
   const [levelOpening, setLevelOpening] = useState(false);
@@ -63,13 +63,13 @@ export default function HookSoundPreviewScreen() {
         mark(`pass ${n} saver=${n}`);
         setPass(n); setStage('daily3'); setPips([false, false, false]); setLevelOpening(false); setLevelRewards(null);
       });
-      // The three check-offs, as useRetention.applyDaily plays them (the pip pops, the sound and buzz in the same turn).
+      // The three check-offs, as useRetention.applyDaily hands them to the map button (wow-loops: the check flies in
+      // and the button plays its own sound and buzz when it lands, the third on the ring's full flash).
       [0, 1, 2].forEach(i => at(t0 + 3000 + i * 2500, () => {
         const done = i + 1;
         mark(`daily3-check ${done} day ${flameDay(STREAK)}`);
         setPips(p => p.map((on, k) => on || k === i));
-        setPop(p => ({ index: i, key: p.key + 1 }));
-        playDaily3(done, flameDay(STREAK));
+        setLanding(l => ({ index: i, done, key: (l?.key ?? 0) + 1, day: flameDay(STREAK) }));
       }));
       // The level chest: it appears, the player taps, the server pays.
       at(t0 + 11_500, () => { mark('level-chest show'); setStage('level'); });
@@ -98,7 +98,7 @@ export default function HookSoundPreviewScreen() {
       <Text style={styles.h}>{pass === 1 ? 'Hook sound capture: Battery Saver' : 'Hook sound capture'}</Text>
       <View style={styles.button}>
         <Daily3MapButton pips={pips} streak={STREAK.days} attention={done === 3 ? 'claim' : 'none'} onPress={() => undefined}
-          popIndex={pop.index} popKey={pop.key} active reducedMotion={false} />
+          landing={landing} active reducedMotion={false} />
       </View>
       {stage === 'level' && (
         // Hosted exactly like useRetention's overlay (the same react-native-modal, backdrop and centred wrap with its
