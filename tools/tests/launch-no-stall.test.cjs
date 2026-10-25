@@ -34,6 +34,7 @@ function harness() {
     '../services/push': { openColdStartPush() {} },
     // Art lane: Splash picks its art through themeSplashUri and draws the shared loop frame.
     '../utils/splashArt': { themeSplashUri: () => null },
+    '../nativeSplash': { isNativeSplashUp: () => false, splashArtShown() {} },
     './splashFrame': { SplashStill: 'SplashStill', SPLASH_POSTER: 1, SPLASH_LOGO: 2, splashLogoFrame: () => ({}) },
   };
   return { nav, state, auth, crumbs, common };

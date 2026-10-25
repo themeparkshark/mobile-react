@@ -121,8 +121,35 @@ test('native splash is held until the first JS frame and released once', async (
   assert.equal(timer.ms, splash.NATIVE_SPLASH_SAFETY_MS);
   splash.releaseNativeSplash();
   splash.releaseNativeSplash();
+  // Fonts are ready but the splash art is not drawn yet: wait a moment for it.
+  assert.equal(timer.ms, splash.SPLASH_ART_WAIT_MS);
+  assert.deepEqual(calls.slice(2), []);
+  splash.splashArtShown();
   timer.fn();
-  assert.deepEqual(calls.slice(2), [['clearSafety'], ['hide']]);
+  assert.deepEqual(calls.slice(2), [['clearSafety'], ['clearSafety'], ['hide']], 'hides once, as soon as the art is on screen');
+});
+
+test('native splash hides at once when the splash art was drawn before fonts settled', () => {
+  const calls = [];
+  const splash = loadTs('src/nativeSplash.ts', {
+    'expo-splash-screen': {
+      setOptions: () => {},
+      preventAutoHideAsync: async () => true,
+      hideAsync: async () => { calls.push('hide'); },
+    },
+  }, { setTimeout: () => 1, clearTimeout: () => {} });
+  splash.holdNativeSplash();
+  assert.equal(splash.isNativeSplashUp(), true);
+  splash.splashArtShown();
+  assert.deepEqual(calls, []);
+  splash.releaseNativeSplash();
+  assert.deepEqual(calls, ['hide']);
+  assert.equal(splash.isNativeSplashUp(), false);
+});
+
+test('Splash shows its art under the native launch screen and tells it when it is drawn', () => {
+  const src = read('src/screens/SplashScreen.tsx');
+  assert.match(src, /if \(isNativeSplashUp\(\)\) \{\s*[^]*?artOpacity\.setValue\(1\);\s*requestAnimationFrame\(\(\) => requestAnimationFrame\(splashArtShown\)\);/);
 });
 
 test('App holds the splash at module scope and Root releases it once fonts settle', () => {

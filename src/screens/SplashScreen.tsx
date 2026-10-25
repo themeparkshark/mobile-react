@@ -9,6 +9,7 @@ import { ThemeContext } from '../context/ThemeProvider';
 import { CrumbContext } from '../context/CrumbProvider';
 import { themeSplashUri } from '../utils/splashArt';
 import { SplashStill } from './splashFrame';
+import { isNativeSplashUp, splashArtShown } from '../nativeSplash';
 
 // The binary's launch art. app.config.js `splash.image` points at this file and
 // Expo hashes it into the runtime fingerprint, so its bytes must never change in
@@ -41,11 +42,19 @@ export default function SplashScreen() {
   const fadeIn = () => {
     if (faded.current) return;
     faded.current = true;
+    if (isNativeSplashUp()) {
+      // The native launch screen still covers us: show the art at once and
+      // let the native fade (220 ms) carry the eye from launch art to it.
+      artOpacity.setValue(1);
+      requestAnimationFrame(() => requestAnimationFrame(splashArtShown));
+      return;
+    }
     Animated.timing(artOpacity, {
       toValue: 1,
       duration: SPLASH_FADE_MS,
       useNativeDriver: true,
     }).start();
+    splashArtShown();
   };
 
   // If the art never reports a load, still fade so the screen never sticks.
