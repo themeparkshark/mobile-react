@@ -579,3 +579,13 @@ test('wave 5: a cold coin never leaves the summary with an empty face (the house
   assert.ok(/EXPO_PUBLIC_MOTION_CAPTURE_COIN_URL/.test(preview) && !/EXPO_PUBLIC_MOTION_CAPTURE_COIN_URL/.test(read('app.config.js')),
     'the cold-coin capture flag lives only in the preview');
 });
+
+test('wave 5: the daily chest quiets its own energy banner (it slid over the card and its update drew a shut chest mid-pop)', () => {
+  const filter = loadTs('src/api/broadcastFilter.ts');
+  const list = ['You gained 20 Energy!', 'You earned 25 coins!', 'Level up! You reached level 4!'];
+  assert.deepEqual([...filter.visibleBroadcasts(list, true, true)], ['Level up! You reached level 4!']);
+  assert.deepEqual([...filter.visibleBroadcasts(list, true)], ['You gained 20 Energy!', 'Level up! You reached level 4!'], 'Watch keeps the energy line');
+  assert.deepEqual([...filter.visibleBroadcasts(list, false)], list);
+  assert.ok(/\[QUIET_COIN_BROADCAST\]: true, \[QUIET_ENERGY_BROADCAST\]: true/.test(read('src/api/endpoints/daily-gifts/update.ts')), 'the chest claim asks for both');
+  assert.ok(/Boolean\(cfg\?\.\[QUIET_ENERGY_BROADCAST\]\)/.test(read('src/hooks/useAxiosSetup.ts')), 'and the interceptor honours it');
+});

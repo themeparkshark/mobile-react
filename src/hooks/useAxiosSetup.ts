@@ -2,7 +2,7 @@ import { AxiosError, AxiosResponse } from 'axios';
 import { isStandalonePreviewMode } from '../utils/standalonePreview';
 import { useContext, useEffect, useRef } from 'react';
 import client from '../api/client';
-import { QUIET_COIN_BROADCAST, visibleBroadcasts } from '../api/broadcastFilter';
+import { QUIET_COIN_BROADCAST, QUIET_ENERGY_BROADCAST, visibleBroadcasts } from '../api/broadcastFilter';
 import { AuthContext } from '../context/AuthProvider';
 import { BroadcastContext } from '../context/BroadcastProvider';
 import { showToast } from '../utils/toast';
@@ -34,11 +34,13 @@ export const useAxiosSetup = () => {
         consecutive500Count = 0;
         // A screen that shows the result itself (the stamp claim cascade and level-up plate) opts out of
         // every broadcast (skipBroadcasts), so the player never gets the same news twice. Watch opts out of
-        // coin broadcasts only (QUIET_COIN_BROADCAST); its own reward moment shows the coins.
+        // coin broadcasts only (QUIET_COIN_BROADCAST); its own reward moment shows the coins. The daily chest
+        // also quiets its energy banner (QUIET_ENERGY_BROADCAST): the battery climbs out of the chest itself.
         const cfg = response.config as Record<string, unknown> | undefined;
         const skipAll = cfg?.skipBroadcasts === true;
         if (!skipAll && response.data && Array.isArray(response.data.broadcasts)) {
-          const shown = visibleBroadcasts<string>(response.data.broadcasts, Boolean(cfg?.[QUIET_COIN_BROADCAST]));
+          const shown = visibleBroadcasts<string>(response.data.broadcasts, Boolean(cfg?.[QUIET_COIN_BROADCAST]),
+            Boolean(cfg?.[QUIET_ENERGY_BROADCAST]));
           if (shown.length > 0) enqueueRef.current(shown);
         }
         return response;
