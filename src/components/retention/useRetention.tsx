@@ -55,6 +55,11 @@ const ART = [LEVEL_CHEST, LEVEL_CHEST_OPEN, WEEKLY, WEEKLY_OPEN, FREEZE, BOX,
 const MIN_REFRESH_MS = 15000;
 /** The armed full-set card flies its check by this long even if the modal never says it has shown. */
 const ARM_FALLBACK_MS = 600;
+/**
+ * A claim answer that lands while the full set's card grows out of the button renders once the card is this far in:
+ * past the settle spring, well before the lid's beat (FULL_SET.chestAt plus the gather).
+ */
+export const ENTER_QUIET_MS = 460;
 /** The chain's next card mounts (hidden) this long after the chest's answer, once its prizes have landed. */
 const PREMOUNT_MS = 2400;
 const COACH_KEY = 'tps.retention.coach.v1';
@@ -628,11 +633,22 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     }
   };
 
+  /** Resolves once the card has been in for ENTER_QUIET_MS (at once if it has not started entering, or is long in). */
+  const quietAfterEntrance = async () => {
+    if (reducedMotion) return;
+    const e = enteredAt.value;
+    if (e >= NOT_YET / 2) return;
+    const wait = e + ENTER_QUIET_MS - Date.now();
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  };
+
   const openReveal = async () => {
     if (!view || view.k !== 'reveal' || view.rewards || opening.current) return;
     opening.current = true;
     const current = view;
-    setView({ ...current, opening: true });
+    // The full set's chest gathers by itself from the card's entrance: no extra render (and native commit) just to say
+    // "opening" while the card may still be growing out of the button.
+    if (!current.auto) setView({ ...current, opening: true });
     try {
       const seenP = current.src === 'daily' ? readSeen() : Promise.resolve(null);
       const ahead = current.src === 'daily' ? claimAhead.current : null;
@@ -652,6 +668,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       }
       // The answer goes straight to the card: the chest keeps its own lid beat on the UI thread (gatherMs),
       // so a fast server never cuts the shake short and a busy JS thread never adds a second wait.
+      // One exception: an answer that lands while the full set's card is still growing out of the button waits
+      // until the card is in (ENTER_QUIET_MS, well before the lid's beat). Mounting the prize rows is the biggest
+      // native commit of the moment; mid-entrance it held the main thread for about 250 ms (a frozen card on a
+      // phone, and a card that seemed to vanish and pop back on the simulator).
+      if (current.auto) await quietAfterEntrance();
       if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards, state: result.state ?? null, moment });
       if (result.state?.goals) applyDaily(result.state);
       if (current.src === 'level') setChests(cs => cs.map(c => (c.level === current.level ? { ...c, opened: true, rewards: result.rewards } : c)));

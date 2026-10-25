@@ -455,3 +455,13 @@ test('round 5: a return to the app knows the days away at once, and a level ches
   assert.match(reveal, /known && !!footer && styles\.bottomKnown/);
   assert.match(reveal, /styles\.floor/);
 });
+
+test('the full set never mounts its prize rows while the card is growing in, and it is always in before the lid', () => {
+  const hook = read('src/components/retention/useRetention.tsx');
+  const quiet = Number(/export const ENTER_QUIET_MS = (\d+);/.exec(hook)[1]);
+  assert.ok(quiet >= 400, 'past the settle spring');
+  assert.ok(quiet < L.lidDelay({ autoOpen: true, repeat: true }) - 200, 'well before the shortest full-set lid beat');
+  // The answer waits for the entrance before the render that mounts the rows, and the auto chest skips the extra "opening" render.
+  assert.match(hook, /if \(current\.auto\) await quietAfterEntrance\(\);\s*\n\s*if \(mounted\.current\) setView\(\{ \.\.\.current, opening: false, rewards: result\.rewards/);
+  assert.match(hook, /if \(!current\.auto\) setView\(\{ \.\.\.current, opening: true \}\);/);
+});
