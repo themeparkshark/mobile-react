@@ -92,9 +92,12 @@ async function wowMapCatch(e, opts = {}) {
   // `at` is the beat's catch-clock time; after the held frame the wall time moves by the hold.
   const add = (at, name, fn) => beats.push({ at, wall: at + (at > p.hitStopAt ? hold : 0), name, fn });
   p.wobbles.forEach(([at, intent], k) => add(at, `wobble${k + 1}`, () => C.catchHaptic(intent, 2)));
-  if (beam) add(p.hitStopAt, 'beam', () => { C.catchMark('beam'); C.catchHaptic('comboHeavy', 3); C.catchSound('chime', { volume: 0.7, pitch: 6 }); });
+  // Wave 5 round 2: the slam's lighter buzz 30 ms before the held frame (100 before the burst), the slam's sound on it,
+  // and the heavy on the burst frame on every show.
+  if (beam) add(p.hitStopAt - 30, 'slam', () => C.catchMark('slam'));
+  if (beam) add(p.hitStopAt, 'beam', () => { C.catchMark('beam'); C.catchSound('chime', { volume: 0.7, pitch: 6 }); });
   add(p.hitStopAt + 1, 'hitstop', () => C.catchMark('hitstop'));
-  add(p.burstAt, 'burst', () => { C.catchMark('burst'); if (!beam) C.catchHaptic('comboHeavy', 3); C.catchSound('chime', grand ? { volume: 0.9, pitch: 4 } : { volume: 0.8 }); });
+  add(p.burstAt, 'burst', () => { C.catchMark('burst'); C.catchHaptic('comboHeavy', 3); C.catchSound('chime', grand ? { volume: 0.9, pitch: 4 } : { volume: 0.8 }); });
   if (grand) add(p.burstAt + 90, 'grand-heavy', () => C.catchHaptic('comboHeavy', 2));
   add(p.burstAt + 180, 'success', () => C.catchHaptic('success', 3));
   add(p.badgeAt + 1, 'badge', () => C.catchMark('badge'));
@@ -117,6 +120,7 @@ async function wowMapCatch(e, opts = {}) {
   if (pressEcho) e.Haptics.queueHaptic('tapLight', 1);
   C.catchMark(repeat ? 'tap-repeat' : 'tap');
   if (grand) C.catchMark('grand');
+  if (beam) C.catchMark('beam-due');
   C.catchHaptic('tapLight', 3);
   C.catchSound('pop');
 

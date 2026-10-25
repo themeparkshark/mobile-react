@@ -4,7 +4,7 @@ import { beatHaptic, HAPTIC_GATE_MS, lastAppHapticAt, queueHaptic, setHapticTrac
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { momentSaver, playMoment, preloadMoments, studioMoment, studioReady } from '../../../gamekit/audio/playMoment';
 import type { MomentName } from '../../../gamekit/audio/momentMap';
-import { burstMoment, burstTakesVoicing, burstVoicing, CATCH_BURST_MS, CATCH_WOBBLE_INTENTS, REPEAT_BURST_MS, counterLift, CATCH_WOBBLE_TICKS_MS, catchHeat, COIN_TICK_GAP_MS, decodeDay, EMPTY_RUN, encodeDay, heatTier, HOT_LAYER_HEAT, MIN_BEAT_GAP_MS, REPEAT_WOBBLE_INTENTS, REPEAT_WOBBLE_TICKS_MS, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
+import { BEAM_SLAM_LATE_MS, burstMoment, burstTakesVoicing, burstVoicing, CATCH_BURST_MS, CATCH_WOBBLE_INTENTS, REPEAT_BURST_MS, counterLift, CATCH_WOBBLE_TICKS_MS, catchHeat, COIN_TICK_GAP_MS, decodeDay, EMPTY_RUN, encodeDay, heatTier, HOT_LAYER_HEAT, MIN_BEAT_GAP_MS, REPEAT_WOBBLE_INTENTS, REPEAT_WOBBLE_TICKS_MS, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
 import { CAPTURE_LINES, captureTraceOn, traceEvent } from '../../../gamekit/audio/studioTrace';
 
 /**
@@ -241,8 +241,11 @@ const HOT_THUMP_MS = 90;
 const GOLDEN_SUCCESS_MS = 180;
 /** When the burst's heavy buzz fired (every player), so a bunched success still lands GOLDEN_SUCCESS_MS after it. */
 let burstBuzzAt = -Infinity;
-/** Wave 5: this catch's marks from wow-map (every player): the gold beam dropped, the grand 25th, a miss. */
-let catchFlags = { beam: false, grand: false, missed: false };
+/**
+ * Wave 5: this catch's marks from wow-map (every player): the gold beam dropped, the grand 25th, a miss. Round 2:
+ * `beamDue`, the beam will drop on this catch (known on the tap), so its slam buzz takes the gather's last rung.
+ */
+let catchFlags = { beam: false, grand: false, missed: false, beamDue: false };
 /** The burst's first heavy buzz (or the beam's) has fired; a later heavy is the grand catch's second hit. */
 let burstHeavyDone = false;
 /** When the burst was due on the UI clock (wall ms), and when its sound started. */
@@ -274,6 +277,31 @@ function dueNow(now = Date.now()): number {
 }
 
 /**
+ * Wave 5 round 2 (the grade's fix 4): the beam's slam buzz, every player. A lighter rigid pulse on the beam's last fall
+ * (wow-map's 'slam' beat, BEAM_SLAM_BUZZ_LEAD_MS before the held frame, 100 ms before the burst), so the burst's heavy
+ * lands on the burst frame itself (the brightest frame) a full beat later. The gather's last wobble buzz gives way to
+ * it on a beam catch (fireWobble), so it always has room. A slam that reaches JS late is dropped (the heavy carries
+ * the impact alone), never pushed toward the heavy; a miss never slams.
+ */
+function slamBuzz(): void {
+  if (catchFlags.missed || !catchFlags.beamDue) return;
+  const now = Date.now();
+  const late = now - dueNow(now);
+  if (late > BEAM_SLAM_LATE_MS) {
+    trace('drop', `slam ${Math.round(late)}ms late`);
+    traceEvent('mark', 'catch-pulse-dropped', `slam ${Math.round(late)} ms late`);
+    return;
+  }
+  if (now - laneLast() < MIN_BEAT_GAP_MS) {
+    trace('drop', 'slam lane busy');
+    traceEvent('mark', 'catch-pulse-dropped', 'slam lane busy');
+    return;
+  }
+  beatLaneAt = now;
+  beatHaptic('hitRigid');
+}
+
+/**
  * The hot thump (heat tier 2): one crisp buzz on the beat after the burst (burst + 90 ms on the plan), between the
  * heavy and the success at +180, on every show (the beam catches too, whose heavy came with the beam). The grand
  * 25th has its own second heavy on that beat, so it never thumps. A burst that reached JS late buzzes its heavy late,
@@ -281,8 +309,8 @@ function dueNow(now = Date.now()): number {
  */
 function scheduleThump(heat: number): void {
   if (thumpTimer) clearTimeout(thumpTimer);
-  // The heavy fires in this same turn (or came with the beam, before the burst).
-  const heavyAt = catchFlags.beam ? burstDueAt : Math.max(burstDueAt, Date.now());
+  // The heavy fires in this same turn (round 2: on the beam catches too; the beam's slam is a lighter buzz before it).
+  const heavyAt = Math.max(burstDueAt, Date.now());
   const due = heavyAt + HOT_THUMP_MS;
   traceEvent('mark', 'catch-thump', `+${heat}`);
   thumpTimer = setTimeout(() => {
@@ -449,7 +477,7 @@ function onCatchMark(name: string): void {
     beatUntil = now + BEAT_WINDOW_MS;
     catchLive = true;
     settledAt = -Infinity;
-    catchFlags = { beam: false, grand: false, missed: false };
+    catchFlags = { beam: false, grand: false, missed: false, beamDue: false };
     burstHeavyDone = false;
     burstDueAt = -Infinity;
     burstSoundAt = -Infinity;
@@ -473,6 +501,9 @@ function onCatchMark(name: string): void {
   }
   // Wave 5: wow-map names the grand 25th on the tap; a beam after a miss is a stale beat (never a slam on a boing).
   if (name === 'grand') { catchFlags.grand = true; return; }
+  // Round 2: the beam drops on this catch (wow-map knows it on the tap) and its slam buzz comes before the burst.
+  if (name === 'beam-due') { catchFlags.beamDue = true; return; }
+  if (name === 'slam') { slamBuzz(); return; }
   if (name === 'miss') catchFlags.missed = true;
   if (name === 'beam') { if (catchFlags.missed) return; catchFlags.beam = true; }
   if (name === 'burst') burstDueAt = dueNow();
@@ -559,7 +590,7 @@ export function resetCatchSoundForTests(): void {
   beatLaneAt = -Infinity;
   catchLive = false;
   settledAt = -Infinity;
-  catchFlags = { beam: false, grand: false, missed: false };
+  catchFlags = { beam: false, grand: false, missed: false, beamDue: false };
   burstHeavyDone = false;
   burstDueAt = -Infinity;
   burstSoundAt = -Infinity;
@@ -692,6 +723,12 @@ function fireWobble(k: number, intent: HapticIntent): void {
   const b = beats;
   if (!b || b.closed || b.fired[k]) return;
   b.fired[k] = true;
+  // Round 2: on a beam catch the slam's rigid buzz is the gather's top rung (100 ms before the burst), so the last
+  // wobble's buzz gives way to it (its tick still rings). Tick, light, then the slam, then the heavy on the burst.
+  if (catchFlags.beamDue && k === b.offsets.length - 1) {
+    trace('drop', `wobble${k + 1} gives way to the slam`);
+    return;
+  }
   // Wave 5 (live release run, load 100): a wobble buzz that comes so late it would land under one beat gap before
   // the burst's heavy (which never waits) is dropped, never flammed into it.
   if (b.due0 !== undefined && Date.now() > b.due0 + (b.burstAt - (b.offsets[0] ?? 0)) - MIN_BEAT_GAP_MS) {

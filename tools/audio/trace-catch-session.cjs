@@ -79,7 +79,7 @@ function analyse(e, catchesAt) {
     const flyStart = sounds.find((s) => inside(s) && s.name.startsWith('moment:catch.fly:'));
     const burstLayer = sounds.filter((s) => inside(s) && burst && s.name.startsWith(`moment:${burst}:`) && /layer/.test(s.name)).map((s) => s.name.split(':')[2].split('#')[0]);
     const wobbleSounds = sounds.filter((s) => inside(s) && s.name.startsWith('moment:catch.wobble:'));
-    const wobbleHaptics = haptics.filter((h) => h.t > clock0 + 100 && h.t < clock0 + p.hitStopAt);
+    const wobbleHaptics = haptics.filter((h) => h.t > clock0 + 100 && h.t < clock0 + p.hitStopAt && h.intent !== 'hitRigid'); // the beam's slam (w5r2) is not a wobble
     const land = sounds.find((s) => inside(s) && s.name.startsWith('moment:catch.land:'));
     const counter = sounds.filter((s) => inside(s) && s.name.startsWith('moment:ui.counterTick:'));
     const end = Math.max(...sounds.filter((s) => inside(s) && s.name.startsWith(`moment:${burst}:`)).map((s) => s.t)) - (burstSound?.t ?? 0);
@@ -98,7 +98,9 @@ function analyse(e, catchesAt) {
       tapHaptics: haptics.filter((h) => h.t >= t0 - 5 && h.t < clock0 + 100).length,
       wobbleHapticMs: wobbleHaptics.map(rel),
       wobbleIntents: wobbleHaptics.map((h) => h.intent),
-      thumpMs: (() => { const h = haptics.find((x) => inside(x) && x.intent === 'hitRigid'); return h ? rel(h) : -1; })(),
+      // The hot thump is the rigid buzz after the burst's heavy; a rigid before it is the beam's slam (w5r2).
+      thumpMs: (() => { const h = haptics.find((x) => inside(x) && x.intent === 'hitRigid' && burstHaptic && x.t > burstHaptic.t); return h ? rel(h) : -1; })(),
+      slamMs: (() => { const h = haptics.find((x) => inside(x) && x.intent === 'hitRigid' && (!burstHaptic || x.t < burstHaptic.t)); return h ? rel(h) : -1; })(),
       hot: sounds.some((s) => inside(s) && s.name.startsWith('moment:catch.hot:')),
       sounds: sounds.filter((s) => inside(s) && s.name.startsWith('moment:catch.')).length,
       // The same without the burst's voicing tails (wave 5), so layer counts compare like for like.
@@ -153,7 +155,7 @@ async function main() {
   const lines = [
     '50-catch map session, real studio engine on the silent TraceBackend (virtual clock; nothing played).',
     'Per catch (ms on the catch clock, from when the find starts moving): show (full / short, +beam, +grand, +treat), burst moment, heat, server hold | every buzz in order and the closest two | the burst tail (voicing layers) | bell to slide | last sound against the done frame | burst haptic and sound (thump = the hot second buzz, +hot = the bright layer) | wobble rungs, sound ms, haptic ms and intents | counter ticks (rung@ms) against coin landings | stamp | legacy sounds',
-    ...a.perCatch.map((c) => `#${String(c.n).padStart(2)} ${c.repeat ? 'short' : 'full '}${c.grand ? '+grand' : c.beam ? '+beam ' : c.treat ? '+treat' : '      '} ${c.burst.padEnd(17)}${c.lucky ? ' +beam-slam' : ''} heat +${c.heat} hold ${c.hold} | buzzes ${c.buzzes.join(' ')} (closest ${c.minGapMs} ms${c.flams.length ? `, FLAM ${c.flams.join(' ')}` : ''}) | tail ${c.tail} | bell to slide ${c.flyGapMs} ms | last sound vs done ${c.lastSoundVsDoneMs} ms | hap ${c.burstHapticMs} snd ${c.burstSoundMs}${c.thumpMs > 0 ? ` thump ${c.thumpMs}` : ''}${c.hot ? ' +hot' : ''} | wobble ${c.wobbleRungs.join(' ')} at ${c.wobbleSoundMs.join(',')} haps ${c.wobbleHapticMs.join(',')} ${c.wobbleIntents.join(',')} | counter ${c.counterRungs.map((r, k) => `${r}@${c.counterMs[k]}`).join(' ')} coins land ${c.coinLandsMs.join(',')} | stamp ${c.landMs} | burst pitch ${c.burstPitch >= 0 ? '+' : ''}${c.burstPitch} | done ${c.doneMs}, after it ${c.afterDone.join(',') || 'nothing'} | legacy ${c.legacy.join(',') || 'none'}`),
+    ...a.perCatch.map((c) => `#${String(c.n).padStart(2)} ${c.repeat ? 'short' : 'full '}${c.grand ? '+grand' : c.beam ? '+beam ' : c.treat ? '+treat' : '      '} ${c.burst.padEnd(17)}${c.lucky ? ' +beam-slam' : ''} heat +${c.heat} hold ${c.hold} | buzzes ${c.buzzes.join(' ')} (closest ${c.minGapMs} ms${c.flams.length ? `, FLAM ${c.flams.join(' ')}` : ''}) | tail ${c.tail} | bell to slide ${c.flyGapMs} ms | last sound vs done ${c.lastSoundVsDoneMs} ms | ${c.slamMs > 0 ? `slam ${c.slamMs} ` : ''}hap ${c.burstHapticMs} snd ${c.burstSoundMs}${c.thumpMs > 0 ? ` thump ${c.thumpMs}` : ''}${c.hot ? ' +hot' : ''} | wobble ${c.wobbleRungs.join(' ')} at ${c.wobbleSoundMs.join(',')} haps ${c.wobbleHapticMs.join(',')} ${c.wobbleIntents.join(',')} | counter ${c.counterRungs.map((r, k) => `${r}@${c.counterMs[k]}`).join(' ')} coins land ${c.coinLandsMs.join(',')} | stamp ${c.landMs} | burst pitch ${c.burstPitch >= 0 ? '+' : ''}${c.burstPitch} | done ${c.doneMs}, after it ${c.afterDone.join(',') || 'nothing'} | legacy ${c.legacy.join(',') || 'none'}`),
     `whack hits round-robin: ${a.hits.join(' ')}`,
     `coin ladder per catch: ${a.ladderRuns.slice(0, 3).map((r) => r.join(',')).join(' | ')} ...`,
     '',

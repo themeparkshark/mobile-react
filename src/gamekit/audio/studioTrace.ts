@@ -35,7 +35,8 @@ export function studioTraceOn(): boolean {
  * preview flushes to Documents/catch-trace.log. Release JS has no console, so this is the only way to prove timing there.
  */
 export function captureTraceOn(): boolean {
-  return process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';
+  // Round 2: the hooks' capture too (HookSoundPreview: Daily 3 checks, the flame, both chests).
+  return process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview' || process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HookSoundPreview';
 }
 export const CAPTURE_LINES: string[] = [];
 export function captureLine(line: string): void {

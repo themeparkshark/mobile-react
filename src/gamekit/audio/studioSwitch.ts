@@ -57,7 +57,8 @@ export function studioMuted(): boolean {
  * frame-rate comparison without a sound leaving the simulator.
  */
 export function studioCapture(): 'on' | 'off' | null {
-  if (!studioMuted() || process.env.EXPO_PUBLIC_MOTION_CAPTURE !== 'HomeCatchPreview') return null;
+  if (!studioMuted()) return null;
+  if (process.env.EXPO_PUBLIC_MOTION_CAPTURE !== 'HomeCatchPreview' && process.env.EXPO_PUBLIC_MOTION_CAPTURE !== 'HookSoundPreview') return null;
   const v = process.env.EXPO_PUBLIC_STUDIO_CAPTURE;
   return v === 'on' || v === 'off' ? v : null;
 }

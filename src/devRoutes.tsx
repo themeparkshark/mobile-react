@@ -64,6 +64,9 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
     // Release-mode captures of the big moments (EXPO_PUBLIC_MOTION_CAPTURE=<route> with `expo start --no-dev`), so a
     // reveal can be recorded in release-like JS when the scratch server cannot reach it for real. Store builds never
     // set it, so this folds away like the dev list.
+    // wow-sound w5r2: the daily loop's hooks (Daily 3 checks, the flame, both chests), alone on their capture.
+    : process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HookSoundPreview'
+      ? [{ name: 'HookSoundPreview', getComponent: () => require('./components/retention/HookSoundPreviewScreen').default }]
     : process.env.EXPO_PUBLIC_MOTION_CAPTURE
       ? [
           { name: 'BoxRevealPreview', getComponent: () => require('./screens/pins/BoxRevealPreviewScreen').default },
@@ -82,6 +85,7 @@ export function devInitialRoute(): string | null {
   if (!__DEV__) {
     if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1') return 'BossMapPreview';
     const motion = process.env.EXPO_PUBLIC_MOTION_CAPTURE;
+    if (motion === 'HookSoundPreview') return motion;
     return motion === 'BoxRevealPreview' || motion === 'PostWinRewardsPreview' || motion === 'SetRevealPreview'
       || motion === 'CoinLevelingPreview' || motion === 'HomeCatchPreview' ? motion : null;
   }

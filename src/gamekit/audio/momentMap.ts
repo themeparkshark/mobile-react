@@ -149,7 +149,8 @@ export const MOMENTS = {
     voicings: [
       [{ ref: 'shared/sh_sparkle', delayMs: 40, db: -4 }],
       [{ ref: 'shared/sh_coin_shower', delayMs: 60, db: -7 }],
-      [{ ref: 'shared/sh_pluck', delayMs: 0, db: -9 }, { ref: 'shared/sh_sparkle', delayMs: 90, db: -5 }],
+      // w5r2: the pluck waits 40 ms (rendered at phone EQ it darkened the bell's attack by 1.9 kHz when it started with it).
+      [{ ref: 'shared/sh_pluck', delayMs: 40, db: -9 }, { ref: 'shared/sh_sparkle', delayMs: 90, db: -5 }],
       [{ ref: 'shared/sh_coin_shower', delayMs: 30, db: -9 }, { ref: 'shared/sh_sparkle', delayMs: 120, db: -6 }],
     ],
     mix: 'fx', gainDb: 0, measuredLufs: -18.8, variantGainDb: 0, duck: DUCK_REVEAL, maxVoices: 2,
@@ -170,7 +171,8 @@ export const MOMENTS = {
     group: 'catch', label: 'Another coin (short catch)', beat: 'burst',
     primary: 'shared/sh_sparkle', variant: 'shared/sh_pluck', fallback: 'fx.coin',
     // A warm pluck under it, a tiny coin rain, a faint bell: each short catch in a row has its own tail.
-    voicings: [[], [{ ref: 'shared/sh_pluck', delayMs: 0, db: -8 }], [{ ref: 'shared/sh_coin_shower', delayMs: 40, db: -10 }],
+    // w5r2: the pluck waits 40 ms, after the sparkle's attack (at 0 it dulled it by 0.7 kHz on a phone speaker).
+    voicings: [[], [{ ref: 'shared/sh_pluck', delayMs: 40, db: -8 }], [{ ref: 'shared/sh_coin_shower', delayMs: 40, db: -10 }],
       [{ ref: 'shared/sh_ding', delayMs: 0, db: -11 }]],
     mix: 'fx', gainDb: 0, measuredLufs: -19.6, variantGainDb: 0, maxVoices: 2,
     haptic: 'goodHit', hapticOffsetMs: 0,

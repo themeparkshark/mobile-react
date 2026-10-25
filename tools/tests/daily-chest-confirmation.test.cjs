@@ -67,6 +67,8 @@ function chest({ reconciled = null, reduced = false } = {}) {
       if (name === '../gamekit/SFX') return { playSfx: name => sounds.push(name) };
       // Studio sound (wave 5 chest pop): off in this test, so the chest plays today's sounds.
       if (name === '../gamekit/audio/playMoment') return { studioReady: () => false, playMoment: () => 0 };
+      if (name === '../gamekit/audio/loopSound') return { playChestOpen: () => false, preloadLoopMoments: () => undefined };
+      if (name === '../dev/captureMark') return { useCaptureMark: () => undefined };
       if (name === '../api/endpoints/daily-gifts/update') return { default: () => { const request = pending(); updates.push(request); return request.promise; } };
       if (name === '../api/endpoints/daily-gifts/create') return { default: async () => { if (reconciled) return reconciled; throw new Error('Offline'); } };
       if (name.includes('assets/')) return name;

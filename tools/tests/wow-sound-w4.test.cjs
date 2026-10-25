@@ -71,12 +71,13 @@ test('fix 2: a heat-5 catch always has more layers than a heat-0 one (two ticks,
   assert.deepEqual(plain(h), { ticks: 2, heavy: 1, thump: 1, glock: 1 }, 'the hot one keeps everything and adds the thump and the glock, even stalled');
 });
 
-test('fix 1: the 10th catch (the beam, full show) is the loudest: slam, duck and heavy buzz on the beam frame, then the bell', async () => {
+test('fix 1 (w5r2): the 10th catch (the beam, full show) is the loudest: slam buzz on the beam\'s fall, slam sound and duck on the held frame, then the bell and the heavy on the burst frame', async () => {
   const { a, e } = await fiftyCatches();
   const c10 = a.perCatch[9];
   assert.equal(c10.repeat, false, 'wow-map 00100bd0: the 10th catch plays the full show');
   assert.equal(c10.lucky, true, 'the beam slam (catch.lucky sh_star_slam) plays');
-  assert.equal(c10.burstHapticMs, 600, 'the heavy buzz lands on the beam (the held frame at 600)');
+  assert.equal(c10.slamMs, 570, 'the slam\'s rigid buzz on the beam\'s last fall (100 ms before the burst)');
+  assert.equal(c10.burstHapticMs, 670, 'the heavy buzz lands on the burst frame, the brightest one (wave 5 round 2)');
   assert.equal(c10.burst, 'catch.burst', 'then the bell on the burst');
   const slams = e.Trace.traceEvents().filter((x) => x.kind === 'sound' && x.name.startsWith('moment:catch.lucky:primary'));
   assert.equal(slams.length, 6, 'one slam per beam catch (10, 20, 25, 30, 40, 50)');

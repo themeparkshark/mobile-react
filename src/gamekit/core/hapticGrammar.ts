@@ -93,6 +93,17 @@ export const HAPTIC_PATTERNS = {
   streakIgnite: [{ at: 0, p: 'soft' }, { at: 120, p: 'medium' }, { at: 240, p: 'heavy' }, { at: 380, p: 'light' }, { at: 500, p: 'selection' }],
   /** A chest pops (cq_chest_open, coins spill at +80): the lid pops, lands heavy, then the coins patter out. */
   chestOpen: [{ at: 0, p: 'rigid' }, { at: 120, p: 'heavy' }, { at: 260, p: 'light' }, { at: 380, p: 'selection' }, { at: 500, p: 'selection' }],
+  /**
+   * Wave 5 round 2: the flame's swell when the third Daily 3 check leads into the all-done chord (the check's own light
+   * pulse comes 160 ms before): it peaks heavy on the chord's attack, the frame the third pip pops and the button turns
+   * to its chest, then glows down under the coin shower. 120 ms or more apart.
+   */
+  flameSwell: [{ at: 0, p: 'heavy' }, { at: 140, p: 'medium' }, { at: 260, p: 'light' }, { at: 380, p: 'selection' }],
+  /**
+   * Wave 5 round 2: the chest pop's short form (the lid pops, lands heavy), for a reveal whose own reward rows buzz
+   * from 300 ms on (the level chest): the coin patter would stack on the first row, so the rows carry it instead.
+   */
+  chestPop: [{ at: 0, p: 'rigid' }, { at: 120, p: 'heavy' }],
 } satisfies Record<string, HapticStep[]>;
 
 export type HapticPatternName = keyof typeof HAPTIC_PATTERNS;

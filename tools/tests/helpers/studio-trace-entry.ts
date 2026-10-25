@@ -8,3 +8,4 @@ export * as Haptics from '../../../src/gamekit/Haptics';
 export * as Catch from '../../../src/screens/ExploreScreen/ridePhoto/catchAudio';
 export { GameAudio } from '../../../src/gamekit/audio/GameAudio';
 export * as Power from '../../../src/power/batterySaver';
+export * as Loop from '../../../src/gamekit/audio/loopSound';

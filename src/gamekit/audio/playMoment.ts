@@ -45,6 +45,7 @@ import {
   queueHaptic,
   setHapticTraceListener,
   type HapticIntent,
+  type HapticPatternName,
   type HapticPrimitive,
   type HapticStep,
 } from '../Haptics';
@@ -78,6 +79,11 @@ export interface MomentOptions {
   pitch?: number;
   /** Wave 5: the everyday burst's round-robin tail (MomentDef.voicings); omitted = the moment's own layers. */
   voicing?: number;
+  /**
+   * Wave 5 round 2: a different shaped buzz for this call (a surface with its own beats right after, like the level
+   * chest's reward rows, takes the moment's short form so nothing stacks). Omitted = the moment's own pattern.
+   */
+  hapticPattern?: HapticPatternName;
 }
 
 /** Output latencies up to this (ms) fire the paired haptic in the same call as the sound. */
@@ -184,7 +190,7 @@ const PRIMITIVE_INTENT: Record<HapticPrimitive, HapticIntent> = {
  */
 function fireHaptic(name: MomentName, opts: MomentOptions, leadMs: number): void {
   const def = MOMENTS[name] as MomentDef;
-  const pattern = momentHaptic(name, { walking: opts.walking });
+  const pattern = opts.hapticPattern ?? momentHaptic(name, { walking: opts.walking });
   if (!pattern) return;
   const game = opts.context === 'game';
   // An output latency at or under HAPTIC_LEAD_FREE_MS (audio-api, about 20 ms) is below what a hand

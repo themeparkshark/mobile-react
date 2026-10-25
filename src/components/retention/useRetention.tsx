@@ -13,7 +13,8 @@ import { AuthContext } from '../../context/AuthProvider';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
-import { playMoment, studioMoment, studioReady } from '../../gamekit/audio/playMoment';
+import { studioMoment } from '../../gamekit/audio/playMoment';
+import { flameDay, playDaily3, preloadLoopMoments } from '../../gamekit/audio/loopSound';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import * as RootNavigation from '../../RootNavigation';
 import { enablePush } from '../../services/push';
@@ -97,9 +98,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     void loadRetentionFlags().then(f => { if (mounted.current && f) setFlags(f); });
   }, [o.enabled, o.mapFocused, o.refreshKey, flags]);
 
-  // Warm the art once the features are on, so the first reveal never pops in.
+  // Warm the art once the features are on, so the first reveal never pops in (and the loop's sounds, so the day's
+  // first check and chest ring on their frame, not after a first-play load).
   useEffect(() => {
-    if (flags?.dailyThree || flags?.levelChests) void Asset.loadAsync(ART).catch(() => undefined);
+    if (flags?.dailyThree || flags?.levelChests) { void Asset.loadAsync(ART).catch(() => undefined); preloadLoopMoments(); }
   }, [flags?.dailyThree, flags?.levelChests]);
 
   const applyDaily = useCallback((next: DailyThreeState) => {
@@ -111,11 +113,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       const index = next.goals.findIndex(g => g.key === fresh[fresh.length - 1]);
       setPop(p => ({ index, key: p.key + 1 }));
       setCelebrate(c => [...new Set([...c, ...fresh])]);
-      // Studio sound (approved Oct 24): a check ding per goal, all 3 rings the chord and grows the flame. Wave 5: the
-      // buzz is the moment's own shaped pattern (a tick then the check; the flame's swell), felt even with sound off.
-      const moment = next.claimable ? 'loop.daily3Done' : 'loop.daily3Check';
-      if (studioReady(moment)) playMoment(moment, { haptic: true });
-      else {
+      // Studio sound (approved Oct 24): each check climbs a note (do, re, mi), the third leads into the all-done chord,
+      // and that chord rings brighter each day of the streak (every 7th day the flame's own ignite). Its shaped buzz
+      // (a tick then the check; the flame's swell) is felt even with the sound off. Studio off: today's.
+      const checked = next.claimable ? 3 : Math.min(2, next.goals.filter(g => g.done).length);
+      if (!playDaily3(checked, flameDay(next.streak))) {
         haptic('success');
         playSfx(next.claimable ? 'fx.reveal' : 'fx.coinTick');
       }
