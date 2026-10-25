@@ -546,7 +546,7 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   // cover is the launch scene over the whole screen (header and footer too). Taps on the hidden HUD are swallowed.
   assert.match(explore, /<MapLaunchCover variant="sky" blockTouches style=\{SKY_COVER_STYLE\} \/>/);
   assert.match(explore, /const SKY_COVER_STYLE = \{ top: 70 \+ \(Constants\.statusBarHeight \?\? 0\), zIndex: 45 \} as const;/);
-  assert.match(explore, /<\/Wrapper>\s*\{\/\*[^]*?\*\/\}\s*<MapLaunchCover variant="launch" armOnMount blockTouches style=\{LAUNCH_COVER_STYLE\} \/>\s*<\/>/);
+  assert.match(explore, /\{\(late \|\| !deferBody\) && <ExploreScreenBody \/>\}\s*\{\/\*[^]*?\*\/\}\s*<MapLaunchCover variant="launch" armOnMount blockTouches style=\{LAUNCH_COVER_STYLE\} \/>\s*<\/>/);
   assert.match(explore, /const LAUNCH_COVER_STYLE = \{ zIndex: 100 \} as const;/);
   assert.match(store, /const launch = firstCover;/);
   // The HUD row is whole from the first map frame; a later lead change cross-fades (MapStatusStack).
@@ -1440,4 +1440,17 @@ test('wave 5 round 3: the slow-tile capture source is development only', () => {
   const style = read('src/components/map/tpsMapStyle.ts');
   assert.match(style, /const DEV_TILE_SOURCE = __DEV__ \? process\.env\.EXPO_PUBLIC_DEV_TILE_SOURCE : undefined;/);
   assert.match(style, /url: DEV_TILE_SOURCE \|\| 'https:\/\/tiles\.openfreemap\.org\/planet'/);
+});
+
+test('wave 5 round 3: under the launch cover, the map screen body mounts a commit after the cover (the bar animates first)', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  // A thin shell: the launch cover alone in the first commit; the whole map screen (state, effects,
+  // map, HUD) two frames later; a later visit (no launch cover) mounts it at once.
+  const shell = explore.slice(explore.indexOf('function ExploreScreen() {'));
+  assert.match(shell, /const \[deferBody\] = useState\(launchCoverAhead\);\s*const late = useLateMount\(\);/);
+  assert.match(shell, /\{\(late \|\| !deferBody\) && <ExploreScreenBody \/>\}/);
+  assert.match(explore, /export function ExploreScreenBody\(\) \{/);
+  assert.equal((explore.match(/<MapLaunchCover variant="launch"/g) ?? []).length, 1, 'one launch cover, in the shell');
+  const cover = read('src/components/map/mapCover.ts');
+  assert.match(cover, /export function launchCoverAhead\(\): boolean \{\s*return firstCover \|\| \(plan\.up && plan\.launch && !plan\.lifting\);/);
 });

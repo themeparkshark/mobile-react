@@ -206,6 +206,11 @@ function coverLog(step: string, now: number) {
   console.log(`[launch-cover] ${step} at +${now - startedAt} ms (lift at +${plan.deadline - startedAt} ms${plan.lifting ? ', lifting' : ''})`);
 }
 
+/** The app's first cover (the launch scene) is still to come, or up and not lifting yet. */
+export function launchCoverAhead(): boolean {
+  return firstCover || (plan.up && plan.launch && !plan.lifting);
+}
+
 export function isMapCovered(): boolean {
   return plan.up;
 }

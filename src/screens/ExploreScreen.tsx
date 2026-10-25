@@ -27,7 +27,7 @@ import TopbarColumn from '../components/Topbar/TopbarColumn';
 import UsernameBanner from '../components/Topbar/UsernameBanner';
 import Wrapper from '../components/Wrapper';
 import MapLaunchCover from '../components/map/MapLaunchCover';
-import { holdMapCover, useCoverArt, useMapCovered, useMapOnScreen } from '../components/map/mapCover';
+import { holdMapCover, launchCoverAhead, useCoverArt, useMapCovered, useMapOnScreen } from '../components/map/mapCover';
 import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import { LocationContext } from '../context/LocationProvider';
@@ -209,22 +209,22 @@ const PARKED_TIME = '2000-01-01T00:00:00Z';
 // Friends drawn as ghost sharks at most (the closest).
 const GHOST_CAP = 5;
 
-/** True two frames after the first mount (one commit later), for overlays that start hidden. */
-function useLateMount(): boolean {
+/** True two frames after `after` is true (one commit later), for parts of the screen that can wait. */
+function useLateMount(after = true): boolean {
   // With no frame clock (a test runner) there is nothing to draw between commits: mount at once.
   const [late, setLate] = useState(typeof requestAnimationFrame !== 'function');
   useEffect(() => {
-    if (late) return undefined;
+    if (late || !after) return undefined;
     let second = 0;
     const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => setLate(true)); });
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [after]); // eslint-disable-line react-hooks/exhaustive-deps
   return late;
 }
 /** A player whose home never confirms (weak GPS indoors) still meets Finn after this long. */
 export const ONBOARDING_FALLBACK_MS = 8000;
 
-function ExploreScreen() {
+export function ExploreScreenBody() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const mapFocused = useIsFocused();
   // Idle (no touch, no walking for 2 min): the map's live polls slow down.
@@ -1340,7 +1340,6 @@ function ExploreScreen() {
   }) : [];
 
   return (
-    <>
     <Wrapper>
       <Topbar>
         {/* Topbar currencies: only for signed-in users */}
@@ -1892,10 +1891,27 @@ function ExploreScreen() {
       {/* Fin-ister Nights overlays (sheet, rank card, tutorial, exit moment, Marquee); outside the park block on purpose. */}
       {lateOverlays && player && <FrightLayer night={frightNight} engine={frightEngine} top={slotTop + 64} />}
     </Wrapper>
-    {/* The app's first cover: the launch scene over the whole screen, header and footer included,
-        so the splash and its one bar carry on until the park map has drawn, then the whole game
-        (map, header, footer, buttons) arrives in one fade with no label swapping underneath. */}
-    <MapLaunchCover variant="launch" armOnMount blockTouches style={LAUNCH_COVER_STYLE} />
+  );
+}
+
+/**
+ * The map screen. Under the app's first cover, the screen's first commit is only that cover (the
+ * same splash, bar and fun fact the Loading screen showed), so its bar and bubbles start animating
+ * on the UI thread before anything heavy runs; the whole map screen (its state, effects, map, HUD
+ * and markers) mounts two frames later underneath. A profile showed the cover's bar frozen for
+ * about a second when the cover started in the same commit as the map screen's render and effects.
+ * A later visit (no launch cover) mounts everything at once, as before.
+ */
+function ExploreScreen() {
+  const [deferBody] = useState(launchCoverAhead);
+  const late = useLateMount();
+  return (
+    <>
+      {(late || !deferBody) && <ExploreScreenBody />}
+      {/* The app's first cover: the launch scene over the whole screen, header and footer included,
+          so the splash and its one bar carry on until the park map has drawn, then the whole game
+          (map, header, footer, buttons) arrives in one fade with no label swapping underneath. */}
+      <MapLaunchCover variant="launch" armOnMount blockTouches style={LAUNCH_COVER_STYLE} />
     </>
   );
 }
