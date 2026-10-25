@@ -57,8 +57,8 @@ test('fix 2: the same for the catch moments (catchAudio caches its preload the s
 
 test('fix 2: preloadMoments reports whether it loaded anything, and both callers drop their flag on false', () => {
   assert.match(src('src/gamekit/audio/playMoment.ts'), /export function preloadMoments\(names: readonly MomentName\[\]\): Promise<boolean> \{\s*if \(!isStudioSoundOn\(\) \|\| !GameAudio\.isSfxEnabled\(\)\) return Promise\.resolve\(false\);/);
-  assert.match(src('src/gamekit/audio/loopSound.ts'), /preloadMoments\(LOOP_MOMENTS\)\.then\(\(ok\) => \{ if \(!ok\) preloaded = false; \}/);
-  assert.match(src('src/screens/ExploreScreen/ridePhoto/catchAudio.ts'), /preloadMoments\(CATCH_MOMENTS\)\.then\(\(ok\) => \{ if \(!ok\) momentsReady = false; \}/);
+  assert.match(src('src/gamekit/audio/loopSound.ts'), /const retry = \(\) => \{ preloaded = false; whenSoundMayStart\(preloadLoopMoments\); \};\s*void preloadMoments\(LOOP_MOMENTS\)\.then\(\(ok\) => \{ if \(!ok\) retry\(\); \}, retry\);/);
+  assert.match(src('src/screens/ExploreScreen/ridePhoto/catchAudio.ts'), /const retry = \(\) => \{ momentsReady = false; whenSoundMayStart\(preloadCatchMoments\); \};\s*void preloadMoments\(CATCH_MOMENTS\)\.then\(\(ok\) => \{ if \(!ok\) retry\(\); \}, retry\);/);
   assert.match(src('src/gamekit/audio/GameAudio.ts'), /async preload\(names\?: string\[\]\): Promise<boolean> \{[\s\S]{0,300}if \(!this\.sfxEnabled\) return false;\s*await this\.init\(\);\s*if \(!this\.backend\) return false;/);
 });
 
@@ -128,4 +128,24 @@ test('fix 3: a redesigned Daily 3 (a ring that fills before the full-set flash) 
   const chord = starts(e, t0, 'moment:loop.daily3Done:primary')[0];
   assert.ok(note && chord, 'both ring');
   assert.ok(Math.abs(chord.t - note.t - 420) <= 20, `chord ${chord.t - note.t} ms after the note`);
+});
+
+test('fix 2 (round 3, found in the hook capture): a surface that preloads ONCE before the settings are in still decodes as soon as sound may start, with no second call', async () => {
+  const e = heldEngine();
+  const files = (re) => e.Trace.traceEvents().filter((x) => x.kind === 'legacy' && x.name === 'file' && re.test(x.detail ?? ''));
+  e.Loop.preloadLoopMoments();
+  await e.Catch.preloadCatchAudio();
+  await run(e, 200);
+  assert.equal(files(/^moment:loop\./).length, 0, 'nothing decodes while the engine waits');
+  e.GameAudio.settingsKnown();
+  await run(e, 600);
+  assert.ok(files(/^moment:loop\.daily3Check/).length > 0, 'the loop cues decoded by themselves once the settings came in');
+  assert.ok(files(/^moment:catch\./).length > 0, 'and the catch moments');
+  const t0 = e.clock.now;
+  assert.equal(e.Loop.playDaily3(1, 1), true);
+  await run(e, 100);
+  assert.equal(e.Trace.traceEvents().filter((x) => x.t >= t0 && x.kind === 'legacy' && x.name === 'file').length, 0, 'the first check never decodes on play');
+  const src2 = src('src/gamekit/audio/studioSwitch.ts');
+  assert.match(src2, /if \(on\) soundMayHaveStarted\(\);/, 'the studio flag read retries too');
+  assert.match(src('src/gamekit/audio/GameAudio.ts'), /settingsKnown\(\): void \{\s*this\.settingsPending = false;\s*soundMayHaveStarted\(\);/);
 });

@@ -74,6 +74,25 @@ export function isStudioSoundOn(): boolean {
 }
 
 /**
+ * Wave 5 round 3: one-shot retries for preloads that ran too early. A loop or catch preload that lands before sound can
+ * start (the player's settings not in yet, sound effects off, or the studio flag not read yet) loads nothing; it parks
+ * its retry here, and the retry runs once the next time sound may have become possible (settings known, sound effects
+ * on, the flag read). Without this, a surface that preloads once at mount rang its first cue after a first-play decode
+ * (the w5r3 hook capture: the day's first check decoded on play and its buzz came 100 ms late). Deduplicated by
+ * function, run on the next tick, never throws.
+ */
+const soundRetries = new Set<() => void>();
+export function whenSoundMayStart(retry: () => void): void {
+  soundRetries.add(retry);
+}
+export function soundMayHaveStarted(): void {
+  if (!soundRetries.size) return;
+  const list = Array.from(soundRetries);
+  soundRetries.clear();
+  setTimeout(() => { for (const fn of list) { try { fn(); } catch { /* sound is decoration */ } } }, 0);
+}
+
+/**
  * Key 2: read the server flag (cached 5 minutes; only a real answer is cached,
  * so a network hiccup reads as off for this call and asks again next time).
  * Never throws.
@@ -85,6 +104,7 @@ export function loadStudioSoundFlag(read: FlagReader, now: () => number = Date.n
     .then((payload) => {
       const on = payload?.flags?.studio_sound === true;
       flag = { on, at: now() };
+      if (on) soundMayHaveStarted();
       return on;
     })
     .catch(() => false)
