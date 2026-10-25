@@ -56,23 +56,6 @@ export const COIN_FLIGHT = {
   prizeArcPt: 44,
 } as const;
 
-/**
- * A prize from a reward dialog on its way to the shelf (GameDialog): it leaves the card's icon spot at the card icon's
- * size (EASE.out, so it moves at once), arcs low (arcPt), swells a little mid-air, tilts, and lands endScale of its
- * size in the Profile icon, pulling a trail of trailDots shrinking gold dots trailStep behind it.
- */
-export const PRIZE_FLIGHT = { arcPt: 60, swell: 0.12, tiltDeg: 12, endScale: 0.3, trailDots: 6, trailStep: 0.05, trailPt: 9 } as const;
-
-/** The prize at flight progress raw (0 to 1) from `from` to `to` (window points). Pure worklet (unit tested). */
-export function prizeAt(raw: number, from: Point, to: Point): { x: number; y: number; scale: number; rot: number } {
-  'worklet';
-  const r = Math.min(1, Math.max(0, raw));
-  const t = PRIZE_OUT(r);
-  const at = coinAt(t, 0, 1, from, to, true, PRIZE_FLIGHT.arcPt);
-  const swell = 1 + PRIZE_FLIGHT.swell * Math.sin(Math.PI * t);
-  return { x: at.x, y: at.y, scale: swell * (1 - (1 - PRIZE_FLIGHT.endScale) * t), rot: -PRIZE_FLIGHT.tiltDeg * Math.sin(Math.PI * t) };
-}
-
 /** Where coin i of n starts and lands (it leaves i * staggerMs late). Pure (unit tested). */
 export function coinLandTimes(n: number, startAt = 0): number[] {
   const k = Math.max(0, Math.min(COIN_FLIGHT.max, Math.floor(n)));
@@ -93,6 +76,23 @@ export function coinAt(t: number, i: number, n: number, from: Point, to: Point, 
   const y = u * u * from.y + 2 * u * t * cy + t * t * to.y;
   const scale = t < 0.5 ? 0.7 + (COIN_FLIGHT.midScale - 0.7) * (t / 0.5) : COIN_FLIGHT.midScale - (COIN_FLIGHT.midScale - 0.85) * ((t - 0.5) / 0.5);
   return { x, y, scale, rot: (i % 2 ? 1 : -1) * 220 * t };
+}
+
+/**
+ * A prize from a reward dialog on its way to the shelf (GameDialog): it leaves the card's icon spot at the card icon's
+ * size (EASE.out, so it moves at once), arcs low (arcPt), swells a little mid-air, tilts, and lands endScale of its
+ * size in the Profile icon, pulling a trail of trailDots shrinking gold dots trailStep behind it.
+ */
+export const PRIZE_FLIGHT = { arcPt: 60, swell: 0.12, tiltDeg: 12, endScale: 0.3, trailDots: 6, trailStep: 0.05, trailPt: 9 } as const;
+
+/** The prize at flight progress raw (0 to 1) from `from` to `to` (window points). Pure worklet (unit tested). Defined after coinAt: a worklet's closure is read where it is defined. */
+export function prizeAt(raw: number, from: Point, to: Point): { x: number; y: number; scale: number; rot: number } {
+  'worklet';
+  const r = Math.min(1, Math.max(0, raw));
+  const t = PRIZE_OUT(r);
+  const at = coinAt(t, 0, 1, from, to, true, PRIZE_FLIGHT.arcPt);
+  const swell = 1 + PRIZE_FLIGHT.swell * Math.sin(Math.PI * t);
+  return { x: at.x, y: at.y, scale: swell * (1 - (1 - PRIZE_FLIGHT.endScale) * t), rot: -PRIZE_FLIGHT.tiltDeg * Math.sin(Math.PI * t) };
 }
 
 export type Flight = { id: number; from: Point; to: Point; count: number; size: number; onLand?: (i: number) => void; onDone?: () => void;

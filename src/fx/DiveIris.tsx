@@ -343,7 +343,7 @@ export function sharkPlunge(e: number, fromLeft: boolean, w: number, h: number):
   'worklet';
   const k = 1 - Math.min(1, Math.max(0, e));
   const dir = fromLeft ? 1 : -1;
-  return { dx: -dir * DIVE.plunge.backPt * w * k, dy: -DIVE.plunge.dropPt * h * k, rot: dir * DIVE.plunge.noseDeg * k * k,
+  return { dx: -dir * DIVE.plunge.backPt * w * k, dy: -DIVE.plunge.dropPt * h * k, rot: dir * DIVE.plunge.noseDeg * k,
     // Long and thin while it shoots down, round again as it levels out.
     stretch: DIVE.plunge.stretch * Math.sin(Math.PI * Math.min(1, k * 1.2)) };
 }
