@@ -8,7 +8,7 @@
  * (one frame never moves it more than MAX_STEP_MS), so neither a busy JS
  * thread nor one long UI frame (the board mounting as Details closes) can skip
  * 2 or 1: on a loaded iPhone SE, JS timers jumped from 3 straight back to the
- * game. The clock is back at 0 whenever the countdown hides, so it always opens on 3.
+ * game. Every run mounts fresh with its clock at 0, so it always opens on 3.
  *
  * The game comes back under the 1 (HANDOVER_AT, once the 1's punch has settled, so no number or scale is
  * changing when that big render lands: a React commit while the UI thread is still writing a number's props
@@ -19,7 +19,7 @@
  */
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeOut, runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withTiming,
+import Animated, { FadeOut, runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue,
   type SharedValue } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
@@ -29,8 +29,6 @@ import { BRAND } from '../../../ui';
 const STEP_MS = 340;
 /** The most one frame can move the clock, so a hitch never skips a number. */
 const MAX_STEP_MS = 34;
-/** How long after hiding the clock goes back to 0 (the hidden frame is long painted by then). */
-const RESET_DELAY_MS = 250;
 /** How long each number's punch (1.3 down to 1) lasts, as a share of its step. */
 const PUNCH_SHARE = 0.4;
 /** The scrim's fade as it hands over to the game, the arcade or the page (UI thread, after the 1's full step). */
@@ -57,8 +55,7 @@ function CountNumber({ value, index, clock, reducedMotion }: {
   return <Animated.Text style={[styles.number, index > 0 && styles.numberStacked, style]}>{value}</Animated.Text>;
 }
 
-function ResumeCountdown({ active, onDone, onHidden }: {
-  active: boolean;
+interface CountdownProps {
   /**
    * The game comes back (under the 1). Return true for a plain resume (nothing to hand over to): the countdown
    * then hides itself the moment the 1's step ends, with a render of only this small component.
@@ -66,7 +63,10 @@ function ResumeCountdown({ active, onDone, onHidden }: {
   onDone: () => boolean;
   /** It has hidden itself (a plain resume): the parent can let go of it whenever it is free. */
   onHidden: () => void;
-}) {
+}
+
+/** One countdown, mounted fresh for each run: its clock starts at 0, so its very first frame shows the 3. */
+function CountdownRun({ onDone, onHidden }: CountdownProps) {
   const reducedMotion = useReducedGameMotion();
   /** 0 to 3: the 3 shows in [0, 1), the 2 in [1, 2), the 1 from 2 until it hides. */
   const clock = useSharedValue(0);
@@ -116,22 +116,12 @@ function ResumeCountdown({ active, onDone, onHidden }: {
   frameRef.current = frame;
 
   useEffect(() => {
-    if (!active) return undefined;
-    finished.current = false;
-    clock.value = 0;
-    plain.value = false;
     tick();
     frame.setActive(true);
-    return () => {
-      frame.setActive(false);
-      setHiddenSelf(false);
-      // Back to 0 once it has hidden (on the UI thread, a moment later, so the closing frame keeps the 1
-      // instead of flashing a 3), so the next countdown never opens on the last run's 1.
-      clock.value = withDelay(RESET_DELAY_MS, withTiming(0, { duration: 0 }));
-    };
-    // Starting a countdown depends only on `active`.
+    return () => frame.setActive(false);
+    // A run starts once, when it mounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, []);
 
   // Tell the parent a frame after it has hidden, so the screen's big render never delays the fade.
   useEffect(() => {
@@ -140,7 +130,7 @@ function ResumeCountdown({ active, onDone, onHidden }: {
     return () => cancelAnimationFrame(id);
   }, [hiddenSelf]);
 
-  if (!active || hiddenSelf) return null;
+  if (hiddenSelf) return null;
   return <Animated.View style={styles.scrimHost} exiting={reducedMotion ? undefined : FadeOut.duration(EXIT_FADE_MS)}>
     <Pressable style={styles.scrim} onPress={skip} accessibilityRole="button"
       accessibilityLabel="Resuming in 3 2 1. Tap to resume now.">
@@ -157,9 +147,19 @@ function ResumeCountdown({ active, onDone, onHidden }: {
 }
 
 /**
- * Renders only when it starts or hides. A render mid-count would hand the numbers the JS thread's copy of
- * the clock (useAnimatedStyle's render-time value) and could show a stale number for a frame.
+ * Each time it becomes active, a fresh run mounts (a new key), so no run ever starts from the last run's clock
+ * (a reused clock could show the last run's 1 on the first frame). It renders only when it starts or hides:
+ * a render mid-count would hand the numbers the JS thread's copy of the clock and could show a stale number.
  */
+function ResumeCountdown({ active, onDone, onHidden }: CountdownProps & { active: boolean }) {
+  const run = useRef(0);
+  const wasActive = useRef(false);
+  if (active && !wasActive.current) run.current += 1;
+  wasActive.current = active;
+  if (!active) return null;
+  return <CountdownRun key={run.current} onDone={onDone} onHidden={onHidden} />;
+}
+
 export default memo(ResumeCountdown, (a, b) => a.active === b.active);
 
 const styles = StyleSheet.create({

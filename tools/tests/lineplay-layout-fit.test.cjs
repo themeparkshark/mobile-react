@@ -698,8 +698,10 @@ test('a one-time tip waits while the page window has stepped aside, so it never 
 
 test('the resume countdown always opens on 3, never on the last run\'s 1', () => {
   const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
-  assert.match(countdown, /finished\.current = false;\n\s+clock\.value = 0;/, 'the clock restarts from 0 (the 3) every time');
-  assert.match(countdown, /clock\.value = withDelay\(RESET_DELAY_MS, withTiming\(0, \{ duration: 0 \}\)\);/, 'back at 0 once hidden: the closing frame keeps the 1 (no 3 flash) and the next run never opens on the 1');
+  // Each activation mounts a fresh run (new key), so its clock starts at 0 (the 3) on its very first frame.
+  assert.match(countdown, /if \(active && !wasActive\.current\) run\.current \+= 1;/);
+  assert.match(countdown, /return <CountdownRun key=\{run\.current\} onDone=\{onDone\} onHidden=\{onHidden\} \/>;/);
+  assert.match(countdown, /function CountdownRun\(\{ onDone, onHidden \}: CountdownProps\) \{\n\s+const reducedMotion = useReducedGameMotion\(\);\n\s+\/\*\*[^\n]*\*\/\n\s+const clock = useSharedValue\(0\);/);
 });
 
 test('paused, the board PLAY strip is never a tap that only hides Details: it rests in pale blue and runs the 3 2 1', () => {
@@ -775,7 +777,7 @@ test('3, 2 and 1 each get one even beat: the game comes back under the 1, which 
   // and tells the parent a frame later, so the screen's big render never delays the beat.
   assert.match(countdown, /if \(after >= 3\) \{\n\s+runOnJS\(sleep\)\(\);\n\s+if \(plain\.value\) runOnJS\(hideSelf\)\(\);/);
   assert.match(countdown, /if \(clock\.value >= 3\) hideSelf\(\);/, 'a late JS thread hides it at once');
-  assert.match(countdown, /if \(!active \|\| hiddenSelf\) return null;/);
+  assert.match(countdown, /if \(hiddenSelf\) return null;/);
   assert.match(countdown, /const id = requestAnimationFrame\(\(\) => hiddenRef\.current\(\)\);/);
   const screen = read(SCREEN);
   assert.match(screen, /setResumeHandoff\('plain'\);\n\s+return true;\n\s+\}\} onHidden=\{\(\) => setResumeHandoff\(current => current === 'plain' \? null : current\)\} \/>/);
