@@ -41,51 +41,184 @@ test('round 5: the +1 and the hearts read at a glance and the bubble never wraps
   assert.ok(Number(/HEART_SIZE = (\d+)/.exec(src)[1]) >= 22);
 });
 
-test('round 6: three solid gold hearts, 28 to 32 pt with a white outline, pop past full size and fan out; a sparkle on the badge', () => {
-  const size = Number(/HEART_SIZE = (\d+)/.exec(src)[1]);
-  assert.ok(size >= 28 && size <= 32, `heart size ${size}`);
+const loadFx = () => loadTs('src/screens/LinePlay/group/CrewBadgeFx.tsx', {
+  '@shopify/react-native-skia': { Skia: { Path: { MakeFromSVGString: () => ({}) } }, Canvas: () => null, Picture: () => null, PaintStyle: {}, StrokeJoin: {}, createPicture: () => null },
+  react: { memo: x => x, useEffect: () => undefined, useMemo: f => f(), useRef: x => ({ current: x }), useState: x => [x, () => undefined] },
+  'react-native': { StyleSheet: { create: x => x }, Text: () => null, View: () => null },
+  'react-native-reanimated': { __esModule: true, default: { View: () => null } },
+  '../../../gamekit/Haptics': { queueHaptic: () => undefined },
+  '../../../gamekit/audio/playMoment': { playMoment: () => undefined },
+  '../../../ui': { GameIcon: () => null },
+  '../../../ui/tokens': { BRAND: { white: '#fff', navy: '#05346e', gold: '#ffcf3b' } },
+  '../../../ui/motionEasing': { EASE: {}, SPRING: {} },
+  'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
+});
+
+test('round 6 (kept): solid gold hearts with a white rim and a navy ink line, a sparkle on the badge', () => {
   assert.match(src, /Skia\.Path\.MakeFromSVGString\('M16 29/, 'a real heart shape, not the round heart badge tinted into a disc');
   assert.match(src, /rim\.setColor\(Skia\.Color\(BRAND\.white\)\)/, 'a white rim');
+  assert.match(src, /ink\.setColor\(Skia\.Color\(BRAND\.navy\)\)/, 'a navy ink line');
   assert.doesNotMatch(src, /<GameIcon name="heart"/);
-  assert.match(src, /const pop = \(k < 0\.12 \? 0\.4 \+ 0\.85/, 'pops to 1.25 then settles');
-  assert.match(src, /opacity: k < 0\.08 \? k \/ 0\.08 : k < 0\.85 \? 1/, 'solid, not half see-through');
-  assert.match(src, /HEART_FAN/);
   assert.match(src, /<GameIcon name="sparkle" size=\{SPARK_SIZE\} \/>/);
-  // Still quiet for other players: the hearts never buzz or play a sound.
-  const starsEffect = src.slice(src.indexOf('const before = lastStars.current'), src.indexOf('const badgeStyle'));
-  assert.doesNotMatch(starsEffect, /queueHaptic|playHaptic|playMoment/);
+  // Still quiet for other players: the queue never buzzes or plays a sound.
+  const queueSrc = src.slice(src.indexOf('export function createHeartsQueue'), src.indexOf('export const HEART_SIZE'));
+  assert.doesNotMatch(queueSrc, /queueHaptic|playHaptic|playMoment/);
 });
 
-test('wave 5 round 2: three separate hearts (40 pt apart inside the first fifth of the rise), one canvas only while they fly', () => {
-  const fx = loadTs('src/screens/LinePlay/group/CrewBadgeFx.tsx', {
-    '@shopify/react-native-skia': { Skia: { Path: { MakeFromSVGString: () => ({}) } }, Canvas: () => null, Group: () => null, Oval: () => null, Path: () => null },
-    react: { memo: x => x, useEffect: () => undefined, useRef: x => ({ current: x }), useState: x => [x, () => undefined] },
-    'react-native': { StyleSheet: { create: x => x }, Text: () => null, View: () => null },
-    'react-native-reanimated': { __esModule: true, default: { View: () => null } },
-    '../../../gamekit/Haptics': { queueHaptic: () => undefined },
-    '../../../gamekit/audio/playMoment': { playMoment: () => undefined },
-    '../../../ui': { GameIcon: () => null },
-    '../../../ui/tokens': { BRAND: { white: '#fff', navy: '#05346e', gold: '#ffcf3b' } },
-    '../../../ui/motionEasing': { EASE: {}, SPRING: {} },
-    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
-  });
-  const step = fx.CREW_FX.heartStep;
-  for (const i of [0, 2]) {
-    const at = fx.heartAt(i * step + 0.76 * 0.2 + 0.001, i);
-    assert.ok(Math.abs(Math.abs(at.x) - 40) <= 5, `heart ${i} is about 40 pt out by a fifth of its rise (${at.x.toFixed(1)})`);
+// A fake clock for the hearts queue: timers run when the test advances time.
+function fakeClock() {
+  let now = 0; let seq = 0; const timers = new Map();
+  return {
+    setTimeout: (fn, ms) => { const id = ++seq; timers.set(id, { at: now + ms, fn }); return id; },
+    clearTimeout: id => { timers.delete(id); },
+    advance(ms) {
+      const until = now + ms;
+      for (;;) {
+        const next = [...timers.entries()].filter(([, t]) => t.at <= until).sort((a, b) => a[1].at - b[1].at)[0];
+        if (!next) break;
+        timers.delete(next[0]); now = next[1].at; next[1].fn();
+      }
+      now = until;
+    },
+    pending: () => timers.size,
+  };
+}
+const harness = (fx, firstKey = 0) => {
+  const clock = fakeClock();
+  const log = [];
+  let mounted = false;
+  const q = fx.createHeartsQueue(firstKey, { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout,
+    start: () => { mounted = true; log.push('start'); }, end: () => { mounted = false; log.push('end'); } });
+  return { q, clock, log, mounted: () => mounted };
+};
+const flags = (covered = false, order = 0, reduced = false) => ({ covered, reduced, order });
+
+test('wave 5 round 3 BLOCKER: a burst that has started always finishes and its canvas always leaves', () => {
+  const fx = loadFx();
+  const ms = fx.CREW_FX.heartsMs;
+  // The grader's case: the strip is covered (a kid taps the next game) in the middle of the burst.
+  {
+    const h = harness(fx, 0);
+    h.q.update(1, flags());
+    h.clock.advance(0);
+    assert.equal(h.mounted(), true, 'the burst starts');
+    h.clock.advance(ms * 0.4);
+    h.q.update(1, flags(true));
+    h.clock.advance(ms);
+    assert.equal(h.mounted(), false, 'covering the strip mid-burst never freezes the hearts: the canvas unmounts');
+    h.q.update(1, flags(false));
+    h.clock.advance(ms * 2);
+    assert.deepEqual(h.log, ['start', 'end'], 'and it does not replay when the strip comes back');
   }
-  assert.equal(fx.heartAt(0, 0).opacity, 0);
-  assert.ok(fx.heartAt(0.5, 1).opacity === 1, 'solid mid-rise');
-  const src = read('src/screens/LinePlay/group/CrewBadgeFx.tsx');
-  assert.match(src, /\{burst > 0 && <HeartsBurst key=\{burst\} t=\{hearts\} mine=\{mine\} \/>\}/, 'nothing mounted between bursts');
-  assert.equal((src.match(/<Canvas/g) || []).length, 1, 'one canvas for all three hearts');
-  assert.match(src, /setTimeout\(\(\) => setBurst\(0\), CREW_FX\.heartsMs \+ 80\)/);
+  // Reduce Motion or a new seat order mid-burst: same.
+  for (const change of [flags(false, 0, true), flags(false, 3)]) {
+    const h = harness(fx, 0);
+    h.q.update(2, flags());
+    h.clock.advance(ms * 0.5);
+    h.q.update(2, change);
+    h.clock.advance(ms);
+    assert.equal(h.mounted(), false, `no hearts stuck on screen after ${JSON.stringify(change)}`);
+  }
+  // The hearts' own last frame ends it early; the safety timer then does nothing more.
+  {
+    const h = harness(fx, 0);
+    h.q.update(1, flags());
+    h.clock.advance(ms * 0.99);
+    h.q.finish();
+    assert.equal(h.mounted(), false);
+    h.clock.advance(ms);
+    assert.deepEqual(h.log, ['start', 'end']);
+    assert.equal(h.clock.pending(), 0, 'no timer left behind');
+  }
+  // Leaving the screen mid-burst: nothing fires after dispose.
+  {
+    const h = harness(fx, 0);
+    h.q.update(1, flags());
+    h.clock.advance(10);
+    h.q.dispose();
+    assert.equal(h.clock.pending(), 0);
+  }
+  // The component wires it so: the timing callback finishes the burst, cleanup never cancels a started burst.
+  assert.match(src, /withTiming\(1, \{ duration: CREW_FX\.heartsMs, easing: Easing\.linear \}, ok => \{ if \(ok\) runOnJS\(endBurst\)\(\); \}\)/);
+  assert.match(src, /queue\.current\?\.update\(starsKey, \{ covered, reduced, order \}\);\n  \}, \[starsKey, reduced, covered, order\]\);/);
+  assert.match(src, /useEffect\(\(\) => \(\) => \{ queue\.current\?\.dispose\(\); cancelAnimation\(hearts\); cancelAnimation\(bob\); \}, \[hearts, bob\]\);/);
+  assert.match(src, /endTimer = io\.setTimeout\(finish, CREW_FX\.heartsMs \+ 80\)/, 'a safety timer the strip never clears');
 });
 
-test('wave 5 round 2: hearts earned behind the pass-the-phone card wait and play once the strip is back, badge by badge', () => {
-  const src = read('src/screens/LinePlay/group/CrewBadgeFx.tsx');
-  assert.match(src, /if \(covered\) return undefined;\n    const before = lastStars\.current;/, 'stars are not consumed while covered');
-  assert.match(src, /Math\.max\(0, order\) \* CREW_FX\.crewStaggerMs/);
+test('wave 5 round 2 (kept): stars earned behind the pass-the-phone card wait, then play badge by badge; the first value never plays', () => {
+  const fx = loadFx();
+  const step = fx.CREW_FX.crewStaggerMs;
+  const h = harness(fx, 5);
+  h.q.update(5, flags());
+  h.clock.advance(5000);
+  assert.deepEqual(h.log, [], 'the first value never celebrates');
+  h.q.update(6, flags(true, 2));
+  h.clock.advance(5000);
+  assert.deepEqual(h.log, [], 'nothing plays while the card covers the strip');
+  h.q.update(6, flags(false, 2));
+  h.clock.advance(2 * step - 1);
+  assert.deepEqual(h.log, [], 'the third badge waits its turn');
+  h.clock.advance(1);
+  assert.deepEqual(h.log, ['start']);
+  // Stars rising during a burst play right after it (never two canvases at once).
+  h.q.update(7, flags(false, 2));
+  h.clock.advance(fx.CREW_FX.heartsMs + 80);
+  assert.deepEqual(h.log, ['start', 'end']);
+  h.clock.advance(2 * step);
+  assert.deepEqual(h.log, ['start', 'end', 'start']);
+  // Reduce Motion: stars are counted but never play.
+  const r = harness(fx, 0);
+  r.q.update(1, flags(false, 0, true));
+  r.clock.advance(5000);
+  r.q.update(1, flags());
+  r.clock.advance(5000);
+  assert.deepEqual(r.log, []);
   const play = read('src/screens/LinePlay/group/useGroupPlay.tsx');
   assert.match(play, /<GroupStrip group=\{group\} compact=\{compact\} covered=\{!!mode\}/);
+});
+
+test('wave 5 round 3: 34 pt hearts in a halo around the badge, solid to the end, each shrinks to nothing with a white sparkle pop', () => {
+  const fx = loadFx();
+  assert.ok(fx.HEART_SIZE >= 34 && fx.HEART_SIZE <= 36, `heart size ${fx.HEART_SIZE}`);
+  const step = fx.CREW_FX.heartStep;
+  for (const lean of ['left', 'right']) {
+    for (let i = 0; i < 3; i += 1) {
+      let sawPop = false; let sawSpark = false;
+      for (let t = 0; t <= 1; t += 0.001) {
+        const h = fx.heartAt(t, i, lean);
+        if (h.scale > 0) assert.equal(h.opacity, 1, 'never see-through');
+        if (h.scale > 1.2) sawPop = true;
+        if (h.spark > 0.4 && h.scale < 0.05) sawSpark = true;
+      }
+      assert.ok(sawPop, `heart ${i} pops past full size`);
+      assert.ok(sawSpark, `heart ${i} ends in a sparkle where it was`);
+      assert.equal(fx.heartAt(1, i, lean).scale, 0, 'every heart is gone when the burst ends');
+    }
+  }
+  assert.ok(2 * step + 0.5 * fx.SPARK_END <= 1.0001, 'the last sparkle is gone inside the burst');
+  // They pop one after another (pop, pop, pop).
+  assert.ok(fx.heartAt(step * 0.5, 1).scale === 0 && fx.heartAt(step * 0.5, 0).scale > 0);
+  assert.match(src, /\{burst > 0 && <HeartsBurst key=\{burst\} t=\{hearts\} mine=\{mine\} lean=\{order === 0 \? 'right' : 'left'\} \/>\}\n    <Animated\.View style=\{badgeStyle\}>/,
+    'nothing mounted between bursts, and the hearts sit behind the badge');
+  assert.equal((src.match(/<Canvas/g) || []).length, 1, 'one canvas for all three hearts');
+});
+
+test('wave 5 round 3: no heart crosses words (the ride card above the strip, the strip line right of the badges)', () => {
+  const fx = loadFx();
+  // Measured on the real LinePlay round (iPhone 17 Pro): the ride card's lowest words end about 42 pt above a badge's
+  // centre, the strip line starts 22 pt right of the last badge's centre, and the first badge sits 36 pt from the
+  // screen's left edge (the next badge is 19 pt to its right, so the first badge's hearts may lean over it).
+  for (const lean of ['left', 'right']) {
+    let top = 0; let left = 0; let right = 0;
+    for (let t = 0; t <= 1; t += 0.0005) for (let i = 0; i < 3; i += 1) {
+      const h = fx.heartAt(t, i, lean);
+      if (h.scale <= 0) continue;
+      const half = (fx.HEART_SIZE / 2) * h.scale;
+      top = Math.min(top, h.y - half); left = Math.min(left, h.x - half); right = Math.max(right, h.x + half);
+    }
+    assert.ok(top >= -39, `${lean}: the halo stays under the ride card's words (${top.toFixed(1)})`);
+    assert.ok(left >= -38, `${lean}: on screen (${left.toFixed(1)})`);
+    if (lean === 'left') assert.ok(right <= 22, `the last badge's hearts stop before the strip line (${right.toFixed(1)})`);
+    else assert.ok(right <= 19 + 22, `the first badge's hearts stop before the strip line (${right.toFixed(1)})`);
+  }
 });
