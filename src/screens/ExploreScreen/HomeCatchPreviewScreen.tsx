@@ -87,6 +87,8 @@ const EXP = __DEV__ ? process.env.EXPO_PUBLIC_HH3_EXP ?? '' : '';
  */
 const CAPTURE = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';
 const CAPTURE_CATCHES: number[] = String(process.env.EXPO_PUBLIC_MOTION_CAPTURE_ORDER || '1,2,5,10,25').split(',').map(Number).filter((n: number) => n > 0);
+/** Capture only: ms between scripted catches (wow-sound w5r3's 15-minute memory sessions use 18000). */
+const CAPTURE_GAP_MS = Math.max(3000, Number(process.env.EXPO_PUBLIC_MOTION_CAPTURE_GAP_MS) || 6000);
 /** Map-chrome budget captures: 'still' (frozen map, resting chrome), 'still-bare' (same, chrome invisible), 'still-peek' (a find tapped). */
 const STILL = EXP.startsWith('still');
 const BARE = EXP === 'still-bare';
@@ -403,7 +405,7 @@ function HomeCatchPreview() {
       catchTraceBuffer.push(`[capture] ${Date.now()} catch ${n}`);
       const pretzel = items.find(entry => entry.rarity <= 1 && FIXTURES[items.indexOf(entry)]?.inRange);
       if (pretzel) tapFind(pretzel);
-    }, 9000 + i * 6000));
+    }, 9000 + i * CAPTURE_GAP_MS));
     return () => timers.forEach(clearTimeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
