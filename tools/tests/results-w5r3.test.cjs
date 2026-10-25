@@ -45,8 +45,15 @@ test('the Best Moment polaroid waits for the last star and YOU WIN!, eases down 
   // No overshoot spring that dips into the ribbon or the card.
   assert.match(duel, /polY\.value = withDelay\(polAt, withTiming\(0, \{ duration: 420, easing: Easing\.out\(Easing\.cubic\) \}\)\);/);
   assert.doesNotMatch(duel, /withSpring\(0, \{ damping: 10, stiffness: 220 \}\)/);
-  // Clear sky: the ribbon rises 36 pt over the card and slams to 1.25x.
-  assert.match(duel, /const POL_GAP = 64;/);
+  // Clear sky: the ribbon rises 36 pt over the card (it has settled when the polaroid drops).
+  assert.match(duel, /const POL_GAP = 48;/);
+  // It sizes itself to the sky between the score plate and the ribbon.
+  const scale = fnFrom(file, 'polaroidScale', 'const POL_GAP = 48, POL_H = 152, POL_TOP_RESERVE = 136;\n');
+  assert.equal(scale(null, 62), 1, 'before layout: full size');
+  assert.equal(scale(1000, 62), 1, 'lots of sky: full size');
+  assert.equal(scale(250, 62), 0.6, 'a tall card: never under 0.6');
+  assert.ok(Math.abs(scale(380, 62) - (380 - 48 - 198) / 152) < 1e-9);
+  assert.match(duel, /style=\{\{ width: POL_W \* polK, height: POL_H \* polK \}\}/);
   assert.match(duel, /model\.best && !polGone && cardH > 0 \?/);
 });
 
@@ -60,7 +67,7 @@ test('the Best Moment caption is a picture (a bolt and the big time), the senten
   assert.equal(time('on Q2'), null);
   assert.equal(spoken('0.4s on Q2'), 'Best moment: 0.4 seconds on question 2');
   assert.doesNotMatch(duel, />BEST MOMENT</);
-  assert.match(duel, /<GameIcon name="rush" size=\{30\} \/>/);
+  assert.match(duel, /<GameIcon name="rush" size=\{Math\.round\(30 \* polK\)\} \/>/);
   assert.match(duel, /accessibilityLabel=\{bestMomentSpoken\(model\.best\.label\)\}/);
 });
 

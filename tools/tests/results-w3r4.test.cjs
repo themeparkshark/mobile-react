@@ -29,7 +29,7 @@ test('the Best Moment polaroid waits for the badges and drops above the card, ne
     'react-native-reanimated': {}, '../art': { ART: {}, C: {} }, '../../../gamekit/results/ResultsRibbon': {},
     '../../../gamekit/results/ResultsCard': {}, '../../../gamekit/results/feelings': { feelingChips: (s) => s }, '../../../ui/GameIcon': {},
     '../../../gamekit/audio/GameAudio': { GameAudio: {} }, '../../../gamekit/Haptics': { playHaptic() {} },
-    'react/jsx-runtime': { jsx() {}, jsxs() {}, Fragment: 'F' },
+    'react/jsx-runtime': { jsx() {}, jsxs() {}, Fragment: 'F' }, 'react-native-safe-area-context': { initialWindowMetrics: null },
   });
   // No badges: two beats, as before.
   assert.equal(dr.polaroidAt(500, 0, false), 1000);

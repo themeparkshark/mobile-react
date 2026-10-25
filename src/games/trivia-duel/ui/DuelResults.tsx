@@ -8,11 +8,12 @@
  * on TPS, and REMATCH (pulses on the beat) / PASS TO CREW / CONTINUE.
  */
 import { openExternal } from '../../../services/external';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
+import { initialWindowMetrics } from 'react-native-safe-area-context';
 import { ART, C } from '../art';
 import type { FactCard } from '../store';
 import { ResultsRibbon } from '../../../gamekit/results/ResultsRibbon';
@@ -28,7 +29,23 @@ import GameIcon, { type GameIconName } from '../../../ui/GameIcon';
  * slams to 1.25x, so the gap keeps the polaroid (tilted -6 deg) in clear sky.
  */
 const POL_BOTTOM_PAD = 10;
-const POL_GAP = 64;
+const POL_GAP = 48;
+/** The polaroid art's full size (pt). */
+const POL_W = 200;
+const POL_H = 152;
+/** The score plate and the close button live this far under the safe top: the polaroid stays below them. */
+const POL_TOP_RESERVE = 136;
+
+/**
+ * How big the polaroid draws so it fits the sky between the score plate and
+ * the ribbon (1 = full size, never under 0.6). `cardTopY` is the card's top
+ * edge in window points (or null before layout: full size).
+ */
+export function polaroidScale(cardTopY: number | null, safeTop: number): number {
+  if (cardTopY == null) return 1;
+  const room = cardTopY - POL_GAP - (safeTop + POL_TOP_RESERVE);
+  return Math.max(0.6, Math.min(1, room / POL_H));
+}
 
 /** The shared results card blue (ResultsCard): one surface on every results card. */
 const CARD_BLUE = '#0768b9';
@@ -174,6 +191,11 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   const [polGone, setPolGone] = useState(!model.best || reducedMotion);
   // The polaroid drops above the card (over the stage), never over its badges.
   const [cardH, setCardH] = useState(0);
+  // Where the card's bottom sits in the window (the root has no transform), so
+  // the polaroid can size itself to the sky between the score plate and the ribbon.
+  const rootRef = useRef<View>(null);
+  const [rootBottomY, setRootBottomY] = useState<number | null>(null);
+  const polK = polaroidScale(rootBottomY == null || cardH <= 0 ? null : rootBottomY - POL_BOTTOM_PAD - cardH, initialWindowMetrics?.insets.top ?? 47);
   // A won duel always lights at least one star: a YOU WIN! over three empty
   // stars would read like a loss (duelStars gives every win 1 to 3).
   const stars = model.won && !model.ride ? Math.max(1, model.stars) : model.stars;
@@ -219,7 +241,9 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   const title = model.ride ? (model.ride.won ? 'RIDE COIN!' : 'GOOD TRY!')
     : model.practice ? (model.won ? 'PRACTICE WIN!' : 'GOOD PRACTICE!') : model.won ? 'YOU WIN!' : model.tie ? 'DEAD EVEN!' : 'GOOD GAME!';
   return (
-    <View style={[styles.root, { height }]} pointerEvents="box-none">
+    <View ref={rootRef} style={[styles.root, { height }]} pointerEvents="box-none" onLayout={() => {
+      rootRef.current?.measureInWindow((_x, y, _w, h) => { if (h > 0) setRootBottomY(Math.round(y + h)); });
+    }}>
       {/* The card hugs what it shows, anchored at the bottom like Sharky and
           Boss, so the stage acts above it (a fixed full height left an empty
           blue band under DONE on a loss). */}
@@ -313,11 +337,11 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
       {model.best && !polGone && cardH > 0 ? (
         <Animated.View style={[styles.polaroid, { bottom: POL_BOTTOM_PAD + cardH + POL_GAP }, polStyle]} pointerEvents="none"
           accessible accessibilityLabel={bestMomentSpoken(model.best.label)}>
-          <Image source={ART.polaroid} style={styles.polImg} resizeMode="contain" />
+          <Image source={ART.polaroid} style={{ width: POL_W * polK, height: POL_H * polK }} resizeMode="contain" />
           {/* A picture, not a sentence: a bolt and the big time (the rest is spoken). */}
-          <View style={styles.polCaption} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-            <GameIcon name="rush" size={30} />
-            {bestMomentTime(model.best.label) ? <Text style={styles.polTime}>{bestMomentTime(model.best.label)}</Text> : null}
+          <View style={[styles.polCaption, { bottom: 16 * polK }]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+            <GameIcon name="rush" size={Math.round(30 * polK)} />
+            {bestMomentTime(model.best.label) ? <Text style={[styles.polTime, { fontSize: Math.round(26 * polK) }]}>{bestMomentTime(model.best.label)}</Text> : null}
           </View>
         </Animated.View>
       ) : null}
@@ -633,7 +657,6 @@ const styles = StyleSheet.create({
   half: { width: '48.5%' },
   full: { width: '100%' },
   polaroid: { position: 'absolute', alignSelf: 'center', alignItems: 'center' },
-  polImg: { width: 200, height: 152 },
-  polCaption: { position: 'absolute', bottom: 16, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  polCaption: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 4 },
   polTime: { fontFamily: 'Shark', fontSize: 26, color: C.navy },
 });
