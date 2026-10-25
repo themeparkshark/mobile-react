@@ -111,3 +111,14 @@ test('PLAY AGAIN never shows the last run over the new count: the HUD stays back
   const sb = whack.slice(i, i + 900);
   assert.match(sb, /pace\.value = 0;/);
 });
+
+test('the capture can ask Whack for a new Finn (dev or a capture build only), without touching the real Finn book', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /const forceFinn = !!props\.captureNewFinn && \(__DEV__ \|\| process\.env\.EXPO_PUBLIC_PERF_CAPTURE === '1'\);/);
+  const i = whack.indexOf('if (forceFinn) {');
+  assert.ok(i > 0);
+  assert.doesNotMatch(whack.slice(i, i + 260), /AsyncStorage\.setItem/);
+  const cap = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
+  assert.match(cap, /label: 'WHACK, AUTOPLAY, NEW FINN'/);
+  assert.match(cap, /captureNewFinn=\{run\.newFinn\}/);
+});

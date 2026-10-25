@@ -115,6 +115,13 @@ export interface WhackASharkProps {
   raid?: WhackRaidConfig | null;
   net?: WhackNetAdapter | null;
   autoplay?: boolean;
+  /**
+   * Capture only (dev or a release-JS capture build, never a store build):
+   * this run unlocks its ride's costume Finn as if a golden was bonked and the
+   * book were empty, so the new-Finn moment can be checked on demand. The
+   * real Finn book is never read or written for it.
+   */
+  captureNewFinn?: boolean;
   /** Wave 2 (MiniGameTester only): Boss Run finales every 3rd Run. The Wave 1 build is Golden Rush only. */
   bossRuns?: boolean;
   onBurstBanked?: (b: BurstBanked) => void;
@@ -659,8 +666,13 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       ...(reason ? { reason } : {}),
     };
     let unlocked: FinnCard | null = null;
+    const forceFinn = !!props.captureNewFinn && (__DEV__ || process.env.EXPO_PUBLIC_PERF_CAPTURE === '1');
     const collect = (async () => {
       if (!rideKey) return;
+      if (forceFinn) {
+        unlocked = applyRunToBook({}, { rideId: rideKey, theme, format, goldens: Math.max(1, goldens), date: today, rank: null }).unlocked;
+        return;
+      }
       const book = (await readJson<CardBook>(CARDS_KEY)) ?? {};
       const applied = applyRunToBook(book, { rideId: rideKey, theme, format, goldens, date: today, rank: null });
       if (applied.unlocked) {
