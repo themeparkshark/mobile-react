@@ -497,3 +497,14 @@ test('wave 5: thinner Battery Saver look, one big tomorrow picture, a promise bu
   assert.match(freeze, /withDelay\(DURATION\.hitStop, withSpring\(1, SPRING\.land\)\)/);
   assert.match(freeze, /frostRing/);
 });
+
+test('the loops frame graph shows only in dev or a release-like perf capture flag store builds never set', () => {
+  const perf = read('src/components/retention/LoopPerf.tsx');
+  assert.match(perf, /export const LOOPS_PERF_CAPTURE = process\.env\.EXPO_PUBLIC_LOOPS_PERF === '1';/);
+  assert.match(perf, /return LOOPS_PERF_CAPTURE \|\| \(__DEV__ && /);
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /\{LOOPS_PERF_CAPTURE && !visible && <LoopPerf \/>\}/);
+  for (const f of ['eas.json', 'app.config.js']) {
+    if (fs.existsSync(path.join(root, f))) assert.doesNotMatch(read(f), /EXPO_PUBLIC_LOOPS_PERF/);
+  }
+});
