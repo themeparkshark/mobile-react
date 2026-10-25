@@ -15,7 +15,7 @@
  * scrim fades on the UI thread. When the tap asked for the arcade or a page, the parent keeps `released`
  * false until that result is on screen, so the 1 holds and no frame shows the game board live in between.
  */
-import { useCallback, useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withTiming,
   type SharedValue } from 'react-native-reanimated';
@@ -33,8 +33,8 @@ const RESET_DELAY_MS = 250;
 const PUNCH_SHARE = 0.4;
 /** The scrim's fade as it hands over to the game, the arcade or the page (UI thread, after the 1's full step). */
 const EXIT_FADE_MS = 140;
-/** Where the game comes back: 40% into the 1, about 200 ms before the 1 ends, so the 3, 2 and 1 each get one even beat. */
-const HANDOVER_AT = 2.4;
+/** Where the game comes back: 15% into the 1, about 290 ms before the 1 ends, so even a busy JS thread has it back in time and the 3, 2 and 1 each get one even beat. */
+const HANDOVER_AT = 2.15;
 /** The clock's end: the 1's step (to 3), then the fade (reduced motion: no fade, one frame). */
 const FADE_UNITS = EXIT_FADE_MS / STEP_MS;
 const END = 3 + FADE_UNITS;
@@ -58,12 +58,15 @@ function CountNumber({ value, index, clock, reducedMotion }: {
   return <Animated.Text style={[styles.number, index > 0 && styles.numberStacked, style]}>{value}</Animated.Text>;
 }
 
-export default function ResumeCountdown({ active, released, onDone, onHidden }: {
+function ResumeCountdown({ active, released, onDone, onHidden }: {
   active: boolean;
   /** The parent's result (the game, the arcade sheet, the page) is on screen: after the 1's step, fade. */
   released: boolean;
-  /** The game comes back (under the 1). */
-  onDone: () => void;
+  /**
+   * The game comes back (under the 1). Returning true (a plain resume, nothing to hand over to) lets go at once:
+   * the fade starts on the UI thread as the 1's step ends, with no wait for a React render.
+   */
+  onDone: () => boolean | void;
   /** The fade has finished: the parent unmounts it. */
   onHidden: () => void;
 }) {
@@ -82,11 +85,18 @@ export default function ResumeCountdown({ active, released, onDone, onHidden }: 
 
   const frameRef = useRef<{ setActive: (on: boolean) => void } | null>(null);
 
+  const release = useCallback(() => {
+    if (releasedRef.current) return;
+    releasedRef.current = true;
+    releasedSv.value = true;
+    sleeping.value = false;
+    frameRef.current?.setActive(true);
+  }, [releasedSv, sleeping]);
   const finish = useCallback(() => {
     if (finished.current) return;
     finished.current = true;
-    doneRef.current();
-  }, []);
+    if (doneRef.current() === true) release();
+  }, [release]);
   /** A tap skips to the end of the 1; the fade still waits for the parent's result. */
   const skip = useCallback(() => {
     clock.value = Math.max(clock.value, 3);
@@ -137,13 +147,8 @@ export default function ResumeCountdown({ active, released, onDone, onHidden }: 
   }, [active]);
 
   useEffect(() => {
-    if (!active || !released || releasedRef.current) return;
-    releasedRef.current = true;
-    releasedSv.value = true;
-    sleeping.value = false;
-    frame.setActive(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, released]);
+    if (active && released) release();
+  }, [active, released, release]);
 
   // The scrim fades on the UI thread over the last part of the clock (after the 1's full step).
   const hostStyle = useAnimatedStyle(() => ({
@@ -165,6 +170,12 @@ export default function ResumeCountdown({ active, released, onDone, onHidden }: 
     </Pressable>
   </Animated.View>;
 }
+
+/**
+ * Re-renders only when it starts, is released or hides. A render mid-fade would hand the view the
+ * JS thread's stale copy of the fade (useAnimatedStyle's render-time value) and flash the 1 back.
+ */
+export default memo(ResumeCountdown, (a, b) => a.active === b.active && a.released === b.released);
 
 const styles = StyleSheet.create({
   scrimHost: { ...StyleSheet.absoluteFillObject, zIndex: 40 },

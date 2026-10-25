@@ -268,7 +268,7 @@ export default function LinePlayScreen() {
     holder.__linePlayPreviewLocked = setPreviewLocked;
     return () => { delete holder.__linePlayPreviewLocked; };
   }, []);
-  const [resumeHandoff, setResumeHandoff] = useState<'arcade' | 'page' | 'done' | null>(null);
+  const [resumeHandoff, setResumeHandoff] = useState<'arcade' | 'page' | 'done' | 'plain' | null>(null);
   const [toast, setToast] = useState<QueueToastMessage | null>(null);
   const toastKey = useRef(0);
   const showToastRef = useRef<((message: Omit<QueueToastMessage, 'key'>) => void) | null>(null);
@@ -900,8 +900,9 @@ export default function LinePlayScreen() {
   // 'done' lets the countdown fade once the 1 has had its full step; it unmounts when the fade ends.
   useEffect(() => {
     if (resumeHandoff == null) return undefined;
-    if (resumeHandoff === 'done') {
-      const unstick = setTimeout(() => setResumeHandoff(current => current === 'done' ? null : current), RESUME_DONE_MAX_MS);
+    if (resumeHandoff === 'done' || resumeHandoff === 'plain') {
+      const from = resumeHandoff;
+      const unstick = setTimeout(() => setResumeHandoff(current => current === from ? null : current), RESUME_DONE_MAX_MS);
       return () => clearTimeout(unstick);
     }
     let frameId: number | null = null;
@@ -1601,7 +1602,9 @@ export default function LinePlayScreen() {
       {/* Toasts land inside the wait card between its top row and Details: never over the ride name, ARCADE, pause or PLAY. */}
       <QueueToast message={toast} onDone={() => setToast(null)} top={toastSpot?.top} slim={toastSpot?.slim} />
 
-      {/* The game comes back under the 1; the 1 gets its full step, like the 3 and the 2, then fades. */}
+      {/* The game comes back under the 1; the 1 gets its full step, like the 3 and the 2, then fades.
+          A plain resume (true) lets go at once on the UI thread, with no wait for a React render; 'plain' keeps
+          it mounted without changing `released`, so no render lands mid-fade. */}
       <ResumeCountdown active={resuming || resumeHandoff != null} onDone={() => {
         setResuming(false);
         session.resume();
@@ -1610,7 +1613,8 @@ export default function LinePlayScreen() {
         // The 1 stays up until the arcade starts coming in, or the page is in place under it (no scroll to watch).
         if (arcadeAfterResume.current) { arcadeAfterResume.current = false; setArcadeOpen(true); setResumeHandoff('arcade'); }
         else if (page != null) { jumpToPage(page, false); setResumeHandoff('page'); }
-        else setResumeHandoff('done');
+        else { setResumeHandoff('plain'); return true; }
+        return false;
       }} released={resumeHandoff === 'done'} onHidden={() => setResumeHandoff(null)} />
 
       {/* End by hand: one branded sheet (header End, back, or a footer tab). */}

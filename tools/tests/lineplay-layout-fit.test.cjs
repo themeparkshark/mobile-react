@@ -739,9 +739,14 @@ test('after the 3 2 1, the arcade or the page follows the 1 with no live-board g
   const screen = read(SCREEN);
   // The countdown stays up (still on the 1) while it hands over.
   assert.match(screen, /<ResumeCountdown active=\{resuming \|\| resumeHandoff != null\}/);
-  assert.match(screen, /const \[resumeHandoff, setResumeHandoff\] = useState<'arcade' \| 'page' \| 'done' \| null>\(null\);/);
+  assert.match(screen, /const \[resumeHandoff, setResumeHandoff\] = useState<'arcade' \| 'page' \| 'done' \| 'plain' \| null>\(null\);/);
   assert.match(screen, /released=\{resumeHandoff === 'done'\}/, 'the fade waits for the result');
-  assert.match(screen, /else setResumeHandoff\('done'\);\n\s+\}\} released=\{resumeHandoff === 'done'\} onHidden=\{\(\) => setResumeHandoff\(null\)\} \/>/, 'a plain resume lets go at once; it unmounts when its fade ends');
+  assert.match(screen, /else \{ setResumeHandoff\('plain'\); return true; \}\n\s+return false;\n\s+\}\} released=\{resumeHandoff === 'done'\} onHidden=\{\(\) => setResumeHandoff\(null\)\} \/>/,
+    'a plain resume lets go at once on the UI thread (no render changes `released`); it unmounts when its fade ends');
+  const cd = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
+  assert.match(cd, /if \(doneRef\.current\(\) === true\) release\(\);/);
+  assert.match(cd, /export default memo\(ResumeCountdown, \(a, b\) => a\.active === b\.active && a\.released === b\.released\);/,
+    'no render mid-fade (a render would hand the view a stale opacity and flash the 1 back)');
   // The arcade: the countdown lets go on the frame the sheet starts coming in (both sheets report it).
   assert.match(screen, /const ARCADE_PRESENT_FRAMES = 3;/);
   assert.match(screen, /const onArcadeShowing = useCallback\(\(\) => \{\n\s+let frames = ARCADE_PRESENT_FRAMES;/);
@@ -757,7 +762,7 @@ test('after the 3 2 1, the arcade or the page follows the 1 with no live-board g
   // Never stuck: a fallback lets go after RESUME_HANDOFF_MAX_MS.
   assert.match(screen, /const RESUME_HANDOFF_MAX_MS = 1500;/);
   assert.match(screen, /const fallback = setTimeout\(\(\) => letGo\(resumeHandoff\), RESUME_HANDOFF_MAX_MS\);/);
-  assert.match(screen, /const unstick = setTimeout\(\(\) => setResumeHandoff\(current => current === 'done' \? null : current\), RESUME_DONE_MAX_MS\);/,
+  assert.match(screen, /const unstick = setTimeout\(\(\) => setResumeHandoff\(current => current === from \? null : current\), RESUME_DONE_MAX_MS\);/,
     'and the fade can never stick either');
   // The countdown: its frame clock sleeps while it holds on the 1 (a hold costs no frame work), and it fades out on the UI thread.
   const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
