@@ -238,7 +238,7 @@ export const BURST_RINGS_MAX = 3;
  * Wave 5 round 3, the staircase (each tier at least 1.12x the last, and each adds something new):
  * 1st catch of a session 1.05 (Alex's star, bloom, two rings, centre stage), 5th 1.3 (eight big stars with gold
  * trails fly into the counter, which punches once per star), 10th 1.47 (the beam, the spike fan and a
- * counter-turning ring), 25th 1.7 (all of it and confetti). The first catch ever is the hero (1.36, centre stage, a
+ * counter-turning ring), 25th 1.7 (all of it and confetti). The first catch ever is the hero (1.44, centre stage, a
  * screen-wide bloom). Ordinary repeats stay a touch smaller, rotate three looks and three fidgets, and step their
  * chime up, so the 40th catch still varies. A golden find (a real server flag, never chance) gets the beam.
  */
@@ -246,7 +246,7 @@ export function burstVariant(catchNumber: number, options: { readonly firstEver?
   const n = Math.max(1, Math.floor(catchNumber));
   const base = { beam: false, milestone: false, treat: false, grand: false, fan: false, counterRing: false, homeStars: false,
     hero: false, centre: false, fidget: 0 as 0 | 1 | 2, pitch: 0, golden: false };
-  if (options.firstEver) return { ...base, kind: 'hero', inkScale: 1.36, rings: 3, stars: 8, hero: true, centre: true };
+  if (options.firstEver) return { ...base, kind: 'hero', inkScale: 1.44, rings: 3, stars: 8, hero: true, centre: true };
   if (n % 25 === 0) return { ...base, kind: 'grand', inkScale: 1.7, rings: 3, stars: 8, beam: true, milestone: true, grand: true, fan: true, counterRing: true, centre: true };
   if (n % 10 === 0) return { ...base, kind: 'beam', inkScale: 1.47, rings: 3, stars: 8, beam: true, milestone: true, fan: true, counterRing: true, centre: true };
   if (n % 5 === 0) return { ...base, kind: 'stars', inkScale: 1.3, rings: 2, stars: 8, treat: true, homeStars: true };
