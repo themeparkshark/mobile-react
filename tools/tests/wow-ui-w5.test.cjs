@@ -158,3 +158,9 @@ test('rolling number: no re-layout when a roll lands (it re-committed a stale wh
   assert.match(landed, /format\(r\.to\)\.length < format\(Math\.max\(r\.from, r\.to\)\)\.length\) \{ roll\.current = null; setSettled/);
   assert.match(src, /const WheelFace = memo\(function WheelFace/, 'the rolling face never re-renders with its sizing');
 });
+
+test('rolling number: the strip moves by top (shadow tree), so a React commit elsewhere never shows an older digit', () => {
+  const src = read('src/ui/RollingNumber.tsx');
+  assert.match(src, /const strip = useAnimatedStyle\(\(\) => \(\{ top: -wheelPos\(v\.value, place\) \* cell/);
+  assert.doesNotMatch(src, /translateY: -wheelPos/);
+});

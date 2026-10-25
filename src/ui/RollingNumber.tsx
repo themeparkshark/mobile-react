@@ -364,7 +364,10 @@ const WheelFace = memo(function WheelFace({ place, v, lineHeight, fontSize, text
   const clipH = Math.min(lineHeight, Math.ceil(fontSize * ROLL_LOOK.clipEm));
   const cell = lineHeight * (1 + ROLL_LOOK.cellGap);
   const inset = (lineHeight - clipH) / 2;
-  const strip = useAnimatedStyle(() => ({ transform: [{ translateY: -wheelPos(v.value, place) * cell - (cell - lineHeight) / 2 - inset }] }));
+  // The strip moves by `top` (a layout prop), not a transform: Reanimated writes layout props into the shadow
+  // tree, so a React commit elsewhere (a coin flight ending, a toast) can never re-apply an older strip
+  // position for a frame (a transform update could, and showed 1,104 after 1,105).
+  const strip = useAnimatedStyle(() => ({ top: -wheelPos(v.value, place) * cell - (cell - lineHeight) / 2 - inset }));
   const wheel = useAnimatedStyle(() => {
     const p = wheelPos(v.value, place);
     // The digit stretches a little while it slides (a whole digit holds unstretched), like a smear on a spinning wheel.
@@ -375,7 +378,7 @@ const WheelFace = memo(function WheelFace({ place, v, lineHeight, fontSize, text
   const glowText = useMemo(() => [textStyle, { color: flashColor }], [textStyle, flashColor]);
   return (
     <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: inset, height: clipH, overflow: 'hidden' }, wheel]}>
-      <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0 }, strip]}>
+      <Animated.View style={[{ position: 'absolute', left: 0, right: 0 }, strip]}>
         <DigitStrip cell={cell} lineHeight={lineHeight} textStyle={textStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} />
         {flash && <Animated.View style={[StyleSheet.absoluteFill, glowStyle]}>
           <DigitStrip cell={cell} lineHeight={lineHeight} textStyle={glowText} maxFontSizeMultiplier={maxFontSizeMultiplier} />
