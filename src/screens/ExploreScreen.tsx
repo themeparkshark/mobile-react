@@ -147,6 +147,12 @@ const WINDOW_WIDTH = Dimensions.get('window').width;
 /** Energy and Swords sit this far above the avatar, so the Energy pill always clears PLAY RIDE's top. */
 const ENERGY_GAP = energyGap(WINDOW_WIDTH);
 /**
+ * The two loading covers' styles, made once: the covers never re-render while they lift (a re-render
+ * resets an animated view to its mount-time opacity for a frame), so their props must not change.
+ */
+const SKY_COVER_STYLE = { top: 70 + (Constants.statusBarHeight ?? 0), zIndex: 45 } as const;
+const LAUNCH_COVER_STYLE = { zIndex: 100 } as const;
+/**
  * Finn's "Tap PLAY RIDE!" card: one line and a picture, on the left just above the help button,
  * ending before the Energy pill on the right, with a pointer down at PLAY RIDE. It never covers the
  * player's shark, the chest or the right column. On a short phone (iPhone SE) Finn is smaller.
@@ -1761,7 +1767,7 @@ function ExploreScreen() {
       )}
       {/* A later loading sky (walking into a park) sits above every map button, card and tip (under
           the header and footer), so a kid sees one loading bar finish, then the map and its buttons in one fade. */}
-      <MapLaunchCover variant="sky" blockTouches style={{ top: 70 + (Constants.statusBarHeight ?? 0), zIndex: 45 }} />
+      <MapLaunchCover variant="sky" blockTouches style={SKY_COVER_STYLE} />
 
       {/* Community Center Modal */}
       <CommunityCenterModal
@@ -1788,7 +1794,7 @@ function ExploreScreen() {
     {/* The app's first cover: the launch scene over the whole screen, header and footer included,
         so the splash and its one bar carry on until the park map has drawn, then the whole game
         (map, header, footer, buttons) arrives in one fade with no label swapping underneath. */}
-    <MapLaunchCover variant="launch" armOnMount blockTouches style={{ zIndex: 100 }} />
+    <MapLaunchCover variant="launch" armOnMount blockTouches style={LAUNCH_COVER_STYLE} />
     </>
   );
 }

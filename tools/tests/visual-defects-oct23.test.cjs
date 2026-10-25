@@ -544,8 +544,10 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   const explore = read('src/screens/ExploreScreen.tsx');
   // A later sky sits above every HUD widget (zIndex up to 40) and under the header; the app's first
   // cover is the launch scene over the whole screen (header and footer too). Taps on the hidden HUD are swallowed.
-  assert.match(explore, /<MapLaunchCover variant="sky" blockTouches style=\{\{ top: 70 \+ \(Constants\.statusBarHeight \?\? 0\), zIndex: 45 \}\} \/>/);
-  assert.match(explore, /<\/Wrapper>\s*\{\/\*[^]*?\*\/\}\s*<MapLaunchCover variant="launch" armOnMount blockTouches style=\{\{ zIndex: 100 \}\} \/>\s*<\/>/);
+  assert.match(explore, /<MapLaunchCover variant="sky" blockTouches style=\{SKY_COVER_STYLE\} \/>/);
+  assert.match(explore, /const SKY_COVER_STYLE = \{ top: 70 \+ \(Constants\.statusBarHeight \?\? 0\), zIndex: 45 \} as const;/);
+  assert.match(explore, /<\/Wrapper>\s*\{\/\*[^]*?\*\/\}\s*<MapLaunchCover variant="launch" armOnMount blockTouches style=\{LAUNCH_COVER_STYLE\} \/>\s*<\/>/);
+  assert.match(explore, /const LAUNCH_COVER_STYLE = \{ zIndex: 100 \} as const;/);
   assert.match(store, /const launch = firstCover;/);
   // The HUD row is whole from the first map frame; a later lead change cross-fades (MapStatusStack).
   assert.match(explore, /<MapStatusStack entries=\{statusEntries\} \/>/);
@@ -1185,4 +1187,22 @@ test('PLAY RIDE stand-in: the art\'s own layers and colors, cross-faded out over
   assert.match(button, /const \[standIn, setStandIn\] = useState\(!pillArtSeen\);/);
   assert.match(button, /Animated\.timing\(standInOpacity, \{ toValue: 0, duration: STAND_IN_FADE_MS, useNativeDriver: true \}\)/);
   assert.match(button, /if \(reducedMotion\) \{ setStandIn\(false\); return undefined; \}/);
+});
+
+test('launch cover: its animated view never re-renders while up, so no frame snaps back to the full splash', () => {
+  const cover = read('src/components/map/MapLaunchCover.tsx');
+  assert.match(cover, /return useMemo\(\(\) => \(\s*<Animated\.View testID="map-launch-cover"/);
+  assert.match(cover, /\), \[launch, blockTouches, style\]\);/);
+  // The cover is memoized, so the screen's re-renders never reach it (its style objects are made once).
+  assert.match(cover, /export default memo\(MapLaunchCover\);/);
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.doesNotMatch(explore, /<MapLaunchCover[^>]*style=\{\{/);
+});
+
+test('launch bar: the map cover has room to creep visibly (handoff well under the 70s steps), never parked for seconds', () => {
+  const k = loadTs('src/constants/launchHandoff.ts');
+  assert.equal(k.LAUNCH_HANDOFF_SHARE, 0.56);
+  // Over the longest launch wait (9 s) the bar still moves at least 2 points a second toward the first step.
+  assert.ok((k.COVER_STEPS.armed - k.LAUNCH_HANDOFF_SHARE) / (k.COVER_LAUNCH_MAX_MS / 1000) >= 0.0199);
+  assert.ok(k.SPLASH_LONG_SHARE < k.LAUNCH_HANDOFF_SHARE, 'the bar only ever moves forward at the hand-off');
 });

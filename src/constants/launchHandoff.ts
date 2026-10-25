@@ -2,8 +2,11 @@
  * One loading bar from launch to the map. The splash fills its bar to this share,
  * then the map's sky cover shows the same bar and fills the rest while the park
  * tiles draw, so a kid sees one bar finish, never a second, frozen loading screen.
+ * The cover's steps (COVER_STEPS, in the 70s) sit well above it, so the bar visibly creeps while
+ * the map loads: from 0.70 it had only a few points to cover in up to 9 s and read as parked for
+ * about 3 s in a release launch.
  */
-export const LAUNCH_HANDOFF_SHARE = 0.7;
+export const LAUNCH_HANDOFF_SHARE = 0.56;
 /**
  * The Splash route (waiting on sign-in and the game's words) shows the same bar from its first
  * frame and creeps it to this share, so the launch shows progress from its first second. The

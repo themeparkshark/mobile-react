@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useState } from 'react';
+import { memo, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   Easing, cancelAnimation, runOnJS, runOnUI, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withSequence, withTiming,
@@ -118,13 +118,18 @@ function CoverSky({ plan, style, blockTouches, launch }: {
     opacity: opacity.value,
     transform: [{ scale: 1.06 - 0.06 * opacity.value }],
   }));
-  return (
+  // The animated view never re-renders while the cover is up: a re-render hands the view its
+  // mount-time style again (opacity 1) for a frame before the UI thread catches up, which flashed the
+  // whole splash back over a half-lifted map (seen in a release launch). New plans only drive the
+  // shared values above, so the element stays the same and React leaves the view alone.
+  return useMemo(() => (
     <Animated.View testID="map-launch-cover" pointerEvents={blockTouches ? 'auto' : 'none'}
       accessibilityLabel="Loading the map" accessibilityRole="progressbar"
       style={[StyleSheet.absoluteFill, launch ? styles.launch : styles.sky, style, lift]}>
       {launch ? <LaunchScene /> : <MapCoverSky fill={fill} />}
     </Animated.View>
-  );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [launch, blockTouches, style]);
 }
 
 const styles = StyleSheet.create({
