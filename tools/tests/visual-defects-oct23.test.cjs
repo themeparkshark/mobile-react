@@ -1464,3 +1464,13 @@ test('wave 5 round 3: a park-first new player still gets the daily chest and Dai
   assert.equal(q.firstVisitChestWaits({ firstVisit: false, catchesThisVisit: 0, huntStartedAt: null, now: 0 }), false);
   assert.equal(q.firstVisitChestWaits({ firstVisit: true, catchesThisVisit: 0, huntStartedAt: null, now: 0 }), true, 'home first hunt still waits');
 });
+
+test('wave 5 round 3: once the launch cover starts its deadline fade, a map screen mounting then never brings the splash back', () => {
+  const cover = read('src/components/map/mapCover.ts');
+  assert.match(cover, /export function coverFadeStarted\(tok: number\) \{\s*if \(tok !== plan\.token \|\| !plan\.up \|\| plan\.lifting\) return;\s*plan = \{ \.\.\.plan, lifting: true \};/);
+  // armMapCover and beginMapCover only continue a cover that is up and not lifting.
+  assert.match(cover, /export function armMapCover[^]*?if \(plan\.up && !plan\.lifting\) return;/);
+  assert.match(cover, /const continuing = plan\.up && !plan\.lifting;/);
+  const launch = read('src/components/map/MapLaunchCover.tsx');
+  assert.match(launch, /setTimeout\(\(\) => coverFadeStarted\(tok\), Math\.max\(0, plan\.deadline - Date\.now\(\)\)\)/);
+});

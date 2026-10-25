@@ -1,10 +1,10 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   Easing, cancelAnimation, runOnJS, runOnUI, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withSequence, withTiming,
 } from 'react-native-reanimated';
 import MapCoverSky, { MAP_COVER_SKY } from './MapCoverSky';
-import { armMapCover, coverLifted, noteCoverMounted, useCoverPlan, type CoverPlan } from './mapCover';
+import { armMapCover, coverFadeStarted, coverLifted, noteCoverMounted, useCoverPlan, type CoverPlan } from './mapCover';
 import {
   COVER_FADE_MS, COVER_FINISH_MS, COVER_SMOOTH_FRAMES, COVER_SMOOTH_WAIT_MS, LAUNCH_HANDOFF_SHARE,
 } from '../../constants/launchHandoff';
@@ -121,6 +121,14 @@ function CoverSky({ plan, style, blockTouches, launch }: {
         (finished) => { 'worklet'; if (finished) runOnJS(faded)(liftToken.value); }));
     })(plan.deadline, plan.share, plan.ceiling, plan.lifting);
   // One set of animations per plan.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan.version]);
+  // The store learns when the deadline fade begins (the UI thread runs it on its own clock).
+  useEffect(() => {
+    if (plan.lifting) return undefined;
+    const tok = plan.token;
+    const timer = setTimeout(() => coverFadeStarted(tok), Math.max(0, plan.deadline - Date.now()));
+    return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan.version]);
   const lift = useAnimatedStyle(() => ({

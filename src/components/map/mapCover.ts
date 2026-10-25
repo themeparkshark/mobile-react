@@ -91,6 +91,17 @@ function publish(next: Omit<CoverPlan, 'version'>, notify = true) {
   if (notify) listeners.forEach(listener => listener(plan));
 }
 
+/**
+ * The cover with this token began its deadline fade on the UI thread (no map reported drawn in
+ * time). From here it is lifting: a map screen that mounts now (a remount right after the lift)
+ * starts a new, later cover instead of picking up this half-gone launch cover again, which flashed
+ * the whole splash back over the map (seen once in ten release launches under heavy load).
+ */
+export function coverFadeStarted(tok: number) {
+  if (tok !== plan.token || !plan.up || plan.lifting) return;
+  plan = { ...plan, lifting: true };
+}
+
 /** The cover with this token finished fading (called by MapLaunchCover from the UI thread). */
 export function coverLifted(tok: number) {
   if (tok !== plan.token || !plan.up) return;
