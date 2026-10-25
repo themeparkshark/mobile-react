@@ -3,7 +3,8 @@
  * more for a crew. Nothing waits on it: the verified wait is already counting
  * underneath, and the line never pauses for it.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
+import { AuthContext } from '../../../context/AuthProvider';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
@@ -25,6 +26,9 @@ const DOORS: ReadonlyArray<{ kind: GroupKind; icon: GameIconName; title: string;
   { kind: 'family', icon: 'star', title: 'Family with kids', body: 'Easier rounds for kids' },
   { kind: 'friends', icon: 'crown', title: 'Friends', body: 'Up to 6, pass the phone' },
 ];
+
+/** The opener's line. A guest's wait earns no Parts yet, so it never says the wait is counting. */
+export const WHOS_IN_LINE_BODY = { player: 'Your wait is already counting. Pick your crew.', guest: 'Play while you wait. Pick your crew.' } as const;
 
 const KIND_TITLE: Record<GroupKind, string> = {
   solo: 'Just me', couple: 'The two of us', family: 'Family crew', friends: 'Friend crew',
@@ -51,6 +55,8 @@ export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing,
   const reducedMotion = useReducedGameMotion();
   // After a game dive the sheet springs up through the opening water (never mounted under it).
   const diveSettled = useDiveSettled();
+  const { player, isReady } = useContext(AuthContext);
+  const guest = isReady && !player;
   const [kind, setKind] = useState<GroupKind | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
 
@@ -101,7 +107,7 @@ export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing,
                 <View style={styles.headerCopy}>
                   <Text style={styles.kicker}>LINEPLAY</Text>
                   <Text style={styles.title} accessibilityRole="header">Who&apos;s in line?</Text>
-                  <Text style={styles.body}>Your wait is already counting. Pick your crew.</Text>
+                  <Text style={styles.body}>{guest ? WHOS_IN_LINE_BODY.guest : WHOS_IN_LINE_BODY.player}</Text>
                 </View>
                 <Image source={CREW_ART} style={styles.crewArt} contentFit="contain"
                   accessibilityLabel="A crew of sharks waiting together" />

@@ -1,7 +1,7 @@
 import { BlurView } from 'expo-blur';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { ReactNode, useContext, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { gameAlert, SharkLoader } from '../ui';
@@ -9,8 +9,20 @@ import { signInErrorCopy } from './signInErrors';
 
 export default function SignInButtons({
   children = null,
+  top = null,
+  caption,
+  width = 220,
+  plain = false,
 }: {
   readonly children?: ReactNode;
+  /** Shown above the Apple button (the Login screen puts Play now first). */
+  readonly top?: ReactNode;
+  /** A short line right above the Apple button, such as 'I already have a shark'. */
+  readonly caption?: string;
+  /** Apple button width in points (at least 220). */
+  readonly width?: number;
+  /** No frosted panel: for a card that already has its own background. */
+  readonly plain?: boolean;
 }) {
   const { login } = useContext(AuthContext);
   const { labels, warnings } = useCrumbs();
@@ -19,7 +31,7 @@ export default function SignInButtons({
 
   return (
     <BlurView
-      intensity={40}
+      intensity={plain ? 0 : 40}
       tint="light"
       style={{
         marginLeft: 'auto',
@@ -30,7 +42,7 @@ export default function SignInButtons({
     >
       <View
         pointerEvents={isSigningIn ? 'none' : 'auto'}
-        style={{
+        style={plain ? { alignItems: 'center', paddingVertical: 4 } : {
           backgroundColor: 'rgba(255, 255, 255, 0.75)',
           padding: 24,
           borderRadius: 20,
@@ -39,11 +51,14 @@ export default function SignInButtons({
           borderColor: 'rgba(255,255,255,0.3)',
         }}
       >
+        {top}
+        {caption ? <Text style={{ fontFamily: 'Knockout', fontSize: 16, color: '#05346e', textAlign: 'center',
+          marginTop: top ? 16 : 0, marginBottom: 6 }}>{caption}</Text> : null}
         <AppleAuthentication.AppleAuthenticationButton
           buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
           buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
           cornerRadius={12}
-          style={{ width: 220, height: 48 }}
+          style={{ width: Math.max(220, width), height: 48 }}
           onPress={async () => {
             if (signingIn.current) return;
             signingIn.current = true;

@@ -1,6 +1,7 @@
 import { TrailProvider } from './src/services/trail/TrailProvider';
 import { Image, ImageBackground, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import ErrorBoundary from 'react-native-error-boundary';
 import Root from './src/Root';
@@ -90,12 +91,18 @@ import RideLogOutboxSync from './src/services/RideLogOutboxSync';
 import RemintNoticeModal from './src/components/RemintNoticeModal';
 import { PowerProvider } from './src/power';
 
+// Polish-lane QA only (src/dev/laneNav.ts): inlined to false, so it never ships.
+if (process.env.EXPO_PUBLIC_LANE_NAV === '1') require('./src/dev/laneNav');
+
 export default function App() {
   if (__DEV__ && process.env.EXPO_PUBLIC_ERROR_FALLBACK_PREVIEW === '1') {
     return <ErrorFallback error={new Error('preview')} resetError={() => undefined} />;
   }
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+    {/* One safe-area root above every provider: anything a provider mounts (Finn's warm-up
+        game, toasts, sheets) can read the notch insets. Navigation reuses this one. */}
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
     {/* @ts-ignore */}
     <ErrorBoundary FallbackComponent={ErrorFallback} onError={reportBoundaryError}>
       <PowerProvider>
@@ -138,6 +145,7 @@ export default function App() {
       </AuthProvider>
       </PowerProvider>
     </ErrorBoundary>
+    </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

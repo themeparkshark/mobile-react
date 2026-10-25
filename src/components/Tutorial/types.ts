@@ -1,5 +1,5 @@
 /**
- * Tutorial System — Type Definitions
+ * Tutorial System: Type Definitions
  * 
  * The tutorial is a multi-step interactive walkthrough that guides
  * new users through the app after they complete onboarding.
@@ -54,6 +54,10 @@ export interface TutorialStep {
   sequence: TutorialSequence;
   /** Optional illustrated guide heading. */
   title?: string;
+  /** Finn is sniffing out the first find: no button and no tap-to-skip; the line changes on its own. */
+  waitsForFind?: boolean;
+  /** A small picture under Finn's line so a kid who cannot read yet still gets it. */
+  picture?: 'walk';
   /** A free hands-on round; never grants collection or currency rewards. */
   activity?: 'memory_warmup';
   /** Teacher shark's speech text */
@@ -62,6 +66,8 @@ export interface TutorialStep {
   subtitle?: string;
   /** Where to position the teacher shark */
   sharkPosition: SharkPosition;
+  /** Finn stands beside his bubble (bottom-center): keeps the middle of the map clear for a waiting find. */
+  beside?: boolean;
   /** Shark's mood/expression */
   sharkMood: SharkMood;
   /** Spotlight target area (null = no spotlight, full overlay) */
@@ -97,8 +103,10 @@ export interface TutorialContextType {
   currentIndex: number;
   /** Total steps in the active sequence */
   totalSteps: number;
-  /** Start a tutorial sequence */
-  startTutorial: (sequence: TutorialSequence, options?: { inPark?: boolean }) => void;
+  /** Start a tutorial sequence. findReady: at home, the first find has already landed next to the player. */
+  startTutorial: (sequence: TutorialSequence, options?: { inPark?: boolean; findReady?: boolean; looking?: boolean }) => void;
+  /** The first home find landed while Finn is still saying hi: his line switches to "Grab it!". */
+  findLanded?: () => void;
   /** Advance to next step */
   nextStep: () => void;
   /** Skip the current tutorial sequence */

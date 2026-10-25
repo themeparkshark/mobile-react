@@ -2,7 +2,7 @@
  * Capture a flex card and hand it to the OS share sheet. The OS sheet is the
  * only way out: no in-app posting, no account linking (kid safety).
  */
-import { shareExternal, shareFileExternal } from '../services/external';
+import { SHARE_TIMED_OUT, shareExternal, shareFileExternal } from '../services/external';
 import * as Sharing from 'expo-sharing';
 import type { RefObject } from 'react';
 import { PixelRatio, Platform, Share, type View } from 'react-native';
@@ -27,8 +27,10 @@ export async function captureFlex(ref: RefObject<View | null>, format: FlexForma
 }
 
 export interface ShareOutcome {
-  /** true shared, false closed without sharing, null unknown (Android). */
+  /** true shared, false closed without sharing, null unknown (Android, or the sheet never answered). */
   readonly shared: boolean | null;
+  /** The sheet never answered in time (it may still be up): neither a share nor a cancel. */
+  readonly timedOut?: boolean;
   /** iOS destination activity type, e.g. com.burbn.instagram.shareextension. */
   readonly activity: string | null;
 }
@@ -52,14 +54,17 @@ export function activityLabel(activity: string | null | undefined): string | nul
   return 'other';
 }
 
-export async function openShareSheet(uri: string): Promise<ShareOutcome> {
+/** `name` titles the file in the share sheet ("Golden Churro" becomes Golden-Churro.jpg), never a UUID. */
+export async function openShareSheet(uri: string, name?: string): Promise<ShareOutcome> {
   if (Platform.OS === 'ios') {
-    const result = await shareExternal({ url: uri });
+    const result = await shareExternal({ url: uri }, undefined, name);
     if (!result) return { shared: false, activity: null };
+    if (result === SHARE_TIMED_OUT) return { shared: null, activity: null, timedOut: true };
     if (result.action === Share.sharedAction) return { shared: true, activity: activityLabel(result.activityType) };
     return { shared: false, activity: null };
   }
   if (!await Sharing.isAvailableAsync()) throw new Error('share sheet unavailable');
-  if (!(await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share' }))) return { shared: false, activity: null };
-  return { shared: null, activity: null };
+  const outcome = await shareFileExternal(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share' }, name);
+  if (outcome === 'declined') return { shared: false, activity: null };
+  return { shared: null, activity: null, timedOut: outcome === 'timeout' };
 }

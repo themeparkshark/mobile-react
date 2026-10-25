@@ -11,6 +11,7 @@ import SparkleBurst from '../ui/SparkleBurst';
 import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 import * as RootNavigation from '../RootNavigation';
 import { NotificationContext } from '../context/NotificationProvider';
+import { SoundEffectContext, SoundEffectContextType } from '../context/SoundEffectProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
@@ -71,6 +72,7 @@ export default function Wrapper({
     : require('../../assets/images/original-bottom-bar.png');
   const { checkPermission, hasPermission } = usePermissions();
   const { notificationCount } = useContext(NotificationContext);
+  const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   // A catch moment owns the whole screen: the tab bar slides away on the UI thread (no re-render).
   const barSlide = useAnimatedStyle(() => ({ transform: [{ translateY: 160 * catchShown.value }] }));
   const reducedMotion = useUiReducedMotion();
@@ -86,6 +88,28 @@ export default function Wrapper({
     const size = interpolate(Math.abs(m.glowX.value - COMPASS_INDEX), [0, 1], [1.7, 1], 'clamp');
     return { opacity: m.glowOpacity.value, transform: [{ translateX: x - GLOW / 2 }, { scale: size }] };
   });
+
+  const goTo = (item: { screen: string; permission?: PermissionEnums }, key: number) => {
+    if (isCatchShown()) return;
+    if (!previewMode) {
+      const pick = playFooterTap(footerIndex(RootNavigation.navigationRef.getCurrentRoute()?.name),
+        key, reducedMotion);
+      // The rare compass pick: a bigger answer in the hand on its burst (the press already ticked).
+      if (pick.rare) setTimeout(() => queueHaptic('hitMedium'), RARE_HAPTIC_AT);
+    }
+    // Already here: the screen scrolls back to its top (News).
+    if (!onNavigate && RootNavigation.navigationRef.getCurrentRoute()?.name === item.screen
+      && emitTabReselect(item.screen)) return;
+    if (item.permission !== undefined) {
+      if (checkPermission(item.permission)) {
+        if (onNavigate) onNavigate(item.screen);
+        else RootNavigation.navigate(item.screen);
+      }
+    } else {
+      if (onNavigate) onNavigate(item.screen);
+      else RootNavigation.navigate(item.screen);
+    }
+  };
 
   const items = [
     {
@@ -189,27 +213,7 @@ export default function Wrapper({
                           : true
                       }
                       pressHaptic="tickSelection"
-                      onPress={() => {
-                        if (isCatchShown()) return;
-                        if (!previewMode) {
-                          const pick = playFooterTap(footerIndex(RootNavigation.navigationRef.getCurrentRoute()?.name),
-                            key, reducedMotion);
-                          // The rare compass pick: a bigger answer in the hand on its burst (the press already ticked).
-                          if (pick.rare) setTimeout(() => queueHaptic('hitMedium'), RARE_HAPTIC_AT);
-                        }
-                        // Already here: the screen scrolls back to its top (News).
-                        if (!onNavigate && RootNavigation.navigationRef.getCurrentRoute()?.name === item.screen
-                          && emitTabReselect(item.screen)) return;
-                        if (item.permission !== undefined) {
-                          if (checkPermission(item.permission)) {
-                            if (onNavigate) onNavigate(item.screen);
-                            else RootNavigation.navigate(item.screen);
-                          }
-                        } else {
-                          if (onNavigate) onNavigate(item.screen);
-                          else RootNavigation.navigate(item.screen);
-                        }
-                      }}
+                      onPress={() => goTo(item, key)}
                       onPressSound={item.sound}
                     >
                       <FooterIcon index={key}>
@@ -228,7 +232,12 @@ export default function Wrapper({
                       </FooterIcon>
                     </Button>
                     {/* Capped: past 1.2x the five labels run into each other ("NEWSSTANDINGS") and over the page. */}
+                    {/* The word under the icon is part of the button too: a kid who taps
+                        "PROFILE" instead of the picture still goes there. */}
                     <FooterLabel index={key}><Text
+                      onPress={() => { playSound(item.sound); goTo(item, key); }}
+                      suppressHighlighting
+                      accessibilityRole="button"
                       maxFontSizeMultiplier={1.2}
                       numberOfLines={1}
                       style={{

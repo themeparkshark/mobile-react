@@ -201,7 +201,7 @@ export default function LinePlayScreen() {
   }, [diveReady]);
   useEffect(() => () => { if (readyCap.current) clearTimeout(readyCap.current); }, []);
   const { latestLocationSampleRef } = useContext(LocationStatusContext);
-  const { player, refreshPlayer } = useContext(AuthContext);
+  const { player, refreshPlayer, isReady: authReady } = useContext(AuthContext);
   const prediction = snapshot.prediction;
   const completedActivityIds = useMemo(() => new Set(snapshot.completedActivityIds), [snapshot.completedActivityIds]);
   const [projectOpen, setProjectOpen] = useState(false);
@@ -373,13 +373,17 @@ export default function LinePlayScreen() {
     const previewPlayerId = __DEV__ && process.env.EXPO_PUBLIC_LINEPLAY_FLOW_PREVIEW === '1'
       ? 99999999 : undefined;
     const playerId = player?.id ?? previewPlayerId;
-    if (!ride || !playerId) return;
-    if (startedRef.current?.session === session && startedRef.current.playerId === playerId &&
+    // Wait for sign-in to settle, so a returning player is never started as a guest.
+    if (!ride || (playerId == null && !authReady)) return;
+    // A signed-out guest still plays: a local session (games, story, recap) with no Parts.
+    const sessionPlayer = playerId ?? 0;
+    if (startedRef.current?.session === session && startedRef.current.playerId === sessionPlayer &&
         startedRef.current.rideId === ride.rideId) return;
-    startedRef.current = { session, playerId, rideId: ride.rideId };
+    startedRef.current = { session, playerId: sessionPlayer, rideId: ride.rideId };
     const freshSample = latestLocationSampleRef.current;
-    void session.start(ride, isRecentQueueSample(freshSample) ? freshSample : undefined, playerId);
-  }, [ride, session, player?.id]);
+    void session.start(ride, isRecentQueueSample(freshSample) ? freshSample : undefined, playerId,
+      { guest: playerId == null });
+  }, [ride, session, player?.id, authReady]);
 
   // The existing queue feed supplies an entrance-board signal. Poll only
   // while this screen is foregrounded; it never estimates the guest's place.

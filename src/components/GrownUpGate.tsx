@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameIconName } from '../ui/iconNames';
 import RealMoneyMark from './RealMoneyMark';
-import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
 import { useModalLayer } from '../ui/modalLayers';
@@ -58,8 +58,51 @@ let vipMember = false;
 const REST_KEY = 'grown-up-gate:rest-until';
 let gateRestUntil = 0;
 type GateRequest = { resolve: (ok: boolean) => void; seed: number; reason?: GateReason | null; devOffer?: GateReason };
-let showGate: ((r: GateRequest | null) => void) | null = null;
+type ShowGate = (r: GateRequest) => void;
+type GateHost = { show: ShowGate; hint: (text: string) => void };
+/**
+ * Every mounted gate host, oldest first. The root host sits at the bottom; a slot
+ * inside a sheet or game <Modal> (GrownUpGateSlot) goes on top while it is up.
+ * iOS presents a <Modal> from the view controller that holds it, so only a host
+ * inside the top-most modal can show above it: askGrownUp always uses the top one.
+ */
+let hosts: GateHost[] = [];
+let showGate: ShowGate | null = null;
+function syncShowGate() { showGate = hosts.length ? hosts[hosts.length - 1].show : null; }
 let open: Promise<boolean> | null = null;
+/** iOS shows nothing new while a modal is still sliding away: the answer waits for the gate to be gone. */
+export const GATE_DISMISS_FALLBACK_MS = 2000;
+/**
+ * A gate that iOS refused to present (another modal was in the way) closes as a no, never hangs.
+ * Long enough that a slow or hot phone still gets its gate (presenting can take 3 s or more there).
+ */
+export const GATE_SHOW_WATCHDOG_MS = 5000;
+/** How long the kind "tap again" hint stays up after the gate could not show. */
+export const GATE_HINT_MS = 2200;
+/**
+ * The hint a kid sees when the gate could not show, so a tap never does nothing: the
+ * retry arrow and the button to tap again, never a lock (that reads as "not allowed").
+ * Exported for tests.
+ */
+export function gateRetryHint(reason: GateReason | null | undefined): string {
+  return reason?.kind === 'share' ? 'Tap Share again' : 'Tap it again';
+}
+
+/**
+ * The hint goes to the top-most host at the moment it is needed, the one inside the
+ * front modal, so it draws where the kid is looking, never under an open sheet.
+ */
+function showRetryHint(text: string) {
+  hosts[hosts.length - 1]?.hint(text);
+}
+
+/**
+ * Dev only (captures and QA): `globalThis.__gateRefuse = true` makes every gate act as if
+ * iOS refused to present it, so the watchdog and the retry hint can be seen on a device.
+ */
+function devRefuse(): boolean {
+  return __DEV__ && (globalThis as { __gateRefuse?: boolean }).__gateRefuse === true;
+}
 
 /** The 30 s rest survives a force-quit. */
 async function loadRest() {
@@ -280,24 +323,110 @@ function MoreForGrownUps() {
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'] as const;
 const MAX_FONT = 1.3;
 
-/** The gate's dialog. Mounted once, at the root. */
-export function GrownUpGateHost() {
+/**
+ * The gate inside a sheet's or game's own <Modal>, so it shows above that modal
+ * (the game results Share, a ride card sheet). Put it last inside the <Modal>.
+ */
+export function GrownUpGateSlot() {
+  return <GrownUpGateHost nested />;
+}
+
+/**
+ * The gate's dialog. Mounted once at the root, plus a GrownUpGateSlot inside any
+ * modal that can share or leave the game. The answer is given only after the
+ * gate has fully gone, so the share sheet or browser that follows can present.
+ */
+export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean } = {}) {
   const [req, setReq] = useState<GateRequest | null>(null);
   const [typed, setTyped] = useState('');
   // After a right answer: the offer card (price, trial, renewal terms) for the grown-up only.
   const [details, setDetails] = useState<{ head: string; lines: string[] } | null>(null);
   const [more, setMore] = useState(false);
-  useEffect(() => {
-    showGate = r => { setTyped(''); setDetails(r?.devOffer ? gateDetails(r.devOffer) : null); setMore(false); setReq(r); };
-    return () => { showGate = null; };
+  // The answer while the gate fades out; null while it is up.
+  const [closing, setClosing] = useState<boolean | null>(null);
+  // The gate could not show (iOS refused it): a short "Tap Share again" instead of a silent no.
+  const [hint, setHint] = useState<string | null>(null);
+  const reqRef = useRef<GateRequest | null>(null);
+  const answerRef = useRef<boolean | null>(null);
+  const shownRef = useRef(false);
+  const finish = useCallback(() => {
+    const done = reqRef.current;
+    if (!done) return;
+    reqRef.current = null;
+    const ok = answerRef.current === true;
+    answerRef.current = null;
+    setReq(null); setDetails(null); setClosing(null);
+    done.resolve(ok);
   }, []);
-  // Waits behind any open sheet instead of stacking a second <Modal> (ui/modalLayers.ts).
-  const front = useModalLayer(!!req, 'wait');
-  if (!req || !front) return null;
+  const close = useCallback((ok: boolean) => {
+    if (!reqRef.current || answerRef.current !== null) return;
+    answerRef.current = ok;
+    // Only iOS refuses to present while a modal is leaving (and only iOS reports onDismiss).
+    if (Platform.OS !== 'ios') { finish(); return; }
+    setClosing(ok);
+  }, [finish]);
+  useEffect(() => {
+    const host: GateHost = {
+      hint: text => setHint(text),
+      show: (r: GateRequest) => {
+        reqRef.current?.resolve(false);
+        reqRef.current = r; answerRef.current = null; shownRef.current = false;
+        setTyped(''); setDetails(r.devOffer ? gateDetails(r.devOffer) : null); setMore(false); setClosing(null); setReq(r);
+      },
+    };
+    hosts = nested ? [...hosts, host] : [host, ...hosts];
+    syncShowGate();
+    return () => {
+      hosts = hosts.filter(h => h !== host);
+      syncShowGate();
+      // The modal holding it went away: the ask ends (a yes given during the fade still counts),
+      // so no button waits forever and an answered yes is never lost.
+      const left = reqRef.current;
+      const ok = answerRef.current === true;
+      reqRef.current = null;
+      answerRef.current = null;
+      left?.resolve(ok);
+    };
+  }, [nested]);
+  // The root gate waits behind any open sheet instead of stacking a second <Modal> (ui/modalLayers.ts).
+  // A slot is already inside the top modal, so it shows at once.
+  const layerFront = useModalLayer(!!req && !nested, 'wait');
+  const front = nested ? !!req : layerFront;
+  const presenting = !!req && front && closing === null;
+  useEffect(() => {
+    if (!presenting) return undefined;
+    const t = setTimeout(() => {
+      if (shownRef.current || !reqRef.current || answerRef.current !== null) return;
+      // It never showed, so there is no fade to wait for: a no at once, so the next tap asks fresh.
+      showRetryHint(gateRetryHint(reqRef.current.reason));
+      answerRef.current = false;
+      finish();
+    }, GATE_SHOW_WATCHDOG_MS);
+    return () => clearTimeout(t);
+  }, [presenting, req, finish]);
+  useEffect(() => {
+    if (closing === null) return undefined;
+    const t = setTimeout(finish, GATE_DISMISS_FALLBACK_MS);
+    return () => clearTimeout(t);
+  }, [closing, finish]);
+  useEffect(() => {
+    if (!hint) return undefined;
+    const t = setTimeout(() => setHint(null), GATE_HINT_MS);
+    return () => clearTimeout(t);
+  }, [hint]);
+  // Not a <Modal>: it draws inside whatever holds this host, so it shows even where the gate could not.
+  const hintPill = hint ? (
+    <View style={styles.hintWrap} pointerEvents="none">
+      <View style={styles.hint} accessible accessibilityLiveRegion="polite" accessibilityLabel={hint}>
+        <GameIcon name="retry" size={22} />
+        <Text maxFontSizeMultiplier={MAX_FONT} style={styles.hintText}>{hint}</Text>
+      </View>
+    </View>
+  ) : null;
+  if (!req || !front) return hintPill;
   const resting = req.seed < 0;
   const q = resting ? null : grownUpQuestion(req.seed);
   const why = resting ? null : gateReasonLines(req.reason);
-  const close = (ok: boolean) => { req.resolve(ok); setReq(null); setDetails(null); };
   const press = (k: typeof KEYS[number]) => {
     if (k === 'del') { setTyped(t => t.slice(0, -1)); return; }
     if (k === 'ok') {
@@ -309,7 +438,9 @@ export function GrownUpGateHost() {
     setTyped(t => (t.length < 3 ? t + k : t));
   };
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent>
+    <>
+    <Modal visible={closing === null && !devRefuse()} transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent
+      onShow={() => { shownRef.current = true; }} onDismiss={finish}>
       <View style={styles.scrim}>
         {details ? (
           <View style={styles.card} accessibilityViewIsModal>
@@ -387,6 +518,8 @@ export function GrownUpGateHost() {
         )}
       </View>
     </Modal>
+    {hintPill}
+    </>
   );
 }
 
@@ -424,6 +557,10 @@ const styles = StyleSheet.create({
   keyDelText: { fontFamily: undefined, fontSize: 26 },
   cancel: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
   cancelText: { fontFamily: FONT.display, fontSize: 17, color: GATE_COLORS.inkSoft },
+  hintWrap: { position: 'absolute', left: 0, right: 0, bottom: 110, alignItems: 'center' },
+  hint: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 18,
+    backgroundColor: GATE_COLORS.panel, borderWidth: 3, borderColor: GATE_COLORS.border },
+  hintText: { fontFamily: FONT.display, fontSize: 18, color: GATE_COLORS.ink },
 });
 
 // Load the saved rest and miss count as soon as the app starts (best effort).

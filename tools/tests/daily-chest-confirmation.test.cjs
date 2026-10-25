@@ -67,6 +67,7 @@ function chest({ reconciled = null, reduced = false } = {}) {
       if (name === '../ui/GoldBurst') return { GoldBurst: 'GoldBurst' };
       if (name === '../gamekit/fx/CountUpText') return { CountUpText: 'CountUpText' };
       if (name === '../ui/motionEasing') return { ...require('./helpers/ts-module.cjs').loadTs('src/ui/motion.ts'), EASE: {} };
+      if (name === './TapHint') return { default: 'TapHint' };
       if (name === '../hooks/useReducedGameMotion') return { default: () => reduced };
       if (name === '../gamekit/SFX') return { playSfx: name => sounds.push(name) };
       if (name === '../api/endpoints/daily-gifts/update') return { default: () => { const request = pending(); updates.push(request); return request.promise; } };

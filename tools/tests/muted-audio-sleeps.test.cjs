@@ -7,12 +7,12 @@ const path = require('node:path');
 
 const read = (p) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf8');
 
-test('GameAudio.preload returns before init when sound effects are off', () => {
+test('GameAudio.preload loads nothing without an engine (sound off)', () => {
   const src = read('src/gamekit/audio/GameAudio.ts');
   const body = src.slice(src.indexOf('async preload(names?: string[])'));
-  const guard = body.indexOf('if (!this.sfxEnabled) return;');
   const init = body.indexOf('await this.init();');
-  assert.ok(guard > 0 && init > 0 && guard < init, 'the sfx guard comes before init in preload');
+  const guard = body.indexOf('if (!this.backend) return false;');
+  assert.ok(init > 0 && guard > init && guard < body.indexOf('const list'), 'preload stops when init left the engine off');
 });
 
 test('SFX.play returns before init when sound effects are off', () => {
@@ -28,29 +28,24 @@ test('play() still loads lazily, so turning sound back on works without a preloa
   assert.match(src, /Lazy: load now, play when ready/);
 });
 
-test('GameAudio.init leaves the hardware asleep with sound effects and music both off (not cached)', () => {
+test('GameAudio.init leaves the hardware asleep while sound is off or settings are unknown (not cached)', () => {
   const src = read('src/gamekit/audio/GameAudio.ts');
   const body = src.slice(src.indexOf("init(choice: BackendChoice = 'auto')"));
   const cached = body.indexOf('if (this.initPromise) return this.initPromise;');
-  const guard = body.indexOf('if (!this.sfxEnabled && !this.musicEnabled) return Promise.resolve();');
+  const guard = body.indexOf('if (!this.wantsAudio()) return Promise.resolve();');
   const assign = body.indexOf('this.initPromise = (async');
   assert.ok(cached >= 0 && guard > cached && assign > guard, 'guard sits after the cache check and before the init promise is stored');
+  assert.match(src, /return !this\.settingsPending && \(this\.sfxEnabled \|\| this\.musicEnabled\);/);
 });
 
 test('loadKey never dereferences a missing backend', () => {
   const src = read('src/gamekit/audio/GameAudio.ts');
   assert.doesNotMatch(src, /this\.backend!\.load/);
-  assert.match(src, /if \(!backend\) \{ this\.loading\.delete\(key\); return false; \}/);
+  assert.match(src, /if \(!this\.backend\) \{ this\.loading\.delete\(key\); return false; \}/);
 });
 
-test('the app music setting reaches the studio engine', () => {
+test('the app music and sound settings reach the studio engine', () => {
   const src = read('src/context/SoundEffectProvider.tsx');
-  assert.match(src, /GameAudio\.setMusicEnabled\(isReady && !!player\?\.enabled_music\)/);
-  assert.match(src, /SFX\.setEnabled\(isReady && !!player\?\.enabled_sound_effects\)/);
-});
-
-test('sound starts off until the player setting is known', () => {
-  const src = read('src/gamekit/audio/GameAudio.ts');
-  assert.match(src, /private sfxEnabled = false;/);
-  assert.match(src, /private musicEnabled = false;/);
+  assert.match(src, /SFX\.setMusicEnabled\(musicAllowed\)/);
+  assert.match(src, /SFX\.setEnabled\(allowed\)/);
 });
