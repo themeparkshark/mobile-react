@@ -19,7 +19,7 @@ import { enablePush } from '../../services/push';
 import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
 import {
-  CHECK, PRIZE_FLIGHT, lidDelay, STREAK_MILESTONES, WELCOME_FX, dailyChain, daysAway, flameMomentFor, flightDoneMs, flightPlan,
+  CHECK, LOOP_DIM_LEVEL, PRIZE_FLIGHT, exitDimPlan, lidDelay, STREAK_MILESTONES, WELCOME_FX, dailyChain, daysAway, flameMomentFor, flightDoneMs, flightPlan,
   flightTarget, isRareChest, isRepeatChest, mayAskAfterChain, tomorrowPrize, welcomeCards, type FlameMoment, type WelcomeCard,
 } from '../../services/retention/loopMotion';
 import { DURATION, SPRING } from '../../ui/motion';
@@ -72,6 +72,8 @@ export const ENTER_QUIET_MS = 460;
 export const NEXT_OVERLAP_MS = 380;
 /** ...but never sooner than this after the prizes lift off (the eye follows them to the HUD first). */
 export const NEXT_MIN_MS = 420;
+/** The next chain card counts taps this long after it starts to grow in (its settle spring is mostly done). */
+export const B_TAPS_AFTER_MS = 360;
 /** The chain's next card mounts (hidden) this long after the chest's answer, once its prizes have landed. */
 const PREMOUNT_MS = 2400;
 const COACH_KEY = 'tps.retention.coach.v1';
@@ -79,6 +81,20 @@ const COACH_KEY = 'tps.retention.coach.v1';
 const FLAME_SEEN_KEY = 'tps.retention.flameSeen.v1';
 /** This phone has shown the "come back tomorrow" card (per player): after that it shows only before gear or a milestone. */
 const TOMORROW_SEEN_KEY = 'tps.retention.tomorrowSeen.v1';
+/** The navy dim behind every loop card (the HUD and map recede). */
+const LOOP_DIM = LOOP_DIM_LEVEL;
+/**
+ * The dim as a card leaves (exitDimPlan): it lifts so the kid sees the prizes land in the HUD, and when a next chain
+ * card is booked (nextAt, epoch ms) it comes back with that card on the same mark. Never gated on reading a shared
+ * value back from the UI thread.
+ */
+function dimForExit(nextAt: number) {
+  const p = exitDimPlan(nextAt, Date.now(), DURATION.exit);
+  const lift = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
+  if (p.backAt === null) return lift;
+  const back = withTiming(p.end, { duration: DURATION.enter, easing: EASE.out });
+  return p.lift ? withSequence(lift, withDelayUntil(p.backAt, back)) : back;
+}
 /** How many Daily 3 chests this phone has opened (per player): after three, the chest plays its shorter repeat version. */
 const CHEST_OPENS_KEY = 'tps.retention.chestOpens.v1';
 /** When this phone last opened the map for this player (for the welcome back). */
@@ -496,7 +512,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
    * HUD counter in plain sight (coins first, then tickets, then energy), bumping it on each landing. 300 ms after
    * the last landing the next card starts (for the Daily 3 chest: the big flame at 3, 7, 30, 100 and the tomorrow
    * card the first time, or before gear or a milestone). A normal day ends right here: one tap after the chest.
-   * The balance is read at once so the counters roll while the icons land; nothing ever waits on it.
+   * The HUD counters step up as the icons land (counterTicks); the balance is read back once the moment is over.
    */
   const finishReveal = (paid: PaidRewards | null, src: 'daily' | 'weekly' | 'level', state: DailyThreeState | null, moment: FlameMoment | undefined,
     origins: readonly PrizeOrigin[] = []) => {
@@ -514,48 +530,47 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     // The next card mounts while the prizes are still flying and enters on the UI thread the moment they have landed
     // (an absolute mark shared with the flight), so a busy JS thread never leaves the kid on a still map between cards.
     const t0 = Date.now() + 60;
-    setView({ k: 'flying', legs });
-    setLegs(legs);
-    setLegsAt(t0);
     const doneAt = t0 + (reducedMotion ? 420 : flightDoneMs(plan));
-    if (legsTimer.current) clearTimeout(legsTimer.current);
-    legsTimer.current = setTimeout(() => setLegs(null), Math.max(0, doneAt - Date.now()) + 200);
-    void Promise.resolve(refreshPlayer?.()).catch(() => undefined);
+    // The balance is read once the moment is over (the HUD counters already step up as each prize lands), so its
+    // render never lands in the middle of the flight or the next card's entrance.
+    playerReadDue.current = true;
     // The next card launches out of the Daily 3 button (where the flame lives), so the eye goes there with it.
     launchFrom.current = null;
     buttonBox.current?.measureInWindow((x, y, w, h) => {
       if (Number.isFinite(x) && w > 0) launchFrom.current = { x: x + w / 2 - width / 2, y: y + h / 2 - height / 2 };
     });
-    // The next card is already mounted, hidden, in the second host: it grows out of the Daily 3 button the frame the
-    // last prize lands (UI thread), and JS only has to say which card is up once the chest card has gone.
+    // The next card is already mounted, hidden, in the second host: it grows out of the Daily 3 button while the last
+    // prizes land (UI thread). Everything React needs to know is said in this ONE render (the flight and which card
+    // is up), so nothing renders again until the kid taps: each render costs the main thread a whole-tree pass, and
+    // one landing mid-handoff froze the card (and made the simulator replay an old frame of the chest card).
     const pre = preNextRef.current;
     if (src === 'daily' && pre && !reducedMotion) {
       chainRef.current = preChainRef.current.slice(1);
       // One continuous moment, no still map between cards: the next card grows out of the Daily 3 button while the
       // last prizes are still landing (NEXT_OVERLAP_MS before the flight ends, never sooner than NEXT_MIN_MS), on an
       // absolute UI-thread mark shared with the flight.
-      const nextAt = t0 + Math.max(NEXT_MIN_MS, (reducedMotion ? 420 : flightDoneMs(plan)) - NEXT_OVERLAP_MS);
+      const nextAt = t0 + Math.max(NEXT_MIN_MS, flightDoneMs(plan) - NEXT_OVERLAP_MS);
+      // Read by the exit below (same render): the dim comes back with the next card, on the same mark.
+      nextAtRef.current = nextAt;
       enterBOnFlight.value = 0;
       outB.value = 0;
       enteredB.value = nextAt;
       cardB.value = withDelayUntil(nextAt, withSpring(1, SPRING.settle));
-      dim.value = withDelayUntil(nextAt, withTiming(0.55, { duration: DURATION.enter, easing: EASE.out }));
       launchB.value = launchFrom.current ?? { x: 0, y: 0 };
       buttonBox.current?.measureInWindow((x, y, w, h) => {
         if (Number.isFinite(x) && w > 0) launchB.value = { x: x + w / 2 - width / 2, y: y + h / 2 - height / 2 };
       });
       if (!legs.length) flightLanded.value = Date.now() + PRIZE_FLIGHT.exitMs;
-      // If the last landing never reports (a cut-short flight), the card still comes in.
-      const fallbackAt = Math.max(0, doneAt - Date.now()) + 700;
-      chainTimer.current = setTimeout(() => {
-        chainTimer.current = null;
-        if (!mounted.current) return;
-        if (enteredB.value >= NOT_YET / 2) flightLanded.value = Date.now();
-        setView(pre.step === 'flame' && flameRef.current ? { k: 'flame', moment: flameRef.current, slot: 'B' } : { k: 'tomorrow', slot: 'B' });
-        if (pre.step === 'tomorrow') { tomorrowSeen.current = true; void AsyncStorage.setItem(tomorrowKey, '1').catch(() => undefined); }
-      }, Math.min(fallbackAt, PRIZE_FLIGHT.exitMs + 80));
+      setView(pre.step === 'flame' && flameRef.current ? { k: 'flame', moment: flameRef.current, slot: 'B' } : { k: 'tomorrow', slot: 'B' });
+      setLegs(legs);
+      setLegsAt(t0);
+      if (pre.step === 'tomorrow') { tomorrowSeen.current = true; void AsyncStorage.setItem(tomorrowKey, '1').catch(() => undefined); }
       return;
     }
+    nextAtRef.current = 0;
+    setView({ k: 'flying', legs });
+    setLegs(legs);
+    setLegsAt(t0);
     const next = async () => {
       chainTimer.current = null;
       if (src !== 'daily') void refresh(true);
@@ -631,8 +646,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   /** Prizes flying home from their rows (kept apart from the card, so the next card can mount while they fly). */
   const [legs, setLegs] = useState<readonly FlightSpec[] | null>(null);
   const [legsAt, setLegsAt] = useState<number | undefined>(undefined);
-  const legsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (legsTimer.current) clearTimeout(legsTimer.current); }, []);
+  /** When the next chain card enters (epoch ms, 0 when none is booked): the dim comes back on this mark. */
+  const nextAtRef = useRef(0);
+  /** A chest paid out: the balance is read once the moment is over (never mid-flight or mid-entrance). */
+  const playerReadDue = useRef(false);
 
   /** A claim whose answer was lost: read back what the server paid for that exact chest. */
   const recoverPaid = async (src: 'daily' | 'weekly' | 'level', level_: number, claimDate: string | null | undefined, timeoutMs = 6000):
@@ -901,7 +918,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
         const at = typeof enterMark === 'number' ? Math.max(enterMark, Date.now()) : Date.now();
         enteredAt.value = at;
         cardT.value = reducedMotion ? withTiming(1, { duration: DURATION.quick }) : withDelayUntil(at, withSpring(1, SPRING.settle));
-        dim.value = withDelayUntil(at, withTiming(0.55, { duration: DURATION.enter, easing: EASE.out }));
+        dim.value = withDelayUntil(at, withTiming(LOOP_DIM, { duration: DURATION.enter, easing: EASE.out }));
       }
       return;
     }
@@ -911,11 +928,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       // (the eye follows the prizes to the HUD), then the map comes back into view.
       cardUp.current = false;
       out.value = withTiming(1, { duration: reducedMotion ? DURATION.quick : PRIZE_FLIGHT.exitMs, easing: EASE.in });
-      // The dim lifts for the prize flight; when the next chain card is already booked, it comes back with that card.
-      const nextAt = enteredB.value;
-      dim.value = nextAt < NOT_YET / 2 && nextAt > Date.now()
-        ? withSequence(withTiming(0, { duration: DURATION.exit, easing: EASE.in }), withDelayUntil(nextAt, withTiming(0.55, { duration: DURATION.enter, easing: EASE.out })))
-        : withTiming(0, { duration: DURATION.exit, easing: EASE.in });
+      // The dim lifts for the prize flight; when the next chain card is booked it comes back with that card, on the
+      // same absolute mark (a JS number set in the same render, never a shared value read back across threads). This is
+      // the one and only dim write for the handoff, so nothing later can leave the next card on a bright map.
+      dim.value = dimForExit(nextAtRef.current);
     }
     if (!view && wasUp.current) {
       // Keep the modal up through the exit, then let it go (one render to close, none to open).
@@ -941,7 +957,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     enteredB.value = at;
     outB.value = 0;
     cardB.value = withDelayUntil(at, withSpring(1, SPRING.settle));
-    dim.value = withDelayUntil(at, withTiming(0.55, { duration: DURATION.enter, easing: EASE.out }));
+    dim.value = withDelayUntil(at, withTiming(LOOP_DIM, { duration: DURATION.enter, easing: EASE.out }));
   });
   // The second host's card leaves when its moment is done (faster than it came); the dim goes if nothing follows.
   const slotB = (view?.k === 'flame' || view?.k === 'tomorrow') && view.slot === 'B';
@@ -950,6 +966,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     if (slotB) { wasSlotB.current = true; return; }
     if (!wasSlotB.current) return;
     wasSlotB.current = false;
+    nextAtRef.current = 0;
     outB.value = withTiming(1, { duration: reducedMotion ? DURATION.quick : PRIZE_FLIGHT.exitMs, easing: EASE.in });
     if (!view) dim.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
     const t = setTimeout(() => setPreNext(null), PRIZE_FLIGHT.exitMs + 80);
@@ -971,7 +988,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     enterOnRing.value = 0;
     enteredAt.value = v;
     cardT.value = withSpring(1, SPRING.settle);
-    dim.value = withTiming(0.55, { duration: DURATION.enter, easing: EASE.out });
+    dim.value = withTiming(LOOP_DIM, { duration: DURATION.enter, easing: EASE.out });
   });
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
   const dimLayer = useMemo(() => [StyleSheet.absoluteFill, stageStyles.dim, dimStyle], [dimStyle]);
@@ -1163,6 +1180,17 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const shownContent = showing ? content : lastCard.current?.content ?? null;
   if (!view && !present && !lingering) lastCard.current = null;
   backdropRef.current = () => { if (!revealing && (showing || slotB)) close(); };
+  /**
+   * The next card takes taps from AWESOME on (no render to switch them on), so a tap on it counts only once it has
+   * really grown in: a quick second tap on AWESOME never skips a card the kid has not seen yet.
+   */
+  const bIsIn = () => nextAtRef.current === 0 || Date.now() >= nextAtRef.current + B_TAPS_AFTER_MS;
+  // The balance read after a chest waits until the moment is over (the counters already stepped up as prizes landed).
+  useEffect(() => {
+    if (!playerReadDue.current || (view && view.k !== 'sheet' && view.k !== 'push')) return;
+    playerReadDue.current = false;
+    void Promise.resolve(refreshPlayer?.()).catch(() => undefined);
+  }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
   // The second host's card: built once per pre-mount (same element while it waits, enters and plays).
   const nextKind = preNext?.step ?? null;
   const nextMoment = flameRef.current;
@@ -1171,15 +1199,16 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     if (nextKind === 'flame' && nextMoment) {
       return { title: nextMoment.kind === 'milestone' ? 'Big flame!' : 'Flame up!', live: false,
         content: <StreakMoment key={`B:${JSON.stringify(nextMoment)}`} moment={nextMoment} reducedMotion={reducedMotion}
-          onDone={() => afterFlameRef.current()} prize={tomorrowPrize(daily).kind} entered={enteredB} /> };
+          onDone={() => { if (bIsIn()) afterFlameRef.current(); }} prize={tomorrowPrize(daily).kind} entered={enteredB} /> };
     }
     return { title: 'See you tomorrow', live: false,
-      content: <TomorrowCard prize={tomorrowPrize(daily)} reducedMotion={reducedMotion} onDone={() => afterTomorrowRef.current()} entered={enteredB} /> };
+      content: <TomorrowCard prize={tomorrowPrize(daily)} reducedMotion={reducedMotion} onDone={() => { if (bIsIn()) afterTomorrowRef.current(); }} entered={enteredB} /> };
   }, [nextKind]); // eslint-disable-line react-hooks/exhaustive-deps
   const nextLive = useMemo(() => (nextCard ? { ...nextCard, live: slotB } : null), [nextCard, slotB]);
   const stageState: StageState = {
     title: shownTitle, content: shownContent, showing, closable: !revealing && showing, reducedMotion,
-    legs, legsAt, landed: flightLanded, perf: perfOn,
+    // The flight layer shows only while the prizes fly (no extra render to take it down afterwards).
+    legs: view?.k === 'flying' || slotB ? legs : null, legsAt, landed: flightLanded, perf: perfOn,
     next: nextLive,
   };
   // The card host never re-renders: what it shows goes through the stage store, in the same commit (layout effect).

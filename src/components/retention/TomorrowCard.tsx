@@ -94,7 +94,10 @@ export default function TomorrowCard({ prize, reducedMotion, onDone, startAt, en
             {prize.kind === 'gear' && <View style={styles.gearChip}><Text style={styles.gearText}>NEW GEAR</Text></View>}
           </Animated.View>
           <View style={styles.ghost} accessibilityLabel={`Tomorrow's flame: day ${prize.flameNext}`}>
-            <View style={{ opacity: 0.85 }}><FlameArt days={prize.flameNext} size={60} reducedMotion still ghost /></View>
+            {/* A navy disc with a gold dashed rim behind the white ghost, so it never melts into the pale hill. */}
+            <View style={styles.ghostDisc}>
+              <FlameArt days={prize.flameNext} size={58} reducedMotion still ghost />
+            </View>
             <View style={styles.ghostNum}><Text style={styles.ghostNumText} allowFontScaling={false}>{prize.flameNext}</Text></View>
           </View>
         </View>
@@ -145,10 +148,12 @@ const styles = StyleSheet.create({
   gearChip: { position: 'absolute', bottom: 0, backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2,
     borderWidth: 2, borderColor: BRAND.white },
   gearText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, marginTop: 1 },
-  ghost: { width: 64, alignItems: 'center', marginBottom: 10 },
-  ghostNum: { marginTop: -10, minWidth: 30, height: 28, borderRadius: 14, paddingHorizontal: 6, backgroundColor: 'rgba(255,255,255,0.3)',
-    borderWidth: 2.5, borderColor: BRAND.gold, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
-  ghostNumText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white, marginTop: 1 },
+  ghost: { width: 78, alignItems: 'center', marginBottom: 8 },
+  ghostDisc: { width: 76, height: 76, borderRadius: 38, backgroundColor: '#0d4f92', borderWidth: 3, borderColor: GOLD_FX.rays,
+    borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  ghostNum: { marginTop: -12, minWidth: 34, height: 30, borderRadius: 15, paddingHorizontal: 6, backgroundColor: BRAND.navy,
+    borderWidth: 2.5, borderColor: GOLD_FX.rays, alignItems: 'center', justifyContent: 'center' },
+  ghostNumText: { fontFamily: 'Shark', fontSize: 17, color: GOLD_FX.rays, marginTop: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.navy, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
   chipText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white, marginTop: 1 },

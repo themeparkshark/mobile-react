@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { playHaptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
@@ -14,8 +14,10 @@ import FlameArt, { TomorrowGoal } from './FlameArt';
 /**
  * The daily +1, inside the chest card (no extra card on a normal day): the
  * ember glows, the flame whooshes up past full size and settles, the number
- * rolls N-1 to N, three sparks fly, then "N days in a row!" (only once the
- * roll has landed) and the next flame size to grow toward.
+ * rolls N-1 to N and lands with a squash, a gold ring pops and sparks fly,
+ * then tomorrow stamps in beside it as one big picture on a navy pill
+ * (tomorrow's flame with its number, plus the prize waiting, "Tomorrow!").
+ * The number shows once (on the flame); the words are for screen readers.
  * `grow` false shows today's flame at rest (already celebrated on this phone).
  */
 export default function FlameUpRow({ from, to, grow, reducedMotion, prize = 'chest' }: {
@@ -35,7 +37,10 @@ export default function FlameUpRow({ from, to, grow, reducedMotion, prize = 'che
   const sparkle = useSharedValue(0);
   /** The new number lands with a squash (wide and short), then stamps back to round. */
   const pop = useSharedValue(1);
+  /** The landing ring and the second spark wave on the number's squash. */
+  const land = useSharedValue(0);
   const sparks = play ? momentParticles(3, budget, false) : 0;
+  const landSparks = play ? momentParticles(6, budget, false) : 0;
   useEffect(() => {
     if (!grow) return;
     if (reducedMotion) { playHaptic('tierUp'); playSfx(LOOP_CUES.flameUp.fallback); return; }
@@ -47,6 +52,7 @@ export default function FlameUpRow({ from, to, grow, reducedMotion, prize = 'che
     sparkle.value = withDelay(at, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
     text.value = withDelay(at + DURATION.base, withSpring(1, SPRING.stamp));
     pop.value = withDelay(at + DURATION.base - 40, withSequence(withTiming(1.28, { duration: 70, easing: EASE.out }), withSpring(1, SPRING.stamp)));
+    land.value = withDelay(at + DURATION.base - 40, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
     const t = setTimeout(() => { playHaptic('tierUp'); playSfx(LOOP_CUES.flameUp.fallback, 0.8); }, at);
     return () => clearTimeout(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -54,34 +60,43 @@ export default function FlameUpRow({ from, to, grow, reducedMotion, prize = 'che
   const oldStyle = useAnimatedStyle(() => ({ opacity: 1 - roll.value, transform: [{ translateY: -20 * roll.value }] }));
   const newStyle = useAnimatedStyle(() => ({ opacity: roll.value, transform: [{ translateY: 20 * (1 - roll.value) }, { scaleX: pop.value }, { scaleY: 2 - pop.value }] }));
   const textStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, text.value * 1.5), transform: [{ scale: 1.25 - 0.25 * text.value }] }));
+  const ringStyle = useAnimatedStyle(() => ({ opacity: land.value <= 0 || land.value >= 1 ? 0 : 0.9 * (1 - land.value),
+    transform: [{ scale: 0.5 + 0.9 * land.value }] }));
   return (
-    <View style={styles.row} accessible accessibilityLabel={`${to} days in a row`}>
+    <View style={styles.row} accessible accessibilityLabel={`${to === 1 ? 'Your flame is lit' : `${to} days in a row`}. Tomorrow: day ${to + 1}`}>
       <View style={styles.flameBox}>
-        <Animated.View style={flameStyle}><FlameArt days={to} size={64} reducedMotion={reducedMotion} boost={boost} /></Animated.View>
-        <View style={styles.center} pointerEvents="none"><SparkleBurst progress={sparkle} count={sparks} radius={44} /></View>
+        <Animated.View style={flameStyle}><FlameArt days={to} size={66} reducedMotion={reducedMotion} boost={boost} /></Animated.View>
+        <View style={styles.center} pointerEvents="none"><SparkleBurst progress={sparkle} count={sparks} radius={46} /></View>
         <View style={styles.num}>
-          {play && <Animated.Text style={[styles.numText, oldStyle]} allowFontScaling={false}>{from}</Animated.Text>}
-          <Animated.Text style={[styles.numText, play && styles.abs, newStyle]} allowFontScaling={false}>{to}</Animated.Text>
+          {play && <View style={styles.numRing} pointerEvents="none"><Animated.View style={[styles.ring, ringStyle]} /></View>}
+          {play && <View style={styles.center} pointerEvents="none"><SparkleBurst progress={land} count={landSparks} radius={34} /></View>}
+          <View style={styles.numFace}>
+            {play && <Animated.Text style={[styles.numText, oldStyle]} allowFontScaling={false}>{from}</Animated.Text>}
+            <Animated.Text style={[styles.numText, play && styles.abs, newStyle]} allowFontScaling={false}>{to}</Animated.Text>
+          </View>
         </View>
       </View>
-      <Animated.View style={[styles.words, textStyle]}>
-        <Text style={styles.big} numberOfLines={1} adjustsFontSizeToFit>{to === 1 ? 'Your flame is lit!' : `${to} days in a row!`}</Text>
-        <TomorrowGoal days={to} prize={prize} size={32} reducedMotion={reducedMotion} textStyle={styles.small} />
+      {/* Tomorrow as one big picture on the navy pill the flame cards use: readable from arm's length. */}
+      <Animated.View style={[styles.pill, textStyle]}>
+        <TomorrowGoal days={to} prize={prize} size={42} reducedMotion={reducedMotion} stacked textStyle={styles.small} />
       </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16,
-    paddingHorizontal: 8, paddingVertical: 4 },
-  flameBox: { width: 70, height: 70, alignItems: 'center', justifyContent: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 16, paddingHorizontal: 8, paddingVertical: 5 },
+  flameBox: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center' },
   center: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },
-  num: { position: 'absolute', bottom: -2, right: -4, minWidth: 30, height: 28, borderRadius: 14, paddingHorizontal: 6,
-    backgroundColor: BRAND.white, borderWidth: 2.5, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  numText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginTop: 1 },
+  // Today's number, once: a white chip on the flame (it rolls, squashes and stamps back).
+  num: { position: 'absolute', bottom: -2, right: -6, minWidth: 34, height: 30 },
+  numFace: { minWidth: 34, height: 30, borderRadius: 15, paddingHorizontal: 6, backgroundColor: BRAND.white, borderWidth: 2.5,
+    borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  numRing: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  ring: { width: 56, height: 56, borderRadius: 28, borderWidth: 4, borderColor: '#FFE07A' },
+  numText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, marginTop: 1 },
   abs: { position: 'absolute' },
-  words: { flex: 1, gap: 1 },
-  big: { fontFamily: 'Shark', fontSize: 22, color: BRAND.gold },
+  pill: { backgroundColor: BRAND.navy, borderRadius: 18, paddingHorizontal: 12, paddingTop: 4, paddingBottom: 6, flexShrink: 1 },
   small: { fontFamily: 'Shark', color: BRAND.gold },
 });

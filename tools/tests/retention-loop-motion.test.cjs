@@ -452,7 +452,7 @@ test('round 5: a return to the app knows the days away at once, and a level ches
   assert.match(hook, /const lastOpenMem = new Map<string, number>\(\);/);
   assert.match(hook, /const last = id \? lastOpenMem\.get\(String\(id\)\) : undefined;/);
   const reveal = read('src/components/retention/RewardReveal.tsx');
-  assert.match(reveal, /known && !!footer && styles\.bottomKnown/);
+  assert.match(reveal, /known && \(footer \? \(dropIn \? styles\.bottomLevel : styles\.bottomKnown\) : styles\.bottomButton\)/);
   assert.match(reveal, /styles\.floor/);
 });
 
@@ -476,7 +476,7 @@ test('wave 5: thinner Battery Saver look, one big tomorrow picture, a promise bu
     assert.match(src, /spin=\{budget\.level === 'full'\}/);
   }
   // The rows' empty plates show from the glide, so the card is never an empty panel.
-  assert.match(reveal, /slots\.value = withDelayAfter\(entered, pl\.pop \+ Math\.max\(0, pl\.hold - 60\)/);
+  assert.match(reveal, /slots\.value = withDelayAfter\(entered, pl\.pop \+ Math\.max\(0, pl\.hold - DURATION\.quick\) \+ SLOTS_AFTER_HINT_MS/);
   // A level chest's line fades in as the chest lands (never drawn over).
   assert.match(reveal, /subtitleStyle = useAnimatedStyle\(\(\) => \(\{ opacity: Math\.max\(0, Math\.min\(1, 1 - drop\.value/);
   // Tomorrow is one big picture row: no far ladder, prize art at 44 pt on the flame card.
@@ -507,4 +507,75 @@ test('the loops frame graph shows only in dev or a release-like perf capture fla
   for (const f of ['eas.json', 'app.config.js']) {
     if (fs.existsSync(path.join(root, f))) assert.doesNotMatch(read(f), /EXPO_PUBLIC_LOOPS_PERF/);
   }
+});
+
+test('wave 5 round 2: the chain handoff is one render, the dim always comes back with the next card', () => {
+  const hook = read('src/components/retention/useRetention.tsx');
+  const start = hook.indexOf('const finishReveal = ');
+  const end = hook.indexOf('const next = async () => {', start);
+  const handoff = hook.slice(start, end);
+  // The B path says everything in one render (the flight and which card is up) and returns: no timer that renders
+  // again mid-flight or mid-entrance, and no balance read in the middle of the moment.
+  const b = handoff.slice(handoff.indexOf("if (src === 'daily' && pre && !reducedMotion)"));
+  assert.match(b, /setView\(pre\.step === 'flame' && flameRef\.current \? \{ k: 'flame', moment: flameRef\.current, slot: 'B' \} : \{ k: 'tomorrow', slot: 'B' \}\);\s*\n\s*setLegs\(legs\);\s*\n\s*setLegsAt\(t0\);/);
+  assert.doesNotMatch(handoff, /setTimeout/);
+  assert.doesNotMatch(handoff, /refreshPlayer/);
+  assert.doesNotMatch(hook, /legsTimer/);
+  assert.match(handoff, /playerReadDue\.current = true;/);
+  assert.match(hook, /if \(!playerReadDue\.current \|\| \(view && view\.k !== 'sheet' && view\.k !== 'push'\)\) return;/);
+  // The flight layer goes with the view (no extra render to take it down).
+  assert.match(hook, /legs: view\?\.k === 'flying' \|\| slotB \? legs : null/);
+  // The next card counts taps only once it has grown in.
+  assert.match(hook, /onDone=\{\(\) => \{ if \(bIsIn\(\)\) afterTomorrowRef\.current\(\); \}\}/);
+  // The dim: one write, from a JS mark set in the same render, never a shared value read back.
+  assert.match(handoff, /nextAtRef\.current = nextAt;/);
+  assert.match(hook, /dim\.value = dimForExit\(nextAtRef\.current\);/);
+  assert.doesNotMatch(hook, /const nextAt = enteredB\.value;/);
+  const now = 1_000_000;
+  assert.deepEqual(plain(L.exitDimPlan(0, now, 200)), { lift: true, backAt: null, end: 0 });
+  assert.deepEqual(plain(L.exitDimPlan(now + 700, now, 200)), { lift: true, backAt: now + 700, end: L.LOOP_DIM_LEVEL });
+  // A booked card whose mark is near or past never leaves the map bright.
+  assert.equal(L.exitDimPlan(now + 100, now, 200).end, L.LOOP_DIM_LEVEL);
+  assert.equal(L.exitDimPlan(now - 500, now, 200).end, L.LOOP_DIM_LEVEL);
+  assert.equal(L.LOOP_DIM_LEVEL, 0.55);
+});
+
+test('wave 5 round 2: HUD numbers step at most 3 times a flight and hold until the balance is read back', () => {
+  const C = loadTs('src/services/retention/counterTicks.ts');
+  assert.deepEqual([...C.counterStepIndexes(8)], [2, 5, 7]);
+  assert.deepEqual([...C.counterStepIndexes(2)], [0, 1]);
+  assert.deepEqual([...C.counterStepIndexes(1)], [0]);
+  for (let n = 1; n <= 12; n++) {
+    const s = C.counterStepIndexes(n);
+    assert.ok(s.size <= C.COUNTER_STEPS && s.has(n - 1));
+  }
+  const cur = read('src/components/Topbar/Currency.tsx');
+  assert.match(cur, /if \(expect\.current === null\) setDisplayCount\(prevCount\.current\);/);
+  assert.match(cur, /if \(count === counted\) \{ prevCount\.current = count; setDisplayCount\(count\); return; \}/);
+});
+
+test('wave 5 round 2: the chest card tomorrow row is big, each fact is said once, plates never draw over chips', () => {
+  const row = read('src/components/retention/FlameUpRow.tsx');
+  assert.match(row, /<TomorrowGoal days=\{to\} prize=\{prize\} size=\{42\} reducedMotion=\{reducedMotion\} stacked/);
+  assert.match(row, /pill: \{ backgroundColor: BRAND\.navy/);
+  assert.doesNotMatch(row, /days in a row!/);
+  // Flame up has a payoff on the number's squash (a ring and a second spark wave, budgeted).
+  assert.match(row, /momentParticles\(6, budget, false\)/);
+  const flame = read('src/components/retention/StreakMoment.tsx');
+  assert.match(flame, /landRing/);
+  assert.match(flame, /bloom\.value = W\(withDelay\(hit,/);
+  assert.match(flame, /\{flameUpLine\(to\)\}/);
+  assert.match(flame, /\{milestoneBadgeLine\(to\)\}/);
+  assert.equal(L.flameUpLine(7), 'Days in a row!');
+  assert.equal(L.flameUpLine(1), 'Your flame is lit!');
+  assert.doesNotMatch(L.milestoneBadgeLine(7), /\d/);
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  const after = Number(/export const SLOTS_AFTER_HINT_MS = (\d+);/.exec(reveal)[1]);
+  assert.ok(after >= 0.75 * motion.DURATION.quick, 'the chips are mostly gone before the plates show');
+  assert.match(reveal, /hintOut\.value = withDelayAfter\(entered, pl\.pop \+ Math\.max\(0, pl\.hold - DURATION\.quick\), withTiming\(1, \{ duration: DURATION\.quick, easing: EASE\.out \}\)\)/);
+  assert.match(reveal, /return small \* 50 \+ big \* 108 \+ 10;/);
+  assert.match(reveal, /bottomLevel: \{ minHeight: 116 \}/);
+  const tomorrow = read('src/components/retention/TomorrowCard.tsx');
+  assert.match(tomorrow, /ghostDisc: \{ width: 76, height: 76, borderRadius: 38, backgroundColor: '#0d4f92'/);
+  for (const line of [L.flameUpLine(5), L.milestoneBadgeLine(7)]) assert.ok(L.kidSafeCopy(line));
 });

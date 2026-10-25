@@ -9,7 +9,7 @@ import { playHaptic, queueHaptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import { usePowerBudget } from '../../power';
 import {
-  LOOP_CUES, PRESS, STAGGER, milestoneBadge, milestoneFlames, milestoneHaptic, type FlameMoment,
+  LOOP_CUES, PRESS, STAGGER, flameUpLine, milestoneBadgeLine, milestoneFlames, milestoneHaptic, type FlameMoment,
 } from '../../services/retention/loopMotion';
 import { BRAND, GameIcon } from '../../ui';
 import { GoldBurst, RadialFlash, SparkleBurst } from '../../ui/GoldBurst';
@@ -67,11 +67,14 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
   const slam = useSharedValue(reducedMotion ? 1 : 0);
   const squash = useSharedValue(1);
   const numPop = useSharedValue(1);
+  /** +1: the number's landing (a gold ring and a second spark wave pop out of the number chip). */
+  const land = useSharedValue(0);
   const badge = useSharedValue(reducedMotion ? 1 : 0);
   const finn = useSharedValue(reducedMotion ? 1 : 0);
   const wave = useSharedValue(0);
   const [ready, setReady] = useState(reducedMotion);
   const [sparks, setSparks] = useState(0);
+  const [landSparks, setLandSparks] = useState(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const afterMark = useMarkTimers(entered);
   const later = (fn: () => void, ms: number) => {
@@ -104,7 +107,14 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
       // The new number lands with a squash (wide and short) and stamps back to round.
       numPop.value = W(withDelay(at + DURATION.base - 40, withSequence(withTiming(1.28, { duration: 70, easing: EASE.out }), withSpring(1, SPRING.stamp))));
       sparkle.value = W(withDelay(at, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out })));
-      gold.value = W(withDelay(at, withSequence(withTiming(0.55, { duration: 160 }), withTiming(0.3, { duration: 600 }))));
+      // The payoff on the number's squash: the rays flare and swell, a gold ring and a second wave of sparks pop out.
+      const hit = at + DURATION.base - 40;
+      setLandSparks(momentParticles(PARTICLES.sparkles, budget, false));
+      gold.value = W(withDelay(at, withSequence(withTiming(0.55, { duration: 160 }), withDelay(Math.max(0, hit - at - 160),
+        withSequence(withTiming(0.9, { duration: 90, easing: EASE.out }), withTiming(0.35, { duration: 700 }))))));
+      bloom.value = W(withDelay(hit, withSequence(withTiming(1, { duration: DURATION.bloom * 0.35 }), withTiming(0, { duration: DURATION.bloom * 0.65 }))));
+      land.value = W(withDelay(hit, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out })));
+      later(() => queueHaptic('hitMedium'), hit);
       later(() => { playHaptic('tierUp'); playSfx(cue.fallback); }, at);
       later(() => setReady(true), at + 420);
       return;
@@ -146,6 +156,8 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
   });
   const rollOld = useAnimatedStyle(() => ({ opacity: 1 - roll.value, transform: [{ translateY: -28 * roll.value }] }));
   const rollNew = useAnimatedStyle(() => ({ opacity: roll.value, transform: [{ translateY: 28 * (1 - roll.value) }, { scaleX: numPop.value }, { scaleY: 2 - numPop.value }] }));
+  const landRing = useAnimatedStyle(() => ({ opacity: land.value <= 0 || land.value >= 1 ? 0 : 0.9 * (1 - land.value),
+    transform: [{ scale: 0.6 + 1.1 * land.value }] }));
   const plusTextStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, plusText.value * 1.5), transform: [{ scale: 1.3 - 0.3 * plusText.value }] }));
   const badgeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, badge.value * 2), transform: [{ scale: 1.7 - 0.7 * badge.value }] }));
   const finnStyle = useAnimatedStyle(() => ({
@@ -175,16 +187,21 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
             <View style={styles.bigNum}><Text style={styles.bigNumText} allowFontScaling={false}>{to}</Text></View>
           </Animated.View>
         ) : (
-          <View style={styles.rollBox}>
-            <Animated.Text style={[styles.rollText, rollOld]} allowFontScaling={false}>{from}</Animated.Text>
-            <Animated.Text style={[styles.rollText, styles.rollAbs, rollNew]} allowFontScaling={false}>{to}</Animated.Text>
+          <View style={styles.rollWrap}>
+            {!reducedMotion && <View style={styles.rollRing} pointerEvents="none"><Animated.View style={[styles.landRing, landRing]} /></View>}
+            {landSparks > 0 && <View style={styles.center} pointerEvents="none"><SparkleBurst progress={land} count={landSparks} radius={80} /></View>}
+            <View style={styles.rollBox}>
+              <Animated.Text style={[styles.rollText, rollOld]} allowFontScaling={false}>{from}</Animated.Text>
+              <Animated.Text style={[styles.rollText, styles.rollAbs, rollNew]} allowFontScaling={false}>{to}</Animated.Text>
+            </View>
           </View>
         )}
       </View>
       {big ? (
         <Animated.View style={badgeStyle}>
           <View style={styles.badge}>
-          <Text style={styles.badgeText}>{milestoneBadge(to)}</Text>
+          {/* The big number above already says how many: the badge says what it means (each fact once). */}
+          <Text style={styles.badgeText}>{milestoneBadgeLine(to)}</Text>
           <View style={styles.flames}>
             {rows.crown && <GameIcon name="crown" size={26} />}
             {Array.from({ length: rows.rows }, (_, r) => (
@@ -198,7 +215,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
           </View>
         </Animated.View>
       ) : (
-        <Animated.Text style={[styles.plusText, plusTextStyle]}>{to === 1 ? 'Your flame is lit!' : `${to} days in a row!`}</Animated.Text>
+        <Animated.Text style={[styles.plusText, plusTextStyle]}>{flameUpLine(to)}</Animated.Text>
       )}
       {/* Tomorrow as one big picture: the next day's flame and the prize waiting. */}
       <View style={styles.next}><TomorrowGoal days={to} prize={prize} size={44} reducedMotion={reducedMotion} /></View>
@@ -268,7 +285,10 @@ const styles = StyleSheet.create({
   bigNum: { minWidth: 92, height: 72, borderRadius: 36, paddingHorizontal: 16, backgroundColor: BRAND.white,
     borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   bigNumText: { fontFamily: 'Shark', fontSize: 50, color: BRAND.navy, marginTop: 4 },
-  rollBox: { position: 'absolute', bottom: 8, minWidth: 64, height: 54, borderRadius: 27, backgroundColor: BRAND.white, borderWidth: 3.5,
+  rollWrap: { position: 'absolute', bottom: 8, alignItems: 'center', justifyContent: 'center' },
+  rollRing: { position: 'absolute', left: -60, right: -60, top: -60, bottom: -60, alignItems: 'center', justifyContent: 'center' },
+  landRing: { width: 96, height: 96, borderRadius: 48, borderWidth: 5, borderColor: '#FFE07A' },
+  rollBox: { minWidth: 64, height: 54, borderRadius: 27, backgroundColor: BRAND.white, borderWidth: 3.5,
     borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', paddingHorizontal: 12 },
   rollText: { fontFamily: 'Shark', fontSize: 36, color: BRAND.navy, marginTop: 3 },
   rollAbs: { position: 'absolute' },

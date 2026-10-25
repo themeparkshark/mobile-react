@@ -145,6 +145,16 @@ export function milestoneBadge(day: number): string {
   return `${day} days in a row!`;
 }
 
+/** The milestone badge under the big number: the number is said once (on the chip), the badge says what it means. */
+export function milestoneBadgeLine(_day: number): string {
+  return 'Days in a row!';
+}
+
+/** The +1 line under the rolling number (the number itself is on the chip, never said twice). */
+export function flameUpLine(day: number): string {
+  return day <= 1 ? 'Your flame is lit!' : 'Days in a row!';
+}
+
 /**
  * The rule for every loop moment's copy: no loss, guilt or rush words. Kids are
  * never told they "lost" or "broke" anything and never told to hurry.
@@ -492,3 +502,17 @@ export const LOOP_CUES = {
 } as const;
 
 export type LoopCue = keyof typeof LOOP_CUES;
+
+/** The navy dim behind every loop card. */
+export const LOOP_DIM_LEVEL = 0.55;
+
+/**
+ * The dim as a loop card leaves. No next card booked: it lifts to 0. A next chain card booked at `nextAt` (epoch ms):
+ * it lifts for the prize flight and comes back to LOOP_DIM_LEVEL on that mark; a mark already within `exitMs` (or past)
+ * never lifts at all. The end state with a booked card is always the full dim.
+ */
+export function exitDimPlan(nextAt: number, now: number, exitMs: number): { readonly lift: boolean; readonly backAt: number | null; readonly end: number } {
+  if (!nextAt) return { lift: true, backAt: null, end: 0 };
+  if (nextAt > now + exitMs) return { lift: true, backAt: nextAt, end: LOOP_DIM_LEVEL };
+  return { lift: false, backAt: now, end: LOOP_DIM_LEVEL };
+}

@@ -25,12 +25,17 @@ import { NOT_YET, withDelayAfter } from './delayUntil';
 
 const BOX = require('../../../assets/images/retention/mystery-box.png');
 /** Everything around the chest and rows on a known-prize card (safe areas, ribbon, header, flame row, button, padding). */
-const CHROME_KNOWN = 440;
-/** The rows area for this many small prize rows and hero cards (row heights plus gaps). */
-function rowsFor(small: number, big: number): number {
-  return small * 52 + big * 110 + 28;
+const CHROME_KNOWN = 458;
+/**
+ * The rows area for this many small prize rows and hero cards: a small row is 44 pt plus its 6 pt gap, a hero card
+ * 102 pt plus its gap, and the list's own padding. Sized to the content, so the card never ends in empty blue.
+ */
+export function rowsFor(small: number, big: number): number {
+  return small * 50 + big * 108 + 10;
 }
 const FREEZE = require('../../../assets/images/retention/freeze.png');
+/** The plates start this long after the chips begin to fade (the chips are below 30 percent by then). */
+export const SLOTS_AFTER_HINT_MS = 130;
 const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
 const RAYS = require('../../../assets/images/reveal/rays-gold-fade.webp');
 
@@ -383,8 +388,10 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     // Settle: the open chest holds big and centred on its rays, then glides up into its slot (eased, the rays riding
     // along and receding) as the first prize lands under it.
     lift.value = withDelayAfter(entered, pl.pop + pl.hold, withTiming(0, { duration: REVEAL_ROWS.glideMs, easing: EASE.out }));
-    hintOut.value = withDelayAfter(entered, pl.pop + Math.max(0, pl.hold - 60), withTiming(1, { duration: DURATION.quick, easing: EASE.in }));
-    slots.value = withDelayAfter(entered, pl.pop + Math.max(0, pl.hold - 60), withTiming(1, { duration: DURATION.quick, easing: EASE.out }));
+    // The "what is inside" chips fade first; the empty plates come in only once the chips are nearly gone (the two
+    // never draw together), and are in before the first prize stamps into its plate.
+    hintOut.value = withDelayAfter(entered, pl.pop + Math.max(0, pl.hold - DURATION.quick), withTiming(1, { duration: DURATION.quick, easing: EASE.out }));
+    slots.value = withDelayAfter(entered, pl.pop + Math.max(0, pl.hold - DURATION.quick) + SLOTS_AFTER_HINT_MS, withTiming(1, { duration: 110, easing: EASE.out }));
     // A rare chest: a gold beam rises out of the lid and lingers while the rows land.
     if (rare) beam.value = atPop(withSequence(withTiming(1, { duration: 180, easing: EASE.out }), withDelay(700, withTiming(0, { duration: 700 }))));
     const at = pl.rows;
@@ -534,7 +541,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
         </View>
       </Pressable>
       {/* The tall footer slot is only for the Daily 3 flame row: a level chest's card ends right under its button. */}
-      <View style={[styles.bottom, known && !!footer && styles.bottomKnown]}>
+      <View style={[styles.bottom, known && (footer ? (dropIn ? styles.bottomLevel : styles.bottomKnown) : styles.bottomButton)]}>
         {revealed ? <DoneArea footer={footer} label={doneLabel ?? 'AWESOME!'} onDone={done} appear={doneIn} /> : null}
       </View>
       {/* Confetti only at full power: Battery Saver keeps still rays, half the sparkles and coins, and no confetti. */}
@@ -808,8 +815,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 3, borderBottomColor: BRAND.goldLip },
   smallBtnText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
   bottom: { alignSelf: 'stretch', minHeight: 96, justifyContent: 'flex-end', gap: 8, marginTop: 6 },
-  // The Daily 3 chest footer holds the flame row too.
-  bottomKnown: { minHeight: 146 },
+  // The Daily 3 chest footer holds the flame row too (flame plus tomorrow's picture pill).
+  bottomKnown: { minHeight: 164 },
+  // A level chest's footer: the next level line and its bar, then the button (ends right under it).
+  bottomLevel: { minHeight: 116 },
+  // Only the button.
+  bottomButton: { minHeight: 58 },
   button: { alignSelf: 'stretch', backgroundColor: BRAND.gold, borderRadius: 16, paddingVertical: 12,
     alignItems: 'center', borderBottomWidth: 4, borderBottomColor: BRAND.goldLip },
   buttonPressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2 },

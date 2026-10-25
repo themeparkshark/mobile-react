@@ -146,7 +146,9 @@ export function NextFlameGoal({ days, size = 30, textStyle, short = false }: {
  * a plus, and the real prize waiting (the Daily 3 chest, or a present only when gear is really next) wiggling gently,
  * then "Tomorrow!". No small print and no far ladder: the flame size ladder lives in the flame itself.
  */
-export function TomorrowGoal({ days, prize, size = 30, textStyle, reducedMotion = false }: {
+export function TomorrowGoal({ days, prize, size = 30, textStyle, reducedMotion = false, stacked = false }: {
+  /** "Tomorrow!" sits on top of the picture (a narrow pill beside the flame), instead of after it. */
+  readonly stacked?: boolean;
   readonly days: number;
   /** Tomorrow's prize: 'chest' (the Daily 3 chest), 'gear' (a gift) or 'flame' (the flame alone). */
   readonly prize: 'chest' | 'gear' | 'flame';
@@ -167,8 +169,12 @@ export function TomorrowGoal({ days, prize, size = 30, textStyle, reducedMotion 
     ), -1);
   }, () => { cancelAnimation(wiggle); wiggle.value = 0; }, !reducedMotion);
   const prizeStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value * 6}deg` }, { scale: 1 + Math.abs(wiggle.value) * 0.05 }] }));
-  return (
-    <View style={styles.goal} accessible accessibilityLabel={`Tomorrow: day ${next}${prize === 'gear' ? ' and new gear' : prize === 'chest' ? ' and a chest' : ''}`}>
+  const label = (
+    <Text style={[styles.goalText, textStyle, styles.goalMin, { fontSize: Math.max(16, Math.round(size * (stacked ? 0.44 : 0.5))) },
+      stacked && styles.goalTextStacked]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>Tomorrow!</Text>
+  );
+  const picture = (
+    <>
       <View style={[styles.ghostWrap, { width: size * 1.25, height: size * 1.25 }]}>
         <FlameArt days={next} size={size * 1.15} reducedMotion still ghost />
         <View style={[styles.ghostDay, { minWidth: size * 0.75, height: size * 0.62, borderRadius: size * 0.31 }]}>
@@ -181,8 +187,21 @@ export function TomorrowGoal({ days, prize, size = 30, textStyle, reducedMotion 
           <Image cachePolicy="memory-disk" source={prize === 'gear' ? GIFT : DAILY_CHEST} style={{ width: size * 1.15, height: size * 1.15 }} contentFit="contain" transition={0} />
         </Animated.View>
       )}
-      <Text style={[styles.goalText, textStyle, styles.goalMin, { fontSize: Math.max(16, Math.round(size * 0.5)) }]} numberOfLines={1}
-        adjustsFontSizeToFit minimumFontScale={0.8}>Tomorrow!</Text>
+    </>
+  );
+  const a11y = `Tomorrow: day ${next}${prize === 'gear' ? ' and new gear' : prize === 'chest' ? ' and a chest' : ''}`;
+  if (stacked) {
+    return (
+      <View style={styles.goalStacked} accessible accessibilityLabel={a11y}>
+        {label}
+        <View style={styles.goal}>{picture}</View>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.goal} accessible accessibilityLabel={a11y}>
+      {picture}
+      {label}
     </View>
   );
 }
@@ -225,6 +244,8 @@ const styles = StyleSheet.create({
   ember: { opacity: 0.92 },
   ring: { borderWidth: 3, borderColor: GOLD_FX.rays, borderStyle: 'dashed' },
   goal: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  goalStacked: { alignItems: 'center', gap: 0 },
+  goalTextStacked: { marginLeft: 0, marginBottom: -2 },
   tomorrowCol: { gap: 2, flexShrink: 1 },
   plus: { fontFamily: 'Shark', color: GOLD_FX.rays, marginTop: 2 },
   farRow: { opacity: 0.8, transform: [{ scale: 0.92 }], alignSelf: 'flex-start' },

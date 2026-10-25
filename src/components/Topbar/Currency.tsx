@@ -5,7 +5,7 @@ import shortenNumber from '../../helpers/shorten-number';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { useHelp } from '../help/HelpProvider';
 import { glossaryKeyForName } from '../../services/help/glossary';
-import { counterStep, counterTicks } from '../../services/retention/counterTicks';
+import { counterStep, counterStepIndexes, counterTicks } from '../../services/retention/counterTicks';
 
 interface CurrencyProps {
   /** Remote icon URL or a bundled require(); falls back to the gold coin. */
@@ -37,6 +37,8 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
   shown.current = displayCount;
   /** A prize flight is landing here: the number steps up per icon, and the read-back balance waits its turn. */
   const flight = useRef<{ until: number; timers: ReturnType<typeof setTimeout>[] } | null>(null);
+  /** The number the last flight counted up to: shown until the read-back balance arrives (read after the moment). */
+  const expect = useRef<number | null>(null);
   
   // Tooltip animation
   const tooltipAnim = useRef(new Animated.Value(0)).current;
@@ -117,15 +119,20 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
       const base = shown.current;
       const n = plan.landings.length;
       const last = Math.max(...plan.landings);
+      expect.current = base + plan.amount;
+      // Every landing hops the icon (native driver, no render); the number steps at most COUNTER_STEPS times, so a big
+      // handful of coins never means a render per coin while the next card grows in.
+      const steps = counterStepIndexes(n);
       const timers = plan.landings.map((ms, i) => setTimeout(() => {
-        setDisplayCount(counterStep(base, plan.amount, i, n));
+        if (steps.has(i)) setDisplayCount(counterStep(base, plan.amount, i, n));
         bounceAnim.setValue(1.18);
         Animated.spring(bounceAnim, { toValue: 1, friction: 4, useNativeDriver: true }).start();
       }, ms));
-      // After the last landing the real balance takes over (normally the same number, so nothing moves).
+      // After the last landing the counted-up number stays until the balance is read back (normally the same number,
+      // so nothing moves, and no render at all if it is already in).
       timers.push(setTimeout(() => {
         flight.current = null;
-        setDisplayCount(prevCount.current);
+        if (expect.current === null) setDisplayCount(prevCount.current);
       }, last + 450));
       flight.current = { until: Date.now() + last + 450, timers };
     });
@@ -137,7 +144,16 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     if (flight.current && prevCount.current !== count) {
       // The read-back balance arrived mid-flight: the landings already count it up.
       prevCount.current = count;
+      expect.current = null;
       return;
+    }
+    if (expect.current !== null && prevCount.current !== count) {
+      const counted = expect.current;
+      expect.current = null;
+      // The balance the landings already counted up to: nothing moves.
+      if (count === counted) { prevCount.current = count; setDisplayCount(count); return; }
+      // Something else changed too: roll on from the number on screen (never back down to the old balance first).
+      prevCount.current = counted;
     }
     if (prevCount.current !== count) {
       const increased = count > prevCount.current;
@@ -203,7 +219,7 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
   
   // Sync display if count changes externally without animation
   useEffect(() => {
-    if (!flight.current && displayCount !== count && prevCount.current === count) {
+    if (!flight.current && expect.current === null && displayCount !== count && prevCount.current === count) {
       setDisplayCount(count);
     }
   }, [count, displayCount]);

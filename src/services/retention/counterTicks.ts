@@ -31,3 +31,14 @@ export function counterStep(base: number, amount: number, i: number, n: number):
   if (n <= 0) return base + amount;
   return base + Math.round((amount * Math.min(n, i + 1)) / n);
 }
+
+/** A flight steps a HUD number at most this many times (each step is a render; the icon still hops on every landing). */
+export const COUNTER_STEPS = 3;
+
+/** Which of n landings step the number: evenly spread, always including the last. */
+export function counterStepIndexes(n: number): Set<number> {
+  const out = new Set<number>();
+  const k = Math.min(n, COUNTER_STEPS);
+  for (let j = 1; j <= k; j++) out.add(Math.ceil((j * n) / k) - 1);
+  return out;
+}
