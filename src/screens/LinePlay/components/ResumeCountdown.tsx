@@ -10,14 +10,16 @@
  * 2 or 1: on a loaded iPhone SE, JS timers jumped from 3 straight back to the
  * game. The clock is back at 0 whenever the countdown hides, so it always opens on 3.
  *
- * The game comes back under the 1 (HANDOVER_AT, part way into its step), so the JS thread has time to
- * lay it out while the 1 is still up. The 1 always gets its full step, like the 3 and the 2, and then the
- * scrim fades on the UI thread. When the tap asked for the arcade or a page, the parent keeps `released`
- * false until that result is on screen, so the 1 holds and no frame shows the game board live in between.
+ * The game comes back under the 1 (HANDOVER_AT, once the 1's punch has settled, so no number or scale is
+ * changing when that big render lands: a React commit while the UI thread is still writing a number's props
+ * can briefly show a stale number). A plain resume then lets go when the 1's step ends, with the parent's
+ * timer set from the clock, so the 3, 2 and 1 each get one even beat. When the tap asked for the arcade or a
+ * page, the parent keeps it mounted (still on the 1) until that result is on screen, so no frame shows the
+ * game board live in between. It always leaves by unmounting with a UI-thread FadeOut.
  */
 import { memo, useCallback, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withTiming,
+import Animated, { FadeOut, runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withTiming,
   type SharedValue } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
@@ -33,11 +35,8 @@ const RESET_DELAY_MS = 250;
 const PUNCH_SHARE = 0.4;
 /** The scrim's fade as it hands over to the game, the arcade or the page (UI thread, after the 1's full step). */
 const EXIT_FADE_MS = 140;
-/** Where the game comes back: 15% into the 1, about 290 ms before the 1 ends, so even a busy JS thread has it back in time and the 3, 2 and 1 each get one even beat. */
-const HANDOVER_AT = 2.15;
-/** The clock's end: the 1's step (to 3), then the fade (reduced motion: no fade, one frame). */
-const FADE_UNITS = EXIT_FADE_MS / STEP_MS;
-const END = 3 + FADE_UNITS;
+/** Where the game comes back: once the 1's punch has settled (PUNCH_SHARE into its step), about 200 ms before the 1 ends. */
+const HANDOVER_AT = 2 + PUNCH_SHARE;
 
 /** The haptic tick and sound for each number, on the JS thread. */
 function tick() {
@@ -58,72 +57,46 @@ function CountNumber({ value, index, clock, reducedMotion }: {
   return <Animated.Text style={[styles.number, index > 0 && styles.numberStacked, style]}>{value}</Animated.Text>;
 }
 
-function ResumeCountdown({ active, released, onDone, onHidden }: {
+function ResumeCountdown({ active, onDone }: {
   active: boolean;
-  /** The parent's result (the game, the arcade sheet, the page) is on screen: after the 1's step, fade. */
-  released: boolean;
   /**
-   * The game comes back (under the 1). Returning true (a plain resume, nothing to hand over to) lets go at once:
-   * the fade starts on the UI thread as the 1's step ends, with no wait for a React render.
+   * The game comes back (under the 1). `msLeftOfOne` is how long the 1 still has of its step, so a plain
+   * resume can let go exactly when it ends (the 3, 2 and 1 each get one even beat).
    */
-  onDone: () => boolean | void;
-  /** The fade has finished: the parent unmounts it. */
-  onHidden: () => void;
+  onDone: (msLeftOfOne: number) => void;
 }) {
   const reducedMotion = useReducedGameMotion();
-  /** 0 to END: the 3 shows in [0, 1), the 2 in [1, 2), the 1 from 2 to 3 and on through the fade. */
+  /** 0 to 3: the 3 shows in [0, 1), the 2 in [1, 2), the 1 from 2 until it unmounts. */
   const clock = useSharedValue(0);
-  /** Set from JS when the parent lets go; until then the clock holds at 3 (still on the 1). */
-  const releasedSv = useSharedValue(false);
-  const sleeping = useSharedValue(false);
-  const releasedRef = useRef(false);
   const finished = useRef(false);
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
-  const hiddenRef = useRef(onHidden);
-  hiddenRef.current = onHidden;
 
   const frameRef = useRef<{ setActive: (on: boolean) => void } | null>(null);
 
-  const release = useCallback(() => {
-    if (releasedRef.current) return;
-    releasedRef.current = true;
-    releasedSv.value = true;
-    sleeping.value = false;
-    frameRef.current?.setActive(true);
-  }, [releasedSv, sleeping]);
   const finish = useCallback(() => {
     if (finished.current) return;
     finished.current = true;
-    if (doneRef.current() === true) release();
-  }, [release]);
-  /** A tap skips to the end of the 1; the fade still waits for the parent's result. */
+    doneRef.current(Math.max(0, (3 - clock.value) * STEP_MS));
+  }, [clock]);
+  /** A tap skips to the end of the 1. */
   const skip = useCallback(() => {
-    clock.value = Math.max(clock.value, 3);
+    clock.value = 3;
     finish();
   }, [clock, finish]);
-  // Holding on the 1 for a hand-off: the frame clock stops, so a hold costs no frame work.
-  const sleep = useCallback(() => {
-    if (!releasedRef.current) frameRef.current?.setActive(false);
-  }, []);
-  const hidden = useCallback(() => hiddenRef.current(), []);
+  // Done counting: the frame clock stops, so holding on the 1 for a hand-off costs no frame work.
+  const sleep = useCallback(() => frameRef.current?.setActive(false), []);
 
   const frame = useFrameCallback(info => {
     'worklet';
     const before = clock.value;
-    const cap = releasedSv.value ? END : 3;
-    if (before >= cap) {
-      if (!releasedSv.value && !sleeping.value) { sleeping.value = true; runOnJS(sleep)(); }
-      return;
-    }
-    // Reduced motion: no fade, the scrim leaves in one frame after the 1.
-    const after = before >= 3 && reducedMotion ? cap
-      : Math.min(cap, before + Math.min(info.timeSincePreviousFrame ?? 16, MAX_STEP_MS) / STEP_MS);
+    if (before >= 3) return;
+    const after = Math.min(3, before + Math.min(info.timeSincePreviousFrame ?? 16, MAX_STEP_MS) / STEP_MS);
     clock.value = after;
     // The 2 and the 1 tick on the frame they appear.
     if (Math.floor(after) > Math.floor(before) && after < 3) runOnJS(tick)();
     if (before < HANDOVER_AT && after >= HANDOVER_AT) runOnJS(finish)();
-    if (before < END && after >= END) runOnJS(hidden)();
+    if (after >= 3) runOnJS(sleep)();
   }, false);
   frameRef.current = frame;
 
@@ -131,9 +104,6 @@ function ResumeCountdown({ active, released, onDone, onHidden }: {
     if (!active) return undefined;
     finished.current = false;
     clock.value = 0;
-    releasedRef.current = false;
-    releasedSv.value = false;
-    sleeping.value = false;
     tick();
     frame.setActive(true);
     return () => {
@@ -146,17 +116,8 @@ function ResumeCountdown({ active, released, onDone, onHidden }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  useEffect(() => {
-    if (active && released) release();
-  }, [active, released, release]);
-
-  // The scrim fades on the UI thread over the last part of the clock (after the 1's full step).
-  const hostStyle = useAnimatedStyle(() => ({
-    opacity: clock.value <= 3 ? 1 : Math.max(0, 1 - (clock.value - 3) / FADE_UNITS),
-  }));
-
   if (!active) return null;
-  return <Animated.View style={[styles.scrimHost, hostStyle]}>
+  return <Animated.View style={styles.scrimHost} exiting={reducedMotion ? undefined : FadeOut.duration(EXIT_FADE_MS)}>
     <Pressable style={styles.scrim} onPress={skip} accessibilityRole="button"
       accessibilityLabel="Resuming in 3 2 1. Tap to resume now.">
       <View style={styles.bubble}>
@@ -172,10 +133,10 @@ function ResumeCountdown({ active, released, onDone, onHidden }: {
 }
 
 /**
- * Re-renders only when it starts, is released or hides. A render mid-fade would hand the view the
- * JS thread's stale copy of the fade (useAnimatedStyle's render-time value) and flash the 1 back.
+ * Renders only when it starts or hides. A render mid-count would hand the numbers the JS thread's copy of
+ * the clock (useAnimatedStyle's render-time value) and could show a stale number for a frame.
  */
-export default memo(ResumeCountdown, (a, b) => a.active === b.active && a.released === b.released);
+export default memo(ResumeCountdown, (a, b) => a.active === b.active);
 
 const styles = StyleSheet.create({
   scrimHost: { ...StyleSheet.absoluteFillObject, zIndex: 40 },
