@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Modal from 'react-native-modal';
 import { AuthContext, type AuthContextType } from '../../context/AuthProvider';
 import { setHapticTraceListener } from '../../gamekit/Haptics';
 import { flameDay, playDaily3, preloadLoopMoments } from '../../gamekit/audio/loopSound';
@@ -11,6 +12,7 @@ import type { DailyGiftType } from '../../models/daily-gift-type';
 import type { PlayerType } from '../../models/player-type';
 import { BRAND } from '../../ui';
 import DailyGiftModal from '../DailyGiftModal';
+import Ribbon from '../Ribbon';
 import Daily3MapButton from './Daily3MapButton';
 import RewardReveal from './RewardReveal';
 
@@ -99,11 +101,18 @@ export default function HookSoundPreviewScreen() {
           popIndex={pop.index} popKey={pop.key} active reducedMotion={false} />
       </View>
       {stage === 'level' && (
-        <View key={`level-${pass}`} style={StyleSheet.absoluteFill}>
-          <RewardReveal reducedMotion={false} rewards={levelRewards} opening={levelOpening} dropIn
-            subtitle="You reached Level 4! Tap your chest." closedArt={LEVEL_CHEST} openArt={LEVEL_CHEST_OPEN}
-            onOpen={() => undefined} onDone={() => undefined} />
-        </View>
+        // Hosted exactly like useRetention's overlay (the same react-native-modal, backdrop and centred wrap with its
+        // ribbon), so the lid-peak frame shows the real layout: round 2 drew it at the top, under the Dynamic Island.
+        <Modal key={`level-${pass}`} isVisible animationIn="zoomIn" animationOut="zoomOut" animationInTiming={240}
+          animationOutTiming={180} backdropColor={BRAND.navy} backdropOpacity={0.55}
+          useNativeDriver useNativeDriverForBackdrop hideModalContentWhileAnimating={false}>
+          <View style={styles.wrap}>
+            <Ribbon text="Level 4!" />
+            <RewardReveal reducedMotion={false} rewards={levelRewards} opening={levelOpening} dropIn
+              subtitle="You reached Level 4! Tap your chest." closedArt={LEVEL_CHEST} openArt={LEVEL_CHEST_OPEN}
+              onOpen={() => undefined} onDone={() => undefined} />
+          </View>
+        </Modal>
       )}
       {stage === 'daily' && (
         <AuthContext.Provider key={`daily-${pass}`} value={authValue}>
@@ -118,4 +127,5 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: BRAND.blue, paddingTop: 80, alignItems: 'center' },
   h: { fontFamily: 'Shark', fontSize: 20, color: BRAND.white },
   button: { marginTop: 160, transform: [{ scale: 2.4 }] },
+  wrap: { alignItems: 'center' },
 });
