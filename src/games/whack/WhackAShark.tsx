@@ -159,6 +159,8 @@ const finishHandoff = (curtain: number) => (repeatBurst(curtain) ? FINISH_HANDOF
 const padsAfter = (curtain: number) => (repeatBurst(curtain) ? 380 : 600);
 /** Capture A/B only (EXPO_PUBLIC_WHACK_NO_REST=1, dev or the Whack capture): keep the board drawing under the card. */
 const NO_REST = (__DEV__ || WHACK_CAPTURE) && process.env.EXPO_PUBLIC_WHACK_NO_REST === '1';
+/** The pads' finite beats (pop, one shine, one later pulse) are over this long after they appear. */
+const PADS_SETTLED_MS = 3600;
 /** Autoplay presses GO this long after the card lands (captures can hold the idle card longer). */
 const AUTO_GO_MS = (__DEV__ || WHACK_CAPTURE) && Number(process.env.EXPO_PUBLIC_WHACK_AUTO_GO_MS) > 0 ? Number(process.env.EXPO_PUBLIC_WHACK_AUTO_GO_MS) : 3500;
 const LIFETIME_KEY = '@whack/lifetime_bursts';
@@ -568,9 +570,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const ghostT = useRef(0);
   const busyRef = juice.busy;
   useEffect(() => {
-    if (!visible) return undefined;
+    // Only while a Burst plays: a card or the results never keep a 4 Hz timer awake (w5r2).
+    if (!visible || phase !== 'play') return undefined;
     const iv = setInterval(() => {
-      if (phase !== 'play') return;
       // The light snapshot: no tap log copied across threads 4 times a second.
       void runtimeRef.current.mirrorLite().then((m) => {
         const t = tlRef.current;
@@ -1002,9 +1004,10 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       restTimer.current = setTimeout(() => {
         restTimer.current = null;
         if (runToken.current === token && !finishing.current && !NO_REST) restBoard(true);
-        // Frame graph captures only: start a fresh window, so the idle card's numbers are the idle card's alone.
-        if (PERF_GRAPH) perf.reset();
       }, landIn + CARD_SETTLE_MS);
+      // Frame graph captures only: start a fresh window once every finite card beat is over (the pads' pop, shine
+      // and their one later pulse), so the idle card's numbers are a truly idle card's alone (w5r2).
+      if (PERF_GRAPH) setTimeout(() => { if (runToken.current === token) perf.reset(); }, landIn + padsAfter(curtainKind.current) + PADS_SETTLED_MS);
       // Autoplay saves a banked fever for the finale (the expert line).
       if (autoplay) setTimeout(() => onReadyRef.current(feverReady && next === totalBursts - 1), landIn + AUTO_GO_MS);
     }, mountIn);

@@ -104,3 +104,16 @@ test('breather: the card lands as an event and the number climbs from its first 
   const rim = /RIM_FLASH = \{ at: (\d+), inMs: (\d+), outMs: (\d+) \}/.exec(ov).slice(1).map(Number);
   assert.ok(rim[0] + rim[1] + rim[2] <= 800);
 });
+
+test('Whack: the idle-card probe window opens after every finite card beat, and no 4 Hz poll runs under a card', () => {
+  const wh = read('src/games/whack/WhackAShark.tsx');
+  assert.match(wh, /const PADS_SETTLED_MS = 3600;/);
+  assert.match(wh, /if \(PERF_GRAPH\) setTimeout\(\(\) => \{ if \(runToken\.current === token\) perf\.reset\(\); \}, landIn \+ padsAfter\(curtainKind\.current\) \+ PADS_SETTLED_MS\);/);
+  // The pads' own beats end inside PADS_SETTLED_MS: pop (spring), the shine, then one pulse at 2600 ms (260 + 260).
+  const ov = read('src/games/whack/ui/Overlays.tsx');
+  const shine = /PAD_SHINE = \{ delayMs: (\d+), ms: (\d+) \}/.exec(ov).slice(1).map(Number);
+  assert.ok(shine[0] + shine[1] < 3600);
+  assert.match(ov, /withDelay\(2600, withTiming\(1\.06, \{ duration: 260, easing: EASE\.out \}\)\),\n\s+withTiming\(1, \{ duration: 260, easing: EASE\.inOut \}\),/);
+  assert.ok(400 + 2600 + 260 + 260 <= 3600);
+  assert.match(wh, /if \(!visible \|\| phase !== 'play'\) return undefined;\n\s+const iv = setInterval\(\(\) => \{\n\s+\/\/ The light snapshot/);
+});

@@ -76,7 +76,7 @@ test('frame-rate captures: a control probe on the still tester list, and the idl
   assert.match(tester, /const WHACK_PERF_CONTROL = process\.env\.EXPO_PUBLIC_MOTION_CAPTURE === 'Whack' && process\.env\.EXPO_PUBLIC_WHACK_PERF === '1';/);
   assert.match(tester, /\{WHACK_PERF_CONTROL \? <PerfControl \/> : null\}/);
   const wh = read('src/games/whack/WhackAShark.tsx');
-  assert.match(wh, /if \(PERF_GRAPH\) perf\.reset\(\);/);
+  assert.match(wh, /if \(PERF_GRAPH\) setTimeout\(\(\) => \{ if \(runToken\.current === token\) perf\.reset\(\); \}/);
   assert.match(wh, /const PERF_GRAPH = \(__DEV__ \|\| WHACK_CAPTURE\) && process\.env\.EXPO_PUBLIC_WHACK_PERF === '1';/, 'store builds never draw the graph');
 });
 
