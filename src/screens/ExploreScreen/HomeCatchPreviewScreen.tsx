@@ -89,12 +89,13 @@ const EXP = __DEV__ ? process.env.EXPO_PUBLIC_HH3_EXP ?? '' : '';
 const CAPTURE = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';
 const CAPTURE_CATCHES: number[] = String(process.env.EXPO_PUBLIC_MOTION_CAPTURE_ORDER || '1,2,5,10,25').split(',').map(Number).filter((n: number) => n > 0);
 /**
- * Wave 5 round 2 capture scenes (lane tooling, never set in store builds): 'where' (the other in-range finds were
- * caught earlier, so this is the last catch in range and the next goal flies to the nearest find), 'reduced' (Reduce
- * Motion), 'miss' (the server says no), 'battery' (Battery Saver on for the run, then off again). EXPO_PUBLIC_MOTION_CAPTURE_SUN
- * pins the sun's height (45 is midday), so a capture taken at night still shows the daytime map.
+ * Wave 5 round 2 capture scenes (lane tooling, never set in store builds), one per catch of the order, comma separated
+ * (blank for a plain catch): 'where' (the other in-range finds were caught earlier, so this is the last catch in range
+ * and the next goal flies to the nearest find), 'reduced' (Reduce Motion), 'miss' (the server says no), 'battery'
+ * (Battery Saver on for that catch, then off again). EXPO_PUBLIC_MOTION_CAPTURE_SUN pins the sun's height (45 is
+ * midday), so a capture taken at night still shows the daytime map.
  */
-const SCENE = CAPTURE ? String(process.env.EXPO_PUBLIC_MOTION_CAPTURE_SCENE || '') : '';
+const SCENES: string[] = CAPTURE ? String(process.env.EXPO_PUBLIC_MOTION_CAPTURE_SCENE || '').split(',') : [];
 const CAPTURE_SUN = CAPTURE ? Number(process.env.EXPO_PUBLIC_MOTION_CAPTURE_SUN ?? NaN) : NaN;
 /** Map-chrome budget captures: 'still' (frozen map, resting chrome), 'still-bare' (same, chrome invisible), 'still-peek' (a find tapped). */
 const STILL = EXP.startsWith('still');
@@ -273,7 +274,7 @@ function HomeCatchPreview() {
     const item = stepItem.current?.id === id ? stepItem.current : items.find(entry => entry.id === id)!;
     // A Legendary's server roll takes a moment (the reveal's shiver waits for it).
     await new Promise(resolve => setTimeout(resolve, item.rarity >= 5 ? 2600 : 450));
-    if (SCENE === 'miss') throw Object.assign(new Error('missed'), { response: { status: 422, data: { error: null } } });
+    if (sceneNow.current === 'miss') throw Object.assign(new Error('missed'), { response: { status: 422, data: { error: null } } });
     if (SCRIPT[stepRef.current]?.escape && !rodeAgain.current) {
       throw Object.assign(new Error('rode_by'), { response: { status: 409, data: { error: 'It rode by! Get ready for the next ride.', photo: { rides_left: 2 } } } });
     }
@@ -299,6 +300,9 @@ function HomeCatchPreview() {
   };
 
   // As the app (HomeExplore): with nothing else in range, the next goal flies onto the nearest find or its edge arrow.
+  /** The capture scene of the catch now playing (see SCENES). */
+  const sceneNow = useRef('');
+  const [sceneReduced, setSceneReduced] = useState(false);
   const whereState = useRef({ items, caught, size });
   whereState.current = { items, caught, size };
   const whereNext = useCallback((caughtPivot: number) => {
@@ -417,17 +421,24 @@ function HomeCatchPreview() {
   // Release-like capture: the common pretzel is caught as catch 1, 2, 5, 10 and 25 of a session (see CAPTURE).
   useEffect(() => {
     if (!CAPTURE) return undefined;
-    // 'where': the other finds in range were caught already (they leave the map), so the pretzel is the last one here.
-    if (SCENE === 'where') setCaught(new Set(items.filter((entry, i) => FIXTURES[i].inRange && entry.rarity > 1).map(entry => entry.pivot_id!)));
-    if (SCENE === 'battery') setBatterySaver(true);
-    const after = SCENE === 'battery' ? setTimeout(() => setBatterySaver(false), 9000 + CAPTURE_CATCHES.length * 6000) : null;
+    // Each scene is set up 1.5 s before its catch's tap (and the last one's undone 1.5 s before the next tap).
+    const setups = CAPTURE_CATCHES.map((_, i) => setTimeout(() => {
+      const scene = SCENES[i] ?? '';
+      sceneNow.current = scene;
+      catchTraceBuffer.push(`[capture] ${Date.now()} scene ${scene || 'plain'}`);
+      // 'where': the other finds in range were caught already (they leave the map), so the pretzel is the last one here.
+      setCaught(scene === 'where' ? new Set(items.filter((entry, j) => FIXTURES[j].inRange && entry.rarity > 1).map(entry => entry.pivot_id!)) : new Set());
+      setBatterySaver(scene === 'battery');
+      setSceneReduced(scene === 'reduced');
+    }, 7500 + i * 6000));
+    const after = setTimeout(() => setBatterySaver(false), 9000 + CAPTURE_CATCHES.length * 6000);
     const timers = CAPTURE_CATCHES.map((n, i) => setTimeout(() => {
       resetCatchSessionForPreview(n - 1);
-      catchTraceBuffer.push(`[capture] ${Date.now()} catch ${n}`);
+      catchTraceBuffer.push(`[capture] ${Date.now()} catch ${n}${SCENES[i] ? ` ${SCENES[i]}` : ''}`);
       const pretzel = items.find(entry => entry.rarity <= 1 && FIXTURES[items.indexOf(entry)]?.inRange);
       if (pretzel) tapFind(pretzel);
     }, 9000 + i * 6000));
-    return () => { timers.forEach(clearTimeout); if (after) { clearTimeout(after); setBatterySaver(false); } };
+    return () => { timers.forEach(clearTimeout); setups.forEach(clearTimeout); clearTimeout(after); if (SCENES.includes('battery')) setBatterySaver(false); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const stageItem = request?.item ?? items[0];
@@ -482,7 +493,7 @@ function HomeCatchPreview() {
         mapStill={mapStill}
         autoShots={autoplay ? SCRIPT[step]?.shots ?? null : null} refreshAfterCatch={false}
         forceRide={autoplay && SCRIPT[step] && EXP !== 'noforce' ? { kind: SCRIPT[step].kind, sky: SCRIPT[step].sky, gullPass: SCRIPT[step].gullPass } : null}
-        onCascade={setCascadeOn} forceReducedMotion={(autoplay && !!SCRIPT[step]?.reduced) || SCENE === 'reduced'} whereNext={whereNext}
+        onCascade={setCascadeOn} forceReducedMotion={(autoplay && !!SCRIPT[step]?.reduced) || sceneReduced} whereNext={whereNext}
         autoSkipReveal={autoplay && !!SCRIPT[step]?.skip}
         loadSetPage={async () => previewSetPage(stepItem.current ?? request?.item ?? null)}
         autoEscape={autoplay && SCRIPT[step]?.again ? 'again' : 'map'}
