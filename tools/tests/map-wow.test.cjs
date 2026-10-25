@@ -788,3 +788,16 @@ test('wave 5 r2: the burst canvas is mounted only while a catch shows (nothing o
   // The capture route can pin daytime light (a night capture is the time-of-day tint, not a grey map).
   assert.match(read('src/screens/ExploreScreen/HomeCatchPreviewScreen.tsx'), /sunOverride=\{Number\.isFinite\(CAPTURE_SUN\) \? CAPTURE_SUN : undefined\}/);
 });
+
+test('wave 5 r2: Alex star is the common burst, drawn bigger, and the stage keeps each tier on screen', () => {
+  const burst = read('src/screens/ExploreScreen/CatchBurst.tsx');
+  assert.match(burst, /export const INK_BASE = 0\.9;/);
+  assert.match(burst, /Math\.min\(INK_TIER_MAX, v\.inkScale\.value\) \* INK_BASE \*/);
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /catchStage\(start, plan\.risePt, area, inkReach\(variant\.inkScale\)\)/);
+  // On a 402 pt phone, even the grand burst's ink fits between the edges.
+  const reach = Math.round((220 * 0.9 * 1.4 * 1.31) / 2);
+  assert.ok(reach * 2 + 24 <= 402, `grand ink ${reach * 2} pt`);
+  const stage = wow.catchStage({ x: 20, y: 300 }, 24, { width: 402, top: 100, bottom: 700 }, reach);
+  assert.ok(stage.x - reach >= 12 && stage.x + reach <= 390);
+});

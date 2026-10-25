@@ -25,7 +25,7 @@ import { CurrencyContext } from '../../context/CurrencyProvider';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
-import CatchBurst, { loadBurstInk, type BurstValues } from './CatchBurst';
+import CatchBurst, { inkReach, loadBurstInk, type BurstValues } from './CatchBurst';
 import { CatchRaysArt } from './CatchRays';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { DURATION, EASE, SPRING, flashPeak, momentParticles } from '../../ui/motionEasing';
@@ -161,9 +161,6 @@ const STREAM_COIN_ART = require('../../../assets/icons/game/coin.png');
 const STREAM_COIN = COIN_STREAM.sizePt;
 /** Alex's inked 4-point spark, sliding down the beam. */
 const INK_SPARK = require('../../../assets/fx/spark.webp');
-const INK_SIZE = 220;
-/** The inked burst's widest reach (its peak scale is about 1.28), so the stage keeps all of it on screen. */
-const INK_REACH = Math.round(INK_SIZE * 1.28 / 2);
 /** Haptic intents a beat can name (beats carry an index, so the UI thread passes numbers only). */
 const BEAT_HAPTICS: readonly CatchBeatHaptic[] = ['tapLight', 'tickSelection', 'hitMedium', 'comboHeavy', 'success', 'hitSoft'];
 /** Beat kinds on the catch clock (fired from the UI thread with runOnJS: sound, haptics, marks only). */
@@ -1264,7 +1261,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // The stage keeps the whole inked burst on screen: below the header, above the tab bar, 12 pt from the
     // edges. A find already well placed just rises (the badge rises later, after the ink has faded).
     const area = { width: layer.width, top: insets.top + 40 - off.y, bottom: window.height - insets.bottom - 96 - off.y };
-    const stage = motion ? catchStage(start, plan.risePt, area, INK_REACH) : start;
+    const stage = motion ? catchStage(start, plan.risePt, area, inkReach(variant.inkScale)) : start;
     stageX.value = stage.x; stageY.value = stage.y;
     // The map kicks away from the find, toward the far side of the screen (down when the find is centred).
     const dx = layer.width / 2 - stage.x, dy = layer.height / 2 - stage.y;

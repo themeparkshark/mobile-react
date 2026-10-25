@@ -23,6 +23,13 @@ import { GOLD_FX } from '../../ui/motion';
 
 const INK_BURST = require('../../../assets/fx/burst-gold.webp');
 export const BURST_INK_SIZE = 220;
+/** Wave 5 round 2: Alex's ink burst's base size and its tier cap (its widest frame is about 1.31x this). */
+export const INK_BASE = 0.9;
+export const INK_TIER_MAX = 1.4;
+/** How far the ink reaches from the find at its widest, for a burst variant's size (the stage keeps it on screen). */
+export function inkReach(inkScale: number): number {
+  return Math.round((BURST_INK_SIZE * INK_BASE * Math.min(INK_TIER_MAX, inkScale) * 1.31) / 2);
+}
 
 /** Alex's ink burst as a Skia image, decoded once for the app's life (every catch reuses it). */
 let inkImage: SkImage | null = null;
@@ -145,9 +152,9 @@ function CatchBurst({ v, goldSize, confetti }: { readonly v: BurstValues; readon
     const grow = Math.min(1, b / 140);
     const suck = f.suck;
     const pull = 1 - suck * suck * suck;
-    // The ink grows with the tier only up to 1.25x (the grand's extra size goes to the rays and bloom, so it reads
-    // as a bigger sunburst, never a heavier mace).
-    const s = Math.min(1.25, v.inkScale.value) * 0.78 * (0.35 + 0.85 * (1 - (1 - grow) * (1 - grow)) + 0.08 * p) * (1 + 0.025 * Math.sin(b / 70)) * pull;
+    // Wave 5 round 2: Alex's star is the whole common burst now (no spike fan behind it), so it is drawn bigger
+    // (INK_BASE) and grows with the tier up to INK_TIER_MAX; past that the grand's extra size goes to the bloom and fan.
+    const s = Math.min(INK_TIER_MAX, v.inkScale.value) * INK_BASE * (0.35 + 0.85 * (1 - (1 - grow) * (1 - grow)) + 0.08 * p) * (1 + 0.025 * Math.sin(b / 70)) * pull;
     return [{ translateX: v.sx.value }, { translateY: v.sy.value }, { scale: s },
       { rotate: (v.inkTurn.value + 12 * p - 40 * suck) * Math.PI / 180 }];
   });
