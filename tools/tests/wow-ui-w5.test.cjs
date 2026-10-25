@@ -164,3 +164,13 @@ test('rolling number: the strip moves by top (shadow tree), so a React commit el
   assert.match(src, /const strip = useAnimatedStyle\(\(\) => \(\{ top: -wheelPos\(v\.value, place\) \* cell/);
   assert.doesNotMatch(src, /translateY: -wheelPos/);
 });
+
+test('dive: the crew sheet is decided before the water opens and is already in place, so the open is one change', () => {
+  const lp = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(lp, /&& groupPlay\.crewKnown;/);
+  assert.ok(lp.indexOf('const groupPlay = useGroupPlay(') < lp.indexOf('const diveReady ='), 'readiness reads the crew');
+  const sheet = read('src/screens/LinePlay/group/WhosInLineSheet.tsx');
+  assert.doesNotMatch(sheet, /useDiveSettled/);
+  assert.match(sheet, /entering=\{still \? undefined : FadeIn\.duration\(180\)\}/);
+  assert.match(read('src/screens/LinePlay/group/useGroupPlay.tsx'), /const crewKnown = crew\.loaded;/);
+});

@@ -9,7 +9,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text
 import { Image } from 'expo-image';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
-import { useDiveSettled } from '../../../fx/DiveIris';
+import { useDiveActive } from '../../../fx/DiveIris';
 import { SPRING } from '../../../ui/motionEasing';
 import { BRAND, GameButton, GameIcon, SHADOW, type GameIconName } from '../../../ui';
 import {
@@ -53,8 +53,9 @@ export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing,
   readonly onClose?: () => void;
 }) {
   const reducedMotion = useReducedGameMotion();
-  // After a game dive the sheet springs up through the opening water (never mounted under it).
-  const diveSettled = useDiveSettled();
+  // Under a game dive the sheet is already in place when the water opens (no slide in after it): the open
+  // reveals the game and the sheet as one change. Away from a dive it springs up as usual.
+  const diving = useDiveActive();
   const { player, isReady } = useContext(AuthContext);
   const guest = isReady && !player;
   const [kind, setKind] = useState<GroupKind | null>(null);
@@ -80,7 +81,8 @@ export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing,
   const filled = useMemo(() => rows.map((row, index) => ({
     name: row.name.trim() || `Player ${index + 1}`, kid: row.kid })), [rows]);
 
-  if (!visible || !diveSettled) return null;
+  if (!visible) return null;
+  const still = reducedMotion || diving;
 
   const pickDoor = (door: GroupKind) => {
     if (door === 'solo') { onChoose(createLineGroup('solo', [{ name: ownerName ?? 'Player 1' }])); return; }
@@ -95,11 +97,11 @@ export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing,
   });
 
   return (
-    <Animated.View entering={reducedMotion ? undefined : FadeIn.duration(180)} style={styles.scrim}
+    <Animated.View entering={still ? undefined : FadeIn.duration(180)} style={styles.scrim}
       accessibilityViewIsModal>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fill}>
         <View style={styles.fill} />
-        <Animated.View entering={reducedMotion ? undefined
+        <Animated.View entering={still ? undefined
           : SlideInDown.springify().damping(SPRING.settle.damping).stiffness(SPRING.settle.stiffness).mass(SPRING.settle.mass)} style={styles.sheet}>
           {kind == null ? (
             <>

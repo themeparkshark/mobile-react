@@ -172,27 +172,6 @@ export default function LinePlayScreen() {
   useEffect(() => {
     if (diveSettled) navigation.setOptions({ animation: 'fade' } as object);
   }, [diveSettled, navigation]);
-  // The game dive's water is the loader: it opens once this screen has laid out and its wait and first
-  // round are on it (no loading card under the opening hole; DiveIris DIVE.readyPatienceMs is only a backstop).
-  const diveReady = snapshot.startedAt != null && snapshot.playlist.length > 0;
-  const laidOut = useRef(false);
-  const readyCap = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onRootLayout = useCallback(() => {
-    if (__DEV__) (globalThis as { __diveMark?: (w: string) => void }).__diveMark?.(`lp-layout ready=${diveReady}`);
-    if (diveReady) { notifyDiveLanded(); return; }
-    // The water keeps swimming until the first round lands (the effect below says so).
-    if (!laidOut.current) notifyDiveLaidOut();
-    laidOut.current = true;
-  }, [diveReady]);
-  useEffect(() => {
-    if (__DEV__ && diveReady) (globalThis as { __diveMark?: (w: string) => void }).__diveMark?.('lp-ready');
-    if (!diveReady || !laidOut.current) return undefined;
-    if (readyCap.current) clearTimeout(readyCap.current);
-    // Straight away (no frame wait on a busy JS thread): the water itself waits a few UI frames before it opens.
-    notifyDiveLanded();
-    return undefined;
-  }, [diveReady]);
-  useEffect(() => () => { if (readyCap.current) clearTimeout(readyCap.current); }, []);
   const { latestLocationSampleRef } = useContext(LocationStatusContext);
   const { player, refreshPlayer, isReady: authReady } = useContext(AuthContext);
   const prediction = snapshot.prediction;
@@ -758,6 +737,30 @@ export default function LinePlayScreen() {
   });
   sheetOpenRef.current = groupPlay.sheetOpen;
   groupPlayRef.current = groupPlay;
+  // The game dive's water is the loader: it opens once this screen has laid out and its wait and first
+  // round (and the crew sheet, if any) are on it (no loading card under the opening hole; DiveIris
+  // DIVE.readyPatienceMs is only a backstop).
+  // The crew is known too, so a "Who's in line?" sheet is already in place under the water and the
+  // open reveals the game and the sheet together (one change, never a sheet sliding up after).
+  const diveReady = snapshot.startedAt != null && snapshot.playlist.length > 0 && groupPlay.crewKnown;
+  const laidOut = useRef(false);
+  const readyCap = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onRootLayout = useCallback(() => {
+    if (__DEV__) (globalThis as { __diveMark?: (w: string) => void }).__diveMark?.(`lp-layout ready=${diveReady}`);
+    if (diveReady) { notifyDiveLanded(); return; }
+    // The water keeps swimming until the first round lands (the effect below says so).
+    if (!laidOut.current) notifyDiveLaidOut();
+    laidOut.current = true;
+  }, [diveReady]);
+  useEffect(() => {
+    if (__DEV__ && diveReady) (globalThis as { __diveMark?: (w: string) => void }).__diveMark?.('lp-ready');
+    if (!diveReady || !laidOut.current) return undefined;
+    if (readyCap.current) clearTimeout(readyCap.current);
+    // Straight away (no frame wait on a busy JS thread): the water itself waits a few UI frames before it opens.
+    notifyDiveLanded();
+    return undefined;
+  }, [diveReady]);
+  useEffect(() => () => { if (readyCap.current) clearTimeout(readyCap.current); }, []);
   const lineTipReady = linePlayTipReady({
     screenReady: snapshot.state === 'active', gameOpen: activeGame != null, lineMoving: snapshot.moving,
     sheetOpen: groupPlay.sheetOpen || arcadeOpen || projectOpen || waitEndPrompt != null || boardingAsk || lineDone || resuming,

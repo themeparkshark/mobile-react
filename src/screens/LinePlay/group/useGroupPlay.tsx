@@ -192,7 +192,9 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
 
   /** The crew opener or a pass-the-phone card is up: one-time tips wait. */
   const sheetOpen = (openerVisible && !mode) || !!mode;
-  return { group, wantsRound, startRound, finishTurn, overlays, strip, recapSlot, sheetOpen };
+  /** The crew is known (loaded from this phone): whether the "Who's in line?" sheet shows is decided. */
+  const crewKnown = crew.loaded;
+  return { group, wantsRound, startRound, finishTurn, overlays, strip, recapSlot, sheetOpen, crewKnown };
 }
 
 export type { MiniGameId };

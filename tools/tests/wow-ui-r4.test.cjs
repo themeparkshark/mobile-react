@@ -71,13 +71,14 @@ test('dive: LinePlay is the real screen under the water (no skeleton landing), t
   assert.doesNotMatch(src, /return <DiveLanding/, 'no placeholder landing frame');
   assert.doesNotMatch(src, /function DiveLanding/);
   assert.match(src, /onLayout=\{onRootLayout\}/, 'the real root says when it is laid out');
-  assert.match(src, /const diveReady = snapshot\.startedAt != null && snapshot\.playlist\.length > 0;/,
+  assert.match(src, /const diveReady = snapshot\.startedAt != null && snapshot\.playlist\.length > 0 && groupPlay\.crewKnown;/,
     'the water waits for the wait card and the first round, so no skeleton shows under the opening hole');
   assert.doesNotMatch(src, /DIVE_READY_CAP_MS/, 'no short cap that opens onto a loading card (wave 5)');
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
   assert.equal((gym.match(/onLayout=\{notifyDiveLanded\}/g) || []).length, 3, 'every GymBattle root tells the water it landed');
   const sheet = read('src/screens/LinePlay/group/WhosInLineSheet.tsx');
-  assert.match(sheet, /if \(!visible \|\| !diveSettled\) return null;/);
+  // Wave 5: under a dive the sheet is already in place when the water opens (one change, no slide after).
+  assert.match(sheet, /if \(!visible\) return null;\n\s+const still = reducedMotion \|\| diving;/);
   assert.match(sheet, /SPRING\.settle\.damping/);
   const dive = read('src/fx/DiveIris.tsx');
   assert.match(dive, /const onOpenStart = \(\) => \{[\s\S]*settleListeners\.forEach\(l => l\(true\)\)/,

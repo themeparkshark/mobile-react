@@ -80,7 +80,7 @@ export const DIVE = {
    */
   readyPatienceMs: 2500,
   /** While the water waits, the shark keeps swimming on slowly from lingerAt to here (never parked). */
-  drift: { to: 0.62, ms: 1800 },
+  drift: { to: 0.66, ms: 2200 },
   /** If the water has not covered the screen this long after its close should have ended, go anyway (ms). */
   watchdogMs: 1200,
   /** How often the water re-checks after safetyMs (ms). */
