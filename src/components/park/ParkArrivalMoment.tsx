@@ -26,7 +26,8 @@
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type MutableRefObject } from 'react';
+import { Canvas, Path, Skia } from '@shopify/react-native-skia';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withRepeat, Easing, ReduceMotion, type SharedValue,
@@ -51,6 +52,7 @@ import {
 import { ARRIVAL_ART, FINN_ART, warmArrivalArt } from './arrivalArt';
 import ArrivalFxCanvas, { confettiPieces } from './ArrivalFxCanvas';
 import { perfMark } from './momentPerf';
+import { StepGate, createStepStore, useMountSteps, type StepStore } from './mountSteps';
 
 type Projector = (latitude: number, longitude: number) => Promise<{ x: number; y: number } | null>;
 type Point = { x: number; y: number };
@@ -123,6 +125,10 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
   const leave = useSharedValue(0);
   const goalFly = useSharedValue(0);
   const pipGlow = useSharedValue(0);
+  // The Daily 3 pill docks under the stack button after the cards (it holds GOAL_HOLD_MS longer than they do), its
+  // next pip glows once more there, then it fades (goalDock 0 to 1).
+  const goalDock = useSharedValue(0);
+  const dockGlow = useSharedValue(0);
   const fly = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
   const drop = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
   const shine = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
@@ -136,11 +142,20 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
   const startedAt = useRef(0);
   const laidOut = useRef(false);
   const artReady = useRef(false);
-  // The stage mounts in MOUNT_STEPS small commits, one per frame, while it is still invisible: a cold first arrival
-  // used to build every layer (about 90 views and the particle canvas) in one commit and froze the map for one long
-  // frame (150 to 500 ms on the release capture). Each step is a short frame; the moment starts after the last.
-  const [step, setStep] = useState(0);
+  // The stage mounts in MOUNT_STEPS small commits, one per frame: a cold first arrival used to build every layer
+  // (about 90 views and the particle canvas) in one commit and froze the map for one long frame (150 to 500 ms on
+  // the release capture). Wave 5 round 3: the heavy layers (the veil and ribbon, the letters, the gold fan, the glow
+  // and Finn, the cards, the particle canvas) are built while the stage is invisible and the moment starts after
+  // GO_STEP; the two light ones (the Daily 3 pill, the landing pings) land in the first frames of the unfurl, long
+  // before they show. Each step is a StepGate, so a step never re-renders the stage's live animated views.
   const mountedAll = useRef(false);
+  const steps = useMountSteps(MOUNT_STEPS, step => {
+    perfMark(`arrival.step${step}`);
+    if (step === GO_STEP) { mountedAll.current = true; tryStart(); }
+  });
+  // Taps reach the map until the moment is on screen, and again once the cards are on their way home (the stage
+  // swallowed map taps through its whole invisible build). Only the tap catcher re-renders when this flips.
+  const live = useRef<StepStore>(createStepStore(0)).current;
   // The particle canvas leaves one frame before the stage does (two light commits, never one heavy one at the end).
   const [fxOn, setFxOn] = useState(true);
 
@@ -159,6 +174,7 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
   const finish = useCallback(() => {
     if (phase.current === 'done') return;
     phase.current = 'done';
+    live.set(0);
     perfMark('arrival.done');
     // Everything is already invisible here: the particle canvas unmounts first, the rest of the stage on the next frame.
     setFxOn(false);
@@ -183,18 +199,30 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
     // A gold ring pings where a card lands: on its coin ("this is where it is") or on the stack button that caught it.
     ping.forEach((v, i) => {
       v.value = withDelay(startIn + i * A.flyStepMs + A.flyMs - 40, withTiming(1, { duration: PING_MS, easing: EASE.out }, ok => {
-        // The moment ends on the frame the last ping fades (the UI clock, not a JS timer).
-        if (ok && i === last) runOnJS(finish)();
+        // The moment ends on the frame the last ping fades (the UI clock, not a JS timer), or on the docked pill's fade.
+        if (ok && i === last && !goal) runOnJS(finish)();
       }));
     });
     // The ribbon folds into the stack button behind the cards (the eye follows the cards first); the Daily 3 pill
     // flies home with them (GoalStrip reads goalFly).
     leave.value = withDelay(startIn + 220, withTiming(1, { duration: A.shrinkMs, easing: EASE.in }));
-    goalFly.value = withDelay(startIn + cards.length * A.flyStepMs, withTiming(1, { duration: A.flyMs, easing: EASE.inOut }));
+    // Wave 5 round 3: the Daily 3 pill stays on stage GOAL_HOLD_MS after the last card leaves (one close goal, read
+    // last), flies up to dock under the stack button, its next pip glows once more there, and then it fades; the
+    // moment ends on that fade (or on the last ping when there is no goal).
+    if (goal) {
+      const goalAt = startIn + cards.length * A.flyStepMs + GOAL_HOLD_MS;
+      goalFly.value = withDelay(goalAt, withTiming(1, { duration: A.flyMs, easing: EASE.inOut }));
+      dockGlow.value = withDelay(goalAt + A.flyMs - 60, withSequence(withTiming(1, { duration: 160, easing: EASE.out }),
+        withTiming(0.35, { duration: 180, easing: EASE.inOut }), withTiming(1, { duration: 160, easing: EASE.out })));
+      goalDock.value = withDelay(goalAt + A.flyMs + GOAL_DOCK_MS, withTiming(1, { duration: GOAL_FADE_MS, easing: EASE.in }, ok => {
+        if (ok) runOnJS(finish)();
+      }));
+    }
   };
   const leaving = (fromTap: boolean) => {
     if (phase.current !== 'in') return;
     phase.current = 'out';
+    live.set(0);
     playSfx('fx.whoosh', 0.6);
     perfMark('arrival.handoff');
     if (fromTap) {
@@ -203,7 +231,8 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
       if (!reduced) gold.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
     }
     // Safety only: a dropped animation callback never leaves the stage up.
-    timers.current.push(setTimeout(finish, momentMs(last * A.flyStepMs + A.flyMs + PING_MS + 900)));
+    timers.current.push(setTimeout(finish, momentMs(last * A.flyStepMs + A.flyMs + PING_MS + 900 +
+      (goal ? A.flyStepMs + GOAL_HOLD_MS + A.flyMs + GOAL_DOCK_MS + GOAL_FADE_MS : 0))));
   };
 
   // The JS side of each beat (haptic, sound, handoff), fired from the UI clock so it lands on its frame.
@@ -237,6 +266,7 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
     phase.current = 'in';
     startedAt.current = Date.now();
     perfMark('arrival.start');
+    live.set(1);
     shown.value = 1;
     clock.value = 0;
     // The beat clock always runs in real time: Reanimated would otherwise jump it to the end under the
@@ -311,18 +341,6 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
     timers.current.push(setTimeout(() => requestAnimationFrame(() => go()), A.armMs));
   };
 
-  // One mount step per frame (see MOUNT_STEPS); the last one lets the moment start.
-  useEffect(() => {
-    perfMark(`arrival.step${step}`);
-    if (step >= MOUNT_STEPS) { mountedAll.current = true; tryStart(); return undefined; }
-    // A gap long enough for the UI thread to finish drawing the last step (one rAF let two steps land in one long frame).
-    let raf = 0;
-    const timer = setTimeout(() => { raf = requestAnimationFrame(() => setStep(n => n + 1)); }, STEP_GAP_MS);
-    return () => { clearTimeout(timer); cancelAnimationFrame(raf); };
-    // tryStart reads refs only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
   useEffect(() => {
     // The art is preloaded while the arrival waits its turn (useParkArrival); never hold the moment on a slow decode.
     timers.current.push(setTimeout(() => { artReady.current = true; tryStart(); }, A.artWaitMs));
@@ -330,7 +348,7 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
     return () => {
       timers.current.forEach(clearTimeout); timers.current = [];
       [shown, clock, scrim, ribbon, punch, banner, gold, bloom, flash, burst, rain, rain2, finn, wave, point, flip, ribbonShine, goalIn, leave,
-        goalFly, pipGlow, ...fly, ...drop, ...shine, ...ping].forEach(v => cancelAnimation(v));
+        goalFly, pipGlow, goalDock, dockGlow, ...fly, ...drop, ...shine, ...ping].forEach(v => cancelAnimation(v));
     };
     // The moment plays once per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -405,22 +423,24 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
     <Animated.View ref={rootRef} collapsable={false} style={[StyleSheet.absoluteFill, rootStyle]} pointerEvents="box-none">
       {/* Plain view (never an animated one) tells us the stage has laid out. */}
       <View pointerEvents="none" style={StyleSheet.absoluteFill} onLayout={() => { laidOut.current = true; tryStart(); }} />
-      <Pressable style={StyleSheet.absoluteFill} onPress={onTap} accessibilityRole="button"
-        accessibilityLabel={`Welcome to ${parkName}! Tap to see today on the map.`}>
-        <Animated.View style={[StyleSheet.absoluteFill, scrimStyle]}>
-          <LinearGradient colors={SCRIM} locations={[0, 0.45, 1]} style={StyleSheet.absoluteFill} />
-        </Animated.View>
-      </Pressable>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrimStyle]}>
+        <LinearGradient colors={SCRIM} locations={[0, 0.45, 1]} style={StyleSheet.absoluteFill} />
+      </Animated.View>
+      <TapCatcher live={live} onTap={onTap} label={`Welcome to ${parkName}! Tap to see today on the map.`} />
       <Animated.View pointerEvents="none" style={[styles.stage, { top: ribbonCenterY - 150, height: 300 }, stageStyle]}>
         {/* Reduce Motion: a soft static glow only (rays pasted behind a faded stage looked stuck on). */}
-        {step >= 2 && !reduced && <GoldBurst size={Math.min(width * 1.85, 760)} amount={gold} bloom={bloom} reduced={reduced} style={styles.absCenter} />}
-        {step >= 3 && <CoreBloom gold={gold} bloom={bloom} width={ribbonWidth} />}
-        {step >= 3 && <RadialFlash flash={flash} size={300} />}
+        <StepGate steps={steps} at={2}>
+          {!reduced && <GoldBurst size={Math.min(width * 1.85, 760)} amount={gold} bloom={bloom} reduced={reduced} style={styles.absCenter} />}
+        </StepGate>
+        <StepGate steps={steps} at={3}>
+          <CoreBloom gold={gold} bloom={bloom} width={ribbonWidth} />
+          <RadialFlash flash={flash} size={300} />
         {/* Finn peeks over the ribbon's right end (drawn behind it, so the ribbon holds him up). */}
-        {step >= 3 && <Animated.View style={[styles.finn, { right: Math.max(2, (width - ribbonWidth) / 2 - 6) }, finnStyle]}>
-          <Image source={FINN_ART[pose % FINN_ART.length]} style={{ width: 100, height: 125 }} contentFit="contain" transition={0} />
-          {golden && <View style={styles.finnCrown}><GameIcon name="crown" size={40} /></View>}
-        </Animated.View>}
+          <Animated.View style={[styles.finn, { right: Math.max(2, (width - ribbonWidth) / 2 - 6) }, finnStyle]}>
+            <Image source={FINN_ART[pose % FINN_ART.length]} style={{ width: 100, height: 125 }} contentFit="contain" transition={0} />
+            {golden && <View style={styles.finnCrown}><GameIcon name="crown" size={40} /></View>}
+          </Animated.View>
+        </StepGate>
         {/* The scale runs on a plain wrapper: iOS left the plaque's fill behind at its start size when the
             bordered view itself was scaled. */}
         <Animated.View style={[styles.welcomeSlot, bannerStyle]}>
@@ -432,30 +452,40 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
           <Image source={ARRIVAL_ART.ribbon} style={StyleSheet.absoluteFill} contentFit="contain" transition={0}
             onLoad={() => { artReady.current = true; tryStart(); }} onError={() => { artReady.current = true; tryStart(); }} />
           {golden && !reduced && <RibbonShine progress={ribbonShine} width={ribbonWidth} />}
-          {step >= 1 && <View style={styles.titleRow}>
-            {title.split('').map((char, i) => (
-              <StampLetter key={`${i}-${char}`} char={char} size={titleSize} at={delays[i] ?? 0} clock={clock} reduced={reduced} />
-            ))}
-          </View>}
+          <StepGate steps={steps} at={1}>
+            <View style={styles.titleRow}>
+              {title.split('').map((char, i) => (
+                <StampLetter key={`${i}-${char}`} char={char} size={titleSize} at={delays[i] ?? 0} clock={clock} reduced={reduced} />
+              ))}
+            </View>
+          </StepGate>
         </Animated.View>
       </Animated.View>
-      {step >= 6 && fxOn && !reduced && !(__DEV__ && (globalThis as { __tpsNoFxCanvas?: boolean }).__tpsNoFxCanvas) && <ArrivalFxCanvas width={width} height={height} top={fxTop} rain={rain} rain2={rain2}
-        pieces={pieces} pieces2={pieces2} burst={burst} sparkles={sparkles}
-        burstAt={{ x: width / 2, y: ribbonCenterY }} burstRadius={190}
-        fly={fly} targets={targets} froms={froms} stack={{ x: stackX, y: stackY }} />}
-      {step >= 4 && <View pointerEvents="none" style={[styles.cards, { top: cardsTop }]}>
-        {cards.map((card, i) => (
-          <TodayCard key={card.kind} card={card} index={i} width={cardWidth} drop={drop[i]} fly={fly[i]} leave={leave}
-            shine={shine[i]} flip={card.kind === 'limited' ? flip : undefined}
-            fromX={froms[i]?.x ?? width / 2} fromY={froms[i]?.y ?? cardsTop + 80}
-            targets={targets} stackX={stackX} stackY={stackY} reduced={reduced} />
+      <StepGate steps={steps} at={5}>
+        {fxOn && !reduced && !(__DEV__ && (globalThis as { __tpsNoFxCanvas?: boolean }).__tpsNoFxCanvas) && <ArrivalFxCanvas width={width} height={height} top={fxTop} rain={rain} rain2={rain2}
+          pieces={pieces} pieces2={pieces2} burst={burst} sparkles={sparkles}
+          burstAt={{ x: width / 2, y: ribbonCenterY }} burstRadius={190}
+          fly={fly} targets={targets} froms={froms} stack={{ x: stackX, y: stackY }} />}
+      </StepGate>
+      <StepGate steps={steps} at={4}>
+        <View pointerEvents="none" style={[styles.cards, { top: cardsTop }]}>
+          {cards.map((card, i) => (
+            <TodayCard key={card.kind} card={card} index={i} width={cardWidth} drop={drop[i]} fly={fly[i]} leave={leave}
+              shine={shine[i]} flip={card.kind === 'limited' ? flip : undefined}
+              fromX={froms[i]?.x ?? width / 2} fromY={froms[i]?.y ?? cardsTop + 80}
+              targets={targets} stackX={stackX} stackY={stackY} reduced={reduced} />
+          ))}
+        </View>
+      </StepGate>
+      <StepGate steps={steps} at={6}>
+        {goal && <GoalStrip goal={goal} progress={goalIn} fly={goalFly} glow={pipGlow} dock={goalDock} dockGlow={dockGlow} leave={leave}
+          top={cardsTop + 172} centerX={width / 2} screenWidth={width} stackX={stackX} stackY={stackY} reduced={reduced} />}
+      </StepGate>
+      <StepGate steps={steps} at={7}>
+        {!reduced && cards.map((card, i) => (
+          <CoinPing key={`ping-${card.kind}`} index={i} targets={targets} stackX={stackX} stackY={stackY} progress={ping[i]} />
         ))}
-      </View>}
-      {step >= 5 && goal && <GoalStrip goal={goal} progress={goalIn} fly={goalFly} glow={pipGlow} leave={leave} top={cardsTop + 172}
-        centerX={width / 2} stackX={stackX} stackY={stackY} reduced={reduced} />}
-      {step >= 7 && !reduced && cards.map((card, i) => (
-        <CoinPing key={`ping-${card.kind}`} index={i} targets={targets} stackX={stackX} stackY={stackY} progress={ping[i]} />
-      ))}
+      </StepGate>
     </Animated.View>
   );
 }
@@ -619,11 +649,28 @@ function SunMark() {
   </View>;
 }
 
-/** A number next to a picture of what it counts: a map coin (the blue fin coin players see on the map) and the count. */
-function CoinCount({ count }: { readonly count: number }) {
-  return <View style={styles.coinCount}>
-    <Image source={ARRIVAL_ART.mapCoin} style={styles.coinCountIcon} contentFit="contain" transition={0} />
-    <Text style={styles.coinCountText} allowFontScaling={false}>{count}</Text>
+/**
+ * A number next to a picture of what it counts, dressed like its own card so a non-reader can tell the two numbers
+ * apart (wave 5 round 3): coins to FIND wear a red map pin over a map coin in a blue pill; NEW coins stand on a little
+ * gold plank with a sparkle, in a gold pill.
+ */
+export function CoinCount({ count, kind }: { readonly count: number; readonly kind: 'find' | 'new' }) {
+  if (kind === 'new') {
+    return <View style={[styles.coinCount, styles.coinCountNew]}>
+      <View style={styles.countArt}>
+        <Image source={ARRIVAL_ART.mapCoin} style={styles.countCoin} contentFit="contain" transition={0} />
+        <View style={styles.countPlank} />
+        <Image source={ARRIVAL_ART.sparkle} style={styles.countSpark} contentFit="contain" transition={0} />
+      </View>
+      <Text style={[styles.coinCountText, styles.coinCountTextNew]} allowFontScaling={false}>{count}</Text>
+    </View>;
+  }
+  return <View style={[styles.coinCount, styles.coinCountFind]}>
+    <View style={styles.countArt}>
+      <Image source={ARRIVAL_ART.mapCoin} style={styles.countCoin} contentFit="contain" transition={0} />
+      <View style={styles.countPin}><GameIcon name="pin" size={18} /></View>
+    </View>
+    <Text style={[styles.coinCountText, styles.coinCountTextFind]} allowFontScaling={false}>{count}</Text>
   </View>;
 }
 
@@ -651,7 +698,7 @@ function CardFace({ card, flip, shine }: { readonly card: ArrivalCard; readonly 
         <Image source={ARRIVAL_ART.sparkle} style={styles.newSpark} contentFit="contain" transition={0} />
         <Image source={ARRIVAL_ART.sparkle} style={styles.newSpark2} contentFit="contain" transition={0} />
       </View>
-      <CoinCount count={card.count} />
+      <CoinCount count={card.count} kind="new" />
     </>;
   }
   // Coins still to find here: a map pin with small map coins around it ("these are on the map, go find them"), and
@@ -665,7 +712,7 @@ function CardFace({ card, flip, shine }: { readonly card: ArrivalCard; readonly 
       ))}
       <View style={styles.findPin}><GameIcon name="pin" size={44} /></View>
     </View>
-    <CoinCount count={card.count} />
+    <CoinCount count={card.count} kind="find" />
   </>;
 }
 
@@ -676,27 +723,35 @@ function CardFace({ card, flip, shine }: { readonly card: ArrivalCard; readonly 
  * on the cards' landing beat (from 1.6x on SPRING.stamp) and flies home into the stack button with the cards.
  * Pictures only.
  */
-const GoalStrip = memo(function GoalStrip({ goal, progress, fly, glow, leave, top, centerX, stackX, stackY, reduced }: {
+const GoalStrip = memo(function GoalStrip({ goal, progress, fly, glow, dock, dockGlow, leave, top, centerX, screenWidth, stackX, stackY, reduced }: {
   readonly goal: ArrivalGoal; readonly progress: SharedValue<number>; readonly fly: SharedValue<number>;
-  readonly glow: SharedValue<number>; readonly leave: SharedValue<number>; readonly top: number;
-  readonly centerX: number; readonly stackX: number; readonly stackY: number; readonly reduced: boolean;
+  readonly glow: SharedValue<number>; readonly dock: SharedValue<number>; readonly dockGlow: SharedValue<number>;
+  readonly leave: SharedValue<number>; readonly top: number;
+  readonly centerX: number; readonly screenWidth: number; readonly stackX: number; readonly stackY: number; readonly reduced: boolean;
 }) {
   const next = nextGoalPip(goal);
+  // The pill's own width (measured once on a plain view), so its dock under the stack button stays on screen.
+  const pillW = useSharedValue(GOAL_W_GUESS);
   const style = useAnimatedStyle(() => {
-    if (reduced) return { opacity: Math.min(progress.value, 1 - leave.value) };
+    if (reduced) return { opacity: Math.min(progress.value, 1 - Math.max(leave.value, dock.value)) };
     const f = fly.value;
-    const at = flyPoint(centerX, top + GOAL_H / 2, stackX, stackY, false, f);
+    const to = goalDockPoint(pillW.value, screenWidth, stackX, stackY);
+    const at = flyPoint(centerX, top + GOAL_H / 2, to.x, to.y, false, f);
+    const d = dock.value;
     return {
-      opacity: Math.min(1, progress.value * 2) * (f < 0.85 ? 1 : (1 - f) / 0.15),
+      opacity: Math.min(1, progress.value * 2) * (1 - d),
       transform: [{ translateX: at.x - centerX }, { translateY: at.y - (top + GOAL_H / 2) },
-        { scale: (1.6 - 0.6 * progress.value) * (1 - 0.7 * f) }],
+        { scale: (1.6 - 0.6 * progress.value) * (1 - (1 - GOAL_DOCK_SCALE) * f) * (1 - 0.25 * d) }],
     };
   });
-  const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scale: 0.9 + 0.35 * glow.value }] }));
+  const glowStyle = useAnimatedStyle(() => {
+    const g = Math.max(glow.value, dockGlow.value);
+    return { opacity: g, transform: [{ scale: 0.9 + 0.35 * g }] };
+  });
   const label = `Daily 3: ${goal.done} of ${goal.total} done today. Finish them for the chest.` +
     (goal.giftTomorrow ? ' A streak prize waits tomorrow.' : '');
   return <Animated.View pointerEvents="none" style={[styles.goalWrap, { top }, style]} accessible accessibilityLabel={label}>
-    <View style={styles.goal}>
+    <View style={styles.goal} onLayout={e => { pillW.value = e.nativeEvent.layout.width; }}>
       <View style={styles.goalFlame}>
         <GameIcon name="streak" size={34} />
         {goal.streak > 0 && <Text style={styles.goalStreak} allowFontScaling={false}>{goal.streak}</Text>}
@@ -709,15 +764,39 @@ const GoalStrip = memo(function GoalStrip({ goal, progress, fly, glow, leave, to
       </View>
       {/* The Daily 3 chest the three pips open (a real reward on the server). */}
       <GameIcon name="chest" size={30} />
-      {/* Tomorrow: the next flame, ghosted until it is earned, with a gift on it when tomorrow holds a streak prize. */}
+      {/* Tomorrow: the next flame drawn as a warm gold outline (ghosted until it is earned, never grey) with its day
+          number inside, and a gift on it when tomorrow holds a streak prize. */}
       <View style={styles.tomorrow}>
-        <View style={styles.tomorrowFlame}><GameIcon name="streak" size={24} /></View>
-        <Text style={styles.tomorrowDay} allowFontScaling={false}>{goal.streak + 1}</Text>
+        <TomorrowFlame day={goal.streak + 1} />
         {goal.giftTomorrow && <View style={styles.tomorrowGift}><GameIcon name="gift" size={20} /></View>}
       </View>
     </View>
   </Animated.View>;
 });
+
+/** A first guess at the pill's width (pt) until it has laid out. */
+const GOAL_W_GUESS = 300;
+
+/** Tomorrow's flame: a warm gold outline with a pale gold inside (drawn once), the day number on it. */
+const TOMORROW_W = 30;
+const TOMORROW_H = 36;
+const FLAME_PATH = Skia.Path.MakeFromSVGString('M15 2 C 16.5 8, 26 11.5, 26 21.5 C 26 28.5, 21 34, 15 34 C 9 34, 4 28.5, 4 22 C 4 16.5, 7.5 13.5, 9.5 10 C 11 13, 12 14, 13 14.5 C 13.5 10, 12.5 6, 15 2 Z');
+function TomorrowFlame({ day }: { readonly day: number }) {
+  return <View style={styles.tomorrowFlame}>
+    {FLAME_PATH && <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Path path={FLAME_PATH} color="rgba(255,214,90,0.32)" />
+      <Path path={FLAME_PATH} style="stroke" strokeWidth={2.6} strokeJoin="round" color={BRAND.gold} />
+    </Canvas>}
+    <Text style={styles.tomorrowDay} allowFontScaling={false}>{day}</Text>
+  </View>;
+}
+
+/** Catches a tap on the arrival only while it is on screen (the map keeps its taps while the stage builds). */
+function TapCatcher({ live, onTap, label }: { readonly live: StepStore; readonly onTap: () => void; readonly label: string }) {
+  const on = useSyncExternalStore(live.subscribe, live.get, live.get);
+  if (!on) return null;
+  return <Pressable style={StyleSheet.absoluteFill} onPress={onTap} accessibilityRole="button" accessibilityLabel={label} />;
+}
 
 /** The goal pill's height (for its flight home from its centre). */
 const GOAL_H = 52;
@@ -728,9 +807,24 @@ const PING_MS = 520;
  * fan, the glow and Finn, the cards, the Daily 3 pill, the particle canvas, the landing pings. Each one is a short UI
  * frame (the release capture showed one 95 ms frame when the ribbon and the letters mounted together).
  */
-const MOUNT_STEPS = 8;
-/** The wait between two mount steps (ms): about two frames, so each step gets its own UI frame. */
-const STEP_GAP_MS = 34;
+const MOUNT_STEPS = 7;
+/** The moment starts once this step has landed (the steps after it are the light Daily 3 pill and the pings). */
+const GO_STEP = 5;
+/** The Daily 3 pill leaves this long after the last card (ms), docks for GOAL_DOCK_MS and fades over GOAL_FADE_MS. */
+export const GOAL_HOLD_MS = 300;
+export const GOAL_DOCK_MS = 420;
+const GOAL_FADE_MS = 200;
+/** Docked under the stack button, the pill is this size (and stays inside the screen's right edge). */
+export const GOAL_DOCK_SCALE = 0.5;
+
+/* Declared after GOAL_H and GOAL_DOCK_SCALE: a worklet captures the values it reads when it is created. */
+/** Where the Daily 3 pill docks: right under the stack button, pulled left just enough to stay on screen. */
+export function goalDockPoint(pillWidth: number, screenWidth: number, stackX: number, stackY: number): { x: number; y: number } {
+  'worklet';
+  const half = (pillWidth * GOAL_DOCK_SCALE) / 2;
+  return { x: Math.min(stackX, screenWidth - 8 - half), y: stackY + HUD_ROW_HEIGHT / 2 + 8 + (GOAL_H * GOAL_DOCK_SCALE) / 2 };
+}
+
 
 /**
  * Where a card lands: on a map coin, two gold rings spread and a small gold coin hops out ("it is here");
@@ -862,8 +956,18 @@ const styles = StyleSheet.create({
   sunDisc: { width: 15, height: 15, borderRadius: 8, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.white },
   coinCount: { marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 54, paddingLeft: 3, paddingRight: 9,
     borderRadius: 14, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, justifyContent: 'center' },
-  coinCountIcon: { width: 22, height: 22 },
-  coinCountText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.gold },
+  coinCountText: { fontFamily: 'Shark', fontSize: 20 },
+  // Find: a blue pill with white words (the map's own colours); new: a gold pill with navy words (the shelf's).
+  coinCountFind: { backgroundColor: BRAND.blueBright },
+  coinCountTextFind: { color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
+  coinCountNew: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },
+  coinCountTextNew: { color: BRAND.navy },
+  countArt: { width: 26, height: 26 },
+  countCoin: { position: 'absolute', left: 2, top: 2, width: 20, height: 20 },
+  countPin: { position: 'absolute', right: -3, top: -6 },
+  countPlank: { position: 'absolute', left: 0, right: 2, bottom: 1, height: 5, borderRadius: 2, backgroundColor: '#d99a00',
+    borderWidth: 1, borderColor: BRAND.navy },
+  countSpark: { position: 'absolute', right: -4, top: -4, width: 13, height: 13 },
   // A gold shelf plank (the blue coins stand out on it, like the coin shelf's own boards).
   plank: { position: 'absolute', left: -4, right: -4, top: 40, height: 12, borderRadius: 4, backgroundColor: GOLD_FX.rays,
     borderWidth: 2, borderColor: '#b87800' },
@@ -892,8 +996,8 @@ const styles = StyleSheet.create({
   pipDone: { backgroundColor: BRAND.gold },
   pipGlow: { position: 'absolute', width: 40, height: 40, borderRadius: 20, backgroundColor: GOLD_FX.raysSoft, borderWidth: 3, borderColor: GOLD_FX.rays },
   tomorrow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 8, marginLeft: 2, borderLeftWidth: 2, borderLeftColor: 'rgba(255,255,255,0.55)' },
-  tomorrowFlame: { opacity: 0.55 },
-  tomorrowDay: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white, marginLeft: 1 },
+  tomorrowFlame: { width: TOMORROW_W, height: TOMORROW_H, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 3 },
+  tomorrowDay: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
   tomorrowGift: { position: 'absolute', right: -14, top: -16, transform: [{ rotate: '10deg' }] },
 });
 

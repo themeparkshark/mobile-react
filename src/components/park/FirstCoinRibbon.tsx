@@ -12,7 +12,7 @@
  * special", and the coin still goes where it lives. Reduce Motion: the ribbon
  * fades in and out, the haptic and the sound stay. UI thread only; one-shot.
  */
-import { Canvas, Path, Skia, TileMode, vec } from '@shopify/react-native-skia';
+import { Canvas, Group, LinearGradient as SkLinearGradient, Path, Rect, Skia, TileMode, vec } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef } from 'react';
@@ -35,6 +35,7 @@ import { ARRIVAL_ART, FINN_ART } from './arrivalArt';
 import BurstCanvas from './BurstCanvas';
 import { FIRST_COIN, FIRST_COIN_SHORT, firstCoinImpactAt, type FirstCoinPlan } from './firstCoinToday';
 import { perfMark } from './momentPerf';
+import { StepGate, useMountSteps } from './mountSteps';
 
 type Point = { readonly x: number; readonly y: number };
 
@@ -78,6 +79,13 @@ const CORE = 150;
 const RIBBON_LEFT = 28;
 /** The crowned coin's round badge overhangs the ribbon's left end, so the burst never sits on the words. */
 const BADGE = 64;
+/** Wave 5 round 3: the slam's upward reach stops this far above the ribbon's top edge (where the map's HUD rows end). */
+export const FAN_CLIP = 30;
+/** The ribbon's invisible build: this many steps, one frame each, then the beat sheet starts ARM_MS later. */
+export const FIRST_COIN_BUILD = 5;
+const ARM_MS = 60;
+/** While it builds, the ribbon's layer is drawn at this invisible opacity (iOS skips a fully transparent layer). */
+const ARM_OPACITY = 0.012;
 /** How far behind the coin each trail dot rides (fraction of the flight). */
 const TRAIL = [0.07, 0.14, 0.21] as const;
 /** The flight home leaves a thicker comet: five big gold dots (round 6). */
@@ -108,7 +116,7 @@ function Ribbon({ onDone, reduced, toss, plan: F, short }: {
   const landRef = useRef(toss?.onLand); landRef.current = toss?.onLand;
   const finish = () => { perfMark('firstCoin.done'); doneRef.current(); };
   const impact = () => { perfMark('firstCoin.impact'); playHaptic('golden'); playMoment('game.newRecord'); };
-  const landHome = () => { queueHaptic('tapLight'); landRef.current?.(); };
+  const landHome = () => { perfMark('firstCoin.land'); queueHaptic('tapLight'); landRef.current?.(); perfMark('firstCoin.landed'); };
   const top = (toss?.hudTop ?? 0) + HUD_TOP + F.topOffset;
   // The ribbon's coin slot (layer points) and where the coin starts (its spot on the map, or the map's middle).
   const slot = { x: RIBBON_LEFT + BADGE / 2 - 8, y: top + 33 };
@@ -116,8 +124,21 @@ function Ribbon({ onDone, reduced, toss, plan: F, short }: {
   const to = toss?.to ?? null;
   const coinSource = toss?.coinUrl ? { uri: toss.coinUrl } : ARRIVAL_ART.goldCoin;
 
-  useEffect(() => {
+  // Wave 5 round 3: the ribbon is built in FIRST_COIN_BUILD small invisible steps (the ribbon, then the slam's fans,
+  // the rings, Finn and the sunrise band, the flyers), one frame each, and the beat sheet starts ARM_MS after the last
+  // one. Built in one commit, its first visible frame was a 110 to 120 ms freeze right as it appeared (release JS).
+  const shown = useSharedValue(ARM_OPACITY);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const started = useRef(false);
+  const steps = useMountSteps(reduced ? 0 : FIRST_COIN_BUILD, step => {
+    perfMark(`firstCoin.step${step}`);
+    if (step < (reduced ? 0 : FIRST_COIN_BUILD) || started.current) return;
+    started.current = true;
+    timers.current.push(setTimeout(() => requestAnimationFrame(go), ARM_MS));
+  });
+  const go = () => {
     perfMark('firstCoin.start');
+    shown.value = 1;
     if (reduced) {
       // A real 160 ms fade in and out (Reanimated would skip a plain timing under the system Reduce Motion).
       const fade = { duration: DURATION.quick, reduceMotion: ReduceMotion.Never };
@@ -126,7 +147,7 @@ function Ribbon({ onDone, reduced, toss, plan: F, short }: {
         withDelay(F.exitAt - DURATION.quick, withTiming(0, fade, ok => {
           if (ok) { runOnJS(landHome)(); runOnJS(finish)(); }
         }), ReduceMotion.Never));
-      return () => cancelAnimation(drop);
+      return;
     }
     const hit = firstCoinImpactAt(F);
     if (F.sweepMs > 0) sweep.value = withTiming(1, { duration: F.sweepMs, easing: EASE.inOut });
@@ -165,8 +186,11 @@ function Ribbon({ onDone, reduced, toss, plan: F, short }: {
       }));
     }
     const endAt = Math.max(F.exitAt + F.exitMs, to ? F.homeAt + F.homeMs : 0);
-    const done = setTimeout(finish, momentMs(endAt + 60));
-    return () => { clearTimeout(done); [sweep, drop, out, fly, home, rings, finn, crown, punch, gold, shine, pump, core].forEach(v => cancelAnimation(v)); };
+    timers.current.push(setTimeout(finish, momentMs(endAt + 60)));
+  };
+  useEffect(() => () => {
+    timers.current.forEach(clearTimeout); timers.current = [];
+    [shown, sweep, drop, out, fly, home, rings, finn, crown, punch, gold, shine, pump, core].forEach(v => cancelAnimation(v));
     // One-shot per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -202,31 +226,48 @@ function Ribbon({ onDone, reduced, toss, plan: F, short }: {
       { rotate: `${-10 + 10 * finn.value - 8 * pump.value}deg` }, { scale: (0.5 + 0.5 * finn.value) * (1 + 0.08 * pump.value) }],
   }));
   const ribbonWidth = width - RIBBON_LEFT - F.railClear;
-  const kickStyle = useAnimatedStyle(() => ({ transform: [{ translateY: kick * punch.value }] }));
+  const kickStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: kick * punch.value }] }));
   const coreStyle = useAnimatedStyle(() => ({ opacity: core.value, transform: [{ scale: 0.6 + 0.4 * core.value }] }));
   const shineStyle = useAnimatedStyle(() => ({
     opacity: shine.value > 0 && shine.value < 1 ? 1 : 0,
     transform: [{ translateX: -60 + (ribbonWidth + 60) * shine.value }, { skewX: '-20deg' }],
   }));
 
+  // Everything that reaches up from the crowned coin (the fans, the white core, the rings) is clipped FAN_CLIP above the
+  // ribbon's top edge, where the map's HUD rows end: the slam is the brightest thing on the map without washing over
+  // the boss row or the Adventure card (the crisp fan feathers out at that line instead of stopping hard).
+  const clipTop = top - FAN_CLIP;
   return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, kickStyle]} accessibilityLiveRegion="polite">
-    {!reduced && <Animated.View style={[styles.sweep, { width: band }, sweepStyle]}>
-      <LinearGradient colors={['rgba(255,214,90,0)', 'rgba(255,214,90,1)', 'rgba(255,246,200,1)', 'rgba(255,214,90,1)', 'rgba(255,214,90,0)']}
-        start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
-    </Animated.View>}
-    {/* Two clear sparkle rings around the crowned coin, drawn UNDER the ribbon: they halo its edges and never
-        sit on the words. */}
-    {/* Round 6: the slam's ring opens wider than the ribbon is tall (FIRST_COIN.ringPt start, about 2x by its end). */}
-    {!reduced && <BurstCanvas progress={rings} count={sparkles} radius={92} ring={FIRST_COIN.ringPt} starSize={16} x={slot.x} y={slot.y} />}
-    {!reduced && <BurstCanvas progress={rings} count={sparkles} radius={132} ring={0} starSize={13} x={slot.x} y={slot.y} delayed={0.16} />}
-    <Animated.View style={[styles.ribbonWrap, { top, right: F.railClear }, ribbonStyle]}>
-      {/* One gold ray fan behind the coin only. */}
-      {/* A full fan, far bigger than the badge: it shows above and below the ribbon on the slam frame. */}
-      {!reduced && <GoldBurst size={RAYS} amount={gold} bloom={core} spin={false} style={styles.rays} />}
-      {!reduced && <SlamFan amount={gold} />}
-      {!reduced && <Animated.View style={[styles.core, coreStyle]}>
-        <Image source={ARRIVAL_ART.soft} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#ffffff" />
+    <StepGate steps={steps} at={3}>
+      {!reduced && <Animated.View style={[styles.sweep, { width: band }, sweepStyle]}>
+        <LinearGradient colors={['rgba(255,214,90,0)', 'rgba(255,214,90,1)', 'rgba(255,246,200,1)', 'rgba(255,214,90,1)', 'rgba(255,214,90,0)']}
+          start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
       </Animated.View>}
+    </StepGate>
+    {/* Two clear sparkle rings around the crowned coin, drawn UNDER the ribbon: they halo its edges and never
+        sit on the words. Round 6: the slam's ring opens wider than the ribbon is tall (FIRST_COIN.ringPt start,
+        about 2x by its end). */}
+    <StepGate steps={steps} at={2}>
+      {!reduced && <View style={[styles.layerClip, { top: clipTop }]}>
+        <View style={[styles.layerOrigin, { top: -clipTop, width, height }]}>
+          <BurstCanvas progress={rings} count={sparkles} radius={92} ring={FIRST_COIN.ringPt} starSize={16} x={slot.x} y={slot.y} />
+          <BurstCanvas progress={rings} count={sparkles} radius={132} ring={0} starSize={13} x={slot.x} y={slot.y} delayed={0.16} />
+        </View>
+      </View>}
+    </StepGate>
+    <Animated.View style={[styles.ribbonWrap, { top, right: F.railClear }, ribbonStyle]}>
+      <StepGate steps={steps} at={1}>
+        {!reduced && <View style={[styles.slamClip, { width: width + 2 * FAN_R }]}>
+          <View style={styles.slamOrigin}>
+            {/* A soft gold glow, far bigger than the badge, and the crisp hand-drawn fan over it. */}
+            <GoldBurst size={RAYS} amount={gold} bloom={core} spin={false} style={styles.rays} />
+            <SlamFan amount={gold} />
+            <Animated.View style={[styles.core, coreStyle]}>
+              <Image source={ARRIVAL_ART.soft} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#ffffff" />
+            </Animated.View>
+          </View>
+        </View>}
+      </StepGate>
       <View style={styles.ribbon} accessible accessibilityLabel="First coin today!">
         <View style={styles.ribbonTop} />
         {!reduced && <Animated.View style={[styles.shine, shineStyle]} />}
@@ -240,16 +281,22 @@ function Ribbon({ onDone, reduced, toss, plan: F, short }: {
         </Animated.View>
         <Animated.View style={[styles.crown, crownStyle]}><GameIcon name="crown" size={32} /></Animated.View>
       </View>
-      {!reduced && <Animated.View style={[styles.finn, finnStyle]}>
-        <Image source={FINN_ART[1]} style={{ width: 78, height: 98 }} contentFit="contain" transition={0} />
-      </Animated.View>}
+      <StepGate steps={steps} at={3}>
+        {!reduced && <Animated.View style={[styles.finn, finnStyle]}>
+          <Image source={FINN_ART[1]} style={{ width: 78, height: 98 }} contentFit="contain" transition={0} />
+        </Animated.View>}
+      </StepGate>
     </Animated.View>
     {/* The throw: the coin and its gold comet trail, up from the map into the slot. */}
-    {!reduced && TRAIL.map((lag, i) => <Flyer key={`t${i}`} t={fly} lag={lag} from={from} to={slot} lift={-90} dot={i} />)}
-    {!reduced && <Flyer t={fly} lag={0} from={from} to={slot} lift={-90} source={coinSource} />}
+    <StepGate steps={steps} at={4}>
+      {!reduced && TRAIL.map((lag, i) => <Flyer key={`t${i}`} t={fly} lag={lag} from={from} to={slot} lift={-90} dot={i} />)}
+      {!reduced && <Flyer t={fly} lag={0} from={from} to={slot} lift={-90} source={coinSource} />}
+    </StepGate>
     {/* Home: out of the slot and down to the shelf button. */}
-    {!reduced && to && TRAIL_HOME.map((lag, i) => <Flyer key={`h${i}`} t={home} lag={lag} from={slot} to={to} lift={-70} dot={i} home />)}
-    {!reduced && to && <Flyer t={home} lag={0} from={slot} to={to} lift={-70} source={coinSource} home />}
+    <StepGate steps={steps} at={5}>
+      {!reduced && to && TRAIL_HOME.map((lag, i) => <Flyer key={`h${i}`} t={home} lag={lag} from={slot} to={to} lift={-70} dot={i} home />)}
+      {!reduced && to && <Flyer t={home} lag={0} from={slot} to={to} lift={-70} source={coinSource} home />}
+    </StepGate>
   </Animated.View>;
 }
 
@@ -258,6 +305,9 @@ const FAN_R = 150;
 const FAN_WEDGES = 11;
 /** The fan opens over this arc (degrees), centred on "right", so the rays that would leave the screen are not drawn. */
 const FAN_ARC = 290;
+/** The fan feathers out over this many points below the HUD line (its canvas coordinates: FAN_FEATHER_Y). */
+const FAN_FEATHER = 26;
+const FAN_FEATHER_Y = FAN_R - 33 - FAN_CLIP;
 
 /**
  * The slam's hand-drawn gold fan behind the crowned coin: bold gold wedges with a white-hot middle and a soft fade at
@@ -290,7 +340,14 @@ function SlamFan({ amount }: { readonly amount: SharedValue<number> }) {
   }));
   return <Animated.View pointerEvents="none" style={[styles.fan, style]}>
     <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Path path={art.path} paint={art.fill} />
+      {/* Feathered out at the HUD line (FAN_CLIP above the ribbon): the wedges fade to nothing over FAN_FEATHER pt. */}
+      <Group layer>
+        <Path path={art.path} paint={art.fill} />
+        <Rect x={0} y={0} width={FAN_R * 2} height={FAN_R * 2} blendMode="dstIn">
+          <SkLinearGradient start={vec(0, FAN_FEATHER_Y)} end={vec(0, FAN_FEATHER_Y + FAN_FEATHER)}
+            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,1)']} />
+        </Rect>
+      </Group>
     </Canvas>
   </Animated.View>;
 }
@@ -338,6 +395,12 @@ function Flyer({ t, lag, from, to, lift, source, dot, home }: {
 const styles = StyleSheet.create({
   sweep: { position: 'absolute', top: 0, bottom: 0, left: 0 },
   ribbonWrap: { position: 'absolute', left: RIBBON_LEFT, alignItems: 'center' },
+  // The slam's clip: from FAN_CLIP above the ribbon's top edge down, wide enough for the whole fan; the origin view puts
+  // the layers back at the ribbon's own coordinates.
+  slamClip: { position: 'absolute', top: -FAN_CLIP, left: -RIBBON_LEFT - FAN_R, height: FAN_CLIP + 33 + FAN_R + 40, overflow: 'hidden' },
+  slamOrigin: { position: 'absolute', left: RIBBON_LEFT + FAN_R, top: FAN_CLIP, width: 0, height: 0 },
+  layerClip: { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden' },
+  layerOrigin: { position: 'absolute', left: 0 },
   rays: { position: 'absolute', left: BADGE / 2 - 8 + RAYS_SHIFT - RAYS / 2, top: 33 - RAYS / 2 },
   core: { position: 'absolute', left: BADGE / 2 - 8 - CORE / 2, top: 33 - CORE / 2, width: CORE, height: CORE },
   fan: { position: 'absolute', left: BADGE / 2 - 8 - FAN_R, top: 33 - FAN_R, width: FAN_R * 2, height: FAN_R * 2 },

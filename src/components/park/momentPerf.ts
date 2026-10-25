@@ -12,10 +12,10 @@ let reset: (() => void) | null = null;
 export const PERF_HUD = __DEV__ && process.env.EXPO_PUBLIC_PERF_HUD === '1';
 
 /**
- * Lane capture stage only (EXPO_PUBLIC_MOTION_CAPTURE=ParkMomentsCapture, never set in a store or OTA bundle):
+ * Lane capture builds only (EXPO_PUBLIC_MOTION_CAPTURE=ParkMomentsCapture or ParkMapCapture, never set in a store or OTA bundle):
  * every mark is kept with its time, so the stage can say where in a moment a long frame fell.
  */
-const CAPTURE_MARKS = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'ParkMomentsCapture';
+const CAPTURE_MARKS = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'ParkMomentsCapture' || process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'ParkMapCapture';
 let marks: { name: string; at: number }[] = [];
 export function takeCaptureMarks(): { name: string; at: number }[] {
   const out = marks; marks = []; return out;

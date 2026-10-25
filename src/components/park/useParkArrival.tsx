@@ -23,6 +23,7 @@ import { BRAND } from '../../ui/tokens';
 import GameIcon from '../../ui/GameIcon';
 import { TONES, type StatusEntry } from '../map/MapStatusStack';
 import ParkArrivalMoment from './ParkArrivalMoment';
+import MapMomentProbe, { MAP_CAPTURE } from './MapMomentProbe';
 import { warmArrivalArt } from './arrivalArt';
 import {
   TODAY_CHIP_MS, arrivalCards, arrivalIsGolden, arrivalIsRepeat, arrivalSeenToday, finnPose, markArrivalHistory, markArrivalSeen, parkDayKey,
@@ -127,7 +128,8 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
   }, [playerId]);
 
   // QA captures: play on every park entry (dev builds only, EXPO_PUBLIC_PARK_ARRIVAL_ALWAYS=1).
-  const always = __DEV__ && process.env.EXPO_PUBLIC_PARK_ARRIVAL_ALWAYS === '1';
+  // Lane capture builds on the real map (ParkMapCapture, release-like JS) also replay per entry, to measure frames there.
+  const always = (__DEV__ && process.env.EXPO_PUBLIC_PARK_ARRIVAL_ALWAYS === '1') || MAP_CAPTURE;
   const due = !!playerId && parkId !== null && !!parkName && seen !== null && (always || !arrivalSeenToday(seen, parkId, day));
 
   // Due: decode the art now, so the stage's first frame never waits on an image.
@@ -239,6 +241,9 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
         golden={playing.golden} onDone={onDone} />
     </View>
   ) : null), [playing, parkName, projector, onDone]);
+  // Lane capture builds only: the frame probe sits on the real map next to the moment (never in a store bundle).
+  const probeLabel = playing ? `${playing.golden ? 'golden' : playing.repeat ? 'repeat' : 'arrival'} ${parkName}` : '';
+  const withProbe = MAP_CAPTURE ? <>{layer}<MapMomentProbe running={!!playing} label={probeLabel} /></> : layer;
 
   // Due and not started yet: Finn's tips and the daily chest wait their turn, but never longer than
   // PENDING_MAX_MS (a map whose coins never load must not hold the chest forever).
@@ -253,7 +258,7 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     const timer = setTimeout(() => setGaveUp(waitKey), PENDING_MAX_MS);
     return () => clearTimeout(timer);
   }, [waitKey]);
-  return { layer, showing: !!playing, pending: waiting && gaveUp !== waitKey, todayEntry };
+  return { layer: withProbe, showing: !!playing, pending: waiting && gaveUp !== waitKey, todayEntry };
 }
 
 /** The "Today" chip in the HUD stack: today's three picture cards, small. Tap to see them again. */

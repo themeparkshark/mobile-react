@@ -53,3 +53,13 @@ export function takeRideUpVariant(key: string, now: Date = new Date()): RideUpVa
 }
 
 primeRideUpDay();
+
+if (__DEV__) {
+  // QA: the next ride-up is the day's first again (lane.sh eval 'globalThis.__tpsRideUpReset()').
+  (globalThis as Record<string, unknown>).__tpsRideUpReset = () => {
+    memory = null;
+    last = null;
+    void AsyncStorage.removeItem(KEY).catch(() => undefined);
+    return 'reset';
+  };
+}

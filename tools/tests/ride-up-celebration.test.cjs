@@ -34,7 +34,7 @@ test('UI thread, power budget, Reduce Motion and Dim Flashing Lights', () => {
 
 test('mounted only when the queue really ended with boarding, and the chips land under its burst', () => {
   const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
-  assert.match(recap, /\{rideUp && <RideUpCelebration rideName=\{rideName\} short=\{rideUpShort\} \/>\}/);
+  assert.match(recap, /\{rideUp && <RideUpCelebration rideName=\{rideName\} short=\{rideUpShort\} origin=\{cannonFrom\} \/>\}/);
   assert.match(recap, /const rideUp = endReason === 'boarded'/);
   assert.match(recap, /rideUp \? rideUpStatStartsAt\(index, plan\)/, 'the earned row rolls out of the burst');
   assert.match(src, /return plan\.burstAt \+ index \* plan\.statStepMs;/);
@@ -42,7 +42,7 @@ test('mounted only when the queue really ended with boarding, and the chips land
 
 test('the recap\'s own header card is the stage: no veil, no second banner, the real title stamps', () => {
   const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
-  assert.match(recap, /<RideUpHero active=\{rideUp\} plan=\{rideUpPlan\}>\{backdrop => \(/, 'the header card itself pops');
+  assert.match(recap, /<RideUpHero active=\{rideUp\} plan=\{rideUpPlan\} burstPoint=\{burstPoint\}>\{backdrop => \(/, 'the header card itself pops');
   assert.match(recap, /<RideUpKicker active=\{rideUp\} style=\{styles\.recapKicker\}>/, 'the existing title is the stamp');
   assert.doesNotMatch(src, /styles\.veil|veil:/, 'no full-page veil');
   assert.doesNotMatch(src, /YOUR RIDE&apos;S UP!/, 'no duplicate title banner');
@@ -81,15 +81,54 @@ test('round 6: frame 1 is the whole card, the burst at 0.4 s leads the numbers, 
   assert.doesNotMatch(preview, /<SafeAreaView/);
 });
 
-test('round 6: the confetti makes its colors once per frame, never once per piece', () => {
+test('round 6 (kept): the burst colours are made once per frame, never once per piece', () => {
   const fx = read('src/components/park/ArrivalFxCanvas.tsx');
   const rain = fx.slice(fx.indexOf('export function drawRain'), fx.indexOf('/** A four-point star'));
   assert.doesNotMatch(rain, /Skia\.Color\(/, 'drawRain reads the frame palette');
-  assert.match(rain, /paint\.setColor\(pal\[piece\.tone\]\)/);
-  assert.ok(fx.indexOf('export function rainPalette') < fx.indexOf('export function drawRain'), 'the palette worklet is declared before the worklet that calls it');
-  assert.match(src, /drawRain\(canvas, paint, ink, rain\.value, pieces, pal\)/);
+  const cannon = src.slice(src.indexOf('const picture = useDerivedValue'), src.indexOf("if (count <= 0) return <Announce"));
+  assert.match(cannon, /const pal = rainPalette\(\);/);
+  assert.doesNotMatch(cannon, /Skia\.Color\(|Skia\.Paint\(/, 'the cannon reads the frame palette and its paints are made once');
   const burst = read('src/components/park/BurstCanvas.tsx');
   assert.doesNotMatch(burst.slice(burst.indexOf('for (let i = 0; i < stars.length')), /Skia\.Color\(/, 'no color per star');
+});
+
+test('wave 5 round 3: the payoff breaks out of the header: a cannon from the shark, rays past the card edges, bigger stars', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  // The cannon: pieces shoot up and out of the shark (above it at first), then fall across the sheet below it.
+  const fxSrc = src;
+  assert.match(fxSrc, /export const CANNON_UP = 1[0-9]{2};/);
+  assert.match(fxSrc, /<Canvas style=\{\[styles\.cannon, \{ top: -top, width, height: height \+ top \}\]\}>/, 'the canvas reaches above the recap');
+  const pieceSrc = fxSrc.slice(fxSrc.indexOf('export function cannonPieces'), fxSrc.indexOf('function Cannon('));
+  const mod = { exports: {} };
+  const ts = require('typescript');
+  const js = ts.transpileModule(`const CANNON_G = 980;\n${pieceSrc.replace(/export /g, '')}\nmodule.exports = { cannonPieces, cannonAt };`.replace("const CANNON_G = 980;\n", ''), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2019 } }).outputText;
+  new Function('module', 'exports', js)(mod, mod.exports);
+  const pieces = mod.exports.cannonPieces(28);
+  assert.equal(pieces.length, 28);
+  let up = 0; let below = 0;
+  for (const p of pieces) {
+    if (mod.exports.cannonAt(p, 0.35).y < -40) up += 1;
+    if (mod.exports.cannonAt(p, 1.4).y > 60) below += 1;
+  }
+  assert.ok(up >= 20, `most pieces fly up out of the card first (${up})`);
+  assert.ok(below >= 20, `then fall across the sheet (${below})`);
+  // The rays: the same fan inside the card and behind it, so they run on past the card's edges.
+  assert.match(fxSrc, /export function heroRaysSize\(cardHeight: number\): number \{\n  return Math\.max\(340, cardHeight \* 2\.4\);/);
+  assert.equal((fxSrc.match(/<GoldBurst size=\{rays\}/g) || []).length, 2);
+  assert.match(fxSrc, /<BurstCanvas progress=\{burst\} count=\{sparkles\} radius=\{168\} ring=\{52\}/);
+  // Built in steps after the card's first frame (the burst layers never ride the recap's first commit).
+  assert.match(fxSrc, /export const HERO_BUILD = 3;/);
+  for (const at of [1, 2, 3]) assert.match(fxSrc, new RegExp(`<StepGate steps=\\{steps\\} at=\\{${at}\\}>`));
+});
+
+test('wave 5 round 3: the earned chips are big (40 pt icons, 24 pt numbers) and a zero reads as nothing (dimmed, no tick)', () => {
+  const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
+  assert.match(recap, /export const RIDE_UP_ICON = 40;/);
+  assert.match(recap, /<GameIcon name=\{icon\} size=\{rideUp \? RIDE_UP_ICON : 30\} \/>/);
+  assert.match(recap, /const none = value <= 0 && index > 0;/);
+  assert.match(recap, /recapStatNone: \{ opacity: 0\.4 \}/);
+  assert.match(recap, /tick=\{rideUp && !none\}/);
+  assert.match(recap, /recapStatValueBig: \{ fontSize: 24 \}/);
 });
 
 test('round 6: the recap art is decoded while the player waits, so the first frame has its shark and icons', () => {

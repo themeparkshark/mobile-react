@@ -27,6 +27,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type StyleProp, type TextStyle } from 'react-native';
 import Animated, {
   Easing, ReduceMotion, cancelAnimation, runOnJS, useAnimatedProps, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { isDimFlashingLightsEnabled } from '../../../../modules/flash-safety';
 import { playHaptic, queueHaptic } from '../../../gamekit/Haptics';
@@ -36,10 +37,11 @@ import { usePowerBudget } from '../../../power';
 import { GoldBurst } from '../../../ui/GoldBurst';
 import { SLAM_SQUASH } from '../../../ui/motion';
 import { DURATION, EASE, GOLD_FX, SPRING, flashPeak, momentParticles } from '../../../ui/motionEasing';
-import { RAIN_COLORS, confettiPieces, drawRain, rainPalette } from '../../../components/park/ArrivalFxCanvas';
+import { RAIN_COLORS, rainPalette } from '../../../components/park/ArrivalFxCanvas';
 import BurstCanvas from '../../../components/park/BurstCanvas';
 import { withDelay, withSequence, withSpring, withTiming } from '../../../components/park/momentTime';
 import { perfMark } from '../../../components/park/momentPerf';
+import { StepGate, useMountSteps } from '../../../components/park/mountSteps';
 
 /** The beat sheet (ms), pure numbers so tests can read them. */
 export const RIDE_UP = {
@@ -88,6 +90,8 @@ export const RIDE_UP_REPEAT: RideUpPlan = {
 /** Where the burst comes from inside the header card: its shark (the card's right side). */
 const SHARK = { fromRight: 84, fromBottom: 78 };
 const BAR = 9;
+/** The header card's border (its inside starts this far in). */
+const CARD_BORDER = 3;
 const BRAND_NAVY = '#05346e';
 
 /**
@@ -95,18 +99,36 @@ const BRAND_NAVY = '#05346e';
  * glows gold behind its shark, fills a gold bar along its bottom edge and bursts stars.
  * `backdrop` is drawn inside the card, under its words (pass it as the card's first child).
  */
-export function RideUpHero({ active, plan = RIDE_UP, children }: {
+export function RideUpHero({ active, plan = RIDE_UP, burstPoint, children }: {
   readonly active: boolean;
   /** RIDE_UP the first ride of the day, RIDE_UP_REPEAT after that. */
   readonly plan?: RideUpPlan;
+  /** Where the card's shark is (in the card's parent's points): the confetti cannon fires from there. */
+  readonly burstPoint?: SharedValue<{ x: number; y: number } | null>;
   readonly children: (backdrop: ReactNode) => ReactNode;
 }) {
   const preference = useReduceMotionPreference();
   if (!active || preference === null) return <>{children(null)}</>;
-  return <HeroStage reduced={preference} plan={plan}>{children}</HeroStage>;
+  return <HeroStage reduced={preference} plan={plan} burstPoint={burstPoint}>{children}</HeroStage>;
 }
 
-function HeroStage({ reduced, plan: P, children }: { readonly reduced: boolean; readonly plan: RideUpPlan; readonly children: (backdrop: ReactNode) => ReactNode }) {
+/**
+ * Wave 5 round 3: frame 1 is the card itself (title, shark, ride name, the bar); its burst layers mount in
+ * HERO_BUILD small steps over the next frames (the glow inside the card, the rays outside it, the stars), all before
+ * the burst at 0.4 s, so the recap's first frames never carry them (a 110 ms freeze at 67 ms in release JS).
+ */
+export const HERO_BUILD = 3;
+/** The card's ray fan (the same size and centre inside and outside the card, so the rays run on across its edge). */
+export function heroRaysSize(cardHeight: number): number {
+  return Math.max(340, cardHeight * 2.4);
+}
+
+function HeroStage({ reduced, plan: P, burstPoint, children }: {
+  readonly reduced: boolean; readonly plan: RideUpPlan;
+  readonly burstPoint?: SharedValue<{ x: number; y: number } | null>;
+  readonly children: (backdrop: ReactNode) => ReactNode;
+}) {
+  const steps = useMountSteps(reduced ? 0 : HERO_BUILD, step => perfMark(`rideUp.step${step}`));
   const budget = usePowerBudget();
   const sparkles = momentParticles(P.sparkles, budget, reduced);
   const peak = flashPeak(isDimFlashingLightsEnabled(), reduced);
@@ -177,14 +199,18 @@ function HeroStage({ reduced, plan: P, children }: { readonly reduced: boolean; 
   }));
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
   const onLayout = (e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
+    const { x, y, width, height } = e.nativeEvent.layout;
+    if (burstPoint) burstPoint.value = { x: x + width - SHARK.fromRight, y: y + height - SHARK.fromBottom };
     if (!box || Math.abs(box.width - width) > 1 || Math.abs(box.height - height) > 1) setBox({ width, height });
   };
   const sharkAt = box ? { x: box.width - SHARK.fromRight, y: box.height - SHARK.fromBottom } : null;
+  const rays = heroRaysSize(box?.height ?? 176);
   const backdrop = <View pointerEvents="none" style={StyleSheet.absoluteFill}>
     {/* The gold ray fan behind the card's shark, under its words. */}
-    {sharkAt && <GoldBurst size={Math.max(260, (box?.height ?? 176) * 2)} amount={glow} reduced={reduced}
-      style={{ position: 'absolute', left: sharkAt.x - Math.max(130, (box?.height ?? 176)), top: sharkAt.y - Math.max(130, (box?.height ?? 176)) }} />}
+    <StepGate steps={steps} at={1}>
+      {sharkAt && <GoldBurst size={rays} amount={glow} reduced={reduced}
+        style={{ position: 'absolute', left: sharkAt.x - rays / 2, top: sharkAt.y - rays / 2 }} />}
+    </StepGate>
     {/* The liquid gold bar along the bottom edge, with a bright glint riding its tip. */}
     <Animated.View style={[styles.bar, barStyle]} />
     <Animated.View style={[styles.glint, glintStyle]} />
@@ -192,9 +218,17 @@ function HeroStage({ reduced, plan: P, children }: { readonly reduced: boolean; 
   </View>;
 
   return <Animated.View style={heroStyle} onLayout={onLayout}>
+    {/* The same fan behind the whole card, so on the burst its rays break out past the card's edges onto the sheet
+        (the card's border sits over the seam; inside it, the card's own fan carries them on). */}
+    <StepGate steps={steps} at={2}>
+      {!reduced && sharkAt && <GoldBurst size={rays} amount={glow} reduced={reduced}
+        style={{ position: 'absolute', left: CARD_BORDER + sharkAt.x - rays / 2, top: CARD_BORDER + sharkAt.y - rays / 2 }} />}
+    </StepGate>
     {children(backdrop)}
-    {!reduced && sharkAt && <BurstCanvas progress={burst} count={sparkles} radius={124} ring={44} starSize={13}
-      x={sharkAt.x} y={sharkAt.y} />}
+    <StepGate steps={steps} at={3}>
+      {!reduced && sharkAt && <BurstCanvas progress={burst} count={sparkles} radius={168} ring={52} starSize={15}
+        x={CARD_BORDER + sharkAt.x} y={CARD_BORDER + sharkAt.y} />}
+    </StepGate>
   </Animated.View>;
 }
 
@@ -281,13 +315,19 @@ export function RollingValue({ value, prefix = '', suffix = '', delayMs, duratio
 }
 
 /**
- * One shower of confetti over the whole recap, on the burst (the only full-screen piece; no veil). A second ride the
- * same day (`short`) has no confetti: only the announcement stays.
+ * Wave 5 round 3: a confetti cannon fires out of the header card's shark on the burst (not a shower from the top of
+ * the screen): blue, white and gold pieces shoot up and out past the card's edges, then fall and flutter across the
+ * sheet. The canvas reaches CANNON_UP above the recap, so pieces fly out over the screen above it too. A second ride
+ * the same day (`short`) has no confetti: only the announcement stays. Reduce Motion: none.
  */
-export default function RideUpCelebration({ rideName, short = false }: { readonly rideName: string; readonly short?: boolean }) {
+export default function RideUpCelebration({ rideName, short = false, origin }: {
+  readonly rideName: string; readonly short?: boolean;
+  /** Where the header card's shark is, in this layer's points (RideUpHero writes it on layout). */
+  readonly origin?: Readonly<SharedValue<{ x: number; y: number } | null>>;
+}) {
   const preference = useReduceMotionPreference();
-  if (preference === null || preference || short) return <Announce rideName={rideName} />;
-  return <Confetti rideName={rideName} />;
+  if (preference === null || preference || short || !origin) return <Announce rideName={rideName} />;
+  return <Cannon rideName={rideName} origin={origin} />;
 }
 
 function Announce({ rideName }: { readonly rideName: string }) {
@@ -295,36 +335,106 @@ function Announce({ rideName }: { readonly rideName: string }) {
     accessible accessibilityLabel={`Your ride's up! ${rideName}. Have fun!`} />;
 }
 
-function Confetti({ rideName }: { readonly rideName: string }) {
+/** The cannon's canvas mounts on this step of its own build (about 0.2 s in, well before it fires at 0.42 s). */
+const CANNON_STEP = 4;
+/** How far above the recap the cannon's pieces can fly (pt). */
+export const CANNON_UP = 140;
+/** One cannon piece: launch angle (radians, up is negative), speed (pt/s), spin, size and colour. */
+export interface CannonPiece { readonly a: number; readonly v: number; readonly spin: number; readonly w: number; readonly color: number; readonly delay: number; readonly drift: number }
+/** The cannon's pieces: a fan from up-left to up-right, a few fast ones that clear the card, deterministic (no random). */
+export function cannonPieces(count: number): CannonPiece[] {
+  return Array.from({ length: Math.max(0, count) }, (_, i) => {
+    const u = ((i * 37) % 100) / 100;
+    return {
+      a: (-165 + u * 150) * (Math.PI / 180),
+      v: 430 + ((i * 53) % 9) * 38,
+      spin: (i % 2 ? 1 : -1) * (300 + ((i * 41) % 320)),
+      w: 12 + (i % 3) * 4,
+      color: [0, 1, 2, 0, 3][i % 5] ?? 0,
+      delay: ((i * 29) % 8) / 100,
+      drift: (i % 2 ? 1 : -1) * (8 + ((i * 13) % 12)),
+    };
+  });
+}
+/** Gravity of the cannon's pieces (pt/s per s) and the shower's length (s). */
+const CANNON_G = 980;
+
+/** Where cannon piece `p` is `tau` seconds after it fires (relative to the shark); pure, for tests. */
+export function cannonAt(p: CannonPiece, tau: number): { x: number; y: number } {
+  'worklet';
+  // Air drag eases the launch speed so the pieces float down instead of dropping like stones.
+  const k = 1.6;
+  const travel = (1 - Math.exp(-k * tau)) / k;
+  return {
+    x: Math.cos(p.a) * p.v * travel + p.drift * Math.sin(tau * 9),
+    y: Math.sin(p.a) * p.v * travel + 0.5 * CANNON_G * 0.55 * tau * tau,
+  };
+}
+
+function Cannon({ rideName, origin }: { readonly rideName: string; readonly origin: Readonly<SharedValue<{ x: number; y: number } | null>> }) {
   const { width, height } = useWindowDimensions();
   const budget = usePowerBudget();
-  const confetti = momentParticles(RIDE_UP.confetti, budget, false);
+  const count = momentParticles(RIDE_UP.confetti, budget, false);
   const rain = useSharedValue(0);
+  // The canvas mounts a few frames after the recap's first frame (never in its first commit, one small step of its
+  // own); the cannon fires at confettiAt.
+  const steps = useMountSteps(CANNON_STEP);
   useEffect(() => {
     rain.value = withDelay(RIDE_UP.confettiAt, withTiming(1, { duration: RIDE_UP.confettiMs, easing: Easing.linear }));
     return () => cancelAnimation(rain);
   }, [rain]);
-  const pieces = useMemo(() => confettiPieces(confetti, width, height * 0.75, 3), [confetti, width, height]);
-  const rainPicture = useDerivedValue(() => createPicture(canvas => {
+  const pieces = useMemo(() => cannonPieces(count), [count]);
+  const art = useMemo(() => {
     const paint = Skia.Paint();
     paint.setAntiAlias(true);
     const ink = Skia.Paint();
     ink.setAntiAlias(true);
     ink.setStyle(PaintStyle.Stroke);
     ink.setStrokeWidth(1);
+    return { paint, ink };
+  }, []);
+  const seconds = RIDE_UP.confettiMs / 1000;
+  const top = CANNON_UP;
+  const picture = useDerivedValue(() => createPicture(canvas => {
+    const t = rain.value;
+    const at = origin.value;
+    if (t <= 0 || t >= 1 || !at) return;
     const pal = rainPalette();
-    ink.setColor(pal[RAIN_COLORS.length - 1]);
-    drawRain(canvas, paint, ink, rain.value, pieces, pal);
-  }, { width, height }));
-  if (confetti <= 0) return <Announce rideName={rideName} />;
+    art.ink.setColor(pal[RAIN_COLORS.length - 1]);
+    for (let i = 0; i < pieces.length; i += 1) {
+      const p = pieces[i];
+      const local = Math.max(0, (t - p.delay) / (1 - p.delay));
+      if (local <= 0 || local >= 1) continue;
+      const tau = local * seconds;
+      const pos = cannonAt(p, tau);
+      const alpha = local < 0.78 ? 1 : (1 - local) / 0.22;
+      const h = p.w * 0.6;
+      canvas.save();
+      canvas.translate(at.x + pos.x, top + at.y + pos.y);
+      canvas.rotate(p.spin * tau, 0, 0);
+      // The flutter: the piece turns over as it flies.
+      canvas.scale(1, 0.25 + 0.75 * Math.abs(Math.cos(tau * 11 + i)));
+      art.paint.setColor(pal[p.color]);
+      art.paint.setAlphaf(alpha);
+      const rect = Skia.RRectXY(Skia.XYWHRect(-p.w / 2, -h / 2, p.w, h), 2, 2);
+      canvas.drawRRect(rect, art.paint);
+      art.ink.setAlphaf(0.5 * alpha);
+      canvas.drawRRect(rect, art.ink);
+      canvas.restore();
+    }
+  }, { width, height: height + top }));
+  if (count <= 0) return <Announce rideName={rideName} />;
   return <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityLiveRegion="polite"
     accessible accessibilityLabel={`Your ride's up! ${rideName}. Have fun!`}>
-    <Canvas style={StyleSheet.absoluteFill}><Picture picture={rainPicture} /></Canvas>
+    <StepGate steps={steps} at={CANNON_STEP}>
+      <Canvas style={[styles.cannon, { top: -top, width, height: height + top }]}><Picture picture={picture} /></Canvas>
+    </StepGate>
   </View>;
 }
 
 const styles = StyleSheet.create({
   rolling: { padding: 0, textAlign: 'center' },
+  cannon: { position: 'absolute', left: 0 },
   bar: { position: 'absolute', left: 0, right: 0, bottom: 0, height: BAR, backgroundColor: GOLD_FX.rays,
     borderTopWidth: 2, borderTopColor: '#fff2b0', transformOrigin: 'left' },
   glint: { position: 'absolute', left: 0, bottom: -3, width: 20, height: BAR + 6, borderRadius: 10, backgroundColor: '#fff6cf' },

@@ -11,7 +11,7 @@ import { useRef, type ReactNode } from 'react';
 import { Image as NativeImage, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeInDown, ZoomIn, useDerivedValue, useSharedValue } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import RideUpCelebration, { RIDE_UP, RIDE_UP_REPEAT, RideUpHero, RideUpKicker, RollingValue, rideUpStatStartsAt, type RideUpPlan } from './RideUpCelebration';
 import { takeRideUpVariant } from './rideUpRepeat';
@@ -52,6 +52,9 @@ export function warmRecapArt(): void {
   }
 }
 
+/** The earned row's icons on "Your ride's up!" (pt). */
+export const RIDE_UP_ICON = 40;
+
 /** How long a recap number rolls (bigger numbers roll a little longer, capped). */
 function rollMs(target: number): number {
   return Math.min(900, 380 + target * 18);
@@ -76,11 +79,14 @@ function RecapStat({ icon, value, prefix = '', label, index, reducedMotion, ride
 }) {
   const delayMs = rideUp ? rideUpStatStartsAt(index, plan) : 260 + index * 90;
   const durationMs = rideUp ? plan.statMs : rollMs(value);
+  // Wave 5 round 3: nothing earned in a chip reads as nothing (a dimmed chip that never rolls or ticks), so the eye
+  // goes to what you did earn; on "Your ride's up!" the earned icons are big (40 pt).
+  const none = value <= 0 && index > 0;
   return <Animated.View entering={reducedMotion || rideUp ? undefined : ZoomIn.delay(160 + index * 90).springify().damping(11)}
-    style={styles.recapStat} accessible accessibilityLabel={`${prefix}${value} ${label}`}>
-    <GameIcon name={icon} size={30} />
+    style={[styles.recapStat, none && styles.recapStatNone]} accessible accessibilityLabel={`${prefix}${value} ${label}`}>
+    <GameIcon name={icon} size={rideUp ? RIDE_UP_ICON : 30} />
     <RollingValue value={value} prefix={prefix} delayMs={delayMs} durationMs={durationMs} reduced={reducedMotion}
-      tick={rideUp} style={styles.recapStatValue} />
+      tick={rideUp && !none} style={[styles.recapStatValue, rideUp && styles.recapStatValueBig]} />
     <Text style={styles.recapStatLabel}>{label}</Text>
   </Animated.View>;
 }
@@ -96,6 +102,9 @@ function TickRow({ icon, label, value, index, reducedMotion }: {
     <Text style={styles.tickValue}>{value}</Text>
   </Animated.View>;
 }
+
+/** Where the recap card starts inside the recap (its side margin): the cannon's points are the recap's. */
+const RECAP_CARD_X = spacing.lg;
 
 const ROW_ICONS: Record<string, GameIconName> = { wait: 'timer', bonus: 'parts', mastery: 'star', encore: 'xp' };
 
@@ -200,12 +209,15 @@ export default function SessionRecap({
     (coin.available_parts ?? 0) >= coin.parts_to_next_level && playerEnergy != null &&
     playerEnergy >= coin.energy_to_next_level;
   let stat = 0;
+  // Where the header card's shark is: the confetti cannon fires from it (the card writes it on layout, UI thread only).
+  const burstPoint = useSharedValue<{ x: number; y: number } | null>(null);
+  const cannonFrom = useDerivedValue(() => (burstPoint.value ? { x: burstPoint.value.x + RECAP_CARD_X, y: burstPoint.value.y } : null));
 
   return (
     <View style={{ flex: 1 }}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.recapCard}>
       {/* "Your ride's up!": the header card itself is the celebration (pop, title stamp, gold bar, rays, burst). */}
-      <RideUpHero active={rideUp} plan={rideUpPlan}>{backdrop => (
+      <RideUpHero active={rideUp} plan={rideUpPlan} burstPoint={burstPoint}>{backdrop => (
       <LinearGradient colors={['#13a8e9', '#0879ca', '#0768b9']} style={styles.recapHero}>
         {backdrop}
         <View style={styles.recapHeroCopy}>
@@ -446,7 +458,7 @@ export default function SessionRecap({
       <GameButton label={doneLabel} onPress={onDone} fullWidth style={styles.recapBtn} />
     </ScrollView>
     {/* "Your ride's up!": the app cheers you onto the ride, then gets out of the way. */}
-    {rideUp && <RideUpCelebration rideName={rideName} short={rideUpShort} />}
+    {rideUp && <RideUpCelebration rideName={rideName} short={rideUpShort} origin={cannonFrom} />}
     </View>
   );
 }
@@ -487,6 +499,8 @@ const styles = StyleSheet.create({
   },
   recapStat: { alignItems: 'center', flex: 1 },
   recapStatValue: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 20, marginTop: 2 },
+  recapStatValueBig: { fontSize: 24 },
+  recapStatNone: { opacity: 0.4 },
   recapStatLabel: { color: '#3b6884', fontFamily: 'Knockout', fontSize: 12, marginTop: 1, textTransform: 'uppercase' },
   queueStampCard: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg, padding: spacing.sm,
     borderRadius: borderRadius.lg, borderWidth: 3, borderColor: '#ffd443', backgroundColor: '#e5f8ff', ...shadows.md },

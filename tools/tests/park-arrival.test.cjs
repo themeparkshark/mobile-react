@@ -138,12 +138,12 @@ test('the moment never re-renders React once it plays: stable props, card target
   const src = read('src/components/park/ParkArrivalMoment.tsx');
   assert.match(src, /const targets = useSharedValue<\(Point \| null\)\[\]>/);
   assert.doesNotMatch(src, /setTargets/, 'no React state for the card targets');
-  // Wave 5 round 2: the only React state is the invisible mount steps (before the moment starts) and the particle
-  // canvas leaving on the last frame (after it ends): nothing re-renders while it plays.
-  assert.equal((src.match(/useState\(/g) || []).length, 2);
-  assert.match(src, /const \[step, setStep\] = useState\(0\)/);
+  // Wave 5 round 3: the only stage state is the particle canvas leaving on the last frame (after it ends); the mount
+  // steps live in StepGates and the tap catcher in its own component, so nothing re-renders the stage while it plays.
+  assert.equal((src.match(/useState\(/g) || []).length, 1);
+  assert.doesNotMatch(src, /setStep/);
   assert.match(src, /const \[fxOn, setFxOn\] = useState\(true\)/);
-  assert.match(src, /if \(step >= MOUNT_STEPS\) \{ mountedAll\.current = true; tryStart\(\); return undefined; \}/);
+  assert.match(src, /if \(step === GO_STEP\) \{ mountedAll\.current = true; tryStart\(\); \}/);
   assert.match(src, /if \(!laidOut\.current \|\| !artReady\.current \|\| !mountedAll\.current/, 'the moment starts only once every step has mounted');
   const hook = read('src/components/park/useParkArrival.tsx');
   assert.match(hook, /const onDone = useCallback\(/, 'a stable onDone');
@@ -232,25 +232,42 @@ test('round 6: no still hold, the cards are home by about 2.45 s and the veil li
   assert.match(src, /A\.scrimOpacity \* scrim\.value\) \* \(1 - leave\.value\)/, 'the veil lifts with the leave');
 });
 
-test('wave 5 round 2: a cold first arrival builds in small frames, hands off on the UI thread and unmounts in two steps', () => {
+test('wave 5 round 2/3: a cold first arrival builds in small frames (gates), hands off on the UI thread and unmounts in two steps', () => {
   const src = read('src/components/park/ParkArrivalMoment.tsx');
-  assert.match(src, /const MOUNT_STEPS = 8;/);
-  for (const step of [1, 2, 3, 4, 5, 6, 7]) assert.match(src, new RegExp(`\\{step >= ${step} &&`), `layers mount at step ${step}`);
-  assert.match(src, /setTimeout\(\(\) => \{ raf = requestAnimationFrame\(\(\) => setStep\(n => n \+ 1\)\); \}, STEP_GAP_MS\)/, 'one step per UI frame');
+  assert.match(src, /const MOUNT_STEPS = 7;/);
+  assert.match(src, /const GO_STEP = 5;/);
+  for (const step of [1, 2, 3, 4, 5, 6, 7]) assert.match(src, new RegExp(`<StepGate steps=\\{steps\\} at=\\{${step}\\}>`), `layers mount at step ${step}`);
+  const steps = read('src/components/park/mountSteps.tsx');
+  assert.match(steps, /timer = setTimeout\(\(\) => \{\n        raf = requestAnimationFrame\(\(\) => \{/, 'one step per UI frame');
+  assert.match(steps, /useSyncExternalStore\(steps\.subscribe, steps\.get, steps\.get\)/, 'only a gate re-renders on its step');
   // The flight home is scheduled with the rest of the beat sheet (no JS hop at the handoff); a tap reschedules it.
   assert.match(src, /scheduleLeave\(A\.handoffAt\);\n  \};/);
   assert.match(src, /if \(fromTap\) \{\n      cancelAnimation\(clock\);\n      scheduleLeave\(0\);/);
   assert.match(src, /setFxOn\(false\);\n    requestAnimationFrame\(\(\) => doneRef\.current\(\)\);/, 'the canvas leaves a frame before the stage');
-  assert.match(src, /step >= 6 && fxOn && !reduced/);
+  assert.match(src, /<StepGate steps=\{steps\} at=\{5\}>\n        \{fxOn && !reduced/);
   const art = read('src/components/park/arrivalArt.ts');
   assert.match(art, /ARRIVAL_ICONS\.map\(name => ICON_SOURCES\[name\]\)/, 'the card and pill icons are decoded with the art');
+});
+
+test('wave 5 round 3: map taps go through while the stage builds and once the cards leave; the moment starts after 5 steps', () => {
+  const src = read('src/components/park/ParkArrivalMoment.tsx');
+  assert.doesNotMatch(src, /<Pressable style=\{StyleSheet\.absoluteFill\} onPress=\{onTap\}[^/]*>\n\s+<Animated/, 'the veil is not inside a tap catcher');
+  assert.match(src, /<TapCatcher live=\{live\} onTap=\{onTap\}/);
+  assert.match(src, /function TapCatcher\([^]*?if \(!on\) return null;/, 'no tap catcher while the stage is not live');
+  assert.match(src, /perfMark\('arrival\.start'\);\n    live\.set\(1\);/, 'live from the first visible frame');
+  assert.match(src, /phase\.current = 'out';\n    live\.set\(0\);/, 'and not after the handoff');
+  assert.match(src, /root[^\n]*pointerEvents="box-none"|style=\{\[StyleSheet\.absoluteFill, rootStyle\]\} pointerEvents="box-none"/);
+  assert.match(src, /<Animated\.View pointerEvents="none" style=\{\[StyleSheet\.absoluteFill, scrimStyle\]\}>/, 'the veil never takes a tap');
+  // Build cost before the start: steps 0..5, about 2 frames each (34 ms + a frame) plus armMs: about 0.35 s.
+  const A = arrival.ARRIVAL;
+  assert.ok(5 * (34 + 17) + A.armMs + 17 <= 380, 'trigger to first frame about 0.35 s');
 });
 
 test('wave 5 round 2: the cards read with zero words and the cards are home by 2.2 s', () => {
   const src = read('src/components/park/ParkArrivalMoment.tsx');
   assert.doesNotMatch(src, />\?</, 'no "?" disc on the coins-to-find card');
   assert.match(src, /function CoinCount\(/, 'every count sits next to a gold coin');
-  assert.equal((src.match(/<CoinCount count=\{card\.count\} \/>/g) || []).length, 2);
+  assert.equal((src.match(/<CoinCount count=\{card\.count\} kind="(new|find)" \/>/g) || []).length, 2);
   assert.match(src, /styles\.orbitCoin/, 'coins to find ring the map pin');
   assert.match(src, /if \(card\.kind === 'boss'\) return <BossClock card=\{card\} \/>;/, 'the boss card is the clock (no printed time)');
   assert.match(src, /const CLOCK = 5[0-9];/, 'a big clock face');
@@ -271,8 +288,38 @@ test('wave 5 round 2: the Daily 3 pill is a tomorrow hook: bigger, the next pip 
   assert.match(src, /<GameIcon name="chest" size=\{30\} \/>/);
   assert.match(src, /goal\.giftTomorrow && <View style=\{styles\.tomorrowGift\}><GameIcon name="gift"/);
   assert.match(src, /\{goal\.streak \+ 1\}/);
-  assert.match(src, /flyPoint\(centerX, top \+ GOAL_H \/ 2, stackX, stackY, false, f\)/, 'it flies home with the cards');
+  assert.match(src, /flyPoint\(centerX, top \+ GOAL_H \/ 2, to\.x, to\.y, false, f\)/, 'it flies home after the cards');
   assert.doesNotMatch(src.slice(src.indexOf('const GoalStrip'), src.indexOf('const GOAL_H')), /hours|minutes|left|hurry|lose/i, 'no countdown or loss words');
   const hook = read('src/components/park/useParkArrival.tsx');
   assert.match(hook, /giftTomorrow: state\.streak\.next_milestone\?\.days_away === 1/, 'the gift only when the server\'s prize is tomorrow');
+});
+
+test('wave 5 round 3: the two counts look different (find: pin and coin, blue pill; new: plank and sparkle, gold pill)', () => {
+  const src = read('src/components/park/ParkArrivalMoment.tsx');
+  const body = src.slice(src.indexOf('export function CoinCount'), src.indexOf('/** Where the small coins sit around the map pin'));
+  assert.match(body, /kind === 'new'[^]*styles\.coinCountNew[^]*styles\.countPlank[^]*ARRIVAL_ART\.sparkle/);
+  assert.match(body, /styles\.coinCountFind[^]*<GameIcon name="pin"/);
+  assert.match(src, /coinCountFind: \{ backgroundColor: BRAND\.blueBright \}/);
+  assert.match(src, /coinCountNew: \{ backgroundColor: BRAND\.gold/);
+});
+
+test('wave 5 round 3: the Daily 3 pill holds 300 ms past the cards, docks under the stack button on screen, glows, then the moment ends', () => {
+  const src = read('src/components/park/ParkArrivalMoment.tsx');
+  assert.match(src, /export const GOAL_HOLD_MS = 300;/);
+  assert.match(src, /const goalAt = startIn \+ cards\.length \* A\.flyStepMs \+ GOAL_HOLD_MS;/);
+  assert.match(src, /dockGlow\.value = withDelay\(goalAt \+ A\.flyMs - 60/, 'the next pip glows again once docked');
+  assert.match(src, /if \(ok && i === last && !goal\) runOnJS\(finish\)\(\);/, 'with a goal the moment ends on the pill');
+  assert.match(src, /goalDock\.value = withDelay\([^]*?runOnJS\(finish\)\(\);/);
+  // The dock point stays on the screen for a 300 pt pill on a 375 pt phone (the stack button sits 39 pt from the edge).
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const scale = Number(/GOAL_DOCK_SCALE = ([0-9.]+);/.exec(src)[1]);
+  for (const [w, pill] of [[375, 300], [402, 320], [440, 300]]) {
+    const stackX = w - 39;
+    const x = Math.min(stackX, w - 8 - (pill * scale) / 2);
+    assert.ok(x + (pill * scale) / 2 <= w - 8 + 0.001, `docked pill on screen at ${w}`);
+  }
+  // Tomorrow's flame: a warm gold outline (no grey ghost), the day number inside it.
+  assert.match(src, /<Path path=\{FLAME_PATH\} style="stroke" strokeWidth=\{2\.6\} strokeJoin="round" color=\{BRAND\.gold\} \/>/);
+  assert.doesNotMatch(src, /tomorrowFlame: \{ opacity/);
+  assert.match(src, /<TomorrowFlame day=\{goal\.streak \+ 1\} \/>/);
 });

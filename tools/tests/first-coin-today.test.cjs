@@ -126,3 +126,21 @@ test('wave 5 round 2: from the fourth day the first coin plays a short ribbon (a
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /short=\{collectFlight\.crowned === 'short'\}/);
 });
+
+test('wave 5 round 3: the ribbon builds in invisible steps and starts after the last; the slam stops at the HUD line', () => {
+  const src = read('src/components/park/FirstCoinRibbon.tsx');
+  assert.match(src, /export const FIRST_COIN_BUILD = 5;/);
+  for (const at of [1, 2, 3, 4, 5]) assert.match(src, new RegExp(`<StepGate steps=\\{steps\\} at=\\{${at}\\}>`), `a layer mounts at step ${at}`);
+  assert.match(src, /const shown = useSharedValue\(ARM_OPACITY\);/, 'invisible while it builds');
+  assert.match(src, /if \(step < \(reduced \? 0 : FIRST_COIN_BUILD\) \|\| started\.current\) return;/, 'the beat sheet starts after the last step');
+  assert.match(src, /perfMark\('firstCoin\.start'\);\n    shown\.value = 1;/);
+  assert.doesNotMatch(src, /useEffect\(\(\) => \{\n    perfMark\('firstCoin\.start'\)/, 'never started in the mount commit');
+  // The slam's upward reach (fans, core, rings) is clipped FAN_CLIP above the ribbon, where the HUD rows end.
+  assert.match(src, /export const FAN_CLIP = 30;/);
+  assert.match(src, /slamClip: \{ position: 'absolute', top: -FAN_CLIP,[^}]*overflow: 'hidden' \}/);
+  assert.match(src, /const clipTop = top - FAN_CLIP;/);
+  assert.match(src, /<View style=\{\[styles\.layerClip, \{ top: clipTop \}\]\}>/, 'the rings are clipped at the same line');
+  assert.match(src, /<Rect x=\{0\} y=\{0\} width=\{FAN_R \* 2\} height=\{FAN_R \* 2\} blendMode="dstIn">/, 'the crisp fan feathers out at the line');
+  // The capture marks around the flight home (the short ribbon's long frame was near it).
+  assert.match(src, /perfMark\('firstCoin\.land'\);/);
+});
