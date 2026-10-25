@@ -111,6 +111,10 @@ const DAY_BACKDROP = ['#0a7dd1', '#07569e', '#073e87'] as const;
 const NIGHT_BACKDROP = ['#3B2A6B', '#2B2350', '#1E1838'] as const;
 /** Returning after this long away gets a quick "welcome back" heads up. */
 const WELCOME_BACK_AFTER_MS = 20_000;
+/** The longest the resume countdown waits on the 1 for the arcade or the page it is handing over to. */
+const RESUME_HANDOFF_MAX_MS = 1500;
+/** The crew row's height in the free band above the rail (GroupStrip band: a full 44 pt). */
+const CREW_BAND_ROW = 44;
 const QUEUE_RECAP_SHARK = require('../../../assets/images/screens/lineplay/queue-recap-shark.png');
 
 const GAME_NAMES: Record<string, string> = {
@@ -244,6 +248,11 @@ export default function LinePlayScreen() {
   const arcadeAfterResume = useRef(false);
   // A chapter button tapped while paused: the resume countdown opens that page when it ends.
   const pageAfterResume = useRef<number | null>(null);
+  /**
+   * After the 1, the countdown stays up (still on the 1) until what the tap asked for is on screen:
+   * the arcade sheet starting its entrance, or the page in place. No frame shows the board live in between.
+   */
+  const [resumeHandoff, setResumeHandoff] = useState<'arcade' | 'page' | null>(null);
   const [toast, setToast] = useState<QueueToastMessage | null>(null);
   const toastKey = useRef(0);
   const showToastRef = useRef<((message: Omit<QueueToastMessage, 'key'>) => void) | null>(null);
@@ -783,7 +792,8 @@ export default function LinePlayScreen() {
   groupPlayRef.current = groupPlay;
   const lineTipReady = linePlayTipReady({
     screenReady: snapshot.state === 'active', gameOpen: activeGame != null, lineMoving: snapshot.moving,
-    sheetOpen: groupPlay.sheetOpen || arcadeOpen || projectOpen || waitEndPrompt != null || boardingAsk || lineDone || resuming,
+    sheetOpen: groupPlay.sheetOpen || arcadeOpen || projectOpen || waitEndPrompt != null || boardingAsk || lineDone || resuming ||
+      resumeHandoff != null,
     finished: false,
   });
 
@@ -862,6 +872,23 @@ export default function LinePlayScreen() {
   }, [closeDetails, snapshot.state, resuming]);
   useEffect(() => () => {
     if (revealTimer.current) clearTimeout(revealTimer.current);
+  }, []);
+  // The countdown's hand-off: the page is painted in place two frames after the jump; the arcade lets go
+  // when its sheet starts coming in (onArcadeShowing). Never longer than RESUME_HANDOFF_MAX_MS.
+  useEffect(() => {
+    if (resumeHandoff == null) return undefined;
+    let frameId: number | null = null;
+    if (resumeHandoff === 'page') {
+      frameId = requestAnimationFrame(() => { frameId = requestAnimationFrame(() => setResumeHandoff(null)); });
+    }
+    const fallback = setTimeout(() => setResumeHandoff(null), RESUME_HANDOFF_MAX_MS);
+    return () => {
+      if (frameId != null) cancelAnimationFrame(frameId);
+      clearTimeout(fallback);
+    };
+  }, [resumeHandoff]);
+  const onArcadeShowing = useCallback(() => {
+    setResumeHandoff(current => current === 'arcade' ? null : current);
   }, []);
   // The window coming back after Hide on a short phone fades in too, never pops.
   const wasShown = useRef(pagesShown);
@@ -1021,13 +1048,10 @@ export default function LinePlayScreen() {
   // One gold button per screen: the chapter page has PLAY NOW and the board page is the game itself
   // (its PLAY strip and "Next signal" are gold), so there the rail's Next is a quiet white button.
   const railQuiet = visibleItem?.kind === 'chapter_intro' || boardPage;
-  const jumpToPage = (index: number) => {
+  const jumpToPage = (index: number, animated = Math.abs(index - visiblePageIndex) <= 1) => {
     if (index < 0 || index >= activityPages.length) return;
     setPageIndex(index);
-    activityListRef.current?.scrollToIndex({
-      index,
-      animated: Math.abs(index - visiblePageIndex) <= 1,
-    });
+    activityListRef.current?.scrollToIndex({ index, animated });
   };
   tourRef.current = { activityPages, jumpToPage };
 
@@ -1129,7 +1153,7 @@ export default function LinePlayScreen() {
               onTogglePause={() => {
                 if (resuming) return;
                 if (snapshot.state === 'paused') setResuming(true);
-                else { arcadeAfterResume.current = false; pageAfterResume.current = null; session.pause('manual'); void Haptics.selectionAsync(); }
+                else { arcadeAfterResume.current = false; pageAfterResume.current = null; setResumeHandoff(null); session.pause('manual'); void Haptics.selectionAsync(); }
               }}
               onPlayBonus={arcadeChoices.length ? () => {
                 // Paused: never a dead tap. The same 3 2 1 as the play button runs, then the arcade opens.
@@ -1333,6 +1357,7 @@ export default function LinePlayScreen() {
                     <ChapterCard chapter={snapshot.chapter} completedIds={completedActivityIds} compact={fit.short}
                       windowHeight={pageViewHeight}
                       crewRelay={snapshot.crewRelay} paused={snapshot.state !== 'active'}
+                      locked={snapshot.state !== 'active' && snapshot.state !== 'paused'}
                       chapterClue={chapterClue}
                       signalAvailable={sharedPages.length > 0}
                       onChooseMission={(id) => {
@@ -1396,9 +1421,11 @@ export default function LinePlayScreen() {
             </View>
             </Reanimated.View>
             {/* The window stepped aside: the crew row comes back into the free band above the rail when it fits. */}
-            {!pagesShown && crewLent && groupPlay.strip != null && crewRowInBand(pagesHeight, crewRowHeight) && (
-              <Reanimated.View entering={reducedFx ? undefined : FadeIn.duration(200)} style={[styles.crewBand, { bottom: railBlock }]}
-                pointerEvents="box-none">{groupPlay.strip}</Reanimated.View>
+            {/* The band runs from the wait card's bottom edge to the rail, and the row (a full 44 pt) sits in its middle, so the gaps above and below match. */}
+            {!pagesShown && crewLent && groupPlay.bandStrip != null && crewRowInBand(pagesHeight + fit.activityGap, crewRowHeight && Math.max(crewRowHeight, CREW_BAND_ROW)) && (
+              <Reanimated.View entering={reducedFx ? undefined : FadeIn.duration(200)}
+                style={[styles.crewBand, { top: -fit.activityGap, bottom: railBlock }]}
+                pointerEvents="box-none">{groupPlay.bandStrip}</Reanimated.View>
             )}
             {/* The rail stays at its usual bottom spot in every state, so a thumb finds it in the same place. */}
             <Reanimated.View layout={reducedFx ? undefined : LinearTransition.duration(180)}
@@ -1433,6 +1460,7 @@ export default function LinePlayScreen() {
 
       {bonus ? <BonusPicker
         visible={arcadeOpen && snapshot.state === 'active'}
+        onShowing={onArcadeShowing}
         bonus={bonus}
         secondsToNext={secondsToNextBonus}
         questChoice={arcadeChoices.find(choice => choice.gameId === 'current') ?? null}
@@ -1460,6 +1488,7 @@ export default function LinePlayScreen() {
         }}
       /> : <QueueArcadeSheet
         visible={arcadeOpen && snapshot.state === 'active'}
+        onShowing={onArcadeShowing}
         choices={arcadeChoices}
         onClose={() => {
           queuedArcadeGame.current = null;
@@ -1531,13 +1560,14 @@ export default function LinePlayScreen() {
 
       <QueueToast message={toast} onDone={() => setToast(null)} />
 
-      <ResumeCountdown active={resuming} onDone={() => {
+      <ResumeCountdown active={resuming || resumeHandoff != null} onDone={() => {
         setResuming(false);
         session.resume();
-        if (arcadeAfterResume.current) { arcadeAfterResume.current = false; setArcadeOpen(true); }
         const page = pageAfterResume.current;
         pageAfterResume.current = null;
-        if (page != null) jumpToPage(page);
+        // The 1 stays up until the arcade starts coming in, or the page is in place under it (no scroll to watch).
+        if (arcadeAfterResume.current) { arcadeAfterResume.current = false; setArcadeOpen(true); setResumeHandoff('arcade'); }
+        else if (page != null) { jumpToPage(page, false); setResumeHandoff('page'); }
       }} />
 
       {/* End by hand: one branded sheet (header End, back, or a footer tab). */}

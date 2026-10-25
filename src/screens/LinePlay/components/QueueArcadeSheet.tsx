@@ -31,7 +31,7 @@ const ICONS: Record<string, number> = {
   showdown: require('../../../../assets/images/screens/lineplay/arcade/showdown.png'),
 };
 
-export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, onHidden,
+export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, onHidden, onShowing,
   kicker = 'LINEPLAY', title = 'QUEUE ARCADE', intro = 'Pick a quick game while you wait.',
   note = 'Your wait still counts while you play.', newLabel = 'New this wait.', showNew = true }: {
   readonly visible: boolean;
@@ -47,13 +47,16 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
   readonly onChoose: (index: number) => void;
   readonly onClose: () => void;
   readonly onHidden: () => void;
+  /** The sheet starts coming in (the queue's resume countdown hands over on this frame). */
+  readonly onShowing?: () => void;
 }) {
   const reducedMotion = useReducedGameMotion();
-  return <Modal isVisible={visible} style={styles.modal} hasBackdrop={false}
+  // The slide runs on the UI thread, so a busy JS thread never holds the sheet below the screen.
+  return <Modal isVisible={visible} style={styles.modal} hasBackdrop={false} useNativeDriver hideModalContentWhileAnimating
     animationIn={reducedMotion ? 'fadeIn' : 'slideInUp'}
     animationOut={reducedMotion ? 'fadeOut' : 'slideOutDown'}
     animationInTiming={reducedMotion ? 120 : 260} animationOutTiming={reducedMotion ? 120 : 180}
-    onBackButtonPress={onClose} onModalHide={onHidden}>
+    onBackButtonPress={onClose} onModalHide={onHidden} onModalWillShow={onShowing}>
     <View style={styles.scrim}>
       <Pressable accessibilityRole="button" accessibilityLabel={`Close ${title.toLowerCase()}`}
         onPress={onClose} style={StyleSheet.absoluteFill} />

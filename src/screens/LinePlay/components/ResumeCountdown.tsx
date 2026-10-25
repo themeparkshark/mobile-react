@@ -9,10 +9,14 @@
  * thread nor one long UI frame (the board mounting as Details closes) can skip
  * 2 or 1: on a loaded iPhone SE, JS timers jumped from 3 straight back to the
  * game. The clock is back at 0 whenever the countdown hides, so it always opens on 3.
+ *
+ * After the 1, the parent may keep it up (still on the 1) until what the tap asked for is on screen
+ * (the arcade sheet starting its entrance, or the page in place), so no frame shows the game board
+ * live in between. Then it fades out on the UI thread while that result comes in.
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withTiming,
+import Animated, { FadeOut, runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withTiming,
   type SharedValue } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
@@ -26,6 +30,8 @@ const MAX_STEP_MS = 34;
 const RESET_DELAY_MS = 250;
 /** How long each number's punch (1.3 down to 1) lasts, as a share of its step. */
 const PUNCH_SHARE = 0.4;
+/** The scrim's fade as it hands over to the game, the arcade or the page (UI thread). */
+const EXIT_FADE_MS = 140;
 
 /** The haptic tick and sound for each number, on the JS thread. */
 function tick() {
@@ -54,9 +60,13 @@ export default function ResumeCountdown({ active, onDone }: { active: boolean; o
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
 
+  const frameRef = useRef<{ setActive: (on: boolean) => void } | null>(null);
+
   const finish = useCallback(() => {
     if (finished.current) return;
     finished.current = true;
+    // The clock is done: a hand-off hold (still on the 1) costs no frame work.
+    frameRef.current?.setActive(false);
     doneRef.current();
   }, []);
 
@@ -69,6 +79,7 @@ export default function ResumeCountdown({ active, onDone }: { active: boolean; o
     if (Math.floor(after) > Math.floor(before) && after < 3) runOnJS(tick)();
     if (before < 3 && after >= 3) runOnJS(finish)();
   }, false);
+  frameRef.current = frame;
 
   useEffect(() => {
     if (!active) return undefined;
@@ -87,22 +98,25 @@ export default function ResumeCountdown({ active, onDone }: { active: boolean; o
   }, [active]);
 
   if (!active) return null;
-  return <Pressable style={styles.scrim} onPress={finish} accessibilityRole="button"
-    accessibilityLabel="Resuming in 3 2 1. Tap to resume now.">
-    <View style={styles.bubble}>
-      {[3, 2, 1].map((value, index) => <CountNumber key={value} value={value} index={index} clock={clock}
-        reducedMotion={reducedMotion} />)}
-    </View>
-    {/* On a navy pill, so the words read over any page behind the scrim (board tiles, stars). */}
-    <View style={styles.hintPill}>
-      <Text style={styles.hint}>Back in line</Text>
-    </View>
-  </Pressable>;
+  return <Animated.View style={styles.scrimHost} exiting={reducedMotion ? undefined : FadeOut.duration(EXIT_FADE_MS)}>
+    <Pressable style={styles.scrim} onPress={finish} accessibilityRole="button"
+      accessibilityLabel="Resuming in 3 2 1. Tap to resume now.">
+      <View style={styles.bubble}>
+        {[3, 2, 1].map((value, index) => <CountNumber key={value} value={value} index={index} clock={clock}
+          reducedMotion={reducedMotion} />)}
+      </View>
+      {/* On a navy pill, so the words read over any page behind the scrim (board tiles, stars). */}
+      <View style={styles.hintPill}>
+        <Text style={styles.hint}>Back in line</Text>
+      </View>
+    </Pressable>
+  </Animated.View>;
 }
 
 const styles = StyleSheet.create({
+  scrimHost: { ...StyleSheet.absoluteFillObject, zIndex: 40 },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: BRAND.scrim, alignItems: 'center',
-    justifyContent: 'center', zIndex: 40 },
+    justifyContent: 'center' },
   bubble: { width: 132, height: 132, borderRadius: 66, backgroundColor: BRAND.gold, borderWidth: 4,
     borderColor: BRAND.navy, borderBottomWidth: 8, alignItems: 'center', justifyContent: 'center' },
   number: { fontFamily: 'Shark', fontSize: 74, color: BRAND.navy, marginTop: 6 },

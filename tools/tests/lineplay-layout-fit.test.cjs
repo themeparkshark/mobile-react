@@ -207,6 +207,7 @@ test('an iPhone SE reading Details: no rail button acts on the hidden page; one 
   const { runtime } = require('./helpers/reward-hook-runtime.cjs');
   const calls = [];
   const rail = props => runtime('src/screens/LinePlay/components/ActivityPageRail.tsx', {
+    '../../../services/lineplay/lineLayout': layout(),
     '../../../ui': { GameIcon: 'GameIcon' }, './KidText': { default: 'KidText' },
     '../../../design-system': { borderRadius: { lg: 16, md: 12 }, spacing: { sm: 8, xs: 4, md: 12, lg: 16 } },
   }, { index: 1, count: 4, nextLabel: 'Clue 2', progressText: 'CLUE 1/3', onFirst: () => calls.push('first'),
@@ -339,7 +340,10 @@ test('the window stepped aside: the rail stays put and the crew row comes back i
   assert.equal(m.crewRowInBand(40, 44), false, 'never squeezed into a band too short for it');
   assert.equal(m.crewRowInBand(75, 0), false, 'not before it was measured');
   const screen = read(SCREEN);
-  assert.match(screen, /\{!pagesShown && crewLent && groupPlay\.strip != null && crewRowInBand\(pagesHeight, crewRowHeight\) && \(/);
+  // The band runs from the card's bottom edge (back over the activity gap) to the rail; the row is a full 44 pt, centred.
+  assert.match(screen, /\{!pagesShown && crewLent && groupPlay\.bandStrip != null && crewRowInBand\(pagesHeight \+ fit\.activityGap, crewRowHeight && Math\.max\(crewRowHeight, CREW_BAND_ROW\)\) && \(/);
+  assert.match(screen, /style=\{\[styles\.crewBand, \{ top: -fit\.activityGap, bottom: railBlock \}\]\}/);
+  assert.match(screen, /const CREW_BAND_ROW = 44;/);
   assert.match(screen, /crewBand: \{ position: 'absolute', left: 0, right: 0, top: 0, justifyContent: 'center' \}/);
 });
 
@@ -518,6 +522,7 @@ test('paused by hand with Details open on an SE: the one rail button is Play, an
   const { runtime } = require('./helpers/reward-hook-runtime.cjs');
   const calls = [];
   const rail = props => runtime('src/screens/LinePlay/components/ActivityPageRail.tsx', {
+    '../../../services/lineplay/lineLayout': layout(),
     '../../../ui': { GameIcon: 'GameIcon' }, './KidText': { default: 'KidText' }, './ClueDots': { default: 'ClueDots' },
     '../../../design-system': { borderRadius: { lg: 16, md: 12 }, spacing: { sm: 8, xs: 4, md: 12, lg: 16 } },
   }, { index: 1, count: 4, nextLabel: 'Spot the clue', onFirst: () => {}, onNext: () => calls.push('next'),
@@ -536,7 +541,7 @@ test('paused by hand with Details open on an SE: the one rail button is Play, an
   const screen = read(SCREEN);
   assert.match(screen, /const railBack = railBackAction\(snapshot\.state, snapshot\.pauseReason\);/);
   assert.match(screen, /const onRailBack = useCallback\(\(\) => \{\n\s*closeDetails\(\);\n\s*if \(railBack === 'play' && !resuming\) setResuming\(true\);\n\s*\}, \[closeDetails, railBack, resuming\]\);/);
-  assert.match(screen, /<ResumeCountdown active=\{resuming\} onDone=\{\(\) => \{\n\s*setResuming\(false\);\n\s*session\.resume\(\);/,
+  assert.match(screen, /<ResumeCountdown active=\{resuming \|\| resumeHandoff != null\} onDone=\{\(\) => \{\n\s*setResuming\(false\);\n\s*session\.resume\(\);/,
     'the countdown ends in session.resume()');
   // The card's paused line points at that one button.
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
@@ -596,7 +601,8 @@ test('a space clue page says its own mission name and no second count (the rail 
   assert.doesNotMatch(slot, /MISSION \d OF 3/);
   assert.match(slot, /title=\{title \?\? \(navigator \? 'Spot the clue' : 'Field Note'\)\}/);
   const rail = read('src/screens/LinePlay/components/ActivityPageRail.tsx');
-  assert.match(rail, /numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.7\}>/, 'a long next name shrinks a little, never cut');
+  assert.match(rail, /numberOfLines=\{naming \? nextWords\.lines : 1\} adjustsFontSizeToFit\n\s+minimumFontScale=\{naming && nextWords\.lines === 2 \? 0\.9 : 0\.7\}>/,
+    'a long next name is never cut: two lines at the normal size on a narrow phone');
 });
 
 test('the board page "Tap to play" strip with no header fills its window (no cream band on an SE)', () => {
@@ -609,7 +615,7 @@ test('every picture on the board page means one thing: the hint is the turn-tile
   const m = layout();
   const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
   const hint = card.slice(card.indexOf('const hintButton ='), card.indexOf('const relayStars'));
-  assert.match(hint, /<TurnTileGlyph size=\{beside \? 24 : 28\} \/>/, 'the hint wears the same picture as the hinted tile');
+  assert.match(hint, /<TurnTileGlyph size=\{beside \? 22 : 26\} \/>/, 'the hint wears the same picture as the hinted tile');
   assert.doesNotMatch(hint, /GameIcon/, 'never a GameIcon a rail page could also wear');
   // The board's own pictures (the 3 relay stars, checks) are never the picture of the page after it.
   const boardIcons = [...card.matchAll(/<GameIcon[^>]*name="([a-zA-Z]+)"/g)].map(match => match[1]);
@@ -624,8 +630,8 @@ test('every picture on the board page means one thing: the hint is the turn-tile
 test('paused, ARCADE is never a dead tap: one tap runs the resume 3 2 1, then the arcade opens', () => {
   const screen = read(SCREEN);
   assert.match(screen, /if \(snapshot\.state === 'paused' \|\| resuming\) \{\n\s+arcadeAfterResume\.current = true;\n\s+if \(!resuming\) setResuming\(true\);\n\s+void Haptics\.selectionAsync\(\);/);
-  assert.match(screen, /session\.resume\(\);\n\s+if \(arcadeAfterResume\.current\) \{ arcadeAfterResume\.current = false; setArcadeOpen\(true\); \}/);
-  assert.match(screen, /arcadeAfterResume\.current = false; pageAfterResume\.current = null; session\.pause\('manual'\)/, 'pausing again forgets the queued arcade');
+  assert.match(screen, /if \(arcadeAfterResume\.current\) \{ arcadeAfterResume\.current = false; setArcadeOpen\(true\); setResumeHandoff\('arcade'\); \}/);
+  assert.match(screen, /arcadeAfterResume\.current = false; pageAfterResume\.current = null; setResumeHandoff\(null\); session\.pause\('manual'\)/, 'pausing again forgets the queued arcade');
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.doesNotMatch(card, /onPress=\{onPlayBonus\} disabled=\{paused\}/, 'no disabled ARCADE while paused');
 });
@@ -661,12 +667,14 @@ test('paused, the chapter PLAY and clue buttons are never a dead tap: one tap ru
   assert.doesNotMatch(chapter, /disabled=\{paused\}/, 'no chapter button goes dead while paused');
   assert.match(chapter, /paused && styles\.playResting/, 'the paused PLAY rests in pale blue, never a faded olive gold');
   assert.match(chapter, /playResting: \{ backgroundColor: '#e8f6ff', borderColor: '#0b4f8a' \}/);
-  assert.match(chapter, /\$\{paused \? 'Resume and play' : done === 3 \? 'Play' : 'Start'\} \$\{nextName\}/);
+  assert.match(chapter, /const playVerb = !locked && paused \? 'Resume and play' : done === 3 \? 'Play' : 'Start';/);
+  assert.match(chapter, /accessibilityLabel=\{`\$\{playVerb\} \$\{nextName\}`\}/);
   const screen = read(SCREEN);
   assert.match(screen, /pageAfterResume\.current = index;\n\s+if \(!resuming\) setResuming\(true\);/);
   assert.match(screen, /if \(snapshot\.state !== 'active'\) return;\n\s+jumpToPage\(index\);/);
-  assert.match(screen, /const page = pageAfterResume\.current;\n\s+pageAfterResume\.current = null;\n\s+if \(page != null\) jumpToPage\(page\);/);
-  assert.match(screen, /pageAfterResume\.current = null; session\.pause\('manual'\)/, 'pausing again forgets the queued page');
+  assert.match(screen, /const page = pageAfterResume\.current;\n\s+pageAfterResume\.current = null;/);
+  assert.match(screen, /else if \(page != null\) \{ jumpToPage\(page, false\); setResumeHandoff\('page'\); \}/);
+  assert.match(screen, /pageAfterResume\.current = null; setResumeHandoff\(null\); session\.pause\('manual'\)/, 'pausing again forgets the queued page');
 });
 
 test('one name per clue on every chapter: PLAY, the bubble, the rail, the page header and the recap say the mission name', () => {
@@ -724,4 +732,78 @@ test('clue 3 (the finale game) says its mission name on the rail, the page and t
   const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
   assert.match(slot, /<MiniGameSlot title=\{missionTitle\} item=\{item\}/);
   assert.match(slot, /const label = title \?\? item\.title \?\?/);
+});
+
+test('after the 3 2 1, the arcade or the page follows the 1 with no live-board gap', () => {
+  const screen = read(SCREEN);
+  // The countdown stays up (still on the 1) while it hands over.
+  assert.match(screen, /<ResumeCountdown active=\{resuming \|\| resumeHandoff != null\}/);
+  assert.match(screen, /const \[resumeHandoff, setResumeHandoff\] = useState<'arcade' \| 'page' \| null>\(null\);/);
+  // The arcade: the countdown lets go on the frame the sheet starts coming in (both sheets report it).
+  assert.match(screen, /const onArcadeShowing = useCallback\(\(\) => \{\n\s+setResumeHandoff\(current => current === 'arcade' \? null : current\);/);
+  assert.equal([...screen.matchAll(/onShowing=\{onArcadeShowing\}/g)].length, 2, 'QueueArcadeSheet and BonusPicker');
+  const sheet = read('src/screens/LinePlay/components/QueueArcadeSheet.tsx');
+  assert.match(sheet, /onModalWillShow=\{onShowing\}/);
+  assert.match(sheet, /useNativeDriver hideModalContentWhileAnimating/, 'the slide runs on the UI thread, so a busy JS thread never holds it');
+  assert.match(read('src/screens/LinePlay/components/BonusPicker.tsx'), /onModalWillShow=\{onShowing\}/);
+  // The page: jumped to with no scroll animation under the 1, released two frames later, once it is painted.
+  assert.match(screen, /frameId = requestAnimationFrame\(\(\) => \{ frameId = requestAnimationFrame\(\(\) => setResumeHandoff\(null\)\); \}\);/);
+  // Never stuck: a fallback lets go after RESUME_HANDOFF_MAX_MS.
+  assert.match(screen, /const RESUME_HANDOFF_MAX_MS = 1500;/);
+  assert.match(screen, /const fallback = setTimeout\(\(\) => setResumeHandoff\(null\), RESUME_HANDOFF_MAX_MS\);/);
+  // The countdown: its frame clock stops at the 1 (a hold costs no frame work), and it fades out on the UI thread.
+  const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
+  assert.match(countdown, /finished\.current = true;\n\s+\/\/[^\n]*\n\s+frameRef\.current\?\.setActive\(false\);/);
+  assert.match(countdown, /exiting=\{reducedMotion \? undefined : FadeOut\.duration\(EXIT_FADE_MS\)\}/);
+  assert.match(countdown, /const EXIT_FADE_MS = 140;/);
+  assert.ok(140 < 250, 'the fade ends before the clock resets, so the closing frames keep the 1');
+});
+
+test('the chapter page never shows a live-looking button that does nothing (detected, ending, complete)', () => {
+  const screen = read(SCREEN);
+  assert.match(screen, /locked=\{snapshot\.state !== 'active' && snapshot\.state !== 'paused'\}/);
+  const chapter = read('src/screens/LinePlay/components/ChapterCard.tsx');
+  assert.match(chapter, /const off = \{ disabled: locked, accessibilityState: \{ disabled: locked \} \} as const;/);
+  // Every mission button (PLAY, the strip, the 3 bubbles in both layouts, the crew chips, Crew Prompts) takes it.
+  const presses = [...chapter.matchAll(/onPress=\{\(\) => onChooseMission\(/g)].length;
+  assert.equal(presses, 7);
+  assert.equal([...chapter.matchAll(/\{\.\.\.off\}/g)].length, presses, 'every onChooseMission button can be off');
+  assert.equal([...chapter.matchAll(/locked && styles\.locked/g)].length, presses, 'and looks off');
+  assert.match(chapter, /locked: \{ opacity: 0\.45 \}/);
+  // Paused stays live (the 3 2 1 runs): no button goes dead just because a kid paused.
+  assert.doesNotMatch(chapter, /disabled=\{paused\}/);
+});
+
+test('the board hint is help: the turn-tile picture wears a small "?" badge, and is never the rail Next picture', () => {
+  const m = layout();
+  const card = read('src/screens/LinePlay/components/NavigationPanelCard.tsx');
+  const hint = card.slice(card.indexOf('const hintButton ='), card.indexOf('const relayStars'));
+  assert.match(hint, /<View style=\{\[styles\.helpBadge, beside && styles\.helpBadgeBeside\]\} pointerEvents="none">/);
+  assert.match(hint, />\?<\/Text>/);
+  assert.match(card, /helpBadge: \{[^}]*backgroundColor: BRAND\.navy/);
+  // The hint never wears any rail page's picture (it has no GameIcon at all).
+  const pages = ['chapter_intro', 'crew_grid', 'circuit', 'crew_relay', 'signal', 'puzzle', 'trivia', 'lore', 'prediction', 'minigame'];
+  const hintIcons = [...hint.matchAll(/<GameIcon[^>]*name=["{]'?([a-zA-Z]+)/g)].map(match => match[1]);
+  for (const kind of pages) assert.ok(!hintIcons.includes(m.railPageIcon(kind)), `${kind} Next picture is not the hint`);
+  assert.deepEqual(hintIcons, []);
+});
+
+test('a narrow rail (iPhone SE) says the mission name alone on up to two full-size lines; wider phones keep "Next:"', () => {
+  const m = layout();
+  assert.equal(m.RAIL_NARROW_WIDTH, 390);
+  assert.deepEqual(plain(m.railNextText('Rebuild the star chart', 375)), { text: 'Rebuild the star chart', lines: 2 });
+  assert.deepEqual(plain(m.railNextText('Rebuild the star chart', 402)), { text: 'Next: Rebuild the star chart', lines: 1 });
+  assert.deepEqual(plain(m.railNextText('Spot the clue', 440)), { text: 'Next: Spot the clue', lines: 1 });
+  assert.deepEqual(plain(m.railNextText('Spot the clue', 0)), { text: 'Next: Spot the clue', lines: 1 }, 'before the first layout');
+  const rail = read('src/screens/LinePlay/components/ActivityPageRail.tsx');
+  assert.match(rail, /`Next activity: \$\{nextLabel\}`/, 'VoiceOver still hears Next');
+  assert.match(rail, /nextTextTwoLines: \{ lineHeight: 18, textAlign: 'center' \}/);
+});
+
+test('the crew row in the free band is a full 44 pt with no top margin, so it sits in the middle', () => {
+  const strip = read('src/screens/LinePlay/group/GroupStrip.tsx');
+  assert.match(strip, /bandChip: \{ minHeight: 44, marginTop: 0 \}/);
+  assert.equal([...strip.matchAll(/compact && styles\.compactChip, band && styles\.bandChip/g)].length, 2);
+  const hook = read('src/screens/LinePlay/group/useGroupPlay.tsx');
+  assert.match(hook, /const bandStrip: ReactNode = showStrip \? <GroupStrip group=\{group\} compact=\{compact\} band onEdit=\{onEditCrew\} \/> : null;/);
 });

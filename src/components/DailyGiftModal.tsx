@@ -362,7 +362,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                 stamp={r.day === day ? stamp : undefined} />
             ))}
           </View>}
-          {!simple && chestOwnsFlame && (displayedGift.streak ?? 0) > 1 && (
+          {chestOwnsFlame && !simple && (displayedGift.streak ?? 0) > 1 && (
             <View style={styles.streakRow}>
               <GameIcon name="streak" size={18} />
               <Text style={styles.streakText}>{`${displayedGift.streak} day streak`}</Text>

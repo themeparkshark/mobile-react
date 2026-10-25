@@ -389,8 +389,12 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
     accessibilityHint={`Tap a tile to turn it. Link all three ${look.relayNoun} to the exit.`}
     accessibilityState={{ disabled: locked, expanded: showHint }} hitSlop={6}>
     {/* The same "turn this tile" picture the hinted tile wears, never the magnifier: on this page the
-        rail's "Next: Spot the clue" owns the magnifier, so each picture means one thing. */}
-    <TurnTileGlyph size={beside ? 24 : 28} />
+        rail's "Next: Spot the clue" owns the magnifier, so each picture means one thing. The little
+        "?" badge makes it help ("show me which tile"), so it never reads as the instruction picture. */}
+    <TurnTileGlyph size={beside ? 22 : 26} />
+    <View style={[styles.helpBadge, beside && styles.helpBadgeBeside]} pointerEvents="none">
+      <Text style={[styles.helpBadgeText, beside && styles.helpBadgeTextBeside]} accessible={false}>?</Text>
+    </View>
   </Pressable>;
   const relayStars = (starSize: number) => <View style={styles.relayRow} accessible
     accessibilityLabel={`${trace.signals} of 3 ${look.relayNoun} connected, ${panel.name}, ${size} by ${size}`}>
@@ -501,6 +505,12 @@ const styles = StyleSheet.create({
   hintButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: BRAND.gold, alignItems: 'center',
     justifyContent: 'center', borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 5 },
   hintButtonOn: { backgroundColor: BRAND.goldLight, borderBottomWidth: 3 },
+  // The help mark: a small navy "?" bubble on the hint button's corner.
+  helpBadge: { position: 'absolute', top: -7, right: -7, width: 20, height: 20, borderRadius: 10,
+    backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
+  helpBadgeBeside: { top: -6, right: -6, width: 18, height: 18, borderRadius: 9 },
+  helpBadgeText: { fontFamily: 'Shark', fontSize: 13, lineHeight: 15, color: BRAND.goldLight, marginTop: 2 },
+  helpBadgeTextBeside: { fontSize: 12, lineHeight: 14 },
   panel: { marginTop: 10, backgroundColor: BRAND.blueBright, borderRadius: 20, borderWidth: 3, borderColor: BRAND.navy,
     paddingVertical: 12, paddingHorizontal: 22 },
   panelTight: { marginTop: 6, paddingVertical: 6 },

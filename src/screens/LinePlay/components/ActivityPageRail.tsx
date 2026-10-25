@@ -1,10 +1,10 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { borderRadius, spacing } from '../../../design-system';
 import { GameIcon } from '../../../ui';
 import KidText from './KidText';
 import ClueDots from './ClueDots';
 import type { GameIconName } from '../../../ui/iconNames';
-import type { PageRailMode, RailBackAction } from '../../../services/lineplay/lineLayout';
+import { railNextText, type PageRailMode, type RailBackAction } from '../../../services/lineplay/lineLayout';
 
 interface Props {
   readonly index: number;
@@ -51,6 +51,7 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
   progressText, progressAccessibilityLabel, onFirst, onArcade, arcadePaused = false, onNext,
   moreAvailable = false, morePaused = false, onMore, mode = 'pages', onShowPages, quiet = false,
   backAction = 'show', progressDots = null, nextIcon, hideCount = false }: Props) {
+  const { width } = useWindowDimensions();
   if (mode === 'back' && onShowPages) {
     const play = backAction === 'play';
     return <View style={styles.rail}>
@@ -66,6 +67,8 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
   const wrapsToFirst = index + 1 >= count;
   const showMore = wrapsToFirst && moreAvailable && !!onMore;
   const calm = quiet && !showMore;
+  const nextWords = railNextText(nextLabel, width);
+  const naming = !showMore && count > 1 && !wrapsToFirst;
   return <View style={styles.rail}>
     {/* On the first page there is nowhere to return to, so the button is gone, not faded. */}
     {index > 0 && <Pressable accessibilityRole="button" accessibilityLabel={`Return to ${firstLabel.toLowerCase()}`}
@@ -89,9 +92,12 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
       disabled={showMore ? morePaused : count <= 1} onPress={showMore ? onMore : onNext}
       style={[styles.next, calm && styles.nextQuiet, (showMore ? morePaused : count <= 1) && styles.disabled]}>
       {nextIcon && !showMore && count > 1 && !wrapsToFirst ? <GameIcon name={nextIcon} size={24} /> : null}
-      <Text style={[styles.nextText, calm && styles.nextTextQuiet]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+      {/* A narrow phone: the mission name alone, on up to two lines at the normal size (never a small font). */}
+      <Text style={[styles.nextText, naming && nextWords.lines === 2 && styles.nextTextTwoLines, calm && styles.nextTextQuiet]}
+        numberOfLines={naming ? nextWords.lines : 1} adjustsFontSizeToFit
+        minimumFontScale={naming && nextWords.lines === 2 ? 0.9 : 0.7}>
         {showMore ? morePaused ? 'Resume for more rounds' : 'More queue rounds'
-          : count <= 1 ? 'Only activity' : wrapsToFirst ? `Back to ${firstLabel.toLowerCase()}` : `Next: ${nextLabel}`}
+          : count <= 1 ? 'Only activity' : wrapsToFirst ? `Back to ${firstLabel.toLowerCase()}` : nextWords.text}
       </Text>
       {count > 1 && <GameIcon name="arrow" size={26} />}
     </Pressable>
@@ -122,6 +128,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm, borderRadius: borderRadius.md, backgroundColor: '#ffca30',
     borderBottomWidth: 4, borderBottomColor: '#d99a00' },
   nextText: { flexShrink: 1, color: '#093d77', fontFamily: 'Knockout', fontSize: 17 },
+  nextTextTwoLines: { lineHeight: 18, textAlign: 'center' },
   // Quiet: white with a blue outline, same size and spot, so it still reads as a button.
   nextQuiet: { backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#0875c9', borderBottomWidth: 4,
     borderBottomColor: '#0875c9' },

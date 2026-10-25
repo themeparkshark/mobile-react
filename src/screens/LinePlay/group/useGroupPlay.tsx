@@ -182,9 +182,11 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
       onClose={() => setEditing(false)} />
   </>;
 
-  const strip: ReactNode = live && crew.loaded && crew.chosen
-    ? <GroupStrip group={group} compact={compact} onEdit={() => { if (!group?.active) setEditing(true); }} />
-    : null;
+  const onEditCrew = () => { if (!group?.active) setEditing(true); };
+  const showStrip = live && crew.loaded && crew.chosen;
+  const strip: ReactNode = showStrip ? <GroupStrip group={group} compact={compact} onEdit={onEditCrew} /> : null;
+  /** The same row for the free band above the rail (a short phone reading Details): full 44 pt, centred. */
+  const bandStrip: ReactNode = showStrip ? <GroupStrip group={group} compact={compact} band onEdit={onEditCrew} /> : null;
 
   const recapSlot = (args: {
     readonly realMinutes: number; readonly postedMinutes: number | null; readonly partsEarned: number | null;
@@ -194,7 +196,7 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
 
   /** The crew opener or a pass-the-phone card is up: one-time tips wait. */
   const sheetOpen = (openerVisible && !mode) || !!mode;
-  return { group, wantsRound, startRound, finishTurn, overlays, strip, recapSlot, sheetOpen };
+  return { group, wantsRound, startRound, finishTurn, overlays, strip, bandStrip, recapSlot, sheetOpen };
 }
 
 export type { MiniGameId };

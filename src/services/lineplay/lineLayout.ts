@@ -376,6 +376,19 @@ export function railNextIndex(pageIds: readonly string[], visibleIndex: number, 
   return step(next);
 }
 
+/** Below this screen width (an iPhone SE is 375) the rail's Next button is too narrow for "Next: " plus a mission name. */
+export const RAIL_NARROW_WIDTH = 390;
+
+/**
+ * The words on the rail's Next button. A narrow phone drops the "Next:" prefix (the picture and the
+ * arrow already say next) and lets the mission name take two lines at the normal size, so it never
+ * shrinks to a small font. The spoken label always says "Next activity".
+ */
+export function railNextText(nextLabel: string, screenWidth: number): { readonly text: string; readonly lines: 1 | 2 } {
+  return screenWidth > 0 && screenWidth < RAIL_NARROW_WIDTH
+    ? { text: nextLabel, lines: 2 } : { text: `Next: ${nextLabel}`, lines: 1 };
+}
+
 /**
  * A small picture for each page, beside the rail's "Next: ..." so a kid who can't read yet still follows.
  * The magnifier is the clue page's alone: the board's hint button wears the "turn this tile" picture.

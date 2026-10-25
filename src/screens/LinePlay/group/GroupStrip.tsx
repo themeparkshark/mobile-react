@@ -16,21 +16,26 @@ export function stripLine(group: LineGroup): string {
   return `${crew} · Tied at the top`;
 }
 
-export default function GroupStrip({ group, onEdit, compact = false }: {
+export default function GroupStrip({ group, onEdit, compact = false, band = false }: {
   readonly group: LineGroup | null;
   readonly onEdit: () => void;
   /** Short phones: a slimmer row (still a 40 pt target with its hitSlop). */
   readonly compact?: boolean;
+  /**
+   * In the free band above the rail (an iPhone SE reading Details): there is room, so the row is a full
+   * 44 pt tall with no top margin, and it sits exactly in the middle of the band.
+   */
+  readonly band?: boolean;
 }) {
   if (!isPassAndPlay(group)) {
     return <Pressable accessibilityRole="button" accessibilityLabel="Add your crew for pass and play"
-      onPress={onEdit} hitSlop={6} style={({ pressed }) => [styles.soloChip, compact && styles.compactChip, pressed && styles.pressed]}>
+      onPress={onEdit} hitSlop={6} style={({ pressed }) => [styles.soloChip, compact && styles.compactChip, band && styles.bandChip, pressed && styles.pressed]}>
       <GameIcon name="crown" size={compact ? 18 : 20} />
       <Text style={[styles.soloText, compact && styles.compactText]}>Here with friends? Add your crew!</Text>
     </Pressable>;
   }
   return <Pressable accessibilityRole="button" accessibilityLabel={`${stripLine(group)}. Edit crew`}
-    onPress={onEdit} hitSlop={compact ? 4 : undefined} style={({ pressed }) => [styles.strip, compact && styles.compactChip, pressed && styles.pressed]}>
+    onPress={onEdit} hitSlop={compact ? 4 : undefined} style={({ pressed }) => [styles.strip, compact && styles.compactChip, band && styles.bandChip, pressed && styles.pressed]}>
     <View style={styles.badges}>
       {group.players.map((player, index) => <View key={player.id} style={index > 0 ? styles.overlap : null}>
         <PlayerBadge name={player.name} index={index} size={28} kid={player.kid} />
@@ -54,6 +59,7 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#ffcf3b' },
   soloText: { color: '#ffffff', fontFamily: 'Shark', fontSize: 16 },
   compactChip: { minHeight: 36, marginTop: 4 },
+  bandChip: { minHeight: 44, marginTop: 0 },
   compactText: { fontSize: 14 },
   pressed: { opacity: 0.8 },
 });
