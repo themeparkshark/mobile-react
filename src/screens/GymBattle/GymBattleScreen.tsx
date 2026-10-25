@@ -1110,15 +1110,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
   },
-  // Winner cue in Alex's flat style: a hard team-colour disc under the
-  // tower base with a navy outline. No soft glow (Dustin asked to drop the
-  // glow-filter look). The render passes shadowColor; shadowOpacity 0 keeps
-  // it from drawing anything soft.
+  // Winner cue in Alex's flat style: a hard team-colour stage behind the
+  // tower base with a navy outline, peeking out around the base. No soft glow
+  // (Dustin asked to drop the glow-filter look). The render passes
+  // shadowColor; shadowOpacity 0 keeps it from drawing anything soft.
   pillarGlow: {
     position: 'absolute',
-    bottom: '-3%',
-    left: '14%',
-    right: '14%',
+    bottom: '1%',
+    left: '6%',
+    right: '6%',
     height: '9%',
     borderRadius: 999,
     borderWidth: 3,

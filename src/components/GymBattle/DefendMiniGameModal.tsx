@@ -304,8 +304,10 @@ export default function DefendMiniGameModal({
   const handleGameEnd = async () => {
     setGameState('submitting');
     try {
-      // Send totalPoints (which includes multiplied taps)
-      const response = await defendGym(parkId, totalPoints);
+      // Send totalPoints (which includes multiplied taps). The server takes at
+      // most 500 and scores at most 300, so a fast kid with the x3 bonus never
+      // gets a refused send for tapping too well.
+      const response = await defendGym(parkId, Math.min(totalPoints, 500));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setResult({
         points: response.points_earned,

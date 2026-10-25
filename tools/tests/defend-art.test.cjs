@@ -101,3 +101,8 @@ test('Defend result never claims a bonus or points that did not happen, and show
   assert.match(src, /result\.points > 0 \? `\+\$\{result\.points\} points for your team!` : 'Tap faster next time to score for your team!'/);
   assert.match(src, /<Animated\.View style=\{\[styles\.shieldGlowWrap, glowAnimStyle\]\}>\s*<View style=\{styles\.shieldGlow\}>/, 'the scale runs on a plain wrapper, never on the bordered ring');
 });
+
+test('a very fast Defend round is never refused for too many taps', () => {
+  const src = read('src/components/GymBattle/DefendMiniGameModal.tsx');
+  assert.match(src, /defendGym\(parkId, Math\.min\(totalPoints, 500\)\)/);
+});
