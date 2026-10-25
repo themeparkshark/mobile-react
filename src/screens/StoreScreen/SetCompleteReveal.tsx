@@ -29,11 +29,12 @@
  */
 import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
 import { InlineBackContext } from './inlineBack';
+import FadeInOnMount from '../../ui/FadeInOnMount';
 import * as Haptics from 'expo-haptics';
 import { memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Dimensions, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
-  Easing, FadeIn, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { equipShopTitle } from '../../api/endpoints/me/shop-sets';
@@ -263,7 +264,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
     <RevealLayer inline={inline} onClose={() => leave(false)} onShown={onShown}>
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
       {/* Inline (over the try-on) and queued or recovered (over the shop): the same quick cross-fade. Bridged (over the navy cover): at once. */}
-      <Animated.View entering={still || bridged ? undefined : FadeIn.duration(DURATION.base)} style={styles.fill} {...swipe.panHandlers}>
+      <FadeInOnMount duration={DURATION.base} instant={still || bridged} style={styles.fill} {...swipe.panHandlers}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />
         <Pressable onPress={() => leave(false)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close"
           style={[styles.close, { top: insets.top + 10 }]}>
@@ -295,9 +296,9 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
               </Animated.View>
             </ShopStage>
             {allCopy.wearing && (
-              <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={styles.wearing}>
+              <FadeInOnMount duration={160} instant={still} style={styles.wearing}>
                 <Text style={styles.wearingText}>NOW WEARING</Text>
-              </Animated.View>
+              </FadeInOnMount>
             )}
           </View>
           {!still && <SparkleBurst progress={sparkle} radius={STAGE * 0.72} count={momentParticles(PARTICLES.sparkles, budget, still)} />}
@@ -350,7 +351,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
             </Pressable>
           </View>
         </View>
-      </Animated.View>
+      </FadeInOnMount>
     </RevealLayer>
   );
 }

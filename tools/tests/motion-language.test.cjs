@@ -501,7 +501,10 @@ test('wave 3 round 4: tier plates have ink edges, Prismatic has a few long rays,
 
 test('wave 3 round 4: the queued or recovered Set Complete times like the inline one', () => {
   const reveal = read('src/screens/StoreScreen/SetCompleteReveal.tsx');
-  assert.ok(reveal.includes('entering={still || bridged ? undefined : FadeIn.duration(DURATION.base)}'), 'one cross-fade time for both paths');
+  assert.ok(reveal.includes('<FadeInOnMount duration={DURATION.base} instant={still || bridged} style={styles.fill}'), 'one cross-fade time for both paths, on a shared value');
+  assert.ok(!/entering=\{/.test(reveal), 'no layout-animation entering (it snapped in at full opacity on Fabric in release JS)');
+  const fade = read('src/ui/FadeInOnMount.tsx');
+  assert.ok(/shown\.value = withTiming\(1, \{ duration, easing: EASE\.out \}\)/.test(fade) && /opacity: shown\.value/.test(fade), 'the fade plays on the UI thread');
 });
 
 test('wave 3 rerun round 2: the box reveal footer fades in, so Done never shows a frame as a blank pill', () => {
