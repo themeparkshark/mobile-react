@@ -144,7 +144,10 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const known = !!expectRows && expectRows.small + expectRows.big > 0;
   // With known prizes the card is sized to fit the whole screen (ribbon, chest, every row, the flame row and the
   // button, under the Dynamic Island and above the home bar): the chest takes what the rows leave.
-  const expectedRowsH = known && expectRows ? rowsFor(expectRows.small, expectRows.big) : 0;
+  // The rows never push the card past the screen (a milestone day with gear AND a mystery box): past this they scroll,
+  // and each hero card slides into view as it lands.
+  const rowsCap = Math.max(200, height - CHROME_KNOWN - (compact ? 96 : 120));
+  const expectedRowsH = known && expectRows ? Math.min(rowsCap, rowsFor(expectRows.small, expectRows.big)) : 0;
   const size = known
     ? Math.max(compact ? 96 : 120, Math.min(width * 0.5, 210, height - CHROME_KNOWN - expectedRowsH))
     : Math.min(width * 0.44, height * (compact ? 0.17 : 0.21), 190);
@@ -202,7 +205,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   // More prizes than the preview promised (a milestone gear): the rows area grows to fit them (up to the screen),
   // then scrolls so the hero card is always seen.
   const paidRowsH = revealed ? rowsFor(rows.filter(r => !isBigReward(r.kind)).length, rows.filter(r => isBigReward(r.kind)).length) : 0;
-  const rowsArea = known && revealed ? Math.min(Math.max(expectedRowsH, height - CHROME_KNOWN - size), Math.max(expectedRowsH, paidRowsH)) : rowsHeight;
+  const rowsArea = known && revealed
+    ? Math.min(rowsCap, Math.max(expectedRowsH, height - CHROME_KNOWN - size), Math.max(expectedRowsH, paidRowsH)) : rowsHeight;
   const overflow = known && revealed && paidRowsH > rowsArea;
   // Centre the big chest (and the chips under it) in the stage plus rows area.
   const previewH = preview ? 96 : 0;

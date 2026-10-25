@@ -608,6 +608,9 @@ test('wave 5 round 2: the chest card tomorrow row is big, each fact is said once
   assert.match(reveal, /hintOut\.value = withDelayAfter\(entered, pl\.pop \+ Math\.max\(0, pl\.hold - DURATION\.quick\), withTiming\(1, \{ duration: DURATION\.quick, easing: EASE\.out \}\)\)/);
   assert.match(reveal, /return small \* 50 \+ big \* 108 \+ 10;/);
   assert.match(reveal, /bottomLevel: \{ minHeight: 116 \}/);
+  // A milestone day with gear and a mystery box never pushes the card past the screen: the rows scroll instead.
+  assert.match(reveal, /const rowsCap = Math\.max\(200, height - CHROME_KNOWN - \(compact \? 96 : 120\)\);/);
+  assert.match(reveal, /\? Math\.min\(rowsCap, Math\.max\(expectedRowsH, height - CHROME_KNOWN - size\), Math\.max\(expectedRowsH, paidRowsH\)\)/);
   const tomorrow = read('src/components/retention/TomorrowCard.tsx');
   assert.match(tomorrow, /ghostDisc: \{ width: 76, height: 76, borderRadius: 38, backgroundColor: '#0d4f92'/);
   for (const line of [L.flameUpLine(5), L.milestoneBadgeLine(7)]) assert.ok(L.kidSafeCopy(line));
