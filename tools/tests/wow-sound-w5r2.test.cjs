@@ -179,3 +179,9 @@ test('fix 1: the hook capture is its own release-like route, and its frame marks
   assert.doesNotMatch(screen, /[\u2013\u2014]/, 'no dashes in copy');
   assert.match(src('src/gamekit/audio/studioSwitch.ts'), /if \(!studioMuted\(\)\) return null;/);
 });
+
+test('fix 4: the burst\'s heavy leaves before the burst\'s sound work (the grand shower put it 39 ms late on a loaded run)', () => {
+  const s = src('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(s, /case BEAT\.burst:\n\s+run\.burst = true;\n(\s+\/\/.*\n)+\s+catchHaptic\('comboHeavy', 3\);\n\s+catchMark\('burst'\);/);
+  assert.match(src('src/screens/ExploreScreen/ridePhoto/catchAudio.ts'), /const heavyAt = burstHeavyDone && Number\.isFinite\(burstBuzzAt\) \? burstBuzzAt : Math\.max\(burstDueAt, Date\.now\(\)\);/);
+});

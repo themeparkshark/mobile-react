@@ -309,8 +309,9 @@ function slamBuzz(): void {
  */
 function scheduleThump(heat: number): void {
   if (thumpTimer) clearTimeout(thumpTimer);
-  // The heavy fires in this same turn (round 2: on the beam catches too; the beam's slam is a lighter buzz before it).
-  const heavyAt = Math.max(burstDueAt, Date.now());
+  // The heavy fired just before the burst mark, in this same turn (round 2: on the beam catches too; the beam's slam is
+  // a lighter buzz before it), so the thump keeps its 90 ms from the real heavy.
+  const heavyAt = burstHeavyDone && Number.isFinite(burstBuzzAt) ? burstBuzzAt : Math.max(burstDueAt, Date.now());
   const due = heavyAt + HOT_THUMP_MS;
   traceEvent('mark', 'catch-thump', `+${heat}`);
   thumpTimer = setTimeout(() => {

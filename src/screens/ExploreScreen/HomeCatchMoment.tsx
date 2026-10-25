@@ -1026,10 +1026,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         break;
       case BEAT.burst:
         run.burst = true;
-        catchMark('burst');
-        // The heavy always lands on the burst frame (round 2: on the beam catches too, after the slam's lighter buzz);
-        // the grand catch adds a second heavy hit one beat later and a higher chime.
+        // The heavy always lands on the burst frame (round 2: on the beam catches too, after the slam's lighter buzz),
+        // and it leaves first: the burst's sound work came before it and put it 39 ms late behind the grand shower on
+        // a loaded run. The grand catch adds a second heavy hit one beat later and a higher chime.
         catchHaptic('comboHeavy', 3);
+        catchMark('burst');
         catchSound('chime', run.grand ? { volume: 0.9, pitch: 4 } : { volume: 0.8 });
         break;
       case BEAT.success: if (!quiet) catchHaptic('success', 3); break;
