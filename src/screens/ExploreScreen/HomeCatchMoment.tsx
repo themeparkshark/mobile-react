@@ -272,6 +272,16 @@ function BurstStar({ index, t, count, home, to }: { index: number; t: SharedValu
   </Animated.View>;
 }
 
+const HOME_STAR = 40;
+/** Wave 5 round 3: a treat star's pose (or one of its trail sparkles `lag` ms behind it) in layer points. Worklet, pure. */
+function homeStarPose(index: number, lag: number, k: number, on: number, count: number, d: number, to: { x: number; y: number }, sx: number, sy: number) {
+  'worklet';
+  const h = on && index < count ? homeStarAt(d - lag, index, count, to) : null;
+  if (!h) return { opacity: 0, transform: [{ translateX: -200 }, { translateY: -200 }, { scale: 0 }, { rotate: '0deg' }] };
+  return { opacity: lag ? (lag > 50 ? 0.5 : 0.8) : 1, transform: [{ translateX: sx + h.x - HOME_STAR / 2 }, { translateY: sy + h.y - HOME_STAR / 2 },
+    { scale: (h.scale / 1.45) * k }, { rotate: `${(index % 2 ? -1 : 1) * d * 0.3}deg` }] };
+}
+
 /**
  * Wave 5 round 3: one star of the 5th-catch treat, drawn like the stream's coins (always mounted at the layer, in layer
  * points, still until a treat throws it): it flings out of the find, hangs a beat at the tips, then flies home into the
@@ -280,18 +290,16 @@ function BurstStar({ index, t, count, home, to }: { index: number; t: SharedValu
 const HomeStar = memo(function HomeStar({ index, clock, plan, on, count, sx, sy, to }: { index: number; clock: SharedValue<number>;
   plan: SharedValue<CatchPlan>; on: SharedValue<number>; count: SharedValue<number>; sx: SharedValue<number>; sy: SharedValue<number>;
   to: SharedValue<{ x: number; y: number }> }) {
-  const pose = (lag: number, k: number) => {
-    'worklet';
-    const h = on.value && index < count.value ? homeStarAt(clock.value - plan.value.burstAt - lag, index, count.value, to.value) : null;
-    if (!h) return { opacity: 0, transform: [{ translateX: -200 }, { translateY: -200 }, { scale: 0 }, { rotate: '0deg' }] };
-    return { opacity: lag ? (lag > 50 ? 0.5 : 0.8) : 1, transform: [{ translateX: sx.value + h.x - HOME_STAR / 2 }, { translateY: sy.value + h.y - HOME_STAR / 2 },
-      { scale: (h.scale / 1.45) * k }, { rotate: `${(index % 2 ? -1 : 1) * (clock.value - plan.value.burstAt) * 0.3}deg` }] };
-  };
-  const star = useAnimatedStyle(() => pose(0, 1));
-  const trailA = useAnimatedStyle(() => pose(40, 0.6));
-  const trailB = useAnimatedStyle(() => pose(80, 0.4));
+  // Every updater reads its shared values itself: Reanimated finds a style's inputs in the updater's own closure, so a
+  // shared value read only inside a helper never re-runs the style (the stars stayed hidden on their first frame).
+  const star = useAnimatedStyle(() => homeStarPose(index, 0, 1, on.value, count.value, clock.value - plan.value.burstAt, to.value, sx.value, sy.value));
+  const trailA = useAnimatedStyle(() => homeStarPose(index, 40, 0.6, on.value, count.value, clock.value - plan.value.burstAt, to.value, sx.value, sy.value));
+  const trailB = useAnimatedStyle(() => homeStarPose(index, 80, 0.4, on.value, count.value, clock.value - plan.value.burstAt, to.value, sx.value, sy.value));
   // A soft white glow right behind the star, so a gold star reads over the gold burst and the map alike.
-  const glow = useAnimatedStyle(() => { const r = pose(0, 1.5); return { ...r, opacity: r.opacity * 0.85 }; });
+  const glow = useAnimatedStyle(() => {
+    const r = homeStarPose(index, 0, 1.5, on.value, count.value, clock.value - plan.value.burstAt, to.value, sx.value, sy.value);
+    return { ...r, opacity: r.opacity * 0.85 };
+  });
   return <>
     <Animated.View pointerEvents="none" style={[styles.homeStar, trailB]}>
       <RNImage source={MAP_SPARKLE} style={[styles.fxFill, { tintColor: GOLD_FX.rays }]} resizeMode="contain" fadeDuration={0} />
@@ -307,7 +315,6 @@ const HomeStar = memo(function HomeStar({ index, clock, plan, on, count, sx, sy,
     </Animated.View>
   </>;
 });
-const HOME_STAR = 40;
 
 
 /**

@@ -751,7 +751,7 @@ test('wave 5 r3: the 5th-catch stars are big, fling out, then land in the counte
   assert.ok(wow.homeStarLand(0) - wow.HOME_STARS.flyMs >= treat.suckAt - treat.burstAt, 'they fly home once the gold is sucking back (over the map, not gold on gold)');
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.match(src, /const lands = \[\.\.\.starLands, \.\.\.coinLands\]\.sort/, 'star landings punch the counter too');
-  assert.match(src, /const trailA = useAnimatedStyle\(\(\) => pose\(40, 0\.6\)\);/, 'a short gold trail behind each star');
+  assert.match(src, /const trailA = useAnimatedStyle\(\(\) => homeStarPose\(index, 40, 0\.6, on\.value, count\.value, clock\.value - plan\.value\.burstAt/, 'a short gold trail behind each star, its inputs read in the updater itself');
   assert.match(src, /<HomeStar key=\{`s\$\{index\}`\}/, 'drawn at the layer like the coins (always mounted, layer points)');
 });
 
