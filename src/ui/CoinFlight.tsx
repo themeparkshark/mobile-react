@@ -12,11 +12,12 @@
  * Transforms and opacity only, on the UI thread; the host renders nothing while no coins fly.
  */
 import { memo, useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Image as RNImage, StyleSheet, View } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withTiming,
   type SharedValue } from 'react-native-reanimated';
 import CoinTrails from '../fx/CoinTrails';
-import GameIcon, { type GameIconName } from './GameIcon';
+import { ICON_SOURCES, type GameIconName } from './GameIcon';
+import { resolveIconName } from './iconNames';
 import SparkleBurst from './SparkleBurst';
 import { DURATION, EASE } from './motionEasing';
 import { BEZIER } from './motion';
@@ -25,6 +26,8 @@ import { Z } from './tokens';
 export interface Point { readonly x: number; readonly y: number }
 
 /** EASE.inOut as a plain worklet curve (the coin reads its own window of one shared clock). */
+/** EASE.out for a prize: it leaves the card at once (an ease-in start read as a gift parked on the screen). */
+export const PRIZE_OUT = Easing.bezierFn(BEZIER.out[0], BEZIER.out[1], BEZIER.out[2], BEZIER.out[3]);
 export const IN_OUT = Easing.bezierFn(BEZIER.inOut[0], BEZIER.inOut[1], BEZIER.inOut[2], BEZIER.inOut[3]);
 
 /** The coin flight (pure data, unit tested). */
@@ -49,6 +52,8 @@ export const COIN_FLIGHT = {
    * pulling a short gold trail, with more stars where they land.
    */
   big: { size: 34, spreadPt: 320, arcPt: 130, trailDots: 4, trailStep: 0.045, trailPt: 7, endSparkles: 10 },
+  /** A prize going to the shelf: a low arc (it heads for the shelf at once, never up and away first). */
+  prizeArcPt: 44,
 } as const;
 
 /** Where coin i of n starts and lands (it leaves i * staggerMs late). Pure (unit tested). */
@@ -58,13 +63,14 @@ export function coinLandTimes(n: number, startAt = 0): number[] {
 }
 
 /** Coin i of n at flight time t (0 to 1): a quadratic arc from `from` to `to`. Pure worklet (unit tested). */
-export function coinAt(t: number, i: number, n: number, from: Point, to: Point, big = false): { x: number; y: number; scale: number; rot: number } {
+export function coinAt(t: number, i: number, n: number, from: Point, to: Point, big = false, arcPt?: number):
+  { x: number; y: number; scale: number; rot: number } {
   'worklet';
   const spread = n > 1 ? i / (n - 1) - 0.5 : 0;
   // The control point: above the middle of the line, fanned a little per coin so they read as several
   // (a big gain throws a wider, higher fan).
   const cx = (from.x + to.x) / 2 + spread * (big ? COIN_FLIGHT.big.spreadPt : COIN_FLIGHT.spreadPt);
-  const cy = Math.min(from.y, to.y) - (big ? COIN_FLIGHT.big.arcPt : COIN_FLIGHT.arcPt) - (i % 3) * COIN_FLIGHT.arcStepPt;
+  const cy = Math.min(from.y, to.y) - (arcPt ?? (big ? COIN_FLIGHT.big.arcPt : COIN_FLIGHT.arcPt)) - (i % 3) * COIN_FLIGHT.arcStepPt;
   const u = 1 - t;
   const x = u * u * from.x + 2 * u * t * cx + t * t * to.x;
   const y = u * u * from.y + 2 * u * t * cy + t * t * to.y;
@@ -187,7 +193,7 @@ function FlightRun({ flight, onDone }: { readonly flight: Flight; readonly onDon
     if (now && !before && flight.sparkleEnd) end.value = withDelay(0, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
   });
   return <>
-    {flight.big && <CoinTrails clock={p} count={flight.count} from={flight.from} to={flight.to} />}
+    {flight.big && <CoinTrails clock={p} count={flight.count} from={flight.from} to={flight.to} prize={flight.icon != null} />}
     {Array.from({ length: flight.count }, (_, i) => <FlyingCoin key={i} clock={p} i={i} flight={flight} />)}
     {flight.sparkleEnd && <SparkleBurst progress={end} count={flight.big ? COIN_FLIGHT.big.endSparkles : COIN_FLIGHT.endSparkles}
       x={flight.to.x} y={flight.to.y} dist={flight.big ? [30, 58] : [22, 42]} size={flight.big ? [16, 24] : [14, 20]} gravity={14} seed={flight.id} />}
@@ -213,8 +219,8 @@ const FlyingCoin = memo(function FlyingCoin({ clock, i, flight }: { readonly clo
   const style = useAnimatedStyle(() => {
     const raw = (clock.value - i * COIN_FLIGHT.staggerMs) / COIN_FLIGHT.flyMs;
     if (raw <= 0 || raw >= 1) return { opacity: 0 };
-    const t = IN_OUT(raw);
-    const at = coinAt(t, i, n, flight.from, flight.to, flight.big === true);
+    const t = prize ? PRIZE_OUT(raw) : IN_OUT(raw);
+    const at = coinAt(t, i, n, flight.from, flight.to, flight.big === true, prize ? COIN_FLIGHT.prizeArcPt : undefined);
     const shrink = 1 - (1 - endScale) * t;
     // A prize leaves at full size where it stood (no fade in, no spin); coins fade in and spin.
     return {
@@ -225,7 +231,10 @@ const FlyingCoin = memo(function FlyingCoin({ clock, i, flight }: { readonly clo
   });
   return (
     <Animated.View style={[{ position: 'absolute', left: 0, top: 0, width: flight.size, height: flight.size }, style]}>
-      <GameIcon name={flight.icon ?? 'coin'} size={flight.size} />
+      {/* A plain image view: a pooled expo-image view handed on after a flight showed its gift for a few frames
+          on the map's own markers. */}
+      <RNImage source={ICON_SOURCES[resolveIconName(flight.icon ?? 'coin') ?? 'coin']} fadeDuration={0} resizeMode="contain"
+        style={{ width: flight.size, height: flight.size }} />
     </Animated.View>
   );
 });

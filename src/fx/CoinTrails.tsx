@@ -6,11 +6,13 @@
 import { Dimensions } from 'react-native';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { Canvas, Path, Skia, type SkPath } from '@shopify/react-native-skia';
-import { COIN_FLIGHT, IN_OUT, coinAt, type Point } from '../ui/CoinFlight';
+import { COIN_FLIGHT, IN_OUT, PRIZE_OUT, coinAt, type Point } from '../ui/CoinFlight';
 import { GOLD_FX } from '../ui/motionEasing';
 
-export default function CoinTrails({ clock, count, from, to }: {
+export default function CoinTrails({ clock, count, from, to, prize = false }: {
   readonly clock: SharedValue<number>; readonly count: number; readonly from: Point; readonly to: Point;
+  /** A prize's trail follows its own quick, low path. */
+  readonly prize?: boolean;
 }) {
   const { width, height } = Dimensions.get('window');
   const B = COIN_FLIGHT.big;
@@ -22,7 +24,8 @@ export default function CoinTrails({ clock, count, from, to }: {
       for (let k = 1; k <= B.trailDots; k++) {
         const back = raw - k * B.trailStep;
         if (back <= 0) break;
-        const at = coinAt(IN_OUT(back), i, count, from, to, true);
+        const at = prize ? coinAt(PRIZE_OUT(back), i, count, from, to, true, COIN_FLIGHT.prizeArcPt)
+          : coinAt(IN_OUT(back), i, count, from, to, true);
         path.addCircle(at.x, at.y, B.trailPt * (1 - (k - 1) / (B.trailDots + 1)));
       }
     }
