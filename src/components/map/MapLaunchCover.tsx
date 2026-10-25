@@ -107,14 +107,15 @@ function CoverSky({ plan, style, blockTouches, launch }: {
       }
       cancelAnimation(fill);
       liftAskedAt.value = -1;
-      // Honest progress: the bar creeps at a steady pace toward this plan's ceiling (the next real
-      // step, in the 70s) right up to the deadline, so it is always moving and never parks near
-      // full. It fills the rest only as the cover lifts. It never moves back.
+      // Honest progress: the bar creeps toward this plan's ceiling (the next real step, in the 70s)
+      // right up to the deadline, so it is always moving and never parks near full. It eases out, so
+      // each new step starts with a visible push (a slow linear creep over 9 s read as parked), then
+      // slows toward the ceiling. It fills the rest only as the cover lifts. It never moves back.
       const remaining = Math.max(0, deadline - Date.now());
       if (share !== null) fill.value = share;
       const creep = Math.max(0, remaining - COVER_FINISH_MS);
       fill.value = withSequence(
-        withTiming(Math.max(fill.value, ceiling), { duration: Math.max(250, creep), easing: Easing.linear }),
+        withTiming(Math.max(fill.value, ceiling), { duration: Math.max(250, creep), easing: Easing.out(Easing.quad) }),
         withTiming(1, { duration: COVER_FINISH_MS, easing: Easing.out(Easing.quad) }));
       opacity.value = withDelay(remaining, withTiming(0, { duration: COVER_FADE_MS, easing: Easing.out(Easing.quad) },
         (finished) => { 'worklet'; if (finished) runOnJS(faded)(liftToken.value); }));

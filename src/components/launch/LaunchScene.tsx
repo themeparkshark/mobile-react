@@ -44,10 +44,10 @@ export function moveLaunchBar(share: number, ms: number, creep?: { readonly to: 
   const to = Math.max(0, Math.min(1, share));
   if (to <= launchFill.value) return;
   const step = withTiming(to, { duration: ms, easing: ms > 600 ? Easing.out(Easing.cubic) : Easing.inOut(Easing.quad) });
-  // Then, until the next real step moves it on, the bar keeps creeping (linear, on the UI thread), so
-  // a busy JS thread (the map screen mounting) never leaves it parked.
+  // Then, until the next real step moves it on, the bar keeps creeping (on the UI thread, easing out
+  // so the creep shows right away), so a busy JS thread (the map screen mounting) never leaves it parked.
   launchFill.value = creep && creep.to > to
-    ? withSequence(step, withTiming(Math.min(1, creep.to), { duration: creep.ms, easing: Easing.linear }))
+    ? withSequence(step, withTiming(Math.min(1, creep.to), { duration: creep.ms, easing: Easing.out(Easing.quad) }))
     : step;
 }
 

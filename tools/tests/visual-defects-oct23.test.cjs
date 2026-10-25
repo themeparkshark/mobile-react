@@ -513,8 +513,8 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   // plan into a UI-thread withDelay fade with the bar on the same clock.
   assert.match(cover, /const opacity = useSharedValue\(1\);/);
   assert.match(cover, /opacity\.value = withDelay\(remaining, withTiming\(0/);
-  assert.match(cover, /withTiming\(Math\.max\(fill\.value, ceiling\), \{ duration: Math\.max\(250, creep\), easing: Easing\.linear \}\)/,
-    'the bar creeps at a steady pace, only to the next real step');
+  assert.match(cover, /withTiming\(Math\.max\(fill\.value, ceiling\), \{ duration: Math\.max\(250, creep\), easing: Easing\.out\(Easing\.quad\) \}\)/,
+    'the bar creeps (a visible push first, then slower), only to the next real step');
   assert.match(cover, /\{launch \? <LaunchScene \/> : <MapCoverSky fill=\{fill\} \/>\}/);
   assert.match(cover, /const fill = launch \? launchFill : ownFill;/, 'the launch cover fills the one launch bar');
   assert.match(cover, /\}, \[plan\.version\]\);/);
@@ -1234,7 +1234,7 @@ test('launch bar: between real steps it keeps creeping on the UI thread (the par
   const loading = read('src/screens/LoadingScreen.tsx');
   assert.match(loading, /\? \{ to: 0\.9 \* LAUNCH_HANDOFF_SHARE, ms: LOADING_CREEP_MS \} : \{ to: COVER_STEPS\.armed, ms: COVER_LAUNCH_MAX_MS \}\);/);
   const scene = read('src/components/launch/LaunchScene.tsx');
-  assert.match(scene, /\? withSequence\(step, withTiming\(Math\.min\(1, creep\.to\), \{ duration: creep\.ms, easing: Easing\.linear \}\)\)/);
+  assert.match(scene, /\? withSequence\(step, withTiming\(Math\.min\(1, creep\.to\), \{ duration: creep\.ms, easing: Easing\.out\(Easing\.quad\) \}\)\)/);
   assert.match(scene, /if \(to <= launchFill\.value\) return;/, 'the bar never moves back');
   const k = loadTs('src/constants/launchHandoff.ts');
   assert.ok(k.COVER_STEPS.armed > k.LAUNCH_HANDOFF_SHARE && 0.9 * k.LAUNCH_HANDOFF_SHARE > 0.5 * k.LAUNCH_HANDOFF_SHARE);
