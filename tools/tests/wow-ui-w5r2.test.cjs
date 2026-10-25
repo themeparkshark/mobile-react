@@ -146,7 +146,8 @@ test('reward dialog: the rays reach past the card behind the ribbon, and OK flie
 
 test('queued dialogs: one backdrop for the queue, the card swaps (the bare screen never flashes), and cards open solid', () => {
   const src = read('src/ui/GameDialog.tsx');
-  assert.match(src, /if \(handOff\?\.\(\) === true\) \{\n\s+exit\.value = withTiming\(1, \{ duration: DIALOG_CLOSE\.cardMs, easing: EASE\.in \}, done => \{\n\s+if \(done\) runOnJS\(finishHandOff\)\(\);/);
+  assert.match(src, /handing\.value = 1;\n\s+exit\.value = withTiming\(1, \{ duration: DIALOG_CLOSE\.cardMs, easing: EASE\.in \}\);\n\s+return;/);
+  assert.match(src, /useAnimatedReaction\(\(\) => handing\.value === 1 && exit\.value >= HANDOFF_AT/, 'the next card is asked for mid-shrink');
   assert.match(src, /if \(!handedOver\) scrim\.value = withTiming\(1,/, 'the backdrop only fades in for the first dialog');
   assert.match(src, /fade\.value = handedOver \? 1 : withTiming\(1, \{ duration: reducedMotion \? MOTION\.fadeMs : CARD_SOLID_MS/);
   assert.match(src, /<GameDialog contentKey=\{request\.id\} visible=\{visible\}/, 'the host keeps one dialog for the queue');

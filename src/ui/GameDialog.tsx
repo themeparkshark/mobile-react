@@ -81,6 +81,8 @@ const CARD_EXIT = 0.92;
  * last, so the screen behind never shows through a half-faded card.
  */
 export const DIALOG_CLOSE = { cardMs: 140, scrimDelayMs: 60, scrimMs: 170 } as const;
+/** A card handing over to a queued one asks for the next card at this share of its shrink (the JS render lands as it goes). */
+export const HANDOFF_AT = 0.6;
 /** The card's opacity at close progress e (0 to 1): solid for most of the shrink, gone at the end. Pure worklet. */
 export function closeOpacity(e: number): number {
   'worklet';
@@ -245,6 +247,8 @@ export function GameDialog({
   const iconSpark = useSharedValue(0);
   const prizeGlow = useSharedValue(0);
   const prizeBloom = useSharedValue(0);
+  /** 1 while this card hands over to a queued one: the swap is asked for at HANDOFF_AT of the shrink (UI thread). */
+  const handing = useSharedValue(0);
   /** Where the prize sits inside the card (for the wide ray fan behind it), measured on layout; on: 1 once known. */
   const raysX = useSharedValue(0);
   const raysY = useSharedValue(0);
@@ -345,6 +349,11 @@ export function GameDialog({
     const button = index === null ? undefined : (buttons && buttons.length ? buttons : [{ text: 'OK' }])[index];
     if (runButtonHandlers) button?.onPress?.();
   };
+  useAnimatedReaction(() => handing.value === 1 && exit.value >= HANDOFF_AT, (now, before) => {
+    if (!now || before) return;
+    handing.value = 0;
+    runOnJS(finishHandOff)();
+  });
 
   /**
    * Taking a prize (OK on a reward dialog): it flies out of the card, over the backdrop as it leaves, and lands on
@@ -379,9 +388,10 @@ export function GameDialog({
     // A dialog waiting right behind this one: the card goes and the backdrop stays for the next card (the bare
     // screen never flashes between them).
     if (handOff?.() === true) {
-      exit.value = withTiming(1, { duration: DIALOG_CLOSE.cardMs, easing: EASE.in }, done => {
-        if (done) runOnJS(finishHandOff)();
-      });
+      // The next card is asked for part way through the shrink (HANDOFF_AT), so it is drawn by the time this
+      // one is gone: no empty backdrop between the two.
+      handing.value = 1;
+      exit.value = withTiming(1, { duration: DIALOG_CLOSE.cardMs, easing: EASE.in });
       return;
     }
     // The card shrinks and goes first (solid until its last frames); the backdrop leaves last.
