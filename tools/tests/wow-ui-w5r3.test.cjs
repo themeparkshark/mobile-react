@@ -26,20 +26,23 @@ const coinFlight = () => loadTs('src/ui/CoinFlight.tsx', {
   './motion': { BEZIER: { out: [0, 0, 0.58, 1], inOut: [0.42, 0, 0.58, 1] } }, './tokens': { Z: { toast: 100 } },
 });
 
-test('dialog close: the card, the backdrop and the prize keep their motion in the view tree (no stale frame after a render)', () => {
+test('dialog: never an older frame left on screen (open after the views are on screen, final look said again, gone means out of the layout)', () => {
   const src = read('src/ui/GameDialog.tsx');
-  assert.match(src, /export function keepInTree\(v: number\): number \{\n\s+'worklet';\n\s+return v \* 0\.0005;/);
-  // A sub-pixel top: never a visible move, even at the end of an open (life 1) plus a close (exit 1).
-  assert.ok(2 * 0.0005 < 0.01);
-  assert.match(src, /top: keepInTree\(s\.life\.value \+ s\.exit\.value\),/, 'the card');
-  assert.match(src, /const scrimStyle = useAnimatedStyle\(\(\) => \(\{ opacity: scrim\.value, top: keepInTree\(scrim\.value\) \}\)\);/, 'the backdrop');
-  assert.match(src, /opacity: raw > 0 && raw < 1 \? 1 : 0, top: keepInTree\(raw\),/, 'the flying prize');
-  assert.match(src, /s\.life\.value = withTiming\(1, \{ duration: OPEN_TREE_MS \}\);/, 'the whole open (pop, ribbon, stamp) is covered');
-  assert.match(src, /export const OPEN_TREE_MS = 760;/);
-  // 'top' is a layout prop on Fabric: it is committed into the tree with every other prop of that frame.
-  const allow = read('node_modules/react-native-reanimated/src/propsAllowlists.ts');
-  const nativeList = allow.slice(allow.indexOf('NATIVE_THREAD_PROPS_WHITELIST'));
-  assert.match(nativeList, /\n\s+top: true,/);
+  const k = l => (l >= 2 ? 0.99995 : l >= 1 ? 0.9999 : 1);
+  assert.match(src, /return l >= 2 \? 0\.99995 : l >= 1 \? 0\.9999 : 1;/);
+  assert.ok(k(0.5) === 1 && k(1) !== 1 && k(2) !== k(1) && Math.abs(1 - k(2)) < 1e-3, 'twice, never visible');
+  assert.match(src, /s\.life\.value = withTiming\(2, \{ duration: 2 \* OPEN_SETTLE_MS, easing: Easing\.linear \}\);/);
+  assert.match(src, /opacity: s\.shown\.value \* s\.fade\.value \* closeOpacity\(s\.exit\.value\) \* k,/, 'the card');
+  assert.match(src, /display: s\.exit\.value >= 1 \? 'none' : 'flex',/, 'a card that has gone is out of the layout');
+  assert.match(src, /opacity: scrim\.value \* settleFactor\(scrimLife\.value\),\n\s+display: scrim\.value <= 0 && scrimLife\.value > 0 \? 'none' : 'flex'/, 'the backdrop');
+  assert.match(src, /display: raw >= 1 \? 'none' : 'flex',/, 'a landed prize');
+  // The first card animates only once the dialog's own views have laid out natively (an iOS modal presents late).
+  assert.match(src, /if \(shown && mounted && onScreen\.current && openedFor\.current !== key\) \{/);
+  assert.match(src, /onLayout=\{\(\) => \{ if \(!onScreen\.current\) \{ onScreen\.current = true; setLaidOut\(n => n \+ 1\); \} \}\}/);
+  assert.doesNotMatch(src, /keepInTree/, 'motion stays on the fast path (a layout prop every frame stalled behind map renders)');
+  // Only the gift lifts out; the rays stay and soften.
+  assert.match(src, /const giftStyle = useAnimatedStyle\(\(\) => \(\{ opacity: \(1 - s\.iconGone\.value\)/);
+  assert.match(src, /s\.prizeGlow\.value = withTiming\(0\.4, \{ duration: DIALOG_CLOSE\.cardMs, easing: EASE\.out \}\);/);
 });
 
 test('prize to the shelf: drawn by the dialog above its backdrop from shared values, from the icon spot to the Profile tab', () => {
@@ -75,7 +78,7 @@ test('prize to the shelf: drawn by the dialog above its backdrop from shared val
   assert.match(launch, /if \(done\) hits\.value \+= 1;/, 'the shelf squashes on the landing frame (UI thread)');
   assert.doesNotMatch(src, /flyCoins\(/, 'the prize is not handed to the root flight host (it was under the dialog)');
   // Where it leaves from and lands is measured as the card settles, so OK flies it on the press frame.
-  assert.match(src, /useAnimatedReaction\(\(\) => s\.shown\.value === 1 && s\.life\.value >= 1,/);
+  assert.match(src, /useAnimatedReaction\(\(\) => s\.shown\.value === 1 && s\.life\.value >= 1 && s\.exit\.value === 0,/);
   // The prizes are drawn after every card (above them and the backdrop), and the dialog stays until they land.
   assert.ok(src.indexOf('<PrizeFlight key=') > src.indexOf('<DialogCard key='));
   assert.match(src, /if \(flight\.current\.flying\.size > 0 \|\| !flight\.current\.scrimGone\) return;/);

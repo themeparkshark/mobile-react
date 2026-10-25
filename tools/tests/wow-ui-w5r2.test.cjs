@@ -149,7 +149,7 @@ test('queued dialogs: one backdrop for the queue, the card swaps (the bare scree
   const src = read('src/ui/GameDialog.tsx');
   // Round 3: the next card is drawn hidden under the open one and pops in on the UI thread at HANDOFF_AT of the shrink.
   assert.match(src, /s\.exit\.value = withTiming\(HANDOFF_AT, \{ duration: DIALOG_CLOSE\.cardMs \* HANDOFF_AT, easing: EASE\.in \}, done => \{\n\s+if \(!done\) return;\n\s+openSlot\(back, opts\);/);
-  assert.match(src, /if \(!handedOver\) scrim\.value = withTiming\(1,/, 'the backdrop only fades in for the first dialog');
+  assert.match(src, /if \(!handedOver\) \{\n\s+scrim\.value = withTiming\(1,/, 'the backdrop only fades in for the first dialog');
   assert.match(src, /s\.fade\.value = o\.handedOver \? 1 : withTiming\(1, \{ duration: o\.reduced \? MOTION\.fadeMs : CARD_SOLID_MS/);
   assert.match(src, /<GameDialog contentKey=\{request\.id\} visible=\{visible\}/, 'the host keeps one dialog for the queue');
   assert.doesNotMatch(src, /<GameDialog key=\{request\.id\}/);

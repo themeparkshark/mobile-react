@@ -131,21 +131,17 @@ export const DIALOG_PRIZE = { iconPt: 124, plainIconPt: 72, raysPt: 380, glowAmo
    */
   flyMs: 460 } as const;
 /**
- * How long a card's opening keeps its motion in the view tree (keepInTree): the pop, the ribbon stamp and the prize's
- * stamp are all done inside this.
+ * After a card opens it says its final look again, twice (at 1 and 2 of its life, OPEN_SETTLE_MS apart). On Fabric
+ * (Reanimated 3.16.7) opacity and transforms are written straight onto the view; a view mounted late (an iOS modal
+ * presenting under load) or a React render computed a moment earlier can leave it showing an older frame, and an
+ * animation that has finished never writes again: an invisible card, or a backdrop stuck at 0 over a map that then
+ * ignores every tap. A one-part-in-ten-thousand change makes the final values go out again; never visible.
  */
-export const OPEN_TREE_MS = 760;
-/**
- * A sub-pixel `top` that changes with a moving value. On Fabric (Reanimated 3.16.7) opacity and transforms are written
- * straight onto the view, outside the view tree, while a layout prop such as `top` is committed into the tree with
- * every other prop of that frame. So while a dialog opens or closes, its motion is in the tree, and a React render
- * elsewhere (the map, a coin flight, a button laying out) can never re-apply an older card, scrim or prize for the rest
- * of the move: the w5 'card half see-through, then solid again, then gone with no shrink' close. Rounds to no
- * visible move (under a thousandth of a point).
- */
-export function keepInTree(v: number): number {
+export const OPEN_SETTLE_MS = 800;
+/** The final-look factor at life l (0 to 2): 1 while it moves, then two slightly different values. Pure worklet. */
+export function settleFactor(l: number): number {
   'worklet';
-  return v * 0.0005;
+  return l >= 2 ? 0.99995 : l >= 1 ? 0.9999 : 1;
 }
 /** A fresh dialog's card is solid inside this (ms): a pop, never a see-through card over the buttons behind it. */
 export const CARD_SOLID_MS = 50;
@@ -250,7 +246,7 @@ type CardSlot = {
   readonly pop: SharedValue<number>;
   readonly fade: SharedValue<number>;
   readonly exit: SharedValue<number>;
-  /** 0 to 1 over OPEN_TREE_MS after the card opens: the card's motion stays in the view tree that long. */
+  /** 0 to 2 over 2 * OPEN_SETTLE_MS after the card opens: its final look is said again at 1 and at 2 (settleFactor). */
   readonly life: SharedValue<number>;
   readonly parts: SharedValue<number>;
   readonly ribbon: SharedValue<number>;
@@ -301,7 +297,7 @@ export function openSlot(s: CardSlot, o: { readonly handedOver: boolean; readonl
   s.land.value = 0;
   s.shown.value = 1;
   s.life.value = 0;
-  s.life.value = withTiming(1, { duration: OPEN_TREE_MS });
+  s.life.value = withTiming(2, { duration: 2 * OPEN_SETTLE_MS, easing: Easing.linear });
   // Solid from its first frames (a pop, not a fade): never the screen behind ghosting through the card.
   s.fade.value = o.handedOver ? 1 : withTiming(1, { duration: o.reduced ? MOTION.fadeMs : CARD_SOLID_MS, easing: EASE.out });
   s.iconPop.value = o.reduced ? 1 : ICON_STAMP.from;
@@ -375,6 +371,8 @@ export function GameDialog({
   const closing = useRef(false);
   const chosen = useRef<number | null>(null);
   const scrim = useSharedValue(0);
+  /** The backdrop's own settle clock (settleFactor): its final look is said again after it has faded in. */
+  const scrimLife = useSharedValue(0);
   const slots = [useCardSlot(), useCardSlot(), useCardSlot()];
   const key = contentKey ?? 'one';
   const current: DialogCardContent = { key, title, message, icon, buttons, dismissible, haptic: hapticKind, equalChoices };
@@ -408,27 +406,35 @@ export function GameDialog({
   }, [shown]);
   /** The request the showing card was opened for (null while closed). */
   const openedFor = useRef<number | string | null>(null);
+  /** The dialog's views are on screen (its root laid out natively): only then does the first card animate. */
+  const onScreen = useRef(false);
+  const [laidOut, setLaidOut] = useState(0);
   useEffect(() => {
-    if (shown && mounted && openedFor.current !== key) {
+    if (shown && mounted && onScreen.current && openedFor.current !== key) {
       // A new request taking over an open dialog: the backdrop is already up, only the card pops in.
       const handedOver = openedFor.current !== null;
       openedFor.current = key;
       closing.current = false;
       chosen.current = null;
-      if (!handedOver) scrim.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : DURATION.base, easing: EASE.out });
+      if (!handedOver) {
+        scrim.value = withTiming(1, { duration: reducedMotion ? MOTION.fadeMs : DURATION.base, easing: EASE.out });
+        scrimLife.value = 0;
+        scrimLife.value = withTiming(2, { duration: 2 * OPEN_SETTLE_MS, easing: Easing.linear });
+      }
       openSlot(slots[frontSlot]!, { handedOver, celebrates: dialogCelebrates({ icon, haptic: hapticKind, buttons }),
         prize: cardPrize(current), reduced: reducedMotion });
       openHaptic(current, reducedMotion);
     }
     // Opening only depends on visibility and which request is shown; haptic kind and motion are read at open time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, mounted, key]);
+  }, [shown, mounted, key, laidOut]);
 
   /** The prize in flight (it holds the dialog's views until it lands) and whether the backdrop has gone. */
   const flight = useRef({ flying: new Set<number>(), seq: 0, scrimGone: false });
   const finish = () => {
     if (flight.current.flying.size > 0 || !flight.current.scrimGone) return;
     setMounted(false);
+    onScreen.current = false;
     setLeaving(null);
     const index = chosen.current;
     onAnswer?.(index);
@@ -478,6 +484,8 @@ export function GameDialog({
       flight.current.flying.add(id);
       const hits = shelfHitsValue();
       s.iconGone.value = 1;
+      // The rays it leaves behind soften as the card shrinks.
+      s.prizeGlow.value = withTiming(0.4, { duration: DIALOG_CLOSE.cardMs, easing: EASE.out });
       s.prize.value = 0;
       s.prize.value = withTiming(1, { duration: DIALOG_PRIZE.flyMs, easing: Easing.linear }, done => {
         // The Profile icon squashes and throws its stars on the landing frame (Wrapper, UI thread).
@@ -538,9 +546,11 @@ export function GameDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  // The backdrop's fade stays in the view tree (keepInTree), so a render elsewhere can never put back an older,
   // half-faded backdrop after it has gone.
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.value, top: keepInTree(scrim.value) }));
+  // The backdrop says its final look again once it has faded in (settleFactor) and is taken out of the layout when it
+  // has gone (a layout prop, committed into the view tree), so an older half-faded frame can never stay up.
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.value * settleFactor(scrimLife.value),
+    display: scrim.value <= 0 && scrimLife.value > 0 ? 'none' : 'flex' }));
 
   if (!mounted) return null;
   const cards: { content: DialogCardContent; slot: number; role: 'front' | 'next' | 'leaving' }[] = [];
@@ -551,7 +561,8 @@ export function GameDialog({
   return (
     <Modal transparent visible animationType="none" statusBarTranslucent
       onRequestClose={() => { if (dismiss !== null) close(dismiss); }}>
-      <KeyboardAvoidingView testID={testID} enabled={avoidKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardAvoidingView testID={testID} enabled={avoidKeyboard}
+        onLayout={() => { if (!onScreen.current) { onScreen.current = true; setLaidOut(n => n + 1); } }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: Z.dialog }}>
         <Animated.View style={[StyleSheet.absoluteFill, scrimStyle]}>
           {/* Underwater light, no blur pass: deeper blue at the edges, light in the middle so the colours stay clean. */}
@@ -632,20 +643,23 @@ export function DialogCard({ s, content, role, reduced, onChoose, registerMeasur
     });
   };
   registerMeasure(measureFlight);
-  useAnimatedReaction(() => s.shown.value === 1 && s.life.value >= 1, (now, before) => {
+  useAnimatedReaction(() => s.shown.value === 1 && s.life.value >= 1 && s.exit.value === 0, (now, before) => {
     if (now && !before) runOnJS(measureFlight)();
   });
 
-  // Every part of the card keeps its motion in the view tree while it opens and while it closes (keepInTree): on
-  // Fabric a React render elsewhere (the map, a coin flight) re-applies the props it last knew, and a value moved
-  // only on the UI thread could come back stale for the rest of the close (a half-faded card snapping back solid).
-  const cardStyle = useAnimatedStyle(() => ({
-    opacity: s.shown.value * s.fade.value * closeOpacity(s.exit.value),
-    transform: reduced ? [] : [
-      { scale: (CARD_FROM + (1 - CARD_FROM) * s.pop.value) * (1 - (1 - CARD_EXIT) * s.exit.value) },
-    ],
-    top: keepInTree(s.life.value + s.exit.value),
-  }));
+  // The card moves on the UI thread's fast path; once open it says its final look again (settleFactor), and once gone
+  // it is taken out of the layout (display, committed into the view tree), so a React render elsewhere can never leave
+  // an older card on screen (the w5 'see-through, then solid again, then gone with no shrink' close).
+  const cardStyle = useAnimatedStyle(() => {
+    const k = settleFactor(s.life.value);
+    return {
+      opacity: s.shown.value * s.fade.value * closeOpacity(s.exit.value) * k,
+      transform: reduced ? [] : [
+        { scale: (CARD_FROM + (1 - CARD_FROM) * s.pop.value) * (1 - (1 - CARD_EXIT) * s.exit.value) * k },
+      ],
+      display: s.exit.value >= 1 ? 'none' : 'flex',
+    };
+  });
   const ribbonStyle = useAnimatedStyle(() => {
     if (reduced) return {};
     const r = s.ribbon.value;
@@ -655,7 +669,9 @@ export function DialogCard({ s, content, role, reduced, onChoose, registerMeasur
   const bodyStyle = useAnimatedStyle(() => partStyle(s.parts.value, 1, reduced));
   const buttonsStyle = useAnimatedStyle(() => partStyle(s.parts.value, 2, reduced));
   // The card's own prize hides on the frame the flying one leaves its spot (one prize, lifting out of the card).
-  const iconStyle = useAnimatedStyle(() => ({ opacity: 1 - s.iconGone.value, transform: [{ scale: s.iconPop.value }] }));
+  const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: s.iconPop.value * settleFactor(s.life.value) }] }));
+  // Only the gift lifts out of the card (the rays stay and fade with it).
+  const giftStyle = useAnimatedStyle(() => ({ opacity: (1 - s.iconGone.value) * settleFactor(s.life.value) }));
   // The wide ray fan sits behind the card and the ribbon, centred on the prize, and turns with the card's own fan.
   const outerRaysStyle = useAnimatedStyle(() => ({ opacity: s.raysOn.value,
     transform: [{ translateX: s.raysX.value - DIALOG_PRIZE.outerRaysPt / 2 }, { translateY: s.raysY.value - DIALOG_PRIZE.outerRaysPt / 2 }] }));
@@ -715,7 +731,9 @@ export function DialogCard({ s, content, role, reduced, onChoose, registerMeasur
             {/* A prize stamps onto a fan of gold rays: the brightest thing on the screen. */}
             {celebrates && <GoldBurst size={DIALOG_PRIZE.raysPt} amount={s.prizeGlow} bloom={s.prizeBloom} reduced={reduced}
               style={{ position: 'absolute' }} />}
-            <GameIcon name={icon} size={celebrates ? DIALOG_PRIZE.iconPt : DIALOG_PRIZE.plainIconPt} />
+            <Animated.View style={giftStyle}>
+              <GameIcon name={icon} size={celebrates ? DIALOG_PRIZE.iconPt : DIALOG_PRIZE.plainIconPt} />
+            </Animated.View>
             {/* A reward's icon lands with a ring of gold stars around it. */}
             {celebrates && <SparkleBurst progress={s.iconSpark} count={8} x={DIALOG_PRIZE.iconPt / 2} y={DIALOG_PRIZE.iconPt / 2}
               spread={[-210, 30]} dist={[52, 78]} size={[16, 22]} seed={9} />}
@@ -746,13 +764,13 @@ function PrizeFlight({ s, icon }: { readonly s: CardSlot; readonly icon: GameIco
   const style = useAnimatedStyle(() => {
     const raw = s.prize.value;
     const at = prizeAt(raw, s.from.value, s.to.value);
-    return { opacity: raw > 0 && raw < 1 ? 1 : 0, top: keepInTree(raw),
+    return { opacity: raw > 0 && raw < 1 ? 1 : 0, display: raw >= 1 ? 'none' : 'flex',
       transform: [{ translateX: at.x - half }, { translateY: at.y - half }, { rotate: `${at.rot}deg` }, { scale: at.scale }] };
   });
   const landStyle = useAnimatedStyle(() => ({ transform: [{ translateX: s.to.value.x }, { translateY: s.to.value.y }] }));
   return <>
     <PrizeTrail progress={s.prize} from={s.from} to={s.to} />
-    <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, width: size, height: size }, style]}>
+    <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0, width: size, height: size }, style]}>
       {/* A plain image view (a pooled expo-image view handed on after a flight showed its gift on a map marker). */}
       <RNImage source={ICON_SOURCES[resolveIconName(icon) ?? 'gift']} fadeDuration={0} resizeMode="contain"
         style={{ width: size, height: size }} />

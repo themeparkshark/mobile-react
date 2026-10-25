@@ -383,11 +383,13 @@ function cardView(content, reduced = false) {
 
 test('GameDialog: mounting open springs when motion is on, fades under reduced motion', () => {
   dialogHaptics.length = 0;
-  const open = dialogView({});
+  // The first card animates once the dialog's views have laid out natively (its root's onLayout).
+  const laidOut = view => { view.find(n => n.type === 'KeyboardAvoidingView' || typeof n.props?.onLayout === 'function' && n.props.behavior !== undefined)?.props.onLayout?.(); view.render(); return view; };
+  const open = laidOut(dialogView({}));
   assert.ok(open.motions.includes('spring'), 'a host-mounted dialog (visible on mount) gets the spring pop');
   assert.deepEqual(dialogHaptics, ['tickSelection'], 'a selection tick when it opens');
   assert.equal(open.find(n => n.type === 'BlurView'), undefined, 'no blur pass under the scrim (it flickered and read grey)');
-  const reduced = dialogView({}, true);
+  const reduced = laidOut(dialogView({}, true));
   assert.ok(!reduced.motions.includes('spring'), 'reduced motion never springs');
   assert.ok(reduced.motions.includes('timing'));
 });
