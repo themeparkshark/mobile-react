@@ -416,7 +416,7 @@ function TaskMarker({
   // The island's art (its animated styles and views) mounts only once the slot has a ride, a few
   // islands per frame (islandMount): an empty slot is one bare box, so the map screen's first
   // commit no longer builds 80 full islands at once (that held the launch bar still for seconds).
-  const materialized = useIslandMount(!parked);
+  const materialized = useIslandMount(!parked, aliveRank);
 
   const press = () => { if (shownRef.current) onPress(task); };
   const status = live && (live.status === 'OPERATING' && live.wait !== null ? `${live.wait} min wait`

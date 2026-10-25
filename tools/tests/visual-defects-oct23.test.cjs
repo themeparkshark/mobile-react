@@ -1414,6 +1414,13 @@ test('wave 5 round 3: ride islands mount their art a few per frame, never all 80
   assert.deepEqual([...mounted], [...Array(44).keys()], 'in slot order, each once');
   assert.equal(m.islandsWaiting(), 0);
   assert.ok(m.ISLANDS_PER_FRAME <= 8);
+  // Nearest first: a near island queued late still mounts before far ones.
+  const order = [];
+  m.queueIslandMount(() => order.push('far'), 30);
+  m.queueIslandMount(() => order.push('near'), 0);
+  m.queueIslandMount(() => order.push('mid'), 5);
+  while (frames.length) frames.shift()();
+  assert.deepEqual([...order], ['near', 'mid', 'far']);
 });
 
 test('wave 5 round 3: an island keeps its two map markers whatever it draws (MapLibre insert crash class)', () => {
@@ -1422,7 +1429,7 @@ test('wave 5 round 3: an island keeps its two map markers whatever it draws (Map
   // Exactly two Markers, rendered unconditionally; only the main marker's one child switches, from a
   // bare box of the island's own size to the art, and that switch is one way (useIslandMount).
   assert.equal((body.match(/<Marker[\s>]/g) ?? []).length, 2);
-  assert.match(body, /const materialized = useIslandMount\(!parked\);/);
+  assert.match(body, /const materialized = useIslandMount\(!parked, aliveRank\);/);
   assert.match(body, /\{materialized \? <IslandArt [^]*? \/> : <View style=\{styles\.bare\} \/>\}\s*<\/Marker>/);
   assert.match(marker, /container: \{ width: 72, height: 96,/);
   assert.match(marker, /bare: \{ width: 72, height: 96, opacity: 0 \},/);
@@ -1430,7 +1437,7 @@ test('wave 5 round 3: an island keeps its two map markers whatever it draws (Map
   assert.doesNotMatch(body, /useAnimatedStyle|useSharedValue/);
   const mount = read('src/screens/ExploreScreen/islandMount.ts');
   assert.match(mount, /if \(mounted \|\| !hasRide\) return undefined;/, 'never turns false again');
-  assert.match(mount, /useCoverArt\(hasRide && !mounted\);/, 'the loading cover waits for islands with a ride');
+  assert.match(mount, /useCoverArt\(hasRide && !mounted && rank < HOLD_RANKS\);/, 'the loading cover waits for the nearest islands');
   // Every ride slot stays a TaskMarker from the first commit (parked or not).
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /if \(!task\) return <TaskMarker key=\{`ride-\$\{slot\}`\} task=\{PARKED_TASK\} parked/);
@@ -1492,4 +1499,12 @@ test('wave 5 round 3: a launch step the bar already passed still keeps it creepi
 test('wave 5 round 3: an art hold released in a commit re-plans after it, so holds added in the same commit still count', () => {
   const cover = read('src/components/map/mapCover.ts');
   assert.match(cover, /return \(\) => \{ if \(artWaiting\.delete\(key\)\) void Promise\.resolve\(\)\.then\(\(\) => replan\(Date\.now\(\)\)\); \};/);
+});
+
+test('wave 5 round 3: the islands that hold the cover are the ten nearest (ranks are exact only up to the alive-rank limit)', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const budget = loadTs('src/components/map/alive/ambientBudget.ts');
+  const mount = read('src/screens/ExploreScreen/islandMount.ts');
+  const hold = Number(/export const HOLD_RANKS = (\d+);/.exec(mount)[1]);
+  assert.ok(hold <= budget.ALIVE_RANK_LIMIT, 'a clamped far rank never holds the cover');
 });
