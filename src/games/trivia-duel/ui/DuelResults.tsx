@@ -35,6 +35,8 @@ const POL_W = 200;
 const POL_H = 152;
 /** The score plate and the close button live this far under the safe top: the polaroid stays below them. */
 const POL_TOP_RESERVE = 136;
+/** How far the polaroid falls as it fades in (pt). */
+const POL_DROP_PT = 36;
 
 /**
  * How big the polaroid draws so it fits the sky between the score plate and
@@ -183,7 +185,8 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   const cardO = useSharedValue(reducedMotion ? 0 : 1);
   const pulse = useSharedValue(1);
   const gap = useSharedValue(0);
-  const polY = useSharedValue(-300);
+  // It drops a short way and fades in as it falls, so it never sweeps across the score plate.
+  const polY = useSharedValue(-POL_DROP_PT);
   const polS = useSharedValue(1);
   // The Best Moment polaroid leaves the tree once it has popped away. Left
   // mounted at scale 0 over the card, it drew the banners under it hollow
@@ -229,7 +232,10 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   // gold a few beats: that much more and you catch him.
   const gapStyle = useAnimatedStyle(() => ({ backgroundColor: gap.value > 0.5 ? C.gold : GAP_NAVY }));
   // Drops in centre for 1.5s, then pops away (never parked over the card's words).
-  const polStyle = useAnimatedStyle(() => ({ opacity: polS.value > 0.02 ? 1 : 0, transform: [{ translateY: polY.value }, { scale: polS.value }, { rotate: '-6deg' }] }));
+  const polStyle = useAnimatedStyle(() => ({
+    opacity: polS.value > 0.02 ? Math.min(1, Math.max(0, 1 + polY.value / POL_DROP_PT)) : 0,
+    transform: [{ translateY: polY.value }, { scale: polS.value }, { rotate: '-6deg' }],
+  }));
   // A lost ride challenge shows its right answers on the coin goal row instead.
   const rideGoal = model.ride && !model.ride.won && model.ride.need ? { right: Math.min(model.ride.right ?? 0, model.ride.need), need: model.ride.need } : null;
   const chips = duelChips(model.rows).filter((c) => !(rideGoal && c.label === 'RIGHT ANSWERS'));
@@ -339,7 +345,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
           accessible accessibilityLabel={bestMomentSpoken(model.best.label)}>
           <Image source={ART.polaroid} style={{ width: POL_W * polK, height: POL_H * polK }} resizeMode="contain" />
           {/* A picture, not a sentence: a bolt and the big time (the rest is spoken). */}
-          <View style={[styles.polCaption, { bottom: 16 * polK }]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+          <View style={[styles.polCaption, { bottom: -6 * polK }]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
             <GameIcon name="rush" size={Math.round(30 * polK)} />
             {bestMomentTime(model.best.label) ? <Text style={[styles.polTime, { fontSize: Math.round(26 * polK) }]}>{bestMomentTime(model.best.label)}</Text> : null}
           </View>
@@ -657,6 +663,8 @@ const styles = StyleSheet.create({
   half: { width: '48.5%' },
   full: { width: '100%' },
   polaroid: { position: 'absolute', alignSelf: 'center', alignItems: 'center' },
-  polCaption: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 4 },
+  // The time sits on its own white tag under the photos, so it reads on any art.
+  polCaption: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#ffffff', borderRadius: 12,
+    borderWidth: 2.5, borderColor: C.navy, paddingLeft: 4, paddingRight: 8 },
   polTime: { fontFamily: 'Shark', fontSize: 26, color: C.navy },
 });

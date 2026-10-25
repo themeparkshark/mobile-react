@@ -45,6 +45,10 @@ test('the Best Moment polaroid waits for the last star and YOU WIN!, eases down 
   // No overshoot spring that dips into the ribbon or the card.
   assert.match(duel, /polY\.value = withDelay\(polAt, withTiming\(0, \{ duration: 420, easing: Easing\.out\(Easing\.cubic\) \}\)\);/);
   assert.doesNotMatch(duel, /withSpring\(0, \{ damping: 10, stiffness: 220 \}\)/);
+  // A short fall that fades in: it never sweeps across the score plate at the top.
+  assert.match(duel, /const POL_DROP_PT = 36;/);
+  assert.match(duel, /const polY = useSharedValue\(-POL_DROP_PT\);/);
+  assert.match(duel, /opacity: polS\.value > 0\.02 \? Math\.min\(1, Math\.max\(0, 1 \+ polY\.value \/ POL_DROP_PT\)\) : 0,/);
   // Clear sky: the ribbon rises 36 pt over the card (it has settled when the polaroid drops).
   assert.match(duel, /const POL_GAP = 48;/);
   // It sizes itself to the sky between the score plate and the ribbon.
