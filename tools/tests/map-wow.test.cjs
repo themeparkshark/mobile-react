@@ -927,3 +927,11 @@ test('wave 5 r3: ordinary repeats vary: three fidgets round-robin, the chime ste
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.match(src, /run\.pitch \? \{ volume: 0\.8, pitch: run\.pitch \}/);
 });
+
+test('wave 5 r3: the catch effects draw their stars, sparks and water ring with RN Image (expo-image views never showed in release-like captures)', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  for (const art of ['MINI_STAR', 'INK_SPARK', 'WATER_RING']) {
+    assert.match(src, new RegExp(`<RNImage source=\\{${art}\\} style=\\{styles\\.fxFill\\} resizeMode="contain" fadeDuration=\\{0\\} />`), art);
+    assert.doesNotMatch(src, new RegExp(`<Image source=\\{${art}\\}`), art);
+  }
+});

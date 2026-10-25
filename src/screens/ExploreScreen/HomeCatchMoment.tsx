@@ -289,7 +289,7 @@ function BurstStar({ index, t, count, home, to }: { index: number; t: SharedValu
       <RNImage source={MAP_SPARKLE} style={[styles.fxFill, { tintColor: GOLD_FX.raysSoft }]} resizeMode="contain" fadeDuration={0} />
     </Animated.View>
     <Animated.View pointerEvents="none" style={[styles.burstStar, style]}>
-      <Image source={MINI_STAR} style={styles.fxFill} contentFit="contain" transition={0} />
+      <RNImage source={MINI_STAR} style={styles.fxFill} resizeMode="contain" fadeDuration={0} />
     </Animated.View>
   </>;
 }
@@ -346,7 +346,7 @@ function BeamSpark({ index, clock, plan, on, sx, sy }: { index: number; clock: S
     return { opacity: Math.sin(u * Math.PI), transform: [{ translateX: x - 9 }, { translateY: y - 9 }, { scale: 0.7 + 0.5 * Math.sin(u * Math.PI) }, { rotate: `${u * 180 * side}deg` }] };
   });
   return <Animated.View pointerEvents="none" style={[styles.beamSpark, style]}>
-    <Image source={INK_SPARK} style={styles.fxFill} contentFit="contain" transition={0} />
+    <RNImage source={INK_SPARK} style={styles.fxFill} resizeMode="contain" fadeDuration={0} />
   </Animated.View>;
 }
 
@@ -610,7 +610,7 @@ const CatchFx = memo(function CatchFx({ fx, sv, burst, confetti, layerHeight, ar
       <BeamSpark key={index} index={index} clock={sv.clock} plan={sv.plan} on={sv.beamOn} sx={sv.sx} sy={sv.sy} />))}
     {motionFx && <Animated.View style={[styles.splash, fx.splash]} pointerEvents="none" />}
     {motionFx && <Animated.View style={[styles.waterRing, fx.water]} pointerEvents="none">
-      <Image source={WATER_RING} style={styles.fxFill} contentFit="contain" transition={0} />
+      <RNImage source={WATER_RING} style={styles.fxFill} resizeMode="contain" fadeDuration={0} />
     </Animated.View>}
     {/* Wave 4: the bloom, the hand-inked sunburst and Alex's ink burst in one Skia canvas driven by the clock
         (no animated view style a React commit could reset, so the burst can never blink mid-hold). */}
