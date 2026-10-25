@@ -173,7 +173,8 @@ function coinTipLayout(stores: number, column: { readonly width: number; readonl
   const room = WINDOW_WIDTH - 12 - 16 - column.width - 8;
   const above = room < COIN_TIP_MIN;
   const maxWidth = above ? COIN_TIP_WIDTH : Math.min(COIN_TIP_WIDTH, room);
-  const bottom = above ? Math.max(bottomLeftColumnHeight(stores), 32 + column.height) + 8 : bottomLeftColumnHeight(stores) + 6;
+  // On a short phone the card sits 3 pt lower (still 3 pt clear of the help button) so its top clears the player's island.
+  const bottom = above ? Math.max(bottomLeftColumnHeight(stores), 32 + column.height) + 8 : bottomLeftColumnHeight(stores) + (SHORT_MAP ? 3 : 6);
   return {
     style: { position: 'absolute', left: 12, maxWidth, bottom, zIndex: 40 } as const,
     narrow: maxWidth < COIN_TIP_ROOMY,

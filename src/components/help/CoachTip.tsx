@@ -101,8 +101,8 @@ const styles = StyleSheet.create({
     borderWidth: 3, borderColor: BRAND.white, paddingVertical: 10, paddingLeft: 6, paddingRight: 12, ...SHADOW.card,
   },
   compactCard: { paddingLeft: 12, borderColor: BRAND.gold },
-  // Short phones (iPhone SE): 8 pt less height, so the card's top clears the island above it.
-  smallArtCard: { paddingVertical: 6 },
+  // Short phones (iPhone SE): 12 pt less height, so the card's top clears the island above it.
+  smallArtCard: { paddingVertical: 4 },
   finn: { width: 58, height: 58, marginRight: 6 },
   finnSmall: { width: 42, height: 42 },
   art: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },

@@ -1365,7 +1365,8 @@ test('wave 5 round 3: Finn card reading time starts when the card shows, and the
   assert.match(tip, /const timer = setTimeout\(onDismiss, autoHideMs\);[\s\S]*?\}, \[ready\]\);/);
   // Short phones: the picture card is 8 pt shorter (padding 10 to 6 top and bottom), bottom edge unchanged.
   assert.match(tip, /small && !!art && styles\.smallArtCard/);
-  assert.match(tip, /smallArtCard: \{ paddingVertical: 6 \},/);
+  assert.match(tip, /smallArtCard: \{ paddingVertical: 4 \},/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /bottomLeftColumnHeight\(stores\) \+ \(SHORT_MAP \? 3 : 6\);/);
   assert.match(tip, /paddingVertical: 10, paddingLeft: 6/);
 });
 
