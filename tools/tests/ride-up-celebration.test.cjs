@@ -177,6 +177,7 @@ test('wave 5 round 3: the ride-up starts on the frame the recap shows, once the 
   assert.match(recap, /requestAnimationFrame\(\(\) => \{ if \(goStore\.get\(\) >= 1\) return; shown\.value = 1; goStore\.set\(1\); \}\)/, 'shows and starts on one frame');
   assert.match(recap, /new Set\(\['art', 'hero', 'cannon'\]\)/, 'it waits for the shark and for every layer to mount');
   assert.match(recap, /setTimeout\(go, RIDE_UP_GO_MAX_MS\)/);
+  assert.match(recap, /shown\.value = withDelay\(RIDE_UP_GO_MAX_MS, withTiming\(1, \{ duration: 0 \}\)\);/, 'the UI thread shows the card even while JS is busy');
   assert.ok(Number(/RIDE_UP_GO_MAX_MS = (\d+)/.exec(src)[1]) <= 400);
   assert.match(recap, /<RideUpGo\.Provider value=\{rideUp \? goStore : null\}>/);
   assert.ok(Number(/RIDE_UP_ART_WAIT_MS = (\d+)/.exec(src)[1]) <= 300);

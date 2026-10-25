@@ -11,7 +11,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { Image as NativeImage, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import Animated, { FadeInDown, ZoomIn, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
+import Animated, { FadeInDown, ZoomIn, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import { createStepStore } from '../../../components/park/mountSteps';
 import RideUpCelebration, { RIDE_UP, RIDE_UP_ART_WAIT_MS, RIDE_UP_GO_MAX_MS, RIDE_UP_REPEAT, RideUpGo, RideUpHero, RideUpKicker, RollingValue, rideUpStatStartsAt, type RideUpPlan } from './RideUpCelebration';
@@ -235,6 +235,10 @@ export default function SessionRecap({
   const cannonBuilt = useRef(() => ready('cannon')).current;
   useEffect(() => {
     if (goStore.get() >= 1) return undefined;
+    // The UI thread shows the card by RIDE_UP_GO_MAX_MS even if the JS thread is still busy opening the line screen
+    // (on a real boarded recap the JS timers below ran about 4 s late, and the card stayed invisible all that time);
+    // the beats then start when JS gets to them, as they always did.
+    shown.value = withDelay(RIDE_UP_GO_MAX_MS, withTiming(1, { duration: 0 }));
     const art = setTimeout(begin, heroInventory && onOpenInventory ? 120 : RIDE_UP_ART_WAIT_MS);
     const most = setTimeout(go, RIDE_UP_GO_MAX_MS);
     return () => { clearTimeout(art); clearTimeout(most); };
