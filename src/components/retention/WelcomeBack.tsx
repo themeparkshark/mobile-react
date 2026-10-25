@@ -109,7 +109,7 @@ export default function WelcomeBack({ cards: cardsIn, reducedMotion, onDone }: {
             <Drop key={c.kind} v={drops[i]} hero={hero}>
               <Tile card={c} gift={i === giftIndex ? gift : null} reducedMotion={reducedMotion} hero={hero} />
             </Drop>
-          )) : [0, 1, 2].map(i => <WaitingTile key={i} index={i} reducedMotion={reducedMotion} />)}
+          )) : <WaitingTile index={0} reducedMotion={reducedMotion} />}
         </View>
         <Text style={styles.tap}>Tap to play!</Text>
       </Animated.View>
@@ -207,7 +207,10 @@ const styles = StyleSheet.create({
   chipText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.white, marginTop: 2 },
   chipTextGold: { color: BRAND.navy },
   shields: { flexDirection: 'row', gap: 2, marginTop: -6 },
-  waiting: { flex: 1, maxWidth: 150, height: 128, backgroundColor: 'rgba(255,255,255,0.5)', borderBottomColor: 'rgba(169,205,234,0.6)' },
+  // One soft dashed plate the size of a hero tile while today's goals load (most returns show one tile, so the card
+  // keeps its size when it drops in; never three empty boxes that become one).
+  waiting: { flex: 1, maxWidth: 250, height: 200, backgroundColor: 'rgba(255,255,255,0.22)', borderWidth: 2.5, borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.7)', borderBottomWidth: 2.5, borderBottomColor: 'rgba(255,255,255,0.7)' },
   ring: { width: 76, height: 76, borderRadius: 38, backgroundColor: BRAND.sky, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 0 },
   dot: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   dotMid: { marginTop: -14 },
