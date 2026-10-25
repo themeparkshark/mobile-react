@@ -28,6 +28,8 @@ import { computeRender, createHoleAnim, createRenderState, type HoleAnim, type R
 
 /** The last stretch of a Burst (the last 5 plus the ticks' lead) advances on wall time, never the presentation clock. */
 export const TRUE_TIME_MS = 5600;
+/** The longest gap one frame may add to that wall-clock stretch (backgrounding pauses the clock first). */
+export const WALL_CAP_MS = 250;
 
 export interface RuntimeFlags {
   running: boolean;
@@ -279,7 +281,10 @@ export function useWhackRuntime(opts: {
       const r = rt.value;
       const a = an.value;
       const L = geo.value;
-      r.frameWall = Date.now();
+      // Wall ms since the last frame (Date.now, not the frame clock): the last stretch of a Burst runs on it.
+      const now = Date.now();
+      const wallDt = r.frameWall > 0 ? Math.min(WALL_CAP_MS, Math.max(0, now - r.frameWall)) : 0;
+      r.frameWall = now;
       // At rest under a card: nothing on the board moves, so nothing is recomputed or redrawn.
       if (r.rest) return;
       if (r.running && !s.ended) {
@@ -289,10 +294,10 @@ export function useWhackRuntime(opts: {
           f = 0.5 + 0.5 * q * q;
           r.easeT += fxDt;
         }
-        // The last seconds run on true wall time (no hit-stop or slow-mo stretch), so each of the last 5
-        // seconds is one real second and the ticks queued ahead land on their stamps (w5: seconds measured
-        // 1.04 to 1.28 s of wall time when the sim rode the presentation clock to the end).
-        const dt = s.len - s.t <= TRUE_TIME_MS ? c.lastWallDt : fxDt;
+        // The last seconds run on the wall clock (no hit-stop, slow-mo or slow frame clock), so each of the
+        // last 5 seconds is one real second and the ticks queued ahead land on their stamps (w5: seconds
+        // measured 1.04 to 1.28 s of wall time when the sim rode the presentation clock to the end).
+        const dt = s.len - s.t <= TRUE_TIME_MS ? (c.paused ? 0 : wallDt) : fxDt;
         r.wallMs += c.paused ? 0 : dt > 0 ? dt : 0;
         r.acc += dt * f;
         const whole = Math.floor(r.acc);

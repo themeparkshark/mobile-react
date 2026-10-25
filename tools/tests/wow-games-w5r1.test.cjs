@@ -11,32 +11,13 @@ const path = require('node:path');
 const { loadTs } = require('./helpers/ts-module.cjs');
 
 const read = (p) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf8');
-const clock = loadTs('src/gamekit/core/clock.ts');
-
-test('clock: lastWallDt is the raw frame time, untouched by hit-stop or slow-mo, and 0 while paused', () => {
-  const c = clock.createClock();
-  clock.hitStop(c, 110, { holdSim: true, force: true });
-  clock.advanceClock(c, 40);
-  assert.equal(c.simMs, 0, 'the golden freeze still holds the sim');
-  assert.equal(c.lastWallDt, 40, 'but the wall delta is the whole frame');
-  const s = clock.createClock();
-  clock.slowMo(s, 0.35, 280, 120);
-  clock.advanceClock(s, 100);
-  assert.ok(Math.abs(s.lastFxDt - 35) < 1e-6);
-  assert.equal(s.lastWallDt, 100);
-  clock.advanceClock(s, 180);
-  assert.equal(s.lastWallDt, 180, 'a slow frame still counts in full (the presentation delta is capped at maxFrameMs)');
-  assert.equal(s.lastFxDt <= s.cfg.maxFrameMs, true);
-  clock.advanceClock(s, 4000);
-  assert.equal(s.lastWallDt, clock.WALL_CAP_MS, 'a long gap is capped');
-  clock.pauseClock(s);
-  clock.advanceClock(s, 16);
-  assert.equal(s.lastWallDt, 0, 'paused: no time passes');
-});
 
 test('Whack: the last stretch of a Burst advances on wall time, covering the last 5 and the ticks\' lead', () => {
   const rt = read('src/games/whack/useWhackRuntime.ts');
-  assert.match(rt, /const dt = s\.len - s\.t <= TRUE_TIME_MS \? c\.lastWallDt : fxDt;/);
+  assert.match(rt, /const dt = s\.len - s\.t <= TRUE_TIME_MS \? \(c\.paused \? 0 : wallDt\) : fxDt;/);
+  assert.match(rt, /const wallDt = r\.frameWall > 0 \? Math\.min\(WALL_CAP_MS, Math\.max\(0, now - r\.frameWall\)\) : 0;/,
+    'the wall delta comes from Date.now, so a slow or throttled frame clock cannot stretch the last 5');
+  assert.match(rt, /export const WALL_CAP_MS = 250;/);
   assert.match(rt, /r\.acc \+= dt \* f;/);
   assert.doesNotMatch(rt, /r\.acc \+= fxDt \* f;/, 'the sim no longer rides the presentation clock to the end');
   const trueMs = Number(/export const TRUE_TIME_MS = (\d+);/.exec(rt)[1]);
