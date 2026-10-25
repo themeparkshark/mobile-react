@@ -1362,7 +1362,12 @@ function ExploreScreen() {
             )}
 {/* TaskListModal removed - tasks now spawn on map like Pokemon! */}
           </View>
+          {/* box-none: this holder reaches 50 pt down over the tab bar, and its zIndex lifts it above
+              the bar once the plain parent views are flattened away. Without it the middle of the
+              bar (STANDINGS, the map compass, SOCIAL) ignored every tap while PLAY RIDE! showed.
+              Only the PLAY RIDE! button inside takes taps. */}
           <View
+            pointerEvents="box-none"
             style={{
               position: 'absolute',
               bottom: -50,

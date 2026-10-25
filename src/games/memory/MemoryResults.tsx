@@ -148,7 +148,9 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
   const backSt = useAnimatedStyle(() => ({ opacity: flip.value >= 0.5 ? 1 : 0, transform: [{ perspective: 900 }, { rotateY: `${flip.value * 180 - 180}deg` }] }));
 
   const canAlbum = !!data.rewards;
-  const canStats = data.numbers.length > 0 || !!data.grades;
+  // The first-session warm-up card is one tap to the map: no STATS panel for a stray
+  // late tap to open over CLEARED (a kid still tapping the board lands right there).
+  const canStats = data.mode !== 'warmup' && (data.numbers.length > 0 || !!data.grades);
   const canShare = !!data.daily;
   const canChallenge = !!data.daily?.ranked;
 

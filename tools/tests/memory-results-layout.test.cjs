@@ -112,3 +112,7 @@ test('faces draw from one shared decoded sheet per board, with a preload fallbac
   assert.equal(m.sharedSheetFor(ready, B).id, 'b');
   assert.equal(m.sharedSheetFor(ready, 9), null);
 });
+
+test('hotfix: the first-session warm-up card has no STATS button for a late tap to open over CLEARED', () => {
+  assert.match(src, /const canStats = data\.mode !== 'warmup' && \(/);
+});

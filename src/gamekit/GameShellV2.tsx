@@ -58,6 +58,7 @@ import { Haptic } from './Haptics';
 import { playSfx } from './SFX';
 import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovementContext';
 import { RideChallengeContext } from './RideChallengeContext';
+import { GrownUpGateSlot } from '../components/GrownUpGate';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon from '../ui/GameIcon';
 import { ResultsCard, type ResultStat } from './results/ResultsCard';
@@ -330,8 +331,6 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       setCountText(firstCount);
       setWrap(null);
       setHoldReason(null);
-      resultsScale.value = 0.7;
-      resultsOpacity.value = 0;
       return () => {
         clearCountdown();
         clearCelebration();
@@ -404,8 +403,6 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       startedRef.current = false;
       claimedRef.current = false;
       clearCelebration();
-      resultsScale.value = 0.7;
-      resultsOpacity.value = 0;
       setCountText(firstCount);
       setPhase('countdown');
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -423,8 +420,6 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       Haptic[effectiveResult.stars > 0 ? 'success' : 'failBuzz']();
       playSfx(effectiveResult.stars > 0 ? 'win' : 'lose');
       clearCelebration();
-      resultsOpacity.value = reducedMotionRef.current ? 1 : withTiming(1, { duration: 220 });
-      resultsScale.value = reducedMotionRef.current ? 1 : withSpring(1, JUICE.settleSpring);
       if (effectiveResult.stars > 0 && !reducedMotionRef.current) {
         // Confetti bursts timed to the star stamps.
         celebrationTimers.current.push(setTimeout(() => {
@@ -435,7 +430,22 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           confettiRef.current?.burst({ x: SCREEN_W * 0.7, y: SCREEN_H * 0.28, preset: 'confetti', count: 24 });
         }, 900));
       }
-    }, [visible, effectiveResult, phase, sessionKey, clearCountdown, clearResume, clearCelebration, resultsOpacity, resultsScale]);
+    }, [visible, effectiveResult, phase, sessionKey, clearCountdown, clearResume, clearCelebration]);
+
+    // The results card fades in from here only, AFTER the card has mounted. Passive effects
+    // run after the new card view is attached, so every animation frame reaches it. Starting
+    // the fade in the same effect that sets phase 'results' raced the card's mount: when the
+    // JS thread was busy (a kid still tapping at the buzzer), the 220 ms fade finished before
+    // the card view attached, and the card stayed at opacity 0 over a dimmed board.
+    useEffect(() => {
+      if (phase !== 'results') {
+        resultsOpacity.value = 0;
+        resultsScale.value = 0.7;
+        return;
+      }
+      resultsOpacity.value = reducedMotionRef.current ? 1 : withTiming(1, { duration: 220 });
+      resultsScale.value = reducedMotionRef.current ? 1 : withSpring(1, JUICE.settleSpring);
+    }, [phase, resultsOpacity, resultsScale]);
 
     // Ride challenge win: a short stamp, then straight into the coin reveal.
     useEffect(() => {
@@ -845,6 +855,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             style={styles.confetti}
             pointerEvents="none"
           />}
+          {/* The grown-up gate for a results Share or link: inside this modal, so it shows on top. */}
+          {visible && <GrownUpGateSlot />}
         </View>
     );
     return rideChallenge ? gameContent : (
