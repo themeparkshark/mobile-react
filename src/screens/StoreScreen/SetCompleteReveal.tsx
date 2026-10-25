@@ -136,6 +136,23 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   const bar = useSharedValue(still && xp ? xp.to : xp?.from ?? 0);
   const levelPulse = useSharedValue(1);
   const hop = useSharedValue(0);
+  // The card's cross-fade starts when its layer is on screen (the queued Modal's onShow, or at once inline): started
+  // on mount, it could finish before the Modal was presented, so the card snapped in at full opacity.
+  const enter = useSharedValue(still || bridged ? 1 : 0);
+  const enterStyle = useAnimatedStyle(() => ({ opacity: enter.value }));
+  const entered = useRef(still || bridged);
+  const startEnter = () => {
+    if (entered.current) return;
+    entered.current = true;
+    enter.value = withTiming(1, { duration: DURATION.base, easing: Easing.out(Easing.quad) });
+  };
+  const layerShown = () => { startEnter(); onShown?.(); };
+  // Never a blank layer: if the Modal never reports onShow, the card fades in anyway.
+  useEffect(() => {
+    const t = setTimeout(startEnter, ENTER_FALLBACK_MS);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [burst, setBurst] = useState(false);
   const [shownLevel, setShownLevel] = useState(xp ? (xp.levelUp ? xp.level - 1 : xp.level) : null);
 
@@ -261,10 +278,10 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   };
 
   return (
-    <RevealLayer inline={inline} onClose={() => leave(false)} onShown={onShown}>
+    <RevealLayer inline={inline} onClose={() => leave(false)} onShown={layerShown}>
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
       {/* Inline (over the try-on) and queued or recovered (over the shop): the same quick cross-fade. Bridged (over the navy cover): at once. */}
-      <FadeInOnMount duration={DURATION.base} instant={still || bridged} style={styles.fill} {...swipe.panHandlers}>
+      <Animated.View style={[styles.fill, enterStyle]} {...swipe.panHandlers}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />
         <Pressable onPress={() => leave(false)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close"
           style={[styles.close, { top: insets.top + 10 }]}>
@@ -351,12 +368,15 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
             </Pressable>
           </View>
         </View>
-      </FadeInOnMount>
+      </Animated.View>
     </RevealLayer>
   );
 }
 
 /** Its own modal, or (inline) a full-screen layer inside the modal it was handed off from. */
+/** If the queued layer's Modal never reports onShow, the card still fades in by then. */
+export const ENTER_FALLBACK_MS = 600;
+
 function RevealLayer({ inline, onClose, onShown, children }: {
   readonly inline: boolean; readonly onClose: () => void; readonly onShown?: () => void; readonly children: ReactNode;
 }) {

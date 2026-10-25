@@ -501,7 +501,10 @@ test('wave 3 round 4: tier plates have ink edges, Prismatic has a few long rays,
 
 test('wave 3 round 4: the queued or recovered Set Complete times like the inline one', () => {
   const reveal = read('src/screens/StoreScreen/SetCompleteReveal.tsx');
-  assert.ok(reveal.includes('<FadeInOnMount duration={DURATION.base} instant={still || bridged} style={styles.fill}'), 'one cross-fade time for both paths, on a shared value');
+  assert.ok(reveal.includes('<Animated.View style={[styles.fill, enterStyle]}') && /enter\.value = withTiming\(1, \{ duration: DURATION\.base,/.test(reveal), 'one cross-fade time for both paths, on a shared value');
+  assert.ok(reveal.includes('onShown={layerShown}') && /const layerShown = \(\) => \{ startEnter\(\); onShown\?\.\(\); \};/.test(reveal), 'it starts when the layer is on screen (the queued Modal\'s onShow), not on mount');
+  assert.ok(/setTimeout\(startEnter, ENTER_FALLBACK_MS\)/.test(reveal), 'never a blank layer if onShow never comes');
+  assert.ok(reveal.includes('<FadeInOnMount duration={160} instant={still} style={styles.wearing}>'), 'NOW WEARING fades in on a shared value too');
   assert.ok(!/entering=\{/.test(reveal), 'no layout-animation entering (it snapped in at full opacity on Fabric in release JS)');
   const fade = read('src/ui/FadeInOnMount.tsx');
   assert.ok(/shown\.value = withTiming\(1, \{ duration, easing: EASE\.out \}\)/.test(fade) && /opacity: shown\.value/.test(fade), 'the fade plays on the UI thread');
