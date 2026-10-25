@@ -137,7 +137,14 @@ test('the beat clock runs in real time under the system Reduce Motion (Reanimate
 test('the moment never re-renders React once it plays: stable props, card targets in a shared value', () => {
   const src = read('src/components/park/ParkArrivalMoment.tsx');
   assert.match(src, /const targets = useSharedValue<\(Point \| null\)\[\]>/);
-  assert.doesNotMatch(src, /setTargets|useState\(/, 'no React state inside the stage');
+  assert.doesNotMatch(src, /setTargets/, 'no React state for the card targets');
+  // Wave 5 round 2: the only React state is the invisible mount steps (before the moment starts) and the particle
+  // canvas leaving on the last frame (after it ends): nothing re-renders while it plays.
+  assert.equal((src.match(/useState\(/g) || []).length, 2);
+  assert.match(src, /const \[step, setStep\] = useState\(0\)/);
+  assert.match(src, /const \[fxOn, setFxOn\] = useState\(true\)/);
+  assert.match(src, /if \(step >= MOUNT_STEPS\) \{ mountedAll\.current = true; tryStart\(\); return undefined; \}/);
+  assert.match(src, /if \(!laidOut\.current \|\| !artReady\.current \|\| !mountedAll\.current/, 'the moment starts only once every step has mounted');
   const hook = read('src/components/park/useParkArrival.tsx');
   assert.match(hook, /const onDone = useCallback\(/, 'a stable onDone');
   assert.match(hook, /const layer = useMemo\(/);
@@ -201,7 +208,7 @@ test('round 5: every fifth arrival is golden; the cards read as pictures; the ve
   for (const n of [0, 1, 2, 3, 4, 6, 9, NaN]) assert.equal(arrival.arrivalIsGolden(n), false, String(n));
   assert.ok(arrival.ARRIVAL.scrimOpacity <= 0.3, 'a light veil, the drawn park stays vivid under the rays');
   const src = read('src/components/park/ParkArrivalMoment.tsx');
-  assert.match(src, /styles\.stackFront/, 'new coins read as a little stack of fin coins');
+  assert.match(src, /styles\.plankCoin/, 'new coins stand on a little shelf plank');
   assert.match(src, /<GameIcon name="pin"/, 'coins to find read as a map pin');
   assert.match(src, /styles\.foil/, 'today\'s special coin wears a gold foil edge');
   assert.match(src, /const repeat = repeatVisit && !golden/, 'a golden arrival is always the full party');
@@ -223,4 +230,49 @@ test('round 6: no still hold, the cards are home by about 2.45 s and the veil li
   assert.ok(A.pointAt + 120 + A.flipMs <= A.handoffAt, 'the limited coin flip finishes before it flies');
   const src = read('src/components/park/ParkArrivalMoment.tsx');
   assert.match(src, /A\.scrimOpacity \* scrim\.value\) \* \(1 - leave\.value\)/, 'the veil lifts with the leave');
+});
+
+test('wave 5 round 2: a cold first arrival builds in small frames, hands off on the UI thread and unmounts in two steps', () => {
+  const src = read('src/components/park/ParkArrivalMoment.tsx');
+  assert.match(src, /const MOUNT_STEPS = 3;/);
+  for (const step of [1, 2, 3]) assert.match(src, new RegExp(`\\{step >= ${step} &&`), `layers mount at step ${step}`);
+  assert.match(src, /requestAnimationFrame\(\(\) => setStep\(n => n \+ 1\)\)/, 'one step per frame');
+  // The flight home is scheduled with the rest of the beat sheet (no JS hop at the handoff); a tap reschedules it.
+  assert.match(src, /scheduleLeave\(A\.handoffAt\);\n  \};/);
+  assert.match(src, /if \(fromTap\) \{\n      cancelAnimation\(clock\);\n      scheduleLeave\(0\);/);
+  assert.match(src, /setFxOn\(false\);\n    requestAnimationFrame\(\(\) => doneRef\.current\(\)\);/, 'the canvas leaves a frame before the stage');
+  assert.match(src, /step >= 3 && fxOn && !reduced/);
+  const art = read('src/components/park/arrivalArt.ts');
+  assert.match(art, /ARRIVAL_ICONS\.map\(name => ICON_SOURCES\[name\]\)/, 'the card and pill icons are decoded with the art');
+});
+
+test('wave 5 round 2: the cards read with zero words and the cards are home by 2.2 s', () => {
+  const src = read('src/components/park/ParkArrivalMoment.tsx');
+  assert.doesNotMatch(src, />\?</, 'no "?" disc on the coins-to-find card');
+  assert.match(src, /function CoinCount\(/, 'every count sits next to a gold coin');
+  assert.equal((src.match(/<CoinCount count=\{card\.count\} \/>/g) || []).length, 2);
+  assert.match(src, /styles\.orbitCoin/, 'coins to find ring the map pin');
+  assert.match(src, /if \(card\.kind === 'boss'\) return <BossClock card=\{card\} \/>;/, 'the boss card is the clock (no printed time)');
+  assert.match(src, /const CLOCK = 5[0-9];/, 'a big clock face');
+  assert.match(src, /hands\.night \? <GameIcon name="moon" size=\{20\} \/> : <SunMark \/>/);
+  const A = arrival.ARRIVAL;
+  assert.ok(arrival.arrivalEndsAt(3) <= 2300, `home by 2.3 s (${arrival.arrivalEndsAt(3)})`);
+  assert.ok(A.handoffAt + 2 * A.flyStepMs + A.flyMs <= 2250, 'the last card is home by about 2.2 s');
+});
+
+test('wave 5 round 2: the Daily 3 pill is a tomorrow hook: bigger, the next pip glows, the chest, tomorrow\'s flame', () => {
+  assert.equal(arrival.nextGoalPip({ done: 0, total: 3 }), 0);
+  assert.equal(arrival.nextGoalPip({ done: 2, total: 3 }), 2);
+  assert.equal(arrival.nextGoalPip({ done: 3, total: 3 }), null);
+  const A = arrival.ARRIVAL;
+  assert.ok(Math.abs(A.goalAt - (A.cardsAt + 2 * A.cardStepMs + 120)) <= 60, 'it pops on the cards\' landing beat');
+  const src = read('src/components/park/ParkArrivalMoment.tsx');
+  assert.match(src, /pip: \{ width: 28, height: 28/, 'pips about 1.3x (22 to 28 pt)');
+  assert.match(src, /<GameIcon name="chest" size=\{30\} \/>/);
+  assert.match(src, /goal\.giftTomorrow && <View style=\{styles\.tomorrowGift\}><GameIcon name="gift"/);
+  assert.match(src, /\{goal\.streak \+ 1\}/);
+  assert.match(src, /flyPoint\(centerX, top \+ GOAL_H \/ 2, stackX, stackY, false, f\)/, 'it flies home with the cards');
+  assert.doesNotMatch(src.slice(src.indexOf('const GoalStrip'), src.indexOf('const GOAL_H')), /hours|minutes|left|hurry|lose/i, 'no countdown or loss words');
+  const hook = read('src/components/park/useParkArrival.tsx');
+  assert.match(hook, /giftTomorrow: state\.streak\.next_milestone\?\.days_away === 1/, 'the gift only when the server\'s prize is tomorrow');
 });

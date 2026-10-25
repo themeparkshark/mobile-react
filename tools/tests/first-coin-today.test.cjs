@@ -33,7 +33,7 @@ test('wired after the catch and after the ride coin flight, only on a real colle
   assert.match(explore, /onDone=\{\(\) => \{ setCollectFlight\(null\); firstCoin\.noteCollected\(\); \}\}/);
   assert.match(explore, /free: mapFocused && mapFreeForMoment && !arrivalBusy/, 'waits for the arrival and the chest');
   const hook = read('src/components/park/useFirstCoinToday.tsx');
-  assert.match(hook, /setTimeout\(\(\) => \{ setQueued\(false\); setPlaying\(Date\.now\(\)\); \}, 300\)/, 'the 300 ms gap');
+  assert.match(hook, /setTimeout\(\(\) => \{ setQueued\(false\); setPlaying\(\{ key: Date\.now\(\), short: queued === 'short' \}\); \}, 300\)/, 'the 300 ms gap');
   const ribbon = read('src/components/park/FirstCoinRibbon.tsx');
   assert.match(ribbon, /momentParticles\(FIRST_COIN\.sparkles/);
   assert.match(ribbon, /useReduceMotionPreference/);
@@ -55,7 +55,7 @@ test('one continuous throw: the coin flies into the ribbon while it drops, the c
   assert.match(ribbon, /onLand: \(\) => void|readonly onLand\?: \(\) => void/);
   assert.match(ribbon, /TRAIL\.map/, 'a gold comet trail behind the throw');
   const hook = read('src/components/park/useFirstCoinToday.tsx');
-  assert.match(hook, /const noteCollected = useCallback\(\(\) => \{ if \(claim\(\)\) setQueued\(true\); \}, \[claim\]\)/, 'one claim rule for both paths');
+  assert.match(hook, /const noteCollected = useCallback\(\(\) => \{ const kind = claim\(\); if \(kind\) setQueued\(kind\); \}, \[claim\]\)/, 'one claim rule for both paths');
 });
 
 test('round 5: no still beat before the flight home, the ribbon clears the right rail, the coin has its own badge', () => {
@@ -84,7 +84,7 @@ test('round 6: the slam is the brightest thing on the map: a big fan, a ring wid
   assert.ok(F.FIRST_COIN.ringPt * 2 * 2.1 >= 1.5 * 66, 'the ring opens wider than the ribbon is tall');
   assert.match(src, /ring=\{FIRST_COIN\.ringPt\}/);
   assert.ok(F.FIRST_COIN.kickPt >= 6, 'a 6 pt kick on the slam');
-  assert.match(src, /FIRST_COIN\.kickPt \* punch\.value/);
+  assert.match(src, /F\.kickPt \* punch\.value/);
   assert.match(src, /TRAIL_HOME\.map/, 'the flight home has its own thick comet');
   assert.match(src, /const TRAIL_HOME = \[0\.05, 0\.1, 0\.15, 0\.2, 0\.25\]/);
 });
@@ -94,5 +94,35 @@ test('round 6: the crowned coin badge and its fan sit fully on screen (the ribbo
   assert.ok(Number(/const RIBBON_LEFT = (\d+)/.exec(src)[1]) >= 24);
   assert.match(src, /left: RIBBON_LEFT/);
   assert.match(src, /const slot = \{ x: RIBBON_LEFT \+ BADGE \/ 2 - 8/);
-  assert.match(src, /const ribbonWidth = width - RIBBON_LEFT - FIRST_COIN\.railClear/);
+  assert.match(src, /const ribbonWidth = width - RIBBON_LEFT - F\.railClear/);
+});
+
+test('wave 5 round 2: the slam fan is bright and mostly on screen, with a white-hot core and a small screen kick', () => {
+  const src = read('src/components/park/FirstCoinRibbon.tsx');
+  const RAYS = Number(/const RAYS = (\d+)/.exec(src)[1]);
+  const SHIFT = Number(/const RAYS_SHIFT = (\d+)/.exec(src)[1]);
+  const LEFT = Number(/const RIBBON_LEFT = (\d+)/.exec(src)[1]);
+  const BADGE = Number(/const BADGE = (\d+)/.exec(src)[1]);
+  const centre = LEFT + BADGE / 2 - 8 + SHIFT;
+  assert.ok((centre + RAYS / 2) / RAYS >= 0.8, `at least 80% of the fan on screen (${((centre + RAYS / 2) / RAYS).toFixed(2)})`);
+  assert.match(src, /withTiming\(1, \{ duration: 50, easing: EASE\.out \}\), withDelay\(F\.fanHoldMs, withTiming\(F\.fanRest/, 'full strength through the hold, then it eases down');
+  assert.equal(F.FIRST_COIN.fanHoldMs, 70);
+  assert.equal(F.FIRST_COIN.fanFadeMs, 400);
+  assert.match(src, /tintColor="#ffffff"/, 'a white core behind the crowned coin');
+  assert.match(src, /const kick = !reduced && budget\.level === 'full' \? F\.screenKickPt : 0;/, 'the kick only at full power, never with Reduce Motion');
+  assert.ok(F.FIRST_COIN.screenKickPt >= 2 && F.FIRST_COIN.screenKickPt <= 4);
+});
+
+test('wave 5 round 2: from the fourth day the first coin plays a short ribbon (about 1.1 s, straight home)', () => {
+  for (const d of [1, 2, 3]) assert.equal(F.firstCoinVariant(d), 'full', String(d));
+  for (const d of [4, 10, 200]) assert.equal(F.firstCoinVariant(d), 'short', String(d));
+  const S = F.FIRST_COIN_SHORT;
+  assert.ok(F.firstCoinEndsAt(S) <= 1200, `short ends by 1.2 s (${F.firstCoinEndsAt(S)})`);
+  assert.ok(F.firstCoinImpactAt(S) < F.firstCoinImpactAt(), 'the slam comes sooner');
+  assert.equal(S.sweepMs, 0, 'no sunrise band on the short one');
+  assert.equal(S.crownAt + 120, F.firstCoinImpactAt(S), 'the crown still hits on the landing frame');
+  const hook = read('src/components/park/useFirstCoinToday.tsx');
+  assert.match(hook, /return firstCoinVariant\(days\.current\);/);
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /short=\{collectFlight\.crowned === 'short'\}/);
 });

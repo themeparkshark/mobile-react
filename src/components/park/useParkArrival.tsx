@@ -154,7 +154,8 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
       return getDailyThree(4000).then(state => {
         if (debug) console.log('[arrival] daily3', state.enabled);
         if (!state.enabled) return;
-        setGoal({ done: doneCount(state.goals), total: state.goals.length || 3, streak: state.streak.days });
+        setGoal({ done: doneCount(state.goals), total: state.goals.length || 3, streak: state.streak.days,
+          giftTomorrow: state.streak.next_milestone?.days_away === 1 });
       });
     }).catch(error => { if (debug) console.log('[arrival] goal failed', String(error)); })
       .finally(() => setGoalSettled(key));

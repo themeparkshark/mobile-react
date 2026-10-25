@@ -45,11 +45,12 @@ export default function GroupStrip({ group, onEdit, compact = false }: {
         const known = seen.current;
         const stars = new Map(groupStandings(group).map(row => [String(row.player.id), row.stars]));
         let joining = 0;
+        // The first seat is the phone's own player (the grown-up holding it, defaultKidFlag): only their hearts tick.
         const badges = group.players.map((player, index) => {
           const id = String(player.id);
           const joinOrder = known && !known.has(id) ? joining++ : null;
           return <View key={player.id} style={index > 0 ? styles.overlap : null}>
-            <CrewBadgeFx joinOrder={joinOrder} starsKey={stars.get(id) ?? 0} reduced={reduced}>
+            <CrewBadgeFx joinOrder={joinOrder} starsKey={stars.get(id) ?? 0} reduced={reduced} mine={index === 0}>
               <PlayerBadge name={player.name} index={index} size={28} kid={player.kid} />
             </CrewBadgeFx>
           </View>;

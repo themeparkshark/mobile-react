@@ -242,9 +242,24 @@ function ShelfLandingCanvas({ width, height, progress, hover, pulse, glow, flash
 }) {
   const stars = useMemo(() => burstStars(sparkles, shiny ? 13 : 11), [sparkles, shiny]);
   const gold = useMemo(() => Skia.Color(GOLD_FX.rays), []);
+  // Wave 5 round 2: every paint is made once per landing (Skia host objects are shared with the UI thread by
+  // reference and only the UI thread touches them), never once per frame.
+  const paints = useMemo(() => {
+    const fill = Skia.Paint();
+    fill.setAntiAlias(true);
+    const ring = Skia.Paint();
+    ring.setAntiAlias(true);
+    ring.setStyle(PaintStyle.Stroke);
+    ring.setStrokeWidth(4);
+    const wave = Skia.Paint();
+    wave.setAntiAlias(true);
+    wave.setStyle(PaintStyle.Stroke);
+    return { fill, ring, wave, white: Skia.Color('#fffbe8') };
+  }, []);
   const picture = useDerivedValue(() => createPicture(canvas => {
-    const paint = Skia.Paint();
-    paint.setAntiAlias(true);
+    const paint = paints.fill;
+    paint.setShader(null);
+    paint.setAlphaf(1);
     const t = progress.value;
     const cx0 = startX + size / 2, cy0 = startY + size / 2;
     const at = (k: number) => {
@@ -264,10 +279,7 @@ function ShelfLandingCanvas({ width, height, progress, hover, pulse, glow, flash
     };
     // 1. The empty slot glows gold twice.
     if (t < 1 && pulse.value > 0.001) {
-      const ring = Skia.Paint();
-      ring.setAntiAlias(true);
-      ring.setStyle(PaintStyle.Stroke);
-      ring.setStrokeWidth(4);
+      const ring = paints.ring;
       ring.setColor(gold);
       ring.setAlphaf(0.3 + 0.6 * pulse.value);
       canvas.drawCircle(slot.x, slot.y, ((slotWidth + 10) / 2) * (1 + 0.12 * pulse.value), ring);
@@ -290,7 +302,7 @@ function ShelfLandingCanvas({ width, height, progress, hover, pulse, glow, flash
     const f = flash.value;
     if (f > 0.001 && flashTop > 0) {
       soft(slot.x, slot.y, slotWidth * 1.3 * (0.7 + 0.9 * f), GOLD_FX.raysSoft, 0.95 * f);
-      paint.setColor(Skia.Color('#fffbe8'));
+      paint.setColor(paints.white);
       paint.setAlphaf(flashTop * f);
       canvas.drawCircle(slot.x, slot.y, slotWidth * 0.75 * (0.8 + 0.8 * f), paint);
       paint.setAlphaf(1);
@@ -303,9 +315,7 @@ function ShelfLandingCanvas({ width, height, progress, hover, pulse, glow, flash
       const spread = 1 - (1 - w) * (1 - w);
       const rx = slotWidth * (0.6 + SHELF_LANDING.plankWaveReach * spread);
       const ry = rx * 0.16;
-      const wave = Skia.Paint();
-      wave.setAntiAlias(true);
-      wave.setStyle(PaintStyle.Stroke);
+      const wave = paints.wave;
       wave.setStrokeWidth(Math.max(1, 6 * (1 - w)));
       wave.setColor(gold);
       wave.setAlphaf(0.95 * (1 - w));
@@ -313,6 +323,7 @@ function ShelfLandingCanvas({ width, height, progress, hover, pulse, glow, flash
       canvas.drawOval(Skia.XYWHRect(slot.x - rx, plankY - ry, rx * 2, ry * 2), wave);
     }
     if (b > 0 && b < 1) {
+      // The stars reach about 2.5 slot widths (round 2: the coin-sized burst read small on the shelf).
       drawBurst(canvas, b, slot.x, slot.y, stars, slotWidth * SHELF_LANDING.puffReach, slotWidth * 0.55, 0);
       if (shiny) drawBurst(canvas, b, slot.x, slot.y, [], slotWidth, slotWidth * 0.9, 0.18);
     }

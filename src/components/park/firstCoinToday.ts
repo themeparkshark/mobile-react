@@ -47,16 +47,52 @@ export const FIRST_COIN = {
   homePeak: 2.5,
   /** The ribbon ends left of the map's right rail (its pins stay visible). */
   railClear: 62,
+  /** Wave 5 round 2: the fan holds full strength for the hit-stop, then eases down to this over fanFadeMs and rides out with the ribbon. */
+  fanHoldMs: 70,
+  fanFadeMs: 400,
+  fanRest: 0.45,
+  /** The whole layer kicks this far on the slam frame (full power only, never with Reduce Motion). */
+  screenKickPt: 3,
 } as const;
 
+export type FirstCoinPlan = { readonly [K in keyof typeof FIRST_COIN]: number };
+
+/**
+ * After the first few days a regular player has seen the full ribbon many times: from the fourth celebrated day the
+ * crown still slams with its fan and rings, and the coin goes straight home (no sunrise band, no shine, no second
+ * fist pump), all in about 1.1 s. Same honesty rule: only the real first coin of the day.
+ */
+export const FIRST_COIN_SHORT: FirstCoinPlan = {
+  ...FIRST_COIN,
+  sweepMs: 0,
+  coinFlyAt: 20,
+  coinFlyMs: 340,
+  crownAt: 20 + 340 - 120,
+  sparkleAt: 360,
+  shineAt: 99_999,
+  pumpAt: 99_999,
+  exitAt: 700,
+  exitMs: 180,
+  homeAt: 640,
+  homeMs: 380,
+};
+
+/** The full ribbon plays on the first FULL_DAYS celebrated days; after that the short one. */
+export const FIRST_COIN_FULL_DAYS = 3;
+
+/** Which ribbon a first coin gets, from how many days (this one included) have had one. */
+export function firstCoinVariant(daysCelebrated: number): 'full' | 'short' {
+  return Number.isFinite(daysCelebrated) && daysCelebrated > FIRST_COIN_FULL_DAYS ? 'short' : 'full';
+}
+
 /** The impact frame: the coin lands in the slot and the crown hits. */
-export function firstCoinImpactAt(): number {
-  return FIRST_COIN.coinFlyAt + FIRST_COIN.coinFlyMs;
+export function firstCoinImpactAt(plan: FirstCoinPlan = FIRST_COIN): number {
+  return plan.coinFlyAt + plan.coinFlyMs;
 }
 
 /** When the whole ribbon is gone. */
-export function firstCoinEndsAt(): number {
-  return Math.max(FIRST_COIN.exitAt + FIRST_COIN.exitMs, FIRST_COIN.homeAt + FIRST_COIN.homeMs);
+export function firstCoinEndsAt(plan: FirstCoinPlan = FIRST_COIN): number {
+  return Math.max(plan.exitAt + plan.exitMs, plan.homeAt + plan.homeMs);
 }
 
 /** Is this collection the first of the day? (stored = the last day a first coin was celebrated) */

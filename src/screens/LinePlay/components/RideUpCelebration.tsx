@@ -65,6 +65,26 @@ export const RIDE_UP = {
   confetti: 28,
 } as const;
 
+export type RideUpPlan = { readonly [K in keyof typeof RIDE_UP]: number };
+
+/**
+ * A second ride the same day (rideUpRepeat.ts): the card still slams, fills and bursts, but faster, with no confetti,
+ * and the earned numbers roll out in about 0.8 s (the last of five lands by 780 ms). Settled by about 1.4 s.
+ */
+export const RIDE_UP_REPEAT: RideUpPlan = {
+  ...RIDE_UP,
+  ringMs: 200,
+  hitAt: 260,
+  burstAt: 320,
+  confettiAt: 99_999,
+  confetti: 0,
+  leaveAt: 1150,
+  leaveMs: 220,
+  ticks: 4,
+  statStepMs: 50,
+  statMs: 260,
+};
+
 /** Where the burst comes from inside the header card: its shark (the card's right side). */
 const SHARK = { fromRight: 84, fromBottom: 78 };
 const BAR = 9;
@@ -75,15 +95,20 @@ const BRAND_NAVY = '#05346e';
  * glows gold behind its shark, fills a gold bar along its bottom edge and bursts stars.
  * `backdrop` is drawn inside the card, under its words (pass it as the card's first child).
  */
-export function RideUpHero({ active, children }: { readonly active: boolean; readonly children: (backdrop: ReactNode) => ReactNode }) {
+export function RideUpHero({ active, plan = RIDE_UP, children }: {
+  readonly active: boolean;
+  /** RIDE_UP the first ride of the day, RIDE_UP_REPEAT after that. */
+  readonly plan?: RideUpPlan;
+  readonly children: (backdrop: ReactNode) => ReactNode;
+}) {
   const preference = useReduceMotionPreference();
   if (!active || preference === null) return <>{children(null)}</>;
-  return <HeroStage reduced={preference}>{children}</HeroStage>;
+  return <HeroStage reduced={preference} plan={plan}>{children}</HeroStage>;
 }
 
-function HeroStage({ reduced, children }: { readonly reduced: boolean; readonly children: (backdrop: ReactNode) => ReactNode }) {
+function HeroStage({ reduced, plan: P, children }: { readonly reduced: boolean; readonly plan: RideUpPlan; readonly children: (backdrop: ReactNode) => ReactNode }) {
   const budget = usePowerBudget();
-  const sparkles = momentParticles(RIDE_UP.sparkles, budget, reduced);
+  const sparkles = momentParticles(P.sparkles, budget, reduced);
   const peak = flashPeak(isDimFlashingLightsEnabled(), reduced);
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
   const pop = useSharedValue(0);
@@ -98,7 +123,7 @@ function HeroStage({ reduced, children }: { readonly reduced: boolean; readonly 
   const win = () => { if (alive.current) { playHaptic('win'); playMoment('game.win'); } };
   const tick = (step: number) => { if (alive.current) playMoment('ui.counterTick', { step }); };
   // The tick ladder rides the bar's own fill: one rung each sixth of the bar, on the frame it is reached.
-  useAnimatedReaction(() => Math.floor(ring.value * RIDE_UP.ticks + 0.0001), (now, before) => {
+  useAnimatedReaction(() => Math.floor(ring.value * P.ticks + 0.0001), (now, before) => {
     if (reduced || before === null || before === undefined || now <= before || now <= 0) return;
     runOnJS(tick)(now);
   }, [reduced]);
@@ -111,26 +136,26 @@ function HeroStage({ reduced, children }: { readonly reduced: boolean; readonly 
       pop.value = 1;
       ring.value = 1;
       glow.value = withSequence(ReduceMotion.Never, withTiming(0.6, fade),
-        withDelay(RIDE_UP.leaveAt, withTiming(0, fade, ok => { if (ok) runOnJS(win)(); }), ReduceMotion.Never));
-      leave.value = withDelay(RIDE_UP.leaveAt, withTiming(1, fade), ReduceMotion.Never);
+        withDelay(P.leaveAt, withTiming(0, fade, ok => { if (ok) runOnJS(win)(); }), ReduceMotion.Never));
+      leave.value = withDelay(P.leaveAt, withTiming(1, fade), ReduceMotion.Never);
       return () => { alive.current = false; [glow, leave].forEach(v => cancelAnimation(v)); };
     }
     // 1. gather: the card pops in with one overshoot, the glow builds, the bar fills.
     pop.value = withSpring(1, SPRING.pop);
     glow.value = withSequence(withTiming(0.35, { duration: DURATION.base, easing: EASE.charge }),
-      withDelay(RIDE_UP.burstAt - DURATION.base, withTiming(1, { duration: DURATION.quick, easing: EASE.out })),
-      withDelay(RIDE_UP.leaveAt - RIDE_UP.burstAt - DURATION.quick, withTiming(0, { duration: RIDE_UP.leaveMs * 2, easing: EASE.in })));
-    ring.value = withDelay(RIDE_UP.ringAt, withTiming(1, { duration: RIDE_UP.ringMs, easing: EASE.out }));
+      withDelay(P.burstAt - DURATION.base, withTiming(1, { duration: DURATION.quick, easing: EASE.out })),
+      withDelay(P.leaveAt - P.burstAt - DURATION.quick, withTiming(0, { duration: P.leaveMs * 2, easing: EASE.in })));
+    ring.value = withDelay(P.ringAt, withTiming(1, { duration: P.ringMs, easing: EASE.out }));
     // 2. hold: one held frame on the full bar: squash, kick, a capped flash and the win buzz.
-    punch.value = withDelay(RIDE_UP.hitAt, withSequence(withTiming(1, { duration: 1 }),
+    punch.value = withDelay(P.hitAt, withSequence(withTiming(1, { duration: 1 }),
       withDelay(DURATION.hitStop - 1, withSpring(0, SPRING.pop))));
-    flash.value = withDelay(RIDE_UP.hitAt, withSequence(withTiming(peak, { duration: 30 }),
+    flash.value = withDelay(P.hitAt, withSequence(withTiming(peak, { duration: 30 }),
       withTiming(peak, { duration: DURATION.hitStop - 30 }, ok => { if (ok) runOnJS(win)(); }),
       withTiming(0, { duration: DURATION.flash })));
     // 3. burst: the ring and stars from the shark.
-    burst.value = withDelay(RIDE_UP.burstAt, withTiming(1, { duration: DURATION.sparkle, easing: Easing.linear }));
+    burst.value = withDelay(P.burstAt, withTiming(1, { duration: DURATION.sparkle, easing: Easing.linear }));
     // 4. settle: the bar fades with the rays (exits faster than entrances).
-    leave.value = withDelay(RIDE_UP.leaveAt, withTiming(1, { duration: RIDE_UP.leaveMs, easing: EASE.in }, ok => {
+    leave.value = withDelay(P.leaveAt, withTiming(1, { duration: P.leaveMs, easing: EASE.in }, ok => {
       if (ok) runOnJS(perfMark)('rideUp.done');
     }));
     return () => { alive.current = false; [pop, glow, ring, punch, flash, burst, leave].forEach(v => cancelAnimation(v)); };
@@ -206,13 +231,13 @@ Animated.addWhitelistedNativeProps({ text: true });
 const RollingInput = Animated.createAnimatedComponent(TextInput);
 
 /** When stat `index` of the earned row starts rolling on "Your ride's up!" (ms from the card's first frame). */
-export function rideUpStatStartsAt(index: number): number {
-  return RIDE_UP.burstAt + index * RIDE_UP.statStepMs;
+export function rideUpStatStartsAt(index: number, plan: RideUpPlan = RIDE_UP): number {
+  return plan.burstAt + index * plan.statStepMs;
 }
 
 /** When stat `index` of the earned row lands on "Your ride's up!" (ms from the card's first frame). */
-export function rideUpStatLandsAt(index: number): number {
-  return rideUpStatStartsAt(index) + RIDE_UP.statMs;
+export function rideUpStatLandsAt(index: number, plan: RideUpPlan = RIDE_UP): number {
+  return rideUpStatStartsAt(index, plan) + plan.statMs;
 }
 
 /**
@@ -255,11 +280,19 @@ export function RollingValue({ value, prefix = '', suffix = '', delayMs, duratio
     style={[styles.rolling, style, popStyle]} />;
 }
 
-/** One shower of confetti over the whole recap, on the burst (the only full-screen piece; no veil). */
-export default function RideUpCelebration({ rideName }: { readonly rideName: string }) {
+/**
+ * One shower of confetti over the whole recap, on the burst (the only full-screen piece; no veil). A second ride the
+ * same day (`short`) has no confetti: only the announcement stays.
+ */
+export default function RideUpCelebration({ rideName, short = false }: { readonly rideName: string; readonly short?: boolean }) {
   const preference = useReduceMotionPreference();
-  if (preference === null || preference) return null;
+  if (preference === null || preference || short) return <Announce rideName={rideName} />;
   return <Confetti rideName={rideName} />;
+}
+
+function Announce({ rideName }: { readonly rideName: string }) {
+  return <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityLiveRegion="polite"
+    accessible accessibilityLabel={`Your ride's up! ${rideName}. Have fun!`} />;
 }
 
 function Confetti({ rideName }: { readonly rideName: string }) {
@@ -283,7 +316,7 @@ function Confetti({ rideName }: { readonly rideName: string }) {
     ink.setColor(pal[RAIN_COLORS.length - 1]);
     drawRain(canvas, paint, ink, rain.value, pieces, pal);
   }, { width, height }));
-  if (confetti <= 0) return null;
+  if (confetti <= 0) return <Announce rideName={rideName} />;
   return <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityLiveRegion="polite"
     accessible accessibilityLabel={`Your ride's up! ${rideName}. Have fun!`}>
     <Canvas style={StyleSheet.absoluteFill}><Picture picture={rainPicture} /></Canvas>

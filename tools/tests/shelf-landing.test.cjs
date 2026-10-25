@@ -113,6 +113,30 @@ test('round 6: the impact runs along the plank, every row coin hops a visible ar
   assert.ok(L.SHELF_LANDING.rowHopPt >= 8 && L.SHELF_LANDING.rowHopUpMs + L.SHELF_LANDING.rowHopDownMs >= 300, 'an arc you can see (8 pt or more over 300 ms or more)');
   assert.match(fx, /withTiming\(-0\.12, \{ duration: SHELF_LANDING\.rowHopDownMs, easing: EASE\.in \}\)/, 'down with a little squash');
   assert.match(fx, /scale: reduced \? 1 : 0\.35 \+ 0\.65 \* badge\.value/, 'the pill springs up from small (SPRING.pop overshoots)');
-  assert.match(fx, /<GameIcon name="sparkle" size=\{22\} \/>/);
+  assert.match(fx, /<GameIcon name="sparkle" size=\{30\} \/>/);
   assert.ok(L.rowHopDelay(4) + L.SHELF_LANDING.rowHopUpMs < L.SHELF_LANDING.shineAfterMs + L.SHELF_LANDING.shineMs + 200, 'the last hop peaks while the bar is still there');
+});
+
+test('wave 5 round 2: paints made once, a burst about 2.5 slots wide, the light bar crosses the whole row in step with the hops', () => {
+  const arrivalSrc = read('src/components/CoinShelfArrival.tsx');
+  const canvas = arrivalSrc.slice(arrivalSrc.indexOf('function ShelfLandingCanvas'), arrivalSrc.indexOf('const CHIP_CLEAR'));
+  const frame = canvas.slice(canvas.indexOf('createPicture('));
+  assert.doesNotMatch(frame, /Skia\.Paint\(\)/, 'no paint is made inside the frame');
+  assert.match(canvas, /const paints = useMemo\(\(\) => \{/);
+  assert.ok(L.SHELF_LANDING.puffReach * 0.98 >= 2.4, 'the farthest stars reach about 2.5 slot widths');
+  const fx = read('src/components/ShelfLandingFx.tsx');
+  const rowFrame = fx.slice(fx.indexOf('const picture = useDerivedValue'), fx.indexOf('// The pill springs up'));
+  assert.doesNotMatch(rowFrame, /Skia\.(Paint|Shader|Path)/, 'the row shine builds nothing per frame');
+  assert.match(fx, /withTiming\(1, \{ duration: bar\.durationMs, easing: Easing\.linear \}\)/);
+  for (const width of [335, 362, 400]) {
+    const slots = 5, band = Math.max(70, width * 0.3);
+    const bar = L.rowBarTiming(width, slots, band);
+    for (let i = 0; i < slots; i += 1) {
+      const peak = L.rowHopDelay(i) + L.SHELF_LANDING.rowHopUpMs;
+      const p = (peak - bar.startAt) / bar.durationMs;
+      const centre = -band + (width + band) * p + band / 2;
+      assert.ok(Math.abs(centre - (i + 0.5) * width / slots) <= 3, `width ${width}: the bar is over coin ${i} at the top of its hop`);
+    }
+  }
+  assert.match(fx, /pip: \{ width: 14, height: 14/, 'the row-done pips are 1.5x (9 to 14 pt)');
 });

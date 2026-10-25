@@ -10,15 +10,18 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native';
 import FirstCoinRibbon from './FirstCoinRibbon';
 import { parkDayKey } from './parkArrival';
-import { isFirstCoinToday } from './firstCoinToday';
+import { firstCoinVariant, isFirstCoinToday } from './firstCoinToday';
 
 const KEY = (playerId: number) => `tps.firstCoinToday.v1:${playerId}`;
+/** How many days have had a first-coin ribbon (the fourth and later play the short one). */
+const DAYS_KEY = (playerId: number) => `tps.firstCoinToday.days.v1:${playerId}`;
 
 if (__DEV__) {
-  // QA: celebrate the next coin again (lane.sh eval 'globalThis.__tpsFirstCoinReset()').
-  (globalThis as Record<string, unknown>).__tpsFirstCoinReset = () => { devReset?.(); return 'reset'; };
+  // QA: celebrate the next coin again (lane.sh eval 'globalThis.__tpsFirstCoinReset()'); pass a day count to pick
+  // the ribbon (__tpsFirstCoinReset(3) makes the next one the short repeat).
+  (globalThis as Record<string, unknown>).__tpsFirstCoinReset = (daysSoFar?: number) => { devReset?.(daysSoFar); return 'reset'; };
 }
-let devReset: (() => void) | null = null;
+let devReset: ((daysSoFar?: number) => void) | null = null;
 
 export default function useFirstCoinToday({ playerId, free }: {
   readonly playerId: number | null | undefined;
@@ -26,47 +29,60 @@ export default function useFirstCoinToday({ playerId, free }: {
   readonly free: boolean;
 }): {
   readonly noteCollected: () => void;
-  /** For a coin that is about to fly home: true (and marked) when it is the first of the day, so it flies into the ribbon instead. */
-  readonly claim: () => boolean;
+  /**
+   * For a coin that is about to fly home: the ribbon it gets ('full' for the first few days, then 'short') when it is
+   * the first of the day (and marks it), or false.
+   */
+  readonly claim: () => 'full' | 'short' | false;
   readonly layer: ReactNode;
   readonly showing: boolean;
 } {
   const stored = useRef<string | null | undefined>(undefined);
-  const [queued, setQueued] = useState(false);
-  const [playing, setPlaying] = useState<number | null>(null);
+  const days = useRef(0);
+  const [queued, setQueued] = useState<'full' | 'short' | false>(false);
+  const [playing, setPlaying] = useState<{ key: number; short: boolean } | null>(null);
 
   useEffect(() => {
     stored.current = undefined;
     if (!playerId) return undefined;
     let active = true;
-    void AsyncStorage.getItem(KEY(playerId)).then(value => { if (active) stored.current = value; })
-      .catch(() => { if (active) stored.current = null; });
-    devReset = () => { stored.current = null; void AsyncStorage.removeItem(KEY(playerId)).catch(() => undefined); };
+    void AsyncStorage.getItem(DAYS_KEY(playerId)).then(raw => {
+      const n = Number(raw);
+      if (active) days.current = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    }).catch(() => undefined).finally(() => AsyncStorage.getItem(KEY(playerId)).then(value => { if (active) stored.current = value; })
+      .catch(() => { if (active) stored.current = null; }));
+    devReset = (daysSoFar?: number) => {
+      stored.current = null;
+      if (typeof daysSoFar === 'number') days.current = daysSoFar;
+      void AsyncStorage.removeItem(KEY(playerId)).catch(() => undefined);
+    };
     return () => { active = false; devReset = null; };
   }, [playerId]);
 
-  const claim = useCallback(() => {
+  const claim = useCallback((): 'full' | 'short' | false => {
     if (!playerId || stored.current === undefined) return false;
     const today = parkDayKey(new Date());
     if (!isFirstCoinToday(stored.current, today)) return false;
     // Marked first, so a quick exit never replays it.
     stored.current = today;
+    days.current += 1;
     void AsyncStorage.setItem(KEY(playerId), today).catch(() => undefined);
-    return true;
+    void AsyncStorage.setItem(DAYS_KEY(playerId), String(days.current)).catch(() => undefined);
+    return firstCoinVariant(days.current);
   }, [playerId]);
-  const noteCollected = useCallback(() => { if (claim()) setQueued(true); }, [claim]);
+  const noteCollected = useCallback(() => { const kind = claim(); if (kind) setQueued(kind); }, [claim]);
 
   useEffect(() => {
     if (!queued || !free || playing) return undefined;
     // The 300 ms gap between celebrations.
-    const timer = setTimeout(() => { setQueued(false); setPlaying(Date.now()); }, 300);
+    const timer = setTimeout(() => { setQueued(false); setPlaying({ key: Date.now(), short: queued === 'short' }); }, 300);
     return () => clearTimeout(timer);
   }, [queued, free, playing]);
 
   const layer = playing ? (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 58 }]}>
-      <FirstCoinRibbon key={playing} onDone={() => setPlaying(null)} />
+      <FirstCoinRibbon key={playing.key} short={playing.short} onDone={() => setPlaying(null)} />
     </View>
   ) : null;
-  return { noteCollected, claim, layer, showing: !!playing || queued };
+  return { noteCollected, claim, layer, showing: !!playing || !!queued };
 }

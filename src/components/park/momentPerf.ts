@@ -11,6 +11,16 @@ let reset: (() => void) | null = null;
 
 export const PERF_HUD = __DEV__ && process.env.EXPO_PUBLIC_PERF_HUD === '1';
 
+/**
+ * Lane capture stage only (EXPO_PUBLIC_MOTION_CAPTURE=ParkMomentsCapture, never set in a store or OTA bundle):
+ * every mark is kept with its time, so the stage can say where in a moment a long frame fell.
+ */
+const CAPTURE_MARKS = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'ParkMomentsCapture';
+let marks: { name: string; at: number }[] = [];
+export function takeCaptureMarks(): { name: string; at: number }[] {
+  const out = marks; marks = []; return out;
+}
+
 /** The dev frame HUD registers how to read and reset its stats. */
 export function registerPerfSampler(read: Sampler | null, clear: (() => void) | null): void {
   sampler = read;
@@ -19,6 +29,7 @@ export function registerPerfSampler(read: Sampler | null, clear: (() => void) | 
 
 /** `name.start` resets the window; anything else logs the window so far. */
 export function perfMark(name: string): void {
+  if (CAPTURE_MARKS) marks.push({ name, at: Date.now() });
   if (!PERF_HUD) return;
   if (name.endsWith('.start')) { reset?.(); console.log(`[perf] ${name}`); return; }
   const s = sampler?.();

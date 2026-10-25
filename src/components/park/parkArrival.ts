@@ -162,15 +162,19 @@ export const ARRIVAL = {
   cardStepMs: 90,
   cardDrop: 40,
   /** Each card catches one white shine after it lands (round 6: the shine is the beat that fills the look, no still hold). */
-  shineAfterMs: 300,
-  shineMs: 460,
+  shineAfterMs: 260,
+  shineMs: 400,
   confettiSecondAt: 900,
-  goalAt: 1150,
-  pointAt: 1080,
-  flipMs: 520,
+  /** Wave 5 round 2: the Daily 3 pill pops on the cards' landing beat (the last card lands at about 1.0 s). */
+  goalAt: 980,
+  pointAt: 1000,
+  flipMs: 460,
   coinTurnMs: 4000,
-  /** Round 6: the cards leave as soon as the shines and the flip have played (about 1 s after they land). */
-  handoffAt: 1750,
+  /**
+   * Wave 5 round 2: the cards leave as soon as the shines and the flip have played (0.6 s after the last one
+   * lands) and are home by 2.2 s, inside the 2.6 s settle with room for a slow frame.
+   */
+  handoffAt: 1600,
   /** The UI clock runs a little past the handoff. */
   clockMs: 2600,
   rainMs: 2200,
@@ -181,9 +185,9 @@ export const ARRIVAL = {
   armMs: 90,
   /** A tap before this is ignored (a kid mashing through the moment still sees the park name land). */
   minTapAt: 700,
-  /** Each card flies home on a visible arc with a gold trail, one after another (all home by about 2.45 s). */
-  flyMs: 560,
-  flyStepMs: 70,
+  /** Each card flies home on a visible arc with a gold trail, one after another (all home by about 2.2 s). */
+  flyMs: 480,
+  flyStepMs: 60,
   shrinkMs: 460,
   confetti: 28,
   /** A second, smaller shower as the cards land. */
@@ -211,7 +215,7 @@ export const ARRIVAL_REPEAT: ArrivalPlan = {
   cardsAt: 480,
   cardStepMs: 70,
   confettiSecondAt: 99_999,
-  goalAt: 760,
+  goalAt: 700,
   pointAt: 1000,
   handoffAt: 1400,
   clockMs: 1800,
@@ -291,6 +295,15 @@ export interface ArrivalGoal {
   readonly done: number;
   readonly total: number;
   readonly streak: number;
+  /** The server's next streak milestone prize is tomorrow (Daily 3 next_milestone.days_away === 1): a gift sits on tomorrow's flame. */
+  readonly giftTomorrow?: boolean;
+}
+
+/** The goal pill's next pip to fill (the one that glows), or null when all of today's goals are done. */
+export function nextGoalPip(goal: Pick<ArrivalGoal, 'done' | 'total'>): number | null {
+  const total = Math.max(0, Math.floor(goal.total));
+  const done = Math.max(0, Math.floor(goal.done));
+  return done < total ? done : null;
 }
 
 export type ArrivalCueKind = 'hit' | 'card' | 'goal' | 'handoff';

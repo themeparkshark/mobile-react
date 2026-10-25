@@ -32,7 +32,7 @@ import { BRAND } from '../../ui/tokens';
 import { HUD_TOP } from '../map/statusStack';
 import { ARRIVAL_ART, FINN_ART } from './arrivalArt';
 import BurstCanvas from './BurstCanvas';
-import { FIRST_COIN, firstCoinImpactAt } from './firstCoinToday';
+import { FIRST_COIN, FIRST_COIN_SHORT, firstCoinImpactAt, type FirstCoinPlan } from './firstCoinToday';
 import { perfMark } from './momentPerf';
 
 type Point = { readonly x: number; readonly y: number };
@@ -49,15 +49,27 @@ export type FirstCoinThrow = {
   readonly hudTop?: number;
 };
 
-export default function FirstCoinRibbon({ onDone, toss }: { readonly onDone: () => void; readonly toss?: FirstCoinThrow }) {
+export default function FirstCoinRibbon({ onDone, toss, short = false }: {
+  readonly onDone: () => void; readonly toss?: FirstCoinThrow;
+  /** The short repeat (fourth celebrated day on): slam, fan, rings, straight home in about 1.1 s. */
+  readonly short?: boolean;
+}) {
   const preference = useReduceMotionPreference();
   if (preference === null) return null;
-  return <Ribbon onDone={onDone} reduced={preference} toss={toss} />;
+  return <Ribbon onDone={onDone} reduced={preference} toss={toss} plan={short ? FIRST_COIN_SHORT : FIRST_COIN} short={short} />;
 }
 
 const COIN = 54;
 /** The gold ray fan behind the crowned coin (pt across). */
 const RAYS = 300;
+/**
+ * Wave 5 round 2: the fan's centre sits this far right of the crowned coin (behind the ribbon's left end), so more
+ * than 80% of it is on screen (centred on the coin, a third of it was off the left edge) and it still rises above
+ * and below the ribbon around the badge.
+ */
+const RAYS_SHIFT = 40;
+/** The white-hot core behind the crowned coin on the slam (pt across). */
+const CORE = 150;
 /**
  * The ribbon starts this far in from the left edge, so the crowned coin's badge (and the fan and rings around it)
  * sit fully on screen instead of half off the edge (round 6, seen on the real map).
@@ -70,10 +82,14 @@ const TRAIL = [0.07, 0.14, 0.21] as const;
 /** The flight home leaves a thicker comet: five big gold dots (round 6). */
 const TRAIL_HOME = [0.05, 0.1, 0.15, 0.2, 0.25] as const;
 
-function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readonly reduced: boolean; readonly toss?: FirstCoinThrow }) {
+function Ribbon({ onDone, reduced, toss, plan: F, short }: {
+  readonly onDone: () => void; readonly reduced: boolean; readonly toss?: FirstCoinThrow; readonly plan: FirstCoinPlan; readonly short: boolean;
+}) {
   const { width, height } = useWindowDimensions();
   const budget = usePowerBudget();
   const sparkles = momentParticles(FIRST_COIN.sparkles, budget, reduced);
+  // The layer kicks on the slam only at full power (never in calm or Battery Saver, never with Reduce Motion).
+  const kick = !reduced && budget.level === 'full' ? F.screenKickPt : 0;
   const sweep = useSharedValue(0);
   const drop = useSharedValue(0);
   const out = useSharedValue(0);
@@ -86,12 +102,13 @@ function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readon
   const gold = useSharedValue(0);
   const shine = useSharedValue(0);
   const pump = useSharedValue(0);
+  const core = useSharedValue(0);
   const doneRef = useRef(onDone); doneRef.current = onDone;
   const landRef = useRef(toss?.onLand); landRef.current = toss?.onLand;
   const finish = () => { perfMark('firstCoin.done'); doneRef.current(); };
   const impact = () => { perfMark('firstCoin.impact'); playHaptic('golden'); playMoment('game.newRecord'); };
   const landHome = () => { queueHaptic('tapLight'); landRef.current?.(); };
-  const top = (toss?.hudTop ?? 0) + HUD_TOP + FIRST_COIN.topOffset;
+  const top = (toss?.hudTop ?? 0) + HUD_TOP + F.topOffset;
   // The ribbon's coin slot (layer points) and where the coin starts (its spot on the map, or the map's middle).
   const slot = { x: RIBBON_LEFT + BADGE / 2 - 8, y: top + 33 };
   const from = toss?.from ?? { x: width / 2, y: height * 0.42 };
@@ -105,43 +122,50 @@ function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readon
       const fade = { duration: DURATION.quick, reduceMotion: ReduceMotion.Never };
       fly.value = 1; crown.value = 1;
       drop.value = withSequence(ReduceMotion.Never, withTiming(1, fade, ok => { if (ok) runOnJS(impact)(); }),
-        withDelay(FIRST_COIN.exitAt - DURATION.quick, withTiming(0, fade, ok => {
+        withDelay(F.exitAt - DURATION.quick, withTiming(0, fade, ok => {
           if (ok) { runOnJS(landHome)(); runOnJS(finish)(); }
         }), ReduceMotion.Never));
       return () => cancelAnimation(drop);
     }
-    const hit = firstCoinImpactAt();
-    sweep.value = withTiming(1, { duration: FIRST_COIN.sweepMs, easing: EASE.inOut });
+    const hit = firstCoinImpactAt(F);
+    if (F.sweepMs > 0) sweep.value = withTiming(1, { duration: F.sweepMs, easing: EASE.inOut });
     // The ribbon is on its way down while the coin is still in the air.
-    drop.value = withDelay(FIRST_COIN.ribbonAt, withSpring(1, SPRING.settle));
-    out.value = withDelay(FIRST_COIN.exitAt, withTiming(1, { duration: FIRST_COIN.exitMs, easing: EASE.in }));
+    drop.value = withDelay(F.ribbonAt, withSpring(1, SPRING.settle));
+    out.value = withDelay(F.exitAt, withTiming(1, { duration: F.exitMs, easing: EASE.in }));
     // The throw: up off the map on an arc (EASE.out, so it leaves fast and settles into the slot).
-    fly.value = withDelay(FIRST_COIN.coinFlyAt, withTiming(1, { duration: FIRST_COIN.coinFlyMs, easing: EASE.out }));
+    fly.value = withDelay(F.coinFlyAt, withTiming(1, { duration: F.coinFlyMs, easing: EASE.out }));
     // The crown drops like a stamp and hits on the landing frame: the buzz and the sting fire there.
-    crown.value = withDelay(FIRST_COIN.crownAt, withTiming(1, { duration: DURATION.slam, easing: EASE.in }, ok => {
+    crown.value = withDelay(F.crownAt, withTiming(1, { duration: DURATION.slam, easing: EASE.in }, ok => {
       if (ok) runOnJS(impact)();
     }));
     // A held squash of the coin and the ribbon (hit-stop), then a springy release.
     punch.value = withDelay(hit, withSequence(withTiming(1, { duration: 1 }), withDelay(DURATION.hitStop, withSpring(0, SPRING.pop))));
+    // The fan is at full strength on the slam and holds there for the hit-stop, eases down to a rest glow (the
+    // shine and the fist pump still have gold behind them) and leaves with the ribbon.
     gold.value = withDelay(hit, withSequence(
-      withTiming(1, { duration: 140, easing: EASE.out }), withDelay(800, withTiming(0, { duration: 400, easing: EASE.in }))));
-    rings.value = withDelay(FIRST_COIN.sparkleAt, withTiming(1, { duration: DURATION.sparkle + FIRST_COIN.sparkleWaveMs, easing: Easing.linear }));
-    finn.value = withDelay(hit, withSequence(withSpring(1, SPRING.pop),
-      withDelay(FIRST_COIN.exitAt - hit - 300, withTiming(0, { duration: FIRST_COIN.exitMs, easing: EASE.in }))));
+      withTiming(1, { duration: 50, easing: EASE.out }), withDelay(F.fanHoldMs, withTiming(F.fanRest, { duration: F.fanFadeMs, easing: EASE.out })),
+      withDelay(Math.max(0, F.exitAt - hit - 50 - F.fanHoldMs - F.fanFadeMs), withTiming(0, { duration: F.exitMs, easing: EASE.in }))));
+    // A white-hot core behind the crowned coin: the brightest spot on the map for the slam, gone in 0.4 s.
+    core.value = withDelay(hit, withSequence(withTiming(1, { duration: 40 }), withDelay(F.fanHoldMs, withTiming(0, { duration: F.fanFadeMs, easing: EASE.out }))));
+    rings.value = withDelay(F.sparkleAt, withTiming(1, { duration: DURATION.sparkle + F.sparkleWaveMs, easing: Easing.linear }));
+    if (!short) finn.value = withDelay(hit, withSequence(withSpring(1, SPRING.pop),
+      withDelay(F.exitAt - hit - 300, withTiming(0, { duration: F.exitMs, easing: EASE.in }))));
     // The beat between the burst and the flight home is never still: a shine runs across the ribbon and
-    // Finn pumps his fist again.
-    shine.value = withDelay(FIRST_COIN.shineAt, withTiming(1, { duration: FIRST_COIN.shineMs, easing: EASE.inOut }));
-    pump.value = withDelay(FIRST_COIN.pumpAt, withSequence(withTiming(1, { duration: DURATION.quick, easing: EASE.out }),
-      withSpring(0, SPRING.land)));
+    // Finn pumps his fist again (the short repeat goes straight home instead).
+    if (!short) {
+      shine.value = withDelay(F.shineAt, withTiming(1, { duration: F.shineMs, easing: EASE.inOut }));
+      pump.value = withDelay(F.pumpAt, withSequence(withTiming(1, { duration: DURATION.quick, easing: EASE.out }),
+        withSpring(0, SPRING.land)));
+    }
     // Home: the coin hops out of the slot and flies to the shelf button as the ribbon leaves.
     if (to) {
-      home.value = withDelay(FIRST_COIN.homeAt, withTiming(1, { duration: FIRST_COIN.homeMs, easing: EASE.inOut }, ok => {
+      home.value = withDelay(F.homeAt, withTiming(1, { duration: F.homeMs, easing: EASE.inOut }, ok => {
         if (ok) runOnJS(landHome)();
       }));
     }
-    const endAt = Math.max(FIRST_COIN.exitAt + FIRST_COIN.exitMs, to ? FIRST_COIN.homeAt + FIRST_COIN.homeMs : 0);
+    const endAt = Math.max(F.exitAt + F.exitMs, to ? F.homeAt + F.homeMs : 0);
     const done = setTimeout(finish, momentMs(endAt + 60));
-    return () => { clearTimeout(done); [sweep, drop, out, fly, home, rings, finn, crown, punch, gold, shine, pump].forEach(v => cancelAnimation(v)); };
+    return () => { clearTimeout(done); [sweep, drop, out, fly, home, rings, finn, crown, punch, gold, shine, pump, core].forEach(v => cancelAnimation(v)); };
     // One-shot per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -156,7 +180,7 @@ function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readon
     : {
       opacity: Math.min(1, drop.value * 1.6) * (1 - out.value),
       // The crown's slam kicks the whole ribbon down FIRST_COIN.kickPt for the held frame, then it springs back.
-      transform: [{ translateY: -40 * (1 - drop.value) - 70 * out.value + FIRST_COIN.kickPt * punch.value },
+      transform: [{ translateY: -40 * (1 - drop.value) - 70 * out.value + F.kickPt * punch.value },
         { scaleX: 1 + 0.04 * punch.value }, { scaleY: 1 - 0.07 * punch.value }],
     }));
   // The slot coin shows once the flyer lands, squashes on the hit, and leaves when it hops out for home.
@@ -176,13 +200,15 @@ function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readon
     transform: [{ translateY: 30 * (1 - finn.value) - 8 * Math.max(0, Math.sin(Math.min(1, finn.value) * Math.PI)) - 12 * pump.value },
       { rotate: `${-10 + 10 * finn.value - 8 * pump.value}deg` }, { scale: (0.5 + 0.5 * finn.value) * (1 + 0.08 * pump.value) }],
   }));
-  const ribbonWidth = width - RIBBON_LEFT - FIRST_COIN.railClear;
+  const ribbonWidth = width - RIBBON_LEFT - F.railClear;
+  const kickStyle = useAnimatedStyle(() => ({ transform: [{ translateY: kick * punch.value }] }));
+  const coreStyle = useAnimatedStyle(() => ({ opacity: core.value, transform: [{ scale: 0.6 + 0.4 * core.value }] }));
   const shineStyle = useAnimatedStyle(() => ({
     opacity: shine.value > 0 && shine.value < 1 ? 1 : 0,
     transform: [{ translateX: -60 + (ribbonWidth + 60) * shine.value }, { skewX: '-20deg' }],
   }));
 
-  return <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityLiveRegion="polite">
+  return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, kickStyle]} accessibilityLiveRegion="polite">
     {!reduced && <Animated.View style={[styles.sweep, { width: band }, sweepStyle]}>
       <LinearGradient colors={['rgba(255,214,90,0)', 'rgba(255,214,90,1)', 'rgba(255,246,200,1)', 'rgba(255,214,90,1)', 'rgba(255,214,90,0)']}
         start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
@@ -192,10 +218,13 @@ function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readon
     {/* Round 6: the slam's ring opens wider than the ribbon is tall (FIRST_COIN.ringPt start, about 2x by its end). */}
     {!reduced && <BurstCanvas progress={rings} count={sparkles} radius={92} ring={FIRST_COIN.ringPt} starSize={16} x={slot.x} y={slot.y} />}
     {!reduced && <BurstCanvas progress={rings} count={sparkles} radius={132} ring={0} starSize={13} x={slot.x} y={slot.y} delayed={0.16} />}
-    <Animated.View style={[styles.ribbonWrap, { top, right: FIRST_COIN.railClear }, ribbonStyle]}>
+    <Animated.View style={[styles.ribbonWrap, { top, right: F.railClear }, ribbonStyle]}>
       {/* One gold ray fan behind the coin only. */}
       {/* A full fan, far bigger than the badge: it shows above and below the ribbon on the slam frame. */}
-      {!reduced && <GoldBurst size={RAYS} amount={gold} spin={false} style={styles.rays} />}
+      {!reduced && <GoldBurst size={RAYS} amount={gold} bloom={core} spin={false} style={styles.rays} />}
+      {!reduced && <Animated.View style={[styles.core, coreStyle]}>
+        <Image source={ARRIVAL_ART.soft} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#ffffff" />
+      </Animated.View>}
       <View style={styles.ribbon} accessible accessibilityLabel="First coin today!">
         <View style={styles.ribbonTop} />
         {!reduced && <Animated.View style={[styles.shine, shineStyle]} />}
@@ -219,7 +248,7 @@ function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readon
     {/* Home: out of the slot and down to the shelf button. */}
     {!reduced && to && TRAIL_HOME.map((lag, i) => <Flyer key={`h${i}`} t={home} lag={lag} from={slot} to={to} lift={-70} dot={i} home />)}
     {!reduced && to && <Flyer t={home} lag={0} from={slot} to={to} lift={-70} source={coinSource} home />}
-  </View>;
+  </Animated.View>;
 }
 
 /**
@@ -265,7 +294,8 @@ function Flyer({ t, lag, from, to, lift, source, dot, home }: {
 const styles = StyleSheet.create({
   sweep: { position: 'absolute', top: 0, bottom: 0, left: 0 },
   ribbonWrap: { position: 'absolute', left: RIBBON_LEFT, alignItems: 'center' },
-  rays: { position: 'absolute', left: BADGE / 2 - 8 - RAYS / 2, top: 33 - RAYS / 2 },
+  rays: { position: 'absolute', left: BADGE / 2 - 8 + RAYS_SHIFT - RAYS / 2, top: 33 - RAYS / 2 },
+  core: { position: 'absolute', left: BADGE / 2 - 8 - CORE / 2, top: 33 - CORE / 2, width: CORE, height: CORE },
   ribbon: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 66, paddingLeft: BADGE - 2, paddingRight: 12,
     borderRadius: 18, borderWidth: 3, borderColor: BRAND.white, backgroundColor: BRAND.gold, alignSelf: 'stretch',
     borderBottomWidth: 6, borderBottomColor: '#d99a00', overflow: 'hidden' },

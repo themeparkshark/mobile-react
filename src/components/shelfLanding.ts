@@ -15,8 +15,8 @@ export const SHELF_LANDING = {
   hitStopMs: 60,
   /** The sparkle puff and ring burst from the slot rim. */
   puffMs: 760,
-  /** How far the sparkles fly, in slot widths. */
-  puffReach: 1.8,
+  /** How far the sparkles fly, in slot widths (wave 5 round 2: about 2.5 slot widths for the farthest star). */
+  puffReach: 2.6,
   /** The impact's flat gold ring runs this far along the plank on each side, in slot widths. */
   plankWaveReach: 2.6,
   sparkles: 12,
@@ -57,6 +57,24 @@ export function shinyLanding(key: string | number | null | undefined): boolean {
 /** When coin `index` of a completed row hops (the light bar reaches it). */
 export function rowHopDelay(index: number): number {
   return SHELF_LANDING.shineAfterMs + 60 + Math.max(0, index) * SHELF_LANDING.rowHopStepMs;
+}
+
+/**
+ * The row's light bar runs at an even speed across the whole plank and its centre passes each coin on the top of
+ * that coin's hop (rowHopDelay + rowHopUpMs), left to right: the light lifts the coins one by one. Returns when the
+ * bar starts (ms after the landing) and how long it takes to cross from fully left of the row to fully right.
+ */
+export function rowBarTiming(width: number, slots: number, band: number): { readonly startAt: number; readonly durationMs: number } {
+  const n = Math.max(1, Math.floor(slots));
+  const w = Math.max(1, width);
+  const pitch = w / n;
+  const travel = w + band;
+  // Speed: one slot pitch per hop step.
+  const durationMs = Math.round(SHELF_LANDING.rowHopStepMs * travel / pitch);
+  // Coin 0's centre (pitch / 2) is (pitch / 2 + band / 2) of the way along the travel from the bar's start.
+  const peak0 = rowHopDelay(0) + SHELF_LANDING.rowHopUpMs;
+  const startAt = Math.max(0, Math.round(peak0 - durationMs * (pitch / 2 + band / 2) / travel));
+  return { startAt, durationMs };
 }
 
 /** When a neighbour `distance` slots away starts its jiggle (0 is the landing coin itself: none). */

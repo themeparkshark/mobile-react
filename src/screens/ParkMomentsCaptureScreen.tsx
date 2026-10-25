@@ -13,6 +13,8 @@
 import { useContext, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFrameCallback, useSharedValue } from 'react-native-reanimated';
+import { takeCaptureMarks } from '../components/park/momentPerf';
 import { getTaskAttempt } from '../api/endpoints/me/task-attempts';
 import { AuthContext } from '../context/AuthProvider';
 import { PerfOverlay, usePerfProbe } from '../gamekit/perf/PerfOverlay';
@@ -23,9 +25,10 @@ import type { ArrivalCard } from '../components/park/parkArrival';
 import { RIDE_UP } from './LinePlay/components/RideUpCelebration';
 import { RideUpSample } from './LinePlay/QueueStampPreviewScreen';
 import { createEarnedShelfArrival } from '../services/collection/earnedShelf';
+import { setBatterySaver, useBatterySaver, usePowerBudget } from '../power';
 import * as RootNavigation from '../RootNavigation';
 
-type Moment = 'arrival' | 'golden' | 'firstCoin' | 'rideUp';
+type Moment = 'arrival' | 'golden' | 'firstCoin' | 'firstCoinShort' | 'rideUp';
 
 const CARDS: readonly ArrivalCard[] = [
   { kind: 'limited', taskId: 78, name: 'Space Mountain', count: 1, latitude: 33.8115, longitude: -117.9175 },
@@ -38,15 +41,31 @@ export default function ParkMomentsCaptureScreen() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const probe = usePerfProbe(true);
+  // Battery Saver from the stage itself (the app's own switch), so a Saver run shows the thinned particles.
+  const saver = useBatterySaver();
+  const budget = usePowerBudget();
   const [playing, setPlaying] = useState<{ moment: Moment; key: number } | null>(null);
   const [last, setLast] = useState('tap a moment');
   const runs = useRef(0);
   const startedAt = useRef(0);
+  // Where each long frame fell (ms since the tap, summed on the UI thread), so a hitch can be pinned to a beat.
+  const since = useSharedValue(-1);
+  const hitches = useSharedValue<number[]>([]);
+  useFrameCallback(info => {
+    'worklet';
+    const dt = info.timeSincePreviousFrame;
+    if (dt == null || since.value < 0) return;
+    since.value += dt;
+    if (dt > 34) hitches.value = [...hitches.value.slice(-40), Math.round(since.value - dt), Math.round(dt)];
+  });
 
   const start = (moment: Moment) => {
     if (playing) return;
     runs.current += 1;
     probe.reset();
+    takeCaptureMarks();
+    hitches.value = [];
+    since.value = 0;
     startedAt.current = Date.now();
     setPlaying({ moment, key: runs.current });
     // Ride up has no end callback: its window is its own beat sheet (settled by leaveAt + leaveMs).
@@ -54,8 +73,19 @@ export default function ParkMomentsCaptureScreen() {
   };
   const done = (moment: Moment) => {
     const s = probe.summary();
-    setLast(`${moment} ${((Date.now() - startedAt.current) / 1000).toFixed(2)}s  UI ${s.fpsAvg.toFixed(1)}  p5 ${s.fpsP5.toFixed(1)}\n` +
-      `worst ${s.worstMs.toFixed(1)}ms  >16.7 ${s.over16Pct}%  frames ${s.frames}`);
+    const doneAt = Date.now() - startedAt.current;
+    const head = `${moment} ${(doneAt / 1000).toFixed(2)}s  UI ${s.fpsAvg.toFixed(1)}  p5 ${s.fpsP5.toFixed(1)}\n` +
+      `worst ${s.worstMs.toFixed(1)}ms  >16.7 ${s.over16Pct}%  frames ${s.frames}`;
+    const marks = takeCaptureMarks().map(m => `${m.name.split('.').pop()}@${m.at - startedAt.current}`);
+    // One more second on the frame clock after the moment ends, so a hitch at the unmount shows too.
+    setTimeout(() => {
+      const h = hitches.value;
+      since.value = -1;
+      const long: string[] = [];
+      for (let i = 0; i + 1 < h.length; i += 2) long.push(`${h[i + 1]}@${h[i]}`);
+      setLast(`${head}\nlong ${long.join(' ') || 'none'}\n${marks.join(' ')} end@${doneAt}`);
+    }, 1000);
+    setLast(head);
     setPlaying(null);
   };
   const shelf = async () => {
@@ -81,23 +111,27 @@ export default function ParkMomentsCaptureScreen() {
           pose={playing.key % 3} onDone={() => done(playing.moment)} />
       </View>
     ) : null}
-    {playing?.moment === 'firstCoin' && <FirstCoinRibbon key={playing.key} toss={toss} onDone={() => done('firstCoin')} />}
+    {(playing?.moment === 'firstCoin' || playing?.moment === 'firstCoinShort') && <FirstCoinRibbon key={playing.key} toss={toss}
+      short={playing.moment === 'firstCoinShort'} onDone={() => done(playing.moment)} />}
     {playing?.moment === 'rideUp' && <View style={[StyleSheet.absoluteFill, styles.recap, { paddingTop: insets.top + 24, paddingBottom: insets.bottom }]}>
       <RideUpSample />
     </View>}
     {/* Low on the screen, clear of every moment (the ribbons and the arrival live in the top half). */}
     <View pointerEvents="none" style={[styles.panel, { bottom: insets.bottom + 76 }]}>
       <PerfOverlay probe={probe} visible style={styles.graph} />
-      <Text style={styles.last}>{last}</Text>
+      <Text style={styles.last}>{`${saver ? 'SAVER ON' : 'saver off'}  particles x${budget.particleScale}\n`}{last}</Text>
     </View>
     {!playing && <View style={[styles.buttons, { bottom: insets.bottom + 16 }]}>
-      {([['arrival', 'Arrive'], ['golden', 'Golden'], ['firstCoin', 'First coin'], ['rideUp', 'Ride up']] as const).map(([m, label]) => (
+      {([['arrival', 'Arrive'], ['golden', 'Golden'], ['firstCoin', 'First coin'], ['firstCoinShort', 'Coin 2'], ['rideUp', 'Ride up']] as const).map(([m, label]) => (
         <Pressable key={m} accessibilityRole="button" accessibilityLabel={label} onPress={() => start(m)} style={styles.button}>
           <Text style={styles.buttonText}>{label}</Text>
         </Pressable>
       ))}
       <Pressable accessibilityRole="button" accessibilityLabel="Shelf" onPress={() => void shelf()} style={styles.button}>
         <Text style={styles.buttonText}>Shelf</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Saver" onPress={() => setBatterySaver(!saver)} style={styles.button}>
+        <Text style={styles.buttonText}>Saver</Text>
       </Pressable>
     </View>}
   </View>;

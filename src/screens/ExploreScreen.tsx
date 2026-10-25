@@ -400,7 +400,7 @@ function ExploreScreen() {
 
   // "First coin today!": the hook lives further down (it waits for the map to be free); the catch calls it here.
   const firstCoinNote = useRef<() => void>(() => undefined);
-  const firstCoinClaim = useRef<() => boolean>(() => false);
+  const firstCoinClaim = useRef<() => 'full' | 'short' | false>(() => false);
   // Collect moment: after a ride win, back on the map, the coin flies from its island onto the shelf button.
   const mapProjector = useRef<MapProjector | null>(null);
   const avatarRef = useRef<View>(null);
@@ -410,7 +410,7 @@ function ExploreScreen() {
   const reducedMotion = useReducedGameMotion();
   const [pendingCollect, setPendingCollect] = useState<{ latitude: number; longitude: number; coinUrl: string | null; first: boolean } | null>(null);
   const [collectFlight, setCollectFlight] = useState<{ key: number; from: { x: number; y: number }; to: { x: number; y: number };
-    coinUrl: string | null; label: string | null; crowned?: boolean; hudTop?: number } | null>(null);
+    coinUrl: string | null; label: string | null; crowned?: 'full' | 'short' | false; hudTop?: number } | null>(null);
   const avatarPop = useSharedValue(1);
   const avatarPopStyle = useAnimatedStyle(() => ({ transform: [{ scale: avatarPop.value }] }));
   const popAvatar = useCallback(() => {
@@ -1815,7 +1815,7 @@ function ExploreScreen() {
           coinUrl={collectFlight.coinUrl} label={collectFlight.label} reducedMotion={reducedMotion}
           onLand={popAvatar}
           onDone={() => { setCollectFlight(null); firstCoin.noteCollected(); }} />}
-        {collectFlight?.crowned && <FirstCoinRibbon key={collectFlight.key}
+        {collectFlight?.crowned && <FirstCoinRibbon key={collectFlight.key} short={collectFlight.crowned === 'short'}
           toss={{ from: collectFlight.from, to: collectFlight.to, coinUrl: collectFlight.coinUrl, onLand: popAvatar, hudTop: collectFlight.hudTop }}
           onDone={() => setCollectFlight(null)} />}
       </View>

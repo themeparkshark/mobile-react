@@ -8,7 +8,7 @@
  * no travel; the badge simply shows and the chime and buzz stay.
  */
 import { Canvas, Picture, Skia, TileMode, createPicture, vec } from '@shopify/react-native-skia';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   cancelAnimation, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue,
@@ -18,8 +18,9 @@ import { queueHaptic } from '../gamekit/Haptics';
 import { playMoment } from '../gamekit/audio/playMoment';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon from '../ui/GameIcon';
+import { Easing } from 'react-native-reanimated';
 import { EASE, SPRING } from '../ui/motionEasing';
-import { SHELF_LANDING, jiggleAmount, jiggleDelay, jiggleDirection, rowHopDelay } from './shelfLanding';
+import { SHELF_LANDING, jiggleAmount, jiggleDelay, jiggleDirection, rowBarTiming, rowHopDelay } from './shelfLanding';
 
 /** One rung of the row's tick ladder: the sound climbs one step per coin, a light tick in the hand. */
 function rowTick(step: number) {
@@ -111,52 +112,63 @@ export function RowShine({ landingKey, armed = false, width, height, slots = 5 }
   const badge = useSharedValue(0);
   const gleam = useSharedValue(0);
   const spark = useSharedValue(0);
+  const band = Math.max(70, width * 0.3);
+  // The bar crosses the whole plank at an even speed and passes each coin on the top of its hop (rowBarTiming).
+  const bar = rowBarTiming(width, slots, band);
   useEffect(() => {
     if (!landingKey) return undefined;
     if (reduced) { rowCompleteCue(); badge.value = 1; return undefined; }
     t.value = 0;
-    t.value = withDelay(SHELF_LANDING.shineAfterMs, withTiming(1, { duration: SHELF_LANDING.shineMs, easing: EASE.inOut }));
+    t.value = withDelay(bar.startAt, withTiming(1, { duration: bar.durationMs, easing: Easing.linear }));
     glow.value = withDelay(SHELF_LANDING.shineAfterMs, withSequence(withTiming(1, { duration: 200, easing: EASE.out }),
       withDelay(SHELF_LANDING.plankGlowMs - 400, withTiming(0, { duration: 400, easing: EASE.in }))));
     badge.value = withDelay(SHELF_LANDING.badgeAt, withSpring(1, SPRING.pop));
     gleam.value = withDelay(SHELF_LANDING.badgeAt + 160, withTiming(1, { duration: 420, easing: EASE.inOut }));
     spark.value = withDelay(SHELF_LANDING.badgeAt + 90, withTiming(1, { duration: 460, easing: EASE.out }));
     return () => { cancelAnimation(t); cancelAnimation(glow); cancelAnimation(badge); cancelAnimation(gleam); cancelAnimation(spark); };
+    // The bar timing follows the row's size, fixed for a landing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [landingKey, reduced, t, glow, badge, gleam, spark]);
   // The cue rides the same UI clock as the band: it fires when the band first moves.
   const started = useSharedValue(0);
   useEffect(() => {
     if (!landingKey || reduced) return undefined;
     started.value = 0;
-    started.value = withDelay(SHELF_LANDING.shineAfterMs, withTiming(1, { duration: 16 }, ok => { if (ok) runOnJS(rowCompleteCue)(); }));
+    started.value = withDelay(bar.startAt, withTiming(1, { duration: 16 }, ok => { if (ok) runOnJS(rowCompleteCue)(); }));
     return () => cancelAnimation(started);
-  }, [landingKey, reduced, started]);
-  const band = Math.max(70, width * 0.3);
+  }, [landingKey, reduced, started, bar.startAt]);
+  // The plank glow and the light bar are built once (paints, gradients and the bar's shape); each frame only moves
+  // the bar and sets an alpha.
+  const art = useMemo(() => {
+    const plank = Skia.Paint();
+    plank.setAntiAlias(true);
+    plank.setShader(Skia.Shader.MakeLinearGradient(vec(0, height - 34), vec(0, height),
+      [Skia.Color('rgba(255,207,59,0)'), Skia.Color('rgba(255,207,59,0.9)'), Skia.Color('rgba(255,246,207,0.95)')],
+      [0, 0.55, 1], TileMode.Clamp));
+    const light = Skia.Paint();
+    light.setAntiAlias(true);
+    light.setShader(Skia.Shader.MakeLinearGradient(vec(0, 0), vec(band, 0),
+      [Skia.Color('rgba(255,236,150,0)'), Skia.Color('rgba(255,236,150,0.7)'), Skia.Color('rgba(255,255,255,1)'),
+        Skia.Color('rgba(255,236,150,0.7)'), Skia.Color('rgba(255,236,150,0)')], [0, 0.3, 0.5, 0.7, 1], TileMode.Clamp));
+    const path = Skia.Path.Make();
+    const skew = height * 0.32;
+    path.moveTo(skew, 0); path.lineTo(band + skew, 0); path.lineTo(band - skew, height); path.lineTo(-skew, height);
+    path.close();
+    return { plank, light, path, plankRect: Skia.XYWHRect(0, height - 34, width, 34) };
+  }, [band, height, width]);
   const picture = useDerivedValue(() => createPicture(canvas => {
     const g = glow.value, p = t.value;
     if (g > 0.01) {
       // The plank glows gold under the coins.
-      const paint = Skia.Paint();
-      paint.setAntiAlias(true);
-      paint.setShader(Skia.Shader.MakeLinearGradient(vec(0, height - 34), vec(0, height),
-        [Skia.Color('rgba(255,207,59,0)'), Skia.Color('rgba(255,207,59,0.9)'), Skia.Color('rgba(255,246,207,0.95)')],
-        [0, 0.55, 1], TileMode.Clamp));
-      paint.setAlphaf(0.85 * g);
-      canvas.drawRect(Skia.XYWHRect(0, height - 34, width, 34), paint);
+      art.plank.setAlphaf(0.85 * g);
+      canvas.drawRect(art.plankRect, art.plank);
     }
     if (p > 0 && p < 1) {
-      // One skewed gold-and-white bar of light sweeping left to right.
-      const x = -band + (width + band) * p;
-      const paint = Skia.Paint();
-      paint.setAntiAlias(true);
-      paint.setShader(Skia.Shader.MakeLinearGradient(vec(x, 0), vec(x + band, 0),
-        [Skia.Color('rgba(255,236,150,0)'), Skia.Color('rgba(255,236,150,0.65)'), Skia.Color('rgba(255,255,255,1)'),
-          Skia.Color('rgba(255,236,150,0.65)'), Skia.Color('rgba(255,236,150,0)')], [0, 0.3, 0.5, 0.7, 1], TileMode.Clamp));
-      const path = Skia.Path.Make();
-      const skew = height * 0.32;
-      path.moveTo(x + skew, 0); path.lineTo(x + band + skew, 0); path.lineTo(x + band - skew, height); path.lineTo(x - skew, height);
-      path.close();
-      canvas.drawPath(path, paint);
+      // One skewed gold-and-white bar of light sweeping across the whole row, left to right.
+      canvas.save();
+      canvas.translate(-band + (width + band) * p, 0);
+      canvas.drawPath(art.path, art.light);
+      canvas.restore();
     }
   }, { width, height }));
   // The pill springs up from small with one overshoot (SPRING.pop) and a sparkle twinkles on its corner.
@@ -171,7 +183,7 @@ export function RowShine({ landingKey, armed = false, width, height, slots = 5 }
   });
   const gleamStyle = useAnimatedStyle(() => ({
     opacity: gleam.value > 0 && gleam.value < 1 ? 1 : 0,
-    transform: [{ translateX: -24 + 110 * gleam.value }, { rotate: '18deg' }],
+    transform: [{ translateX: -24 + 160 * gleam.value }, { rotate: '18deg' }],
   }));
   if (!landingKey && !armed) return null;
   return <>
@@ -182,17 +194,18 @@ export function RowShine({ landingKey, armed = false, width, height, slots = 5 }
       {Array.from({ length: slots }, (_, i) => <View key={i} style={styles.pip} />)}
       {!reduced && <Animated.View style={[styles.gleam, gleamStyle]} />}
     </Animated.View>
-    {!reduced && <Animated.View pointerEvents="none" style={[styles.spark, sparkStyle]}><GameIcon name="sparkle" size={22} /></Animated.View>}
+    {!reduced && <Animated.View pointerEvents="none" style={[styles.spark, sparkStyle]}><GameIcon name="sparkle" size={30} /></Animated.View>}
   </>;
 }
 
 const styles = StyleSheet.create({
   clip: { overflow: 'hidden', borderRadius: 14 },
   // On the plank, inside the shelf panel: cream with a gold rim (never a dark tab hanging off the edge).
-  badge: { position: 'absolute', right: 8, bottom: 6, flexDirection: 'row', gap: 3, paddingHorizontal: 7, paddingVertical: 4,
-    borderRadius: 12, backgroundColor: '#fff8e4', borderWidth: 2.5, borderColor: '#e9a800', overflow: 'hidden',
-    shadowColor: '#05346e', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 2 }, shadowRadius: 0 },
-  pip: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#ffcf3b', borderWidth: 1.5, borderColor: '#c88a00' },
-  gleam: { position: 'absolute', top: -6, bottom: -6, width: 12, backgroundColor: 'rgba(255,255,255,0.85)' },
-  spark: { position: 'absolute', right: 0, bottom: 20 },
+  // Wave 5 round 2: 1.5x the old pill (14 pt pips), so "row done" reads at a glance.
+  badge: { position: 'absolute', right: 8, bottom: 4, flexDirection: 'row', gap: 5, paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 16, backgroundColor: '#fff8e4', borderWidth: 3, borderColor: '#e9a800', overflow: 'hidden',
+    shadowColor: '#05346e', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 3 }, shadowRadius: 0 },
+  pip: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#ffcf3b', borderWidth: 2, borderColor: '#c88a00' },
+  gleam: { position: 'absolute', top: -8, bottom: -8, width: 16, backgroundColor: 'rgba(255,255,255,0.85)' },
+  spark: { position: 'absolute', right: -2, bottom: 26 },
 });

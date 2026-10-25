@@ -5,6 +5,7 @@
  */
 import { Image } from 'expo-image';
 import { Image as NativeImage } from 'react-native';
+import { ICON_SOURCES } from '../../ui/GameIcon';
 
 export const ARRIVAL_ART = {
   ribbon: require('../../../assets/images/ribbon.png'),
@@ -24,6 +25,9 @@ export const FINN_ART = [
   require('../../assets/games/current-quest/cq_shark_cheer.png'),
 ] as const;
 
+/** The icons the cards, tags and the Daily 3 pill draw (decoded with the art, so no card waits on one). */
+const ARRIVAL_ICONS = ['star', 'sparkle', 'search', 'pin', 'crown', 'streak', 'moon', 'chest', 'gift', 'coin'] as const;
+
 let warmed = false;
 
 /** Decode every arrival image into memory once per app run (cheap, never throws). */
@@ -31,7 +35,7 @@ export function warmArrivalArt(): void {
   if (warmed) return;
   warmed = true;
   try {
-    const uris = [...Object.values(ARRIVAL_ART), ...FINN_ART]
+    const uris = [...Object.values(ARRIVAL_ART), ...FINN_ART, ...ARRIVAL_ICONS.map(name => ICON_SOURCES[name])]
       .map(source => NativeImage.resolveAssetSource(source)?.uri)
       .filter((uri): uri is string => typeof uri === 'string' && uri.length > 0);
     void Image.prefetch(uris, 'memory').catch(() => { warmed = false; });

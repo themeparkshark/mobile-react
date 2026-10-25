@@ -21,7 +21,7 @@ test('four beats: payoff inside 1.5 s, a 70 ms hold, settled by 2.6 s', () => {
 });
 
 test('UI thread, power budget, Reduce Motion and Dim Flashing Lights', () => {
-  assert.match(src, /momentParticles\(RIDE_UP\.sparkles/);
+  assert.match(src, /momentParticles\(P\.sparkles/, 'the card burst reads its plan (RIDE_UP or the repeat)');
   assert.match(src, /momentParticles\(RIDE_UP\.confetti/);
   assert.match(src, /flashPeak\(isDimFlashingLightsEnabled\(\)/);
   assert.match(src, /useReduceMotionPreference/);
@@ -34,15 +34,15 @@ test('UI thread, power budget, Reduce Motion and Dim Flashing Lights', () => {
 
 test('mounted only when the queue really ended with boarding, and the chips land under its burst', () => {
   const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
-  assert.match(recap, /\{rideUp && <RideUpCelebration rideName=\{rideName\} \/>\}/);
+  assert.match(recap, /\{rideUp && <RideUpCelebration rideName=\{rideName\} short=\{rideUpShort\} \/>\}/);
   assert.match(recap, /const rideUp = endReason === 'boarded'/);
-  assert.match(recap, /rideUp \? rideUpStatStartsAt\(index\)/, 'the earned row rolls out of the burst');
-  assert.match(src, /return RIDE_UP\.burstAt \+ index \* RIDE_UP\.statStepMs;/);
+  assert.match(recap, /rideUp \? rideUpStatStartsAt\(index, plan\)/, 'the earned row rolls out of the burst');
+  assert.match(src, /return plan\.burstAt \+ index \* plan\.statStepMs;/);
 });
 
 test('the recap\'s own header card is the stage: no veil, no second banner, the real title stamps', () => {
   const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
-  assert.match(recap, /<RideUpHero active=\{rideUp\}>\{backdrop => \(/, 'the header card itself pops');
+  assert.match(recap, /<RideUpHero active=\{rideUp\} plan=\{rideUpPlan\}>\{backdrop => \(/, 'the header card itself pops');
   assert.match(recap, /<RideUpKicker active=\{rideUp\} style=\{styles\.recapKicker\}>/, 'the existing title is the stamp');
   assert.doesNotMatch(src, /styles\.veil|veil:/, 'no full-page veil');
   assert.doesNotMatch(src, /YOUR RIDE&apos;S UP!/, 'no duplicate title banner');
@@ -98,4 +98,28 @@ test('round 6: the recap art is decoded while the player waits, so the first fra
   assert.match(recap, /Image\.prefetch\(uris, 'memory'\)/);
   assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /useEffect\(\(\) => \{ warmRecapArt\(\); \}, \[\]\);/);
   assert.match(read('src/screens/LinePlay/QueueStampPreviewScreen.tsx'), /warmRecapArt\(\);/);
+});
+
+test('wave 5 round 2: the second ride of the day skips the confetti and rolls the numbers in 0.8 s', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const store = new Map();
+  const repeat = loadTs('src/screens/LinePlay/components/rideUpRepeat.ts', {
+    '@react-native-async-storage/async-storage': { __esModule: true, default: {
+      getItem: async key => store.get(key) ?? null, setItem: async (key, value) => { store.set(key, value); } } },
+  });
+  assert.equal(repeat.rideUpVariantFor(null, '2026-10-25'), 'full');
+  assert.equal(repeat.rideUpVariantFor({ day: '2026-10-25', count: 1 }, '2026-10-25'), 'short');
+  assert.equal(repeat.rideUpVariantFor({ day: '2026-10-24', count: 5 }, '2026-10-25'), 'full', 'a new day starts with the full cheer');
+  assert.equal(JSON.stringify(repeat.nextRideUpDay({ day: '2026-10-24', count: 5 }, '2026-10-25')), JSON.stringify({ day: '2026-10-25', count: 1 }));
+  const day = new Date(2026, 9, 25, 10);
+  assert.equal(repeat.takeRideUpVariant('Space:300', day), 'full');
+  assert.equal(repeat.takeRideUpVariant('Space:300', day), 'full', 'the same recap never counts twice');
+  assert.equal(repeat.takeRideUpVariant('Peter:200', day), 'short');
+  const R = /export const RIDE_UP_REPEAT: RideUpPlan = \{([\s\S]*?)\n\};/.exec(src)[1];
+  const val = name => Number(new RegExp(`${name}: ([\\d_]+)`).exec(R)[1].replace(/_/g, ''));
+  assert.equal(val('confetti'), 0);
+  assert.ok(val('burstAt') + 4 * val('statStepMs') + val('statMs') <= 800, 'five numbers rolled by 0.8 s');
+  assert.ok(val('leaveAt') + val('leaveMs') <= 1500, 'settled by 1.5 s');
+  const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
+  assert.match(recap, /takeRideUpVariant\(`\$\{rideName\}:\$\{elapsedSeconds\}`\) === 'short' \? RIDE_UP_REPEAT : RIDE_UP/);
 });

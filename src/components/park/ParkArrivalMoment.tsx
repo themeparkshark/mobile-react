@@ -26,7 +26,7 @@
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withRepeat, Easing, ReduceMotion, type SharedValue,
@@ -45,7 +45,7 @@ import { BRAND } from '../../ui/tokens';
 import GameIcon from '../../ui/GameIcon';
 import { HUD_ROW_HEIGHT, HUD_TOP } from '../map/statusStack';
 import {
-  ARRIVAL, ARRIVAL_REPEAT, arrivalCues, arrivalTitle, arrivalTitleSize, bossClockHands, flyPoint, letterDelays,
+  ARRIVAL, ARRIVAL_REPEAT, arrivalCues, arrivalTitle, arrivalTitleSize, bossClockHands, flyPoint, letterDelays, nextGoalPip,
   type ArrivalCard, type ArrivalGoal,
 } from './parkArrival';
 import { ARRIVAL_ART, FINN_ART, warmArrivalArt } from './arrivalArt';
@@ -121,6 +121,8 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
   const ribbonShine = useSharedValue(0);
   const goalIn = useSharedValue(0);
   const leave = useSharedValue(0);
+  const goalFly = useSharedValue(0);
+  const pipGlow = useSharedValue(0);
   const fly = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
   const drop = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
   const shine = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
@@ -134,6 +136,13 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
   const startedAt = useRef(0);
   const laidOut = useRef(false);
   const artReady = useRef(false);
+  // The stage mounts in MOUNT_STEPS small commits, one per frame, while it is still invisible: a cold first arrival
+  // used to build every layer (about 90 views and the particle canvas) in one commit and froze the map for one long
+  // frame (150 to 500 ms on the release capture). Each step is a short frame; the moment starts after the last.
+  const [step, setStep] = useState(0);
+  const mountedAll = useRef(false);
+  // The particle canvas leaves one frame before the stage does (two light commits, never one heavy one at the end).
+  const [fxOn, setFxOn] = useState(true);
 
   // Where the ribbon sits and where it folds to (the HUD stack button, top right of the map).
   const stackX = width - 12 - 27;
@@ -151,41 +160,51 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
     if (phase.current === 'done') return;
     phase.current = 'done';
     perfMark('arrival.done');
-    doneRef.current();
+    // Everything is already invisible here: the particle canvas unmounts first, the rest of the stage on the next frame.
+    setFxOn(false);
+    requestAnimationFrame(() => doneRef.current());
   }, []);
-  const startLeave = useCallback(() => {
-    if (phase.current !== 'in') return;
-    phase.current = 'out';
-    playSfx('fx.whoosh', 0.6);
-    cancelAnimation(clock);
+  const last = Math.max(0, cards.length - 1);
+  // The flight home, built on the UI thread. The handoff is scheduled when the moment starts (no JS hop between the
+  // beat and the first card leaving, so a busy JS thread never stretches the hold); a tap reschedules it to now.
+  const scheduleLeave = (startIn: number) => {
     if (reduced) {
-      leave.value = withTiming(1, { duration: DURATION.quick, reduceMotion: ReduceMotion.Never }, ok => { if (ok) runOnJS(finish)(); });
+      leave.value = withDelay(startIn, withTiming(1, { duration: DURATION.quick, reduceMotion: ReduceMotion.Never },
+        ok => { if (ok) runOnJS(finish)(); }), ReduceMotion.Never);
       return;
     }
-    perfMark('arrival.handoff');
     fly.forEach((v, i) => {
       // One card at a time on a visible arc (EASE.inOut: a move between two points), a gold trail behind it.
-      v.value = withDelay(i * A.flyStepMs, withTiming(1, { duration: A.flyMs, easing: EASE.inOut }, ok => {
+      v.value = withDelay(startIn + i * A.flyStepMs, withTiming(1, { duration: A.flyMs, easing: EASE.inOut }, ok => {
         // The stack (or the coin) catches it: a tick in the hand on the frame it lands.
         if (ok) runOnJS(queueHaptic)('tickSelection');
       }));
     });
     // A gold ring pings where a card lands: on its coin ("this is where it is") or on the stack button that caught it.
-    const last = Math.max(0, cards.length - 1);
     ping.forEach((v, i) => {
-      v.value = withDelay(i * A.flyStepMs + A.flyMs - 40, withTiming(1, { duration: PING_MS, easing: EASE.out }, ok => {
+      v.value = withDelay(startIn + i * A.flyStepMs + A.flyMs - 40, withTiming(1, { duration: PING_MS, easing: EASE.out }, ok => {
         // The moment ends on the frame the last ping fades (the UI clock, not a JS timer).
         if (ok && i === last) runOnJS(finish)();
       }));
     });
-    // The ribbon folds into the stack button behind the cards (the eye follows the cards first).
-    leave.value = withDelay(220, withTiming(1, { duration: A.shrinkMs, easing: EASE.in }));
-    gold.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
+    // The ribbon folds into the stack button behind the cards (the eye follows the cards first); the Daily 3 pill
+    // flies home with them (GoalStrip reads goalFly).
+    leave.value = withDelay(startIn + 220, withTiming(1, { duration: A.shrinkMs, easing: EASE.in }));
+    goalFly.value = withDelay(startIn + cards.length * A.flyStepMs, withTiming(1, { duration: A.flyMs, easing: EASE.inOut }));
+  };
+  const leaving = (fromTap: boolean) => {
+    if (phase.current !== 'in') return;
+    phase.current = 'out';
+    playSfx('fx.whoosh', 0.6);
+    perfMark('arrival.handoff');
+    if (fromTap) {
+      cancelAnimation(clock);
+      scheduleLeave(0);
+      if (!reduced) gold.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
+    }
     // Safety only: a dropped animation callback never leaves the stage up.
     timers.current.push(setTimeout(finish, momentMs(last * A.flyStepMs + A.flyMs + PING_MS + 900)));
-    // Shared values are stable refs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduced, cards.length, finish]);
+  };
 
   // The JS side of each beat (haptic, sound, handoff), fired from the UI clock so it lands on its frame.
   const cues = useMemo(() => arrivalCues(cards.length, !!goal, reduced, A), [cards.length, goal, reduced, A]);
@@ -200,9 +219,12 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
     } else if (cue.kind === 'card' || cue.kind === 'goal') {
       queueHaptic('tickSelection');
     } else if (cue.kind === 'handoff') {
-      startLeave();
+      // The flight itself was scheduled on the UI thread at the start; this is the whoosh and the bookkeeping.
+      leaving(false);
     }
-  }, [cues, replay, startLeave]);
+    // leaving reads refs and shared values only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cues, replay]);
   useAnimatedReaction(() => clock.value, (now, before) => {
     if (now < 0 || before === null || before === undefined) return;
     for (let i = 0; i < cueAt.length; i += 1) {
@@ -233,6 +255,7 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
       // A soft static gold glow at half strength (no rays pasted behind a faded stage).
       gold.value = withTiming(0.5, fade);
       drop.forEach(v => { v.value = withTiming(1, fade); });
+      scheduleLeave(A.handoffAt);
       return;
     }
     // 1. gather: the map recedes, the ribbon unfurls from the centre, the plaque stamps, the gold charges.
@@ -242,7 +265,9 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
     gold.value = withSequence(withDelay(120, withTiming(0.32, { duration: A.hitAt - 120, easing: EASE.charge })),
       // 3. burst: the wide fan blooms and keeps a slow turn while the cards land.
       withDelay(A.burstAt - A.hitAt, withTiming(1, { duration: 180, easing: EASE.out })),
-      withTiming(A.goldHold, { duration: DURATION.bloom, easing: EASE.out }));
+      withTiming(A.goldHold, { duration: DURATION.bloom, easing: EASE.out }),
+      // ...and fades as the cards leave (exits faster than entrances).
+      withDelay(Math.max(0, A.handoffAt - A.burstAt - 180 - DURATION.bloom), withTiming(0, { duration: DURATION.exit, easing: EASE.in })));
     // 2. hold: one held frame on the landed name, a capped flash, the ribbon squashes like a stamp.
     flash.value = withDelay(A.hitAt, withSequence(
       withTiming(flashTop, { duration: 40 }), withTiming(flashTop, { duration: DURATION.hitStop - 40 }),
@@ -270,16 +295,30 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
     goalIn.value = withDelay(A.goalAt, withSpring(1, SPRING.stamp));
     // The golden arrival: a bar of light runs across the ribbon right after the burst.
     if (golden) ribbonShine.value = withDelay(A.burstAt + 120, withTiming(1, { duration: 520, easing: EASE.inOut }));
+    // The next goal pip glows twice once the pill has landed (where today's Daily 3 goes next).
+    pipGlow.value = withDelay(A.goalAt + 260, withSequence(withTiming(1, { duration: 200, easing: EASE.out }),
+      withTiming(0.2, { duration: 220, easing: EASE.inOut }), withTiming(1, { duration: 200, easing: EASE.out }),
+      withTiming(0.55, { duration: 260, easing: EASE.inOut })));
+    scheduleLeave(A.handoffAt);
   };
 
   const armed = useRef(false);
   const tryStart = () => {
-    if (!laidOut.current || !artReady.current || armed.current || phase.current !== 'arming') return;
+    if (!laidOut.current || !artReady.current || !mountedAll.current || armed.current || phase.current !== 'arming') return;
     armed.current = true;
     // A few frames after layout (drawn at 1%, so every layer is decoded and rasterized), the first visible
     // frame is the first frame of the moment.
     timers.current.push(setTimeout(() => requestAnimationFrame(() => go()), A.armMs));
   };
+
+  // One mount step per frame (see MOUNT_STEPS); the last one lets the moment start.
+  useEffect(() => {
+    if (step >= MOUNT_STEPS) { mountedAll.current = true; tryStart(); return undefined; }
+    const raf = requestAnimationFrame(() => setStep(n => n + 1));
+    return () => cancelAnimationFrame(raf);
+    // tryStart reads refs only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   useEffect(() => {
     // The art is preloaded while the arrival waits its turn (useParkArrival); never hold the moment on a slow decode.
@@ -288,7 +327,7 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
     return () => {
       timers.current.forEach(clearTimeout); timers.current = [];
       [shown, clock, scrim, ribbon, punch, banner, gold, bloom, flash, burst, rain, rain2, finn, wave, point, flip, ribbonShine, goalIn, leave,
-        ...fly, ...drop, ...shine, ...ping].forEach(v => cancelAnimation(v));
+        goalFly, pipGlow, ...fly, ...drop, ...shine, ...ping].forEach(v => cancelAnimation(v));
     };
     // The moment plays once per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -321,7 +360,7 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
   const onTap = () => {
     // A kid mashing in still sees the name land; after that any tap hands off.
     if (phase.current !== 'in' || Date.now() - startedAt.current < A.minTapAt) return;
-    startLeave();
+    leaving(true);
   };
 
   const rootStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
@@ -371,14 +410,14 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
       </Pressable>
       <Animated.View pointerEvents="none" style={[styles.stage, { top: ribbonCenterY - 150, height: 300 }, stageStyle]}>
         {/* Reduce Motion: a soft static glow only (rays pasted behind a faded stage looked stuck on). */}
-        {!reduced && <GoldBurst size={Math.min(width * 1.85, 760)} amount={gold} bloom={bloom} reduced={reduced} style={styles.absCenter} />}
-        <CoreBloom gold={gold} bloom={bloom} width={ribbonWidth} />
-        <RadialFlash flash={flash} size={300} />
+        {step >= 1 && !reduced && <GoldBurst size={Math.min(width * 1.85, 760)} amount={gold} bloom={bloom} reduced={reduced} style={styles.absCenter} />}
+        {step >= 1 && <CoreBloom gold={gold} bloom={bloom} width={ribbonWidth} />}
+        {step >= 1 && <RadialFlash flash={flash} size={300} />}
         {/* Finn peeks over the ribbon's right end (drawn behind it, so the ribbon holds him up). */}
-        <Animated.View style={[styles.finn, { right: Math.max(2, (width - ribbonWidth) / 2 - 6) }, finnStyle]}>
+        {step >= 1 && <Animated.View style={[styles.finn, { right: Math.max(2, (width - ribbonWidth) / 2 - 6) }, finnStyle]}>
           <Image source={FINN_ART[pose % FINN_ART.length]} style={{ width: 100, height: 125 }} contentFit="contain" transition={0} />
           {golden && <View style={styles.finnCrown}><GameIcon name="crown" size={40} /></View>}
-        </Animated.View>
+        </Animated.View>}
         {/* The scale runs on a plain wrapper: iOS left the plaque's fill behind at its start size when the
             bordered view itself was scaled. */}
         <Animated.View style={[styles.welcomeSlot, bannerStyle]}>
@@ -397,20 +436,21 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
           </View>
         </Animated.View>
       </Animated.View>
-      {!reduced && !(__DEV__ && (globalThis as { __tpsNoFxCanvas?: boolean }).__tpsNoFxCanvas) && <ArrivalFxCanvas width={width} height={height} top={fxTop} rain={rain} rain2={rain2}
+      {step >= 3 && fxOn && !reduced && !(__DEV__ && (globalThis as { __tpsNoFxCanvas?: boolean }).__tpsNoFxCanvas) && <ArrivalFxCanvas width={width} height={height} top={fxTop} rain={rain} rain2={rain2}
         pieces={pieces} pieces2={pieces2} burst={burst} sparkles={sparkles}
         burstAt={{ x: width / 2, y: ribbonCenterY }} burstRadius={190}
         fly={fly} targets={targets} froms={froms} stack={{ x: stackX, y: stackY }} />}
-      <View pointerEvents="none" style={[styles.cards, { top: cardsTop }]}>
+      {step >= 2 && <View pointerEvents="none" style={[styles.cards, { top: cardsTop }]}>
         {cards.map((card, i) => (
           <TodayCard key={card.kind} card={card} index={i} width={cardWidth} drop={drop[i]} fly={fly[i]} leave={leave}
             shine={shine[i]} flip={card.kind === 'limited' ? flip : undefined}
             fromX={froms[i]?.x ?? width / 2} fromY={froms[i]?.y ?? cardsTop + 80}
             targets={targets} stackX={stackX} stackY={stackY} reduced={reduced} />
         ))}
-      </View>
-      {goal && <GoalStrip goal={goal} progress={goalIn} leave={leave} top={cardsTop + 172} />}
-      {!reduced && cards.map((card, i) => (
+      </View>}
+      {step >= 2 && goal && <GoalStrip goal={goal} progress={goalIn} fly={goalFly} glow={pipGlow} leave={leave} top={cardsTop + 172}
+        centerX={width / 2} stackX={stackX} stackY={stackY} reduced={reduced} />}
+      {step >= 3 && !reduced && cards.map((card, i) => (
         <CoinPing key={`ping-${card.kind}`} index={i} targets={targets} stackX={stackX} stackY={stackY} progress={ping[i]} />
       ))}
     </Animated.View>
@@ -546,22 +586,46 @@ function CardTag({ card }: { readonly card: ArrivalCard }) {
 }
 
 /**
- * The boss time as a picture: a clock face with the hands at the park's time (a kid matches it to any
- * clock), a sun or a moon for day or night, and the time in small print for the grown-up.
+ * The boss time as a picture: a big clock face with the hands at the park's time (a kid matches it to any clock),
+ * a sun or a moon for day or night, and the boss peeking from behind it. No printed time: the clock is the time
+ * (the screen reader still says it).
  */
 function BossClock({ card }: { readonly card: Extract<ArrivalCard, { kind: 'boss' }> }) {
   const hands = card.at ? bossClockHands(card.at) : null;
-  return <View style={styles.bossArt}>
+  return <View style={styles.bossArt} accessible accessibilityLabel={`Boss at ${card.time}`}>
     <Image source={ARRIVAL_ART.boss} style={styles.bossKraken} contentFit="contain" transition={0} />
-    {hands && <View style={styles.clock} accessible accessibilityLabel={`Boss at ${card.time}`}>
-      {[0, 90, 180, 270].map(deg => <View key={deg} style={[styles.clockTick, { transform: [{ rotate: `${deg}deg` }, { translateY: -15 }] }]} />)}
-      <View style={[styles.hand, styles.hourHand, { transform: [{ rotate: `${hands.hour}deg` }, { translateY: -5 }] }]} />
-      <View style={[styles.hand, styles.minuteHand, { transform: [{ rotate: `${hands.minute}deg` }, { translateY: -7.5 }] }]} />
+    {hands ? <View style={styles.clock}>
+      {CLOCK_TICKS.map(deg => <View key={deg} style={[styles.clockTick, deg % 90 === 0 && styles.clockTickBig,
+        { transform: [{ rotate: `${deg}deg` }, { translateY: -CLOCK / 2 + 7 }] }]} />)}
+      <View style={[styles.hand, styles.hourHand, { transform: [{ rotate: `${hands.hour}deg` }, { translateY: -7 }] }]} />
+      <View style={[styles.hand, styles.minuteHand, { transform: [{ rotate: `${hands.minute}deg` }, { translateY: -10 }] }]} />
       <View style={styles.clockHub} />
-      {hands.night && <View style={styles.clockSky}><GameIcon name="moon" size={13} /></View>}
-    </View>}
+      <View style={styles.clockSky}>{hands.night ? <GameIcon name="moon" size={20} /> : <SunMark />}</View>
+    </View> : <Text style={styles.cardSmall} numberOfLines={1} adjustsFontSizeToFit allowFontScaling={false}>{card.time}</Text>}
   </View>;
 }
+
+const CLOCK = 58;
+const CLOCK_TICKS = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330];
+
+/** A small hand-drawn sun (code-drawn: a gold disc with a white rim and eight short rays). */
+function SunMark() {
+  return <View style={styles.sun}>
+    {[0, 45, 90, 135].map(deg => <View key={deg} style={[styles.sunRay, { transform: [{ rotate: `${deg}deg` }] }]} />)}
+    <View style={styles.sunDisc} />
+  </View>;
+}
+
+/** A number next to a picture of what it counts: a gold coin and the count in one badge. */
+function CoinCount({ count }: { readonly count: number }) {
+  return <View style={styles.coinCount}>
+    <Image source={ARRIVAL_ART.goldCoin} style={styles.coinCountIcon} contentFit="contain" transition={0} />
+    <Text style={styles.coinCountText} allowFontScaling={false}>{count}</Text>
+  </View>;
+}
+
+/** Where the small coins sit around the map pin (they ring it like coins waiting to be found). */
+const ORBIT = [{ x: -26, y: -8 }, { x: 24, y: -12 }, { x: -20, y: 20 }, { x: 22, y: 18 }] as const;
 
 function CardFace({ card, flip, shine }: { readonly card: ArrivalCard; readonly flip?: SharedValue<number>; readonly shine: SharedValue<number> }) {
   if (card.kind === 'limited') {
@@ -570,63 +634,94 @@ function CardFace({ card, flip, shine }: { readonly card: ArrivalCard; readonly 
       <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{card.name}</Text>
     </>;
   }
-  if (card.kind === 'boss') {
-    return <>
-      <BossClock card={card} />
-      <Text style={styles.cardSmall} numberOfLines={1} adjustsFontSizeToFit allowFontScaling={false}>{card.time}</Text>
-    </>;
-  }
+  if (card.kind === 'boss') return <BossClock card={card} />;
   if (card.kind === 'new') {
-    // New coins here: a little fanned stack of fin coins with a sparkle (more coins = more to collect), and the
-    // count in a blue pill.
+    // New coins here: shiny new coins standing on a little shelf plank, sparkling, and the count next to a coin.
+    const shown = Math.max(1, Math.min(3, card.count));
     return <>
       <View style={styles.art}>
-        <Image source={ARRIVAL_ART.mapCoin} style={[styles.stackCoin, styles.stackBack]} contentFit="contain" transition={0} />
-        <Image source={ARRIVAL_ART.mapCoin} style={[styles.stackCoin, styles.stackMid]} contentFit="contain" transition={0} />
-        <Image source={ARRIVAL_ART.mapCoin} style={[styles.stackCoin, styles.stackFront]} contentFit="contain" transition={0} />
+        <View style={styles.plank}><View style={styles.plankTop} /></View>
+        {Array.from({ length: shown }, (_, i) => (
+          <Image key={i} source={ARRIVAL_ART.mapCoin} contentFit="contain" transition={0}
+            style={[styles.plankCoin, { left: 32 - (shown * 22) / 2 + i * 22 - 2, top: i % 2 ? 10 : 6 }]} />
+        ))}
         <Image source={ARRIVAL_ART.sparkle} style={styles.newSpark} contentFit="contain" transition={0} />
+        <Image source={ARRIVAL_ART.sparkle} style={styles.newSpark2} contentFit="contain" transition={0} />
       </View>
-      <View style={[styles.countPill, styles.countPillBlue]}>
-        <Text style={[styles.countPillText, styles.countPillTextLight]} allowFontScaling={false}>{card.count}</Text>
-      </View>
+      <CoinCount count={card.count} />
     </>;
   }
-  // Coins still to find here: a map pin with a "?" coin beside it and an empty dashed coin spot ("go find
-  // these on the map"); never the wallet's coin stack (that reads as a reward). The count sits in a gold pill.
+  // Coins still to find here: a map pin with small gold coins around it ("these are on the map, go find them"), and
+  // the count next to a coin.
   return <>
     <View style={styles.art}>
-      <View style={[styles.slotGhost, styles.findSpot]} />
-      <View style={styles.findPin}><GameIcon name="pin" size={46} /></View>
-      <View style={[styles.ghost, styles.findCoin]}>
-        <Image source={ARRIVAL_ART.mapCoin} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
-        <View style={styles.askDisc}><Text style={styles.ask} allowFontScaling={false}>?</Text></View>
-      </View>
+      <View style={styles.orbitRing} />
+      {ORBIT.slice(0, Math.max(1, Math.min(4, card.count))).map((o, i) => (
+        <Image key={i} source={ARRIVAL_ART.goldCoin} contentFit="contain" transition={0}
+          style={[styles.orbitCoin, { left: 32 + o.x - 10, top: 32 + o.y - 10 }]} />
+      ))}
+      <View style={styles.findPin}><GameIcon name="pin" size={44} /></View>
     </View>
-    <View style={styles.countPill}><Text style={styles.countPillText} allowFontScaling={false}>{card.count}</Text></View>
+    <CoinCount count={card.count} />
   </>;
 }
 
-/** Today's Daily 3 under the cards: a flame (with the streak) and three pips, gold when done. Pictures only. */
-const GoalStrip = memo(function GoalStrip({ goal, progress, leave, top }: {
-  readonly goal: ArrivalGoal; readonly progress: SharedValue<number>; readonly leave: SharedValue<number>; readonly top: number;
+/**
+ * Today's Daily 3 under the cards, big enough to read in a glance: a flame with the streak, today's three pips (the
+ * next one to fill glows), the Daily 3 chest they open, and tomorrow's flame (the streak plus one) with a gift on it
+ * when the server's next streak prize is tomorrow. Honest and calm: no clock, no countdown, no "or lose it". It pops
+ * on the cards' landing beat (from 1.6x on SPRING.stamp) and flies home into the stack button with the cards.
+ * Pictures only.
+ */
+const GoalStrip = memo(function GoalStrip({ goal, progress, fly, glow, leave, top, centerX, stackX, stackY, reduced }: {
+  readonly goal: ArrivalGoal; readonly progress: SharedValue<number>; readonly fly: SharedValue<number>;
+  readonly glow: SharedValue<number>; readonly leave: SharedValue<number>; readonly top: number;
+  readonly centerX: number; readonly stackX: number; readonly stackY: number; readonly reduced: boolean;
 }) {
-  const style = useAnimatedStyle(() => ({
-    opacity: Math.min(1, progress.value * 2) * (1 - leave.value),
-    transform: [{ scale: 1.6 - 0.6 * progress.value }],
-  }));
-  return <Animated.View pointerEvents="none" style={[styles.goalWrap, { top }, style]}
-    accessible accessibilityLabel={`Daily 3: ${goal.done} of ${goal.total} done today`}>
+  const next = nextGoalPip(goal);
+  const style = useAnimatedStyle(() => {
+    if (reduced) return { opacity: Math.min(progress.value, 1 - leave.value) };
+    const f = fly.value;
+    const at = flyPoint(centerX, top + GOAL_H / 2, stackX, stackY, false, f);
+    return {
+      opacity: Math.min(1, progress.value * 2) * (f < 0.85 ? 1 : (1 - f) / 0.15),
+      transform: [{ translateX: at.x - centerX }, { translateY: at.y - (top + GOAL_H / 2) },
+        { scale: (1.6 - 0.6 * progress.value) * (1 - 0.7 * f) }],
+    };
+  });
+  const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scale: 0.9 + 0.35 * glow.value }] }));
+  const label = `Daily 3: ${goal.done} of ${goal.total} done today. Finish them for the chest.` +
+    (goal.giftTomorrow ? ' A streak prize waits tomorrow.' : '');
+  return <Animated.View pointerEvents="none" style={[styles.goalWrap, { top }, style]} accessible accessibilityLabel={label}>
     <View style={styles.goal}>
-      <GameIcon name="streak" size={26} />
-      {goal.streak > 0 && <Text style={styles.goalStreak} allowFontScaling={false}>{goal.streak}</Text>}
+      <View style={styles.goalFlame}>
+        <GameIcon name="streak" size={34} />
+        {goal.streak > 0 && <Text style={styles.goalStreak} allowFontScaling={false}>{goal.streak}</Text>}
+      </View>
       <View style={styles.pips}>
-        {Array.from({ length: goal.total }, (_, i) => <View key={i} style={[styles.pip, i < goal.done && styles.pipDone]} />)}
+        {Array.from({ length: goal.total }, (_, i) => <View key={i} style={styles.pipSlot}>
+          {i === next && <Animated.View style={[styles.pipGlow, glowStyle]} />}
+          <View style={[styles.pip, i < goal.done && styles.pipDone]} />
+        </View>)}
+      </View>
+      {/* The Daily 3 chest the three pips open (a real reward on the server). */}
+      <GameIcon name="chest" size={30} />
+      {/* Tomorrow: the next flame, ghosted until it is earned, with a gift on it when tomorrow holds a streak prize. */}
+      <View style={styles.tomorrow}>
+        <View style={styles.tomorrowFlame}><GameIcon name="streak" size={24} /></View>
+        <Text style={styles.tomorrowDay} allowFontScaling={false}>{goal.streak + 1}</Text>
+        {goal.giftTomorrow && <View style={styles.tomorrowGift}><GameIcon name="gift" size={20} /></View>}
       </View>
     </View>
   </Animated.View>;
 });
 
+/** The goal pill's height (for its flight home from its centre). */
+const GOAL_H = 52;
+
 const PING_MS = 520;
+/** How many one-frame commits the invisible stage is built in (ribbon and name, gold and Finn, cards, particles). */
+const MOUNT_STEPS = 3;
 
 /**
  * Where a card lands: on a map coin, two gold rings spread and a small gold coin hops out ("it is here");
@@ -741,51 +836,55 @@ const styles = StyleSheet.create({
   tagNew: { backgroundColor: BRAND.white, borderColor: BRAND.blueBright },
   tagText: { fontFamily: 'Shark', fontSize: 12, letterSpacing: 0.8, color: BRAND.navy },
   tagStar: { flexDirection: 'row', alignItems: 'center', gap: 1, paddingHorizontal: 6 },
-  bossArt: { width: 72, height: 64, marginTop: 4 },
-  bossKraken: { position: 'absolute', left: -2, top: 0, width: 52, height: 52 },
-  clock: { position: 'absolute', right: -4, bottom: -2, width: 38, height: 38, borderRadius: 19, backgroundColor: BRAND.white,
-    borderWidth: 3, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  // Wave 5 round 2: the clock is the hero (58 pt) and the boss peeks from behind its left side.
+  bossArt: { width: 84, height: 96, marginTop: 2, alignItems: 'center', justifyContent: 'flex-end' },
+  bossKraken: { position: 'absolute', left: -6, top: 0, width: 40, height: 40, transform: [{ rotate: '-10deg' }] },
+  clock: { width: CLOCK, height: CLOCK, borderRadius: CLOCK / 2, backgroundColor: BRAND.white, marginBottom: 6,
+    borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   clockTick: { position: 'absolute', width: 2, height: 4, borderRadius: 1, backgroundColor: BRAND.navy },
+  clockTickBig: { width: 3, height: 7 },
   hand: { position: 'absolute', borderRadius: 2, backgroundColor: BRAND.navy },
-  hourHand: { width: 3.5, height: 10 },
-  minuteHand: { width: 2.5, height: 15 },
-  clockHub: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: BRAND.gold },
-  clockSky: { position: 'absolute', top: -10, right: -10 },
+  hourHand: { width: 5, height: 14 },
+  minuteHand: { width: 3.5, height: 20 },
+  clockHub: { position: 'absolute', width: 9, height: 9, borderRadius: 5, backgroundColor: BRAND.gold, borderWidth: 1.5, borderColor: BRAND.navy },
+  clockSky: { position: 'absolute', top: -12, right: -12 },
+  sun: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  sunRay: { position: 'absolute', width: 4, height: 24, borderRadius: 2, backgroundColor: GOLD_FX.rays },
+  sunDisc: { width: 15, height: 15, borderRadius: 8, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.white },
+  coinCount: { marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 54, paddingLeft: 3, paddingRight: 9,
+    borderRadius: 14, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, justifyContent: 'center' },
+  coinCountIcon: { width: 22, height: 22 },
+  coinCountText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.gold },
+  plank: { position: 'absolute', left: -4, right: -4, top: 40, height: 12, borderRadius: 4, backgroundColor: BRAND.blue,
+    borderWidth: 2, borderColor: BRAND.navy },
+  plankTop: { position: 'absolute', left: 2, right: 2, top: 1, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.6)' },
+  plankCoin: { position: 'absolute', width: 32, height: 32 },
+  newSpark2: { position: 'absolute', left: -6, top: 0, width: 18, height: 18 },
+  orbitRing: { position: 'absolute', left: 4, top: 6, width: 56, height: 52, borderRadius: 28, borderWidth: 2, borderStyle: 'dashed',
+    borderColor: BRAND.blueBright },
+  orbitCoin: { position: 'absolute', width: 20, height: 20 },
   cardSmall: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy, marginTop: 6 },
-  slotGhost: { position: 'absolute', width: 40, height: 40, borderRadius: 20, borderWidth: 2.5, borderStyle: 'dashed',
-    borderColor: BRAND.blueBright, backgroundColor: 'rgba(120,196,255,0.18)' },
-  askDisc: { position: 'absolute', width: 26, height: 26, borderRadius: 13, backgroundColor: BRAND.white,
-    borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
-  countPill: { marginTop: 6, minWidth: 44, paddingHorizontal: 10, borderRadius: 12, backgroundColor: BRAND.gold,
-    borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center' },
-  countPillText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
   tagTextLight: { color: BRAND.white },
   art: { width: 64, height: 64, marginTop: 4 },
   coinArt: { alignItems: 'center', justifyContent: 'center' },
   newSpark: { position: 'absolute', right: -8, top: -6, width: 26, height: 26 },
-  stackCoin: { position: 'absolute', width: 44, height: 44 },
-  stackBack: { left: -4, top: 4, transform: [{ rotate: '-16deg' }, { scale: 0.82 }] },
-  stackMid: { right: -4, top: 4, transform: [{ rotate: '16deg' }, { scale: 0.82 }] },
-  stackFront: { left: 10, top: 16 },
-  countPillBlue: { backgroundColor: BRAND.blueBright, borderColor: BRAND.white },
-  countPillTextLight: { color: BRAND.white },
-  findPin: { position: 'absolute', left: 2, top: -2 },
-  findSpot: { left: 26, top: 22, width: 34, height: 34, borderRadius: 17 },
-  findCoin: { left: 26, top: 22, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  ghost: { position: 'absolute', width: 44, height: 44 },
-  ghostBack: { left: -6, top: 2 },
-  ghostMid: { right: -6, top: 2 },
-  ghostFront: { left: 10, top: 16, alignItems: 'center', justifyContent: 'center' },
-  ask: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, marginTop: 1 },
-  cardBig: { fontFamily: 'Shark', fontSize: 26, color: BRAND.navy, marginTop: 4 },
+  findPin: { position: 'absolute', left: 10, top: 6 },
   cardName: { fontFamily: 'Knockout', fontSize: 13, lineHeight: 15, color: BRAND.navy, textAlign: 'center', marginTop: 6 },
   goalWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  goal: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.blue, borderRadius: 18, borderWidth: 3,
-    borderColor: BRAND.white, paddingHorizontal: 12, paddingVertical: 5, borderBottomWidth: 5, borderBottomColor: BRAND.navy },
-  goalStreak: { fontFamily: 'Shark', fontSize: 18, color: BRAND.gold, marginRight: 4 },
-  pips: { flexDirection: 'row', gap: 6 },
-  pip: { width: 22, height: 22, borderRadius: 11, borderWidth: 3, borderColor: BRAND.white, backgroundColor: 'rgba(255,255,255,0.18)' },
+  // Wave 5 round 2: about 1.3x the old pill (flame 34, pips 28, the streak at 23 pt), plus the chest and tomorrow.
+  goal: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: GOAL_H, backgroundColor: BRAND.blue, borderRadius: 22, borderWidth: 3,
+    borderColor: BRAND.white, paddingHorizontal: 14, paddingVertical: 6, borderBottomWidth: 6, borderBottomColor: BRAND.navy },
+  goalFlame: { flexDirection: 'row', alignItems: 'center' },
+  goalStreak: { fontFamily: 'Shark', fontSize: 23, color: BRAND.gold, marginLeft: 1 },
+  pips: { flexDirection: 'row', gap: 7 },
+  pipSlot: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  pip: { width: 28, height: 28, borderRadius: 14, borderWidth: 3.5, borderColor: BRAND.white, backgroundColor: 'rgba(255,255,255,0.18)' },
   pipDone: { backgroundColor: BRAND.gold },
+  pipGlow: { position: 'absolute', width: 40, height: 40, borderRadius: 20, backgroundColor: GOLD_FX.raysSoft, borderWidth: 3, borderColor: GOLD_FX.rays },
+  tomorrow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 8, marginLeft: 2, borderLeftWidth: 2, borderLeftColor: 'rgba(255,255,255,0.55)' },
+  tomorrowFlame: { opacity: 0.55 },
+  tomorrowDay: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white, marginLeft: 1 },
+  tomorrowGift: { position: 'absolute', right: -14, top: -16, transform: [{ rotate: '10deg' }] },
 });
 
 export default memo(ParkArrivalMoment);
