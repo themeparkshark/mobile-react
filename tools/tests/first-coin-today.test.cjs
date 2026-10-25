@@ -88,3 +88,11 @@ test('round 6: the slam is the brightest thing on the map: a big fan, a ring wid
   assert.match(src, /TRAIL_HOME\.map/, 'the flight home has its own thick comet');
   assert.match(src, /const TRAIL_HOME = \[0\.05, 0\.1, 0\.15, 0\.2, 0\.25\]/);
 });
+
+test('round 6: the crowned coin badge and its fan sit fully on screen (the ribbon starts 28 pt in)', () => {
+  const src = read('src/components/park/FirstCoinRibbon.tsx');
+  assert.ok(Number(/const RIBBON_LEFT = (\d+)/.exec(src)[1]) >= 24);
+  assert.match(src, /left: RIBBON_LEFT/);
+  assert.match(src, /const slot = \{ x: RIBBON_LEFT \+ BADGE \/ 2 - 8/);
+  assert.match(src, /const ribbonWidth = width - RIBBON_LEFT - FIRST_COIN\.railClear/);
+});

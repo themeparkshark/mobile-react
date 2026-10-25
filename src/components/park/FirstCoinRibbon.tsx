@@ -58,6 +58,11 @@ export default function FirstCoinRibbon({ onDone, toss }: { readonly onDone: () 
 const COIN = 54;
 /** The gold ray fan behind the crowned coin (pt across). */
 const RAYS = 300;
+/**
+ * The ribbon starts this far in from the left edge, so the crowned coin's badge (and the fan and rings around it)
+ * sit fully on screen instead of half off the edge (round 6, seen on the real map).
+ */
+const RIBBON_LEFT = 28;
 /** The crowned coin's round badge overhangs the ribbon's left end, so the burst never sits on the words. */
 const BADGE = 64;
 /** How far behind the coin each trail dot rides (fraction of the flight). */
@@ -88,7 +93,7 @@ function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readon
   const landHome = () => { queueHaptic('tapLight'); landRef.current?.(); };
   const top = (toss?.hudTop ?? 0) + HUD_TOP + FIRST_COIN.topOffset;
   // The ribbon's coin slot (layer points) and where the coin starts (its spot on the map, or the map's middle).
-  const slot = { x: 12 + BADGE / 2 - 8, y: top + 33 };
+  const slot = { x: RIBBON_LEFT + BADGE / 2 - 8, y: top + 33 };
   const from = toss?.from ?? { x: width / 2, y: height * 0.42 };
   const to = toss?.to ?? null;
   const coinSource = toss?.coinUrl ? { uri: toss.coinUrl } : ARRIVAL_ART.goldCoin;
@@ -171,7 +176,7 @@ function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readon
     transform: [{ translateY: 30 * (1 - finn.value) - 8 * Math.max(0, Math.sin(Math.min(1, finn.value) * Math.PI)) - 12 * pump.value },
       { rotate: `${-10 + 10 * finn.value - 8 * pump.value}deg` }, { scale: (0.5 + 0.5 * finn.value) * (1 + 0.08 * pump.value) }],
   }));
-  const ribbonWidth = width - 12 - FIRST_COIN.railClear;
+  const ribbonWidth = width - RIBBON_LEFT - FIRST_COIN.railClear;
   const shineStyle = useAnimatedStyle(() => ({
     opacity: shine.value > 0 && shine.value < 1 ? 1 : 0,
     transform: [{ translateX: -60 + (ribbonWidth + 60) * shine.value }, { skewX: '-20deg' }],
@@ -259,7 +264,7 @@ function Flyer({ t, lag, from, to, lift, source, dot, home }: {
 
 const styles = StyleSheet.create({
   sweep: { position: 'absolute', top: 0, bottom: 0, left: 0 },
-  ribbonWrap: { position: 'absolute', left: 12, alignItems: 'center' },
+  ribbonWrap: { position: 'absolute', left: RIBBON_LEFT, alignItems: 'center' },
   rays: { position: 'absolute', left: BADGE / 2 - 8 - RAYS / 2, top: 33 - RAYS / 2 },
   ribbon: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 66, paddingLeft: BADGE - 2, paddingRight: 12,
     borderRadius: 18, borderWidth: 3, borderColor: BRAND.white, backgroundColor: BRAND.gold, alignSelf: 'stretch',
