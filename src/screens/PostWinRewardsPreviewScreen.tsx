@@ -35,7 +35,8 @@ export default function PostWinRewardsPreviewScreen() {
   const [showWin, setShowWin] = useState(!capture);
   useEffect(() => {
     if (!capture) return undefined;
-    const t = setTimeout(() => setShowWin(true), 6000);
+    // EXPO_PUBLIC_MOTION_CAPTURE_DELAY_MS waits longer, until Metro's download banner has gone.
+    const t = setTimeout(() => setShowWin(true), Number(process.env.EXPO_PUBLIC_MOTION_CAPTURE_DELAY_MS || 6000));
     return () => clearTimeout(t);
   }, [capture]);
   const [showCoin, setShowCoin] = useState(false);

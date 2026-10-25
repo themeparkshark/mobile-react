@@ -22,6 +22,10 @@ function rewardFor(set: ShopSetSummary): ShopSetReward {
   };
 }
 
+/** Release-like capture only: how long the reveal waits after the set loads (EXPO_PUBLIC_MOTION_CAPTURE_DELAY_MS), so
+ * Metro's download banner has gone from the evidence. Store builds never set it. */
+const OPEN_DELAY_MS = Math.max(0, Number(process.env.EXPO_PUBLIC_MOTION_CAPTURE_DELAY_MS || 0));
+
 export default function SetRevealPreviewScreen() {
   const [set, setSet] = useState<ShopSetSummary | null>(null);
   const [run, setRun] = useState(0);
@@ -32,7 +36,7 @@ export default function SetRevealPreviewScreen() {
     getShopSets()
       .then(data => { if (live) setSet(data.sets.find(s => (s.pieces?.length ?? 0) > 1) ?? FALLBACK_SET); })
       .catch(() => { if (live) setSet(FALLBACK_SET); })
-      .finally(() => { if (live) setOpen(true); });
+      .finally(() => { if (live) setTimeout(() => { if (live) setOpen(true); }, OPEN_DELAY_MS); });
     return () => { live = false; };
   }, []);
   return (
