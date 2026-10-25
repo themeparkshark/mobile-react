@@ -509,7 +509,14 @@ const CatchBadge = memo(function CatchBadge({ st, summary, photo, bonusXp, newRi
 type BadgeContent = { readonly summary: CatchSummary | null; readonly on: boolean; readonly coinStamp: number | null;
   readonly nextArt: ReturnType<typeof findImageSource> | null };
 type BadgeStore = { get: () => BadgeContent; set: (patch: Partial<BadgeContent>) => void; subscribe: (fn: () => void) => () => void };
-const EMPTY_BADGE: BadgeContent = { summary: null, on: false, coinStamp: null, nextArt: null };
+/**
+ * The badge starts with placeholder words (hidden under its gate), so its pill, bar, count and NEW views mount with the
+ * map and every later answer only changes words and numbers (wave 5 round 3: the answer's mount cost a 50 to 90 ms frame
+ * right on the hit-stop). Its content is kept between catches for the same reason.
+ */
+const PLACEHOLDER_SUMMARY: CatchSummary = { isNew: true, replayed: false, setName: ' ', setColor: '#FFB020', collected: 0, total: 1, complete: false,
+  progressFrom: 0, progressTo: 0, rarityColor: '#FFB020', rarityLabel: '' };
+const EMPTY_BADGE: BadgeContent = { summary: PLACEHOLDER_SUMMARY, on: false, coinStamp: null, nextArt: null };
 function createBadgeStore(): BadgeStore {
   let state = EMPTY_BADGE;
   const subs = new Set<() => void>();
@@ -1089,7 +1096,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       if (finished) setReadyItem(finished);
       setStageNonce(n => n + 1);
       if (primeSeq.current !== seq) return;
-      badgeStore.set({ summary: null }); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
+      setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
     }));
     setShowing(null);
     badgeStore.set({ on: false });
@@ -1165,9 +1172,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     cancelAnimation(cc);
     const now = Date.now();
     const elapsed = Math.max(0, now - tapAt);
-    // The first frames since the tap are already gone (start there, never behind), and the held frame is due on time.
+    // The first frames since the tap are already gone (start there, never behind), and the held frame is due on time
+    // (wave 5 round 3: a late start, the tap's own commit, plays the wind-up up to about a third faster).
     const e = Math.min(48, elapsed);
-    const duration = Math.max(1, hitStopAt * 0.75, hitStopAt - elapsed);
+    const duration = Math.max(1, hitStopAt * 0.65, hitStopAt - elapsed);
     heldGoal.value = now + duration;
     cc.value = e;
     cc.value = withTiming(hitStopAt, { duration, easing: Easing.linear }, done => {
@@ -1328,7 +1336,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const motion = !latest.current.reducedMotion;
     [badgeIn, reveal, progress, gradeIn, barGlow].forEach(value => { cancelAnimation(value); value.value = 0; });
     badgeKick.value = 1;
-    badgeStore.set({ summary: null, coinStamp: null, nextArt: null }); setPhoto(null); setCascade(0); setBonusXp(null);
+    // The hidden badge takes this find's likely words now (the tap commits anyway), so the answer changes only numbers.
+    const last = badgeStore.get().summary;
+    badgeStore.set({ summary: catchSummary(item, { dex: last?.total ? { found: last.collected ?? 0, total: last.total } : { found: 0, total: 1 } }) });
+    setPhoto(null); setCascade(0); setBonusXp(null);
     cancelAnimation(beaconT); beaconT.value = -1;
     isNewSV.value = 0;
     setShowing(request);
@@ -1484,9 +1495,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       // Wave 5 round 2: when nothing else is in catch range, the next goal is the nearest find on the map (its own art),
       // and on this catch the disc flies onto that find's spot or edge arrow: where to walk, with no words.
       const where = motion ? latest.current.whereNext?.(pivotId) ?? null : null;
-      // One store write: only the badge host re-renders on the answer (never the catch layer, wave 5 round 3).
-      badgeStore.set({ summary: next, on: true, coinStamp: coinStampNow, nextArt: where ? findImageSource(where.item)
-        : upNext ? findImageSource({ icon_url: upNext.icon_url, variant_slug: upNext.variant_slug, name: upNext.name }) : null });
+      // One store write: only the badge host re-renders on the answer (never the catch layer, wave 5 round 3). The answer's
+      // React work (this and the counter's stream plan) commits inside the held frame, where nothing moves, never mid wind-up.
+      const content: Partial<BadgeContent> = { summary: next, on: true, coinStamp: coinStampNow, nextArt: where ? findImageSource(where.item)
+        : upNext ? findImageSource({ icon_url: upNext.icon_url, variant_slug: upNext.variant_slug, name: upNext.name }) : null };
+      let streamPlan: Parameters<typeof streamHud>[1] | null = null;
       const flightAt = where ? whereFlightAt(plan) : -1;
       if (where) whereSV.value = { on: 1, at: flightAt, x0: nextDiscRef.current.x, y0: nextDiscRef.current.y, x1: where.x, y1: where.y };
       const list: Beat[] = [...ladder,
@@ -1523,7 +1536,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
           coinGeo.value = { fx: stage.x, fy: stage.y, tx: chip.x - off.x, ty: chip.y - off.y };
           coinN.value = stream.count;
           coinLands.forEach((at, i) => list.push({ at, kind: BEAT.coin, arg: i }));
-          streamHud('coins', { id: streamIdRef.current, gain: coins, lands });
+          streamPlan = { id: streamIdRef.current, gain: coins, lands };
           end = Math.max(end, lands[lands.length - 1] + COUNT.ms + 400);
         } else {
           // No counter on screen, or Reduce Motion: the counter simply rolls once, a beat after the burst.
@@ -1533,6 +1546,13 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       // The where-next flight lands and lingers on the clock, which runs on past done for it (the map is free by then).
       if (flightAt >= 0) end = Math.max(end, flightAt + WHERE.totalMs);
       list.sort((a, b) => a.at - b.at);
+      const commitAnswer = () => {
+        if (!alive()) return;
+        badgeStore.set(content);
+        if (streamPlan) streamHud('coins', streamPlan);
+      };
+      const commitIn = plan.reduced ? 0 : plan.hitStopAt + 10 - (Date.now() - t0);
+      if (commitIn > 0) setTimeout(commitAnswer, commitIn); else commitAnswer();
       beats.value = list;
       endAt.value = end;
       if (plan.reduced) {

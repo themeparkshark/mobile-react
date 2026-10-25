@@ -677,7 +677,7 @@ test('wave 5 r2: the catch clock starts on the tap, and the pin follows it until
   assert.match(effect, /startRef\.current = \(\) => \{ startRef\.current = null; runOnUI\(showCopy\)\(pivotId\); \};/);
   assert.match(src, /const showCopy = \(pivot: number\) => \{\s*'worklet';\s*catchHidePivot\.value = pivot;\s*copyOn\.value = 1;/);
   // The start never runs behind the tap: it begins at the time already gone (one or two frames at most).
-  assert.match(src, /const elapsed = Math\.max\(0, now - tapAt\);\s*[^\n]*\n\s*const e = Math\.min\(48, elapsed\);/);
+  assert.match(src, /const elapsed = Math\.max\(0, now - tapAt\);[\s\S]{0,400}const e = Math\.min\(48, elapsed\);/);
   // Until the copy draws, the pin rises, glides and wobbles with the clock.
   assert.match(src, /if \(!clockOn\.value \|\| copyOn\.value\) return null;/);
   const pin = read('src/screens/ExploreScreen/PrepItem.tsx');
@@ -699,7 +699,7 @@ test('wave 5 r2: the answer never holds the clock for a React commit; a server w
   assert.match(cont, /Math\.max\(0\.8, \(tail - behind\) \/ tail\)/);
   assert.match(cont, /cc\.value = withTiming\(end, \{ duration: total, easing: twoSpeed \}\);/, 'one timing, no frame lost at a hand-over');
   // The wind-up aims the held frame at its planned wall time from the tap (at most a third faster).
-  assert.match(src, /const duration = Math\.max\(1, hitStopAt \* 0\.75, hitStopAt - elapsed\);\s*heldGoal\.value = now \+ duration;/);
+  assert.match(src, /const duration = Math\.max\(1, hitStopAt \* 0\.65, hitStopAt - elapsed\);\s*heldGoal\.value = now \+ duration;/);
   // On every plan the done frame lands by 2.6 s from the tap, even when the server answered 150 ms after the held frame.
   for (const plan of [wow.catchPlan({ reduced: false }), wow.catchPlan({ reduced: false, milestone: true }),
     wow.catchPlan({ reduced: false, repeat: true }), wow.catchPlan({ reduced: false, repeat: true, treat: true })]) {
@@ -905,6 +905,8 @@ test('wave 5 r3: the answer re-renders only the badge host (no catch-layer commi
   assert.match(src, /const c = useSyncExternalStore\(store\.subscribe, store\.get\);/);
   const answer = src.slice(src.indexOf("catchMark('answer');"), src.indexOf('runOnUI(markCaught)();'));
   assert.equal((answer.match(/badgeStore\.set\(/g) || []).length, 1, 'one store write on the answer');
+  assert.match(answer, /const commitIn = plan\.reduced \? 0 : plan\.hitStopAt \+ 10 - \(Date\.now\(\) - t0\);/, 'committed inside the held frame');
+  assert.match(src, /const EMPTY_BADGE: BadgeContent = \{ summary: PLACEHOLDER_SUMMARY/, 'the badge views mount with the map');
   assert.doesNotMatch(answer, /\bset(?!Timeout)[A-Z]\w*\(/, 'no React state set on the answer');
   // Captures count every real frame (the probe only logs when the clock moves).
   assert.match(read('src/screens/ExploreScreen/HomeCatchPreviewScreen.tsx'), /\[frame\] \$\{Date\.now\(\)\} dt=/);
