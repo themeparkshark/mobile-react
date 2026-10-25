@@ -489,7 +489,7 @@ test('wave 3 round 4: Awesome! never moves after it shows, and the CTA is pinned
 test('wave 3 round 4: tier plates have ink edges, Prismatic has a few long rays, rings glow without shadows', () => {
   const tierPlateLook = pureFrom('src/components/coin/TierPlate.tsx', 'tierPlateLook', { coinTier: loadTs('src/constants/coinTiers.ts').coinTier });
   const prism = tierPlateLook(4), legend = tierPlateLook(5);
-  assert.ok(prism.rays <= 8 && prism.reach >= 1.38, 'Prismatic: 8 chunky rays, not a gear edge');
+  assert.ok(prism.rays >= 8 && prism.rays <= 12 && prism.reach >= 1.38, 'Prismatic: a few long light rays, not a gear edge');
   assert.ok(legend.rays > prism.rays && legend.reach > prism.reach, 'Legendary is still the biggest sunburst');
   const plate = read('src/components/coin/TierPlate.tsx');
   assert.ok(/borderBottomColor: PLATE_INK/.test(plate), 'every ray has an ink edge behind it');

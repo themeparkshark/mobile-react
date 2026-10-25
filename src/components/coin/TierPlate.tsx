@@ -21,8 +21,8 @@ export function tierPlateLook(level: number): {
 } {
   const tier = coinTier(level);
   if (tier.fx === 'starburst') return { rays: 16, reach: 1.5, altReach: 1.5, colors: [tier.ring, '#ffe27a'], glint: null, disc: 1.2 };
-  // Prismatic: a few long, chunky light rays (a hand-drawn badge), never a fine gear edge.
-  if (tier.fx === 'rays') return { rays: 8, reach: 1.48, altReach: 1.3, colors: [tier.ring, '#ffffff'], glint: '#ffffff', disc: 1.1 };
+  // Prismatic: a shine of 12 light rays, long and short in turn (a hand-drawn badge, never a compass or a gear edge).
+  if (tier.fx === 'rays') return { rays: 12, reach: 1.48, altReach: 1.32, colors: [tier.ring, '#ffffff'], glint: '#ffffff', disc: 1.1 };
   if (tier.level >= 6) return { rays: 10, reach: 1.3, altReach: 1.3, colors: [tier.ring, tier.ringDeep], glint: null, disc: 1.2 };
   return { rays: 0, reach: 1.22, altReach: 1.22, colors: [tier.ring, tier.ringDeep], glint: null, disc: 1.2 };
 }
