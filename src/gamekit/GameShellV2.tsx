@@ -91,6 +91,12 @@ import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 const COUNT_HOLD_MS = __DEV__ ? Number(process.env.EXPO_PUBLIC_COUNT_HOLD_MS || -1) : -1;
 /** Dev capture only: how long a capture hold lasts (EXPO_PUBLIC_DEV_HOLD_FOR_MS, default 6 s). */
 const CAPTURE_HOLD_FOR = __DEV__ ? Number(process.env.EXPO_PUBLIC_DEV_HOLD_FOR_MS || 6000) : 6000;
+/**
+ * Capture only (EXPO_PUBLIC_COUNT_TRACE=1 with the Whack capture; store builds never set it): after each start a
+ * small line shows how many UI frames drew 3, 2, 1 and GO, the longest frame gap, and the game's clock on GO's
+ * frame and at the tail's end, so a screenshot proves the start even when a screen recorder drops frames.
+ */
+const COUNT_TRACE = process.env.EXPO_PUBLIC_COUNT_TRACE === '1';
 import { EASE } from '../ui/motionEasing';
 import { usePowerBudget } from '../power';
 
@@ -452,6 +458,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const cdHeld = useSharedValue(0);
     const cdPillExitAt = useSharedValue(NO_PILL_EXIT);
     const cdReduced = useSharedValue(reducedMotion);
+    const cdTrace = useSharedValue({ f0: 0, f1: 0, f2: 0, f3: 0, maxDt: 0, goRem: -1 });
+    const [countTrace, setCountTraceRaw] = useState<string | null>(null);
+    const traceMountAt = useRef(Date.now());
+    const traceStageMs = useRef(0);
+    const setCountTrace = useCallback((s: string) => setCountTraceRaw(`open to count ${traceStageMs.current}ms, ${s}`), []);
     useEffect(() => { cdReduced.value = reducedMotion; }, [reducedMotion, cdReduced]);
     // w5r2, one callout at a time: a game's picture demo (countdownDemo) plays alone in its pill on the first
     // start, then shrinks away BEFORE the 3 lands (w5r3: no frame shows the pill and a number together); a
@@ -509,6 +520,14 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         pillOut.value = cdReduced.value ? (p > 0 ? 1 : 0) : p * p;
       }
       cdClock.value = t >= cdFrom.value && t < COUNT_END_MS ? t : -1;
+      if (COUNT_TRACE) {
+        const tr = cdTrace.value;
+        const ix = countPose(cdClock.value, false, false).index;
+        if (ix === 0) tr.f0 += 1; else if (ix === 1) tr.f1 += 1; else if (ix === 2) tr.f2 += 1; else if (ix === 3) tr.f3 += 1;
+        const raw = frame.timeSincePreviousFrame ?? 0;
+        if (raw > tr.maxDt) tr.maxDt = raw;
+        if (ix === 3 && tr.goRem < 0) tr.goRem = remainingMs ? remainingMs.value : -2;
+      }
       const ats = cdAts.value;
       const i = cdNext.value;
       // At most one step per frame, so every number and GO is drawn on its own frame.
@@ -519,9 +538,13 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       if (t >= COUNT_END_MS && cdNext.value >= ats.length) {
         cdLive.value = false;
         cdClock.value = -1;
+        if (COUNT_TRACE) {
+          const tr = cdTrace.value;
+          runOnJS(setCountTrace)(`frames 3:${tr.f0} 2:${tr.f1} 1:${tr.f2} GO:${tr.f3} maxgap ${Math.round(tr.maxDt)}ms clock@GO ${Math.round(tr.goRem)} @end ${remainingMs ? Math.round(remainingMs.value) : -2}`);
+        }
         runOnJS(onCountDone)();
       }
-    }, [cdLive, cdT, cdHeld, cdPillExitAt, cdReduced, pillOut, cdClock, cdFrom, cdAts, cdNext, onCountStep, onCountDone]);
+    }, [cdTrace, remainingMs, cdLive, cdT, cdHeld, cdPillExitAt, cdReduced, pillOut, cdClock, cdFrom, cdAts, cdNext, onCountStep, onCountDone]);
     const countFrame = useFrameCallback(countFrameFn, false);
     countFrameRef.current = countFrame;
     // Start the anchored clock `lead` ms before the first step (the demo pill's time, then its exit).
@@ -536,6 +559,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       cdPillExitAt.value = lead > 0 ? from - COACH_EXIT_MS : NO_PILL_EXIT;
       cdT.value = from - lead;
       cdClock.value = -1;
+      if (COUNT_TRACE) {
+        cdTrace.value = { f0: 0, f1: 0, f2: 0, f3: 0, maxDt: 0, goRem: -1 };
+        traceStageMs.current = Date.now() - traceMountAt.current;
+      }
       cdLive.value = true;
       setGoTail(true);
       countFrame.setActive(true);
@@ -1038,6 +1065,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </View>
           ) : null}
 
+          {COUNT_TRACE && countTrace ? <Text style={styles.countTrace}>{countTrace}</Text> : null}
           {/* Countdown: scrim (fades at GO), the bubble numbers, the instruction pill, tap anywhere to skip. */}
           {/* Mounted for the whole count (drawing nothing until the clock starts), so the 3 lands on the
               first frame of the count instead of waiting for a canvas to mount. */}
@@ -1212,6 +1240,7 @@ function GoalMeter({ current, target, label, reducedMotion }: { current: number;
 }
 
 const styles = StyleSheet.create({
+  countTrace: { position: 'absolute', left: 4, right: 4, bottom: 4, fontSize: 11, color: '#05346e', backgroundColor: 'rgba(255,255,255,0.85)' },
   resultsStill: { opacity: 1, transform: [{ scale: 1 }] },
   root: {
     flex: 1,

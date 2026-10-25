@@ -167,6 +167,12 @@ const SHINE_END = { x: 1, y: 0.5 } as const;
 /** Gold sparkles in the roll's end pop (capped; none with Reduce Motion). */
 const POP_SPARKS = 6;
 
+/** The +N's width (pt) at 54 pt: room for its final value, so a climbing number is never clipped. */
+export function breatherScoreWidth(total: number): number {
+  const chars = 1 + Math.max(1, Math.round(Math.max(0, total))).toLocaleString('en-US').length;
+  return Math.min(220, Math.max(120, chars * 23 + 6));
+}
+
 /** The first number the roll shows: a fifth of the total, so the card never says +0 for points you earned. */
 export function breatherRollFrom(total: number): number {
   return total > 0 ? Math.max(1, Math.round(total * BREATHER_ROLL.fromShare)) : 0;
@@ -389,6 +395,9 @@ export function Breather(p: BreatherProps) {
   }));
   const dimStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, enter.value * 1.6) }));
   const theme = p.theme ?? 'park';
+  // w5r3: the number keeps the width of its final value while it climbs, so no digit is clipped mid-roll
+  // and the +N stays centred under the fan.
+  const scoreWidth = breatherScoreWidth(p.burstScore);
   const tickEvery = Math.max(1, Math.round(p.burstScore / 10));
   // At most 3 picture stats: the run total (only when it differs from this Burst) and two chips.
   const showRun = p.runScore !== p.burstScore;
@@ -405,6 +414,16 @@ export function Breather(p: BreatherProps) {
       {/* The animated layer carries only the motion; the bordered cream card is a plain view inside it. */}
       <Animated.View style={[cardStyle, { marginTop: p.top ?? 14 }]}>
       <View style={styles.card} accessibilityLabel={`Burst ${p.burstNumber} of ${p.bursts} banked. ${p.burstScore} points.`}>
+        {/* The money frame: the gold ray fan behind the +N, kept inside the card's own edge (a second fan on a
+            special card's pop). It sits under everything on the card. */}
+        {fancy && p.burstScore > 0 ? (
+          <View pointerEvents="none" style={styles.fanClip}>
+            <View style={styles.fanAnchor}>
+              <GoldBurst size={CARD_FAN.size} amount={fan} bloom={fanBloom} spin={false} />
+              {p.special ? <View style={StyleSheet.absoluteFill}><GoldBurst size={CARD_FAN.size} amount={extraFan} spin={false} /></View> : null}
+            </View>
+          </View>
+        ) : null}
         {/* Bursts as pips: banked ones are gold with a check (no words). */}
         <View style={styles.pips}>
           {Array.from({ length: p.bursts }, (_, i) => (
@@ -414,19 +433,12 @@ export function Breather(p: BreatherProps) {
           ))}
         </View>
         <View style={styles.scoreRow}>
-          {/* The money frame: the gold ray fan behind the +N (a second one on a special card's pop). */}
-          {fancy && p.burstScore > 0 ? (
-            <View pointerEvents="none" style={styles.fanAnchor}>
-              <GoldBurst size={CARD_FAN.size} amount={fan} bloom={fanBloom} spin={false} />
-              {p.special ? <View style={StyleSheet.absoluteFill}><GoldBurst size={CARD_FAN.size} amount={extraFan} spin={false} /></View> : null}
-            </View>
-          ) : null}
           <Animated.View pointerEvents="none" style={[styles.popRing, ringStyle]} />
           {p.reduced || p.burstScore <= 0 ? null : Array.from({ length: POP_SPARKS }, (_, k) => <PopSpark key={k} k={k} pop={pop} />)}
           <GameIcon name="coins" size={34} />
           <CountUpText value={p.burstScore} fromValue={rollFrom} reducedMotion={p.reduced} prefix="+" delayMs={enterIn + roll.landMs}
             durationMs={roll.ms} easing={ROLL_EASE} punch={roll.punch} punchAt="end" tickEvery={tickEvery} onTick={p.onCountTick}
-            onDone={p.onRollDone} style={styles.cardScore} />
+            onDone={p.onRollDone} style={[styles.cardScore, { minWidth: scoreWidth }]} />
           {p.special && fancy && p.burstScore > 0 ? <SparkleBurst progress={extra} count={10} radius={130} /> : null}
         </View>
         {p.bonks != null ? (
@@ -622,7 +634,9 @@ const styles = StyleSheet.create({
   multBadge: { position: 'absolute', top: -10, right: -8, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 3, borderColor: NAVY, paddingHorizontal: 7, paddingVertical: 1 },
   multText: { fontFamily: 'Shark', fontSize: 18, color: NAVY },
   dim: { ...StyleSheet.absoluteFillObject, backgroundColor: BREATHER_VEIL },
-  fanAnchor: { position: 'absolute', left: '50%', top: '50%', width: CARD_FAN.size, height: CARD_FAN.size, marginLeft: -CARD_FAN.size / 2, marginTop: -CARD_FAN.size / 2 },
+  fanClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 18, overflow: 'hidden' },
+  fanAnchor: { position: 'absolute', left: '50%', top: COIN_TARGET_Y - 4, width: CARD_FAN.size, height: CARD_FAN.size,
+    marginLeft: -CARD_FAN.size / 2, marginTop: -CARD_FAN.size / 2 },
   coinAnchor: { position: 'absolute', left: '50%', top: COIN_TARGET_Y, width: 0, height: 0 },
   flyCoin: { position: 'absolute', left: -15, top: -15, width: 30, height: 30 },
   goalFlame: { flexDirection: 'row', alignItems: 'center', marginLeft: 6, opacity: 0.4 },

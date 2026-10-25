@@ -128,3 +128,16 @@ test('the exit pad: a 60 pt round trophy button set clear of the GO pads', () =>
   assert.match(ov, /bank: \{ marginTop: 18, width: 60, height: 60, alignItems: 'center', justifyContent: 'center',\n\s+borderRadius: 30,/);
   assert.match(ov, /<GameIcon name="trophy" size=\{32\} \/>\n\s+<View style=\{styles\.bankCheck\}><GameIcon name="check" size=\{18\} \/><\/View>/);
 });
+
+test('the card fan sits on the +N inside the card edge, and the climbing number keeps its final width', () => {
+  const ov = read('src/games/whack/ui/Overlays.tsx');
+  assert.match(ov, /fanClip: \{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 18, overflow: 'hidden' \}/);
+  assert.match(ov, /top: COIN_TARGET_Y - 4, width: CARD_FAN\.size/, 'the fan centres on the +N, where the coins land');
+  assert.match(ov, /style=\{\[styles\.cardScore, \{ minWidth: scoreWidth \}\]\}/);
+  const m = /export function breatherScoreWidth\(total: number\): number \{[\s\S]*?\n\}/.exec(ov);
+  // eslint-disable-next-line no-new-func
+  const w = new Function(`${m[0].replace(/^export /, '').replace('(total: number): number', '(total)')}\nreturn breatherScoreWidth;`)();
+  assert.equal(w(0), 120);
+  assert.equal(w(2645), 6 * 23 + 6);
+  assert.ok(w(123456) <= 220, 'fits the SE card next to the coin');
+});
