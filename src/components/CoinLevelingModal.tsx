@@ -27,7 +27,7 @@ import { playLimited, SFX_PRIORITY } from '../audio/sfxLimiter';
 import { usePresentationSlot } from '../hooks/usePresentationQueue';
 import type { LevelUpResult } from '../api/endpoints/me/ride-coins/level-up';
 import CoinStand from './coin/CoinStand';
-import TierPlate from './coin/TierPlate';
+import TierPlate, { plateRoom } from './coin/TierPlate';
 import Crowning from './coin/Crowning';
 import LevelUpBurst from './coin/LevelUpBurst';
 import PerkTrack from './coin/PerkTrack';
@@ -79,7 +79,14 @@ const SUCCESS_TEXT_DROP = SHORT_PHONE ? 0 : 22;
 export function standRoom(level: number, success: boolean, shortPhone: boolean): number {
   if (coinTier(level).stand === 'none') return 0;
   // A short phone's success coin on a stand does not grow or drop (tightStand), so it needs only the card's room.
-  return success && !shortPhone ? 18 : 10;
+  return success && !shortPhone ? 28 : 16;
+}
+/**
+ * How much deeper the blue band reaches than the room under a stand: the stand's navy foot rests inside the band,
+ * on its floor, instead of hanging past it into the pale card.
+ */
+export function standFloor(level: number): number {
+  return coinTier(level).stand === 'none' ? 0 : 12;
 }
 /** Vertical padding of the success box, the breathing gap it keeps after fitting, and when and how fast it fits. */
 const SUCCESS_BOX_PAD = SHORT_PHONE ? 4 : 10;
@@ -688,7 +695,9 @@ export default function CoinLevelingModal({
             contentContainerStyle={{ paddingBottom: ctaPinned ? 4 : 14 }}
           >
             <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: (state === 'success' ? 185 + SUCCESS_TEXT_DROP : 185)
-                + standRoom(state === 'success' ? nextLevel : currentLevel, state === 'success', SHORT_PHONE),
+                + standRoom(state === 'success' ? nextLevel : currentLevel, state === 'success', SHORT_PHONE)
+                + standFloor(state === 'success' ? nextLevel : currentLevel)
+                + plateRoom(nextLevel, state === 'success', SHORT_PHONE),
               backgroundColor: '#168AD7', borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }} />
             <View style={{ position: 'absolute', top: 16, left: 20, width: 15, height: 15,
               borderRadius: 8, borderWidth: 2, borderColor: '#FFFFFF88' }} />
@@ -708,7 +717,8 @@ export default function CoinLevelingModal({
                   >
                     <View ref={coinRef} collapsable={false} onLayout={() => { if (!anchor) measureAnchor(); }} style={{ alignItems: 'center', justifyContent: 'center', marginTop: (state === 'success' ? nextLevel : currentLevel) >= 10 ? 26 : 0,
                       marginBottom: ((state === 'success' ? nextLevel : currentLevel) >= 6 ? 14 : 0)
-                        + standRoom(state === 'success' ? nextLevel : currentLevel, state === 'success', SHORT_PHONE) }}>
+                        + standRoom(state === 'success' ? nextLevel : currentLevel, state === 'success', SHORT_PHONE)
+                        + plateRoom(nextLevel, state === 'success', SHORT_PHONE) }}>
                       {/* Mounted with the card (hidden at 0), like every burst layer: nothing new mounts on the tap. */}
                       {state !== 'maxed' && (
                         <View pointerEvents="none" style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>

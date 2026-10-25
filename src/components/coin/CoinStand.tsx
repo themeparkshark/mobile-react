@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { coinTier } from '../../constants/coinTiers';
+import { PLATE_INK } from './TierPlate';
 
 /**
  * The stand under a Level 6+ coin and the crown on a Level 10 coin
@@ -48,7 +49,10 @@ function CoinStand({ level, size, layer, pennantColor = '#1f5fbf' }: CoinStandPr
       )}
       <View style={[styles.top, { width, height, borderRadius: height / 2,
         backgroundColor: tier.stand === 'crown_dais' ? '#ffcf3b' : '#ffffff',
-        borderColor: gold ? '#d99a00' : tier.ring, borderWidth: Math.max(2, size * 0.035) }]}>
+        borderColor: PLATE_INK, borderWidth: Math.max(2, size * 0.022) }]}>
+        {/* Drawn like Alex's art: an ink edge, a band of the tier colour under it and a soft shade on the lower half. */}
+        <View style={[styles.shade, { height: height * 0.42, backgroundColor: tier.stand === 'crown_dais' ? '#f5b81c' : '#d8efff' }]} />
+        <View style={[styles.lip, { borderRadius: height / 2, borderColor: gold ? '#d99a00' : tier.ring, borderWidth: Math.max(1.5, size * 0.016) }]} />
         {/* Wave scallops on the plinth top. */}
         {(tier.stand === 'wave' || tier.stand === 'wave_foam') && [0.2, 0.5, 0.8].map(x => (
           <View key={x} style={[styles.scallop, { left: width * x - size * 0.07, width: size * 0.14, height: size * 0.07,
@@ -56,7 +60,8 @@ function CoinStand({ level, size, layer, pennantColor = '#1f5fbf' }: CoinStandPr
         ))}
       </View>
       <View style={[styles.base, { width: width * 0.8, height: height * 0.7, borderBottomLeftRadius: height / 2,
-        borderBottomRightRadius: height / 2, backgroundColor: tier.stand === 'crown_dais' ? '#d99a00' : tier.ringDeep }]} />
+        borderBottomRightRadius: height / 2, backgroundColor: tier.stand === 'crown_dais' ? '#d99a00' : tier.ringDeep,
+        borderColor: PLATE_INK, borderWidth: Math.max(2, size * 0.02), borderTopWidth: 0 }]} />
       {tier.stand === 'wave_foam' && [0.12, 0.86, 0.95].map((x, i) => (
         <View key={x} style={[styles.bubble, { left: width * x, top: -size * (0.05 + i * 0.06), width: size * (0.07 - i * 0.015),
           height: size * (0.07 - i * 0.015) }]} />
@@ -68,6 +73,8 @@ function CoinStand({ level, size, layer, pennantColor = '#1f5fbf' }: CoinStandPr
 const styles = StyleSheet.create({
   wrap: { position: 'absolute', alignSelf: 'center', alignItems: 'center' },
   top: { zIndex: 2, overflow: 'hidden' },
+  shade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  lip: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   base: { marginTop: -2 },
   scallop: { position: 'absolute', top: 1, borderBottomWidth: 2, borderLeftWidth: 0, borderRightWidth: 0, borderRadius: 20 },
   bubble: { position: 'absolute', borderRadius: 20, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#5fd0ff' },

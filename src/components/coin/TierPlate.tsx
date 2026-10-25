@@ -18,6 +18,26 @@ export function tierPlateLook(level: number): { readonly rays: number; readonly 
   return { rays: 0, reach: 1.22, colors: [tier.ring, tier.ringDeep] };
 }
 
+/** How much shorter the lowest ray is than the top one (coin radii): the sunburst sits on the card's blue band like a
+ * rising sun, so its lower rays never reach the words under the coin. */
+export const LOW_RAY_TRIM = 0.15;
+
+/** How far ray i (0 points straight up) reaches, in coin radii: full on the top half, a little shorter towards the bottom. */
+export function rayReach(reach: number, rays: number, i: number): number {
+  const down = Math.max(0, -Math.cos((2 * Math.PI * i) / rays));
+  return reach - LOW_RAY_TRIM * down;
+}
+
+/**
+ * Extra room under a success coin whose plate throws rays (Prismatic and Legendary, no stand): the blue band and the
+ * line under the coin move down this far, so the ray tips stay on the band and clear of "YOUR COIN LEVELED UP".
+ */
+export function plateRoom(level: number, success: boolean, shortPhone: boolean): number {
+  const tier = coinTier(level);
+  if (!success || tier.stand !== 'none' || tierPlateLook(level).rays === 0) return 0;
+  return shortPhone ? 4 : 8;
+}
+
 /**
  * The new tier's plate behind the coin: plain Views (no shadow), still once it lands. A disc in the tier's metal,
  * and from Prismatic up a ring of pointed rays, so Gold, Prismatic and Legendary are told apart without text.
@@ -40,17 +60,22 @@ export default function TierPlate({ level, size, progress }: {
   return (
     <Reanimated.View pointerEvents="none" style={[{ position: 'absolute', width: reach * 2, height: reach * 2,
       alignItems: 'center', justifyContent: 'center' }, style]}>
-      {Array.from({ length: look.rays }, (_, i) => (
-        <View key={i} style={{ position: 'absolute', width: reach * 2, height: reach * 2, alignItems: 'center',
-          transform: [{ rotate: `${(360 / look.rays) * i}deg` }] }}>
-          {/* The ink edge: the same ray a little bigger, behind it. */}
-          <View style={{ position: 'absolute', top: -INK_TIP, width: 0, height: 0, borderLeftWidth: rayHalf + INK_SIDE,
-            borderRightWidth: rayHalf + INK_SIDE, borderBottomWidth: rayLen + INK_TIP,
-            borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: PLATE_INK }} />
-          <View style={{ width: 0, height: 0, borderLeftWidth: rayHalf, borderRightWidth: rayHalf, borderBottomWidth: rayLen,
-            borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: look.colors[i % 2] }} />
-        </View>
-      ))}
+      {Array.from({ length: look.rays }, (_, i) => {
+        // The lower rays are a little shorter: each starts lower in its turned box, so its tip stops nearer the coin.
+        const tip = reach - r * rayReach(look.reach, look.rays, i);
+        const len = rayLen - tip;
+        return (
+          <View key={i} style={{ position: 'absolute', width: reach * 2, height: reach * 2, alignItems: 'center',
+            transform: [{ rotate: `${(360 / look.rays) * i}deg` }] }}>
+            {/* The ink edge: the same ray a little bigger, behind it. */}
+            <View style={{ position: 'absolute', top: tip - INK_TIP, width: 0, height: 0, borderLeftWidth: rayHalf + INK_SIDE,
+              borderRightWidth: rayHalf + INK_SIDE, borderBottomWidth: len + INK_TIP,
+              borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: PLATE_INK }} />
+            <View style={{ marginTop: tip, width: 0, height: 0, borderLeftWidth: rayHalf, borderRightWidth: rayHalf, borderBottomWidth: len,
+              borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: look.colors[i % 2] }} />
+          </View>
+        );
+      })}
       <View style={{ position: 'absolute', width: disc * 2 + 5, height: disc * 2 + 5, borderRadius: disc + 2.5,
         backgroundColor: PLATE_INK }} />
       <View style={{ position: 'absolute', width: disc * 2, height: disc * 2, borderRadius: disc, backgroundColor: tier.halo,

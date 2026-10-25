@@ -515,7 +515,7 @@ test('wave 3 rerun round 2: the daily chest card keeps one height from the tap t
   assert.ok(!/bodyBandStyle/.test(chest), 'the body copy is never hidden, so it never draws late');
   assert.ok(/<View style=\{styles\.footerSlot\}>\s*<Animated\.View[^>]*>\s*<Pressable onPress=\{dismiss\} disabled=\{phase !== 'open'\}/.test(chest), 'Awesome! is laid out from the start');
   assert.ok(/<Animated\.View style=\{revealInStyle\}>\s*<Pressable onPress=\{dismiss\}/.test(chest), 'it stays hidden until the lid pops (its fade is always attached)');
-  assert.ok(/<Animated\.Text style=\{\[styles\.subtitle, revealOutStyle\]\}/.test(chest) && /<Animated\.Text style=\{\[styles\.subtitle, styles\.over, revealInStyle\]\}/.test(chest), 'both subtitle lines keep their fades attached');
+  assert.ok(/<Animated\.Text style=\{\[styles\.subtitle, subtitleOutStyle\]\}/.test(chest) && /<Animated\.Text style=\{\[styles\.subtitle, styles\.over, subtitleInStyle\]\}/.test(chest), 'both subtitle lines keep their fades attached');
   assert.ok(/if \(phase !== 'closed'\) return;\s*cancelAnimation\(reveal\); reveal\.value = 0;/.test(chest), 'a shut chest always starts with today\'s words');
   assert.ok(/styles\.laterButton, styles\.laterInSlot/.test(chest), 'Back to map sits in the same spot while the chest is shut');
   assert.ok(!/\{phase === 'open' && \(\s*<Pressable onPress=\{dismiss\}/.test(chest), 'no button mounts at the payoff');
@@ -526,7 +526,7 @@ test('wave 3 rerun round 2: the open card commits hidden a frame before the lid 
   assert.ok(/pendingCelebrate\.current = isTicket;\s*setPhase\('open'\);/.test(chest), 'the server answer only commits the (hidden) open card');
   assert.ok(/celebrateRef\.current\(isTicket\); \}, reducedMotionRef\.current \? 0 : POP_AFTER_COMMIT_MS\);/.test(chest), 'the pop starts a frame after that commit');
   const celebrate = chest.slice(chest.indexOf('const celebrate = '), chest.indexOf('const pendingCelebrate'));
-  assert.ok(/hintOut\.value = withTiming\(1, \{ duration: 90 \}\);\s*reveal\.value = withTiming\(1,/.test(celebrate), '"Opening your chest" fades and the open words fade in with the pop, on the UI thread');
+  assert.ok(/hintOut\.value = withTiming\(1, \{ duration: 90 \}\);\s*(\/\/[^\n]*\s*)?reveal\.value = withTiming\(1,/.test(celebrate), '"Opening your chest" fades and the open words fade in with the pop, on the UI thread');
   assert.ok(/hintOut\.value = 1; reveal\.value = 1;/.test(celebrate), 'reduced motion shows them at once');
   assert.ok(/<CountUpText value=\{phase === 'open' \? amount : countStart\(amount\)\} prefix="\+"\s*delayMs=\{phase === 'open' && !reducedMotion \? COUNT_DELAY_MS : 0\}/.test(chest), 'the count waits on its own delay (no React update to start it)');
   assert.ok(!/setShown\(/.test(chest), 'no count state updates during the pop');
@@ -548,7 +548,7 @@ test('wave 3 rerun round 2: a React commit mid-pop can never leave the chest shu
   }
   assert.ok(m.resyncShift(1) !== m.resyncShift(0) && m.resyncShift(1) < 0.01, 'transforms move a sub-pixel');
   const chest = read('src/components/DailyGiftModal.tsx');
-  assert.ok(/useEffect\(\(\) => \{\s*if \(phase === 'closed'\) return undefined;\s*const flip = \(\) => \{ resync\.value = resync\.value \? 0 : 1; \};/.test(chest), 'flipped after every commit while the chest opens');
+  assert.ok(/useEffect\(\(\) => \{\s*if \(phase === 'closed'\) return undefined;\s*if \(!resyncLive\.current\) return undefined;[^\n]*\s*const flip = \(\) => \{ resync\.value = resync\.value \? 0 : 1; \};/.test(chest), 'flipped after every commit while the chest opens (until the pop has landed)');
   for (const name of ['chestStyle', 'prizeStyle', 'mouthStyle', 'seamStyle', 'lidStyle', 'wholeChestStyle', 'riseStyle', 'ticketStyle', 'sparkStyle']) {
     const at = chest.indexOf(`const ${name} = useAnimatedStyle(`);
     assert.ok(at > 0 && /resync\.value/.test(chest.slice(at, chest.indexOf('}));', at) + 4) || chest.slice(at, at + 600).includes('resync.value')), `${name} reads resync`);
@@ -607,4 +607,47 @@ test('wave 5: a coin on a stand (Level 6 and up) keeps its stand clear of "YOUR 
   assert.ok(/const tightStand = SHORT_PHONE && coinTier\(successLevel\)\.stand !== 'none';/.test(modal)
     && /translateY: coinDrop \* grow\.value \}, \{ scale: coinPop\.value \* \(1 \+ \(coinGrow - 1\) \* grow\.value\)/.test(modal),
     'on a short phone a coin on a stand keeps its size, so the prize box is not cut off above Awesome!');
+});
+
+test('wave 5 round 2: ray plates stay on the band, stands rest inside it, the chest line swaps cleanly, the resend guard stops', () => {
+  const tiers = loadTs('src/constants/coinTiers.ts');
+  const PLATE = 'src/components/coin/TierPlate.tsx';
+  const tierPlateLook = pureFrom(PLATE, 'tierPlateLook', { coinTier: tiers.coinTier });
+  const LOW_RAY_TRIM = constFrom(PLATE, 'LOW_RAY_TRIM');
+  const rayReach = pureFrom(PLATE, 'rayReach', { LOW_RAY_TRIM });
+  const plateRoom = pureFrom(PLATE, 'plateRoom', { coinTier: tiers.coinTier, tierPlateLook });
+  for (const lvl of [4, 5]) {
+    const look = tierPlateLook(lvl);
+    assert.equal(rayReach(look.reach, look.rays, 0), look.reach, `Lv${lvl}: the top ray keeps its full reach`);
+    assert.ok(Math.abs(rayReach(look.reach, look.rays, look.rays / 2) - (look.reach - LOW_RAY_TRIM)) < 1e-9, `Lv${lvl}: the bottom ray is the shortest`);
+    assert.ok(LOW_RAY_TRIM >= 0.1 && LOW_RAY_TRIM <= 0.2, 'a gentle taper (still a sunburst)');
+    assert.ok(plateRoom(lvl, true, false) >= 6 && plateRoom(lvl, true, true) > 0, `Lv${lvl}: the band and the line make room on success`);
+    assert.equal(plateRoom(lvl, false, false), 0, 'no plate on the pre-tap card');
+  }
+  for (const lvl of [1, 2, 3, 6, 7]) assert.equal(plateRoom(lvl, true, false), 0, `Lv${lvl}: no ray room (a disc, or the stand's room)`);
+  const plate = read(PLATE);
+  assert.ok(/const tip = reach - r \* rayReach\(look\.reach, look\.rays, i\);/.test(plate) && /top: tip - INK_TIP/.test(plate), 'each ray and its ink edge start lower by the same amount');
+
+  const LV = 'src/components/CoinLevelingModal.tsx';
+  const standFloor = pureFrom(LV, 'standFloor', { coinTier: tiers.coinTier });
+  for (const lvl of [1, 5]) assert.equal(standFloor(lvl), 0);
+  for (const lvl of [6, 7, 8, 9, 10]) assert.ok(standFloor(lvl) >= 10, `Lv${lvl}: the band reaches past the stand's navy foot`);
+  const modal = read(LV);
+  assert.ok(/\+ standFloor\(state === 'success' \? nextLevel : currentLevel\)\s*\+ plateRoom\(nextLevel, state === 'success', SHORT_PHONE\),/.test(modal), 'the band grows by both');
+  assert.equal((modal.match(/\+ plateRoom\(nextLevel, state === 'success', SHORT_PHONE\)/g) || []).length, 2, 'and the coin box by the ray room');
+
+  const DG = 'src/components/DailyGiftModal.tsx';
+  const SUBTITLE_SWAP = constFrom(DG, 'SUBTITLE_SWAP');
+  const out = pureFrom(DG, 'subtitleOut', { SUBTITLE_SWAP }), inn = pureFrom(DG, 'subtitleIn', { SUBTITLE_SWAP });
+  for (let v = 0; v <= 1.0001; v += 0.02) assert.ok(out(v) === 0 || inn(v) === 0, `never both lines at ${v.toFixed(2)}`);
+  assert.equal(out(0), 1); assert.equal(inn(0), 0); assert.equal(out(1), 0); assert.equal(inn(1), 1);
+  assert.ok(constFrom(DG, 'REVEAL_MS') * SUBTITLE_SWAP >= 60 && constFrom(DG, 'REVEAL_MS') * SUBTITLE_SWAP <= 90, 'the old line leaves in about 70 ms');
+  const chest = read(DG);
+  assert.ok(/translateY: \(1 - t\) \* SUBTITLE_RISE/.test(chest), 'the new line rises in');
+  assert.ok(/if \(!resyncLive\.current\) return undefined;/.test(chest), 'a settled card stops resending');
+  assert.ok(/resyncLive\.current = false;\s*resync\.value = resync\.value \? 0 : 1;/.test(chest), 'one last resend as it stops');
+  assert.ok(constFrom(DG, 'RESYNC_AFTER_POP_MS') >= 1500, 'after every beat (the Day 7 punch ends near 1.2 s)');
+
+  const post = read('src/components/PostWinRewardsModal.tsx');
+  assert.ok(/Image\.prefetch\(\[taskCoinUrl\], 'memory-disk'\)/.test(post), 'the coin art is warmed the moment the reward modal mounts (before the game is played)');
 });

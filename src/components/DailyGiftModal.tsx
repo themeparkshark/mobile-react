@@ -114,11 +114,16 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const mounted = useRef(true);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const punchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The resend guard (resync) runs from the tap until the pop has landed, then stops: a settled card does not
+  // recompute its styles on every render. The timer sends everything once more as it stops.
+  const resyncLive = useRef(false);
+  const resyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (revealTimer.current) clearTimeout(revealTimer.current);
+      if (resyncTimer.current) clearTimeout(resyncTimer.current);
       if (punchTimer.current) clearTimeout(punchTimer.current);
     };
   }, []);
@@ -263,6 +268,14 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   };
 
   const celebrate = (isTicket: boolean) => {
+    // Keep resending while the pop plays (the Day 7 punch is the last beat), then once more and stop.
+    resyncLive.current = true;
+    if (resyncTimer.current) clearTimeout(resyncTimer.current);
+    resyncTimer.current = setTimeout(() => {
+      resyncTimer.current = null;
+      resyncLive.current = false;
+      resync.value = resync.value ? 0 : 1;
+    }, reducedMotionRef.current ? 120 : RESYNC_AFTER_POP_MS);
     if (reducedMotionRef.current) {
       shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1; punch.value = 1; gold.value = 0.8; hop.value = 0; seam.value = 0; lid.value = 0;
       hintOut.value = 1; reveal.value = 1;
@@ -292,7 +305,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     burst.value = 0;
     burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) });
     hintOut.value = withTiming(1, { duration: 90 });
-    reveal.value = withTiming(1, { duration: 140, easing: EASE.out });
+    // One clean hand-off for the line under the ribbon: today's words fade out first, then "Day N collected!" rises in.
+    reveal.value = withTiming(1, { duration: REVEAL_MS, easing: EASE.out });
     prize.value = withDelay(120, withSpring(1, { damping: 9, stiffness: 150 }));
     stamp.value = withDelay(650, withSpring(1, { damping: 8, stiffness: 220 }));
     if (isTicket) {
@@ -342,6 +356,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const open = async () => {
     if (claiming.current || phase !== 'closed') return;
     claiming.current = true;
+    resyncLive.current = true;
     walletBefore.current = player?.coins ?? null;
     cancelAnimation(hintOut); hintOut.value = 0; cancelAnimation(reveal); reveal.value = 0;
     setPhase('opening');
@@ -412,6 +427,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const resync = useSharedValue(0);
   useEffect(() => {
     if (phase === 'closed') return undefined;
+    if (!resyncLive.current) return undefined; // the pop has landed: nothing is moving, nothing to resend
     const flip = () => { resync.value = resync.value ? 0 : 1; };
     flip();
     const again = setTimeout(flip, 40); // and once more after the native mount has landed
@@ -430,7 +446,13 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: cardShake.value }] }));
   const hintStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(1 - hintOut.value, resync.value) }));
   const revealInStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(reveal.value, resync.value) }));
-  const revealOutStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(1 - reveal.value, resync.value) }));
+  // The line under the ribbon swaps in two steps, never two lines on top of each other: the old line is gone by
+  // SUBTITLE_SWAP of the way, then the new one fades in rising 6 pt.
+  const subtitleOutStyle = useAnimatedStyle(() => ({ opacity: resyncOpacity(subtitleOut(reveal.value), resync.value) }));
+  const subtitleInStyle = useAnimatedStyle(() => {
+    const t = subtitleIn(reveal.value);
+    return { opacity: resyncOpacity(t, resync.value), transform: [{ translateY: (1 - t) * SUBTITLE_RISE + resyncShift(resync.value) }] };
+  });
   // Light pours out of the open chest with the lid pop (bright over the pile on a non-coin day).
   const mouthStyle = useAnimatedStyle(() => ({
     opacity: resyncOpacity(Math.min(1, prize.value * 1.4) * (kind === 'coins' ? 0.55 : 0.9), resync.value),
@@ -491,11 +513,11 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
           {/* Both lines are always laid out with their fades attached (a fade attached to a view mid-show drew a frame late),
               and the pop swaps them on the UI thread. */}
           <View>
-            <Animated.Text style={[styles.subtitle, revealOutStyle]} accessibilityElementsHidden={phase === 'open'}
+            <Animated.Text style={[styles.subtitle, subtitleOutStyle]} accessibilityElementsHidden={phase === 'open'}
               importantForAccessibility={phase === 'open' ? 'no-hide-descendants' : 'auto'}>
               {`Today’s chest: day ${day} of ${ladder.length}`}
             </Animated.Text>
-            <Animated.Text style={[styles.subtitle, styles.over, revealInStyle]} accessibilityElementsHidden={phase !== 'open'}
+            <Animated.Text style={[styles.subtitle, styles.over, subtitleInStyle]} accessibilityElementsHidden={phase !== 'open'}
               importantForAccessibility={phase === 'open' ? 'auto' : 'no-hide-descendants'}>
               {`Day ${day} collected!`}
             </Animated.Text>
@@ -654,6 +676,21 @@ export function walletCoins(amount: number): number {
 }
 
 /** Where the chest art is cut into lid and body (a share of its height, through the gold band and the lock). */
+/** The words and Awesome! show over this long once the lid pops. */
+export const REVEAL_MS = 180;
+/** The line under the ribbon: the old line is gone by this point of the reveal, then the new one fades in. */
+export const SUBTITLE_SWAP = 0.4;
+const SUBTITLE_RISE = 6;
+export function subtitleOut(v: number): number {
+  'worklet';
+  return Math.max(0, 1 - v / SUBTITLE_SWAP);
+}
+export function subtitleIn(v: number): number {
+  'worklet';
+  return Math.max(0, Math.min(1, (v - SUBTITLE_SWAP) / (1 - SUBTITLE_SWAP)));
+}
+/** The resend guard stops this long after the pop starts (every beat, the Day 7 punch included, has landed). */
+export const RESYNC_AFTER_POP_MS = 1800;
 export const LID_CUT = 0.46;
 /** How far the lid hinges back (degrees around its top edge), lifts (chest sizes) and tilts when it pops. */
 export const LID_HINGE_DEG = 25;
