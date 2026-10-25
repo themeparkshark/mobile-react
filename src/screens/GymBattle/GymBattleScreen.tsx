@@ -1272,7 +1272,8 @@ const styles = StyleSheet.create({
   // Same solid cream pill as the header cards (no see-through navy).
   pillarToast: {
     position: 'absolute',
-    bottom: SCREEN_H * 0.36,
+    // Never over the action buttons: on an SE 36% of the height sat on them.
+    bottom: Math.max(SCREEN_H * 0.36, 306),
     alignSelf: 'center',
     backgroundColor: '#FFF8E6',
     paddingHorizontal: 16,
