@@ -1377,6 +1377,7 @@ const styles = StyleSheet.create({
   },
   // Same cream card language as Defend: navy outline, flat drop, bright.
   noTeamBlur: {
+    alignSelf: 'stretch',
     borderRadius: 28,
     overflow: 'hidden',
     marginHorizontal: 20,

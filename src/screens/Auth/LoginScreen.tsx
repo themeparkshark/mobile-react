@@ -170,8 +170,10 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
     ], 'secure-text');
   };
   // Entrance animations
-  const logoScale = useRef(new Animated.Value(0)).current;
-  const logoOpacity = useRef(new Animated.Value(0)).current;
+  // The title is already on screen from the splash (same spot, same art), so
+  // it stays put: popping it in from nothing read as the title vanishing.
+  const logoScale = useRef(new Animated.Value(1)).current;
+  const logoOpacity = useRef(new Animated.Value(1)).current;
   const titleY = useRef(new Animated.Value(30)).current;
   const titleOpacity = useRef(new Animated.Value(0)).current;
   const buttonsY = useRef(new Animated.Value(40)).current;
@@ -185,22 +187,8 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
   useEffect(() => {
     // Entrance sequence
     Animated.sequence([
-      // Logo bounces in
-      Animated.parallel([
-        Animated.spring(logoScale, {
-          toValue: 1,
-          tension: 50,
-          friction: 7,
-          useNativeDriver: true,
-          delay: 300,
-        }),
-        Animated.timing(logoOpacity, {
-          toValue: 1,
-          duration: 400,
-          delay: 300,
-          useNativeDriver: true,
-        }),
-      ]),
+      // Let the splash fade settle, then bring in the rest.
+      Animated.delay(250),
       // Title slides up
       Animated.parallel([
         Animated.spring(titleY, {

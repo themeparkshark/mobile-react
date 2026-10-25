@@ -83,3 +83,9 @@ test('the loop poster is sharp on the biggest phone', () => {
   assert.ok(w >= 1290, `poster width ${w}`);
   assert.ok(buf.length < 320 * 1024, `poster ${buf.length} bytes`);
 });
+
+test('Login keeps the title where the splash left it', () => {
+  const src = read('src/screens/Auth/LoginScreen.tsx');
+  assert.match(src, /const logoScale = useRef\(new Animated\.Value\(1\)\)\.current;/);
+  assert.match(src, /const logoOpacity = useRef\(new Animated\.Value\(1\)\)\.current;/);
+});
