@@ -31,7 +31,7 @@ import * as RootNavigation from '../RootNavigation';
 import TicketPunch from './TicketPunch';
 import { serverPerkChips, type PerkChipData } from './coin/progressionModel';
 import ChallengeStatusCard from './rewards/ChallengeStatusCard';
-import { lostTryCopy, lostTryHasRetry } from './rewards/lostTryCard';
+import { AD_RETRY_ACTION, VIP_RETRY_ACTION, lostTryCopy, lostTryHasRetry } from './rewards/lostTryCard';
 import { markStandingsStale } from '../screens/LeaderboardsScreen/standingsCache';
 import { challengeRibbon, outOfTicketsCopy, type TicketSources } from './rewards/challengeCopy';
 import { prefetchParkShelf } from '../services/collection/parkShelfPrefetch';
@@ -893,10 +893,10 @@ export default function RedeemRedeemableModal({
             primary={firstCoinTicketReturned || rescueRetryAvailable
               ? { label: location ? 'Try Again' : 'Finding You', onPress: handleProtectedRetry, disabled: !location }
               : canOfferRetry
-              ? { label: adBusy ? 'One Moment' : vip ? 'One More Try (VIP)' : 'Watch Ad: One More Try',
+              ? { ...(adBusy ? { label: 'One Moment' } : vip ? VIP_RETRY_ACTION : AD_RETRY_ACTION),
                 onPress: () => { void handleAdRetry(); }, disabled: adBusy || !location }
               : { label: 'Continue', onPress: handleLostClose }}
-            quiet={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry ? { label: canOfferRetry ? 'No thanks' : 'DONE', onPress: handleLostClose } : undefined}
+            quiet={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry ? { label: 'DONE', onPress: handleLostClose } : undefined}
             guardRetry={firstCoinTicketReturned || rescueRetryAvailable} />}
 
           {/* MINIGAME STATE - rendered inside the same modal */}

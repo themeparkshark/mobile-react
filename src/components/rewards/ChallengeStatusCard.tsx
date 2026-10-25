@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import { ResultsRibbon } from '../../gamekit/results/ResultsRibbon';
-import GameIcon from '../../ui/GameIcon';
+import GameIcon, { type GameIconName } from '../../ui/GameIcon';
 import { ResultPrimaryButton, ResultSecondaryButton } from '../../gamekit/results/ResultButtons';
 import SharkLoader from '../../ui/SharkLoader';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
@@ -22,6 +22,10 @@ export interface ChallengeStatusAction {
   readonly label: string;
   readonly onPress: () => void;
   readonly disabled?: boolean;
+  /** Pictures that lead the label (the ad retry: play, then retry). */
+  readonly icons?: readonly GameIconName[];
+  /** What VoiceOver says when the pictures carry more than the label. */
+  readonly a11yLabel?: string;
 }
 
 /**
@@ -84,7 +88,7 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
           <GameIcon name="ticket" size={30} />
           <Text style={[styles.ticketText, ticket > 0 && styles.ticketBack]}>{ticket > 0 ? `+${ticket}` : `${ticket}`}</Text>
         </View> : <Text style={styles.message}>{message}</Text>}
-        {primary && <ResultPrimaryButton label={primary.label} onPress={primary.onPress}
+        {primary && <ResultPrimaryButton label={primary.label} icons={primary.icons} a11yLabel={primary.a11yLabel} onPress={primary.onPress}
           disabled={primary.disabled || !armed} style={[styles.primary, primary.disabled && styles.dim]} />}
         {secondary && <ResultSecondaryButton label={secondary.label} onPress={secondary.disabled ? undefined : secondary.onPress}
           style={[styles.secondary, secondary.disabled && styles.dim]} />}

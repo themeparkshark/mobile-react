@@ -4,9 +4,11 @@
  * results capture screen, so a capture shows the exact words a kid sees.
  *
  * Honest title: the card cannot know how close the game was (the game's own
- * panel already showed that), so it never claims SO CLOSE!. When a retry is
- * on offer it says ONE MORE TRY! (the game's own card already said GOOD
- * TRY!, so a kid never reads GOOD TRY! twice); otherwise GOOD TRY!. The
+ * panel already showed that), so it never claims SO CLOSE!. When a free
+ * retry is waiting (the Ticket came back, a Rescue try) it says ONE MORE
+ * TRY!; otherwise GOOD TRY! (a Ticket spent is not a free try, so ONE MORE
+ * TRY! over a -1 Ticket would be a mixed message, even with a paid retry on
+ * offer: that button carries its own pictures). The
  * ticket picture shows only what changed: -n spent or +1 back, never a
  * bare 0 that reads like "you have no Tickets".
  */
@@ -31,8 +33,7 @@ export const LOST_TRY_TITLE = 'Good Try!';
 export const RETRY_TRY_TITLE = 'One More Try!';
 
 export function lostTryCopy(input: LostTryInput): LostTryCopy {
-  const hasRetry = lostTryHasRetry(input);
-  const title = hasRetry ? RETRY_TRY_TITLE : LOST_TRY_TITLE;
+  const title = lostTryHasFreeRetry(input) ? RETRY_TRY_TITLE : LOST_TRY_TITLE;
   if (input.usedRescuePass) {
     return {
       title,
@@ -53,6 +54,15 @@ export function lostTryCopy(input: LostTryInput): LostTryCopy {
  * card per miss in a moving line. RedeemRedeemableModal and the queue results
  * capture both use this rule.
  */
+/** A retry that costs nothing more: the Ticket came back, or a Rescue try is left. */
+export function lostTryHasFreeRetry(input: Pick<LostTryInput, 'firstCoinTicketReturned' | 'rescueRetryAvailable'>): boolean {
+  return input.firstCoinTicketReturned || input.rescueRetryAvailable;
+}
+
+/** The paid retry button: pictures lead (play, then retry), a short label, the whole idea spoken. */
+export const AD_RETRY_ACTION = { label: 'Watch Ad', icons: ['play', 'retry'], a11yLabel: 'Watch an ad for one more try' } as const;
+export const VIP_RETRY_ACTION = { label: 'One More Try', icons: ['crown', 'retry'], a11yLabel: 'One more try for VIP members' } as const;
+
 export function lostTryHasRetry(input: Pick<LostTryInput, 'firstCoinTicketReturned' | 'rescueRetryAvailable' | 'retryOffered'>): boolean {
   return input.firstCoinTicketReturned || input.rescueRetryAvailable || !!input.retryOffered;
 }

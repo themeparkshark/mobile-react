@@ -415,7 +415,7 @@ test('Sharky results use the shared ribbon, buttons and chips; podium only for a
   assert.match(sharky, /<ResultChip key=\{c\.label\}/);
   assert.match(sharky, /const newBest = data\.newBest && !saved;\n\s+const cheer = data\.stars > 0 \|\| newBest;/);
   assert.match(sharky, /\{cheer \? <Image source=\{SHARKY_ART\.podium\}/, 'no podium on a 0-star run');
-  assert.match(sharky, /data\.newCard\.toUpperCase\(\)/);
+  assert.match(sharky, /<SharkyUnlock card=\{data\.newCard\}/);
   assert.doesNotMatch(sharky, /missionText\(m\.id\)\}<\/Text>/, 'mission words are spoken only');
   assert.doesNotMatch(sharky, /borderRadius: 36/, 'no pill PLAY AGAIN');
   const swim = read('src/games/sharky/SharkySwim.tsx');
@@ -481,7 +481,8 @@ test('one finish cue: Rhythm keeps its drum roll and the card owns the NEW BEST 
 test('Sharky results fit a short phone: smaller stage, tight card, the bottom rows keep their space from the start', () => {
   const sharky = read('src/games/sharky/hud/SharkyResults.tsx');
   assert.doesNotMatch(sharky, /setBelow\(true\)/, 'the below rows never pop in and push the card off screen');
-  assert.match(sharky, /belowIn\.value = withDelay\(2400, withTiming\(1/);
+  assert.match(sharky, /export const BELOW_AT = 2400;/);
+  assert.match(sharky, /belowIn\.value = withDelay\(BELOW_AT, withTiming\(1/);
   assert.match(sharky, /stage: \{ width: '100%', flex: 1, minHeight: 0,/, 'the stage flexes into the room the card leaves');
   // One results picture: the ribbon rides on the card's top edge (never pinned to the top of
   // the screen, where an SE status bar cut into it), with the podium standing on it.
@@ -586,7 +587,7 @@ test('the ride try card never claims SO CLOSE!: GOOD TRY! (ONE MORE TRY! with a 
   const base = { usedRescuePass: false, rescueRetryAvailable: false, firstCoinTicketReturned: false, lostTicketCost: 0 };
   const cases = [
     [{ ...base, lostTicketCost: 1 }, '1 Ticket used.', -1, 'Good Try!'],
-    [{ ...base, lostTicketCost: 1, retryOffered: true }, '1 Ticket used.', -1, 'One More Try!'],
+    [{ ...base, lostTicketCost: 1, retryOffered: true }, '1 Ticket used.', -1, 'Good Try!'],
     [{ ...base, lostTicketCost: 2 }, '2 Tickets used.', -2, 'Good Try!'],
     [{ ...base, firstCoinTicketReturned: true }, 'Your Ticket came back. Try again!', 1, 'One More Try!'],
     [{ ...base, usedRescuePass: true, rescueRetryAvailable: true }, 'No Ticket spent. One more try today!', 0, 'One More Try!'],
@@ -871,7 +872,7 @@ test('duel banners and the Big Final chip keep their fill: the pop rides a wrapp
   // The Best Moment polaroid leaves the tree after it pops away (never parked at scale 0 over the banners).
   assert.match(duel, /const \[polGone, setPolGone\] = useState\(!model\.best \|\| reducedMotion\);/);
   assert.match(duel, /setTimeout\(\(\) => setPolGone\(true\), polAt \+ 1500 \+ 320\)/);
-  assert.match(duel, /\{model\.best && !polGone \? \(/);
+  assert.match(duel, /\{model\.best && !polGone && cardH > 0 \? \(/);
   // The capture screen can show the won duel card with every banner without beating Fin.
   const capture = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
   assert.match(capture, /banners: \['FIN BEATEN', 'RANK UP', 'NEW BEST'\]/);

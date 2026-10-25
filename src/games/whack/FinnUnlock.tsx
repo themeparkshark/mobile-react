@@ -23,6 +23,8 @@ import { ResultsSettleContext } from '../../gamekit/results/ResultsCard';
  * after the stars, the tally and the total, so the Finn gets its own beat.
  */
 export const FINN_UNLOCK_AT_MS = 1900;
+/** The new Finn's tile size (pt). */
+export const FINN_TILE_PT = 72;
 /** The Finn lands just after its panel pops in. */
 const FINN_AFTER_PANEL_MS = 90;
 
@@ -61,11 +63,13 @@ export function FinnUnlock({ theme, reducedMotion }: { theme: WhackThemeId; redu
 }
 
 const styles = StyleSheet.create({
-  row: { alignItems: 'center', justifyContent: 'center', paddingVertical: 2 },
-  card: { width: 92, height: 92, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#05346e', alignItems: 'center',
+  // Compact (72 pt): a tall Whack win with a new Finn still leaves room for the
+  // cheering shark to peek over the ribbon on a 874 pt phone (iPhone 17 Pro).
+  row: { alignItems: 'center', justifyContent: 'center' },
+  card: { width: FINN_TILE_PT, height: FINN_TILE_PT, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#05346e', alignItems: 'center',
     justifyContent: 'flex-end', overflow: 'hidden' },
-  finn: { width: 86, height: 86 },
-  slot: { width: 92, height: 92 },
+  finn: { width: FINN_TILE_PT - 6, height: FINN_TILE_PT - 6 },
+  slot: { width: FINN_TILE_PT, height: FINN_TILE_PT },
   tagPos: { position: 'absolute', top: -10, right: -26 },
   tag: { backgroundColor: '#ffcf3b', borderRadius: 10, borderWidth: 2.5, borderColor: '#05346e', paddingHorizontal: 7, paddingVertical: 1 },
   tagText: { fontFamily: 'Shark', fontSize: 15, color: '#05346e' },

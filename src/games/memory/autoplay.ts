@@ -10,12 +10,16 @@ import { useEffect, type MutableRefObject } from 'react';
 import type { MMState } from './engine';
 import { BOT, botPick, type BotProfile } from './bot';
 
-export function useMemoryAutoplay({ runRef, tapSlot, enabled }: {
+export function useMemoryAutoplay({ runRef, tapSlot, enabled, capture }: {
   runRef: MutableRefObject<{ eng: MMState; playing: boolean; busy: boolean; ended: boolean; pending: boolean } | null>;
   tapSlot: (slot: number) => void;
   enabled: boolean;
+  /** The results capture screen's bot (capture builds only: dev, or release JS with EXPO_PUBLIC_PERF_CAPTURE=1). */
+  capture?: BotProfile;
 }): void {
-  const profile = (typeof __DEV__ !== 'undefined' && __DEV__ ? process.env.EXPO_PUBLIC_MEMORY_AUTOPLAY : undefined) as BotProfile | undefined;
+  const dev = typeof __DEV__ !== 'undefined' && __DEV__;
+  const captureBuild = dev || process.env.EXPO_PUBLIC_PERF_CAPTURE === '1';
+  const profile = ((captureBuild ? capture : undefined) ?? (dev ? process.env.EXPO_PUBLIC_MEMORY_AUTOPLAY : undefined)) as BotProfile | undefined;
   useEffect(() => {
     if (!profile || !BOT[profile] || !enabled) return;
     const p = BOT[profile];

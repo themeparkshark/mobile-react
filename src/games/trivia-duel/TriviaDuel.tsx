@@ -1612,7 +1612,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
         wins: rk.winsAtRank, need: nextRank ? FIN_RANKS[rk.rank].promoteAfter : 0,
         stripes: FIN_RANKS[rk.rank].stripes, nextStripes: ri < FIN_RANK_ORDER.length - 1 ? FIN_RANKS[FIN_RANK_ORDER[ri + 1]].stripes : null,
       },
-      // A missed Final bet is why right answers can still end on a low score:
+      // A missed Big Final is why right answers can still end on a low score:
       // the card shows it, so every number agrees with every other number.
       finalLost: finalPointsLost(p, resultsLog.current),
       best: t.me.fastestMs >= 0 ? { label: `${fastest} on Q${Math.max(0, fastestIdx) + 1}` } : null,

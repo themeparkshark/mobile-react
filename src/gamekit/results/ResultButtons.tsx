@@ -12,18 +12,23 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
 import GameIcon, { type GameIconName } from '../../ui/GameIcon';
 
-export function ResultPrimaryButton({ label, icon, onPress, disabled, style }: {
+export function ResultPrimaryButton({ label, icon, icons, a11yLabel, onPress, disabled, style }: {
   label: string;
   icon?: GameIconName;
+  /** Pictures that lead the label (for example play then retry: watch, then go again). */
+  icons?: readonly GameIconName[];
+  /** What VoiceOver says when the pictures carry more than the label. */
+  a11yLabel?: string;
   onPress?: () => void;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const lead = icons ?? (icon ? [icon] : []);
   return (
-    <TouchableOpacity accessibilityRole="button" accessibilityLabel={label} style={[styles.btn, styles.primary, style]}
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel={a11yLabel ?? label} style={[styles.btn, styles.primary, style]}
       onPress={onPress} disabled={disabled}>
-      {icon ? <GameIcon name={icon} size={26} /> : null}
-      <Text style={[styles.primaryText, icon && styles.gap]} numberOfLines={1} adjustsFontSizeToFit>{label.toUpperCase()}</Text>
+      {lead.map((name, i) => <GameIcon key={`${name}-${i}`} name={name} size={26} />)}
+      <Text style={[styles.primaryText, lead.length > 0 && styles.gap]} numberOfLines={1} adjustsFontSizeToFit>{label.toUpperCase()}</Text>
     </TouchableOpacity>
   );
 }

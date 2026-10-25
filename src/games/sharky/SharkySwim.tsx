@@ -86,6 +86,10 @@ export interface SharkySwimProps {
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
   onQuit?: (resume: () => void) => void;
+  /** Results capture only (dev, or release JS with EXPO_PUBLIC_PERF_CAPTURE=1): Sharky plays itself. */
+  captureAutoplay?: boolean;
+  /** Results capture only: this run unlocks Prize Boxes, so the unlock beat can be checked on demand. */
+  captureUnlock?: boolean;
 }
 
 const MODE_ID: Record<SharkyMode, number> = { queue: MODE_QUEUE, ride: MODE_RIDE, rally: MODE_RALLY, ghost: MODE_GHOST, practice: MODE_PRACTICE };
@@ -159,7 +163,7 @@ export function sharkyHeadline(reason: number, mode: number, score: number, star
 }
 
 export function SharkySwim({
-  visible, difficulty, seed, mode: modeProp = 'queue', rideId, rideCategory, raceUrl, onComplete, onClose, onQuit,
+  visible, difficulty, seed, mode: modeProp = 'queue', rideId, rideCategory, raceUrl, onComplete, onClose, onQuit, captureAutoplay, captureUnlock,
 }: SharkySwimProps) {
   const mode: SharkyMode = modeProp === 'race' ? 'rally' : modeProp;
   const auth = useContext(AuthContext);
@@ -248,7 +252,7 @@ export function SharkySwim({
   // Dev, or a release-JS capture build (EXPO_PUBLIC_PERF_CAPTURE=1, like the
   // Boss raid autoplay): store builds set neither, so a kid always swims.
   const captureBuild = __DEV__ || process.env.EXPO_PUBLIC_PERF_CAPTURE === '1';
-  const autoplay = captureBuild && (process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '1' || process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '2');
+  const autoplay = captureBuild && (!!captureAutoplay || process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '1' || process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '2');
   const autoCheap = captureBuild && process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '2';
   const autoSalt = autoplay ? ((process.env.EXPO_PUBLIC_SHARKY_NAME ?? '').length % 5) : 0;
   const engine = useSharkyEngine(cfg, (batch) => feelRef.current?.handle(batch), autoplay, autoSalt, autoCheap, reducedMotion);
@@ -311,7 +315,7 @@ export function SharkySwim({
           next.rankCount = mu.rankCount;
         }
         setMissionView(mu);
-        const card = m === MODE_QUEUE ? unlockCard(before, before + 1) : null;
+        const card = m === MODE_QUEUE ? (captureBuild && captureUnlock ? unlockCard(0, 1) : unlockCard(before, before + 1)) : null;
         setProgress(next);
         void saveProgress(next);
         if (liveRally && round && rally.transport) {

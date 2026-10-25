@@ -260,6 +260,8 @@ export interface MemoryGameProps {
   party?: MemoryPartyBinding;
   /** Daily Deck setup from the booth menu (deck of the day, face seed, ghost, streak). */
   daily?: DailySetup;
+  /** The results capture screen's bot (ignored outside capture builds). */
+  captureAutoplay?: 'clean' | 'mixed' | 'novice' | 'timeout';
 }
 
 export interface DailySetup {
@@ -367,6 +369,7 @@ export default function MemoryGame({
   onComplete,
   party,
   daily,
+  captureAutoplay,
 }: MemoryGameProps) {
   const partyRef = useRef(party);
   partyRef.current = party;
@@ -1027,7 +1030,8 @@ export default function MemoryGame({
     let chipText: string | null = null;
     let crownHint: string | null = null;
     if (r.mode === 'ride') {
-      numbers.push({ label: 'TURNS', value: `${e.turns}/${par}`, hot: e.turns <= par });
+      // A run with no turns shows no TURNS chip: a gold 0/13 would read like a score of zero.
+      if (e.turns > 0) numbers.push({ label: 'TURNS', value: `${e.turns}/${par}`, hot: e.turns <= par });
       if (!r.signal) numbers.push({ label: 'TIME', value: `${(chargedMs / 1000).toFixed(1)}s` });
       if (x.ridePb != null && !r.signal) numbers.push({ label: 'BEST', value: `${(x.ridePb / 1000).toFixed(1)}s`, hot: x.newRidePb });
       if (won) numbers.push({ label: 'SCORE', value: finalScore.toLocaleString('en-US') });
@@ -2355,7 +2359,7 @@ export default function MemoryGame({
   // ---------------------------------------------------------------------------
   // Autoplay (dev capture only)
   // ---------------------------------------------------------------------------
-  useMemoryAutoplay({ runRef, tapSlot, enabled: visible && !result && !tryScreen });
+  useMemoryAutoplay({ runRef, tapSlot, enabled: visible && !result && !tryScreen, capture: captureAutoplay });
 
   // ---------------------------------------------------------------------------
   // Try again (Ride Sprint: 3 tries per Ticket), rematch, wrap-up

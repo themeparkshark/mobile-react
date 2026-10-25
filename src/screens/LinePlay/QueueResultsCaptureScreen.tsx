@@ -52,17 +52,21 @@ import { CurrentQuestQueueGame } from '../../games/current-quest';
 import { TriviaGame, createLinePlayTriviaSource } from '../../games/trivia';
 import { TriviaDuel } from '../../games/trivia-duel';
 import ChallengeStatusCard from '../../components/rewards/ChallengeStatusCard';
-import { lostTryCopy, lostTryHasRetry } from '../../components/rewards/lostTryCard';
+import { AD_RETRY_ACTION, lostTryCopy, lostTryHasRetry } from '../../components/rewards/lostTryCard';
 import { DuelResults, type ResultsModel } from '../../games/trivia-duel/ui/DuelResults';
 
 type Run = {
-  game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel' | 'duelWin' | 'duelPart' | 'rideMiss' | 'timingTwo' | 'banana' | 'memoryRide'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number;
+  game: 'tap' | 'shark' | 'timing' | 'current' | 'trivia' | 'duel' | 'duelWin' | 'duelPart' | 'rideMiss' | 'timingTwo' | 'banana' | 'memoryRide' | 'memoryWarmup'; groupTurn: boolean; rideUpAfterMs: number | null; endReason?: WrapUpReason; key: number;
   /** RIDE MISS: what the server said about the lost try (a ticket and coin fixture). */
   miss?: { ticketBack: boolean; ticketCost: number };
   /** Whack plays itself (the game's own scripted player), so a release check can show a star run and a win streak. */
   autoplay?: boolean;
   /** Whack: this run unlocks a new costume Finn (capture only), so the new-Finn beat can be checked on demand. */
   newFinn?: boolean;
+  /** Memory: the capture bot plays (clean clears with turns, so the STATS star pips show). */
+  memoryBot?: 'clean' | 'mixed' | 'novice' | 'timeout';
+  /** Sharky: this run unlocks Prize Boxes (capture only). */
+  sharkyUnlock?: boolean;
 };
 
 const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
@@ -77,12 +81,18 @@ const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'SHARKY, RIDE UP IN 6 S', run: { game: 'shark', groupTurn: false, rideUpAfterMs: 6000 } },
   { label: 'SHARKY, RIDE UP AT 1 S', run: { game: 'shark', groupTurn: false, rideUpAfterMs: 1000 } },
   { label: 'SHARKY GROUP TURN', run: { game: 'shark', groupTurn: true, rideUpAfterMs: null } },
+  // Sharky plays itself and unlocks Prize Boxes: the unlock picture with its NEW tag, inside the card above the buttons.
+  { label: 'SHARKY, AUTOPLAY, UNLOCK', run: { game: 'shark', groupTurn: false, rideUpAfterMs: null, autoplay: true, sharkyUnlock: true } },
   { label: 'RHYTHM IN LINE', run: { game: 'timing', groupTurn: false, rideUpAfterMs: null } },
   // The card with a game's own extra row inside it, above DONE: Rhythm's TRY TWO THUMBS? offer and Banana Basket's rows.
   { label: 'RHYTHM, TWO THUMBS OFFER', run: { game: 'timingTwo', groupTurn: false, rideUpAfterMs: null } },
   { label: 'BANANA BASKET IN LINE', run: { game: 'banana', groupTurn: false, rideUpAfterMs: null } },
   // Memory Match's ride try card (TIME'S UP!, TRY AGAIN with tries left, DONE): play it and let the clock run out.
   { label: 'MEMORY RIDE TRY CARD', run: { game: 'memoryRide', groupTurn: false, rideUpAfterMs: null } },
+  // Memory Match played by the capture bot: a cleared board with turns (the end card, STATS star pips).
+  { label: 'MEMORY RIDE, AUTOPLAY', run: { game: 'memoryRide', groupTurn: false, rideUpAfterMs: null, memoryBot: 'clean' } },
+  // Finn's warm-up (the first-session first win), played by the bot.
+  { label: 'MEMORY WARM-UP, AUTOPLAY', run: { game: 'memoryWarmup', groupTurn: false, rideUpAfterMs: null, memoryBot: 'clean' } },
   { label: 'CURRENT QUEST IN LINE', run: { game: 'current', groupTurn: false, rideUpAfterMs: null } },
   { label: 'CURRENT QUEST, RIDE UP IN 6 S', run: { game: 'current', groupTurn: false, rideUpAfterMs: 6000 } },
   { label: 'LINE TRIVIA', run: { game: 'trivia', groupTurn: false, rideUpAfterMs: null } },
@@ -336,8 +346,8 @@ export default function QueueResultsCaptureScreen() {
             firstCoinTicketReturned: tryCard === 'back', lostTicketCost: tryCard === 'back' ? 0 : 1, retryOffered: tryCard === 'spent' })}
             primary={tryCard === 'back'
               ? { label: 'Try Again', onPress: () => { note('Try card: Try Again'); setTryCard(null); } }
-              : { label: 'Watch Ad: One More Try', onPress: () => { note('Try card: One More Try'); setTryCard(null); } }}
-            quiet={{ label: tryCard === 'back' ? 'DONE' : 'No thanks', onPress: () => { note('Try card: DONE'); setTryCard(null); } }}
+              : { ...AD_RETRY_ACTION, onPress: () => { note('Try card: One More Try'); setTryCard(null); } }}
+            quiet={{ label: 'DONE', onPress: () => { note('Try card: DONE'); setTryCard(null); } }}
             guardRetry={tryCard === 'back'} />
           </View>
         </View>
@@ -346,11 +356,12 @@ export default function QueueResultsCaptureScreen() {
       <ShellFrameContext.Provider value={shortPhone ? SE_FRAME : null}>
       <LinePlayMovementContext.Provider value={movement}>
         {run && common && run.game === 'tap' ? <WhackAShark key={run.key} {...common} difficulty={2} taskName="Space Mountain" autoplay={run.autoplay} captureNewFinn={run.newFinn} /> : null}
-        {run && common && run.game === 'shark' ? <SharkySwim key={run.key} {...common} difficulty={2} /> : null}
+        {run && common && run.game === 'shark' ? <SharkySwim key={run.key} {...common} difficulty={2} captureAutoplay={run.autoplay} captureUnlock={run.sharkyUnlock} /> : null}
         {run && common && run.game === 'timing' ? <RhythmTapGame key={run.key} {...common} /> : null}
         {run && common && run.game === 'timingTwo' ? <RhythmTapGame key={run.key} {...common} captureOfferTwo /> : null}
         {run && common && run.game === 'banana' ? <BananaBasketGame key={run.key} {...common} mode="queue" /> : null}
-        {run && common && run.game === 'memoryRide' ? <MemoryGame key={run.key} {...common} mode="ride" difficulty={1} menu={false} taskName="Space Mountain" /> : null}
+        {run && common && run.game === 'memoryRide' ? <MemoryGame key={run.key} {...common} mode="ride" difficulty={1} menu={false} taskName="Space Mountain" captureAutoplay={run.memoryBot} /> : null}
+        {run && common && run.game === 'memoryWarmup' ? <MemoryGame key={run.key} {...common} mode="warmup" menu={false} captureAutoplay={run.memoryBot} /> : null}
         {run && common && run.game === 'current' ? <CurrentQuestQueueGame key={run.key} {...common} taskName="Space Mountain" /> : null}
         {run && common && run.game === 'trivia' ? (
           <TriviaGame key={run.key} visible title="Line Trivia" seed={run.key}

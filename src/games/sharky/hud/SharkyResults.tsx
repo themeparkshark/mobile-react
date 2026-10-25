@@ -21,9 +21,9 @@
  * SO CLOSE TO YOUR BEST!. A ride run that missed the gate gets the shared bar
  * with a word (ALMOST AT THE GATE!), never a percent. A saved run gets the
  * shared gold RUN SAVED stamp.
- * Below the fold (its space is kept from the start; it fades in at 2.4s): the green ahead bars, mission slots with a
- * slot-machine reel on completion, Tokens at this ride, the Full Clear medal,
- * the NEW! unlock card. The surface is a sky-to-white gradient; no dark slab.
+ * Extras, inside the card above the buttons (their space is kept from the start; they fade in at 2.4s): the green
+ * ahead bars, mission pictures, Tokens at this ride, the Full Clear medal, the unlock as a
+ * picture with a gold NEW tag (its name spoken only). The surface is a sky-to-white gradient; no dark slab.
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -51,6 +51,7 @@ import { ResultButtonRow, ResultPrimaryButton, ResultSecondaryButton } from '../
 import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { bestAwareTitle } from '../../../gamekit/results/feelings';
 import { missionIcon } from './missionIcons';
+import { SharkyUnlock } from './SharkyUnlock';
 
 /** The shared results card blue (ResultsCard). */
 const CARD_BLUE = '#0768b9';
@@ -106,6 +107,9 @@ export const STAR_GAP = 220;
 export function sharkyTitleAt(stars: number): number {
   return stars > 0 ? STAR_AT + (Math.min(3, stars) - 1) * STAR_GAP + 120 : STAR_AT;
 }
+
+/** When the extras (unlock, missions, tokens, medal) fade in: after the stars, the title and the score slam. */
+export const BELOW_AT = 2400;
 
 /** PLAY AGAIN pulses this many times, then rests. */
 export const PLAY_PULSES = 3;
@@ -181,7 +185,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
         fx.current?.burst('confetti', box.w / 2, box.h * 0.42, { count: 24 });
       }
     }, 1400);
-    if (!reducedMotion) belowIn.value = withDelay(2400, withTiming(1, { duration: 260 }));
+    if (!reducedMotion) belowIn.value = withDelay(BELOW_AT, withTiming(1, { duration: 260 }));
     // Confetti cannon from both stage corners (a win or TIME!): 2 bursts of 16, 120ms apart.
     // The only confetti on screen (the shell skips its own: ownCelebration).
     const cannons: ReturnType<typeof setTimeout>[] = [];
@@ -292,23 +296,11 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
           </View>
         ) : null}
 
-        <Animated.View style={[styles.playWrap, short && styles.playWrapShort, btnStyle]}>
-          <ResultPrimaryButton label={primaryLabel} icon={againFirst ? 'retry' : undefined} disabled={!tapReady} onPress={primary} style={styles.playBtn} />
-        </Animated.View>
-        {againFirst || challenge || playAgain ? (
-          <ResultButtonRow>
-            {againFirst ? (
-              <ResultSecondaryButton label={claimLabel} onPress={claim} />
-            ) : playAgain ? (
-              <ResultSecondaryButton label="PLAY AGAIN" icon="retry" onPress={playAgain} />
-            ) : null}
-            {challenge ? <ResultSecondaryButton label={challengeLabel ?? 'RACE GHOSTS'} icon="rush" onPress={challenge} /> : null}
-          </ResultButtonRow>
-        ) : null}
-
+        {/* Extras sit inside the card above the buttons, like every other game's card. */}
         {hasBelow ? (
           <Animated.View style={[styles.below, belowStyle]}>
-            {data.newCard ? <Text style={[styles.newCard, short && styles.newCardShort]}>{data.newCard.toUpperCase()}</Text> : null}
+            {/* The unlock as a picture with a gold NEW tag on its own beat (like Whack's new Finn); the name is spoken. */}
+            {data.newCard ? <SharkyUnlock card={data.newCard} atMs={BELOW_AT + 90} reducedMotion={reducedMotion} /> : null}
             {ahead && bars.length ? (
               <View style={styles.splitRow} accessible accessibilityLabel={`Ahead of your best at ${bars.length} gates`}>
                 {bars.map((d, i) => (
@@ -345,6 +337,21 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
             {data.fullClear ? <Image source={SHARKY_ART.fullClear} style={[styles.medal, short && styles.medalShort]} resizeMode="contain" /> : null}
           </Animated.View>
         ) : null}
+
+        <Animated.View style={[styles.playWrap, short && styles.playWrapShort, btnStyle]}>
+          <ResultPrimaryButton label={primaryLabel} icon={againFirst ? 'retry' : undefined} disabled={!tapReady} onPress={primary} style={styles.playBtn} />
+        </Animated.View>
+        {againFirst || challenge || playAgain ? (
+          <ResultButtonRow>
+            {againFirst ? (
+              <ResultSecondaryButton label={claimLabel} onPress={claim} />
+            ) : playAgain ? (
+              <ResultSecondaryButton label="PLAY AGAIN" icon="retry" onPress={playAgain} />
+            ) : null}
+            {challenge ? <ResultSecondaryButton label={challengeLabel ?? 'RACE GHOSTS'} icon="rush" onPress={challenge} /> : null}
+          </ResultButtonRow>
+        ) : null}
+
       </Animated.View>
       <FxStage ref={fx} width={box.w} height={box.h} reducedMotion={reducedMotion} style={StyleSheet.absoluteFill} />
     </View>
@@ -381,9 +388,8 @@ const styles = StyleSheet.create({
   feelingText: { fontFamily: 'Knockout', fontSize: 16, color: INK, letterSpacing: 1 },
   playWrap: { width: '100%', marginTop: 12 },
   playBtn: { marginTop: 0 },
-  // One row under the buttons: missions, tokens and the medal side by side.
+  // One row above the buttons: the unlock or missions, tokens and the medal side by side.
   below: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', columnGap: 8, marginTop: 8 },
-  newCard: { fontFamily: 'Shark', fontSize: 18, color: INK, backgroundColor: REWARD, borderRadius: 12, overflow: 'hidden', paddingHorizontal: 14, paddingVertical: 6, marginBottom: 6 },
   splitRow: { flexDirection: 'row', alignItems: 'flex-end', marginVertical: 4 },
   splitCell: { alignItems: 'center', marginHorizontal: 8 },
   splitBar: { width: 22, borderRadius: 6, borderWidth: 2, borderColor: INK, backgroundColor: '#3ccf6b' },
@@ -402,6 +408,5 @@ const styles = StyleSheet.create({
   starsShort: { marginVertical: 2 },
   scoreShort: { fontSize: 44, lineHeight: 52 },
   playWrapShort: { marginTop: 8 },
-  newCardShort: { fontSize: 16, paddingVertical: 4, marginBottom: 0 },
   medalShort: { width: 40, height: 40 },
 });

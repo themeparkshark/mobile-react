@@ -135,6 +135,11 @@ export interface WhackHandle {
   bankAndExit: () => void;
 }
 
+/**
+ * The live pace chip races this Burst's best (a per-Burst ghost), so it says
+ * so: a Burst can run ahead while the whole run still ends under BEST.
+ */
+export const PACE_BEST_LABEL = 'VS BEST BURST';
 const LIFETIME_KEY = '@whack/lifetime_bursts';
 const RUN_OF_DAY_KEY = '@whack/run_of_day';
 const CARDS_KEY = '@whack/finn_cards';
@@ -928,6 +933,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     if (pendingBest.current != null) { setBest(pendingBest.current); pendingBest.current = null; }
     setShellScore(0);
     setBreather(null);
+    // The header reads BURST 1/4 under PLAY AGAIN's 3-2-1, never the last run's 4/4.
+    setBurstIdx(0);
   }, [clearAutoReady]);
 
   // Wrap-up (boarding / left the queue): bank the live Burst from a coherent snapshot.
@@ -1031,7 +1038,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
                   late taps fall through to nothing, so the results card arrives cleanly. */}
               <Animated.View style={[StyleSheet.absoluteFill, camera.style]} pointerEvents={phase === 'play' ? 'auto' : 'none'}>
                 <WhackBoard L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} images={images} hud={hud} theme={theme}
-                  bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride && !result && phase === 'play'} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} hudOutside />
+                  bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride && !result && phase === 'play'} paceLabel={rivalName ? `VS ${rivalName}` : PACE_BEST_LABEL} hudOutside />
               </Animated.View>
             </GestureDetector>
           ) : null}
@@ -1043,7 +1050,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
             // back when the new run's first Burst starts.
             <HudStepBack back={!!result || phase === 'done'} reducedMotion={reducedMotion}>
               <WhackHud L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} hud={hud} pace={pace}
-                showPace={!!ghostRef.current && !ride && !result && phase === 'play'} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} />
+                showPace={!!ghostRef.current && !ride && !result && phase === 'play'} paceLabel={rivalName ? `VS ${rivalName}` : PACE_BEST_LABEL} />
             </HudStepBack>
           ) : null}
           {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={capacity}

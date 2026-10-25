@@ -182,7 +182,7 @@ export const WhackHud = React.memo(function WhackHud({ L, sim, rs, tick, hud, pa
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
       <HudPlate L={L} sim={sim} rs={rs} tick={tick} hud={hud} fontS={fontS} fontM={fontM} fontL={fontL} />
-      <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace} paceLabel={paceLabel ?? 'VS BEST'} />
+      <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace} paceLabel={paceLabel ?? 'VS BEST BURST'} />
     </Canvas>
   );
 });
@@ -206,7 +206,7 @@ export const WhackBoard = React.memo(function WhackBoard({ L, sim, rs, tick, ima
       <Boss L={L} rs={rs} sim={sim} tick={tick} boss={images.boss} bossFx={bossFx} on={hud.boss} />
       <Picture picture={wells} />
       {hudOutside ? null : <HudPlate L={L} sim={sim} rs={rs} tick={tick} hud={hud} fontS={fontS} fontM={fontM} fontL={fontL} />}
-      {hudOutside ? null : <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace} paceLabel={paceLabel ?? 'VS BEST'} />}
+      {hudOutside ? null : <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace} paceLabel={paceLabel ?? 'VS BEST BURST'} />}
     </Canvas>
   );
 });
@@ -410,6 +410,18 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
 }
 
 // ---------------------------------------------------------------------------
+/** A whole number with thousands commas, magnitude only (a UI-thread worklet: no toLocaleString there). */
+export function commaInt(n: number): string {
+  'worklet';
+  const s = String(Math.abs(Math.round(n)));
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 === 0) out += ',';
+    out += s[i];
+  }
+  return out;
+}
+
 // Stage-band prompts: Auto Look-Up and the ghost pace line.
 
 function StagePrompts({ L, rs, tick, fontS, fontM, pace, showPace, paceLabel }: {
@@ -427,7 +439,8 @@ function StagePrompts({ L, rs, tick, fontS, fontM, pace, showPace, paceLabel }: 
   const promptW = fontM ? fontM.measureText('TAP TO KEEP BONKING').width : 200;
   const paceText = useDerivedValue(() => {
     const d = Math.round(pace.value);
-    return d >= 0 ? `+${d} ${paceLabel}` : `${d} ${paceLabel}`;
+    // Thousands commas like every results card (+8,610, never +8610).
+    return `${d >= 0 ? '+' : '-'}${commaInt(d)} ${paceLabel}`;
   });
   const paceColor = useDerivedValue(() => (pace.value >= 0 ? '#11823b' : '#c2412f'));
   // Only a lead shows during play: no minus numbers while a kid is bonking.

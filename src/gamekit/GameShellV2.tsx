@@ -416,9 +416,13 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       headsUpTimer.current = null;
     }, []);
 
+    // The how-to line under the count is for the first play of each opening only:
+    // PLAY AGAIN's 3-2-1 is just the count (a kid who just played knows the rules).
+    const playedOnceRef = useRef(false);
     // -- Reset when (re)opened. ---------------------------------------------
     useEffect(() => {
       if (!visible) return;
+      playedOnceRef.current = false;
       startedRef.current = false;
       claimedRef.current = false;
       setPhase('countdown');
@@ -453,6 +457,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const beginPlay = useCallback(() => {
       if (startedRef.current) return;
       startedRef.current = true;
+      playedOnceRef.current = true;
       setPhase('playing');
       onStartRef.current();
     }, []);
@@ -1032,7 +1037,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             >
               {goal ? <Text style={styles.goalHeadline}>{`${goal.target} ${goal.label}`}</Text> : null}
               <Animated.Text style={[styles.count, countStyle]}>{countText}</Animated.Text>
-              {objective ? <Text style={styles.objective}>{objective}</Text> : null}
+              {objective && !playedOnceRef.current ? <Text style={styles.objective}>{objective}</Text> : null}
               <Text style={styles.skipHint}>tap to skip</Text>
             </Pressable>
           ) : null}

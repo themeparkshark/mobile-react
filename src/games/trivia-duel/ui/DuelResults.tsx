@@ -22,9 +22,13 @@ import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { feelingChips, type FeelingStat } from '../../../gamekit/results/feelings';
 import GameIcon, { type GameIconName } from '../../../ui/GameIcon';
 
-/** The polaroid sits this far above the card's top edge (root paddingBottom + a gap clear of the ribbon). */
+/**
+ * The polaroid sits this far above the card's top edge (root paddingBottom +
+ * a gap clear of the ribbon). The ribbon rises 36 pt over the card's top and
+ * slams to 1.25x, so the gap keeps the polaroid (tilted -6 deg) in clear sky.
+ */
 const POL_BOTTOM_PAD = 10;
-const POL_GAP = 34;
+const POL_GAP = 64;
 
 /** The shared results card blue (ResultsCard): one surface on every results card. */
 const CARD_BLUE = '#0768b9';
@@ -96,15 +100,30 @@ export const GAP_BEATS = 4;
 export const BANNER_AT = 700;
 export const BANNER_GAP = 180;
 export const RANK_UP_AT = 1100;
+/** The ribbon's slam (1.25x, then the settle spring) takes about this long after it starts. */
+export const RIBBON_SLAM_MS = 360;
 /**
- * When the Best Moment polaroid drops: after FIN BEATEN, NEW BEST and the
+ * When the Best Moment polaroid drops: after the last star, the title
+ * (YOU WIN! lands right after the last star), FIN BEATEN, NEW BEST and the
  * RANK UP badge have popped (it never lands while they do), and never before
  * two beats. It drops above the card, over the stage, so it covers no badge.
  */
-export function polaroidAt(beatMs: number, banners: number, rankUp: boolean): number {
+export function polaroidAt(beatMs: number, banners: number, rankUp: boolean, stars = 0): number {
   const lastBanner = banners > 0 ? BANNER_AT + (banners - 1) * BANNER_GAP + 260 : 0;
   const lastRank = rankUp ? RANK_UP_AT + 420 : 0;
-  return Math.max(beatMs * 2, lastBanner, lastRank);
+  const titleLanded = rideRibbonDelay(stars, false) + RIBBON_SLAM_MS;
+  return Math.max(beatMs * 2, lastBanner, lastRank, titleLanded);
+}
+
+/** The Best Moment caption as a picture: the time alone ("0.4s"), read big beside a bolt. */
+export function bestMomentTime(label: string): string | null {
+  const m = /^(\d+(?:\.\d+)?)s\b/.exec(label.trim());
+  return m ? `${m[1]}s` : null;
+}
+
+/** What VoiceOver says for the Best Moment ("0.4s on Q2" -> "Best moment: 0.4 seconds on question 2"). */
+export function bestMomentSpoken(label: string): string {
+  return `Best moment: ${label.replace(/(\d+(?:\.\d+)?)s\b/, '$1 seconds').replace(/\bQ(\d+)/, 'question $1')}`;
 }
 
 export interface ResultsModel {
@@ -155,7 +174,11 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   const [polGone, setPolGone] = useState(!model.best || reducedMotion);
   // The polaroid drops above the card (over the stage), never over its badges.
   const [cardH, setCardH] = useState(0);
-  const polAt = polaroidAt(beatMs, model.banners.length, model.banners.includes('RANK UP'));
+  // A won duel always lights at least one star: a YOU WIN! over three empty
+  // stars would read like a loss (duelStars gives every win 1 to 3).
+  const stars = model.won && !model.ride ? Math.max(1, model.stars) : model.stars;
+  // The polaroid waits for the stars and the title too, so the win's first look is YOU WIN!.
+  const polAt = polaroidAt(beatMs, model.banners.length, model.banners.includes('RANK UP'), stars);
 
   useEffect(() => {
     if (reducedMotion) cardO.value = withTiming(1, { duration: 300 });
@@ -166,9 +189,8 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
     }
     if (!reducedMotion && onRematch) pulse.value = withRepeat(withSequence(withTiming(1.06, { duration: beatMs * 0.25 }), withTiming(1, { duration: beatMs * 0.75 })), 3);
     if (model.best && !reducedMotion) {
-      polY.value = withDelay(polAt, withSequence(
-        withSpring(0, { damping: 10, stiffness: 220 }),
-      ));
+      // It eases down and stops dead: no bounce that could dip into the ribbon or the card.
+      polY.value = withDelay(polAt, withTiming(0, { duration: 420, easing: Easing.out(Easing.cubic) }));
       // Then it pops away instead of tucking over the card's words.
       polS.value = withDelay(polAt + 1500, withTiming(0, { duration: 260, easing: Easing.in(Easing.quad) }));
       const gone = setTimeout(() => setPolGone(true), polAt + 1500 + 320);
@@ -193,9 +215,6 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   const rankUp = model.banners.includes('RANK UP');
 
   const total = Math.max(1, model.myScore + model.oppScore);
-  // A won duel always lights at least one star: a YOU WIN! over three empty
-  // stars would read like a loss (duelStars gives every win 1 to 3).
-  const stars = model.won && !model.ride ? Math.max(1, model.stars) : model.stars;
   const fact = model.facts[0];
   const title = model.ride ? (model.ride.won ? 'RIDE COIN!' : 'GOOD TRY!')
     : model.practice ? (model.won ? 'PRACTICE WIN!' : 'GOOD PRACTICE!') : model.won ? 'YOU WIN!' : model.tie ? 'DEAD EVEN!' : 'GOOD GAME!';
@@ -290,12 +309,15 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
           </View>
         </View>
       </Animated.View>
-      {model.best && !polGone ? (
-        <Animated.View style={[styles.polaroid, { bottom: POL_BOTTOM_PAD + cardH + POL_GAP }, polStyle]} pointerEvents="none">
+      {/* It waits for the card's real height, so it never drops onto the card. */}
+      {model.best && !polGone && cardH > 0 ? (
+        <Animated.View style={[styles.polaroid, { bottom: POL_BOTTOM_PAD + cardH + POL_GAP }, polStyle]} pointerEvents="none"
+          accessible accessibilityLabel={bestMomentSpoken(model.best.label)}>
           <Image source={ART.polaroid} style={styles.polImg} resizeMode="contain" />
-          <View style={styles.polCaption}>
-            <Text style={styles.polTitle}>BEST MOMENT</Text>
-            <Text style={styles.polText}>{model.best.label}</Text>
+          {/* A picture, not a sentence: a bolt and the big time (the rest is spoken). */}
+          <View style={styles.polCaption} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+            <GameIcon name="rush" size={30} />
+            {bestMomentTime(model.best.label) ? <Text style={styles.polTime}>{bestMomentTime(model.best.label)}</Text> : null}
           </View>
         </Animated.View>
       ) : null}
@@ -612,7 +634,6 @@ const styles = StyleSheet.create({
   full: { width: '100%' },
   polaroid: { position: 'absolute', alignSelf: 'center', alignItems: 'center' },
   polImg: { width: 200, height: 152 },
-  polCaption: { position: 'absolute', bottom: 18, alignItems: 'center' },
-  polTitle: { fontFamily: 'Shark', fontSize: 14, color: C.navy },
-  polText: { fontFamily: 'Knockout', fontSize: 16, color: C.navy },
+  polCaption: { position: 'absolute', bottom: 16, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  polTime: { fontFamily: 'Shark', fontSize: 26, color: C.navy },
 });
