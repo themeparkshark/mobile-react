@@ -23,7 +23,7 @@ const DAILY_PAID: PaidRewards = { coins: 15, tickets: 1, energy: 20, xp: 35, ite
 const LEVEL_PAID: PaidRewards = { coins: 120, tickets: 2, energy: 30, item: { id: 1, name: 'Captain Hat', image: null, rarity: 2 } };
 
 type Stage = { k: 'flame'; moment: Exclude<FlameMoment, { kind: 'none' }> } | { k: 'tomorrow'; days: number }
-  | { k: 'chest'; src: 'daily' | 'level'; rewards: PaidRewards | null; opening: boolean; n: number }
+  | { k: 'chest'; src: 'daily' | 'level'; rewards: PaidRewards | null; opening: boolean; n: number; repeat?: boolean; rare?: boolean }
   | { k: 'saved'; streak: number } | { k: 'ember'; was: number } | null;
 
 const FIXTURE = (days: number, milestoneTomorrow = false) => ({
@@ -65,6 +65,9 @@ export default function StreakFlamePreview() {
       setLanding(l => ({ index: done - 1, done, key: (l?.key ?? 0) + 1 }));
     } else if (code === 'reset') { setStage(null); setPips([false, false, false]); setFreezes(0); setArrive(0); }
     else if (code.startsWith('chestd')) setStage({ k: 'chest', src: 'daily', rewards: null, opening: false, n: Date.now() });
+    // The repeat chest (after three opens on this phone) and a rare chest (its gold beam), on demand for the lane tools.
+    else if (code.startsWith('chestp')) setStage({ k: 'chest', src: 'daily', rewards: null, opening: false, n: Date.now(), repeat: true });
+    else if (code.startsWith('chestr')) setStage({ k: 'chest', src: 'daily', rewards: null, opening: false, n: Date.now(), rare: true });
     else if (code.startsWith('chestl')) setStage({ k: 'chest', src: 'level', rewards: null, opening: false, n: Date.now() });
     else if (code.startsWith('saved')) setStage({ k: 'saved', streak: n });
     else if (code.startsWith('ember')) setStage({ k: 'ember', was: n });
@@ -93,7 +96,7 @@ export default function StreakFlamePreview() {
         <View style={styles.row}><Text style={styles.rowName}>captaindax</Text><StreakFlame streak={0} best={6} size={24} /></View>
         <Text style={styles.h}>Moments</Text>
         <View style={styles.buttons}>
-          {['p1', 'p2', 'm3', 'm7', 'p12', 'm30', 'm100', 't2', 't6', 'land1', 'land2', 'land3', 'chestd', 'chestl', 'saved8', 'ember12', 'fin', 'reset'].map(c => (
+          {['p1', 'p2', 'm3', 'm7', 'p12', 'm30', 'm100', 't2', 't6', 'land1', 'land2', 'land3', 'chestd', 'chestp', 'chestr', 'chestl', 'saved8', 'ember12', 'fin', 'reset'].map(c => (
             <Pressable key={c} onPress={() => play(c)} style={styles.btn}><Text style={styles.btnText}>{c}</Text></Pressable>
           ))}
         </View>
@@ -117,7 +120,7 @@ export default function StreakFlamePreview() {
             : stage.k === 'chest' ? (
               <RewardReveal key={stage.n} reducedMotion={rm} rewards={stage.rewards} opening={stage.opening} onOpen={openChest} onDone={() => setStage(null)}
                 subtitle={stage.src === 'daily' ? 'All three goals done!' : 'You reached Level 4!'} dropIn={stage.src === 'level'}
-                autoOpen={stage.src === 'daily'} fullSet={stage.src === 'daily'}
+                autoOpen={stage.src === 'daily'} fullSet={stage.src === 'daily'} repeat={!!stage.repeat} rare={!!stage.rare}
                 expectRows={stage.src === 'daily' ? { small: 4, big: 1 } : { small: 3, big: 1 }}
                 preview={<GymPreview level={stage.src === 'level'} />}
                 closedArt={stage.src === 'daily' ? ICON_SOURCES.chest : LEVEL_CHEST} openArt={stage.src === 'daily' ? ICON_SOURCES.chestOpen : LEVEL_CHEST_OPEN}
