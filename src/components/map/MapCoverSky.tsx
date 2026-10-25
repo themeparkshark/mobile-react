@@ -25,6 +25,19 @@ export const COVER_CLOUDS = [
 ] as const;
 
 /**
+ * The sheet over a slow map sits under the HUD (the header cards, the compass rail, the help and
+ * watch buttons, Energy and the steps pill, PLAY RIDE, Finn's card), so its clouds keep to the open
+ * sky between them, never within 24 pt of a button, where an outlined cloud would read as an empty
+ * speech bubble: one at the left between the adventure card and Finn's card, and on a taller map
+ * (minSheet, in points) one more between the adventure card and the shark. They are a touch softer.
+ */
+export const SHEET_CLOUDS = [
+  { x: 0.04, y: 0.3, w: 0.24, drift: 8, periodMs: 11000, phase: 0.15, minSheet: 0 },
+  { x: 0.4, y: 0.25, w: 0.22, drift: -8, periodMs: 9000, phase: 0.6, minSheet: 680 },
+] as const;
+const SHEET_CLOUD_OPACITY = 0.85;
+
+/**
  * What the map shows while park tiles stream in: the game's light sky with Alex's drawn
  * clouds, the shark bobbing in the middle, and the splash's own loading bar picking up where
  * the splash left it (LAUNCH_HANDOFF_SHARE) and filling the rest. Every loop runs on the UI
@@ -73,7 +86,8 @@ function MapCoverSky({ done = false, fill: drivenFill, bar = true }: {
         setBox(current => (current && current.width === w && current.height === h ? current : { width: w, height: h }));
       }}>
       {/* Clouds sit at percentages of the cover (native layout, no JS measuring), so they show on the first frame and never jump. */}
-      {COVER_CLOUDS.map((c, i) => <CoverCloud key={i} cloud={c} width={width} still={reduced} />)}
+      {(bar ? COVER_CLOUDS : SHEET_CLOUDS.filter(c => height >= c.minSheet)).map((c, i) => <CoverCloud key={i} cloud={c}
+        width={width} still={reduced} opacity={bar ? 1 : SHEET_CLOUD_OPACITY} />)}
       <View style={styles.center}>
         <Animated.View style={sharkStyle}>
           <Image source={SHARK} style={{ width: sharkSize, height: sharkSize }} contentFit="contain"
@@ -97,10 +111,11 @@ function MapCoverSky({ done = false, fill: drivenFill, bar = true }: {
  * like weather: never in step with the shark's bob, never with each other. UI thread; still under
  * Reduce Motion.
  */
-function CoverCloud({ cloud, width, still }: {
-  readonly cloud: (typeof COVER_CLOUDS)[number];
+function CoverCloud({ cloud, width, still, opacity }: {
+  readonly cloud: (typeof COVER_CLOUDS)[number] | (typeof SHEET_CLOUDS)[number];
   readonly width: number;
   readonly still: boolean;
+  readonly opacity: number;
 }) {
   const w = Math.round(width * cloud.w);
   const d = useSharedValue<number>(cloud.phase);
@@ -113,7 +128,7 @@ function CoverCloud({ cloud, width, still }: {
   }, [still, cloud, d]);
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: d.value * cloud.drift }] }));
   return (
-    <Animated.View style={[{ position: 'absolute', left: `${cloud.x * 100}%`, top: `${cloud.y * 100}%` }, style]}>
+    <Animated.View style={[{ position: 'absolute', left: `${cloud.x * 100}%`, top: `${cloud.y * 100}%`, opacity }, style]}>
       <Image source={CLOUD} style={{ width: w, height: Math.round(w * 155 / 232) }} contentFit="contain"
         cachePolicy="memory-disk" priority="high" transition={0} />
     </Animated.View>

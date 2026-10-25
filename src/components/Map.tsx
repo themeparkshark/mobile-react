@@ -47,6 +47,7 @@ import { DeclutterContext } from './map/declutter/Placed';
 import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapDeclutter';
 import type { InsetRect, LayoutItem, Rect } from './map/declutter/solver';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
+import { clearOfflineChipDock, offlineChipDock, publishOfflineChipDock } from './map/offlineDock';
 import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 import { MOTION_PROBE, MotionProbeFrames, probeCamera, probeCount } from '../dev/motionProbe';
 import { useTrail } from '../services/trail/TrailProvider';
@@ -579,13 +580,22 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const railSide = extraCount > 0 && !!viewSize && railFloor > 0
     && controlsTop + railColumnHeight(1 + Math.max(extraCount, RAIL_EXTRAS_PLANNED)) + RAIL_FLOOR_GAP > viewSize.height - railFloor;
   // Screen-space art over the map is an inset too: the Fin-ister moon (FrightMapLayer draws it
-  // at 66 % across, 15 % down, 40 pt glow) and Explore's docked offline chip (OfflineBanner:
-  // 44 pt, 16 pt from the right, 43 % down the window) while it shows.
+  // at 66 % across, 15 % down, 40 pt glow) and Explore's docked offline chip (OfflineBanner, at
+  // this map's chip dock) while it shows.
   const [offline, setOffline] = useState(isOffline());
   useEffect(() => onConnectivityChange(setOffline), []);
   const [viewTop, setViewTop] = useState<number | null>(null);
-  const windowHeight = window.height;
   const frightOn = !!fright?.active;
+  // The offline chip's dock: under the whole planned rail (or beside it on a short phone), so going
+  // offline never puts the chip on the compass, Daily 3 or the chest. OfflineBanner reads it.
+  const chipDock = useMemo(() => (viewSize && viewTop !== null ? offlineChipDock({
+    viewTop, viewHeight: viewSize.height, controlsTop, railFloor,
+    railHeight: railSide ? railColumnHeight(RAIL_EXTRAS_PLANNED) : railColumnHeight(1 + RAIL_EXTRAS_PLANNED),
+    railWidth: railSide ? RAIL_BUTTON * 2 + RAIL_GAP : RAIL_BUTTON,
+  }) : null), [viewSize?.height, viewTop, controlsTop, railFloor, railSide]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dockOwner = useRef({}).current;
+  useEffect(() => { if (chipDock) publishOfflineChipDock(dockOwner, chipDock); }, [chipDock, dockOwner]);
+  useEffect(() => () => clearOfflineChipDock(dockOwner), [dockOwner]);
   const declutterControls = useMemo<InsetRect[]>(() => {
     if (!declutter || !viewSize) return [];
     // The compass (and chest) column: a hard inset with a 6 pt gap (share 0: no art under a button).
@@ -593,9 +603,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       ? { x: viewSize.width - 16 - 54 - 8 - 54 - 6, y: controlsTop - 6, w: 54 * 2 + 8 + 12, h: railColumnHeight(extraCount) + 12, share: 0 }
       : { x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6, w: 54 + 12, h: 54 + extraCount * 62 + 12, share: 0 }];
     if (frightOn) out.push({ x: Math.round(viewSize.width * 0.66) - 44, y: Math.round(viewSize.height * 0.15) - 44, w: 88, h: 88, share: 0.2 });
-    if (offline && viewTop !== null) out.push({ x: viewSize.width - 16 - 44 - 8, y: Math.round(windowHeight * 0.43) - viewTop - 8, w: 60, h: 60, share: 0.2 });
+    if (offline && viewTop !== null && chipDock) out.push({ x: viewSize.width - chipDock.right - 44 - 8, y: chipDock.top - viewTop - 8, w: 60, h: 60, share: 0.2 });
     return out;
-  }, [!!declutter, viewSize?.width, viewSize?.height, controlsTop, extraCount, railSide, frightOn, offline, viewTop, windowHeight]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [!!declutter, viewSize?.width, viewSize?.height, controlsTop, extraCount, railSide, frightOn, offline, viewTop, chipDock]); // eslint-disable-line react-hooks/exhaustive-deps
   // Development overlay (EXPO_PUBLIC_DECLUTTER_DEBUG=1): every footprint and chip box the solver placed.
   const [debugRects, setDebugRects] = useState<Map<string, { body: Rect; tag: Rect | null; point?: { x: number; y: number } }> | null>(null);
   const debugOn = __DEV__ && process.env.EXPO_PUBLIC_DECLUTTER_DEBUG === '1';
@@ -811,7 +821,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           reducedMotion={reducedMotion} hint={compassHint.visible && haveHeading} onHintDone={compassHint.dismiss}
           noCompassFlash={noCompassFlash}
           awayArt={hasDressedShark(lookInventory) ? <View style={styles.awaySharkScale}><MapSharkLook inventory={lookInventory} t={fxClock} kick={fxKick} animate={false} playing={false} /></View> : undefined} />
-        {railSide ? <View pointerEvents="box-none" style={styles.railExtras}>{extraControls}</View> : extraControls}
+        {/* The extras always sit in this one wrapper (beside the compass on a short phone, under it
+            otherwise): only its style changes, so a rail that changes sides never remounts a button. */}
+        <View pointerEvents="box-none" style={railSide ? styles.railExtras : extraCount > 0 ? styles.railExtrasUnder : styles.railExtrasNone}>
+          {extraControls}
+        </View>
       </Reanimated.View>
 
       {/* Every marker inside the map (islands, finds, haunts) reads its placement from here. */}
@@ -1129,6 +1143,8 @@ const styles = StyleSheet.create({
   // The compass on the right, the extra buttons in their own column to its left (short phones).
   railSide: { flexDirection: 'row-reverse', alignItems: 'flex-start' },
   railExtras: { gap: 8 },
+  railExtrasUnder: { gap: 8 },
+  railExtrasNone: { display: 'none' },
   debugBody: { position: 'absolute', borderWidth: 1, borderColor: '#ff3df5', backgroundColor: 'rgba(255,61,245,0.08)' },
   debugTag: { position: 'absolute', borderWidth: 1, borderColor: '#3dffb0' },
   debugPoint: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: '#00e5ff' },

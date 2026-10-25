@@ -119,7 +119,7 @@ import { playSfx } from '../gamekit/SFX';
 import { AWAY_LINE, awayHeadline, awayMessage, stallAction } from '../components/fright/halloweenShop';
 import { useHelp } from '../components/help/HelpProvider';
 import OneTimeTip from '../components/help/OneTimeTip';
-import CoinTipPicture from '../components/help/CoinTipPicture';
+import CoinTipPicture, { COIN_TIP_PICTURE_IMAGES } from '../components/help/CoinTipPicture';
 import HelpButton from '../components/help/HelpButton';
 import { mapTipReady, parkTipFor } from '../services/help/tipGate';
 // Map declutter: one HUD row, and every marker placed by priority (no overlaps).
@@ -208,6 +208,19 @@ const PARKED_BOX = { width: 1, height: 1 } as const;
 const PARKED_TIME = '2000-01-01T00:00:00Z';
 // Friends drawn as ghost sharks at most (the closest).
 const GHOST_CAP = 5;
+
+/** True two frames after the first mount (one commit later), for overlays that start hidden. */
+function useLateMount(): boolean {
+  // With no frame clock (a test runner) there is nothing to draw between commits: mount at once.
+  const [late, setLate] = useState(typeof requestAnimationFrame !== 'function');
+  useEffect(() => {
+    if (late) return undefined;
+    let second = 0;
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => setLate(true)); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return late;
+}
 
 function ExploreScreen() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
@@ -323,6 +336,10 @@ function ExploreScreen() {
 
   // The map's loading cover is up: tips, tutorials and slams wait for the map to arrive.
   const mapCovered = useMapCovered();
+  // A light first mount: the map, its HUD and the launch cover mount first; the overlays that start
+  // hidden (Community Center, Too Far, events, Fin-ister Nights, Home Hunt results, Daily 3 sheets)
+  // join two frames later in their own commit, so the phone draws the loading bar's creep in between.
+  const lateOverlays = useLateMount();
   // The first seconds after the cover lifts belong to the map, its pins and PLAY RIDE: Finn's park
   // tips wait MAP_CALM_MS, so a kid never meets a pile of cards (at most one card in that window).
   // The window starts at the first VISIBLE map frame: this screen is on top (the Splash and Loading
@@ -1101,9 +1118,11 @@ function ExploreScreen() {
   }, [nextUpBusy, nextUpRefresh]);
   // Daily 3 first, the chest after it: the chest waits for today's gift to load (often a beat after
   // the map lifts), so it joins at the end of the rail and never pushes Daily 3 down a slot. A claimed
-  // chest leaves from the end too, so no button ever moves.
-  const mapControls = retention.button ? <>{retention.button}{chestButton}</> : chestButton;
+  // chest leaves from the end too, so no button ever moves. The two always sit in the same two slots
+  // of one fragment (an empty slot is null), so one arriving never remounts the other: a chest that
+  // drew first never blinks out and pops in again when Daily 3 joins.
   const mapControlsCount = (chestButton ? 1 : 0) + (retention.button ? 1 : 0);
+  const mapControls = mapControlsCount > 0 ? <>{retention.button}{chestButton}</> : null;
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
@@ -1344,14 +1363,14 @@ function ExploreScreen() {
       {/* One overlay at a time: the daily chest comes last, after the first catch and never alongside a find. */}
       {chestShowing && dailyGift &&
         <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} onClosed={onChestClosed} />}
-      {retention.overlay}
-      {player && liveEvt.event && <EventSheet event={liveEvt.event} visible={eventOpen} onClose={() => setEventOpen(false)} atPark={!!park}
+      {lateOverlays && retention.overlay}
+      {lateOverlays && player && liveEvt.event && <EventSheet event={liveEvt.event} visible={eventOpen} onClose={() => setEventOpen(false)} atPark={!!park}
         onShowRide={id => { const t = visibleTasks.find(task => task.id === id); if (t) { setEventOpen(false); setSelectedTask(t); } }} />}
-      {player && liveEvt.event && <EventRecapCard event={liveEvt.event} visible={recapDue && mapFocused && !eventOpen} onClose={recapSeen}
+      {lateOverlays && player && liveEvt.event && <EventRecapCard event={liveEvt.event} visible={recapDue && mapFocused && !eventOpen} onClose={recapSeen}
         onOpenChests={() => { recapSeen(); setEventOpen(true); }} />}
       {/* Monday Home Hunt results come through the presentation queue, after the daily chest (2 full-screen moments per app open). */}
-      <HomeHuntResultsHost enabled={!!player && !park && mapFocused && permissionGranted && hasCompleted('onboarding') && chestReady
-        && !dailyGiftOccluded && !chestShowing && !(chestUnclaimed && !chestDismissed(dailyGift!.id))} />
+      {lateOverlays && <HomeHuntResultsHost enabled={!!player && !park && mapFocused && permissionGranted && hasCompleted('onboarding') && chestReady
+        && !dailyGiftOccluded && !chestShowing && !(chestUnclaimed && !chestDismissed(dailyGift!.id))} />}
       {/* Home Mode: the map always renders without a park, even before the
           first park check settles (it shows the park-check card until then).
           Gating it on parkLoaded left a blank grey screen whenever park state
@@ -1561,7 +1580,7 @@ function ExploreScreen() {
             ? coinTipLayout(park.stores.length, { width: rightColumnWidth, height: rightColumnHeight }) : null;
           return <OneTimeTip key={parkTip} id={parkTip} ready={parkTipReady}
             small={!!coin && (SHORT_MAP || coin.narrow)} fit={!!coin} narrow={coin?.narrow}
-            art={coin ? <CoinTipPicture /> : undefined}
+            art={coin ? <CoinTipPicture /> : undefined} artImages={coin ? COIN_TIP_PICTURE_IMAGES : 0}
             pointerLeft={coin?.pointer}
             style={coin?.style ?? PARK_WELCOME_TIP_STYLE} />;
         })()}
@@ -1770,12 +1789,12 @@ function ExploreScreen() {
       <MapLaunchCover variant="sky" blockTouches style={SKY_COVER_STYLE} />
 
       {/* Community Center Modal */}
-      <CommunityCenterModal
+      {lateOverlays && <CommunityCenterModal
         visible={showCommunityCenterModal}
         center={communityCenter}
         onClose={() => setShowCommunityCenterModal(false)}
         onAction={refreshCommunityCenter}
-      />
+      />}
       
       {/* The collect moment flies over everything on the map screen. */}
       <View ref={flightLayerRef} collapsable={false} pointerEvents="none"
@@ -1786,10 +1805,10 @@ function ExploreScreen() {
           onDone={() => setCollectFlight(null)} />}
       </View>
       {/* Too Far Away: ribbon + blue card with a distance meter */}
-      <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}
-        homeItem={tooFarIsHomeItem} onClose={() => setShowTooFarModal(false)} />
+      {lateOverlays && <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}
+        homeItem={tooFarIsHomeItem} onClose={() => setShowTooFarModal(false)} />}
       {/* Fin-ister Nights overlays (sheet, rank card, tutorial, exit moment, Marquee); outside the park block on purpose. */}
-      {player && <FrightLayer night={frightNight} engine={frightEngine} top={slotTop + 64} />}
+      {lateOverlays && player && <FrightLayer night={frightNight} engine={frightEngine} top={slotTop + 64} />}
     </Wrapper>
     {/* The app's first cover: the launch scene over the whole screen, header and footer included,
         so the splash and its one bar carry on until the park map has drawn, then the whole game

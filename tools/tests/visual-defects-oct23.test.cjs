@@ -496,7 +496,7 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   }).COVER_CLOUDS;
   // Each cloud drifts on its own slow clock (not the shark's 1.3 s bob), starting at its own point.
   const coverSrc = read('src/components/map/MapCoverSky.tsx');
-  assert.match(coverSrc, /<CoverCloud key=\{i\} cloud=\{c\} width=\{width\} still=\{reduced\} \/>/);
+  assert.match(coverSrc, /\{\(bar \? COVER_CLOUDS : SHEET_CLOUDS\.filter\(c => height >= c\.minSheet\)\)\.map\(\(c, i\) => <CoverCloud key=\{i\} cloud=\{c\}\s+width=\{width\} still=\{reduced\}/);
   assert.equal(new Set(clouds.map((c) => c.periodMs)).size, clouds.length);
   assert.equal(new Set(clouds.map((c) => c.phase)).size, clouds.length);
   for (const c of clouds) {
@@ -1020,7 +1020,7 @@ test('coin card: no 200 pt floor, sized to its content, narrow or a row up when 
   assert.match(tip, /\{!narrow && <Text style=\{styles\.ok\}>OK<\/Text>\}/);
   assert.match(tip, /fitCopy: \{ flexShrink: 1 \}/);
   const picture = read('src/components/help/CoinTipPicture.tsx');
-  assert.match(picture, /<GameIcon name="ticket" size=\{36\} \/>/);
+  assert.match(picture, /<GameIcon name="ticket" size=\{36\} onLoad=\{\(\) => loaded\('ticket'\)\} \/>/);
   assert.match(picture, /coin: \{ width: 38, height: 38 \}/);
   assert.doesNotMatch(picture, /GameIcon name="arrow"/, 'the arrow is drawn gold, not a blue circle');
 });
@@ -1035,7 +1035,7 @@ test('Community Center top cards glow warm like lit signs', () => {
 test('short phones: the map rail puts the chest and Daily 3 beside the compass instead of on the Trail Boxes pill', () => {
   const map = read('src/components/Map.tsx');
   assert.match(map, /const railSide = extraCount > 0 && !!viewSize && railFloor > 0\s*&& controlsTop \+ railColumnHeight\(1 \+ Math\.max\(extraCount, RAIL_EXTRAS_PLANNED\)\) \+ RAIL_FLOOR_GAP > viewSize\.height - railFloor;/);
-  assert.match(map, /\{railSide \? <View pointerEvents="box-none" style=\{styles\.railExtras\}>\{extraControls\}<\/View> : extraControls\}/);
+  assert.match(map, /<View pointerEvents="box-none" style=\{railSide \? styles\.railExtras : extraCount > 0 \? styles\.railExtrasUnder : styles\.railExtrasNone\}>\s*\{extraControls\}\s*<\/View>/);
   assert.match(map, /railSide: \{ flexDirection: 'row-reverse', alignItems: 'flex-start' \},/);
   // The declutter keeps map art out from under the two-column rail too.
   assert.match(map, /w: 54 \* 2 \+ 8 \+ 12, h: railColumnHeight\(extraCount\) \+ 12/);
@@ -1142,12 +1142,12 @@ test('launch never starts the login music while sign-in is still loading (no aud
 
 test('map rail: Daily 3 first and the late chest joins at the end, popping in on the UI thread (no button ever moves)', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /const mapControls = retention\.button \? <>\{retention\.button\}\{chestButton\}<\/> : chestButton;/);
+  assert.match(explore, /const mapControls = mapControlsCount > 0 \? <>\{retention\.button\}\{chestButton\}<\/> : null;/);
   assert.doesNotMatch(explore, /<>\{chestButton\}\{retention\.button\}<\/>/);
   const chest = read('src/components/map/ChestMapButton.tsx');
   assert.match(chest, /shown\.value = reduced \? 1 : withSpring\(1,/);
   assert.match(chest, /transform: \[\{ scale: 0\.7 \+ 0\.3 \* shown\.value \}\]/);
-  assert.match(chest, /if \(drawn\) fade\.value = reduced \? 1 : withTiming\(1, \{ duration: 160 \}\);/);
+  assert.match(chest, /fade\.value = reduced \? 1 : withTiming\(1, \{ duration: 160 \}\);/);
 });
 
 test('PLAY RIDE: a ride island mostly under the pill and its chip fades out while the pill is up', () => {
@@ -1237,4 +1237,108 @@ test('launch bar: between real steps it keeps creeping on the UI thread (the par
   assert.match(scene, /if \(to <= launchFill\.value\) return;/, 'the bar never moves back');
   const k = loadTs('src/constants/launchHandoff.ts');
   assert.ok(k.COVER_STEPS.armed > k.LAUNCH_HANDOFF_SHARE && 0.9 * k.LAUNCH_HANDOFF_SHARE > 0.5 * k.LAUNCH_HANDOFF_SHARE);
+});
+
+test('wave 5 round 2: the chest pops in once and is never remounted when Daily 3 joins or the rail changes sides', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  // One fragment, two fixed slots (Daily 3, chest), or nothing: never a bare chest that later moves into a fragment.
+  assert.match(explore, /const mapControls = mapControlsCount > 0 \? <>\{retention\.button\}\{chestButton\}<\/> : null;/);
+  assert.doesNotMatch(explore, /: chestButton;/);
+  // The map keeps one wrapper around the extras and only switches its style.
+  const map = read('src/components/Map.tsx');
+  assert.doesNotMatch(map, /\{railSide \? <View[^}]*\}>\{extraControls\}<\/View> : extraControls\}/);
+  assert.match(map, /railExtrasNone: \{ display: 'none' \},/);
+  // Backstop: any later remount stands at full at once (one pop per app session).
+  const chest = read('src/components/map/ChestMapButton.tsx');
+  assert.match(chest, /let poppedThisSession = false;/);
+  assert.match(chest, /const \[settled\] = useState\(poppedThisSession\);/);
+  assert.match(chest, /const fade = useSharedValue\(settled \? 1 : 0\);/);
+  assert.match(chest, /if \(!drawn \|\| settled\) return;\s*poppedThisSession = true;/);
+});
+
+test("wave 5 round 2: Finn's coin card shows only once Finn and all three pictures have drawn", () => {
+  const tip = read('src/components/help/CoachTip.tsx');
+  assert.match(tip, /export const TipArtLoaded = createContext/);
+  assert.match(tip, /const expected = \(compact \? 0 : 1\) \+ \(art \? artImages : 0\);/);
+  assert.match(tip, /onLoad=\{\(\) => artLoaded\('finn'\)\} onError=\{\(\) => artLoaded\('finn'\)\}/);
+  assert.match(tip, /pointerEvents=\{ready \? 'box-none' : 'none'\}/);
+  assert.doesNotMatch(tip, /entering=\{/, 'no mount-time fade that would start before the pictures draw');
+  assert.match(tip, /export const TIP_ART_WAIT_MS = 700;/);
+  const picture = read('src/components/help/CoinTipPicture.tsx');
+  const names = new Set([...picture.matchAll(/loaded\('(\w+)'\)/g)].map((m) => m[1]));
+  assert.deepEqual([...names].sort(), ['coin', 'sparkle', 'ticket']);
+  assert.match(picture, /export const COIN_TIP_PICTURE_IMAGES = 3;/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /artImages=\{coin \? COIN_TIP_PICTURE_IMAGES : 0\}/);
+  assert.match(read('src/ui/GameIcon.tsx'), /onLoad=\{onLoad\} onError=\{onLoad\}/);
+});
+
+test('wave 5 round 2: the offline chip docks under the whole planned rail, or beside it on a short phone', () => {
+  const { offlineChipDock } = loadTs('src/components/map/offlineDock.ts', { react: { useEffect() {}, useState: (v) => [typeof v === 'function' ? v() : v, () => {}] } });
+  const column = 3 * 54 + 2 * 8;
+  // iPhone 17 Pro shape: rail from 160 pt in a 680 pt map, Energy column 210 pt.
+  const pro = offlineChipDock({ viewTop: 120, viewHeight: 680, controlsTop: 160, railHeight: column, railWidth: 54, railFloor: 210 });
+  assert.equal(pro.top, 120 + 160 + column + 8, 'at least 8 pt under the third rail slot');
+  assert.equal(pro.right, 21, 'centred under the compass');
+  // A short phone with no room under the rail: beside it, clear of both rail columns.
+  const se = offlineChipDock({ viewTop: 90, viewHeight: 500, controlsTop: 150, railHeight: 116, railWidth: 116, railFloor: 220 });
+  assert.equal(se.right, 16 + 116 + 8);
+  assert.equal(se.top, 90 + 150 + 5);
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /railHeight: railSide \? railColumnHeight\(RAIL_EXTRAS_PLANNED\) : railColumnHeight\(1 \+ RAIL_EXTRAS_PLANNED\),/);
+  assert.match(map, /publishOfflineChipDock\(dockOwner, chipDock\)/);
+  const banner = read('src/components/OfflineBanner.tsx');
+  assert.match(banner, /const mapDock = useOfflineChipDock\(\);/);
+  assert.match(banner, /onMap \? mapDock\.top : Math\.round\(windowHeight \* MAP_CHIP_TOP\)/);
+});
+
+test('wave 5 round 2: the slow-tile sheet keeps its clouds in open sky, at least 24 pt from every HUD button', () => {
+  const clouds = loadTs('src/components/map/MapCoverSky.tsx', {
+    react: { memo: (c) => c, useEffect() {}, useState: (v) => [v, () => {}] },
+    'react-native': { StyleSheet: { create: (x) => x, absoluteFill: {}, absoluteFillObject: {} }, View: 'View', useWindowDimensions: () => ({ width: 402, height: 874 }) },
+    'expo-image': { Image: 'Image' },
+    'react-native-reanimated': { default: { View: 'View' }, Easing: {}, cancelAnimation() {}, useAnimatedStyle() {}, useSharedValue() {}, withRepeat() {}, withSequence() {}, withTiming() {} },
+    '../../config': { default: { primary: '#09268f' } },
+    '../../ui/useUiReducedMotion': { default: () => false },
+    '../../power/batterySaver': { useBatterySaver: () => false },
+    'react/jsx-runtime': { jsx() {}, jsxs() {} },
+  }).SHEET_CLOUDS;
+  // The sheet (the map view) on three phones, in points, with every HUD button and card measured from
+  // the w5 captures (13ca21c2 SE, w5r2 17 Pro and Pro Max), as [x, y, w, h] from the sheet's top left.
+  const phones = [
+    { name: 'SE', w: 375, h: 589, hud: [[12, 19, 351, 50], [12, 81, 160, 57], [244, 157, 115, 114], [215, 301, 143, 73],
+      [30, 359, 43, 42], [17, 414, 70, 48], [95, 384, 185, 60], [12, 282, 200, 70]] },
+    { name: '17 Pro', w: 402, h: 769, hud: [[13, 27, 376, 44], [13, 88, 171, 56], [332, 163, 54, 177], [242, 475, 143, 72],
+      [29, 535, 44, 42], [17, 585, 70, 71], [101, 557, 200, 90], [12, 440, 208, 88], [280, 599, 67, 68]] },
+    { name: 'Pro Max', w: 440, h: 844, hud: [[14, 23, 410, 42], [14, 82, 186, 56], [370, 158, 53, 175], [280, 538, 143, 84],
+      [30, 603, 42, 43], [110, 621, 220, 90], [12, 508, 215, 88]] },
+  ];
+  for (const p of phones) {
+    const shown = clouds.filter((c) => p.h >= c.minSheet);
+    assert.ok(shown.length >= 1, `${p.name}: the sky keeps at least one cloud`);
+    // The shark bobs in the middle of the sheet; clouds stay off it too.
+    const shark = Math.min(p.w, p.h) * 0.26;
+    const hud = [...p.hud, [(p.w - shark) / 2, (p.h - shark) / 2 - 10, shark, shark + 20]];
+    for (const c of shown) {
+      const cw = p.w * c.w; const ch = cw * 155 / 232;
+      const box = [p.w * c.x + Math.min(0, c.drift), p.h * c.y, cw + Math.abs(c.drift), ch];
+      for (const [x, y, w, h] of hud) {
+        const dx = Math.max(x - (box[0] + box[2]), box[0] - (x + w), 0);
+        const dy = Math.max(y - (box[1] + box[3]), box[1] - (y + h), 0);
+        assert.ok(Math.max(dx, dy) >= 24, `${p.name}: cloud at ${c.x},${c.y} is ${Math.max(dx, dy).toFixed(0)} pt from [${x},${y},${w},${h}]`);
+      }
+    }
+  }
+  assert.equal(phones.filter((p) => p.h >= 680).length, 2, 'the second cloud shows on the 17 Pro and Pro Max, not the SE');
+  assert.match(read('src/components/map/MapCoverSky.tsx'), /opacity=\{bar \? 1 : SHEET_CLOUD_OPACITY\}/);
+});
+
+test('wave 5 round 2: the map screen mounts its hidden overlays a commit after the map and HUD', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /const lateOverlays = useLateMount\(\);/);
+  for (const what of ['retention.overlay', 'player && liveEvt.event && <EventSheet', 'player && liveEvt.event && <EventRecapCard',
+    '<HomeHuntResultsHost', '<CommunityCenterModal', '<TooFarDialog', 'player && <FrightLayer']) {
+    assert.ok(explore.includes(`lateOverlays && ${what}`), `${what} waits for the second commit`);
+  }
+  // The chest, the boss and PLAY RIDE are not deferred.
+  assert.doesNotMatch(explore, /lateOverlays && (chestShowing|<RedeemModal|player && park && <BossRaidFlow)/);
 });

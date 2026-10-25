@@ -1,18 +1,23 @@
 import { Image } from 'expo-image';
-import { useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, RADIUS, SHADOW } from '../../ui';
 
 const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
+
+/** A picture inside a tip's art calls this (with its own name) once it has drawn. */
+export const TipArtLoaded = createContext<(name: string) => void>(() => undefined);
+/** The longest a tip waits for its pictures before it shows anyway (a missing file never hides it). */
+export const TIP_ART_WAIT_MS = 700;
 
 /**
  * A one-time Finn tip. Never a modal: it floats where the caller puts it, the
  * rest of the screen keeps working, a tap closes it, and it leaves on its own.
  */
 export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9000, compact = false, small = false, art, pointerLeft,
-  fit = false, narrow = false }: {
+  fit = false, narrow = false, artImages = 0 }: {
   readonly title: string;
   readonly body: string;
   readonly onDismiss: () => void;
@@ -30,9 +35,30 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
   readonly fit?: boolean;
   /** Little room: the title may take two lines and the OK word steps aside (a tap anywhere still closes it). */
   readonly narrow?: boolean;
+  /** How many pictures inside `art` report through TipArtLoaded (the card waits for them and Finn). */
+  readonly artImages?: number;
 }) {
   const [cardWidth, setCardWidth] = useState(0);
   const reduced = useReducedGameMotion();
+  // The card shows only once Finn and every picture in it have drawn, so its first visible frame is
+  // complete (never an arrow alone, then the ticket, then Finn). It fades in on the UI thread.
+  const expected = (compact ? 0 : 1) + (art ? artImages : 0);
+  const drawnArt = useRef(new Set<string>());
+  const [ready, setReady] = useState(expected === 0);
+  const artLoaded = useCallback((name: string) => {
+    drawnArt.current.add(name);
+    if (drawnArt.current.size >= expected) setReady(true);
+  }, [expected]);
+  useEffect(() => {
+    if (ready) return undefined;
+    const timer = setTimeout(() => setReady(true), TIP_ART_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [ready]);
+  const shown = useSharedValue(0);
+  useEffect(() => {
+    if (ready) shown.value = reduced ? 1 : withTiming(1, { duration: 220 });
+  }, [ready, reduced, shown]);
+  const fadeIn = useAnimatedStyle(() => ({ opacity: shown.value }));
   useEffect(() => {
     void AccessibilityInfo.announceForAccessibility(`${title}. ${body}`);
     if (autoHideMs <= 0) return;
@@ -42,12 +68,14 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <Animated.View pointerEvents="box-none" entering={reduced ? undefined : FadeIn.duration(220)}
-      exiting={reduced ? undefined : FadeOut.duration(150)} style={style}>
+    <TipArtLoaded.Provider value={artLoaded}>
+    <Animated.View pointerEvents={ready ? 'box-none' : 'none'}
+      exiting={reduced ? undefined : FadeOut.duration(150)} style={[style, fadeIn]}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${body}`} accessibilityHint="Closes the tip"
         onPress={onDismiss} onLayout={pointerLeft !== undefined ? event => setCardWidth(event.nativeEvent.layout.width) : undefined}
         style={[styles.card, compact && styles.compactCard, fit && styles.fitCard]}>
-        {!compact && <Image source={FINN} style={[styles.finn, small && styles.finnSmall]} contentFit="contain" />}
+        {!compact && <Image source={FINN} style={[styles.finn, small && styles.finnSmall]} contentFit="contain"
+          onLoad={() => artLoaded('finn')} onError={() => artLoaded('finn')} />}
         <View style={fit ? styles.fitCopy : styles.copy}>
           <Text style={styles.title} numberOfLines={art ? (narrow ? 2 : 1) : undefined} adjustsFontSizeToFit={!!art} minimumFontScale={0.8}>{title}</Text>
           {art ? <View style={styles.art}>{art}</View> : <Text style={styles.body}>{body}</Text>}
@@ -57,6 +85,7 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
       {pointerLeft !== undefined && <View pointerEvents="none"
         style={[styles.pointer, { left: cardWidth > 0 ? Math.min(pointerLeft, cardWidth - 34) : pointerLeft }]} />}
     </Animated.View>
+    </TipArtLoaded.Provider>
   );
 }
 

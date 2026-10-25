@@ -18,6 +18,7 @@ import { navigationRef } from '../RootNavigation';
 import * as Haptics from '../helpers/haptics';
 import { isOffline, onConnectivityChange, isOfflineMarkOwned, onOfflineMarkOwner } from '../services/connectivity';
 import { BRAND, FONT, GameButton, HIT_SLOP, OUTLINE, Z } from '../ui';
+import { useOfflineChipDock } from './map/offlineDock';
 
 export const OFFLINE_SHOW_DELAY_MS = 1200;
 export const OFFLINE_PROBE_INTERVAL_MS = 15000;
@@ -76,6 +77,8 @@ export default function OfflineBanner() {
   const catchOpen = useCatchOpen();
   const reduceMotion = useReducedMotion();
   const { height: windowHeight } = useWindowDimensions();
+  // On the map, the map says where the chip docks (under or beside its whole button rail).
+  const mapDock = useOfflineChipDock();
   const [phase, setPhase] = useState<Phase>('hidden');
   // A screen showing its own full offline state owns the mark: no second one here.
   const [markOwned, setMarkOwned] = useState(isOfflineMarkOwned());
@@ -207,12 +210,14 @@ export default function OfflineBanner() {
   // currency counters and header buttons stay visible and tappable offline.
   const top = (initialWindowMetrics?.insets.top ?? 47) + HEADER_CLEARANCE + (routeName ? ROUTE_EXTRA_TOP[routeName] ?? 0 : 0);
   // On sign-in the chip tucks under the status bar, clear of the title art and the sign-in card.
-  const dockTop = routeName === 'Login' ? (initialWindowMetrics?.insets.top ?? 47) + 8 : Math.round(windowHeight * MAP_CHIP_TOP);
+  const onMap = routeName !== 'Login' && !!mapDock;
+  const dockTop = routeName === 'Login' ? (initialWindowMetrics?.insets.top ?? 47) + 8
+    : onMap ? mapDock.top : Math.round(windowHeight * MAP_CHIP_TOP);
 
   return (
     <View
       pointerEvents="box-none"
-      style={chipOnly ? [styles.hostDocked, { top: dockTop }] : [styles.host, { top }]}
+      style={chipOnly ? [styles.hostDocked, { top: dockTop }, onMap && { right: mapDock.right }] : [styles.host, { top }]}
     >
       <Animated.View
         style={cardStyle}
