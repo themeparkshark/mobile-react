@@ -674,7 +674,7 @@ test('one name per clue on every chapter: PLAY, the bubble, the rail, the page h
   assert.match(screen, /case 'trivia': return chapter && item\.id === `\$\{chapter\.id\}-trivia` \? chapter\.missionNames\[0\] : 'Shark Trivia';/);
   assert.match(screen, /if \(item\?\.kind === 'trivia'\) return chapter && id === `\$\{chapter\.id\}-trivia`\n\s+\? chapter\.missionNames\[0\]/);
   assert.match(screen, /missionTitle=\{chapterMissionTitle\(snapshot\.chapter, item\.id\)\}/);
-  assert.match(screen, /return index === 0 \|\| index === 1 \? chapter\.missionNames\[index\] : undefined;/);
+  assert.match(screen, /return index >= 0 \? chapter\.missionNames\[index\] : undefined;/);
   const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
   assert.match(slot, /<TriviaSlot title=\{missionTitle\}/);
   assert.match(slot, /title=\{title \?\? 'Shark Trivia'\} teacher \/>/);
@@ -714,4 +714,14 @@ test('the resume countdown shows 3, 2 and 1 on the UI thread, so neither a busy 
   assert.match(countdown, /const shown = t >= 0 && \(t < 1 \|\| index === 2\);/, 'each number shows only during its own step; the 1 holds until the game is back');
   assert.doesNotMatch(countdown, /setTimeout|setCount\(/, 'no JS timer or JS state drives the number');
   assert.match(countdown, /onPress=\{finish\}/, 'a tap still skips it');
+});
+
+test('clue 3 (the finale game) says its mission name on the rail, the page and the recap, never a second title', () => {
+  const screen = read(SCREEN);
+  assert.match(screen, /case 'minigame': return chapter && item\.id === chapterMissionIds\(chapter\)\[2\] \? chapter\.missionNames\[2\]/);
+  assert.match(screen, /if \(item\?\.kind === 'minigame'\) return chapter && id === chapterMissionIds\(chapter\)\[2\]\n\s+\? chapter\.missionNames\[2\]/);
+  assert.match(screen, /return index >= 0 \? chapter\.missionNames\[index\] : undefined;/);
+  const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
+  assert.match(slot, /<MiniGameSlot title=\{missionTitle\} item=\{item\}/);
+  assert.match(slot, /const label = title \?\? item\.title \?\?/);
 });

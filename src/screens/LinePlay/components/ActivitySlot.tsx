@@ -56,7 +56,7 @@ export interface ActivitySlotProps {
   readonly onNavigationMakeRoom?: () => void;
   /** The chapter's name for its board mission ("Fix the signal"), so PLAY NOW, the rail and the board say one phrase. */
   readonly navigationTitle?: string;
-  /** A chapter clue page's own mission name, so PLAY, the bubble, the rail and the page say one name. */
+  /** A chapter clue page's own mission name (clues 1 to 3), so PLAY, the bubble, the rail and the page say one name. */
   readonly missionTitle?: string;
   /** The board page's height once the crew row lends its room (an iPhone SE), so the board starts at its final size. */
   readonly navigationTargetHeight?: number;
@@ -134,7 +134,7 @@ export default function ActivitySlot({
 }: ActivitySlotProps) {
   switch (item.kind) {
     case 'minigame':
-      return <MiniGameSlot item={item} navigator={navigationPanel && item.id === `${chapterId}-star-chart`} completed={completed} paused={paused}
+      return <MiniGameSlot title={missionTitle} item={item} navigator={navigationPanel && item.id === `${chapterId}-star-chart`} completed={completed} paused={paused}
         currentQuestBonusStatus={currentQuestBonusStatus} bestStars={bestStars} onPlayGame={onPlayGame} />;
     case 'circuit':
       if (!onNavigationTurn || !onNavigationReplay || !onNavigationNext) return null;
@@ -170,9 +170,12 @@ function MiniGameSlot({
   currentQuestBonusStatus,
   bestStars,
   onPlayGame,
+  title,
 }: {
   item: Extract<ActivityItem, { kind: 'minigame' }>;
   navigator: boolean;
+  /** The chapter's clue 3 mission name, so the page says what its bubble and PLAY say. */
+  title?: string;
   completed: boolean;
   paused: boolean;
   currentQuestBonusStatus: 'available' | 'pending' | 'verified' | null;
@@ -180,7 +183,7 @@ function MiniGameSlot({
   onPlayGame: (item: Extract<ActivityItem, { kind: 'minigame' }>) => void;
 }) {
   const isStarChart = item.id.endsWith('-star-chart');
-  const label = item.title ?? (isStarChart ? 'Rebuild the Star Chart' : GAME_LABELS[item.gameId] ?? item.gameId);
+  const label = title ?? item.title ?? (isStarChart ? 'Rebuild the Star Chart' : GAME_LABELS[item.gameId] ?? item.gameId);
   return (
     <PageScroll fill={CARD_FILL}>
       <ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE ARCADE'} title={label} navigator={navigator} />

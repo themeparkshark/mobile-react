@@ -121,7 +121,9 @@ const GAME_NAMES: Record<string, string> = {
 
 function playedActivityName(id: string, playlist: readonly ActivityItem[], chapter: LinePlayChapter | null): string {
   const item = playlist.find(entry => entry.id === id);
-  if (item?.kind === 'minigame') return GAME_NAMES[item.gameId] ?? 'Mini-game';
+  // The chapter's clue 3 (its finale game) says its mission name, like the bubble and PLAY.
+  if (item?.kind === 'minigame') return chapter && id === chapterMissionIds(chapter)[2]
+    ? chapter.missionNames[2] : GAME_NAMES[item.gameId] ?? 'Mini-game';
   if (item?.kind === 'crew_grid') return 'Crew Prompts';
   if (item?.kind === 'circuit') return 'Signal Repair';
   if (item?.kind === 'trivia') return chapter && id === `${chapter.id}-trivia`
@@ -151,15 +153,17 @@ function pageName(item: ActivityItem | { kind: 'signal' | 'puzzle'; id: string }
     // The chapter's clue 2 keeps its mission name too (the bubble, the rail and the page say one name).
     case 'lore': return chapter && item.id === `${chapter.id}-field-note` ? chapter.missionNames[1] : 'Field Note';
     case 'prediction': return 'Wait Guess';
-    case 'minigame': return item.title ?? GAME_NAMES[item.gameId] ?? 'Arcade round';
+    // Clue 3, the finale game, says its mission name too ("Restore the log", never a second, longer title).
+    case 'minigame': return chapter && item.id === chapterMissionIds(chapter)[2] ? chapter.missionNames[2]
+      : item.title ?? GAME_NAMES[item.gameId] ?? 'Arcade round';
   }
 }
 
-/** A chapter clue page's mission name (clue 1 or 2), the same name its bubble and the rail use. */
+/** A chapter clue page's mission name (clue 1, 2 or 3), the same name its bubble and the rail use. */
 function chapterMissionTitle(chapter: LinePlayChapter | null | undefined, id: string): string | undefined {
   if (!chapter) return undefined;
   const index = chapterMissionIds(chapter).indexOf(id);
-  return index === 0 || index === 1 ? chapter.missionNames[index] : undefined;
+  return index >= 0 ? chapter.missionNames[index] : undefined;
 }
 
 function tabLabel(screen: string): string {
