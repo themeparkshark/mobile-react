@@ -38,6 +38,7 @@ function mapChallenge(initial = task) {
       if (name.endsWith('mapOpportunityTiming')) return timing.exports;
       if (name === '../context/SoundEffectProvider') return { SoundEffectContext: {} };
       if (name === '../ui') return { BRAND: { white: '#fff', navy: '#05346e' }, GameIcon: 'GameIcon' };
+      if (name === './map/mapCover') return { useCoverArt: () => () => undefined };
       if (name.includes('assets/')) return 1;
       return { default: name };
     },

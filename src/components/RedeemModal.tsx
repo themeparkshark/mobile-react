@@ -18,6 +18,7 @@ import RedeemVaultModal from './RedeemVaultModal';
 import YellowButton from './YellowButton';
 import { TaskType } from '../models/task-type';
 import { BRAND, GameIcon } from '../ui';
+import { useCoverArt } from './map/mapCover';
 
 /**
  * PLAY RIDE's wrapper sits 50 pt below the map's bottom edge (ExploreScreen); the group rests 120 pt
@@ -36,7 +37,13 @@ export default function RedeemModal({
   liveStatus = null,
   onOpenChange,
   onShownChange,
+  covered = false,
 }: {
+  /**
+   * The map's loading cover is still up. A ride already in range gets PLAY RIDE ready under it, at
+   * rest (no slide), and the cover waits for its art: the cover's own fade reveals it with the map.
+   */
+  readonly covered?: boolean;
   /** PLAY RIDE (or the closed-ride sign) is up or gone: the map keeps its art out from under it. */
   readonly onShownChange?: (shown: boolean) => void;
   /** The live feed's status for the ride in range (DOWN, CLOSED...): no PLAY RIDE on a closed ride. */
@@ -76,6 +83,8 @@ export default function RedeemModal({
   const closedReason = !otherSelected && !available ? nearbyRideClosedReason(redeemable, liveStatus) : null;
   const closedLabel = closedReason ? closedRideCopy(closedReason) : null;
   const shown = (available && pillReady) || !!closedLabel;
+  // Under the cover the lift waits for the pill art (never past the cover's hard cap).
+  const pillArtDrawn = useCoverArt(covered && available && !pillReady);
   const identity = redeemable ? `${redeemable.type}:${redeemable.model.id}` : null;
   const shownChange = useRef(onShownChange); shownChange.current = onShownChange;
   useEffect(() => { shownChange.current?.(shown); }, [shown]);
@@ -83,7 +92,8 @@ export default function RedeemModal({
   // The pill unmounts when the ride stops being available: its next showing waits for its art again.
   useEffect(() => { if (!available) setPillReady(false); }, [available]);
   // The "you're in range" cue lands with the pill itself (never before the button is on screen).
-  const pillShown = available && pillReady;
+  // Under the cover it waits for the reveal, so the cue lands as the kid sees the button.
+  const pillShown = available && pillReady && !covered;
   useEffect(() => {
     if (pillShown && identity !== lastAnnounced.current) {
       lastAnnounced.current = identity;
@@ -97,11 +107,12 @@ export default function RedeemModal({
   // it is fully transparent. Native driver; Reduce Motion places it at once.
   useEffect(() => {
     enter.stopAnimation();
-    if (reducedMotion) enter.setValue(shown ? 1 : 0);
+    // Under the cover it simply stands in place: the cover's fade is its entrance.
+    if (reducedMotion || covered) enter.setValue(shown ? 1 : 0);
     else if (shown) Animated.spring(enter, { toValue: 1, stiffness: 260, damping: 20, mass: 1, useNativeDriver: true }).start();
     else Animated.timing(enter, { toValue: 0, duration: 140, useNativeDriver: true }).start();
     return () => enter.stopAnimation();
-  }, [shown, identity, reducedMotion, enter]);
+  }, [shown, identity, reducedMotion, enter, covered]);
   const entrance = {
     opacity: enter.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }),
     transform: [
@@ -115,7 +126,7 @@ export default function RedeemModal({
       {redeemable && available && (
         <Animated.View style={entrance}>
           <YellowButton
-            onArtReady={() => setPillReady(true)}
+            onArtReady={() => { pillArtDrawn(); setPillReady(true); }}
             onPress={async () => {
               setOpenedRedeemable(redeemable);
               setModalVisible(true);

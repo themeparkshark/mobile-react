@@ -1135,7 +1135,8 @@ function ExploreScreen() {
     setChestDismissals(count => count + 1);
   }, [dailyGiftId]);
   const chestButton = chestUnclaimed && !chestShowing
-    ? <ChestMapButton onPress={() => setChestRequested(true)} /> : null;
+    // Keyed by the day's gift: a new day's chest is a new button that pops in once.
+    ? <ChestMapButton key={dailyGiftId ?? 0} giftId={dailyGiftId ?? 0} onPress={() => setChestRequested(true)} /> : null;
   // Daily 3, the Weekly Box and level-up chests (server flags daily_three / level_chests, off by default).
   const openParam = (route.params as { open?: string } | undefined)?.open;
   // The nearest ride coin on this park map, guided like a checklist tap.
@@ -1559,11 +1560,14 @@ function ExploreScreen() {
               width: '50%',
             }}
           >
-            {/* PLAY RIDE and its ride chip slide up only after the loading cover lifts: on iOS this
-                wrapper's native slide can draw above the cover, so it waits for the map. They also
-                wait while Finn's card is up (his first adventure dims the map): one thing at a time. */}
+            {/* A ride already in range when the map opens: PLAY RIDE and its chip get ready under
+                the loading cover, standing still at rest (no slide, which on iOS could draw above the
+                cover), and the cover's own fade reveals them with the map. One found after the lift
+                slides up as before. They wait while Finn's card is up (his first adventure dims the
+                map): one thing at a time. */}
             <RedeemModal
-              redeemable={mapFocused && !mapCovered && !isActive ? activeRedeemable : undefined}
+              redeemable={mapFocused && !isActive ? activeRedeemable : undefined}
+              covered={mapCovered}
               park={park}
               selectedTaskId={selectedTask?.id ?? null}
               liveStatus={activeLiveStatus}

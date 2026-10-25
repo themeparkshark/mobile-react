@@ -61,14 +61,16 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
     if (reduced) shown.setValue(1);
     else NativeAnimated.timing(shown, { toValue: 1, duration: 220, useNativeDriver: true }).start();
   }, [ready, reduced, shown]);
+  // Announce and start the reading clock when the card actually shows (ready), not at mount: a slow
+  // picture load never eats into the kid's reading time. Once per tip.
   useEffect(() => {
+    if (!ready) return undefined;
     void AccessibilityInfo.announceForAccessibility(`${title}. ${body}`);
-    if (autoHideMs <= 0) return;
+    if (autoHideMs <= 0) return undefined;
     const timer = setTimeout(onDismiss, autoHideMs);
     return () => clearTimeout(timer);
-    // Announce and time once per tip.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
   return (
     <TipArtLoaded.Provider value={artLoaded}>
     <Animated.View pointerEvents={ready ? 'box-none' : 'none'}
@@ -76,7 +78,7 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
       <NativeAnimated.View pointerEvents="box-none" style={{ opacity: shown }}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${body}`} accessibilityHint="Closes the tip"
         onPress={onDismiss} onLayout={pointerLeft !== undefined ? event => setCardWidth(event.nativeEvent.layout.width) : undefined}
-        style={[styles.card, compact && styles.compactCard, fit && styles.fitCard]}>
+        style={[styles.card, compact && styles.compactCard, fit && styles.fitCard, small && !!art && styles.smallArtCard]}>
         {!compact && <Image source={FINN} style={[styles.finn, small && styles.finnSmall]} contentFit="contain"
           onLoad={() => artLoaded('finn')} onError={() => artLoaded('finn')} />}
         <View style={fit ? styles.fitCopy : styles.copy}>
@@ -99,6 +101,8 @@ const styles = StyleSheet.create({
     borderWidth: 3, borderColor: BRAND.white, paddingVertical: 10, paddingLeft: 6, paddingRight: 12, ...SHADOW.card,
   },
   compactCard: { paddingLeft: 12, borderColor: BRAND.gold },
+  // Short phones (iPhone SE): 8 pt less height, so the card's top clears the island above it.
+  smallArtCard: { paddingVertical: 6 },
   finn: { width: 58, height: 58, marginRight: 6 },
   finnSmall: { width: 42, height: 42 },
   art: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },

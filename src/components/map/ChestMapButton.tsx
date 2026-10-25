@@ -9,20 +9,22 @@ import { useCoverArt } from './mapCover';
 const CHEST = require('../../../assets/images/daily/chest-closed.png');
 
 /**
- * The chest pops in once per app session. If anything ever remounts the button later (a rail
- * rebuilt, the map screen coming back), it stands at full at once: it never blinks out and
- * pops a second time.
+ * Each day's chest pops in once per app session. If anything remounts the button later (a rail
+ * rebuilt, the map screen coming back), it never pops a second time: it snaps to full as soon as
+ * its art has drawn. A new day's chest (a new gift id) pops again.
  */
-let poppedThisSession = false;
+let poppedGift: number | string | null = null;
 /** Tests only: the next mount pops again. */
-export function resetChestPopForTests(): void { poppedThisSession = false; }
+export function resetChestPopForTests(): void { poppedGift = null; }
 
 /**
  * The daily chest on the map, under the recenter button and in its style.
  * It is only on the map while today's chest is unclaimed, with a gold dot,
  * so "Back to map" never loses the day's reward.
  */
-export default function ChestMapButton({ onPress }: { readonly onPress: () => void }) {
+export default function ChestMapButton({ onPress, giftId }: { readonly onPress: () => void;
+  /** Today's gift: a new one pops again in the same session. */
+  readonly giftId: number | string }) {
   // The map's loading cover waits for the chest art, so the button is never an empty blue circle.
   const artDrawn = useCoverArt();
   // The button shows only once its chest has drawn: when today's chest arrives after the map, it never
@@ -34,18 +36,21 @@ export default function ChestMapButton({ onPress }: { readonly onPress: () => vo
   // native driver: its values live on the UI thread and a parent re-render never resets them (a
   // re-rendered Reanimated style could drop back to its mount value for a few frames: the blink).
   const reduced = useReducedGameMotion();
-  // Already popped this session: the button mounts at full (its art is in the memory cache).
-  const [settled] = useState(poppedThisSession);
-  const fade = useRef(new Animated.Value(settled ? 1 : 0)).current;
+  // Already popped this session (same gift): no second pop. It still waits for its art, so a cold
+  // image cache (memory purged after a long background) never shows an empty blue circle: invisible
+  // until onLoad, then full in one step, no spring.
+  const [settled] = useState(poppedGift === giftId);
+  const fade = useRef(new Animated.Value(0)).current;
   const shown = useRef(new Animated.Value(settled ? 1 : 0)).current;
   useEffect(() => {
-    if (!drawn || settled) return;
-    poppedThisSession = true;
-    if (reduced) { fade.setValue(1); shown.setValue(1); return; }
+    if (!drawn) return;
+    if (settled || reduced) { fade.setValue(1); shown.setValue(1); poppedGift = giftId; return; }
+    poppedGift = giftId;
     Animated.parallel([
       Animated.timing(fade, { toValue: 1, duration: 160, useNativeDriver: true }),
       Animated.spring(shown, { toValue: 1, stiffness: 320, damping: 18, mass: 0.8, useNativeDriver: true }),
     ]).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawn, reduced, settled, shown, fade]);
   const pop = useRef({ opacity: fade, transform: [{ scale: shown.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }] }).current;
   return (

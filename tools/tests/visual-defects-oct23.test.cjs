@@ -529,8 +529,8 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   assert.match(read('src/components/Wrapper.tsx'), /cachePolicy="memory-disk"\s*priority="high"\s*transition=\{0\}/);
   // The launch map comes from the phone's recent fix when there is one (a fresh fix can take seconds).
   assert.match(read('src/context/LocationProvider.tsx'), /getLastKnownPositionAsync\(\{ maxAge: 5 \* 60 \* 1000, requiredAccuracy: 200 \}\)/);
-  // PLAY RIDE and its ride chip wait for the cover to lift (their wrapper can draw above the cover on iOS).
-  assert.match(read('src/screens/ExploreScreen.tsx'), /redeemable=\{mapFocused && !mapCovered && !isActive \? activeRedeemable : undefined\}/);
+  // PLAY RIDE and its ride chip get ready under the cover at rest (no slide) and are revealed by its fade.
+  assert.match(read('src/screens/ExploreScreen.tsx'), /redeemable=\{mapFocused && !isActive \? activeRedeemable : undefined\}\s*covered=\{mapCovered\}/);
   // The header coin, key and ticket and the five footer icons are decoded into memory before the hand-off.
   const warmSrc = read('src/helpers/launchArt.ts');
   assert.match(warmSrc, /Image\.prefetch\(bundled, 'memory-disk'\)/);
@@ -654,7 +654,9 @@ test('PLAY RIDE is one piece: the pill, its label and the ride chip appear toget
   // The whole group (pill, label, chip) stays hidden and only rises once the art is ready.
   assert.match(redeem, /const shown = \(available && pillReady\) \|\| !!closedLabel;/);
   assert.match(redeem, /<Animated\.View style=\{entrance\}>/);
-  assert.match(redeem, /onArtReady=\{\(\) => setPillReady\(true\)\}/);
+  assert.match(redeem, /onArtReady=\{\(\) => \{ pillArtDrawn\(\); setPillReady\(true\); \}\}/);
+  // Under the cover, the lift waits for the pill art (fix 3, wave 5 round 3).
+  assert.match(redeem, /const pillArtDrawn = useCoverArt\(covered && available && !pillReady\);/);
 });
 
 test('Ride Detail keeps the same three tiles on every ride and its hint names the button as it reads', () => {
@@ -874,7 +876,7 @@ test('PLAY RIDE rises into place from above the footer: transparent at its start
   assert.match(redeem, /outputRange: \[PLAY_RIDE_ENTER_FROM, PLAY_RIDE_REST_Y\]/);
   assert.match(redeem, /outputRange: \[0\.9, 1\]/);
   assert.match(redeem, /Animated\.spring\(enter, \{ toValue: 1,[^}]*useNativeDriver: true \}\)/);
-  assert.match(redeem, /if \(reducedMotion\) enter\.setValue\(shown \? 1 : 0\);/);
+  assert.match(redeem, /if \(reducedMotion \|\| covered\) enter\.setValue\(shown \? 1 : 0\);/);
   // The closed-ride pill uses the same entrance (no slide over the footer either).
   assert.equal((redeem.match(/style=\{entrance\}/g) ?? []).length, 2);
   assert.doesNotMatch(redeem, /translateY: animated/);
@@ -884,7 +886,7 @@ test('PLAY RIDE rises into place from above the footer: transparent at its start
 
 test('the in-range cue lands with the PLAY RIDE pill, and the pill waits for its art again after it went away', () => {
   const redeem = read('src/components/RedeemModal.tsx');
-  assert.match(redeem, /const pillShown = available && pillReady;/);
+  assert.match(redeem, /const pillShown = available && pillReady && !covered;/);
   assert.match(redeem, /if \(pillShown && identity !== lastAnnounced\.current\) \{[^}]*in_redeem_zone\.mp3/);
   assert.match(redeem, /useEffect\(\(\) => \{ if \(!available\) setPillReady\(false\); \}, \[available\]\);/);
 });
@@ -1099,8 +1101,8 @@ test('splash bar keeps creeping through a slow sign-in, below the Loading screen
 
 test('wave 3 round 2: PLAY RIDE waits for Finn, Battery Saver stills the launch, the pill press always springs back', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /redeemable=\{mapFocused && !mapCovered && !isActive \? activeRedeemable : undefined\}/,
-    'PLAY RIDE and its chip stay hidden while the map cover or a Finn card is up');
+  assert.match(explore, /redeemable=\{mapFocused && !isActive \? activeRedeemable : undefined\}/,
+    'PLAY RIDE and its chip stay hidden while a Finn card is up');
   const scene = read('src/components/launch/LaunchScene.tsx');
   assert.match(scene, /const saver = useBatterySaver\(\);/);
   assert.match(scene, /const still = reduced \|\| saver \|\| !active;/);
@@ -1149,7 +1151,7 @@ test('map rail: Daily 3 first and the late chest joins at the end, popping in on
   assert.match(chest, /Animated\.spring\(shown, \{ toValue: 1, stiffness: 320, damping: 18, mass: 0\.8, useNativeDriver: true \}\)/);
   assert.match(chest, /outputRange: \[0\.7, 1\]/);
   assert.match(chest, /Animated\.timing\(fade, \{ toValue: 1, duration: 160, useNativeDriver: true \}\)/);
-  assert.match(chest, /if \(reduced\) \{ fade\.setValue\(1\); shown\.setValue\(1\); return; \}/);
+  assert.match(chest, /if \(settled \|\| reduced\) \{ fade\.setValue\(1\); shown\.setValue\(1\); poppedGift = giftId; return; \}/);
 });
 
 test('PLAY RIDE: a ride island mostly under the pill and its chip fades out while the pill is up', () => {
@@ -1252,12 +1254,15 @@ test('wave 5 round 2: the chest pops in once and is never remounted when Daily 3
   assert.match(map, /railExtrasNone: \{ display: 'none' \},/);
   // Backstop: any later remount stands at full at once (one pop per app session).
   const chest = read('src/components/map/ChestMapButton.tsx');
-  assert.match(chest, /let poppedThisSession = false;/);
-  assert.match(chest, /const \[settled\] = useState\(poppedThisSession\);/);
-  assert.match(chest, /const fade = useRef\(new Animated\.Value\(settled \? 1 : 0\)\)\.current;/);
+  assert.match(chest, /let poppedGift: number \| string \| null = null;/);
+  assert.match(chest, /const \[settled\] = useState\(poppedGift === giftId\);/);
+  // Wave 5 round 3: even a settled (already popped) chest waits for its art: never an empty blue circle.
+  assert.match(chest, /const fade = useRef\(new Animated\.Value\(0\)\)\.current;/);
+  assert.match(chest, /if \(!drawn\) return;\s*if \(settled \|\| reduced\) \{ fade\.setValue\(1\); shown\.setValue\(1\); poppedGift = giftId; return; \}/);
   // The pop is native-driven: a parent re-render never drops a running or finished pop back to its mount value.
   assert.doesNotMatch(chest, /react-native-reanimated/);
-  assert.match(chest, /if \(!drawn \|\| settled\) return;\s*poppedThisSession = true;/);
+  // A new day's chest is a new button (keyed by gift id) that pops again.
+  assert.match(explore, /<ChestMapButton key=\{dailyGiftId \?\? 0\} giftId=\{dailyGiftId \?\? 0\}/);
 });
 
 test("wave 5 round 2: Finn's coin card shows only once Finn and all three pictures have drawn", () => {
@@ -1350,4 +1355,39 @@ test('wave 5 round 2: the map screen mounts its hidden overlays a commit after t
   }
   // The chest, the boss and PLAY RIDE are not deferred.
   assert.doesNotMatch(explore, /lateOverlays && (chestShowing|<RedeemModal|player && park && <BossRaidFlow)/);
+});
+
+// Wave 5 round 3.
+test('wave 5 round 3: Finn card reading time starts when the card shows, and the SE card clears the island above it', () => {
+  const tip = read('src/components/help/CoachTip.tsx');
+  // The announce and the auto-hide clock wait for ready (all pictures drawn), never mount.
+  assert.match(tip, /useEffect\(\(\) => \{\s*if \(!ready\) return undefined;\s*void AccessibilityInfo\.announceForAccessibility/);
+  assert.match(tip, /const timer = setTimeout\(onDismiss, autoHideMs\);[\s\S]*?\}, \[ready\]\);/);
+  // Short phones: the picture card is 8 pt shorter (padding 10 to 6 top and bottom), bottom edge unchanged.
+  assert.match(tip, /small && !!art && styles\.smallArtCard/);
+  assert.match(tip, /smallArtCard: \{ paddingVertical: 6 \},/);
+  assert.match(tip, /paddingVertical: 10, paddingLeft: 6/);
+});
+
+test('wave 5 round 3: a ride in range when the map opens has PLAY RIDE on the first lifted frame', () => {
+  const { runtime } = require('./helpers/reward-hook-runtime.cjs');
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const waits = [];
+  const load = props => runtime('src/components/RedeemModal.tsx', {
+    '../hooks/useReducedGameMotion': { default: () => false },
+    '../screens/ExploreScreen/mapOpportunityTiming': loadTs('src/screens/ExploreScreen/mapOpportunityTiming.ts'),
+    '../screens/ExploreScreen/mapMarkerPresentation': loadTs('src/screens/ExploreScreen/mapMarkerPresentation.ts'),
+    '../context/SoundEffectProvider': { SoundEffectContext: { value: { playSound: async () => undefined } } },
+    '../ui': { BRAND: new Proxy({}, { get: () => '#fff' }), GameIcon: 'GameIcon' },
+    './map/mapCover': { useCoverArt: enabled => { waits.push(enabled); return () => undefined; } },
+  }, { park: { id: 1 }, onPress: () => undefined, ...props });
+  const ride = { type: 'task', model: { id: 11, name: 'Space Ride', ticket_cost: 1 } };
+  const app = load({ redeemable: ride, covered: true });
+  // The pill mounts under the cover (so its art loads there) and the cover waits for that art.
+  assert.ok(app.find(n => n.props?.text === 'Play Ride!'), 'PLAY RIDE is mounted under the cover');
+  assert.equal(waits.at(-1), true, 'the cover holds its lift for the pill art');
+  const redeem = read('src/components/RedeemModal.tsx');
+  // Under the cover it stands at rest (no slide), and the in-range cue waits for the reveal.
+  assert.match(redeem, /if \(reducedMotion \|\| covered\) enter\.setValue\(shown \? 1 : 0\);/);
+  assert.match(redeem, /const pillShown = available && pillReady && !covered;/);
 });
