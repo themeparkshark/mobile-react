@@ -1894,7 +1894,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const sy = flyFromY.value + (stageY.value - flyFromY.value) * f.glide;
     return { transform: [{ translateX: sx }, { translateY: sy }] };
   });
-  const sparkOrigin = starOrigin;
+  // Wave 5 round 3: each origin view has its own animated style. The sparks and the stars used to share one handle, and on
+  // Fabric with Reanimated 3.16 only one of the two views followed it: the stars' origin stayed at the layer's top-left
+  // corner, so the burst's stars (and the 5th catch's stars flying home) were drawn off screen, or stray in the corner.
+  const sparkOrigin = useAnimatedStyle(() => { touchHeal(heal); return ({ transform: [{ translateX: stageX.value }, { translateY: stageY.value }] }); });
   const badgeStyle = useAnimatedStyle(() => {
     touchHeal(heal);
     if (!onUi()) return HIDDEN;

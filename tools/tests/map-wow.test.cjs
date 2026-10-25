@@ -931,10 +931,19 @@ test('wave 5 r3: ordinary repeats vary: three fidgets round-robin, the chime ste
   assert.match(src, /run\.pitch \? \{ volume: 0\.8, pitch: run\.pitch \}/);
 });
 
-test('wave 5 r3: the catch effects draw their stars, sparks and water ring with RN Image (expo-image views never showed in release-like captures)', () => {
+test('wave 5 r3: the catch effects draw their stars, sparks and water ring with RN Image, like the coins and sparkles', () => {
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   for (const art of ['MINI_STAR', 'INK_SPARK', 'WATER_RING']) {
     assert.match(src, new RegExp(`<RNImage source=\\{${art}\\} style=\\{styles\\.fxFill\\} resizeMode="contain" fadeDuration=\\{0\\} />`), art);
     assert.doesNotMatch(src, new RegExp(`<Image source=\\{${art}\\}`), art);
   }
+});
+
+test('wave 5 r3: every effect origin has its own animated style (one handle on two views left the stars at the top-left corner)', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.doesNotMatch(src, /const sparkOrigin = starOrigin;/);
+  assert.match(src, /const sparkOrigin = useAnimatedStyle\(/);
+  const styles = src.slice(src.indexOf('const fxStyles = useMemo<FxStyles>'), src.indexOf('const fxValues'));
+  const handles = [...styles.matchAll(/(\w+): (\w+)/g)].map(m => m[2]).filter(h => h !== 'useMemo');
+  assert.equal(new Set(handles).size, handles.length, `no shared handle: ${handles.join(', ')}`);
 });
