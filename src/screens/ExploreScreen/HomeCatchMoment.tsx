@@ -30,7 +30,7 @@ import { CatchRaysArt } from './CatchRays';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { DURATION, EASE, SPRING, flashPeak, momentParticles } from '../../ui/motionEasing';
 import { GOLD_FX, PARTICLES } from '../../ui/motion';
-import { nextGoalAt } from '../../components/map/alive/mapWow';
+import { homeStarAt, nextGoalAt, WHERE, whereAt, whereFlightAt } from '../../components/map/alive/mapWow';
 import { arcPoint, beamAt, BEAM, CONFETTI, burstVariant, BURST_RINGS_MAX, BURST_STARS_MAX, catchFrame, catchHaptics, catchPlan, catchStage, coinStreamAt, coinStreamPlan, COIN_STREAM, type CatchBeatHaptic, type CatchFrame, type CatchPlan } from '../../components/map/alive/mapWow';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { usePowerBudget } from '../../power';
@@ -47,7 +47,7 @@ import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, setRide
 import { useRideArt } from './ridePhoto/rideAssets';
 import { catchHaptic, catchMark, catchSound, catchTraceBuffer } from './ridePhoto/catchAudio';
 import { touchHeal, useCommitHeal } from '../../components/map/alive/commitHeal';
-import { catchDim, catchHidePivot, catchKickX, catchKickY, dimCatchChrome, setCatchOpen, showCatchChrome } from './catchPresence';
+import { catchDim, catchHidePivot, catchKickX, catchKickY, catchPinPose, dimCatchChrome, setCatchOpen, showCatchChrome } from './catchPresence';
 import reportRideOff from '../../api/endpoints/me/prep-items/ride-off';
 import { READY_RIDES, RIDES, rideStamps, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
 import { loadRideMemory, recordRide, ridesSnapped } from './ridePhoto/rides/rideMemory';
@@ -231,11 +231,18 @@ function GatherSparkle({ index, count, charge }: { index: number; count: number;
  * A star flung from the burst (bigger than a sparkle, so it reads even at 10 frames a second). Round 4: a pool
  * of BURST_STARS_MAX, of which `count` fly this catch (the burst variant), fanned evenly over the top.
  */
-function BurstStar({ index, t, count }: { index: number; t: SharedValue<number>; count: SharedValue<number> }) {
+function BurstStar({ index, t, count, home, to }: { index: number; t: SharedValue<number>; count: SharedValue<number>;
+  /** Wave 5 round 2: 1 on the 5th-catch treat: the stars arc into the coin counter at `to` (pt from the find). */
+  home: SharedValue<number>; to: SharedValue<{ x: number; y: number }> }) {
   const style = useAnimatedStyle(() => {
     const p = t.value;
     const n = count.value;
     if (p <= 0 || p >= 1 || index >= n) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }, { rotate: '0deg' }] };
+    if (home.value) {
+      const h = homeStarAt(p, index, n, to.value);
+      if (!h) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }, { rotate: '0deg' }] };
+      return { opacity: 1, transform: [{ translateX: h.x }, { translateY: h.y }, { scale: h.scale }, { rotate: `${(index % 2 ? -1 : 1) * p * 300}deg` }] };
+    }
     const spread = n > 4 ? 0.62 : 0.9;
     const angle = -Math.PI / 2 + (index - (n - 1) / 2) * spread;
     const reach = (index % 2 ? 96 : 120) + (n > 4 ? 30 : 0);
@@ -364,7 +371,7 @@ const StreamCoin = memo(function StreamCoin({ index, t, count, geo, source }: {
   </>;
 });
 
-type BadgeStyles = Record<'badge' | 'kick' | 'landRing' | 'bar' | 'barGlow' | 'newPop' | 'grade' | 'ride' | 'countOld' | 'countNew' | 'coinStamp' | 'oneMore' | 'next' | 'nextRing', ReturnType<typeof useAnimatedStyle<ViewStyle>>>;
+type BadgeStyles = Record<'badge' | 'kick' | 'landRing' | 'bar' | 'barGlow' | 'newPop' | 'grade' | 'ride' | 'countOld' | 'countNew' | 'coinStamp' | 'oneMore' | 'next' | 'nextRing' | 'ghost', ReturnType<typeof useAnimatedStyle<ViewStyle>>>;
 
 /**
  * The collection badge as a memo (round 3): it re-renders only when its content changes (the server's answer,
@@ -407,6 +414,9 @@ const CatchBadge = memo(function CatchBadge({ st, summary, photo, bonusXp, newRi
                 {/* One more to finish the set: the last empty stretch of the bar glows gold (no words needed). */}
                 {summary?.isNew && total != null && collected != null && total - collected === 1
                   ? <Animated.View pointerEvents="none" style={[styles.oneMore, { width: `${100 / total}%` }, st.oneMore]} /> : null}
+                {/* Wave 5 round 2: the next slot glows softly in time with the next-goal disc ("this one is next"). */}
+                {nextArt && !photo && total != null && collected != null && total - collected > 1
+                  ? <Animated.View pointerEvents="none" style={[styles.ghostSlot, { left: `${(100 * collected) / total}%`, width: `${100 / total}%` }, st.ghost]} /> : null}
               </View>
               {/* A NEW find's count steps up on the frame it lands (two layers swapped on the UI thread, no re-render). */}
               {collected != null && total != null && (summary?.isNew ? <View>
@@ -424,12 +434,13 @@ const CatchBadge = memo(function CatchBadge({ st, summary, photo, bonusXp, newRi
               <Text style={styles.coinStampText} numberOfLines={1}>+{coinStamp}</Text>
             </View>
           </Animated.View>}
-          {/* Round 5, the next goal: the set's next missing find as a navy silhouette in a gold ring, popping onto the
-              badge's corner after the catch lands (a Pokedex shadow: a picture, no words). */}
+          {/* The next goal: the set's next missing find popping onto the badge's corner in a gold ring after the catch
+              lands. Wave 5 round 2: its own art, faded to a light ghost (a kid can tell what it is, and that it is not
+              theirs yet), instead of a navy shadow nobody could name. A picture, no words. */}
           {nextArt && !photo ? <Animated.View style={[styles.nextAt, st.next]} pointerEvents="none">
             <Animated.View style={[styles.nextRing, st.nextRing]} />
             <View style={styles.nextDisc}>
-              <RNImage source={nextArt as never} style={[styles.nextArt, { tintColor: '#0b3a73' }]} resizeMode="contain" fadeDuration={0} />
+              <RNImage source={nextArt as never} style={styles.nextArt} resizeMode="contain" fadeDuration={0} />
             </View>
           </Animated.View> : null}
           {photo && <Animated.View style={[styles.gradeChip, { backgroundColor: GRADE_CHIP[photo.grade][0] }, st.grade]}>
@@ -458,7 +469,8 @@ type FxStyles = Record<'halo' | 'beam' | 'splash' | 'water' | 'gather' | 'spark'
 /** The shared values the effects pools read (stable for the component's life). */
 type FxValues = { readonly frame: SharedValue<CatchFrame>; readonly clock: SharedValue<number>; readonly plan: SharedValue<CatchPlan>;
   readonly on: SharedValue<number>; readonly beamOn: SharedValue<number>; readonly ringN: SharedValue<number>; readonly starN: SharedValue<number>;
-  readonly sx: SharedValue<number>; readonly sy: SharedValue<number> };
+  readonly sx: SharedValue<number>; readonly sy: SharedValue<number>;
+  readonly homeStars: SharedValue<number>; readonly starTo: SharedValue<{ x: number; y: number }> };
 
 /**
  * The common catch's art and effects (round 3). A memo with stable props only (shared values, animated style
@@ -501,7 +513,7 @@ const CatchFx = memo(function CatchFx({ fx, sv, burst, confetti, layerHeight, ar
       {Array.from({ length: sparks }, (_, index) => <BurstSparkle key={index} index={index} count={sparks} t={fxT} />)}
     </Animated.View>
     <Animated.View style={[styles.sparkOrigin, fx.star]} pointerEvents="none">
-      {Array.from({ length: stars }, (_, index) => <BurstStar key={index} index={index} t={fxT} count={sv.starN} />)}
+      {Array.from({ length: stars }, (_, index) => <BurstStar key={index} index={index} t={fxT} count={sv.starN} home={sv.homeStars} to={sv.starTo} />)}
     </Animated.View>
     <Animated.View style={[styles.flash, fx.flash]} pointerEvents="none">
       <RNImage source={GLOW_TEX} style={[styles.fxFill, { tintColor: GOLD_FX.core }]} resizeMode="stretch" fadeDuration={0} />
@@ -564,11 +576,17 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   readonly warm?: readonly { readonly item: PrepItemType; readonly forceRide?: { readonly kind?: RideKind; readonly sky?: Sky } | null }[];
   /** Refresh the signed-in player after a catch (off in signed-out dev previews). */
   readonly refreshAfterCatch?: boolean;
+  /**
+   * Wave 5 round 2: where to walk next after this catch (this layer's points), or null while another find is still in
+   * catch range. The next-goal disc then shows that find and flies onto its spot or its edge arrow.
+   */
+  readonly whereNext?: (caughtPivot: number) => { readonly x: number; readonly y: number; readonly item: PrepItemType } | null;
 }>(function HomeCatchMoment({ request, stageItem = null, badgeBottom, redeem = redeemPrepItem, getFix, mapStill = null,
-  onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, autoShots, forceRide, warm, onCascade, forceReducedMotion = false, autoSkipReveal = false, autoEscape = 'map', loadSetPage, onRideAgain, refreshAfterCatch = true }, ref) {
+  onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, autoShots, forceRide, warm, onCascade, forceReducedMotion = false, autoSkipReveal = false, autoEscape = 'map', loadSetPage, onRideAgain, refreshAfterCatch = true, whereNext }, ref) {
   const systemReduced = useReducedGameMotion();
   // Development recordings can show one catch with Reduce Motion on.
-  const reducedMotion = (__DEV__ && forceReducedMotion) || systemReduced;
+  // Release-like captures (CATCH_PROBE, lane tooling only) can show it too.
+  const reducedMotion = ((__DEV__ || CATCH_PROBE) && forceReducedMotion) || systemReduced;
   const power = usePowerBudget();
   const { refreshPlayer, player } = useContext(AuthContext);
   // Uncommon's tighter lamp is earned per player, never per device.
@@ -671,6 +689,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const barFrom = useSharedValue(0);
   const barTo = useSharedValue(0);
   const beamOn = useSharedValue(0);
+  /** Wave 5 round 2: when the clock reached its held frame before the server answered (Date.now on the UI thread), 0 otherwise. */
+  const heldAt = useSharedValue(0);
   /** The layer's copy shows from the clock's first frame, the same frame the pin hides (one clean swap). */
   const copyOn = useSharedValue(0);
   const inkTurn = useSharedValue(0);
@@ -678,8 +698,15 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const inkScale = useSharedValue(1);
   const ringN = useSharedValue(1);
   const starN = useSharedValue(4);
-  /** Wave 4: 1 on the grand (25th) catch: the second ring of rays and the confetti. */
+  /** Wave 4: 1 on the grand (25th) catch: the confetti. */
   const grandSV = useSharedValue(0);
+  /** Wave 5 round 2: milestones show the spike fan and the counter-turning ring; the 5th's stars fly to the counter. */
+  const fanSV = useSharedValue(0);
+  const ring2SV = useSharedValue(0);
+  const homeSV = useSharedValue(0);
+  const starTo = useSharedValue({ x: 0, y: -300 });
+  /** Wave 5 round 2: the where-next flight (on the session's last catch in range): from the badge's disc to the next find. */
+  const whereSV = useSharedValue({ on: 0, at: 0, x0: 0, y0: 0, x1: 0, y1: 0 });
   /** A NEW find steps its count and bar; a repeat find shows its coins on the badge instead (never a fake fill). */
   const isNewSV = useSharedValue(0);
   const kickDirX = useSharedValue(0);
@@ -716,6 +743,16 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       probeRows.value = ''; probeN.value = 0;
     }
   });
+  // Until the layer's copy draws, the tapped pin follows the clock (rise, glide, wobble): the same pose on the hand-off frame.
+  useAnimatedReaction(() => {
+    if (!clockOn.value || copyOn.value) return null;
+    const f = frame.value;
+    // The rise is part of the glide (the stage point already sits risePt above the pin).
+    return { x: (stageX.value - flyFromX.value) * f.glide, y: (stageY.value - flyFromY.value) * f.glide, rot: f.wobble + holdWobble.value };
+  }, (pose, prev) => {
+    if (!pose) { if (prev) catchPinPose.value = { x: 0, y: 0, rot: 0 }; return; }
+    catchPinPose.value = pose;
+  });
   useAnimatedReaction(() => (clockOn.value ? frame.value.shake : 0), (k, prev) => {
     if (k === prev) return;
     catchKickX.value = k * kickDirX.value;
@@ -733,17 +770,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const runRef = useRef<{ token: number; item: PrepItemType; data: RedeemPrepItemResponseType['data'] | null; next: CatchSummary | null; burst: boolean;
     beam: boolean; grand: boolean } | null>(null);
   const streamIdRef = useRef(0);
-  /** Starts the clock (once the copy has drawn, or after 280 ms). */
+  /** Hands the catch from the pin to the layer's copy (once the copy has drawn, or after 280 ms). */
   const startRef = useRef<(() => void) | null>(null);
   const onCopyShown = useCallback(() => startRef.current?.(), []);
-  /** Wave 4: the catch whose server answer is waiting for its commit before the burst plays. */
-  const caughtPending = useRef(0);
-  const releaseCaught = (token: number) => {
-    if (caughtPending.current !== token) return;
-    caughtPending.current = 0;
-    runOnUI(markCaught)();
-  };
-  useLayoutEffect(() => { if (caughtPending.current) releaseCaught(caughtPending.current); });
   const skipped = useRef(false);
   const skipWake = useRef<(() => void) | null>(null);
   /** A wait a skip can cut short (the Ride Photo hand-off). */
@@ -756,11 +785,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const clockRef = useRef<{ t0: number; plan: CatchPlan; skippable: boolean; streamed: boolean } | null>(null);
   const pauseUntil = (at: number) => { const c = clockRef.current; return pause(c ? c.t0 + at - Date.now() : 0); };
 
-  const latest = useRef({ getFix, currencies, triggerFly, getTarget, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request, onRideAgain });
-  latest.current = { getFix, currencies, triggerFly, getTarget, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request, onRideAgain };
+  const latest = useRef({ getFix, currencies, triggerFly, getTarget, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request, onRideAgain, whereNext });
+  latest.current = { getFix, currencies, triggerFly, getTarget, refreshPlayer, onCollected, onUnavailable, onRodeOff: onRodeOffProp, onDone, onFailed, redeem, reducedMotion, onCascade, request, onRideAgain, whereNext };
 
   const badgeLeft = (layer.width - BADGE_WIDTH) / 2;
   const target = { x: badgeLeft + STICKER_LEFT + STICKER / 2, y: layer.height - badgeBottom - BADGE_HEIGHT / 2 - 8 };
+  /** The next-goal disc's centre on the badge's corner (styles.nextAt), where the where-next flight starts. */
+  const nextDiscRef = useRef({ x: 0, y: 0 });
+  nextDiscRef.current = { x: badgeLeft + BADGE_WIDTH + 34 - 30, y: layer.height - badgeBottom - BADGE_HEIGHT + (BADGE_HEIGHT - 60) / 2 + 30 };
   const fromPoint = (req: CatchRequest | null) => req?.from ?? { x: layer.width / 2, y: layer.height * 0.45 };
   // land() and arrive() are stable callbacks: they read the badge spot and the layer offset through refs
   // (round 1 read a stale target from the first render, so the coins set off from the top-left corner).
@@ -959,6 +991,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (!keepReveal) { showCatchChrome(false); setCatchOpen(false); }
     dimCatchChrome(false, latest.current.reducedMotion);
     catchKickX.value = 0; catchKickY.value = 0;
+    catchPinPose.value = { x: 0, y: 0, rot: 0 };
     clockRef.current = null; skipped.current = false; skipWake.current = null;
     barGlow.value = 0;
     // A common's clock keeps running a moment longer for the counter's roll; only its badge mode ends here.
@@ -970,7 +1003,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   };
 
   // ── The common catch's clock (UI thread) ──────────────────────────────
-  /** The server has answered: run the clock from the held frame to its end in one withTiming. */
+  /**
+   * The server has answered: run the clock from the held frame to its end. Wave 5 round 2: when the answer kept the
+   * find waiting on its held frame, the beats after the burst's hold (the flight, the badge, the exit) play a little
+   * faster to win that wait back (at most 20 percent faster), so the moment still ends on its planned time. The
+   * wind-up and the burst itself always keep their planned pace.
+   */
   const continueRun = () => {
     'worklet';
     if (continued.value) return;
@@ -980,25 +1018,45 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     holdWobble.value = withTiming(0, { duration: 40 });
     const from = cc.value;
     const end = endAt.value;
-    cc.value = withTiming(end, { duration: Math.max(1, end - from), easing: Easing.linear });
-  };
-  /** Tap to the held frame (squash, wobbles, gather); a slow server holds a small wobble there, never a freeze. */
-  const startClock = (hitStopAt: number, reducedRun: boolean, pivot: number) => {
-    'worklet';
-    // The map pin hides on this frame: the layer's copy has drawn and starts moving now.
-    catchHidePivot.value = pivot;
-    copyOn.value = 1;
-    continued.value = 0; waiting.value = 0; skipSV.value = 0;
+    const p = planSV.value;
+    const waited = heldAt.value > 0 ? Math.max(0, Date.now() - heldAt.value) : 0;
+    heldAt.value = 0;
+    const mid = Math.min(end, Math.max(from, p.suckAt));
+    const tail = p.doneAt - mid;
+    const k = waited > 0 && tail > 0 ? Math.max(0.8, (tail - waited) / tail) : 1;
     cancelAnimation(cc);
-    cc.value = 0;
-    cc.value = withTiming(hitStopAt, { duration: Math.max(1, hitStopAt), easing: Easing.linear }, done => {
+    cc.value = withSequence(
+      withTiming(mid, { duration: Math.max(1, mid - from), easing: Easing.linear }),
+      withTiming(end, { duration: Math.max(1, (end - mid) * k), easing: Easing.linear }));
+  };
+  /**
+   * Tap to the held frame (squash, wobbles, gather); a slow server holds a small wobble there, never a freeze.
+   * Wave 5 round 2: the clock starts on the tap (the effect's own frame), not once the layer's copy has drawn, so
+   * every beat lands on its planned time from the tap. Until the copy draws, the pin itself follows the clock.
+   */
+  const startClock = (hitStopAt: number, reducedRun: boolean, tapAt: number) => {
+    'worklet';
+    continued.value = 0; waiting.value = 0; skipSV.value = 0; heldAt.value = 0;
+    cancelAnimation(cc);
+    // The time since the tap (at most one or two frames) is already gone: start there, never behind.
+    const e = Math.min(48, Math.max(0, Date.now() - tapAt));
+    cc.value = e;
+    cc.value = withTiming(hitStopAt, { duration: Math.max(1, hitStopAt - e), easing: Easing.linear }, done => {
       if (!done) return;
       if (resolved.value === 1) { continueRun(); return; }
       if (resolved.value === 0) {
         waiting.value = 1;
+        heldAt.value = Date.now();
         if (!reducedRun) holdWobble.value = withRepeat(withSequence(withTiming(5, { duration: 90 }), withTiming(-5, { duration: 90 })), -1, true);
       }
     });
+  };
+  /** The layer's copy has drawn: the pin hides and the copy carries on from the same pose on this frame. */
+  const showCopy = (pivot: number) => {
+    'worklet';
+    catchHidePivot.value = pivot;
+    copyOn.value = 1;
+    catchPinPose.value = { x: 0, y: 0, rot: 0 };
   };
   const markCaught = () => {
     'worklet';
@@ -1051,7 +1109,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         catchMark('burst');
         // The beam's impact already gave the heavy buzz; the grand catch adds a second heavy hit and a higher chime.
         if (!run.beam) catchHaptic('comboHeavy', 3);
-        if (run.grand) setTimeout(() => { if (runRef.current === run) catchHaptic('comboHeavy', 3); }, 120);
+        // Wave 5 round 2: every milestone adds a second heavy hit (the 10th), the grand one a third.
+        if (run.beam) setTimeout(() => { if (runRef.current === run) catchHaptic('comboHeavy', 3); }, 120);
+        if (run.grand) setTimeout(() => { if (runRef.current === run) catchHaptic('comboHeavy', 3); }, 260);
         catchSound('chime', run.grand ? { volume: 0.9, pitch: 4 } : { volume: 0.8 });
         break;
       case BEAT.success: if (!quiet) catchHaptic('success', 3); break;
@@ -1156,6 +1216,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // softens and the map's own controls fade, on the UI thread from this frame.
     dimCatchChrome(true);
     setCatchOpen(true);
+    // The map's markers under the badge drop their tags now, on the tap's own commit, so no parent re-render ever
+    // lands inside the burst (wave 5 round 2; it used to ride the server's answer).
+    latest.current.onCascade?.(true);
 
     // The catch, four beats on one UI-thread clock (src/ui/motion.ts, mapWow catchPlan and catchFrame): a
     // squish under the finger, wobble wobble wobble while it rises and glides to its stage and the gold
@@ -1191,6 +1254,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     beamOn.value = beam ? 1 : 0; grandSV.value = grand ? 1 : 0;
     inkTurn.value = ((sessionCatches + 1) * 47) % 360;
     inkScale.value = variant.inkScale; ringN.value = variant.rings; starN.value = variant.stars;
+    fanSV.value = motion && variant.fan ? 1 : 0; ring2SV.value = motion && variant.counterRing ? 1 : 0; homeSV.value = 0;
+    whereSV.value = { on: 0, at: 0, x0: 0, y0: 0, x1: 0, y1: 0 };
     const ladder: Beat[] = catchHaptics(plan).filter(h => h.at > 0 && h.at < plan.hitStopAt)
       .map(h => ({ at: h.at, kind: BEAT.haptic, arg: BEAT_HAPTICS.indexOf(h.intent) }));
     beats.value = ladder;
@@ -1202,12 +1267,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     catchMark(plan.repeat ? 'tap-repeat' : 'tap');
     catchHaptic('tapLight', 3);
     catchSound('pop');
-    // The clock starts once the layer's copy of the find has drawn (expo-image decodes a fresh mount off the
-    // UI thread; round 2 started on the tap and the copy appeared mid-move, or not at all, a hole). Until then
-    // the pin itself shows the tap's squish. At most 280 ms, so a slow decode never holds the catch up.
-    startRef.current = () => { startRef.current = null; runOnUI(startClock)(plan.hitStopAt, !motion, pivotId); };
-    const startTimer = setTimeout(() => startRef.current?.(), 280);
+    // Wave 5 round 2: the clock starts on the tap, so every beat lands on its planned time (it used to wait for the
+    // layer's copy of the find to draw, about 200 ms on a busy phone, and the whole catch ran that late). The copy
+    // takes over from the pin once it has drawn (expo-image decodes a fresh mount off the UI thread); until then the
+    // pin itself follows the clock (catchPinPose), so there is never a hole. At most 280 ms either way.
     const t0 = Date.now();
+    runOnUI(startClock)(plan.hitStopAt, !motion, t0);
+    startRef.current = () => { startRef.current = null; runOnUI(showCopy)(pivotId); };
+    const startTimer = setTimeout(() => startRef.current?.(), 280);
     const run = catchFind(latest.current.redeem, item.id, pivotId, latest.current.getFix(), { catch_style: 'chomp' });
 
     void (async () => {
@@ -1242,7 +1309,6 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       catchMark('answer');
       setSummary(next);
       setBadgeOn(true);
-      latest.current.onCascade?.(true);
       barFrom.value = next.progressFrom; barTo.value = next.progressTo;
       // The burst variant (beam, grand, ink size and turn) was set on the tap, from the same catch number.
       isNewSV.value = next.isNew ? 1 : 0;
@@ -1251,7 +1317,13 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       const cs = commonSet.current;
       const page = cs && cs.slug === item.set_slug ? cs.items : null;
       const upNext = nextMissing(page, item.id, next.complete);
-      setNextArt(upNext ? findImageSource({ icon_url: upNext.icon_url, variant_slug: upNext.variant_slug, name: upNext.name }) : null);
+      // Wave 5 round 2: when nothing else is in catch range, the next goal is the nearest find on the map (its own art),
+      // and on this catch the disc flies onto that find's spot or edge arrow: where to walk, with no words.
+      const where = motion ? latest.current.whereNext?.(pivotId) ?? null : null;
+      setNextArt(where ? findImageSource(where.item)
+        : upNext ? findImageSource({ icon_url: upNext.icon_url, variant_slug: upNext.variant_slug, name: upNext.name }) : null);
+      const flightAt = where ? whereFlightAt(plan) : -1;
+      if (where) whereSV.value = { on: 1, at: flightAt, x0: nextDiscRef.current.x, y0: nextDiscRef.current.y, x1: where.x, y1: where.y };
       const list: Beat[] = [...ladder,
         { at: plan.hitStopAt + 1, kind: BEAT.hitstop, arg: 0 },
         { at: plan.burstAt, kind: BEAT.burst, arg: 0 }, { at: plan.burstAt + 180, kind: BEAT.success, arg: 0 },
@@ -1272,6 +1344,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         const stream = coinStreamPlan(coins, !motion, Math.max(3, momentParticles(COIN_STREAM.max, power, !motion)));
         const chip = latest.current.getTarget('coins');
         const lands = stream.landAt.map(ms => plan.coinsAt + ms);
+        // The 5th-catch treat: its stars lead the coins into the counter.
+        if (chip && motion && variant.homeStars) { starTo.value = { x: chip.x - off.x - stage.x, y: chip.y - off.y - stage.y }; homeSV.value = 1; }
         if (stream.count > 0 && chip) {
           coinGeo.value = { fx: stage.x, fy: stage.y, tx: chip.x - off.x, ty: chip.y - off.y };
           coinN.value = stream.count;
@@ -1283,6 +1357,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
           setTimeout(() => pulseHud('coins', coins), Math.max(0, plan.burstAt - (Date.now() - t0)) + (motion ? 300 : DURATION.quick));
         }
       }
+      // The where-next flight lands and lingers on the clock, which runs on past done for it (the map is free by then).
+      if (flightAt >= 0) end = Math.max(end, flightAt + WHERE.totalMs);
       list.sort((a, b) => a.at - b.at);
       beats.value = list;
       endAt.value = end;
@@ -1292,10 +1368,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         catchHaptic('comboHeavy', 3);
         setTimeout(() => { if (alive()) catchHaptic('success', 3); }, 180);
       }
-      // Wave 4: the clock runs on into the burst only once this answer's React commit (summary, badge, next goal,
-      // the parent's cascade) has landed, so its mount never lands inside the burst's hold (the r5 frame gaps).
-      caughtPending.current = token;
-      setTimeout(() => releaseCaught(token), 150);
+      // Wave 5 round 2: the clock never waits for this answer's React commit (wave 4 did, and every tier ran about
+      // 190 ms late). The commit is small (the badge's words and the next goal; the parent's cascade went out on the
+      // tap) and lands in the wind-up or the held frame, and the burst draws on the UI thread in one Skia canvas.
+      runOnUI(markCaught)();
     })();
   // A new request (or a retry of the same find) starts a fresh moment.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1702,20 +1778,47 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const nextStyle = useAnimatedStyle(() => {
     touchHeal(heal);
     const g = clockOn.value ? nextGoalAt(cc.value, planSV.value) : { scale: 0, bob: 0, ring: -1 };
-    return { opacity: g.scale > 0 ? 1 : 0, transform: [{ translateY: g.bob }, { rotate: '8deg' }, { scale: g.scale }] };
+    // The disc leaves the badge on the frame its where-next flight starts (one disc on screen, never two).
+    const w = whereSV.value;
+    const flown = w.on && cc.value >= w.at;
+    return { opacity: g.scale > 0 && !flown ? 1 : 0, transform: [{ translateY: g.bob }, { rotate: '8deg' }, { scale: g.scale }] };
   });
   const nextRingStyle = useAnimatedStyle(() => {
     touchHeal(heal);
     const r = clockOn.value ? nextGoalAt(cc.value, planSV.value).ring : -1;
     return { opacity: r < 0 ? 0 : 0.8 * (1 - r), transform: [{ scale: 1 + 0.6 * Math.max(0, r) }] };
   });
+  // Wave 5 round 2: the bar's next slot breathes with the disc's ring (on from the disc's pop).
+  const ghostStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
+    const g = clockOn.value ? nextGoalAt(cc.value, planSV.value) : { scale: 0, bob: 0, ring: -1 };
+    return { opacity: g.scale <= 0 ? 0 : g.ring < 0 ? 0.7 : 0.35 + 0.45 * (1 - g.ring), transform: [{ translateX: 0 }] };
+  });
+  // Wave 5 round 2: the where-next disc: arcs from the badge onto the next find (or its edge arrow), lands with a pop
+  // and a gold ring, bobs there a beat, then fades. On the same clock, so it never waits on JS.
+  const whereStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
+    if (!onUi()) return HIDDEN;
+    const w = whereSV.value;
+    const at = w.on ? whereAt(cc.value - w.at, { x: w.x0, y: w.y0 }, { x: w.x1, y: w.y1 }) : null;
+    if (!at) return { opacity: 0, transform: [{ translateX: -999 }, { translateY: -999 }, { scale: 0 }] };
+    return { opacity: at.alpha, transform: [{ translateX: at.x - 30 }, { translateY: at.y - 30 }, { rotate: `${at.rot}deg` }, { scale: at.scale }] };
+  });
+  const whereRingStyle = useAnimatedStyle(() => {
+    touchHeal(heal);
+    const w = whereSV.value;
+    const at = w.on ? whereAt(cc.value - w.at, { x: w.x0, y: w.y0 }, { x: w.x1, y: w.y1 }) : null;
+    const r = at ? at.ring : -1;
+    return { opacity: r < 0 ? 0 : 0.9 * (1 - r), transform: [{ scale: 1 + 0.9 * Math.max(0, r) }] };
+  });
   const badgeStyles = useMemo<BadgeStyles>(() => ({ badge: badgeStyle, kick: stickerKick, landRing, bar: barStyle, barGlow: barGlowStyle,
     newPop: newStyle, grade: gradeStyle, ride: rideStyle, countOld, countNew, coinStamp: coinStampStyle, oneMore: oneMoreStyle,
-    next: nextStyle, nextRing: nextRingStyle }), []); // eslint-disable-line react-hooks/exhaustive-deps
+    next: nextStyle, nextRing: nextRingStyle, ghost: ghostStyle }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const fxStyles = useMemo<FxStyles>(() => ({ halo: haloStyle, beam: beamStyle, splash: splashStyle, water: waterStyle,
     gather: gatherOrigin, spark: sparkOrigin, star: starOrigin, flash: flashStyle, item: itemStyle }), []); // eslint-disable-line react-hooks/exhaustive-deps
-  const fxValues = useMemo<FxValues>(() => ({ frame, clock: cc, plan: planSV, on: clockOn, beamOn, ringN, starN, sx: stageX, sy: stageY }), []); // eslint-disable-line react-hooks/exhaustive-deps
-  const burstValues = useMemo<BurstValues>(() => ({ frame, clock: cc, plan: planSV, on: clockOn, sx: stageX, sy: stageY, inkScale, inkTurn, grand: grandSV }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const fxValues = useMemo<FxValues>(() => ({ frame, clock: cc, plan: planSV, on: clockOn, beamOn, ringN, starN, sx: stageX, sy: stageY, homeStars: homeSV, starTo }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const burstValues = useMemo<BurstValues>(() => ({ frame, clock: cc, plan: planSV, on: clockOn, sx: stageX, sy: stageY, inkScale, inkTurn, grand: grandSV,
+    fan: fanSV, ring2: ring2SV }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const color = item ? rarityColor(item.rarity) : BRAND.gold;
   const motionFx = !!item && !reducedMotion && catchStyleFor(item.rarity) === 'chomp';
   const sparks = motionFx ? momentParticles(PARTICLES.sparkles, power, reducedMotion) : 0;
@@ -1869,6 +1972,13 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       <CatchBadge st={badgeStyles} summary={summary} photo={photo} bonusXp={bonusXp} newRide={newRide} art={art} name={name} color={color}
         left={badgeLeft} bottom={badgeBottom} coinStamp={coinStamp} nextArt={nextArt} />
       </View>
+      {/* Wave 5 round 2: where to walk next (the session's last catch in range): the next-goal disc flies onto the find. */}
+      <Animated.View pointerEvents="none" style={[styles.whereAt, whereStyle]}>
+        <Animated.View style={[styles.nextRing, whereRingStyle]} />
+        <View style={styles.nextDisc}>
+          {nextArt ? <RNImage source={nextArt as never} style={styles.nextArt} resizeMode="contain" fadeDuration={0} /> : null}
+        </View>
+      </Animated.View>
       {/* The coin stream (always mounted, still until a catch throws its coins). */}
       {layer.width > 0 && <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         {Array.from({ length: COIN_STREAM.max }, (_, index) => (
@@ -1917,7 +2027,9 @@ const styles = StyleSheet.create({
   nextRing: { position: 'absolute', width: 60, height: 60, borderRadius: 30, borderWidth: 3, borderColor: GOLD_FX.rays },
   nextDisc: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#ffffff', borderWidth: 3, borderColor: GOLD_FX.rays,
     alignItems: 'center', justifyContent: 'center' },
-  nextArt: { width: 42, height: 42, opacity: 0.88 },
+  nextArt: { width: 44, height: 44, opacity: 0.5 },
+  whereAt: { position: 'absolute', left: 0, top: 0, width: 60, height: 60, alignItems: 'center', justifyContent: 'center' },
+  ghostSlot: { position: 'absolute', top: 0, bottom: 0, borderRadius: 4, backgroundColor: BRAND.goldLight },
   itemRim: { position: 'absolute', left: -18, top: -18, width: FIND_ART_SIZE + 36, height: FIND_ART_SIZE + 36, opacity: 0.85 },
   itemFallback: { width: FIND_ART_SIZE, height: FIND_ART_SIZE, borderRadius: FIND_ART_SIZE / 2, alignItems: 'center', justifyContent: 'center' },
   badge: { position: 'absolute', width: BADGE_WIDTH, height: BADGE_HEIGHT, borderRadius: BADGE_HEIGHT / 2,

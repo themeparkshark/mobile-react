@@ -175,24 +175,63 @@ export interface BurstVariant {
   readonly milestone: boolean;
   /** Wave 4: the 5th-catch treat (the star tier holds its burst longer on the snappy repeat). */
   readonly treat: boolean;
-  /** Wave 4: the 25th: a second ring of rays turning the other way and a gold confetti shower. */
+  /** Wave 4: the 25th: a gold confetti shower. */
   readonly grand: boolean;
+  /**
+   * Wave 5 round 2: the hand-inked spike fan behind Alex's burst shows on milestones only (the 10th and the 25th).
+   * A common is Alex's inked star alone on a soft gold bloom, one clear read (the two stacked looked like a mace).
+   */
+  readonly fan: boolean;
+  /** Wave 5 round 2: a second ring of rays turning the other way (the 10th and the 25th). */
+  readonly counterRing: boolean;
+  /** Wave 5 round 2: the 5th-catch treat's stars arc into the coin counter (they lead the coins home). */
+  readonly homeStars: boolean;
 }
 
 export const BURST_STARS_MAX = 8;
 export const BURST_RINGS_MAX = 3;
 
+/**
+ * Wave 5 round 2, a clear staircase (each tier at least 1.12x the last, and each adds something new):
+ * 1st catch 1.05 (Alex's star, bloom, two rings), 5th 1.18 (its stars fly into the counter), 10th 1.34 (the beam,
+ * the spike fan and a counter-turning ring), 25th 1.6 (all of it and confetti). Ordinary repeats stay a touch
+ * smaller and rotate three looks, so the 50th catch still varies.
+ */
 export function burstVariant(catchNumber: number): BurstVariant {
   const n = Math.max(1, Math.floor(catchNumber));
-  // Wave 4: each tier visibly climbs. The 25th is about 1.4x the 10th (1.56 vs 1.12) with a counter-turning ring and confetti.
-  if (n % 25 === 0) return { kind: 'grand', inkScale: 1.56, rings: 3, stars: 8, beam: true, milestone: true, treat: false, grand: true };
-  if (n % 10 === 0) return { kind: 'beam', inkScale: 1.12, rings: 2, stars: 6, beam: true, milestone: true, treat: false, grand: false };
-  if (n % 5 === 0) return { kind: 'stars', inkScale: 1.08, rings: 1, stars: 8, beam: false, milestone: false, treat: true, grand: false };
-  if (n === 1) return { kind: 'classic', inkScale: 1, rings: 1, stars: 4, beam: false, milestone: false, treat: false, grand: false };
+  const base = { beam: false, milestone: false, treat: false, grand: false, fan: false, counterRing: false, homeStars: false };
+  if (n % 25 === 0) return { ...base, kind: 'grand', inkScale: 1.6, rings: 3, stars: 8, beam: true, milestone: true, grand: true, fan: true, counterRing: true };
+  if (n % 10 === 0) return { ...base, kind: 'beam', inkScale: 1.34, rings: 3, stars: 8, beam: true, milestone: true, fan: true, counterRing: true };
+  if (n % 5 === 0) return { ...base, kind: 'stars', inkScale: 1.18, rings: 2, stars: 8, treat: true, homeStars: true };
+  if (n === 1) return { ...base, kind: 'classic', inkScale: 1.05, rings: 2, stars: 4 };
   const k = n % 3;
-  if (k === 0) return { kind: 'rings', inkScale: 0.9, rings: 3, stars: 2, beam: false, milestone: false, treat: false, grand: false };
-  if (k === 1) return { kind: 'stars', inkScale: 0.95, rings: 1, stars: 6, beam: false, milestone: false, treat: false, grand: false };
-  return { kind: 'classic', inkScale: 1, rings: 1, stars: 4, beam: false, milestone: false, treat: false, grand: false };
+  if (k === 0) return { ...base, kind: 'rings', inkScale: 0.9, rings: 3, stars: 2 };
+  if (k === 1) return { ...base, kind: 'stars', inkScale: 0.95, rings: 1, stars: 6 };
+  return { ...base, kind: 'classic', inkScale: 1, rings: 1, stars: 4 };
+}
+
+/**
+ * Wave 5 round 2: a 5th-catch treat star (index i of n) at burst progress p 0..1, relative to the find: it flings out
+ * over the top, then arcs into the coin counter at `to` (relative pt), shrinking, and is gone once it lands.
+ * Worklet-safe and pure.
+ */
+export function homeStarAt(p: number, i: number, n: number, to: { x: number; y: number }): { x: number; y: number; scale: number } | null {
+  'worklet';
+  const q = (p - i * 0.025) / 0.8;
+  if (q <= 0 || q >= 1 || n <= 0) return null;
+  const angle = -Math.PI / 2 + (i - (n - 1) / 2) * (n > 4 ? 0.5 : 0.8);
+  const reach = i % 2 ? 92 : 118;
+  const ox = Math.cos(angle) * reach, oy = Math.sin(angle) * reach;
+  if (q < 0.3) {
+    const u = q / 0.3;
+    const out = 1 - (1 - u) * (1 - u) * (1 - u);
+    return { x: ox * out, y: oy * out, scale: (u < 0.3 ? u / 0.3 : 1) * 1.2 };
+  }
+  const f = (q - 0.3) / 0.7;
+  const e = f < 0.5 ? 4 * f * f * f : 1 - Math.pow(-2 * f + 2, 3) / 2;
+  const cx = (ox + to.x) / 2, cy = Math.min(oy, to.y) - 60;
+  const u = 1 - e;
+  return { x: u * u * ox + 2 * u * e * cx + e * e * to.x, y: u * u * oy + 2 * u * e * cy + e * e * to.y, scale: 1.2 - 0.6 * e };
 }
 
 /** The beam drops this long before the held frame and lands on it (the flash is its impact). */
@@ -696,6 +735,35 @@ export function nextGoalAt(t: number, p: CatchPlan): { scale: number; bob: numbe
   const scale = d < 120 ? 1.2 * easeOut3(d / 120) : 1 + 0.2 * settle((d - 120) / 300);
   const ring = d < 200 ? -1 : ((d - 200) % 700) / 700;
   return { scale, bob: -2 * Math.sin(d / 160), ring };
+}
+
+/**
+ * Wave 5 round 2, where to walk next: on the session's last catch in range the next-goal disc leaves the badge and
+ * arcs onto the next find (or its edge arrow): 420 ms flight, a landing pop with a gold ring, a short bob there,
+ * then a fade. It starts once the disc has been read on the badge (about 450 ms), and always before the badge leaves.
+ */
+export const WHERE = { flightMs: 420, popMs: 200, stayMs: 620, fadeMs: 220, arcPt: 70, totalMs: 420 + 200 + 620 + 220 } as const;
+
+export function whereFlightAt(p: CatchPlan): number {
+  return Math.min(p.nextAt + 450, p.exitAt - 60);
+}
+
+/** The where-next disc `d` ms after its flight starts (layer points), or null when it is not on screen. Worklet. */
+export function whereAt(d: number, from: { x: number; y: number }, to: { x: number; y: number }):
+  { x: number; y: number; scale: number; rot: number; alpha: number; ring: number } | null {
+  'worklet';
+  if (d < 0 || d >= WHERE.totalMs) return null;
+  if (d < WHERE.flightMs) {
+    const e = easeInOut3(d / WHERE.flightMs);
+    const at = arcPoint(from, to, WHERE.arcPt, e);
+    return { x: at.x, y: at.y, scale: 1 - 0.25 * Math.sin(e * Math.PI) * 0.6, rot: 8 - 8 * e, alpha: 1, ring: -1 };
+  }
+  const l = d - WHERE.flightMs;
+  const pop = l < WHERE.popMs ? 1 + 0.22 * Math.sin((l / WHERE.popMs) * Math.PI) : 1;
+  const ring = l < 520 ? l / 520 : -1;
+  const fadeFrom = WHERE.popMs + WHERE.stayMs;
+  const alpha = l < fadeFrom ? 1 : 1 - clamp01((l - fadeFrom) / WHERE.fadeMs);
+  return { x: to.x, y: to.y - 3 * Math.sin(l / 140), scale: pop * (1 - 0.15 * (1 - alpha)), rot: 0, alpha, ring };
 }
 
 /* Round 5: the catch's hand-inked sunburst (CatchRays draws it once with Skia). */

@@ -8,8 +8,8 @@
  * mounts once per catch (during the wind-up, long before the burst) and nothing in it re-renders until it goes.
  * Wave 5: it also redraws only inside the burst's window (the gold, the ink, the confetti), never in the wind-up or flight.
  *
- * What it draws, from back to front: the soft gold bloom with the hand-inked sunburst (CatchRaysArt), on the
- * grand catch a second ring of rays turning the other way, Alex's inked gold burst image, and on the grand
+ * What it draws, from back to front: the soft gold bloom, on milestones the hand-inked spike fan (CatchRaysArt) and
+ * a second ring of rays turning the other way, Alex's inked gold burst image, and on the grand
  * catch a capped shower of gold, white and blue confetti with navy ink edges. Blue, white and gold only.
  */
 import { memo, useEffect, useState } from 'react';
@@ -53,6 +53,9 @@ export interface BurstValues {
   readonly inkScale: SharedValue<number>;
   readonly inkTurn: SharedValue<number>;
   readonly grand: SharedValue<number>;
+  /** Wave 5 round 2: 1 on milestones: the spike fan behind Alex's star, and the second ring turning the other way. */
+  readonly fan: SharedValue<number>;
+  readonly ring2: SharedValue<number>;
 }
 
 /** One confetti piece: a small inked card that pops out and flutters down (UI thread, no React). */
@@ -116,10 +119,12 @@ function CatchBurst({ v, goldSize, confetti }: { readonly v: BurstValues; readon
     if (!f || g <= 0) return 0;
     return Math.min(1, g * 1.1) * (f.suck < 0.6 ? 1 : 1 - (f.suck - 0.6) / 0.4);
   });
-  // The grand catch's second ring: a touch bigger, turning the other way, under the ink.
+  // Wave 5 round 2: the spike fan only on milestones (a common is Alex's star on the bloom alone).
+  const fanO = useDerivedValue(() => (v.fan.value ? goldO.value : 0));
+  // The milestone's second ring: a touch bigger, turning the other way, under the ink.
   const ringT = useDerivedValue(() => {
     const f = bf.value;
-    const g = f && v.grand.value ? f.gold : 0;
+    const g = f && v.ring2.value ? f.gold : 0;
     if (!f || g <= 0) return HIDE;
     const b = bt.value - v.plan.value.burstAt;
     const s = v.inkScale.value * 1.16 * (0.45 + 0.55 * g) * (1 - f.suck * f.suck);
@@ -128,7 +133,7 @@ function CatchBurst({ v, goldSize, confetti }: { readonly v: BurstValues; readon
   });
   const ringO = useDerivedValue(() => {
     const f = bf.value;
-    const g = f && v.grand.value ? f.gold : 0;
+    const g = f && v.ring2.value ? f.gold : 0;
     return !f || g <= 0 ? 0 : 0.85 * Math.min(1, g * 1.1) * (f.suck < 0.5 ? 1 : 1 - (f.suck - 0.5) / 0.5);
   });
   // Alex's inked burst: snaps out past full size, holds (the screenshot frame), then sucks back into the find.
@@ -157,7 +162,10 @@ function CatchBurst({ v, goldSize, confetti }: { readonly v: BurstValues; readon
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
       <Group transform={goldT} opacity={goldO}>
-        <CatchRaysArt size={goldSize} />
+        <CatchRaysArt size={goldSize} bloomOnly />
+      </Group>
+      <Group transform={goldT} opacity={fanO}>
+        <CatchRaysArt size={goldSize} raysOnly />
       </Group>
       <Group transform={ringT} opacity={ringO}>
         <CatchRaysArt size={goldSize} raysOnly />

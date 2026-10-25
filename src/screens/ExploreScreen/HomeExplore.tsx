@@ -30,7 +30,7 @@ import { catchStyleFor } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
 import { useCatchOpen, catchDim, catchShown } from './catchPresence';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
-import { bannerCovers, clusterFinds, edgeArrowPlacement, findFootprint, hudRowTop, peekBottom, sharkFootprint, type Rect } from './findEdges';
+import { bannerCovers, clusterFinds, edgeArrowPlacement, findFootprint, hudRowTop, peekBottom, sharkFootprint, whereNextAfterCatch, type Rect } from './findEdges';
 import type { FingerSide } from './PrepItem';
 import { mapStatusLine, peekLine, screenBearing } from './findPresentation';
 import { isStaleHighlight, nearestFind } from './nearestFind';
@@ -711,6 +711,18 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const rowTop = TOP + (liveBar ? LIVE_BAR_ROW : 0);
   // Edge tokens (48 pt) centre below the chip row's home row, so a live boss bar pushes both down together.
   const edgeTop = rowTop + 30 + 8 + 24;
+  // Wave 5 round 2: after a catch with nothing else in range, the badge's next goal flies onto the nearest find (its spot
+  // on screen, or its edge arrow), so a kid who cannot read knows where to walk. Refs keep the callback stable.
+  const whereRef = useRef({ placed, containerSize, edgeTop });
+  whereRef.current = { placed, containerSize, edgeTop };
+  const whereNext = useCallback((caughtPivot: number) => {
+    const { placed: list, containerSize: size, edgeTop: top } = whereRef.current;
+    const finds = list.filter(entry => entry.item.pivot_id != null).map(entry => ({ pivot: entry.item.pivot_id as number, inRange: entry.inRange,
+      distance: entry.distance, isNew: !!entry.item.is_new_variant, point: findPoints.current.get(entry.item.pivot_id as number) ?? null }));
+    const at = whereNextAfterCatch(finds, caughtPivot, size, { top, bottom: 190, side: 30 });
+    const item = at ? list.find(entry => entry.item.pivot_id === at.pivot)?.item : undefined;
+    return at && item ? { x: at.x, y: at.y, item } : null;
+  }, []);
   const tokens = useMemo(() => edgeFinds.map(edge => {
     const at = edgeArrowPlacement(edge.point, containerSize, { top: edgeTop, bottom: 190, side: 30 });
     return { x: at.x - 28, y: at.y - 28, w: 56, h: 56 };
@@ -798,7 +810,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       <HomeCatchMoment ref={catchRef} request={catchRequest} stageItem={stageItem} badgeBottom={BOTTOM_SLOT}
         getFix={getFix} mapStill={mapStill}
         onCollected={onCollectedStable} onUnavailable={onUnavailableStable} onRodeOff={onRodeOffStable} onFailed={onFailedStable} onDone={onDoneStable} onRideAgain={onRideAgainStable}
-        warm={warmFinds} onCascade={setCascadeOn} />
+        warm={warmFinds} onCascade={setCascadeOn} whereNext={whereNext} />
 
 
       {introOpen && <HomeIntro onDone={markIntroSeen} />}

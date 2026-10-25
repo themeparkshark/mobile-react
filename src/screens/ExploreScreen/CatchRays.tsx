@@ -51,7 +51,9 @@ function useRayPaths(size: number) {
  * lives in one canvas whose transforms come straight from the UI-thread clock (no view style a React commit
  * could reset). `raysOnly` drops the bloom (the grand catch's second, counter-turning ring).
  */
-export const CatchRaysArt = memo(function CatchRaysArt({ size, raysOnly = false }: { readonly size: number; readonly raysOnly?: boolean }) {
+export const CatchRaysArt = memo(function CatchRaysArt({ size, raysOnly = false, bloomOnly = false }: { readonly size: number; readonly raysOnly?: boolean;
+  /** Wave 5 round 2: just the soft light (a common's burst is Alex's inked star on this bloom, no spike fan). */
+  readonly bloomOnly?: boolean }) {
   const c = size / 2;
   const { rays, shine } = useRayPaths(size);
   return (
@@ -62,11 +64,13 @@ export const CatchRaysArt = memo(function CatchRaysArt({ size, raysOnly = false 
           colors={['rgba(255,251,234,1)', 'rgba(255,213,74,0.75)', 'rgba(255,201,60,0.3)', 'rgba(255,201,60,0)']}
           positions={[0, 0.2, 0.55, 1]} />
       </Circle>}
+      {!bloomOnly && <Group>
       <Path path={rays}>
         <RadialGradient c={vec(c, c)} r={c * 0.92} colors={[GOLD_FX.core, GOLD_FX.rays, '#F2A91E']} positions={[0.08, 0.38, 1]} />
       </Path>
       <Path path={rays} style="stroke" strokeWidth={2.2 * (size / 320)} strokeJoin="round" color={INK} />
       <Path path={shine} style="stroke" strokeWidth={1.8 * (size / 320)} strokeCap="round" color="rgba(255,255,255,0.8)" />
+      </Group>}
     </Group>
   );
 });

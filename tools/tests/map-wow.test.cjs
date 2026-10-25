@@ -143,7 +143,7 @@ test('the catch uses the shared motion language and never punishes a miss', () =
   assert.match(src, /flashPeak\(isDimFlashingLightsEnabled\(\)/, 'the flash respects Dim Flashing Lights');
   assert.match(src, /momentParticles\(PARTICLES\.sparkles/, 'sparkles go through the power budget');
   assert.match(src, /<CatchBurst /, "the gold is the hand-inked fan on a bloom, drawn by the burst canvas");
-  assert.match(read('src/screens/ExploreScreen/CatchBurst.tsx'), /<CatchRaysArt size=\{goldSize\} \/>/);
+  assert.match(read('src/screens/ExploreScreen/CatchBurst.tsx'), /<CatchRaysArt size=\{goldSize\} bloomOnly \/>/);
   const common = src.slice(src.indexOf('const plan = catchPlan('), src.indexOf("catchMark('fly')"));
   assert.ok(!/failBuzz/.test(common), 'a missed common catch is soft, never an error buzz');
 });
@@ -324,7 +324,7 @@ test('round 3: no JS timer paces the catch; the pin hides only after the layer d
   const explore = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.ok(!/hidden=\{catchingPivot === /.test(explore), 'the pin is not hidden on the tap commit');
   assert.match(src, /catchHidePivot\.value = pivot/, 'the pin hides on the UI thread when the copy starts moving');
-  assert.match(src, /onDisplay=\{onCopyShown\}/, 'the clock waits for the copy to draw');
+  assert.match(src, /onDisplay=\{onCopyShown\}/, 'the pin hands over to the copy once it has drawn');
   assert.match(read('src/screens/ExploreScreen/PrepItem.tsx'), /catchHidePivot\.value === myPivot/);
   const marker = read('src/screens/ExploreScreen/HomeFindMarker.tsx');
   assert.match(marker, /squashFind\(item\.pivot_id\)/, 'the pin itself squishes on the tap frame');
@@ -498,7 +498,7 @@ test('wave 5: the next goal is sticker size and on screen about half a second on
   const t = wow.catchPlan({ reduced: false, repeat: true, treat: true });
   assert.ok(t.exitAt - t.nextAt >= 420 && t.doneAt <= 1450);
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
-  assert.match(src, /nextArt: \{ width: 42, height: 42/);
+  assert.match(src, /nextArt: \{ width: 44, height: 44, opacity: 0\.5 \}/);
 });
 
 test('wave 5: release-like captures log every catch frame (beam, gold, ink) and never ship that probe', () => {
@@ -580,9 +580,9 @@ test('wave 4: the burst lives in one Skia canvas on the clock, never an animated
   assert.match(burst, /Skia\.Image\.MakeImageFromEncoded/, 'the ink art is decoded once for the app');
   assert.match(src, /useEffect\(\(\) => \{ void loadBurstInk\(\)\.then\(setBurstInk\); \}, \[\]\)/, 'and preloaded when the map mounts');
   assert.match(src, /warmStep === 0 && !reducedMotion && <Canvas[\s\S]{0,200}<CatchRaysArt size=\{goldSize\} \/>/, 'and drawn once, tiny, at launch (no first-catch compile)');
-  // The server answer's commit lands before the burst plays, never inside its hold.
-  assert.match(src, /caughtPending\.current = token;\s*setTimeout\(\(\) => releaseCaught\(token\), 150\);/);
-  assert.match(src, /useLayoutEffect\(\(\) => \{ if \(caughtPending\.current\) releaseCaught\(caughtPending\.current\); \}\);/);
+  // Wave 5 round 2: the clock never waits for the answer's commit (that put every tier about 190 ms behind plan).
+  assert.doesNotMatch(src, /caughtPending|releaseCaught/);
+  assert.match(src, /endAt\.value = end;[\s\S]{0,900}runOnUI\(markCaught\)\(\);/);
 });
 
 test('wave 4: the 10th-catch beam is set from a JS flag on the tap (JS never reads back a value it just wrote)', () => {
@@ -605,7 +605,7 @@ test('wave 4: every tier climbs: the 5th holds its stars 250+ ms, the 25th is 1.
   assert.ok(treat.suckAt - treat.burstAt >= 250, `5th burst hold ${treat.suckAt - treat.burstAt}`);
   assert.ok(plain.suckAt - plain.burstAt <= 200, 'ordinary repeats stay snappy');
   assert.ok(treat.doneAt <= 1450, `5th still settled by ${treat.doneAt}`);
-  assert.ok(v25.inkScale / v10.inkScale >= 1.35, `grand vs beam ${v25.inkScale / v10.inkScale}`);
+  assert.ok(v25.inkScale / v10.inkScale >= 1.12, `grand vs beam ${v25.inkScale / v10.inkScale}`);
   assert.ok(v25.grand && !v10.grand && v25.beam && v10.beam);
   const p = wow.catchPlan({ reduced: false, milestone: true });
   assert.equal(wow.confettiAt(p.burstAt - 1, p, 0, 10), null);
@@ -665,4 +665,120 @@ test('wave 5: the badge makes room for the next-goal disc, so it never covers th
   assert.match(src, /styles\.badge, nextArt && !photo && styles\.badgeNextRoom/);
   assert.match(src, /badgeNextRoom: \{ paddingRight: 16 \+ 30 \}/);
   assert.match(src, /nextAt: \{ position: 'absolute', right: -34,/, 'the 60 pt disc reaches 26 pt into the badge, inside the 46 pt room');
+});
+
+/* ------------------------------------------------------------- wave 5, round 2 */
+
+test('wave 5 r2: the catch clock starts on the tap, and the pin follows it until the copy draws (no 200 ms late start)', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  const effect = src.slice(src.indexOf('const variant = burstVariant(sessionCatches + 1)'), src.indexOf('// ── Ride Photo hand-offs'));
+  const start = effect.indexOf('runOnUI(startClock)(plan.hitStopAt, !motion, t0);');
+  assert.ok(start > 0 && start < effect.indexOf('catchFind('), 'the clock starts before the server call, on the tap');
+  assert.match(effect, /startRef\.current = \(\) => \{ startRef\.current = null; runOnUI\(showCopy\)\(pivotId\); \};/);
+  assert.match(src, /const showCopy = \(pivot: number\) => \{\s*'worklet';\s*catchHidePivot\.value = pivot;\s*copyOn\.value = 1;/);
+  // The start never runs behind the tap: it begins at the time already gone (one or two frames at most).
+  assert.match(src, /const e = Math\.min\(48, Math\.max\(0, Date\.now\(\) - tapAt\)\);/);
+  // Until the copy draws, the pin rises, glides and wobbles with the clock.
+  assert.match(src, /if \(!clockOn\.value \|\| copyOn\.value\) return null;/);
+  const pin = read('src/screens/ExploreScreen/PrepItem.tsx');
+  assert.match(pin, /const pose = tapped \? catchPinPose\.value : null;/);
+  assert.match(read('src/screens/ExploreScreen/catchPresence.ts'), /export const catchPinPose = makeMutable\(\{ x: 0, y: 0, rot: 0 \}\);/);
+});
+
+test('wave 5 r2: the answer never holds the clock for a React commit; a server wait is won back after the burst', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  const effect = src.slice(src.indexOf('const variant = burstVariant(sessionCatches + 1)'), src.indexOf('// ── Ride Photo hand-offs'));
+  const answer = effect.slice(effect.indexOf("catchMark('answer');"));
+  assert.doesNotMatch(answer, /onCascade/, 'the parent re-render left the answer (it rides the tap now)');
+  const tapPart = src.slice(src.indexOf('const { item, pivotId } = request;'), src.indexOf("catchMark(plan.repeat ? 'tap-repeat' : 'tap')"));
+  assert.match(tapPart.slice(tapPart.indexOf('dimCatchChrome(true);')), /latest\.current\.onCascade\?\.\(true\);/);
+  assert.match(answer, /runOnUI\(markCaught\)\(\);/);
+  // continueRun keeps the wind-up and the burst at plan pace and speeds up only what follows the hold (at most 20%).
+  const cont = src.slice(src.indexOf('const continueRun = () => {'), src.indexOf('const startClock ='));
+  assert.match(cont, /const mid = Math\.min\(end, Math\.max\(from, p\.suckAt\)\);/);
+  assert.match(cont, /Math\.max\(0\.8, \(tail - waited\) \/ tail\)/);
+  assert.match(src, /heldAt\.value = Date\.now\(\);/);
+  // On every plan the done frame lands by 2.6 s from the tap, even when the server answered 150 ms after the held frame.
+  for (const plan of [wow.catchPlan({ reduced: false }), wow.catchPlan({ reduced: false, milestone: true }),
+    wow.catchPlan({ reduced: false, repeat: true }), wow.catchPlan({ reduced: false, repeat: true, treat: true })]) {
+    const waited = 150;
+    const tail = plan.doneAt - plan.suckAt;
+    const k = Math.max(0.8, (tail - waited) / tail);
+    const done = plan.suckAt + waited + tail * k;
+    assert.ok(done <= 2600, `done ${done}`);
+    assert.ok(Math.abs(done - plan.doneAt) <= 50, `within 50 ms of plan (${done} vs ${plan.doneAt})`);
+  }
+});
+
+test('wave 5 r2: a clear staircase: 1st, 5th, 10th, 25th each at least 1.12x the last and each adds something new', () => {
+  const v = [1, 5, 10, 25].map(n => wow.burstVariant(n));
+  for (let i = 1; i < v.length; i++) assert.ok(v[i].inkScale / v[i - 1].inkScale >= 1.12, `tier ${i}: ${v[i].inkScale / v[i - 1].inkScale}`);
+  assert.ok(!v[0].fan && !v[1].fan && v[2].fan && v[3].fan, 'the spike fan only on milestones');
+  assert.ok(v[1].homeStars && !v[0].homeStars && !v[2].homeStars, 'the 5th throws its stars into the counter');
+  assert.ok(v[2].counterRing && v[3].counterRing && !v[1].counterRing, 'the 10th gets the counter-turning ring');
+  assert.ok(v[3].grand && !v[2].grand, 'confetti stays the 25th');
+  for (const n of [2, 3, 4, 6, 7, 8, 9, 11]) assert.ok(!wow.burstVariant(n).fan, `common ${n} is Alex's star on the bloom`);
+  const burst = read('src/screens/ExploreScreen/CatchBurst.tsx');
+  assert.match(burst, /const fanO = useDerivedValue\(\(\) => \(v\.fan\.value \? goldO\.value : 0\)\);/);
+  assert.match(burst, /const g = f && v\.ring2\.value \? f\.gold : 0;/);
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /if \(run\.beam\) setTimeout\(\(\) => \{ if \(runRef\.current === run\) catchHaptic\('comboHeavy', 3\); \}, 120\);/, 'a stronger haptic on the 10th');
+});
+
+test('wave 5 r2: the 5th-catch stars fling out, then land in the coin counter', () => {
+  const to = { x: 120, y: -420 };
+  assert.equal(wow.homeStarAt(0, 0, 8, to), null);
+  const out = wow.homeStarAt(0.2, 3, 8, to);
+  assert.ok(out && out.y < 0, 'flung up first');
+  const late = wow.homeStarAt(0.79, 0, 8, to);
+  assert.ok(late && Math.hypot(late.x - to.x, late.y - to.y) < 6, `lands on the counter (${late && late.x}, ${late && late.y})`);
+  assert.equal(wow.homeStarAt(0.81, 0, 8, to), null, 'gone once it lands');
+  for (let i = 0; i < 8; i++) assert.ok(i * 0.025 + 0.8 < 1, 'every star lands inside the sparkle window');
+});
+
+test('wave 5 r2: where to walk next: only once nothing is in range, a new find first, its edge arrow when off screen', () => {
+  const edges = loadTs('src/screens/ExploreScreen/findEdges.ts');
+  const size = { width: 400, height: 800 };
+  const inset = { top: 74, bottom: 190, side: 30 };
+  const finds = [
+    { pivot: 1, inRange: false, distance: 10, isNew: false, point: { x: 200, y: 400 } },
+    { pivot: 2, inRange: true, distance: 20, isNew: false, point: { x: 220, y: 380 } },
+    { pivot: 3, inRange: false, distance: 90, isNew: true, point: { x: 900, y: 300 } },
+    { pivot: 4, inRange: false, distance: 60, isNew: false, point: { x: 100, y: 500 } },
+  ];
+  assert.equal(edges.whereNextAfterCatch(finds, 1, size, inset), null, 'another find is in range: catch that one first');
+  const at = plain(edges.whereNextAfterCatch(finds.filter(f => f.pivot !== 2), 1, size, inset));
+  assert.equal(at.pivot, 3, 'a new find first');
+  assert.ok(at.edge && at.x === size.width - inset.side, 'off screen: its edge arrow');
+  const onScreen = plain(edges.whereNextAfterCatch(finds.filter(f => f.pivot !== 2 && f.pivot !== 3), 1, size, inset));
+  assert.deepEqual(onScreen, { pivot: 4, x: 100, y: 500, edge: false });
+  assert.equal(edges.whereNextAfterCatch([finds[0]], 1, size, inset), null, 'no other find: no flight');
+});
+
+test('wave 5 r2: the next-goal disc shows the real find, flies onto it after being read, and the next bar slot glows', () => {
+  for (const plan of [wow.catchPlan({ reduced: false }), wow.catchPlan({ reduced: false, repeat: true })]) {
+    const at = wow.whereFlightAt(plan);
+    assert.ok(at - plan.nextAt >= 380, 'read on the badge first');
+    assert.ok(at < plan.exitAt, 'leaves before the badge does');
+  }
+  const from = { x: 350, y: 700 }, to = { x: 30, y: 300 };
+  assert.deepEqual(plain(wow.whereAt(0, from, to)).x, 350);
+  const landed = plain(wow.whereAt(wow.WHERE.flightMs + 1, from, to));
+  assert.ok(Math.abs(landed.x - to.x) < 1 && landed.ring >= 0, 'lands with a ring');
+  assert.equal(wow.whereAt(wow.WHERE.totalMs, from, to), null);
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.doesNotMatch(src, /tintColor: '#0b3a73'/, 'no navy shadow nobody can name');
+  assert.match(src, /const flown = w\.on && cc\.value >= w\.at;/, 'one disc on screen at a time');
+  assert.match(src, /if \(flightAt >= 0\) end = Math\.max\(end, flightAt \+ WHERE\.totalMs\);/, 'the clock runs on for the flight');
+  assert.match(src, /styles\.ghostSlot, \{ left: `\$\{\(100 \* collected\) \/ total\}%`, width: `\$\{100 \/ total\}%` \}/);
+  assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /whereNext=\{whereNext\}/);
+});
+
+test('wave 5 r2: the burst canvas is mounted only while a catch shows (nothing on the resting map)', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /const item = showing\?\.item \?\? chompRequest\?\.item \?\? null;/);
+  assert.match(src, /\{item && <CatchFx /);
+  assert.match(src, /\{motionFx && <CatchBurst v=\{burst\}/);
+  // The capture route can pin daytime light (a night capture is the time-of-day tint, not a grey map).
+  assert.match(read('src/screens/ExploreScreen/HomeCatchPreviewScreen.tsx'), /sunOverride=\{Number\.isFinite\(CAPTURE_SUN\) \? CAPTURE_SUN : undefined\}/);
 });

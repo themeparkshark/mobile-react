@@ -97,3 +97,24 @@ export function peekBottom(finds: readonly Rect[], size: { width: number; height
   const rect = (bottom: number): Rect => ({ x: (size.width - peekW) / 2, y: size.height - bottom - peekH, w: peekW, h: peekH });
   return bottoms[clearestSlot(bottoms.map(rect), finds.concat(fixed))];
 }
+
+/**
+ * Wave 5 round 2, where to walk next: after a catch, when no other find is still in catch range (the kid has to
+ * walk now), the next goal points at the nearest find still on the map, a new one first. On screen it is the
+ * find's own spot; off screen it is its edge arrow. Null while another find is in range (catch that one first)
+ * or when the map has no other find. Pure.
+ */
+export function whereNextAfterCatch(finds: readonly { readonly pivot: number; readonly inRange: boolean; readonly distance: number | null;
+  readonly isNew: boolean; readonly point: { x: number; y: number } | null }[], caughtPivot: number,
+  size: { width: number; height: number }, inset: { top: number; bottom: number; side: number }): { pivot: number; x: number; y: number; edge: boolean } | null {
+  const others = finds.filter(find => find.pivot !== caughtPivot);
+  if (others.some(find => find.inRange)) return null;
+  const pick = others.filter(find => find.point)
+    .sort((a, b) => Number(b.isNew) - Number(a.isNew) || (a.distance ?? Infinity) - (b.distance ?? Infinity))[0];
+  if (!pick?.point) return null;
+  const p = pick.point;
+  const onScreen = p.x >= inset.side && p.x <= size.width - inset.side && p.y >= inset.top && p.y <= size.height - inset.bottom;
+  if (onScreen) return { pivot: pick.pivot, x: p.x, y: p.y, edge: false };
+  const at = edgeArrowPlacement(p, size, inset);
+  return { pivot: pick.pivot, x: at.x, y: at.y, edge: true };
+}

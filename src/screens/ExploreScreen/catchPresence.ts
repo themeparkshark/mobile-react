@@ -96,5 +96,13 @@ export function squashFind(pivotId: number | null | undefined): void {
   tapSquash.value = withSequence(withTiming(1, { duration: 90, easing: Easing.out(Easing.cubic) }), withSpring(0, { damping: 11, stiffness: 300 }));
 }
 
+/**
+ * Wave 5 round 2: the catch clock starts on the tap (not when the layer's copy of the find has drawn), so the
+ * payoff lands on its planned frame. Until the copy draws, the tapped pin itself follows the clock: it rises,
+ * glides and wobbles with this pose (pt and degrees, written on the UI thread), so the hand-off to the copy is
+ * the same pose on the same frame.
+ */
+export const catchPinPose = makeMutable({ x: 0, y: 0, rot: 0 });
+
 /** The pin the catch layer has taken over (hidden on the UI thread from the layer's first moving frame). */
 export const catchHidePivot = makeMutable(-1);

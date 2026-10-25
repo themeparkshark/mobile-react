@@ -15,7 +15,7 @@ import { catchStyleFor } from './ridePhoto';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { formatFindDistance, msUntilLeavesInChanges } from './homeFindCopy';
 import { findImageOrder, findLook, mapGlowColor } from './findPresentation';
-import { catchDim, catchHidePivot, tapPivot, tapSquash } from './catchPresence';
+import { catchDim, catchHidePivot, catchPinPose, tapPivot, tapSquash } from './catchPresence';
 
 /**
  * A tinted glow or sparkle. React Native's own Image applies tintColor every time; expo-image sometimes drew
@@ -359,8 +359,13 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   // The catch layer takes over on the UI thread: this pin hides on the same frame the layer's copy starts
   // moving (after its art has drawn), never a frame before (no blink) or after (no double).
   const handOff = useAnimatedStyle(() => ({ opacity: catchHidePivot.value === myPivot ? 0 : 1 }), [myPivot]);
-  const pulseArt = useAnimatedStyle(() => ({ transform: [{ scale: reduced ? 1 : 1 + 0.35 * pulseV.value },
-    { scale: tapPivot.value === myPivot ? 1 - 0.14 * tapSquash.value : 1 }] }), [reduced, myPivot]);
+  // Wave 5 round 2: the tapped pin follows the catch clock (rise, glide, wobble) until the layer's copy takes over.
+  const pulseArt = useAnimatedStyle(() => {
+    const tapped = tapPivot.value === myPivot;
+    const pose = tapped ? catchPinPose.value : null;
+    return { transform: [{ translateX: pose ? pose.x : 0 }, { translateY: pose ? pose.y : 0 }, { rotate: `${pose ? pose.rot : 0}deg` },
+      { scale: reduced ? 1 : 1 + 0.35 * pulseV.value }, { scale: tapped ? 1 - 0.14 * tapSquash.value : 1 }] };
+  }, [reduced, myPivot]);
   const pulseRing = useAnimatedStyle(() => ({ opacity: pulseV.value, transform: [{ scale: 0.8 + 0.6 * pulseV.value }] }));
   const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${live ? (tick.value * 24) % 360 : 0}deg` }] }), [live]);
   // The pointed-at find breathes a soft ring on the map's clock, so a kid who cannot read sees which one to tap.
