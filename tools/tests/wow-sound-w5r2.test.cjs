@@ -136,7 +136,7 @@ test('fix 1: the chest pop: the daily chest keeps its five-step patter; the leve
   assert.deepEqual(short, ['hitRigid@0', 'comboHeavy@120']);
   // wow-loops integration (w5r3 preview): the rebuilt reveal starts the pop 10 ms before its lid pops (the heavy on
   // the lid's peak, pop + 110), and its rows come after the hold (checked in wow-sound-w5r3).
-  assert.match(src('src/components/retention/RewardReveal.tsx'), /later_\(Math\.max\(0, pl\.pop - 10\), \(\) => \{ if \(!playChestOpen\(\{ rowsFollow: true \}\)\)/, 'the pop starts just before the lid');
+  assert.match(src('src/components/retention/RewardReveal.tsx'), /if \(playChestOpen\(\{ rowsFollow: true, delayMs: Math\.max\(0, e \+ pl\.pop - 10 - Date\.now\(\)\) \}\)\) return;/, 'the pop starts just before the lid');
 });
 
 test('fix 2: the loop\'s cues are decoded before the first check or chest (a first-play load rang them late)', async () => {

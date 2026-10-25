@@ -234,11 +234,12 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
     // Studio sound (wow-sound, approved Oct 24): when the check lands (F) it rings its climbing note (do, re, mi) with a
     // light buzz, and the third leads into the all-done chord on the ring's full flash (F + fullRing), brighter each
     // streak day, with the flame's swell. Off (or not approved): today's medium buzz and sound, and the golden pair.
-    later(() => {
-      if (playDaily3(landing.done, landing.day ?? flameDay({ days: streak }), { syncMs: 0, chordAfterMs: CHECK.fullRing })) return;
-      queueHaptic('hitMedium'); playSfx(cue.fallback, 0.9);
-      if (full) later(() => { playHaptic('golden'); playSfx(LOOP_CUES.fullSet.fallback, 0.9); }, CHECK.fullRing);
-    }, F);
+    // Scheduled now on the audio clock for the check's landing (F) and the full flash (F + fullRing): the flight starts
+    // on the UI thread this same frame, and a JS timer at F rang 34 ms late in the w5r3 preview capture.
+    if (!playDaily3(landing.done, landing.day ?? flameDay({ days: streak }), { syncMs: F, chordAfterMs: CHECK.fullRing })) {
+      later(() => { queueHaptic('hitMedium'); playSfx(cue.fallback, 0.9); }, F);
+      if (full) later(() => { playHaptic('golden'); playSfx(LOOP_CUES.fullSet.fallback, 0.9); }, F + CHECK.fullRing);
+    }
   }, [landingKey, landingArmed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Release-like hook capture only (an empty call in every other bundle): the check's arrival, the sparkle start (the

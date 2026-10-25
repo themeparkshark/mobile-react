@@ -116,10 +116,13 @@ export function playDaily3(done: number, day: number, timing: Daily3Timing = {})
  * (the level chest from 300 ms), so the pop keeps its short form (lid pop, heavy land) and the rows carry the coins.
  * Returns false when studio sound cannot play it.
  */
-export function playChestOpen(opts: { readonly rowsFollow?: boolean } = {}): boolean {
+export function playChestOpen(opts: { readonly rowsFollow?: boolean; readonly delayMs?: number } = {}): boolean {
   try {
     if (!studioReady('chest.open')) return false;
-    playMoment('chest.open', { haptic: true, hapticPattern: opts.rowsFollow ? 'chestPop' : undefined });
+    // delayMs (integration preview): a surface that knows its lid's frame ahead schedules the pop on the audio clock
+    // now, instead of a JS timer that a busy reveal fires late.
+    const delayMs = Number.isFinite(opts.delayMs) && (opts.delayMs as number) > 0 ? opts.delayMs : undefined;
+    playMoment('chest.open', { haptic: true, delayMs, hapticPattern: opts.rowsFollow ? 'chestPop' : undefined });
     return true;
   } catch {
     return false;

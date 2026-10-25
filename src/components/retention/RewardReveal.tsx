@@ -383,7 +383,12 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     // Studio sound (wow-sound, approved Oct 24): the chest's own pop and shaped buzz, short form since the rows buzz
     // after it. Its heavy comes 120 ms after its start, so it starts 10 ms before the pop and the heavy lands on the
     // lid's peak (pop + 110). Off: the golden pair and today's sound, on the pop as before.
-    later_(Math.max(0, pl.pop - 10), () => { if (!playChestOpen({ rowsFollow: true })) { playHaptic('golden'); playSfx('fx.reward'); } });
+    // Scheduled as soon as the entrance mark is known (on the audio clock), so a busy JS thread at the pop never makes
+    // it late (a JS timer here rang the heavy 50 ms after the lid's peak in the w5r3 preview capture).
+    whenEntered(e => {
+      if (playChestOpen({ rowsFollow: true, delayMs: Math.max(0, e + pl.pop - 10 - Date.now()) })) return;
+      later(() => { playHaptic('golden'); playSfx('fx.reward'); }, Math.max(0, e + pl.pop - Date.now()));
+    });
     later_(pl.lid + 60, () => { cancelAnimation(shake); shake.value = 0; });
     cancelAnimation(calm); calm.value = withTiming(0, { duration: 120 });
     // Settle: the open chest holds big and centred on its rays, then glides up into its slot (eased, the rays riding
