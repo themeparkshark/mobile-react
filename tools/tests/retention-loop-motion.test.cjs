@@ -591,6 +591,7 @@ test('wave 5 round 2: the chest card tomorrow row is big, each fact is said once
   const row = read('src/components/retention/FlameUpRow.tsx');
   assert.match(row, /<TomorrowGoal days=\{to\} prize=\{prize\} size=\{42\} reducedMotion=\{reducedMotion\} stacked/);
   assert.match(row, /pill: \{ backgroundColor: BRAND\.navy/);
+  assert.match(row, /minWidth: Math\.max\(34, 14 \+ String\(Math\.max\(from, to\)\)\.length \* 11\)/);
   assert.doesNotMatch(row, /days in a row!/);
   // Flame up has a payoff on the number's squash (a ring and a second spark wave, budgeted).
   assert.match(row, /momentParticles\(6, budget, false\)/);

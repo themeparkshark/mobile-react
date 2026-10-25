@@ -70,7 +70,8 @@ export default function FlameUpRow({ from, to, grow, reducedMotion, prize = 'che
         <View style={styles.num}>
           {play && <View style={styles.numRing} pointerEvents="none"><Animated.View style={[styles.ring, ringStyle]} /></View>}
           {play && <View style={styles.center} pointerEvents="none"><SparkleBurst progress={land} count={landSparks} radius={34} /></View>}
-          <View style={styles.numFace}>
+          {/* Wide enough for the new number too (9 to 10, 99 to 100: the rolling number is never clipped). */}
+          <View style={[styles.numFace, { minWidth: Math.max(34, 14 + String(Math.max(from, to)).length * 11) }]}>
             {play && <Animated.Text style={[styles.numText, oldStyle]} allowFontScaling={false}>{from}</Animated.Text>}
             <Animated.Text style={[styles.numText, play && styles.abs, newStyle]} allowFontScaling={false}>{to}</Animated.Text>
           </View>
