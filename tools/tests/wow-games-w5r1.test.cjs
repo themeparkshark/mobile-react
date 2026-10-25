@@ -24,8 +24,11 @@ test('clock: lastWallDt is the raw frame time, untouched by hit-stop or slow-mo,
   clock.advanceClock(s, 100);
   assert.ok(Math.abs(s.lastFxDt - 35) < 1e-6);
   assert.equal(s.lastWallDt, 100);
-  clock.advanceClock(s, 400);
-  assert.equal(s.lastWallDt, s.cfg.maxFrameMs, 'a background gap is clamped like every other delta');
+  clock.advanceClock(s, 180);
+  assert.equal(s.lastWallDt, 180, 'a slow frame still counts in full (the presentation delta is capped at maxFrameMs)');
+  assert.equal(s.lastFxDt <= s.cfg.maxFrameMs, true);
+  clock.advanceClock(s, 4000);
+  assert.equal(s.lastWallDt, clock.WALL_CAP_MS, 'a long gap is capped');
   clock.pauseClock(s);
   clock.advanceClock(s, 16);
   assert.equal(s.lastWallDt, 0, 'paused: no time passes');

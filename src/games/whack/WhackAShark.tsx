@@ -1195,11 +1195,14 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     () => {
       if (!SYNC_LOG) return -1;
       const rem = remainingMs.value;
+      // The Burst just ended (the derived clock hides itself with 1e9): that frame is the zero crossing.
+      if (rem <= 0 || rem >= 1e9) return 0;
       if (rem > 5000 || runtime.sim.value.frozen) return -1;
-      return rem <= 0 || rem >= 1e9 ? 0 : Math.ceil(rem / 1000);
+      return Math.ceil(rem / 1000);
     },
     (sec, prev) => {
-      if (sec < 0 || sec === prev || prev == null || prev < 0) return;
+      // Log 5..1 as they are stamped and 0 when a live last 5 ends (never the 0 of a card or a count).
+      if (sec < 0 || sec === prev || prev == null || (sec === 0 && prev < 1) || (prev < 0 && sec !== 5)) return;
       runOnJS(logCross)(sec, Date.now());
     },
     [logCross],

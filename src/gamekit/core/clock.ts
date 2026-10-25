@@ -206,6 +206,9 @@ function currentSlow(c: GameClock): number {
   return c.slowScale + (1 - c.slowScale) * ease('inOutQuad', t);
 }
 
+/** The longest frame lastWallDt counts in full (ms). */
+export const WALL_CAP_MS = 250;
+
 /**
  * Advance by a wall-clock frame delta. Updates simMs/fxMs and the fixed-step
  * accumulator. Returns the sim delta (ms).
@@ -219,7 +222,9 @@ export function advanceClock(c: GameClock, frameMs: number): number {
     c.lastWallDt = 0;
     return 0;
   }
-  c.lastWallDt = dt;
+  // Its own, looser cap: a slow frame (up to WALL_CAP_MS) still counts in full, so true seconds stay true on a
+  // stuttering phone. Backgrounding pauses the clock, so a long gap never lands here.
+  c.lastWallDt = frameMs > WALL_CAP_MS ? WALL_CAP_MS : frameMs < 0 ? 0 : frameMs;
   // Budget bucket leaks at the budget rate.
   c.bucketMs -= dt * c.cfg.freezeBudget;
   if (c.bucketMs < 0) c.bucketMs = 0;
