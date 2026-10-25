@@ -1,6 +1,7 @@
 import { ResizeMode, Video } from 'expo-av';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
+import { SPLASH_LOGO, SPLASH_POSTER, splashLogoFrame } from '../splashFrame';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useIsFocused } from '@react-navigation/native';
 import { useContext, useEffect, useRef } from 'react';
@@ -31,7 +32,8 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SPLASH_VIDEO = require('../../../assets/videos/splash-loop.mp4');
 // First frame of the loop, drawn under the video so the screen opens on the
 // same art (no dark blue flash while the video starts).
-const SPLASH_POSTER = require('../../../assets/images/splash-loop-poster.jpg');
+// The loop's first frame, shared with Splash so the fade between them is seamless.
+
 const whooshSound = require('../../../assets/sounds/whoosh.mp3');
 // Floating bubble component
 function FloatingBubble({
@@ -281,11 +283,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
       {/* Logo: bounces in + gentle float */}
       <Animated.View
         style={{
-          position: 'absolute',
-          top: SCREEN_HEIGHT * 0.12,
-          width: SCREEN_WIDTH * 0.9,
-          height: SCREEN_WIDTH * 0.9 * (322 / 1284),
-          left: SCREEN_WIDTH * 0.05,
+          ...splashLogoFrame(SCREEN_WIDTH, SCREEN_HEIGHT),
           opacity: logoOpacity,
           transform: [
             { scale: logoScale },
@@ -294,7 +292,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
         }}
       >
         <Image
-          source={require('../../../assets/images/screens/login/logo.png')}
+          source={SPLASH_LOGO}
           style={{ width: '100%', height: '100%' }}
           contentFit="contain"
         />

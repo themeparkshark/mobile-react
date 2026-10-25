@@ -32,6 +32,9 @@ function harness() {
     'expo-av': { ResizeMode: { COVER: 'cover' }, Video: 'Video' },
     'lodash': { sample: list => list?.[0] },
     '../services/push': { openColdStartPush() {} },
+    // Art lane: Splash picks its art through themeSplashUri and draws the shared loop frame.
+    '../utils/splashArt': { themeSplashUri: () => null },
+    './splashFrame': { SplashStill: 'SplashStill', SPLASH_POSTER: 1, SPLASH_LOGO: 2, splashLogoFrame: () => ({}) },
   };
   return { nav, state, auth, crumbs, common };
 }

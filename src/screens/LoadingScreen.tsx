@@ -1,5 +1,6 @@
 import { ResizeMode, Video } from 'expo-av';
 import { Image } from 'expo-image';
+import { SPLASH_LOGO, SPLASH_POSTER, splashLogoFrame } from './splashFrame';
 import { LinearGradient } from 'expo-linear-gradient';
 import { sample } from 'lodash';
 import { useIsFocused } from '@react-navigation/native';
@@ -18,7 +19,8 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SPLASH_VIDEO = require('../../assets/videos/splash-loop.mp4');
 // First frame of the loop, drawn under the video so the screen opens on the
 // same art (no dark blue flash while the video starts).
-const SPLASH_POSTER = require('../../assets/images/splash-loop-poster.jpg');
+// The loop's first frame, shared with Splash so the fade between them is seamless.
+
 
 // Bubble that rises from bottom to top
 function Bubble({ delay, size, left, duration }: { delay: number; size: number; left: number; duration: number }) {
@@ -153,7 +155,7 @@ export default function LoadingScreen() {
   const hasUsername = !!player?.username;
   const hasNavigated = useRef(false);
   
-  // Safe navigate — prevents double navigation race condition
+  // Safe navigate: prevents a double navigation race condition
   const safeNavigate = async () => {
     if (hasNavigated.current) return;
     hasNavigated.current = true;
@@ -245,7 +247,7 @@ export default function LoadingScreen() {
         transition={0}
         style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
       />
-      {/* Looping video background — exact screen dimensions */}
+      {/* Looping video background: exact screen dimensions */}
       <Video
         source={SPLASH_VIDEO}
         resizeMode={ResizeMode.COVER}
@@ -254,19 +256,15 @@ export default function LoadingScreen() {
         isMuted
         style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
       />
-      {/* Logo — gentle float */}
+      {/* Logo: gentle float */}
       <Animated.View
         style={{
-          position: 'absolute',
-          top: SCREEN_HEIGHT * 0.12,
-          width: SCREEN_WIDTH * 0.9,
-          height: SCREEN_WIDTH * 0.9 * (322 / 1284),
-          left: SCREEN_WIDTH * 0.05,
+          ...splashLogoFrame(SCREEN_WIDTH, SCREEN_HEIGHT),
           transform: [{ translateY: logoFloat }],
         }}
       >
         <Image
-          source={require('../../assets/images/screens/login/logo.png')}
+          source={SPLASH_LOGO}
           style={{ width: '100%', height: '100%' }}
           contentFit="contain"
         />

@@ -80,6 +80,6 @@ test('fingerprinted config art keeps the 1.7.3 binary bytes', () => {
   assert.equal(sha1('assets/images/splash-bg.png'), 'f5871f674fb979d5721e342eb7003a85fd0c2498', 'splash-bg.png is the native launch art: change it only with a new binary');
   assert.equal(sha1('assets/icon.png'), '924255ffa6ebe1697ce3d1acaf23c942a82553e2', 'icon.png is native: change it only with a new binary');
   const splash = read('src/screens/SplashScreen.tsx');
-  assert.match(splash, /assets\/images\/splash-art\.jpg/);
+  assert.match(splash, /SplashStill/, 'new splash art is a JS asset (the loop poster plus the title)');
   assert.match(splash, /useNativeDriver: true/);
 });

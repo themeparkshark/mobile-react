@@ -8,14 +8,16 @@ import { AuthContext } from '../context/AuthProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import { CrumbContext } from '../context/CrumbProvider';
 import { themeSplashUri } from '../utils/splashArt';
+import { SplashStill } from './splashFrame';
 
 // The binary's launch art. app.config.js `splash.image` points at this file and
 // Expo hashes it into the runtime fingerprint, so its bytes must never change in
 // an OTA (a changed file sends the update to a runtime no binary has). It is
 // drawn first so the handoff from the native launch screen has no pop.
 const LAUNCH_ART = require('../../assets/images/splash-bg.png');
-// The current splash art. It cross-fades in over the launch art.
-const SPLASH_ART = require('../../assets/images/splash-art.jpg');
+// The current splash art is SplashStill: the loading loop's first frame and
+// the title, the exact picture Loading and Login open on. It cross-fades in
+// over the launch art, and the later fade to Loading changes nothing on screen.
 
 export const SPLASH_FADE_MS = 250;
 const FADE_SAFETY_MS = 600;
@@ -30,9 +32,10 @@ export default function SplashScreen() {
   // Pick the art once, when the splash mounts. A theme that resolves later
   // never swaps the picture mid-fade, and the retired 1.7.3 server splash
   // (light-sword, wizard hat, castle) never replaces the bundled art.
-  const [artSource, setArtSource] = useState(() => {
+  // null means the bundled SplashStill.
+  const [artSource, setArtSource] = useState<{ uri: string } | null>(() => {
     const uri = themeSplashUri(theme?.splash_screen_url);
-    return uri ? { uri } : SPLASH_ART;
+    return uri ? { uri } : null;
   });
 
   const fadeIn = () => {
@@ -83,16 +86,20 @@ export default function SplashScreen() {
     <View style={{ flex: 1, backgroundColor: '#0768B9' }}>
       <Image source={LAUNCH_ART} contentFit="cover" style={size} />
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: artOpacity }]}>
-        <Image
-          source={artSource}
-          contentFit="cover"
-          transition={0}
-          onLoad={fadeIn}
-          // A server splash that fails to load falls back to the bundled art,
-          // so the old launch art underneath never shows through.
-          onError={() => setArtSource(SPLASH_ART)}
-          style={size}
-        />
+        {artSource ? (
+          <Image
+            source={artSource}
+            contentFit="cover"
+            transition={0}
+            onLoad={fadeIn}
+            // A server splash that fails to load falls back to the bundled art,
+            // so the old launch art underneath never shows through.
+            onError={() => setArtSource(null)}
+            style={size}
+          />
+        ) : (
+          <SplashStill onReady={fadeIn} />
+        )}
       </Animated.View>
     </View>
   );
