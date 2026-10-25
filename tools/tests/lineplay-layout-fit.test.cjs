@@ -690,7 +690,7 @@ test('a one-time tip waits while the page window has stepped aside, so it never 
 
 test('the resume countdown always opens on 3, never on the last run\'s 1', () => {
   const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
-  assert.match(countdown, /useEffect\(\(\) => \{\n\s+if \(!active\) setCount\(3\);\n\s+\}, \[active\]\);/);
+  assert.match(countdown, /useEffect\(\(\) => \{\n\s+if \(!active\) setCount\(3\);\n\s+else finished\.current = false;\n\s+\}, \[active\]\);/);
 });
 
 test('paused, the board PLAY strip is never a tap that only hides Details: it rests in pale blue and runs the 3 2 1', () => {
@@ -701,4 +701,12 @@ test('paused, the board PLAY strip is never a tap that only hides Details: it re
   assert.match(card, /<Text style=\{styles\.playStripCta\}>\{'PLAY  '\}<\/Text>\{title\}/, 'one row: PLAY and the mission name, like the chapter strip');
   const screen = read(SCREEN);
   assert.match(screen, /const onBoardPlay = useCallback\(\(\) => \{\n\s+closeDetails\(\);\n\s+if \(snapshot\.state === 'paused' && !resuming\) \{\n\s+setResuming\(true\);/);
+});
+
+test('the resume countdown shows 3, 2 and 1 one at a time, each timed from its own render', () => {
+  const countdown = read('src/screens/LinePlay/components/ResumeCountdown.tsx');
+  assert.match(countdown, /const timer = setTimeout\(\(\) => \(count > 1 \? setCount\(count - 1\) : finish\(\)\), STEP_MS\);\n\s+return \(\) => clearTimeout\(timer\);/);
+  assert.match(countdown, /\}, \[active, count\]\);/);
+  assert.doesNotMatch(countdown, /index \* STEP_MS/, 'no batch of timers that can all fire late in one render and skip 2 and 1');
+  assert.doesNotMatch(countdown, /3 \* STEP_MS/);
 });

@@ -19,40 +19,35 @@ export default function ResumeCountdown({ active, onDone }: { active: boolean; o
   const reducedMotion = useReducedGameMotion();
   const [count, setCount] = useState(3);
   const punch = useSharedValue(1);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const finished = useRef(false);
 
   const finish = () => {
     if (finished.current) return;
     finished.current = true;
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
     onDone();
   };
 
   // Back to 3 as soon as it hides, so the next countdown never opens on the last run's 1.
   useEffect(() => {
     if (!active) setCount(3);
+    else finished.current = false;
   }, [active]);
 
+  // One number at a time: each step is timed from the render that shows it, so a busy JS thread can
+  // only make a number stay a little longer, never skip 2 and 1 (timers that all fire late in one
+  // batch used to jump from 3 straight to the game on an iPhone SE).
   useEffect(() => {
-    if (!active) return;
-    finished.current = false;
-    [3, 2, 1].forEach((value, index) => {
-      timers.current.push(setTimeout(() => {
-        setCount(value);
-        void Haptics.selectionAsync();
-        playSfx('countdown', 0.6);
-        cancelAnimation(punch);
-        punch.value = reducedMotion ? 1 : withSequence(withTiming(1.3, { duration: 90 }),
-          withSpring(1, { damping: 10, stiffness: 300 }));
-      }, index * STEP_MS));
-    });
-    timers.current.push(setTimeout(finish, 3 * STEP_MS));
-    return () => { timers.current.forEach(clearTimeout); timers.current = []; };
-    // Starting a countdown depends only on `active`.
+    if (!active || finished.current) return undefined;
+    void Haptics.selectionAsync();
+    playSfx('countdown', 0.6);
+    cancelAnimation(punch);
+    punch.value = reducedMotion ? 1 : withSequence(withTiming(1.3, { duration: 90 }),
+      withSpring(1, { damping: 10, stiffness: 300 }));
+    const timer = setTimeout(() => (count > 1 ? setCount(count - 1) : finish()), STEP_MS);
+    return () => clearTimeout(timer);
+    // A step depends only on whether it runs and which number shows.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, [active, count]);
 
   const numberStyle = useAnimatedStyle(() => ({ transform: [{ scale: punch.value }] }));
   if (!active) return null;
