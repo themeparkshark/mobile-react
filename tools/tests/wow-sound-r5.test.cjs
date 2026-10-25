@@ -135,7 +135,8 @@ test('fix 4: the beam (every 10th catch) slams in on the held frame; the grand 2
   }
   const beamCatch = catchesAt[9];
   const ev = e.Trace.traceEvents().filter((x) => x.kind === 'sound' && x.name.startsWith('moment:catch.lucky:primary') && x.t >= beamCatch.t0 && x.t < catchesAt[10].t0);
-  assert.equal(ev[0].t - beamCatch.clock0, beamCatch.plan.hitStopAt + 20, 'the slam lands with the beam\'s impact (the held frame)');
+  // Wave 5 round 3: the beam lands 50 ms before the held frame, with its slam buzz.
+  assert.equal(ev[0].t - beamCatch.clock0, beamCatch.plan.hitStopAt - 50 + 20, 'the slam lands with the beam\'s impact (its landing frame)');
   const plan = e.Plan;
   assert.equal(typeof plan.luckyEvery, 'undefined', 'the daily lucky count is gone');
   assert.equal(typeof plan.DAY_MILESTONES, 'undefined', 'and the coin-of-the-day milestones');

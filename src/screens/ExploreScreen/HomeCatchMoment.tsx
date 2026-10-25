@@ -31,7 +31,7 @@ import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { DURATION, EASE, SPRING, flashPeak, momentParticles } from '../../ui/motionEasing';
 import { GOLD_FX, PARTICLES } from '../../ui/motion';
 import { nextGoalAt } from '../../components/map/alive/mapWow';
-import { arcPoint, beamAt, BEAM, CONFETTI, burstVariant, BURST_RINGS_MAX, BURST_STARS_MAX, catchFrame, catchHaptics, catchPlan, catchStage, coinStreamAt, coinStreamPlan, COIN_STREAM, type CatchBeatHaptic, type CatchFrame, type CatchPlan } from '../../components/map/alive/mapWow';
+import { arcPoint, beamAt, beamLandAt, BEAM, CONFETTI, burstVariant, BURST_RINGS_MAX, BURST_STARS_MAX, catchFrame, catchHaptics, catchPlan, catchStage, coinStreamAt, coinStreamPlan, COIN_STREAM, type CatchBeatHaptic, type CatchFrame, type CatchPlan } from '../../components/map/alive/mapWow';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { usePowerBudget } from '../../power';
 import { holdHud, hudClock, hudStreamId, nextHudStreamId, pulseHud, streamHud } from '../../components/Topbar/hudPulse';
@@ -46,7 +46,6 @@ import { Sunburst } from '../../gamekit/fx/ShaderFx';
 import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, setRidePhotoPlayer, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
 import { useRideArt } from './ridePhoto/rideAssets';
 import { catchBeatAt, catchHaptic, catchMark, catchSound } from './ridePhoto/catchAudio';
-import { BEAM_SLAM_BUZZ_LEAD_MS } from '../../gamekit/audio/catchSoundPlan';
 import { touchHeal, useCommitHeal } from '../../components/map/alive/commitHeal';
 import { catchDim, catchHidePivot, catchKickX, catchKickY, dimCatchChrome, setCatchOpen, showCatchChrome } from './catchPresence';
 import reportRideOff from '../../api/endpoints/me/prep-items/ride-off';
@@ -290,7 +289,7 @@ function BeamSpark({ index, clock, plan, on, sx, sy }: { index: number; clock: S
   on: SharedValue<number>; sx: SharedValue<number>; sy: SharedValue<number> }) {
   const style = useAnimatedStyle(() => {
     if (!on.value) return { opacity: 0, transform: [{ translateX: -999 }, { translateY: -999 }, { scale: 0 }, { rotate: '0deg' }] };
-    const d = clock.value - (plan.value.hitStopAt - BEAM.dropMs) - index * 50;
+    const d = clock.value - (beamLandAt(plan.value) - BEAM.dropMs) - index * 50;
     const u = d / 360;
     if (u <= 0 || u >= 1) return { opacity: 0, transform: [{ translateX: -999 }, { translateY: -999 }, { scale: 0 }, { rotate: '0deg' }] };
     const side = index % 2 ? -1 : 1;
@@ -1148,7 +1147,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // rare big moment is the bright one; ordinary repeats stay snappy.
     const plan = catchPlan({ reduced: !motion, repeat: sessionCatches > 0 && !variant.milestone, milestone: variant.milestone && motion, calm: calmPower,
       treat: variant.treat });
-    // The beam and the grand show are known from the tap (the beam drops 300 ms before the held frame, often
+    // The beam and the grand show are known from the tap (the beam drops 300 ms before it lands, 50 before the held frame, often
     // before the server answers), so they are set here, before the clock starts, and kept as JS flags.
     const beam = motion && variant.beam;
     const grand = motion && variant.grand;
@@ -1176,9 +1175,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // Wave 5 (wow-sound): the beam lands on the held frame whether or not the server has answered (the clock holds
     // there on a slow answer, and a beat added after the clock reached it never fired: the slam and its heavy buzz
     // were lost on every slow 10th catch). A miss takes it back out below.
-    // Round 2: the slam's lighter buzz on the beam's fall (120 ms before the burst), then the slam's sound on the held
-    // frame, so the heavy lands on the burst frame itself.
-    const beamBeats: Beat[] = [{ at: plan.hitStopAt - BEAM_SLAM_BUZZ_LEAD_MS, kind: BEAT.slam, arg: 0 }, { at: plan.hitStopAt, kind: BEAT.beam, arg: 0 }];
+    // Round 2 put the slam's lighter buzz 120 ms before the burst so the heavy lands on the burst frame itself.
+    // Round 3: the slam buzz and the beam (its landing frame and slam sound) are one beat, 120 ms before the burst.
+    // The slam is listed first, so the buzz leaves just before the sound in the same JS turn.
+    const beamBeats: Beat[] = [{ at: beamLandAt(plan), kind: BEAT.slam, arg: 0 }, { at: beamLandAt(plan), kind: BEAT.beam, arg: 0 }];
     beats.value = beam ? [...ladder, ...beamBeats] : ladder;
     skipped.current = false;
     runRef.current = { token, item, data: null, next: null, burst: false, beam, grand };
@@ -1250,9 +1250,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         { at: plan.doneAt, kind: BEAT.done, arg: 0 }];
       // The bar's gold tick only when a NEW find really moved it (honest progress).
       if (next.isNew) list.push({ at: plan.tickAt, kind: BEAT.tick, arg: 0 });
-      // The beam lands on the held frame with its slam sound; its lighter buzz comes on the last fall (round 2), and the
-      // heavy is the burst's own (then the success, the golden pair). Sorted below.
-      if (current.beam) list.push({ at: plan.hitStopAt, kind: BEAT.beam, arg: 0 }, { at: plan.hitStopAt - BEAM_SLAM_BUZZ_LEAD_MS, kind: BEAT.slam, arg: 0 });
+      // The beam lands with its slam buzz and slam sound, 120 ms before the burst (round 3), and the heavy is the
+      // burst's own (then the success, the golden pair). Sorted below (stable: the slam stays before the beam).
+      if (current.beam) list.push({ at: beamLandAt(plan), kind: BEAT.slam, arg: 0 }, { at: beamLandAt(plan), kind: BEAT.beam, arg: 0 });
       // The grand 25th: a second heavy hit one beat (90 ms) after the burst, on the UI clock, so heavy, heavy and the
       // success at +180 land evenly and never flam (wave 4 fired it from a JS timer at +120, 60 ms before the success).
       if (current.grand) list.push({ at: plan.burstAt + 90, kind: BEAT.haptic, arg: BEAT_HAPTICS.indexOf('comboHeavy') });
@@ -1596,11 +1596,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const reach = Math.max(1, stageY.value) / Math.max(1, layerHeightSV.value);
     return { opacity: 1 - at.fade * at.fade, transform: [{ translateX: stageX.value - BEAM_W / 2 }, { scaleX: 1 - 0.65 * at.fade }, { scaleY: at.drop * reach }] };
   });
-  // Where the beam hits: a flat gold splash ring on the ground (scaleY 0.45), from the held frame.
+  // Where the beam hits: a flat gold splash ring on the ground (scaleY 0.45), from the beam's landing frame.
   const splashStyle = useAnimatedStyle(() => {
     touchHeal(heal);
     if (!onUi()) return HIDDEN;
-    const d = beamOn.value && clockOn.value ? cc.value - planSV.value.hitStopAt : -1;
+    const d = beamOn.value && clockOn.value ? cc.value - beamLandAt(planSV.value) : -1;
     const u = d / 520;
     if (d < 0 || u >= 1) return { opacity: 0, transform: [{ translateX: -999 }, { translateY: -999 }, { scaleY: 0.45 }, { scale: 0 }] };
     return { opacity: 0.95 * (1 - u), transform: [{ translateX: stageX.value - 60 }, { translateY: stageY.value + 18 - 60 },

@@ -392,9 +392,12 @@ test('round 4: milestone variety (never chance): stars every 5th, the beam every
   assert.equal(wow.burstVariant(5).kind, 'stars');
   assert.ok(wow.burstVariant(25).inkScale > wow.burstVariant(10).inkScale && wow.burstVariant(10).inkScale > 1);
   const plan = wow.catchPlan({ reduced: false, repeat: true, milestone: true });
-  const drop = wow.beamAt(plan.hitStopAt - 1, plan);
-  assert.ok(drop.drop > 0.98, 'the beam head reaches the find on the held frame');
-  assert.equal(wow.beamAt(plan.hitStopAt - 301, plan), null);
+  // Wave 5 round 3 (wow-sound): the beam lands 50 ms before the held frame, 120 before the burst, on its slam beat.
+  assert.equal(wow.beamLandAt(plan), plan.hitStopAt - wow.BEAM.landLeadMs);
+  assert.equal(plan.burstAt - wow.beamLandAt(plan), 120, 'a full haptic gate between the slam and the burst heavy');
+  const drop = wow.beamAt(wow.beamLandAt(plan) - 1, plan);
+  assert.ok(drop.drop > 0.98, 'the beam head reaches the find on its slam frame');
+  assert.equal(wow.beamAt(wow.beamLandAt(plan) - 301, plan), null);
   assert.equal(wow.beamAt(plan.hitStopAt + 500, plan), null, 'gone after its fade');
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.match(src, /const BeamColumn = memo/, 'a drawn, tapered column of light, not a flat bar');
@@ -547,7 +550,8 @@ test('wave 4: the 10th-catch beam is set from a JS flag on the tap (JS never rea
   const effect = src.slice(src.indexOf('const variant = burstVariant(sessionCatches + 1)'), src.indexOf('// ── Ride Photo hand-offs'));
   assert.match(effect, /const beam = motion && variant\.beam;/);
   assert.match(effect, /beamOn\.value = beam \? 1 : 0;/);
-  assert.match(effect, /if \(current\.beam\) list\.push\(\{ at: plan\.hitStopAt, kind: BEAT\.beam/);
+  // Wave 5 round 3 (wow-sound): the slam and the beam are one beat at beamLandAt, the slam listed first.
+  assert.match(effect, /if \(current\.beam\) list\.push\(\{ at: beamLandAt\(plan\), kind: BEAT\.slam, arg: 0 \}, \{ at: beamLandAt\(plan\), kind: BEAT\.beam/);
   assert.doesNotMatch(effect, /if \(beamOn\.value\)/, 'no JS read of the beam value');
   assert.doesNotMatch(src.slice(src.indexOf('const onBeat = useCallback'), src.indexOf('useAnimatedReaction(() => cc.value')), /beamOn\.value/);
   // The beam drops 300 ms before the held frame: it is on before the clock reaches it on every plan.

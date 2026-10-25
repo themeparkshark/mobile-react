@@ -57,6 +57,8 @@ export const MIN_BEAT_GAP_MS = 90;
  * 20 to 35 ms before the beam lands.
  */
 export const BEAM_SLAM_BUZZ_LEAD_MS = 50;
+// Round 3: wow-map's beam now LANDS at this same lead (mapWow BEAM.landLeadMs, beamLandAt), so the slam buzz, the
+// slam sound and the landing frame are one beat; a test keeps the two numbers equal.
 /**
  * A slam buzz that reaches JS later than this is dropped: the burst's heavy carries the impact alone. Up to this, it
  * still lands 90 ms or more before an on-time heavy (never a flam).

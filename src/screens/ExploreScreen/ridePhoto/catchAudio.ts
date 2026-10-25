@@ -279,8 +279,9 @@ function dueNow(now = Date.now()): number {
 }
 
 /**
- * Wave 5 round 2 (the grade's fix 4): the beam's slam buzz, every player. A lighter rigid pulse on the beam's last fall
- * (wow-map's 'slam' beat, BEAM_SLAM_BUZZ_LEAD_MS before the held frame, 120 ms before the burst), so the burst's heavy
+ * Wave 5 round 2 (the grade's fix 4): the beam's slam buzz, every player. A lighter rigid pulse as the beam lands
+ * (wow-map's 'slam' beat, BEAM_SLAM_BUZZ_LEAD_MS before the held frame, 120 ms before the burst; round 3 lands the
+ * beam and its slam sound on this same beat, so buzz, sound and picture are one hit), so the burst's heavy
  * lands on the burst frame itself (the brightest frame) a full beat later. The gather's last wobble buzz gives way to
  * it on a beam catch (fireWobble), so it always has room. A slam that reaches JS late is dropped (the heavy carries
  * the impact alone), never pushed toward the heavy; a miss never slams.

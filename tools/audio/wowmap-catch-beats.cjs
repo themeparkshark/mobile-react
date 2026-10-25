@@ -94,8 +94,9 @@ async function wowMapCatch(e, opts = {}) {
   p.wobbles.forEach(([at, intent], k) => add(at, `wobble${k + 1}`, () => C.catchHaptic(intent, 2)));
   // Wave 5 round 2: the slam's lighter buzz 50 ms before the held frame (120 before the burst), the slam's sound on it,
   // and the heavy on the burst frame on every show.
+  // Round 3: the beam lands with its slam (one beat, 50 ms before the held frame), the buzz first.
   if (beam) add(p.hitStopAt - 50, 'slam', () => C.catchMark('slam'));
-  if (beam) add(p.hitStopAt, 'beam', () => { C.catchMark('beam'); C.catchSound('chime', { volume: 0.7, pitch: 6 }); });
+  if (beam) add(p.hitStopAt - 50, 'beam', () => { C.catchMark('beam'); C.catchSound('chime', { volume: 0.7, pitch: 6 }); });
   add(p.hitStopAt + 1, 'hitstop', () => C.catchMark('hitstop'));
   add(p.burstAt, 'burst', () => { C.catchHaptic('comboHeavy', 3); C.catchMark('burst'); C.catchSound('chime', grand ? { volume: 0.9, pitch: 4 } : { volume: 0.8 }); });
   if (grand) add(p.burstAt + 90, 'grand-heavy', () => C.catchHaptic('comboHeavy', 2));

@@ -88,8 +88,9 @@ test('the beam lands on the held frame even when the server answers late (it is 
   assert.ok(r.hold > 800, `the clock held ${r.hold} ms`);
   const slam = v.starts('moment:catch.lucky:primary')[0];
   assert.ok(slam, 'the slam plays');
-  assert.equal(slam.t, 600 + 20, 'on the held frame (600), not after the hold');
-  assert.ok(v.haptics.some((h) => h.intent === 'hitRigid' && h.t === 550), 'its slam buzz on the beam\'s last fall, before the hold');
+  // Round 3: the beam lands with its slam buzz at 550 (50 before the held frame); its sound leaves in the same turn.
+  assert.equal(slam.t, 550 + 20, 'on the beam\'s landing frame (550), not after the hold');
+  assert.ok(v.haptics.some((h) => h.intent === 'hitRigid' && h.t === 550), 'its slam buzz on the same frame, before the hold');
   assert.ok(v.haptics.some((h) => h.intent === 'comboHeavy' && h.t === 670 + r.hold), 'the heavy waits for the burst frame');
   const burst = r.delivered.find((d) => d.name === 'burst').at;
   assert.equal(burst, 670 + r.hold, 'the burst waits for the answer');
@@ -214,7 +215,7 @@ test('HomeCatchMoment hands catchAudio the UI clock: due time per beat, the beam
   const src = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen/HomeCatchMoment.tsx'), 'utf8');
   assert.match(src, /runOnJS\(onBeat\)\(b\.kind, b\.arg, Date\.now\(\) - \(t - b\.at\)\)/);
   assert.match(src, /catchBeatAt\(plannedAt\);/);
-  assert.match(src, /const beamBeats: Beat\[\] = \[\{ at: plan\.hitStopAt - BEAM_SLAM_BUZZ_LEAD_MS, kind: BEAT\.slam, arg: 0 \}, \{ at: plan\.hitStopAt, kind: BEAT\.beam, arg: 0 \}\];/);
+  assert.match(src, /const beamBeats: Beat\[\] = \[\{ at: beamLandAt\(plan\), kind: BEAT\.slam, arg: 0 \}, \{ at: beamLandAt\(plan\), kind: BEAT\.beam, arg: 0 \}\];/);
   assert.match(src, /beats\.value = beam \? \[\.\.\.ladder, \.\.\.beamBeats\] : ladder;/);
   assert.match(src, /if \(beam\) catchMark\('beam-due'\);/);
   assert.match(src, /if \(grand\) catchMark\('grand'\);/);

@@ -195,15 +195,26 @@ export function burstVariant(catchNumber: number): BurstVariant {
 }
 
 /** The beam drops this long before the held frame and lands on it (the flash is its impact). */
-export const BEAM = { dropMs: 300, fadeMs: 420, sparkles: 5 } as const;
+/**
+ * `landLeadMs` (wave 5 round 3, wow-sound): the beam lands this long before the held frame, 120 ms before the burst,
+ * so its slam buzz, its slam sound and its landing frame are one beat, and the burst's heavy still has a full 120 ms
+ * after it (the shared haptic gate). Round 2 buzzed the slam here but landed the beam 50 ms later: a flam of buzz,
+ * then sound and picture.
+ */
+export const BEAM = { dropMs: 300, fadeMs: 420, sparkles: 5, landLeadMs: 50 } as const;
+/** When the beam's head reaches the find (its slam). Worklet-safe. */
+export function beamLandAt(p: Pick<CatchPlan, 'hitStopAt'>): number {
+  'worklet';
+  return p.hitStopAt - BEAM.landLeadMs;
+}
 
 /**
  * The beam at clock `t` (round 4): the drop 0..1 (its head reaches the find at 1, on the held frame), then
- * a fade 0..1 while it narrows; -1 when it is not on screen. Worklet-safe.
+ * a fade 0..1 while it narrows; -1 when it is not on screen. Worklet-safe. It lands at beamLandAt (round 3).
  */
 export function beamAt(t: number, p: CatchPlan): { drop: number; fade: number } | null {
   'worklet';
-  const d = t - (p.hitStopAt - BEAM.dropMs);
+  const d = t - (beamLandAt(p) - BEAM.dropMs);
   if (d < 0 || p.reduced) return null;
   if (d < BEAM.dropMs) { const u = d / BEAM.dropMs; return { drop: u * u, fade: 0 }; }
   const f = (d - BEAM.dropMs) / BEAM.fadeMs;
