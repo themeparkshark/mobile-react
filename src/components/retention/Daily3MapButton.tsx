@@ -198,6 +198,13 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
       fly.value = 0;
       flyOn.value = 1;
       fly.value = withTiming(1, { duration: F, easing: EASE.inOut });
+      // Sound (wow-sound): scheduled here, where the flight starts, on the audio clock for the check's landing (F) and
+      // the full flash (F + fullRing). A JS timer at F rang 34 ms late, and a call at the effect 30 to 50 ms early
+      // (measureInWindow answers a frame or more later), in the w5r3 preview captures.
+      if (!playDaily3(landing.done, landing.day ?? flameDay({ days: streak }), { syncMs: F, chordAfterMs: CHECK.fullRing })) {
+        later(() => { queueHaptic('hitMedium'); playSfx(cue.fallback, 0.9); }, F);
+        if (full) later(() => { playHaptic('golden'); playSfx(LOOP_CUES.fullSet.fallback, 0.9); }, F + CHECK.fullRing);
+      }
       flyOn.value = withDelay(F, withTiming(0, { duration: 60 }));
       // Arrival: the ring segment fills, the check draws then stamps (scale and fade on separate clocks).
       segs[i].value = 0;
@@ -234,12 +241,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
     // Studio sound (wow-sound, approved Oct 24): when the check lands (F) it rings its climbing note (do, re, mi) with a
     // light buzz, and the third leads into the all-done chord on the ring's full flash (F + fullRing), brighter each
     // streak day, with the flame's swell. Off (or not approved): today's medium buzz and sound, and the golden pair.
-    // Scheduled now on the audio clock for the check's landing (F) and the full flash (F + fullRing): the flight starts
-    // on the UI thread this same frame, and a JS timer at F rang 34 ms late in the w5r3 preview capture.
-    if (!playDaily3(landing.done, landing.day ?? flameDay({ days: streak }), { syncMs: F, chordAfterMs: CHECK.fullRing })) {
-      later(() => { queueHaptic('hitMedium'); playSfx(cue.fallback, 0.9); }, F);
-      if (full) later(() => { playHaptic('golden'); playSfx(LOOP_CUES.fullSet.fallback, 0.9); }, F + CHECK.fullRing);
-    }
+
   }, [landingKey, landingArmed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Release-like hook capture only (an empty call in every other bundle): the check's arrival, the sparkle start (the
