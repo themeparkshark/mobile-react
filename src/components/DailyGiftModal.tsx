@@ -553,8 +553,16 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                   <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff3b0" />
                 </Animated.View>
               )}
+              <View style={{ width: chestSize, height: chestSize }}>
+              {/* A coin day's open chest is mounted (hidden) from the start, so its art is decoded before the pop and the
+                  swap from the closed chest is one commit with no empty frame. */}
+              {coinDay && (
+                <View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: phase === 'open' ? 1 : 0 }]}>
+                  <Image source={CHEST_OPEN} style={{ width: chestSize, height: chestSize }} contentFit="contain" transition={0} />
+                </View>
+              )}
               {phase === 'open' && coinDay
-                ? <Image source={CHEST_OPEN} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
+                ? null
                 : (
                   // A non-coin day never shows coins it did not pay, so the chest stays Alex's whole closed picture. On the
                   // pop its lid (a clipped copy of the same art, drawn only while it is up) jumps open, light and the
@@ -581,6 +589,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                     </Animated.View>
                   </View>
                 )}
+              </View>
               {phase === 'open' && coinDay && (
                 <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 0.8, height: chestSize * 0.42,
                   left: chestSize * 0.12, top: chestSize * 0.1 }, mouthStyle]}>

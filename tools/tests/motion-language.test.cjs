@@ -646,6 +646,9 @@ test('wave 5 round 2: ray plates stay on the band, stands rest inside it, the ch
   assert.ok(/translateY: \(1 - t\) \* SUBTITLE_RISE/.test(chest), 'the new line rises in');
   assert.ok(/<View style=\{styles\.aboveGold\}>\s*<Animated\.Text style=\{\[styles\.subtitle, subtitleOutStyle\]\}/.test(chest), 'the line sits above the gold light (its flash never washes the words out)');
   assert.ok(/if \(!resyncLive\.current\) return undefined;/.test(chest), 'a settled card stops resending');
+  assert.ok(/\{coinDay && \(\s*<View pointerEvents="none" style=\{\[StyleSheet\.absoluteFill, \{ opacity: phase === 'open' \? 1 : 0 \}\]\}>\s*<Image source=\{CHEST_OPEN\}/.test(chest),
+    'a coin day mounts its open chest (hidden) from the start, so the pop never shows an empty spot while the art decodes');
+  assert.equal((chest.match(/source=\{CHEST_OPEN\}/g) || []).length, 1, 'one open chest, never remounted on the pop');
   assert.ok(/resyncLive\.current = false;\s*resync\.value = resync\.value \? 0 : 1;/.test(chest), 'one last resend as it stops');
   assert.ok(constFrom(DG, 'RESYNC_AFTER_POP_MS') >= 1500, 'after every beat (the Day 7 punch ends near 1.2 s)');
 
