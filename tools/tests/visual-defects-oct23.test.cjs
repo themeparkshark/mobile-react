@@ -1435,3 +1435,9 @@ test('wave 5 round 3: an island keeps its two map markers whatever it draws (Map
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /if \(!task\) return <TaskMarker key=\{`ride-\$\{slot\}`\} task=\{PARKED_TASK\} parked/);
 });
+
+test('wave 5 round 3: the slow-tile capture source is development only', () => {
+  const style = read('src/components/map/tpsMapStyle.ts');
+  assert.match(style, /const DEV_TILE_SOURCE = __DEV__ \? process\.env\.EXPO_PUBLIC_DEV_TILE_SOURCE : undefined;/);
+  assert.match(style, /url: DEV_TILE_SOURCE \|\| 'https:\/\/tiles\.openfreemap\.org\/planet'/);
+});
