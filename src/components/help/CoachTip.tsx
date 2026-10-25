@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { createContext, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { AccessibilityInfo, Animated as NativeAnimated, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, { FadeOut } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, RADIUS, SHADOW } from '../../ui';
 
@@ -54,11 +54,13 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
     const timer = setTimeout(() => setReady(true), TIP_ART_WAIT_MS);
     return () => clearTimeout(timer);
   }, [ready]);
-  const shown = useSharedValue(0);
+  // Native driver: the card re-renders as it measures itself, and a native value never drops back.
+  const shown = useRef(new NativeAnimated.Value(0)).current;
   useEffect(() => {
-    if (ready) shown.value = reduced ? 1 : withTiming(1, { duration: 220 });
+    if (!ready) return;
+    if (reduced) shown.setValue(1);
+    else NativeAnimated.timing(shown, { toValue: 1, duration: 220, useNativeDriver: true }).start();
   }, [ready, reduced, shown]);
-  const fadeIn = useAnimatedStyle(() => ({ opacity: shown.value }));
   useEffect(() => {
     void AccessibilityInfo.announceForAccessibility(`${title}. ${body}`);
     if (autoHideMs <= 0) return;
@@ -70,7 +72,8 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
   return (
     <TipArtLoaded.Provider value={artLoaded}>
     <Animated.View pointerEvents={ready ? 'box-none' : 'none'}
-      exiting={reduced ? undefined : FadeOut.duration(150)} style={[style, fadeIn]}>
+      exiting={reduced ? undefined : FadeOut.duration(150)} style={style}>
+      <NativeAnimated.View pointerEvents="box-none" style={{ opacity: shown }}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${body}`} accessibilityHint="Closes the tip"
         onPress={onDismiss} onLayout={pointerLeft !== undefined ? event => setCardWidth(event.nativeEvent.layout.width) : undefined}
         style={[styles.card, compact && styles.compactCard, fit && styles.fitCard]}>
@@ -84,6 +87,7 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
       </Pressable>
       {pointerLeft !== undefined && <View pointerEvents="none"
         style={[styles.pointer, { left: cardWidth > 0 ? Math.min(pointerLeft, cardWidth - 34) : pointerLeft }]} />}
+      </NativeAnimated.View>
     </Animated.View>
     </TipArtLoaded.Provider>
   );

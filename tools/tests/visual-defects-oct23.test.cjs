@@ -781,7 +781,7 @@ test('the launch cover waits for the header and HUD icons (inside its hard cap),
   assert.match(chest, /onLoad=\{onArt\} onError=\{onArt\}/);
   assert.match(chest, /const onArt = \(\) => \{ artDrawn\(\); setDrawn\(true\); \};/);
   // Hidden until drawn (opacity 0 on the UI thread), then it pops in.
-  assert.match(chest, /const pop = useAnimatedStyle\(\(\) => \(\{ opacity: fade\.value/);
+  assert.match(chest, /const pop = useRef\(\{ opacity: fade, transform:/);
   assert.match(read('src/components/Topbar/Currency.tsx'), /onLoad=\{artDrawn\}/);
   const avatar = read('src/components/Avatar.tsx');
   assert.match(avatar, /onLoad=\{index === 0 \? artDrawn : undefined\}/);
@@ -1145,9 +1145,10 @@ test('map rail: Daily 3 first and the late chest joins at the end, popping in on
   assert.match(explore, /const mapControls = mapControlsCount > 0 \? <>\{retention\.button\}\{chestButton\}<\/> : null;/);
   assert.doesNotMatch(explore, /<>\{chestButton\}\{retention\.button\}<\/>/);
   const chest = read('src/components/map/ChestMapButton.tsx');
-  assert.match(chest, /shown\.value = reduced \? 1 : withSpring\(1,/);
-  assert.match(chest, /transform: \[\{ scale: 0\.7 \+ 0\.3 \* shown\.value \}\]/);
-  assert.match(chest, /fade\.value = reduced \? 1 : withTiming\(1, \{ duration: 160 \}\);/);
+  assert.match(chest, /Animated\.spring\(shown, \{ toValue: 1, stiffness: 320, damping: 18, mass: 0\.8, useNativeDriver: true \}\)/);
+  assert.match(chest, /outputRange: \[0\.7, 1\]/);
+  assert.match(chest, /Animated\.timing\(fade, \{ toValue: 1, duration: 160, useNativeDriver: true \}\)/);
+  assert.match(chest, /if \(reduced\) \{ fade\.setValue\(1\); shown\.setValue\(1\); return; \}/);
 });
 
 test('PLAY RIDE: a ride island mostly under the pill and its chip fades out while the pill is up', () => {
@@ -1252,7 +1253,9 @@ test('wave 5 round 2: the chest pops in once and is never remounted when Daily 3
   const chest = read('src/components/map/ChestMapButton.tsx');
   assert.match(chest, /let poppedThisSession = false;/);
   assert.match(chest, /const \[settled\] = useState\(poppedThisSession\);/);
-  assert.match(chest, /const fade = useSharedValue\(settled \? 1 : 0\);/);
+  assert.match(chest, /const fade = useRef\(new Animated\.Value\(settled \? 1 : 0\)\)\.current;/);
+  // The pop is native-driven: a parent re-render never drops a running or finished pop back to its mount value.
+  assert.doesNotMatch(chest, /react-native-reanimated/);
   assert.match(chest, /if \(!drawn \|\| settled\) return;\s*poppedThisSession = true;/);
 });
 
@@ -1263,6 +1266,7 @@ test("wave 5 round 2: Finn's coin card shows only once Finn and all three pictur
   assert.match(tip, /onLoad=\{\(\) => artLoaded\('finn'\)\} onError=\{\(\) => artLoaded\('finn'\)\}/);
   assert.match(tip, /pointerEvents=\{ready \? 'box-none' : 'none'\}/);
   assert.doesNotMatch(tip, /entering=\{/, 'no mount-time fade that would start before the pictures draw');
+  assert.match(tip, /NativeAnimated\.timing\(shown, \{ toValue: 1, duration: 220, useNativeDriver: true \}\)/);
   assert.match(tip, /export const TIP_ART_WAIT_MS = 700;/);
   const picture = read('src/components/help/CoinTipPicture.tsx');
   const names = new Set([...picture.matchAll(/loaded\('(\w+)'\)/g)].map((m) => m[1]));

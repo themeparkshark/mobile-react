@@ -1,7 +1,6 @@
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, SHADOW } from '../../ui';
@@ -30,20 +29,25 @@ export default function ChestMapButton({ onPress }: { readonly onPress: () => vo
   // flashes an empty blue circle first.
   const [drawn, setDrawn] = useState(false);
   const onArt = () => { artDrawn(); setDrawn(true); };
-  // It joins the end of the rail (nothing above it moves) and pops in on the UI thread once drawn:
-  // a quick fade and a small spring from 0.7, never a hard blink. Reduce Motion places it at once.
+  // It joins the end of the rail (nothing above it moves) and pops in once drawn: a quick fade and a
+  // small spring from 0.7, never a hard blink. Reduce Motion places it at once. The pop runs on the
+  // native driver: its values live on the UI thread and a parent re-render never resets them (a
+  // re-rendered Reanimated style could drop back to its mount value for a few frames: the blink).
   const reduced = useReducedGameMotion();
   // Already popped this session: the button mounts at full (its art is in the memory cache).
   const [settled] = useState(poppedThisSession);
-  const shown = useSharedValue(settled ? 1 : 0);
-  const fade = useSharedValue(settled ? 1 : 0);
+  const fade = useRef(new Animated.Value(settled ? 1 : 0)).current;
+  const shown = useRef(new Animated.Value(settled ? 1 : 0)).current;
   useEffect(() => {
     if (!drawn || settled) return;
     poppedThisSession = true;
-    shown.value = reduced ? 1 : withSpring(1, { stiffness: 320, damping: 18, mass: 0.8 });
-    fade.value = reduced ? 1 : withTiming(1, { duration: 160 });
+    if (reduced) { fade.setValue(1); shown.setValue(1); return; }
+    Animated.parallel([
+      Animated.timing(fade, { toValue: 1, duration: 160, useNativeDriver: true }),
+      Animated.spring(shown, { toValue: 1, stiffness: 320, damping: 18, mass: 0.8, useNativeDriver: true }),
+    ]).start();
   }, [drawn, reduced, settled, shown, fade]);
-  const pop = useAnimatedStyle(() => ({ opacity: fade.value, transform: [{ scale: 0.7 + 0.3 * shown.value }] }));
+  const pop = useRef({ opacity: fade, transform: [{ scale: shown.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }] }).current;
   return (
     <Animated.View style={pop}>
       <Pressable onPress={() => { haptic('tapLight'); onPress(); }} accessibilityRole="button"
