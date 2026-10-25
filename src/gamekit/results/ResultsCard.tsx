@@ -368,8 +368,13 @@ export function ResultsCard({
 
       {extras ? (
         extrasBeat ? (
-          <Animated.View style={[styles.extras, extrasStyle]}>
-            <ResultsSettleContext.Provider value={settle}>{extras}</ResultsSettleContext.Provider>
+          // The pop rides a wrapper; the cream fill lives on a plain view inside it, so
+          // iOS always draws the fill (on the animated view itself it came back
+          // missing, only the border, while the Finn inside it was still springing).
+          <Animated.View style={[styles.extrasPop, extrasStyle]}>
+            <View style={[styles.extras, styles.extrasInPop]}>
+              <ResultsSettleContext.Provider value={settle}>{extras}</ResultsSettleContext.Provider>
+            </View>
           </Animated.View>
         ) : <View style={styles.extras}>{extras}</View>
       ) : null}
@@ -614,6 +619,8 @@ const styles = StyleSheet.create({
   pipOn: { backgroundColor: '#ffcf3b' },
   // The tally sits on the score's spot (no row of its own), then folds into it.
   buckets: { position: 'absolute', left: -60, right: -60, top: 0, bottom: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  extrasPop: { width: '100%', marginTop: 10 },
+  extrasInPop: { marginTop: 0 },
   extras: { width: '100%', marginTop: 10, backgroundColor: '#fff8e4', borderRadius: 16, borderWidth: 3, borderColor: '#05346e',
     paddingVertical: 6, paddingHorizontal: 8, alignItems: 'center' },
   // The clip's bottom edge sits a few points under the card's top edge, about a

@@ -165,5 +165,7 @@ test('the warm-up first win wears the family card: blue, white border, the share
 
 test('the extras panel never sits at scale 0 (its cream fill came back missing for seconds on iOS)', () => {
   const card = read('src/gamekit/results/ResultsCard.tsx');
+  // The fill lives on a plain view inside the popping wrapper.
+  assert.match(card, /<Animated\.View style=\{\[styles\.extrasPop, extrasStyle\]\}>\s*<View style=\{\[styles\.extras, styles\.extrasInPop\]\}>/);
   assert.match(card, /const extrasStyle = useAnimatedStyle\(\(\) => \(\{ opacity: extrasIn\.value > 0\.02 \? 1 : 0, transform: \[\{ scale: 0\.6 \+ 0\.4 \* extrasIn\.value \}\] \}\)\);/);
 });

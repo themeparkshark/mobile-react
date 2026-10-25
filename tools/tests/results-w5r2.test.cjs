@@ -25,7 +25,7 @@ test('the new Finn waits for the card to settle: its panel pops in with it (neve
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /export function settleMs\(/);
   assert.match(card, /export const ResultsSettleContext = React\.createContext<number>\(0\);/);
-  assert.match(card, /extrasBeat \? \(\s*<Animated\.View style=\{\[styles\.extras, extrasStyle\]\}>/);
+  assert.match(card, /<Animated\.View style=\{\[styles\.extrasPop, extrasStyle\]\}>\s*<View style=\{\[styles\.extras, styles\.extrasInPop\]\}>/);
   // settle = count delay + the total's count-up + the NEW BEST beat.
   assert.match(card, /return countDelay \+ Math\.max\(900, countUpMs\(0, Math\.max\(0, args\.score\)\)\) \+ \(args\.newBest \? 520 : 160\);/);
   const finn = read('src/games/whack/FinnUnlock.tsx');
