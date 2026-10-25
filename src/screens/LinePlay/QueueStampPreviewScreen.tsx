@@ -2,7 +2,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import SessionRecap from './components/SessionRecap';
+import SessionRecap, { warmRecapArt } from './components/SessionRecap';
 
 /**
  * Dev-only sample of the real recap after a verified ten-minute queue session.
@@ -16,6 +16,8 @@ export default function QueueStampPreviewScreen() {
   const navigation = useNavigation();
   const [ended, setEnded] = useState(false);
   useEffect(() => {
+    // Like LinePlay: the art is decoded while the screen opens.
+    warmRecapArt();
     const end = () => setEnded(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const off = (navigation as any).addListener('transitionEnd', (e: { data?: { closing?: boolean } }) => { if (!e?.data?.closing) end(); });

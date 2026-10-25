@@ -8,14 +8,14 @@
  * Only server-confirmed amounts are shown as earned; nothing here grants.
  */
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image as NativeImage, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import RideUpCelebration, { RIDE_UP, RideUpHero, RideUpKicker, RollingValue, rideUpStatStartsAt } from './RideUpCelebration';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
-import { BRAND, GameButton, GameIcon, type GameIconName } from '../../../ui';
+import { BRAND, GameButton, GameIcon, ICON_SOURCES, type GameIconName } from '../../../ui';
 import type { PredictionResolution } from '../../../services/lineplay/content';
 import type { CrewPuzzleSummary } from '../../../api/endpoints/me/inline-timer/types';
 import { crewRelayScore, type CrewRelayProgress } from '../../../services/lineplay/crewRelay';
@@ -29,6 +29,27 @@ import { parkDayLine, recapRows, type RecapRewardsInput } from '../../../service
 
 const QUEUE_STAMP_IMAGE = require('../../../../assets/images/stamps/stamp-09.png');
 const QUEUE_RECAP_SHARK = require('../../../../assets/images/screens/lineplay/queue-recap-shark.png');
+
+let recapArtWarm = false;
+
+/**
+ * Decode the recap's art (the celebrating shark, the stamp and the earned-row icons) into memory before the wait
+ * ends, so "Your ride's up!" never opens on a card with its shark and icons still blank (round 6: two such frames
+ * on a cold first open). LinePlay calls it when the line screen opens; cheap, once per app run, never throws.
+ */
+export function warmRecapArt(): void {
+  if (recapArtWarm) return;
+  recapArtWarm = true;
+  try {
+    const icons: GameIconName[] = ['star', 'energy', 'xp', 'parts', 'ticket', 'arrow', 'timer'];
+    const uris = [QUEUE_RECAP_SHARK, QUEUE_STAMP_IMAGE, ...icons.map(name => ICON_SOURCES[name])]
+      .map(source => NativeImage.resolveAssetSource(source)?.uri)
+      .filter((uri): uri is string => typeof uri === 'string' && uri.length > 0);
+    void Image.prefetch(uris, 'memory').catch(() => { recapArtWarm = false; });
+  } catch {
+    recapArtWarm = false;
+  }
+}
 
 /** How long a recap number rolls (bigger numbers roll a little longer, capped). */
 function rollMs(target: number): number {

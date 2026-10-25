@@ -65,7 +65,7 @@ import {
   resolvePrediction,
 } from '../../services/lineplay/content';
 import { circuitThemeFor } from '../../services/lineplay/circuitTheme';
-import SessionRecap from './components/SessionRecap';
+import SessionRecap, { warmRecapArt } from './components/SessionRecap';
 import LineSnackOffer from './components/LineSnackOffer';
 import QueueToast, { type QueueToastMessage } from './components/QueueToast';
 import ResumeCountdown from './components/ResumeCountdown';
@@ -178,6 +178,8 @@ export default function LinePlayScreen() {
   const ride: RideContext | undefined = route.params?.ride;
 
   const { session, snapshot } = useLinePlaySession();
+  // The ride-up recap's art is decoded while the player waits, so its first frame is whole.
+  useEffect(() => { warmRecapArt(); }, []);
   const { latestLocationSampleRef } = useContext(LocationStatusContext);
   const { player, refreshPlayer, isReady: authReady } = useContext(AuthContext);
   const prediction = snapshot.prediction;

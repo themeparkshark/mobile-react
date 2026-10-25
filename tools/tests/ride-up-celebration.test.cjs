@@ -91,3 +91,11 @@ test('round 6: the confetti makes its colors once per frame, never once per piec
   const burst = read('src/components/park/BurstCanvas.tsx');
   assert.doesNotMatch(burst.slice(burst.indexOf('for (let i = 0; i < stars.length')), /Skia\.Color\(/, 'no color per star');
 });
+
+test('round 6: the recap art is decoded while the player waits, so the first frame has its shark and icons', () => {
+  const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
+  assert.match(recap, /export function warmRecapArt\(\)/);
+  assert.match(recap, /Image\.prefetch\(uris, 'memory'\)/);
+  assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /useEffect\(\(\) => \{ warmRecapArt\(\); \}, \[\]\);/);
+  assert.match(read('src/screens/LinePlay/QueueStampPreviewScreen.tsx'), /warmRecapArt\(\);/);
+});
