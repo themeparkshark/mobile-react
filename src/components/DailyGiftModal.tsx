@@ -511,8 +511,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         <Ribbon text="Daily Chest" />
         <View style={styles.card}>
           {/* Both lines are always laid out with their fades attached (a fade attached to a view mid-show drew a frame late),
-              and the pop swaps them on the UI thread. */}
-          <View>
+              and the pop swaps them on the UI thread. Drawn above the gold light, so its flash never washes the words out. */}
+          <View style={styles.aboveGold}>
             <Animated.Text style={[styles.subtitle, subtitleOutStyle]} accessibilityElementsHidden={phase === 'open'}
               importantForAccessibility={phase === 'open' ? 'no-hide-descendants' : 'auto'}>
               {`Today’s chest: day ${day} of ${ladder.length}`}

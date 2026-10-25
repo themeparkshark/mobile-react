@@ -644,6 +644,7 @@ test('wave 5 round 2: ray plates stay on the band, stands rest inside it, the ch
   assert.ok(constFrom(DG, 'REVEAL_MS') * SUBTITLE_SWAP >= 60 && constFrom(DG, 'REVEAL_MS') * SUBTITLE_SWAP <= 90, 'the old line leaves in about 70 ms');
   const chest = read(DG);
   assert.ok(/translateY: \(1 - t\) \* SUBTITLE_RISE/.test(chest), 'the new line rises in');
+  assert.ok(/<View style=\{styles\.aboveGold\}>\s*<Animated\.Text style=\{\[styles\.subtitle, subtitleOutStyle\]\}/.test(chest), 'the line sits above the gold light (its flash never washes the words out)');
   assert.ok(/if \(!resyncLive\.current\) return undefined;/.test(chest), 'a settled card stops resending');
   assert.ok(/resyncLive\.current = false;\s*resync\.value = resync\.value \? 0 : 1;/.test(chest), 'one last resend as it stops');
   assert.ok(constFrom(DG, 'RESYNC_AFTER_POP_MS') >= 1500, 'after every beat (the Day 7 punch ends near 1.2 s)');
