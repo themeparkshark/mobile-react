@@ -23,7 +23,7 @@
  * full bar fade in and out, the buzz and the sound stay. Plain ride names only, no logos.
  */
 import { Canvas, PaintStyle, Picture, Skia, createPicture } from '@shopify/react-native-skia';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type StyleProp, type TextStyle } from 'react-native';
 import Animated, {
   Easing, ReduceMotion, cancelAnimation, runOnJS, useAnimatedProps, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue,
@@ -97,11 +97,23 @@ export const RIDE_UP_REPEAT: RideUpPlan = {
 export const RideUpGo = createContext<StepStore | null>(null);
 /** The longest the ride-up waits for the shark to decode before it starts anyway (ms). */
 export const RIDE_UP_ART_WAIT_MS = 260;
-const ONE = () => 1;
-const NO_SUB = () => () => undefined;
-export function useRideUpGo(): boolean {
+/**
+ * Runs `start` once the ride-up's go frame arrives (at once outside a ride-up recap), WITHOUT a React render: the go
+ * store calls it straight from its rAF, so every beat starts in the same JS tick and the go frame only has to draw.
+ * The cleanup it returns runs on unmount or when `deps` change.
+ */
+export function useWhenRideUpGo(start: () => void | (() => void), deps: readonly unknown[]): void {
   const store = useContext(RideUpGo);
-  return useSyncExternalStore(store?.subscribe ?? NO_SUB, store?.get ?? ONE, store?.get ?? ONE) >= 1;
+  useEffect(() => {
+    let ran = false;
+    let cleanup: void | (() => void);
+    const run = () => { if (ran) return; ran = true; cleanup = start(); };
+    if (!store || store.get() >= 1) { run(); return () => { if (cleanup) cleanup(); }; }
+    const off = store.subscribe(() => { if (store.get() >= 1) run(); });
+    return () => { off(); if (cleanup) cleanup(); };
+    // The caller lists what restarts it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
 }
 
 /** Where the burst comes from inside the header card: its shark (the card's right side). */
@@ -146,7 +158,6 @@ function HeroStage({ reduced, plan: P, burstPoint, children }: {
   readonly children: (backdrop: ReactNode) => ReactNode;
 }) {
   const steps = useMountSteps(reduced ? 0 : HERO_BUILD, step => perfMark(`rideUp.step${step}`));
-  const go = useRideUpGo();
   const budget = usePowerBudget();
   const sparkles = momentParticles(P.sparkles, budget, reduced);
   const peak = flashPeak(isDimFlashingLightsEnabled(), reduced);
@@ -168,8 +179,7 @@ function HeroStage({ reduced, plan: P, burstPoint, children }: {
     runOnJS(tick)(now);
   }, [reduced]);
 
-  useEffect(() => {
-    if (!go) return undefined;
+  useWhenRideUpGo(() => {
     alive.current = true;
     perfMark('rideUp.start');
     if (reduced) {
@@ -201,8 +211,7 @@ function HeroStage({ reduced, plan: P, burstPoint, children }: {
     }));
     return () => { alive.current = false; [pop, glow, ring, punch, flash, burst, leave].forEach(v => cancelAnimation(v)); };
     // One-shot per mount, from the go frame.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [go]);
+  }, []);
 
   const heroStyle = useAnimatedStyle(() => (reduced ? {} : {
     transform: [
@@ -261,18 +270,16 @@ export function RideUpKicker({ active, style, children }: { readonly active: boo
   const punch = useSharedValue(0);
   const alive = useRef(true);
   const cheer = () => { if (alive.current) { playHaptic('winRoll'); playMoment('reward.reveal'); } };
-  const go = useRideUpGo();
-  useEffect(() => {
+  useWhenRideUpGo(() => {
     alive.current = true;
-    if (!active || preference === null || !go) return () => { alive.current = false; };
+    if (!active || preference === null) return () => { alive.current = false; };
     if (preference) { cheer(); return () => { alive.current = false; }; }
     stamp.value = 0;
     stamp.value = withDelay(RIDE_UP.stampAt, withTiming(1, { duration: DURATION.slam, easing: EASE.in }, ok => { if (ok) runOnJS(cheer)(); }));
     punch.value = withDelay(RIDE_UP.stampAt + DURATION.slam, withSequence(withTiming(1, { duration: 1 }),
       withDelay(DURATION.hitStop, withSpring(0, SPRING.stamp))));
     return () => { alive.current = false; cancelAnimation(stamp); cancelAnimation(punch); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, preference, go]);
+  }, [active, preference]);
   // On screen from frame 1: the title starts oversize (never invisible) and slams down to size.
   const animated = useAnimatedStyle(() => ({
     transform: [{ scale: 1.5 - 0.5 * stamp.value }, { scaleX: 1 + SLAM_SQUASH * punch.value }, { scaleY: 1 - SLAM_SQUASH * punch.value }],
@@ -312,19 +319,16 @@ export function RollingValue({ value, prefix = '', suffix = '', delayMs, duratio
   const pop = useSharedValue(1);
   const alive = useRef(true);
   const landed = () => { if (alive.current && tick) queueHaptic('tickSelection'); };
-  const go = useRideUpGo();
-  useEffect(() => {
+  useWhenRideUpGo(() => {
     alive.current = true;
     if (reduced || value <= 0) { shown.value = value; return () => { alive.current = false; }; }
-    if (!go) { shown.value = 0; return () => { alive.current = false; }; }
     shown.value = 0;
     shown.value = withDelay(delayMs, withTiming(value, { duration: durationMs, easing: EASE.out }, ok => {
       if (ok) runOnJS(landed)();
     }));
     pop.value = withDelay(delayMs + durationMs, withSequence(withTiming(1.12, { duration: DURATION.tap }), withSpring(1, SPRING.stamp)));
     return () => { alive.current = false; cancelAnimation(shown); cancelAnimation(pop); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, reduced, go]);
+  }, [value, reduced]);
   const animatedProps = useAnimatedProps(() => {
     const text = prefix + String(Math.round(shown.value)) + suffix;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -405,12 +409,10 @@ function Cannon({ rideName, origin }: { readonly rideName: string; readonly orig
   // The canvas mounts a few frames after the recap's first frame (never in its first commit, one small step of its
   // own); the cannon fires at confettiAt.
   const steps = useMountSteps(CANNON_STEP);
-  const go = useRideUpGo();
-  useEffect(() => {
-    if (!go) return undefined;
+  useWhenRideUpGo(() => {
     rain.value = withDelay(RIDE_UP.confettiAt, withTiming(1, { duration: RIDE_UP.confettiMs, easing: Easing.linear }));
     return () => cancelAnimation(rain);
-  }, [rain, go]);
+  }, [rain]);
   const pieces = useMemo(() => cannonPieces(count), [count]);
   const art = useMemo(() => {
     const paint = Skia.Paint();

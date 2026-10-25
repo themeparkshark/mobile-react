@@ -176,12 +176,10 @@ test('wave 5 round 3: the ride-up starts on the frame the recap shows, once the 
   assert.match(recap, /requestAnimationFrame\(\(\) => \{ shown\.value = 1; goStore\.set\(1\); \}\)/, 'shows and starts on one frame');
   assert.match(recap, /<RideUpGo\.Provider value=\{rideUp \? goStore : null\}>/);
   assert.ok(Number(/RIDE_UP_ART_WAIT_MS = (\d+)/.exec(src)[1]) <= 300);
-  // Every beat waits for go: the hero, the title slam, the rolling numbers and the cannon.
-  assert.equal((src.match(/const go = useRideUpGo\(\);/g) || []).length, 4);
-  assert.match(src, /\}, \[go\]\);/);
-  assert.match(src, /\}, \[active, preference, go\]\);/);
-  assert.match(src, /\}, \[value, reduced, go\]\);/);
-  assert.match(src, /\}, \[rain, go\]\);/);
+  // Every beat waits for go, and go starts them straight from the store (no React render on the go frame).
+  assert.equal((src.match(/useWhenRideUpGo\(\(\) => \{/g) || []).length, 4, 'the hero, the title slam, the rolling numbers and the cannon');
+  assert.match(src, /const off = store\.subscribe\(\(\) => \{ if \(store\.get\(\) >= 1\) run\(\); \}\);/);
+  assert.doesNotMatch(src, /useSyncExternalStore/, 'nothing re-renders on go');
   // The art is decoded again as the wait starts to end (a long wait can push it out of the memory cache).
   const lp = read('src/screens/LinePlay/LinePlayScreen.tsx');
   assert.match(lp, /useEffect\(\(\) => \{ if \(endingSoon\) warmRecapArt\(\); \}, \[endingSoon\]\);/);
