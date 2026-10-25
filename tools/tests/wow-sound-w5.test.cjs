@@ -239,3 +239,20 @@ test('release-like capture: catch lines and moment starts (with delays) land in 
   const loud = await engine({ dev: false, trace: false, env: { EXPO_PUBLIC_STUDIO_MUTE: undefined, EXPO_PUBLIC_MOTION_CAPTURE: 'HomeCatchPreview', EXPO_PUBLIC_STUDIO_CAPTURE: 'on' } });
   assert.equal(loud.Switch.studioCapture(), null);
 });
+
+test('live release run (load 100): a wobble buzz that comes too late is dropped rather than flammed into the burst', async () => {
+  const { r, v } = await hotCatch(5, { stalls: [{ at: 280, ms: 70 }] });
+  const burst = r.delivered.find((d) => d.name === 'burst').at;
+  const near = v.haptics.filter((h) => h.t > burst - 90 && h.t < burst);
+  assert.deepEqual(plain(near), [], `nothing in the beat before the burst (${v.haptics.map((h) => `${h.intent}@${h.t}`).join(' ')})`);
+  assert.ok(minGap(v.haptics) >= 90, v.haptics.map((h) => `${h.intent}@${h.t}`).join(' '));
+});
+
+test('live release run (load 100): a late thump timer never pulls the golden success under one beat gap', async () => {
+  const { v } = await hotCatch(5, { stalls: [{ at: 425, ms: 40 }, { at: 550, ms: 30 }] });
+  const thump = v.haptics.find((h) => h.intent === 'hitRigid');
+  const success = v.haptics.find((h) => h.intent === 'success' && h.t > 400);
+  assert.ok(thump && success, v.haptics.map((h) => `${h.intent}@${h.t}`).join(' '));
+  assert.ok(success.t - thump.t >= 90, `success ${success.t - thump.t} ms after the thump`);
+  assert.ok(minGap(v.haptics) >= 90, v.haptics.map((h) => `${h.intent}@${h.t}`).join(' '));
+});

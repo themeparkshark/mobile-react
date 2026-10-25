@@ -4,7 +4,7 @@ import { beatHaptic, HAPTIC_GATE_MS, lastAppHapticAt, queueHaptic, setHapticTrac
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { momentSaver, playMoment, preloadMoments, studioMoment, studioReady } from '../../../gamekit/audio/playMoment';
 import type { MomentName } from '../../../gamekit/audio/momentMap';
-import { burstMoment, burstTakesVoicing, burstVoicing, CATCH_WOBBLE_INTENTS, counterLift, CATCH_WOBBLE_TICKS_MS, catchHeat, COIN_TICK_GAP_MS, decodeDay, EMPTY_RUN, encodeDay, heatTier, HOT_LAYER_HEAT, MIN_BEAT_GAP_MS, REPEAT_WOBBLE_INTENTS, REPEAT_WOBBLE_TICKS_MS, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
+import { burstMoment, burstTakesVoicing, burstVoicing, CATCH_BURST_MS, CATCH_WOBBLE_INTENTS, REPEAT_BURST_MS, counterLift, CATCH_WOBBLE_TICKS_MS, catchHeat, COIN_TICK_GAP_MS, decodeDay, EMPTY_RUN, encodeDay, heatTier, HOT_LAYER_HEAT, MIN_BEAT_GAP_MS, REPEAT_WOBBLE_INTENTS, REPEAT_WOBBLE_TICKS_MS, type CatchRunState } from '../../../gamekit/audio/catchSoundPlan';
 import { CAPTURE_LINES, captureTraceOn, traceEvent } from '../../../gamekit/audio/studioTrace';
 
 /**
@@ -218,6 +218,9 @@ let beats: {
   closed: boolean;
   /** When the tap came (ms): wobble beats count until the gather closes, up to PRE_BURST_MS after it. */
   tapAt: number;
+  /** The burst frame on the catch clock (wave 5), and when the first wobble was due (wall ms; set by startWobbles). */
+  burstAt: number;
+  due0?: number;
 } | null = null;
 /**
  * The stamp is a beat too: the haptic that follows the badge sound in the same frame (wow-map's arrive()
@@ -317,6 +320,7 @@ function cutWobbles(graceMs = 0): void {
   for (const v of s.wobbleVoices) {
     if (v.at > now + graceMs) {
       try { GameAudio.stop(v.id); } catch { /* optional */ }
+      trace('cut', `catch.wobble l${v.step} +${v.at - now}`);
       traceEvent('mark', 'catch-wobble-cut', `${v.at - now} ms early`);
     }
   }
@@ -346,6 +350,7 @@ function pullWobbles(): void {
   for (const v of s.wobbleVoices) {
     if (v.at <= now) { prev = Math.max(prev, v.at); kept.push(v); continue; }
     try { GameAudio.stop(v.id); } catch { /* optional */ }
+    trace('cut', `catch.wobble l${v.step} +${v.at - now}`);
     const at = Math.max(now, prev + TICK_PULL_GAP_MS);
     if (at > now + HOLD_MS) { traceEvent('mark', 'catch-wobble-cut', `${v.at - now} ms early`); continue; }
     const id = playMoment('catch.wobble', { step: v.step, delayMs: at - now });
@@ -369,6 +374,7 @@ function mergeCounterAtDone(s: NonNullable<typeof session>): void {
   for (const v of s.counterVoices.slice().reverse()) {
     if (v.at > now) {
       try { GameAudio.stop(v.id); } catch { /* optional */ }
+      trace('cut', `ui.counterTick l${v.step} +${v.at - now}`);
       top = Math.max(top, v.step);
     } else started = Math.max(started, v.at);
   }
@@ -382,6 +388,7 @@ function mergeCounterAtDone(s: NonNullable<typeof session>): void {
   // one coin gap ago, that tick is the last one (a second tick now would double it, a later one would trail done).
   if (sinceLast < COIN_TICK_GAP_MS) {
     s.rung = COUNTER_TOP;
+    trace('final', `ui.counterTick ${sinceLast} ms ago`);
     traceEvent('mark', 'catch-counter-final', `the tick ${sinceLast} ms ago is the last`);
     return;
   }
@@ -442,7 +449,7 @@ function onCatchMark(name: string): void {
     if (thumpTimer) { clearTimeout(thumpTimer); thumpTimer = null; }
     closeBeats();
     beats = {
-      n: 0, seen: 0, fired: [], timers: [], closed: false, tapAt: now,
+      n: 0, seen: 0, fired: [], timers: [], closed: false, tapAt: now, burstAt: repeatPlan ? REPEAT_BURST_MS : CATCH_BURST_MS,
       offsets: repeatPlan ? REPEAT_WOBBLE_TICKS_MS : CATCH_WOBBLE_TICKS_MS,
       intents: repeatPlan ? REPEAT_WOBBLE_INTENTS : CATCH_WOBBLE_INTENTS,
     };
@@ -676,6 +683,13 @@ function fireWobble(k: number, intent: HapticIntent): void {
   const b = beats;
   if (!b || b.closed || b.fired[k]) return;
   b.fired[k] = true;
+  // Wave 5 (live release run, load 100): a wobble buzz that comes so late it would land under one beat gap before
+  // the burst's heavy (which never waits) is dropped, never flammed into it.
+  if (b.due0 !== undefined && Date.now() > b.due0 + (b.burstAt - (b.offsets[0] ?? 0)) - MIN_BEAT_GAP_MS) {
+    trace('drop', `wobble${k + 1} too near the burst`);
+    traceEvent('mark', 'catch-pulse-dropped', `wobble ${k + 1} near the burst`);
+    return;
+  }
   spacedBeat(heated(intent), true);
 }
 
@@ -692,6 +706,7 @@ function startWobbles(intent: HapticIntent): void {
   // Wave 5: planned from the first wobble's UI-clock time, so a late JS turn does not push the rest late too;
   // each one still keeps TICK_PULL_GAP_MS after the one before it (never a flam).
   const due0 = dueNow(now);
+  b.due0 = due0;
   const plan: number[] = [];
   b.offsets.forEach((off, k) => plan.push(k === 0 ? now : Math.max(due0 + off - base, plan[k - 1] + TICK_PULL_GAP_MS)));
   fireWobble(0, intent);
@@ -760,7 +775,8 @@ export function catchHaptic(intent: HapticIntent, priority = 2): void {
     }
     // A stalled thread delivers the burst and its success together: the success still waits its 180 ms.
     if (intent === 'success' && now - burstBuzzAt < GOLDEN_SUCCESS_MS - 30) {
-      const at = burstBuzzAt + GOLDEN_SUCCESS_MS;
+      // Wave 5: and never under one beat gap after the hot thump (a late thump timer once left 83 ms).
+      const at = Math.max(burstBuzzAt + GOLDEN_SUCCESS_MS, laneLast() + MIN_BEAT_GAP_MS);
       traceEvent('mark', 'catch-beat-spaced', `success +${at - now} ms`);
       burstBuzzAt = -Infinity;
       beatLaneAt = Math.max(beatLaneAt, at);

@@ -41,6 +41,9 @@ export const HOT_LAYER_HEAT = 5;
  */
 export const CATCH_WOBBLE_TICKS_MS: readonly number[] = [200, 350, 480];
 export const REPEAT_WOBBLE_TICKS_MS: readonly number[] = [150, 290];
+/** wow-map catchPlan: the burst frame on the same clock (the full show and every milestone 670, the short show and treat 430). */
+export const CATCH_BURST_MS = 670;
+export const REPEAT_BURST_MS = 430;
 /** The buzz on each wobble beat (mapWow.catchHaptics): light, then a little heavier. */
 export const CATCH_WOBBLE_INTENTS: readonly ('tickSelection' | 'tapLight' | 'hitMedium')[] = ['tickSelection', 'tapLight', 'hitMedium'];
 export const REPEAT_WOBBLE_INTENTS: readonly ('tickSelection' | 'tapLight' | 'hitMedium')[] = ['tickSelection', 'hitMedium'];
