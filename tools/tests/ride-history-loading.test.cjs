@@ -73,6 +73,7 @@ function journal() {
       if (name === '../../ui') return { GameIcon: 'GameIcon', SharkLoader: 'SharkLoader' };
       if (name.includes('assets/')) return 1;
       if (name.includes('RideCard') || name.includes('ShareableRideCard')) return name;
+      if (name === '../../components/GrownUpGate') return { GrownUpGateSlot: 'GrownUpGateSlot' };
       throw new Error(`Unexpected import ${name}`);
     },
   }, { filename: file });

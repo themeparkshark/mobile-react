@@ -153,7 +153,7 @@ test('the catch call: fresh GPS wins, 410 is gone, server words are kept, detail
 
 test('wiring: taps catch, the server nearby check never auto-opens outside the tutorial, no modal', () => {
   const screen = read('src/screens/ExploreScreen.tsx');
-  assert.match(screen, /if \(source === 'auto'\) return;/);
+  assert.match(screen, /if \(source === 'auto' && !finnsFirstFind\) return;/);
   assert.doesNotMatch(screen, /<PrepItemRedeemModal/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /onPrepItemNearby\(nearbyItem, nearbyItem\.pivot_id, 'auto'\)/);

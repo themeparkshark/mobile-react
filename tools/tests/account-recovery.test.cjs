@@ -158,6 +158,8 @@ function provider({ me } = {}) {
     '../services/lineplay/backgroundQueueHeartbeat': { async clearQueueBackgroundHeartbeat() {} },
     '../utils/apiCache': { async clearCache() { events.push(['clearAccountCache']); } },
     '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
+    // The launch effect is not run here (useAsyncEffect is a no-op); launch-profile.test.cjs drives it.
+    './launchProfile': { loadLaunchProfile: async () => ({ kind: 'failed', error: new Error('launch not driven here') }) },
     '../screens/LeaderboardsScreen/standingsCache': { endStandingsSession: () => undefined },
     '../screens/SetCollection/dexCache': { clearBook() {} },
     '../services/push': { refreshPushRegistration: async () => undefined, listenForPushTaps: () => () => undefined },

@@ -9,7 +9,7 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/Tutorial/s
   { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText,
   { module: moduleRef, exports: moduleRef.exports });
 const steps = moduleRef.exports;
-function guide(preview = false, xp) {
+function guide(preview = false, xp, frames = null) {
   const writes = [], removals = [];
   const auth = { value: { player: { id: 5, total_experience: xp ?? (preview ? 200 : 0) } } };
   const app = runtime('src/components/Tutorial/TutorialProvider.tsx', {
@@ -21,7 +21,11 @@ function guide(preview = false, xp) {
     '@react-native-async-storage/async-storage': { default: {
       getItem: async () => null, setItem: async (...args) => writes.push(args), removeItem: async key => removals.push(key),
     } },
-  }, { children: 'Player map' }, preview ? { __DEV__: true, process: { env: { EXPO_PUBLIC_PARK_FIRST_PLAY_PREVIEW: '1' } } } : {});
+  }, { children: 'Player map' }, {
+    // Frames run at once unless a test holds them (`frames` collects them instead).
+    requestAnimationFrame: fn => { if (frames) frames.push(fn); else fn(); return 1; },
+    ...(preview ? { __DEV__: true, process: { env: { EXPO_PUBLIC_PARK_FIRST_PLAY_PREVIEW: '1' } } } : {}),
+  });
   return { app, auth, writes, removals, state: () => app.tree.props.value,
     finn: () => app.find(n => n.type === 'Finn'), game: () => app.find(n => n.type === 'Memory') };
 }
@@ -79,4 +83,17 @@ test('Replay Tutorials works for an existing player: a deliberate reset is not a
   assert.equal(c.state().hasCompleted('friends'), false);
   c.state().startTutorial('friends'); c.app.render();
   assert.equal(c.state().isActive, true, 'the friends guide plays again after Replay Tutorials');
+});
+
+test('the PLAY tap is acknowledged at once: the button pulses before the warm-up mounts, so a slow mount never looks dropped', async () => {
+  const frames = [];
+  const c = guide(false, undefined, frames); await c.app.settle(); c.state().startTutorial('onboarding', { inPark: true }); c.app.render();
+  assert.equal(c.finn().props.nextLoading, false);
+  c.finn().props.onNext(); c.app.render();
+  assert.equal(c.finn().props.nextLoading, true, 'the tap shows as taken');
+  assert.equal(c.game(), undefined, 'the warm-up has not mounted yet');
+  c.finn().props.onNext(); c.app.render();
+  assert.equal(frames.length, 1, 'a second tap while it opens does nothing');
+  frames.shift()(); assert.equal(frames.length, 1); frames.shift()(); c.app.render();
+  assert.ok(c.game(), 'two frames later the warm-up is up'); assert.equal(c.finn(), undefined);
 });
