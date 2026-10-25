@@ -65,6 +65,8 @@ function provider({ login, me, failCache = false, apiCheck } = {}) {
       async clearCache() { events.push(['clearAccountCache']); },
     },
     '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
+    // The launch effect is not run here (useAsyncEffect is a no-op); launch-profile.test.cjs drives it.
+    './launchProfile': { loadLaunchProfile: async () => ({ kind: 'failed', error: new Error('launch not driven here') }) },
     // Standings v2: sign-out and account switches drop every cached board.
     '../screens/LeaderboardsScreen/standingsCache': { endStandingsSession: () => events.push(['standings-session-ended']) },
     '../screens/SetCollection/dexCache': { clearBook() {} },
