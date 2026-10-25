@@ -247,6 +247,14 @@ function GatherSparkle({ index, count, charge }: { index: number; count: number;
  * A star flung from the burst (bigger than a sparkle, so it reads even at 10 frames a second). Round 4: a pool
  * of BURST_STARS_MAX, of which `count` fly this catch (the burst variant), fanned evenly over the top.
  */
+/** Wave 5 round 3: one sparkle of a treat star's gold trail, `lag` ms behind the star. Worklet. */
+function homeTrail(p: number, lag: number, index: number, home: number, count: number, to: { x: number; y: number }) {
+  'worklet';
+  const h = home && p > 0 && p < 1 && index < count ? homeStarAt(p * DURATION.sparkle - lag, index, count, to) : null;
+  if (!h) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }] };
+  return { opacity: lag > 50 ? 0.45 : 0.75, transform: [{ translateX: h.x }, { translateY: h.y }, { scale: h.scale * (lag > 50 ? 0.45 : 0.65) }] };
+}
+
 function BurstStar({ index, t, count, home, to }: { index: number; t: SharedValue<number>; count: SharedValue<number>;
   /** Wave 5 round 2: 1 on the 5th-catch treat: the stars arc into the coin counter at `to` (pt from the find). */
   home: SharedValue<number>; to: SharedValue<{ x: number; y: number }> }) {
@@ -270,14 +278,9 @@ function BurstStar({ index, t, count, home, to }: { index: number; t: SharedValu
     };
   });
   // Wave 5 round 3: a treat star leaves a short gold trail (two sparkles 35 and 70 ms behind it) on its way home.
-  const trailA = useAnimatedStyle(() => homeTrail(t.value, 35));
-  const trailB = useAnimatedStyle(() => homeTrail(t.value, 70));
-  function homeTrail(p: number, lag: number) {
-    'worklet';
-    const h = home.value && p > 0 && p < 1 && index < count.value ? homeStarAt(p * DURATION.sparkle - lag, index, count.value, to.value) : null;
-    if (!h) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }] };
-    return { opacity: lag > 50 ? 0.45 : 0.75, transform: [{ translateX: h.x }, { translateY: h.y }, { scale: h.scale * (lag > 50 ? 0.45 : 0.65) }] };
-  }
+  // (A module-level worklet: a function declared inside the component is not hoisted once the worklet plugin rewrites it.)
+  const trailA = useAnimatedStyle(() => homeTrail(t.value, 35, index, home.value, count.value, to.value));
+  const trailB = useAnimatedStyle(() => homeTrail(t.value, 70, index, home.value, count.value, to.value));
   return <>
     <Animated.View pointerEvents="none" style={[styles.burstStar, trailB]}>
       <RNImage source={MAP_SPARKLE} style={[styles.fxFill, { tintColor: GOLD_FX.rays }]} resizeMode="contain" fadeDuration={0} />
