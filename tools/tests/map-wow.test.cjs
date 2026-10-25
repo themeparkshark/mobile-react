@@ -504,7 +504,7 @@ test('wave 5: the next goal is sticker size and on screen about half a second on
 test('wave 5: release-like captures log every catch frame (beam, gold, ink) and never ship that probe', () => {
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.match(src, /const CATCH_PROBE = process\.env\.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';/);
-  assert.match(src, /if \(!CATCH_PROBE \|\| t < 0\) return;/);
+  assert.match(src, /if \(!CATCH_PROBE\) return;/);
   const audio = read('src/screens/ExploreScreen/ridePhoto/catchAudio.ts');
   assert.match(audio, /if \(!__DEV__ && !CAPTURE_TRACE\) return;/);
   // The beam is driven by a flag set from JS on the tap; JS never reads beamOn back.
@@ -677,7 +677,7 @@ test('wave 5 r2: the catch clock starts on the tap, and the pin follows it until
   assert.match(effect, /startRef\.current = \(\) => \{ startRef\.current = null; runOnUI\(showCopy\)\(pivotId\); \};/);
   assert.match(src, /const showCopy = \(pivot: number\) => \{\s*'worklet';\s*catchHidePivot\.value = pivot;\s*copyOn\.value = 1;/);
   // The start never runs behind the tap: it begins at the time already gone (one or two frames at most).
-  assert.match(src, /const e = Math\.min\(48, Math\.max\(0, Date\.now\(\) - tapAt\)\);/);
+  assert.match(src, /const elapsed = Math\.max\(0, now - tapAt\);\s*[^\n]*\n\s*const e = Math\.min\(48, elapsed\);/);
   // Until the copy draws, the pin rises, glides and wobbles with the clock.
   assert.match(src, /if \(!clockOn\.value \|\| copyOn\.value\) return null;/);
   const pin = read('src/screens/ExploreScreen/PrepItem.tsx');
@@ -696,8 +696,10 @@ test('wave 5 r2: the answer never holds the clock for a React commit; a server w
   // continueRun keeps the wind-up and the burst at plan pace and speeds up only what follows the hold (at most 20%).
   const cont = src.slice(src.indexOf('const continueRun = () => {'), src.indexOf('const startClock ='));
   assert.match(cont, /const mid = Math\.min\(end, Math\.max\(from, p\.suckAt\)\);/);
-  assert.match(cont, /Math\.max\(0\.8, \(tail - waited\) \/ tail\)/);
-  assert.match(src, /heldAt\.value = Date\.now\(\);/);
+  assert.match(cont, /Math\.max\(0\.8, \(tail - behind\) \/ tail\)/);
+  assert.match(cont, /cc\.value = withTiming\(end, \{ duration: total, easing: twoSpeed \}\);/, 'one timing, no frame lost at a hand-over');
+  // The wind-up aims the held frame at its planned wall time from the tap (at most a third faster).
+  assert.match(src, /const duration = Math\.max\(1, hitStopAt \* 0\.75, hitStopAt - elapsed\);\s*heldGoal\.value = now \+ duration;/);
   // On every plan the done frame lands by 2.6 s from the tap, even when the server answered 150 ms after the held frame.
   for (const plan of [wow.catchPlan({ reduced: false }), wow.catchPlan({ reduced: false, milestone: true }),
     wow.catchPlan({ reduced: false, repeat: true }), wow.catchPlan({ reduced: false, repeat: true, treat: true })]) {
@@ -705,6 +707,10 @@ test('wave 5 r2: the answer never holds the clock for a React commit; a server w
     const tail = plan.doneAt - plan.suckAt;
     const k = Math.max(0.8, (tail - waited) / tail);
     const done = plan.suckAt + waited + tail * k;
+    // The two-speed shape is continuous and ends where it should.
+    const shape = { a: 0.3, b: 0.2 };
+    const ease = u => (u <= shape.a ? (u / shape.a) * shape.b : shape.b + ((u - shape.a) / (1 - shape.a)) * (1 - shape.b));
+    assert.ok(Math.abs(ease(shape.a) - shape.b) < 1e-9 && Math.abs(ease(1) - 1) < 1e-9 && ease(0) === 0);
     assert.ok(done <= 2600, `done ${done}`);
     assert.ok(Math.abs(done - plan.doneAt) <= 50, `within 50 ms of plan (${done} vs ${plan.doneAt})`);
   }

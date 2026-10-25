@@ -691,6 +691,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const beamOn = useSharedValue(0);
   /** Wave 5 round 2: when the clock reached its held frame before the server answered (Date.now on the UI thread), 0 otherwise. */
   const heldAt = useSharedValue(0);
+  /** Wave 5 round 2: the wall time the clock is due at its held frame, and the tail's two-speed shape (see twoSpeed). */
+  const heldGoal = useSharedValue(0);
+  const tailShape = useSharedValue({ a: 1, b: 1 });
   /** The layer's copy shows from the clock's first frame, the same frame the pin hides (one clean swap). */
   const copyOn = useSharedValue(0);
   const inkTurn = useSharedValue(0);
@@ -727,7 +730,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const probeN = useSharedValue(0);
   const probeLast = useSharedValue(0);
   useAnimatedReaction(() => (CATCH_PROBE && clockOn.value ? cc.value : -1), t => {
-    if (!CATCH_PROBE || t < 0) return;
+    if (!CATCH_PROBE) return;
+    // The last rows of a catch are written when its clock stops (they hold the done frame).
+    if (t < 0) { if (probeN.value > 0) { runOnJS(flushProbe)(probeRows.value); probeRows.value = ''; probeN.value = 0; } return; }
     const now = Date.now();
     const dt = probeLast.value > 0 ? now - probeLast.value : 0;
     probeLast.value = now;
@@ -1004,10 +1009,21 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
 
   // ── The common catch's clock (UI thread) ──────────────────────────────
   /**
-   * The server has answered: run the clock from the held frame to its end. Wave 5 round 2: when the answer kept the
-   * find waiting on its held frame, the beats after the burst's hold (the flight, the badge, the exit) play a little
-   * faster to win that wait back (at most 20 percent faster), so the moment still ends on its planned time. The
-   * wind-up and the burst itself always keep their planned pace.
+   * Wave 5 round 2: the clock's tail runs at two speeds in one timing: plan pace to the end of the burst's hold, then a
+   * little faster (tailShape: `a` is the share of the time, `b` the share of the clock, of the first part). One timing,
+   * so no frame is lost at a hand-over between two.
+   */
+  const twoSpeed = (u: number): number => {
+    'worklet';
+    const s = tailShape.value;
+    if (u <= s.a) return s.a > 0 ? (u / s.a) * s.b : s.b;
+    return s.b + ((u - s.a) / Math.max(1e-6, 1 - s.a)) * (1 - s.b);
+  };
+  /**
+   * The server has answered: run the clock from the held frame to its end. Wave 5 round 2: any time the catch fell
+   * behind its plan (the server's wait at the held frame, a busy frame at a hand-over) is won back after the burst's
+   * hold (the flight, the badge, the exit play at most 20 percent faster), so the moment ends on its planned time
+   * from the tap. The wind-up and the burst itself keep their planned pace.
    */
   const continueRun = () => {
     'worklet';
@@ -1019,29 +1035,37 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const from = cc.value;
     const end = endAt.value;
     const p = planSV.value;
-    const waited = heldAt.value > 0 ? Math.max(0, Date.now() - heldAt.value) : 0;
-    heldAt.value = 0;
+    // How far behind the plan the clock is: the wall time past the moment it was due at its held frame.
+    const behind = heldGoal.value > 0 ? Math.max(0, Date.now() - heldGoal.value) : 0;
+    heldAt.value = 0; heldGoal.value = 0;
     const mid = Math.min(end, Math.max(from, p.suckAt));
     const tail = p.doneAt - mid;
-    const k = waited > 0 && tail > 0 ? Math.max(0.8, (tail - waited) / tail) : 1;
+    const k = behind > 0 && tail > 0 ? Math.max(0.8, (tail - behind) / tail) : 1;
+    const d1 = Math.max(0, mid - from);
+    const d2 = Math.max(0, (end - mid) * k);
+    const total = Math.max(1, d1 + d2);
+    tailShape.value = { a: d1 / total, b: end - from > 0 ? (mid - from) / (end - from) : 1 };
     cancelAnimation(cc);
-    cc.value = withSequence(
-      withTiming(mid, { duration: Math.max(1, mid - from), easing: Easing.linear }),
-      withTiming(end, { duration: Math.max(1, (end - mid) * k), easing: Easing.linear }));
+    cc.value = withTiming(end, { duration: total, easing: twoSpeed });
   };
   /**
    * Tap to the held frame (squash, wobbles, gather); a slow server holds a small wobble there, never a freeze.
-   * Wave 5 round 2: the clock starts on the tap (the effect's own frame), not once the layer's copy has drawn, so
-   * every beat lands on its planned time from the tap. Until the copy draws, the pin itself follows the clock.
+   * Wave 5 round 2: the clock starts on the tap (the effect's own frame), not once the layer's copy has drawn, and
+   * aims the held frame at its planned wall time from the tap (a late start plays the wind-up up to a third faster).
+   * Until the copy draws, the pin itself follows the clock.
    */
   const startClock = (hitStopAt: number, reducedRun: boolean, tapAt: number) => {
     'worklet';
     continued.value = 0; waiting.value = 0; skipSV.value = 0; heldAt.value = 0;
     cancelAnimation(cc);
-    // The time since the tap (at most one or two frames) is already gone: start there, never behind.
-    const e = Math.min(48, Math.max(0, Date.now() - tapAt));
+    const now = Date.now();
+    const elapsed = Math.max(0, now - tapAt);
+    // The first frames since the tap are already gone (start there, never behind), and the held frame is due on time.
+    const e = Math.min(48, elapsed);
+    const duration = Math.max(1, hitStopAt * 0.75, hitStopAt - elapsed);
+    heldGoal.value = now + duration;
     cc.value = e;
-    cc.value = withTiming(hitStopAt, { duration: Math.max(1, hitStopAt - e), easing: Easing.linear }, done => {
+    cc.value = withTiming(hitStopAt, { duration, easing: Easing.linear }, done => {
       if (!done) return;
       if (resolved.value === 1) { continueRun(); return; }
       if (resolved.value === 0) {
