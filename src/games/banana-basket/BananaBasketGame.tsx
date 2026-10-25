@@ -59,7 +59,7 @@ import {
   starsFor, step, type SimConfig, type SimState,
 } from './sim';
 import { mixSeed } from './fixed';
-import { nextStarDelta, pileLine, tipLine, whyLine } from './summary';
+import { nextStarDelta, pileLine, tipLine } from './summary';
 import { botInput, createBot, BOT_EXPERT, type Bot } from './bots';
 import { buildProof, decodeInput, type BananaProof } from './proof';
 import { compareLine, createGhost, finnRun, ghostAdvance, ghostFinal, type Ghost } from './ghost';
@@ -862,7 +862,9 @@ function BananaRun({
       message: stars >= 1
         ? (mode === 'ride' ? 'RIDE COIN EARNED!' : stars === 3 ? 'BASKET MASTER!' : 'NICE HAUL!')
         : undefined,
-      note: stars === 0 ? `${whyLine(facts)} ${tipLine(facts)}`.trim() : cmp ? cmp.line : next ? `+${next.delta} TO ${next.label}` : undefined,
+      // A 0-star card keeps one short tip a kid can use (the list of what went wrong
+      // was three sentences of reading under GOOD TRY!).
+      note: stars === 0 ? tipLine(facts) : cmp ? cmp.line : next ? `+${next.delta} TO ${next.label}` : undefined,
       rival: g ? { name: g.name, score: g.final } : null,
       stats: [
         { label: 'BALL SHARE', value: `${share}%` },

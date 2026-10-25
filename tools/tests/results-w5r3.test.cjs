@@ -183,3 +183,9 @@ test('a record Banana Basket or Sharky run is a NEW BEST: the shell compares wit
   const e = sharky.slice(sharky.indexOf('const best = prog.best[key] ?? 0;'));
   assert.ok(e.indexOf('bestBeforeRun.current = best;') < e.indexOf('setProgress(next)'));
 });
+
+test('a 0-star Banana Basket card keeps one short tip, not three sentences of reading', () => {
+  const banana = read('src/games/banana-basket/BananaBasketGame.tsx');
+  assert.match(banana, /note: stars === 0 \? tipLine\(facts\) :/);
+  assert.doesNotMatch(banana, /whyLine\(facts\)/);
+});
