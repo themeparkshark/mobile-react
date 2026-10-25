@@ -153,7 +153,7 @@ export function catchPlan(options: { readonly reduced: boolean; readonly calm?: 
       hitStopAt, burstAt, burstScale: 1.25,
       gatherSparkles: 4, burstSparkles: 8,
       flyAt, flyMs, arcPt: 60, landAt, kickPt,
-      repeat: true, coinsAt: burstAt, barMs, tickAt: landAt + barMs + 10, exitAt, exitMs, doneAt: exitAt + exitMs,
+      repeat: true, coinsAt: options.treat ? burstAt + TREAT_COINS_DELAY_MS : burstAt, barMs, tickAt: landAt + barMs + 10, exitAt, exitMs, doneAt: exitAt + exitMs,
       reduced: false, heroScale: 1.5, landScale: 0.95, inkMs: suckAt + suckMs - burstAt, goldHoldMs: 120, badgeAt: flyAt, badgeInMs: 200,
       suckAt, suckMs, nextAt: flyAt + 20,
       fidget, twirl: fidget === 1 ? 360 : 0, hopPt: fidget === 2 ? 16 : 0,
@@ -263,19 +263,21 @@ export function burstVariant(catchNumber: number, options: { readonly firstEver?
 
 /**
  * Wave 5 round 3: the 5th-catch treat stars lead the coins home. Star i flings out over the top (outMs), then arcs into
- * the coin counter at `to` (relative pt), 40 ms after the one before, and lands at homeStarLand(i) ms after the burst
+ * the coin counter at `to` (relative pt), 40 ms after the one before (after a short hang at the tips), and lands at homeStarLand(i) ms after the burst
  * (the counter punches on each landing). Big (about 40 pt to 25 pt), so they read at phone size.
  */
-export const HOME_STARS = { outMs: 130, flyMs: 260, staggerMs: 40, from: 1.45, to: 0.9 } as const;
+export const HOME_STARS = { outMs: 140, hangMs: 190, flyMs: 280, staggerMs: 40, from: 1.45, to: 0.9 } as const;
 export function homeStarLand(i: number): number {
-  return i * HOME_STARS.staggerMs + HOME_STARS.outMs + HOME_STARS.flyMs;
+  return i * HOME_STARS.staggerMs + HOME_STARS.outMs + HOME_STARS.hangMs + HOME_STARS.flyMs;
 }
+/** Wave 5 round 3: on the treat the coins wait for the stars (they spray out once the burst has sucked back), so every star lands on its own. */
+export const TREAT_COINS_DELAY_MS = 260;
 
 /** A treat star `d` ms after the burst (index i of n), relative to the find, or null when it is not on screen. Worklet. */
 export function homeStarAt(d: number, i: number, n: number, to: { x: number; y: number }): { x: number; y: number; scale: number } | null {
   'worklet';
   const local = d - i * HOME_STARS.staggerMs;
-  if (local <= 0 || n <= 0 || local >= HOME_STARS.outMs + HOME_STARS.flyMs) return null;
+  if (local <= 0 || n <= 0 || local >= HOME_STARS.outMs + HOME_STARS.hangMs + HOME_STARS.flyMs) return null;
   const angle = -Math.PI / 2 + (i - (n - 1) / 2) * (n > 4 ? 0.42 : 0.8);
   const reach = i % 2 ? 96 : 124;
   const ox = Math.cos(angle) * reach, oy = Math.sin(angle) * reach;
@@ -284,7 +286,12 @@ export function homeStarAt(d: number, i: number, n: number, to: { x: number; y: 
     const out = 1 - (1 - u) * (1 - u) * (1 - u);
     return { x: ox * out, y: oy * out, scale: (u < 0.3 ? u / 0.3 : 1) * HOME_STARS.from };
   }
-  const f = (local - HOME_STARS.outMs) / HOME_STARS.flyMs;
+  // They hang a beat at the tips (a ring of stars around the find, bobbing), then fly home once the burst is gone.
+  if (local < HOME_STARS.outMs + HOME_STARS.hangMs) {
+    const h = (local - HOME_STARS.outMs) / HOME_STARS.hangMs;
+    return { x: ox, y: oy - 6 * Math.sin(h * Math.PI), scale: HOME_STARS.from * (1 + 0.08 * Math.sin(h * Math.PI)) };
+  }
+  const f = (local - HOME_STARS.outMs - HOME_STARS.hangMs) / HOME_STARS.flyMs;
   const e = f < 0.5 ? 4 * f * f * f : 1 - Math.pow(-2 * f + 2, 3) / 2;
   const cx = (ox + to.x) / 2, cy = Math.min(oy, to.y) - 60;
   const u = 1 - e;

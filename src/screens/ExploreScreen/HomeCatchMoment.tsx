@@ -1523,7 +1523,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         const chip = latest.current.getTarget('coins');
         const coinLands = stream.landAt.map(ms => plan.coinsAt + ms);
         // The 5th-catch treat: its stars lead the coins into the counter, and the counter punches once per star (wave 5
-        // round 3: the stars land first, 40 ms apart, then the coins).
+        // round 3: the stars land first, 40 ms apart, then the coins spray out and follow).
         let starLands: number[] = [];
         if (chip && motion && variant.homeStars) {
           starTo.value = { x: chip.x - off.x - stage.x, y: chip.y - off.y - stage.y }; homeSV.value = 1;

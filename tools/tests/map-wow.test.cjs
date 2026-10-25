@@ -745,7 +745,10 @@ test('wave 5 r3: the 5th-catch stars are big, fling out, then land in the counte
   for (let i = 0; i < 8; i++) assert.ok(wow.homeStarLand(i) < motion.DURATION.sparkle, 'every star lands inside the sparkle window');
   for (let i = 1; i < 8; i++) assert.ok(wow.homeStarLand(i) - wow.homeStarLand(i - 1) >= 40, 'one punch per star, never merged');
   // The stars lead: the last star lands before the first coin (each landing punches the counter).
-  assert.ok(wow.homeStarLand(7) < wow.coinStreamPlan(10, false).landAt[0], 'stars first, then the coins');
+  const treat = wow.catchPlan({ reduced: false, repeat: true, treat: true });
+  assert.equal(treat.coinsAt - treat.burstAt, wow.TREAT_COINS_DELAY_MS, 'on the treat the coins wait for the stars');
+  assert.ok(treat.burstAt + wow.homeStarLand(7) < treat.coinsAt + wow.coinStreamPlan(10, false).landAt[0], 'stars first, then the coins');
+  assert.ok(wow.homeStarLand(0) - wow.HOME_STARS.flyMs >= treat.suckAt - treat.burstAt, 'they fly home once the gold is sucking back (over the map, not gold on gold)');
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.match(src, /const lands = \[\.\.\.starLands, \.\.\.coinLands\]\.sort/, 'star landings punch the counter too');
   assert.match(src, /homeTrail\(t\.value, 35, index/, 'a short gold trail behind each star');
