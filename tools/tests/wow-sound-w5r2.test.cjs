@@ -175,6 +175,6 @@ test('fix 1: the hook capture is its own release-like route, and its frame marks
   // The capture is muted (studio on only inside the mute, never in an audible run) and writes only to Documents.
   const screen = src('src/components/retention/HookSoundPreviewScreen.tsx');
   assert.match(screen, /hook-trace\.log/);
-  assert.doesNotMatch(screen, /[–—]/, 'no dashes in copy');
+  assert.doesNotMatch(screen, /[\u2013\u2014]/, 'no dashes in copy');
   assert.match(src('src/gamekit/audio/studioSwitch.ts'), /if \(!studioMuted\(\)\) return null;/);
 });
