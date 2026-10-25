@@ -82,8 +82,8 @@ class GameAudioEngine {
   private musicEnabled = true;
   /** True until the app knows the player's sound settings (holdUntilSettings / settingsKnown). */
   private settingsPending = false;
-  /** Dev only: EXPO_PUBLIC_STUDIO_MUTE=1 keeps studio simulators silent (master gain pinned to 0). */
-  private readonly studioMute = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
+  /** EXPO_PUBLIC_STUDIO_MUTE=1 (lane tooling only, dev and release-like JS) keeps test simulators silent (master gain pinned to 0). */
+  private readonly studioMute = process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
   private masterVolume = this.studioMute ? 0 : 1;
   private busGain: Record<Bus, number> = { ...BUS_DEFAULT };
   private ducks: Duck[] = [];

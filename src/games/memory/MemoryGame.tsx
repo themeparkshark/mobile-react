@@ -23,6 +23,7 @@
  */
 
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import TapHint, { TAP_HINT_SIZE } from '../../components/TapHint';
 import { Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -107,7 +108,7 @@ import { SharkStage, type SharkStageHandle } from './SharkStage';
 import { BoardFxOver, BoardFxUnder, NO_ARC, type ArcState, type FlashRects, type RippleState, type RopeState } from './BoardFx';
 import { AwningCallouts, BoothFront, marqueeChain, marqueeFizzle, marqueeFlash, useMarquee, type AwningCalloutsHandle, type PrizeEntry } from './MemoryBooth';
 import { FlightLayer, type FlightLayerHandle } from './FlightLayer';
-import { MemoryResults, type MemoryResultsData, type ResultsNumber } from './MemoryResults';
+import { FIRST_WIN_ART, MemoryResults, type MemoryResultsData, type ResultsNumber } from './MemoryResults';
 import { FLIP_MS, FLIP_SHOWTIME_MS, MM, hitStopFor, ladderStep, starsFor as tierStars } from './theme';
 import { boothGeo, hitSlot as geoHitSlot, slotCenter, slotXY, waveStep, type BoothGeo } from './layout';
 import {
@@ -167,6 +168,79 @@ const GULL_GRAB = require('../../assets/games/memory/studio/gull_grab.png');
 const GULL_OFF = require('../../assets/games/memory/studio/gull_takeoff.png');
 const TIDE_ARROW = require('../../assets/games/memory/studio/tide_arrow.png');
 const HALO = require('../../assets/games/memory/v8/fx/glow_halo_2.png');
+// Existing carnival art reused for the warm-up sky (no new art): Sharky's bunting and this game's own
+// outlined cloud (the same line art as Finn's dust puffs, not a flat blob).
+/** How long the warm-up waits for a first tap before the pointing hand shows. */
+export const WARMUP_HINT_DELAY_MS = 2000;
+const SKY_BUNTING = require('../../assets/games/sharky/tide/v71/gate_rush_bunting.png');
+const SKY_CLOUD = require('../../assets/games/memory/v8/fx/cloud_puff_2.png');
+const SKY_CLOUD_SMALL = require('../../assets/games/memory/v8/fx/cloud_puff_1.png');
+/** cloud_puff_1 and cloud_puff_2 are 192 x 172. */
+const CLOUD_RATIO = 172 / 192;
+/** The park deck's coaster card (361 x 512): two of them side by side say "find two that match" with no words. */
+const MATCH_CUE_CARD = require('../../assets/games/memory/deck-park-coaster.png');
+const MATCH_CUE_RATIO = 512 / 361;
+
+/**
+ * Finn's warm-up: the 2-row board leaves a tall band of empty sky above the
+ * booth. A string of carnival bunting, four outlined clouds at different sizes
+ * and a picture cue (two matching coaster cards, the warm-up's how-to for a kid
+ * who cannot read yet) fill it, so the first screen a kid plays on looks like a
+ * midway, not a blank wall. Still images only (no animation, no battery cost),
+ * drawn behind everything.
+ */
+function WarmupSky({ g }: { g: BoothGeo }) {
+  // The sky band: from the top of the field to Finn's hat / the HUD plates.
+  const floor = Math.min(g.barker.y + 18, g.hud.y - 4);
+  if (floor < 110) {
+    // Short phones (iPhone SE): no sky band, but the two-card cue still shows, right of Finn, above the HUD plates.
+    // Finn's art fills the left ~40 %, the HUD plates sit lower on the right.
+    const cueH = Math.min(48, g.hud.y - 20);
+    if (cueH < 30) return null;
+    const cueW = cueH / MATCH_CUE_RATIO;
+    return <MatchCue top={Math.max(6, (g.hud.y - cueH) / 2 - 4)} left={g.W * 0.72 - (cueW * 2 + 10) / 2} h={cueH} />;
+  }
+  const w = g.W * 0.94;
+  const h = Math.min(w * (341 / 1024), floor * 0.5);
+  const bw = h * (1024 / 341);
+  const top = Math.max(10, Math.min(floor - h - 6, floor * 0.42));
+  const cloud = Math.min(96, floor * 0.34);
+  // The cue sits centred above the bunting, between the big clouds.
+  const cueH = Math.max(34, Math.min(64, top - 14));
+  const cueW = cueH / MATCH_CUE_RATIO;
+  const cueTop = Math.max(6, (top - cueH) / 2);
+  const clouds: readonly { src: number; left?: number; right?: number; top: number; size: number; flip?: boolean }[] = [
+    { src: SKY_CLOUD, left: g.W * 0.04, top: Math.max(6, top - cloud * 0.9), size: cloud },
+    { src: SKY_CLOUD, right: g.W * 0.05, top: Math.max(4, top - cloud * 1.15), size: cloud * 0.72, flip: true },
+    { src: SKY_CLOUD_SMALL, left: g.W * 0.27, top: Math.max(2, top - cloud * 1.2), size: cloud * 0.42 },
+    // Under the bunting on the right, clear of the flags and of Finn on the left.
+    { src: SKY_CLOUD_SMALL, right: g.W * 0.12, top: Math.min(top + h + 12, floor - cloud * 0.5 * CLOUD_RATIO - 40), size: cloud * 0.5, flip: true },
+  ];
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View style={StyleSheet.absoluteFill} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        {clouds.map((c, i) => <Image key={i} source={c.src} resizeMode="contain"
+          style={{ position: 'absolute', left: c.left, right: c.right, top: c.top, width: c.size, height: c.size * CLOUD_RATIO,
+            transform: c.flip ? [{ scaleX: -1 }] : undefined }} />)}
+        <Image source={SKY_BUNTING} resizeMode="contain"
+          style={{ position: 'absolute', left: (g.W - bw) / 2, top, width: bw, height: h }} />
+      </View>
+      <MatchCue top={cueTop} left={(g.W - cueW * 2 - 10) / 2} h={cueH} />
+    </View>
+  );
+}
+
+/** Two of the same card, side by side: the warm-up's whole rule as one picture. */
+function MatchCue({ top, left, h }: { top: number; left: number; h: number }) {
+  const w = h / MATCH_CUE_RATIO;
+  return (
+    <View accessible accessibilityRole="image" accessibilityLabel="Find two cards that match" pointerEvents="none"
+      style={{ position: 'absolute', top, left, flexDirection: 'row', gap: 10 }}>
+      <Image source={MATCH_CUE_CARD} resizeMode="contain" style={{ width: w, height: h, transform: [{ rotate: '-8deg' }] }} />
+      <Image source={MATCH_CUE_CARD} resizeMode="contain" style={{ width: w, height: h, transform: [{ rotate: '8deg' }] }} />
+    </View>
+  );
+}
 const JINGLE = require('../../../assets/sounds/redeem_modal_jingle.mp3');
 
 export interface MemoryGameProps {
@@ -267,6 +341,19 @@ interface RaceState {
   emotes: Record<string, { id: EmoteId; at: number }>;
   layout: Layout;
 }
+
+/** What finishRun read from the saved records, for the result card. */
+interface EndExtras {
+  isNewBest: boolean;
+  rewards: RunRewards | null;
+  daily: DailySummary | null;
+  edition: CoinEdition | null;
+  upgraded: boolean;
+  ridePb: number | null;
+  newRidePb: boolean;
+  extra: string[];
+}
+const NO_END_EXTRAS: EndExtras = { isNewBest: false, rewards: null, daily: null, edition: null, upgraded: false, ridePb: null, newRidePb: false, extra: [] };
 
 export default function MemoryGame({
   visible,
@@ -916,23 +1003,158 @@ export default function MemoryGame({
     }
   }, [deck.id, deck.label, deck.symbols.length, taskName]);
 
+  /** The run whose result card is set, and the end watchdog (see armEndWatch). */
+  const endWatch = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resultFor = useRef<Run | null>(null);
+  /**
+   * The end of a run as a result card, built with no waiting: everything the
+   * card shows is passed in. finishRun fills in the saved records (bests,
+   * album, ride edition); the warm-up and the end watchdog pass none, so the
+   * card can never wait on storage.
+   */
+  const showEnd = useCallback((r: Run, won: boolean, x: EndExtras = NO_END_EXTRAS) => {
+    const e = r.eng;
+    const grades = gradesFor(e);
+    const stars = r.mode === 'ride' ? rideStars(e) : r.mode === 'daily' ? dailyStars(e) : r.mode === 'warmup' ? (won ? 3 : 0) : timeAttackStars(r.cleared);
+    const finalScore = e.score;
+    const verdict = r.src.verdict();
+    const perfect = e.status === 'cleared' && e.turns <= perfectOf(e);
+    const chargedMs = Math.round(chargedElapsed(e));
+    const par = r.mode === 'daily' ? fairParFor(e.pairsTotal) : parFor(e.pairsTotal);
+    const numbers: ResultsNumber[] = [];
+    let banner = won ? 'CLEARED!' : memoryLossBanner(e.pairs, e.pairsTotal, e.status === 'out');
+    let tally: MemoryResultsData['tally'] = null;
+    let chipText: string | null = null;
+    let crownHint: string | null = null;
+    if (r.mode === 'ride') {
+      numbers.push({ label: 'TURNS', value: `${e.turns}/${par}`, hot: e.turns <= par });
+      if (!r.signal) numbers.push({ label: 'TIME', value: `${(chargedMs / 1000).toFixed(1)}s` });
+      if (x.ridePb != null && !r.signal) numbers.push({ label: 'BEST', value: `${(x.ridePb / 1000).toFixed(1)}s`, hot: x.newRidePb });
+      if (won) numbers.push({ label: 'SCORE', value: finalScore.toLocaleString('en-US') });
+      // The luck chip contradicts PERFECT!, and it is jargon on a loss.
+      chipText = won && !perfect ? luckyChip(e) : null;
+      if (perfect && won) banner = 'PERFECT!';
+      // Three crowns but not PERFECT (turns): warm banner plus how to get PERFECT, so 100% never reads as "not perfect".
+      else if (won && stars >= 3) {
+        banner = 'AMAZING!';
+        crownHint = `Clear it in ${perfectOf(e)} turns for PERFECT!`;
+      }
+    } else if (r.mode === 'timeAttack') {
+      banner = `BOARD ${e.board}`;
+      tally = { parts: `${r.cleared} BOARDS · CHAIN ${e.maxChain} · ${e.showtimes} SHOWTIME`, total: finalScore };
+      numbers.push({ label: 'BOARDS', value: `${r.cleared}` });
+      numbers.push({ label: 'BEST CHAIN', value: `${e.maxChain}` });
+    } else if (r.mode === 'daily') {
+      banner = won ? 'DAILY DONE' : `OUT ${e.pairs}/${e.pairsTotal}`;
+      numbers.push({ label: 'TURNS', value: `${e.turns}`, hot: won && e.turns <= par });
+      numbers.push({ label: 'PAR', value: `${par}` });
+      numbers.push({ label: 'STRIKES', value: `${e.strikes}/2` });
+    } else if (r.mode === 'warmup') {
+      banner = won ? 'YOU DID IT!' : 'CLEARED!';
+      numbers.push({ label: 'TURNS', value: `${e.turns}` });
+    }
+    const data: MemoryResultsData = {
+      mode: r.mode === 'race' ? 'race' : r.mode,
+      banner,
+      won,
+      recallPct: recallPct(e),
+      edition: x.edition,
+      upgraded: x.upgraded,
+      stars,
+      numbers,
+      tally,
+      chip: chipText,
+      grades: r.mode === 'warmup' ? null : { memory: grades.memory, speed: grades.speed, chain: grades.chain },
+      tip: r.mode === 'warmup' ? 'Remember where you saw each card. That is the whole game.' : grades.tip,
+      newBest: r.mode === 'ride' && !won ? false : x.isNewBest || x.newRidePb,
+      rewards: r.mode === 'warmup' ? null : x.rewards,
+      daily: x.daily,
+      extraRewards: x.extra,
+      againLabel: r.mode === 'ride' ? null : r.mode === 'warmup' ? null : 'PLAY AGAIN',
+      crownHint,
+    };
+    resultFor.current = r;
+    setScore(finalScore);
+    setResultData(data);
+    setResult({
+      score: finalScore,
+      stars,
+      maxCombo: e.maxChain,
+      message: banner,
+      note: grades.tip,
+      meta: {
+        game: 'memory',
+        engine: ENGINE_VERSION,
+        mode: r.mode,
+        score: finalScore,
+        duration: Math.round(e.elapsedMs),
+        charged_ms: chargedMs,
+        signal_mode: r.signal,
+        seed: baseSeed,
+        tryIndex: r.tryIndex,
+        ranked: r.ranked,
+        runIndex: r.runIndex,
+        deck: deck.id,
+        turns: e.turns,
+        pairs: e.pairs,
+        maxCombo: e.maxChain,
+        showtimes: e.showtimes,
+        stars,
+        edition: x.edition,
+        verdict,
+        log: e.log.slice(),
+        walking: walkingRef.current,
+      },
+    });
+  }, [baseSeed, deck.id]);
+
+  /**
+   * A guaranteed end. Once a board is cleared (or a run ends), the result card
+   * must arrive even if a beat timer is lost or a save never answers. This
+   * timer lives outside `later`, so clearTimers can never cancel it.
+   */
+  const armEndWatch = useCallback((r: Run, won: boolean, ms: number) => {
+    if (endWatch.current) clearTimeout(endWatch.current);
+    endWatch.current = setTimeout(() => {
+      endWatch.current = null;
+      if (runRef.current !== r || resultFor.current === r) return;
+      if (!r.ended) {
+        r.ended = true;
+        r.playing = false;
+        GameAudio.music.stop(400);
+      }
+      // A ride win still mints its coin edition, even on the watchdog's card.
+      const edition = r.mode === 'ride' && won ? editionForStars(rideStars(r.eng)) : null;
+      showEnd(r, won, { ...NO_END_EXTRAS, edition });
+    }, ms);
+  }, [showEnd]);
+  useEffect(() => () => { if (endWatch.current) clearTimeout(endWatch.current); }, []);
+
   const finishRun = useCallback((won: boolean) => {
     const r = runRef.current;
     if (!r || r.ended) return;
     r.ended = true;
     r.playing = false;
     const e = r.eng;
-    const grades = gradesFor(e);
     const stars = r.mode === 'ride' ? rideStars(e) : r.mode === 'daily' ? dailyStars(e) : r.mode === 'warmup' ? (won ? 3 : 0) : timeAttackStars(r.cleared);
     const finalScore = e.score;
     setScore(finalScore);
     GameAudio.music.stop(400);
     GameAudio.music.setState('open', 0);
-    const verdict = r.src.verdict();
     const perfect = e.status === 'cleared' && e.turns <= perfectOf(e);
     const chargedMs = Math.round(chargedElapsed(e));
+    const pbKey = r.mode === 'ride' ? 0 : r.mode === 'daily' ? 2 : r.mode === 'warmup' ? 3 : 1;
+    if (r.mode === 'warmup') {
+      // Finn's warm-up card shows nothing that is saved, so it never waits:
+      // the card comes on this frame and the saves run behind it.
+      showEnd(r, won);
+      void savePersonalBest(pbKey, finalScore).catch(() => undefined);
+      void collectRewards(r, won, perfect, stars).catch(() => undefined);
+      return;
+    }
+    // Saves are best effort; if one never answers, the watchdog shows the card anyway.
+    armEndWatch(r, won, 8000);
     void (async () => {
-      const pbKey = r.mode === 'ride' ? 0 : r.mode === 'daily' ? 2 : r.mode === 'warmup' ? 3 : 1;
       // Saving bests and records is on-device and best effort: a storage
       // failure must never leave the player on a dead board with no result.
       const pb = await savePersonalBest(pbKey, finalScore).catch(() => ({ best: finalScore, isNewBest: false }));
@@ -957,40 +1179,7 @@ export default function MemoryGame({
         await pushRankHistory(e.board).catch(() => undefined);
         await saveTaRuns((await loadTaRuns().catch(() => 0)) + 1).catch(() => undefined);
       }
-      if (runRef.current !== r) return;
-      const par = r.mode === 'daily' ? fairParFor(e.pairsTotal) : parFor(e.pairsTotal);
-      const numbers: ResultsNumber[] = [];
-      let banner = won ? 'CLEARED!' : memoryLossBanner(e.pairs, e.pairsTotal, e.status === 'out');
-      let tally: MemoryResultsData['tally'] = null;
-      let chipText: string | null = null;
-      let crownHint: string | null = null;
-      if (r.mode === 'ride') {
-        numbers.push({ label: 'TURNS', value: `${e.turns}/${par}`, hot: e.turns <= par });
-        if (!r.signal) numbers.push({ label: 'TIME', value: `${(chargedMs / 1000).toFixed(1)}s` });
-        if (ridePb != null && !r.signal) numbers.push({ label: 'BEST', value: `${(ridePb / 1000).toFixed(1)}s`, hot: newRidePb });
-        if (won) numbers.push({ label: 'SCORE', value: finalScore.toLocaleString('en-US') });
-        // The luck chip contradicts PERFECT!, and it is jargon on a loss.
-        chipText = won && !perfect ? luckyChip(e) : null;
-        if (perfect && won) banner = 'PERFECT!';
-        // Three crowns but not PERFECT (turns): warm banner plus how to get PERFECT, so 100% never reads as "not perfect".
-        else if (won && stars >= 3) {
-          banner = 'AMAZING!';
-          crownHint = `Clear it in ${perfectOf(e)} turns for PERFECT!`;
-        }
-      } else if (r.mode === 'timeAttack') {
-        banner = `BOARD ${e.board}`;
-        tally = { parts: `${r.cleared} BOARDS · CHAIN ${e.maxChain} · ${e.showtimes} SHOWTIME`, total: finalScore };
-        numbers.push({ label: 'BOARDS', value: `${r.cleared}` });
-        numbers.push({ label: 'BEST CHAIN', value: `${e.maxChain}` });
-      } else if (r.mode === 'daily') {
-        banner = won ? 'DAILY DONE' : `OUT ${e.pairs}/${e.pairsTotal}`;
-        numbers.push({ label: 'TURNS', value: `${e.turns}`, hot: won && e.turns <= par });
-        numbers.push({ label: 'PAR', value: `${par}` });
-        numbers.push({ label: 'STRIKES', value: `${e.strikes}/2` });
-      } else if (r.mode === 'warmup') {
-        banner = 'CLEARED!';
-        numbers.push({ label: 'TURNS', value: `${e.turns}` });
-      }
+      if (runRef.current !== r || resultFor.current === r) return;
       const extra: string[] = [];
       if (upgraded && edition) extra.push(`UPGRADED TO ${edition.toUpperCase()}`);
       if (r.mode === 'timeAttack' || r.mode === 'ride' || r.mode === 'daily') {
@@ -1003,59 +1192,10 @@ export default function MemoryGame({
           // Mastery waits for the next run.
         }
       }
-      const data: MemoryResultsData = {
-        mode: r.mode === 'race' ? 'race' : r.mode,
-        banner,
-        won,
-        recallPct: recallPct(e),
-        edition,
-        upgraded,
-        stars,
-        numbers,
-        tally,
-        chip: chipText,
-        grades: r.mode === 'warmup' ? null : { memory: grades.memory, speed: grades.speed, chain: grades.chain },
-        tip: r.mode === 'warmup' ? 'Remember where you saw each card. That is the whole game.' : grades.tip,
-        newBest: r.mode === 'ride' && !won ? false : pb.isNewBest || newRidePb,
-        rewards: r.mode === 'warmup' ? null : rewards,
-        daily: dailySum,
-        extraRewards: extra,
-        againLabel: r.mode === 'ride' ? null : r.mode === 'warmup' ? null : 'PLAY AGAIN',
-        crownHint,
-      };
-      setResultData(data);
-      setResult({
-        score: finalScore,
-        stars,
-        maxCombo: e.maxChain,
-        message: banner,
-        note: grades.tip,
-        meta: {
-          game: 'memory',
-          engine: ENGINE_VERSION,
-          mode: r.mode,
-          score: finalScore,
-          duration: Math.round(e.elapsedMs),
-          charged_ms: chargedMs,
-          signal_mode: r.signal,
-          seed: baseSeed,
-          tryIndex: r.tryIndex,
-          ranked: r.ranked,
-          runIndex: r.runIndex,
-          deck: deck.id,
-          turns: e.turns,
-          pairs: e.pairs,
-          maxCombo: e.maxChain,
-          showtimes: e.showtimes,
-          stars,
-          edition,
-          verdict,
-          log: e.log.slice(),
-          walking: walkingRef.current,
-        },
-      });
+      if (runRef.current !== r || resultFor.current === r) return;
+      showEnd(r, won, { isNewBest: pb.isNewBest, rewards, daily: dailySum, edition, upgraded, ridePb, newRidePb, extra });
     })();
-  }, [baseSeed, collectRewards, deck.id, rideKey]);
+  }, [armEndWatch, collectRewards, deck.id, deck.label, rideKey, showEnd]);
 
   // ---------------------------------------------------------------------------
   // Board clear (3 beats on the 232ms grid) and the Final Pair
@@ -1070,6 +1210,10 @@ export default function MemoryGame({
     GameAudio.playLadder('mm_match', 7, { volume: 0.9 });
     GameAudio.play('mm_brass_g');
     Haptic.success();
+    // Finn's warm-up: the CLEARED sign starts dropping the moment the last pair
+    // goes, so a first win never reads as an empty board (other modes keep the 3-beat slam).
+    const signNow = r.mode === 'warmup';
+    if (signNow) awning.current?.sign('CLEARED');
     // Beat 2: counter bounces slot by slot, coin fountains from the post tops, fist pump, scene shake.
     later(EIGHTH_MS, () => {
       setBounceKey((k) => k + 1);
@@ -1087,7 +1231,7 @@ export default function MemoryGame({
       fx.current?.burst('confetti', g.W / 2, g.awning.y + g.awning.h, { count: reducedMotion ? 6 : 60 });
       GameAudio.play('mm_board_clear');
       GameAudio.duck(6, 60, 300, 300);
-      if (r.mode !== 'ride' && r.mode !== 'daily') awning.current?.sign('CLEARED');
+      if (r.mode !== 'ride' && r.mode !== 'daily' && !signNow) awning.current?.sign('CLEARED');
     });
     later(700, () => { if (!calm) camera.frame(1); });
   }, [calm, camera, later, reducedMotion]);
@@ -1975,12 +2119,23 @@ export default function MemoryGame({
             break;
           }
           const m = lastMatch;
+          // The board is clear: the result card is guaranteed from here, even
+          // if a beat timer is lost (see armEndWatch).
+          armEndWatch(r, true, r.mode === 'warmup' ? 1800 : 7000);
           if (r.mode === 'warmup') {
             r.busy = true;
-            later(flipMs + 110, () => {
-              clearBeats(r, g, m ? m.b : 0);
-              later(EIGHTH_MS * 4, () => finishRun(true));
-            });
+            if (reducedMotion) {
+              // Still: the CLEARED sign lands the instant the last pair matches, then the card.
+              awning.current?.sign('CLEARED');
+              GameAudio.play('mm_board_clear');
+              Haptic.success();
+              later(700, () => finishRun(true));
+            } else {
+              later(flipMs + 110, () => {
+                clearBeats(r, g, m ? m.b : 0);
+                later(EIGHTH_MS * 4, () => finishRun(true));
+              });
+            }
           } else if (m) finalPair(m.a, m.b, ev.bonus, ev.secondsLeft);
           else finishRun(true);
           break;
@@ -2009,7 +2164,7 @@ export default function MemoryGame({
       r.moved.clear();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardCleared, calm, camera, clearBeats, deck, endRace, finalPair, finishRun, flags.scoreOnHud, gameNow, later, reducedMotion, sendAttack, send, showTip, syncHud, timeoutScene]);
+  }, [armEndWatch, boardCleared, calm, camera, clearBeats, deck, endRace, finalPair, finishRun, flags.scoreOnHud, gameNow, later, reducedMotion, sendAttack, send, showTip, syncHud, timeoutScene]);
   applyEventsRef.current = applyEvents;
 
   // ---------------------------------------------------------------------------
@@ -2100,12 +2255,18 @@ export default function MemoryGame({
     }
   }, [applyEvents, gameNow, send, syncHud]);
 
+  // Finn's warm-up: a pointing hand on a card until the first tap, so a kid who cannot read
+  // the header still knows what to do (TapHint waits 2 s, so a quick kid never sees it).
+  const [warmHint, setWarmHint] = useState(mode === 'warmup');
+  const warmHintRef = useRef(mode === 'warmup');
   const tapSlotRef = useRef<(slot: number, pipelined?: boolean) => void>(() => undefined);
   const tapSlot = useCallback((slot: number, pipelined = false) => {
     const r = runRef.current;
     if (!r) return;
     if (r.finalAt && !r.ended) { skipFinal(); return; }
     if (!r.playing || r.ended || r.pausedAt != null || slot < 0) return;
+    // The warm-up's pointing hand leaves on the kid's first real tap.
+    if (warmHintRef.current) { warmHintRef.current = false; setWarmHint(false); }
     // A tap during a pending reveal is buffered (one), sent the moment it's legal.
     if (r.pending) {
       if (r.eng.up.indexOf(slot) < 0) r.buffered = slot;
@@ -2310,12 +2471,14 @@ export default function MemoryGame({
   const ids = useMemo(() => Array.from({ length: n }, (_, i) => i), [n]);
   const r = runRef.current;
   const g = geo;
-  const title = mode === 'ride' ? 'Memory Match' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : mode === 'warmup' ? 'Memory Warm-up' : 'Memory Match';
+  const title = mode === 'ride' ? 'Memory Match' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : mode === 'warmup' ? 'Finn’s Warm-up' : 'Memory Match';
   const subtitle = mode === 'ride'
     ? `${r && r.tryIndex > 0 ? `Try ${r.tryIndex + 1} of ${RIDE_TRIES} · ` : ''}${taskName || deck.label}${r?.signal ? ' · Low signal' : ''}`
     : mode === 'timeAttack' ? `${deck.label} · Board ${hud.board}`
     : mode === 'daily' ? `${deck.label} · ${daily?.ranked && runIndex === 0 ? 'Ranked' : 'Practice'}`
-    : mode === 'race' ? `${deck.label} · Practice race` : deck.label;
+    : mode === 'race' ? `${deck.label} · Practice race`
+    // The warm-up's how-to is a picture in the sky (two matching cards), not small header text.
+    : mode === 'warmup' ? undefined : deck.label;
   const notchFrac = mode === 'ride' && !(r?.signal) ? 15000 / 45000 : -1;
   const raceSharks = SHARKS;
   void raceSharks;
@@ -2357,6 +2520,13 @@ export default function MemoryGame({
         <LinearGradient colors={['#0b80c4', '#35a8e6', '#bfe5ff']} style={StyleSheet.absoluteFill} />
         {g ? (
           <>
+            {mode === 'warmup' ? <WarmupSky g={g} /> : null}
+            {/* The first-win card's pictures, drawn invisibly while the kid plays, so the card is whole on frame one. */}
+            {mode === 'warmup' ? (
+              <View style={styles.preload} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                {FIRST_WIN_ART.map((src, i) => <Image key={i} source={src} style={styles.preloadImg} />)}
+              </View>
+            ) : null}
             {/* Scene layer: backdrop rays and the booth front take camera beats; the board never does. */}
             <Animated.View style={[StyleSheet.absoluteFill, camera.style]} pointerEvents="none">
               <Rays cx={g.W / 2} cy={g.grid.y + g.grid.h / 2} r={Math.max(g.W, g.H)} amount={rays} still={reducedMotion} />
@@ -2425,6 +2595,11 @@ export default function MemoryGame({
               style={[styles.abs, { top: tideAt.y - g.ch * 0.32, width: g.cw * 1.1, height: g.ch * 0.64 }, tideStyle]} />
 
             <FxStage ref={fx} width={g.W} height={g.H} reducedMotion={reducedMotion} style={StyleSheet.absoluteFill} />
+            {mode === 'warmup' && warmHint && !resultData ? (
+              // Fingertip (bottom centre of the hand) on the middle of the top row's second card.
+              <TapHint delay={WARMUP_HINT_DELAY_MS} style={{ left: g.grid.x + g.cw * 1.5 + g.gap - TAP_HINT_SIZE.width / 2,
+                top: g.grid.y + g.ch * 0.55 - TAP_HINT_SIZE.height }} />
+            ) : null}
 
             {/* One tap gesture over the whole felt. */}
             <GestureDetector gesture={tap}>
@@ -2551,6 +2726,8 @@ function ArrowGlyph({ dir }: { dir: 'h' | 'v' }) {
 }
 
 const styles = StyleSheet.create({
+  preload: { position: 'absolute', left: 0, top: 0, width: 24, height: 24, opacity: 0, overflow: 'hidden' },
+  preloadImg: { position: 'absolute', width: 24, height: 24 },
   field: { flex: 1, overflow: 'hidden' },
   abs: { position: 'absolute', left: 0, top: 0 },
   hud: { position: 'absolute', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },

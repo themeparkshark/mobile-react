@@ -314,8 +314,11 @@ test('GameAudio: with sound effects and music both off nothing starts the audio 
 
 test('the player\'s Music setting reaches the game audio engine, like Sound Effects', () => {
   const provider = fs.readFileSync(path.join(root, 'src/context/SoundEffectProvider.tsx'), 'utf8');
-  assert.match(provider, /SFX\.setEnabled\(!\(isReady && !player\?\.enabled_sound_effects\)\);/);
-  assert.match(provider, /SFX\.setMusicEnabled\(!\(isReady && !player\?\.enabled_music\)\);/);
+  // Both follow sfxPolicy: signed-in players by their own setting, guests hear the game.
+  assert.match(provider, /sfxAllowed\(\{ isReady, signedIn: !!player, playerSetting: player\?\.enabled_sound_effects/);
+  assert.match(provider, /SFX\.setEnabled\(allowed\);/);
+  assert.match(provider, /musicAllowed = sfxAllowed\(\{ isReady, signedIn: !!player, playerSetting: player\?\.enabled_music/);
+  assert.match(provider, /SFX\.setMusicEnabled\(musicAllowed\);/);
   assert.match(fs.readFileSync(path.join(root, 'src/gamekit/SFX.ts'), 'utf8'), /setMusicEnabled\(value: boolean\): void \{\s*GameAudio\.setMusicEnabled\(value\);/);
 });
 

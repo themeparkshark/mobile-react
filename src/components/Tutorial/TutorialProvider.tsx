@@ -1,5 +1,5 @@
 /**
- * TutorialProvider — Context provider that manages tutorial state
+ * TutorialProvider: Context provider that manages tutorial state
  * 
  * Tracks which tutorials have been completed (persisted to AsyncStorage),
  * manages the current tutorial sequence, and provides methods to
@@ -8,19 +8,22 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TutorialContextType, TutorialSequence, TutorialStep, SpotlightTarget } from './types';
-import { getStepsForSequence } from './steps';
+import { getStepsForSequence, HOME_LOOKING_MS } from './steps';
 import { teacherBottomOffset } from './tutorialLayout';
 import { Dimensions } from 'react-native';
 import SpotlightOverlay from './SpotlightOverlay';
 import TeacherShark from './TeacherShark';
 import MemoryGame from '../../games/memory/MemoryGame';
 import { AuthContext } from '../../context/AuthProvider';
-// Sounds disabled temporarily — will re-enable once tutorial flow is stable
+import { claimGuestWarmup } from '../../services/guestTaste';
+// Sounds disabled temporarily: will re-enable once tutorial flow is stable
 // import { SoundEffectContext } from '../../context/SoundEffectProvider';
 
 const STORAGE_KEY = '@tps_tutorial_completed';
+/** Guides that run over the map, where the footer's compass rises into the screen. */
+const MAP_SEQUENCES = new Set<TutorialSequence>(['onboarding', 'home_first_find', 'park_arrival']);
 
-/** All tutorial sequences — used to auto-complete for existing players */
+/** All tutorial sequences: used to auto-complete for existing players */
 const ALL_SEQUENCES: TutorialSequence[] = [
   'onboarding', 'park_arrival', 'park', 'store', 'gym', 'community_center', 'friends', 'pins',
 ];
@@ -90,6 +93,22 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     }).catch(() => setLoaded(true)); // An unreadable store still lets tutorials run.
   }, []);
 
+  // A guest who won Finn's warm-up before signing in keeps it, but only the
+  // first account after the taste claims it (a sibling's new account does not).
+  // Re-read when the account changes, since the guest plays after this provider mounts.
+  // Onboarding waits for this check, so a new account never starts the wrong steps.
+  const [guestCheck, setGuestCheck] = useState<{ id: number | null; played: boolean }>({ id: null, played: false });
+  const playerId = player?.id ?? null;
+  useEffect(() => {
+    let current = true;
+    void Promise.resolve().then(() => claimGuestWarmup(playerId))
+      .then(played => { if (current) setGuestCheck({ id: playerId, played: played === true }); })
+      .catch(() => { if (current) setGuestCheck({ id: playerId, played: false }); });
+    return () => { current = false; };
+  }, [playerId]);
+  const guestChecked = guestCheck.id === playerId;
+  const guestPlayed = guestChecked && guestCheck.played;
+
   // Auto-complete all tutorials for existing players (handles a reinstall or cache wipe).
   // Checked once per install load: after "Replay Tutorials" the empty set is on purpose.
   const existingPlayerChecked = useRef(false);
@@ -141,28 +160,51 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
         }
       });
     } else {
-      // Ref not found — skip spotlight
+      // Ref not found: skip spotlight
       setSpotlightTarget(null);
     }
   }, []);
 
   // Start a tutorial sequence
-  const startTutorial = useCallback((sequence: TutorialSequence, options?: { inPark?: boolean }) => {
-    // Don't start until AsyncStorage has loaded — avoids replaying on fresh load
+  const startTutorial = useCallback((sequence: TutorialSequence, options?: { inPark?: boolean; findReady?: boolean; looking?: boolean }) => {
+    // Don't start until AsyncStorage has loaded: avoids replaying on fresh load
     if (!loaded) return;
     if (completedSequences.has(sequence)) return;
     
     if (isActive) return;
-    const steps = getStepsForSequence(sequence, options);
+    if ((sequence === 'onboarding' || sequence === 'park_arrival') && !guestChecked) return;
+    const steps = getStepsForSequence(sequence, { ...options, guestPlayed });
     if (steps.length === 0) return;
 
     inParkOnboardingRef.current = sequence === 'onboarding' && !!options?.inPark;
+    homeHelloRef.current = sequence === 'onboarding' && !options?.inPark && options?.findReady === false;
     setCurrentSequence(sequence);
     setCurrentSteps(steps);
     setCurrentIndex(0);
     setIsActive(true);
 
-  }, [loaded, isActive, completedSequences]);
+  }, [loaded, isActive, completedSequences, guestPlayed, guestChecked]);
+
+  // At home Finn may start before the first find has landed (a slow
+  // connection). When it lands while he is still on his hello, his line
+  // switches from "walk around" to "it landed right next to you".
+  const homeHelloRef = useRef(false);
+  const findLanded = useCallback(() => {
+    if (!isActive || currentSequence !== 'onboarding' || !homeHelloRef.current || currentIndex !== 0) return;
+    homeHelloRef.current = false;
+    setCurrentSteps(getStepsForSequence('onboarding', { findReady: true, guestPlayed }));
+  }, [isActive, currentSequence, currentIndex, guestPlayed]);
+
+  // Finn sniffing for the first find: if none lands in HOME_LOOKING_MS, he
+  // says how finds work instead ("walk around"), with Let's hunt!.
+  const lookingStep = isActive && !!currentSteps[currentIndex]?.waitsForFind;
+  useEffect(() => {
+    if (!lookingStep) return undefined;
+    const timer = setTimeout(() => {
+      setCurrentSteps(getStepsForSequence('onboarding', { findReady: false, guestPlayed }));
+    }, HOME_LOOKING_MS);
+    return () => clearTimeout(timer);
+  }, [lookingStep, guestPlayed]);
 
   // Advance to next step
   const nextStep = useCallback(() => {
@@ -284,6 +326,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     currentIndex,
     totalSteps: currentSteps.length,
     startTutorial,
+    findLanded,
     nextStep,
     skipTutorial,
     hasCompleted,
@@ -295,13 +338,13 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     <TutorialContext.Provider value={contextValue}>
       {children}
 
-      {/* Tutorial Overlay — renders above everything */}
+      {/* Tutorial Overlay: renders above everything */}
       {isActive && currentStep && !firstPlayOpen && (
         <>
           <SpotlightOverlay
             target={spotlightTarget}
             opacity={0.55}
-            onPress={currentStep.activity ? undefined : nextStep}
+            onPress={currentStep.activity || currentStep.waitsForFind ? undefined : nextStep}
             onSpotlightPress={currentStep.interactive ? nextStep : undefined}
             spotlightTappable={currentStep.interactive}
           />
@@ -309,18 +352,21 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
             title={currentStep.title}
             text={currentStep.text}
             subtitle={currentStep.subtitle}
+            picture={currentStep.picture}
+            beside={currentStep.beside}
             mood={currentStep.sharkMood}
             position={currentStep.sharkPosition}
             nextText={currentStep.nextText}
             showSkip={currentStep.showSkip}
-            showNext={!currentStep.interactive}
+            showNext={!currentStep.interactive && !currentStep.waitsForFind}
             stepIndex={currentIndex}
             totalSteps={currentSteps.length}
             onNext={currentStep.activity ? startFirstPlay : nextStep}
             nextLoading={firstPlayStarting}
             onSkip={skipTutorial}
             bottomOffset={teacherBottomOffset(currentStep, spotlightTarget, Dimensions.get('window').height,
-              currentSequence === 'park_arrival' || inParkOnboardingRef.current ? 120 : 20)}
+              // Map guides stand Finn above the MAP compass, never on it.
+              MAP_SEQUENCES.has(currentSequence as TutorialSequence) ? 120 : 20)}
           />
         </>
       )}

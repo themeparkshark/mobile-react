@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { Alert } from 'react-native';
+import { gameAlert } from '../ui/GameDialog';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from './useCrumbs';
@@ -36,21 +36,14 @@ export default function usePermissions() {
         return true;
       }
 
-      Alert.alert(
-        prompts.permissions[permission as keyof typeof permissions],
-        '',
+      // A friendly ask in the game's own dialog: sign in is the big button, "Not now" keeps playing.
+      gameAlert(
+        prompts.permissions[permission as keyof typeof permissions] ?? 'Sign in to save your shark.',
+        'Sign in to make your own shark.',
         [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-          {
-            text: 'Ok',
-            onPress: async () => {
-              RootNavigation.navigate('Login');
-            },
-          },
-        ]
+          { text: 'Sign in', onPress: () => { RootNavigation.navigate('Login'); } },
+          { text: 'Not now', style: 'cancel' },
+        ],
       );
 
       return false;
