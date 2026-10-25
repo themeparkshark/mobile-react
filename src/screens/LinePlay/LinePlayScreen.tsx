@@ -187,7 +187,7 @@ import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { lineNudgeReady, linePlayTipReady } from '../../services/help/tipGate';
 import { chapterMissionIds, chapterPlayNow, railPageIcon, crewRowInBand, PAGE_FRAME_V, railBackAction, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIM_HOLD_MAX_MS, PAGES_DIP_MS, PAGES_DIP_OPACITY,
-  PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS, queueToastTop } from '../../services/lineplay/lineLayout';
+  PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS, queueToastSpot } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
 
@@ -981,6 +981,7 @@ export default function LinePlayScreen() {
   const [waitCardBottom, setWaitCardBottom] = useState<number | null>(null);
   /** Its top edge: a queue toast lands inside the card, under its top row and above Details. */
   const [waitCardTop, setWaitCardTop] = useState<number | null>(null);
+  const toastSpot = queueToastSpot(waitCardTop, waitCardBottom);
   const measureWaitCard = useCallback(() => {
     waitCardRef.current?.measureInWindow((x, y, _width, height) => {
       if (Number.isFinite(x) && Number.isFinite(y)) {
@@ -1598,7 +1599,7 @@ export default function LinePlayScreen() {
         style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} onVisibleChange={onPartTip} />
 
       {/* Toasts land inside the wait card between its top row and Details: never over the ride name, ARCADE, pause or PLAY. */}
-      <QueueToast message={toast} onDone={() => setToast(null)} top={queueToastTop(waitCardTop, waitCardBottom) ?? undefined} />
+      <QueueToast message={toast} onDone={() => setToast(null)} top={toastSpot?.top} slim={toastSpot?.slim} />
 
       {/* The game comes back under the 1; the 1 gets its full step, like the 3 and the 2, then fades. */}
       <ResumeCountdown active={resuming || resumeHandoff != null} onDone={() => {

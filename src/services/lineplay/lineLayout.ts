@@ -412,19 +412,22 @@ export function railPageIcon(kind: string | undefined): GameIconName | undefined
 /** The wait card's top row (ride name, ARCADE, pause) and its bottom row (Details), measured on an iPhone SE. */
 export const WAIT_CARD_TOP_ROW = 56;
 export const WAIT_CARD_DETAILS_ROW = 42;
-/** A queue toast's height with a two-line body. */
-export const QUEUE_TOAST_H = 80;
+/** A queue toast's height with a two-line body, and the slim one-line toast for a short card (no Ride Parts). */
+export const QUEUE_TOAST_H = 86;
+export const QUEUE_TOAST_SLIM_H = 54;
 /**
- * Where a queue toast lands: inside the wait card, between its top row and Details, so it never covers the
- * ride name, ARCADE, pause or Details (and never the page's PLAY below). A card too short for that band
- * (a moving line's compact card) puts it just under the card. Before the card is measured: null (the default spot).
+ * Where a queue toast lands: inside the wait card, centred between its top row and Details, so it never covers
+ * the ride name, ARCADE, pause or Details (and never the page's PLAY below). A short card (no Ride Parts) gets the
+ * slim one-line toast; a card too short even for that (a moving line's compact card) puts it just under the card.
+ * Before the card is measured: null (the default spot).
  */
-export function queueToastTop(cardTop: number | null, cardBottom: number | null): number | null {
+export function queueToastSpot(cardTop: number | null, cardBottom: number | null): { top: number; slim: boolean } | null {
   if (cardTop == null || cardBottom == null || cardBottom <= cardTop) return null;
   const highest = cardTop + WAIT_CARD_TOP_ROW;
-  const lowest = cardBottom - WAIT_CARD_DETAILS_ROW - QUEUE_TOAST_H;
-  if (lowest < highest) return cardBottom + 6;
-  return Math.round(lowest);
+  const band = cardBottom - WAIT_CARD_DETAILS_ROW - highest;
+  if (band >= QUEUE_TOAST_H) return { top: Math.round(highest + (band - QUEUE_TOAST_H) / 2), slim: false };
+  if (band >= QUEUE_TOAST_SLIM_H) return { top: Math.round(highest + (band - QUEUE_TOAST_SLIM_H) / 2), slim: true };
+  return { top: cardBottom + 6, slim: true };
 }
 
 /**
@@ -432,7 +435,7 @@ export function queueToastTop(cardTop: number | null, cardBottom: number | null)
  * page leads with what to do (its prompt and first choice) before the story, so a non-reader sees an action
  * without scrolling. 0 (not measured yet) keeps the full banner.
  */
-export const HERO_SLIM_PAGE = 180;
+export const HERO_SLIM_PAGE = 240;
 export function heroSlim(viewHeight: number): boolean {
   return viewHeight > 0 && viewHeight < HERO_SLIM_PAGE;
 }

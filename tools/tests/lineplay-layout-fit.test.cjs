@@ -855,14 +855,23 @@ test('one message asks at a time: the idle nudge never shows over a one-time tip
 
 test('a queue toast lands inside the wait card between its top row and Details, never over its buttons', () => {
   const m = layout();
-  // iPhone SE card (measured): top 92, bottom 315. Top row ends at 148, Details starts at 273.
-  const top = m.queueToastTop(92, 315);
-  assert.ok(top >= 92 + m.WAIT_CARD_TOP_ROW, 'below the ride name, ARCADE and pause');
-  assert.ok(top + m.QUEUE_TOAST_H <= 315 - m.WAIT_CARD_DETAILS_ROW, 'above Details');
-  assert.equal(m.queueToastTop(92, 200), 206, 'a card too short for the band: just under it');
-  assert.equal(m.queueToastTop(null, 315), null, 'not measured yet: the default spot');
-  assert.match(read(SCREEN), /<QueueToast message=\{toast\} onDone=\{\(\) => setToast\(null\)\} top=\{queueToastTop\(waitCardTop, waitCardBottom\) \?\? undefined\} \/>/);
-  assert.match(read('src/screens/LinePlay/components/QueueToast.tsx'), /style=\{\[styles\.wrap, top != null && \{ top \}\]\}/);
+  const inBand = (spot, top, bottom, h) => {
+    assert.ok(spot.top >= top + m.WAIT_CARD_TOP_ROW, 'below the ride name, ARCADE and pause');
+    assert.ok(spot.top + h <= bottom - m.WAIT_CARD_DETAILS_ROW, 'above Details');
+  };
+  // iPhone SE card with Ride Parts (measured): top 92, bottom 315: the full toast.
+  const tall = m.queueToastSpot(92, 315);
+  assert.equal(tall.slim, false); inBand(tall, 92, 315, m.QUEUE_TOAST_H);
+  // iPhone SE card with no Ride Parts at this ride (measured): top 91, bottom 245: the slim one-line toast.
+  const short = m.queueToastSpot(91, 245);
+  assert.equal(short.slim, true); inBand(short, 91, 245, m.QUEUE_TOAST_SLIM_H);
+  assert.deepEqual(plain(m.queueToastSpot(92, 180)), { top: 186, slim: true }, 'a moving line\'s compact card: just under it');
+  assert.equal(m.queueToastSpot(null, 315), null, 'not measured yet: the default spot');
+  assert.match(read(SCREEN), /<QueueToast message=\{toast\} onDone=\{\(\) => setToast\(null\)\} top=\{toastSpot\?\.top\} slim=\{toastSpot\?\.slim\} \/>/);
+  const toast = read('src/screens/LinePlay/components/QueueToast.tsx');
+  assert.match(toast, /style=\{\[styles\.wrap, top != null && \{ top \}\]\}/);
+  assert.match(toast, /toastSlim: \{ height: 54,/);
+  assert.equal(m.QUEUE_TOAST_SLIM_H, 54);
 });
 
 test('the arcade sheet slides in already full: its pictures are decoded while LinePlay is up', () => {
@@ -889,6 +898,7 @@ test('on a short window (iPhone SE) a page banner is one slim row and the clue p
   const m = layout();
   assert.equal(m.heroSlim(113), true, 'SE clue page window');
   assert.equal(m.heroSlim(0), false, 'before layout');
+  assert.equal(m.heroSlim(179), true, 'SE clue page window, short wait card (no Ride Parts)');
   assert.equal(m.heroSlim(260), false, 'taller phones keep the full banner');
   const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
   assert.match(slot, /const slim = heroSlim\(useContext\(PageHeightContext\)\);/);
