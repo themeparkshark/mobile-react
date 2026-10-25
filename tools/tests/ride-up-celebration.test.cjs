@@ -34,7 +34,7 @@ test('UI thread, power budget, Reduce Motion and Dim Flashing Lights', () => {
 
 test('mounted only when the queue really ended with boarding, and the chips land under its burst', () => {
   const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
-  assert.match(recap, /\{rideUp && <RideUpCelebration rideName=\{rideName\} short=\{rideUpShort\} origin=\{cannonFrom\} \/>\}/);
+  assert.match(recap, /\{rideUp && <RideUpCelebration rideName=\{rideName\} short=\{rideUpShort\} origin=\{cannonFrom\} onBuilt=\{cannonBuilt\} \/>\}/);
   assert.match(recap, /const rideUp = endReason === 'boarded'/);
   assert.match(recap, /rideUp \? rideUpStatStartsAt\(index, plan\)/, 'the earned row rolls out of the burst');
   assert.match(src, /return plan\.burstAt \+ index \* plan\.statStepMs;/);
@@ -42,7 +42,7 @@ test('mounted only when the queue really ended with boarding, and the chips land
 
 test('the recap\'s own header card is the stage: no veil, no second banner, the real title stamps', () => {
   const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
-  assert.match(recap, /<RideUpHero active=\{rideUp\} plan=\{rideUpPlan\} burstPoint=\{burstPoint\}>\{backdrop => \(/, 'the header card itself pops');
+  assert.match(recap, /<RideUpHero active=\{rideUp\} plan=\{rideUpPlan\} burstPoint=\{burstPoint\} onBuilt=\{heroBuilt\}>\{backdrop => \(/, 'the header card itself pops');
   assert.match(recap, /<RideUpKicker active=\{rideUp\} style=\{styles\.recapKicker\}>/, 'the existing title is the stamp');
   assert.doesNotMatch(src, /styles\.veil|veil:/, 'no full-page veil');
   assert.doesNotMatch(src, /YOUR RIDE&apos;S UP!/, 'no duplicate title banner');
@@ -124,6 +124,7 @@ test('wave 5 round 3: the payoff breaks out of the header: a cannon from the sha
   // Built in steps after the card's first frame (the burst layers never ride the recap's first commit).
   assert.match(fxSrc, /export const HERO_BUILD = 3;/);
   for (const at of [1, 2, 3]) assert.match(fxSrc, new RegExp(`<StepGate steps=\\{steps\\} at=\\{${at}\\}>`));
+  assert.match(fxSrc, /if \(step >= \(reduced \? 0 : HERO_BUILD\)\) onBuilt\?\.\(\);/);
 });
 
 test('wave 5 round 3: the earned chips are big (40 pt icons, 24 pt numbers) and a zero reads as nothing (dimmed, no tick)', () => {
@@ -173,7 +174,10 @@ test('wave 5 round 3: the ride-up starts on the frame the recap shows, once the 
   assert.match(recap, /const shown = useSharedValue\(rideUp \? 0\.012 : 1\);/, 'drawn at an invisible 1% until go');
   assert.match(recap, /onLoad=\{rideUp \? begin : undefined\} onError=\{rideUp \? begin : undefined\}/, 'the shark decoding starts it');
   assert.match(recap, /setTimeout\(begin, heroInventory && onOpenInventory \? 120 : RIDE_UP_ART_WAIT_MS\)/, 'never held longer than the art wait');
-  assert.match(recap, /requestAnimationFrame\(\(\) => \{ shown\.value = 1; goStore\.set\(1\); \}\)/, 'shows and starts on one frame');
+  assert.match(recap, /requestAnimationFrame\(\(\) => \{ if \(goStore\.get\(\) >= 1\) return; shown\.value = 1; goStore\.set\(1\); \}\)/, 'shows and starts on one frame');
+  assert.match(recap, /new Set\(\['art', 'hero', 'cannon'\]\)/, 'it waits for the shark and for every layer to mount');
+  assert.match(recap, /setTimeout\(go, RIDE_UP_GO_MAX_MS\)/);
+  assert.ok(Number(/RIDE_UP_GO_MAX_MS = (\d+)/.exec(src)[1]) <= 400);
   assert.match(recap, /<RideUpGo\.Provider value=\{rideUp \? goStore : null\}>/);
   assert.ok(Number(/RIDE_UP_ART_WAIT_MS = (\d+)/.exec(src)[1]) <= 300);
   // Every beat waits for go, and go starts them straight from the store (no React render on the go frame).

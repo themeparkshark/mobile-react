@@ -97,6 +97,8 @@ export const RIDE_UP_REPEAT: RideUpPlan = {
 export const RideUpGo = createContext<StepStore | null>(null);
 /** The longest the ride-up waits for the shark to decode before it starts anyway (ms). */
 export const RIDE_UP_ART_WAIT_MS = 260;
+/** The ride-up never waits longer than this for its art and its layers (ms). */
+export const RIDE_UP_GO_MAX_MS = 400;
 /**
  * Runs `start` once the ride-up's go frame arrives (at once outside a ride-up recap), WITHOUT a React render: the go
  * store calls it straight from its rAF, so every beat starts in the same JS tick and the go frame only has to draw.
@@ -128,8 +130,10 @@ const BRAND_NAVY = '#05346e';
  * glows gold behind its shark, fills a gold bar along its bottom edge and bursts stars.
  * `backdrop` is drawn inside the card, under its words (pass it as the card's first child).
  */
-export function RideUpHero({ active, plan = RIDE_UP, burstPoint, children }: {
+export function RideUpHero({ active, plan = RIDE_UP, burstPoint, onBuilt, children }: {
   readonly active: boolean;
+  /** Its burst layers have all mounted (the recap shows only after that, so no build frame lands after the start). */
+  readonly onBuilt?: () => void;
   /** RIDE_UP the first ride of the day, RIDE_UP_REPEAT after that. */
   readonly plan?: RideUpPlan;
   /** Where the card's shark is (in the card's parent's points): the confetti cannon fires from there. */
@@ -138,7 +142,7 @@ export function RideUpHero({ active, plan = RIDE_UP, burstPoint, children }: {
 }) {
   const preference = useReduceMotionPreference();
   if (!active || preference === null) return <>{children(null)}</>;
-  return <HeroStage reduced={preference} plan={plan} burstPoint={burstPoint}>{children}</HeroStage>;
+  return <HeroStage reduced={preference} plan={plan} burstPoint={burstPoint} onBuilt={onBuilt}>{children}</HeroStage>;
 }
 
 /**
@@ -152,12 +156,15 @@ export function heroRaysSize(cardHeight: number): number {
   return Math.max(340, cardHeight * 2.4);
 }
 
-function HeroStage({ reduced, plan: P, burstPoint, children }: {
-  readonly reduced: boolean; readonly plan: RideUpPlan;
+function HeroStage({ reduced, plan: P, burstPoint, onBuilt, children }: {
+  readonly reduced: boolean; readonly plan: RideUpPlan; readonly onBuilt?: () => void;
   readonly burstPoint?: SharedValue<{ x: number; y: number } | null>;
   readonly children: (backdrop: ReactNode) => ReactNode;
 }) {
-  const steps = useMountSteps(reduced ? 0 : HERO_BUILD, step => perfMark(`rideUp.step${step}`));
+  const steps = useMountSteps(reduced ? 0 : HERO_BUILD, step => {
+    perfMark(`rideUp.step${step}`);
+    if (step >= (reduced ? 0 : HERO_BUILD)) onBuilt?.();
+  });
   const budget = usePowerBudget();
   const sparkles = momentParticles(P.sparkles, budget, reduced);
   const peak = flashPeak(isDimFlashingLightsEnabled(), reduced);
@@ -346,23 +353,27 @@ export function RollingValue({ value, prefix = '', suffix = '', delayMs, duratio
  * sheet. The canvas reaches CANNON_UP above the recap, so pieces fly out over the screen above it too. A second ride
  * the same day (`short`) has no confetti: only the announcement stays. Reduce Motion: none.
  */
-export default function RideUpCelebration({ rideName, short = false, origin }: {
+export default function RideUpCelebration({ rideName, short = false, origin, onBuilt }: {
   readonly rideName: string; readonly short?: boolean;
+  /** The cannon's canvas has mounted (at once when there is no cannon). */
+  readonly onBuilt?: () => void;
   /** Where the header card's shark is, in this layer's points (RideUpHero writes it on layout). */
   readonly origin?: Readonly<SharedValue<{ x: number; y: number } | null>>;
 }) {
   const preference = useReduceMotionPreference();
-  if (preference === null || preference || short || !origin) return <Announce rideName={rideName} />;
-  return <Cannon rideName={rideName} origin={origin} />;
+  if (preference === null) return <Announce rideName={rideName} />;
+  if (preference || short || !origin) return <Announce rideName={rideName} onBuilt={onBuilt} />;
+  return <Cannon rideName={rideName} origin={origin} onBuilt={onBuilt} />;
 }
 
-function Announce({ rideName }: { readonly rideName: string }) {
+function Announce({ rideName, onBuilt }: { readonly rideName: string; readonly onBuilt?: () => void }) {
+  useEffect(() => { onBuilt?.(); }, [onBuilt]);
   return <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityLiveRegion="polite"
     accessible accessibilityLabel={`Your ride's up! ${rideName}. Have fun!`} />;
 }
 
-/** The cannon's canvas mounts on this step of its own build (about 0.2 s in, well before it fires at 0.42 s). */
-const CANNON_STEP = 4;
+/** The cannon's canvas mounts on the last step of its own build, while the recap is still invisible. */
+const CANNON_STEP = 2;
 /** How far above the recap the cannon's pieces can fly (pt). */
 export const CANNON_UP = 140;
 /** One cannon piece: launch angle (radians, up is negative), speed (pt/s), spin, size and colour. */
@@ -401,14 +412,16 @@ export function cannonAt(p: CannonPiece, tau: number): { x: number; y: number } 
   };
 }
 
-function Cannon({ rideName, origin }: { readonly rideName: string; readonly origin: Readonly<SharedValue<{ x: number; y: number } | null>> }) {
+function Cannon({ rideName, origin, onBuilt }: {
+  readonly rideName: string; readonly origin: Readonly<SharedValue<{ x: number; y: number } | null>>; readonly onBuilt?: () => void;
+}) {
   const { width, height } = useWindowDimensions();
   const budget = usePowerBudget();
   const count = momentParticles(RIDE_UP.confetti, budget, false);
   const rain = useSharedValue(0);
   // The canvas mounts a few frames after the recap's first frame (never in its first commit, one small step of its
   // own); the cannon fires at confettiAt.
-  const steps = useMountSteps(CANNON_STEP);
+  const steps = useMountSteps(CANNON_STEP, step => { if (step >= CANNON_STEP) onBuilt?.(); });
   useWhenRideUpGo(() => {
     rain.value = withDelay(RIDE_UP.confettiAt, withTiming(1, { duration: RIDE_UP.confettiMs, easing: Easing.linear }));
     return () => cancelAnimation(rain);
@@ -453,7 +466,7 @@ function Cannon({ rideName, origin }: { readonly rideName: string; readonly orig
       canvas.restore();
     }
   }, { width, height: height + top }));
-  if (count <= 0) return <Announce rideName={rideName} />;
+  if (count <= 0) return <Announce rideName={rideName} onBuilt={onBuilt} />;
   return <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityLiveRegion="polite"
     accessible accessibilityLabel={`Your ride's up! ${rideName}. Have fun!`}>
     <StepGate steps={steps} at={CANNON_STEP}>

@@ -14,7 +14,7 @@ import { Image } from 'expo-image';
 import Animated, { FadeInDown, ZoomIn, useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import { createStepStore } from '../../../components/park/mountSteps';
-import RideUpCelebration, { RIDE_UP, RIDE_UP_ART_WAIT_MS, RIDE_UP_REPEAT, RideUpGo, RideUpHero, RideUpKicker, RollingValue, rideUpStatStartsAt, type RideUpPlan } from './RideUpCelebration';
+import RideUpCelebration, { RIDE_UP, RIDE_UP_ART_WAIT_MS, RIDE_UP_GO_MAX_MS, RIDE_UP_REPEAT, RideUpGo, RideUpHero, RideUpKicker, RollingValue, rideUpStatStartsAt, type RideUpPlan } from './RideUpCelebration';
 import { takeRideUpVariant } from './rideUpRepeat';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
 import { BRAND, GameButton, GameIcon, ICON_SOURCES, type GameIconName } from '../../../ui';
@@ -221,15 +221,23 @@ export default function SessionRecap({
   // the same frame the recap shows (RideUpGo): the first visible frame is the whole card, shark included.
   const goStore = useRef(createStepStore(rideUp ? 0 : 1)).current;
   const shown = useSharedValue(rideUp ? 0.012 : 1);
-  const begin = useRef(() => {
+  // It goes once the shark has decoded AND the hero's and the cannon's layers have all mounted (their build frames land
+  // while the recap is still invisible, never after its start), and never later than RIDE_UP_GO_MAX_MS.
+  const waiting = useRef(new Set(['art', 'hero', 'cannon'])).current;
+  const go = useRef(() => {
     if (goStore.get() >= 1) return;
     // One more frame at 1%, so the decoded shark is drawn once before the recap shows.
-    requestAnimationFrame(() => { shown.value = 1; goStore.set(1); });
+    requestAnimationFrame(() => { if (goStore.get() >= 1) return; shown.value = 1; goStore.set(1); });
   }).current;
+  const ready = useRef((part: string) => { waiting.delete(part); if (waiting.size === 0) go(); }).current;
+  const begin = useRef(() => ready('art')).current;
+  const heroBuilt = useRef(() => ready('hero')).current;
+  const cannonBuilt = useRef(() => ready('cannon')).current;
   useEffect(() => {
     if (goStore.get() >= 1) return undefined;
-    const fallback = setTimeout(begin, heroInventory && onOpenInventory ? 120 : RIDE_UP_ART_WAIT_MS);
-    return () => clearTimeout(fallback);
+    const art = setTimeout(begin, heroInventory && onOpenInventory ? 120 : RIDE_UP_ART_WAIT_MS);
+    const most = setTimeout(go, RIDE_UP_GO_MAX_MS);
+    return () => { clearTimeout(art); clearTimeout(most); };
     // Once per recap.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -240,7 +248,7 @@ export default function SessionRecap({
     <Animated.View style={[{ flex: 1 }, shownStyle]}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.recapCard}>
       {/* "Your ride's up!": the header card itself is the celebration (pop, title stamp, gold bar, rays, burst). */}
-      <RideUpHero active={rideUp} plan={rideUpPlan} burstPoint={burstPoint}>{backdrop => (
+      <RideUpHero active={rideUp} plan={rideUpPlan} burstPoint={burstPoint} onBuilt={heroBuilt}>{backdrop => (
       <LinearGradient colors={['#13a8e9', '#0879ca', '#0768b9']} style={styles.recapHero}>
         {backdrop}
         <View style={styles.recapHeroCopy}>
@@ -482,7 +490,7 @@ export default function SessionRecap({
       <GameButton label={doneLabel} onPress={onDone} fullWidth style={styles.recapBtn} />
     </ScrollView>
     {/* "Your ride's up!": the app cheers you onto the ride, then gets out of the way. */}
-    {rideUp && <RideUpCelebration rideName={rideName} short={rideUpShort} origin={cannonFrom} />}
+    {rideUp && <RideUpCelebration rideName={rideName} short={rideUpShort} origin={cannonFrom} onBuilt={cannonBuilt} />}
     </Animated.View>
     </RideUpGo.Provider>
   );
