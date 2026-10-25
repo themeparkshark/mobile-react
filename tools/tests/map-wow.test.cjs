@@ -659,3 +659,10 @@ test('wave 5: the burst canvas redraws only inside the burst window (gold, ink, 
     }
   }
 });
+
+test('wave 5: the badge makes room for the next-goal disc, so it never covers the set count', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /styles\.badge, nextArt && !photo && styles\.badgeNextRoom/);
+  assert.match(src, /badgeNextRoom: \{ paddingRight: 16 \+ 30 \}/);
+  assert.match(src, /nextAt: \{ position: 'absolute', right: -34,/, 'the 60 pt disc reaches 26 pt into the badge, inside the 46 pt room');
+});

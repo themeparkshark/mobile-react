@@ -382,7 +382,7 @@ const CatchBadge = memo(function CatchBadge({ st, summary, photo, bonusXp, newRi
 }) {
   const total = summary?.total, collected = summary?.collected;
   return (
-        <Animated.View pointerEvents="none" style={[styles.badge, { left, bottom }, st.badge]}>
+        <Animated.View pointerEvents="none" style={[styles.badge, nextArt && !photo && styles.badgeNextRoom, { left, bottom }, st.badge]}>
           {/* Sticker: the photo (or the item) breaks out of the badge with a die-cut edge */}
           <Animated.View style={[styles.sticker, photo && styles.stickerPhoto,
             photo && { borderColor: photo.grade === 'frame_it' ? '#ffcf3b' : photo.grade === 'great' ? '#c9d5e3' : '#ffffff' }, st.kick]}>
@@ -1910,7 +1910,9 @@ const styles = StyleSheet.create({
   spark: { position: 'absolute', left: -4, top: -4, width: 8, height: 8, borderRadius: 2 },
   item: { position: 'absolute', left: 0, top: 0, width: FIND_ART_SIZE, height: FIND_ART_SIZE },
   itemArt: { width: FIND_ART_SIZE, height: FIND_ART_SIZE },
-  // Wave 5: the next goal at sticker size (it was a 28 pt shadow that barely registered).
+  // Wave 5: the next goal at sticker size (it was a 28 pt shadow that barely registered). The badge's text and
+  // bar make room for it, so the disc never covers the set count.
+  badgeNextRoom: { paddingRight: 16 + 30 },
   nextAt: { position: 'absolute', right: -34, top: (BADGE_HEIGHT - 60) / 2, width: 60, height: 60, alignItems: 'center', justifyContent: 'center' },
   nextRing: { position: 'absolute', width: 60, height: 60, borderRadius: 30, borderWidth: 3, borderColor: GOLD_FX.rays },
   nextDisc: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#ffffff', borderWidth: 3, borderColor: GOLD_FX.rays,
