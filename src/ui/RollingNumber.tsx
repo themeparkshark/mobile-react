@@ -22,7 +22,7 @@
  * with the bump. Reduce Motion: the new number is simply there.
  * Transforms and opacity only, all timing on the UI thread (no per-frame React render, no JS timers).
  */
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import Animated, { cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring,
   withTiming, type SharedValue } from 'react-native-reanimated';
@@ -287,7 +287,11 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
   const flashColor = rising.current ? ROLL_LOOK.gainFlash : ROLL_LOOK.lossFlash;
   // The glow is a second, flash-coloured copy of each digit strip faded in on top (one opacity per column),
   // never an animated text colour on every digit cell.
-  const textStyle: StyleProp<TextStyle> = [style, { lineHeight, includeFontPadding: false }];
+  // Stable across re-renders that change nothing (a parent's inline style object): a wheel face that
+  // re-renders lets React commit its first-mount transform for a frame, which showed a stale digit (714 after 715).
+  const styleKey = JSON.stringify(flat);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const textStyle: StyleProp<TextStyle> = useMemo(() => [flat, { lineHeight, includeFontPadding: false }], [styleKey, lineHeight]);
 
   if (!columns) {
     return (
@@ -300,20 +304,20 @@ function RollingNumber({ value: incoming, format = defaultFormat, style, maxFont
     <Animated.View style={[{ flexDirection: 'row', alignItems: 'center' }, bumpStyle]}
       accessible accessibilityRole="text" accessibilityLabel={text}>
       {columns.map((col, i) => col.kind === 'sep'
-        ? <Separator key={`s${columns.length - i}`} col={col} v={v} textStyle={textStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} />
+        ? <Separator key={`s${columns.length - i}`} char={col.char} place={col.place} v={v} textStyle={textStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} />
         : <DigitWheel key={`d${col.place}`} col={col} v={v} lineHeight={lineHeight} fontSize={fontSize} textStyle={textStyle}
           flash={celebrate ? flash : undefined} flashColor={flashColor} maxFontSizeMultiplier={maxFontSizeMultiplier} />)}
     </Animated.View>
   );
 }
 
-function Separator({ col, v, textStyle, maxFontSizeMultiplier }: {
-  readonly col: WheelColumn; readonly v: SharedValue<number>; readonly textStyle: StyleProp<TextStyle>; readonly maxFontSizeMultiplier: number;
+const Separator = memo(function Separator({ char, place, v, textStyle, maxFontSizeMultiplier }: {
+  readonly char: string; readonly place: number; readonly v: SharedValue<number>; readonly textStyle: StyleProp<TextStyle>;
+  readonly maxFontSizeMultiplier: number;
 }) {
-  const place = col.place;
   const fade = useAnimatedStyle(() => ({ opacity: wheelOpacity(v.value, place) }));
-  return <Animated.Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, fade]}>{col.char}</Animated.Text>;
-}
+  return <Animated.Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, fade]}>{char}</Animated.Text>;
+});
 
 /** Sizing for a wheel that turns: as wide as the widest digit, so no digit is clipped while it passes. */
 const WidestDigit = memo(function WidestDigit({ textStyle, lineHeight, maxFontSizeMultiplier }: {
@@ -331,7 +335,27 @@ function DigitWheel({ col, v, lineHeight, fontSize, textStyle, flash, flashColor
   readonly textStyle: StyleProp<TextStyle>; readonly flash?: SharedValue<number>; readonly flashColor: string;
   readonly maxFontSizeMultiplier: number;
 }) {
-  const place = col.place;
+  return (
+    <View style={{ height: lineHeight }}>
+      {/* The resting digit sizes a still wheel; a turning wheel is as wide as the widest digit. The face rolls over it. */}
+      {col.turns
+        ? <WidestDigit textStyle={textStyle} lineHeight={lineHeight} maxFontSizeMultiplier={maxFontSizeMultiplier} />
+        : <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, { opacity: 0 }]}>{col.char}</Text>}
+      <WheelFace place={col.place} v={v} lineHeight={lineHeight} fontSize={fontSize} textStyle={textStyle} flash={flash}
+        flashColor={flashColor} maxFontSizeMultiplier={maxFontSizeMultiplier} />
+    </View>
+  );
+}
+
+/**
+ * The rolling face of one wheel. Memoized on stable props, so a re-render that only resizes the wheel
+ * (or a parent re-render) never re-commits its animated transform; the UI thread alone moves it.
+ */
+const WheelFace = memo(function WheelFace({ place, v, lineHeight, fontSize, textStyle, flash, flashColor, maxFontSizeMultiplier }: {
+  readonly place: number; readonly v: SharedValue<number>; readonly lineHeight: number; readonly fontSize: number;
+  readonly textStyle: StyleProp<TextStyle>; readonly flash?: SharedValue<number>; readonly flashColor: string;
+  readonly maxFontSizeMultiplier: number;
+}) {
   // The clip is the glyph's own height, centred on the line, so no neighbour digit peeks out of a pill.
   const clipH = Math.min(lineHeight, Math.ceil(fontSize * ROLL_LOOK.clipEm));
   const cell = lineHeight * (1 + ROLL_LOOK.cellGap);
@@ -344,23 +368,18 @@ function DigitWheel({ col, v, lineHeight, fontSize, textStyle, flash, flashColor
     return { opacity: wheelOpacity(v.value, place), transform: [{ scaleY: 1 + ROLL_LOOK.stretch * Math.sin(slide * Math.PI) }] };
   });
   const glowStyle = useAnimatedStyle(() => ({ opacity: flash ? flash.value * ROLL_LOOK.flashPeak : 0 }));
+  const glowText = useMemo(() => [textStyle, { color: flashColor }], [textStyle, flashColor]);
   return (
-    <View style={{ height: lineHeight }}>
-      {/* The resting digit sizes a still wheel; a turning wheel is as wide as the widest digit. The strip rolls over it. */}
-      {col.turns
-        ? <WidestDigit textStyle={textStyle} lineHeight={lineHeight} maxFontSizeMultiplier={maxFontSizeMultiplier} />
-        : <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[textStyle, { opacity: 0 }]}>{col.char}</Text>}
-      <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: inset, height: clipH, overflow: 'hidden' }, wheel]}>
-        <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0 }, strip]}>
-          <DigitStrip cell={cell} lineHeight={lineHeight} textStyle={textStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} />
-          {flash && <Animated.View style={[StyleSheet.absoluteFill, glowStyle]}>
-            <DigitStrip cell={cell} lineHeight={lineHeight} textStyle={[textStyle, { color: flashColor }]} maxFontSizeMultiplier={maxFontSizeMultiplier} />
-          </Animated.View>}
-        </Animated.View>
+    <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: inset, height: clipH, overflow: 'hidden' }, wheel]}>
+      <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0 }, strip]}>
+        <DigitStrip cell={cell} lineHeight={lineHeight} textStyle={textStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} />
+        {flash && <Animated.View style={[StyleSheet.absoluteFill, glowStyle]}>
+          <DigitStrip cell={cell} lineHeight={lineHeight} textStyle={glowText} maxFontSizeMultiplier={maxFontSizeMultiplier} />
+        </Animated.View>}
       </Animated.View>
-    </View>
+    </Animated.View>
   );
-}
+});
 
 /** The 0 to 9 then 0 digit strip (static text; only its parent moves). */
 const DigitStrip = memo(function DigitStrip({ cell, lineHeight, textStyle, maxFontSizeMultiplier }: {
