@@ -28,8 +28,9 @@ export function useGameMusic(bed: string | null, { at = 'bar', fadeMs = 300, ena
   const musicOn = enabled && player?.enabled_music !== false;
   const started = useRef(false);
 
+  // The player's Music setting reaches the engine from SoundEffectProvider only; `enabled`
+  // gates this game's own bed and never flips the setting for the whole app.
   useEffect(() => {
-    GameAudio.setMusicEnabled(musicOn);
     GameAudio.music.setAppMusicBridge({
       suspend: () => { try { void app?.stopMusic?.(); } catch { /* app music optional */ } },
       restore: () => { try { void app?.restoreMusic?.(); } catch { /* app music optional */ } },
@@ -37,6 +38,10 @@ export function useGameMusic(bed: string | null, { at = 'bar', fadeMs = 300, ena
   }, [app, musicOn]);
 
   useEffect(() => {
+    if (!musicOn && started.current) {
+      started.current = false;
+      GameAudio.music.stop(400);
+    }
     if (!bed || !musicOn) return;
     void GameAudio.init().then(() => {
       if (!started.current) {

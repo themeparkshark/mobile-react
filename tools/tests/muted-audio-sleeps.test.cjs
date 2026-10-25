@@ -10,7 +10,8 @@ const read = (p) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf8')
 test('GameAudio.preload returns before init when sound effects are off', () => {
   const src = read('src/gamekit/audio/GameAudio.ts');
   const body = src.slice(src.indexOf('async preload(names?: string[])'));
-  const guard = body.indexOf('if (!this.sfxEnabled) return;');
+  // False (nothing loaded), so a caller that caches its preload tries again once sound is back on.
+  const guard = body.indexOf('if (!this.sfxEnabled) return false;');
   const init = body.indexOf('await this.init();');
   assert.ok(guard > 0 && init > 0 && guard < init, 'the sfx guard comes before init in preload');
 });
@@ -32,7 +33,9 @@ test('GameAudio.init leaves the hardware asleep with sound effects and music bot
   const src = read('src/gamekit/audio/GameAudio.ts');
   const body = src.slice(src.indexOf("init(choice: BackendChoice = 'auto')"));
   const cached = body.indexOf('if (this.initPromise) return this.initPromise;');
-  const guard = body.indexOf('if (!this.sfxEnabled && !this.musicEnabled) return Promise.resolve();');
+  // Merged with the hotfix contract (Oct 24): wantsAudio() is false with both off, or before settings are known.
+  const guard = body.indexOf('if (!this.wantsAudio()) return Promise.resolve();');
+  assert.match(src, /wantsAudio\(\): boolean \{\s*return !this\.settingsPending && \(this\.sfxEnabled \|\| this\.musicEnabled\);/);
   const assign = body.indexOf('this.initPromise = (async');
   assert.ok(cached >= 0 && guard > cached && assign > guard, 'guard sits after the cache check and before the init promise is stored');
 });
@@ -45,12 +48,14 @@ test('loadKey never dereferences a missing backend', () => {
 
 test('the app music setting reaches the studio engine', () => {
   const src = read('src/context/SoundEffectProvider.tsx');
-  assert.match(src, /GameAudio\.setMusicEnabled\(isReady && !!player\?\.enabled_music\)/);
-  assert.match(src, /SFX\.setEnabled\(isReady && !!player\?\.enabled_sound_effects\)/);
+  assert.match(src, /SFX\.setMusicEnabled\(musicAllowed\)/);
+  assert.match(src, /SFX\.setEnabled\(allowed\)/);
 });
 
-test('sound starts off until the player setting is known', () => {
-  const src = read('src/gamekit/audio/GameAudio.ts');
-  assert.match(src, /private sfxEnabled = false;/);
-  assert.match(src, /private musicEnabled = false;/);
+test('sound waits until the player setting is known (hotfix contract: hold, then settingsKnown)', () => {
+  const src = read('src/context/SoundEffectProvider.tsx');
+  assert.match(src, /SFX\.holdUntilSettings\(\);/);
+  assert.match(src, /if \(isReady\) SFX\.settingsKnown\(\);/);
+  const audio = read('src/gamekit/audio/GameAudio.ts');
+  assert.match(audio, /holdUntilSettings\(\): void \{\s*this\.settingsPending = true;/);
 });

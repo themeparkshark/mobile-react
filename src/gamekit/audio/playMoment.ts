@@ -313,7 +313,7 @@ export function preloadMoments(names: readonly MomentName[]): Promise<void> {
       if (lk) keys.push(lk);
     });
   }
-  return GameAudio.preload(keys).catch(() => undefined);
+  return GameAudio.preload(keys).then(() => undefined, () => undefined);
 }
 
 /** Tests only. */

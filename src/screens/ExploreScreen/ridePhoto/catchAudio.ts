@@ -112,7 +112,8 @@ export function preloadCatchAudio(): Promise<void> {
     registered = true;
   }
   preloadCatchMoments();
-  ready = GameAudio.preload([...Object.keys(CUES), ...Object.values(HOUSE) as string[]]).catch(() => undefined);
+  // Not kept while sound is off (no engine), so turning Sound on preloads normally.
+  ready = GameAudio.preload([...Object.keys(CUES), ...Object.values(HOUSE) as string[]]).then(ok => { if (!ok) ready = null; }, () => undefined);
   return ready;
 }
 

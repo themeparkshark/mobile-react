@@ -211,7 +211,7 @@ test('one flame number: Daily 3 owns the flame while it is on, and ride days nev
   const radial = readSrc('src/components/RadialStatsMenu.tsx');
   assert.match(radial, /useFlameStreak\(dailyGift\?\.streak, isOpen\)/);
   assert.match(radial, /streakFrom === 'daily3' \? 'daily3_streak' : 'day_streak'/);
-  assert.match(readSrc('src/components/DailyGiftModal.tsx'), /\{chestOwnsFlame && \(displayedGift\.streak/);
+  assert.match(readSrc('src/components/DailyGiftModal.tsx'), /\{chestOwnsFlame && (?:!simple && )?\(displayedGift\.streak/);
   assert.match(glossary.LOCAL_GLOSSARY.daily3_streak.what, /Daily 3/);
   // Ride days in a row are their own number: never the flame icon, never "Day Streak".
   for (const f of ['src/screens/RideTracker/RideStatsScreen.tsx', 'src/screens/RideTracker/RideTrackerScreen.tsx', 'src/screens/RideTracker/RideWrappedScreen.tsx']) {

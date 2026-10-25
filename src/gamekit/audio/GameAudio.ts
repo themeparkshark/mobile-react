@@ -80,12 +80,12 @@ class GameAudioEngine {
   private lastPlayed = new Map<string, number>();
   private lastVariant = new Map<string, number>();
   private nextId = 1;
-  // Off until the player's settings are known (SoundEffectProvider turns them on): a muted player never
-  // hears a blip, or wakes the audio hardware, while the app is still loading.
-  private sfxEnabled = false;
-  private musicEnabled = false;
-  /** Dev only: EXPO_PUBLIC_STUDIO_MUTE=1 keeps studio simulators silent (master gain pinned to 0). */
-  private readonly studioMute = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
+  private sfxEnabled = true;
+  private musicEnabled = true;
+  /** True until the app knows the player's sound settings (holdUntilSettings / settingsKnown). */
+  private settingsPending = false;
+  /** EXPO_PUBLIC_STUDIO_MUTE=1 (lane tooling only, dev and release-like JS) keeps test simulators silent (master gain pinned to 0). */
+  private readonly studioMute = process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
   private masterVolume = this.studioMute ? 0 : 1;
   /**
    * Dev only: EXPO_PUBLIC_STUDIO_TRACE=1 runs the whole engine into TraceBackend, which never touches
@@ -113,12 +113,32 @@ class GameAudioEngine {
     this.music = new MusicDirector(this);
   }
 
-  /** Pick and start a backend. Safe to call many times. */
+  /**
+   * True while the player has sound effects or music on. With both off nothing starts
+   * the audio engine: no battery spent on a silent audio session, and no session start
+   * that can fail. Turning either back on starts it on the next play or load.
+   */
+  wantsAudio(): boolean {
+    return !this.settingsPending && (this.sfxEnabled || this.musicEnabled);
+  }
+
+  /**
+   * The app holds the engine until the player's sound settings are known (SoundEffectProvider),
+   * so a muted player never starts it in the moment before their settings load.
+   */
+  holdUntilSettings(): void {
+    this.settingsPending = true;
+  }
+
+  /** The player's sound settings are in: the next play or load may start the engine. */
+  settingsKnown(): void {
+    this.settingsPending = false;
+  }
+
+  /** Pick and start a backend. Safe to call many times. Resolves with no backend while all sound is off. */
   init(choice: BackendChoice = 'auto'): Promise<void> {
     if (this.initPromise) return this.initPromise;
-    // Sound effects and music both off: leave the audio hardware asleep (battery, and a stuck audio
-    // device can never stall a muted player). Not cached, so turning sound back on starts it then.
-    if (!this.sfxEnabled && !this.musicEnabled) return Promise.resolve();
+    if (!this.wantsAudio()) return Promise.resolve();
     this.initPromise = (async () => {
       let backend: AudioBackend | null = null;
       if (this.traceMode) {
@@ -224,22 +244,29 @@ class GameAudioEngine {
     return p;
   }
 
-  /** Decode/prepare cues (all registered cues when names is omitted). */
-  async preload(names?: string[]): Promise<void> {
-    // Sound effects off: never wake the audio hardware for cues nobody will hear (battery, and a
-    // stuck audio device can never stall a muted player). play() loads lazily if sound comes back on.
-    if (!this.sfxEnabled) return;
+  /**
+   * Decode/prepare cues (all registered cues when names is omitted). False when nothing was
+   * loaded because all sound is off (no engine): a caller that caches its preload drops the
+   * cache then, so turning Sound back on preloads normally instead of loading on first play.
+   */
+  async preload(names?: string[]): Promise<boolean> {
+    // Sound effects off (music may still be on): never decode cues nobody will hear. False, so a
+    // caller that caches its preload tries again once sound comes back on.
+    if (!this.sfxEnabled) return false;
     await this.init();
+    if (!this.backend) return false;
     const list = names ?? Array.from(this.cues.keys());
     await Promise.all(list.map(async (name) => {
       const def = this.cues.get(name);
       if (!def || !this.playable(def)) return;
       await Promise.all(this.files(name, def).map((f) => this.loadKey(f.key, f.src, def.maxVoices ?? 3)));
     }));
+    return true;
   }
 
   async preloadBeds(names: string[]): Promise<void> {
     await this.init();
+    if (!this.backend) return;
     await Promise.all(names.map(async (name) => {
       const def = this.beds.get(name);
       if (!def) return;

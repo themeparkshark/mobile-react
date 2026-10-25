@@ -1,5 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Image as ArtImage } from 'expo-image';
 import { Image, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import { parkDayLabel } from '../services/collection/parkDayLabel';
 import GameIcon from '../ui/GameIcon';
@@ -38,6 +39,13 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   const shareDay = () => {
     if (recap) shareFlex('park_day', parkDayFlexPayload(recap), { surface: 'park_day' });
   };
+
+  // Warm the coin art as soon as the day loads, so a Share card is ready to capture at once
+  // (same memory-disk cache the card's art reads) instead of waiting on slow art.
+  useEffect(() => {
+    const urls = recap ? parkDayFlexPayload(recap).coinUrls.filter((url): url is string => typeof url === 'string') : [];
+    if (urls.length) ArtImage.prefetch(urls, 'memory-disk').catch(() => undefined);
+  }, [recap]);
 
   useFocusEffect(useCallback(() => {
     let current = true;

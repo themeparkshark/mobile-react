@@ -5,6 +5,7 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 import * as RootNavigation from '../RootNavigation';
 import { NotificationContext } from '../context/NotificationProvider';
+import { SoundEffectContext, SoundEffectContextType } from '../context/SoundEffectProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
@@ -40,8 +41,25 @@ export default function Wrapper({
     : require('../../assets/images/original-bottom-bar.png');
   const { checkPermission, hasPermission } = usePermissions();
   const { notificationCount } = useContext(NotificationContext);
+  const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   // A catch moment owns the whole screen: the tab bar slides away on the UI thread (no re-render).
   const barSlide = useAnimatedStyle(() => ({ transform: [{ translateY: 160 * catchShown.value }] }));
+
+  const goTo = (item: { screen: string; permission?: PermissionEnums }) => {
+    if (isCatchShown()) return;
+    // Already here: the screen scrolls back to its top (News).
+    if (!onNavigate && RootNavigation.navigationRef.getCurrentRoute()?.name === item.screen
+      && emitTabReselect(item.screen)) return;
+    if (item.permission !== undefined) {
+      if (checkPermission(item.permission)) {
+        if (onNavigate) onNavigate(item.screen);
+        else RootNavigation.navigate(item.screen);
+      }
+    } else {
+      if (onNavigate) onNavigate(item.screen);
+      else RootNavigation.navigate(item.screen);
+    }
+  };
 
   const items = [
     {
@@ -133,21 +151,7 @@ export default function Wrapper({
                           ? hasPermission(item.permission)
                           : true
                       }
-                      onPress={() => {
-                        if (isCatchShown()) return;
-                        // Already here: the screen scrolls back to its top (News).
-                        if (!onNavigate && RootNavigation.navigationRef.getCurrentRoute()?.name === item.screen
-                          && emitTabReselect(item.screen)) return;
-                        if (item.permission !== undefined) {
-                          if (checkPermission(item.permission)) {
-                            if (onNavigate) onNavigate(item.screen);
-                            else RootNavigation.navigate(item.screen);
-                          }
-                        } else {
-                          if (onNavigate) onNavigate(item.screen);
-                          else RootNavigation.navigate(item.screen);
-                        }
-                      }}
+                      onPress={() => goTo(item)}
                       onPressSound={item.sound}
                     >
                       <Image
@@ -161,7 +165,12 @@ export default function Wrapper({
                       />
                     </Button>
                     {/* Capped: past 1.2x the five labels run into each other ("NEWSSTANDINGS") and over the page. */}
+                    {/* The word under the icon is part of the button too: a kid who taps
+                        "PROFILE" instead of the picture still goes there. */}
                     <Text
+                      onPress={() => { playSound(item.sound); goTo(item); }}
+                      suppressHighlighting
+                      accessibilityRole="button"
                       maxFontSizeMultiplier={1.2}
                       numberOfLines={1}
                       style={{

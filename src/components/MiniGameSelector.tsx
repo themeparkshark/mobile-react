@@ -37,6 +37,9 @@ const WHACK_DEV: { format?: WhackFormat; unlock?: number; theme?: WhackTheme } =
 } : {};
 
 // 'current' is opt-in (preferredGame) until the ride pool's server verifier accepts its v3 proof (WS7).
+/** The Home Arcade's task name: its games say "Home Arcade", never queue words. */
+export const HOME_ARCADE_TASK_NAME = 'Home Arcade';
+
 type MiniGameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'banana' | 'photo' | 'current';
 
 interface Props {
@@ -180,6 +183,8 @@ export default function MiniGameSelector({
   // Trivia Duel builds its own deck from the park/ride chapter. The paid
   // ride challenge ("Beat the Buzzer", 3 questions, 2 right to win) and the
   // local tester use bundled questions; only the attempt result grants coins.
+  /** Home Arcade games say so in their header, never queue words. */
+  const homeArcade = taskName === HOME_ARCADE_TASK_NAME;
   const rideChapter = useMemo(() => parkId != null
     ? getLinePlayChapter(parkId, undefined, taskName) : null,
   [parkId, taskName]);
@@ -254,8 +259,8 @@ export default function MiniGameSelector({
             visible={visible}
             mode={isPractice ? 'practice' : 'queue'}
             seed={seed}
-            title="Trivia Duel"
-            subtitle="Queue Duel"
+            title={homeArcade ? 'Park Trivia' : 'Trivia Duel'}
+            subtitle={homeArcade ? 'Home Arcade' : 'Queue Duel'}
             parkId={parkId}
             chapterId={rideChapter?.id}
             onClose={onClose}
