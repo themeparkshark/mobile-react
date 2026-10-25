@@ -135,6 +135,8 @@ export interface WhackHandle {
 /** The last-5 ticks are queued this far ahead of each second crossing (absorbs a late JS thread). */
 // r6: 320 ms of lead (r5 measured JS lag up to 206 ms against 160), so every tick and the whistle land on the stamp.
 const LAST5_LEAD_MS = 320;
+/** Dev beat log (EXPO_PUBLIC_AUDIO_LOG=1): each last-5 cue's queued time and the UI frame that stamps it. */
+const SYNC_LOG = __DEV__ && process.env.EXPO_PUBLIC_AUDIO_LOG === '1';
 /**
  * Release-like capture of Whack (EXPO_PUBLIC_MOTION_CAPTURE=Whack with `expo start --no-dev`, see devRoutes):
  * store builds never set it, so it folds away. With it, the autoplay bot and the frame graph work in release JS.
@@ -256,7 +258,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const [result, setResult] = useState<GameResult | null>(null);
   const [banner, setBanner] = useState<{ text: string | null; sub?: string | null; color?: string; stamp: number }>({ text: null, stamp: 0 });
   const [breather, setBreather] = useState<null | {
-    burstScore: number; runScore: number; stats: { label: string; value: string }[]; next: string; readyAt: number; goal: string | null;
+    burstScore: number; runScore: number; bonks: number; bestStreak: number; stats: { label: string; value: string }[]; next: string; readyAt: number; goal: string | null;
     duelLine: string | null; incoming: number; feverReady: boolean; bossNext: boolean; boost: boolean;
     split?: { text: string; ahead: boolean; delta?: number; best?: number } | null;
     nextShape?: string; nextBoss?: number; goalStar?: { progress: number; target: number; three: boolean; best?: number | null } | null;
@@ -943,6 +945,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         quick: repeatBurst(curtainKind.current),
         burstScore: b.score,
         runScore: total,
+        bonks: b.result.hits,
+        bestStreak: b.result.maxStreak,
         stats: [
           { label: 'QUICK', value: `${b.result.quick}` },
           { label: 'STREAK', value: `${b.result.maxStreak}` },
@@ -987,11 +991,13 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       restTimer.current = setTimeout(() => {
         restTimer.current = null;
         if (runToken.current === token && !finishing.current && !NO_REST) runtime.setRest(true);
+        // Frame graph captures only: start a fresh window, so the idle card's numbers are the idle card's alone.
+        if (PERF_GRAPH) perf.reset();
       }, landIn + CARD_SETTLE_MS);
       // Autoplay saves a banked fever for the finale (the expert line).
       if (autoplay) setTimeout(() => onReadyRef.current(feverReady && next === totalBursts - 1), landIn + AUTO_GO_MS);
     }, mountIn);
-  }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay, cardAt, clearRest, runtime]);
+  }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay, cardAt, clearRest, runtime, perf]);
 
   const onReady = useCallback((goFever: boolean) => {
     if (phase !== 'breather' || finishing.current) return;
@@ -1154,8 +1160,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const lastFiveTick = useCallback((sec: number, toCrossMs: number, uiAt: number) => {
     const lag = Math.max(0, Date.now() - uiAt);
     const delayMs = Math.max(0, Math.round(toCrossMs - lag));
-    if (__DEV__ && process.env.EXPO_PUBLIC_AUDIO_LOG === '1') {
-      console.log(`[wow-sync] ${Date.now() % 100000} last5 sec=${sec} lag=${lag} delay=${delayMs} late=${Math.max(0, Math.round(lag - toCrossMs))}`);
+    if (SYNC_LOG) {
+      // due = the wall ms the cue is queued to sound; the [wow-cross] line is the UI frame that stamps that second.
+      console.log(`[wow-sync] ${Date.now() % 100000} last5 sec=${sec} lag=${lag} delay=${delayMs} late=${Math.max(0, Math.round(lag - toCrossMs))} due=${(Date.now() + delayMs) % 100000}`);
     }
     if (sec === 0) {
       preWhistle.current = Date.now();
@@ -1179,6 +1186,23 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       runOnJS(lastFiveTick)(sec, remainingMs.value - sec * 1000, Date.now());
     },
     [lastFiveTick],
+  );
+  // Dev beat log only: the UI frame each last-5 second (and zero) is crossed, to check each queued cue against it.
+  const logCross = useCallback((sec: number, uiAt: number) => {
+    console.log(`[wow-cross] ${uiAt % 100000} sec=${sec}`);
+  }, []);
+  useAnimatedReaction(
+    () => {
+      if (!SYNC_LOG) return -1;
+      const rem = remainingMs.value;
+      if (rem > 5000 || runtime.sim.value.frozen) return -1;
+      return rem <= 0 || rem >= 1e9 ? 0 : Math.ceil(rem / 1000);
+    },
+    (sec, prev) => {
+      if (sec < 0 || sec === prev || prev == null || prev < 0) return;
+      runOnJS(logCross)(sec, Date.now());
+    },
+    [logCross],
   );
   // FINISH!'s JS half, on the beat's first frame: the whistle (unless the UI clock already queued it on
   // the zero frame), the finisher buzz, and a clear stage.
@@ -1284,6 +1308,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
               burstNumber={burstIdx + 1}
               bursts={totalBursts}
               burstScore={breather.burstScore}
+              bonks={breather.bonks}
+              bestStreak={breather.bestStreak}
               runScore={breather.runScore}
               stats={breather.stats}
               nextBanner={breather.next}

@@ -26,6 +26,7 @@ import JuiceLab from '../gamekit/demo/JuiceLab';
 import { CurrentQuestGame, CurrentQuestHub, type HubPick } from '../games/current-quest';
 import LagoonDashPreview from '../games/current-quest/party/LagoonDashPreview';
 import { LinePlayMovementContext } from '../gamekit/LinePlayMovementContext';
+import { PerfOverlay, usePerfProbe } from '../gamekit/perf/PerfOverlay';
 import { RhythmTapGame } from '../games/rhythm';
 import SprintLab from '../games/rhythm/multiplayer/SprintLab';
 
@@ -46,6 +47,17 @@ const RIDE_SPRINTS: { type: GameType; number: string; label: string; desc: strin
   { type: 'memory', number: '03', label: 'Memory Match', desc: 'Find four pairs as fast as you can', cue: 'MATCH' },
   { type: 'trivia', number: '04', label: 'Park Trivia', desc: 'Two fast park questions', cue: 'THINK' },
 ];
+
+/**
+ * Release-like Whack frame-rate captures only (EXPO_PUBLIC_MOTION_CAPTURE=Whack with EXPO_PUBLIC_WHACK_PERF=1,
+ * never set in store builds): the same frame probe on this still list, the control the game's numbers are
+ * read against on the same simulator and machine state.
+ */
+const WHACK_PERF_CONTROL = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'Whack' && process.env.EXPO_PUBLIC_WHACK_PERF === '1';
+function PerfControl() {
+  const probe = usePerfProbe(true, false);
+  return <PerfOverlay probe={probe} visible extra={() => 'control: still list'} style={{ top: 120, right: undefined, left: 6 }} />;
+}
 
 export default function MiniGameTesterScreen() {
   const navigation = useNavigation<any>();
@@ -297,6 +309,7 @@ export default function MiniGameTesterScreen() {
         </ScrollView>}
       </SafeAreaView>
       </Wrapper>
+      {WHACK_PERF_CONTROL ? <PerfControl /> : null}
 
       {/* Mini-Game */}
       <MiniGameSelector

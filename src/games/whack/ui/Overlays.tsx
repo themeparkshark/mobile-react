@@ -118,6 +118,10 @@ export interface BreatherProps {
   enterAt?: number;
   /** The repeat card of a middle Burst: the same beats, about 60 percent as long. */
   quick?: boolean;
+  /** Sharks bonked this Burst: drawn as a row of shark heads (w5, no numbers to read). */
+  bonks?: number;
+  /** Best combo this Burst: drawn as a flame that grows with it. */
+  bestStreak?: number;
 }
 
 /** The banked roll (r6): starts as the card lands, never on 0, and climbs long enough to read. */
@@ -130,6 +134,31 @@ const POP_SPARKS = 6;
 /** The first number the roll shows: a fifth of the total, so the card never says +0 for points you earned. */
 export function breatherRollFrom(total: number): number {
   return total > 0 ? Math.max(1, Math.round(total * BREATHER_ROLL.fromShare)) : 0;
+}
+
+/** Sharks bonked as a row of shark heads (w5 picture stats): one lit head per BONKS_PER_HEAD bonks, up to BONK_HEADS. */
+export const BONK_HEADS = 5;
+export const BONKS_PER_HEAD = 5;
+export function bonkHeadsLit(bonks: number): number {
+  return bonks <= 0 ? 0 : Math.min(BONK_HEADS, Math.ceil(bonks / BONKS_PER_HEAD));
+}
+/** The best combo as a flame that grows with it: 4 sizes (pt), the combo badge's own tiers (3, 6, 10). */
+export function streakFlameSize(streak: number): number {
+  return streak >= 10 ? 34 : streak >= 6 ? 28 : streak >= 3 ? 23 : 18;
+}
+/** The heads light one by one while the roll climbs (UI thread), starting this long after the card lands. */
+export const HEADS_START_MS = 200;
+export const HEAD_STEP_MS = 90;
+
+/** One shark head of the bonk row: lit heads pop in on the card's UI clock; the rest wait as pale outlines. */
+function BonkHead({ lit, at, src, reduced }: { lit: boolean; at: number; src: number; reduced?: boolean }) {
+  const v = useSharedValue(lit && !reduced ? 0 : 1);
+  useEffect(() => {
+    if (!lit || reduced) return;
+    v.value = withDelay(at, withSequence(withTiming(1.22, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.settle)));
+  }, [lit, at, reduced, v]);
+  const style = useAnimatedStyle(() => ({ opacity: lit ? Math.min(1, v.value * 2) : 1, transform: [{ scale: lit ? v.value : 1 }] }));
+  return <Animated.Image source={src} style={[styles.head, lit ? null : styles.headOff, style]} resizeMode="contain" />;
 }
 
 /** Stat label to a picture (no reading): the value sits next to its icon. */
@@ -246,6 +275,23 @@ export function Breather(p: BreatherProps) {
             durationMs={roll.ms} easing={ROLL_EASE} punch={roll.punch} punchAt="end" tickEvery={tickEvery} onTick={p.onCountTick}
             onDone={p.onRollDone} style={styles.cardScore} />
         </View>
+        {p.bonks != null ? (
+          // w5 picture stats: a row of shark heads for the sharks bonked, a flame that grows with the best combo.
+          <View style={styles.chips}>
+            <View style={[styles.chip, styles.headsChip]} accessibilityLabel={`Sharks bonked: ${p.bonks}`}>
+              {Array.from({ length: BONK_HEADS }, (_, i) => (
+                <BonkHead key={i} lit={i < bonkHeadsLit(p.bonks ?? 0)} at={enterIn + HEADS_START_MS + i * HEAD_STEP_MS}
+                  src={THEMED_SHARK_FRAMES[theme][1]} reduced={p.reduced} />
+              ))}
+            </View>
+            {(p.bestStreak ?? 0) > 0 ? (
+              <View style={[styles.chip, styles.flameChip]} accessibilityLabel={`Best combo: ${p.bestStreak}`}>
+                <GameIcon name="streak" size={streakFlameSize(p.bestStreak ?? 0)} />
+                <Text style={styles.flameValue}>{p.bestStreak}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : (
         <View style={styles.chips}>
           {showRun ? (
             <View style={styles.chip} accessibilityLabel={`Run total ${p.runScore}`}>
@@ -260,6 +306,7 @@ export function Breather(p: BreatherProps) {
             </View>
           ))}
         </View>
+        )}
         {p.duelLine ? <Text style={styles.duelLine}>{p.duelLine}</Text> : null}
         {p.goalStar ? (
           <View style={styles.starRow} accessibilityLabel={p.goal ?? undefined}>
@@ -415,6 +462,11 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', marginTop: 10 },
   chip: { flexDirection: 'row', backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 3, borderColor: NAVY, paddingHorizontal: 10, paddingVertical: 4, marginHorizontal: 4, alignItems: 'center' },
   chipValue: { fontFamily: 'Shark', fontSize: 18, color: NAVY, marginLeft: 5 },
+  headsChip: { paddingHorizontal: 6, height: 44 },
+  head: { width: 26, height: 26, marginHorizontal: 1 },
+  headOff: { opacity: 0.22 },
+  flameChip: { height: 44, paddingLeft: 6, paddingRight: 10 },
+  flameValue: { fontFamily: 'Shark', fontSize: 15, color: NAVY, marginLeft: 3 },
   chipLabel: { fontFamily: 'Knockout', fontSize: 11, color: BLUE, letterSpacing: 1 },
   duelLine: { fontFamily: 'Shark', fontSize: 18, color: CORAL, marginTop: 8 },
   splitChip: { flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, borderWidth: 2, borderColor: NAVY },

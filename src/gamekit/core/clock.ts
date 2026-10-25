@@ -71,6 +71,11 @@ export interface GameClock {
   /** Deltas produced by the last advance(). */
   lastSimDt: number;
   lastFxDt: number;
+  /**
+   * Wall ms of the last advance (0 while paused): no hit-stop or slow-mo in it. A game whose sim rides
+   * the presentation clock reads it where seconds must stay true (Whack's last 5 seconds).
+   */
+  lastWallDt: number;
   /** Fixed-step accumulator (ms of sim time not yet stepped). */
   acc: number;
   steps: number;
@@ -112,6 +117,7 @@ export function createClock(cfg: Partial<ClockConfig> = {}): GameClock {
     fxScale: 1,
     lastSimDt: 0,
     lastFxDt: 0,
+    lastWallDt: 0,
     acc: 0,
     steps: 0,
     localUntil,
@@ -210,8 +216,10 @@ export function advanceClock(c: GameClock, frameMs: number): number {
   if (c.paused) {
     c.lastSimDt = 0;
     c.lastFxDt = 0;
+    c.lastWallDt = 0;
     return 0;
   }
+  c.lastWallDt = dt;
   // Budget bucket leaks at the budget rate.
   c.bucketMs -= dt * c.cfg.freezeBudget;
   if (c.bucketMs < 0) c.bucketMs = 0;

@@ -26,6 +26,9 @@ import { K_ANGLER, K_BRUISER, K_HELMET, K_PUFFER } from './waves';
 import { hitTest, touchOffset, type BoardLayout } from './render/layout';
 import { computeRender, createHoleAnim, createRenderState, type HoleAnim, type RenderState } from './render/renderState';
 
+/** The last stretch of a Burst (the last 5 plus the ticks' lead) advances on wall time, never the presentation clock. */
+export const TRUE_TIME_MS = 5600;
+
 export interface RuntimeFlags {
   running: boolean;
   acc: number;
@@ -286,8 +289,12 @@ export function useWhackRuntime(opts: {
           f = 0.5 + 0.5 * q * q;
           r.easeT += fxDt;
         }
-        r.wallMs += c.paused ? 0 : fxDt > 0 ? fxDt : 0;
-        r.acc += fxDt * f;
+        // The last seconds run on true wall time (no hit-stop or slow-mo stretch), so each of the last 5
+        // seconds is one real second and the ticks queued ahead land on their stamps (w5: seconds measured
+        // 1.04 to 1.28 s of wall time when the sim rode the presentation clock to the end).
+        const dt = s.len - s.t <= TRUE_TIME_MS ? c.lastWallDt : fxDt;
+        r.wallMs += c.paused ? 0 : dt > 0 ? dt : 0;
+        r.acc += dt * f;
         const whole = Math.floor(r.acc);
         // acc can be negative after a party nudge (the board ran ahead of the room clock): hold until caught up.
         if (whole > 0) {
