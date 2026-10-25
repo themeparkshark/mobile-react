@@ -29,6 +29,8 @@ import MatchLinkBanner from '../../components/match/MatchLinkBanner';
 import { friendlyActionError, isLinkFailure } from '../../services/match/matchLink';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+// Bottom edge of the ARENA BATTLE title and the three header cards.
+const HEADER_BOTTOM = 180;
 
 // Pillar images
 const PILLAR_IMAGES = {
@@ -154,7 +156,7 @@ const AnimatedPillar = ({
     // On short screens (iPhone SE) the winner tower grew up into the header
     // cards. Cap the tower height to the room between the header and the
     // tower bases (58% down), keeping the winner-to-side size ratio.
-    const maxWinner = (SCREEN_H * 0.58 - 190) / aspectRatio;
+    const maxWinner = (SCREEN_H * 0.58 - (HEADER_BOTTOM + 22)) / aspectRatio;
     const winnerSize = Math.min(SCREEN_W * 0.45, maxWinner);
     // Short screens: side towers stay close to the winner's size so their
     // crests still read (they sit lower, so they never reach the header).
@@ -238,18 +240,23 @@ const AnimatedPillar = ({
           },
         ]}
       >
-        {/* Winner glow effect */}
+        {/* Winner stage: always fully solid. It breathes in scale only (native
+            driver), on a plain wrapper so the navy outline stays in step with
+            the fill. */}
         {isWinner && (
           <Animated.View
+            pointerEvents="none"
             style={[
-              styles.pillarGlow,
+              styles.pillarStageWrap,
               {
-                backgroundColor: teamColor,
-                opacity: glowAnim,
-                shadowColor: teamColor,
+                transform: [
+                  { scale: glowAnim.interpolate({ inputRange: [0.3, 1], outputRange: [1, 1.06] }) },
+                ],
               },
             ]}
-          />
+          >
+            <View style={[styles.pillarGlow, { backgroundColor: teamColor }]} />
+          </Animated.View>
         )}
         
         {/* Pillar image */}
@@ -459,6 +466,27 @@ const AnimatedButton = ({
     </TouchableOpacity>
   );
 };
+
+const clock = (secs: number) => `${Math.floor(secs / 60)}:${(secs % 60).toString().padStart(2, '0')}`;
+
+// "Come back soon" state of an arena button. A solid cream pill at full
+// opacity (never a see-through, broken-looking button): the button's name, then
+// a clock and the time left in navy. The ready state is the full-colour art.
+const RestingButton = ({ label, line, icon = 'timer', style, big }: {
+  label: string;
+  line: string;
+  icon?: 'timer' | 'swords' | 'check';
+  style: any;
+  big?: boolean;
+}) => (
+  <View style={[style, styles.restingBtn]} accessible accessibilityLabel={`${label}, ${line}`}>
+    <Text style={[styles.restingLabel, big && styles.restingLabelBig]} numberOfLines={1}>{label}</Text>
+    <View style={styles.restingRow}>
+      <GameIcon name={icon} size={big ? 22 : 16} />
+      <Text style={[styles.restingTime, big && styles.restingTimeBig]} numberOfLines={1}>{line}</Text>
+    </View>
+  </View>
+);
 
 // Sparkle component
 const Sparkle = ({ x, y, delay }: { x: number; y: number; delay: number }) => {
@@ -789,7 +817,8 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     Array(12).fill(0).map((_, i) => ({
       id: `s-${i}`,
       x: Math.random() * SCREEN_W,
-      y: SCREEN_H * 0.15 + Math.random() * (SCREEN_H * 0.35),
+      // Start below the header cards (about 180 pt) so no star crosses their text.
+      y: HEADER_BOTTOM + Math.random() * Math.max(40, SCREEN_H * 0.5 - HEADER_BOTTOM),
       delay: i * 400,
     }))
   , []);
@@ -899,9 +928,14 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             {/* Your Team */}
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>YOUR TEAM</Text>
-              <Text style={[styles.statValue, { color: TEAM_COLORS[player?.team as keyof typeof TEAM_COLORS] || '#fff' }]}>
-                {player?.team ? TEAM_NAMES[player.team as keyof typeof TEAM_NAMES]?.replace('Team ', '') : 'None'}
-              </Text>
+              <View style={styles.statTeamRow}>
+                {player?.team && TEAMS[player.team as TeamId] ? (
+                  <Image source={TEAMS[player.team as TeamId].badge} style={styles.statCrest} contentFit="contain" />
+                ) : null}
+                <Text style={[styles.statValue, { color: TEAM_COLORS[player?.team as keyof typeof TEAM_COLORS] || '#123A6B' }]}>
+                  {player?.team ? TEAM_NAMES[player.team as keyof typeof TEAM_NAMES]?.replace('Team ', '') : 'None'}
+                </Text>
+              </View>
             </View>
             
             {/* Countdown */}
@@ -915,9 +949,14 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             {/* Leader */}
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>LEADING</Text>
-              <Text style={[styles.statValue, { color: hasWinner ? TEAM_COLORS[winningTeam] : '#fff' }]}>
-                {hasWinner ? TEAM_NAMES[winningTeam]?.replace('Team ', '') : 'TIE'}
-              </Text>
+              <View style={styles.statTeamRow}>
+                {hasWinner ? (
+                  <Image source={TEAMS[winningTeam].badge} style={styles.statCrest} contentFit="contain" />
+                ) : null}
+                <Text style={[styles.statValue, { color: hasWinner ? TEAM_COLORS[winningTeam] : '#123A6B' }]}>
+                  {hasWinner ? TEAM_NAMES[winningTeam]?.replace('Team ', '') : 'TIE'}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
@@ -947,104 +986,109 @@ export default function GymBattleScreen({ navigation, route }: Props) {
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
-          {/* Top row: Defend, Check In, Battle */}
+          {/* Top row: Defend, Check In, Battle. Ready = READY tag + the
+              full-colour button. Waiting = a solid cream pill with a clock. */}
           <View style={styles.actionRow}>
             {/* Defend button - 30 min cooldown */}
-            <View style={{ alignItems: 'center' }}>
-              {!battleActive && player ? (
-                <View style={styles.cooldownBadge}>
-                  <Text style={styles.cooldownText}>WAITING</Text>
-                </View>
-              ) : player && defendCooldown > 0 ? (
-                <View style={styles.cooldownBadge}>
-                  <Text style={styles.cooldownText}>
-                    {Math.floor(defendCooldown / 60)}:{(defendCooldown % 60).toString().padStart(2, '0')}
-                  </Text>
-                </View>
-              ) : player ? (
-                <View style={styles.readyBadge}>
-                  <Text style={styles.readyText}>READY</Text>
-                </View>
-              ) : null}
-              <AnimatedButton 
-                onPress={handleDefend}
-                disabled={!battleActive || defendCooldown > 0}
-                source={require('../../../assets/images/btn-defend.png')}
-                style={styles.actionBtnImage}
-              />
+            <View style={styles.actionCell}>
+              {battleActive && defendCooldown <= 0 ? (
+                <>
+                  <View style={styles.readyBadge}>
+                    <Text style={styles.readyText}>READY</Text>
+                  </View>
+                  <AnimatedButton
+                    onPress={handleDefend}
+                    source={require('../../../assets/images/btn-defend.png')}
+                    style={styles.actionBtnImage}
+                  />
+                </>
+              ) : (
+                <>
+                  <View style={styles.badgeSpacer} />
+                  <RestingButton
+                    label="DEFEND"
+                    line={!battleActive ? 'SOON' : clock(defendCooldown)}
+                    style={styles.actionBtnImage}
+                  />
+                </>
+              )}
             </View>
-            
+
             {/* Check In button */}
-            <View style={{ alignItems: 'center' }}>
-              {!battleActive && player ? (
-                <View style={styles.cooldownBadge}>
-                  <Text style={styles.cooldownText}>WAITING</Text>
-                </View>
-              ) : player && !canCheckIn ? (
-                <View style={styles.cooldownBadge}>
-                  <Text style={styles.cooldownText}>
-                    {checkinCooldown > 0 
-                      ? `${Math.floor(checkinCooldown / 60)}:${(checkinCooldown % 60).toString().padStart(2, '0')}`
-                      : 'WAIT'}
-                  </Text>
-                </View>
-              ) : player && canCheckIn ? (
-                <View style={styles.readyBadge}>
-                  <Text style={styles.readyText}>READY</Text>
-                </View>
-              ) : null}
-              <AnimatedButton 
-                onPress={handleCheckIn}
-                disabled={!battleActive || !canCheckIn}
-                source={require('../../../assets/images/btn-checkin.png')}
-                style={styles.actionBtnImage}
-              />
+            <View style={styles.actionCell}>
+              {battleActive && canCheckIn ? (
+                <>
+                  <View style={styles.readyBadge}>
+                    <Text style={styles.readyText}>READY</Text>
+                  </View>
+                  <AnimatedButton
+                    onPress={handleCheckIn}
+                    source={require('../../../assets/images/btn-checkin.png')}
+                    style={styles.actionBtnImage}
+                  />
+                </>
+              ) : (
+                <>
+                  <View style={styles.badgeSpacer} />
+                  <RestingButton
+                    label="CHECK IN"
+                    line={battleActive && checkinCooldown > 0 ? clock(checkinCooldown) : 'SOON'}
+                    style={styles.actionBtnImage}
+                  />
+                </>
+              )}
             </View>
-            
+
             {/* Battle button */}
-            <View style={{ alignItems: 'center' }}>
-              {!battleActive && player ? (
-                <View style={styles.cooldownBadge}>
-                  <Text style={styles.cooldownText}>WAITING</Text>
-                </View>
-              ) : player && !canAttack ? (
-                attackCooldown > 0 ? (
-                  <View style={styles.cooldownBadge}>
-                    <Text style={styles.cooldownText}>
-                      {Math.floor(attackCooldown / 60)}:{(attackCooldown % 60).toString().padStart(2, '0')}
-                    </Text>
+            <View style={styles.actionCell}>
+              {battleActive && canAttack ? (
+                <>
+                  <View style={styles.readyBadge}>
+                    <Text style={styles.readyText}>READY</Text>
                   </View>
-                ) : !hasSwords ? (
-                  <View style={styles.lockedBadge}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}><Text style={styles.lockedText}>NEED 2</Text><GameIcon name="swords" size={14} /></View>
-                  </View>
-                ) : (
-                  <View style={styles.cooldownBadge}>
-                    <Text style={styles.cooldownText}>WAIT</Text>
-                  </View>
-                )
-              ) : player && canAttack ? (
-                <View style={styles.readyBadge}>
-                  <Text style={styles.readyText}>READY</Text>
-                </View>
-              ) : null}
-              <AnimatedButton 
-                onPress={handleBattle}
-                disabled={!battleActive || !canAttack}
-                source={require('../../../assets/images/btn-battle.png')}
-                style={styles.actionBtnImage}
-              />
+                  <AnimatedButton
+                    onPress={handleBattle}
+                    source={require('../../../assets/images/btn-battle.png')}
+                    style={styles.actionBtnImage}
+                  />
+                </>
+              ) : (
+                <>
+                  <View style={styles.badgeSpacer} />
+                  {battleActive && attackCooldown <= 0 && !hasSwords ? (
+                    <RestingButton label="BATTLE" line="NEED 2" icon="swords" style={styles.actionBtnImage} />
+                  ) : (
+                    <RestingButton
+                      label="BATTLE"
+                      line={battleActive && attackCooldown > 0 ? clock(attackCooldown) : 'SOON'}
+                      style={styles.actionBtnImage}
+                    />
+                  )}
+                </>
+              )}
             </View>
           </View>
 
-          {/* Leave a Coin button */}
-          <AnimatedButton 
-            onPress={handleLeaveCoin}
-            disabled={!battleActive || hasPlacedToday}
-            source={require('../../../assets/images/btn-leavecoin.png')}
-            style={styles.leaveCoinBtnImage}
-            noShimmer
-          />
+          {/* Leave a Coin: the gold art when it can be used, otherwise a solid
+              cream "done for today" or "soon" pill in the same spot. */}
+          {battleActive && !hasPlacedToday ? (
+            <AnimatedButton
+              onPress={handleLeaveCoin}
+              source={require('../../../assets/images/btn-leavecoin.png')}
+              style={styles.leaveCoinBtnImage}
+              noShimmer
+            />
+          ) : (
+            <View style={[styles.leaveCoinBtnImage, styles.leaveCoinRestSlot]}>
+              <RestingButton
+                label="LEAVE A COIN"
+                line={hasPlacedToday ? 'DONE TODAY' : 'SOON'}
+                icon={hasPlacedToday ? 'check' : 'timer'}
+                style={styles.leaveCoinRest}
+                big
+              />
+            </View>
+          )}
 
           {/* Go Back button */}
           <AnimatedButton 
@@ -1114,12 +1158,15 @@ const styles = StyleSheet.create({
   // tower base with a navy outline, peeking out around the base. No soft glow
   // (Dustin asked to drop the glow-filter look). The render passes
   // shadowColor; shadowOpacity 0 keeps it from drawing anything soft.
-  pillarGlow: {
+  pillarStageWrap: {
     position: 'absolute',
     bottom: '1%',
     left: '6%',
     right: '6%',
     height: '9%',
+  },
+  pillarGlow: {
+    flex: 1,
     borderRadius: 999,
     borderWidth: 3,
     borderColor: '#123A6B',
@@ -1239,50 +1286,74 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: 'Shark',
   },
-  cooldownBadge: {
-    backgroundColor: 'rgba(5, 52, 110, 0.8)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: '#EF4444',
+  actionCell: {
+    alignItems: 'center',
   },
-  cooldownText: {
-    color: '#EF4444',
-    fontSize: 12,
-    fontWeight: '800',
-    fontFamily: 'Shark',
-  },
+  // Solid green READY tag with the navy outline (go). Same height as the
+  // spacer a waiting button keeps, so the row never jumps.
   readyBadge: {
-    backgroundColor: 'rgba(5, 52, 110, 0.8)',
+    height: 24,
+    justifyContent: 'center',
+    backgroundColor: '#22C55E',
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: 12,
     marginBottom: 4,
-    borderWidth: 1,
-    borderColor: '#22C55E',
+    borderWidth: 2,
+    borderColor: '#123A6B',
   },
   readyText: {
-    color: '#22C55E',
+    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800',
     fontFamily: 'Shark',
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 0,
   },
-  lockedBadge: {
-    backgroundColor: 'rgba(5, 52, 110, 0.8)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+  badgeSpacer: {
+    height: 24,
     marginBottom: 4,
-    borderWidth: 1,
-    borderColor: '#6B7280',
   },
-  lockedText: {
-    color: '#6B7280',
-    fontSize: 10,
+  // Waiting (come back soon): a solid, quieter cream pill at full opacity.
+  restingBtn: {
+    backgroundColor: '#EFE6D2',
+    borderRadius: 999,
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  restingLabel: {
+    color: '#5A6F8C',
+    fontSize: 11,
     fontWeight: '800',
     fontFamily: 'Shark',
+    letterSpacing: 0.5,
+  },
+  restingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  restingTime: {
+    color: '#123A6B',
+    fontSize: 15,
+    fontWeight: '900',
+    fontFamily: 'Shark',
+  },
+  restingLabelBig: { fontSize: 14 },
+  restingTimeBig: { fontSize: 20 },
+  leaveCoinRestSlot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leaveCoinRest: {
+    width: '78%',
+    height: '56%',
   },
   arenaHeader: {
     position: 'absolute',
@@ -1307,37 +1378,56 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 12,
   },
+  // Same bright cream card as Join a Team and Defend: solid fill (nothing
+  // shows through), 3 pt navy outline and a hard navy drop.
   statBox: {
     flex: 1,
-    backgroundColor: 'rgba(5, 52, 110, 0.6)',
-    borderRadius: 12,
-    padding: 10,
+    backgroundColor: '#FFF8E6',
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.3)',
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
+  // The timer card is the gold one, so the middle reads as "the clock".
   countdownBox: {
-    borderColor: '#FBBF24',
-    borderWidth: 2,
+    backgroundColor: '#FFD54A',
   },
   statLabel: {
     fontSize: 10,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '800',
+    color: '#123A6B',
     letterSpacing: 1,
-    marginBottom: 4,
+    marginBottom: 3,
+  },
+  statTeamRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statCrest: {
+    width: 22,
+    height: 22,
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '900',
     fontFamily: 'Shark',
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 1, height: 1.5 },
+    textShadowRadius: 0,
   },
   countdownText: {
     fontSize: 18,
     fontWeight: '900',
-    color: '#FBBF24',
+    color: '#123A6B',
     fontFamily: 'Shark',
-    letterSpacing: 2,
+    letterSpacing: 1,
   },
   linkSlot: { alignSelf: 'stretch', paddingHorizontal: 24 },
   linkOverlay: { position: 'absolute', left: 16, right: 16, bottom: 150, zIndex: 50 },

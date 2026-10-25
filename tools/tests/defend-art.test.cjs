@@ -51,7 +51,7 @@ test('the Defend countdown ends on GO!, never a 0', () => {
 // plaque and bonus banner covered the shield.
 test('Gym towers and the Defend layout fit a short screen', () => {
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
-  assert.match(gym, /const maxWinner = \(SCREEN_H \* 0\.58 - 190\) \/ aspectRatio;/);
+  assert.match(gym, /const maxWinner = \(SCREEN_H \* 0\.58 - \(HEADER_BOTTOM \+ 22\)\) \/ aspectRatio;/);
   assert.match(gym, /Math\.min\(SCREEN_W \* 0\.32, winnerSize \* sideRatio\)/);
   const defend = read('src/components/GymBattle/DefendMiniGameModal.tsx');
   assert.match(defend, /const SHORT = SCREEN_H < 700;/);
@@ -112,4 +112,50 @@ test('Join a Team uses the same bright cream card as Defend', () => {
   assert.match(styleBlock(src, 'noTeamBox'), /backgroundColor: '#FFF8E6'/);
   assert.match(styleBlock(src, 'noTeamBlur'), /borderColor: '#123A6B'/);
   assert.match(styleBlock(src, 'noTeamText'), /color: '#123A6B'/);
+});
+
+// Grader, wave 5 round 1: the header cards were dark see-through slabs, the
+// winner stage and the Defend ring faded in and out like a smudge, and the
+// cooldown buttons looked broken at 30% opacity.
+test('Gym header cards are solid cream with crests, and nothing pulses in opacity', () => {
+  const src = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  const box = styleBlock(src, 'statBox');
+  assert.match(box, /backgroundColor: '#FFF8E6'/);
+  assert.match(box, /borderWidth: 3,\s*borderColor: '#123A6B'/);
+  assert.match(styleBlock(src, 'countdownText'), /color: '#123A6B'/);
+  assert.equal((src.match(/style=\{styles\.statCrest\}/g) || []).length, 2, 'YOUR TEAM and LEADING carry the team crest');
+  assert.doesNotMatch(src, /rgba\(5, 52, 110, 0\.6\)/, 'no see-through navy header slab');
+  assert.match(src, /y: HEADER_BOTTOM \+ Math\.random\(\)/, 'sparkles start below the header cards');
+  const stage = src.slice(src.indexOf('{/* Winner stage'), src.indexOf('{/* Pillar image */}'));
+  assert.doesNotMatch(stage, /opacity:/, 'the winner stage never fades');
+  assert.match(stage, /\{ scale: glowAnim\.interpolate\(\{ inputRange: \[0\.3, 1\], outputRange: \[1, 1\.06\] \}\) \}/);
+  const defend = read('src/components/GymBattle/DefendMiniGameModal.tsx');
+  const ring = defend.slice(defend.indexOf('const glowAnimStyle'), defend.indexOf('}));', defend.indexOf('const glowAnimStyle')));
+  assert.doesNotMatch(ring, /opacity/, 'the Defend ring stays fully solid');
+});
+
+test('waiting arena buttons are solid cream pills with a clock, ready ones are full colour', () => {
+  const src = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  const rest = styleBlock(src, 'restingBtn');
+  assert.match(rest, /backgroundColor: '#EFE6D2'/);
+  assert.doesNotMatch(rest, /opacity/);
+  assert.match(src, /<GameIcon name=\{icon\} size=\{big \? 22 : 16\} \/>/);
+  assert.equal((src.match(/<RestingButton/g) || []).length, 5);
+  const row = src.slice(src.indexOf('{/* Top row: Defend, Check In, Battle.'), src.indexOf('{/* Go Back button */}'));
+  assert.doesNotMatch(row, /disabled=/, 'no see-through disabled button in the action area');
+  assert.doesNotMatch(src, /cooldownBadge|lockedBadge/);
+});
+
+test('the Defend result button says DONE, so the tier is said once', () => {
+  const src = read('src/components/GymBattle/DefendMiniGameModal.tsx');
+  assert.match(src, /<Text style=\{styles\.doneButtonText\}>DONE<\/Text>/);
+  assert.doesNotMatch(src, />NICE!<\/Text>/);
+});
+
+test('the Defend round clock runs from its start time, so taps cannot stretch it', () => {
+  const src = read('src/components/GymBattle/DefendMiniGameModal.tsx');
+  assert.match(src, /GAME_DURATION - Math\.floor\(\(Date\.now\(\) - startedAt\) \/ 1000\)/);
+  assert.match(src, /if \(gameState !== 'playing' \|\| Date\.now\(\) >= endsAtRef\.current\) return;/);
+  assert.match(src, /timeLeft <= 7 && timeLeft > 0 && !bonusFiredRef\.current/);
+  assert.doesNotMatch(src, /setTimeLeft\(t => t - 1\)/);
 });

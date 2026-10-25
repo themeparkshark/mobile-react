@@ -128,7 +128,7 @@ export default function DefendMiniGameModal({
   const glowIntensity = useSharedValue(0.3);
   const multiplierScale = useSharedValue(1);
   const countdownScale = useSharedValue(1);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load sounds
   useEffect(() => {
@@ -165,9 +165,13 @@ export default function DefendMiniGameModal({
     }
   }, [visible]);
 
-  // Activate random multiplier (x2 or x3) at 7 seconds remaining
+  // Activate random multiplier (x2 or x3) at 7 seconds remaining. "<= 7" plus
+  // a once flag: a busy phone can step the clock from 8 straight to 6.
+  const bonusFiredRef = useRef(false);
   useEffect(() => {
-    if (gameState === 'playing' && timeLeft === 7) {
+    if (gameState !== 'playing') bonusFiredRef.current = false;
+    if (gameState === 'playing' && timeLeft <= 7 && timeLeft > 0 && !bonusFiredRef.current) {
+      bonusFiredRef.current = true;
       const randomMultiplier = Math.random() < 0.5 ? 2 : 3;
       setMultiplier(randomMultiplier as 2 | 3);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -201,23 +205,32 @@ export default function DefendMiniGameModal({
     }
   }, [gameState, countdown]);
 
-  // Timer countdown during game
+  // Round clock: measured from the start time, so a flurry of taps (which
+  // keeps the JS thread busy) can never stretch the 25 seconds.
+  const endsAtRef = useRef(0);
   useEffect(() => {
-    if (gameState === 'playing' && timeLeft > 0) {
-      timerRef.current = setTimeout(() => {
-        setTimeLeft(t => t - 1);
-        // Urgency haptics in last 5 seconds
-        if (timeLeft <= 6) {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
-      }, 1000);
-    } else if (gameState === 'playing' && timeLeft === 0) {
-      handleGameEnd();
-    }
-
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+    if (gameState !== 'playing') return;
+    const startedAt = Date.now();
+    endsAtRef.current = startedAt + GAME_DURATION * 1000;
+    let shown = GAME_DURATION;
+    const tick = () => {
+      const left = Math.max(0, GAME_DURATION - Math.floor((Date.now() - startedAt) / 1000));
+      if (left !== shown) {
+        shown = left;
+        // Urgency haptics in the last 5 seconds
+        if (left <= 5) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setTimeLeft(left);
+      }
+      if (left === 0 && timerRef.current) clearInterval(timerRef.current);
     };
+    timerRef.current = setInterval(tick, 100);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [gameState]);
+
+  useEffect(() => {
+    if (gameState === 'playing' && timeLeft === 0) handleGameEnd();
   }, [gameState, timeLeft]);
 
   // Continuous shield glow pulse during play
@@ -241,7 +254,7 @@ export default function DefendMiniGameModal({
   };
 
   const handleTap = useCallback((event: any) => {
-    if (gameState !== 'playing') return;
+    if (gameState !== 'playing' || Date.now() >= endsAtRef.current) return;
 
     // Haptic feedback - stronger during multiplier
     const intensity = multiplier > 1 ? Haptics.ImpactFeedbackStyle.Heavy :
@@ -354,11 +367,11 @@ export default function DefendMiniGameModal({
     transform: [{ scale: countdownScale.value }],
   }));
 
-  // Flat burst behind the shield: a solid ring that breathes a little in
-  // scale (UI thread). glowIntensity runs 0.3 to 0.6.
+  // Flat burst behind the shield: a fully solid ring (nothing shows through)
+  // that breathes a little in scale only, on the UI thread. glowIntensity
+  // runs 0.3 to 0.6.
   const glowAnimStyle = useAnimatedStyle(() => ({
-    opacity: 0.7 + glowIntensity.value * 0.5,
-    transform: [{ scale: 0.93 + (glowIntensity.value - 0.3) * 0.3 }],
+    transform: [{ scale: 0.95 + (glowIntensity.value - 0.3) * 0.25 }],
   }));
 
   // Simple tier based on taps (just for fun labels)
@@ -531,7 +544,7 @@ export default function DefendMiniGameModal({
               )}
               
               <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
-                <Text style={styles.doneButtonText}>NICE!</Text>
+                <Text style={styles.doneButtonText}>DONE</Text>
               </TouchableOpacity>
               </View>
             </Animated.View>
