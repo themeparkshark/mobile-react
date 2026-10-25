@@ -817,7 +817,9 @@ function LadderDay({ reward, state, stamp }: {
   const kind = mainKind(reward);
   const fallback = useSharedValue(state === 'done' ? 1 : 0);
   const s = stamp ?? fallback;
-  const checkStyle = useAnimatedStyle(() => ({ opacity: s.value, transform: [{ scale: 1.8 - s.value * 0.8 }] }));
+  // The check slams down onto the tile and stops there (never smaller than the tile, so the gold under it never peeks out).
+  const checkStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, s.value), transform: [{ scale: Math.max(1, 1.8 - s.value * 0.8) }] }));
+  const labelStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, s.value) }));
   return (
     <View style={[styles.day, state === 'today' && styles.dayToday, reward.day === 7 && styles.daySeven]}>
       <Text style={[styles.dayLabel, state === 'today' && styles.dayLabelToday]}>{`DAY ${reward.day}`}</Text>
@@ -827,9 +829,9 @@ function LadderDay({ reward, state, stamp }: {
       <Text style={styles.dayAmount}>{reward[kind]}</Text>
       {/* A collected day is one clean green tile (its day, then a big check): the prize under it never shows through. */}
       {(state === 'done' || stamp) && <Animated.View style={[styles.check, checkStyle]}>
-        <Text style={styles.dayLabelDone}>{`DAY ${reward.day}`}</Text>
         <GameIcon name="check" size={26} accessibilityLabel="Collected" />
       </Animated.View>}
+      {(state === 'done' || stamp) && <Animated.Text style={[styles.dayLabelDone, labelStyle]}>{`DAY ${reward.day}`}</Animated.Text>}
     </View>
   );
 }
@@ -849,9 +851,9 @@ const styles = StyleSheet.create({
   dayLabelToday: { color: '#7a3d00' },
   dimmed: { opacity: 0.55, marginVertical: 2 },
   dayAmount: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
-  check: { ...StyleSheet.absoluteFillObject, borderRadius: 10, backgroundColor: '#3cb85c', borderWidth: 2, borderColor: '#1f7a3a',
-    justifyContent: 'center', alignItems: 'center', paddingTop: 3, gap: 1 },
-  dayLabelDone: { fontFamily: 'Knockout', fontSize: 10, color: BRAND.white },
+  check: { ...StyleSheet.absoluteFillObject, borderRadius: 10, backgroundColor: '#3cb85c',
+    justifyContent: 'center', alignItems: 'center', paddingTop: 10 },
+  dayLabelDone: { position: 'absolute', top: 5, left: 0, right: 0, textAlign: 'center', fontFamily: 'Knockout', fontSize: 10, color: BRAND.white },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
   streakText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold },
   stage: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginTop: 6 },

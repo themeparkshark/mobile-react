@@ -703,7 +703,7 @@ test('wave 5 round 3: SE stand tiers fit, the card cancels its animations, Prism
   }
 
   const DG = read('src/components/DailyGiftModal.tsx');
-  assert.ok(/check: \{ \.\.\.StyleSheet\.absoluteFillObject, borderRadius: 10, backgroundColor: '#3cb85c'/.test(DG), 'a collected day is a solid green tile');
+  assert.ok(/check: \{ ...StyleSheet\.absoluteFillObject, borderRadius: 10, backgroundColor: '#3cb85c',\s*justifyContent/.test(DG) && /<Animated\.Text style={\[styles\.dayLabelDone, labelStyle\]}>/.test(DG), 'a collected day is a solid green tile, its day on top');
   assert.ok(DG.indexOf('Where the chest art is cut into lid and body') < DG.indexOf('export const LID_CUT') &&
     DG.indexOf('Where the chest art is cut into lid and body') > DG.indexOf('export const RESYNC_AFTER_POP_MS'), 'the LID_CUT note sits on LID_CUT');
 
