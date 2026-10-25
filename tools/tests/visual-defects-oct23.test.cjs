@@ -1391,3 +1391,47 @@ test('wave 5 round 3: a ride in range when the map opens has PLAY RIDE on the fi
   assert.match(redeem, /if \(reducedMotion \|\| covered\) enter\.setValue\(shown \? 1 : 0\);/);
   assert.match(redeem, /const pillShown = available && pillReady && !covered;/);
 });
+
+test('wave 5 round 3: ride islands mount their art a few per frame, never all 80 slots in the first commit', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const frames = [];
+  const m = loadTs('src/screens/ExploreScreen/islandMount.ts', {
+    react: { useEffect() {}, useState: v => [v, () => undefined] },
+    '../../components/map/mapCover': { useCoverArt: () => () => undefined },
+  }, { requestAnimationFrame: fn => { frames.push(fn); return frames.length; } });
+  const mounted = [];
+  const cancels = [];
+  for (let i = 0; i < 45; i++) cancels.push(m.queueIslandMount(() => mounted.push(i)));
+  cancels[44](); // a slot that lost its ride before its turn leaves the queue
+  assert.equal(frames.length, 1, 'one frame callback at a time');
+  let frame = 0;
+  while (frames.length) {
+    frames.shift()();
+    frame++;
+    assert.ok(mounted.length <= frame * m.ISLANDS_PER_FRAME, `frame ${frame}: at most ${m.ISLANDS_PER_FRAME} islands per frame`);
+  }
+  assert.equal(mounted.length, 44);
+  assert.deepEqual([...mounted], [...Array(44).keys()], 'in slot order, each once');
+  assert.equal(m.islandsWaiting(), 0);
+  assert.ok(m.ISLANDS_PER_FRAME <= 8);
+});
+
+test('wave 5 round 3: an island keeps its two map markers whatever it draws (MapLibre insert crash class)', () => {
+  const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
+  const body = marker.slice(marker.indexOf('function TaskMarker('), marker.indexOf('type IslandArtProps'));
+  // Exactly two Markers, rendered unconditionally; only the main marker's one child switches, from a
+  // bare box of the island's own size to the art, and that switch is one way (useIslandMount).
+  assert.equal((body.match(/<Marker[\s>]/g) ?? []).length, 2);
+  assert.match(body, /const materialized = useIslandMount\(!parked\);/);
+  assert.match(body, /\{materialized \? <IslandArt [^]*? \/> : <View style=\{styles\.bare\} \/>\}\s*<\/Marker>/);
+  assert.match(marker, /container: \{ width: 72, height: 96,/);
+  assert.match(marker, /bare: \{ width: 72, height: 96, opacity: 0 \},/);
+  // The art's animated styles live in IslandArt, not in every slot.
+  assert.doesNotMatch(body, /useAnimatedStyle|useSharedValue/);
+  const mount = read('src/screens/ExploreScreen/islandMount.ts');
+  assert.match(mount, /if \(mounted \|\| !hasRide\) return undefined;/, 'never turns false again');
+  assert.match(mount, /useCoverArt\(hasRide && !mounted\);/, 'the loading cover waits for islands with a ride');
+  // Every ride slot stays a TaskMarker from the first commit (parked or not).
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /if \(!task\) return <TaskMarker key=\{`ride-\$\{slot\}`\} task=\{PARKED_TASK\} parked/);
+});
