@@ -1,11 +1,13 @@
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import Reanimated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { Animated, Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 import shortenNumber from '../../helpers/shorten-number';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { useHelp } from '../help/HelpProvider';
 import { glossaryKeyForName } from '../../services/help/glossary';
 import { counterStep, counterTicks } from '../../services/retention/counterTicks';
+import { withDelayAfter } from '../retention/delayUntil';
 
 interface CurrencyProps {
   /** Remote icon URL or a bundled require(); falls back to the gold coin. */
@@ -35,10 +37,37 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
   const prevCount = useRef(count);
   const shown = useRef(count);
   shown.current = displayCount;
+  const queuedRef = useRef<number | null>(null);
   /** A prize flight is landing here: the number steps up per icon, and the read-back balance waits its turn. */
   const flight = useRef<{ until: number; timers: ReturnType<typeof setTimeout>[] } | null>(null);
   /** The number the last flight counted up to: shown until the read-back balance arrives (read after the moment). */
   const expect = useRef<number | null>(null);
+  /**
+   * A prize flight announced ahead: its new number is mounted hidden in the render that starts the flight and swapped
+   * in on the UI thread as the first prize lands (no render while the prizes fly or the next card grows in).
+   */
+  const [queued, setQueued] = useState<number | null>(null);
+  queuedRef.current = queued;
+  const swap = useSharedValue(0);
+  useEffect(() => {
+    if (!flyTarget) return;
+    return counterTicks.subscribeSwap(flyTarget, sw => {
+      const base = expect.current ?? shown.current;
+      expect.current = base + sw.amount;
+      queuedRef.current = base + sw.amount;
+      setQueued(base + sw.amount);
+      swap.value = 0;
+      swap.value = withDelayAfter(sw.mark as SharedValue<number>, sw.stepAt, withTiming(1, { duration: 90 }));
+    });
+  }, [flyTarget]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The read-back balance is in (the plain number shows it now): the swap layer goes, after that render is on screen.
+  const hadQueued = useRef(false);
+  useLayoutEffect(() => {
+    if (queued !== null) { hadQueued.current = true; return; }
+    if (hadQueued.current) { hadQueued.current = false; swap.value = 0; }
+  }, [queued]); // eslint-disable-line react-hooks/exhaustive-deps
+  const oldNum = useAnimatedStyle(() => ({ opacity: 1 - swap.value }));
+  const newNum = useAnimatedStyle(() => ({ opacity: swap.value, transform: [{ scale: 1 + 0.12 * (1 - swap.value) }] }));
   
   // Tooltip animation
   const tooltipAnim = useRef(new Animated.Value(0)).current;
@@ -119,14 +148,16 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
       const base = shown.current;
       const n = plan.landings.length;
       const last = Math.max(...plan.landings);
-      expect.current = base + plan.amount;
       // Every landing hops the icon (native driver, no render). In a whole flight the number changes once, together
       // with every other counter (one render for the HUD), as soon as each has its first prize in; on its own it steps
       // per landing.
-      const step = plan.step;
+      // Announced ahead (the number swaps in on the UI thread): only the hops here.
+      const swapped = queuedRef.current !== null;
+      const step = swapped ? undefined : plan.step;
+      if (!swapped) expect.current = base + plan.amount;
       if (step) step(() => setDisplayCount(base + plan.amount));
       const timers = plan.landings.map((ms, i) => setTimeout(() => {
-        if (!step) setDisplayCount(counterStep(base, plan.amount, i, n));
+        if (!step && !swapped) setDisplayCount(counterStep(base, plan.amount, i, n));
         bounceAnim.setValue(1.18);
         Animated.spring(bounceAnim, { toValue: 1, friction: 4, useNativeDriver: true }).start();
       }, ms));
@@ -153,7 +184,8 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
       const counted = expect.current;
       expect.current = null;
       // The balance the landings already counted up to: nothing moves.
-      if (count === counted) { prevCount.current = count; setDisplayCount(count); return; }
+      if (count === counted) { prevCount.current = count; setDisplayCount(count); setQueued(null); return; }
+      setQueued(null);
       // Something else changed too: roll on from the number on screen (never back down to the old balance first).
       prevCount.current = counted;
     }
@@ -258,9 +290,18 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
               contentFit="contain"
             />
           </Animated.View>
-          <Text style={styles.countText} numberOfLines={1} adjustsFontSizeToFit>
-            {shortenNumber(displayCount)}
-          </Text>
+          <View style={styles.countBox}>
+            <Reanimated.Text style={[styles.countText, styles.countIn, oldNum]} numberOfLines={1} adjustsFontSizeToFit>
+              {shortenNumber(displayCount)}
+            </Reanimated.Text>
+            {queued !== null && (
+              <View style={styles.countOver} pointerEvents="none">
+                <Reanimated.Text style={[styles.countText, styles.countIn, newNum]} numberOfLines={1} adjustsFontSizeToFit>
+                  {shortenNumber(queued)}
+                </Reanimated.Text>
+              </View>
+            )}
+          </View>
         </View>
       </TouchableOpacity>
       
@@ -314,6 +355,10 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
   },
+  // The number's box takes the pill's free width; a queued number sits exactly over the shown one.
+  countBox: { flex: 1, justifyContent: 'center' },
+  countIn: { flex: 0, alignSelf: 'stretch' },
+  countOver: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center' },
   countText: {
     flex: 1,
     textAlign: 'center',

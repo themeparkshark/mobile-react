@@ -509,59 +509,82 @@ test('the loops frame graph shows only in dev or a release-like perf capture fla
   }
 });
 
-test('wave 5 round 2: the chain handoff is one render, the dim always comes back with the next card', () => {
+test('wave 5 round 2: the chain handoff is one render, then runs on a UI-thread mark; the dim always comes back', () => {
   const hook = read('src/components/retention/useRetention.tsx');
   const start = hook.indexOf('const finishReveal = ');
   const end = hook.indexOf('const next = async () => {', start);
   const handoff = hook.slice(start, end);
   // The B path says everything in one render (the flight and which card is up) and returns: no timer that renders
-  // again mid-flight or mid-entrance, and no balance read in the middle of the moment.
+  // mid-flight or mid-entrance, and no balance read in the middle of the moment.
   const b = handoff.slice(handoff.indexOf("if (src === 'daily' && pre && !reducedMotion)"));
-  assert.match(b, /setView\(pre\.step === 'flame' && flameRef\.current \? \{ k: 'flame', moment: flameRef\.current, slot: 'B' \} : \{ k: 'tomorrow', slot: 'B' \}\);\s*\n\s*setLegs\(legs\);\s*\n\s*setLegsAt\(t0\);/);
-  assert.doesNotMatch(handoff, /setTimeout/);
+  assert.match(b, /setView\(pre\.step === 'flame' && flameRef\.current \? \{ k: 'flame', moment: flameRef\.current, slot: 'B' \} : \{ k: 'tomorrow', slot: 'B' \}\);\s*\n\s*setLegs\(legs\);/);
   assert.doesNotMatch(handoff, /refreshPlayer/);
   assert.doesNotMatch(hook, /legsTimer/);
   assert.match(handoff, /playerReadDue\.current = true;/);
   assert.match(hook, /if \(!playerReadDue\.current \|\| \(view && view\.k !== 'sheet' && view\.k !== 'push'\)\) return;/);
-  // The flight layer goes with the view (no extra render to take it down).
-  assert.match(hook, /legs: view\?\.k === 'flying' \|\| slotB \? legs : null/);
+  // The only timer in the handoff lets the chest card go once the next card has fully played in.
+  assert.deepEqual([...handoff.matchAll(/setTimeout\(/g)].length, 1);
+  assert.match(handoff, /nextAtRef\.current \+ A_LET_GO_AFTER_MS/);
+  // Everything that moves waits for the handoff mark: the next card, the exit, the dim, the flight.
+  assert.match(b, /cardB\.value = withDelayAfter\(handoffAt, nextOffset, withSpring\(1, SPRING\.settle\)\);/);
+  assert.match(hook, /out\.value = withDelayAfter\(handoffAt, 0, withTiming\(1,/);
+  assert.match(hook, /dim\.value = dimForHandoff\(handoffAt, h\.nextOffset\);/);
+  assert.match(hook, /legs: view\?\.k === 'flying' \|\| slotB \? legs : null, landed: flightLanded, flightMark: handoffAt/);
+  assert.match(read('src/components/retention/LoopStage.tsx'), /mark=\{s\.flightMark\}/);
+  // The mark is set on the UI thread, the frame after the render that started the handoff is on screen.
+  assert.match(hook, /runOnUI\(\(\) => \{\s*'worklet';\s*requestAnimationFrame\(\(\) => \{/);
+  const flight = read('src/components/retention/PrizeFlight.tsx');
+  assert.match(flight, /t\.value = mark \? withDelayAfter\(mark, delay, go\)/);
   // The next card counts taps only once it has grown in.
   assert.match(hook, /onDone=\{\(\) => \{ if \(bIsIn\(\)\) afterTomorrowRef\.current\(\); \}\}/);
-  // The dim: one write, from a JS mark set in the same render, never a shared value read back.
-  assert.match(handoff, /nextAtRef\.current = nextAt;/);
-  assert.match(hook, /dim\.value = dimForExit\(nextAtRef\.current\);/);
-  assert.doesNotMatch(hook, /const nextAt = enteredB\.value;/);
-  const now = 1_000_000;
-  assert.deepEqual(plain(L.exitDimPlan(0, now, 200)), { lift: true, backAt: null, end: 0 });
-  assert.deepEqual(plain(L.exitDimPlan(now + 700, now, 200)), { lift: true, backAt: now + 700, end: L.LOOP_DIM_LEVEL });
-  // A booked card whose mark is near or past never leaves the map bright.
-  assert.equal(L.exitDimPlan(now + 100, now, 200).end, L.LOOP_DIM_LEVEL);
-  assert.equal(L.exitDimPlan(now - 500, now, 200).end, L.LOOP_DIM_LEVEL);
+  // The dim plan: it lifts for the flight and always ends at the full dim when a next card is booked.
+  assert.deepEqual(plain(L.handoffDim(null, 200, 300)), [{ after: 0, to: 0, ms: 200 }]);
+  const withCard = plain(L.handoffDim(830, 200, 300));
+  assert.equal(withCard.at(-1).to, L.LOOP_DIM_LEVEL);
+  assert.equal(withCard.at(-1).after, 830);
+  assert.equal(L.handoffDim(50, 200, 300).at(-1).after, 200, 'never comes back before it has lifted');
   assert.equal(L.LOOP_DIM_LEVEL, 0.55);
 });
 
-test('wave 5 round 2: a prize flight re-renders the HUD once, and the next card starts after that render', () => {
+test('wave 5 round 2: the HUD numbers change with no render while prizes fly (mounted hidden in the handoff render)', () => {
   const C = loadTs('src/services/retention/counterTicks.ts');
-  // Every counter's number changes together, as soon as each has its first prize in.
   assert.equal(C.counterStepAt([{ landings: [550, 595, 640] }, { landings: [630] }]), 630);
-  const steps = [];
-  const offs = ['coins', 'tickets'].map(t => C.counterTicks.subscribe(t, plan => { steps.push([t, plan.stepAt]); plan.step(() => undefined); }));
-  C.counterTicks.flight([{ target: 'coins', amount: 25, landings: [550, 595] }, { target: 'tickets', amount: 1, landings: [630] }]);
-  offs.forEach(off => off());
-  assert.deepEqual(steps, [['coins', 630], ['tickets', 630]]);
+  assert.deepEqual(plain(C.legLandings({ icons: 3, delay: 30 }, 45, 520)), [550, 595, 640]);
+  const seen = [];
+  const off = C.counterTicks.subscribeSwap('coins', sw => seen.push([sw.amount, sw.stepAt]));
+  C.counterTicks.prepare([{ target: 'coins', amount: 25 }, { target: 'tickets', amount: 0 }], {}, 630);
+  off();
+  assert.deepEqual(seen, [[25, 630]]);
+  const hook = read('src/components/retention/useRetention.tsx');
+  const handoff = hook.slice(hook.indexOf('const finishReveal = '), hook.indexOf('const next = async () => {'));
+  assert.match(handoff, /counterTicks\.prepare\(legs, handoffAt,/);
   const cur = read('src/components/Topbar/Currency.tsx');
-  assert.match(cur, /if \(step\) step\(\(\) => setDisplayCount\(base \+ plan\.amount\)\);/);
-  assert.match(cur, /if \(!step\) setDisplayCount\(counterStep\(base, plan\.amount, i, n\)\);/);
+  // The new number is mounted hidden and swapped in on the UI thread at the first landing.
+  assert.match(cur, /swap\.value = withDelayAfter\(sw\.mark as SharedValue<number>, sw\.stepAt, withTiming\(1, \{ duration: 90 \}\)\);/);
+  assert.match(cur, /\{queued !== null && \(/);
+  // Its icon still hops per landing, and the read-back balance takes over with nothing moving.
+  assert.match(cur, /if \(!step && !swapped\) setDisplayCount\(counterStep\(base, plan\.amount, i, n\)\);/);
+  assert.match(cur, /if \(count === counted\) \{ prevCount\.current = count; setDisplayCount\(count\); setQueued\(null\); return; \}/);
   assert.match(cur, /if \(expect\.current === null\) setDisplayCount\(prevCount\.current\);/);
-  assert.match(cur, /if \(count === counted\) \{ prevCount\.current = count; setDisplayCount\(count\); return; \}/);
-  assert.match(read('src/components/retention/PrizeFlight.tsx'), /counterTicks\.flight\(/);
-  // The next card waits for that one HUD render (and still overlaps the last landings).
+  // The swap layer goes only after the render that shows the real number is on screen (no flash of the old one).
+  assert.match(cur, /if \(hadQueued\.current\) \{ hadQueued\.current = false; swap\.value = 0; \}/);
+  // The next card starts after every counter has its first prize in (and still overlaps the last landings).
   const plan = L.flightPlan([{ kind: 'coins', amount: 25 }, { kind: 'tickets', amount: 1 }, { kind: 'energy', amount: 20 }], () => true);
   const firstIn = Math.max(...plan.map(l => l.delay + L.PRIZE_FLIGHT.flyMs));
   const next = L.chainNextAfter(plan, 380, 420);
   assert.ok(next >= firstIn + L.NEXT_AFTER_STEP_MS);
   assert.ok(next < L.flightDoneMs(plan), 'still overlaps the last landings');
-  assert.match(read('src/components/retention/useRetention.tsx'), /const nextAt = t0 \+ chainNextAfter\(plan, NEXT_OVERLAP_MS, NEXT_MIN_MS\);/);
+  assert.match(hook, /const nextOffset = chainNextAfter\(plan, NEXT_OVERLAP_MS, NEXT_MIN_MS\);/);
+});
+
+test('wave 5 round 2: the chest card that left is let go once the next card is in, and hidden cards keep still', () => {
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /const shownContent = showing \? content : hostAGone \? null : lastCard\.current\?\.content \?\? null;/);
+  assert.match(hook, /aShownAt\.current = Date\.now\(\);/);
+  const after = Number(/export const A_LET_GO_AFTER_MS = (\d+);/.exec(hook)[1]);
+  assert.ok(after >= 1500, 'after the next card has played in');
+  // The tomorrow card mounted early waits for its entrance before its loops move.
+  assert.match(read('src/components/retention/TomorrowCard.tsx'), /const E = <T,>\(x: T\): T => \(entered \? \(withDelayAfter\(entered, 0, x as never\) as T\) : x\);/);
 });
 
 test('wave 5 round 2: the chest card tomorrow row is big, each fact is said once, plates never draw over chips', () => {
@@ -590,13 +613,3 @@ test('wave 5 round 2: the chest card tomorrow row is big, each fact is said once
   for (const line of [L.flameUpLine(5), L.milestoneBadgeLine(7)]) assert.ok(L.kidSafeCopy(line));
 });
 
-test('wave 5 round 2: a card that left is let go in the flight step render, and hidden cards keep still', () => {
-  const C = loadTs('src/services/retention/counterTicks.ts');
-  assert.equal(typeof C.counterTicks.onFlightStep, 'function');
-  const hook = read('src/components/retention/useRetention.tsx');
-  assert.match(hook, /counterTicks\.onFlightStep\(\(\) => \{ if \(mounted\.current\) setAGoneAt\(Date\.now\(\)\); \}\)/);
-  assert.match(hook, /const shownContent = showing \? content : hostAGone \? null : lastCard\.current\?\.content \?\? null;/);
-  assert.match(hook, /aShownAt\.current = Date\.now\(\);/);
-  // The tomorrow card mounted early waits for its entrance before its loops move.
-  assert.match(read('src/components/retention/TomorrowCard.tsx'), /const E = <T,>\(x: T\): T => \(entered \? \(withDelayAfter\(entered, 0, x as never\) as T\) : x\);/);
-});

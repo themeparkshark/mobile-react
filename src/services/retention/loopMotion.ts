@@ -507,18 +507,17 @@ export type LoopCue = keyof typeof LOOP_CUES;
 export const LOOP_DIM_LEVEL = 0.55;
 
 /**
- * The dim as a loop card leaves. No next card booked: it lifts to 0. A next chain card booked at `nextAt` (epoch ms):
- * it lifts for the prize flight and comes back to LOOP_DIM_LEVEL on that mark; a mark already within `exitMs` (or past)
- * never lifts at all. The end state with a booked card is always the full dim.
+ * The dim through a chest's handoff, as steps after the handoff mark: it lifts so the kid sees the prizes land in the
+ * HUD, and when a next chain card is booked (at `nextOffset` ms) it comes back to LOOP_DIM_LEVEL with that card. The
+ * last step with a booked card is always the full dim.
  */
-export function exitDimPlan(nextAt: number, now: number, exitMs: number): { readonly lift: boolean; readonly backAt: number | null; readonly end: number } {
-  if (!nextAt) return { lift: true, backAt: null, end: 0 };
-  if (nextAt > now + exitMs) return { lift: true, backAt: nextAt, end: LOOP_DIM_LEVEL };
-  return { lift: false, backAt: now, end: LOOP_DIM_LEVEL };
+export function handoffDim(nextOffset: number | null, exitMs: number, enterMs: number): readonly { readonly after: number; readonly to: number; readonly ms: number }[] {
+  const lift = { after: 0, to: 0, ms: exitMs };
+  return nextOffset === null ? [lift] : [lift, { after: Math.max(exitMs, nextOffset), to: LOOP_DIM_LEVEL, ms: enterMs }];
 }
 
 /** The next chain card starts at least this long after the HUD numbers change (their render is done by then). */
-export const NEXT_AFTER_STEP_MS = 200;
+export const NEXT_AFTER_STEP_MS = 120;
 
 /**
  * When the next chain card starts growing in, in ms after the flight's mark: it overlaps the last landings

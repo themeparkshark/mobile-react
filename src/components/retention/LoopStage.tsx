@@ -21,6 +21,8 @@ export interface StageState {
   readonly legsAt?: number;
   /** Set on the UI thread when the last prize lands (the next card grows in from that frame). */
   readonly landed?: SharedValue<number>;
+  /** The handoff's UI-thread mark: the flight starts the frame after the render that mounted it is on screen. */
+  readonly flightMark?: SharedValue<number>;
   readonly perf: boolean;
   /**
    * The next card, mounted early and hidden in its own host while the chest card is still up (a big card mounting
@@ -128,7 +130,7 @@ function Extras({ store }: { readonly store: StageStore }) {
   const s = useStage(store);
   return (
     <>
-      {s.legs && s.legs.length > 0 && <PrizeFlight legs={s.legs} origin={{ x: 0, y: 0 }} reducedMotion={s.reducedMotion} startAt={s.legsAt} landed={s.landed} />}
+      {s.legs && s.legs.length > 0 && <PrizeFlight legs={s.legs} origin={{ x: 0, y: 0 }} reducedMotion={s.reducedMotion} startAt={s.legsAt} landed={s.landed} mark={s.flightMark} />}
       {s.perf && <LoopPerf />}
     </>
   );

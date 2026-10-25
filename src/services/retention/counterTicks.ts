@@ -18,9 +18,20 @@ export interface CounterPlan {
 }
 
 type Listener = (plan: CounterPlan) => void;
+/**
+ * A flight announced ahead, in the same render that starts it: each counter mounts its new number hidden now and
+ * swaps it in on the UI thread at `stepAt` ms after the flight's mark (no render while anything moves).
+ */
+export interface CounterSwap {
+  readonly amount: number;
+  /** The flight's UI-thread mark (a Reanimated shared value, epoch ms); typed loosely to keep this module plain. */
+  readonly mark: unknown;
+  readonly stepAt: number;
+}
+type SwapListener = (swap: CounterSwap) => void;
+const swapListeners = new Map<string, Set<SwapListener>>();
 const listeners = new Map<string, Set<Listener>>();
-/** Run in the same timer as a flight's counter step (so their renders share it), e.g. letting a card that left go. */
-const stepListeners = new Set<() => void>();
+
 
 export const counterTicks = {
   plan(target: string, plan: CounterPlan): void {
@@ -34,12 +45,17 @@ export const counterTicks = {
     const stepAt = counterStepAt(live);
     const steps: (() => void)[] = [];
     live.forEach(l => listeners.get(l.target)?.forEach(fn => fn({ amount: l.amount, landings: l.landings, stepAt, step: f => steps.push(f) })));
-    if (steps.length || stepListeners.size) setTimeout(() => { steps.forEach(f => f()); stepListeners.forEach(f => f()); }, stepAt);
+    if (steps.length) setTimeout(() => steps.forEach(f => f()), stepAt);
   },
-  /** Called in the flight's one step timer (React batches every state change made there into that one render). */
-  onFlightStep(fn: () => void): () => void {
-    stepListeners.add(fn);
-    return () => { stepListeners.delete(fn); };
+  /** Announce a flight in the render that starts it (see CounterSwap). */
+  prepare(legs: readonly { readonly target: string; readonly amount: number }[], mark: unknown, stepAt: number): void {
+    legs.forEach(l => { if (l.amount > 0) swapListeners.get(l.target)?.forEach(fn => fn({ amount: l.amount, mark, stepAt })); });
+  },
+  subscribeSwap(target: string, listener: SwapListener): () => void {
+    let set = swapListeners.get(target);
+    if (!set) { set = new Set(); swapListeners.set(target, set); }
+    set.add(listener);
+    return () => { set?.delete(listener); };
   },
   subscribe(target: string, listener: Listener): () => void {
     let set = listeners.get(target);
@@ -58,4 +74,9 @@ export function counterStep(base: number, amount: number, i: number, n: number):
 /** When a flight's numbers change (ms from now): as soon as every counter has its first prize in. */
 export function counterStepAt(legs: readonly { readonly landings: readonly number[] }[]): number {
   return legs.reduce((m, l) => Math.max(m, l.landings.length ? Math.min(...l.landings) : 0), 0);
+}
+
+/** A flight's landings per counter (ms after its mark), from its legs (the same arithmetic the icons fly on). */
+export function legLandings(leg: { readonly icons: number; readonly delay: number }, stepMs: number, flyMs: number): number[] {
+  return Array.from({ length: leg.icons }, (_, i) => leg.delay + i * stepMs + flyMs);
 }

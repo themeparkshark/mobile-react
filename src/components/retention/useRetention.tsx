@@ -3,8 +3,8 @@ import { Asset } from 'expo-asset';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Image as RNImage, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Animated, { useAnimatedReaction, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { NOT_YET, withDelayUntil } from './delayUntil';
+import Animated, { runOnUI, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import { NOT_YET, withDelayAfter, withDelayUntil } from './delayUntil';
 import {
   buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
   type DailyThreeState, type LevelChest, type PaidRewards,
@@ -19,13 +19,13 @@ import { enablePush } from '../../services/push';
 import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
 import {
-  CHECK, LOOP_DIM_LEVEL, PRIZE_FLIGHT, chainNextAfter, exitDimPlan, lidDelay, STREAK_MILESTONES, WELCOME_FX, dailyChain, daysAway, flameMomentFor, flightDoneMs, flightPlan,
+  CHECK, LOOP_DIM_LEVEL, PRIZE_FLIGHT, chainNextAfter, handoffDim, lidDelay, STREAK_MILESTONES, WELCOME_FX, dailyChain, daysAway, flameMomentFor, flightDoneMs, flightPlan,
   flightTarget, isRareChest, isRepeatChest, mayAskAfterChain, tomorrowPrize, welcomeCards, type FlameMoment, type WelcomeCard,
 } from '../../services/retention/loopMotion';
 import { DURATION, SPRING } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import { type FlightSpec } from './PrizeFlight';
-import { counterTicks } from '../../services/retention/counterTicks';
+import { counterStepAt, counterTicks, legLandings } from '../../services/retention/counterTicks';
 import { mayAskForPush, notePushAsked } from '../../services/retention/pushAsk';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../../ui';
 import { useModalLayer } from '../../ui/modalLayers';
@@ -73,6 +73,13 @@ export const ENTER_QUIET_MS = 460;
 export const NEXT_OVERLAP_MS = 380;
 /** ...but never sooner than this after the prizes lift off (the eye follows them to the HUD first). */
 export const NEXT_MIN_MS = 420;
+/**
+ * The chest's handoff starts about this long after AWESOME (the render that starts it reaches the screen first); JS
+ * timers that follow the flight allow this much.
+ */
+export const HANDOFF_SLACK_MS = 250;
+/** The chest card that left is unmounted this long after the next card starts to grow in (its entrance beats are done). */
+export const A_LET_GO_AFTER_MS = 2200;
 /** The next chain card counts taps this long after it starts to grow in (its settle spring is mostly done). */
 export const B_TAPS_AFTER_MS = 360;
 /** The chain's next card mounts (hidden) this long after the chest's answer, once its prizes have landed. */
@@ -85,16 +92,13 @@ const TOMORROW_SEEN_KEY = 'tps.retention.tomorrowSeen.v1';
 /** The navy dim behind every loop card (the HUD and map recede). */
 const LOOP_DIM = LOOP_DIM_LEVEL;
 /**
- * The dim as a card leaves (exitDimPlan): it lifts so the kid sees the prizes land in the HUD, and when a next chain
- * card is booked (nextAt, epoch ms) it comes back with that card on the same mark. Never gated on reading a shared
- * value back from the UI thread.
+ * The dim through a chest's handoff (handoffDim), on the handoff's UI-thread mark: it lifts for the prize flight and
+ * comes back with the next chain card. Written once, by the exit, so nothing later can leave a card on a bright map.
  */
-function dimForExit(nextAt: number) {
-  const p = exitDimPlan(nextAt, Date.now(), DURATION.exit);
-  const lift = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
-  if (p.backAt === null) return lift;
-  const back = withTiming(p.end, { duration: DURATION.enter, easing: EASE.out });
-  return p.lift ? withSequence(lift, withDelayUntil(p.backAt, back)) : back;
+function dimForHandoff(mark: SharedValue<number>, nextOffset: number | null) {
+  const steps = handoffDim(nextOffset, DURATION.exit, DURATION.enter).map((st, i) =>
+    withDelayAfter(mark, st.after, withTiming(st.to, { duration: st.ms, easing: i === 0 ? EASE.in : EASE.out })));
+  return steps.length === 1 ? steps[0] : withSequence(...steps);
 }
 /** How many Daily 3 chests this phone has opened (per player): after three, the chest plays its shorter repeat version. */
 const CHEST_OPENS_KEY = 'tps.retention.chestOpens.v1';
@@ -528,10 +532,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       const row = origins.find(o => flightTarget(o.kind) === leg.target);
       legs.push({ ...leg, from: row ?? fallback, to });
     }
-    // The next card mounts while the prizes are still flying and enters on the UI thread the moment they have landed
-    // (an absolute mark shared with the flight), so a busy JS thread never leaves the kid on a still map between cards.
-    const t0 = Date.now() + 60;
-    const doneAt = t0 + (reducedMotion ? 420 : flightDoneMs(plan));
+    // ONE render says everything React needs to know (the flight, and which card is up). The handoff itself (the chest
+    // card leaving, the prizes flying, the next card growing in) starts on a UI-thread mark the frame after that render
+    // is on screen, so the render's main-thread cost lands while the card still sits still under the kid's finger,
+    // never mid-motion (a held main thread froze the card and made the simulator replay an old frame of it).
+    const doneAt = Date.now() + HANDOFF_SLACK_MS + (reducedMotion ? 420 : flightDoneMs(plan));
     // The balance is read once the moment is over (the HUD counters already step up as each prize lands), so its
     // render never lands in the middle of the flight or the next card's entrance.
     playerReadDue.current = true;
@@ -540,39 +545,41 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     buttonBox.current?.measureInWindow((x, y, w, h) => {
       if (Number.isFinite(x) && w > 0) launchFrom.current = { x: x + w / 2 - width / 2, y: y + h / 2 - height / 2 };
     });
-    // The next card is already mounted, hidden, in the second host: it grows out of the Daily 3 button while the last
-    // prizes land (UI thread). Everything React needs to know is said in this ONE render (the flight and which card
-    // is up), so nothing renders again until the kid taps: each render costs the main thread a whole-tree pass, and
-    // one landing mid-handoff froze the card (and made the simulator replay an old frame of the chest card).
+    handoffAt.value = NOT_YET;
+    // The HUD numbers are told now (this same render mounts each new number hidden); they swap in on the UI thread
+    // as every counter gets its first prize, so no render lands while the prizes fly or the next card grows in.
+    counterTicks.prepare(legs, handoffAt, reducedMotion ? 160 : counterStepAt(legs.map(l => ({ landings: legLandings(l, PRIZE_FLIGHT.stepMs, PRIZE_FLIGHT.flyMs) }))));
     const pre = preNextRef.current;
     if (src === 'daily' && pre && !reducedMotion) {
       chainRef.current = preChainRef.current.slice(1);
-      // One continuous moment, no still map between cards: the next card grows out of the Daily 3 button while the
-      // last prizes are still landing (NEXT_OVERLAP_MS before the flight ends, never sooner than NEXT_MIN_MS), on an
-      // absolute UI-thread mark shared with the flight.
-      // The HUD numbers change in one render when every counter has its first prize in: the card starts after that.
-      const nextAt = t0 + chainNextAfter(plan, NEXT_OVERLAP_MS, NEXT_MIN_MS);
-      // Read by the exit below (same render): the dim comes back with the next card, on the same mark.
-      nextAtRef.current = nextAt;
+      // One continuous moment, no still map between cards: the next card (mounted early, hidden, in the second host)
+      // grows out of the Daily 3 button while the last prizes are still landing, after the HUD's one render.
+      const nextOffset = chainNextAfter(plan, NEXT_OVERLAP_MS, NEXT_MIN_MS);
+      handoff.current = { nextOffset };
+      // A JS estimate for the tap guard (the real entrance is on the UI thread).
+      nextAtRef.current = Date.now() + HANDOFF_SLACK_MS + nextOffset;
       enterBOnFlight.value = 0;
       outB.value = 0;
-      enteredB.value = nextAt;
-      cardB.value = withDelayUntil(nextAt, withSpring(1, SPRING.settle));
+      enteredB.value = NOT_YET;
+      cardB.value = withDelayAfter(handoffAt, nextOffset, withSpring(1, SPRING.settle));
       launchB.value = launchFrom.current ?? { x: 0, y: 0 };
       buttonBox.current?.measureInWindow((x, y, w, h) => {
         if (Number.isFinite(x) && w > 0) launchB.value = { x: x + w / 2 - width / 2, y: y + h / 2 - height / 2 };
       });
-      if (!legs.length) flightLanded.value = Date.now() + PRIZE_FLIGHT.exitMs;
       setView(pre.step === 'flame' && flameRef.current ? { k: 'flame', moment: flameRef.current, slot: 'B' } : { k: 'tomorrow', slot: 'B' });
       setLegs(legs);
-      setLegsAt(t0);
       if (pre.step === 'tomorrow') { tomorrowSeen.current = true; void AsyncStorage.setItem(tomorrowKey, '1').catch(() => undefined); }
+      // The chest card that left is let go once the next card has fully played in (its own render then lands on a
+      // still card, never in the flight or the entrance): its rays and wiggles stop instead of running hidden.
+      if (aGoneTimer.current) clearTimeout(aGoneTimer.current);
+      aGoneTimer.current = setTimeout(() => { aGoneTimer.current = null; if (mounted.current) setAGoneAt(Date.now()); },
+        Math.max(0, nextAtRef.current + A_LET_GO_AFTER_MS - Date.now()));
       return;
     }
+    handoff.current = { nextOffset: null };
     nextAtRef.current = 0;
     setView({ k: 'flying', legs });
     setLegs(legs);
-    setLegsAt(t0);
     const next = async () => {
       chainTimer.current = null;
       if (src !== 'daily') void refresh(true);
@@ -599,7 +606,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     };
     // Not mounted ahead (a very quick tap): the next card mounts once the prizes have landed, so mounting it never
     // stutters the flight.
-    chainTimer.current = setTimeout(() => { void next(); }, reducedMotion ? 420 : flightDoneMs(plan));
+    chainTimer.current = setTimeout(() => { void next(); }, HANDOFF_SLACK_MS + (reducedMotion ? 420 : flightDoneMs(plan)));
   };
 
   /** The rest of the daily chain, one card at a time. */
@@ -647,12 +654,18 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   }, [revealKey]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Prizes flying home from their rows (kept apart from the card, so the next card can mount while they fly). */
   const [legs, setLegs] = useState<readonly FlightSpec[] | null>(null);
-  const [legsAt, setLegsAt] = useState<number | undefined>(undefined);
   /** The flight's HUD step after a card left (epoch ms): the left card's content is unmounted in that same render. */
   const [aGoneAt, setAGoneAt] = useState(0);
   /** When the card host last started showing a card (epoch ms). */
   const aShownAt = useRef(0);
-  useEffect(() => counterTicks.onFlightStep(() => { if (mounted.current) setAGoneAt(Date.now()); }), []);
+  const aGoneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handoffTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => { handoffTimers.current.forEach(clearTimeout); }, []);
+  useEffect(() => () => { if (aGoneTimer.current) clearTimeout(aGoneTimer.current); }, []);
+  /** The chest's handoff mark (epoch ms, UI thread): set the frame after the render that started it is on screen. */
+  const handoffAt = useSharedValue(NOT_YET);
+  /** A handoff the next exit starts (with the next chain card's offset, null when no card follows). */
+  const handoff = useRef<{ nextOffset: number | null } | null>(null);
   /** When the next chain card enters (epoch ms, 0 when none is booked): the dim comes back on this mark. */
   const nextAtRef = useRef(0);
   /** A chest paid out: the balance is read once the moment is over (never mid-flight or mid-entrance). */
@@ -935,11 +948,37 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       // Exits are faster than entrances: the card fades and settles back a touch while the prizes lift off its rows
       // (the eye follows the prizes to the HUD), then the map comes back into view.
       cardUp.current = false;
-      out.value = withTiming(1, { duration: reducedMotion ? DURATION.quick : PRIZE_FLIGHT.exitMs, easing: EASE.in });
-      // The dim lifts for the prize flight; when the next chain card is booked it comes back with that card, on the
-      // same absolute mark (a JS number set in the same render, never a shared value read back across threads). This is
-      // the one and only dim write for the handoff, so nothing later can leave the next card on a bright map.
-      dim.value = dimForExit(nextAtRef.current);
+      const h = handoff.current;
+      handoff.current = null;
+      if (h) {
+        // A chest's handoff: the card leaves, the dim lifts (and comes back with the next card) on the handoff mark.
+        out.value = withDelayAfter(handoffAt, 0, withTiming(1, { duration: reducedMotion ? DURATION.quick : PRIZE_FLIGHT.exitMs, easing: EASE.in }));
+        dim.value = dimForHandoff(handoffAt, h.nextOffset);
+        const off = h.nextOffset;
+        // The mark: the frame after this render is on screen (a UI-thread job queued behind its mount, then one frame).
+        runOnUI(() => {
+          'worklet';
+          requestAnimationFrame(() => {
+            const now = Date.now();
+            if (off !== null) enteredB.value = now + off;
+            handoffAt.value = now;
+          });
+        })();
+        // Never a stuck card: if the mark is somehow not set, the handoff starts anyway.
+        const late = setTimeout(() => {
+          runOnUI(() => {
+            'worklet';
+            if (handoffAt.value < NOT_YET / 2) return;
+            const now = Date.now();
+            if (off !== null) enteredB.value = now + off;
+            handoffAt.value = now;
+          })();
+        }, HANDOFF_SLACK_MS * 3);
+        handoffTimers.current.push(late);
+      } else {
+        out.value = withTiming(1, { duration: reducedMotion ? DURATION.quick : PRIZE_FLIGHT.exitMs, easing: EASE.in });
+        dim.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
+      }
     }
     if (!view && wasUp.current) {
       // Keep the modal up through the exit, then let it go (one render to close, none to open).
@@ -1219,7 +1258,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const stageState: StageState = {
     title: shownTitle, content: shownContent, showing, closable: !revealing && showing, reducedMotion,
     // The flight layer shows only while the prizes fly (no extra render to take it down afterwards).
-    legs: view?.k === 'flying' || slotB ? legs : null, legsAt, landed: flightLanded, perf: perfOn,
+    legs: view?.k === 'flying' || slotB ? legs : null, landed: flightLanded, flightMark: handoffAt, perf: perfOn,
     next: nextLive,
   };
   // The card host never re-renders: what it shows goes through the stage store, in the same commit (layout effect).
