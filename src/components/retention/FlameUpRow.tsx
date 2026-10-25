@@ -4,7 +4,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, wi
 import { playHaptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import { usePowerBudget } from '../../power';
-import { LOOP_CUES, nextFlameLine } from '../../services/retention/loopMotion';
+import { LOOP_CUES } from '../../services/retention/loopMotion';
 import { BRAND } from '../../ui';
 import { SparkleBurst } from '../../ui/GoldBurst';
 import { DURATION, SPRING, momentParticles } from '../../ui/motion';
@@ -33,6 +33,8 @@ export default function FlameUpRow({ from, to, grow, reducedMotion, prize = 'che
   const roll = useSharedValue(play ? 0 : 1);
   const text = useSharedValue(play ? 0 : 1);
   const sparkle = useSharedValue(0);
+  /** The new number lands with a squash (wide and short), then stamps back to round. */
+  const pop = useSharedValue(1);
   const sparks = play ? momentParticles(3, budget, false) : 0;
   useEffect(() => {
     if (!grow) return;
@@ -44,14 +46,14 @@ export default function FlameUpRow({ from, to, grow, reducedMotion, prize = 'che
     roll.value = withDelay(at, withTiming(1, { duration: DURATION.base, easing: EASE.out }));
     sparkle.value = withDelay(at, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out }));
     text.value = withDelay(at + DURATION.base, withSpring(1, SPRING.stamp));
+    pop.value = withDelay(at + DURATION.base - 40, withSequence(withTiming(1.28, { duration: 70, easing: EASE.out }), withSpring(1, SPRING.stamp)));
     const t = setTimeout(() => { playHaptic('tierUp'); playSfx(LOOP_CUES.flameUp.fallback, 0.8); }, at);
     return () => clearTimeout(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const flameStyle = useAnimatedStyle(() => ({ transform: [{ scale: whoosh.value }] }));
   const oldStyle = useAnimatedStyle(() => ({ opacity: 1 - roll.value, transform: [{ translateY: -20 * roll.value }] }));
-  const newStyle = useAnimatedStyle(() => ({ opacity: roll.value, transform: [{ translateY: 20 * (1 - roll.value) }] }));
+  const newStyle = useAnimatedStyle(() => ({ opacity: roll.value, transform: [{ translateY: 20 * (1 - roll.value) }, { scaleX: pop.value }, { scaleY: 2 - pop.value }] }));
   const textStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, text.value * 1.5), transform: [{ scale: 1.25 - 0.25 * text.value }] }));
-  const line = nextFlameLine(to);
   return (
     <View style={styles.row} accessible accessibilityLabel={`${to} days in a row`}>
       <View style={styles.flameBox}>
@@ -64,7 +66,7 @@ export default function FlameUpRow({ from, to, grow, reducedMotion, prize = 'che
       </View>
       <Animated.View style={[styles.words, textStyle]}>
         <Text style={styles.big} numberOfLines={1} adjustsFontSizeToFit>{to === 1 ? 'Your flame is lit!' : `${to} days in a row!`}</Text>
-        <TomorrowGoal days={to} prize={prize} size={22} far={!!line} textStyle={styles.small} />
+        <TomorrowGoal days={to} prize={prize} size={32} reducedMotion={reducedMotion} textStyle={styles.small} />
       </Animated.View>
     </View>
   );
@@ -81,5 +83,5 @@ const styles = StyleSheet.create({
   abs: { position: 'absolute' },
   words: { flex: 1, gap: 1 },
   big: { fontFamily: 'Shark', fontSize: 22, color: BRAND.gold },
-  small: { fontFamily: 'Shark', fontSize: 14, color: '#e4f7ff' },
+  small: { fontFamily: 'Shark', color: BRAND.gold },
 });

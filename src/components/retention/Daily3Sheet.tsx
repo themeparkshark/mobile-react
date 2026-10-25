@@ -132,7 +132,7 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
             : `Weekly Box: ${state.week.done} of ${state.week.needed} flames`}
           style={[styles.weekly, state.week.claimable && !state.claimable && styles.weeklyReady,
             state.week.claimable && state.claimable && styles.weeklyWaiting]}>
-          <Image source={WEEKLY} style={styles.weeklyArt} contentFit="contain" />
+          <Image cachePolicy="memory-disk" source={WEEKLY} style={styles.weeklyArt} contentFit="contain" />
           <Text style={[styles.weeklyText, state.week.claimable && !state.claimable && styles.weeklyTextReady]}>
             {state.week.claimed ? 'DONE' : state.week.claimable ? (state.claimable ? 'NEXT' : 'OPEN') : 'GIFT'}
           </Text>
@@ -163,8 +163,8 @@ function Coach({ onDone }: { readonly onDone: () => void }) {
       <View style={styles.coachCard}>
         <Text style={styles.coachTitle}>HOW DAILY 3 WORKS</Text>
         <CoachLine icon={<GameIcon name="streak" size={34} />} text="Do all 3 every day to grow your flame." />
-        <CoachLine icon={<Image source={FREEZE} style={{ width: 34, height: 34 }} contentFit="contain" />} text="Ice saves your flame if you miss a day." />
-        <CoachLine icon={<Image source={WEEKLY} style={{ width: 34, height: 34 }} contentFit="contain" />} text="Flames this week open the gift." />
+        <CoachLine icon={<Image cachePolicy="memory-disk" source={FREEZE} style={{ width: 34, height: 34 }} contentFit="contain" />} text="Ice saves your flame if you miss a day." />
+        <CoachLine icon={<Image cachePolicy="memory-disk" source={WEEKLY} style={{ width: 34, height: 34 }} contentFit="contain" />} text="Flames this week open the gift." />
         <Pressable onPress={onDone} accessibilityRole="button" style={({ pressed }) => [styles.open, pressed && styles.openPressed, { marginTop: 6 }]}>
           <Text style={styles.openText}>GOT IT</Text>
         </Pressable>
@@ -192,8 +192,8 @@ function Flame({ days, reducedMotion }: { readonly days: number; readonly reduce
 }
 
 function goalIcon(g: DailyGoal) {
-  if (g.kind === 'chest') return <Image source={DAILY_CHEST} style={styles.goalImg} contentFit="contain" />;
-  if (g.kind === 'catch') return g.park ? <GameIcon name="coin" size={36} /> : <Image source={SNACK} style={styles.goalImg} contentFit="contain" />;
+  if (g.kind === 'chest') return <Image cachePolicy="memory-disk" source={DAILY_CHEST} style={styles.goalImg} contentFit="contain" />;
+  if (g.kind === 'catch') return g.park ? <GameIcon name="coin" size={36} /> : <Image cachePolicy="memory-disk" source={SNACK} style={styles.goalImg} contentFit="contain" />;
   if (g.kind === 'play') return <GameIcon name="play" size={36} />;
   if (g.kind === 'heart') return <GameIcon name="heart" size={36} />;
   return <GameIcon name="shark" size={38} />;
@@ -287,7 +287,7 @@ function ChestBlock({ state, done, busy, onClaim, reducedMotion, charging = fals
   return (
     <View style={[styles.chestBlock, ready && styles.chestBlockReady]}>
       <Animated.View style={[styles.chestArt, chestStyle]}>
-        <Image source={opened ? ICON_SOURCES.chestOpen : PRIZE_CHEST} style={{ width: 72, height: 72 }} contentFit="contain" />
+        <Image cachePolicy="memory-disk" source={opened ? ICON_SOURCES.chestOpen : PRIZE_CHEST} style={{ width: 72, height: 72 }} contentFit="contain" />
         {!ready && !opened && <View style={styles.lock}><GameIcon name="lock" size={20} /></View>}
       </Animated.View>
       <View style={styles.chestRight}>
@@ -338,7 +338,7 @@ function WeekDay({ letter, state, reducedMotion }: { readonly letter: string; re
         state === 'freeze' && styles.dayFreeze, state === 'missed' && styles.dayMissed, state === 'before' && styles.dayBefore,
         state === 'today' && ringStyle]}>
         {state === 'done' && <GameIcon name="streak" size={20} />}
-        {state === 'freeze' && <Image source={FREEZE} style={{ width: 24, height: 24 }} contentFit="contain" />}
+        {state === 'freeze' && <Image cachePolicy="memory-disk" source={FREEZE} style={{ width: 24, height: 24 }} contentFit="contain" />}
       </Animated.View>
       <Text style={[styles.dayLetter, state === 'today' && styles.dayLetterToday]}>{letter}</Text>
     </View>

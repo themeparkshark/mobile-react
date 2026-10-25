@@ -176,6 +176,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   /** The closing line and button fade up after the last prize. */
   const doneIn = useSharedValue(0);
   const drop = useSharedValue(dropIn && !reducedMotion ? 1 : 0);
+  /** The rows' empty plates (0 hidden, 1 shown), up from the glide's first frame. */
+  const slots = useSharedValue(0);
   const dust = useSharedValue(0);
   const [stalled, setStalled] = useState(false);
   const rewardsRef = useRef(rewards);
@@ -382,6 +384,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     // along and receding) as the first prize lands under it.
     lift.value = withDelayAfter(entered, pl.pop + pl.hold, withTiming(0, { duration: REVEAL_ROWS.glideMs, easing: EASE.out }));
     hintOut.value = withDelayAfter(entered, pl.pop + Math.max(0, pl.hold - 60), withTiming(1, { duration: DURATION.quick, easing: EASE.in }));
+    slots.value = withDelayAfter(entered, pl.pop + Math.max(0, pl.hold - 60), withTiming(1, { duration: DURATION.quick, easing: EASE.out }));
     // A rare chest: a gold beam rises out of the lid and lingers while the rows land.
     if (rare) beam.value = atPop(withSequence(withTiming(1, { duration: 180, easing: EASE.out }), withDelay(700, withTiming(0, { duration: 700 }))));
     const at = pl.rows;
@@ -423,6 +426,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     transform: [{ scaleX: 0.5 + dust.value * 1.1 }, { scaleY: 0.5 + dust.value * 0.5 }],
   }));
   const tapStyle = useAnimatedStyle(() => ({ opacity: tapRing.value <= 0 ? 0 : 0.9 * (1 - tapRing.value), transform: [{ scale: 0.7 + tapRing.value * 0.6 }] }));
+  // A level chest drops in from just above its stage: its line fades in as the chest lands (never drawn over).
+  const subtitleStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, Math.min(1, 1 - drop.value * 1.6)) }));
   const skipped = useRef(false);
   const skip = () => {
     // The first 350 ms after the lid pops ignore taps (a quick double tap never skips the show).
@@ -468,23 +473,24 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   return (
     <View style={styles.card}>
       <CardSurface />
-      {fullSet ? <FullSetChecks reducedMotion={reducedMotion} diveY={stageH / 2 + heroDY} entered={entered} afterEnter={afterEnter} /> : <Text style={styles.subtitle}>{subtitle}</Text>}
+      {fullSet ? <FullSetChecks reducedMotion={reducedMotion} diveY={stageH / 2 + heroDY} entered={entered} afterEnter={afterEnter} />
+        : <Animated.Text style={[styles.subtitle, subtitleStyle]}>{subtitle}</Animated.Text>}
       <Pressable onPress={onStage} disabled={opening && !revealed} accessibilityRole="button"
         accessibilityLabel={revealed ? 'Opened' : 'Tap to open'} style={[styles.stage, { height: stageH }]}
         onLayout={e => { if (!stage) setStage({ x: e.nativeEvent.layout.x + e.nativeEvent.layout.width / 2, y: e.nativeEvent.layout.y + e.nativeEvent.layout.height / 2 }); }}>
         <Animated.View pointerEvents="none" style={[styles.hero, heroStyle]}>
         {rare && (
           <Animated.View pointerEvents="none" style={[styles.beam, { width: size * 0.9, height: size * 3.2, top: -size * 2.2 }, beamStyle]}>
-            <Image source={RAYS} style={StyleSheet.absoluteFill} contentFit="cover" tintColor={'#FFF1B8'} transition={0} />
+            <Image cachePolicy="memory-disk" source={RAYS} style={StyleSheet.absoluteFill} contentFit="cover" tintColor={'#FFF1B8'} transition={0} />
           </Animated.View>
         )}
-        <GoldBurst size={size * 2.5} amount={goldAll} bloom={bloomAll} reduced={reducedMotion} style={styles.abs} />
+        <GoldBurst size={size * 2.5} amount={goldAll} bloom={bloomAll} reduced={reducedMotion} spin={budget.level === 'full'} style={styles.abs} />
         {/* A warm pool of light on the floor under the chest, so it sits on a stage (never floats in a blue void). */}
-        <Image source={SOFT} pointerEvents="none" transition={0} contentFit="fill" tintColor="#FFE07A"
+        <Image cachePolicy="memory-disk" source={SOFT} pointerEvents="none" transition={0} contentFit="fill" tintColor="#FFE07A"
           style={[styles.floor, { width: size * 1.5, height: size * 0.34, top: stageH / 2 + size * 0.3 }]} />
         <RadialFlash flash={flash} size={size * 1.6} />
         <Animated.View pointerEvents="none" style={[styles.dust, { width: size * 1.1, height: size * 0.28, top: stageH / 2 + size * 0.36 }, dustStyle]}>
-          <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor="#ffffff" transition={0} />
+          <Image cachePolicy="memory-disk" source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor="#ffffff" transition={0} />
         </Animated.View>
         {dropIn && (
           <Animated.View pointerEvents="none" style={[styles.tapRing, { width: size * 1.05, height: size * 1.05, borderRadius: size }, tapStyle]} />
@@ -492,14 +498,14 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
         <Animated.View style={chestStyle}>
           {/* Both arts stay mounted; the lid swaps on the UI thread on the hit-stop frame. */}
           <Animated.View style={closedStyle}>
-            <Image source={closedArt} style={{ width: size, height: size }} contentFit="contain" transition={0} />
+            <Image cachePolicy="memory-disk" source={closedArt} style={{ width: size, height: size }} contentFit="contain" transition={0} />
           </Animated.View>
           <Animated.View style={[StyleSheet.absoluteFill, openStyle]}>
-            <Image source={openArt} style={{ width: size, height: size }} contentFit="contain" transition={0} />
+            <Image cachePolicy="memory-disk" source={openArt} style={{ width: size, height: size }} contentFit="contain" transition={0} />
           </Animated.View>
           {/* Light leaking from the lid seam while a level chest rattles. */}
           <Animated.View pointerEvents="none" style={[styles.leak, { width: size * 1.1, height: size * 0.4, top: size * 0.22, left: -size * 0.05 }, leakStyle]}>
-            <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor="#FFF4B8" transition={0} />
+            <Image cachePolicy="memory-disk" source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor="#FFF4B8" transition={0} />
           </Animated.View>
         </Animated.View>
         <View style={styles.center} pointerEvents="none">
@@ -514,7 +520,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
             <ScrollView ref={scroll} style={{ height: rowsArea }} contentContainerStyle={styles.rows} scrollEnabled={overflow || !known}
               showsVerticalScrollIndicator={false}>
               {rows.map((row, i) => (
-                <Row key={row.kind} iconRef={r => { rowRefs.current[i] = r; }} row={row} entered={entered} at={plan.current?.rows[i] ?? 0} reducedMotion={reducedMotion} compact={compact}
+                <Row key={row.kind} slots={reducedMotion ? undefined : slots} iconRef={r => { rowRefs.current[i] = r; }} row={row} entered={entered} at={plan.current?.rows[i] ?? 0} reducedMotion={reducedMotion} compact={compact}
                   countMs={rowCountMs(schedule[i] ?? 0, COUNT.ms)} register={f => { rowFinish.current[i] = f; }}
                   onWear={row.kind === 'item' ? onWear : undefined} onPins={row.kind === 'mystery_boxes' ? onPins : undefined} />
               ))}
@@ -531,7 +537,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
       <View style={[styles.bottom, known && !!footer && styles.bottomKnown]}>
         {revealed ? <DoneArea footer={footer} label={doneLabel ?? 'AWESOME!'} onDone={done} appear={doneIn} /> : null}
       </View>
-      {stage && budget.animate && budget.particleScale >= 0.5 && <RewardBurst progress={burst} x={stage.x} y={stage.y + heroDY} />}
+      {/* Confetti only at full power: Battery Saver keeps still rays, half the sparkles and coins, and no confetti. */}
+      {stage && budget.animate && budget.particleScale >= 1 && <RewardBurst progress={burst} x={stage.x} y={stage.y + heroDY} />}
     </View>
   );
 }
@@ -612,7 +619,7 @@ function FountainCoin({ p, progress }: {
   });
   return (
     <Animated.View style={[{ position: 'absolute', left: -p.size / 2, top: -p.size / 2 - 10, width: p.size, height: p.size }, style]}>
-      <Image source={ICON_SOURCES.coin} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+      <Image cachePolicy="memory-disk" source={ICON_SOURCES.coin} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
     </Animated.View>
   );
 }
@@ -639,8 +646,8 @@ function rowIcon(row: RewardRow) {
     case 'tickets': return <GameIcon name="ticket" size={40} />;
     case 'energy': return <GameIcon name="energy" size={40} />;
     case 'xp': return <GameIcon name="xp" size={40} />;
-    case 'freezes': return <Image source={FREEZE} style={{ width: 64, height: 64 }} contentFit="contain" />;
-    case 'mystery_boxes': return <Image source={BOX} style={{ width: 72, height: 72 }} contentFit="contain" />;
+    case 'freezes': return <Image cachePolicy="memory-disk" source={FREEZE} style={{ width: 64, height: 64 }} contentFit="contain" />;
+    case 'mystery_boxes': return <Image cachePolicy="memory-disk" source={BOX} style={{ width: 72, height: 72 }} contentFit="contain" />;
     case 'item': return <GearArt uri={row.image ?? null} />;
   }
 }
@@ -678,8 +685,13 @@ function RollNumber({ v, target }: { readonly v: SharedValue<number>; readonly t
  * cards slam past rest, hold a beat and spring back; small prizes stamp in and their number rolls, then
  * bumps. A skip (register) lands it at once.
  */
-function Row({ row, at, entered, reducedMotion, onWear, onPins, compact = false, countMs, iconRef, register }: {
+function Row({ row, at, entered, reducedMotion, onWear, onPins, compact = false, countMs, iconRef, register, slots }: {
   readonly iconRef?: (v: View | null) => void;
+  /**
+   * The rows' empty plates (0 to 1), up as the open chest glides into its slot: the card is never an empty blue panel
+   * while the first prize is on its way, and each prize then stamps into its own plate.
+   */
+  readonly slots?: SharedValue<number>;
   /** When it lands: ms after the card's entrance (`entered`, a UI-thread mark). */
   readonly row: RewardRow; readonly at: number; readonly entered: SharedValue<number>; readonly reducedMotion: boolean; readonly compact?: boolean;
   readonly countMs: number;
@@ -724,8 +736,11 @@ function Row({ row, at, entered, reducedMotion, onWear, onPins, compact = false,
   }));
   const beamStyle = useAnimatedStyle(() => ({ opacity: beam.value }));
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
+  const plateStyle = useAnimatedStyle(() => ({ opacity: (slots ? slots.value : 0) * Math.max(0, 1 - t.value * 1.5) }));
   return (
     // Laid out from the start (no jump); the face is a plain View (iOS clips a scaled bordered background).
+    <View>
+    {slots && <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.slot, big && styles.slotBig, plateStyle]} />}
     <Animated.View style={style}>
       {big && <Animated.View pointerEvents="none" style={[styles.rowBeam, beamStyle]} />}
       <View style={[styles.row, big && styles.rowBig, compact && styles.rowCompact]}>
@@ -750,6 +765,7 @@ function Row({ row, at, entered, reducedMotion, onWear, onPins, compact = false,
         )}
       </View>
     </Animated.View>
+    </View>
   );
 }
 
@@ -773,6 +789,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14,
     paddingHorizontal: 10, paddingVertical: 2 },
   rowCompact: { minHeight: 0, paddingVertical: 0 },
+  // An empty prize plate waiting for its prize (a soft dashed outline, the row's own shape).
+  slot: { borderRadius: 14, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.45)', backgroundColor: 'rgba(255,255,255,0.08)' },
+  slotBig: { borderRadius: 16, borderColor: 'rgba(255,224,122,0.8)', backgroundColor: 'rgba(255,255,255,0.14)' },
   rowBig: { backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.gold, paddingVertical: 8 },
   rowIcon: { width: 58, alignItems: 'center' },
   rowIconBig: { width: 84 },

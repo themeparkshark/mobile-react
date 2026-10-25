@@ -79,7 +79,7 @@ export default function TomorrowCard({ prize, reducedMotion, onDone, startAt, en
       {/* The night window: friendly blue, a gold moon rising, the prize waiting under it. */}
       <View style={styles.night} accessibilityLabel="Tomorrow">
         <Animated.View style={[styles.moonGlow, moonGlow]}>
-          <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor={GOLD_FX.glow} transition={0} />
+          <Image cachePolicy="memory-disk" source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor={GOLD_FX.glow} transition={0} />
         </Animated.View>
         <Animated.View style={[styles.moon, moonStyle]}><GameIcon name="moon" size={70} /></Animated.View>
         <Animated.View style={[styles.star, { left: 18, top: 16 }, star1]}><GameIcon name="sparkle" size={18} /></Animated.View>
@@ -90,7 +90,7 @@ export default function TomorrowCard({ prize, reducedMotion, onDone, startAt, en
         <View style={styles.hill} />
         <View style={styles.stageRow}>
           <Animated.View style={[styles.prize, giftStyle]}>
-            <Image source={art} style={{ width: 112, height: 112 }} contentFit="contain" />
+            <Image cachePolicy="memory-disk" source={art} style={{ width: 112, height: 112 }} contentFit="contain" />
             {prize.kind === 'gear' && <View style={styles.gearChip}><Text style={styles.gearText}>NEW GEAR</Text></View>}
           </Animated.View>
           <View style={styles.ghost} accessibilityLabel={`Tomorrow's flame: day ${prize.flameNext}`}>
@@ -109,13 +109,17 @@ export default function TomorrowCard({ prize, reducedMotion, onDone, startAt, en
       <Text style={styles.line}>{prize.line}</Text>
       <View style={styles.bottom}>
         <Animated.View style={[styles.finn, finnStyle]} pointerEvents="none">
-          <Image source={FINN_WAVE} style={{ width: 70, height: 70 }} contentFit="contain" />
+          <Image cachePolicy="memory-disk" source={FINN_WAVE} style={{ width: 70, height: 70 }} contentFit="contain" />
         </Animated.View>
         <Animated.View style={[{ flex: 1 }, buttonStyle]}>
           <Pressable onPress={onDone} accessibilityRole="button" style={styles.button}
             onPressIn={() => { press.value = withTiming(PRESS.scale, { duration: PRESS.inMs }); }}
             onPressOut={() => { press.value = withSpring(1, PRESS.spring); }}>
-            <Text style={styles.buttonText}>SEE YOU TOMORROW!</Text>
+            {/* The ribbon already says "See you tomorrow": the button is the promise (tomorrow's prize and a yes). */}
+            <View style={styles.buttonRow}>
+              <GameIcon name={prize.kind === 'gear' ? 'gift' : 'chest'} size={30} />
+              <Text style={styles.buttonText}>I'LL BE BACK!</Text>
+            </View>
           </Pressable>
         </Animated.View>
       </View>
@@ -151,7 +155,8 @@ const styles = StyleSheet.create({
   line: { fontFamily: 'Shark', fontSize: 22, color: BRAND.white, textAlign: 'center', marginTop: 2 },
   bottom: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 6, marginTop: 4 },
   finn: { width: 70, height: 70 },
-  button: { backgroundColor: BRAND.gold, borderRadius: 16, paddingVertical: 13, alignItems: 'center', borderBottomWidth: 4,
+  button: { backgroundColor: BRAND.gold, borderRadius: 16, paddingVertical: 9, alignItems: 'center', borderBottomWidth: 4,
     borderBottomColor: BRAND.goldLip },
-  buttonText: { fontFamily: 'Shark', fontSize: 19, color: '#075083' },
+  buttonRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  buttonText: { fontFamily: 'Shark', fontSize: 20, color: '#075083', marginTop: 2 },
 });

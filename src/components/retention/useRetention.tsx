@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Asset } from 'expo-asset';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AppState, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Animated, { useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { AppState, Image as RNImage, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import Animated, { useAnimatedReaction, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { NOT_YET, withDelayUntil } from './delayUntil';
 import {
   buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
@@ -49,7 +49,15 @@ const BOX = require('../../../assets/images/retention/mystery-box.png');
 // The loop moments' art too (flame, crown, Finn, the gold), so the flame never pops in late.
 const ART = [LEVEL_CHEST, LEVEL_CHEST_OPEN, WEEKLY, WEEKLY_OPEN, FREEZE, BOX,
   require('../../../assets/icons/game/streak.png'), require('../../assets/games/banana-basket/v2/crown.png'),
-  require('../../assets/games/banana-basket/v2/shark_cheer.png'), require('../../../assets/images/reveal/soft-spot.webp')];
+  require('../../assets/games/banana-basket/v2/shark_cheer.png'), require('../../../assets/images/reveal/soft-spot.webp'),
+  require('../../../assets/images/daily/chest-closed.png'), require('../../../assets/fx/spark.webp'),
+  require('../../../assets/images/reveal/rays-gold-fade.webp')];
+const LOOP_ICONS = ['coins', 'coin', 'ticket', 'energy', 'xp', 'gift', 'streak', 'chest', 'chestOpen', 'crown'] as const;
+
+/** The art's URLs as expo-image keys them (a required asset resolves to the same URL the <Image> asks for). */
+function artUrls(): string[] {
+  return [...ART, ...LOOP_ICONS.map(k => ICON_SOURCES[k])].map(m => RNImage.resolveAssetSource(m)?.uri).filter((u): u is string => !!u);
+}
 
 /** Reads are cheap but not free: focus and app-resume reads wait at least 15 s; real events read at once. */
 const MIN_REFRESH_MS = 15000;
@@ -60,6 +68,10 @@ const ARM_FALLBACK_MS = 600;
  * past the settle spring, well before the lid's beat (FULL_SET.chestAt plus the gather).
  */
 export const ENTER_QUIET_MS = 460;
+/** The next chain card enters this long before the prize flight ends (it overlaps the last landings)... */
+export const NEXT_OVERLAP_MS = 380;
+/** ...but never sooner than this after the prizes lift off (the eye follows them to the HUD first). */
+export const NEXT_MIN_MS = 420;
 /** The chain's next card mounts (hidden) this long after the chest's answer, once its prizes have landed. */
 const PREMOUNT_MS = 2400;
 const COACH_KEY = 'tps.retention.coach.v1';
@@ -209,9 +221,12 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     if (player?.id) void AsyncStorage.setItem(`${CHEST_OPENS_KEY}:${player.id}`, String(chestOpens.current)).catch(() => undefined);
   };
 
-  // Warm the art once the features are on, so the first reveal never pops in.
+  // Warm the art once the features are on, so the first reveal never pops in: decoded into expo-image's memory cache
+  // (every loop <Image> asks for memory-disk), so a card's chest and icons are drawn on its very first frame.
   useEffect(() => {
-    if (flags?.dailyThree || flags?.levelChests) void Asset.loadAsync(ART).catch(() => undefined);
+    if (!(flags?.dailyThree || flags?.levelChests)) return;
+    void Asset.loadAsync(ART).catch(() => undefined)
+      .then(() => Image.prefetch(artUrls(), 'memory-disk')).catch(() => undefined);
   }, [flags?.dailyThree, flags?.levelChests]);
 
   const applyDaily = useCallback((next: DailyThreeState) => {
@@ -516,7 +531,15 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     const pre = preNextRef.current;
     if (src === 'daily' && pre && !reducedMotion) {
       chainRef.current = preChainRef.current.slice(1);
-      enterBOnFlight.value = 1;
+      // One continuous moment, no still map between cards: the next card grows out of the Daily 3 button while the
+      // last prizes are still landing (NEXT_OVERLAP_MS before the flight ends, never sooner than NEXT_MIN_MS), on an
+      // absolute UI-thread mark shared with the flight.
+      const nextAt = t0 + Math.max(NEXT_MIN_MS, (reducedMotion ? 420 : flightDoneMs(plan)) - NEXT_OVERLAP_MS);
+      enterBOnFlight.value = 0;
+      outB.value = 0;
+      enteredB.value = nextAt;
+      cardB.value = withDelayUntil(nextAt, withSpring(1, SPRING.settle));
+      dim.value = withDelayUntil(nextAt, withTiming(0.55, { duration: DURATION.enter, easing: EASE.out }));
       launchB.value = launchFrom.current ?? { x: 0, y: 0 };
       buttonBox.current?.measureInWindow((x, y, w, h) => {
         if (Number.isFinite(x) && w > 0) launchB.value = { x: x + w / 2 - width / 2, y: y + h / 2 - height / 2 };
@@ -888,7 +911,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       // (the eye follows the prizes to the HUD), then the map comes back into view.
       cardUp.current = false;
       out.value = withTiming(1, { duration: reducedMotion ? DURATION.quick : PRIZE_FLIGHT.exitMs, easing: EASE.in });
-      dim.value = withTiming(0, { duration: DURATION.exit, easing: EASE.in });
+      // The dim lifts for the prize flight; when the next chain card is already booked, it comes back with that card.
+      const nextAt = enteredB.value;
+      dim.value = nextAt < NOT_YET / 2 && nextAt > Date.now()
+        ? withSequence(withTiming(0, { duration: DURATION.exit, easing: EASE.in }), withDelayUntil(nextAt, withTiming(0.55, { duration: DURATION.enter, easing: EASE.out })))
+        : withTiming(0, { duration: DURATION.exit, easing: EASE.in });
     }
     if (!view && wasUp.current) {
       // Keep the modal up through the exit, then let it go (one render to close, none to open).
@@ -982,7 +1009,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const nextLevel = (lv: number) => (
     <View style={styles.nextBlock}>
       <View style={styles.nextRow}>
-        <Image source={LEVEL_CHEST} style={{ width: 30, height: 30 }} contentFit="contain" />
+        <Image cachePolicy="memory-disk" source={LEVEL_CHEST} style={{ width: 30, height: 30 }} contentFit="contain" />
         <Text style={styles.nextText}>{farLevel && daily?.streak.next_milestone
           ? `Next prize: ${daily.streak.next_milestone.label.toLowerCase()} on Day ${daily.streak.next_milestone.day}`
           : `Next: Level ${lv + 1} chest with new gear`}</Text>
@@ -1027,7 +1054,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     const footer = r.src === 'level' ? nextLevel(r.level ?? 1)
       : r.src === 'weekly' ? (
         <View style={styles.nextRow}>
-          <Image source={WEEKLY} style={{ width: 28, height: 28 }} contentFit="contain" />
+          <Image cachePolicy="memory-disk" source={WEEKLY} style={{ width: 28, height: 28 }} contentFit="contain" />
           <Text style={styles.nextText}>Next box: 5 flames next week</Text>
           <View style={styles.pips}>{[0, 1, 2, 3, 4].map(i => <View key={i} style={[styles.pip, i < 5 && styles.pipLit]} />)}</View>
         </View>
@@ -1081,7 +1108,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     content = (
       <View style={styles.card}>
         <CardSurface />
-        <Image source={FREEZE} style={styles.bigArt} contentFit="contain" />
+        <Image cachePolicy="memory-disk" source={FREEZE} style={styles.bigArt} contentFit="contain" />
         <Text style={styles.lead}>Miss a day? A freeze keeps your flame safe.</Text>
         <Text style={styles.small}>{`You have ${daily.streak.freezes} of ${daily.streak.freeze_cap}. It works by itself.`}</Text>
         <Pressable onPress={() => { void buyFreeze(); }} disabled={busy} accessibilityRole="button"

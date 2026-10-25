@@ -280,7 +280,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
               plays, the flame stays up until the check lands. */}
           <View style={[styles.icon, !(showReady && attention !== 'weekly') && styles.hidden]}><GameIcon name="chest" size={34} /></View>
           {attention === 'weekly' && showReady
-            ? <Image source={WEEKLY} style={{ width: 36, height: 36 }} contentFit="contain" />
+            ? <Image cachePolicy="memory-disk" source={WEEKLY} style={{ width: 36, height: 36 }} contentFit="contain" />
             : <View style={showReady ? styles.hidden : undefined}><FlameArt days={streak} size={44} reducedMotion={reducedMotion} still={!running} /></View>}
           <Animated.View pointerEvents="none" style={[styles.stamp, stampStyle]}>
             <Canvas style={{ width: 40, height: 40 }}>
@@ -320,8 +320,8 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, land
         </View>
         <Text style={styles.bubbleText} allowFontScaling={false}>{bubbleDone >= 3 ? 'All 3!' : `${bubbleDone} of 3`}</Text>
       </Animated.View>
-      <Animated.View pointerEvents="none" style={[styles.trail, trail2]}><Image source={SPARK} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} /></Animated.View>
-      <Animated.View pointerEvents="none" style={[styles.trail, trail1]}><Image source={SPARK} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} /></Animated.View>
+      <Animated.View pointerEvents="none" style={[styles.trail, trail2]}><Image cachePolicy="memory-disk" source={SPARK} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} /></Animated.View>
+      <Animated.View pointerEvents="none" style={[styles.trail, trail1]}><Image cachePolicy="memory-disk" source={SPARK} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} /></Animated.View>
       <Animated.View pointerEvents="none" style={[styles.flyer, flyStyle]}>
         <Canvas style={{ width: FLY, height: FLY }}>
           <Circle cx={FLY / 2} cy={FLY / 2} r={FLY / 2 - 1} color={BRAND.gold} />

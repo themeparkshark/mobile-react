@@ -9,7 +9,7 @@ import { playHaptic, queueHaptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import { usePowerBudget } from '../../power';
 import {
-  LOOP_CUES, PRESS, STAGGER, milestoneBadge, milestoneFlames, milestoneHaptic, nextFlameLine, type FlameMoment,
+  LOOP_CUES, PRESS, STAGGER, milestoneBadge, milestoneFlames, milestoneHaptic, type FlameMoment,
 } from '../../services/retention/loopMotion';
 import { BRAND, GameIcon } from '../../ui';
 import { GoldBurst, RadialFlash, SparkleBurst } from '../../ui/GoldBurst';
@@ -66,6 +66,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
   const roll = useSharedValue(reducedMotion ? 1 : 0);
   const slam = useSharedValue(reducedMotion ? 1 : 0);
   const squash = useSharedValue(1);
+  const numPop = useSharedValue(1);
   const badge = useSharedValue(reducedMotion ? 1 : 0);
   const finn = useSharedValue(reducedMotion ? 1 : 0);
   const wave = useSharedValue(0);
@@ -100,6 +101,8 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
       roll.value = W(withDelay(at, withTiming(1, { duration: DURATION.base, easing: EASE.out })));
       // "N days in a row!" waits for the roll to land (it never says 12 while the number still reads 11).
       plusText.value = W(withDelay(at + DURATION.base, withSpring(1, SPRING.stamp)));
+      // The new number lands with a squash (wide and short) and stamps back to round.
+      numPop.value = W(withDelay(at + DURATION.base - 40, withSequence(withTiming(1.28, { duration: 70, easing: EASE.out }), withSpring(1, SPRING.stamp))));
       sparkle.value = W(withDelay(at, withTiming(1, { duration: DURATION.sparkle, easing: EASE.out })));
       gold.value = W(withDelay(at, withSequence(withTiming(0.55, { duration: 160 }), withTiming(0.3, { duration: 600 }))));
       later(() => { playHaptic('tierUp'); playSfx(cue.fallback); }, at);
@@ -142,7 +145,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
     return { opacity: Math.min(1, s * 3), transform: [{ scale: 1.8 - 0.8 * s }, { scaleY: squash.value }, { scaleX: 2 - squash.value }] };
   });
   const rollOld = useAnimatedStyle(() => ({ opacity: 1 - roll.value, transform: [{ translateY: -28 * roll.value }] }));
-  const rollNew = useAnimatedStyle(() => ({ opacity: roll.value, transform: [{ translateY: 28 * (1 - roll.value) }] }));
+  const rollNew = useAnimatedStyle(() => ({ opacity: roll.value, transform: [{ translateY: 28 * (1 - roll.value) }, { scaleX: numPop.value }, { scaleY: 2 - numPop.value }] }));
   const plusTextStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, plusText.value * 1.5), transform: [{ scale: 1.3 - 0.3 * plusText.value }] }));
   const badgeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, badge.value * 2), transform: [{ scale: 1.7 - 0.7 * badge.value }] }));
   const finnStyle = useAnimatedStyle(() => ({
@@ -150,13 +153,12 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
     transform: [{ translateX: -60 * (1 - finn.value) }, { rotate: `${wave.value * 8}deg` }],
   }));
   const rows = milestoneFlames(to);
-  const line = nextFlameLine(to);
 
   return (
     <Pressable onPress={ready ? onDone : undefined} style={styles.card} accessibilityLabel={`${to} day flame`}>
       <CardSurface />
       <View style={[styles.stage, big && styles.stageBig]}>
-        <GoldBurst size={big ? 330 : 220} amount={gold} bloom={bloom} reduced={reducedMotion} style={styles.abs} />
+        <GoldBurst size={big ? 330 : 220} amount={gold} bloom={bloom} reduced={reducedMotion} spin={budget.level === 'full'} style={styles.abs} />
         <RadialFlash flash={flash} size={260} />
         <Animated.View style={flameStyle}>
           <FlameArt days={to} size={big ? 168 : 156} reducedMotion={reducedMotion} boost={boost} />
@@ -164,7 +166,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
         <View style={styles.center}><SparkleBurst progress={sparkle} count={sparks} radius={big ? 140 : 90} /></View>
         {gatherCount > 0 && <View style={styles.center} pointerEvents="none"><SparkleBurst progress={gatherP} count={Math.min(8, gatherCount)} radius={150} /></View>}
         {big && !reducedMotion && <Animated.View pointerEvents="none" style={[styles.chargeRing, ringStyle]} />}
-        {big && !reducedMotion && budget.animate && budget.particleScale >= 0.5 && (
+        {big && !reducedMotion && budget.animate && budget.particleScale >= 1 && (
           <View style={styles.center} pointerEvents="none"><RewardBurst progress={confetti} x={0} y={-20} /></View>
         )}
         {big ? (
@@ -198,13 +200,13 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
       ) : (
         <Animated.Text style={[styles.plusText, plusTextStyle]}>{to === 1 ? 'Your flame is lit!' : `${to} days in a row!`}</Animated.Text>
       )}
-      {/* The close goal first (tomorrow: one more day and its prize), the far flame ladder small under it. */}
-      <View style={styles.next}><TomorrowGoal days={to} prize={prize} size={26} far={!!line} /></View>
+      {/* Tomorrow as one big picture: the next day's flame and the prize waiting. */}
+      <View style={styles.next}><TomorrowGoal days={to} prize={prize} size={44} reducedMotion={reducedMotion} /></View>
       {/* Finn stands beside the button, never over the words. */}
       <View style={styles.bottom}>
         {big && (
           <Animated.View style={[styles.finn, finnStyle]} pointerEvents="none">
-            <Image source={FINN_WAVE} style={{ width: 72, height: 72 }} contentFit="contain" />
+            <Image cachePolicy="memory-disk" source={FINN_WAVE} style={{ width: 72, height: 72 }} contentFit="contain" />
           </Animated.View>
         )}
         <View style={{ flex: 1 }}>
@@ -276,8 +278,8 @@ const styles = StyleSheet.create({
   flames: { alignItems: 'center', gap: 2 },
   flameRow: { flexDirection: 'row', gap: 2 },
   plusText: { fontFamily: 'Shark', fontSize: 26, color: BRAND.gold, textAlign: 'center', marginTop: 2 },
-  next: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: BRAND.navy, borderRadius: 12,
-    paddingHorizontal: 10, paddingVertical: 4 },
+  next: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: BRAND.navy, borderRadius: 18,
+    paddingHorizontal: 14, paddingVertical: 6 },
   nextText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold, marginTop: 1 },
   bottom: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 60, marginTop: 10 },
   finn: { width: 72, height: 72 },

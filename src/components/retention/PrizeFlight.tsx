@@ -157,7 +157,7 @@ function FlyingIcon({ source, from, to, lift, delay, startAt, landed }: {
   const style = useAnimatedStyle(() => fly(t, from, to, lift));
   return (
     <Animated.View style={[styles.icon, style]}>
-      <Image source={source} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+      <Image cachePolicy="memory-disk" source={source} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
     </Animated.View>
   );
 }

@@ -30,7 +30,7 @@ export const CardSurface = memo(function CardSurface() {
       <LinearGradient colors={['#3d9ee6', BRAND.blue, '#055aa3']} locations={[0, 0.42, 1]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFill} />
       {/* A soft round pool of light high in the card (where the prize sits). */}
-      <Image source={SOFT} style={styles.pool} contentFit="fill" tintColor="#d6efff" transition={0} />
+      <Image cachePolicy="memory-disk" source={SOFT} style={styles.pool} contentFit="fill" tintColor="#d6efff" transition={0} />
       {BUBBLES.map((b, i) => (
         <View key={i} style={[styles.bubble, { left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: b.r * 2, height: b.r * 2, borderRadius: b.r }]} />
       ))}

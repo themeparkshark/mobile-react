@@ -12,7 +12,7 @@ import useAmbientLoop from '../../power/useAmbientLoop';
 import { usePowerBudget } from '../../power';
 import { FREEZE_FX, LOOP_CUES, PRESS, arcPoint, flameLook } from '../../services/retention/loopMotion';
 import { BRAND } from '../../ui';
-import { SPRING, momentParticles } from '../../ui/motion';
+import { DURATION, SPRING, momentParticles } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import FlameArt from './FlameArt';
 import CardSurface from './CardSurface';
@@ -68,6 +68,9 @@ function Shield({ size, fly, reducedMotion }: {
   const land = useSharedValue(1);
   const frost = useSharedValue(0);
   const flashRing = useSharedValue(0);
+  /** The landing kick (pt) and the frost ring that bursts out of the slot. */
+  const kick = useSharedValue(0);
+  const ring = useSharedValue(0);
   const glint = useSharedValue(0);
   const from = useSharedValue(fly?.from ?? { x: 0, y: 0 });
   const puffs = fly && !reducedMotion ? momentParticles(FREEZE_FX.frost, budget, false) : 0;
@@ -77,7 +80,12 @@ function Shield({ size, fly, reducedMotion }: {
     const delay = 200 + fly.order * 160;
     t.value = withDelay(delay, withTiming(1, { duration: FREEZE_FX.flyMs, easing: EASE.inOut }));
     // It lands big (1.6x) and springs into its slot, the slot ring flashes ice blue and frost puffs out.
-    land.value = withDelay(delay + FREEZE_FX.flyMs, withSequence(withTiming(FREEZE_FX.landPop, { duration: 90, easing: EASE.out }), withSpring(1, SPRING.land)));
+    // It lands big (1.6x), holds one hit-stop beat, then springs into its slot with a little kick and a frost ring.
+    land.value = withDelay(delay + FREEZE_FX.flyMs, withSequence(withTiming(FREEZE_FX.landPop, { duration: 90, easing: EASE.out }),
+      withDelay(DURATION.hitStop, withSpring(1, SPRING.land))));
+    kick.value = withDelay(delay + FREEZE_FX.flyMs + 90 + DURATION.hitStop, withSequence(withTiming(3, { duration: 40, easing: EASE.out }),
+      withTiming(-2, { duration: 50 }), withTiming(0, { duration: 60, easing: EASE.out })));
+    ring.value = withDelay(delay + FREEZE_FX.flyMs + 90 + DURATION.hitStop, withTiming(1, { duration: 560, easing: EASE.out }));
     frost.value = withDelay(delay + FREEZE_FX.flyMs, withTiming(1, { duration: 800, easing: EASE.out }));
     flashRing.value = withDelay(delay + FREEZE_FX.flyMs, withSequence(withTiming(1, { duration: 80 }), withTiming(0, { duration: 520, easing: EASE.out })));
     // A clink: a rigid tap, then a light one 70 ms later.
@@ -93,17 +101,22 @@ function Shield({ size, fly, reducedMotion }: {
   const style = useAnimatedStyle(() => {
     const p = arcPoint(t.value, from.value, { x: 0, y: 0 }, 80);
     const s = t.value < 1 ? 0.6 + 0.4 * t.value + 0.35 * Math.sin(Math.PI * t.value) : 1;
-    return { opacity: Math.min(1, t.value * 4), transform: [{ translateX: p.x }, { translateY: p.y }, { scale: s * land.value },
+    return { opacity: Math.min(1, t.value * 4), transform: [{ translateX: p.x }, { translateY: p.y + kick.value }, { scale: s * land.value },
       { rotate: `${(1 - t.value) * 200}deg` }] };
   });
   const flashStyle = useAnimatedStyle(() => ({ opacity: flashRing.value, transform: [{ scale: 1 + 0.5 * (1 - flashRing.value) }] }));
+  const ringStyle = useAnimatedStyle(() => ({ opacity: ring.value <= 0 || ring.value >= 1 ? 0 : 0.9 * (1 - ring.value),
+    transform: [{ scale: 0.8 + 1.7 * ring.value }] }));
   const glintStyle = useAnimatedStyle(() => ({ opacity: glint.value > 0 && glint.value < 1 ? 1 : 0,
     transform: [{ translateX: -size + size * 2 * glint.value }, { rotate: '24deg' }] }));
   return (
     <View style={{ width: size, height: size, zIndex: fly ? 5 : 0 }} accessibilityLabel="Streak freeze">
       {fly && <Animated.View pointerEvents="none" style={[styles.flash, { width: size + 12, height: size + 12, borderRadius: size }, flashStyle]} />}
+      {fly && !reducedMotion && (
+        <Animated.View pointerEvents="none" style={[styles.frostRing, { width: size + 8, height: size + 8, borderRadius: size, left: -4, top: -4 }, ringStyle]} />
+      )}
       <Animated.View style={[StyleSheet.absoluteFill, style]}>
-        <Image source={FREEZE} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+        <Image cachePolicy="memory-disk" source={FREEZE} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden', borderRadius: size * 0.3 }]} pointerEvents="none">
           <Animated.View style={[{ width: size * 0.35, height: size * 1.6, top: -size * 0.3 }, glintStyle]}>
             <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.85)', 'rgba(255,255,255,0)']}
@@ -195,7 +208,7 @@ export function FreezeSavedCard({ streak, days, reducedMotion, onDone }: {
       <CardSurface />
       <View style={styles.stage}>
         <Animated.View style={[styles.glow, glowStyle]}>
-          <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor="#FFD54A" transition={0} />
+          <Image cachePolicy="memory-disk" source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor="#FFD54A" transition={0} />
         </Animated.View>
         <Animated.View style={flameStyle}><FlameArt days={streak} size={128} reducedMotion={reducedMotion} /></Animated.View>
         {/* The ice shell: two halves of a pale dome, a crack drawn across, then they fall away. */}
@@ -213,7 +226,7 @@ export function FreezeSavedCard({ streak, days, reducedMotion, onDone }: {
           </Animated.View>
         </View>
         {puffs > 0 && <View style={styles.center}><FrostPuff progress={frost} count={puffs} radius={95} /></View>}
-        <Image source={FREEZE} style={styles.badge} contentFit="contain" />
+        <Image cachePolicy="memory-disk" source={FREEZE} style={styles.badge} contentFit="contain" />
       </View>
       <Animated.View style={wordsStyle}>
         <Text style={styles.lead}>Your freeze saved your flame!</Text>
@@ -221,7 +234,7 @@ export function FreezeSavedCard({ streak, days, reducedMotion, onDone }: {
       </Animated.View>
       <View style={styles.bottom}>
         <Animated.View style={[styles.finn, finnStyle]} pointerEvents="none">
-          <Image source={FINN} style={{ width: 70, height: 70 }} contentFit="contain" />
+          <Image cachePolicy="memory-disk" source={FINN} style={{ width: 70, height: 70 }} contentFit="contain" />
         </Animated.View>
         <Animated.View style={[{ flex: 1 }, btnStyle]}>
           <Pressable onPress={onDone} accessibilityRole="button" style={styles.button}
@@ -282,6 +295,7 @@ export function EmberCard({ was, reducedMotion, onDone }: {
 const styles = StyleSheet.create({
   slots: { gap: 4, alignItems: 'center' },
   flash: { position: 'absolute', left: -6, top: -6, borderWidth: 4, borderColor: '#bfe8ff', backgroundColor: 'rgba(191,232,255,0.35)' },
+  frostRing: { position: 'absolute', borderWidth: 3, borderColor: '#bfe8ff' },
   slot: { borderRadius: 10, borderWidth: 2.5, borderStyle: 'dashed', borderColor: '#9fd2f5', alignItems: 'center', justifyContent: 'center' },
   slotOpen: { borderColor: BRAND.gold, backgroundColor: 'rgba(255, 207, 59, 0.15)' },
   plus: { fontFamily: 'Shark', fontSize: 22, color: BRAND.gold, marginTop: -2 },

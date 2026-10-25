@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useMemo } from 'react';
 import { StyleSheet, Text, View, type TextStyle, type StyleProp } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming, type SharedValue,
+  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import useAmbientLoop from '../../power/useAmbientLoop';
 import { flameLook, nextFlameLine, nextFlameSize } from '../../services/retention/loopMotion';
@@ -92,12 +92,12 @@ export default function FlameArt({ days, size, reducedMotion, still = false, boo
           tintColor={ghost ? '#ffffff' : undefined} />
         {look.core && !ghost && (
           <Animated.View style={[styles.core, { width: art * 0.44, height: art * 0.44, bottom: art * 0.1, left: art * 0.28 }, coreStyle]}>
-            <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor={GOLD_FX.core} transition={0} />
+            <Image cachePolicy="memory-disk" source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor={GOLD_FX.core} transition={0} />
           </Animated.View>
         )}
         {look.core && !ghost && (
           <Animated.View style={[styles.core, { width: art * 0.24, height: art * 0.34, top: art * 0.1, left: art * 0.4 }, lickStyle]}>
-            <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor="#dff4ff" transition={0} />
+            <Image cachePolicy="memory-disk" source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor="#dff4ff" transition={0} />
           </Animated.View>
         )}
       </Animated.View>
@@ -142,36 +142,47 @@ export function NextFlameGoal({ days, size = 30, textStyle, short = false }: {
 }
 
 /**
- * The close goal: tomorrow. Today's flame, an arrow, tomorrow's flame (a white ghost with its day), a plus, and
- * tomorrow's real prize as a picture (the Daily 3 chest, or a gift when gear is next). A non-reader sees
- * "one more day, a bigger number and a chest". The far flame ladder sits under it, small.
+ * Tomorrow, as one big picture a non-reader gets at a glance: tomorrow's flame as a ghost with its day number on it,
+ * a plus, and the real prize waiting (the Daily 3 chest, or a present only when gear is really next) wiggling gently,
+ * then "Tomorrow!". No small print and no far ladder: the flame size ladder lives in the flame itself.
  */
-export function TomorrowGoal({ days, prize, size = 30, far = true, textStyle }: {
+export function TomorrowGoal({ days, prize, size = 30, textStyle, reducedMotion = false }: {
   readonly days: number;
   /** Tomorrow's prize: 'chest' (the Daily 3 chest), 'gear' (a gift) or 'flame' (the flame alone). */
   readonly prize: 'chest' | 'gear' | 'flame';
+  /** The prize art's size (the ghost flame is a touch bigger). At least 40 reads from arm's length. */
   readonly size?: number;
-  /** Show the far flame ladder under it. */
+  /** @deprecated The far ladder row is gone; kept so older callers still type-check. */
   readonly far?: boolean;
   readonly textStyle?: StyleProp<TextStyle>;
+  readonly reducedMotion?: boolean;
 }) {
   const next = Math.max(1, days + 1);
+  const wiggle = useSharedValue(0);
+  // The prize wiggles 6 degrees, twice, every 3 s (ambient: rests when idle, in the background or with Reduce Motion).
+  useAmbientLoop(() => {
+    wiggle.value = withRepeat(withSequence(
+      withDelay(2400, withTiming(1, { duration: 110 })), withTiming(-1, { duration: 140 }),
+      withTiming(1, { duration: 140 }), withTiming(0, { duration: 110 }),
+    ), -1);
+  }, () => { cancelAnimation(wiggle); wiggle.value = 0; }, !reducedMotion);
+  const prizeStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value * 6}deg` }, { scale: 1 + Math.abs(wiggle.value) * 0.05 }] }));
   return (
-    <View style={styles.tomorrowCol} accessible accessibilityLabel={`Tomorrow: day ${next}${prize === 'gear' ? ' and new gear' : prize === 'chest' ? ' and a chest' : ''}`}>
-      <View style={styles.goal}>
-        <FlameArt days={days} size={size} reducedMotion still />
-        <Text style={styles.arrow} allowFontScaling={false}>{'>'}</Text>
-        <View style={styles.ghostWrap}>
-          <FlameArt days={next} size={size * 1.15} reducedMotion still ghost />
-          <View style={styles.ghostDay}><Text style={styles.ghostDayText} allowFontScaling={false}>{next}</Text></View>
+    <View style={styles.goal} accessible accessibilityLabel={`Tomorrow: day ${next}${prize === 'gear' ? ' and new gear' : prize === 'chest' ? ' and a chest' : ''}`}>
+      <View style={[styles.ghostWrap, { width: size * 1.25, height: size * 1.25 }]}>
+        <FlameArt days={next} size={size * 1.15} reducedMotion still ghost />
+        <View style={[styles.ghostDay, { minWidth: size * 0.75, height: size * 0.62, borderRadius: size * 0.31 }]}>
+          <Text style={[styles.ghostDayText, { fontSize: Math.round(size * 0.42) }]} allowFontScaling={false}>{next}</Text>
         </View>
-        {prize !== 'flame' && <Text style={styles.plus} allowFontScaling={false}>+</Text>}
-        {prize !== 'flame' && (
-          <Image source={prize === 'gear' ? GIFT : DAILY_CHEST} style={{ width: size * 1.2, height: size * 1.2 }} contentFit="contain" transition={0} />
-        )}
-        <Text style={[styles.goalText, textStyle, styles.goalMin]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>Tomorrow!</Text>
       </View>
-      {far && nextFlameSize(next) ? <View style={styles.farRow}><NextFlameGoal days={days} size={Math.round(size * 0.6)} short textStyle={styles.farText} /></View> : null}
+      {prize !== 'flame' && <Text style={[styles.plus, { fontSize: Math.round(size * 0.6) }]} allowFontScaling={false}>+</Text>}
+      {prize !== 'flame' && (
+        <Animated.View style={prizeStyle}>
+          <Image cachePolicy="memory-disk" source={prize === 'gear' ? GIFT : DAILY_CHEST} style={{ width: size * 1.15, height: size * 1.15 }} contentFit="contain" transition={0} />
+        </Animated.View>
+      )}
+      <Text style={[styles.goalText, textStyle, styles.goalMin, { fontSize: Math.max(16, Math.round(size * 0.5)) }]} numberOfLines={1}
+        adjustsFontSizeToFit minimumFontScale={0.8}>Tomorrow!</Text>
     </View>
   );
 }
@@ -213,16 +224,16 @@ const styles = StyleSheet.create({
   // A resting coal: the same warm flame art, low and quiet (never grey, never sad).
   ember: { opacity: 0.92 },
   ring: { borderWidth: 3, borderColor: GOLD_FX.rays, borderStyle: 'dashed' },
-  goal: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1 },
+  goal: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
   tomorrowCol: { gap: 2, flexShrink: 1 },
-  plus: { fontFamily: 'Shark', fontSize: 18, color: GOLD_FX.rays, marginTop: 2 },
+  plus: { fontFamily: 'Shark', color: GOLD_FX.rays, marginTop: 2 },
   farRow: { opacity: 0.8, transform: [{ scale: 0.92 }], alignSelf: 'flex-start' },
   farText: { fontSize: 12, color: '#e4f7ff' },
   arrow: { fontFamily: 'Shark', fontSize: 18, color: GOLD_FX.rays, marginHorizontal: 1, marginTop: 2 },
   ghostWrap: { alignItems: 'center', justifyContent: 'center' },
-  ghostDay: { position: 'absolute', bottom: -2, right: -4, minWidth: 22, height: 20, borderRadius: 10, paddingHorizontal: 3,
-    backgroundColor: '#05346e', borderWidth: 1.5, borderColor: GOLD_FX.rays, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
-  ghostDayText: { fontFamily: 'Shark', fontSize: 13, color: GOLD_FX.rays, marginTop: 1 },
+  ghostDay: { position: 'absolute', bottom: -4, right: -6, paddingHorizontal: 4,
+    backgroundColor: '#05346e', borderWidth: 2, borderColor: GOLD_FX.rays, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  ghostDayText: { fontFamily: 'Shark', color: GOLD_FX.rays, marginTop: 2 },
   awayChip: { marginLeft: 6, minWidth: 34, height: 30, borderRadius: 15, paddingHorizontal: 7, backgroundColor: GOLD_FX.rays,
     alignItems: 'center', justifyContent: 'center', borderBottomWidth: 3, borderBottomColor: '#c98a00' },
   awayNum: { fontFamily: 'Shark', fontSize: 21, color: '#075083', marginTop: 2 },

@@ -43,7 +43,7 @@ export default function StreakFlame({ streak, best = 0, size = 28, still = false
   return (
     <View style={styles.row} accessible accessibilityLabel={label}>
       <Animated.View style={style}>
-        {lit ? <GameIcon name="streak" size={size} /> : <Image source={BEST} style={{ width: size, height: size }} contentFit="contain" />}
+        {lit ? <GameIcon name="streak" size={size} /> : <Image cachePolicy="memory-disk" source={BEST} style={{ width: size, height: size }} contentFit="contain" />}
       </Animated.View>
       <View style={[styles.pill, { height: pill, minWidth: pill, borderRadius: pill / 2, marginLeft: -size * 0.28 }, !lit && styles.pillBest]}>
         <Text style={[styles.text, { fontSize: Math.round(pill * 0.62) }, !lit && styles.textBest]} allowFontScaling={false}>

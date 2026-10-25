@@ -48,6 +48,8 @@ export default function WelcomeBack({ cards: cardsIn, reducedMotion, onDone }: {
   const sparks = useMemo(() => momentParticles(8, budget, reducedMotion), [budget, reducedMotion]);
   const cards = cardsIn ?? [];
   const shown = cards.slice(0, 3);
+  // One tile fills the stage at hero size (never one small tile on an empty card); two or three share the row.
+  const hero = shown.length === 1;
   const giftIndex = shown.findIndex(c => c.kind === 'flame' || c.kind === 'saved');
   const mountedAt = useRef(Date.now());
   useEffect(() => {
@@ -97,15 +99,15 @@ export default function WelcomeBack({ cards: cardsIn, reducedMotion, onDone }: {
       <Animated.View style={[styles.card, outStyle]}>
         <CardSurface />
         <View style={styles.stage}>
-          <GoldBurst size={260} amount={gold} reduced={reducedMotion} style={styles.abs} />
+          <GoldBurst size={340} amount={gold} reduced={reducedMotion} style={styles.abs} />
           <Animated.View pointerEvents="none" style={[styles.splash, splashStyle]} />
-          <Animated.View style={finnStyle}><Image source={FINN} style={{ width: 150, height: 150 }} contentFit="contain" transition={0} /></Animated.View>
+          <Animated.View style={finnStyle}><Image cachePolicy="memory-disk" source={FINN} style={{ width: 176, height: 176 }} contentFit="contain" transition={0} /></Animated.View>
           <View style={styles.center} pointerEvents="none"><SparkleBurst progress={sparkle} count={sparks} radius={110} /></View>
         </View>
         <View style={styles.tiles}>
           {ready ? shown.map((c, i) => (
-            <Drop key={c.kind} v={drops[i]}>
-              <Tile card={c} gift={i === giftIndex ? gift : null} reducedMotion={reducedMotion} />
+            <Drop key={c.kind} v={drops[i]} hero={hero}>
+              <Tile card={c} gift={i === giftIndex ? gift : null} reducedMotion={reducedMotion} hero={hero} />
             </Drop>
           )) : [0, 1, 2].map(i => <WaitingTile key={i} index={i} reducedMotion={reducedMotion} />)}
         </View>
@@ -125,48 +127,50 @@ function WaitingTile({ index, reducedMotion }: { readonly index: number; readonl
   return <Animated.View style={[styles.tile, styles.waiting, style]} />;
 }
 
-function Drop({ v, children }: { readonly v: SharedValue<number>; readonly children: React.ReactNode }) {
+function Drop({ v, children, hero = false }: { readonly v: SharedValue<number>; readonly children: React.ReactNode; readonly hero?: boolean }) {
   const style = useAnimatedStyle(() => ({ opacity: Math.min(1, v.value * 2), transform: [{ translateY: -44 * (1 - v.value) }, { scale: 0.85 + 0.15 * v.value }] }));
-  return <Animated.View style={[{ flex: 1, maxWidth: 150 }, style]}>{children}</Animated.View>;
+  return <Animated.View style={[{ flex: 1, maxWidth: hero ? 250 : 150 }, style]}>{children}</Animated.View>;
 }
 
 /** One picture tile: a big picture, then one number or short word. The sentence is for screen readers. */
-function Tile({ card, gift, reducedMotion }: { readonly card: WelcomeCard; readonly gift: SharedValue<number> | null; readonly reducedMotion: boolean }) {
+function Tile({ card, gift, reducedMotion, hero = false }: {
+  readonly card: WelcomeCard; readonly gift: SharedValue<number> | null; readonly reducedMotion: boolean; readonly hero?: boolean;
+}) {
   const giftStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.28 * (gift ? gift.value : 0) }] }));
   const label = welcomeTileLabel(card);
   return (
-    <View style={styles.tile} accessible accessibilityLabel={card.text}>
-      <Animated.View style={[styles.pic, giftStyle]}>
-        <TilePicture card={card} reducedMotion={reducedMotion} />
+    <View style={[styles.tile, hero && styles.tileHero]} accessible accessibilityLabel={card.text}>
+      <Animated.View style={[styles.pic, hero && styles.picHero, giftStyle]}>
+        <TilePicture card={card} reducedMotion={reducedMotion} scale={hero ? 1.5 : 1} />
       </Animated.View>
       <View style={[styles.chip, (card.kind === 'flame' || card.kind === 'saved') && styles.chipGold]}>
         {/* The flame's number always sits beside a little flame, so it reads as days of flame (never freezes). */}
-        {(card.kind === 'flame' || card.kind === 'saved') && <GameIcon name="streak" size={18} />}
-        <Text style={[styles.chipText, (card.kind === 'flame' || card.kind === 'saved') && styles.chipTextGold]} numberOfLines={1}
+        {(card.kind === 'flame' || card.kind === 'saved') && <GameIcon name="streak" size={hero ? 26 : 18} />}
+        <Text style={[styles.chipText, hero && styles.chipTextHero, (card.kind === 'flame' || card.kind === 'saved') && styles.chipTextGold]} numberOfLines={1}
           adjustsFontSizeToFit allowFontScaling={false}>{label}</Text>
       </View>
     </View>
   );
 }
 
-function TilePicture({ card, reducedMotion }: { readonly card: WelcomeCard; readonly reducedMotion: boolean }) {
+function TilePicture({ card, reducedMotion, scale = 1 }: { readonly card: WelcomeCard; readonly reducedMotion: boolean; readonly scale?: number }) {
   switch (card.kind) {
-    case 'goals': return <GoalsRing done={card.done} />;
-    case 'flame': return <FlameArt days={card.n} size={74} reducedMotion={reducedMotion} />;
-    case 'ember': return <FlameArt days={0} size={74} reducedMotion={reducedMotion} />;
+    case 'goals': return <View style={{ transform: [{ scale }] }}><GoalsRing done={card.done} /></View>;
+    case 'flame': return <FlameArt days={card.n} size={74 * scale} reducedMotion={reducedMotion} />;
+    case 'ember': return <FlameArt days={0} size={74 * scale} reducedMotion={reducedMotion} />;
     case 'saved': return (
       // The flame, kept safe: one small ice shield per freeze that kept it, side by side under it (pictures, no number).
-      <View style={{ width: 78, height: 78, alignItems: 'center' }}>
-        <FlameArt days={card.n} size={60} reducedMotion={reducedMotion} />
+      <View style={{ width: 78 * scale, height: 78 * scale, alignItems: 'center' }}>
+        <FlameArt days={card.n} size={60 * scale} reducedMotion={reducedMotion} />
         <View style={styles.shields}>
           {Array.from({ length: Math.max(1, card.freezes) }, (_, k) => (
-            <Image key={k} source={FREEZE} style={styles.shield} contentFit="contain" />
+            <Image cachePolicy="memory-disk" key={k} source={FREEZE} style={{ width: 24 * scale, height: 24 * scale }} contentFit="contain" />
           ))}
         </View>
       </View>
     );
-    case 'chest': return <Image source={DAILY_CHEST} style={{ width: 68, height: 68 }} contentFit="contain" />;
-    case 'levelChest': return <Image source={ICON_SOURCES.chest} style={{ width: 68, height: 68 }} contentFit="contain" />;
+    case 'chest': return <Image cachePolicy="memory-disk" source={DAILY_CHEST} style={{ width: 68 * scale, height: 68 * scale }} contentFit="contain" />;
+    case 'levelChest': return <Image cachePolicy="memory-disk" source={ICON_SOURCES.chest} style={{ width: 68 * scale, height: 68 * scale }} contentFit="contain" />;
   }
 }
 
@@ -186,7 +190,7 @@ function GoalsRing({ done }: { readonly done: number }) {
 const styles = StyleSheet.create({
   card: { backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white, marginTop: -14,
     paddingTop: 16, paddingBottom: 14, paddingHorizontal: 12, alignItems: 'center', gap: 8, overflow: 'hidden' },
-  stage: { height: 170, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
+  stage: { height: 196, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   abs: { position: 'absolute' },
   center: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },
   splash: { position: 'absolute', width: 180, height: 180, borderRadius: 90, borderWidth: 6, borderColor: BRAND.white },
@@ -194,13 +198,15 @@ const styles = StyleSheet.create({
   tile: { alignItems: 'center', gap: 6, backgroundColor: BRAND.white, borderRadius: 18, paddingTop: 10, paddingBottom: 10,
     borderBottomWidth: 4, borderBottomColor: '#a9cdea' },
   pic: { width: 78, height: 78, alignItems: 'center', justifyContent: 'center' },
+  picHero: { width: 120, height: 120 },
+  tileHero: { paddingTop: 14, paddingBottom: 14, borderRadius: 22, borderWidth: 3, borderColor: BRAND.gold, borderBottomWidth: 5 },
+  chipTextHero: { fontSize: 28 },
   chip: { minWidth: 56, maxWidth: '90%', backgroundColor: BRAND.navy, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3, alignItems: 'center',
     flexDirection: 'row', justifyContent: 'center', gap: 3 },
   chipGold: { backgroundColor: BRAND.gold },
   chipText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.white, marginTop: 2 },
   chipTextGold: { color: BRAND.navy },
   shields: { flexDirection: 'row', gap: 2, marginTop: -6 },
-  shield: { width: 24, height: 24 },
   waiting: { flex: 1, maxWidth: 150, height: 128, backgroundColor: 'rgba(255,255,255,0.5)', borderBottomColor: 'rgba(169,205,234,0.6)' },
   ring: { width: 76, height: 76, borderRadius: 38, backgroundColor: BRAND.sky, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 0 },
   dot: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', marginTop: 8 },

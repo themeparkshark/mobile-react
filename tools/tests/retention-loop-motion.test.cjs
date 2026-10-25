@@ -436,7 +436,7 @@ test('round 5: kid clarity: gear without art is a gift (never a bare shark), the
   const saved = plain(L.welcomeCards({ goals, streak: { days: 6, freeze_saved: 1 } }));
   assert.equal(saved.find(c => c.kind === 'saved').freezes, 1);
   const welcome = read('src/components/retention/WelcomeBack.tsx');
-  assert.match(welcome, /<GameIcon name="streak" size=\{18\} \/>/);
+  assert.match(welcome, /<GameIcon name="streak" size=\{hero \? 26 : 18\} \/>/);
   // Finn says hello at once; tiles wait (bobbing) while today's goals load, never a still map.
   assert.match(welcome, /WaitingTile/);
   const hook = read('src/components/retention/useRetention.tsx');
@@ -464,4 +464,36 @@ test('the full set never mounts its prize rows while the card is growing in, and
   // The answer waits for the entrance before the render that mounts the rows, and the auto chest skips the extra "opening" render.
   assert.match(hook, /if \(current\.auto\) await quietAfterEntrance\(\);\s*\n\s*if \(mounted\.current\) setView\(\{ \.\.\.current, opening: false, rewards: result\.rewards/);
   assert.match(hook, /if \(!current\.auto\) setView\(\{ \.\.\.current, opening: true \}\);/);
+});
+
+test('wave 5: thinner Battery Saver look, one big tomorrow picture, a promise button, one continuous chain', () => {
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  const flame = read('src/components/retention/StreakMoment.tsx');
+  // Confetti only at full power, and the rays stand still on Battery Saver.
+  for (const src of [reveal, flame]) {
+    assert.match(src, /budget\.particleScale >= 1 && /);
+    assert.doesNotMatch(src, /particleScale >= 0\.5/);
+    assert.match(src, /spin=\{budget\.level === 'full'\}/);
+  }
+  // The rows' empty plates show from the glide, so the card is never an empty panel.
+  assert.match(reveal, /slots\.value = withDelayAfter\(entered, pl\.pop \+ Math\.max\(0, pl\.hold - 60\)/);
+  // A level chest's line fades in as the chest lands (never drawn over).
+  assert.match(reveal, /subtitleStyle = useAnimatedStyle\(\(\) => \(\{ opacity: Math\.max\(0, Math\.min\(1, 1 - drop\.value/);
+  // Tomorrow is one big picture row: no far ladder, prize art at 44 pt on the flame card.
+  const art = read('src/components/retention/FlameArt.tsx');
+  assert.doesNotMatch(art, /farRow\}><NextFlameGoal/);
+  assert.match(flame, /<TomorrowGoal days=\{to\} prize=\{prize\} size=\{44\}/);
+  // The tomorrow card's button is the promise, not a second "see you tomorrow".
+  const tomorrow = read('src/components/retention/TomorrowCard.tsx');
+  assert.doesNotMatch(tomorrow, /SEE YOU TOMORROW!/);
+  assert.match(tomorrow, /I'LL BE BACK!/);
+  // The next chain card overlaps the last prize landings (no still map between cards).
+  const hook = read('src/components/retention/useRetention.tsx');
+  const overlap = Number(/export const NEXT_OVERLAP_MS = (\d+);/.exec(hook)[1]);
+  const min = Number(/export const NEXT_MIN_MS = (\d+);/.exec(hook)[1]);
+  assert.ok(overlap >= 200 && min >= 300, 'the prizes lift off and fly first');
+  // Freeze earn: a hit-stop beat, a kick and a frost ring.
+  const freeze = read('src/components/retention/FreezeMoments.tsx');
+  assert.match(freeze, /withDelay\(DURATION\.hitStop, withSpring\(1, SPRING\.land\)\)/);
+  assert.match(freeze, /frostRing/);
 });
