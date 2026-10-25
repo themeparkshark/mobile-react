@@ -402,14 +402,20 @@ function Numbers({ data, reducedMotion, tallyOnly = false, statsOnly = false }: 
   );
 }
 
+/** How many of three stars a grade fills (S also gets a gold ring): a picture, never a letter to read. */
+export function gradeStars(grade: Grade): number {
+  return grade === 'C' ? 1 : grade === 'B' ? 2 : 3;
+}
+const GRADE_WORD: Record<Grade, string> = { S: 'super', A: 'great', B: 'good', C: 'okay' };
+
 function Grades({ g, tip, reducedMotion }: { g: { memory: Grade; speed: Grade; chain: Grade }; tip: string | null; reducedMotion: boolean }) {
   const items: [string, Grade][] = [['MEMORY', g.memory], ['SPEED', g.speed], ['CHAIN', g.chain]];
+  // The tip is spoken only (VoiceOver), never a sentence on the card.
   return (
-    <View style={styles.grades}>
+    <View style={styles.grades} accessible accessibilityLabel={`${items.map(([l, gr]) => `${l.toLowerCase()} ${GRADE_WORD[gr]}`).join(', ')}.${tip ? ` ${tip}` : ''}`}>
       <View style={styles.gradeRow}>
         {items.map(([label, grade], i) => <GradeStamp key={label} label={label} grade={grade} delay={i * 116} reducedMotion={reducedMotion} />)}
       </View>
-      {tip ? <Text style={styles.tip}>{tip}</Text> : null}
     </View>
   );
 }
@@ -422,12 +428,14 @@ function GradeStamp({ label, grade, delay, reducedMotion }: { label: string; gra
     const t = setTimeout(() => Haptic.tickSelection(), delay + 90);
     return () => clearTimeout(t);
   }, [delay, reducedMotion, v]);
-  const st = useAnimatedStyle(() => ({ opacity: v.value > 0 ? 1 : 0, transform: [{ scale: v.value || 1 }, { rotateZ: '-6deg' }] }));
-  const color = grade === 'S' ? MM.goldDeep : grade === 'A' ? MM.ink : grade === 'B' ? MM.scout : '#7a8da3';
+  const st = useAnimatedStyle(() => ({ opacity: v.value > 0 ? 1 : 0, transform: [{ scale: v.value || 1 }] }));
+  const lit = gradeStars(grade);
   return (
     <View style={styles.grade}>
-      <Animated.View style={[styles.gradeStamp, { borderColor: color }, st]}>
-        <Text style={[styles.gradeLetter, { color }]}>{grade}</Text>
+      <Animated.View style={[styles.gradeStars, grade === 'S' && styles.gradeStarsTop, st]}>
+        {[0, 1, 2].map((k) => (
+          <View key={k} style={k < lit ? null : styles.gradeStarOff}><GameIcon name="star" size={k === 1 ? 20 : 16} /></View>
+        ))}
       </Animated.View>
       <Text style={styles.gradeLabel}>{label}</Text>
     </View>
@@ -490,8 +498,8 @@ const styles = StyleSheet.create({
   medalTint: { ...StyleSheet.absoluteFillObject, opacity: 0.35, borderRadius: 27 },
   medalBand: { position: 'absolute', left: -10, right: -10, height: 7, transform: [{ rotateZ: '-20deg' }] },
   recallPlate: { flexDirection: 'row', alignItems: 'baseline', backgroundColor: FAMILY.gold, borderRadius: 14, borderWidth: 3, borderColor: FAMILY.navy, paddingHorizontal: 14, paddingVertical: 4 },
-  pairPlate: { flexDirection: 'row', gap: 5, backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 3, borderColor: FAMILY.navy,
-    paddingHorizontal: 10, paddingVertical: 6 },
+  // Bare on the blue card, the same dots as the try card (no white plate).
+  pairPlate: { flexDirection: 'row', gap: 5, paddingVertical: 4 },
   pairPip: { width: 26, height: 26, borderRadius: 13, borderWidth: 2.5, borderColor: '#9cc3e4', backgroundColor: '#e3eff9',
     alignItems: 'center', justifyContent: 'center' },
   pairCoin: { position: 'absolute', width: 30, height: 30 },
@@ -519,12 +527,13 @@ const styles = StyleSheet.create({
     borderColor: FAMILY.navy, paddingHorizontal: 12, paddingVertical: 2, marginTop: 8 },
   newBestText: { fontFamily: 'Shark', fontSize: 18, color: FAMILY.navy, marginLeft: 6 },
   grades: { alignItems: 'center', marginTop: 8 },
-  gradeRow: { flexDirection: 'row', gap: 18 },
+  gradeRow: { flexDirection: 'row', gap: 12 },
   grade: { alignItems: 'center' },
-  gradeStamp: { width: 40, height: 40, borderRadius: 20, borderWidth: 3, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' },
-  gradeLetter: { fontFamily: 'Shark', fontSize: 24 },
+  gradeStars: { flexDirection: 'row', alignItems: 'flex-end', height: 30, paddingHorizontal: 6, borderRadius: 15, borderWidth: 3,
+    borderColor: 'transparent', backgroundColor: '#ffffff' },
+  gradeStarsTop: { borderColor: '#ffcf3b' },
+  gradeStarOff: { opacity: 0.22 },
   gradeLabel: { fontFamily: 'Knockout', fontSize: 11, color: MM.ink, marginTop: 2 },
-  tip: { fontFamily: 'Knockout', fontSize: 14, color: MM.navyText, textAlign: 'center', marginTop: 6, paddingHorizontal: 6 },
   rewards: { alignItems: 'center', marginTop: 8 },
   chipRow: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
   extraReward: { fontFamily: 'Shark', fontSize: 15, color: FAMILY.navy, backgroundColor: FAMILY.gold, borderRadius: 10, overflow: 'hidden',

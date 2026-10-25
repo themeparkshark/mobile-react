@@ -1015,7 +1015,8 @@ export default function MemoryGame({
         numbers,
         tally,
         chip: chipText,
-        grades: r.mode === 'warmup' ? null : { memory: grades.memory, speed: grades.speed, chain: grades.chain },
+        // A run with no turns has nothing to grade: no stars for play that never happened.
+        grades: r.mode === 'warmup' || e.turns === 0 ? null : { memory: grades.memory, speed: grades.speed, chain: grades.chain },
         tip: r.mode === 'warmup' ? 'Remember where you saw each card. That is the whole game.' : grades.tip,
         newBest: r.mode === 'ride' && !won ? false : pb.isNewBest || newRidePb,
         rewards: r.mode === 'warmup' ? null : rewards,

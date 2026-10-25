@@ -55,7 +55,7 @@ test('the capture autoplay ready tap is cleared when a run ends, restarts or unm
 test('TRY TWO THUMBS? is a picture (drum left, rim right), with icon plus word buttons', () => {
   const rhythm = read('src/games/rhythm/RhythmTapGame.tsx');
   assert.doesNotMatch(rhythm, /Blue on the left thumb, coral on the right\.<\/Text>/, 'no sentence to read');
-  assert.match(rhythm, /accessibilityLabel="Blue drum on the left thumb, coral rim on the right thumb"/);
+  assert.match(rhythm, /accessibilityLabel="Two hands: the left thumb taps the blue drum, the right thumb taps the coral rim"/);
   assert.match(rhythm, /<Image source=\{TWO_DRUM\}/);
   assert.match(rhythm, /<Image source=\{TWO_RIM\}/);
   assert.match(rhythm, /<GameIcon name="check" size=\{18\} \/><Text style=\{styles\.easyBtnTxt\}>YES<\/Text>/);

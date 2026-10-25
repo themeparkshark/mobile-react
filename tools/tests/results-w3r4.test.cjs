@@ -28,6 +28,7 @@ test('the Best Moment polaroid waits for the badges and drops above the card, ne
     '../../../services/external': { openExternal() {} }, react: {}, 'react-native': { StyleSheet: { create: (s) => s } },
     'react-native-reanimated': {}, '../art': { ART: {}, C: {} }, '../../../gamekit/results/ResultsRibbon': {},
     '../../../gamekit/results/ResultsCard': {}, '../../../gamekit/results/feelings': { feelingChips: (s) => s }, '../../../ui/GameIcon': {},
+    '../../../gamekit/audio/GameAudio': { GameAudio: {} }, '../../../gamekit/Haptics': { playHaptic() {} },
     'react/jsx-runtime': { jsx() {}, jsxs() {}, Fragment: 'F' },
   });
   // No badges: two beats, as before.
@@ -79,7 +80,7 @@ test('the shared card speaks the family language: buttons inside, gold score wit
   assert.match(card, /\{actions \? <View style=\{styles\.actions\}>\{actions\}<\/View> : null\}\n\s+<\/View>\n\s+\);/);
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.match(shell, /<ResultsPodium cheer=\{stars > 0 \|\| \(!saved && compareBest\(/);
-  assert.match(shell, /extras=\{resultExtras \?\? resultsExtra \?\? undefined\}\n\s+>\n\s+<View style=\{styles\.actions\}>/);
+  assert.match(shell, /extras=\{resultExtras \?\? resultsExtra \?\? undefined\}\n\s+extrasBeat=\{resultExtrasBeat\}\n\s+>\n\s+<View style=\{styles\.actions\}>/);
   assert.match(shell, /<\/ResultsCard>\n\s+<\/Animated\.View>/, 'nothing renders under the card: DONE is the last thing');
   assert.match(shell, /sharedStage: \{ justifyContent: 'flex-end'/);
   const podium = loadTs('src/gamekit/results/ResultsPodium.tsx', {

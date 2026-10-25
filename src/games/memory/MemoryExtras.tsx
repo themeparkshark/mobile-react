@@ -279,14 +279,22 @@ export function AlbumBody({ album, focusDeck, compact }: { album: Album; focusDe
               const on = d.id === deck.id;
               const c = collected(album.decks[d.id], d.symbols.length);
               return (
-                <Pressable key={d.id} onPress={() => setDeckId(d.id)} style={[styles.tab, on && styles.tabOn]} accessibilityRole="tab" accessibilityState={{ selected: on }}>
-                  <Text style={[styles.tabText, on && styles.tabTextOn]}>{d.label}</Text>
+                // A picture tab (the deck's first card) and its count: no long names to cut off.
+                <Pressable key={d.id} onPress={() => setDeckId(d.id)} style={[styles.tab, on && styles.tabOn]} accessibilityRole="tab"
+                  accessibilityState={{ selected: on }} accessibilityLabel={`${d.label}, ${c} of ${d.symbols.length}`}>
+                  <FaceThumb face={faceFor(d, 0)} w={28} h={35} radius={5} />
                   <Text style={[styles.tabCount, on && styles.tabTextOn]}>{`${c}/${d.symbols.length}`}</Text>
                 </Pressable>
               );
             })}
           </ScrollView>
-          <Text style={styles.pageMeta}>{`${collected(page, size)}/${size} collected · ${foils(page, size)} foil${page?.perfect ? ' · PERFECT' : ''}`}</Text>
+          {/* The page's name and count; foil and perfect show on the cards themselves. */}
+          <View style={styles.pageHead} accessible
+            accessibilityLabel={`${deck.label}: ${collected(page, size)} of ${size} cards, ${foils(page, size)} gold${page?.perfect ? ', perfect' : ''}`}>
+            <Text style={styles.pageName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{deck.label}</Text>
+            <Text style={styles.pageCount}>{`${collected(page, size)}/${size}`}</Text>
+            {page?.perfect ? <Image source={STAMP} style={styles.pagePerfect} resizeMode="contain" /> : null}
+          </View>
           <View style={styles.albumGrid}>
             {deck.symbols.map((_, i) => {
               const f = page?.faces[String(i)];
@@ -313,7 +321,12 @@ export function AlbumBody({ album, focusDeck, compact }: { album: Album; focusDe
                 </View>
               ))}
             </ScrollView>
-          ) : <Text style={styles.sheetHint}>Clear a ride's Daily Deck at or under par to stamp its page.</Text>}
+          ) : (
+            // No stamps yet: a faded stamp picture; the how-to is spoken only.
+            <View accessible accessibilityLabel="No ride stamps yet. Clear a ride's Daily Deck at or under par to stamp its page." style={styles.stampEmpty}>
+              <Image source={STAMP} style={{ width: 44, height: 44 }} resizeMode="contain" />
+            </View>
+          )}
     </View>
   );
 }
@@ -410,12 +423,15 @@ const styles = StyleSheet.create({
   shareCrown: { width: 22, height: 20 },
   shareStreak: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   tabs: { gap: 6, paddingVertical: 4 },
-  tab: { backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: MM.ink, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center' },
+  tab: { backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: MM.ink, paddingHorizontal: 6, paddingVertical: 4, alignItems: 'center', gap: 2 },
   tabOn: { backgroundColor: MM.blue },
-  tabText: { fontFamily: 'Knockout', fontSize: 13, color: MM.navyText },
   tabTextOn: { color: '#ffffff' },
   tabCount: { fontFamily: 'Shark', fontSize: 12, color: MM.ink },
-  pageMeta: { fontFamily: 'Knockout', fontSize: 14, color: MM.navyText, marginVertical: 8 },
+  pageHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 8, maxWidth: '100%', paddingHorizontal: 6 },
+  pageName: { fontFamily: 'Shark', fontSize: 16, color: MM.navyText, flexShrink: 1 },
+  pageCount: { fontFamily: 'Shark', fontSize: 16, color: MM.ink },
+  pagePerfect: { width: 24, height: 24 },
+  stampEmpty: { opacity: 0.3, paddingVertical: 2 },
   albumGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
   albumSlot: { alignItems: 'center', padding: 3, borderRadius: 9 },
   albumPerfect: { backgroundColor: 'rgba(254,201,14,0.35)' },

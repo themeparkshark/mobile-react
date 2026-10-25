@@ -219,7 +219,12 @@ export default function QueueResultsCaptureScreen() {
       };
     });
     // Named patterns too (the star slams, the RUN SAVED stamp's tap).
-    hapticTrace.listener = (name) => { pushCueRef.current(`pattern ${name}`); };
+    hapticTrace.listener = (name) => {
+      // A card with no shell finish haptic (the Duel's own card): its first
+      // star stamp starts the End line, so the line holds the results only.
+      if (finishAt.current < 0 && (name === 'starSlam' || name === 'bigStarSlam')) finishAt.current = cues.current.length;
+      pushCueRef.current(`pattern ${name}`);
+    };
     return () => {
       SFX.setMasterVolume(1);
       unsilence();

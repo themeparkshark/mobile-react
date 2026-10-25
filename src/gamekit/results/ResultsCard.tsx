@@ -37,7 +37,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import GameIcon, { type GameIconName } from '../../ui/GameIcon';
-import { compareBest, formatScore, nextStarGoal, type StarThresholds } from '../core/scoring';
+import { compareBest, countUpMs, formatScore, nextStarGoal, type StarThresholds } from '../core/scoring';
 import { nearMissLine } from '../core/nearMiss';
 import { CountUpText } from '../fx/CountUpText';
 import { bestAwareTitle, feelingChips, feelingLine, feelingTitle, nearBest, noteRun } from './feelings';
@@ -124,6 +124,13 @@ export interface ResultsCardProps {
    */
   extras?: React.ReactNode;
   /**
+   * The extras get their own beat: the cream panel stays hidden (never an
+   * empty box) and pops in once the stars, the tally and the total have all
+   * landed, so a reward inside it (Whack's new Finn) never lands on top of
+   * the score. Children read the moment from ResultsSettleContext.
+   */
+  extrasBeat?: boolean;
+  /**
    * The cheering shark peeks up from behind the ribbon's right end at this
    * scale (0 = no peek): the shell passes it when a tall card leaves no room
    * for the podium scene above, so a big win never loses its moment.
@@ -155,6 +162,20 @@ export function defaultMessage(stars: number, near: boolean, newBest = false): s
  * word (GREAT!) never gives the stars away before they land (the same rule as
  * Sharky, Boss, the Duel and Memory). No stars, no wait.
  */
+/**
+ * When everything on the card has landed (ms after it mounts): the last star,
+ * the tally buckets, the total's count-up and the NEW BEST slam. A reward
+ * that waits for this gets its own beat instead of landing on the tally.
+ */
+export function settleMs(args: { stars: number; stepMs: number; nBuckets: number; score: number; newBest: boolean; reducedMotion: boolean }): number {
+  if (args.reducedMotion) return 0;
+  const countDelay = STAR_BASE_DELAY + args.stepMs * 3 + args.nBuckets * (BUCKET_MS + BUCKET_GAP);
+  return countDelay + Math.max(900, countUpMs(0, Math.max(0, args.score))) + (args.newBest ? 520 : 160);
+}
+
+/** The settle moment for children of a card's extras panel (0 = no wait). */
+export const ResultsSettleContext = React.createContext<number>(0);
+
 export function titleDelayMs(stars: number, stepMs: number, reducedMotion: boolean): number {
   if (reducedMotion || stars <= 0) return 0;
   return STAR_BASE_DELAY + (Math.min(3, stars) - 1) * stepMs + 140;
@@ -162,7 +183,7 @@ export function titleDelayMs(stars: number, stepMs: number, reducedMotion: boole
 
 export function ResultsCard({
   score, stars, message, thresholds, personalBest, maxCombo, stats, note, reducedMotion = false, onRevealed, rival,
-  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer, onNewBestLanded, wrapUp = false, starGoal, wrapReason = null, extras, peek = 0, children: actions,
+  buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer, onNewBestLanded, wrapUp = false, starGoal, wrapReason = null, extras, extrasBeat = false, peek = 0, children: actions,
 }: ResultsCardProps) {
   // The ride came up (or the kid left the line) before any points: a happy
   // send-off (HAVE FUN! stamp), never three empty stars and a big 0.
@@ -235,6 +256,22 @@ export function ResultsCard({
   }, [reducedMotion, best.isNewBest, countDelay, bestScale]);
 
   const bestStyle = useAnimatedStyle(() => ({ transform: [{ scale: bestScale.value }], opacity: bestScale.value > 0.05 ? 1 : 0 }));
+
+  // The extras beat: one UI-thread pop after everything else landed.
+  const settle = extrasBeat ? settleMs({ stars, stepMs: starStepMs, nBuckets, score, newBest: best.isNewBest, reducedMotion }) : 0;
+  const extrasIn = useSharedValue(extrasBeat && !reducedMotion ? 0 : 1);
+  useEffect(() => {
+    if (!extrasBeat || reducedMotion) {
+      extrasIn.value = 1;
+      return undefined;
+    }
+    extrasIn.value = withDelay(settle, withSequence(
+      withTiming(1.06, { duration: 150, easing: Easing.out(Easing.back(2)) }),
+      withSpring(1, { damping: 11, stiffness: 300 }),
+    ));
+    return () => cancelAnimation(extrasIn);
+  }, [extrasBeat, reducedMotion, settle, extrasIn]);
+  const extrasStyle = useAnimatedStyle(() => ({ opacity: extrasIn.value > 0.02 ? 1 : 0, transform: [{ scale: extrasIn.value }] }));
 
   return (
     <View style={[styles.card, short && styles.cardShort]}>
@@ -326,7 +363,13 @@ export function ResultsCard({
 
       {note && !sendOff ? <Text style={styles.note}>{note}</Text> : null}
 
-      {extras ? <View style={styles.extras}>{extras}</View> : null}
+      {extras ? (
+        extrasBeat ? (
+          <Animated.View style={[styles.extras, extrasStyle]}>
+            <ResultsSettleContext.Provider value={settle}>{extras}</ResultsSettleContext.Provider>
+          </Animated.View>
+        ) : <View style={styles.extras}>{extras}</View>
+      ) : null}
 
       {actions ? <View style={styles.actions}>{actions}</View> : null}
     </View>

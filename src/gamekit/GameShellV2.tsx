@@ -211,6 +211,8 @@ interface GameShellV2Props {
   challengeLabel?: string;
   /** Game-owned row under the results card (album, missions, unlock card). */
   resultExtras?: React.ReactNode;
+  /** The extras panel waits for its own beat (after the stars, tally and total land). */
+  resultExtrasBeat?: boolean;
   /** A small chip inside the shared results card, under the brags (Whack's SHARE). */
   resultCardFooter?: React.ReactNode;
   /**
@@ -306,6 +308,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       onChallenge,
       challengeLabel = 'Challenge',
       resultExtras,
+      resultExtrasBeat,
       resultsExtra,
       resultCardFooter,
       resultAction,
@@ -1121,6 +1124,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                     reducedMotion={reducedMotion}
                     peek={peekK}
                     extras={resultExtras ?? resultsExtra ?? undefined}
+                    extrasBeat={resultExtrasBeat}
                   >
                   <View style={styles.actions}>
                     <TouchableOpacity

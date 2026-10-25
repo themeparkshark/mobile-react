@@ -1002,6 +1002,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       onRematch={!ride && format !== 'duel' ? handleRematch : undefined}
       onComplete={onComplete}
       resultExtras={result && unlockedTheme ? <FinnUnlock theme={unlockedTheme} reducedMotion={reducedMotion} /> : undefined}
+      resultExtrasBeat={!!unlockedTheme}
       resultCardFooter={result ? <ShareCardButton chip tiles={tilesRef.current} rideName={taskName ?? null} score={result.score} stars={result.stars ?? 0} /> : undefined}
       onClose={onClose}
       onQuit={onQuit}
@@ -1012,7 +1013,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
             <GestureDetector gesture={runtime.gesture}>
               <Animated.View style={[StyleSheet.absoluteFill, camera.style]}>
                 <WhackBoard L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} images={images} hud={hud} theme={theme}
-                  bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride && !result} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} hudOutside />
+                  bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride && !result && phase === 'play'} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} hudOutside />
               </Animated.View>
             </GestureDetector>
           ) : null}
@@ -1021,7 +1022,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
             // chip or score plate may say a different number than the card.
             <HudStepBack back={!!result} reducedMotion={reducedMotion}>
               <WhackHud L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} hud={hud} pace={pace}
-                showPace={!!ghostRef.current && !ride && !result} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} />
+                showPace={!!ghostRef.current && !ride && !result && phase === 'play'} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} />
             </HudStepBack>
           ) : null}
           {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={capacity}

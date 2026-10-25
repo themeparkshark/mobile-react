@@ -16,6 +16,8 @@ import Animated, {
 import { ART, C } from '../art';
 import type { FactCard } from '../store';
 import { ResultsRibbon } from '../../../gamekit/results/ResultsRibbon';
+import { GameAudio } from '../../../gamekit/audio/GameAudio';
+import { playHaptic } from '../../../gamekit/Haptics';
 import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { feelingChips, type FeelingStat } from '../../../gamekit/results/feelings';
 import GameIcon, { type GameIconName } from '../../../ui/GameIcon';
@@ -306,6 +308,13 @@ function StarPip({ on, i, reducedMotion }: { on: boolean; i: number; reducedMoti
   useEffect(() => {
     if (!on || reducedMotion) return;
     s.value = withDelay(RIDE_STAR_AT + i * RIDE_STAR_GAP, withSequence(withTiming(1.35, { duration: 120 }), withSpring(1, { damping: 7, stiffness: 300 })));
+    // The same stamp every results card makes: one star sound per earned
+    // star, each a step higher, with the star slam feel (the big one on 3).
+    const t = setTimeout(() => {
+      playHaptic(i === 3 ? 'bigStarSlam' : 'starSlam');
+      GameAudio.play(GameAudio.hasCue('sh_star_slam') ? 'sh_star_slam' : 'fx.reveal', { pitch: (i - 1) * 2 });
+    }, RIDE_STAR_AT + i * RIDE_STAR_GAP + 60);
+    return () => clearTimeout(t);
   }, [on, i, s, reducedMotion]);
   const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
   // The same star every results card draws: pale blue until it is earned.

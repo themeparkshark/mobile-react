@@ -280,15 +280,16 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
             <Text style={styles.feelingText} numberOfLines={1} adjustsFontSizeToFit>{feeling}</Text>
           </View>
         ) : null}
-        {chips.length && !(short && showMissions) ? (
-          <View style={styles.chips} accessible accessibilityLabel={brag}>
-            {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} />)}
-          </View>
-        ) : null}
+        {/* The shared card's order: stars, score, label and bar, then the chips. */}
         {goal && !(short && goal.nextStar === 0) ? <NextStarBar goal={goal} delayMs={STAR_AT + 50} reducedMotion={reducedMotion} /> : null}
         {gate !== null ? (
           <NextStarBar goal={{ nextStar: 1, progress: gate, near: gate >= 0.85, remaining: 0 }} word={sharkyGateWord(gate)}
             a11yLabel={`${Math.round(gate * 100)} percent of the way to the Ride Gate`} delayMs={STAR_AT + 50} reducedMotion={reducedMotion} />
+        ) : null}
+        {chips.length && !(short && showMissions) ? (
+          <View style={styles.chips} accessible accessibilityLabel={brag}>
+            {chips.map((c) => <ResultChip key={c.label} label={c.label} value={c.value} />)}
+          </View>
         ) : null}
 
         <Animated.View style={[styles.playWrap, short && styles.playWrapShort, btnStyle]}>

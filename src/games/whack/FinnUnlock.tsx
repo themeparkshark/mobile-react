@@ -1,36 +1,47 @@
 /**
  * FinnUnlock: the new costume Finn a run unlocked, shown as a picture inside
  * the results card (never as words in the title). Alex's cheering costume
- * Finn pops up on a white card with a gold NEW tag, after the stars have
- * stamped, so the star title (NICE!, GREAT!, INCREDIBLE!) keeps its moment.
+ * Finn pops up on a white card with a gold NEW tag on its own beat, after
+ * the stars, the tally and the total have landed, so the star title (NICE!,
+ * GREAT!, INCREDIBLE!) and the score each keep their moment.
  * The name is only spoken (VoiceOver). One spring on the UI thread, then it
  * rests; Reduce Motion shows it in place.
  */
 
-import React, { useEffect } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { THEMED_SHARK_FRAMES } from './assets';
 import type { WhackThemeId } from './timeline';
 import { cardTitle } from './meta/collection';
 import { GameAudio, Haptic } from '../../gamekit';
+import { ResultsSettleContext } from '../../gamekit/results/ResultsCard';
 
-/** When the new Finn pops in (ms after the card lands): after three stars at 464 ms apart. */
+/**
+ * When the new Finn pops in if no card tells us (ms after the card lands).
+ * Inside the shared card it waits for the card's settle moment instead:
+ * after the stars, the tally and the total, so the Finn gets its own beat.
+ */
 export const FINN_UNLOCK_AT_MS = 1900;
+/** The Finn lands just after its panel pops in. */
+const FINN_AFTER_PANEL_MS = 90;
 
 export function FinnUnlock({ theme, reducedMotion }: { theme: WhackThemeId; reducedMotion: boolean }) {
+  const settle = useContext(ResultsSettleContext);
+  const at = settle > 0 ? settle + FINN_AFTER_PANEL_MS : FINN_UNLOCK_AT_MS;
   const pop = useSharedValue(reducedMotion ? 1 : 0);
   const tag = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
     if (reducedMotion) return undefined;
-    pop.value = withDelay(FINN_UNLOCK_AT_MS, withSequence(
+    pop.value = withDelay(at, withSequence(
       withTiming(1.18, { duration: 160, easing: Easing.out(Easing.back(2)) }),
       withSpring(1, { damping: 9, stiffness: 260 }),
     ));
-    tag.value = withDelay(FINN_UNLOCK_AT_MS + 220, withSequence(withTiming(1.3, { duration: 110 }), withSpring(1, { damping: 8, stiffness: 300 })));
-    const t = setTimeout(() => { Haptic.hitSoft(); GameAudio.play('fx.coinFull', { volume: 0.6 }); }, FINN_UNLOCK_AT_MS + 60);
+    tag.value = withDelay(at + 220, withSequence(withTiming(1.3, { duration: 110 }), withSpring(1, { damping: 8, stiffness: 300 })));
+    // An unlock is a reward, not a coin: the reward cue, once.
+    const t = setTimeout(() => { Haptic.hitSoft(); GameAudio.play('fx.reward', { volume: 0.7 }); }, at + 60);
     return () => { clearTimeout(t); cancelAnimation(pop); cancelAnimation(tag); };
-  }, [reducedMotion, pop, tag]);
+  }, [reducedMotion, pop, tag, at]);
   const popSt = useAnimatedStyle(() => ({ opacity: pop.value > 0.02 ? 1 : 0, transform: [{ scale: pop.value }, { rotateZ: '-3deg' }] }));
   const tagSt = useAnimatedStyle(() => ({ opacity: tag.value > 0.02 ? 1 : 0, transform: [{ scale: tag.value }, { rotateZ: '8deg' }] }));
   const name = cardTitle(theme).toLowerCase();
