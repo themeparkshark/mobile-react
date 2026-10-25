@@ -538,6 +538,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     ghostT.current = 0;
     winRef.current = null;
     const sim = createSim(t, carryRef.current);
+    // A new Burst starts level with its ghost: never the last Burst's lead.
+    pace.value = 0;
     juice.reset(carryRef.current.streak);
     setFever(t.feverStart || (carryRef.current.feverLeft > 0 && t.fever));
     bossFx.value = { rise: 0, flinch: 0, flash: 0, ghost: 1, sink: 0 };
@@ -1022,7 +1024,10 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           {L ? (
             // The HUD steps all the way back under the results card: no pace
             // chip or score plate may say a different number than the card.
-            <HudStepBack back={!!result} reducedMotion={reducedMotion}>
+            // It stays back through PLAY AGAIN's 3-2-1 (the last run's burst,
+            // combo and FEVER READY never show over the new count) and comes
+            // back when the new run's first Burst starts.
+            <HudStepBack back={!!result || phase === 'done'} reducedMotion={reducedMotion}>
               <WhackHud L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} hud={hud} pace={pace}
                 showPace={!!ghostRef.current && !ride && !result && phase === 'play'} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} />
             </HudStepBack>

@@ -394,7 +394,7 @@ test('Rhythm gets the shared bar: timing fills it, the goal is spoken only, Easy
   const score = read('src/games/rhythm/core/score.ts');
   assert.match(score, /errs\.length >= STEADY_MIN_HITS && s\.score > 0 \? steadinessOf\(errs\) : null/, 'an empty run never reads Rock steady');
   const whack = read('src/games/whack/WhackAShark.tsx');
-  assert.match(whack, /<HudStepBack back=\{!!result\} reducedMotion=\{reducedMotion\}>\s*<WhackHud/, 'the Whack HUD steps back under the card');
+  assert.match(whack, /<HudStepBack back=\{!!result \|\| phase === 'done'\} reducedMotion=\{reducedMotion\}>\s*<WhackHud/, 'the Whack HUD steps back under the card');
   assert.equal((whack.match(/showPace=\{!!ghostRef\.current && !ride && !result && phase === 'play'\}/g) || []).length, 2, 'no VS BEST pace chip under the results card or at FINISH!');
   const rhythmSrc = read('src/games/rhythm/RhythmTapGame.tsx');
   assert.match(rhythmSrc, /<HudStepBack back=\{!!result\} reducedMotion=\{reducedMotion\}>[\s\S]*styles\.rivalStrip[\s\S]*<DeltaChip[\s\S]*styles\.marchPill[\s\S]*<\/HudStepBack>/, 'the Rhythm rival strip, pace chip and MARCH pill step back under the card');

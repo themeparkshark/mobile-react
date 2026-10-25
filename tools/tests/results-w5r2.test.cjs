@@ -103,3 +103,11 @@ test('PLAY AGAIN starts one run, after the 3-2-1: Whack only gets the next run r
   assert.match(shell, /const onStartRef = useRef\(onStart\);\n\s+onStartRef\.current = onStart;/);
   assert.match(shell, /onStartRef\.current\(\);\n\s+\}, \[\]\);/, 'beginPlay is stable, so the countdown effect does not restart');
 });
+
+test('PLAY AGAIN never shows the last run over the new count: the HUD stays back until the first Burst, and each Burst starts its pace at 0', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /<HudStepBack back=\{!!result \|\| phase === 'done'\} reducedMotion=\{reducedMotion\}>/);
+  const i = whack.indexOf('const startBurst = useCallback');
+  const sb = whack.slice(i, i + 900);
+  assert.match(sb, /pace\.value = 0;/);
+});
