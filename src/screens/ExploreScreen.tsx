@@ -1056,10 +1056,15 @@ export function ExploreScreenBody() {
     }
   }, [fetchGymData]);
 
+  // The first in-range check after the ride list loads: until it answers, a loading cover waits
+  // (within its cap), so PLAY RIDE for the ride you stand at is on the first lifted map frame.
+  const [rangeChecked, setRangeChecked] = useState(false);
+  useCoverArt(!!park && !!player && !!redeemables && !!location?.latitude && !rangeChecked);
   useEffect(() => {
     if (!mapFocused || !park || !location?.latitude || !location?.longitude || !redeemables) return;
     let current = true;
     void checkForRedeemable().then(redeemable => {
+      setRangeChecked(true);
       if (!current) return;
       if (redeemable?.type === 'task' && failedTaskIds.has(redeemable.model.id)) {
         setActiveRedeemable(undefined);

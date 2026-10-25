@@ -1508,3 +1508,9 @@ test('wave 5 round 3: the islands that hold the cover are the ten nearest (ranks
   const hold = Number(/export const HOLD_RANKS = (\d+);/.exec(mount)[1]);
   assert.ok(hold <= budget.ALIVE_RANK_LIMIT, 'a clamped far rank never holds the cover');
 });
+
+test('wave 5 round 3: the loading cover waits (within its cap) for the first in-range check, so PLAY RIDE is on the first map frame', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /useCoverArt\(!!park && !!player && !!redeemables && !!location\?\.latitude && !rangeChecked\);/);
+  assert.match(explore, /void checkForRedeemable\(\)\.then\(redeemable => \{\s*setRangeChecked\(true\);/);
+});
