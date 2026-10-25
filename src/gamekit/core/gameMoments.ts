@@ -430,6 +430,9 @@ export interface FinishPose extends FinalStampPose {
   readonly bloom: number;
 }
 
+/** FINISH!'s opacity on its first frame (the slam fills to 1 from here). */
+export const FINISH_FIRST_ALPHA = 0.7;
+
 /**
  * The finish beat at `t` ms: the label slams from 1.8 (finalStampPose TIME!),
  * lands at DURATION.slam with the squash; on that frame the gold ring rolls
@@ -443,8 +446,11 @@ export function finishPose(t: number, reduced: boolean, handoff: number = FINISH
   const base = finalStampPose(t, true, false, reduced);
   // One shared fade for every piece (easeOut: quick to start leaving, soft at the end).
   const out = t <= handoff ? 1 : 1 - easeOutCubic(clamp01((t - handoff) / FINISH_EXIT_MS));
+  // w5: the word is already on screen on the beat's first frame (the frame the clock hits 0), so the sky band is
+  // never empty between the last 1 and FINISH!; the slam still reads as it shrinks and fills in.
+  const enterA = t < DURATION.slam ? Math.max(base.alpha, FINISH_FIRST_ALPHA) : base.alpha;
   const alpha = t < 0 || t >= handoff + FINISH_EXIT_MS ? 0
-    : reduced ? (t < DURATION.quick ? clamp01(t / DURATION.quick) : 1) * out : base.alpha * out;
+    : reduced ? (t < DURATION.quick ? Math.max(FINISH_FIRST_ALPHA, clamp01(t / DURATION.quick)) : 1) * out : enterA * out;
   if (t < 0 || reduced || alpha <= 0) return { ...base, alpha, ringR: 0, ringA: 0, ring2R: 0, ring2A: 0, flash: 0, gold: 0, bloom: 0 };
   const land = DURATION.slam;
   const p1 = clamp01((t - land) / 380);

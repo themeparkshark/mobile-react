@@ -95,3 +95,13 @@ test('frame-rate captures: a control probe on the still tester list, and the idl
   assert.match(wh, /if \(PERF_GRAPH\) perf\.reset\(\);/);
   assert.match(wh, /const PERF_GRAPH = \(__DEV__ \|\| WHACK_CAPTURE\) && process\.env\.EXPO_PUBLIC_WHACK_PERF === '1';/, 'store builds never draw the graph');
 });
+
+test('FINISH! is on screen on its first frame (no empty sky band between the last 1 and the word)', () => {
+  const motion = loadTs('src/ui/motion.ts');
+  const gm = loadTs('src/gamekit/core/gameMoments.ts');
+  assert.ok(gm.FINISH_FIRST_ALPHA >= 0.6);
+  assert.ok(gm.finishPose(0, false).alpha >= gm.FINISH_FIRST_ALPHA, 'the zero frame already shows the word');
+  assert.ok(gm.finishPose(0, true).alpha >= gm.FINISH_FIRST_ALPHA, 'Reduce Motion too (a fade from 0.7, no slam)');
+  assert.equal(gm.finishPose(-1, false).alpha, 0, 'nothing before the beat');
+  assert.equal(gm.finishPose(motion.DURATION.slam + 10, false).alpha, 1, 'full once landed');
+});
