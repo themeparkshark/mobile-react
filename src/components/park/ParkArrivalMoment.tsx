@@ -148,12 +148,10 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
   const startedAt = useRef(0);
   const laidOut = useRef(false);
   const artReady = useRef(false);
-  // The stage mounts in MOUNT_STEPS small commits, one per frame: a cold first arrival used to build every layer
-  // (about 90 views and the particle canvas) in one commit and froze the map for one long frame (150 to 500 ms on
-  // the release capture). Wave 5 round 3: the heavy layers (the veil and ribbon, the letters, the gold fan, the glow
-  // and Finn, the cards, the particle canvas) are built while the stage is invisible and the moment starts after
-  // GO_STEP; the two light ones (the Daily 3 pill, the landing pings) land in the first frames of the unfurl, long
-  // before they show. Each step is a StepGate, so a step never re-renders the stage's live animated views.
+  // The stage mounts in MOUNT_STEPS small commits, one per frame, while it is invisible: a cold first arrival used to
+  // build every layer (about 90 views and the particle canvas) in one commit and froze the map for one long frame (150
+  // to 500 ms on the release capture). Each step is a StepGate, so a step never re-renders the stage's live animated
+  // views, and the moment starts after the last one (GO_STEP).
   const mountedAll = useRef(false);
   const steps = useMountSteps(MOUNT_STEPS, step => {
     perfMark(`arrival.step${step}`);
@@ -822,8 +820,12 @@ const PING_MS = 520;
  * frame (the release capture showed one 95 ms frame when the ribbon and the letters mounted together).
  */
 const MOUNT_STEPS = 7;
-/** The moment starts once this step has landed (the steps after it are the light Daily 3 pill and the pings). */
-const GO_STEP = 5;
+/**
+ * The moment starts once every step has landed (wave 5 round 3 tried starting after step 5 and leaving the Daily 3
+ * pill and the pings for the first frames: the release capture then showed an 82 to 85 ms frame right at the start).
+ * The build is hidden instead by staging it while the arrival waits for its data (useParkArrival).
+ */
+const GO_STEP = MOUNT_STEPS;
 /** The Daily 3 pill leaves this long after the last card (ms), docks for GOAL_DOCK_MS and fades over GOAL_FADE_MS. */
 export const GOAL_HOLD_MS = 300;
 export const GOAL_DOCK_MS = 420;

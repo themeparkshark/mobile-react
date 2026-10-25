@@ -235,7 +235,7 @@ test('round 6: no still hold, the cards are home by about 2.45 s and the veil li
 test('wave 5 round 2/3: a cold first arrival builds in small frames (gates), hands off on the UI thread and unmounts in two steps', () => {
   const src = read('src/components/park/ParkArrivalMoment.tsx');
   assert.match(src, /const MOUNT_STEPS = 7;/);
-  assert.match(src, /const GO_STEP = 5;/);
+  assert.match(src, /const GO_STEP = MOUNT_STEPS;/, 'every layer is built before the first visible frame');
   for (const step of [1, 2, 3, 4, 5, 6, 7]) assert.match(src, new RegExp(`<StepGate steps=\\{steps\\} at=\\{${step}\\}>`), `layers mount at step ${step}`);
   const steps = read('src/components/park/mountSteps.tsx');
   assert.match(steps, /timer = setTimeout\(\(\) => \{\n        raf = requestAnimationFrame\(\(\) => \{/, 'one step per UI frame');
@@ -249,7 +249,7 @@ test('wave 5 round 2/3: a cold first arrival builds in small frames (gates), han
   assert.match(art, /ARRIVAL_ICONS\.map\(name => ICON_SOURCES\[name\]\)/, 'the card and pill icons are decoded with the art');
 });
 
-test('wave 5 round 3: map taps go through while the stage builds and once the cards leave; the moment starts after 5 steps', () => {
+test('wave 5 round 3: map taps go through while the stage builds and once the cards leave', () => {
   const src = read('src/components/park/ParkArrivalMoment.tsx');
   assert.doesNotMatch(src, /<Pressable style=\{StyleSheet\.absoluteFill\} onPress=\{onTap\}[^/]*>\n\s+<Animated/, 'the veil is not inside a tap catcher');
   assert.match(src, /<TapCatcher live=\{live\} onTap=\{onTap\}/);
@@ -258,9 +258,10 @@ test('wave 5 round 3: map taps go through while the stage builds and once the ca
   assert.match(src, /phase\.current = 'out';\n    live\.set\(0\);/, 'and not after the handoff');
   assert.match(src, /root[^\n]*pointerEvents="box-none"|style=\{\[StyleSheet\.absoluteFill, rootStyle\]\} pointerEvents="box-none"/);
   assert.match(src, /<Animated\.View pointerEvents="none" style=\{\[StyleSheet\.absoluteFill, scrimStyle\]\}>/, 'the veil never takes a tap');
-  // Build cost before the start: steps 0..5, about 2 frames each (34 ms + a frame) plus armMs: about 0.35 s.
+  // Build cost before the start: 7 steps, about 2 frames each (34 ms + a frame) plus armMs, about 0.45 s, spent while
+  // the arrival waits for its boss and Daily 3 answers (staged ahead in useParkArrival).
   const A = arrival.ARRIVAL;
-  assert.ok(5 * (34 + 17) + A.armMs + 17 <= 380, 'trigger to first frame about 0.35 s');
+  assert.ok(7 * (34 + 17) + A.armMs + 17 <= 480, 'about 0.45 s of build, hidden behind the data loads');
 });
 
 test('wave 5 round 2: the cards read with zero words and the cards are home by 2.2 s', () => {
