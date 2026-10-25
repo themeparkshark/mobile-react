@@ -144,8 +144,10 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     burst.value = 0;
     burst.value = withDelay(120, withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }));
     // Studio sound (approved Oct 24): the chest pops with its own sound and shaped buzz (wave 5); off: today's. Round 2:
-    // the pop's short form (lid pop, heavy land on the lid's peak), since the reward rows buzz from 420 ms on.
-    later(() => { if (!playChestOpen({ rowsFollow: true })) { haptic('success'); playSfx('fx.reward'); } }, 120);
+    // the pop's short form (lid pop, heavy land on the lid's peak), since the reward rows buzz from 420 ms on. It starts
+    // at 100 ms, on the flash, so its heavy (120 ms later) lands on the lid's peak at 220 (the w5r2 capture measured
+    // the heavy 33 ms after the peak when it started at 120).
+    later(() => { if (!playChestOpen({ rowsFollow: true })) { haptic('success'); playSfx('fx.reward'); } }, 100);
     const schedule = rowSchedule(rows);
     later(() => setButtonReady(true), (schedule[schedule.length - 1] ?? 400) + doneDelay(rows));
     schedule.forEach((ms, i) => later(() => {

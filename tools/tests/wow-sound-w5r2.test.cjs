@@ -113,7 +113,7 @@ test('fix 1: Battery Saver: one moment and one pulse for the all-done; the check
   const t0 = e.clock.now;
   e.Loop.playDaily3(3, 4);
   await run(e, 1200);
-  assert.deepEqual([...rel(e, t0)], ['comboHeavy@20'], 'one pulse, the swell\'s peak');
+  assert.deepEqual([...rel(e, t0)], ['comboHeavy@180'], 'one pulse, the swell\'s peak, still on the pip\'s pop peak');
   assert.equal(starts(e, t0, 'moment:loop.daily3Check:').length, 0, 'no lead-in note');
   assert.equal(starts(e, t0, 'moment:loop.daily3Done:primary').length, 1);
   assert.equal(starts(e, t0, 'moment:loop.daily3Done:layer').length, 0, 'no coin shower layer');
@@ -137,7 +137,8 @@ test('fix 1: the chest pop: the daily chest keeps its five-step patter; the leve
   // RewardReveal plays it at +120 and its first row at 420 (rowSchedule): 180 ms after the heavy.
   const R = require('./helpers/ts-module.cjs').loadTs('src/services/retention/logic.ts', {}, {});
   const first = R.rowSchedule([{ kind: 'coins' }])[0];
-  assert.ok(first - (120 + 120) >= 120, `row at ${first}`);
+  assert.ok(first - (100 + 120) >= 120, `row at ${first}`);
+  assert.match(src('src/components/retention/RewardReveal.tsx'), /playSfx\('fx\.reward'\); \} \}, 100\);/, 'the pop starts on the flash');
 });
 
 test('fix 2: the loop\'s cues are decoded before the first check or chest (a first-play load rang them late)', async () => {

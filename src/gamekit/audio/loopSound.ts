@@ -72,8 +72,9 @@ export function daily3Plan(done: number, day: number, opts: { readonly saver?: b
   const big = flameMilestoneDay(day) && opts.milestoneReady !== false;
   // The rare 7th day keeps its sting as recorded (never re-pitched); every other day climbs the flame ladder.
   const chord: LoopStep = big ? { moment: 'loop.flameMilestone', at: 0 } : { moment: 'loop.daily3Done', at: 0, pitch: flameSemis(day) };
-  // Battery Saver: the chord alone, one pulse (its heavy peak, never only the soft start of the swell).
-  if (opts.saver) return [{ ...chord, haptic: big ? undefined : 'tierUp' }];
+  // Battery Saver: the chord alone, one pulse (its heavy peak, never only the soft start of the swell), still on the
+  // pip's pop peak (w5r2 capture: played at once it rang 133 ms before the peak).
+  if (opts.saver) return [{ ...chord, at: DONE_AFTER_CHECK_MS, haptic: big ? undefined : 'tierUp' }];
   // The lead-in note keeps one light pulse; the chord swells (the 7th day's ignite keeps its golden pair).
   return [{ ...check, haptic: 'onBeatLight' }, { ...chord, at: DONE_AFTER_CHECK_MS, haptic: big ? undefined : 'flameSwell' }];
 }
