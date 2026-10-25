@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import Reanimated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Reanimated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { Animated, Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 import shortenNumber from '../../helpers/shorten-number';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
@@ -66,6 +66,9 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     if (queued !== null) { hadQueued.current = true; return; }
     if (hadQueued.current) { hadQueued.current = false; swap.value = 0; }
   }, [queued]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** The icon's hop as each prize lands (UI thread). */
+  const hop = useSharedValue(1);
+  const hopStyle = useAnimatedStyle(() => ({ transform: [{ scale: hop.value }] }));
   const oldNum = useAnimatedStyle(() => ({ opacity: 1 - swap.value }));
   const newNum = useAnimatedStyle(() => ({ opacity: swap.value, transform: [{ scale: 1 + 0.12 * (1 - swap.value) }] }));
   
@@ -158,8 +161,9 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
       if (step) step(() => setDisplayCount(base + plan.amount));
       const timers = plan.landings.map((ms, i) => setTimeout(() => {
         if (!step && !swapped) setDisplayCount(counterStep(base, plan.amount, i, n));
-        bounceAnim.setValue(1.18);
-        Animated.spring(bounceAnim, { toValue: 1, friction: 4, useNativeDriver: true }).start();
+        // On the UI thread: a native-driver spring ends with a React render (Fabric syncs its final value), one per
+        // landing; this hop never renders.
+        hop.value = withSequence(withTiming(1.18, { duration: 0 }), withSpring(1, { damping: 7, stiffness: 260 }));
       }, ms));
       // After the last landing the counted-up number stays until the balance is read back (normally the same number,
       // so nothing moves, and no render at all if it is already in).
@@ -283,12 +287,14 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
               ],
             }}
           >
-            <Image
-              source={typeof image === 'number' ? image : image ? { uri: image } : FALLBACK_ICON}
-              placeholder={FALLBACK_ICON}
-              style={styles.icon}
-              contentFit="contain"
-            />
+            <Reanimated.View style={hopStyle}>
+              <Image
+                source={typeof image === 'number' ? image : image ? { uri: image } : FALLBACK_ICON}
+                placeholder={FALLBACK_ICON}
+                style={styles.icon}
+                contentFit="contain"
+              />
+            </Reanimated.View>
           </Animated.View>
           <View style={styles.countBox}>
             <Reanimated.Text style={[styles.countText, styles.countIn, oldNum]} numberOfLines={1} adjustsFontSizeToFit>

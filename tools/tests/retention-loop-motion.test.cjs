@@ -564,6 +564,9 @@ test('wave 5 round 2: the HUD numbers change with no render while prizes fly (mo
   assert.match(cur, /\{queued !== null && \(/);
   // Its icon still hops per landing, and the read-back balance takes over with nothing moving.
   assert.match(cur, /if \(!step && !swapped\) setDisplayCount\(counterStep\(base, plan\.amount, i, n\)\);/);
+  // The landing hop is a UI-thread spring (a native-driver spring ends with a React render on Fabric).
+  assert.match(cur, /hop\.value = withSequence\(withTiming\(1\.18, \{ duration: 0 \}\), withSpring\(1,/);
+  assert.doesNotMatch(cur, /bounceAnim\.setValue\(1\.18\)/);
   assert.match(cur, /if \(count === counted\) \{ prevCount\.current = count; setDisplayCount\(count\); setQueued\(null\); return; \}/);
   assert.match(cur, /if \(expect\.current === null\) setDisplayCount\(prevCount\.current\);/);
   // The swap layer goes only after the render that shows the real number is on screen (no flash of the old one).
