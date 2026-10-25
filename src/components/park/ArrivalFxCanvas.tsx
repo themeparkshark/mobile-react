@@ -21,13 +21,31 @@ type Point = { x: number; y: number };
 export interface ConfettiPieceSpec {
   readonly x: number; readonly delay: number; readonly fall: number; readonly drift: number;
   readonly spin: number; readonly w: number; readonly color: string;
+  /** The piece's color as an index into RAIN_COLORS (the worklet reads the frame's palette, never builds a color per piece). */
+  readonly tone: number;
   /** A tumbling gold coin instead of a paper piece (the golden arrival's rain). */
   readonly coin?: boolean;
 }
 
-const CONFETTI_COLORS = [GOLD_FX.rays, BRAND.white, BRAND.blueBright, BRAND.gold, BRAND.sky, GOLD_FX.raysSoft];
+/**
+ * Every color the rain draws. Pieces carry an index into it, and drawRain turns it into Skia colors once per
+ * frame (rainPalette), so a frame of 40 falling pieces makes 9 colors, not 40 (no per-piece allocation on the UI thread).
+ */
+export const RAIN_COLORS = [GOLD_FX.rays, BRAND.white, BRAND.blueBright, BRAND.gold, BRAND.sky, GOLD_FX.raysSoft, '#fff3b0', '#d99a00', '#05346e'] as const;
+const RAIN_INK = 8;
+const COIN_FACE = 6;
+const COIN_RIM = 7;
+const CONFETTI_TONES = [0, 1, 2, 3, 4, 5];
 /** The golden arrival: gold and white only, and every third piece is a gold coin. */
-const GOLDEN_COLORS = [GOLD_FX.rays, BRAND.gold, '#fff3b0', BRAND.white, GOLD_FX.raysSoft, BRAND.gold];
+const GOLDEN_TONES = [0, 3, 6, 1, 5, 3];
+
+/** The rain's Skia colors for one frame, in RAIN_COLORS order. */
+export function rainPalette() {
+  'worklet';
+  const out = [];
+  for (let i = 0; i < RAIN_COLORS.length; i += 1) out.push(Skia.Color(RAIN_COLORS[i]));
+  return out;
+}
 
 /** Deterministic pieces (no Math.random in render): a seed makes the second shower different from the first. */
 export function confettiPieces(count: number, width: number, fall: number, seed: number, golden = false): ConfettiPieceSpec[] {
@@ -40,15 +58,18 @@ export function confettiPieces(count: number, width: number, fall: number, seed:
       drift: (i % 2 ? 1 : -1) * (14 + ((i * 17) % 22)),
       spin: (i % 2 ? 1 : -1) * (240 + ((i * 41) % 300)),
       w: 13 + (i % 3) * 4,
-      color: (golden ? GOLDEN_COLORS : CONFETTI_COLORS)[i % CONFETTI_COLORS.length],
+      tone: (golden ? GOLDEN_TONES : CONFETTI_TONES)[i % CONFETTI_TONES.length],
+      color: RAIN_COLORS[(golden ? GOLDEN_TONES : CONFETTI_TONES)[i % CONFETTI_TONES.length]],
       coin: golden && k % 3 === 0,
     };
   });
 }
 
-export function drawRain(canvas: SkCanvas, paint: SkPaint, ink: SkPaint, progress: number, pieces: readonly ConfettiPieceSpec[]) {
+export function drawRain(canvas: SkCanvas, paint: SkPaint, ink: SkPaint, progress: number, pieces: readonly ConfettiPieceSpec[],
+  palette?: ReturnType<typeof rainPalette>) {
   'worklet';
   if (progress <= 0 || progress >= 1) return;
+  const pal = palette ?? rainPalette();
   for (let i = 0; i < pieces.length; i += 1) {
     const piece = pieces[i];
     const t = Math.max(0, Math.min(1, (progress - piece.delay) / (1 - piece.delay)));
@@ -64,21 +85,28 @@ export function drawRain(canvas: SkCanvas, paint: SkPaint, ink: SkPaint, progres
     // The flutter: the piece turns over as it falls.
     canvas.scale(1, 0.25 + 0.75 * Math.abs(Math.cos(t * Math.PI * 4)));
     if (piece.coin) {
-      // A gold coin tumbling end over end: a gold disc, a lighter face and a navy rim.
-      const r = piece.w * 0.55;
-      paint.setColor(Skia.Color(GOLD_FX.rays));
+      // A gold coin tumbling end over end, drawn like his coin art: a deep gold rim, a gold face with a raised
+      // inner disc, a white shine on its upper left and a thin navy outline.
+      const r = piece.w * 0.62;
+      paint.setColor(pal[COIN_RIM]);
       paint.setAlphaf(alpha);
       canvas.drawCircle(0, 0, r, paint);
-      paint.setColor(Skia.Color('#fff3b0'));
+      paint.setColor(pal[0]);
       paint.setAlphaf(alpha);
-      canvas.drawCircle(-r * 0.15, -r * 0.15, r * 0.55, paint);
-      ink.setAlphaf(0.5 * alpha);
+      canvas.drawCircle(0, -r * 0.06, r * 0.82, paint);
+      paint.setColor(pal[COIN_FACE]);
+      paint.setAlphaf(alpha);
+      canvas.drawCircle(0, -r * 0.06, r * 0.5, paint);
+      paint.setColor(pal[1]);
+      paint.setAlphaf(0.9 * alpha);
+      canvas.drawCircle(-r * 0.36, -r * 0.4, r * 0.17, paint);
+      ink.setAlphaf(0.55 * alpha);
       canvas.drawCircle(0, 0, r, ink);
       canvas.restore();
       continue;
     }
     const rect = Skia.RRectXY(Skia.XYWHRect(-piece.w / 2, -h / 2, piece.w, h), 2, 2);
-    paint.setColor(Skia.Color(piece.color));
+    paint.setColor(pal[piece.tone]);
     paint.setAlphaf(alpha);
     canvas.drawRRect(rect, paint);
     ink.setAlphaf(0.35 * alpha);
@@ -126,12 +154,14 @@ function ArrivalFxCanvas({ width, height, top, rain, rain2, pieces, pieces2, bur
     ink.setAntiAlias(true);
     ink.setStyle(PaintStyle.Stroke);
     ink.setStrokeWidth(1);
-    ink.setColor(Skia.Color('#05346e'));
+    // One palette per frame for both showers, the stars and the trails.
+    const pal = rainPalette();
+    ink.setColor(pal[RAIN_INK]);
     // Confetti falls from just under the HUD row.
     canvas.save();
     canvas.translate(0, top);
-    drawRain(canvas, paint, ink, rain.value, pieces);
-    drawRain(canvas, paint, ink, rain2.value, pieces2);
+    drawRain(canvas, paint, ink, rain.value, pieces, pal);
+    drawRain(canvas, paint, ink, rain2.value, pieces2, pal);
     canvas.restore();
 
     // The sparkle burst: stars fly out from behind the name, grow, then shrink and fade with a little gravity.
@@ -149,7 +179,7 @@ function ArrivalFxCanvas({ width, height, top, rain, rain2, pieces, pieces2, bur
         canvas.translate(x, y);
         canvas.rotate(b * 90 * (i % 2 ? 1 : -1), 0, 0);
         canvas.scale(s, s);
-        paint.setColor(Skia.Color(r.gold ? GOLD_FX.rays : BRAND.white));
+        paint.setColor(pal[r.gold ? 0 : 1]);
         paint.setAlphaf(b < 0.7 ? 1 : (1 - b) / 0.3);
         canvas.drawPath(star, paint);
         canvas.restore();
@@ -169,7 +199,7 @@ function ArrivalFxCanvas({ width, height, top, rain, rain2, pieces, pieces2, bur
         if (tf <= 0) break;
         const at = flyPoint(from.x, from.y, to.x, to.y, target !== null, tf);
         const fade = (1 - k / 7) * (f > 0.85 ? (1 - f) / 0.15 : 1);
-        paint.setColor(Skia.Color(k % 2 ? GOLD_FX.rays : '#fff6cf'));
+        paint.setColor(pal[k % 2 ? 0 : COIN_FACE]);
         paint.setAlphaf(0.85 * fade);
         canvas.drawCircle(at.x, at.y, 9 - k, paint);
       }

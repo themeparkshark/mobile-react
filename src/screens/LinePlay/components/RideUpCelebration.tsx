@@ -3,20 +3,21 @@
  * No veil and no second banner: the real header card is the stage.
  *
  * Four beats (src/ui/motion.ts), every piece mounted in the same render so they share one
- * beat sheet:
- *   gather   0 ms     the header card pops in (SPRING.pop, one overshoot) and a gold glow
- *                     builds behind its shark;
- *            120 ms   its own YOUR RIDE'S UP! title stamps down from 1.8x and slams
+ * beat sheet. Frame 1 is already the whole card: the shark, the ride name and the title
+ * (oversize) are on screen the moment the recap appears.
+ *   gather   0 ms     the header card pops (SPRING.pop, one overshoot), a gold glow builds
+ *                     behind its shark, and YOUR RIDE'S UP! slams from 1.5x to size by 120 ms
  *                     (SLAM_SQUASH, the winRoll buzz and the reveal cue on the impact frame);
- *            300 ms   a liquid gold bar fills along the card's bottom edge over 650 ms
+ *            60 ms    a liquid gold bar fills along the card's bottom edge over 270 ms
  *                     (EASE.out) with the coin tick ladder climbing as it fills;
- *   hold     950 ms   one held 70 ms frame on the full bar: the card squashes and kicks 3 pt,
+ *   hold     330 ms   one held 70 ms frame on the full bar: the card squashes and kicks 3 pt,
  *                     a white flash at or under 0.4 (none with Dim Flashing Lights), the win buzz;
- *   burst    1020 ms  the gold ray fan blooms inside the card, a gold ring and 12 stars burst
- *                     from the shark, and one shower of 28 blue, white and gold confetti falls
- *                     while the earned row counts up underneath (SessionRecap);
- *   settle   2000 ms  the rays and the bar fade, the card is back to how it looks at rest.
- * Payoff inside 1.1 s, settled by 2.3 s, nothing loops. Every visual runs on the UI thread
+ *   burst    400 ms   the gold ray fan blooms inside the card, a gold ring and 12 stars burst
+ *                     from the shark, one shower of 28 blue, white and gold confetti falls, and
+ *                     the earned row rolls out of the burst one number after another (the last
+ *                     lands by about 1.2 s, SessionRecap);
+ *   settle   1600 ms the rays and the bar fade, the card is back to how it looks at rest.
+ * Payoff at 0.4 s, settled by about 1.9 s, nothing loops. Every visual runs on the UI thread
  * (Reanimated and Skia); the haptics and sounds fire from the same UI timeline (runOnJS in
  * the animation callbacks and one reaction for the ticks). Reduce Motion: the glow and the
  * full bar fade in and out, the buzz and the sound stay. Plain ride names only, no logos.
@@ -35,27 +36,31 @@ import { usePowerBudget } from '../../../power';
 import { GoldBurst } from '../../../ui/GoldBurst';
 import { SLAM_SQUASH } from '../../../ui/motion';
 import { DURATION, EASE, GOLD_FX, SPRING, flashPeak, momentParticles } from '../../../ui/motionEasing';
-import { confettiPieces, drawRain } from '../../../components/park/ArrivalFxCanvas';
+import { RAIN_COLORS, confettiPieces, drawRain, rainPalette } from '../../../components/park/ArrivalFxCanvas';
 import BurstCanvas from '../../../components/park/BurstCanvas';
 import { withDelay, withSequence, withSpring, withTiming } from '../../../components/park/momentTime';
 import { perfMark } from '../../../components/park/momentPerf';
 
 /** The beat sheet (ms), pure numbers so tests can read them. */
 export const RIDE_UP = {
-  stampAt: 120,
-  ringAt: 300,
-  ringMs: 650,
-  hitAt: 950,
-  burstAt: 1020,
-  confettiAt: 1100,
-  confettiMs: 1600,
-  leaveAt: 2000,
+  /** The title is on screen from frame 1 (oversize) and slams to size by DURATION.slam. */
+  stampAt: 0,
+  ringAt: 60,
+  ringMs: 270,
+  hitAt: 330,
+  burstAt: 400,
+  confettiAt: 420,
+  confettiMs: 1500,
+  leaveAt: 1600,
   leaveMs: 260,
   /** The coin tick ladder while the bar fills. */
   ticks: 6,
-  /** The earned row rolls with the bar: stat i starts at ringAt + i x statStepMs and rolls for statMs. */
-  statStepMs: 120,
-  statMs: 600,
+  /**
+   * The earned row rolls out of the burst: stat i starts at burstAt + i x statStepMs and rolls
+   * for statMs, so the last of five numbers lands by about 1.2 s.
+   */
+  statStepMs: 90,
+  statMs: 420,
   sparkles: 12,
   confetti: 28,
 } as const;
@@ -189,9 +194,9 @@ export function RideUpKicker({ active, style, children }: { readonly active: boo
     return () => { alive.current = false; cancelAnimation(stamp); cancelAnimation(punch); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, preference]);
+  // On screen from frame 1: the title starts oversize (never invisible) and slams down to size.
   const animated = useAnimatedStyle(() => ({
-    opacity: Math.min(1, stamp.value * 3),
-    transform: [{ scale: 1.8 - 0.8 * stamp.value }, { scaleX: 1 + SLAM_SQUASH * punch.value }, { scaleY: 1 - SLAM_SQUASH * punch.value }],
+    transform: [{ scale: 1.5 - 0.5 * stamp.value }, { scaleX: 1 + SLAM_SQUASH * punch.value }, { scaleY: 1 - SLAM_SQUASH * punch.value }],
   }));
   if (!active) return <Text style={style}>{children}</Text>;
   return <Animated.Text style={[style, styles.kickerGlow, styles.kickerOrigin, animated]}>{children}</Animated.Text>;
@@ -200,9 +205,14 @@ export function RideUpKicker({ active, style, children }: { readonly active: boo
 Animated.addWhitelistedNativeProps({ text: true });
 const RollingInput = Animated.createAnimatedComponent(TextInput);
 
+/** When stat `index` of the earned row starts rolling on "Your ride's up!" (ms from the card's first frame). */
+export function rideUpStatStartsAt(index: number): number {
+  return RIDE_UP.burstAt + index * RIDE_UP.statStepMs;
+}
+
 /** When stat `index` of the earned row lands on "Your ride's up!" (ms from the card's first frame). */
 export function rideUpStatLandsAt(index: number): number {
-  return RIDE_UP.ringAt + index * RIDE_UP.statStepMs + RIDE_UP.statMs;
+  return rideUpStatStartsAt(index) + RIDE_UP.statMs;
 }
 
 /**
@@ -269,8 +279,9 @@ function Confetti({ rideName }: { readonly rideName: string }) {
     ink.setAntiAlias(true);
     ink.setStyle(PaintStyle.Stroke);
     ink.setStrokeWidth(1);
-    ink.setColor(Skia.Color('#05346e'));
-    drawRain(canvas, paint, ink, rain.value, pieces);
+    const pal = rainPalette();
+    ink.setColor(pal[RAIN_COLORS.length - 1]);
+    drawRain(canvas, paint, ink, rain.value, pieces, pal);
   }, { width, height }));
   if (confetti <= 0) return null;
   return <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityLiveRegion="polite"

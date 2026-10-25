@@ -161,17 +161,18 @@ export const ARRIVAL = {
   cardsAt: 700,
   cardStepMs: 90,
   cardDrop: 40,
-  /** Each card catches one white shine just after it lands. */
-  shineAfterMs: 240,
-  shineMs: 520,
+  /** Each card catches one white shine after it lands (round 6: the shine is the beat that fills the look, no still hold). */
+  shineAfterMs: 300,
+  shineMs: 460,
   confettiSecondAt: 900,
-  goalAt: 1250,
-  pointAt: 1500,
+  goalAt: 1150,
+  pointAt: 1080,
   flipMs: 520,
   coinTurnMs: 4000,
-  handoffAt: 2600,
+  /** Round 6: the cards leave as soon as the shines and the flip have played (about 1 s after they land). */
+  handoffAt: 1750,
   /** The UI clock runs a little past the handoff. */
-  clockMs: 3000,
+  clockMs: 2600,
   rainMs: 2200,
   /** The longest the stage waits for its art to decode before it starts anyway. */
   artWaitMs: 260,
@@ -180,9 +181,9 @@ export const ARRIVAL = {
   armMs: 90,
   /** A tap before this is ignored (a kid mashing through the moment still sees the park name land). */
   minTapAt: 700,
-  /** Each card flies home on a visible arc with a gold trail, one after another. */
-  flyMs: 720,
-  flyStepMs: 90,
+  /** Each card flies home on a visible arc with a gold trail, one after another (all home by about 2.45 s). */
+  flyMs: 560,
+  flyStepMs: 70,
   shrinkMs: 460,
   confetti: 28,
   /** A second, smaller shower as the cards land. */

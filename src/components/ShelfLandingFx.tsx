@@ -17,6 +17,7 @@ import { withDelay, withSequence, withSpring, withTiming } from './park/momentTi
 import { queueHaptic } from '../gamekit/Haptics';
 import { playMoment } from '../gamekit/audio/playMoment';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import GameIcon from '../ui/GameIcon';
 import { EASE, SPRING } from '../ui/motionEasing';
 import { SHELF_LANDING, jiggleAmount, jiggleDelay, jiggleDirection, rowHopDelay } from './shelfLanding';
 
@@ -52,16 +53,19 @@ export function ShelfJiggle({ landingKey, distance, rowWaveKey, index = 0, child
   useEffect(() => {
     if (!rowWaveKey || reduced) return undefined;
     // The hop and its tick start on the same UI frame (the tick rides the hop's first step).
+    // A real arc you can see on every coin: up (EASE.out), down (EASE.in), a small squash on the plank, settle.
     wave.value = withDelay(rowHopDelay(index), withSequence(
-      withTiming(1, { duration: 110, easing: EASE.out }, ok => { if (ok) runOnJS(rowTick)(index); }),
+      withTiming(1, { duration: SHELF_LANDING.rowHopUpMs, easing: EASE.out }, ok => { if (ok) runOnJS(rowTick)(index); }),
+      withTiming(-0.12, { duration: SHELF_LANDING.rowHopDownMs, easing: EASE.in }),
       withSpring(0, SPRING.land)));
     return () => cancelAnimation(wave);
   }, [rowWaveKey, index, reduced, wave]);
   const style = useAnimatedStyle(() => ({
     transform: [
-      { translateY: -hop.value - SHELF_LANDING.rowHopPt * wave.value },
-      { rotate: `${tip.value}deg` },
-      { scale: 1 + 0.12 * wave.value },
+      { translateY: -hop.value - SHELF_LANDING.rowHopPt * Math.max(0, wave.value) },
+      { rotate: `${tip.value + 6 * Math.max(0, wave.value) * (index % 2 ? 1 : -1)}deg` },
+      { scaleX: 1 + 0.12 * Math.max(0, wave.value) + 0.8 * Math.max(0, -wave.value) },
+      { scaleY: 1 + 0.12 * Math.max(0, wave.value) - 0.8 * Math.max(0, -wave.value) },
     ],
   }));
   return <Animated.View style={style}>{children}</Animated.View>;
@@ -106,6 +110,7 @@ export function RowShine({ landingKey, armed = false, width, height, slots = 5 }
   const glow = useSharedValue(0);
   const badge = useSharedValue(0);
   const gleam = useSharedValue(0);
+  const spark = useSharedValue(0);
   useEffect(() => {
     if (!landingKey) return undefined;
     if (reduced) { rowCompleteCue(); badge.value = 1; return undefined; }
@@ -115,8 +120,9 @@ export function RowShine({ landingKey, armed = false, width, height, slots = 5 }
       withDelay(SHELF_LANDING.plankGlowMs - 400, withTiming(0, { duration: 400, easing: EASE.in }))));
     badge.value = withDelay(SHELF_LANDING.badgeAt, withSpring(1, SPRING.pop));
     gleam.value = withDelay(SHELF_LANDING.badgeAt + 160, withTiming(1, { duration: 420, easing: EASE.inOut }));
-    return () => { cancelAnimation(t); cancelAnimation(glow); cancelAnimation(badge); cancelAnimation(gleam); };
-  }, [landingKey, reduced, t, glow, badge, gleam]);
+    spark.value = withDelay(SHELF_LANDING.badgeAt + 90, withTiming(1, { duration: 460, easing: EASE.out }));
+    return () => { cancelAnimation(t); cancelAnimation(glow); cancelAnimation(badge); cancelAnimation(gleam); cancelAnimation(spark); };
+  }, [landingKey, reduced, t, glow, badge, gleam, spark]);
   // The cue rides the same UI clock as the band: it fires when the band first moves.
   const started = useSharedValue(0);
   useEffect(() => {
@@ -153,10 +159,16 @@ export function RowShine({ landingKey, armed = false, width, height, slots = 5 }
       canvas.drawPath(path, paint);
     }
   }, { width, height }));
+  // The pill springs up from small with one overshoot (SPRING.pop) and a sparkle twinkles on its corner.
   const badgeStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, badge.value * 2),
-    transform: [{ scale: reduced ? 1 : 1.7 - 0.7 * badge.value }],
+    opacity: Math.min(1, badge.value * 2.5),
+    transform: [{ scale: reduced ? 1 : 0.35 + 0.65 * badge.value }],
   }));
+  const sparkStyle = useAnimatedStyle(() => {
+    const k = spark.value;
+    if (k <= 0 || k >= 1) return { opacity: 0 };
+    return { opacity: k < 0.7 ? 1 : (1 - k) / 0.3, transform: [{ scale: k < 0.3 ? 1.3 * (k / 0.3) : 1.3 - 0.6 * ((k - 0.3) / 0.7) }, { rotate: `${120 * k}deg` }] };
+  });
   const gleamStyle = useAnimatedStyle(() => ({
     opacity: gleam.value > 0 && gleam.value < 1 ? 1 : 0,
     transform: [{ translateX: -24 + 110 * gleam.value }, { rotate: '18deg' }],
@@ -170,6 +182,7 @@ export function RowShine({ landingKey, armed = false, width, height, slots = 5 }
       {Array.from({ length: slots }, (_, i) => <View key={i} style={styles.pip} />)}
       {!reduced && <Animated.View style={[styles.gleam, gleamStyle]} />}
     </Animated.View>
+    {!reduced && <Animated.View pointerEvents="none" style={[styles.spark, sparkStyle]}><GameIcon name="sparkle" size={22} /></Animated.View>}
   </>;
 }
 
@@ -181,4 +194,5 @@ const styles = StyleSheet.create({
     shadowColor: '#05346e', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 2 }, shadowRadius: 0 },
   pip: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#ffcf3b', borderWidth: 1.5, borderColor: '#c88a00' },
   gleam: { position: 'absolute', top: -6, bottom: -6, width: 12, backgroundColor: 'rgba(255,255,255,0.85)' },
+  spark: { position: 'absolute', right: 0, bottom: 20 },
 });

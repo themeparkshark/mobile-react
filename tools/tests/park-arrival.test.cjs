@@ -212,3 +212,15 @@ test('round 5: every fifth arrival is golden; the cards read as pictures; the ve
   assert.match(hook, /arrivalIsGolden\(arrivals\.current\)/);
   assert.match(hook, /AsyncStorage\.setItem\(COUNT_KEY\(playerId\)/, 'the count is kept per player');
 });
+
+test('round 6: no still hold, the cards are home by about 2.45 s and the veil lifts as they leave', () => {
+  const A = arrival.ARRIVAL;
+  assert.ok(A.handoffAt <= 1800, `the cards leave by 1.8 s (${A.handoffAt})`);
+  assert.ok(arrival.arrivalEndsAt(3) <= 2500, `home by 2.5 s (${arrival.arrivalEndsAt(3)})`);
+  const lastCardLands = A.cardsAt + 2 * A.cardStepMs + 120;
+  assert.ok(A.handoffAt - lastCardLands <= 800, 'under 0.8 s between the last card landing and the flight home');
+  assert.ok(A.cardsAt + A.shineAfterMs + A.shineMs <= A.handoffAt, 'the first shine finishes before the cards leave');
+  assert.ok(A.pointAt + 120 + A.flipMs <= A.handoffAt, 'the limited coin flip finishes before it flies');
+  const src = read('src/components/park/ParkArrivalMoment.tsx');
+  assert.match(src, /A\.scrimOpacity \* scrim\.value\) \* \(1 - leave\.value\)/, 'the veil lifts with the leave');
+});

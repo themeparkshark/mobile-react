@@ -56,10 +56,14 @@ export default function FirstCoinRibbon({ onDone, toss }: { readonly onDone: () 
 }
 
 const COIN = 54;
+/** The gold ray fan behind the crowned coin (pt across). */
+const RAYS = 300;
 /** The crowned coin's round badge overhangs the ribbon's left end, so the burst never sits on the words. */
 const BADGE = 64;
 /** How far behind the coin each trail dot rides (fraction of the flight). */
 const TRAIL = [0.07, 0.14, 0.21] as const;
+/** The flight home leaves a thicker comet: five big gold dots (round 6). */
+const TRAIL_HOME = [0.05, 0.1, 0.15, 0.2, 0.25] as const;
 
 function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readonly reduced: boolean; readonly toss?: FirstCoinThrow }) {
   const { width, height } = useWindowDimensions();
@@ -146,8 +150,9 @@ function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readon
     ? { opacity: drop.value }
     : {
       opacity: Math.min(1, drop.value * 1.6) * (1 - out.value),
-      transform: [{ translateY: -40 * (1 - drop.value) - 70 * out.value },
-        { scaleX: 1 + 0.03 * punch.value }, { scaleY: 1 - 0.05 * punch.value }],
+      // The crown's slam kicks the whole ribbon down FIRST_COIN.kickPt for the held frame, then it springs back.
+      transform: [{ translateY: -40 * (1 - drop.value) - 70 * out.value + FIRST_COIN.kickPt * punch.value },
+        { scaleX: 1 + 0.04 * punch.value }, { scaleY: 1 - 0.07 * punch.value }],
     }));
   // The slot coin shows once the flyer lands, squashes on the hit, and leaves when it hops out for home.
   const coinStyle = useAnimatedStyle(() => ({
@@ -179,11 +184,13 @@ function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readon
     </Animated.View>}
     {/* Two clear sparkle rings around the crowned coin, drawn UNDER the ribbon: they halo its edges and never
         sit on the words. */}
-    {!reduced && <BurstCanvas progress={rings} count={sparkles} radius={62} ring={34} starSize={12} x={slot.x} y={slot.y} />}
-    {!reduced && <BurstCanvas progress={rings} count={sparkles} radius={96} ring={0} starSize={10} x={slot.x} y={slot.y} delayed={0.16} />}
+    {/* Round 6: the slam's ring opens wider than the ribbon is tall (FIRST_COIN.ringPt start, about 2x by its end). */}
+    {!reduced && <BurstCanvas progress={rings} count={sparkles} radius={92} ring={FIRST_COIN.ringPt} starSize={16} x={slot.x} y={slot.y} />}
+    {!reduced && <BurstCanvas progress={rings} count={sparkles} radius={132} ring={0} starSize={13} x={slot.x} y={slot.y} delayed={0.16} />}
     <Animated.View style={[styles.ribbonWrap, { top, right: FIRST_COIN.railClear }, ribbonStyle]}>
       {/* One gold ray fan behind the coin only. */}
-      {!reduced && <GoldBurst size={200} amount={gold} spin={false} style={styles.rays} />}
+      {/* A full fan, far bigger than the badge: it shows above and below the ribbon on the slam frame. */}
+      {!reduced && <GoldBurst size={RAYS} amount={gold} spin={false} style={styles.rays} />}
       <View style={styles.ribbon} accessible accessibilityLabel="First coin today!">
         <View style={styles.ribbonTop} />
         {!reduced && <Animated.View style={[styles.shine, shineStyle]} />}
@@ -205,7 +212,7 @@ function Ribbon({ onDone, reduced, toss }: { readonly onDone: () => void; readon
     {!reduced && TRAIL.map((lag, i) => <Flyer key={`t${i}`} t={fly} lag={lag} from={from} to={slot} lift={-90} dot={i} />)}
     {!reduced && <Flyer t={fly} lag={0} from={from} to={slot} lift={-90} source={coinSource} />}
     {/* Home: out of the slot and down to the shelf button. */}
-    {!reduced && to && TRAIL.map((lag, i) => <Flyer key={`h${i}`} t={home} lag={lag} from={slot} to={to} lift={-70} dot={i} home />)}
+    {!reduced && to && TRAIL_HOME.map((lag, i) => <Flyer key={`h${i}`} t={home} lag={lag} from={slot} to={to} lift={-70} dot={i} home />)}
     {!reduced && to && <Flyer t={home} lag={0} from={slot} to={to} lift={-70} source={coinSource} home />}
   </View>;
 }
@@ -234,8 +241,10 @@ function Flyer({ t, lag, from, to, lift, source, dot, home }: {
     // Big off the map and coin-sized in the slot; on the way home it swells to 2.5x, then shrinks into its home.
     const scale = home ? (k < 0.3 ? 1 + (peak - 1) * (k / 0.3) : peak - (peak - 0.6) * ((k - 0.3) / 0.7)) : 1.8 - 0.8 * k;
     if (dot != null) {
-      const fade = [0.55, 0.35, 0.2][dot] ?? 0.2;
-      return { opacity: fade, transform: [{ translateX: x - 9 }, { translateY: y - 9 }, { scale: scale * (1 - dot * 0.18) }] };
+      // Home: a thick comet (five dots, big and bright at the head); the throw up keeps a light three-dot trail.
+      const fade = home ? 0.9 - dot * 0.15 : [0.55, 0.35, 0.2][dot] ?? 0.2;
+      const grow = home ? 1.5 * (1 - dot * 0.13) : 1 - dot * 0.18;
+      return { opacity: fade, transform: [{ translateX: x - 9 }, { translateY: y - 9 }, { scale: scale * grow }] };
     }
     // Edge spin that ends face-on: two full turns, cos(...) reaches 1 at the end.
     const spin = Math.cos(u * Math.PI * 4);
@@ -251,7 +260,7 @@ function Flyer({ t, lag, from, to, lift, source, dot, home }: {
 const styles = StyleSheet.create({
   sweep: { position: 'absolute', top: 0, bottom: 0, left: 0 },
   ribbonWrap: { position: 'absolute', left: 12, alignItems: 'center' },
-  rays: { position: 'absolute', left: BADGE / 2 - 8 - 100, top: 33 - 100 },
+  rays: { position: 'absolute', left: BADGE / 2 - 8 - RAYS / 2, top: 33 - RAYS / 2 },
   ribbon: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 66, paddingLeft: BADGE - 2, paddingRight: 12,
     borderRadius: 18, borderWidth: 3, borderColor: BRAND.white, backgroundColor: BRAND.gold, alignSelf: 'stretch',
     borderBottomWidth: 6, borderBottomColor: '#d99a00', overflow: 'hidden' },

@@ -13,7 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
-import RideUpCelebration, { RIDE_UP, RideUpHero, RideUpKicker, RollingValue } from './RideUpCelebration';
+import RideUpCelebration, { RIDE_UP, RideUpHero, RideUpKicker, RollingValue, rideUpStatStartsAt } from './RideUpCelebration';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
 import { BRAND, GameButton, GameIcon, type GameIconName } from '../../../ui';
 import type { PredictionResolution } from '../../../services/lineplay/content';
@@ -46,11 +46,11 @@ function RecapStat({ icon, value, prefix = '', label, index, reducedMotion, ride
   icon: GameIconName; value: number; prefix?: string; label: string; index: number; reducedMotion: boolean;
   /**
    * "Your ride's up!": the chip is in place from the card's first frame and its number rolls
-   * with the gold bar (RIDE_UP.statStepMs apart), landing with a pop and a tick by about 1.4 s.
+   * out of the header's burst (RIDE_UP.statStepMs apart), landing with a pop and a tick by about 1.2 s.
    */
   rideUp?: boolean;
 }) {
-  const delayMs = rideUp ? RIDE_UP.ringAt + index * RIDE_UP.statStepMs : 260 + index * 90;
+  const delayMs = rideUp ? rideUpStatStartsAt(index) : 260 + index * 90;
   const durationMs = rideUp ? RIDE_UP.statMs : rollMs(value);
   return <Animated.View entering={reducedMotion || rideUp ? undefined : ZoomIn.delay(160 + index * 90).springify().damping(11)}
     style={styles.recapStat} accessible accessibilityLabel={`${prefix}${value} ${label}`}>
@@ -158,7 +158,11 @@ export default function SessionRecap({
   const secs = elapsedSeconds % 60;
   const rideUp = endReason === 'boarded';
   const leftQueue = endReason === 'left_queue';
-  const enter = (index: number) => reducedMotion ? undefined : FadeInDown.delay(420 + index * 90).springify().damping(14);
+  // "Your ride's up!" lays the page out at once (the shark is on the header from frame 1 and the cards under it
+  // only rise a few points in a quick fade), so the sheet never shows a blank body while the header plays.
+  const enter = (index: number) => reducedMotion ? undefined
+    : rideUp ? FadeInDown.delay(40 + index * 40).duration(180)
+    : FadeInDown.delay(420 + index * 90).springify().damping(14);
   const upgradeReady = coin != null && coin.current_level < coin.max_level &&
     (coin.available_parts ?? 0) >= coin.parts_to_next_level && playerEnergy != null &&
     playerEnergy >= coin.energy_to_next_level;
@@ -188,7 +192,7 @@ export default function SessionRecap({
             <Playercard inventory={heroInventory} showBackground={false} style={styles.heroCard} />
           </Pressable>
         ) : (
-          <Animated.View entering={reducedMotion ? undefined : ZoomIn.delay(80).springify().damping(9)} style={styles.recapSharkWrap}>
+          <Animated.View entering={reducedMotion || rideUp ? undefined : ZoomIn.delay(80).springify().damping(9)} style={styles.recapSharkWrap}>
             <Image source={QUEUE_RECAP_SHARK} style={styles.recapShark} contentFit="contain"
               accessibilityLabel="Shark celebrating with a ride coin and park ticket" />
           </Animated.View>

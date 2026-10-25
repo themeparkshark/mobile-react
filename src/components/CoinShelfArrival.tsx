@@ -295,8 +295,23 @@ function ShelfLandingCanvas({ width, height, progress, hover, pulse, glow, flash
       canvas.drawCircle(slot.x, slot.y, slotWidth * 0.75 * (0.8 + 0.8 * f), paint);
       paint.setAlphaf(1);
     }
-    // 5. The ring and the stars burst from the slot (a second ring on a shiny landing).
+    // 5. The ring and the stars burst from the slot (a second ring on a shiny landing), and the impact runs along the
+    // plank: a flat gold ring spreads from under the slot across the shelf board and thins out.
     const b = puff.value;
+    if (b > 0 && b < 0.7) {
+      const w = b / 0.7;
+      const spread = 1 - (1 - w) * (1 - w);
+      const rx = slotWidth * (0.6 + SHELF_LANDING.plankWaveReach * spread);
+      const ry = rx * 0.16;
+      const wave = Skia.Paint();
+      wave.setAntiAlias(true);
+      wave.setStyle(PaintStyle.Stroke);
+      wave.setStrokeWidth(Math.max(1, 6 * (1 - w)));
+      wave.setColor(gold);
+      wave.setAlphaf(0.95 * (1 - w));
+      const plankY = slot.y + slotWidth * 0.48;
+      canvas.drawOval(Skia.XYWHRect(slot.x - rx, plankY - ry, rx * 2, ry * 2), wave);
+    }
     if (b > 0 && b < 1) {
       drawBurst(canvas, b, slot.x, slot.y, stars, slotWidth * SHELF_LANDING.puffReach, slotWidth * 0.55, 0);
       if (shiny) drawBurst(canvas, b, slot.x, slot.y, [], slotWidth, slotWidth * 0.9, 0.18);

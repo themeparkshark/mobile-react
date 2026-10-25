@@ -27,6 +27,10 @@ export const FIRST_COIN = {
   topOffset: 150,
   /** Two sparkle rings around the ribbon's coin, 12 each (capped by momentParticles), on the impact frame. */
   sparkleAt: 480,
+  /** The slam's gold ring starts this wide (pt radius) and about doubles: wider than the ribbon is tall. */
+  ringPt: 52,
+  /** The ribbon kicks down this far on the held slam frame. */
+  kickPt: 6,
   sparkleWaveMs: 160,
   sparkles: 12,
   /** A white shine runs across the ribbon after the rings (no still frame between the burst and the flight home). */

@@ -38,3 +38,16 @@ test('round 5: the +1 and the hearts read at a glance and the bubble never wraps
   assert.ok(Number(/PLUS_FONT = (\d+)/.exec(src)[1]) >= 20);
   assert.ok(Number(/HEART_SIZE = (\d+)/.exec(src)[1]) >= 22);
 });
+
+test('round 6: three solid gold hearts, 28 to 32 pt with a white outline, pop past full size and fan out; a sparkle on the badge', () => {
+  const size = Number(/HEART_SIZE = (\d+)/.exec(src)[1]);
+  assert.ok(size >= 28 && size <= 32, `heart size ${size}`);
+  assert.match(src, /mono=\{BRAND\.white\}/, 'a white heart behind the gold one is the outline');
+  assert.match(src, /const pop = k < 0\.12 \? 0\.4 \+ 0\.85/, 'pops to 1.25 then settles');
+  assert.match(src, /opacity: k < 0\.08 \? k \/ 0\.08 : k < 0\.7 \? 1/, 'solid, not half see-through');
+  assert.match(src, /HEART_FAN/);
+  assert.match(src, /<GameIcon name="sparkle" size=\{SPARK_SIZE\} \/>/);
+  // Still quiet for other players: the hearts never buzz or play a sound.
+  const starsEffect = src.slice(src.indexOf('const before = lastStars.current'), src.indexOf('const badgeStyle'));
+  assert.doesNotMatch(starsEffect, /queueHaptic|playHaptic|playMoment/);
+});

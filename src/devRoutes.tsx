@@ -18,6 +18,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'QueueTimesPreview', getComponent: () => require('./screens/QueueTimesPreviewScreen').default },
       { name: 'TriviaGamePreview', getComponent: () => require('./screens/LinePlay/TriviaGamePreviewScreen').default },
       { name: 'QueueStampPreview', getComponent: () => require('./screens/LinePlay/QueueStampPreviewScreen').default },
+      { name: 'ParkMomentsCapture', getComponent: () => require('./screens/ParkMomentsCaptureScreen').default },
       { name: 'MiniGameTester', getComponent: () => require('./screens/MiniGameTesterScreen').default },
       { name: 'GameKitGym', getComponent: () => require('./screens/GameKitGymScreen').default },
       { name: 'ShelfArrivalPreview', getComponent: () => require('./screens/ShelfArrivalPreviewScreen').default },
@@ -70,6 +71,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
           { name: 'PostWinRewardsPreview', getComponent: () => require('./screens/PostWinRewardsPreviewScreen').default },
           { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
           { name: 'CoinLevelingPreview', getComponent: () => require('./screens/CoinLevelingPreviewScreen').default },
+          { name: 'ParkMomentsCapture', getComponent: () => require('./screens/ParkMomentsCaptureScreen').default },
         ]
       : [];
 
@@ -82,7 +84,7 @@ export function devInitialRoute(): string | null {
     if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1') return 'BossMapPreview';
     const motion = process.env.EXPO_PUBLIC_MOTION_CAPTURE;
     return motion === 'BoxRevealPreview' || motion === 'PostWinRewardsPreview' || motion === 'SetRevealPreview'
-      || motion === 'CoinLevelingPreview' ? motion : null;
+      || motion === 'CoinLevelingPreview' || motion === 'ParkMomentsCapture' ? motion : null;
   }
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [

@@ -17,6 +17,8 @@ export const SHELF_LANDING = {
   puffMs: 760,
   /** How far the sparkles fly, in slot widths. */
   puffReach: 1.8,
+  /** The impact's flat gold ring runs this far along the plank on each side, in slot widths. */
+  plankWaveReach: 2.6,
   sparkles: 12,
   /** Neighbours tip as the slot coin squashes, one after another outward. */
   jiggleAfterMs: 0,
@@ -31,8 +33,11 @@ export const SHELF_LANDING = {
   shineAfterMs: 220,
   shineMs: 600,
   /** ...and each coin hops as the bar passes it, left to right, with a tick that climbs the coin ladder. */
-  rowHopStepMs: 100,
-  rowHopPt: 10,
+  rowHopStepMs: 90,
+  rowHopPt: 12,
+  /** Each hop: up over rowHopUpMs (EASE.out), down over rowHopDownMs (EASE.in) with a little squash as it lands. */
+  rowHopUpMs: 150,
+  rowHopDownMs: 190,
   /** The plank glows gold for a beat, then the five-pip "row done" badge pops on its end. */
   plankGlowMs: 700,
   badgeAt: 900,

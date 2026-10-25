@@ -104,3 +104,15 @@ test('round 5: the shared burst worklet is declared before the worklet that call
   assert.ok(src.indexOf('function drawBurstAtOrigin(') < src.indexOf('export function drawBurst('),
     'drawBurstAtOrigin must exist before drawBurst is created, or the landing canvas throws on the UI thread');
 });
+
+test('round 6: the impact runs along the plank, every row coin hops a visible arc, the pill springs up with a sparkle', () => {
+  const arrival = read('src/components/CoinShelfArrival.tsx');
+  assert.match(arrival, /canvas\.drawOval\(Skia\.XYWHRect\(slot\.x - rx, plankY - ry/, 'a flat gold ring spreads along the plank');
+  assert.ok(L.SHELF_LANDING.plankWaveReach >= 2, 'it reaches the neighbours');
+  const fx = read('src/components/ShelfLandingFx.tsx');
+  assert.ok(L.SHELF_LANDING.rowHopPt >= 8 && L.SHELF_LANDING.rowHopUpMs + L.SHELF_LANDING.rowHopDownMs >= 300, 'an arc you can see (8 pt or more over 300 ms or more)');
+  assert.match(fx, /withTiming\(-0\.12, \{ duration: SHELF_LANDING\.rowHopDownMs, easing: EASE\.in \}\)/, 'down with a little squash');
+  assert.match(fx, /scale: reduced \? 1 : 0\.35 \+ 0\.65 \* badge\.value/, 'the pill springs up from small (SPRING.pop overshoots)');
+  assert.match(fx, /<GameIcon name="sparkle" size=\{22\} \/>/);
+  assert.ok(L.rowHopDelay(4) + L.SHELF_LANDING.rowHopUpMs < L.SHELF_LANDING.shineAfterMs + L.SHELF_LANDING.shineMs + 200, 'the last hop peaks while the bar is still there');
+});

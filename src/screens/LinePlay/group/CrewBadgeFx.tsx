@@ -5,8 +5,10 @@
  * (SPRING.land), waves twice (0 to 15 degrees and back) and a gold "+1" bubble
  * rises and fades over 900 ms. Players who join together arrive 80 ms apart.
  * One tick buzz for the join (yours, on your phone).
- * STARS: when a player earns stars in a round, three small gold hearts float up
- * from their badge with a sideways drift over 1.2 s, and the badge bobs once.
+ * STARS: when a player earns stars in a round, three solid gold hearts with a
+ * white outline pop from their badge (past full size, then settle), rise in a
+ * fan with a sideways drift over 1.2 s, a sparkle twinkles on the badge and the
+ * badge bobs once.
  * Nobody else's stars ever buzz the phone (rival and other players' events are
  * quiet), and there is no sound for them either.
  *
@@ -96,8 +98,16 @@ export const CrewBadgeFx = memo(function CrewBadgeFx({ joinOrder, starsKey, redu
     return { opacity: t < 0.12 ? t / 0.12 : t < 0.55 ? 1 : 1 - (t - 0.55) / 0.45, transform: [{ translateY: -30 * t }, { scale: pop }] };
   });
 
+  const sparkStyle = useAnimatedStyle(() => {
+    // A sparkle twinkles on the badge as the hearts leave it (one quick pop and turn).
+    const k = hearts.value / 0.28;
+    if (k <= 0 || k >= 1) return { opacity: 0 };
+    return { opacity: k < 0.7 ? 1 : (1 - k) / 0.3, transform: [{ scale: k < 0.35 ? 1.3 * (k / 0.35) : 1.3 - 0.5 * ((k - 0.35) / 0.65) }, { rotate: `${90 * k}deg` }] };
+  });
+
   return <View>
     <Animated.View style={badgeStyle}>{children}</Animated.View>
+    <Animated.View pointerEvents="none" style={[styles.spark, sparkStyle]}><GameIcon name="sparkle" size={SPARK_SIZE} /></Animated.View>
     <View pointerEvents="none" style={styles.float}>
       <Animated.View style={[styles.plus, plusStyle]}><Text style={styles.plusText} allowFontScaling={false}>+1</Text></Animated.View>
       {Array.from({ length: CREW_FX.hearts }, (_, i) => <Heart key={i} index={i} t={hearts} />)}
@@ -107,20 +117,33 @@ export const CrewBadgeFx = memo(function CrewBadgeFx({ joinOrder, starsKey, redu
 
 function Heart({ index, t }: { readonly index: number; readonly t: SharedValue<number> }) {
   const style = useAnimatedStyle(() => {
-    // Each heart leaves a beat after the one before and drifts on its own sine.
-    const k = (t.value - index * 0.15) / 0.7;
+    // Each heart leaves a beat after the one before: it pops past full size (0.4 to 1.25, then 1), rises in a fan
+    // (left, up, right) on its own sine drift, and stays solid until it is nearly gone.
+    const k = (t.value - index * 0.12) / 0.72;
     if (k <= 0 || k >= 1) return { opacity: 0 };
+    const pop = k < 0.12 ? 0.4 + 0.85 * (k / 0.12) : k < 0.24 ? 1.25 - 0.25 * ((k - 0.12) / 0.12) : 1;
     return {
-      opacity: k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85,
-      transform: [{ translateX: (index - 1) * 12 + 7 * Math.sin(k * Math.PI * 2 + index) }, { translateY: -48 * k }, { scale: 0.7 + 0.4 * k }],
+      opacity: k < 0.08 ? k / 0.08 : k < 0.7 ? 1 : (1 - k) / 0.3,
+      transform: [{ translateX: (index - 1) * HEART_FAN * Math.min(1, k * 1.6) + 5 * Math.sin(k * Math.PI * 2 + index) },
+        { translateY: -HEART_RISE * k }, { rotate: `${(index - 1) * 12 * Math.min(1, k * 2)}deg` }, { scale: pop }],
     };
   });
-  return <Animated.View style={[styles.heart, style]}><GameIcon name="heart" size={HEART_SIZE} mono={HEART_GOLD} /></Animated.View>;
+  // A solid gold heart on a white one a little bigger: a clean white outline that reads on the blue rail.
+  return <Animated.View style={[styles.heart, style]}>
+    <GameIcon name="heart" size={HEART_SIZE + HEART_OUTLINE * 2} mono={BRAND.white} />
+    <View style={styles.heartInk}><GameIcon name="heart" size={HEART_SIZE} mono={HEART_GOLD} /></View>
+  </Animated.View>;
 }
 
 /** Gold, never red (red reads as a miss). Big enough to read at a glance (and on a contact sheet). */
 const HEART_GOLD = '#ffc928';
-export const HEART_SIZE = 22;
+export const HEART_SIZE = 30;
+/** The white rim around each heart (pt per side). */
+const HEART_OUTLINE = 3;
+/** How far the outer hearts fan out sideways, and how high they all rise (pt). */
+const HEART_FAN = 24;
+const HEART_RISE = 58;
+const SPARK_SIZE = 22;
 /** The "+1" is at least 22 pt tall. */
 export const PLUS_FONT = 20;
 
@@ -131,5 +154,7 @@ const styles = StyleSheet.create({
     borderWidth: 2.5, borderColor: BRAND.white, paddingHorizontal: 7,
     shadowColor: BRAND.navy, shadowOpacity: 0.35, shadowOffset: { width: 0, height: 2 }, shadowRadius: 0 },
   plusText: { fontFamily: 'Shark', fontSize: PLUS_FONT, lineHeight: 23, color: BRAND.navy },
-  heart: { position: 'absolute', top: -6 },
+  heart: { position: 'absolute', top: -14, alignItems: 'center', justifyContent: 'center' },
+  heartInk: { position: 'absolute' },
+  spark: { position: 'absolute', right: -8, top: -8 },
 });

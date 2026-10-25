@@ -75,3 +75,16 @@ test('round 5: no still beat before the flight home, the ribbon clears the right
   assert.ok(src.indexOf('<BurstCanvas') < src.indexOf('styles.ribbonWrap'), 'the sparkle rings draw under the ribbon, never on the words');
   assert.match(src, /styles\.badge/);
 });
+
+test('round 6: the slam is the brightest thing on the map: a big fan, a ring wider than the ribbon, a kick, a thick trail home', () => {
+  const src = read('src/components/park/FirstCoinRibbon.tsx');
+  assert.ok(Number(/const RAYS = (\d+)/.exec(src)[1]) >= 280, 'the ray fan is far bigger than the badge');
+  assert.match(src, /<GoldBurst size=\{RAYS\} amount=\{gold\}/);
+  // The ring starts at ringPt and about doubles (BurstCanvas grows it by 2.1x): at least 1.5x the 66 pt ribbon across.
+  assert.ok(F.FIRST_COIN.ringPt * 2 * 2.1 >= 1.5 * 66, 'the ring opens wider than the ribbon is tall');
+  assert.match(src, /ring=\{FIRST_COIN\.ringPt\}/);
+  assert.ok(F.FIRST_COIN.kickPt >= 6, 'a 6 pt kick on the slam');
+  assert.match(src, /FIRST_COIN\.kickPt \* punch\.value/);
+  assert.match(src, /TRAIL_HOME\.map/, 'the flight home has its own thick comet');
+  assert.match(src, /const TRAIL_HOME = \[0\.05, 0\.1, 0\.15, 0\.2, 0\.25\]/);
+});

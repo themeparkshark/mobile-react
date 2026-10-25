@@ -58,6 +58,9 @@ function drawBurstAtOrigin(canvas: SkCanvas, raw: number, c: number, stars: read
     star.close();
     const out = 1 - Math.pow(1 - b, 3);
     const pop = b < 0.22 ? b / 0.22 : 1 - (b - 0.22) * 0.75;
+    // Two colors per frame, never one per star.
+    const goldInk = Skia.Color(GOLD_FX.rays);
+    const whiteInk = Skia.Color('#ffffff');
     for (let i = 0; i < stars.length; i += 1) {
       const s = stars[i];
       const d = radius * s.reach * out;
@@ -66,7 +69,7 @@ function drawBurstAtOrigin(canvas: SkCanvas, raw: number, c: number, stars: read
       canvas.rotate(s.spin * 120 * b, 0, 0);
       const k = s.size * Math.max(0, pop);
       canvas.scale(k, k);
-      paint.setColor(Skia.Color(s.gold ? GOLD_FX.rays : '#ffffff'));
+      paint.setColor(s.gold ? goldInk : whiteInk);
       paint.setAlphaf(b < 0.65 ? 1 : (1 - b) / 0.35);
       canvas.drawPath(star, paint);
       canvas.restore();
