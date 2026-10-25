@@ -11,6 +11,8 @@ import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, wi
 import { Image } from 'expo-image';
 
 const RIBBON = require('../../../assets/images/ribbon.png');
+/** The ribbon art, for screens that preload it before their card shows. */
+export const RESULTS_RIBBON_ART = RIBBON;
 
 export function ResultsRibbon({ title, reducedMotion = false, style, delayMs = 0 }: {
   title: string;

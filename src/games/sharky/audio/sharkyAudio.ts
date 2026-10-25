@@ -54,8 +54,8 @@ export function useSharkyMusic(bed: string | null, stateChange: boolean): void {
   const { player } = useContext(AuthContext);
   const musicOn = player?.enabled_music !== false;
   const started = useRef(false);
+  // The Music setting itself reaches the engine from SoundEffectProvider only.
   useEffect(() => {
-    GameAudio.setMusicEnabled(musicOn);
     GameAudio.music.setAppMusicBridge({
       suspend: () => { try { void app?.stopMusic?.(); } catch { /* app music optional */ } },
       restore: () => { try { void app?.restoreMusic?.(); } catch { /* app music optional */ } },

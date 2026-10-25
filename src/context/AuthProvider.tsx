@@ -14,6 +14,7 @@ import * as RootNavigation from '../RootNavigation';
 import { clearQueueBackgroundHeartbeat } from '../services/lineplay/backgroundQueueHeartbeat';
 import { clearCache } from '../utils/apiCache';
 import { isStandalonePreviewMode } from '../utils/standalonePreview';
+import { loadLaunchProfile } from './launchProfile';
 
 export interface AuthContextType {
   readonly isReady: boolean;
@@ -59,34 +60,51 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
       if (hasInitialNavigated.current) {
         return;
       }
-      try {
-        const player = await refreshPlayer();
+      // A previously verified profile, for a slow or broken network at launch.
+      const readCachedPlayer = async (): Promise<PlayerType | null> => {
+        const cached = await AsyncStorage.getItem('player').catch(() => null);
+        if (!cached) return null;
+        try {
+          const cachedPlayer = JSON.parse(cached) as PlayerType;
+          return cachedPlayer?.id ? cachedPlayer : null;
+        } catch { return null; /* corrupt cache; show sign-in */ }
+      };
+      const launch = await loadLaunchProfile(refreshPlayer, readCachedPlayer);
+      if (launch.kind === 'fresh') {
         setIsReady(true);
         hasInitialNavigated.current = true;
-        if (!isStandalonePreviewMode()) RootNavigation.navigate(player.username ? 'Loading' : 'Welcome');
-      } catch (error: any) {
-        if (error?.response?.status === 401) {
-          await logout().catch(() => undefined);
-          setIsReady(true);
-          return;
-        }
-        // Preserve a previously verified profile during a temporary outage.
-        const cached = await AsyncStorage.getItem('player').catch(() => null);
-        if (cached) {
-          try {
-            const cachedPlayer = JSON.parse(cached) as PlayerType;
-            if (cachedPlayer?.id) {
-              setPlayer(cachedPlayer);
-              hasInitialNavigated.current = true;
-              setIsReady(true);
-              if (!isStandalonePreviewMode()) RootNavigation.navigate(cachedPlayer.username ? 'Loading' : 'Welcome');
-              return;
-            }
-          } catch { /* corrupt cache; show sign-in */ }
-        }
-        setIsReady(true);
-        if (!isStandalonePreviewMode()) RootNavigation.navigate('Login');
+        if (!isStandalonePreviewMode()) RootNavigation.navigate(launch.player.username ? 'Loading' : 'Welcome');
+        return;
       }
+      if (launch.kind === 'cached') {
+        // Slow network: the saved profile opens the game now. The fresh one replaces it when it
+        // lands (refreshPlayer), and a fresh 401 still signs the player out.
+        setPlayer(current => (current?.id ? current : launch.player));
+        hasInitialNavigated.current = true;
+        setIsReady(true);
+        if (!isStandalonePreviewMode()) RootNavigation.navigate(launch.player.username ? 'Loading' : 'Welcome');
+        launch.late.catch(async (error: any) => {
+          if (error?.response?.status === 401) await logout().catch(() => undefined);
+        });
+        return;
+      }
+      const error: any = launch.error;
+      if (error?.response?.status === 401) {
+        await logout().catch(() => undefined);
+        setIsReady(true);
+        return;
+      }
+      // Preserve a previously verified profile during a temporary outage.
+      const cachedPlayer = await readCachedPlayer();
+      if (cachedPlayer) {
+        setPlayer(cachedPlayer);
+        hasInitialNavigated.current = true;
+        setIsReady(true);
+        if (!isStandalonePreviewMode()) RootNavigation.navigate(cachedPlayer.username ? 'Loading' : 'Welcome');
+        return;
+      }
+      setIsReady(true);
+      if (!isStandalonePreviewMode()) RootNavigation.navigate('Login');
     }
   }, [token]);
 

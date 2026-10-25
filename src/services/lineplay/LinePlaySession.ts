@@ -638,6 +638,8 @@ export class LinePlaySession {
   private currentQuestSubmission: Promise<void> | null = null;
   private completionInFlight: Promise<void> | null = null;
   private checkpointPlayerId: number | null = null;
+  /** A signed-out guest: every game plays, nothing is sent to the server or saved for later credit. */
+  private guest = false;
   private backgroundTrackingSessionId: string | null = null;
   private backgroundTrackingAvailable: boolean | null = null;
   private checkpointWrites: Promise<void> = Promise.resolve();
@@ -768,7 +770,7 @@ export class LinePlaySession {
       chapter: this.chapter,
       serverSessionId: this.serverSessionId,
       rewardUnavailable: this.rewardUnavailable,
-      rewardConnectionIssue: this.rewardConnectionIssue,
+      rewardConnectionIssue: this.guest ? 'sign_in' : this.rewardConnectionIssue,
       backgroundTrackingAvailable: this.backgroundTrackingAvailable,
       verifiedEligibleSeconds: this.verifiedEligibleSeconds,
       verifiedPresenceAt: this.lastSuccessfulPresenceUpdateAt || null,
@@ -1380,8 +1382,11 @@ export class LinePlaySession {
    * we still run locally (offline-first) with a null serverSessionId; complete
    * will then no-op the server call gracefully.
    */
-  async start(ride: RideContext, initialLocation?: LocationSample, playerId?: number): Promise<void> {
+  async start(ride: RideContext, initialLocation?: LocationSample, playerId?: number,
+    options: { readonly guest?: boolean } = {}): Promise<void> {
     if (this.disposed || this.state === 'active' || this.state === 'paused') return;
+    // A guest has no account: no checkpoint, no reward session, no queued credit.
+    this.guest = options.guest === true && !playerId;
 
     const locationDuringLoad = this.lastSample;
     const saved = playerId ? await readCheckpoint(playerId, ride.rideId) : null;
@@ -1677,6 +1682,7 @@ export class LinePlaySession {
   }
 
   private async connectServer(sample: LocationSample, force = false): Promise<void> {
+    if (this.guest) return;
     if (this.disposed || !this.ride || this.ride.rideId <= 0 || this.ride.lineRewardsReady === false ||
         this.rewardUnavailable || !this.startRequestId ||
         this.serverSessionId || this.state === 'idle') return;
@@ -2035,6 +2041,12 @@ export class LinePlaySession {
       ? this.lastSample : null;
     const checkpoint = await this.exitCheckpoint(recentSample);
     const sessionId = this.serverSessionId;
+    if (!sessionId && this.guest) {
+      // A guest's wait is just for fun: the recap shows, nothing is queued.
+      this.rewardsPending = false;
+      this.emit();
+      return;
+    }
     if (!sessionId) {
       if (this.entryFix && this.startRequestId && this.ride && this.ride.rideId > 0 &&
           this.ride.lineRewardsReady !== false && !this.rewardUnavailable) {

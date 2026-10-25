@@ -48,7 +48,7 @@ export function ShareCardButton({ tiles, rideName, score, stars, chip = false }:
     try {
       const uri = await captureRef(ref, { format: 'png', quality: 1, result: 'tmpfile' });
       if (await Sharing.isAvailableAsync()) {
-        await shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: shareText(rideName, score, stars), UTI: 'public.png' });
+        await shareFileExternal(uri, { mimeType: 'image/png', dialogTitle: shareText(rideName, score, stars), UTI: 'public.png' }, `Whack-a-Shark ${score}`);
       }
     } catch {
       // The share sheet is optional; a failure never blocks the results.
