@@ -57,14 +57,14 @@ test('blocker 1: 50 catches on the wave 4 map (treats, beams, grands, slow answe
   assert.ok(a.perCatch.some((x) => x.treat && x.hold === 0) && a.perCatch.some((x) => x.treat && x.hold > 0), 'treats with and without a hold');
 });
 
-test('w5r2 fix 4: the grand 25th: the slam\'s rigid buzz 100 ms before the burst, the heavy ON the burst frame, its second heavy one beat later, the success at +180, no thump', async () => {
+test('w5r2 fix 4: the grand 25th: the slam\'s rigid buzz 120 ms before the burst, the heavy ON the burst frame, its second heavy one beat later, the success at +180, no thump', async () => {
   const { a } = await fiftyCatches();
   for (const n of [25, 50]) {
     const g = a.perCatch[n - 1];
     assert.equal(g.grand, true);
     assert.equal(g.burst, 'catch.milestone', `#${n} rings the grand shower`);
     assert.deepEqual(plain(g.heavies), [g.burstPlanMs, g.burstPlanMs + 90], `#${n} heavies (heat ${g.heat})`);
-    assert.ok(g.buzzes.includes('hitRigid@570'), `#${n} the slam buzz on the beam's last fall: ${g.buzzes.join(' ')}`);
+    assert.ok(g.buzzes.includes('hitRigid@550'), `#${n} the slam buzz on the beam's last fall: ${g.buzzes.join(' ')}`);
     assert.ok(!g.buzzes.includes('hitMedium@480'), `#${n} the last wobble gives way to the slam`);
     assert.equal(g.successMs, g.burstPlanMs + 180, `#${n} success keeps its 180 ms`);
     assert.equal(g.thumpMs, -1, `#${n} the grand never thumps (its own second heavy takes that beat)`);
@@ -73,12 +73,12 @@ test('w5r2 fix 4: the grand 25th: the slam\'s rigid buzz 100 ms before the burst
   assert.equal(a.perCatch[49].heat, 0, 'the cold grand');
 });
 
-test('w5r2 fix 4: a beam catch with a hot run: slam rigid at burst - 100, heavy ON the burst frame, thump on burst + 90, success on burst + 180', async () => {
+test('w5r2 fix 4: a beam catch with a hot run: slam rigid at burst - 120, heavy ON the burst frame, thump on burst + 90, success on burst + 180', async () => {
   const { a } = await fiftyCatches();
   const b = a.perCatch[9];
   assert.equal(b.beam && !b.grand, true);
   assert.equal(b.heat, 5);
-  assert.deepEqual(plain(b.buzzes.filter((x) => /comboHeavy|hitRigid|success/.test(x))), ['hitRigid@570', 'comboHeavy@670', 'hitRigid@760', 'success@850']);
+  assert.deepEqual(plain(b.buzzes.filter((x) => /comboHeavy|hitRigid|success/.test(x))), ['hitRigid@550', 'comboHeavy@670', 'hitRigid@760', 'success@850']);
 });
 
 test('the beam lands on the held frame even when the server answers late (it is in the tap\'s ladder now)', async () => {
@@ -89,7 +89,7 @@ test('the beam lands on the held frame even when the server answers late (it is 
   const slam = v.starts('moment:catch.lucky:primary')[0];
   assert.ok(slam, 'the slam plays');
   assert.equal(slam.t, 600 + 20, 'on the held frame (600), not after the hold');
-  assert.ok(v.haptics.some((h) => h.intent === 'hitRigid' && h.t === 570), 'its slam buzz on the beam\'s last fall, before the hold');
+  assert.ok(v.haptics.some((h) => h.intent === 'hitRigid' && h.t === 550), 'its slam buzz on the beam\'s last fall, before the hold');
   assert.ok(v.haptics.some((h) => h.intent === 'comboHeavy' && h.t === 670 + r.hold), 'the heavy waits for the burst frame');
   const burst = r.delivered.find((d) => d.name === 'burst').at;
   assert.equal(burst, 670 + r.hold, 'the burst waits for the answer');

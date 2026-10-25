@@ -56,12 +56,12 @@ test('sync: every catch haptic fires on its own beat, with its sound inside the 
   const { a } = await fiftyCatches();
   for (const c of a.perCatch) {
     // Wave 5: the burst after any server hold (the clock waits on the held frame), as the session's own plan says.
-    // Wave 5 round 2: on a beam catch the last wobble's buzz gives way to the slam's rigid buzz (570, 100 ms before the
+    // Wave 5 round 2: on a beam catch the last wobble's buzz gives way to the slam's rigid buzz (550, 120 ms before the
     // burst), and the heavy lands on the burst frame on every show (the beam's too).
     const p = c.repeat ? { burst: c.burstPlanMs, wob: [150, 290] } : { burst: c.burstPlanMs, wob: c.beam ? [200, 350] : [200, 350, 480] };
     assert.ok(c.burstSoundMs !== null && c.burstHapticMs !== null, `#${c.n} has a burst sound and haptic`);
     assert.equal(c.burstHapticMs, p.burst, `#${c.n} the burst buzz is on the visual burst frame`);
-    assert.equal(c.slamMs, c.beam ? 570 : -1, `#${c.n} the slam buzz only on a beam catch, on the beam's last fall`);
+    assert.equal(c.slamMs, c.beam ? 550 : -1, `#${c.n} the slam buzz only on a beam catch, on the beam's last fall`);
     const lag = c.burstSoundMs - p.burst;
     assert.ok(lag >= 0 && lag <= 30, `#${c.n} the sound is heard within the audio-api output latency of the burst (${lag} ms)`);
     assert.equal(c.wobbleSoundMs.length, c.repeat ? 2 : 3, `#${c.n} one tick per wobble`);

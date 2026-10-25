@@ -76,7 +76,7 @@ test('fix 1 (w5r2): the 10th catch (the beam, full show) is the loudest: slam bu
   const c10 = a.perCatch[9];
   assert.equal(c10.repeat, false, 'wow-map 00100bd0: the 10th catch plays the full show');
   assert.equal(c10.lucky, true, 'the beam slam (catch.lucky sh_star_slam) plays');
-  assert.equal(c10.slamMs, 570, 'the slam\'s rigid buzz on the beam\'s last fall (100 ms before the burst)');
+  assert.equal(c10.slamMs, 550, 'the slam\'s rigid buzz on the beam\'s last fall (120 ms before the burst)');
   assert.equal(c10.burstHapticMs, 670, 'the heavy buzz lands on the burst frame, the brightest one (wave 5 round 2)');
   assert.equal(c10.burst, 'catch.burst', 'then the bell on the burst');
   const slams = e.Trace.traceEvents().filter((x) => x.kind === 'sound' && x.name.startsWith('moment:catch.lucky:primary'));

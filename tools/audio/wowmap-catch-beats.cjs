@@ -92,9 +92,9 @@ async function wowMapCatch(e, opts = {}) {
   // `at` is the beat's catch-clock time; after the held frame the wall time moves by the hold.
   const add = (at, name, fn) => beats.push({ at, wall: at + (at > p.hitStopAt ? hold : 0), name, fn });
   p.wobbles.forEach(([at, intent], k) => add(at, `wobble${k + 1}`, () => C.catchHaptic(intent, 2)));
-  // Wave 5 round 2: the slam's lighter buzz 30 ms before the held frame (100 before the burst), the slam's sound on it,
+  // Wave 5 round 2: the slam's lighter buzz 50 ms before the held frame (120 before the burst), the slam's sound on it,
   // and the heavy on the burst frame on every show.
-  if (beam) add(p.hitStopAt - 30, 'slam', () => C.catchMark('slam'));
+  if (beam) add(p.hitStopAt - 50, 'slam', () => C.catchMark('slam'));
   if (beam) add(p.hitStopAt, 'beam', () => { C.catchMark('beam'); C.catchSound('chime', { volume: 0.7, pitch: 6 }); });
   add(p.hitStopAt + 1, 'hitstop', () => C.catchMark('hitstop'));
   add(p.burstAt, 'burst', () => { C.catchMark('burst'); C.catchHaptic('comboHeavy', 3); C.catchSound('chime', grand ? { volume: 0.9, pitch: 4 } : { volume: 0.8 }); });

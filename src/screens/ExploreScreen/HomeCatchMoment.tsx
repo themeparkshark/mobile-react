@@ -1175,7 +1175,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // Wave 5 (wow-sound): the beam lands on the held frame whether or not the server has answered (the clock holds
     // there on a slow answer, and a beat added after the clock reached it never fired: the slam and its heavy buzz
     // were lost on every slow 10th catch). A miss takes it back out below.
-    // Round 2: the slam's lighter buzz on the beam's last fall (100 ms before the burst), then the slam's sound on the held
+    // Round 2: the slam's lighter buzz on the beam's fall (120 ms before the burst), then the slam's sound on the held
     // frame, so the heavy lands on the burst frame itself.
     const beamBeats: Beat[] = [{ at: plan.hitStopAt - BEAM_SLAM_BUZZ_LEAD_MS, kind: BEAT.slam, arg: 0 }, { at: plan.hitStopAt, kind: BEAT.beam, arg: 0 }];
     beats.value = beam ? [...ladder, ...beamBeats] : ladder;

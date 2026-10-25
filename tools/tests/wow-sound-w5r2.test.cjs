@@ -30,13 +30,13 @@ test('fix 4: the beam catch: slam rigid on the beam\'s fall, the heavy ON the bu
   const hs = e.haptics.filter((h) => h.t >= r.t0).map((h) => ({ t: h.t - r.clock0, intent: h.intent }));
   const slam = hs.find((h) => h.intent === 'hitRigid');
   const heavy = hs.find((h) => h.intent === 'comboHeavy');
-  assert.equal(slam.t, 570);
+  assert.equal(slam.t, 550);
   assert.equal(heavy.t, 670, 'the brightest frame has its buzz');
   assert.ok(heavy.t - slam.t >= 90);
   assert.ok(!hs.some((h) => h.intent === 'hitMedium' && h.t > 400 && h.t < 600), 'the last wobble gave its buzz to the slam');
-  // A slam beat 40 ms late (a stalled JS turn): dropped, the heavy alone on the burst.
+  // A slam beat 50 ms late (a stalled JS turn): dropped, the heavy alone on the burst.
   const e2 = await engine();
-  const r2 = await wowMapCatch(e2, { n: 10, stalls: [{ at: 560, ms: 40 }] });
+  const r2 = await wowMapCatch(e2, { n: 10, stalls: [{ at: 540, ms: 60 }] });
   const hs2 = e2.haptics.filter((h) => h.t >= r2.t0).map((h) => ({ t: h.t - r2.clock0, intent: h.intent }));
   const h2 = hs2.find((h) => h.intent === 'comboHeavy');
   assert.ok(!hs2.some((h) => h.intent === 'hitRigid' && h.t < h2.t), `no late slam (${hs2.map((h) => `${h.intent}@${h.t}`).join(' ')})`);

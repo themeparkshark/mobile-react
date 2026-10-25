@@ -51,12 +51,17 @@ export const REPEAT_WOBBLE_INTENTS: readonly ('tickSelection' | 'tapLight' | 'hi
 export const MIN_BEAT_GAP_MS = 90;
 /**
  * Wave 5 round 2: on a beam catch (every 10th) the slam's buzz is a lighter rigid pulse this long before the held
- * frame (the beam's last fall, 100 ms before the burst), so the heavy lands on the burst frame itself, the brightest
- * frame, and the two stay a full beat apart. The slam's sound still rings on the held frame.
+ * frame (the beam's fall, 120 ms before the burst), so the heavy lands on the burst frame itself, the brightest frame,
+ * and the two stay a full beat apart. The slam's sound still rings on the held frame. The release-like 50-catch run
+ * (load 90) delivered the slam beat 16 to 28 ms after its UI frame, so it is planned 50 ms ahead and in practice buzzes
+ * 20 to 35 ms before the beam lands.
  */
-export const BEAM_SLAM_BUZZ_LEAD_MS = 30;
-/** A slam buzz that reaches JS later than this is dropped: the burst's heavy carries the impact alone (never a flam). */
-export const BEAM_SLAM_LATE_MS = 10;
+export const BEAM_SLAM_BUZZ_LEAD_MS = 50;
+/**
+ * A slam buzz that reaches JS later than this is dropped: the burst's heavy carries the impact alone. Up to this, it
+ * still lands 90 ms or more before an on-time heavy (never a flam).
+ */
+export const BEAM_SLAM_LATE_MS = 30;
 /** Coin ticks into the counter never land closer than this on the audio clock. */
 export const COIN_TICK_GAP_MS = 70;
 /** wow-map burstVariant: every 25th catch of a session is the grand burst (the beam and the biggest ink). */
