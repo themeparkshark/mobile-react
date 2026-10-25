@@ -144,11 +144,11 @@ test('the moment never re-renders React once it plays: stable props, card target
   assert.doesNotMatch(src, /setStep/);
   assert.match(src, /const \[fxOn, setFxOn\] = useState\(true\)/);
   assert.match(src, /if \(step === GO_STEP\) \{ mountedAll\.current = true; tryStart\(\); \}/);
-  assert.match(src, /if \(!laidOut\.current \|\| !artReady\.current \|\| !mountedAll\.current/, 'the moment starts only once every step has mounted');
+  assert.match(src, /if \(holdRef\.current \|\| !laidOut\.current \|\| !artReady\.current \|\| !mountedAll\.current/, 'the moment starts only once every step has mounted');
   const hook = read('src/components/park/useParkArrival.tsx');
   assert.match(hook, /const onDone = useCallback\(/, 'a stable onDone');
   assert.match(hook, /const layer = useMemo\(/);
-  assert.match(hook, /goal=\{playing\.goal\}/, 'the Daily 3 goal is fixed when the moment starts');
+  assert.match(hook, /goal=\{shown\.goal\}/, 'the Daily 3 goal is fixed when the moment starts');
 });
 
 test('a second visit this week is the short hello: ribbon, name and cards, about 1.4 s, no confetti', () => {
@@ -322,4 +322,20 @@ test('wave 5 round 3: the Daily 3 pill holds 300 ms past the cards, docks under 
   assert.match(src, /<Path path=\{FLAME_PATH\} style="stroke" strokeWidth=\{2\.6\} strokeJoin="round" color=\{BRAND\.gold\} \/>/);
   assert.doesNotMatch(src, /tomorrowFlame: \{ opacity/);
   assert.match(src, /<TomorrowFlame day=\{goal\.streak \+ 1\} \/>/);
+});
+
+test('wave 5 round 3: the stage is built ahead while the map is busy and starts the frame the map is free', () => {
+  const hook = read('src/components/park/useParkArrival.tsx');
+  const src = read('src/components/park/ParkArrivalMoment.tsx');
+  assert.match(hook, /const stageable = due && !playing && parkId !== null && !!tasks && boss\?\.parkId === parkId && !!playerId && goalSettled === fetchKey;/,
+    'staged as soon as everything but a free map is in (no `ready`)');
+  assert.doesNotMatch(hook.slice(hook.indexOf('const stageable'), hook.indexOf('// Start it:')), /setSeen|setItem|arrivals\.current \+= 1/, 'nothing is marked seen while staged');
+  assert.match(hook, /cards: stagedCards \?\? cardsFor\(boss\.value\)/, 'the staged cards play as they are');
+  assert.match(hook, /const shown = playing \?\? staged;\n  const hold = !playing;/);
+  assert.match(hook, /golden=\{shown\.golden\} hold=\{hold\} onDone=\{onDone\}/);
+  assert.match(src, /if \(holdRef\.current \|\| !laidOut\.current/, 'a held stage never starts');
+  assert.match(src, /useEffect\(\(\) => \{\n    if \(!hold\) tryStart\(\);/, 'and starts once the map is free');
+  assert.match(src, /accessibilityElementsHidden=\{hold\} importantForAccessibility=\{hold \? 'no-hide-descendants' : 'auto'\}/);
+  // Same key while staged and playing: the built stage is the one that plays (no remount).
+  assert.match(hook, /key=\{`\$\{shown\.parkId\}:\$\{shown\.replay \? 'r' : 'f'\}`\}/);
 });

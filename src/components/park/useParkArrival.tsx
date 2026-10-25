@@ -173,6 +173,18 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     tasks: tasks ?? [], nextBoss: bossValue, parkNames: [park?.name, park?.display_name], now: new Date(),
   }), [tasks, park?.name, park?.display_name]);
 
+  // Wave 5 round 3: everything but a free map is in (the coins, the boss answer, today's Daily 3): build the stage now,
+  // invisibly and in its small steps, while the map finishes what it is doing, so it starts on the frame the map is
+  // free (its build used to start only then and added about 0.7 s, more on a busy phone). Nothing is marked seen
+  // until it really plays; the staged stage takes no taps and is hidden from the screen reader.
+  const stageable = due && !playing && parkId !== null && !!tasks && boss?.parkId === parkId && !!playerId && goalSettled === fetchKey;
+  const stagedCards = useMemo(() => (stageable && boss ? cardsFor(boss.value) : null), [stageable, boss, cardsFor]);
+  const staged = stagedCards && parkId !== null ? (() => {
+    const golden = arrivalIsGolden(arrivals.current + 1);
+    return { parkId, cards: stagedCards, goal, replay: false, repeat: arrivalIsRepeat(history.current, parkId, day),
+      pose: golden ? 1 : finnPose(parkId, day), golden };
+  })() : null;
+
   // Start it: due, the map is free, the coins and the boss answer are in.
   // Each park entry counts (QA "always" mode replays per entry, never in a loop).
   const entry = useRef({ parkId: parkId as number | null, count: 0 });
@@ -197,8 +209,9 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     arrivals.current += 1;
     const golden = arrivalIsGolden(arrivals.current);
     void AsyncStorage.setItem(COUNT_KEY(playerId), String(arrivals.current)).catch(() => undefined);
-    setPlaying({ parkId, cards: cardsFor(boss.value), goal, replay: false, repeat, pose: golden ? 1 : finnPose(parkId, day), golden });
-  }, [due, ready, playing, parkId, tasks, boss, playerId, day, seen, cardsFor, always, goalSettled, fetchKey, goal]);
+    // The stage built while the map was busy plays as it is (the same cards, so nothing re-renders it).
+    setPlaying({ parkId, cards: stagedCards ?? cardsFor(boss.value), goal, replay: false, repeat, pose: golden ? 1 : finnPose(parkId, day), golden });
+  }, [due, ready, playing, parkId, tasks, boss, playerId, day, seen, cardsFor, always, goalSettled, fetchKey, goal, stagedCards]);
 
   // Leaving the park ends the moment at once.
   useEffect(() => { if (playing && playing.parkId !== parkId) setPlaying(null); }, [parkId, playing]);
@@ -234,13 +247,18 @@ export default function useParkArrival({ playerId, park, tasks, ready, projector
     setEndedAt(current => (playingParkId === null ? current : { parkId: playingParkId, at: Date.now() }));
     setPlaying(null);
   }, [playingParkId]);
-  const layer = useMemo(() => (playing ? (
+  const shown = playing ?? staged;
+  const hold = !playing;
+  const layer = useMemo(() => (shown ? (
     <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 60 }]}>
-      <ParkArrivalMoment key={`${playing.parkId}:${playing.replay ? 'r' : 'f'}`} parkName={parkName} cards={playing.cards}
-        goal={playing.goal} projector={projector} replay={playing.replay} repeat={playing.repeat} pose={playing.pose}
-        golden={playing.golden} onDone={onDone} />
+      <ParkArrivalMoment key={`${shown.parkId}:${shown.replay ? 'r' : 'f'}`} parkName={parkName} cards={shown.cards}
+        goal={shown.goal} projector={projector} replay={shown.replay} repeat={shown.repeat} pose={shown.pose}
+        golden={shown.golden} hold={hold} onDone={onDone} />
     </View>
-  ) : null), [playing, parkName, projector, onDone]);
+  ) : null),
+  // The staged stage re-renders only while it waits (never once it plays: `playing` is fixed when it starts).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [shown?.parkId, shown?.cards, shown?.goal, shown?.replay, shown?.repeat, shown?.pose, shown?.golden, hold, parkName, projector, onDone]);
   // Lane capture builds only: the frame probe sits on the real map next to the moment (never in a store bundle).
   const probeLabel = playing ? `${playing.golden ? 'golden' : playing.repeat ? 'repeat' : 'arrival'} ${parkName}` : '';
   const withProbe = MAP_CAPTURE ? <>{layer}<MapMomentProbe running={!!playing} label={probeLabel} /></> : layer;

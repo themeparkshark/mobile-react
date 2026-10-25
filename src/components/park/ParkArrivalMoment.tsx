@@ -72,6 +72,11 @@ export interface ParkArrivalMomentProps {
   readonly pose?: number;
   /** The rare golden arrival (every fifth): gold rain with tumbling coins, Finn in a crown, a shine on the ribbon. */
   readonly golden?: boolean;
+  /**
+   * Built ahead, waiting for the map to be free: the stage builds its steps invisibly and starts the moment this turns
+   * false (it takes no taps and is hidden from the screen reader while it waits).
+   */
+  readonly hold?: boolean;
   readonly onDone: () => void;
 }
 
@@ -82,7 +87,8 @@ function ParkArrivalMoment(props: ParkArrivalMomentProps) {
   return <ArrivalStage {...props} reduced={preference} />;
 }
 
-function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat: repeatVisit = false, pose = 0, golden = false, onDone, reduced }: ParkArrivalMomentProps & { readonly reduced: boolean }) {
+function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat: repeatVisit = false, pose = 0, golden = false, hold = false, onDone, reduced }: ParkArrivalMomentProps & { readonly reduced: boolean }) {
+  const holdRef = useRef(hold); holdRef.current = hold;
   // A golden arrival is always the full party, even on a repeat visit.
   const repeat = repeatVisit && !golden;
   const { width, height } = useWindowDimensions();
@@ -334,12 +340,19 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
 
   const armed = useRef(false);
   const tryStart = () => {
-    if (!laidOut.current || !artReady.current || !mountedAll.current || armed.current || phase.current !== 'arming') return;
+    if (holdRef.current || !laidOut.current || !artReady.current || !mountedAll.current || armed.current || phase.current !== 'arming') return;
     armed.current = true;
     // A few frames after layout (drawn at 1%, so every layer is decoded and rasterized), the first visible
     // frame is the first frame of the moment.
     timers.current.push(setTimeout(() => requestAnimationFrame(() => go()), A.armMs));
   };
+
+  // Staged ahead: the map is free now, start (if every step has landed; otherwise the last step starts it).
+  useEffect(() => {
+    if (!hold) tryStart();
+    // tryStart reads refs only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hold]);
 
   useEffect(() => {
     // The art is preloaded while the arrival waits its turn (useParkArrival); never hold the moment on a slow decode.
@@ -420,7 +433,8 @@ function ArrivalStage({ parkName, cards, goal, projector, replay = false, repeat
   }));
 
   return (
-    <Animated.View ref={rootRef} collapsable={false} style={[StyleSheet.absoluteFill, rootStyle]} pointerEvents="box-none">
+    <Animated.View ref={rootRef} collapsable={false} style={[StyleSheet.absoluteFill, rootStyle]} pointerEvents="box-none"
+      accessibilityElementsHidden={hold} importantForAccessibility={hold ? 'no-hide-descendants' : 'auto'}>
       {/* Plain view (never an animated one) tells us the stage has laid out. */}
       <View pointerEvents="none" style={StyleSheet.absoluteFill} onLayout={() => { laidOut.current = true; tryStart(); }} />
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrimStyle]}>
