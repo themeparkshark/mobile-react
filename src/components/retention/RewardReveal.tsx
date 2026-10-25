@@ -146,7 +146,9 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   // button, under the Dynamic Island and above the home bar): the chest takes what the rows leave.
   // The rows never push the card past the screen (a milestone day with gear AND a mystery box): past this they scroll,
   // and each hero card slides into view as it lands.
-  const rowsCap = Math.max(200, height - CHROME_KNOWN - (compact ? 96 : 120));
+  // A small phone (SE) keeps a shorter rows window (they scroll there anyway), so the whole card with Alex's thicker
+  // frame and the bigger tomorrow pill still ends above the bottom of the screen.
+  const rowsCap = Math.max(compact ? 166 : 200, height - CHROME_KNOWN - (compact ? 96 : 120));
   const expectedRowsH = known && expectRows ? Math.min(rowsCap, rowsFor(expectRows.small, expectRows.big)) : 0;
   const size = known
     ? Math.max(compact ? 96 : 120, Math.min(width * 0.5, 210, height - CHROME_KNOWN - expectedRowsH))

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
@@ -52,6 +52,8 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
   const from = moment.kind === 'milestone' ? Math.max(0, moment.day - 1) : moment.from;
   const beats = momentBeats(big ? 'levelUp' : 'coinRepeat', { reduced: reducedMotion });
   const budget = usePowerBudget();
+  // A small phone (SE): a shorter stage, so the card with its frame, badge, tomorrow pill and button fits the screen.
+  const compact = useWindowDimensions().height < 720;
   const boost = useSharedValue(reducedMotion ? 0 : big ? 0 : -0.35);
   const whoosh = useSharedValue(reducedMotion ? 1 : big ? 0.7 : 0.6);
   // Frame 1 is never empty: a milestone opens on a charged flame (0.7) with its gold already glowing.
@@ -174,7 +176,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
     <Animated.View style={[styles.gate, gateStyle]}>
     <Pressable onPress={ready ? onDone : undefined} style={styles.card} accessibilityLabel={`${to} day flame`}>
       <CardSurface />
-      <View style={[styles.stage, big && styles.stageBig]}>
+      <View style={[styles.stage, big && styles.stageBig, compact && (big ? styles.stageBigCompact : styles.stageCompact)]}>
         <GoldBurst size={big ? 330 : 220} amount={gold} bloom={bloom} reduced={reducedMotion} spin={budget.level === 'full'} style={styles.abs} />
         <RadialFlash flash={flash} size={260} />
         <Animated.View style={flameStyle}>
@@ -285,6 +287,8 @@ const styles = StyleSheet.create({
     paddingTop: 16, paddingBottom: 14, paddingHorizontal: 14, alignItems: 'center', overflow: 'hidden' },
   stage: { width: '100%', height: 230, alignItems: 'center', justifyContent: 'center' },
   stageBig: { height: 270 },
+  stageCompact: { height: 196 },
+  stageBigCompact: { height: 226 },
   chargeRing: { position: 'absolute', width: 170, height: 170, borderRadius: 85, borderWidth: 5, borderColor: '#FFE07A' },
   abs: { position: 'absolute' },
   center: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },
