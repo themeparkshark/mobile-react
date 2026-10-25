@@ -1,10 +1,10 @@
-import { forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AccessibilityInfo, Image as RNImage, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Canvas, Group, Image as SkImageNode, ImageFormat, LinearGradient as SkLinearGradient, Path as SkPath, Picture, Rect, RadialGradient, Skia, vec, type SkImage } from '@shopify/react-native-skia';
+import { Canvas, Circle as SkCircle, DashPathEffect, Group, Image as SkImageNode, ImageFormat, LinearGradient as SkLinearGradient, Path as SkPath, Picture, Rect, RadialGradient, Skia, vec, type SkImage } from '@shopify/react-native-skia';
 
 const WARM_SCALE = [{ scale: 0.01 }];
 /** Stamp art per ride (the ride's own vehicle). Unbuilt rides show a lock instead. */
@@ -30,7 +30,7 @@ import { CatchRaysArt } from './CatchRays';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { DURATION, EASE, SPRING, flashPeak, momentParticles } from '../../ui/motionEasing';
 import { GOLD_FX, PARTICLES } from '../../ui/motion';
-import { homeStarAt, nextGoalAt, WHERE, whereAt, whereFlightAt } from '../../components/map/alive/mapWow';
+import { BEACON, beaconAt, heldFromAnswers, homeStarAt, homeStarLand, MISS, missAt, missRingAt, nextGoalAt, WHERE, whereAt, whereFlightAt, whereTrailAt } from '../../components/map/alive/mapWow';
 import { arcPoint, beamAt, BEAM, CONFETTI, burstVariant, BURST_RINGS_MAX, BURST_STARS_MAX, catchFrame, catchHaptics, catchPlan, catchStage, coinStreamAt, coinStreamPlan, COIN_STREAM, type CatchBeatHaptic, type CatchFrame, type CatchPlan } from '../../components/map/alive/mapWow';
 import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { usePowerBudget } from '../../power';
@@ -47,7 +47,8 @@ import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, setRide
 import { useRideArt } from './ridePhoto/rideAssets';
 import { catchHaptic, catchMark, catchSound, catchTraceBuffer } from './ridePhoto/catchAudio';
 import { touchHeal, useCommitHeal } from '../../components/map/alive/commitHeal';
-import { catchDim, catchHidePivot, catchKickX, catchKickY, catchPinPose, dimCatchChrome, setCatchOpen, showCatchChrome } from './catchPresence';
+import { catchDim, catchHidePivot, catchKickX, catchKickY, catchPinPose, dimCatchChrome, setCatchOpen, sharkShrug, showCatchChrome } from './catchPresence';
+
 import reportRideOff from '../../api/endpoints/me/prep-items/ride-off';
 import { READY_RIDES, RIDES, rideStamps, ridesSnappedLine, type RideKind, type Sky } from './ridePhoto/rides';
 import { loadRideMemory, recordRide, ridesSnapped } from './ridePhoto/rides/rideMemory';
@@ -105,6 +106,24 @@ export function resetRideHintForPreview(): void {
   void AsyncStorage.removeItem(RIDE_HINT_KEY).catch(() => undefined);
 }
 void AsyncStorage.getItem(RIDE_HINT_KEY).then(value => { rideHintSeen = value === '1'; }).catch(() => { rideHintSeen = false; });
+
+/**
+ * Wave 5 round 3: the player's first catch on this phone is the hero (centre stage, Alex's star across most of the
+ * screen, a screen-wide bloom). Unknown until storage answers, and then never again once a catch lands.
+ */
+const FIRST_CATCH_KEY = 'home_first_catch_done_v1';
+let firstCatchDone: boolean | null = null;
+void AsyncStorage.getItem(FIRST_CATCH_KEY).then(value => { firstCatchDone = value === '1'; }).catch(() => { firstCatchDone = true; });
+/** Development captures: the next catch plays as the first ever (memory only; a real catch stores it again). */
+export function resetFirstCatchForPreview(): void { firstCatchDone = false; }
+function markFirstCatchDone(): void {
+  if (firstCatchDone === true) return;
+  firstCatchDone = true;
+  void AsyncStorage.setItem(FIRST_CATCH_KEY, '1').catch(() => undefined);
+}
+/** Wave 5 round 3: this session's server answer times (ms from the tap); a repeat holds its breath about that long. */
+const answerTimes: number[] = [];
+let shrugCount = 0;
 
 const TICKET_ICON = require('../../../assets/images/ticket-icon.png');
 
@@ -164,7 +183,7 @@ const INK_SPARK = require('../../../assets/fx/spark.webp');
 /** Haptic intents a beat can name (beats carry an index, so the UI thread passes numbers only). */
 const BEAT_HAPTICS: readonly CatchBeatHaptic[] = ['tapLight', 'tickSelection', 'hitMedium', 'comboHeavy', 'success', 'hitSoft'];
 /** Beat kinds on the catch clock (fired from the UI thread with runOnJS: sound, haptics, marks only). */
-const BEAT = { haptic: 1, hitstop: 2, burst: 3, success: 4, fly: 5, land: 6, coin: 7, tick: 8, done: 9, badge: 10, tickets: 11, exit: 12, beam: 13 } as const;
+const BEAT = { haptic: 1, hitstop: 2, burst: 3, success: 4, fly: 5, land: 6, coin: 7, tick: 8, done: 9, badge: 10, tickets: 11, exit: 12, beam: 13, star: 14 } as const;
 type Beat = { at: number; kind: number; arg: number };
 /**
  * True on the UI thread. A view's first-render style is computed on the JS thread, whose copies of the clock
@@ -236,7 +255,7 @@ function BurstStar({ index, t, count, home, to }: { index: number; t: SharedValu
     const n = count.value;
     if (p <= 0 || p >= 1 || index >= n) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }, { rotate: '0deg' }] };
     if (home.value) {
-      const h = homeStarAt(p, index, n, to.value);
+      const h = homeStarAt(p * DURATION.sparkle, index, n, to.value);
       if (!h) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }, { rotate: '0deg' }] };
       return { opacity: 1, transform: [{ translateX: h.x }, { translateY: h.y }, { scale: h.scale }, { rotate: `${(index % 2 ? -1 : 1) * p * 300}deg` }] };
     }
@@ -250,9 +269,26 @@ function BurstStar({ index, t, count, home, to }: { index: number; t: SharedValu
         { scale: (p < 0.12 ? p / 0.12 : 1) * (1.15 - 0.45 * p) }, { rotate: `${(index % 2 ? -1 : 1) * p * 220}deg` }],
     };
   });
-  return <Animated.View pointerEvents="none" style={[styles.burstStar, style]}>
-    <Image source={MINI_STAR} style={styles.fxFill} contentFit="contain" transition={0} />
-  </Animated.View>;
+  // Wave 5 round 3: a treat star leaves a short gold trail (two sparkles 35 and 70 ms behind it) on its way home.
+  const trailA = useAnimatedStyle(() => homeTrail(t.value, 35));
+  const trailB = useAnimatedStyle(() => homeTrail(t.value, 70));
+  function homeTrail(p: number, lag: number) {
+    'worklet';
+    const h = home.value && p > 0 && p < 1 && index < count.value ? homeStarAt(p * DURATION.sparkle - lag, index, count.value, to.value) : null;
+    if (!h) return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 0 }] };
+    return { opacity: lag > 50 ? 0.45 : 0.75, transform: [{ translateX: h.x }, { translateY: h.y }, { scale: h.scale * (lag > 50 ? 0.45 : 0.65) }] };
+  }
+  return <>
+    <Animated.View pointerEvents="none" style={[styles.burstStar, trailB]}>
+      <RNImage source={MAP_SPARKLE} style={[styles.fxFill, { tintColor: GOLD_FX.rays }]} resizeMode="contain" fadeDuration={0} />
+    </Animated.View>
+    <Animated.View pointerEvents="none" style={[styles.burstStar, trailA]}>
+      <RNImage source={MAP_SPARKLE} style={[styles.fxFill, { tintColor: GOLD_FX.raysSoft }]} resizeMode="contain" fadeDuration={0} />
+    </Animated.View>
+    <Animated.View pointerEvents="none" style={[styles.burstStar, style]}>
+      <Image source={MINI_STAR} style={styles.fxFill} contentFit="contain" transition={0} />
+    </Animated.View>
+  </>;
 }
 
 /**
@@ -462,6 +498,74 @@ const CatchBadge = memo(function CatchBadge({ st, summary, photo, bonusXp, newRi
   );
 });
 
+/**
+ * Wave 5 round 3: what the badge shows (the server's answer) lives in a tiny store outside the catch layer. The answer
+ * used to commit the whole catch layer (about 40 animated-style hooks re-checked, every worklet closure rebuilt) on the
+ * frame the burst or the Reduce Motion badge starts; now only the badge host re-renders.
+ */
+type BadgeContent = { readonly summary: CatchSummary | null; readonly on: boolean; readonly coinStamp: number | null;
+  readonly nextArt: ReturnType<typeof findImageSource> | null };
+type BadgeStore = { get: () => BadgeContent; set: (patch: Partial<BadgeContent>) => void; subscribe: (fn: () => void) => () => void };
+const EMPTY_BADGE: BadgeContent = { summary: null, on: false, coinStamp: null, nextArt: null };
+function createBadgeStore(): BadgeStore {
+  let state = EMPTY_BADGE;
+  const subs = new Set<() => void>();
+  return {
+    get: () => state,
+    set: patch => {
+      const next = { ...state, ...patch };
+      if ((Object.keys(patch) as (keyof BadgeContent)[]).every(key => next[key] === state[key])) return;
+      state = next;
+      subs.forEach(fn => fn());
+    },
+    subscribe: fn => { subs.add(fn); return () => { subs.delete(fn); }; },
+  };
+}
+const BadgeHost = memo(function BadgeHost({ store, st, photo, bonusXp, newRide, art, name, color, left, bottom }: {
+  readonly store: BadgeStore; readonly st: BadgeStyles; readonly photo: { image: SkImage | null; grade: PhotoGrade } | null;
+  readonly bonusXp: number | null; readonly newRide: { name: string; line: string; stamps: ReturnType<typeof rideStamps> } | null;
+  readonly art: ReturnType<typeof findImageSource> | null; readonly name: string; readonly color: string; readonly left: number; readonly bottom: number;
+}) {
+  const c = useSyncExternalStore(store.subscribe, store.get);
+  // A plain (React) gate over the badge, on from the server's answer to the done frame (round 4): a finished badge never reappears.
+  return <View pointerEvents="none" style={[StyleSheet.absoluteFill, !c.on && styles.gateOff]}>
+    <CatchBadge st={st} summary={c.summary} photo={photo} bonusXp={bonusXp} newRide={newRide} art={art} name={name} color={color}
+      left={left} bottom={bottom} coinStamp={c.coinStamp} nextArt={c.nextArt} />
+  </View>;
+});
+/** The where-next disc's art (the same store, so the answer never commits the catch layer). */
+function WhereArt({ store }: { readonly store: BadgeStore }) {
+  const art = useSyncExternalStore(store.subscribe, () => store.get().nextArt);
+  return art ? <RNImage source={art as never} style={styles.nextArt} resizeMode="contain" fadeDuration={0} /> : null;
+}
+
+/** Wave 5 round 3: one dot of the where-next disc's dotted trail (always mounted, still until a where flight runs). */
+function WhereDot({ index, clock, where }: { index: number; clock: SharedValue<number>;
+  where: SharedValue<{ on: number; at: number; x0: number; y0: number; x1: number; y1: number }> }) {
+  const style = useAnimatedStyle(() => {
+    if (!onUi()) return HIDDEN;
+    const w = where.value;
+    const d = w.on ? whereTrailAt(clock.value - w.at, index, { x: w.x0, y: w.y0 }, { x: w.x1, y: w.y1 }) : null;
+    if (!d) return { opacity: 0, transform: [{ translateX: -999 }, { translateY: -999 }, { scale: 0 }] };
+    return { opacity: d.alpha, transform: [{ translateX: d.x - 6 }, { translateY: d.y - 6 }, { scale: d.scale }] };
+  });
+  return <Animated.View pointerEvents="none" style={[styles.whereDot, style]} />;
+}
+
+/** Wave 5 round 3: the miss's dotted "come closer" ring, drawn once with Skia (static; its wrapper moves). */
+const MISS_RING = 96;
+const MissRingArt = memo(function MissRingArt() {
+  const c = MISS_RING / 2;
+  return <Canvas style={{ width: MISS_RING, height: MISS_RING }} pointerEvents="none">
+    <SkCircle cx={c} cy={c} r={c - 6} style="stroke" strokeWidth={7} strokeCap="round" color={BRAND.navy}>
+      <DashPathEffect intervals={[2, 13]} />
+    </SkCircle>
+    <SkCircle cx={c} cy={c} r={c - 6} style="stroke" strokeWidth={4.5} strokeCap="round" color="#ffffff">
+      <DashPathEffect intervals={[2, 13]} />
+    </SkCircle>
+  </Canvas>;
+});
+
 type FxStyles = Record<'halo' | 'beam' | 'splash' | 'water' | 'gather' | 'spark' | 'star' | 'flash' | 'item', ReturnType<typeof useAnimatedStyle<ViewStyle>>>;
 /** The shared values the effects pools read (stable for the component's life). */
 type FxValues = { readonly frame: SharedValue<CatchFrame>; readonly clock: SharedValue<number>; readonly plan: SharedValue<CatchPlan>;
@@ -593,7 +697,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const layerRef = useRef<View>(null);
   const stage = useRef<RideStageHandle>(null);
   const [layer, setLayer] = useState({ width: 0, height: 0 });
-  const [summary, setSummary] = useState<CatchSummary | null>(null);
+  /** Wave 5 round 3: the badge's content (see BadgeStore): the answer re-renders only the badge host. */
+  const badgeStore = useMemo(createBadgeStore, []);
   const [showing, setShowing] = useState<CatchRequest | null>(null);
   /** Wave 4: the confetti pieces mount only for the grand catch (the same commit as the catch's own art). */
   const [grandCatch, setGrandCatch] = useState(false);
@@ -615,16 +720,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (typeof n === 'number') cascadeSV.value = n;
   };
   const [bonusXp, setBonusXp] = useState<number | null>(null);
-  const [coinStamp, setCoinStamp] = useState<number | null>(null);
-  const [nextArt, setNextArt] = useState<ReturnType<typeof findImageSource> | null>(null);
   /** Round 5: the caught find's set page, read from the tap (one light GET) so the badge can show the next goal. */
   const commonSet = useRef<{ slug: string; items: readonly BookItem[] | null } | null>(null);
-  /**
-   * Round 4: a plain (React) gate over the badge, on from the server's answer to the done frame. A React commit
-   * after the badge has left could flash an old frame of its animated props on Fabric (r4 clip, one frame at
-   * 5.955 s); the gate's opacity 0 rides in that same commit, so a finished badge can never reappear.
-   */
-  const [badgeOn, setBadgeOn] = useState(false);
   // v2: the full-screen catch reveal for Ride Photo catches (the print, the pop, the tally, the book page).
   const [shownReveal, setReveal] = useState<CatchRevealData | null>(null);
   /** Bumped by every prime, so a finished catch's deferred clears never touch the next ride. */
@@ -677,7 +774,16 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const continued = useSharedValue(0);
   const endAt = useSharedValue(0);
   const holdWobble = useSharedValue(0);
-  const miss = useSharedValue(0);
+  /** Wave 5 round 3: ms since the server said no (the funny miss, mapWow missAt), -1 when this catch has not missed. */
+  const missT = useSharedValue(-1);
+  /** 1 when the miss shows the dotted "come closer" ring (a retryable miss, not a find that is gone). */
+  const missRingOn = useSharedValue(0);
+  const missX = useSharedValue(0);
+  const missY = useSharedValue(0);
+  /** Wave 5 round 3: the hero's screen-wide bloom, and the where-next beacon (ms since the disc landed, -1 off). */
+  const heroSV = useSharedValue(0);
+  const beaconT = useSharedValue(-1);
+  const beaconOk = useSharedValue(0);
   const skipSV = useSharedValue(0);
   const stageX = useSharedValue(0);
   const stageY = useSharedValue(0);
@@ -750,7 +856,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     if (!clockOn.value || copyOn.value) return null;
     const f = frame.value;
     // The rise is part of the glide (the stage point already sits risePt above the pin).
-    return { x: (stageX.value - flyFromX.value) * f.glide, y: (stageY.value - flyFromY.value) * f.glide, rot: f.wobble + holdWobble.value };
+    return { x: (stageX.value - flyFromX.value) * f.glide, y: (stageY.value - flyFromY.value) * f.glide - f.hop, rot: f.wobble + holdWobble.value };
   }, (pose, prev) => {
     if (!pose) { if (prev) catchPinPose.value = { x: 0, y: 0, rot: 0 }; return; }
     catchPinPose.value = pose;
@@ -762,7 +868,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   });
   // Channels the shared fx components take as values.
   const fxT = useDerivedValue(() => (clockOn.value ? frame.value.fx : -1));
-  const gatherT = useDerivedValue(() => (clockOn.value && cc.value < planSV.value.burstAt ? frame.value.charge * (1 - miss.value) : 0));
+  const gatherT = useDerivedValue(() => (clockOn.value && cc.value < planSV.value.burstAt ? frame.value.charge * (missT.value < 0 ? 1 : 0) : 0));
 
   /** A token per common catch, so a late beat from an old clock never touches the next one. */
   /**
@@ -770,7 +876,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
    * hands back the old value until the UI thread has run the write, which is why the 10th-catch beam never fired).
    */
   const runRef = useRef<{ token: number; item: PrepItemType; data: RedeemPrepItemResponseType['data'] | null; next: CatchSummary | null; burst: boolean;
-    beam: boolean; grand: boolean } | null>(null);
+    beam: boolean; grand: boolean; pitch: number } | null>(null);
   const streamIdRef = useRef(0);
   /** Hands the catch from the pin to the layer's copy (once the copy has drawn, or after 280 ms). */
   const startRef = useRef<(() => void) | null>(null);
@@ -830,7 +936,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     flyFromY.value = start.y;
     stageX.value = start.x;
     stageY.value = start.y;
-    itemGone.value = 0; miss.value = 0; holdWobble.value = 0; copyOn.value = 0;
+    itemGone.value = 0; cancelAnimation(missT); missT.value = -1; missRingOn.value = 0; holdWobble.value = 0; copyOn.value = 0;
     // The clock restarts here (before the first frame of the layer's copy), so the copy starts unsquished
     // at the pin's own spot, and a fresh stream id rests the counter's old roll at its final digits.
     const sid = nextHudStreamId();
@@ -861,8 +967,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const land = useCallback(async (item: PrepItemType, data: RedeemPrepItemResponseType['data'], token: number, viaPrint: boolean) => {
     const motion = !latest.current.reducedMotion;
     const next = catchSummary(item, data);
-    setSummary(next);
-    setBadgeOn(true);
+    badgeStore.set({ summary: next, on: true });
     latest.current.onCascade?.(true);
     setBonusXp(typeof data.photo?.bonus_xp === 'number' && data.photo.bonus_xp > 0 ? data.photo.bonus_xp : null);
     // Via the print, the map and player updates wait out the close and the flight (their commits never land in
@@ -981,10 +1086,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       if (finished) setReadyItem(finished);
       setStageNonce(n => n + 1);
       if (primeSeq.current !== seq) return;
-      setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
+      badgeStore.set({ summary: null }); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
     }));
     setShowing(null);
-    setBadgeOn(false);
+    badgeStore.set({ on: false });
     reveal.value = 0; gradeIn.value = 0;
     // The (already invisible) reveal clears two frames later, off the done frame; its photo is released after.
     revealedRef.current = false; revealCovered.value = false; revealHand.current = null; escapeHand.current = null;
@@ -1084,11 +1189,21 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     resolved.value = 1;
     if (waiting.value) continueRun();
   };
-  const markMiss = () => {
+  /**
+   * Wave 5 round 3: the server said no. On this UI frame the clock freezes where it is and the funny miss starts (a
+   * boing, a hop back to its spot, a "nope" shake; mapWow missAt), with the dotted "come closer" ring when walking
+   * closer could help. It used to wait for the held frame, then a 1 s quiet, then a text line.
+   */
+  const markMiss = (ring: boolean) => {
     'worklet';
     resolved.value = -1;
     cancelAnimation(holdWobble);
     holdWobble.value = 0;
+    cancelAnimation(cc);
+    missX.value = flyFromX.value; missY.value = flyFromY.value;
+    missRingOn.value = ring ? 1 : 0;
+    missT.value = 0;
+    missT.value = withTiming(MISS.ringAt + MISS.ringMs, { duration: MISS.ringAt + MISS.ringMs, easing: Easing.linear });
   };
   const onSkipAccepted = () => {
     if (!runRef.current || skipped.current) return;
@@ -1133,7 +1248,12 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         // Wave 5 round 2: every milestone adds a second heavy hit (the 10th), the grand one a third.
         if (run.beam) setTimeout(() => { if (runRef.current === run) catchHaptic('comboHeavy', 3); }, 120);
         if (run.grand) setTimeout(() => { if (runRef.current === run) catchHaptic('comboHeavy', 3); }, 260);
-        catchSound('chime', run.grand ? { volume: 0.9, pitch: 4 } : { volume: 0.8 });
+        // Wave 5 round 3: ordinary repeats step their chime up (round-robin), so back-to-back catches never sound the same.
+        catchSound('chime', run.grand ? { volume: 0.9, pitch: 4 } : run.pitch ? { volume: 0.8, pitch: run.pitch } : { volume: 0.8 });
+        break;
+      case BEAT.star:
+        // A treat star lands in the counter: a rising tick, and a light buzz on every other star.
+        if (!quiet) { catchSound('tick', { pitch: 6 + arg * 2, volume: 0.55 }); if (arg % 2 === 0) catchHaptic('tickSelection', 1); }
         break;
       case BEAT.success: if (!quiet) catchHaptic('success', 3); break;
       case BEAT.tickets: {
@@ -1205,7 +1325,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const motion = !latest.current.reducedMotion;
     [badgeIn, reveal, progress, gradeIn, barGlow].forEach(value => { cancelAnimation(value); value.value = 0; });
     badgeKick.value = 1;
-    setSummary(null); setPhoto(null); setCascade(0); setBonusXp(null); setCoinStamp(null); setNextArt(null);
+    badgeStore.set({ summary: null, coinStamp: null, nextArt: null }); setPhoto(null); setCascade(0); setBonusXp(null);
+    cancelAnimation(beaconT); beaconT.value = -1;
     isNewSV.value = 0;
     setShowing(request);
     const start = fromPoint(request);
@@ -1246,12 +1367,14 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // gathers, one held frame with a soft flash, a gold burst where the find pops to its hero size and
     // throws its coins into the counter, then the badge rises, the find flies into its slot, the bar ticks.
     // Round 4: this catch's burst (milestones only, never chance: every 5th stars, every 10th the beam, the 25th grand).
-    const variant = burstVariant(sessionCatches + 1);
+    // Wave 5 round 3: the first catch ever is the hero, and a golden find (the server's flag) gets the beam.
+    const variant = burstVariant(sessionCatches + 1, { firstEver: firstCatchDone === false, golden: item.golden_hour === true });
     const calmPower = power.level === 'calm';
     // Round 5: a milestone (the 10th and every 25th) plays the full first-catch show (the long hold, the beam), so the
-    // rare big moment is the bright one; ordinary repeats stay snappy.
-    const plan = catchPlan({ reduced: !motion, repeat: sessionCatches > 0 && !variant.milestone, milestone: variant.milestone && motion, calm: calmPower,
-      treat: variant.treat });
+    // rare big moment is the bright one; ordinary repeats stay snappy. Wave 5 round 3: a repeat holds its breath about as
+    // long as this session's server answers take, so its burst lands on its planned beat.
+    const plan = catchPlan({ reduced: !motion, repeat: sessionCatches > 0 && !variant.milestone && !variant.hero, milestone: variant.milestone && motion, calm: calmPower,
+      treat: variant.treat, heldAt: heldFromAnswers(answerTimes), fidget: variant.fidget });
     // The beam and the grand show are known from the tap (the beam drops 300 ms before the held frame, often
     // before the server answers), so they are set here, before the clock starts, and kept as JS flags.
     const beam = motion && variant.beam;
@@ -1261,7 +1384,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     // The stage keeps the whole inked burst on screen: below the header, above the tab bar, 12 pt from the
     // edges. A find already well placed just rises (the badge rises later, after the ink has faded).
     const area = { width: layer.width, top: insets.top + 40 - off.y, bottom: window.height - insets.bottom - 96 - off.y };
-    const stage = motion ? catchStage(start, plan.risePt, area, inkReach(variant.inkScale)) : start;
+    // Wave 5 round 3: the session's first catch, the hero and the milestones glide to the middle of the screen (Pokemon GO
+    // centres the catch); ordinary repeats burst near their own spot, so they stay quick.
+    const stageFrom = variant.centre ? { x: layer.width / 2, y: (area.top + area.bottom) / 2 + plan.risePt } : start;
+    const stage = motion ? catchStage(stageFrom, plan.risePt, area, inkReach(variant.inkScale)) : start;
     stageX.value = stage.x; stageY.value = stage.y;
     // The map kicks away from the find, toward the far side of the screen (down when the find is centred).
     const dx = layer.width / 2 - stage.x, dy = layer.height / 2 - stage.y;
@@ -1271,21 +1397,26 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     planSV.value = plan;
     peakFlash.value = flashPeak(isDimFlashingLightsEnabled(), !motion);
     endAt.value = plan.doneAt;
-    miss.value = 0; coinN.value = 0; resolved.value = 0;
+    coinN.value = 0; resolved.value = 0;
     beamOn.value = beam ? 1 : 0; grandSV.value = grand ? 1 : 0;
     inkTurn.value = ((sessionCatches + 1) * 47) % 360;
     inkScale.value = variant.inkScale; ringN.value = variant.rings; starN.value = variant.stars;
     fanSV.value = motion && variant.fan ? 1 : 0; ring2SV.value = motion && variant.counterRing ? 1 : 0; homeSV.value = 0;
+    heroSV.value = motion && variant.hero ? 1 : 0;
+    // The where-next beacon is an extra: never on Battery Saver or in calm power (Reduce Motion has no where flight).
+    beaconOk.value = power.ambient && !power.lowPower ? 1 : 0;
     whereSV.value = { on: 0, at: 0, x0: 0, y0: 0, x1: 0, y1: 0 };
     const ladder: Beat[] = catchHaptics(plan).filter(h => h.at > 0 && h.at < plan.hitStopAt)
       .map(h => ({ at: h.at, kind: BEAT.haptic, arg: BEAT_HAPTICS.indexOf(h.intent) }));
     beats.value = ladder;
     skipped.current = false;
-    runRef.current = { token, item, data: null, next: null, burst: false, beam, grand };
+    runRef.current = { token, item, data: null, next: null, burst: false, beam, grand, pitch: variant.pitch };
     clockOn.value = 1;
     // A new balance that arrives before the coins waits for them (the stream below takes over the counter).
     holdHud('coins', 3000);
     catchMark(plan.repeat ? 'tap-repeat' : 'tap');
+    // Capture tooling reads the plan from the trace (the repeat's held frame now follows the server's answer times).
+    catchMark(`plan:${variant.kind}:h${plan.hitStopAt}:b${plan.burstAt}:l${plan.landAt}:d${plan.doneAt}`);
     catchHaptic('tapLight', 3);
     catchSound('pop');
     // Wave 5 round 2: the clock starts on the tap, so every beat lands on its planned time (it used to wait for the
@@ -1303,21 +1434,31 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       clearTimeout(startTimer);
       startRef.current?.();
       if (!alive()) return;
+      answerTimes.push(Date.now() - t0);
+      if (answerTimes.length > 10) answerTimes.shift();
       if (settled.kind !== 'caught') {
-        // A funny miss, never a sad one: the find boings out of the grab and hops back to its spot.
-        runOnUI(markMiss)();
+        // Wave 5 round 3: a funny miss, never a sad one, on this frame (never after the held frame and a quiet second):
+        // the find boings out of the grab, hops back to its spot and shakes "nope", the shark shrugs, and when walking
+        // closer could help a dotted ring pulls in around the find. The line under it is optional.
+        const ring = settled.kind === 'failed';
+        runOnUI(markMiss)(ring);
         beamOn.value = 0; grandSV.value = 0;
         catchMark('miss');
-        await wait(Math.max(0, plan.hitStopAt - (Date.now() - t0)));
-        if (!alive()) return;
         catchHaptic('hitSoft', 3);
-        miss.value = motion ? withTiming(1, { duration: 420, easing: EASE.out }) : 1;
-        await wait(300);
+        catchSound('pop', { volume: 0.5, pitch: -4 });
+        setTimeout(() => {
+          if (!alive()) return;
+          catchMark('shrug');
+          shrugCount += 1;
+          sharkShrug.value = shrugCount;
+        }, MISS.shrugAt);
+        await wait(MISS.ringAt);
         if (!alive()) return;
-        itemGone.value = withTiming(1, { duration: 160 });
-        if (settled.kind === 'gone') latest.current.onUnavailable();
+        // A find that is gone fades away instead of hopping home.
+        if (settled.kind === 'gone') { itemGone.value = withTiming(1, { duration: 160 }); latest.current.onUnavailable(); }
+        if (ring) catchMark('miss-ring');
         latest.current.onFailed(settled.line, settled.kind === 'failed');
-        await wait(170);
+        await wait(MISS.doneMs - MISS.ringAt);
         if (alive()) finish(false);
         return;
       }
@@ -1328,12 +1469,11 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       if (!current || current.token !== token) return;
       current.data = data; current.next = next;
       catchMark('answer');
-      setSummary(next);
-      setBadgeOn(true);
+      markFirstCatchDone();
       barFrom.value = next.progressFrom; barTo.value = next.progressTo;
       // The burst variant (beam, grand, ink size and turn) was set on the tap, from the same catch number.
       isNewSV.value = next.isNew ? 1 : 0;
-      setCoinStamp(!next.isNew && !data.replayed && data.rewards.coins > 0 ? data.rewards.coins : null);
+      const coinStampNow = !next.isNew && !data.replayed && data.rewards.coins > 0 ? data.rewards.coins : null;
       // The next goal (same commit as the summary, while the badge is still hidden): the set's next missing find.
       const cs = commonSet.current;
       const page = cs && cs.slug === item.set_slug ? cs.items : null;
@@ -1341,8 +1481,9 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       // Wave 5 round 2: when nothing else is in catch range, the next goal is the nearest find on the map (its own art),
       // and on this catch the disc flies onto that find's spot or edge arrow: where to walk, with no words.
       const where = motion ? latest.current.whereNext?.(pivotId) ?? null : null;
-      setNextArt(where ? findImageSource(where.item)
-        : upNext ? findImageSource({ icon_url: upNext.icon_url, variant_slug: upNext.variant_slug, name: upNext.name }) : null);
+      // One store write: only the badge host re-renders on the answer (never the catch layer, wave 5 round 3).
+      badgeStore.set({ summary: next, on: true, coinStamp: coinStampNow, nextArt: where ? findImageSource(where.item)
+        : upNext ? findImageSource({ icon_url: upNext.icon_url, variant_slug: upNext.variant_slug, name: upNext.name }) : null });
       const flightAt = where ? whereFlightAt(plan) : -1;
       if (where) whereSV.value = { on: 1, at: flightAt, x0: nextDiscRef.current.x, y0: nextDiscRef.current.y, x1: where.x, y1: where.y };
       const list: Beat[] = [...ladder,
@@ -1364,13 +1505,21 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         // this clock (hudPulse.streamHud), so the roll starts on the exact frame the first coin arrives.
         const stream = coinStreamPlan(coins, !motion, Math.max(3, momentParticles(COIN_STREAM.max, power, !motion)));
         const chip = latest.current.getTarget('coins');
-        const lands = stream.landAt.map(ms => plan.coinsAt + ms);
-        // The 5th-catch treat: its stars lead the coins into the counter.
-        if (chip && motion && variant.homeStars) { starTo.value = { x: chip.x - off.x - stage.x, y: chip.y - off.y - stage.y }; homeSV.value = 1; }
+        const coinLands = stream.landAt.map(ms => plan.coinsAt + ms);
+        // The 5th-catch treat: its stars lead the coins into the counter, and the counter punches once per star (wave 5
+        // round 3: the stars land first, 40 ms apart, then the coins).
+        let starLands: number[] = [];
+        if (chip && motion && variant.homeStars) {
+          starTo.value = { x: chip.x - off.x - stage.x, y: chip.y - off.y - stage.y }; homeSV.value = 1;
+          const flying = Math.min(variant.stars, momentParticles(BURST_STARS_MAX, power, !motion));
+          starLands = Array.from({ length: flying }, (_, i) => plan.burstAt + homeStarLand(i));
+          starLands.forEach((at, i) => list.push({ at, kind: BEAT.star, arg: i }));
+        }
+        const lands = [...starLands, ...coinLands].sort((a, b) => a - b);
         if (stream.count > 0 && chip) {
           coinGeo.value = { fx: stage.x, fy: stage.y, tx: chip.x - off.x, ty: chip.y - off.y };
           coinN.value = stream.count;
-          lands.forEach((at, i) => list.push({ at, kind: BEAT.coin, arg: i }));
+          coinLands.forEach((at, i) => list.push({ at, kind: BEAT.coin, arg: i }));
           streamHud('coins', { id: streamIdRef.current, gain: coins, lands });
           end = Math.max(end, lands[lands.length - 1] + COUNT.ms + 400);
         } else {
@@ -1633,23 +1782,24 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     touchHeal(heal);
     if (!onUi()) return HIDDEN;
     const f = frame.value;
-    const m = miss.value;
     const p = planSV.value;
+    // Wave 5 round 3: a miss boings out of the grab, hops back to its spot and shakes "nope" (mapWow missAt).
+    const mp = missT.value < 0 ? null : planSV.value.reduced ? { back: 1, hop: 0, sx: 1, sy: 1, rot: 0 } : missAt(missT.value);
+    const m = mp ? mp.back : 0;
     // Rise and glide from the pin's spot to the stage, then the arc home to the badge's sticker slot.
     const g = f.glide * (1 - m);
     const sx = flyFromX.value + (stageX.value - flyFromX.value) * g;
     const sy = flyFromY.value + (stageY.value - flyFromY.value) * g;
     const at = f.fly > 0 ? arcPoint({ x: sx, y: sy }, { x: targetX.value, y: targetY.value }, p.arcPt, f.fly) : { x: sx, y: sy };
     const press = 1 - 0.14 * f.squash;
-    // A miss boings out of the grab and hops back (funny, never sad).
-    const boing = m > 0 ? -14 * Math.sin(m * Math.PI) * (1 - m) : 0;
     return {
       opacity: copyOn.value * (1 - Math.max(f.gone, itemGone.value)),
-      transform: [{ translateX: at.x - FIND_ART_SIZE / 2 }, { translateY: at.y - FIND_ART_SIZE / 2 },
-        { rotate: `${f.wobble + holdWobble.value + boing + f.fly * 360}deg` },
-        { scale: press * (m > 0 ? 1 + (f.scale - 1) * (1 - m) : f.scale) },
+      transform: [{ translateX: at.x - FIND_ART_SIZE / 2 }, { translateY: at.y - FIND_ART_SIZE / 2 - f.hop * (1 - m) - (mp ? mp.hop : 0) },
+        { rotate: `${(f.wobble + holdWobble.value) * (1 - m) + (mp ? mp.rot : 0) + f.fly * 360}deg` },
+        { scale: press * (1 + (f.scale - 1) * (1 - m)) },
         // A coin-like edge turn while it flies (never thinner than a third, so it reads as the same find).
-        { scaleX: f.fly > 0 && f.fly < 1 ? Math.max(0.35, Math.abs(Math.cos(f.fly * Math.PI * 1.5))) : 1 }],
+        { scaleX: (f.fly > 0 && f.fly < 1 ? Math.max(0.35, Math.abs(Math.cos(f.fly * Math.PI * 1.5))) : 1) * (mp ? mp.sx : 1) },
+        { scaleY: mp ? mp.sy : 1 }],
     };
   });
   // The gather: a gold halo builds under the find while it rises (a floor once the catch starts, so it never blinks).
@@ -1657,8 +1807,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     touchHeal(heal);
     if (!onUi()) return HIDDEN;
     const f = frame.value;
-    const m = miss.value;
-    const g = f.glide * (1 - m);
+    const m = missT.value < 0 ? 0 : Math.min(1, missT.value / 200);
+    const g = f.glide * (missT.value < 0 ? 1 : 1 - missAt(missT.value).back);
     const sx = flyFromX.value + (stageX.value - flyFromX.value) * g;
     const sy = flyFromY.value + (stageY.value - flyFromY.value) * g;
     const on = clockOn.value * copyOn.value * (1 - m);
@@ -1823,7 +1973,35 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const w = whereSV.value;
     const at = w.on ? whereAt(cc.value - w.at, { x: w.x0, y: w.y0 }, { x: w.x1, y: w.y1 }) : null;
     if (!at) return { opacity: 0, transform: [{ translateX: -999 }, { translateY: -999 }, { scale: 0 }] };
-    return { opacity: at.alpha, transform: [{ translateX: at.x - 30 }, { translateY: at.y - 30 }, { rotate: `${at.rot}deg` }, { scale: at.scale }] };
+    // Wave 5 round 3: it lands a touch bigger than it flew (60 pt, a sticker a kid can point at), and holds there.
+    const land = cc.value - w.at >= WHERE.flightMs ? 1.12 : 1;
+    return { opacity: at.alpha, transform: [{ translateX: at.x - 30 }, { translateY: at.y - 30 }, { rotate: `${at.rot}deg` }, { scale: at.scale * land }] };
+  });
+  // Wave 5 round 3: the disc starts the beacon on the frame it lands (UI thread; the beacon runs on its own timing, so it
+  // outlasts the catch clock), unless Battery Saver or calm power is on.
+  useAnimatedReaction(() => {
+    const w = whereSV.value;
+    return w.on && beaconOk.value ? cc.value - w.at >= WHERE.flightMs : false;
+  }, (landed, prev) => {
+    if (!landed || prev) return;
+    beaconT.value = 0;
+    beaconT.value = withTiming(BEACON.ms, { duration: BEACON.ms, easing: Easing.linear });
+  });
+  const beaconStyle = useAnimatedStyle(() => {
+    if (!onUi()) return HIDDEN;
+    const w = whereSV.value;
+    const b = beaconT.value >= 0 && w.on ? beaconAt(beaconT.value) : null;
+    if (!b) return { opacity: 0, transform: [{ translateX: -999 }, { translateY: -999 }, { scale: 0 }] };
+    return { opacity: b.opacity, transform: [{ translateX: w.x1 - 30 }, { translateY: w.y1 - 30 }, { scale: b.scale }] };
+  });
+  // The miss's dotted "come closer" ring around the find's own spot.
+  const missRingStyle = useAnimatedStyle(() => {
+    if (!onUi()) return HIDDEN;
+    const r = missRingOn.value && missT.value >= 0 ? missRingAt(missT.value) : null;
+    if (!r) return { opacity: 0, transform: [{ translateX: -999 }, { translateY: -999 }, { scale: 0 }, { rotate: '0deg' }] };
+    const reduced = planSV.value.reduced;
+    return { opacity: r.opacity, transform: [{ translateX: missX.value - MISS_RING / 2 }, { translateY: missY.value - MISS_RING / 2 },
+      { scale: reduced ? 1 : r.scale }, { rotate: `${reduced ? 0 : r.rot}deg` }] };
   });
   const whereRingStyle = useAnimatedStyle(() => {
     touchHeal(heal);
@@ -1839,7 +2017,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     gather: gatherOrigin, spark: sparkOrigin, star: starOrigin, flash: flashStyle, item: itemStyle }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const fxValues = useMemo<FxValues>(() => ({ frame, clock: cc, plan: planSV, on: clockOn, beamOn, ringN, starN, sx: stageX, sy: stageY, homeStars: homeSV, starTo }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const burstValues = useMemo<BurstValues>(() => ({ frame, clock: cc, plan: planSV, on: clockOn, sx: stageX, sy: stageY, inkScale, inkTurn, grand: grandSV,
-    fan: fanSV, ring2: ring2SV }), []); // eslint-disable-line react-hooks/exhaustive-deps
+    fan: fanSV, ring2: ring2SV, hero: heroSV }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const color = item ? rarityColor(item.rarity) : BRAND.gold;
   const motionFx = !!item && !reducedMotion && catchStyleFor(item.rarity) === 'chomp';
   const sparks = motionFx ? momentParticles(PARTICLES.sparkles, power, reducedMotion) : 0;
@@ -1989,15 +2167,18 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
         goldSize={goldSize} fxT={fxT} gatherT={gatherT} onCopyShown={onCopyShown} />}
 
       {/* The badge stays mounted (hidden at badgeIn 0), so the first reward never mounts its views mid-cascade */}
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, !badgeOn && styles.gateOff]}>
-      <CatchBadge st={badgeStyles} summary={summary} photo={photo} bonusXp={bonusXp} newRide={newRide} art={art} name={name} color={color}
-        left={badgeLeft} bottom={badgeBottom} coinStamp={coinStamp} nextArt={nextArt} />
-      </View>
+      <BadgeHost store={badgeStore} st={badgeStyles} photo={photo} bonusXp={bonusXp} newRide={newRide} art={art} name={name} color={color}
+        left={badgeLeft} bottom={badgeBottom} />
+      {/* Wave 5 round 3: the miss's dotted "come closer" ring (static Skia art, moved on the UI thread). */}
+      <Animated.View pointerEvents="none" style={[styles.missRing, missRingStyle]}><MissRingArt /></Animated.View>
+      {/* Wave 5 round 3: the where-next disc's dotted trail and the beacon that keeps pulsing where to walk. */}
+      {Array.from({ length: WHERE.trailDots }, (_, index) => <WhereDot key={index} index={index} clock={cc} where={whereSV} />)}
+      <Animated.View pointerEvents="none" style={[styles.whereAt, beaconStyle]}><View style={styles.beaconRing} /></Animated.View>
       {/* Wave 5 round 2: where to walk next (the session's last catch in range): the next-goal disc flies onto the find. */}
       <Animated.View pointerEvents="none" style={[styles.whereAt, whereStyle]}>
         <Animated.View style={[styles.nextRing, whereRingStyle]} />
         <View style={styles.nextDisc}>
-          {nextArt ? <RNImage source={nextArt as never} style={styles.nextArt} resizeMode="contain" fadeDuration={0} /> : null}
+          <WhereArt store={badgeStore} />
         </View>
       </Animated.View>
       {/* The coin stream (always mounted, still until a catch throws its coins). */}
@@ -2050,6 +2231,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center' },
   nextArt: { width: 44, height: 44, opacity: 0.5 },
   whereAt: { position: 'absolute', left: 0, top: 0, width: 60, height: 60, alignItems: 'center', justifyContent: 'center' },
+  whereDot: { position: 'absolute', left: 0, top: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: GOLD_FX.rays, borderWidth: 2, borderColor: BRAND.white },
+  beaconRing: { width: 60, height: 60, borderRadius: 30, borderWidth: 4, borderColor: GOLD_FX.rays },
+  missRing: { position: 'absolute', left: 0, top: 0, width: MISS_RING, height: MISS_RING },
   ghostSlot: { position: 'absolute', top: 0, bottom: 0, borderRadius: 4, backgroundColor: BRAND.goldLight },
   itemRim: { position: 'absolute', left: -18, top: -18, width: FIND_ART_SIZE + 36, height: FIND_ART_SIZE + 36, opacity: 0.85 },
   itemFallback: { width: FIND_ART_SIZE, height: FIND_ART_SIZE, borderRadius: FIND_ART_SIZE / 2, alignItems: 'center', justifyContent: 'center' },

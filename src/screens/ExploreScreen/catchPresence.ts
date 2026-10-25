@@ -106,3 +106,9 @@ export const catchPinPose = makeMutable({ x: 0, y: 0, rot: 0 });
 
 /** The pin the catch layer has taken over (hidden on the UI thread from the layer's first moving frame). */
 export const catchHidePivot = makeMutable(-1);
+
+/**
+ * Wave 5 round 3: a missed catch makes the map shark shrug (a funny "huh", never sad). The catch layer bumps this
+ * counter; the map's shark reacts once per new value (Map.tsx), and Reduce Motion keeps it still.
+ */
+export const sharkShrug = makeMutable(0);

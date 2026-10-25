@@ -25,7 +25,7 @@ const INK_BURST = require('../../../assets/fx/burst-gold.webp');
 export const BURST_INK_SIZE = 220;
 /** Wave 5 round 2: Alex's ink burst's base size and its tier cap (its widest frame is about 1.31x this). */
 export const INK_BASE = 0.9;
-export const INK_TIER_MAX = 1.4;
+export const INK_TIER_MAX = 1.6;
 /** How far the ink reaches from the find at its widest, for a burst variant's size (the stage keeps it on screen). */
 export function inkReach(inkScale: number): number {
   return Math.round((BURST_INK_SIZE * INK_BASE * Math.min(INK_TIER_MAX, inkScale) * 1.31) / 2);
@@ -63,6 +63,8 @@ export interface BurstValues {
   /** Wave 5 round 2: 1 on milestones: the spike fan behind Alex's star, and the second ring turning the other way. */
   readonly fan: SharedValue<number>;
   readonly ring2: SharedValue<number>;
+  /** Wave 5 round 3: 1 on the first catch ever: a screen-wide gold bloom held through the burst. */
+  readonly hero: SharedValue<number>;
 }
 
 /** One confetti piece: a small inked card that pops out and flutters down (UI thread, no React). */
@@ -143,6 +145,21 @@ function CatchBurst({ v, goldSize, confetti }: { readonly v: BurstValues; readon
     const g = f && v.ring2.value ? f.gold : 0;
     return !f || g <= 0 ? 0 : 0.85 * Math.min(1, g * 1.1) * (f.suck < 0.5 ? 1 : 1 - (f.suck - 0.5) / 0.5);
   });
+  // Wave 5 round 3: the first catch ever lights the whole screen: one soft bloom about twice the screen's width,
+  // swelling in with the burst, held (breathing a little) until the burst sucks back.
+  const heroT = useDerivedValue(() => {
+    const f = bf.value;
+    const g = f && v.hero.value ? f.gold : 0;
+    if (!f || g <= 0) return HIDE;
+    const b = bt.value - v.plan.value.burstAt;
+    const s = 2.7 * (0.55 + 0.45 * g) * (1 + 0.025 * Math.sin(b / 120)) * (1 - 0.5 * f.suck * f.suck);
+    return [{ translateX: v.sx.value }, { translateY: v.sy.value }, { scale: s }, { translateX: -half }, { translateY: -half }];
+  });
+  const heroO = useDerivedValue(() => {
+    const f = bf.value;
+    const g = f && v.hero.value ? f.gold : 0;
+    return !f || g <= 0 ? 0 : 0.8 * Math.min(1, g * 1.2) * (f.suck < 0.4 ? 1 : 1 - (f.suck - 0.4) / 0.6);
+  });
   // Alex's inked burst: snaps out past full size, holds (the screenshot frame), then sucks back into the find.
   const inkT = useDerivedValue(() => {
     const f = bf.value;
@@ -168,6 +185,9 @@ function CatchBurst({ v, goldSize, confetti }: { readonly v: BurstValues; readon
 
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Group transform={heroT} opacity={heroO}>
+        <CatchRaysArt size={goldSize} bloomOnly />
+      </Group>
       <Group transform={goldT} opacity={goldO}>
         <CatchRaysArt size={goldSize} bloomOnly />
       </Group>

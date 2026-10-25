@@ -17,7 +17,7 @@ import QuickAccessMenu from '../../components/QuickAccessMenu';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import HomeFindMarker from './HomeFindMarker';
 import type { FingerSide } from './PrepItem';
-import HomeCatchMoment, { resetCatchSessionForPreview, resetRideHintForPreview, type BookItem, type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
+import HomeCatchMoment, { resetCatchSessionForPreview, resetFirstCatchForPreview, resetRideHintForPreview, type BookItem, type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
 import { resetRevealSeenForPreview } from './ridePhoto/CatchReveal';
 import HomeHuntChip, { chipWidthFor, type HuntChipMessage } from './HomeHuntChip';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
@@ -90,7 +90,7 @@ const CAPTURE = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview';
 const CAPTURE_CATCHES: number[] = String(process.env.EXPO_PUBLIC_MOTION_CAPTURE_ORDER || '1,2,5,10,25').split(',').map(Number).filter((n: number) => n > 0);
 /**
  * Wave 5 round 2 capture scenes (lane tooling, never set in store builds), one per catch of the order, comma separated
- * (blank for a plain catch): 'where' (the other in-range finds were caught earlier, so this is the last catch in range
+ * (blank for a plain catch): 'first' (wave 5 round 3: the player's first catch ever, the hero), 'where' (the other in-range finds were caught earlier, so this is the last catch in range
  * and the next goal flies to the nearest find), 'reduced' (Reduce Motion), 'miss' (the server says no), 'battery'
  * (Battery Saver on for that catch, then off again). EXPO_PUBLIC_MOTION_CAPTURE_SUN pins the sun's height (45 is
  * midday), so a capture taken at night still shows the daytime map.
@@ -389,9 +389,18 @@ function HomeCatchPreview() {
   };
   // Wave 4: every slow frame (over 34 ms) with the catch clock it landed on, so a hitch can be placed on a beat.
   const logSlow = (dt: number, clock: number) => { catchTraceBuffer.push(`[slow] ${Date.now()} dt=${dt.toFixed(1)}ms clock=${Math.round(clock)}`); };
+  // Wave 5 round 3, capture builds only: every frame's time, flushed in batches of 30, so frame-rate claims count the
+  // app's real frames (the catch probe logs only when the clock moves, so a clock waiting on the server read as one long frame).
+  const frameRows = useSharedValue(''), frameRowN = useSharedValue(0);
+  const flushFrames = (rows: string) => { catchTraceBuffer.push(rows.trimEnd()); };
   useFrameCallback(info => {
     const dt = info.timeSincePreviousFrame;
     if (dt == null) return;
+    if (CAPTURE) {
+      frameRows.value = `${frameRows.value}[frame] ${Date.now()} dt=${dt.toFixed(1)}\n`;
+      frameRowN.value += 1;
+      if (frameRowN.value >= 30) { runOnJS(flushFrames)(frameRows.value); frameRows.value = ''; frameRowN.value = 0; }
+    }
     if (dt > 34) runOnJS(logSlow)(dt, hudClock.value);
     frameCount.value += 1; frameSum.value += dt;
     if (dt > 25) frameSlow.value += 1;
@@ -434,6 +443,7 @@ function HomeCatchPreview() {
     const after = setTimeout(() => setBatterySaver(false), 9000 + CAPTURE_CATCHES.length * 6000);
     const timers = CAPTURE_CATCHES.map((n, i) => setTimeout(() => {
       resetCatchSessionForPreview(n - 1);
+      if (SCENES[i] === 'first') resetFirstCatchForPreview();
       catchTraceBuffer.push(`[capture] ${Date.now()} catch ${n}${SCENES[i] ? ` ${SCENES[i]}` : ''}`);
       const pretzel = items.find(entry => entry.rarity <= 1 && FIXTURES[items.indexOf(entry)]?.inRange);
       if (pretzel) tapFind(pretzel);

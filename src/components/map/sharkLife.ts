@@ -3,7 +3,7 @@
  * Benchmarks: an Animal Crossing villager or a Club Penguin penguin left alone is never a
  * statue; it fidgets now and then, never on a metronome, and never while busy walking.
  */
-export type SharkMood = 'tap' | 'cheer' | 'hop' | 'wiggle' | 'look' | 'show' | 'flick';
+export type SharkMood = 'tap' | 'cheer' | 'hop' | 'wiggle' | 'look' | 'show' | 'flick' | 'shrug';
 
 /** A standing shark fidgets once every 7 to 12 s (random inside the window). */
 export const FIDGET_GAP_MS: readonly [number, number] = [7000, 12000];

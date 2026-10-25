@@ -80,6 +80,29 @@ export interface CatchPlan {
    * gold ring (a picture, no words), so every catch ends pointing at the next one.
    */
   readonly nextAt: number;
+  /**
+   * Wave 5 round 3: the repeat's fidget (round-robin, so catch 40 still varies): 0 the two wobbles, 1 a full twirl
+   * while it rises (`twirl` degrees), 2 two little hops (`hopPt` high) with the wobbles turned the other way.
+   */
+  readonly fidget: 0 | 1 | 2;
+  readonly twirl: number;
+  readonly hopPt: number;
+}
+
+/**
+ * Wave 5 round 3: a repeat holds its breath until about when the server usually answers, so the hit-stop and the
+ * burst land on their planned beats instead of 140 to 175 ms late (the burst never plays before the server says yes).
+ * The held frame is the median of this session's recent answer times plus a frame, kept between min and max.
+ */
+export const REPEAT_HELD = { min: 360, max: 560, lead: 20, samples: 5 } as const;
+
+/** The repeat's held frame (ms from the tap) from this session's recent answer times (ms from the tap). Pure. */
+export function heldFromAnswers(answers: readonly number[]): number {
+  const recent = answers.filter(ms => Number.isFinite(ms) && ms > 0).slice(-REPEAT_HELD.samples);
+  if (!recent.length) return REPEAT_HELD.min;
+  const sorted = [...recent].sort((a, b) => a - b);
+  const mid = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+  return Math.round(Math.min(REPEAT_HELD.max, Math.max(REPEAT_HELD.min, mid + REPEAT_HELD.lead)));
 }
 
 /**
@@ -91,41 +114,49 @@ export interface CatchPlan {
  */
 export function catchPlan(options: { readonly reduced: boolean; readonly calm?: boolean; readonly walking?: boolean; readonly repeat?: boolean; readonly milestone?: boolean;
   /** Wave 4: a 5th-catch treat (the star tier) keeps the snappy repeat but holds its burst 280 ms, so the stars read as a reward. */
-  readonly treat?: boolean }): CatchPlan {
+  readonly treat?: boolean;
+  /** Wave 5 round 3: the repeat's held frame (heldFromAnswers), and its fidget (burstVariant). */
+  readonly heldAt?: number; readonly fidget?: 0 | 1 | 2 }): CatchPlan {
   if (options.reduced) {
     const landAt = DURATION.quick;
     return { squashMs: 0, squashTo: 1, anticipationMs: 0, risePt: 0, wobbles: [], hitStopAt: 0, burstAt: 0, burstScale: 1,
       gatherSparkles: 0, burstSparkles: 0, flyAt: 0, flyMs: DURATION.quick, arcPt: 0, landAt, kickPt: 0,
       repeat: !!options.repeat, coinsAt: 0, barMs: 1, tickAt: landAt, exitAt: landAt + 900, exitMs: DURATION.quick, doneAt: landAt + 900 + DURATION.quick,
-      reduced: true, heroScale: 1, landScale: 1, inkMs: 1, goldHoldMs: 0, badgeAt: 0, badgeInMs: DURATION.quick, suckAt: 0, suckMs: 1, nextAt: landAt };
+      reduced: true, heroScale: 1, landScale: 1, inkMs: 1, goldHoldMs: 0, badgeAt: 0, badgeInMs: DURATION.quick, suckAt: 0, suckMs: 1, nextAt: landAt,
+      fidget: 0, twirl: 0, hopPt: 0 };
   }
   const squashMs = DURATION.tap;
   // A milestone catch (the beam) kicks the map the full KICK.maxPt; none while walking or in calm power.
   const kickPt = options.calm || options.walking ? 0 : options.milestone ? KICK.maxPt : 3;
   if (options.repeat) {
-    // Repeat (round 5, snappier): burst at 430, the burst holds only 170 ms then sucks back into the find by 690,
-    // the badge pops in on that frame (in by 0.9 s), the find is home by 1020 and the badge is gone by 1290.
-    const hitStopAt = 360;
+    // Wave 5 round 3: the held frame waits for about when the server answers (REPEAT_HELD, 360 to 560 ms), then the
+    // burst holds 170 ms (280 on the 5th-catch treat), sucks back, and the flight and the badge are a touch quicker,
+    // so a repeat is still done in about 1.3 to 1.5 s.
+    const hitStopAt = Math.round(Math.min(REPEAT_HELD.max, Math.max(REPEAT_HELD.min, options.heldAt ?? REPEAT_HELD.min)));
     const burstAt = hitStopAt + DURATION.hitStop;
-    // Wave 4: a treat (every 5th catch) holds its burst 280 ms instead of 170 (still done by about 1.4 s).
     const suckAt = burstAt + (options.treat ? 280 : 170);
     const suckMs = 90;
     const flyAt = suckAt + suckMs;
-    const flyMs = 330;
+    const flyMs = 280;
     const landAt = flyAt + flyMs;
-    const barMs = 120;
+    const barMs = 110;
     const exitMs = 130;
-    // Wave 5: the badge stays 40 ms longer and the next goal pops 100 ms sooner, so the silhouette reads (about 450 ms).
-    const exitAt = landAt + barMs + 60;
+    // The next goal pops 20 ms into the flight and stays at least 440 ms (read, then the where flight, then the exit).
+    const exitAt = landAt + barMs + 70;
+    const fidget = options.fidget ?? 0;
+    // The wobbles keep their rhythm whatever the held frame: the first early, the last 140 ms before the hold.
+    const late = Math.max(200, hitStopAt - 140);
+    const wobbles = fidget === 1 ? [] : fidget === 2 ? [{ at: 90, deg: -12 }, { at: late, deg: 16 }] : [{ at: 90, deg: 10 }, { at: late, deg: 14 }];
     return {
       squashMs, squashTo: 0.86, anticipationMs: hitStopAt - squashMs, risePt: 18,
-      wobbles: [{ at: 90, deg: 10 }, { at: 220, deg: 14 }],
+      wobbles,
       hitStopAt, burstAt, burstScale: 1.25,
       gatherSparkles: 4, burstSparkles: 8,
       flyAt, flyMs, arcPt: 60, landAt, kickPt,
       repeat: true, coinsAt: burstAt, barMs, tickAt: landAt + barMs + 10, exitAt, exitMs, doneAt: exitAt + exitMs,
       reduced: false, heroScale: 1.5, landScale: 0.95, inkMs: suckAt + suckMs - burstAt, goldHoldMs: 120, badgeAt: flyAt, badgeInMs: 200,
-      suckAt, suckMs, nextAt: flyAt + 60,
+      suckAt, suckMs, nextAt: flyAt + 20,
+      fidget, twirl: fidget === 1 ? 360 : 0, hopPt: fidget === 2 ? 16 : 0,
     };
   }
   // First catch (round 4): tap 0, wobbles to 580, held frame 600, burst 670 (the find pops to about 2x on a gold
@@ -152,7 +183,10 @@ export function catchPlan(options: { readonly reduced: boolean; readonly calm?: 
     flyAt, flyMs, arcPt: 80, landAt, kickPt,
     repeat: false, coinsAt: burstAt, barMs, tickAt: landAt + barMs + 20, exitAt, exitMs, doneAt: exitAt + exitMs,
     reduced: false, heroScale: 1.7, landScale: 0.95, inkMs: suckAt + suckMs - burstAt, goldHoldMs: 160, badgeAt: flyAt, badgeInMs: DURATION.enter,
-    suckAt, suckMs, nextAt: flyAt + 160,
+    // Wave 5 round 3: the next goal pops 200 ms after the find lands (it used to pop mid-flight, and the badge then sat
+    // still for about 600 ms): land 1750, the next goal 1930, the bar's tick 2110, its ring 2130, the exit 2380.
+    suckAt, suckMs, nextAt: landAt + 180,
+    fidget: 0, twirl: 0, hopPt: 0,
   };
 }
 
@@ -163,7 +197,7 @@ export function catchPlan(options: { readonly reduced: boolean; readonly calm?: 
  * classic burst, a gold ring burst and a star burst, each a slightly different size.
  */
 export interface BurstVariant {
-  readonly kind: 'classic' | 'rings' | 'stars' | 'beam' | 'grand';
+  readonly kind: 'classic' | 'rings' | 'stars' | 'beam' | 'grand' | 'hero' | 'golden';
   /** Alex's inked burst size (1 is the classic). */
   readonly inkScale: number;
   /** Gold rings rippling out from the find (1 to 3, 90 ms apart). */
@@ -186,52 +220,76 @@ export interface BurstVariant {
   readonly counterRing: boolean;
   /** Wave 5 round 2: the 5th-catch treat's stars arc into the coin counter (they lead the coins home). */
   readonly homeStars: boolean;
+  /** Wave 5 round 3: the player's first catch ever: centre stage, Alex's star at about 85% of the screen, a screen-wide bloom. */
+  readonly hero: boolean;
+  /** Wave 5 round 3: the find glides to the middle of the screen for its burst (Pokemon GO centres the catch). */
+  readonly centre: boolean;
+  /** Wave 5 round 3: a repeat's fidget (round-robin) and its chime's pitch step, so ordinary repeats never play the same twice running. */
+  readonly fidget: 0 | 1 | 2;
+  readonly pitch: number;
+  /** Wave 5 round 3: a golden find (the server marks it): the beam drops on it too, because the find really is rare. */
+  readonly golden: boolean;
 }
 
 export const BURST_STARS_MAX = 8;
 export const BURST_RINGS_MAX = 3;
 
 /**
- * Wave 5 round 2, a clear staircase (each tier at least 1.12x the last, and each adds something new):
- * 1st catch 1.05 (Alex's star, bloom, two rings), 5th 1.18 (its stars fly into the counter), 10th 1.34 (the beam,
- * the spike fan and a counter-turning ring), 25th 1.6 (all of it and confetti). Ordinary repeats stay a touch
- * smaller and rotate three looks, so the 50th catch still varies.
+ * Wave 5 round 3, the staircase (each tier at least 1.12x the last, and each adds something new):
+ * 1st catch of a session 1.05 (Alex's star, bloom, two rings, centre stage), 5th 1.3 (eight big stars with gold
+ * trails fly into the counter, which punches once per star), 10th 1.47 (the beam, the spike fan and a
+ * counter-turning ring), 25th 1.7 (all of it and confetti). The first catch ever is the hero (1.36, centre stage, a
+ * screen-wide bloom). Ordinary repeats stay a touch smaller, rotate three looks and three fidgets, and step their
+ * chime up, so the 40th catch still varies. A golden find (a real server flag, never chance) gets the beam.
  */
-export function burstVariant(catchNumber: number): BurstVariant {
+export function burstVariant(catchNumber: number, options: { readonly firstEver?: boolean; readonly golden?: boolean } = {}): BurstVariant {
   const n = Math.max(1, Math.floor(catchNumber));
-  const base = { beam: false, milestone: false, treat: false, grand: false, fan: false, counterRing: false, homeStars: false };
-  if (n % 25 === 0) return { ...base, kind: 'grand', inkScale: 1.6, rings: 3, stars: 8, beam: true, milestone: true, grand: true, fan: true, counterRing: true };
-  if (n % 10 === 0) return { ...base, kind: 'beam', inkScale: 1.34, rings: 3, stars: 8, beam: true, milestone: true, fan: true, counterRing: true };
-  if (n % 5 === 0) return { ...base, kind: 'stars', inkScale: 1.18, rings: 2, stars: 8, treat: true, homeStars: true };
-  if (n === 1) return { ...base, kind: 'classic', inkScale: 1.05, rings: 2, stars: 4 };
-  const k = n % 3;
-  if (k === 0) return { ...base, kind: 'rings', inkScale: 0.9, rings: 3, stars: 2 };
-  if (k === 1) return { ...base, kind: 'stars', inkScale: 0.95, rings: 1, stars: 6 };
-  return { ...base, kind: 'classic', inkScale: 1, rings: 1, stars: 4 };
+  const base = { beam: false, milestone: false, treat: false, grand: false, fan: false, counterRing: false, homeStars: false,
+    hero: false, centre: false, fidget: 0 as 0 | 1 | 2, pitch: 0, golden: false };
+  if (options.firstEver) return { ...base, kind: 'hero', inkScale: 1.36, rings: 3, stars: 8, hero: true, centre: true };
+  if (n % 25 === 0) return { ...base, kind: 'grand', inkScale: 1.7, rings: 3, stars: 8, beam: true, milestone: true, grand: true, fan: true, counterRing: true, centre: true };
+  if (n % 10 === 0) return { ...base, kind: 'beam', inkScale: 1.47, rings: 3, stars: 8, beam: true, milestone: true, fan: true, counterRing: true, centre: true };
+  if (n % 5 === 0) return { ...base, kind: 'stars', inkScale: 1.3, rings: 2, stars: 8, treat: true, homeStars: true };
+  if (n === 1) return { ...base, kind: 'classic', inkScale: 1.05, rings: 2, stars: 4, centre: true, golden: !!options.golden, beam: !!options.golden };
+  const fidget = (n % 3) as 0 | 1 | 2;
+  // The chime climbs a step with each repeat (four steps, then round again).
+  const pitch = 2 * (n % 4);
+  const golden = !!options.golden;
+  if (golden) return { ...base, kind: 'golden', inkScale: 1.15, rings: 2, stars: 6, beam: true, golden: true, fidget, pitch };
+  if (fidget === 0) return { ...base, kind: 'rings', inkScale: 0.9, rings: 3, stars: 2, fidget, pitch };
+  if (fidget === 1) return { ...base, kind: 'stars', inkScale: 0.95, rings: 1, stars: 6, fidget, pitch };
+  return { ...base, kind: 'classic', inkScale: 1, rings: 1, stars: 4, fidget, pitch };
 }
 
 /**
- * Wave 5 round 2: a 5th-catch treat star (index i of n) at burst progress p 0..1, relative to the find: it flings out
- * over the top, then arcs into the coin counter at `to` (relative pt), shrinking, and is gone once it lands.
- * Worklet-safe and pure.
+ * Wave 5 round 3: the 5th-catch treat stars lead the coins home. Star i flings out over the top (outMs), then arcs into
+ * the coin counter at `to` (relative pt), 40 ms after the one before, and lands at homeStarLand(i) ms after the burst
+ * (the counter punches on each landing). Big (about 40 pt to 25 pt), so they read at phone size.
  */
-export function homeStarAt(p: number, i: number, n: number, to: { x: number; y: number }): { x: number; y: number; scale: number } | null {
+export const HOME_STARS = { outMs: 130, flyMs: 260, staggerMs: 40, from: 1.45, to: 0.9 } as const;
+export function homeStarLand(i: number): number {
+  return i * HOME_STARS.staggerMs + HOME_STARS.outMs + HOME_STARS.flyMs;
+}
+
+/** A treat star `d` ms after the burst (index i of n), relative to the find, or null when it is not on screen. Worklet. */
+export function homeStarAt(d: number, i: number, n: number, to: { x: number; y: number }): { x: number; y: number; scale: number } | null {
   'worklet';
-  const q = (p - i * 0.025) / 0.8;
-  if (q <= 0 || q >= 1 || n <= 0) return null;
-  const angle = -Math.PI / 2 + (i - (n - 1) / 2) * (n > 4 ? 0.5 : 0.8);
-  const reach = i % 2 ? 92 : 118;
+  const local = d - i * HOME_STARS.staggerMs;
+  if (local <= 0 || n <= 0 || local >= HOME_STARS.outMs + HOME_STARS.flyMs) return null;
+  const angle = -Math.PI / 2 + (i - (n - 1) / 2) * (n > 4 ? 0.42 : 0.8);
+  const reach = i % 2 ? 96 : 124;
   const ox = Math.cos(angle) * reach, oy = Math.sin(angle) * reach;
-  if (q < 0.3) {
-    const u = q / 0.3;
+  if (local < HOME_STARS.outMs) {
+    const u = local / HOME_STARS.outMs;
     const out = 1 - (1 - u) * (1 - u) * (1 - u);
-    return { x: ox * out, y: oy * out, scale: (u < 0.3 ? u / 0.3 : 1) * 1.2 };
+    return { x: ox * out, y: oy * out, scale: (u < 0.3 ? u / 0.3 : 1) * HOME_STARS.from };
   }
-  const f = (q - 0.3) / 0.7;
+  const f = (local - HOME_STARS.outMs) / HOME_STARS.flyMs;
   const e = f < 0.5 ? 4 * f * f * f : 1 - Math.pow(-2 * f + 2, 3) / 2;
   const cx = (ox + to.x) / 2, cy = Math.min(oy, to.y) - 60;
   const u = 1 - e;
-  return { x: u * u * ox + 2 * u * e * cx + e * e * to.x, y: u * u * oy + 2 * u * e * cy + e * e * to.y, scale: 1.2 - 0.6 * e };
+  return { x: u * u * ox + 2 * u * e * cx + e * e * to.x, y: u * u * oy + 2 * u * e * cy + e * e * to.y,
+    scale: HOME_STARS.from - (HOME_STARS.from - HOME_STARS.to) * e };
 }
 
 /** The beam drops this long before the held frame and lands on it (the flash is its impact). */
@@ -578,6 +636,8 @@ export interface CatchFrame {
   readonly suck: number;
   readonly badgeScale: number;
   readonly shake: number;
+  /** Wave 5 round 3: the repeat fidget's hop (pt up), 0 for the other fidgets. */
+  readonly hop: number;
 }
 
 /**
@@ -591,7 +651,7 @@ export function catchFrame(t: number, p: CatchPlan): CatchFrame {
     const badge = t < p.exitAt ? clamp01(t / p.badgeInMs) : 1 - clamp01((t - p.exitAt) / p.exitMs);
     return { squash: 0, charge: 0, lift: 0, glide: 0, wobble: 0, flash: 0, scale: 1, ink: -1, gold: 0, bloom: 0, fx: -1, ring: -1,
       fly: 0, gone: clamp01(t / p.landAt), badge, kick: 1, landRing: -1, bar: t >= p.landAt ? 1 : 0, barGlow: 0, newPop: t >= p.landAt ? 1 : 0,
-      suck: 0, badgeScale: 1, shake: 0 };
+      suck: 0, badgeScale: 1, shake: 0, hop: 0 };
   }
   const sq = p.squashMs;
   const squash = t < 0 ? 0 : t < sq ? easeOut3(t / sq) : settle((t - sq) / 180, 3);
@@ -600,7 +660,9 @@ export function catchFrame(t: number, p: CatchPlan): CatchFrame {
   const charge = b < 0 ? antic * antic : 1 - easeOut3(b / 260);
   const lift = easeOut3(antic);
   const glide = easeInOut3(antic);
-  const wobble = t < p.hitStopAt ? wobbleAt(t, p.wobbles) : 0;
+  // Wave 5 round 3: the fidgets. A twirl turns the find once while it rises; a hop bounces it twice.
+  const wobble = t < p.hitStopAt ? wobbleAt(t, p.wobbles) + (p.twirl ? p.twirl * easeInOut3(antic) : 0) : 0;
+  const hop = p.hopPt > 0 && t < p.hitStopAt && t > sq ? p.hopPt * Math.abs(Math.sin(antic * Math.PI * 2)) : 0;
   const h = t - p.hitStopAt;
   const flash = h < 0 || h >= DURATION.flash ? 0 : h < 40 ? h / 40 : 1 - easeIn2((h - 40) / (DURATION.flash - 40));
   // The find: grows a touch while it gathers, pops past its hero size on the burst, settles there, then
@@ -639,7 +701,7 @@ export function catchFrame(t: number, p: CatchPlan): CatchFrame {
   const n = l - 60;
   const newPop = n < 0 ? 0 : n >= 300 ? 1 : 1 - Math.exp(-5 * (n / 300)) * Math.cos(3 * Math.PI * (n / 300));
   return { squash, charge, lift, glide, wobble, flash, scale, ink, gold, bloom, fx, ring, fly, gone, badge, kick, landRing, bar, barGlow, newPop,
-    suck, badgeScale, shake };
+    suck, badgeScale, shake, hop };
 }
 
 /**
@@ -742,7 +804,22 @@ export function nextGoalAt(t: number, p: CatchPlan): { scale: number; bob: numbe
  * arcs onto the next find (or its edge arrow): 420 ms flight, a landing pop with a gold ring, a short bob there,
  * then a fade. It starts once the disc has been read on the badge (about 450 ms), and always before the badge leaves.
  */
-export const WHERE = { flightMs: 420, popMs: 200, stayMs: 620, fadeMs: 220, arcPt: 70, totalMs: 420 + 200 + 620 + 220 } as const;
+export const WHERE = { flightMs: 420, popMs: 200, stayMs: 900, fadeMs: 220, arcPt: 70, totalMs: 420 + 200 + 900 + 220, trailDots: 7, trailMs: 1100 } as const;
+
+/**
+ * Wave 5 round 3: after the disc lands, the spot keeps a gold pulse (a beacon ring every 800 ms) for 2.4 s, so a kid
+ * can point to where to walk. It stops by itself, and never plays under Reduce Motion or on Battery Saver.
+ */
+export const BEACON = { ms: 2400, periodMs: 800 } as const;
+
+/** The beacon's ring `d` ms after it starts: scale and opacity, or null once it is over. Worklet. */
+export function beaconAt(d: number): { scale: number; opacity: number } | null {
+  'worklet';
+  if (d < 0 || d >= BEACON.ms) return null;
+  const u = (d % BEACON.periodMs) / BEACON.periodMs;
+  const fade = d > BEACON.ms - BEACON.periodMs ? 1 - (d - (BEACON.ms - BEACON.periodMs)) / BEACON.periodMs : 1;
+  return { scale: 0.9 + 1.1 * (1 - (1 - u) * (1 - u)), opacity: 0.85 * (1 - u) * fade };
+}
 
 export function whereFlightAt(p: CatchPlan): number {
   return Math.min(p.nextAt + 450, p.exitAt - 60);
@@ -764,6 +841,69 @@ export function whereAt(d: number, from: { x: number; y: number }, to: { x: numb
   const fadeFrom = WHERE.popMs + WHERE.stayMs;
   const alpha = l < fadeFrom ? 1 : 1 - clamp01((l - fadeFrom) / WHERE.fadeMs);
   return { x: to.x, y: to.y - 3 * Math.sin(l / 140), scale: pop * (1 - 0.15 * (1 - alpha)), rot: 0, alpha, ring };
+}
+
+/**
+ * Wave 5 round 3: the where-next disc leaves a dotted trail: dot i (of WHERE.trailDots) appears as the disc passes its
+ * spot on the arc and fades over trailMs. Null when the dot is not on screen. Worklet.
+ */
+export function whereTrailAt(d: number, i: number, from: { x: number; y: number }, to: { x: number; y: number }):
+  { x: number; y: number; alpha: number; scale: number } | null {
+  'worklet';
+  const n = WHERE.trailDots;
+  const q = (i + 1) / (n + 1);
+  // The disc's eased progress passes q at this time (easeInOut3 inverted by a small search, cheap: 12 steps).
+  let lo = 0, hi = 1;
+  for (let k = 0; k < 12; k++) { const mid = (lo + hi) / 2; if (easeInOut3(mid) < q) lo = mid; else hi = mid; }
+  const at = lo * WHERE.flightMs;
+  const local = d - at;
+  if (local < 0 || local >= WHERE.trailMs) return null;
+  const p = arcPoint(from, to, WHERE.arcPt, q);
+  const pop = local < 120 ? local / 120 : 1;
+  return { x: p.x, y: p.y, alpha: local < 120 ? pop : 1 - (local - 120) / (WHERE.trailMs - 120), scale: 0.5 + 0.5 * pop };
+}
+
+/* -------------------------------------------------------------- the funny miss */
+
+/**
+ * Wave 5 round 3: the server said no. Within a frame the find boings: a squash in the grab (0 to 120 ms), a hop back
+ * to its own spot (120 to 420 ms, 30 pt high, stretched), a landing squash, then a "nope" shake that settles by 900 ms.
+ * A dotted "come closer" ring pulls in around the find twice from 380 ms (MISS.ringMs). The shark shrugs at 150 ms.
+ * Funny, never sad, and no words are needed (the line under it is optional).
+ */
+export const MISS = { squashMs: 120, hopMs: 300, landMs: 100, shakeMs: 380, hopPt: 30, doneMs: 950, shrugAt: 150, ringAt: 380, ringMs: 1600, rings: 2 } as const;
+
+/**
+ * The find on a miss `d` ms after the server's no: back 0..1 (from where it was to its own spot), its hop (pt up),
+ * squash (x and y scale) and rotation (deg). Worklet.
+ */
+export function missAt(d: number): { back: number; hop: number; sx: number; sy: number; rot: number } {
+  'worklet';
+  if (d <= 0) return { back: 0, hop: 0, sx: 1, sy: 1, rot: 0 };
+  const a = MISS.squashMs, b = a + MISS.hopMs, c = b + MISS.landMs, e = c + MISS.shakeMs;
+  if (d < a) { const u = Math.sin((d / a) * Math.PI * 0.5); return { back: 0, hop: 0, sx: 1 + 0.25 * u, sy: 1 - 0.25 * u, rot: 0 }; }
+  if (d < b) {
+    const u = (d - a) / MISS.hopMs;
+    const s = Math.sin(u * Math.PI);
+    // Squashed to stretched in the first third of the hop, then back to round before it lands.
+    const k = clamp01(u * 3), r = clamp01((u - 0.66) / 0.34);
+    return { back: easeInOut3(u), hop: MISS.hopPt * s, sx: 1.25 - 0.4 * k + 0.15 * r, sy: 0.75 + 0.4 * k - 0.15 * r, rot: -10 * s };
+  }
+  if (d < c) { const u = Math.sin(((d - b) / MISS.landMs) * Math.PI); return { back: 1, hop: 0, sx: 1 + 0.18 * u, sy: 1 - 0.18 * u, rot: 0 }; }
+  if (d < e) { const u = (d - c) / MISS.shakeMs; return { back: 1, hop: 0, sx: 1, sy: 1, rot: 12 * Math.sin(u * Math.PI * 4) * (1 - u) }; }
+  return { back: 1, hop: 0, sx: 1, sy: 1, rot: 0 };
+}
+
+/** The dotted "come closer" ring `d` ms after the server's no: it pulls in twice and turns slowly; null when gone. Worklet. */
+export function missRingAt(d: number): { scale: number; opacity: number; rot: number } | null {
+  'worklet';
+  const l = d - MISS.ringAt;
+  if (l < 0 || l >= MISS.ringMs) return null;
+  const per = MISS.ringMs / MISS.rings;
+  const u = (l % per) / per;
+  const s = 1 - (1 - u) * (1 - u);
+  const fade = l > MISS.ringMs - 200 ? (MISS.ringMs - l) / 200 : 1;
+  return { scale: 1.9 - 0.9 * s, opacity: (u < 0.2 ? u / 0.2 : 1) * fade * 0.95, rot: l * 0.03 };
 }
 
 /* Round 5: the catch's hand-inked sunburst (CatchRays draws it once with Skia). */

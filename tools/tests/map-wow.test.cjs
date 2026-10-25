@@ -452,7 +452,7 @@ test('round 4: nothing on the catch path re-renders mid-catch (the caught pin, t
   assert.match(read('src/screens/ExploreScreen/HomeCatchPreviewScreen.tsx'), /cascadeOn && item\.pivot_id !== request\?\.pivotId/);
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
   assert.match(src, /const StreamCoin = memo\(/);
-  assert.match(src, /!badgeOn && styles\.gateOff/, 'a finished badge is gated off in the done commit');
+  assert.match(src, /!c\.on && styles\.gateOff/, 'a finished badge is gated off in the done commit');
 });
 
 
@@ -587,7 +587,7 @@ test('wave 4: the burst lives in one Skia canvas on the clock, never an animated
 
 test('wave 4: the 10th-catch beam is set from a JS flag on the tap (JS never reads back a value it just wrote)', () => {
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
-  const effect = src.slice(src.indexOf('const variant = burstVariant(sessionCatches + 1)'), src.indexOf('// ── Ride Photo hand-offs'));
+  const effect = src.slice(src.indexOf('const variant = burstVariant(sessionCatches + 1'), src.indexOf('// ── Ride Photo hand-offs'));
   assert.match(effect, /const beam = motion && variant\.beam;/);
   assert.match(effect, /beamOn\.value = beam \? 1 : 0;/);
   assert.match(effect, /if \(current\.beam\) list\.push\(\{ at: plan\.hitStopAt, kind: BEAT\.beam/);
@@ -671,7 +671,7 @@ test('wave 5: the badge makes room for the next-goal disc, so it never covers th
 
 test('wave 5 r2: the catch clock starts on the tap, and the pin follows it until the copy draws (no 200 ms late start)', () => {
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
-  const effect = src.slice(src.indexOf('const variant = burstVariant(sessionCatches + 1)'), src.indexOf('// ── Ride Photo hand-offs'));
+  const effect = src.slice(src.indexOf('const variant = burstVariant(sessionCatches + 1'), src.indexOf('// ── Ride Photo hand-offs'));
   const start = effect.indexOf('runOnUI(startClock)(plan.hitStopAt, !motion, t0);');
   assert.ok(start > 0 && start < effect.indexOf('catchFind('), 'the clock starts before the server call, on the tap');
   assert.match(effect, /startRef\.current = \(\) => \{ startRef\.current = null; runOnUI\(showCopy\)\(pivotId\); \};/);
@@ -687,7 +687,7 @@ test('wave 5 r2: the catch clock starts on the tap, and the pin follows it until
 
 test('wave 5 r2: the answer never holds the clock for a React commit; a server wait is won back after the burst', () => {
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
-  const effect = src.slice(src.indexOf('const variant = burstVariant(sessionCatches + 1)'), src.indexOf('// ── Ride Photo hand-offs'));
+  const effect = src.slice(src.indexOf('const variant = burstVariant(sessionCatches + 1'), src.indexOf('// ── Ride Photo hand-offs'));
   const answer = effect.slice(effect.indexOf("catchMark('answer');"));
   assert.doesNotMatch(answer, /onCascade/, 'the parent re-render left the answer (it rides the tap now)');
   const tapPart = src.slice(src.indexOf('const { item, pivotId } = request;'), src.indexOf("catchMark(plan.repeat ? 'tap-repeat' : 'tap')"));
@@ -731,15 +731,24 @@ test('wave 5 r2: a clear staircase: 1st, 5th, 10th, 25th each at least 1.12x the
   assert.match(src, /if \(run\.beam\) setTimeout\(\(\) => \{ if \(runRef\.current === run\) catchHaptic\('comboHeavy', 3\); \}, 120\);/, 'a stronger haptic on the 10th');
 });
 
-test('wave 5 r2: the 5th-catch stars fling out, then land in the coin counter', () => {
+test('wave 5 r3: the 5th-catch stars are big, fling out, then land in the counter one by one before the coins', () => {
   const to = { x: 120, y: -420 };
   assert.equal(wow.homeStarAt(0, 0, 8, to), null);
-  const out = wow.homeStarAt(0.2, 3, 8, to);
+  const out = wow.homeStarAt(100, 1, 8, to);
   assert.ok(out && out.y < 0, 'flung up first');
-  const late = wow.homeStarAt(0.79, 0, 8, to);
+  assert.ok(out.scale * 28 >= 28, 'at least 28 pt while it flies out');
+  const land0 = wow.homeStarLand(0);
+  const late = wow.homeStarAt(land0 - 1, 0, 8, to);
   assert.ok(late && Math.hypot(late.x - to.x, late.y - to.y) < 6, `lands on the counter (${late && late.x}, ${late && late.y})`);
-  assert.equal(wow.homeStarAt(0.81, 0, 8, to), null, 'gone once it lands');
-  for (let i = 0; i < 8; i++) assert.ok(i * 0.025 + 0.8 < 1, 'every star lands inside the sparkle window');
+  assert.ok(late.scale * 28 >= 24, 'still about 25 pt as it lands');
+  assert.equal(wow.homeStarAt(land0 + 1, 0, 8, to), null, 'gone once it lands');
+  for (let i = 0; i < 8; i++) assert.ok(wow.homeStarLand(i) < motion.DURATION.sparkle, 'every star lands inside the sparkle window');
+  for (let i = 1; i < 8; i++) assert.ok(wow.homeStarLand(i) - wow.homeStarLand(i - 1) >= 40, 'one punch per star, never merged');
+  // The stars lead: the last star lands before the first coin (each landing punches the counter).
+  assert.ok(wow.homeStarLand(7) < wow.coinStreamPlan(10, false).landAt[0], 'stars first, then the coins');
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /const lands = \[\.\.\.starLands, \.\.\.coinLands\]\.sort/, 'star landings punch the counter too');
+  assert.match(src, /homeTrail\(t\.value, 35\)/, 'a short gold trail behind each star');
 });
 
 test('wave 5 r2: where to walk next: only once nothing is in range, a new find first, its edge arrow when off screen', () => {
@@ -794,10 +803,124 @@ test('wave 5 r2: Alex star is the common burst, drawn bigger, and the stage keep
   assert.match(burst, /export const INK_BASE = 0\.9;/);
   assert.match(burst, /Math\.min\(INK_TIER_MAX, v\.inkScale\.value\) \* INK_BASE \*/);
   const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
-  assert.match(src, /catchStage\(start, plan\.risePt, area, inkReach\(variant\.inkScale\)\)/);
-  // On a 402 pt phone, even the grand burst's ink fits between the edges.
-  const reach = Math.round((220 * 0.9 * 1.4 * 1.31) / 2);
-  assert.ok(reach * 2 + 24 <= 402, `grand ink ${reach * 2} pt`);
+  assert.match(src, /catchStage\(stageFrom, plan\.risePt, area, inkReach\(variant\.inkScale\)\)/);
+  // On a 402 pt phone the 5th's ink fits between the edges (the hero reaches about 85%); the 10th and 25th fill the
+  // screen and are centred.
+  const reach = Math.round((220 * 0.9 * 1.3 * 1.31) / 2);
+  assert.ok(reach * 2 + 24 <= 402, `5th ink ${reach * 2} pt`);
+  const hero = (220 * 0.9 * wow.burstVariant(1, { firstEver: true }).inkScale * 1.28) / 402;
+  assert.ok(hero >= 0.82 && hero <= 0.92, `hero ink ${Math.round(hero * 100)}% of the width`);
   const stage = wow.catchStage({ x: 20, y: 300 }, 24, { width: 402, top: 100, bottom: 700 }, reach);
   assert.ok(stage.x - reach >= 12 && stage.x + reach <= 390);
+  const grand = Math.round((220 * 0.9 * 1.6 * 1.31) / 2);
+  assert.equal(wow.catchStage({ x: 20, y: 300 }, 24, { width: 402, top: 100, bottom: 700 }, grand).x, 201, 'too wide to fit: centred');
+});
+
+// Wave 5 round 3 (grader fixes): the hero first catch, a 5th that reads, a funny miss, beats on time against the server,
+// no dead hold on the badge, a where-next cue a kid can point at, a lighter answer commit, and variety on repeats.
+test('wave 5 r3: the first catch ever is the hero (centre stage, about 85% of the width, a screen-wide bloom); commons keep their size', () => {
+  const hero = wow.burstVariant(1, { firstEver: true });
+  assert.ok(hero.hero && hero.centre && hero.kind === 'hero');
+  assert.ok(hero.inkScale > wow.burstVariant(1).inkScale * 1.25, 'well past the session-first catch');
+  for (const n of [2, 3, 4, 6, 7, 8, 9]) assert.ok(!wow.burstVariant(n).centre && wow.burstVariant(n).inkScale <= 1, `common ${n} keeps its size`);
+  assert.ok(wow.burstVariant(1).centre && wow.burstVariant(10).centre && wow.burstVariant(25).centre, 'the big ones play centre stage');
+  const burst = read('src/screens/ExploreScreen/CatchBurst.tsx');
+  assert.match(burst, /const heroT = useDerivedValue/);
+  assert.match(burst, /<Group transform=\{heroT\} opacity=\{heroO\}>\s*<CatchRaysArt size=\{goldSize\} bloomOnly \/>/);
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /burstVariant\(sessionCatches \+ 1, \{ firstEver: firstCatchDone === false, golden: item\.golden_hour === true \}\)/);
+  assert.match(src, /const stageFrom = variant\.centre \? \{ x: layer\.width \/ 2,/);
+  assert.match(src, /markFirstCatchDone\(\);/);
+});
+
+test('wave 5 r3: a repeat holds its breath about as long as the server takes, so the burst lands on its beat', () => {
+  assert.equal(wow.heldFromAnswers([]), wow.REPEAT_HELD.min);
+  assert.equal(wow.heldFromAnswers([440, 455, 470]), 475, 'the median answer plus a frame');
+  assert.equal(wow.heldFromAnswers([3000, 2900, 3100]), wow.REPEAT_HELD.max, 'a slow server never stretches it past the max');
+  assert.equal(wow.heldFromAnswers([100, 120]), wow.REPEAT_HELD.min);
+  const p = wow.catchPlan({ reduced: false, repeat: true, heldAt: 475 });
+  assert.equal(p.hitStopAt, 475);
+  assert.equal(p.burstAt, 545);
+  assert.ok(p.doneAt <= 1420, `still a quick repeat (${p.doneAt})`);
+  assert.ok(p.wobbles[p.wobbles.length - 1].at <= p.hitStopAt - 140, 'the last wobble still lands before the hold');
+  const t = wow.catchPlan({ reduced: false, repeat: true, treat: true, heldAt: 475 });
+  assert.ok(t.doneAt <= 1530 && t.suckAt - t.burstAt >= 250);
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /heldAt: heldFromAnswers\(answerTimes\)/);
+  assert.match(src, /answerTimes\.push\(Date\.now\(\) - t0\);/);
+  assert.match(src, /catchMark\(`plan:\$\{variant\.kind\}:h\$\{plan\.hitStopAt\}/, 'captures read the plan from the trace');
+});
+
+test('wave 5 r3: no dead hold on the first catch badge (a beat at least every 400 ms from land to exit)', () => {
+  const p = wow.catchPlan({ reduced: false });
+  const beats = [p.landAt, p.landAt + 60, p.nextAt, p.landAt + p.barMs, p.tickAt, p.nextAt + 200, p.exitAt].sort((a, b) => a - b);
+  for (let i = 1; i < beats.length; i++) assert.ok(beats[i] - beats[i - 1] <= 400, `gap ${beats[i - 1]} to ${beats[i]}`);
+  assert.ok(p.nextAt > p.landAt, 'the next goal pops after the find lands, not mid-flight');
+  assert.ok(wow.whereFlightAt(p) - p.nextAt >= 380, 'still read on the badge before it flies');
+});
+
+test('wave 5 r3: a funny miss within a frame of the server no: boing, hop home, nope shake, a dotted come-closer ring', () => {
+  assert.ok(wow.missAt(60).sx > 1.1 && wow.missAt(60).sy < 0.9, 'squashed in the grab');
+  const mid = wow.missAt(wow.MISS.squashMs + wow.MISS.hopMs / 2);
+  assert.ok(mid.hop >= 25 && mid.back > 0.3 && mid.back < 0.7, 'hops back home, high');
+  const home = wow.missAt(wow.MISS.squashMs + wow.MISS.hopMs + 1);
+  assert.equal(home.back, 1);
+  const shake = [0.1, 0.3, 0.6].map(u => wow.missAt(wow.MISS.squashMs + wow.MISS.hopMs + wow.MISS.landMs + u * wow.MISS.shakeMs).rot);
+  assert.ok(shake.some(r => r > 4) && shake.some(r => r < -4), 'a nope shake both ways');
+  assert.deepEqual(plain(wow.missAt(wow.MISS.doneMs)), { back: 1, hop: 0, sx: 1, sy: 1, rot: 0 }, 'at rest before it hands back to the pin');
+  assert.equal(wow.missRingAt(wow.MISS.ringAt - 1), null);
+  const a = wow.missRingAt(wow.MISS.ringAt + 100), b = wow.missRingAt(wow.MISS.ringAt + 600);
+  assert.ok(a.scale > b.scale, 'the ring pulls in toward the find (come closer)');
+  assert.equal(wow.missRingAt(wow.MISS.ringAt + wow.MISS.ringMs), null);
+  assert.ok(wow.MISS.ringAt <= 400 && wow.MISS.doneMs <= 1000, 'a picture cue inside 0.4 s, back to the map inside 1 s');
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  const miss = src.slice(src.indexOf("if (settled.kind !== 'caught') {"), src.indexOf('const data = settled.data;'));
+  assert.match(miss, /runOnUI\(markMiss\)\(ring\);/);
+  assert.ok(miss.indexOf('runOnUI(markMiss)') < miss.indexOf('await wait('), 'the boing starts on the answer, before any wait');
+  assert.doesNotMatch(miss, /plan\.hitStopAt - \(Date\.now\(\) - t0\)/, 'never waits for the held frame first');
+  assert.match(miss, /sharkShrug\.value = shrugCount;/);
+  assert.match(read('src/components/Map.tsx'), /if \(mood === 'shrug'\)/);
+  assert.match(read('src/components/Map.tsx'), /useAnimatedReaction\(\(\) => sharkShrug\.value/);
+});
+
+test('wave 5 r3: where to walk: a bigger landing, a dotted trail, and a beacon that keeps pulsing 2 to 3 s (never on Battery Saver)', () => {
+  const from = { x: 350, y: 700 }, to = { x: 30, y: 120 };
+  const seen = [];
+  for (let d = 0; d < wow.WHERE.flightMs; d += 10) for (let i = 0; i < wow.WHERE.trailDots; i++) if (wow.whereTrailAt(d, i, from, to) && !seen.includes(i)) seen.push(i);
+  assert.deepEqual(seen, [...Array(wow.WHERE.trailDots).keys()], 'the dots appear in order behind the disc');
+  assert.equal(wow.whereTrailAt(wow.WHERE.flightMs + wow.WHERE.trailMs, 0, from, to), null, 'and fade');
+  assert.ok(wow.BEACON.ms >= 2000 && wow.BEACON.ms <= 3000);
+  assert.ok(wow.beaconAt(100) && wow.beaconAt(wow.BEACON.ms - 1));
+  assert.equal(wow.beaconAt(wow.BEACON.ms), null, 'it stops by itself');
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /beaconOk\.value = power\.ambient && !power\.lowPower \? 1 : 0;/);
+  assert.match(src, /const land = cc\.value - w\.at >= WHERE\.flightMs \? 1\.12 : 1;/);
+});
+
+test('wave 5 r3: the answer re-renders only the badge host (no catch-layer commit on the burst or the Reduce Motion badge)', () => {
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.doesNotMatch(src, /useState<CatchSummary \| null>/);
+  assert.doesNotMatch(src, /setCoinStamp|setNextArt|setBadgeOn/);
+  assert.match(src, /const c = useSyncExternalStore\(store\.subscribe, store\.get\);/);
+  const answer = src.slice(src.indexOf("catchMark('answer');"), src.indexOf('runOnUI(markCaught)();'));
+  assert.equal((answer.match(/badgeStore\.set\(/g) || []).length, 1, 'one store write on the answer');
+  assert.doesNotMatch(answer, /\bset(?!Timeout)[A-Z]\w*\(/, 'no React state set on the answer');
+  // Captures count every real frame (the probe only logs when the clock moves).
+  assert.match(read('src/screens/ExploreScreen/HomeCatchPreviewScreen.tsx'), /\[frame\] \$\{Date\.now\(\)\} dt=/);
+});
+
+test('wave 5 r3: ordinary repeats vary: three fidgets round-robin, the chime steps up, and golden finds get the beam', () => {
+  const kinds = [2, 3, 4].map(n => wow.burstVariant(n).fidget);
+  assert.deepEqual([...new Set(kinds)].sort(), [0, 1, 2], 'three different fidgets in a row');
+  for (let n = 2; n < 12; n++) if (n % 5 && (n + 1) % 5) assert.notEqual(wow.burstVariant(n).pitch, wow.burstVariant(n + 1).pitch, `pitch ${n} vs ${n + 1}`);
+  const twirl = wow.catchPlan({ reduced: false, repeat: true, fidget: 1 });
+  assert.ok(Math.abs(wow.catchFrame(twirl.hitStopAt - 1, twirl).wobble) > 300, 'a full twirl while it rises');
+  const hop = wow.catchPlan({ reduced: false, repeat: true, fidget: 2 });
+  assert.ok(wow.catchFrame(hop.squashMs + (hop.hitStopAt - hop.squashMs) / 4, hop).hop > 10, 'a little hop');
+  assert.equal(wow.catchFrame(500, wow.catchPlan({ reduced: false })).hop, 0, 'the full show keeps its own wobbles');
+  const gold = wow.burstVariant(7, { golden: true });
+  assert.ok(gold.beam && gold.golden && !gold.milestone, 'a golden find gets the beam (a real server flag, never chance)');
+  assert.ok(!wow.burstVariant(7).beam);
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /run\.pitch \? \{ volume: 0\.8, pitch: run\.pitch \}/);
 });

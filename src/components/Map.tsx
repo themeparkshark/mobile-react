@@ -22,7 +22,7 @@ import { AppState } from 'react-native';
 import { useOneTimeTip } from './help/HelpProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { Animated, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
-import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Reanimated, { cancelAnimation, Easing as REasing, runOnJS, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { haptic } from '../gamekit/Haptics';
 import { AMBIENT } from '../ui/motion';
 import { EASE } from '../ui/motionEasing';
@@ -46,7 +46,7 @@ import { DeclutterContext } from './map/declutter/Placed';
 import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapDeclutter';
 import type { InsetRect, LayoutItem, Rect } from './map/declutter/solver';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
-import { catchDim, catchDimBack, catchKickX, catchKickY, catchShown, chromeBack, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { catchDim, catchDimBack, catchKickX, catchKickY, catchShown, chromeBack, isCatchShown, sharkShrug } from '../screens/ExploreScreen/catchPresence';
 import { chromeHeal, touchHeal, useCommitHeal } from './map/alive/commitHeal';
 import { MOTION_PROBE, MotionProbeFrames, probeCamera, probeCount } from '../dev/motionProbe';
 import { useTrail } from '../services/trail/TrailProvider';
@@ -618,7 +618,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         <Reanimated.View pointerEvents="none" style={[styles.beam, live === overlayLive ? overlayBeam : live === slot0Live ? slot0Beam : slot1Beam]}>
           <Image source={HEADING_BEAM} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
         </Reanimated.View>
-        {/* Player's avatar — bobs, tilts, breathes */}
+        {/* Player's avatar: bobs, tilts, breathes */}
         <Reanimated.View style={[{ width: 60, height: 60 }, st.shark]}>
           {hasDressedShark(lookInventory) ? (
             // The follow-view copy plays worn Secret pieces (their rigs); the marker copies draw rest frames.
@@ -694,6 +694,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       wiggle.value = withSequence(withTiming(deg * side, { duration: 300, easing: EASE.inOut }), withDelay(toward !== 0 ? 800 : 600, withTiming(0, { duration: 300, easing: EASE.inOut })));
       if (toward !== 0) hop.value = withSequence(withTiming(0.12, { duration: 200, easing: EASE.out }), withDelay(700, withTiming(0, { duration: 260, easing: EASE.inOut })));
     }
+    if (mood === 'shrug') {
+      // Wave 5 round 3, a missed catch: a little "huh" shrug (dip down, a slow tilt one way then the other, and back).
+      squash.value = withSequence(withTiming(0.55, { duration: 110 }), withDelay(220, withSpring(0, { damping: 9, stiffness: 240 })));
+      wiggle.value = withSequence(withTiming(-7, { duration: 140, easing: EASE.inOut }), withTiming(7, { duration: 200, easing: EASE.inOut }),
+        withSpring(0, { damping: 9, stiffness: 220 }));
+    }
     if (mood === 'flick') {
       // A fin flick: a quick swish one way, a snap back past centre and a settle, with a little squash.
       const side = Math.random() < 0.5 ? -1 : 1;
@@ -726,6 +732,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     next();
     return () => clearTimeout(timer);
   }, [lifeOn, react, fxWorn]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Wave 5 round 3: a missed catch makes the shark shrug (catchPresence.sharkShrug counts misses).
+  // It plays while the catch has the map's ambient life frozen (the shrug is the shark answering the catch, not idle life).
+  const shrugOn = focusedOnPlayer && screenFocused && appActive && !reducedMotion;
+  const onShrug = useCallback(() => { if (shrugOn) react('shrug'); }, [shrugOn, react]);
+  useAnimatedReaction(() => sharkShrug.value, (n, prev) => { if (prev != null && n !== prev) runOnJS(onShrug)(); }, [onShrug]);
   // A find just came into range: one happy hop (no repeat; the next one needs a new find).
   const hopSeen = useRef(sharkHop);
   useEffect(() => {
