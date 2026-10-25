@@ -169,3 +169,17 @@ test('the extras panel never sits at scale 0 (its cream fill came back missing f
   assert.match(card, /<Animated\.View style=\{\[styles\.extrasPop, extrasStyle\]\}>\s*<View style=\{\[styles\.extras, styles\.extrasInPop\]\}>/);
   assert.match(card, /const extrasStyle = useAnimatedStyle\(\(\) => \(\{ opacity: extrasIn\.value > 0\.02 \? 1 : 0, transform: \[\{ scale: 0\.6 \+ 0\.4 \* extrasIn\.value \}\] \}\)\);/);
 });
+
+test('a record Banana Basket or Sharky run is a NEW BEST: the shell compares with the best from before the run, not the one just saved', () => {
+  const banana = read('src/games/banana-basket/BananaBasketGame.tsx');
+  assert.match(banana, /bestBeforeRun\.current = mode === 'ride' \? progress\.bestRide : progress\.bestQueue;/);
+  assert.match(banana, /const shownBest = result && bestBeforeRun\.current != null \? bestBeforeRun\.current : bestNow;/);
+  assert.match(banana, /personalBest=\{shownBest \|\| undefined\}/);
+  // deliver records the old best before it saves the new one.
+  const d = banana.slice(banana.indexOf('const deliver = useCallback'));
+  assert.ok(d.indexOf('bestBeforeRun.current =') < d.indexOf('setProgress(nextP)'));
+  const sharky = read('src/games/sharky/SharkySwim.tsx');
+  assert.match(sharky, /personalBest=\{result && bestBeforeRun\.current != null \? bestBeforeRun\.current : prog\.best\[runMode\] \?\? 0\}/);
+  const e = sharky.slice(sharky.indexOf('const best = prog.best[key] ?? 0;'));
+  assert.ok(e.indexOf('bestBeforeRun.current = best;') < e.indexOf('setProgress(next)'));
+});

@@ -824,6 +824,9 @@ function BananaRun({
   const deliver = useCallback((s: SimState) => {
     if (endedRef.current) return;
     endedRef.current = true;
+    // The card compares this run with the best from BEFORE it: saving the new
+    // best first made a record run read BEST 3,745 under 3,745, with no NEW BEST.
+    bestBeforeRun.current = mode === 'ride' ? progress.bestRide : progress.bestQueue;
     running.value = false;
     stopTamb();
     const elapsed = Date.now() - (startedAt.current || Date.now());
@@ -916,6 +919,10 @@ function BananaRun({
     }, reducedMotion ? 500 : 1100);
   }, [cfg, targets, thresholds, mode, rideId, progress, setProgress, running, ghost, cues, reducedMotion, buzz]);
   const lastProof = useRef<BananaProof | null>(null);
+  /** The best before the run on the card (null while playing): see deliver. */
+  const bestBeforeRun = useRef<number | null>(null);
+  const bestNow = mode === 'ride' ? progress.bestRide : progress.bestQueue;
+  const shownBest = result && bestBeforeRun.current != null ? bestBeforeRun.current : bestNow;
 
   finishRun.current = () => {
     runOnUI(() => {
@@ -963,7 +970,7 @@ function BananaRun({
       subtitle={subtitle}
       score={score}
       hideHeaderScore
-      personalBest={mode === 'ride' ? progress.bestRide || undefined : progress.bestQueue || undefined}
+      personalBest={shownBest || undefined}
       objective={objective}
       result={result}
       thresholds={thresholds}
@@ -977,6 +984,7 @@ function BananaRun({
       onStart={() => {
         if (mode !== 'heat') running.value = true;
         startedAt.current = Date.now();
+        bestBeforeRun.current = null;
       }}
       onPause={() => {
         if (mode === 'heat') {

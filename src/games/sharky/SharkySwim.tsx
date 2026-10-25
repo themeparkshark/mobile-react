@@ -227,6 +227,8 @@ export function SharkySwim({
 
   // --- run config ---------------------------------------------------------------
   const prog = progress ?? EMPTY_PROGRESS;
+  /** The best before the run on the card (null while playing): saving the new best first hid NEW BEST from the shell. */
+  const bestBeforeRun = useRef<number | null>(null);
   // The run's config reads progress as it was when the run began: saving the
   // finished run must never re-create the config and restart a sim under the results.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -286,6 +288,8 @@ export function SharkySwim({
         const before = prog.runs;
         const key = runMode;
         const best = prog.best[key] ?? 0;
+        // The shell's finish feel compares with the best from before this run.
+        bestBeforeRun.current = best;
         const isBest = s.score > best;
         const next: SharkyProgress = {
           ...prog,
@@ -704,7 +708,7 @@ export function SharkySwim({
       multiplier={1}
       fever={fever}
       hideHeaderScore
-      personalBest={prog.best[runMode] ?? 0}
+      personalBest={result && bestBeforeRun.current != null ? bestBeforeRun.current : prog.best[runMode] ?? 0}
       objective={objective}
       result={result}
       thresholds={cfg.mode === MODE_RIDE ? RIDE_STARS : QUEUE_STARS}
