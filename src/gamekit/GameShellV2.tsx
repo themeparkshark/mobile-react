@@ -447,12 +447,16 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     }, [reducedMotion, phase, clearCelebration, resultsScale, resultsOpacity, countScale]);
 
     // -- Run the 3-2-1-GO countdown. ----------------------------------------
+    // The latest onStart, read when GO lands: a game that re-renders during
+    // the count (a new onStart each render) never restarts the 3-2-1.
+    const onStartRef = useRef(onStart);
+    onStartRef.current = onStart;
     const beginPlay = useCallback(() => {
       if (startedRef.current) return;
       startedRef.current = true;
       setPhase('playing');
-      onStart();
-    }, [onStart]);
+      onStartRef.current();
+    }, []);
 
     const punchCount = useCallback(() => {
       if (reducedMotionRef.current) { countScale.value = 1; return; }

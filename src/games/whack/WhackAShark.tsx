@@ -870,6 +870,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     clearAutoReady();
     setResult(null);
     setUnlockedTheme(null);
+    setBreather(null);
     if (pendingBest.current != null) { setBest(pendingBest.current); pendingBest.current = null; }
     setShellScore(0);
     startWall.current = Date.now();
@@ -896,12 +897,14 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     }
   }, [runtime, phase, flash, cues.pip]);
 
+  // PLAY AGAIN: get the next run ready, then let the shell's 3-2-1 start it
+  // (onStart), like every other game. Starting a Burst here as well ran the
+  // game under the count, then restarted it at GO.
   const handleRematch = useCallback(() => {
     finishing.current = false;
     wrappedRef.current = false;
     runToken.current += 1;
-    const nextRun = runIndex + 1;
-    setRunIndex(nextRun);
+    setRunIndex((n) => n + 1);
     bankedRef.current = [];
     carryRef.current = NO_CARRY;
     boostedRunRef.current = false;
@@ -911,8 +914,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     if (pendingBest.current != null) { setBest(pendingBest.current); pendingBest.current = null; }
     setShellScore(0);
     setBreather(null);
-    void claimRunOfDay().finally(() => startBurst(0, nextRun, true));
-  }, [runIndex, startBurst, claimRunOfDay]);
+  }, [clearAutoReady]);
 
   // Wrap-up (boarding / left the queue): bank the live Burst from a coherent snapshot.
   const wrapMirror = useRef<{ score: number } | null>(null);

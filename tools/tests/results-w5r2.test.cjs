@@ -91,3 +91,15 @@ test('every Duel star stamps with the same sound and feel as every other card, a
   const cap = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
   assert.match(cap, /if \(finishAt\.current < 0 && \(name === 'starSlam' \|\| name === 'bigStarSlam'\)\) finishAt\.current = cues\.current\.length;/);
 });
+
+test('PLAY AGAIN starts one run, after the 3-2-1: Whack only gets the next run ready, and the count never restarts on a re-render', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  const i = whack.indexOf('const handleRematch = useCallback');
+  const rematch = whack.slice(i, whack.indexOf('}, [clearAutoReady]);', i));
+  assert.doesNotMatch(rematch, /startBurst\(/, 'the shell countdown starts the run through onStart');
+  assert.match(rematch, /setRunIndex\(\(n\) => n \+ 1\);/);
+  assert.match(rematch, /setResult\(null\);/);
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /const onStartRef = useRef\(onStart\);\n\s+onStartRef\.current = onStart;/);
+  assert.match(shell, /onStartRef\.current\(\);\n\s+\}, \[\]\);/, 'beginPlay is stable, so the countdown effect does not restart');
+});
