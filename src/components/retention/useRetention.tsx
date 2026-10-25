@@ -19,7 +19,7 @@ import { enablePush } from '../../services/push';
 import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
 import {
-  CHECK, LOOP_DIM_LEVEL, PRIZE_FLIGHT, exitDimPlan, lidDelay, STREAK_MILESTONES, WELCOME_FX, dailyChain, daysAway, flameMomentFor, flightDoneMs, flightPlan,
+  CHECK, LOOP_DIM_LEVEL, PRIZE_FLIGHT, chainNextAfter, exitDimPlan, lidDelay, STREAK_MILESTONES, WELCOME_FX, dailyChain, daysAway, flameMomentFor, flightDoneMs, flightPlan,
   flightTarget, isRareChest, isRepeatChest, mayAskAfterChain, tomorrowPrize, welcomeCards, type FlameMoment, type WelcomeCard,
 } from '../../services/retention/loopMotion';
 import { DURATION, SPRING } from '../../ui/motion';
@@ -549,7 +549,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       // One continuous moment, no still map between cards: the next card grows out of the Daily 3 button while the
       // last prizes are still landing (NEXT_OVERLAP_MS before the flight ends, never sooner than NEXT_MIN_MS), on an
       // absolute UI-thread mark shared with the flight.
-      const nextAt = t0 + Math.max(NEXT_MIN_MS, flightDoneMs(plan) - NEXT_OVERLAP_MS);
+      // The HUD numbers change in one render when every counter has its first prize in: the card starts after that.
+      const nextAt = t0 + chainNextAfter(plan, NEXT_OVERLAP_MS, NEXT_MIN_MS);
       // Read by the exit below (same render): the dim comes back with the next card, on the same mark.
       nextAtRef.current = nextAt;
       enterBOnFlight.value = 0;

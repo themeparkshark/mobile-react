@@ -8,6 +8,13 @@ export interface CounterPlan {
   readonly amount: number;
   /** When each icon lands, ms from now. */
   readonly landings: readonly number[];
+  /**
+   * A whole flight (every counter at once): the number is changed inside `step`, which runs for every counter in ONE
+   * timer at `stepAt` ms from now, so the HUD re-renders once per flight (each render costs the main thread a
+   * whole-tree pass). The icon still hops on every landing (native driver, no render).
+   */
+  readonly stepAt?: number;
+  readonly step?: (fn: () => void) => void;
 }
 
 type Listener = (plan: CounterPlan) => void;
@@ -17,6 +24,15 @@ export const counterTicks = {
   plan(target: string, plan: CounterPlan): void {
     if (!(plan.amount > 0) || !plan.landings.length) return;
     listeners.get(target)?.forEach(l => l(plan));
+  },
+  /** Every leg of one prize flight: counters hop per landing and their numbers change together in one render. */
+  flight(legs: readonly { readonly target: string; readonly amount: number; readonly landings: readonly number[] }[]): void {
+    const live = legs.filter(l => l.amount > 0 && l.landings.length);
+    if (!live.length) return;
+    const stepAt = counterStepAt(live);
+    const steps: (() => void)[] = [];
+    live.forEach(l => listeners.get(l.target)?.forEach(fn => fn({ amount: l.amount, landings: l.landings, stepAt, step: f => steps.push(f) })));
+    if (steps.length) setTimeout(() => steps.forEach(f => f()), stepAt);
   },
   subscribe(target: string, listener: Listener): () => void {
     let set = listeners.get(target);
@@ -32,13 +48,7 @@ export function counterStep(base: number, amount: number, i: number, n: number):
   return base + Math.round((amount * Math.min(n, i + 1)) / n);
 }
 
-/** A flight steps a HUD number at most this many times (each step is a render; the icon still hops on every landing). */
-export const COUNTER_STEPS = 3;
-
-/** Which of n landings step the number: evenly spread, always including the last. */
-export function counterStepIndexes(n: number): Set<number> {
-  const out = new Set<number>();
-  const k = Math.min(n, COUNTER_STEPS);
-  for (let j = 1; j <= k; j++) out.add(Math.ceil((j * n) / k) - 1);
-  return out;
+/** When a flight's numbers change (ms from now): as soon as every counter has its first prize in. */
+export function counterStepAt(legs: readonly { readonly landings: readonly number[] }[]): number {
+  return legs.reduce((m, l) => Math.max(m, l.landings.length ? Math.min(...l.landings) : 0), 0);
 }

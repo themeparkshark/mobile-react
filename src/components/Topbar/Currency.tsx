@@ -5,7 +5,7 @@ import shortenNumber from '../../helpers/shorten-number';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { useHelp } from '../help/HelpProvider';
 import { glossaryKeyForName } from '../../services/help/glossary';
-import { counterStep, counterStepIndexes, counterTicks } from '../../services/retention/counterTicks';
+import { counterStep, counterTicks } from '../../services/retention/counterTicks';
 
 interface CurrencyProps {
   /** Remote icon URL or a bundled require(); falls back to the gold coin. */
@@ -120,11 +120,13 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
       const n = plan.landings.length;
       const last = Math.max(...plan.landings);
       expect.current = base + plan.amount;
-      // Every landing hops the icon (native driver, no render); the number steps at most COUNTER_STEPS times, so a big
-      // handful of coins never means a render per coin while the next card grows in.
-      const steps = counterStepIndexes(n);
+      // Every landing hops the icon (native driver, no render). In a whole flight the number changes once, together
+      // with every other counter (one render for the HUD), as soon as each has its first prize in; on its own it steps
+      // per landing.
+      const step = plan.step;
+      if (step) step(() => setDisplayCount(base + plan.amount));
       const timers = plan.landings.map((ms, i) => setTimeout(() => {
-        if (steps.has(i)) setDisplayCount(counterStep(base, plan.amount, i, n));
+        if (!step) setDisplayCount(counterStep(base, plan.amount, i, n));
         bounceAnim.setValue(1.18);
         Animated.spring(bounceAnim, { toValue: 1, friction: 4, useNativeDriver: true }).start();
       }, ms));

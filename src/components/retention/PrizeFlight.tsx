@@ -51,12 +51,10 @@ export default function PrizeFlight({ legs, origin, reducedMotion, startAt, land
     let step = 0;
     // Time already gone since the flight's mark (a late mount catches up instead of shifting every landing).
     const gone = startAt ? Math.max(0, Date.now() - startAt) : 0;
-    // Each HUD counter steps up as its icons land (never a jump after the flight).
-    legs.forEach(leg => {
-      const landings = reducedMotion ? [160]
-        : Array.from({ length: leg.icons }, (_, i) => Math.max(0, leg.delay + i * PRIZE_FLIGHT.stepMs + PRIZE_FLIGHT.flyMs - gone));
-      counterTicks.plan(leg.target, { amount: leg.amount, landings });
-    });
+    // Each HUD counter hops as its icons land and every number changes together in one render (never a jump after
+    // the flight, never a render per coin while the next card grows in).
+    counterTicks.flight(legs.map(leg => ({ target: leg.target, amount: leg.amount, landings: reducedMotion ? [160]
+      : Array.from({ length: leg.icons }, (_, i) => Math.max(0, leg.delay + i * PRIZE_FLIGHT.stepMs + PRIZE_FLIGHT.flyMs - gone)) })));
     legs.forEach(leg => {
       for (let i = 0; i < leg.icons; i++) {
         const at = reducedMotion ? 160 : leg.delay + i * PRIZE_FLIGHT.stepMs + PRIZE_FLIGHT.flyMs;

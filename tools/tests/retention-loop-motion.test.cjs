@@ -540,18 +540,28 @@ test('wave 5 round 2: the chain handoff is one render, the dim always comes back
   assert.equal(L.LOOP_DIM_LEVEL, 0.55);
 });
 
-test('wave 5 round 2: HUD numbers step at most 3 times a flight and hold until the balance is read back', () => {
+test('wave 5 round 2: a prize flight re-renders the HUD once, and the next card starts after that render', () => {
   const C = loadTs('src/services/retention/counterTicks.ts');
-  assert.deepEqual([...C.counterStepIndexes(8)], [2, 5, 7]);
-  assert.deepEqual([...C.counterStepIndexes(2)], [0, 1]);
-  assert.deepEqual([...C.counterStepIndexes(1)], [0]);
-  for (let n = 1; n <= 12; n++) {
-    const s = C.counterStepIndexes(n);
-    assert.ok(s.size <= C.COUNTER_STEPS && s.has(n - 1));
-  }
+  // Every counter's number changes together, as soon as each has its first prize in.
+  assert.equal(C.counterStepAt([{ landings: [550, 595, 640] }, { landings: [630] }]), 630);
+  const steps = [];
+  const offs = ['coins', 'tickets'].map(t => C.counterTicks.subscribe(t, plan => { steps.push([t, plan.stepAt]); plan.step(() => undefined); }));
+  C.counterTicks.flight([{ target: 'coins', amount: 25, landings: [550, 595] }, { target: 'tickets', amount: 1, landings: [630] }]);
+  offs.forEach(off => off());
+  assert.deepEqual(steps, [['coins', 630], ['tickets', 630]]);
   const cur = read('src/components/Topbar/Currency.tsx');
+  assert.match(cur, /if \(step\) step\(\(\) => setDisplayCount\(base \+ plan\.amount\)\);/);
+  assert.match(cur, /if \(!step\) setDisplayCount\(counterStep\(base, plan\.amount, i, n\)\);/);
   assert.match(cur, /if \(expect\.current === null\) setDisplayCount\(prevCount\.current\);/);
   assert.match(cur, /if \(count === counted\) \{ prevCount\.current = count; setDisplayCount\(count\); return; \}/);
+  assert.match(read('src/components/retention/PrizeFlight.tsx'), /counterTicks\.flight\(/);
+  // The next card waits for that one HUD render (and still overlaps the last landings).
+  const plan = L.flightPlan([{ kind: 'coins', amount: 25 }, { kind: 'tickets', amount: 1 }, { kind: 'energy', amount: 20 }], () => true);
+  const firstIn = Math.max(...plan.map(l => l.delay + L.PRIZE_FLIGHT.flyMs));
+  const next = L.chainNextAfter(plan, 380, 420);
+  assert.ok(next >= firstIn + L.NEXT_AFTER_STEP_MS);
+  assert.ok(next < L.flightDoneMs(plan), 'still overlaps the last landings');
+  assert.match(read('src/components/retention/useRetention.tsx'), /const nextAt = t0 \+ chainNextAfter\(plan, NEXT_OVERLAP_MS, NEXT_MIN_MS\);/);
 });
 
 test('wave 5 round 2: the chest card tomorrow row is big, each fact is said once, plates never draw over chips', () => {

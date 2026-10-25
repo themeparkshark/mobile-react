@@ -516,3 +516,16 @@ export function exitDimPlan(nextAt: number, now: number, exitMs: number): { read
   if (nextAt > now + exitMs) return { lift: true, backAt: nextAt, end: LOOP_DIM_LEVEL };
   return { lift: false, backAt: now, end: LOOP_DIM_LEVEL };
 }
+
+/** The next chain card starts at least this long after the HUD numbers change (their render is done by then). */
+export const NEXT_AFTER_STEP_MS = 120;
+
+/**
+ * When the next chain card starts growing in, in ms after the flight's mark: it overlaps the last landings
+ * (`overlapMs` before the flight ends) but never sooner than `minMs`, and never before the HUD numbers have changed
+ * (one render, when every counter has its first prize in), so no render lands in its entrance.
+ */
+export function chainNextAfter(plan: readonly FlightLeg[], overlapMs: number, minMs: number): number {
+  const firstIn = plan.reduce((m, l) => Math.max(m, l.delay + PRIZE_FLIGHT.flyMs), 0);
+  return Math.max(minMs, flightDoneMs(plan) - overlapMs, plan.length ? firstIn + NEXT_AFTER_STEP_MS : 0);
+}
