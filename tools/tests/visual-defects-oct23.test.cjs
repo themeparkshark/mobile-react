@@ -833,7 +833,7 @@ test('SE fits: the coin-in-range card sits left above the help button and ends b
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /const COIN_TIP_WIDTH = Math\.min\(300, WINDOW_WIDTH - 124\);/);
   assert.match(explore, /WINDOW_WIDTH - 12 - 16 - column\.width - 8/);
-  assert.match(explore, /: bottomLeftColumnHeight\(stores\) \+ 6;/);
+  assert.match(explore, /: bottomLeftColumnHeight\(stores\) \+ \(SHORT_MAP \? 3 : 6\);/);
   assert.match(explore, /style: \{ position: 'absolute', left: 12, maxWidth, bottom, zIndex: 40 \} as const,/);
   assert.match(explore, /onLayout=\{event => setRightColumnWidth\(Math\.round\(event\.nativeEvent\.layout\.width\)\)\}/);
   assert.match(explore, /small=\{!!coin && \(SHORT_MAP \|\| coin\.narrow\)\}/);
