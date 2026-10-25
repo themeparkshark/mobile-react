@@ -17,7 +17,7 @@
  * page, the parent keeps it mounted (still on the 1) until that result is on screen, so no frame shows the
  * game board live in between. It always leaves by unmounting with a UI-thread FadeOut.
  */
-import { memo, useCallback, useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeOut, runOnJS, useAnimatedStyle, useFrameCallback, useSharedValue, withDelay, withTiming,
   type SharedValue } from 'react-native-reanimated';
@@ -57,28 +57,40 @@ function CountNumber({ value, index, clock, reducedMotion }: {
   return <Animated.Text style={[styles.number, index > 0 && styles.numberStacked, style]}>{value}</Animated.Text>;
 }
 
-function ResumeCountdown({ active, onDone }: {
+function ResumeCountdown({ active, onDone, onHidden }: {
   active: boolean;
   /**
-   * The game comes back (under the 1). `msLeftOfOne` is how long the 1 still has of its step, so a plain
-   * resume can let go exactly when it ends (the 3, 2 and 1 each get one even beat).
+   * The game comes back (under the 1). Return true for a plain resume (nothing to hand over to): the countdown
+   * then hides itself the moment the 1's step ends, with a render of only this small component.
    */
-  onDone: (msLeftOfOne: number) => void;
+  onDone: () => boolean;
+  /** It has hidden itself (a plain resume): the parent can let go of it whenever it is free. */
+  onHidden: () => void;
 }) {
   const reducedMotion = useReducedGameMotion();
-  /** 0 to 3: the 3 shows in [0, 1), the 2 in [1, 2), the 1 from 2 until it unmounts. */
+  /** 0 to 3: the 3 shows in [0, 1), the 2 in [1, 2), the 1 from 2 until it hides. */
   const clock = useSharedValue(0);
+  /** A plain resume: hide at the end of the 1 (read on the UI thread). */
+  const plain = useSharedValue(false);
+  const [hiddenSelf, setHiddenSelf] = useState(false);
   const finished = useRef(false);
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
+  const hiddenRef = useRef(onHidden);
+  hiddenRef.current = onHidden;
 
   const frameRef = useRef<{ setActive: (on: boolean) => void } | null>(null);
 
+  // Its own small render (not the whole screen's), so the beat after the 1 does not wait on a busy JS thread.
+  const hideSelf = useCallback(() => setHiddenSelf(true), []);
   const finish = useCallback(() => {
     if (finished.current) return;
     finished.current = true;
-    doneRef.current(Math.max(0, (3 - clock.value) * STEP_MS));
-  }, [clock]);
+    if (doneRef.current() !== true) return;
+    plain.value = true;
+    // The JS thread was late and the 1's step is already over: hide now.
+    if (clock.value >= 3) hideSelf();
+  }, [clock, plain, hideSelf]);
   /** A tap skips to the end of the 1. */
   const skip = useCallback(() => {
     clock.value = 3;
@@ -96,7 +108,10 @@ function ResumeCountdown({ active, onDone }: {
     // The 2 and the 1 tick on the frame they appear.
     if (Math.floor(after) > Math.floor(before) && after < 3) runOnJS(tick)();
     if (before < HANDOVER_AT && after >= HANDOVER_AT) runOnJS(finish)();
-    if (after >= 3) runOnJS(sleep)();
+    if (after >= 3) {
+      runOnJS(sleep)();
+      if (plain.value) runOnJS(hideSelf)();
+    }
   }, false);
   frameRef.current = frame;
 
@@ -104,10 +119,12 @@ function ResumeCountdown({ active, onDone }: {
     if (!active) return undefined;
     finished.current = false;
     clock.value = 0;
+    plain.value = false;
     tick();
     frame.setActive(true);
     return () => {
       frame.setActive(false);
+      setHiddenSelf(false);
       // Back to 0 once it has hidden (on the UI thread, a moment later, so the closing frame keeps the 1
       // instead of flashing a 3), so the next countdown never opens on the last run's 1.
       clock.value = withDelay(RESET_DELAY_MS, withTiming(0, { duration: 0 }));
@@ -116,7 +133,14 @@ function ResumeCountdown({ active, onDone }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  if (!active) return null;
+  // Tell the parent a frame after it has hidden, so the screen's big render never delays the fade.
+  useEffect(() => {
+    if (!hiddenSelf) return undefined;
+    const id = requestAnimationFrame(() => hiddenRef.current());
+    return () => cancelAnimationFrame(id);
+  }, [hiddenSelf]);
+
+  if (!active || hiddenSelf) return null;
   return <Animated.View style={styles.scrimHost} exiting={reducedMotion ? undefined : FadeOut.duration(EXIT_FADE_MS)}>
     <Pressable style={styles.scrim} onPress={skip} accessibilityRole="button"
       accessibilityLabel="Resuming in 3 2 1. Tap to resume now.">

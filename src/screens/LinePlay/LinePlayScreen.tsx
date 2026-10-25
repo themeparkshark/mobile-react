@@ -267,8 +267,7 @@ export default function LinePlayScreen() {
     return () => { delete holder.__linePlayPreviewLocked; };
   }, []);
   const [resumeHandoff, setResumeHandoff] = useState<'arcade' | 'page' | 'plain' | null>(null);
-  /** A plain resume: how long the 1 still has of its step when the game comes back under it. */
-  const plainHoldMs = useRef(0);
+
   const [toast, setToast] = useState<QueueToastMessage | null>(null);
   const toastKey = useRef(0);
   const showToastRef = useRef<((message: Omit<QueueToastMessage, 'key'>) => void) | null>(null);
@@ -897,12 +896,13 @@ export default function LinePlayScreen() {
   }, []);
   // The countdown's hand-off: the page is painted in place two frames after the jump; the arcade lets go
   // once its sheet is on screen and moving (onArcadeShowing). Never longer than RESUME_HANDOFF_MAX_MS.
-  // A plain resume lets go when the 1's step ends (the game is already back under it).
+  // A plain resume: the countdown hides itself when the 1's step ends (the game is already back under it)
+  // and then reports it (onHidden); the fallback only unsticks it if that report never comes.
   useEffect(() => {
     if (resumeHandoff == null) return undefined;
     if (resumeHandoff === 'plain') {
-      const end = setTimeout(() => setResumeHandoff(current => current === 'plain' ? null : current), plainHoldMs.current);
-      return () => clearTimeout(end);
+      const unstick = setTimeout(() => setResumeHandoff(current => current === 'plain' ? null : current), RESUME_HANDOFF_MAX_MS);
+      return () => clearTimeout(unstick);
     }
     let frameId: number | null = null;
     const letGo = (from: 'arcade' | 'page') => setResumeHandoff(current => current === from ? null : current);
@@ -1602,16 +1602,17 @@ export default function LinePlayScreen() {
       <QueueToast message={toast} onDone={() => setToast(null)} top={toastSpot?.top} slim={toastSpot?.slim} />
 
       {/* The game comes back under the 1 (once its punch has settled); the 1 still gets its full step, like the 3 and the 2. */}
-      <ResumeCountdown active={resuming || resumeHandoff != null} onDone={(msLeftOfOne) => {
+      <ResumeCountdown active={resuming || resumeHandoff != null} onDone={() => {
         setResuming(false);
         session.resume();
         const page = pageAfterResume.current;
         pageAfterResume.current = null;
         // The 1 stays up until the arcade starts coming in, or the page is in place under it (no scroll to watch).
-        if (arcadeAfterResume.current) { arcadeAfterResume.current = false; setArcadeOpen(true); setResumeHandoff('arcade'); }
-        else if (page != null) { jumpToPage(page, false); setResumeHandoff('page'); }
-        else { plainHoldMs.current = msLeftOfOne; setResumeHandoff('plain'); }
-      }} />
+        if (arcadeAfterResume.current) { arcadeAfterResume.current = false; setArcadeOpen(true); setResumeHandoff('arcade'); return false; }
+        if (page != null) { jumpToPage(page, false); setResumeHandoff('page'); return false; }
+        setResumeHandoff('plain');
+        return true;
+      }} onHidden={() => setResumeHandoff(current => current === 'plain' ? null : current)} />
 
       {/* End by hand: one branded sheet (header End, back, or a footer tab). */}
       <GameDialog
