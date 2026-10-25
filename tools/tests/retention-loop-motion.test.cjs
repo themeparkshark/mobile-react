@@ -589,3 +589,14 @@ test('wave 5 round 2: the chest card tomorrow row is big, each fact is said once
   assert.match(tomorrow, /ghostDisc: \{ width: 76, height: 76, borderRadius: 38, backgroundColor: '#0d4f92'/);
   for (const line of [L.flameUpLine(5), L.milestoneBadgeLine(7)]) assert.ok(L.kidSafeCopy(line));
 });
+
+test('wave 5 round 2: a card that left is let go in the flight step render, and hidden cards keep still', () => {
+  const C = loadTs('src/services/retention/counterTicks.ts');
+  assert.equal(typeof C.counterTicks.onFlightStep, 'function');
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /counterTicks\.onFlightStep\(\(\) => \{ if \(mounted\.current\) setAGoneAt\(Date\.now\(\)\); \}\)/);
+  assert.match(hook, /const shownContent = showing \? content : hostAGone \? null : lastCard\.current\?\.content \?\? null;/);
+  assert.match(hook, /aShownAt\.current = Date\.now\(\);/);
+  // The tomorrow card mounted early waits for its entrance before its loops move.
+  assert.match(read('src/components/retention/TomorrowCard.tsx'), /const E = <T,>\(x: T\): T => \(entered \? \(withDelayAfter\(entered, 0, x as never\) as T\) : x\);/);
+});

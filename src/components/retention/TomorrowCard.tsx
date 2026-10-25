@@ -54,12 +54,14 @@ export default function TomorrowCard({ prize, reducedMotion, onDone, startAt, en
     return () => { if (t) clearTimeout(t); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // The prize wiggles 6 degrees, twice, every 3 s and the stars twinkle (ambient: rests when idle or reduced).
+  // Mounted early and hidden: the loops wait for the card's entrance (nothing moves while nobody can see it).
   useAmbientLoop(() => {
-    wiggle.value = withRepeat(withSequence(
+    const E = <T,>(x: T): T => (entered ? (withDelayAfter(entered, 0, x as never) as T) : x);
+    wiggle.value = E(withRepeat(withSequence(
       withDelay(2200, withTiming(1, { duration: 110 })), withTiming(-1, { duration: 140 }),
       withTiming(1, { duration: 140 }), withTiming(0, { duration: 110 }),
-    ), -1);
-    twinkle.value = withRepeat(withTiming(1, { duration: 1400 }), -1, true);
+    ), -1));
+    twinkle.value = E(withRepeat(withTiming(1, { duration: 1400 }), -1, true));
   }, () => { cancelAnimation(wiggle); cancelAnimation(twinkle); wiggle.value = 0; twinkle.value = 0; }, !reducedMotion);
 
   const cardStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, enter.value * 2), transform: [{ translateY: (1 - enter.value) * 70 }] }));

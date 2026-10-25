@@ -25,6 +25,7 @@ import {
 import { DURATION, SPRING } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import { type FlightSpec } from './PrizeFlight';
+import { counterTicks } from '../../services/retention/counterTicks';
 import { mayAskForPush, notePushAsked } from '../../services/retention/pushAsk';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../../ui';
 import { useModalLayer } from '../../ui/modalLayers';
@@ -647,6 +648,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   /** Prizes flying home from their rows (kept apart from the card, so the next card can mount while they fly). */
   const [legs, setLegs] = useState<readonly FlightSpec[] | null>(null);
   const [legsAt, setLegsAt] = useState<number | undefined>(undefined);
+  /** The flight's HUD step after a card left (epoch ms): the left card's content is unmounted in that same render. */
+  const [aGoneAt, setAGoneAt] = useState(0);
+  /** When the card host last started showing a card (epoch ms). */
+  const aShownAt = useRef(0);
+  useEffect(() => counterTicks.onFlightStep(() => { if (mounted.current) setAGoneAt(Date.now()); }), []);
   /** When the next chain card enters (epoch ms, 0 when none is booked): the dim comes back on this mark. */
   const nextAtRef = useRef(0);
   /** A chest paid out: the balance is read once the moment is over (never mid-flight or mid-entrance). */
@@ -905,6 +911,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     if (showing) {
       if (!cardUp.current) {
         cardUp.current = true;
+        aShownAt.current = Date.now();
         launch.value = !reducedMotion && launchFrom.current ? launchFrom.current : { x: 0, y: 0 };
         launchFrom.current = null;
         out.value = 0;
@@ -1178,7 +1185,10 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const lastCard = useRef<{ title: string; content: ReactNode } | null>(null);
   if (content && view && view.k !== 'flying') lastCard.current = { title, content };
   const shownTitle = showing || !lastCard.current ? title : lastCard.current.title;
-  const shownContent = showing ? content : lastCard.current?.content ?? null;
+  // A card that has left (its exit is long done by the flight's HUD step) is let go: its rays, wiggles and sparkles
+  // stop instead of running hidden under the next card, and every later render has less to walk.
+  const hostAGone = !showing && aGoneAt > aShownAt.current;
+  const shownContent = showing ? content : hostAGone ? null : lastCard.current?.content ?? null;
   if (!view && !present && !lingering) lastCard.current = null;
   backdropRef.current = () => { if (!revealing && (showing || slotB)) close(); };
   /**

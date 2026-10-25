@@ -518,7 +518,7 @@ export function exitDimPlan(nextAt: number, now: number, exitMs: number): { read
 }
 
 /** The next chain card starts at least this long after the HUD numbers change (their render is done by then). */
-export const NEXT_AFTER_STEP_MS = 120;
+export const NEXT_AFTER_STEP_MS = 200;
 
 /**
  * When the next chain card starts growing in, in ms after the flight's mark: it overlaps the last landings

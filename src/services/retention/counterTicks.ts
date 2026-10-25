@@ -19,6 +19,8 @@ export interface CounterPlan {
 
 type Listener = (plan: CounterPlan) => void;
 const listeners = new Map<string, Set<Listener>>();
+/** Run in the same timer as a flight's counter step (so their renders share it), e.g. letting a card that left go. */
+const stepListeners = new Set<() => void>();
 
 export const counterTicks = {
   plan(target: string, plan: CounterPlan): void {
@@ -32,7 +34,12 @@ export const counterTicks = {
     const stepAt = counterStepAt(live);
     const steps: (() => void)[] = [];
     live.forEach(l => listeners.get(l.target)?.forEach(fn => fn({ amount: l.amount, landings: l.landings, stepAt, step: f => steps.push(f) })));
-    if (steps.length) setTimeout(() => steps.forEach(f => f()), stepAt);
+    if (steps.length || stepListeners.size) setTimeout(() => { steps.forEach(f => f()); stepListeners.forEach(f => f()); }, stepAt);
+  },
+  /** Called in the flight's one step timer (React batches every state change made there into that one render). */
+  onFlightStep(fn: () => void): () => void {
+    stepListeners.add(fn);
+    return () => { stepListeners.delete(fn); };
   },
   subscribe(target: string, listener: Listener): () => void {
     let set = listeners.get(target);
