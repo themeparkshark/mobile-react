@@ -18,7 +18,7 @@ import {
 } from '../../services/retention/logic';
 import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 import { useAmbient } from './power';
-import CardSurface from './CardSurface';
+import CardSurface, { CARD_FRAME } from './CardSurface';
 
 const DAILY_CHEST = require('../../../assets/images/daily/chest-closed.png');
 const SNACK = require('../../../assets/images/social/topic_snacks.png');
@@ -346,7 +346,7 @@ function WeekDay({ letter, state, reducedMotion }: { readonly letter: string; re
 }
 
 const styles = StyleSheet.create({
-  card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
+  card: { width: '94%', marginTop: -14, ...CARD_FRAME,
     paddingTop: 20, paddingBottom: 10, paddingHorizontal: 12, alignItems: 'stretch', overflow: 'hidden' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 18, padding: 8 },

@@ -482,7 +482,7 @@ test('wave 5: thinner Battery Saver look, one big tomorrow picture, a promise bu
   // Tomorrow is one big picture row: no far ladder, prize art at 44 pt on the flame card.
   const art = read('src/components/retention/FlameArt.tsx');
   assert.doesNotMatch(art, /farRow\}><NextFlameGoal/);
-  assert.match(flame, /<TomorrowGoal days=\{to\} prize=\{prize\} size=\{44\}/);
+  assert.match(flame, /<TomorrowGoal days=\{to\} prize=\{prize\} size=\{50\}/);
   // The tomorrow card's button is the promise, not a second "see you tomorrow".
   const tomorrow = read('src/components/retention/TomorrowCard.tsx');
   assert.doesNotMatch(tomorrow, /SEE YOU TOMORROW!/);
@@ -571,12 +571,14 @@ test('wave 5 round 2: the HUD numbers change with no render while prizes fly (mo
   assert.match(cur, /if \(expect\.current === null\) setDisplayCount\(prevCount\.current\);/);
   // The swap layer goes only after the render that shows the real number is on screen (no flash of the old one).
   assert.match(cur, /if \(hadQueued\.current\) \{ hadQueued\.current = false; swap\.value = 0; \}/);
-  // The next card starts after every counter has its first prize in (and still overlaps the last landings).
+  // Wave 5 round 3: the next card grows in while the last prizes are still landing (at least 200 ms of overlap with
+  // the last landing; the HUD numbers swap on the UI thread, so nothing waits for their render), never before minMs.
   const plan = L.flightPlan([{ kind: 'coins', amount: 25 }, { kind: 'tickets', amount: 1 }, { kind: 'energy', amount: 20 }], () => true);
-  const firstIn = Math.max(...plan.map(l => l.delay + L.PRIZE_FLIGHT.flyMs));
+  const lastLand = L.flightDoneMs(plan) - L.PRIZE_FLIGHT.nextAfterMs;
   const next = L.chainNextAfter(plan, 380, 420);
-  assert.ok(next >= firstIn + L.NEXT_AFTER_STEP_MS);
-  assert.ok(next < L.flightDoneMs(plan), 'still overlaps the last landings');
+  assert.ok(next <= lastLand - 200, 'overlaps the last landing by 200 ms or more');
+  assert.ok(next >= 420, 'the prizes lift off and fly first');
+  assert.equal(L.chainNextAfter([], 380, 420), Math.max(420, L.flightDoneMs([]) - 380));
   assert.match(hook, /const nextOffset = chainNextAfter\(plan, NEXT_OVERLAP_MS, NEXT_MIN_MS\);/);
 });
 
@@ -592,7 +594,7 @@ test('wave 5 round 2: the chest card that left is let go once the next card is i
 
 test('wave 5 round 2: the chest card tomorrow row is big, each fact is said once, plates never draw over chips', () => {
   const row = read('src/components/retention/FlameUpRow.tsx');
-  assert.match(row, /<TomorrowGoal days=\{to\} prize=\{prize\} size=\{42\} reducedMotion=\{reducedMotion\} stacked/);
+  assert.match(row, /<TomorrowGoal days=\{to\} prize=\{prize\} size=\{48\} reducedMotion=\{reducedMotion\} stacked/);
   assert.match(row, /pill: \{ backgroundColor: BRAND\.navy/);
   assert.match(row, /minWidth: Math\.max\(34, 14 \+ String\(Math\.max\(from, to\)\)\.length \* 11\)/);
   assert.doesNotMatch(row, /days in a row!/);
@@ -620,3 +622,44 @@ test('wave 5 round 2: the chest card tomorrow row is big, each fact is said once
   for (const line of [L.flameUpLine(5), L.milestoneBadgeLine(7)]) assert.ok(L.kidSafeCopy(line));
 });
 
+
+test('wave 5 round 3: a rare chest is its own event (gold shaft, second star ring, coin rain, gold rim, WOW! stamp, own haptic)', () => {
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  assert.match(reveal, /export const RARE_CHEST = \{/);
+  assert.match(reveal, /rain\.value = atPop\(withDelay\(RARE_CHEST\.rainAt/);
+  assert.match(reveal, /stars2\.value = atPop\(withDelay\(RARE_CHEST\.stars2At/);
+  assert.match(reveal, /playHaptic\('bigStarSlam'\)/);
+  assert.match(reveal, /<WowStamp \/>/);
+  assert.match(reveal, /\{rare && <Animated\.View pointerEvents="none" style=\{\[styles\.goldRim, rimStyle\]\} \/>\}/);
+  // Capped and budgeted like every burst (Battery Saver halves them, Reduce Motion draws none).
+  assert.match(reveal, /momentParticles\(RARE_CHEST\.rainCoins, budget, reducedMotion\)/);
+  // Honest words only: the stamp says how it looks, never that the prizes are rarer or worth more.
+  assert.doesNotMatch(reveal, />RARE!?</);
+});
+
+test('wave 5 round 3: welcome back is a burst with a counted flame, a waiting prize and one big gold button', () => {
+  const welcome = read('src/components/retention/WelcomeBack.tsx');
+  assert.match(welcome, /spin=\{budget\.level === 'full'\}/);
+  assert.match(welcome, /count\.value = withDelay\(dropAt \+ WELCOME_FX\.countAt, withTiming\(flameDays/);
+  assert.match(welcome, /useAnimatedProps\(/);
+  assert.match(welcome, /LET'S PLAY!/);
+  assert.doesNotMatch(welcome, /Tap to play!<\/Text>/);
+  assert.match(welcome, /<TomorrowGoal days=\{flameDays\} prize="chest"/);
+  assert.ok(L.WELCOME_FX.giftAt > L.WELCOME_FX.countAt);
+});
+
+test('wave 5 round 3: loop cards never open half-drawn, wear Alex frames, and plates are filled slots', () => {
+  const gate = read('src/components/retention/artGate.ts');
+  assert.match(gate, /shown\.value = withDelay\(maxMs, withTiming\(1, \{ duration: 0 \}\)\)/);
+  for (const f of ['StreakMoment', 'TomorrowCard', 'WelcomeBack']) assert.match(read(`src/components/retention/${f}.tsx`), /useArtGate\(/, f);
+  assert.match(read('src/components/retention/StreakMoment.tsx'), /onDisplay=\{gate\.onDisplay\}/);
+  const surface = read('src/components/retention/CardSurface.tsx');
+  assert.match(surface, /borderColor: BRAND\.navy, borderBottomWidth: CARD_LIP/);
+  for (const f of ['RewardReveal', 'StreakMoment', 'TomorrowCard', 'FreezeMoments', 'WelcomeBack', 'Daily3Sheet', 'PassStepCard']) {
+    assert.match(read(`src/components/retention/${f}.tsx`), /\.\.\.CARD_FRAME/, f);
+  }
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  assert.doesNotMatch(reveal, /slot: \{[^}]*borderStyle: 'dashed'/);
+  // Tomorrow pictures read from arm's length (48 pt and up) and the prize twinkles.
+  assert.match(read('src/components/retention/FlameArt.tsx'), /styles\.prizeSpark/);
+});

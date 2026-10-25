@@ -12,7 +12,7 @@ import { GoldBurst, RadialFlash, SparkleBurst } from '../../ui/GoldBurst';
 import { DURATION, PARTICLES, SPRING, flashPeak, momentParticles } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import RewardBurst from '../RewardBurst';
-import CardSurface from './CardSurface';
+import CardSurface, { CARD_FRAME } from './CardSurface';
 import StampRibbon from './StampRibbon';
 
 /** Beats for the Shark Pass step card (ms after it opens). */
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   // The same dim as every loop card: the map or page shows through softly; the card itself is opaque.
   dim: { flex: 1, backgroundColor: 'rgba(5,52,110,0.55)', alignItems: 'center', justifyContent: 'center' },
   wrap: { alignItems: 'center' },
-  card: { width: '94%', marginTop: -14, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white, backgroundColor: BRAND.blue,
+  card: { width: '94%', marginTop: -14, ...CARD_FRAME, backgroundColor: BRAND.blue,
     paddingTop: 22, paddingBottom: 16, paddingHorizontal: 14, alignItems: 'center', overflow: 'hidden', gap: 10 },
   stage: { height: 170, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   abs: { position: 'absolute' },

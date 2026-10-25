@@ -15,7 +15,7 @@ import { BRAND } from '../../ui';
 import { DURATION, SPRING, momentParticles } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import FlameArt from './FlameArt';
-import CardSurface from './CardSurface';
+import CardSurface, { CARD_FRAME } from './CardSurface';
 
 const FREEZE = require('../../../assets/images/retention/freeze.png');
 const FINN = require('../../assets/games/banana-basket/v2/shark_cheer.png');
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   slotOpen: { borderColor: BRAND.gold, backgroundColor: 'rgba(255, 207, 59, 0.15)' },
   plus: { fontFamily: 'Shark', fontSize: 22, color: BRAND.gold, marginTop: -2 },
   puffOrigin: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },
-  card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
+  card: { width: '94%', marginTop: -14, ...CARD_FRAME,
     paddingTop: 22, paddingBottom: 14, paddingHorizontal: 14, alignItems: 'center', gap: 10 },
   stage: { width: '100%', height: 190, alignItems: 'center', justifyContent: 'center' },
   center: { position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 },

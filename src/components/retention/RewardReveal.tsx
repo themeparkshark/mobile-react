@@ -1,4 +1,5 @@
 import { Image, type ImageSource } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, {
@@ -12,7 +13,7 @@ import { playSfx } from '../../gamekit/SFX';
 import { usePowerBudget } from '../../power';
 import { doneDelay, isBigReward, rewardRows, rowSchedule, type RewardRow } from '../../services/retention/logic';
 import { FULL_SET, LEVEL_CHEST, LOOP_CUES, REPEAT_CHEST, REVEAL_ROWS, countStart, lidDelay, rowCountMs } from '../../services/retention/loopMotion';
-import CardSurface from './CardSurface';
+import CardSurface, { CARD_FRAME } from './CardSurface';
 import type { Point } from './PrizeFlight';
 import GoldCheckCoin from './GoldCheckCoin';
 import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
@@ -25,7 +26,7 @@ import { NOT_YET, withDelayAfter } from './delayUntil';
 
 const BOX = require('../../../assets/images/retention/mystery-box.png');
 /** Everything around the chest and rows on a known-prize card (safe areas, ribbon, header, flame row, button, padding). */
-const CHROME_KNOWN = 458;
+const CHROME_KNOWN = 475;
 /**
  * The rows area for this many small prize rows and hero cards: a small row is 44 pt plus its 6 pt gap, a hero card
  * 102 pt plus its gap, and the list's own padding. Sized to the content, so the card never ends in empty blue.
@@ -37,7 +38,6 @@ const FREEZE = require('../../../assets/images/retention/freeze.png');
 /** The plates start this long after the chips begin to fade (the chips are below 30 percent by then). */
 export const SLOTS_AFTER_HINT_MS = 130;
 const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
-const RAYS = require('../../../assets/images/reveal/rays-gold-fade.webp');
 
 Animated.addWhitelistedNativeProps({ text: true });
 const AnimatedInput = Animated.createAnimatedComponent(TextInput);
@@ -176,6 +176,11 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   /** A slow server: after the strong gather the chest settles into a calm glow and bob (never a frantic stuck chest). */
   const calm = useSharedValue(0);
   const beam = useSharedValue(0);
+  /** A rare chest's extras: a second ring of stars, coins raining over the whole card, a gold rim and a WOW! stamp. */
+  const stars2 = useSharedValue(0);
+  const rain = useSharedValue(0);
+  const rim = useSharedValue(0);
+  const stamp = useSharedValue(0);
   const tapRing = useSharedValue(0);
   /** The lid: 0 closed art, 1 open art (swapped on the UI thread on the hit-stop frame, never by a render). */
   const lid = useSharedValue(0);
@@ -234,6 +239,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   };
   const sparks = useMemo(() => momentParticles(PARTICLES.sparkles, budget, reducedMotion), [budget, reducedMotion]);
   const coins = useMemo(() => momentParticles(rare ? PARTICLES.sparkles : 8, budget, reducedMotion), [budget, reducedMotion, rare]);
+  const rareStars = useMemo(() => (rare ? momentParticles(PARTICLES.sparkles, budget, reducedMotion) : 0), [budget, reducedMotion, rare]);
+  const rainCoins = useMemo(() => (rare ? momentParticles(RARE_CHEST.rainCoins, budget, reducedMotion) : 0), [budget, reducedMotion, rare]);
   const schedule = useMemo(() => rowSchedule(rows, dropIn ? LEVEL_CHEST.rowBeat : repeat ? REPEAT_CHEST.rowBeat : REVEAL_ROWS.beat,
     REVEAL_ROWS.hold, repeat ? REPEAT_CHEST.first : REVEAL_ROWS.first),
     [rows, dropIn, repeat]);
@@ -396,8 +403,21 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     // never draw together), and are in before the first prize stamps into its plate.
     hintOut.value = withDelayAfter(entered, pl.pop + Math.max(0, pl.hold - DURATION.quick), withTiming(1, { duration: DURATION.quick, easing: EASE.out }));
     slots.value = withDelayAfter(entered, pl.pop + Math.max(0, pl.hold - DURATION.quick) + SLOTS_AFTER_HINT_MS, withTiming(1, { duration: 110, easing: EASE.out }));
-    // A rare chest: a gold beam rises out of the lid and lingers while the rows land.
-    if (rare) beam.value = atPop(withSequence(withTiming(1, { duration: 180, easing: EASE.out }), withDelay(700, withTiming(0, { duration: 700 }))));
+    // A rare chest (about 1 in 10) is its own event, readable with zero words: a tall saturated gold shaft drops onto
+    // the chest from the top of the card, a second ring of stars follows the first, gold coins rain across the whole
+    // card, the rim turns gold and a WOW! stamp lands, with its own haptic and sound on top of the golden one.
+    if (rare) {
+      beam.value = atPop(withSequence(withTiming(1, { duration: RARE_CHEST.beamInMs, easing: EASE.out }),
+        withDelay(RARE_CHEST.beamHoldMs, withTiming(0.7, { duration: 900 }))));
+      stars2.value = 0;
+      stars2.value = atPop(withDelay(RARE_CHEST.stars2At, withTiming(1, { duration: DURATION.sparkle + 200, easing: EASE.out })));
+      rain.value = 0;
+      rain.value = atPop(withDelay(RARE_CHEST.rainAt, withTiming(1, { duration: RARE_CHEST.rainMs, easing: Easing.linear })));
+      rim.value = atPop(withTiming(1, { duration: 160, easing: EASE.out }));
+      stamp.value = atPop(withDelay(RARE_CHEST.stampAt, withSequence(withTiming(1.25, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.stamp))));
+      later_(pl.pop + RARE_CHEST.stampAt, () => { playHaptic('bigStarSlam'); playSfx('fx.firework', 1); });
+      later_(pl.pop + RARE_CHEST.stampAt + 160, () => playSfx('fx.jingle', 0.8));
+    }
     const at = pl.rows;
     // The chest glow flares again as each hero card lands.
     const heroes = at.filter((_, i) => isBigReward(rows[i].kind));
@@ -422,7 +442,10 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const heroStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: heroDY * lift.value }, { scale: 1 + (heroScale - 1) * lift.value }],
   }));
-  const beamStyle = useAnimatedStyle(() => ({ opacity: beam.value, transform: [{ scaleY: 0.4 + 0.6 * beam.value }] }));
+  // The shaft drops from the top of the card onto the chest (it grows downward from its top edge).
+  const beamStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, beam.value * 1.4), transform: [{ scaleX: 0.55 + 0.45 * beam.value }] }));
+  const rimStyle = useAnimatedStyle(() => ({ opacity: rim.value }));
+  const stampStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, stamp.value * 2), transform: [{ rotate: '-12deg' }, { scale: stamp.value <= 0 ? 0.01 : stamp.value }] }));
   const chestStyle = useAnimatedStyle(() => ({
     // The drop starts just above the stage (always in sight inside the card), never from off the card.
     transform: [{ translateY: bob.value + calm.value - drop.value * 70 }, { rotate: `${shake.value * amp.value}deg` }, { scale: pop.value },
@@ -484,6 +507,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   return (
     <View style={styles.card}>
       <CardSurface />
+      {/* A rare chest's card turns gold at the rim (stays gold for this card). */}
+      {rare && <Animated.View pointerEvents="none" style={[styles.goldRim, rimStyle]} />}
       {fullSet ? <FullSetChecks reducedMotion={reducedMotion} diveY={stageH / 2 + heroDY} entered={entered} afterEnter={afterEnter} />
         : <Animated.Text style={[styles.subtitle, subtitleStyle]}>{subtitle}</Animated.Text>}
       <Pressable onPress={onStage} disabled={opening && !revealed} accessibilityRole="button"
@@ -491,8 +516,13 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
         onLayout={e => { if (!stage) setStage({ x: e.nativeEvent.layout.x + e.nativeEvent.layout.width / 2, y: e.nativeEvent.layout.y + e.nativeEvent.layout.height / 2 }); }}>
         <Animated.View pointerEvents="none" style={[styles.hero, heroStyle]}>
         {rare && (
-          <Animated.View pointerEvents="none" style={[styles.beam, { width: size * 0.9, height: size * 3.2, top: -size * 2.2 }, beamStyle]}>
-            <Image cachePolicy="memory-disk" source={RAYS} style={StyleSheet.absoluteFill} contentFit="cover" tintColor={'#FFF1B8'} transition={0} />
+          <Animated.View pointerEvents="none" style={[styles.beam, { width: size * 1.1, height: size * 6, bottom: stageH / 2 - size * 0.1 }, beamStyle]}>
+            {/* A saturated gold shaft (bright white-gold core, gold edges) that fades out toward its top. */}
+            <LinearGradient colors={['rgba(255,176,0,0.55)', 'rgba(255,184,0,0.95)', '#FFB800']} locations={[0, 0.35, 1]}
+              start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: size * 0.3 }]} />
+            <LinearGradient colors={['rgba(255,226,92,0.7)', '#FFE45C']} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
+              style={{ position: 'absolute', left: '22%', right: '22%', top: 0, bottom: 0, borderRadius: size * 0.2 }} />
+            <View style={{ position: 'absolute', left: '40%', right: '40%', top: 0, bottom: 0, borderRadius: size * 0.1, backgroundColor: 'rgba(255,250,224,0.9)' }} />
           </Animated.View>
         )}
         <GoldBurst size={size * 2.5} amount={goldAll} bloom={bloomAll} reduced={reducedMotion} spin={budget.level === 'full'} style={styles.abs} />
@@ -522,7 +552,13 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
         <View style={styles.center} pointerEvents="none">
           <SparkleBurst progress={sparkle} count={sparks} radius={size * 1.05} />
           <CoinFountain progress={burst} count={coins} spread={size * (rare ? 1.2 : 0.95)} />
+          {rareStars > 0 && <SparkleBurst progress={stars2} count={rareStars} radius={size * 1.75} />}
         </View>
+        {rare && (
+          <Animated.View pointerEvents="none" accessibilityLabel="Wow! A gold chest" style={[styles.wow, { left: '50%', marginLeft: size * 0.42, top: stageH / 2 - size * 0.95 }, stampStyle]}>
+            <WowStamp />
+          </Animated.View>
+        )}
         </Animated.View>
       </Pressable>
       <Pressable onPress={onStage} disabled={opening && !revealed} accessible={false} style={{ alignSelf: 'stretch' }}>
@@ -548,6 +584,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
       <View style={[styles.bottom, known && (footer ? (dropIn ? styles.bottomLevel : styles.bottomKnown) : styles.bottomButton)]}>
         {revealed ? <DoneArea footer={footer} label={doneLabel ?? 'AWESOME!'} onDone={done} appear={doneIn} /> : null}
       </View>
+      {/* A rare chest: gold coins rain across the whole card, over the rows (pointer events pass through). */}
+      {rainCoins > 0 && <CoinRain progress={rain} count={rainCoins} width={cardW} height={height * 0.8} />}
       {/* Confetti only at full power: Battery Saver keeps still rays, half the sparkles and coins, and no confetti. */}
       {stage && budget.animate && budget.particleScale >= 1 && <RewardBurst progress={burst} x={stage.x} y={stage.y + heroDY} />}
     </View>
@@ -602,6 +640,51 @@ function PreviewIn({ children, entered }: { readonly children: React.ReactNode; 
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const style = useAnimatedStyle(() => ({ opacity: 0.9, transform: [{ translateY: (1 - a.value) * 40 }] }));
   return <Animated.View style={[{ alignItems: 'center', gap: 6 }, style]}>{children}</Animated.View>;
+}
+
+/** A rare chest's extras (ms after the lid pops; capped and budgeted like every burst). */
+export const RARE_CHEST = { beamInMs: 220, beamHoldMs: 1300, stars2At: 140, rainAt: 80, rainMs: 1700, rainCoins: 14, stampAt: 120 } as const;
+
+/** Gold coins raining across the whole card on one shared progress (each on its own lane, delay and spin). */
+function CoinRain({ progress, count, width, height }: { readonly progress: SharedValue<number>; readonly count: number; readonly width: number; readonly height: number }) {
+  const drops = useMemo(() => Array.from({ length: count }, (_, i) => ({
+    x: ((i + 0.5) / count) * width + (((i * 37) % 21) - 10), delay: ((i * 53) % 45) / 100, size: 20 + (i % 3) * 6,
+    spin: (i % 2 ? 1 : -1) * (200 + ((i * 29) % 160)), sway: ((i * 17) % 13) - 6,
+  })), [count, width]);
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {drops.map((d, i) => <RainCoin key={i} d={d} progress={progress} fall={height} />)}
+    </View>
+  );
+}
+
+function RainCoin({ d, progress, fall }: {
+  readonly d: { readonly x: number; readonly delay: number; readonly size: number; readonly spin: number; readonly sway: number };
+  readonly progress: SharedValue<number>; readonly fall: number;
+}) {
+  const style = useAnimatedStyle(() => {
+    const t = Math.max(0, Math.min(1, (progress.value - d.delay) / (1 - d.delay)));
+    if (t <= 0 || t >= 1) return { opacity: 0, transform: [{ translateY: -60 }] };
+    return { opacity: t > 0.85 ? (1 - t) / 0.15 : 1, transform: [{ translateX: d.sway * Math.sin(t * Math.PI * 3) },
+      { translateY: -40 + fall * t * t * 0.6 + fall * t * 0.4 }, { rotate: `${d.spin * t}deg` }] };
+  });
+  return (
+    <Animated.View style={[{ position: 'absolute', left: d.x - d.size / 2, top: 0, width: d.size, height: d.size }, style]}>
+      <Image cachePolicy="memory-disk" source={ICON_SOURCES.coin} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+    </Animated.View>
+  );
+}
+
+/** A gold starburst stamp with a navy ink line (two turned squares), "WOW!" on it. Drawn in code, no new art. */
+function WowStamp() {
+  return (
+    <View style={styles.wowBox}>
+      {/* Three turned squares make a 12-point burst; an inner light face keeps the ink line only on the outside. */}
+      {[0, 30, 60].map(d => <View key={d} style={[styles.wowStar, { transform: [{ rotate: `${d}deg` }] }]} />)}
+      {[0, 30, 60].map(d => <View key={`i${d}`} style={[styles.wowStar, styles.wowStarInner, { transform: [{ rotate: `${d}deg` }] }]} />)}
+      <Text style={styles.wowText} allowFontScaling={false}>WOW!</Text>
+    </View>
+  );
 }
 
 /** Gold coins arcing up out of the open chest and falling back with gravity (one shared progress, budgeted count). */
@@ -781,7 +864,7 @@ function Row({ row, at, entered, reducedMotion, onWear, onPins, compact = false,
 }
 
 const styles = StyleSheet.create({
-  card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
+  card: { width: '94%', marginTop: -14, ...CARD_FRAME,
     paddingTop: 20, paddingBottom: 14, paddingHorizontal: 12, alignItems: 'center', overflow: 'hidden' },
   subtitle: { fontFamily: 'Knockout', fontSize: 17, color: '#e4f7ff', textAlign: 'center', minHeight: 22 },
   checks: { flexDirection: 'row', gap: 12, height: 44, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
@@ -800,13 +883,21 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14,
     paddingHorizontal: 10, paddingVertical: 2 },
   rowCompact: { minHeight: 0, paddingVertical: 0 },
-  // An empty prize plate waiting for its prize (a soft dashed outline, the row's own shape).
-  slot: { borderRadius: 14, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.45)', backgroundColor: 'rgba(255,255,255,0.08)' },
-  slotBig: { borderRadius: 16, borderColor: 'rgba(255,224,122,0.8)', backgroundColor: 'rgba(255,255,255,0.14)' },
+  // An empty prize plate waiting for its prize: a filled pale-blue cartoon slot pressed into the card (a darker top
+  // edge like a dent, a light lip along the bottom), the row's own shape. Never a dashed UI outline.
+  slot: { borderRadius: 14, backgroundColor: 'rgba(190,228,255,0.30)', borderWidth: 2, borderColor: 'rgba(5,52,110,0.22)',
+    borderTopWidth: 3, borderBottomColor: 'rgba(255,255,255,0.55)' },
+  slotBig: { borderRadius: 16, backgroundColor: 'rgba(255,236,170,0.32)', borderColor: 'rgba(201,138,0,0.35)', borderBottomColor: 'rgba(255,248,214,0.8)' },
   rowBig: { backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.gold, paddingVertical: 8 },
   rowIcon: { width: 58, alignItems: 'center' },
   rowIconBig: { width: 84 },
   beam: { position: 'absolute' },
+  goldRim: { ...StyleSheet.absoluteFillObject, borderRadius: 20, borderWidth: 5, borderColor: '#FFD23F' },
+  wow: { position: 'absolute', zIndex: 3 },
+  wowBox: { width: 74, height: 74, alignItems: 'center', justifyContent: 'center' },
+  wowStar: { position: 'absolute', width: 56, height: 56, borderRadius: 4, backgroundColor: BRAND.navy },
+  wowStarInner: { width: 49, height: 49, borderRadius: 3, backgroundColor: '#FFD23F' },
+  wowText: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy, marginTop: 3 },
   rowBeam: { position: 'absolute', left: -8, right: -8, top: -6, bottom: -6, borderRadius: 18, backgroundColor: 'rgba(255, 226, 92, 0.55)' },
   rowLine: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2 },
   rowText: { flex: 1, fontFamily: 'Shark', fontSize: 18, color: BRAND.white, marginTop: 2 },
@@ -820,7 +911,7 @@ const styles = StyleSheet.create({
   smallBtnText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
   bottom: { alignSelf: 'stretch', minHeight: 96, justifyContent: 'flex-end', gap: 8, marginTop: 6 },
   // The Daily 3 chest footer holds the flame row too (flame plus tomorrow's picture pill).
-  bottomKnown: { minHeight: 164 },
+  bottomKnown: { minHeight: 176 },
   // A level chest's footer: the next level line and its bar, then the button (ends right under it).
   bottomLevel: { minHeight: 116 },
   // Only the button.

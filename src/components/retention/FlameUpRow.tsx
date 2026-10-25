@@ -79,7 +79,7 @@ export default function FlameUpRow({ from, to, grow, reducedMotion, prize = 'che
       </View>
       {/* Tomorrow as one big picture on the navy pill the flame cards use: readable from arm's length. */}
       <Animated.View style={[styles.pill, textStyle]}>
-        <TomorrowGoal days={to} prize={prize} size={42} reducedMotion={reducedMotion} stacked textStyle={styles.small} />
+        <TomorrowGoal days={to} prize={prize} size={48} reducedMotion={reducedMotion} stacked textStyle={styles.small} />
       </Animated.View>
     </View>
   );

@@ -16,9 +16,10 @@ import { GoldBurst, RadialFlash, SparkleBurst } from '../../ui/GoldBurst';
 import { DURATION, PARTICLES, SLAM_SQUASH, SPRING, flashPeak, momentBeats, momentParticles } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import RewardBurst from '../RewardBurst';
-import CardSurface from './CardSurface';
+import CardSurface, { CARD_FRAME } from './CardSurface';
 import FlameArt, { TomorrowGoal } from './FlameArt';
 import { useMarkTimers, withDelayAfter, withDelayUntil } from './delayUntil';
+import { useArtGate } from './artGate';
 
 const FINN_WAVE = require('../../assets/games/banana-basket/v2/shark_cheer.png');
 
@@ -165,15 +166,19 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
     transform: [{ translateX: -60 * (1 - finn.value) }, { rotate: `${wave.value * 8}deg` }],
   }));
   const rows = milestoneFlames(to);
+  // The card shows once its flame and tomorrow's pictures are on screen (never an empty card or an icon-less pill).
+  const gate = useArtGate(prize === 'flame' ? 2 : 3);
+  const gateStyle = useAnimatedStyle(() => ({ opacity: gate.shown.value }));
 
   return (
+    <Animated.View style={[styles.gate, gateStyle]}>
     <Pressable onPress={ready ? onDone : undefined} style={styles.card} accessibilityLabel={`${to} day flame`}>
       <CardSurface />
       <View style={[styles.stage, big && styles.stageBig]}>
         <GoldBurst size={big ? 330 : 220} amount={gold} bloom={bloom} reduced={reducedMotion} spin={budget.level === 'full'} style={styles.abs} />
         <RadialFlash flash={flash} size={260} />
         <Animated.View style={flameStyle}>
-          <FlameArt days={to} size={big ? 168 : 156} reducedMotion={reducedMotion} boost={boost} />
+          <FlameArt days={to} size={big ? 168 : 156} reducedMotion={reducedMotion} boost={boost} onDisplay={gate.onDisplay} />
         </Animated.View>
         <View style={styles.center}><SparkleBurst progress={sparkle} count={sparks} radius={big ? 140 : 90} /></View>
         {gatherCount > 0 && <View style={styles.center} pointerEvents="none"><SparkleBurst progress={gatherP} count={Math.min(8, gatherCount)} radius={150} /></View>}
@@ -218,7 +223,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
         <Animated.Text style={[styles.plusText, plusTextStyle]}>{flameUpLine(to)}</Animated.Text>
       )}
       {/* Tomorrow as one big picture: the next day's flame and the prize waiting. */}
-      <View style={styles.next}><TomorrowGoal days={to} prize={prize} size={44} reducedMotion={reducedMotion} /></View>
+      <View style={styles.next}><TomorrowGoal days={to} prize={prize} size={50} reducedMotion={reducedMotion} onDisplay={gate.onDisplay} /></View>
       {/* Finn stands beside the button, never over the words. */}
       <View style={styles.bottom}>
         {big && (
@@ -232,6 +237,7 @@ export default function StreakMoment({ moment, reducedMotion, onDone, prize = 'c
         </View>
       </View>
     </Pressable>
+    </Animated.View>
   );
 }
 
@@ -274,7 +280,8 @@ function DoneButton({ label, onPress, reducedMotion, delay, startAt, entered }: 
 }
 
 const styles = StyleSheet.create({
-  card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
+  gate: { width: '94%', marginTop: -14 },
+  card: { width: '100%', ...CARD_FRAME,
     paddingTop: 16, paddingBottom: 14, paddingHorizontal: 14, alignItems: 'center', overflow: 'hidden' },
   stage: { width: '100%', height: 230, alignItems: 'center', justifyContent: 'center' },
   stageBig: { height: 270 },

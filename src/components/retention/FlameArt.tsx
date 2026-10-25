@@ -30,7 +30,9 @@ const GIFT = require('../../../assets/icons/game/gift.png');
  *
  * `boost` (0..1) lets a moment swell the flame (a whoosh on +1, a charge on a milestone).
  */
-export default function FlameArt({ days, size, reducedMotion, still = false, boost, ghost = false }: {
+export default function FlameArt({ days, size, reducedMotion, still = false, boost, ghost = false, onDisplay }: {
+  /** The flame picture is on screen (a card's art gate waits for it). */
+  readonly onDisplay?: () => void;
   readonly days: number;
   /** The box (pt). The art at scale 1 fills about 86 percent of it. */
   readonly size: number;
@@ -89,7 +91,7 @@ export default function FlameArt({ days, size, reducedMotion, still = false, boo
       {look.sparks > 0 && !still && !reducedMotion && !ghost && <Sparks clock={clock} count={coal ? 1 : look.sparks} size={coal ? art * 0.5 : art} />}
       <Animated.View style={[styles.layer, { width: art, height: art }, flameStyle]}>
         <Image source={FLAME} style={[StyleSheet.absoluteFill, days <= 0 && styles.ember]} contentFit="contain" transition={0} cachePolicy="memory-disk"
-          tintColor={ghost ? '#ffffff' : undefined} />
+          tintColor={ghost ? '#ffffff' : undefined} onDisplay={onDisplay} />
         {look.core && !ghost && (
           <Animated.View style={[styles.core, { width: art * 0.44, height: art * 0.44, bottom: art * 0.1, left: art * 0.28 }, coreStyle]}>
             <Image cachePolicy="memory-disk" source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" tintColor={GOLD_FX.core} transition={0} />
@@ -146,7 +148,9 @@ export function NextFlameGoal({ days, size = 30, textStyle, short = false }: {
  * a plus, and the real prize waiting (the Daily 3 chest, or a present only when gear is really next) wiggling gently,
  * then "Tomorrow!". No small print and no far ladder: the flame size ladder lives in the flame itself.
  */
-export function TomorrowGoal({ days, prize, size = 30, textStyle, reducedMotion = false, stacked = false }: {
+export function TomorrowGoal({ days, prize, size = 30, textStyle, reducedMotion = false, stacked = false, onDisplay }: {
+  /** Each picture (the ghost flame, the prize) reports it is on screen (a card's art gate waits for them). */
+  readonly onDisplay?: () => void;
   /** "Tomorrow!" sits on top of the picture (a narrow pill beside the flame), instead of after it. */
   readonly stacked?: boolean;
   readonly days: number;
@@ -161,13 +165,17 @@ export function TomorrowGoal({ days, prize, size = 30, textStyle, reducedMotion 
 }) {
   const next = Math.max(1, days + 1);
   const wiggle = useSharedValue(0);
+  /** A gold sparkle twinkles on tomorrow's prize (the thing to come back for). */
+  const twinkle = useSharedValue(0);
   // The prize wiggles 6 degrees, twice, every 3 s (ambient: rests when idle, in the background or with Reduce Motion).
   useAmbientLoop(() => {
     wiggle.value = withRepeat(withSequence(
       withDelay(2400, withTiming(1, { duration: 110 })), withTiming(-1, { duration: 140 }),
       withTiming(1, { duration: 140 }), withTiming(0, { duration: 110 }),
     ), -1);
-  }, () => { cancelAnimation(wiggle); wiggle.value = 0; }, !reducedMotion);
+    twinkle.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.sin) }), -1, true);
+  }, () => { cancelAnimation(wiggle); cancelAnimation(twinkle); wiggle.value = 0; twinkle.value = 0.6; }, !reducedMotion);
+  const twinkleStyle = useAnimatedStyle(() => ({ opacity: 0.45 + 0.55 * twinkle.value, transform: [{ scale: 0.7 + 0.45 * twinkle.value }, { rotate: `${twinkle.value * 30}deg` }] }));
   const prizeStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value * 6}deg` }, { scale: 1 + Math.abs(wiggle.value) * 0.05 }] }));
   const label = (
     <Text style={[styles.goalText, textStyle, styles.goalMin, { fontSize: Math.max(16, Math.round(size * (stacked ? 0.44 : 0.5))) },
@@ -176,7 +184,7 @@ export function TomorrowGoal({ days, prize, size = 30, textStyle, reducedMotion 
   const picture = (
     <>
       <View style={[styles.ghostWrap, { width: size * 1.25, height: size * 1.25 }]}>
-        <FlameArt days={next} size={size * 1.15} reducedMotion still ghost />
+        <FlameArt days={next} size={size * 1.15} reducedMotion still ghost onDisplay={onDisplay} />
         <View style={[styles.ghostDay, { minWidth: size * 0.75, height: size * 0.62, borderRadius: size * 0.31 }]}>
           <Text style={[styles.ghostDayText, { fontSize: Math.round(size * 0.42) }]} allowFontScaling={false}>{next}</Text>
         </View>
@@ -184,7 +192,11 @@ export function TomorrowGoal({ days, prize, size = 30, textStyle, reducedMotion 
       {prize !== 'flame' && <Text style={[styles.plus, { fontSize: Math.round(size * 0.6) }]} allowFontScaling={false}>+</Text>}
       {prize !== 'flame' && (
         <Animated.View style={prizeStyle}>
-          <Image cachePolicy="memory-disk" source={prize === 'gear' ? GIFT : DAILY_CHEST} style={{ width: size * 1.15, height: size * 1.15 }} contentFit="contain" transition={0} />
+          <Image cachePolicy="memory-disk" source={prize === 'gear' ? GIFT : DAILY_CHEST} style={{ width: size * 1.15, height: size * 1.15 }} contentFit="contain" transition={0}
+            onDisplay={onDisplay} />
+          <Animated.View pointerEvents="none" style={[styles.prizeSpark, { width: size * 0.5, height: size * 0.5, right: -size * 0.12, top: -size * 0.12 }, twinkleStyle]}>
+            <Image cachePolicy="memory-disk" source={SPARK} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+          </Animated.View>
         </Animated.View>
       )}
     </>
@@ -252,6 +264,7 @@ const styles = StyleSheet.create({
   farText: { fontSize: 12, color: '#e4f7ff' },
   arrow: { fontFamily: 'Shark', fontSize: 18, color: GOLD_FX.rays, marginHorizontal: 1, marginTop: 2 },
   ghostWrap: { alignItems: 'center', justifyContent: 'center' },
+  prizeSpark: { position: 'absolute' },
   ghostDay: { position: 'absolute', bottom: -4, right: -6, paddingHorizontal: 4,
     backgroundColor: '#05346e', borderWidth: 2, borderColor: GOLD_FX.rays, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
   ghostDayText: { fontFamily: 'Shark', color: GOLD_FX.rays, marginTop: 2 },

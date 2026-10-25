@@ -12,8 +12,9 @@ import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 import { GOLD_FX, SPRING } from '../../ui/motion';
 import { EASE } from '../../ui/motionEasing';
 import FlameArt from './FlameArt';
-import CardSurface from './CardSurface';
+import CardSurface, { CARD_FRAME } from './CardSurface';
 import { useMarkTimers, withDelayAfter, withDelayUntil } from './delayUntil';
+import { useArtGate } from './artGate';
 
 const FINN_WAVE = require('../../assets/games/banana-basket/v2/shark_cheer.png');
 const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
@@ -41,6 +42,8 @@ export default function TomorrowCard({ prize, reducedMotion, onDone, startAt, en
   const twinkle = useSharedValue(0);
   const press = useSharedValue(1);
   const afterMark = useMarkTimers(entered);
+  // The card shows once the prize, tomorrow's flame and Finn are on screen (never a half-drawn night window).
+  const gate = useArtGate(3);
   useEffect(() => {
     const wait = Math.max(0, (startAt ?? 0) - Date.now());
     let t: ReturnType<typeof setTimeout> | undefined;
@@ -64,7 +67,7 @@ export default function TomorrowCard({ prize, reducedMotion, onDone, startAt, en
     twinkle.value = E(withRepeat(withTiming(1, { duration: 1400 }), -1, true));
   }, () => { cancelAnimation(wiggle); cancelAnimation(twinkle); wiggle.value = 0; twinkle.value = 0; }, !reducedMotion);
 
-  const cardStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, enter.value * 2), transform: [{ translateY: (1 - enter.value) * 70 }] }));
+  const cardStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, enter.value * 2) * gate.shown.value, transform: [{ translateY: (1 - enter.value) * 70 }] }));
   const giftStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value * 6}deg` }, { scale: 1 + Math.abs(wiggle.value) * 0.04 }] }));
   const moonStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, moon.value * 1.6),
     transform: [{ translateY: 50 * (1 - moon.value) }, { rotate: `${-14 * (1 - moon.value)}deg` }] }));
@@ -92,13 +95,13 @@ export default function TomorrowCard({ prize, reducedMotion, onDone, startAt, en
         <View style={styles.hill} />
         <View style={styles.stageRow}>
           <Animated.View style={[styles.prize, giftStyle]}>
-            <Image cachePolicy="memory-disk" source={art} style={{ width: 112, height: 112 }} contentFit="contain" />
+            <Image cachePolicy="memory-disk" source={art} style={{ width: 112, height: 112 }} contentFit="contain" transition={0} onDisplay={gate.onDisplay} />
             {prize.kind === 'gear' && <View style={styles.gearChip}><Text style={styles.gearText}>NEW GEAR</Text></View>}
           </Animated.View>
           <View style={styles.ghost} accessibilityLabel={`Tomorrow's flame: day ${prize.flameNext}`}>
             {/* A navy disc with a gold dashed rim behind the white ghost, so it never melts into the pale hill. */}
             <View style={styles.ghostDisc}>
-              <FlameArt days={prize.flameNext} size={58} reducedMotion still ghost />
+              <FlameArt days={prize.flameNext} size={64} reducedMotion still ghost onDisplay={gate.onDisplay} />
             </View>
             <View style={styles.ghostNum}><Text style={styles.ghostNumText} allowFontScaling={false}>{prize.flameNext}</Text></View>
           </View>
@@ -114,7 +117,7 @@ export default function TomorrowCard({ prize, reducedMotion, onDone, startAt, en
       <Text style={styles.line}>{prize.line}</Text>
       <View style={styles.bottom}>
         <Animated.View style={[styles.finn, finnStyle]} pointerEvents="none">
-          <Image cachePolicy="memory-disk" source={FINN_WAVE} style={{ width: 70, height: 70 }} contentFit="contain" />
+          <Image cachePolicy="memory-disk" source={FINN_WAVE} style={{ width: 70, height: 70 }} contentFit="contain" transition={0} onDisplay={gate.onDisplay} />
         </Animated.View>
         <Animated.View style={[{ flex: 1 }, buttonStyle]}>
           <Pressable onPress={onDone} accessibilityRole="button" style={styles.button}
@@ -133,7 +136,7 @@ export default function TomorrowCard({ prize, reducedMotion, onDone, startAt, en
 }
 
 const styles = StyleSheet.create({
-  card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
+  card: { width: '94%', marginTop: -14, ...CARD_FRAME,
     paddingTop: 22, paddingBottom: 14, paddingHorizontal: 12, alignItems: 'center', gap: 8 },
   // Friendly night blue (a touch deeper than the sky, never a navy or purple wash) with two soft hills.
   night: { alignSelf: 'stretch', height: 196, borderRadius: 18, backgroundColor: '#2a7fd0', overflow: 'hidden', borderWidth: 3,
@@ -155,7 +158,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
   ghostNum: { marginTop: -12, minWidth: 34, height: 30, borderRadius: 15, paddingHorizontal: 6, backgroundColor: BRAND.navy,
     borderWidth: 2.5, borderColor: GOLD_FX.rays, alignItems: 'center', justifyContent: 'center' },
-  ghostNumText: { fontFamily: 'Shark', fontSize: 17, color: GOLD_FX.rays, marginTop: 1 },
+  ghostNumText: { fontFamily: 'Shark', fontSize: 20, color: GOLD_FX.rays, marginTop: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.navy, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
   chipText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white, marginTop: 1 },

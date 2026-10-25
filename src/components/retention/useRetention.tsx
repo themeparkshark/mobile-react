@@ -39,7 +39,7 @@ import { EmberCard, FreezeSavedCard } from './FreezeMoments';
 import WelcomeBack from './WelcomeBack';
 import RewardReveal, { type PrizeOrigin } from './RewardReveal';
 import LoopPerf, { LOOPS_PERF_CAPTURE, loopPerfMapStyle, loopPerfOn } from './LoopPerf';
-import CardSurface from './CardSurface';
+import CardSurface, { CARD_FRAME } from './CardSurface';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
@@ -1365,7 +1365,7 @@ const styles = StyleSheet.create({
   xpTrack: { height: 16, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'visible', justifyContent: 'center',
     marginHorizontal: 18, paddingLeft: 0 },
   xpFill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 8, backgroundColor: BRAND.gold },
-  card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
+  card: { width: '94%', marginTop: -14, ...CARD_FRAME,
     paddingTop: 22, paddingBottom: 14, paddingHorizontal: 14, alignItems: 'center', gap: 8 },
   bigArt: { width: 110, height: 110 },
   lead: { fontFamily: 'Shark', fontSize: 21, color: BRAND.white, textAlign: 'center' },

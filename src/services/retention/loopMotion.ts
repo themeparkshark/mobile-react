@@ -246,8 +246,10 @@ export const WELCOME_FX = {
   minDaysAway: 3,
   /** Finn is on the first frame (art warmed with the loop art); he swims the last stretch in. */
   finnAt: 0,
-  /** The flame ticks up one size step as a little welcome gift. */
-  giftAt: 360,
+  /** The flame tile's number starts counting up from 0 this long after its tile drops (ms). */
+  countAt: 140,
+  /** ...and lands here: the tile pops, a gold ring and a spark wave fly out (the welcome gift). */
+  giftAt: 700,
   cardsAt: 500,
   cardStep: 90,
   cue: 'fx.reward',
@@ -516,15 +518,12 @@ export function handoffDim(nextOffset: number | null, exitMs: number, enterMs: n
   return nextOffset === null ? [lift] : [lift, { after: Math.max(exitMs, nextOffset), to: LOOP_DIM_LEVEL, ms: enterMs }];
 }
 
-/** The next chain card starts at least this long after the HUD numbers change (their render is done by then). */
-export const NEXT_AFTER_STEP_MS = 120;
-
 /**
  * When the next chain card starts growing in, in ms after the flight's mark: it overlaps the last landings
- * (`overlapMs` before the flight ends) but never sooner than `minMs`, and never before the HUD numbers have changed
- * (one render, when every counter has its first prize in), so no render lands in its entrance.
+ * (`overlapMs` before the flight ends, so it is already growing while the last prizes drop into the HUD: chest,
+ * prizes home, flame to the next card in one sweep), but never sooner than `minMs` (the prizes lift off and fly
+ * first). The HUD numbers swap in on the UI thread (counterTicks.prepare), so no render waits for them any more.
  */
 export function chainNextAfter(plan: readonly FlightLeg[], overlapMs: number, minMs: number): number {
-  const firstIn = plan.reduce((m, l) => Math.max(m, l.delay + PRIZE_FLIGHT.flyMs), 0);
-  return Math.max(minMs, flightDoneMs(plan) - overlapMs, plan.length ? firstIn + NEXT_AFTER_STEP_MS : 0);
+  return Math.max(minMs, flightDoneMs(plan) - overlapMs);
 }
