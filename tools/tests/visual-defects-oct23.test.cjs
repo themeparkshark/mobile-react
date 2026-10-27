@@ -1184,8 +1184,9 @@ test('PLAY RIDE: a ride island mostly under the pill and its chip fades out whil
 
 test('map trees: the first planting fades in (240 ms in MapLibre) and comes sooner, never a hard pop after the lift', () => {
   const map = read('src/components/Map.tsx');
-  assert.match(map, /iconOpacity: decoShown \? 1 : 0,/);
-  assert.match(map, /iconOpacityTransition: \{ duration: reducedMotion \|\| power\.lowPower \? 0 : DECO_FADE_MS, delay: 0 \},/);
+  // Merged with wow-map's memoized DecorationLayer (wave 5): the fade rides on its shown and fadeMs props.
+  assert.match(map, /<DecorationLayer shape=\{decorations\} shown=\{decoShown\} fadeMs=\{reducedMotion \|\| power\.lowPower \? 0 : DECO_FADE_MS\} \/>/);
+  assert.match(map, /iconOpacity: shown \? 1 : 0,\s*iconOpacityTransition: \{ duration: fadeMs, delay: 0 \}/);
   assert.match(map, /const DECO_FADE_MS = 240;/);
   assert.match(map, /setDecoShown\(true\);\s*setDecorations\(buildDecorations\(/);
   assert.match(map, /\}, decoKey\.current === '' \? 60 : 250\);/);

@@ -15,6 +15,8 @@ import HomeFindMarker from './HomeFindMarker';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
 import { useMenuCardFade } from './menuCardFade';
+import { useChromeBack } from './useChromeBack';
+import { chromeHeal, useCommitHeal } from '../../components/map/alive/commitHeal';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { shouldThrottleHomeRequest } from './homeRefresh';
 import { isInPickupRange } from './homeFindCopy';
@@ -26,7 +28,7 @@ import HomeCatchMoment, { type CatchRequest, type HomeCatchHandle } from './Home
 import { pickupFix } from './homeCatch';
 import { catchStyleFor } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
-import { useCatchOpen, catchShown } from './catchPresence';
+import { useCatchOpen, catchDim, catchShown } from './catchPresence';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
 import { bannerCovers, clusterFinds, edgeArrowPlacement, findFootprint, hudRowTop, peekBottom, sharkFootprint, type Rect } from './findEdges';
 import type { FingerSide } from './PrepItem';
@@ -216,10 +218,16 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   // Floating cards leave (opacity 0, no touches) while the quick menu is open, and on a catch's tap frame.
   const cardFade = useMenuCardFade();
   // Menus, edge arrows and chips leave on the tap frame (UI thread), never showing through the viewfinder's fade.
-  const chromeFade = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - catchShown.value * 1.6) }));
+  // Round 4: after a catch the controls come back one after another (useChromeBack), the HUD's close goal first.
+  const chipsBack = useChromeBack(0);
+  const menusBack = useChromeBack(1);
+  const edgesBack = useChromeBack(3);
+  // Round 5: a HomeExplore commit mid-catch (the badge's answer, the open flag) re-sends the chrome's styles.
+  useCommitHeal(chromeHeal);
   // Where each find is on screen, re-measured when the map settles, so a tap opens the catch from the find on that frame.
   const findPoints = useRef(new globalThis.Map<number, { x: number; y: number }>());
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [sharkLook, setSharkLook] = useState<-1 | 0 | 1>(0);
   const [edgeFinds, setEdgeFinds] = useState<EdgeFind[]>([]);
   const [findSides, setFindSides] = useState<Record<number, FingerSide>>({});
   const [cascadeOn, setCascadeOn] = useState(false);
@@ -544,6 +552,20 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   }, [catching]);
 
   const catchingPivot = catchRequest?.pivotId ?? catching?.pivotId ?? null;
+  // During a catch the pin hides on the UI thread (catchPresence.catchHidePivot) on the frame the catch
+  // layer's copy starts moving, after its art has drawn (round 2 hid it on the tap's commit, before the layer
+  // drew it, so the find blinked out under the finger). A caught find then stays hidden here.
+  const [caughtPivots, setCaughtPivots] = useState<ReadonlySet<number>>(() => new Set());
+
+  // A new find in range: the shark gives one happy hop (Map reads the bump; nothing repeats).
+  const [sharkHop, setSharkHop] = useState(0);
+  const inRangeSeen = useRef<Set<number>>(new Set());
+  const inRangeIds = useMemo(() => placed.filter(entry => entry.inRange && entry.item.pivot_id != null).map(entry => entry.item.pivot_id as number), [placed]);
+  useEffect(() => {
+    const fresh = inRangeIds.some(id => !inRangeSeen.current.has(id));
+    inRangeSeen.current = new Set(inRangeIds);
+    if (fresh) setSharkHop(n => n + 1);
+  }, [inRangeIds]);
 
   // Battery: full motion only for finds in range and the 3 nearest; the rest sit still.
   const animatedPivots = useMemo(() => new Set(placed.filter(entry => entry.distance != null)
@@ -600,6 +622,12 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
         if (off) edges.push({ item, point, distance });
       }
       findPoints.current = next;
+      // The shark's look-around turns toward the nearest find in range (screen side of it, from the centre).
+      const nearestIn = placed.filter(entry => entry.inRange && entry.item.pivot_id != null)
+        .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))[0];
+      const nearPoint = nearestIn?.item.pivot_id != null ? next.get(nearestIn.item.pivot_id) : undefined;
+      const look: -1 | 0 | 1 = nearPoint ? (nearPoint.x < containerSize.width / 2 ? -1 : 1) : 0;
+      setSharkLook(current => (current === look ? current : look));
       // The finger cue goes on the side away from the player's shark (screen centre while following).
       const sides: Record<number, FingerSide> = {};
       // Below the shark, the finger hangs under the find, so it never lands on the shark's board.
@@ -649,6 +677,9 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
     callbacks.current.onPrepItemNearby(item, pivotId, 'tap');
   }, []);
   const onDoneStable = useCallback((caught: boolean) => {
+    const done = callbacks.current.catchRequest?.pivotId;
+    // A caught find stays hidden even if the list refresh lands a beat later, and the shark cheers it.
+    if (caught && done != null) { setCaughtPivots(current => new Set(current).add(done)); setSharkHop(n => n + 1); }
     setCatchRequest(null);
     callbacks.current.onCatchDone?.(caught);
   }, []);
@@ -711,6 +742,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       }}>
       {/* Map with prep items - player marker is handled by Map component */}
       <Map coverHost="screen" controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled} focusCoordinate={findFocus}
+        sharkLook={sharkLook} sharkHop={sharkHop}
         extraControls={chestButton} extraControlsCount={chestButtonCount} ambientFrozen={catchOpen} chromeHidden={catchOpen} onUserPan={onUserPan}
         hintReady={compassHintReady && !catchOpen && introSeen === true} trailHidden={firstHunt}>
         {homeLocationConfirmed && allPlaced.map(({ item: prepItem, distance, inRange }) => (
@@ -718,16 +750,18 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
             // Rounded so GPS jitter does not re-render every marker.
             distance={distance == null ? null : Math.round(distance / 5) * 5} inRange={inRange}
             animated={animatedPivots.has(prepItem.pivot_id)}
-            hidden={catchingPivot === prepItem.pivot_id || findGroups.hidden.includes(prepItem.pivot_id ?? -1) || isRodeOff(prepItem)}
+            hidden={caughtPivots.has(prepItem.pivot_id ?? -1) || findGroups.hidden.includes(prepItem.pivot_id ?? -1) || isRodeOff(prepItem)}
             count={findGroups.counts[prepItem.pivot_id ?? -1] ?? 1}
-            chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1) || (cascadeOn && underBanner(prepItem.pivot_id))}
+            // The find being caught never re-renders mid-catch (a re-render would push its pin's first-render
+            // style again for a frame on Fabric: the caught pin flashing back at its spot, wow-map r4).
+            chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1) || (cascadeOn && prepItem.pivot_id !== catchingPivot && underBanner(prepItem.pivot_id))}
             onTap={tapFind} onExpire={handlePrepItemExpire}
             fingerSide={(findSides[prepItem.pivot_id ?? -1] ?? 'right')} showFinger={prepItem.pivot_id === fingerPivot}
             pulseKey={pulse && pulse.pivot === prepItem.pivot_id ? pulse.key : null} plainDistance={firstHunt} />
         ))}
       </Map>
       {/* Kept mounted (no blank remount on return); hidden and inert during a catch. */}
-      <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, edgesBack]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         <FindEdgeArrows finds={edgeFinds} size={containerSize} onPress={onEdgePress} insetTop={edgeTop} />
       </Animated.View>
 
@@ -737,7 +771,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       {quiet ? null : <HomeLive top={TOP} onBarChange={setLiveBar} />}
 
       {homeLocationConfirmed && (
-        <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+        <Animated.View style={[StyleSheet.absoluteFill, chipsBack]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
           {/* First hunt: the ticket chip steps back (dimmed, still tappable) so the treat is what pops. */}
           <View style={[StyleSheet.absoluteFill, firstHunt && styles.hudDim]} pointerEvents="box-none">
             <HomeHudChips top={hudTop} onWidth={setHudWidth} findsUntilTicket={ticket.until} ticketsCapped={ticket.capped} onTicketPress={showTicketLine}
@@ -749,9 +783,9 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       {/* Menus step back (dimmed, not tappable) while a catch is open. While Finn talks
           (quiet) they step out of the way: his bubble sits low on the map, and a kid
           tapping a familiar corner button must never land on Finn instead. */}
-      {/* A plain outer view owns the quiet hide: an animated opacity (chromeFade) would win over a static one. */}
+      {/* A plain outer view owns the quiet hide: an animated opacity (menusBack) would win over a static one. */}
       <View style={[StyleSheet.absoluteFill, quiet && styles.hidden]} pointerEvents={quiet ? 'none' : 'box-none'}>
-      <Animated.View style={[StyleSheet.absoluteFill, chromeFade]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, menusBack]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
         {/* Quick Access Menu - hamburger on left */}
         <QuickAccessMenu position="left" />
 

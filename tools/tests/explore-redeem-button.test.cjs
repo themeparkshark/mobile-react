@@ -10,6 +10,7 @@ const load = props => runtime('src/components/RedeemModal.tsx', {
   '../screens/ExploreScreen/mapOpportunityTiming': timing,
   '../screens/ExploreScreen/mapMarkerPresentation': presentation,
   '../context/SoundEffectProvider': { SoundEffectContext: { value: { playSound: async () => undefined } } },
+  '../gamekit/audio/playMoment': { studioMoment: () => false },
   '../ui': { BRAND: new Proxy({}, { get: () => '#fff' }), GameIcon: 'GameIcon' },
   './map/mapCover': { useCoverArt: () => () => undefined },
 }, { park: { id: 1 }, onPress: () => undefined, ...props });

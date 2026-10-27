@@ -485,7 +485,7 @@ test('first visit: "Let\'s hunt!" leads to hunting; the daily chest waits for a 
 
 test('while Finn talks the map corner buttons step out of the way (a plain view, so chromeFade cannot override it)', () => {
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
-  assert.match(home, /<View style=\{\[StyleSheet\.absoluteFill, quiet && styles\.hidden\]\} pointerEvents=\{quiet \? 'none' : 'box-none'\}>\s*<Animated\.View style=\{\[StyleSheet\.absoluteFill, chromeFade\]\}/);
+  assert.match(home, /<View style=\{\[StyleSheet\.absoluteFill, quiet && styles\.hidden\]\} pointerEvents=\{quiet \? 'none' : 'box-none'\}>\s*<Animated\.View style=\{\[StyleSheet\.absoluteFill, (?:chromeFade|menusBack)\]\}/);
 });
 
 test('warm-up: CLEARED starts the moment the last pair goes, and the sky above the booth is filled with existing art', () => {

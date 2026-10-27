@@ -9,6 +9,8 @@ import {
 import { Image } from 'expo-image';
 import Constants from 'expo-constants';
 import { SoundEffectContext } from './SoundEffectProvider';
+import { studioMoment } from '../gamekit/audio/playMoment';
+import { holdHud, pulseHud } from '../components/Topbar/hudPulse';
 
 interface FlyingCoin {
   id: number;
@@ -124,6 +126,8 @@ export default function CurrencyFlyProvider({ children }: CurrencyFlyProviderPro
     }
     
     setFlyingCoins(prev => [...prev, ...newCoins]);
+    // The counter waits for its coins: its number rolls and its icon bumps when the first one lands.
+    holdHud(targetPosition, 500 + 40 * numCoins + 400);
     
     // Track when first coin lands to play sound
     let soundPlayed = false;
@@ -137,10 +141,13 @@ export default function CurrencyFlyProvider({ children }: CurrencyFlyProviderPro
           easing: Easing.bezier(0.25, 0.1, 0.25, 1), // Premium ease-out curve
           useNativeDriver: true,
         }).start(() => {
-          // Play sound when first coin lands
+          // Studio sound on: every coin that lands climbs one rung of the coin ladder (a big haul sounds
+          // bigger). Off (default): exactly today's single landing sound on the first coin.
+          const studio = studioMoment('catch.count');
           if (!soundPlayed) {
             soundPlayed = true;
-            playCoinSound();
+            if (!studio) playCoinSound();
+            pulseHud(targetPosition);
           }
           
           // Remove coin after animation

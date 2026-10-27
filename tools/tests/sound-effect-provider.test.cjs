@@ -54,6 +54,9 @@ function soundHarness(enabled = true, auth = null) {
         },
       } } };
       if (name === './AuthProvider') return { AuthContext: {} };
+      if (name === '../gamekit/audio/studioSwitch') return { loadStudioSoundFlag: () => Promise.resolve(false) };
+      if (name === '../gamekit/audio/studioTrace') return { studioTraceOn: () => false, traceEvent: () => undefined };
+      if (name === '../api/endpoints/platform/feature-flags') return { default: async () => ({ flags: {} }) };
       if (name === './sfxPolicy') return { ...require('./helpers/ts-module.cjs').loadTs('src/context/sfxPolicy.ts'), QUIET_CAPTURE: false };
       if (name === '../gamekit/SFX') return { SFX: { setEnabled(v) { sfx.push(['sfx', v]); }, setMusicEnabled(v) { sfx.push(['music', v]); }, holdUntilSettings() { sfx.push(['hold']); }, settingsKnown() { sfx.push(['known']); } } };
       throw new Error(`Unexpected dependency: ${name}`);

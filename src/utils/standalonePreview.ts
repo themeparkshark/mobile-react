@@ -7,6 +7,8 @@ export function isStandalonePreviewMode(): boolean {
   if (process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'CoinLevelingPreview') return true;
   if (process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'PostWinRewardsPreview') return true;
   if (process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'Whack') return true;
+  if (process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HomeCatchPreview') return true;
+  if (process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HookSoundPreview') return true;
   return __DEV__ && (
     process.env.EXPO_PUBLIC_MAP_ALIVE_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_STREAK_FLAME_PREVIEW === '1' ||

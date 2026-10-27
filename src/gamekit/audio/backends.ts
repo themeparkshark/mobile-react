@@ -17,6 +17,7 @@
 import { Audio } from 'expo-av';
 import { Asset } from 'expo-asset';
 import { audioStartOpen, audioWanted, whenAudioMayStart } from './startGate';
+import { captureLine, captureTraceOn } from './studioTrace';
 
 /**
  * react-native-audio-api 0.6 AudioParam automation is unsafe from JS: the
@@ -35,7 +36,7 @@ export function rampParamValue(param: { value: number }, to: number, ms: number,
   if (prev) clearInterval(prev);
   rampTimers.delete(param);
   const from = param.value;
-  if (ms <= 16 || !Number.isFinite(from)) {
+  if (ms <= 16 || !Number.isFinite(from) || Math.abs(to - from) < 1e-4) {
     param.value = to;
     return;
   }
@@ -71,7 +72,7 @@ export interface MusicArgs {
 }
 
 export interface AudioBackend {
-  readonly name: 'audio-api' | 'expo-av' | 'silent';
+  readonly name: 'audio-api' | 'expo-av' | 'silent' | 'trace';
   readonly supportsPan: boolean;
   readonly supportsFilter: boolean;
   /** Typical tap-to-sound latency (ms) used for haptic/visual alignment. */
@@ -95,6 +96,8 @@ export interface AudioBackend {
   clockMs?(): number;
   /** True when musicPosition(deck) is a cheap clock read (audio-api), false for an expo-av status call. */
   positionIsCheap?(deck: string): boolean;
+  /** Output latency for one loaded key (the hybrid routes AAC to expo-av); defaults to latencyMs. */
+  latencyOf?(key: string): number;
 }
 
 // =============================================================================
@@ -106,6 +109,8 @@ interface AvVoice {
   busyUntil: number;
   token: number;
   stopTimer: ReturnType<typeof setTimeout> | null;
+  /** A delayed start still waiting (stop() cancels it, so a cut voice never starts late). */
+  startTimer?: ReturnType<typeof setTimeout> | null;
 }
 
 /**
@@ -199,9 +204,12 @@ export class ExpoAvBackend implements AudioBackend {
     this.tokens.set(token, voice);
     if (voice.stopTimer) clearTimeout(voice.stopTimer);
     voice.stopTimer = null;
+    if (voice.startTimer) clearTimeout(voice.startTimer);
+    voice.startTimer = null;
     voice.busyUntil = now + a.delayMs + (a.durationMs > 0 ? a.durationMs : 1500);
     const v = voice;
     const start = () => {
+      v.startTimer = null;
       v.sound
         .setStatusAsync({
           shouldPlay: true,
@@ -218,7 +226,7 @@ export class ExpoAvBackend implements AudioBackend {
         }, a.durationMs / Math.max(0.25, a.rate));
       }
     };
-    if (a.delayMs > 0) setTimeout(start, a.delayMs);
+    if (a.delayMs > 0) v.startTimer = setTimeout(start, a.delayMs);
     else start();
     return token;
   }
@@ -226,6 +234,8 @@ export class ExpoAvBackend implements AudioBackend {
   stop(token: number): void {
     const v = this.tokens.get(token);
     if (!v) return;
+    if (v.startTimer) clearTimeout(v.startTimer);
+    v.startTimer = null;
     v.sound.pauseAsync().catch(() => undefined);
     v.busyUntil = 0;
     this.tokens.delete(token);
@@ -262,7 +272,7 @@ export class ExpoAvBackend implements AudioBackend {
     if (d.ramp) clearInterval(d.ramp);
     d.ramp = null;
     const from = d.gain;
-    if (rampMs <= AV_RAMP_STEP_MS) {
+    if (rampMs <= AV_RAMP_STEP_MS || Math.abs(gain - from) < 1e-4) {
       d.gain = gain;
       pushDeckVolume(d, gain * this.master);
       return;
@@ -387,6 +397,39 @@ async function localPath(src: number): Promise<string | null> {
   }
 }
 
+/** A voice is released this long after it must have ended, if its end event never came. */
+const VOICE_RELEASE_SLACK_MS = 300;
+
+/**
+ * Wave 5 round 3 (memory): react-native-audio-api 0.6.5 always decodes to two channels (its miniaudio decoder is set
+ * to 2), so a mono file (399 of the 400 studio files, and Chris's bank) comes back as two identical channels. Every
+ * voice then copies both (AudioBufferSourceNode::setBuffer) and sizes its buses and time stretcher for two channels.
+ * When the two channels are sample-for-sample identical, keep one: the engine up-mixes a mono voice to both speakers
+ * at the same level (AudioBus speakers rule: left = right = mono), so it sounds exactly the same, with half the
+ * decoded cache and half of every voice's native allocations. A true stereo file (a bed) differs on its first
+ * samples and is kept as it is. Returns null when nothing changed (or anything about the buffer is unexpected).
+ */
+export function dualMonoToMono(ctx: AnyNode, buffer: AnyNode): AnyNode {
+  try {
+    if (!ctx || !buffer || buffer.numberOfChannels !== 2 || typeof ctx.createBuffer !== 'function') return null;
+    const length = buffer.length as number;
+    if (!(length > 0)) return null;
+    // Views over the decoded buffer's own memory, read only here while `buffer` is held (no copy).
+    const left = buffer.getChannelData(0) as Float32Array;
+    const right = buffer.getChannelData(1) as Float32Array;
+    if (left.length !== length || right.length !== length) return null;
+    // Every third sample (a few ms of JS per second of audio, once per cue): a real stereo file differs almost
+    // everywhere, a mono file decoded to two channels never does.
+    for (let i = 0; i < length; i += 3) if (left[i] !== right[i]) return null;
+    if (left[length - 1] !== right[length - 1]) return null;
+    const mono = ctx.createBuffer(1, length, buffer.sampleRate);
+    mono.copyToChannel(left, 0, 0);
+    return mono;
+  } catch {
+    return null;
+  }
+}
+
 export class AudioApiBackend implements AudioBackend {
   readonly name = 'audio-api' as const;
   readonly supportsPan = true;
@@ -399,9 +442,11 @@ export class AudioApiBackend implements AudioBackend {
   private musicBus: AnyNode = null;
   private musicLowpass: AnyNode = null;
   private buffers = new Map<string, AnyNode>();
-  private voices = new Map<number, { src: AnyNode; gain: AnyNode }>();
+  private voices = new Map<number, { src: AnyNode; gain: AnyNode; pan: AnyNode; timer: ReturnType<typeof setTimeout> | null }>();
   private decks = new Map<string, { src: AnyNode; gain: AnyNode; startedAt: number; offset: number; loopMs: number }>();
   private nextToken = 1;
+  /** How many decoded cues were kept as one channel (dualMonoToMono); read by the capture summary. */
+  monoKeys = 0;
 
   constructor() {
     this.mod = loadAudioApi();
@@ -488,8 +533,12 @@ export class AudioApiBackend implements AudioBackend {
       const path = await localPath(src);
       if (!path) return false;
       try {
-        const buffer = await this.ctx.decodeAudioDataSource(path);
+        const decoded = await this.ctx.decodeAudioDataSource(path);
+        // A mono file comes back as two identical channels: keep one (see dualMonoToMono).
+        const buffer = dualMonoToMono(this.ctx, decoded) ?? decoded;
+        if (buffer !== decoded) this.monoKeys += 1;
         this.buffers.set(key, buffer);
+        if (captureTraceOn()) captureLine(`[audio-decode] ${Date.now()} ${key} ch=${buffer.numberOfChannels} mono=${this.monoKeys}/${this.buffers.size}`);
         return true;
       } catch (e) {
         if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[GameAudio] decode failed', path, String(e));
@@ -511,8 +560,9 @@ export class AudioApiBackend implements AudioBackend {
       src.playbackRate.value = a.rate;
       const gain = this.ctx.createGain();
       gain.gain.value = a.gain;
+      let pan: AnyNode = null;
       if (a.pan !== 0) {
-        const pan = this.ctx.createStereoPanner();
+        pan = this.ctx.createStereoPanner();
         pan.pan.value = Math.max(-1, Math.min(1, a.pan));
         src.connect(gain);
         gain.connect(pan);
@@ -526,8 +576,11 @@ export class AudioApiBackend implements AudioBackend {
       if (a.durationMs > 0) src.start(when, offset, a.durationMs / 1000);
       else src.start(when, offset);
       const token = this.nextToken++;
-      this.voices.set(token, { src, gain });
-      src.onEnded = () => this.voices.delete(token);
+      // A voice is released once it ends (or, if the end event never comes, a little after it must have ended).
+      const playMs = (a.durationMs > 0 ? a.durationMs : Math.max(0, (buffer.duration ?? 0) * 1000 - a.startMs)) / Math.max(0.25, a.rate || 1);
+      const timer = setTimeout(() => this.release(token), a.delayMs + playMs + VOICE_RELEASE_SLACK_MS);
+      this.voices.set(token, { src, gain, pan, timer });
+      src.onEnded = () => this.release(token);
       return token;
     } catch {
       return 0;
@@ -544,7 +597,29 @@ export class AudioApiBackend implements AudioBackend {
     } catch {
       // Already stopped.
     }
+    // Released once the 15 ms stop has passed (its end event usually comes first).
+    if (v.timer) clearTimeout(v.timer);
+    v.timer = setTimeout(() => this.release(token), 60);
+  }
+
+  /**
+   * Wave 5 round 2: let a finished voice go. react-native-audio-api 0.6.5 gives every buffer source its own copy of
+   * the decoded sound (AudioBufferSourceNode::setBuffer copies the bus) plus a time stretcher, and frees them only when
+   * the JS host object is garbage collected. Hermes collects by JS heap pressure, and these host objects are tiny on
+   * it, so a 50-catch release run held about 3 MB more per catch with studio sound on (RSS +529 MB against +374 MB
+   * off). Dropping the buffer and the graph links when the voice ends frees the copy at once; the small host
+   * objects go whenever the collector runs.
+   */
+  private release(token: number): void {
+    const v = this.voices.get(token);
+    if (!v) return;
     this.voices.delete(token);
+    if (v.timer) clearTimeout(v.timer);
+    try { v.src.onEnded = null; } catch { /* already gone */ }
+    try { v.src.disconnect(); } catch { /* already gone */ }
+    try { v.gain.disconnect(); } catch { /* already gone */ }
+    try { v.pan?.disconnect(); } catch { /* already gone */ }
+    try { v.src.buffer = null; } catch { /* already gone */ }
   }
 
   stopAll(): void {
@@ -596,6 +671,12 @@ export class AudioApiBackend implements AudioBackend {
     } catch {
       // Already stopped.
     }
+    // Round 2: the stopped bed lets its copy of the loop go (see release()).
+    setTimeout(() => {
+      try { d.src.disconnect(); } catch { /* already gone */ }
+      try { d.gain.disconnect(); } catch { /* already gone */ }
+      try { d.src.buffer = null; } catch { /* already gone */ }
+    }, Math.max(20, fadeMs) + VOICE_RELEASE_SLACK_MS);
   }
 
   async musicPosition(deck: string): Promise<number> {
@@ -639,9 +720,18 @@ export class AudioApiBackend implements AudioBackend {
 // Hybrid: audio-api where it can decode, expo-av for everything else
 // =============================================================================
 
-const AV_ONLY_TYPES = new Set(['m4a', 'aac', 'caf', 'mp4']);
+export const AV_ONLY_TYPES = new Set(['m4a', 'aac', 'caf', 'mp4']);
 
-function assetType(src: number): string {
+/** Metro's metadata for a bundled asset (name, type, dev folder or URI); never its bytes. */
+export function assetMeta(src: number): { name?: string; type?: string; httpServerLocation?: string; uri?: string } | null {
+  try {
+    return Asset.fromModule(src) as unknown as { name?: string; type?: string; httpServerLocation?: string; uri?: string };
+  } catch {
+    return null;
+  }
+}
+
+export function assetType(src: number): string {
   try {
     return (Asset.fromModule(src).type || '').toLowerCase();
   } catch {
@@ -681,6 +771,10 @@ export class HybridBackend implements AudioBackend {
   routeOf(key: string): string | null {
     const b = this.routes.get(key);
     return b ? b.name : null;
+  }
+
+  latencyOf(key: string): number {
+    return (this.routes.get(key) ?? this.api).latencyMs;
   }
 
   async load(key: string, src: number, voices: number): Promise<boolean> {

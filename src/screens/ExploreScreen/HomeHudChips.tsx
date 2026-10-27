@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, type ReactNode } from 'react';
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { haptic } from '../../gamekit/Haptics';
 import { Image } from 'expo-image';
@@ -41,18 +41,37 @@ function HomeHudChips({ top, onWidth, findsUntilTicket, ticketsCapped = false, o
   const pop = useSharedValue(1);
   const glow = useSharedValue(0);
   const last = useRef(remaining);
+  // Round 4: the catch ends pointing at the next goal. The chips come back first after a catch (stagger slot 0)
+  // and the pip that just filled stamps in gold (from 2x, SPRING.stamp) with a ring, 120 ms after the chip pops.
+  const stampAt = useSharedValue(-1);
+  const stamp = useSharedValue(0);
   useEffect(() => {
     if (last.current !== remaining && !reduced) {
       pop.value = withSequence(withTiming(1.18, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 260 }));
+      if (remaining < last.current) {
+        stampAt.value = 3 - remaining - 1;
+        stamp.value = 0;
+        stamp.value = withDelay(120, withTiming(1, { duration: 420 }));
+      }
     }
     last.current = remaining;
-  }, [remaining, reduced, pop]);
+  }, [remaining, reduced, pop, stamp, stampAt]);
   useEffect(() => {
     if (remaining === 1 && !reduced) glow.value = withRepeat(withTiming(1, { duration: 700 }), -1, true);
     else { cancelAnimation(glow); glow.value = 0; }
     return () => cancelAnimation(glow);
   }, [remaining, reduced, glow]);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  const stampPip = useAnimatedStyle(() => {
+    const u = stamp.value;
+    if (u <= 0 || u >= 1) return { transform: [{ scale: 1 }] };
+    const wave = Math.exp(-4 * u) * Math.cos(2.2 * Math.PI * u) * (1 - u);
+    return { transform: [{ scale: 1 + 1.0 * wave }] };
+  });
+  const stampRing = useAnimatedStyle(() => {
+    const u = stamp.value;
+    return { opacity: u <= 0 || u >= 1 ? 0 : 1 - u, transform: [{ scale: 0.6 + 2.2 * u }] };
+  });
   const glowStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + glow.value * 0.45 }], opacity: 0.6 + glow.value * 0.4 }));
   if (!line && !parkStory && !eventChip) return null;
   return (
@@ -65,7 +84,12 @@ function HomeHudChips({ top, onWidth, findsUntilTicket, ticketsCapped = false, o
             <View style={styles.pips}>
               {[0, 1, 2].map(i => i === 2 && remaining === 1
                 ? <Animated.View key={i} style={[styles.pip, styles.pipNext, glowStyle]} />
-                : <View key={i} style={[styles.pip, i < 3 - remaining && styles.pipOn]} />)}
+                : i === 3 - remaining - 1
+                  ? <View key={i}>
+                      <Animated.View style={stampPip}><View style={[styles.pip, styles.pipOn]} /></Animated.View>
+                      <Animated.View pointerEvents="none" style={[styles.pipRing, stampRing]} />
+                    </View>
+                  : <View key={i} style={[styles.pip, i < 3 - remaining && styles.pipOn]} />)}
             </View>
           </Pressable>
         </Animated.View>
@@ -95,5 +119,6 @@ const styles = StyleSheet.create({
   pip: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.35)' },
   pipOn: { backgroundColor: BRAND.gold },
   pipNext: { backgroundColor: BRAND.goldLight },
+  pipRing: { position: 'absolute', left: -2, top: -2, width: 11, height: 11, borderRadius: 6, borderWidth: 1.5, borderColor: BRAND.goldLight },
   text: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 14 },
 });

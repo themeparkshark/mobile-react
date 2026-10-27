@@ -14,6 +14,8 @@
 import type { SfxName } from '../assets/games/sfx/manifest';
 import { GameAudio } from './audio/GameAudio';
 import { LEGACY_SFX_TO_CUE } from './audio/chrisBank';
+import { LEGACY_SFX_TO_MOMENT } from './audio/momentMap';
+import { studioMoment } from './audio/playMoment';
 
 type DuckHook = (active: boolean) => void;
 
@@ -74,9 +76,13 @@ class SfxManager {
       if (!GameAudio.isSfxEnabled()) return;
       const cue = LEGACY_SFX_TO_CUE[name] ?? name;
       if (!GameAudio.backend) await GameAudio.init();
-      const id = GameAudio.play(cue, { volume: volumeScale });
+      // Studio sound on (wow-sound switch): legacy names speak the moment vocabulary
+      // (hit -> game.hit, win -> game.win, ...). Off (default): exactly the Chris cue below.
+      const moment = LEGACY_SFX_TO_MOMENT[name];
+      const studio = !!moment && studioMoment(moment, { volume: volumeScale });
+      const id = studio ? 1 : GameAudio.play(cue, { volume: volumeScale });
       if (id && this.duck) {
-        const ms = GameAudio.cue(cue)?.durationMs ?? 600;
+        const ms = GameAudio.cue(studio ? `moment:${moment}:primary` : cue)?.durationMs ?? 600;
         this.ducking += 1;
         if (this.ducking === 1) this.duck(true);
         setTimeout(() => {

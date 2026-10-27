@@ -23,7 +23,7 @@ import {
   allocateVoice,
   barMs,
   dbToGain,
-  duckGainAt,
+  duckSegment,
   nextGridMs,
   pitchVariance,
   quantizeDelayMs,
@@ -38,6 +38,9 @@ import { AudioApiBackend, ExpoAvBackend, HybridBackend, SilentBackend, audioApiA
 /** Dev capture log of every cue play (EXPO_PUBLIC_AUDIO_LOG=1 with studio mute): the lane's beat log. */
 const AUDIO_LOG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_AUDIO_LOG === '1';
 import { CHRIS_BEDS, CHRIS_CUES, type BedDef, type CueDef } from './chrisBank';
+import { TraceBackend } from './traceBackend';
+import { studioTraceOn, traceEvent } from './studioTrace';
+import { soundMayHaveStarted, studioCapture } from './studioSwitch';
 import { routePan, type AudioRoute } from '../core/audioRoute';
 
 export interface PlayOptions {
@@ -57,6 +60,9 @@ export type BackendChoice = 'auto' | 'audio-api' | 'expo-av';
 
 interface ActiveVoice extends VoiceInfo {
   token: number;
+  /** When it starts (ms, delay included) and the cue's previous scheduled start, so stopping it before it plays undoes its cooldown. */
+  startsAt?: number;
+  prevLastPlayed?: number;
 }
 
 interface Duck {
@@ -87,10 +93,21 @@ class GameAudioEngine {
   private settingsPending = false;
   /** EXPO_PUBLIC_STUDIO_MUTE=1 (lane tooling only, dev and release-like JS) keeps test simulators silent (master gain pinned to 0). */
   private readonly studioMute = process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
+  /**
+   * Wave 5: the muted catch capture's A/B (studioSwitch.studioCapture) runs the engine whatever the scratch player's
+   * setting, so studio on and off are measured doing real audio work; the pinned 0 master gain keeps it silent.
+   */
+  private readonly captureEngine = studioCapture() !== null;
   private masterVolume = this.studioMute ? 0 : 1;
+  /**
+   * Dev only: EXPO_PUBLIC_STUDIO_TRACE=1 runs the whole engine into TraceBackend, which never touches
+   * the audio hardware, and logs every start. Sound settings stay "on" inside the engine so the trace
+   * shows what a player with sound on would hear; nothing is audible either way.
+   */
+  private readonly traceMode = studioTraceOn();
   private busGain: Record<Bus, number> = { ...BUS_DEFAULT };
   private ducks: Duck[] = [];
-  private duckTimer: ReturnType<typeof setInterval> | null = null;
+  private duckTimer: ReturnType<typeof setTimeout> | null = null;
   globalVoices = DEFAULT_GLOBAL_VOICES;
   private groupCaps = new Map<string, number>();
   /** Output route (useAudioRoute keeps it live). Pan only plays on a private route (Whack v5). */
@@ -128,6 +145,7 @@ class GameAudioEngine {
   /** The player's sound settings are in: the next play or load may start the engine. */
   settingsKnown(): void {
     this.settingsPending = false;
+    soundMayHaveStarted();
   }
 
   /** Pick and start a backend. Safe to call many times. Resolves with no backend while all sound is off. */
@@ -136,8 +154,16 @@ class GameAudioEngine {
     if (!this.wantsAudio()) return Promise.resolve();
     this.initPromise = (async () => {
       let backend: AudioBackend | null = null;
+      if (this.traceMode) {
+        // Silent by construction: no native backend is ever created in trace mode.
+        const trace = new TraceBackend(audioApiAvailable());
+        await trace.init();
+        this.backend = trace;
+        return;
+      }
       // Dev studio mute: never wake the audio hardware (a stuck simulator output aborts AVAudioEngine start).
-      if (this.studioMute) {
+      // The muted catch capture's A/B (captureEngine) still runs the real engine, silent at master gain 0.
+      if (this.studioMute && !this.captureEngine) {
         backend = new SilentBackend();
         await backend.init();
         this.backend = backend;
@@ -169,6 +195,18 @@ class GameAudioEngine {
   /** Typical output latency of the active backend (ms). */
   get latencyMs(): number {
     return this.backend?.latencyMs ?? 80;
+  }
+
+  /**
+   * Output latency for one cue (ms): the hybrid plays WAV/MP3 on audio-api (20 ms) and AAC
+   * stingers on expo-av (80 ms). Haptics paired with the cue wait this long so they land together.
+   */
+  latencyFor(name: string): number {
+    const def = this.cues.get(name);
+    const backend = this.backend;
+    if (!def || !backend) return this.latencyMs;
+    const file = this.files(name, def)[0];
+    return file && backend.latencyOf ? backend.latencyOf(file.key) : backend.latencyMs;
   }
 
   registerCues(defs: Record<string, CueDef>): void {
@@ -233,8 +271,8 @@ class GameAudioEngine {
    * cache then, so turning Sound back on preloads normally instead of loading on first play.
    */
   async preload(names?: string[]): Promise<boolean> {
-    // Sound effects off: never wake the audio hardware for cues nobody will hear (battery). play() loads
-    // lazily if sound comes back on.
+    // Sound effects off (music may still be on): never decode cues nobody will hear. False, so a
+    // caller that caches its preload tries again once sound comes back on.
     if (!this.sfxEnabled) return false;
     await this.init();
     if (!this.backend) return false;
@@ -259,8 +297,11 @@ class GameAudioEngine {
   }
 
   setSfxEnabled(v: boolean): void {
+    if (this.traceMode) { traceEvent('legacy', 'setting', `sound effects ${v ? 'on' : 'off'} (trace keeps the engine on, silent)`); v = true; }
+    if (this.captureEngine) v = true;
     this.sfxEnabled = v;
     if (!v) this.backend?.stopAll();
+    else soundMayHaveStarted();
   }
 
   isSfxEnabled(): boolean {
@@ -268,6 +309,7 @@ class GameAudioEngine {
   }
 
   setMusicEnabled(v: boolean): void {
+    if (this.traceMode) { traceEvent('legacy', 'setting', `music ${v ? 'on' : 'off'} (trace keeps the engine on, silent)`); v = true; }
     this.musicEnabled = v;
     if (!v) this.music.stop(200);
   }
@@ -333,6 +375,7 @@ class GameAudioEngine {
       maxVoicesForCue: def.maxVoices ?? 3,
       cooldownMs: def.cooldownMs ?? 0,
       lastPlayedAt: this.lastPlayed.get(name) ?? -1e9,
+      at: now + (opts.delayMs ?? 0),
       group: def.group,
       groupCap: def.group ? this.groupCaps.get(def.group) ?? 0 : 0,
     }, this.globalVoices);
@@ -363,8 +406,9 @@ class GameAudioEngine {
     if (!token) return 0;
     const id = this.nextId++;
     const len = def.durationMs ?? (durationMs || 1200);
-    this.active.push({ id, token, cue: name, group: def.group, priority: def.priority ?? 1, startedAt: now, endsAt: now + (opts.delayMs ?? 0) + len });
-    this.lastPlayed.set(name, now);
+    const startsAt = now + (opts.delayMs ?? 0);
+    this.active.push({ id, token, cue: name, group: def.group, priority: def.priority ?? 1, startedAt: now, endsAt: startsAt + len, startsAt, prevLastPlayed: this.lastPlayed.get(name) });
+    this.lastPlayed.set(name, startsAt);
     this.prune(now);
     if (def.duck) this.duck(def.duck.db, def.duck.attackMs ?? 60, def.duck.holdMs ?? len, def.duck.releaseMs ?? 300);
     this.onPlay?.(name, { voices: this.active.length, backend: backend.name });
@@ -402,8 +446,14 @@ class GameAudioEngine {
   stop(id: number): void {
     const i = this.active.findIndex((v) => v.id === id);
     if (i < 0) return;
-    this.backend?.stop(this.active[i].token);
+    const v = this.active[i];
+    this.backend?.stop(v.token);
     this.active.splice(i, 1);
+    // A voice stopped before it was heard never played: it must not merge the next play by cooldown.
+    if (v.startsAt !== undefined && v.startsAt > Date.now() && this.lastPlayed.get(v.cue) === v.startsAt) {
+      if (v.prevLastPlayed === undefined) this.lastPlayed.delete(v.cue);
+      else this.lastPlayed.set(v.cue, v.prevLastPlayed);
+    }
   }
 
   stopAll(): void {
@@ -438,22 +488,32 @@ class GameAudioEngine {
     return routePan(this.route, pan);
   }
 
-  /** Duck the music bus: attack to -db, hold, release. Deepest duck wins. */
+  /**
+   * Duck the music bus: attack to -db, hold, release. Deepest duck wins.
+   * Event driven: one gain ramp per straight piece of the envelope (attack,
+   * hold, release) and one timer to the next piece, never a polling interval;
+   * the hold costs nothing. (Audio-thread AudioParam automation stays off:
+   * react-native-audio-api 0.6 aborts on it, see backends.ts.)
+   */
   duck(db: number, attackMs = 60, holdMs = 300, releaseMs = 300): void {
+    if (this.traceMode) traceEvent('duck', `-${db} dB`, `attack ${attackMs} hold ${holdMs} release ${releaseMs}`);
     this.ducks.push({ start: Date.now(), db, a: attackMs, h: holdMs, r: releaseMs });
-    if (this.duckTimer) return;
-    this.duckTimer = setInterval(() => {
-      const now = Date.now();
-      this.ducks = this.ducks.filter((d) => now - d.start < d.a + d.h + d.r);
-      let g = 1;
-      for (const d of this.ducks) g = Math.min(g, duckGainAt(now - d.start, d.db, d.a, d.h, d.r));
-      this.music.setDuckGain(g);
-      if (this.ducks.length === 0 && this.duckTimer) {
-        clearInterval(this.duckTimer);
-        this.duckTimer = null;
-        this.music.setDuckGain(1);
-      }
-    }, 30);
+    this.stepDuck();
+  }
+
+  private stepDuck(): void {
+    if (this.duckTimer) clearTimeout(this.duckTimer);
+    this.duckTimer = null;
+    const now = Date.now();
+    this.ducks = this.ducks.filter((d) => now - d.start < d.a + d.h + d.r);
+    const seg = duckSegment(this.ducks, now);
+    if (seg.nextAt === null) {
+      this.ducks = [];
+      this.music.setDuckGain(1, 30);
+      return;
+    }
+    this.music.setDuckGain(seg.target, seg.rampMs);
+    this.duckTimer = setTimeout(() => this.stepDuck(), seg.rampMs);
   }
 
   async unloadAll(): Promise<void> {
@@ -615,9 +675,11 @@ export class MusicDirector {
     b.musicGain(this.deck, this.gainFor(this.current) * this.baseGain * this.duckGain * this.trimGain * muffle, rampMs);
   }
 
-  setDuckGain(g: number): void {
+  /** Ramp the duck to `g` over `rampMs` (no work when it is already there: a duck's hold). */
+  setDuckGain(g: number, rampMs = 30): void {
+    if (g === this.duckGain) return;
     this.duckGain = g;
-    this.refreshGain(30);
+    this.refreshGain(rampMs);
   }
 
   /** A gentle trim (e.g. -3 dB while the line moves). Never stops music. */

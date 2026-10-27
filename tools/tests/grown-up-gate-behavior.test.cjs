@@ -561,6 +561,8 @@ test('useGameMusic: a mid-game Music off stops only this game\'s bed and never w
     '../../context/AuthProvider': { AuthContext: auth },
     '../../context/MusicProvider': { MusicContext: { value: null } },
     './GameAudio': { GameAudio },
+    // Battery Saver rest (wow-sound): awake and on mains here, so the bed never rests.
+    '../../power/PowerProvider': { usePowerBudget: () => ({ lowPower: false, idle: false }) },
   });
   const Game = props => { useGameMusic(props.bed, { at: 'bar', enabled: props.enabled }); return null; };
   const game = rt.mount(Game, { bed: 'mm_loop_main', enabled: true });

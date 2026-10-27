@@ -3,7 +3,7 @@ import MapLaunchCover from './map/MapLaunchCover';
 import TileWaitSheet, { TILE_WAIT_MAX_MS } from './map/TileWaitSheet';
 import { beginMapCover, mapCoverDrawn, mapTilesShown, releaseMapCover, useMapCovered } from './map/mapCover';
 import { Image } from 'expo-image';
-import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createContext, memo, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { PlayerSharkMarker } from './map/PlayerSharkMarker';
@@ -27,6 +27,8 @@ import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { Animated, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { haptic } from '../gamekit/Haptics';
+import { AMBIENT } from '../ui/motion';
+import { EASE } from '../ui/motionEasing';
 import { BRAND, GameIcon, SHADOW } from '../ui';
 import { AuthContext } from '../context/AuthProvider';
 import { HeadingContext, HeadingControlContext, LocationContext } from '../context/LocationProvider';
@@ -48,7 +50,8 @@ import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapD
 import type { InsetRect, LayoutItem, Rect } from './map/declutter/solver';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
 import { clearOfflineChipDock, offlineChipDock, publishOfflineChipDock } from './map/offlineDock';
-import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { catchDim, catchDimBack, catchKickX, catchKickY, catchShown, chromeBack, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { chromeHeal, touchHeal, useCommitHeal } from './map/alive/commitHeal';
 import { MOTION_PROBE, MotionProbeFrames, probeCamera, probeCount } from '../dev/motionProbe';
 import { useTrail } from '../services/trail/TrailProvider';
 import { mapTrailOf } from './map/mapTrail';
@@ -137,7 +140,7 @@ export function railColumnHeight(buttons: number): number {
   return buttons <= 0 ? 0 : buttons * RAIL_BUTTON + (buttons - 1) * RAIL_GAP;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, railFloor = 0, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self', trailHidden = false }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, sharkLook = 0, sharkHop = 0, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, railFloor = 0, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self', trailHidden = false }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -183,6 +186,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly coverHost?: 'self' | 'screen';
   /** Something to catch right here (a ride coin in range): the shark perks up and cheers now and then. */
   readonly sharkCheer?: boolean;
+  /** Screen side (-1 left, 1 right) of the nearest find in range: the shark's look-around turns toward it. */
+  readonly sharkLook?: -1 | 0 | 1;
+  /** Bumped when a find appears in range: the shark gives one happy hop. */
+  readonly sharkHop?: number;
   /** Trail Boxes (steps stream): the box filling as you walk rides on the shark; it hops when one is ready. */
   readonly trail?: MapTrail | null;
   /** A brand new player's first hunt: the Trail Box stays off the shark's back so the treat is the one thing that pops. */
@@ -244,13 +251,21 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const travelCourse = useSharedValue(0);
   const wakeTrail = useDerivedValue(() => wakeTurn(travelCourse.value, mapBearing.value));
   useEffect(() => {
-    if (reducedMotion || !screenFocused || ambientFrozen) { idle.value = 0; sway.value = 0; glow.value = 0.5; return; }
+    // Breathing and swaying only while someone can see it: off screen, in the background, under a catch
+    // and with Reduce Motion the shark rests (logged in development, for the battery proof).
+    if (reducedMotion || !screenFocused || ambientFrozen || !appActive) {
+      if (__DEV__) console.log(`[shark-life] rest focused=${screenFocused} active=${appActive} frozen=${ambientFrozen} reduced=${reducedMotion}`);
+      idle.value = 0; sway.value = 0; glow.value = 0.5; return;
+    }
+    if (__DEV__) console.log('[shark-life] breathe');
     const ease = REasing.inOut(REasing.sin);
-    idle.value = withRepeat(withSequence(withTiming(1, { duration: 1000, easing: ease }), withTiming(0, { duration: 1000, easing: ease })), -1, false);
+    // One breath every AMBIENT.breathMs (2.4 s): the body swells a little taller and thinner, then settles.
+    const half = AMBIENT.breathMs / 2;
+    idle.value = withRepeat(withSequence(withTiming(1, { duration: half, easing: ease }), withTiming(0, { duration: half, easing: ease })), -1, false);
     sway.value = withRepeat(withSequence(withTiming(1, { duration: 1200, easing: ease }), withTiming(-1, { duration: 1200, easing: ease })), -1, false);
     glow.value = withRepeat(withSequence(withTiming(1, { duration: 1400, easing: ease }), withTiming(0, { duration: 1400, easing: ease })), -1, false);
     return () => { cancelAnimation(idle); cancelAnimation(sway); cancelAnimation(glow); };
-  }, [reducedMotion, screenFocused, ambientFrozen, idle, sway, glow]);
+  }, [reducedMotion, screenFocused, ambientFrozen, appActive, idle, sway, glow]);
   // Weak GPS: graded by the fix's accuracy (40 m small and faint, 150 m wide and stronger).
   const weak = useSharedValue(0);
   const weakAccuracy = useSharedValue(WEAK_RING_MIN_M);
@@ -267,7 +282,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const facing = useSharedValue(1);
   const stride = useSharedValue(0);
   useAnimatedReaction(() => facingFor(travelCourse.value, mapBearing.value, facing.value > 0 ? 1 : -1), (next, prevSign) => {
-    if (prevSign !== null && next !== prevSign) facing.value = withTiming(next, { duration: 260 });
+    // The turn: the art flips through its edge with a little stretch (180 ms), like a cartoon about-face.
+    if (prevSign !== null && next !== prevSign) facing.value = withTiming(next, { duration: 180, easing: EASE.inOut });
   });
   // The stride runs only while walking, at the walking pace (a stroll waddles slower).
   const strideMs = useRef(0);
@@ -444,11 +460,14 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const [lampPoints, setLampPoints] = useState<GeoJSON.FeatureCollection>(NO_FEATURES);
   const decoKey = useRef('');
   const decoTimer = useRef<ReturnType<typeof setTimeout>>();
+  // A catch on top freezes the planted set (no re-plant mid-moment); it catches up once the catch is over.
+  const decoFrozen = useRef(ambientFrozen);
+  decoFrozen.current = ambientFrozen;
   const refreshDecorations = useCallback(() => {
     clearTimeout(decoTimer.current);
     decoTimer.current = setTimeout(async () => {
       const map = mapViewRef.current;
-      if (!map || !mapAlive.current) return;
+      if (!map || !mapAlive.current || decoFrozen.current) return;
       try {
         const [zoom, [[east, north], [west, south]]] = await Promise.all([map.getZoom(), map.getVisibleBounds()]);
         // Skip rebuilding for tiny camera nudges (walking follow) at the same density.
@@ -479,6 +498,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [window.height, window.width]);
   useEffect(() => () => clearTimeout(decoTimer.current), []);
+  // Unfrozen (the catch is over): catch up with any camera move that happened under it.
+  useEffect(() => { if (!ambientFrozen) refreshDecorations(); }, [ambientFrozen, refreshDecorations]);
   // Find guide: dashed path for a few seconds, edge arrow while off screen.
   const [viewSize, setViewSize] = useState<{ width: number; height: number } | null>(null);
   const [guidePoint, setGuidePoint] = useState<{ x: number; y: number } | null>(null);
@@ -688,9 +709,15 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const fxKick = useFxKick();
   const sparkleBurst = useSharedValue(0);
   const lastReact = useRef(0);
+  const lookRef = useRef<-1 | 0 | 1>(sharkLook);
+  lookRef.current = sharkLook;
   const tapCount = useRef(0);
   const react = useCallback((m: SharkMood) => {
-    if (reducedMotion) return;
+    if (reducedMotion) {
+      // Reduce Motion: no hop or twirl, a quick 160 ms glow pose instead (the tap still answers).
+      if (m === 'tap') glow.value = withSequence(withTiming(1, { duration: 80 }), withTiming(0.5, { duration: 80 }));
+      return;
+    }
     // A lettered outfit never mirrors, so its look-around is a wiggle.
     const mood: SharkMood = m === 'look' && mirrorOk.value === 0 ? 'wiggle' : m;
     const now = Date.now();
@@ -721,9 +748,20 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       wiggle.value = withSequence(withTiming(-9, { duration: 90 }), withTiming(9, { duration: 120 }), withTiming(-6, { duration: 110 }), withSpring(0, { damping: 8, stiffness: 220 }));
     }
     if (mood === 'look') {
-      // A look over the shoulder and back: a turn of the head the way a curious pet does.
-      const back = facing.value;
-      facing.value = withSequence(withTiming(-back, { duration: 240 }), withDelay(650, withTiming(back, { duration: 240 })));
+      // A curious look: the head tilts, holds, and comes back (a pet hearing its name). With a find in
+      // range it looks toward the find, a little longer and with a tiny lift (go on, it's right there).
+      const toward = lookRef.current;
+      const side = toward !== 0 ? toward : Math.random() < 0.5 ? -1 : 1;
+      const deg = toward !== 0 ? 12 : 8;
+      wiggle.value = withSequence(withTiming(deg * side, { duration: 300, easing: EASE.inOut }), withDelay(toward !== 0 ? 800 : 600, withTiming(0, { duration: 300, easing: EASE.inOut })));
+      if (toward !== 0) hop.value = withSequence(withTiming(0.12, { duration: 200, easing: EASE.out }), withDelay(700, withTiming(0, { duration: 260, easing: EASE.inOut })));
+    }
+    if (mood === 'flick') {
+      // A fin flick: a quick swish one way, a snap back past centre and a settle, with a little squash.
+      const side = Math.random() < 0.5 ? -1 : 1;
+      wiggle.value = withSequence(withTiming(-5 * side, { duration: 70, easing: EASE.out }), withTiming(11 * side, { duration: 110, easing: EASE.inOut }),
+        withSpring(0, { damping: 9, stiffness: 300 }));
+      squash.value = withSequence(withTiming(0.35, { duration: 70 }), withSpring(0, { damping: 8, stiffness: 280 }));
     }
     if (mood === 'tap' || mood === 'cheer') sparkleBurst.value = withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: mood === 'tap' ? 650 : 520, easing: REasing.out(REasing.quad) }), withTiming(0, { duration: 0 }));
     // Worn Secret pieces show off their moment on a tap (and now and then on their own).
@@ -750,6 +788,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     next();
     return () => clearTimeout(timer);
   }, [lifeOn, react, fxWorn]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A find just came into range: one happy hop (no repeat; the next one needs a new find).
+  const hopSeen = useRef(sharkHop);
+  useEffect(() => {
+    if (sharkHop > hopSeen.current && lifeOn && !power.idle) react('hop');
+    hopSeen.current = sharkHop;
+  }, [sharkHop, lifeOn, power.idle, react]);
   // A ride coin in range: the shark perks up and cheers every few seconds until you play it.
   useEffect(() => {
     if (!lifeOn || !sharkCheer || power.idle) return;
@@ -785,7 +829,19 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const compassHintRef = useRef<(() => void) | null>(null);
   compassHintRef.current = compassHint.visible ? compassHint.dismiss : null;
   const chromeOff = chromeHidden ? 1 : 0;
-  const chromeStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.max(catchShown.value * 1.6, chromeOff)) }), [chromeOff]);
+  // Round 5: every Map commit re-sends the rail's style for a moment (commitHeal), so it never shows a stale frame.
+  useCommitHeal(chromeHeal);
+  // Round 4: after a catch the control rail pops back in its stagger slot (from 0.85, one small overshoot).
+  const chromeStyle = useAnimatedStyle(() => {
+    const c = chromeBack(2, catchShown.value, catchDim.value, catchDimBack.value + touchHeal(chromeHeal));
+    return { opacity: chromeOff ? 0 : c.opacity, transform: [{ scale: c.scale }] };
+  }, [chromeOff]);
+  // The burst kicks the map itself (a camera kick of a few points, catchPresence.catchKickX/Y), never the controls.
+  const kickStyle = useAnimatedStyle(() => {
+    const x = catchKickX.value, y = catchKickY.value;
+    const m = Math.max(Math.abs(x), Math.abs(y));
+    return { transform: [{ translateX: x }, { translateY: y }, { scale: 1 + 0.006 * m }] };
+  });
 
   return (
     <MapAliveProvider value={alive}>
@@ -812,6 +868,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           right: 16,
           zIndex: 10,
           gap: 8,
+          transformOrigin: 'top right',
         }, railSide && styles.railSide, chromeStyle]}
         onLayout={event => {
           const { x, y, width, height } = event.nativeEvent.layout;
@@ -833,6 +890,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
 
       {/* Every marker inside the map (islands, finds, haunts) reads its placement from here. */}
       <DeclutterContext.Provider value={declutter?.store ?? null}>
+      <Reanimated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, kickStyle]}>
       <MapView
         ref={mapViewRef}
         style={StyleSheet.absoluteFill}
@@ -953,23 +1011,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           }}
         />
         <Images images={DECO_ICONS} />
-        <ShapeSource id="tps-decorations" shape={decorations}>
-          <SymbolLayer id="tps-decorations" belowLayerID="plaza" style={{
-            iconImage: ['get', 'icon'],
-            // Zoom must lead the expression; each stop scales by the item's own size.
-            iconSize: ['interpolate', ['exponential', 1.4], ['zoom'],
-              15, ['*', 0.32, ['get', 's']], 16, ['*', 0.46, ['get', 's']], 17, ['*', 0.68, ['get', 's']],
-              18, ['*', 0.95, ['get', 's']], 19, ['*', 1.3, ['get', 's']]],
-            iconAllowOverlap: true,
-            iconIgnorePlacement: true,
-            iconAnchor: 'bottom',
-            iconRotationAlignment: 'viewport',
-            iconPitchAlignment: 'viewport',
-            symbolSortKey: ['get', 'k'],
-            iconOpacity: decoShown ? 1 : 0,
-            iconOpacityTransition: { duration: reducedMotion || power.lowPower ? 0 : DECO_FADE_MS, delay: 0 },
-          }} />
-        </ShapeSource>
+        {/* Memoized: a Map re-render (a catch opening, the chrome hiding) never re-sends the layer's style, which
+            made MapLibre re-place the trees and blink them out for a frame or two. It changes only when the
+            planted set changes or the trees fade in once (decoShown). */}
+        <DecorationLayer shape={decorations} shown={decoShown} fadeMs={reducedMotion || power.lowPower ? 0 : DECO_FADE_MS} />
         {/* Time of day: one tint over the tiles only, so every pin stays bright on top. */}
         {/* A background layer, not a GeoJSON fill: it covers the whole viewport, including tiles that
             have not drawn yet, so a camera jump never shows an untinted strip. */}
@@ -1034,6 +1079,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             unmounts afterwards (MapLibre insertReactSubview crash). */}
         {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}
       </MapView>
+      </Reanimated.View>
       </DeclutterContext.Provider>
       {/* Mounted under the cover from the map's first frame (not after the lift), so a cover that
           fades before a busy JS thread catches up never shows a bare map for even a frame. */}
@@ -1228,6 +1274,34 @@ type SharkStyles = ReturnType<typeof useSharkStyles>;
  * The player shark's animated styles for one drawn copy. `live` is 1 while that copy is on
  * screen; at 0 every style returns a fixed value, so a hidden copy does no per-frame work.
  */
+const DECORATION_STYLE = {
+  iconImage: ['get', 'icon'],
+  // Zoom must lead the expression; each stop scales by the item's own size.
+  iconSize: ['interpolate', ['exponential', 1.4], ['zoom'],
+    15, ['*', 0.32, ['get', 's']], 16, ['*', 0.46, ['get', 's']], 17, ['*', 0.68, ['get', 's']],
+    18, ['*', 0.95, ['get', 's']], 19, ['*', 1.3, ['get', 's']]],
+  iconAllowOverlap: true,
+  iconIgnorePlacement: true,
+  iconAnchor: 'bottom',
+  iconRotationAlignment: 'viewport',
+  iconPitchAlignment: 'viewport',
+  symbolSortKey: ['get', 'k'],
+} as const;
+
+/** Trees, bushes and ripples: re-sent to MapLibre only when the planted set changes. */
+const DecorationLayer = memo(function DecorationLayer({ shape, shown, fadeMs }: {
+  readonly shape: GeoJSON.FeatureCollection; readonly shown: boolean; readonly fadeMs: number;
+}) {
+  // The trees fade in once they are planted (never pop in one by one); the style object only changes then.
+  const style = useMemo(() => ({ ...DECORATION_STYLE, iconOpacity: shown ? 1 : 0,
+    iconOpacityTransition: { duration: fadeMs, delay: 0 } }), [shown, fadeMs]);
+  return (
+    <ShapeSource id="tps-decorations" shape={shape}>
+      <SymbolLayer id="tps-decorations" belowLayerID="plaza" style={style as never} />
+    </ShapeSource>
+  );
+});
+
 function useSharkStyles(live: SharedValue<number>, m: SharkMotion) {
   const shark = useAnimatedStyle(() => {
     if (live.value === 0) return { transform: [{ translateY: 0 }, { rotate: '0deg' }, { scale: 1 }, { scaleX: 1 }, { scaleY: 1 }] };
@@ -1241,10 +1315,16 @@ function useSharkStyles(live: SharedValue<number>, m: SharkMotion) {
     const lean = m.mirrorOk.value > 0 ? 7 * mid * (f >= 0 ? -1 : 1) : 0;
     // Reactions: a hop up with a squash on the way down and on landing, a wiggle, a twirl.
     const sq = m.squash.value;
+    // Breath: 1.00 to 1.03 tall and 1.00 to 0.985 wide. Walking: a foot-contact squash each step
+    // (1.03 wide, 0.97 tall for the moment the stride touches down). Turning: a 1.08 stretch mid-flip.
+    const breath = m.idle.value * (1 - m.wake.value);
+    const contact = m.wake.value * Math.pow(1 - m.stride.value, 6);
     return {
-      transform: [{ translateY: -8 * m.idle.value - 5 * step - 30 * m.hop.value + 4 * sq },
+      transform: [{ translateY: -5 * m.idle.value - 3 * step - 30 * m.hop.value + 4 * sq },
         { rotate: `${3 * m.sway.value + 4 * (step - 0.5) * m.wake.value + lean + m.wiggle.value + Math.max(-7, Math.min(7, 0.06 * m.turnLean.value))}deg` },
-        { scale: 1 + 0.04 * m.idle.value + 0.06 * m.hop.value }, { scaleX: sx * m.twirl.value * (1 + 0.12 * sq) }, { scaleY: (1 - 0.06 * mid) * (1 - 0.14 * sq) }],
+        { scale: 1 + 0.06 * m.hop.value },
+        { scaleX: sx * m.twirl.value * (1 + 0.12 * sq) * (1 - 0.02 * breath) * (1 + 0.03 * contact) },
+        { scaleY: (1 + 0.08 * mid) * (1 - 0.14 * sq) * (1 + 0.04 * breath) * (1 - 0.03 * contact) }],
     };
   });
   const shadow = useAnimatedStyle(() => {

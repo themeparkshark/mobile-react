@@ -14,6 +14,8 @@ import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { AuthContext } from '../context/AuthProvider';
 import { playSfx } from '../gamekit/SFX';
+import { playChestOpen, preloadLoopMoments } from '../gamekit/audio/loopSound';
+import { useCaptureMark } from '../dev/captureMark';
 import type { DailyGiftAmountsType, DailyGiftRewardType, DailyGiftType } from '../models/daily-gift-type';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../ui';
 import { ws7Preview } from '../dev/ws7Preview';
@@ -78,13 +80,15 @@ export function countStart(amount: number): number {
 export function prizeBlockHeight(extraLines: number, hasMilestone: boolean, ticketDay: boolean): number {
   return (ticketDay ? 0 : 60) + 38 + extraLines * 24 + (hasMilestone ? 24 : 0);
 }
-export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', simple = false }: {
+export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', claim = update, simple = false }: {
   readonly dailyGift: DailyGiftType;
   readonly onMapOcclusionChange?: (busy: boolean) => void;
   /** After the card has gone: whether today's chest was claimed (false for "Back to map"). */
   readonly onClosed?: (claimed: boolean) => void;
   /** Dev visual QA only: open the chest without a tap. */
   readonly autoOpen?: boolean;
+  /** The claim call (the release-like hook capture opens a local chest without the server). */
+  readonly claim?: typeof update;
   /**
    * A brand new player's first visit: one big chest to tap, no 7-day strip,
    * streak or day count to read. The ladder shows from the next visit on.
@@ -94,6 +98,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const occlusion = useRef(onMapOcclusionChange); occlusion.current = onMapOcclusionChange;
   const closed = useRef(onClosed); closed.current = onClosed;
   useEffect(() => () => { occlusion.current?.(false); }, []);
+  // The chest's pop is decoded before the tap (wow-sound round 2: a first-play load rang it after the lid).
+  useEffect(() => { preloadLoopMoments(); }, []);
   const { player, refreshPlayer } = useContext(AuthContext);
   const currencyFly = useCurrencyFly();
   const { triggerFly } = currencyFly;
@@ -150,6 +156,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   // The shared gold (ui/GoldBurst): gathers while the chest shakes, blooms when the lid pops.
   const gold = useSharedValue(0);
   const goldBloom = useSharedValue(0);
+  // Release-like hook capture only (an empty call in every other bundle): the lid's pop peak.
+  useCaptureMark(pop, 'daily-chest-lid-peak', 1.245);
 
   useEffect(() => {
     if (!dailyGift.redeemed_at && player?.username) setVisible(true);
@@ -292,6 +300,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         playSfx('hit');
       }, 650);
     }
+    // Studio sound (approved Oct 24): the chest's own pop and coin spill, with its shaped buzz (wave 5: lid pop,
+    // heavy land, coins patter) on the lid's frame. Switch off: exactly today's success buzz and sounds.
+    if (playChestOpen()) return;
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     playSfx('win'); playSfx('coin', 0.9);
   };
@@ -313,7 +324,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     }
     playSfx('tick', 0.8);
     try {
-      const confirmed = await update(dailyGift.id);
+      const confirmed = await claim(dailyGift.id);
       if (!confirmed.redeemed_at) throw new Error('Chest was not confirmed');
       acknowledgedGift.current = confirmed;
       // The wallet refresh waits for the coins to land (flyToWallet); a closed screen refreshes now.
