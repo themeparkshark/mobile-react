@@ -23,7 +23,7 @@ import Playercard from '../components/Playercard';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper from '../components/Wrapper';
+import Wrapper, { FOOTER_CLEARANCE } from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
@@ -422,6 +422,7 @@ export default function InventoryScreen() {
                   estimatedItemSize={compact ? 116 : 150}
                   keyExtractor={(item) => item.id.toString()}
                   numColumns={3}
+                  contentContainerStyle={{ paddingBottom: FOOTER_CLEARANCE }}
                   onEndReached={() => {
                     if (!hasMore || itemsLoading || loadError) return;
                     setItemsLoading(true);

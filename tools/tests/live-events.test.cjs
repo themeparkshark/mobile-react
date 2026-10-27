@@ -99,7 +99,7 @@ test('gain only counts more points on the same event; star rides only live at an
 
 test('reward chips put gear first and skip zeros', () => {
   const chips = plain(m.rewardChips({ coins: 300, tickets: 2, energy: 0, xp: 0, item: { id: 9, name: 'Golden Reef Snorkel', image: null } }));
-  assert.deepEqual(chips.map(c => c.icon), ['gift', 'coin', 'ticket']);
+  assert.deepEqual(chips.map(c => c.icon), ['gift', 'coins', 'ticket']);
 });
 
 function loadStore(reads) {

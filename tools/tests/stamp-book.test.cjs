@@ -95,7 +95,7 @@ test('rare and up shine once earned; rewards and claim counts read the payload',
   assert.equal(model.hasShine({ rarity: 'legendary', earned: false }), false);
   assert.equal(model.hasShine({ rarity: 'uncommon', earned: true }), false);
   assert.deepEqual(plain(model.rewardChips(rewards({ energy: 30, tickets: 1, xp: 1500, title: 'Explorer' })).map(c => c.label)),
-    ['+30 Energy', '+1 Ticket', '+1,500 XP', '"Explorer" title']);
+    ['+30 Energy', '+1 Ticket', '+1500 XP', '"Explorer" title']);
   const book = model.buildBook({ stamps: { a: [
     stamp({ id: 1, is_earned: true, reward_claimed: false }),
     stamp({ id: 2, is_earned: true, reward_claimed: true }),
@@ -475,7 +475,7 @@ test('v3: a stamp the app has never heard of still renders: star pictogram, plai
 });
 
 test('v3 round 2: compact counts, colour fills up but never reads as owned, claim-all totals, book cache per player', () => {
-  assert.equal(model.compactCount(9999), '9,999');
+  assert.equal(model.compactCount(9999), '9999');
   assert.equal(model.compactCount(10000), '10K');
   assert.equal(model.compactCount(30000), '30K');
   assert.equal(model.fillFraction(0), 0);

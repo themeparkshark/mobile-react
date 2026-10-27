@@ -40,6 +40,7 @@ import { GrownUpGate } from './social/GrownUpGate';
 import { Burst } from './social/SocialFx';
 import { effectiveStatus, initialTab, mergePage, searchHint, type FriendStatus, type FriendsTab } from './social/socialModel';
 import { SurfaceContext, clearStatus, setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
+import { UpperText } from '../ui/upper';
 
 const CREST = require('../../assets/images/screens/friends/noti.png');
 // The shark-and-envelope cut off its square tile (same art as the bell's request badge), so it sits in the tab like the heart.
@@ -119,7 +120,7 @@ function Hero({ count, onInvite }: { readonly count: number; readonly onInvite: 
       <Image source={CREST} style={styles.crest} contentFit="contain" accessibilityIgnoresInvertColors />
       <View style={{ flex: 1 }} accessible accessibilityLabel={`${count} ${count === 1 ? 'friend' : 'friends'}`}>
         <Animated.Text style={[styles.heroCount, countStyle]} maxFontSizeMultiplier={1.2}>{count}</Animated.Text>
-        <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>{count === 1 ? 'Friend' : 'Friends'}</Text>
+        <UpperText style={styles.heroLabel} maxFontSizeMultiplier={1.2}>{count === 1 ? 'Friend' : 'Friends'}</UpperText>
         {/* Beside the number, never over it. */}
         {burst && <Burst style={{ left: -44, top: 22 }} onDone={endBurst} />}
       </View>
@@ -153,7 +154,7 @@ function TabChip({ label, icon, image, active, badge, onPress }: { readonly labe
           // A round disc like the heart's, so the three tabs match.
           ? <View style={styles.tabDisc}><Image source={image} style={{ width: 24, height: 24 }} contentFit="contain" /></View>
           : <GameIcon name={icon} size={26} />}
-        <Text style={[styles.tabText, active && styles.tabTextActive]} numberOfLines={1} maxFontSizeMultiplier={1.15}>{label}</Text>
+        <UpperText style={[styles.tabText, active && styles.tabTextActive]} numberOfLines={1} maxFontSizeMultiplier={1.15}>{label}</UpperText>
       </Animated.View>
       <CountBadge count={badge} style={styles.tabBadge} />
     </Pressable>
@@ -213,7 +214,7 @@ function Empty({ title, message, onFind }: { readonly title: string; readonly me
   return (
     <Animated.View entering={FadeIn} style={styles.empty}>
       <Image source={CREST} style={styles.emptyArt} contentFit="contain" />
-      <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.2}>{title}</Text>
+      <UpperText style={styles.emptyTitle} maxFontSizeMultiplier={1.2}>{title}</UpperText>
       <Text style={styles.emptyText} maxFontSizeMultiplier={1.3}>{message}</Text>
       {onFind && <Pill label="Find friends" icon="search" tone="gold" onPress={onFind} style={{ marginTop: 14 }} />}
     </Animated.View>
@@ -503,8 +504,8 @@ function MyNameCard({ name, onInvite }: { readonly name: string; readonly onInvi
       <View style={kit.gloss} pointerEvents="none" />
       <Image source={ADD_ART} style={styles.findArt} contentFit="contain" />
       <View style={{ flex: 1 }}>
-        <Text style={styles.findLabel} maxFontSizeMultiplier={1.2}>My shark name</Text>
-        <Text style={styles.findName} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.2}>{name}</Text>
+        <UpperText style={styles.findLabel} maxFontSizeMultiplier={1.2}>My shark name</UpperText>
+        <UpperText style={styles.findName} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.2}>{name}</UpperText>
         <Text style={styles.findText} maxFontSizeMultiplier={1.3}>Friends type it here to add you.</Text>
       </View>
       <Pill compact label="Share" icon="arrow" tone="gold" onPress={onInvite} accessibilityLabel="Share my shark name with a friend" />
@@ -519,7 +520,7 @@ function FindMeCard({ on, onToggle }: { readonly on: boolean; readonly onToggle:
       accessibilityLabel="Let sharks find me" accessibilityHint={on ? 'On: sharks can find you by part of your name. Tap to turn off.' : "Off: sharks can't search for you. Some sharks can still ask to be friends. Turning it on needs a grown-up."}>
       <View style={[kit.card, styles.findCard, styles.findMe]}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.findLabel} maxFontSizeMultiplier={1.2}>Let sharks find me</Text>
+          <UpperText style={styles.findLabel} maxFontSizeMultiplier={1.2}>Let sharks find me</UpperText>
           <Text style={styles.findText} maxFontSizeMultiplier={1.3}>{on ? 'Sharks can find you by part of your name.' : "Sharks can't search for you. A shark who knows your exact name can still ask to be friends. So can a shark who taps you on a leaderboard or post. You pick Yes or No."}</Text>
         </View>
         <View style={[styles.switch, on && styles.switchOn]}>

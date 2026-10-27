@@ -1035,7 +1035,7 @@ function CatchReveal({ data, outcome, escape = null, flags = null, width, height
       </Animated.View>
       <Animated.View pointerEvents="none" style={[styles.chips, { top: L.chips, width }, chipsStyle]}>
         <View style={[styles.rarityChip, { backgroundColor: color }]}>
-          {tier >= 4 ? <Text style={styles.glyph}>{tier === 5 ? '♛' : '◆'}</Text>
+          {tier >= 4 ? <GameIcon name={tier === 5 ? 'crown' : 'star'} size={18} />
             : Array.from({ length: tier - 1 }, (_, i) => <View key={i} style={styles.pip} />)}
           <Text style={styles.chipText}>{rarityText}</Text>
         </View>
@@ -1205,7 +1205,6 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: BRAND.white,
   },
   pip: { width: 9, height: 9, borderRadius: 5, backgroundColor: BRAND.white },
-  glyph: { color: BRAND.white, fontSize: 16, lineHeight: 19 },
   chipText: { fontFamily: 'Shark', fontSize: 17, color: BRAND.white, letterSpacing: 0.6 },
   gradeChip: {
     flexDirection: 'row', alignItems: 'center', gap: 2, borderRadius: 15, height: 32, paddingHorizontal: 11,

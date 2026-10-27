@@ -39,6 +39,9 @@ export const DAYLIGHT: SkyLight = {
 /** Never dim the map tiles more than this: paths and water must stay legible at night. */
 export const MAX_TINT_OPACITY = 0.4;
 
+/** The full-night tint strength: well under the cap so the night map stays bright blue, not gray. */
+export const NIGHT_TINT_OPACITY = 0.3;
+
 const RAD = Math.PI / 180;
 
 /**
@@ -88,10 +91,12 @@ const KEYS: readonly Key[] = [
   { e: 6, tint: [255, 176, 74], tintOpacity: 0.08, wash: 0.55, vignette: 0, lamps: 0, clouds: 0.9, birds: 0.9, glints: 1, fireflies: 0 },
   // Sunset: peach and coral, the first lamps come on.
   { e: 0, tint: [255, 122, 89], tintOpacity: 0.14, wash: 0.75, vignette: 0.12, lamps: 0.3, clouds: 0.45, birds: 0.6, glints: 0.7, fireflies: 0 },
-  // Dusk: violet blue hour.
-  { e: -5, tint: [112, 76, 196], tintOpacity: 0.22, wash: 0.15, vignette: 0.26, lamps: 0.75, clouds: 0.1, birds: 0.15, glints: 0.3, fireflies: 0.45 },
-  // Night: deep navy, warm lamps, fireflies, moonlit glints.
-  { e: -11, tint: [28, 48, 168], tintOpacity: MAX_TINT_OPACITY, wash: 0, vignette: 0.4, lamps: 1, clouds: 0, birds: 0, glints: 0.15, fireflies: 1 },
+  // Dusk: a clear TPS-blue hour (never violet: Dustin's palette is blue, white and gold).
+  { e: -5, tint: [64, 132, 224], tintOpacity: 0.16, wash: 0.15, vignette: 0.2, lamps: 0.75, clouds: 0.1, birds: 0.15, glints: 0.3, fireflies: 0.45 },
+  // Night: bright moonlit blue over the tiles, gold lamps, fireflies, moonlit glints.
+  // A light, saturated blue at a low cap keeps the tan tiles blue and bright, not the old gray-purple
+  // (a 40% navy wash turned every park lavender gray).
+  { e: -11, tint: [0, 110, 230], tintOpacity: NIGHT_TINT_OPACITY, wash: 0, vignette: 0.3, lamps: 1, clouds: 0, birds: 0, glints: 0.15, fireflies: 1 },
 ];
 
 /** The map's lighting for a sun elevation. */

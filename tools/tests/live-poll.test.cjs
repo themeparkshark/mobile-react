@@ -143,9 +143,12 @@ test('map markers and pills stop timers and loops while the map is off screen', 
 test('entry screens left under the map stop their video and loops', () => {
   const loading = read('src/screens/LoadingScreen.tsx');
   assert.match(loading, /const focused = useIsFocused\(\);/);
-  assert.match(loading, /shouldPlay=\{focused\}/);
-  assert.match(loading, /\{focused && BUBBLES\.map/);
-  assert.match(loading, /wobbleLoop\.stop\(\);/, 'bubbles stop their loops on unmount');
+  // The launch scene's bubbles run only while the screen is on top, and stop on unmount.
+  assert.match(loading, /<LaunchScene active=\{focused\} fact=\{fact\} \/>/);
+  const scene = read('src/components/launch/LaunchScene.tsx');
+  assert.match(scene, /const still = reduced \|\| saver \|\| !active;/);
+  assert.match(scene, /\{artIn && !still && LAUNCH_BUBBLES\.map/);
+  assert.match(scene, /return \(\) => cancelAnimation\(p\);/, 'bubbles stop their loops on unmount');
   const login = read('src/screens/Auth/LoginScreen.tsx');
   assert.match(login, /shouldPlay=\{focused\}/);
   assert.match(login, /if \(!focused\) return;\s*const float = Animated\.loop/);

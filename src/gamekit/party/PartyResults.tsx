@@ -30,6 +30,7 @@ import { BOT_SHARK } from './partyArt';
 import SeatAvatar from './SeatAvatar';
 import EmoteBar, { EmotePop } from './EmoteBar';
 import { lossLine, nearMiss, starLabel } from './resultCopy';
+import countText from '../../helpers/countText';
 
 export interface PartyResultsProps {
   state: PartyState;
@@ -54,7 +55,7 @@ function CountUp({ to, delay }: { to: number; delay: number }) {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [delay, to]);
-  return <Text style={styles.score}>{v.toLocaleString('en-US')}</Text>;
+  return <Text style={styles.score}>{countText(v)}</Text>;
 }
 
 function Crown() {

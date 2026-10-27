@@ -24,6 +24,7 @@ import { BRAND, FONT, GameIcon, GameRichText } from '../ui';
 import { BADGE_ART } from './notificationBadgeArt';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { notificationMessage } from './notificationCopy';
+import { UpperText } from '../ui/upper';
 
 const REQUEST_STICKER = require('../../assets/images/screens/friends/request_sticker.png');
 
@@ -130,7 +131,7 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
                 {coins > 0 && (
                   // What they got, without reading: the coin and the number.
                   <View style={styles.reward} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-                    <GameIcon name="coin" size={20} />
+                    <GameIcon name="coins" size={20} />
                     <Text style={styles.rewardText} maxFontSizeMultiplier={1.2}>+{coins}</Text>
                   </View>
                 )}
@@ -154,7 +155,7 @@ function Notification({ notification, unread, answer, onOpen, onClear, onAnswere
         {answeredYes && (
           <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(12)} style={styles.answered} accessibilityLiveRegion="polite">
             <GameIcon name="sparkle" size={24} />
-            <Text style={[styles.answeredText, { color: BRAND.greenLip }]} maxFontSizeMultiplier={1.2}>New friend!</Text>
+            <UpperText style={[styles.answeredText, { color: BRAND.greenLip }]} maxFontSizeMultiplier={1.2}>New friend!</UpperText>
           </Animated.View>
         )}
         {canHeartBack && target && (

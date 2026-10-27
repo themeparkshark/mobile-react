@@ -8,6 +8,7 @@
  */
 import type { GameIconName } from '../../ui/iconNames';
 
+import countText from '../../helpers/countText';
 export type GlossaryKey =
   | 'coins' | 'tickets' | 'energy' | 'ride_parts' | 'ride_coins' | 'rescue_pass'
   | 'keys' | 'swords' | 'xp' | 'coin_levels' | 'limited_coins' | 'ride_challenge'
@@ -227,5 +228,5 @@ export function glossaryKeyForName(name: string | null | undefined): GlossaryKey
 /** "You have 377 Coins" style line for a sheet opened from a balance. */
 export function balanceLine(term: Pick<GlossaryTerm, 'label'>, count: number | null | undefined): string | null {
   if (typeof count !== 'number' || !Number.isFinite(count)) return null;
-  return `You have ${Math.max(0, Math.floor(count)).toLocaleString('en-US')} ${term.label}.`;
+  return `You have ${countText(Math.max(0, Math.floor(count)))} ${term.label}.`;
 }

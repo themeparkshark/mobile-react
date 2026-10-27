@@ -10,6 +10,7 @@ import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { ScoreIcon } from './MiniPodium';
 import StandingsShark from './StandingsShark';
 import { unitWord, type StandingsMetric, type StandingsRowModel, type WeekGoal } from './standingsV2Model';
+import { UpperText } from '../../ui/upper';
 
 /**
  * Your weekly goals (3, 8, 15 rides): moved here from the pinned row in v3,
@@ -87,7 +88,7 @@ export default function SharkCard({ row, metric, board, goals = null, onClose }:
             borderWidth: 4, borderBottomWidth: 8, borderColor: BRAND.white, ...SHADOW.lifted,
           }}>
             <StandingsShark avatar={row.avatar} size={120} ring={row.isMe ? BRAND.gold : BRAND.skyDeep} />
-            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} adjustsFontSizeToFit style={[textPreset('title'), { marginTop: 10, textTransform: 'uppercase' }]}>{row.name}</Text>
+            <UpperText maxFontSizeMultiplier={1.2} numberOfLines={1} adjustsFontSizeToFit style={[textPreset('title'), { marginTop: 10, textTransform: 'uppercase' }]}>{row.name}</UpperText>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
               {row.rank ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 34, borderRadius: RADIUS.pill, backgroundColor: BRAND.blueBright }}>

@@ -18,6 +18,14 @@ import RedeemVaultModal from './RedeemVaultModal';
 import YellowButton from './YellowButton';
 import { TaskType } from '../models/task-type';
 import { BRAND, GameIcon } from '../ui';
+import { useCoverArt } from './map/mapCover';
+
+/**
+ * PLAY RIDE's wrapper sits 50 pt below the map's bottom edge (ExploreScreen); the group rests 120 pt
+ * up from there. Its entrance starts 24 pt lower, still clear of the footer compass, and fully clear.
+ */
+const PLAY_RIDE_REST_Y = -120;
+const PLAY_RIDE_ENTER_FROM = -96;
 
 export default function RedeemModal({
   redeemable,
@@ -28,7 +36,16 @@ export default function RedeemModal({
   selectedTaskId = null,
   liveStatus = null,
   onOpenChange,
+  onShownChange,
+  covered = false,
 }: {
+  /**
+   * The map's loading cover is still up. A ride already in range gets PLAY RIDE ready under it, at
+   * rest (no slide), and the cover waits for its art: the cover's own fade reveals it with the map.
+   */
+  readonly covered?: boolean;
+  /** PLAY RIDE (or the closed-ride sign) is up or gone: the map keeps its art out from under it. */
+  readonly onShownChange?: (shown: boolean) => void;
   /** The live feed's status for the ride in range (DOWN, CLOSED...): no PLAY RIDE on a closed ride. */
   readonly liveStatus?: string | null;
   /** The ride selected on the map; PLAY RIDE hides while a different ride is selected. */
@@ -48,7 +65,10 @@ export default function RedeemModal({
   const [openedRedeemable, setOpenedRedeemable] = useState<CurrentRedeemableType | null>(null);
   const reducedMotion = useReducedGameMotion();
   const lastAnnounced = useRef<string | null>(null);
-  const animated = useRef(new Animated.Value(0)).current;
+  const enter = useRef(new Animated.Value(0)).current;
+  // PLAY RIDE is one piece: the yellow pill, its label and the ride chip under it stay hidden until
+  // the pill art has drawn, then slide up together (never words or a chip on the bare map first).
+  const [pillReady, setPillReady] = useState(false);
 
   const openChange = useRef(onOpenChange); openChange.current = onOpenChange;
   useEffect(() => { openChange.current?.(modalVisible); }, [modalVisible]);
@@ -62,35 +82,51 @@ export default function RedeemModal({
   // Standing at a ride that is not open: the same spot says why (and when it is back), never a blank.
   const closedReason = !otherSelected && !available ? nearbyRideClosedReason(redeemable, liveStatus) : null;
   const closedLabel = closedReason ? closedRideCopy(closedReason) : null;
-  const shown = available || !!closedLabel;
+  const shown = (available && pillReady) || !!closedLabel;
+  // Under the cover the lift waits for the pill art (never past the cover's hard cap).
+  const pillArtDrawn = useCoverArt(covered && available && !pillReady);
   const identity = redeemable ? `${redeemable.type}:${redeemable.model.id}` : null;
+  const shownChange = useRef(onShownChange); shownChange.current = onShownChange;
+  useEffect(() => { shownChange.current?.(shown); }, [shown]);
+  useEffect(() => () => shownChange.current?.(false), []);
+  // The pill unmounts when the ride stops being available: its next showing waits for its art again.
+  useEffect(() => { if (!available) setPillReady(false); }, [available]);
+  // The "you're in range" cue lands with the pill itself (never before the button is on screen).
+  // Under the cover it waits for the reveal, so the cue lands as the kid sees the button.
+  const pillShown = available && pillReady && !covered;
   useEffect(() => {
-    if (available && identity !== lastAnnounced.current) {
+    if (pillShown && identity !== lastAnnounced.current) {
       lastAnnounced.current = identity;
       void playSound(require('../../assets/sounds/in_redeem_zone.mp3'));
     } else if (!available) {
       lastAnnounced.current = null;
     }
-    animated.stopAnimation();
-    if (reducedMotion) animated.setValue(shown ? -120 : 0);
-    else Animated.timing(animated, { toValue: shown ? -120 : 0,
-      duration: 240, useNativeDriver: true }).start();
-    return () => animated.stopAnimation();
-  }, [available, shown, identity, reducedMotion, animated, playSound]);
+  }, [pillShown, available, identity, playSound]);
+  // Entrance: the group fades and springs up into its resting spot (a short 24 pt rise, 0.9 to 1),
+  // starting well above the footer, so it never draws over the compass or the MAP label. Hidden,
+  // it is fully transparent. Native driver; Reduce Motion places it at once.
+  useEffect(() => {
+    enter.stopAnimation();
+    // Under the cover it simply stands in place: the cover's fade is its entrance.
+    if (reducedMotion || covered) enter.setValue(shown ? 1 : 0);
+    else if (shown) Animated.spring(enter, { toValue: 1, stiffness: 260, damping: 20, mass: 1, useNativeDriver: true }).start();
+    else Animated.timing(enter, { toValue: 0, duration: 140, useNativeDriver: true }).start();
+    return () => enter.stopAnimation();
+  }, [shown, identity, reducedMotion, enter, covered]);
+  const entrance = {
+    opacity: enter.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }),
+    transform: [
+      { translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [PLAY_RIDE_ENTER_FROM, PLAY_RIDE_REST_Y] }) },
+      { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) },
+    ],
+  };
 
   return (
     <>
       {redeemable && available && (
-        <Animated.View
-          style={{
-            transform: [
-              {
-                translateY: animated,
-              },
-            ],
-          }}
-        >
+        <Animated.View style={entrance}>
           <YellowButton
+            onArtReady={() => { pillArtDrawn(); setPillReady(true); }}
             onPress={async () => {
               setOpenedRedeemable(redeemable);
               setModalVisible(true);
@@ -109,7 +145,7 @@ export default function RedeemModal({
         </Animated.View>
       )}
       {task && !available && closedLabel && (
-        <Animated.View pointerEvents="none" style={{ transform: [{ translateY: animated }] }} accessible
+        <Animated.View pointerEvents="none" style={entrance} accessible
           accessibilityLabel={`${task.name}. ${closedLabel.a11y}`}>
           <View style={styles.closedPill}>
             <GameIcon name={closedLabel.icon} size={30} />

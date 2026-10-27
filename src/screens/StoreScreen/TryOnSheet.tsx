@@ -54,6 +54,7 @@ import { TileArt } from './ShopTile';
 import CoinTopUpOffer from '../../components/money/CoinTopUpOffer';
 import { cachedVipPlans, priceText } from '../../services/purchases';
 import { useWished, wishStore } from './wishStore';
+import { UpperText } from '../../ui/upper';
 
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 const SHEET_H = Math.min(SCREEN_H * 0.9, 780);
@@ -700,7 +701,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 {secondary && (
                   <Pressable onPress={secondary.onPress} disabled={!row.secondaryEnabled} accessibilityState={{ disabled: !row.secondaryEnabled }}
                     style={[styles.secondary, !row.secondaryEnabled && { opacity: 0.45 }]} accessibilityRole="button" hitSlop={6}>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.secondaryText}>{secondary.label}</Text>
+                    <UpperText maxFontSizeMultiplier={MAX_FONT} style={styles.secondaryText}>{secondary.label}</UpperText>
                   </Pressable>
                 )}
               </View>

@@ -29,7 +29,7 @@ import type { InventoryType } from '../models/inventory-type';
 import Animated, {
   Easing, FadeInDown, FadeInUp, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   buyGoldEdition, claimAllSharkPass, claimSharkPassReward, getSharkPass, markSharkPassSeen, sharkPassErrorCode, wearFrame,
   type SharkPassReward, type SharkPassState, type SharkPassTier,
@@ -54,6 +54,7 @@ import { wearItem } from './StoreScreen/inventoryQueue';
 import { trackImpression, trackMoney } from '../services/money/track';
 import { baseRates, formatLike, regularValue } from '../services/money/offers';
 import { useSupplies } from '../services/money/supplies';
+import countText from '../helpers/countText';
 
 const SEASON_ART: Record<string, number> = {
   'frosty-scarf': require('../../assets/images/sharkpass/frosty-scarf.webp'),
@@ -140,8 +141,8 @@ function Flake({ x, size, dur, delay, drift, height, running }: { x: number; siz
 }
 
 const CELL_W = 92;
-/** "1,500": thousands commas without relying on the device's Intl. */
-const commas = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/** Drawn counts use the one countText rule (1500, 12.5K), never commas. */
+const commas = (n: number) => countText(n);
 
 /** A payoff card; `next` plays right after this one closes (e.g. the set bonus after its last pin). */
 type Landed = {
@@ -173,6 +174,7 @@ export default function SharkPassScreen() {
   const focused = useIsFocused();
   const [active, setActive] = useState(AppState.currentState === 'active');
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [state, setState] = useState<SharkPassState | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [price, setPrice] = useState<ShopPrice | null>(null);
@@ -362,7 +364,7 @@ export default function SharkPassScreen() {
       setState(res.pass);
       haptic('success');
       setLanded({ reward: { type: 'item', name: res.name, slot: 'pin', art, icon_url: null, ready: true }, title: 'Gold!',
-        gold: true, caption: `${res.name}. ${res.spent.toLocaleString('en-US')} coins.`, itemId: Number(res.granted.item_id) || undefined });
+        gold: true, caption: `${res.name}. ${countText(res.spent)} coins.`, itemId: Number(res.granted.item_id) || undefined });
       void refreshPlayer?.().catch(() => undefined);
     } catch (error) {
       const code = sharkPassErrorCode(error);
@@ -441,7 +443,9 @@ export default function SharkPassScreen() {
     <View style={s.root}>
       <LinearGradient colors={['#0d73c9', '#0a4f96', '#083d7a']} style={StyleSheet.absoluteFill} />
       <Snow width={width} height={height} running={running} />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+      {/* The top inset from the JS hook, not a native SafeAreaView: on Dynamic Island phones the
+          native view sometimes kept a 0 inset on this route, so the title sat under the island. */}
+      <View style={{ flex: 1, paddingTop: insets.top }}>
         <View style={s.top}>
           <Pressable onPress={() => RootNavigation.goBack()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back" style={s.back}>
             <GameIcon name="back" size={40} />
@@ -505,7 +509,7 @@ export default function SharkPassScreen() {
                   <View style={{ flex: 1 }}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextKicker}>{nextPrize.pass && !premium ? 'NEXT SHARK PASS PRIZE' : 'NEXT PRIZE'}</Text>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextPrizeText}>
-                      {`${rewardWords(nextPrize.reward)} · ${nextPrize.pointsAway.toLocaleString('en-US')} points away`}
+                      {`${rewardWords(nextPrize.reward)} · ${countText(nextPrize.pointsAway)} points away`}
                     </Text>
                     {winsAwayText(nextPrize.pointsAway, progress.today) && (
                       <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextWins}>{winsAwayText(nextPrize.pointsAway, progress.today)}</Text>
@@ -795,7 +799,7 @@ export default function SharkPassScreen() {
             </Text>
           </ScrollView>
         )}
-      </SafeAreaView>
+      </View>
       {climbed && !landed && (
         <GotIt grants={{}} art="gift" title={`Step ${climbed.to}!`} onDone={() => setClimbed(null)}
           picture={heroLook ? (

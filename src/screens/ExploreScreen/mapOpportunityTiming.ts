@@ -72,20 +72,3 @@ export function nearbyRideClosedReason(
   if (from !== null && from > now) return { kind: 'resting', at: from };
   return { kind: 'closed' };
 }
-
-/**
- * Is it true to tell the player "every ride is open"? Only once the rides have
- * loaded, no ride is resting until later today, and the live feed shows none
- * of the rides on the map as down, closed or in refurbishment. The Ride Control
- * bar falls back to a neutral headline otherwise, so it never contradicts a
- * "Back 2:15 PM" or "Ride is down" note right below it.
- */
-export function everyRideTrulyOpen(input: {
-  readonly loaded: boolean;
-  readonly restingCount: number;
-  readonly liveStatuses: Iterable<string | null | undefined>;
-}): boolean {
-  if (!input.loaded || input.restingCount > 0) return false;
-  for (const status of input.liveStatuses) if (status && CLOSED_LIVE.has(status)) return false;
-  return true;
-}

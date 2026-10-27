@@ -7,6 +7,7 @@ import { PLACE_NAMES } from './placeNames';
 import { US_CITIES } from './usCities';
 import type { FlexCopy, FlexKind, FlexPayload, FlexPayloads, FlexRarity, FrameKey, RarityInput } from './types';
 
+import countText from '../helpers/countText';
 export const RARITY_LABELS: Readonly<Record<FlexRarity, string>> = {
   1: 'Common', 2: 'Uncommon', 3: 'Rare', 4: 'Epic', 5: 'Legendary',
 };
@@ -242,7 +243,7 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
       title: podium ? `${ordinal(rank)} Place!` : pct && pct <= 50 ? `Top ${pct}%` : tier,
       big: podium ? `#${rank}` : pct && pct <= 50 ? `TOP ${pct}%` : null,
       bigLabel: podium ? 'THIS WEEK' : pct && pct <= 50 ? 'OF ALL PLAYERS' : null,
-      stat: count(p.points) ? `${count(p.points).toLocaleString('en-US')} points` : 'Out-hunted almost everyone',
+      stat: count(p.points) ? `${countText(count(p.points))} points` : 'Out-hunted almost everyone',
       sub: null,
       cta: 'Beat my score!',
       frame: 'standings',

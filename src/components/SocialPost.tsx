@@ -4,6 +4,7 @@ import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SocialPostType } from '../models/social-post-type';
 import { BRAND, FONT, GameButton, GameIcon } from '../ui';
 import { formatDuration, isNewVideo, postedAgo, thumbnailFor } from './watch/watchFeed';
+import { UpperText } from '../ui/upper';
 
 /** What the Watch page promises per video (live economy.social_post_view_coins). */
 export const COIN_REWARD = 25;
@@ -80,15 +81,15 @@ function SocialPost({
           {watched ? (
             <View style={[styles.chip, styles.watchedChip]}>
               <GameIcon name="check" size={featured ? 18 : 14} />
-              <Text style={[styles.chipText, { color: BRAND.white }, featured && styles.chipTextHero]}>Watched</Text>
+              <UpperText style={[styles.chipText, { color: BRAND.white }, featured && styles.chipTextHero]}>Watched</UpperText>
             </View>
           ) : featured ? null : (
             // The hero says +25 on its Watch button; grid cards carry the chip.
             <View style={[styles.chip, styles.coinChip]}>
               <Image source={COIN_ART} style={featured ? styles.coinHero : styles.coinSmall} contentFit="contain" />
-              <Text style={[styles.chipText, featured && styles.chipTextHero]}>
+              <UpperText style={[styles.chipText, featured && styles.chipTextHero]}>
                 {pendingSave ? `Tap to save +${COIN_REWARD}` : `+${COIN_REWARD}`}
-              </Text>
+              </UpperText>
             </View>
           )}
 
@@ -101,7 +102,7 @@ function SocialPost({
 
         <View style={[styles.body, featured && styles.heroBody]}>
           {featured && (
-            <Text style={styles.kicker}>{isNew ? 'Brand new' : newest ? 'Newest video' : 'Next to watch'}{ago ? ` · ${ago}` : ''}</Text>
+            <UpperText style={styles.kicker}>{isNew ? 'Brand new' : newest ? 'Newest video' : 'Next to watch'}{ago ? ` · ${ago}` : ''}</UpperText>
           )}
           <Text numberOfLines={featured ? 3 : 2} style={featured ? styles.heroTitle : styles.title}>
             {socialPost.title}

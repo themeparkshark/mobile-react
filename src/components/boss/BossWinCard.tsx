@@ -12,6 +12,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameButton, GameIcon, type GameIconName } from '../../ui';
 import { BOSS_ART } from './bossArt';
 import { BossHpBar } from './BossSheetParts';
+import countText from '../../helpers/countText';
 
 const CARD_W = 340, CARD_H = 520;
 
@@ -43,7 +44,7 @@ function CountUp({ to, start, reduced }: { readonly to: number; readonly start: 
     }, 33);
     return () => clearInterval(id);
   }, [to, start, reduced]);
-  return <Text style={styles.lootAmount}>+{value.toLocaleString()}</Text>;
+  return <Text style={styles.lootAmount}>+{countText(value)}</Text>;
 }
 
 function LootChip({ item, index, reduced, collecting }: { readonly item: Loot; readonly index: number; readonly reduced: boolean; readonly collecting: boolean }) {
@@ -179,7 +180,7 @@ export default function BossWinCard({ raid, lastHp, onDone }: {
         {won ? `The park beat ${BOSS_NAMES[raid.boss]}!` : `${BOSS_NAMES[raid.boss]} got away! Get it next time.`}
       </Text>
       {/* What this kid did, win or lose: the loss still reads as progress. */}
-      {raid.you.damage > 0 && <Text style={styles.yourHits}>{won ? `You hit it for ${raid.you.damage.toLocaleString('en-US')}!` : `You hit it for ${raid.you.damage.toLocaleString('en-US')}.${hpLeftPct > 0 ? ` Only ${hpLeftPct}% left!` : ''}`}</Text>}
+      {raid.you.damage > 0 && <Text style={styles.yourHits}>{won ? `You hit it for ${countText(raid.you.damage)}!` : `You hit it for ${countText(raid.you.damage)}.${hpLeftPct > 0 ? ` Only ${hpLeftPct}% left!` : ''}`}</Text>}
       {raid.mvp_is_you && <Animated.View style={[styles.mvp, crownStyle]}>
         <GameIcon name="crown" size={34} />
         <Text style={styles.mvpText}>YOU WERE MVP</Text>

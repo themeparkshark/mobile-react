@@ -29,6 +29,7 @@ import { INK, Pill, kit, useSquash } from './SocialKit';
 import { Burst, FlyHeart, SharkFace } from './SocialFx';
 import { SurfaceContext, takeJustFriended } from './socialStore';
 import StreakFlame from '../../components/retention/StreakFlame';
+import { UpperText } from '../../ui/upper';
 
 export const ROW_HEIGHT = 92;
 const ADD_ART = require('../../../assets/images/screens/friends/add_friend.png');
@@ -114,10 +115,10 @@ function PlayerRow({ player, status, inset }: { readonly player: PlayerType; rea
             <View style={styles.text}>
               {player.daily3_streak != null ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Text style={[styles.name, { flexShrink: 1 }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{player.screen_name}</Text>
+                  <UpperText style={[styles.name, { flexShrink: 1 }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{player.screen_name}</UpperText>
                   <StreakFlame streak={player.daily3_streak} best={player.daily3_best ?? 0} size={22} />
                 </View>
-              ) : <Text style={styles.name} numberOfLines={1} maxFontSizeMultiplier={1.2}>{player.screen_name}</Text>}
+              ) : <UpperText style={styles.name} numberOfLines={1} maxFontSizeMultiplier={1.2}>{player.screen_name}</UpperText>}
               {status === 'incoming' ? (
                 <Text style={[styles.sub, styles.subAsk]} numberOfLines={1} maxFontSizeMultiplier={1.25}>Wants to be friends!</Text>
               ) : justMade ? (

@@ -32,6 +32,7 @@ import LevelUpBurst from './coin/LevelUpBurst';
 import PerkTrack from './coin/PerkTrack';
 import { LEVEL_UP_ACTS, levelRibbon, levelUpFx, revealCard, type LevelUpFx, type LevelUpUnlocks } from './coin/progressionModel';
 import type { CollectedRideCoin } from '../api/endpoints/me/ride-coins/show';
+import countText from '../helpers/countText';
 
 const SHORT_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 /** "SEP 27" from an ISO time, read as a calendar day. */
@@ -46,6 +47,7 @@ import { storeAvailable } from '../services/purchases';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost } from '../share';
 import { useDevAutoPress } from '../share/devDrive';
+import { UpperText } from '../ui/upper';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -457,7 +459,7 @@ export default function CoinLevelingModal({
                 </Animated.View>
 
                 {/* ── Ride Name ── */}
-                <Text style={{
+                <UpperText style={{
                   fontFamily: 'Shark',
                   fontSize: 17,
                   color: '#17476B',
@@ -467,7 +469,7 @@ export default function CoinLevelingModal({
                 }}>
                   {state === 'success' ? 'YOUR COIN LEVELED UP'
                     : state === 'maxed' ? 'MAX LEVEL REACHED' : 'LEVEL UP YOUR COIN'}
-                </Text>
+                </UpperText>
 
                 {/* Share Studio: a fresh Lv5-9 level-up (the Crowning has its own). A round button pinned
                     over the coin art's top-left corner, so it adds no height (the CTA stays on an SE screen). */}
@@ -483,7 +485,7 @@ export default function CoinLevelingModal({
                   marginBottom: 6,
                   gap: 6,
                 }}>
-                  <Text style={{
+                  <UpperText style={{
                     fontFamily: 'Shark',
                     fontSize: 15,
                     color: '#05346e',
@@ -491,12 +493,12 @@ export default function CoinLevelingModal({
                     letterSpacing: 0.5,
                   }}>
                     Lv.{state === 'success' ? nextLevel : currentLevel} {state === 'success' ? nextTierName : tierName}
-                  </Text>
+                  </UpperText>
 
                   {!isMaxLevel && state !== 'success' && (
                     <>
                       <GameIcon name="arrow" size={16} />
-                      <Text style={{
+                      <UpperText style={{
                         fontFamily: 'Shark',
                         fontSize: 15,
                         color: '#a36609',
@@ -505,7 +507,7 @@ export default function CoinLevelingModal({
                         opacity: 1,
                       }}>
                         Lv.{nextLevel} {nextTierName}
-                      </Text>
+                      </UpperText>
                     </>
                   )}
                 </View>
@@ -646,7 +648,7 @@ export default function CoinLevelingModal({
                       marginBottom: 12,
                     }}>
                       {/* Section Header */}
-                      <Text style={{
+                      <UpperText style={{
                         fontFamily: 'Knockout',
                         fontSize: 11,
                         color: '#14517E',
@@ -656,7 +658,7 @@ export default function CoinLevelingModal({
                         textAlign: 'center',
                       }}>
                         Level-Up Cost
-                      </Text>
+                      </UpperText>
 
                       {/* Cost Row */}
                       <View style={{
@@ -674,14 +676,14 @@ export default function CoinLevelingModal({
                           }}>
                             {rideCoin.energy_to_next_level}
                           </Text>
-                          <Text style={{
+                          <UpperText style={{
                             fontFamily: 'Knockout',
                             fontSize: 10,
                             color: '#3B7197',
                             textTransform: 'uppercase',
                           }}>
                             Energy
-                          </Text>
+                          </UpperText>
                         </View>
 
                         {/* Divider */}
@@ -701,14 +703,14 @@ export default function CoinLevelingModal({
                           }}>
                             {rideCoin.parts_to_next_level}
                           </Text>
-                          <Text style={{
+                          <UpperText style={{
                             fontFamily: 'Knockout',
                             fontSize: 10,
                             color: '#3B7197',
                             textTransform: 'uppercase',
                           }}>
                             Ride Parts
-                          </Text>
+                          </UpperText>
                         </View>
                       </View>
 
@@ -720,7 +722,7 @@ export default function CoinLevelingModal({
                       }} />
 
                       {/* Your Balance Section */}
-                      <Text style={{
+                      <UpperText style={{
                         fontFamily: 'Knockout',
                         fontSize: 11,
                         color: '#14517E',
@@ -730,7 +732,7 @@ export default function CoinLevelingModal({
                         textAlign: 'center',
                       }}>
                         You Have
-                      </Text>
+                      </UpperText>
 
                       {/* Balance Row */}
                       <View style={{
@@ -745,7 +747,7 @@ export default function CoinLevelingModal({
                             fontSize: 18,
                             color: hasEnergy ? '#168052' : '#B43D42',
                           }}>
-                            {playerEnergy.toLocaleString()}
+                            {countText(playerEnergy)}
                           </Text>
                           {hasEnergy && <GameIcon name="check" size={16} />}
                         </View>
@@ -758,7 +760,7 @@ export default function CoinLevelingModal({
                             fontSize: 18,
                             color: hasParts ? '#168052' : '#B43D42',
                           }}>
-                            {playerParts.toLocaleString()}
+                            {countText(playerParts)}
                           </Text>
                           {hasParts && <GameIcon name="check" size={16} />}
                         </View>
@@ -879,13 +881,13 @@ export default function CoinLevelingModal({
                         } : {}),
                       }} />
                     </View>
-                    <Text style={{
+                    <UpperText style={{
                       fontFamily: 'Shark', fontSize: 18,
                       color: nextTierColor,
                       textTransform: 'uppercase',
                     }}>
                       Powering up...
-                    </Text>
+                    </UpperText>
                   </View>
                 )}
 
@@ -909,7 +911,7 @@ export default function CoinLevelingModal({
                       marginBottom: 16,
                       width: '100%',
                     }}>
-                      <Text style={{
+                      <UpperText style={{
                         fontFamily: 'Shark', fontSize: 28,
                         color: '#9D6300',
                         textTransform: 'uppercase',
@@ -918,7 +920,7 @@ export default function CoinLevelingModal({
                         textShadowRadius: 0,
                       }}>
                         {nextTierName}!
-                      </Text>
+                      </UpperText>
                       <Text style={{
                         fontFamily: 'Knockout', fontSize: 14,
                         color: '#315D7B',
@@ -947,7 +949,7 @@ export default function CoinLevelingModal({
                       {/* New perks unlocked (legacy curve) */}
                       {!reveal && rideCoin.next_level_perks.length > 0 && (
                         <View style={{ marginTop: 12, width: '100%' }}>
-                          <Text style={{
+                          <UpperText style={{
                             fontFamily: 'Knockout', fontSize: 11,
                             color: '#825414',
                             textTransform: 'uppercase',
@@ -955,7 +957,7 @@ export default function CoinLevelingModal({
                             marginBottom: 6,
                           }}>
                             New Bonuses Unlocked
-                          </Text>
+                          </UpperText>
                           {rideCoin.next_level_perks.map((perk) => (
                             <Text key={perk.id} style={{
                               fontFamily: 'Knockout', fontSize: 14,

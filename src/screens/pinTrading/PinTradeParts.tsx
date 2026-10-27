@@ -19,6 +19,7 @@ import EnamelPin from './EnamelPin';
 import {
   balanceName, cardTilt, formatClock, HAPTIC_AFTER_AUDIO_MS, HOLD_FINAL_S, HOLD_URGENT_S, pinName, pinTilt, secondsLeft, type StatusChip,
 } from './pinTradeModel';
+import { UpperText } from '../../ui/upper';
 
 /** Trading surfaces (the shop v2 blue panels). Every ink here is AA on its surface. */
 export const TRADE_SURFACE = {
@@ -47,7 +48,7 @@ export const StatusChipView = memo(function StatusChipView({ chip }: { chip: Sta
     <View accessible accessibilityRole="text" accessibilityLabel={chip.label}
       style={[styles.chip, { backgroundColor: tone.bg, borderColor: tone.border }]}>
       <GameIcon name={chip.icon} size={18} />
-      <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.chipText, { color: tone.ink }]}>{chip.label}</Text>
+      <UpperText maxFontSizeMultiplier={MAX_FONT} style={[styles.chipText, { color: tone.ink }]}>{chip.label}</UpperText>
     </View>
   );
 });
@@ -59,7 +60,7 @@ export function CornerRibbon({ label, tone = 'navy', icon }: { label: string; to
   return (
     <View pointerEvents="none" style={[styles.ribbon, { backgroundColor: bg }]}>
       {icon && <GameIcon name={icon} size={14} style={icon === 'arrow' ? { transform: [{ rotate: '-90deg' }] } : undefined} />}
-      <Text maxFontSizeMultiplier={1} style={[styles.ribbonText, { color: ink }]}>{label}</Text>
+      <UpperText maxFontSizeMultiplier={1} style={[styles.ribbonText, { color: ink }]}>{label}</UpperText>
     </View>
   );
 }
@@ -289,7 +290,7 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
   const label = item ? `${caption}: ${pinName(item)}${stamp ? `, ${stamp}` : ''}` : `${caption}: ${placeholder ?? 'nothing yet'}`;
   return (
     <View style={styles.slotWrap} accessible accessibilityLabel={label}>
-      <Text maxFontSizeMultiplier={MAX_FONT} style={styles.slotCaption}>{caption}</Text>
+      <UpperText maxFontSizeMultiplier={MAX_FONT} style={styles.slotCaption}>{caption}</UpperText>
       <Animated.View ref={box as never} collapsable={false}
         style={[styles.slot, handStyle, { width: size + SPACE.xl, height: size + SPACE.xl }, !item && styles.slotEmpty, !!stamp && styles.slotDim]}>
         {item ? (
@@ -305,7 +306,7 @@ export const TradeSlot = memo(function TradeSlot({ caption, item, tilt, size, sh
         )}
         {!item && <Text maxFontSizeMultiplier={1.2} style={styles.slotQuestion}>?</Text>}
         {!!stamp && !!item && (
-          <View pointerEvents="none" style={[styles.stamp, { maxWidth: (size + SPACE.xl) * 0.7, bottom: SPACE.sm }]}><Text maxFontSizeMultiplier={1} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={styles.stampText}>{stamp}</Text></View>
+          <View pointerEvents="none" style={[styles.stamp, { maxWidth: (size + SPACE.xl) * 0.7, bottom: SPACE.sm }]}><UpperText maxFontSizeMultiplier={1} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={styles.stampText}>{stamp}</UpperText></View>
         )}
       </Animated.View>
       <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={styles.slotName}>{item ? balanceName(pinName(item), 16) : placeholder ?? ''}</Text>

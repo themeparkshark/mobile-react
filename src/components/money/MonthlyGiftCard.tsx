@@ -11,6 +11,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import { BRAND, FONT, GameButton, GameIcon, gameAlert } from '../../ui';
 import { GotIt, MAX_FONT } from './moneyUi';
 import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost } from '../../share';
+import countText from '../../helpers/countText';
 
 const PIN_ART: Record<string, number> = {
   'vip-pin-nov': require('../../../assets/images/sharkpass/vip-pin-nov.webp'),
@@ -55,7 +56,7 @@ export default function MonthlyGiftCard() {
       <View style={st.row}>
         {art ? <Image source={art} style={st.pin} contentFit="contain" /> : <GameIcon name="gift" size={64} />}
         <View style={{ flex: 1, gap: 2 }}>
-          <Text maxFontSizeMultiplier={MAX_FONT} style={st.line}>{`${gift.coins.toLocaleString('en-US')} coins`}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={st.line}>{`${countText(gift.coins)} coins`}</Text>
           {gift.pin && <Text maxFontSizeMultiplier={MAX_FONT} style={st.line}>{gift.pin.name}</Text>}
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.note}>Members-only. A new one every month you’re VIP.</Text>
         </View>
@@ -76,7 +77,7 @@ export default function MonthlyGiftCard() {
       {landed && (
         <GotIt grants={{ coins: landed.coins }} art="gift" title="Your VIP gift!"
           picture={landed.art && PIN_ART[landed.art] ? <Image source={PIN_ART[landed.art]} style={{ width: 170, height: 170 }} contentFit="contain" /> : undefined}
-          caption={[`${landed.coins.toLocaleString('en-US')} coins`, landed.pin].filter(Boolean).join(' and ')}
+          caption={[`${countText(landed.coins)} coins`, landed.pin].filter(Boolean).join(' and ')}
           footer={SHARE_IN_MODALS && landed.pin && landed.art && PIN_ART[landed.art] ? (
             // Show off the month's members-only pin. No price, no "VIP costs".
             <View style={{ alignItems: 'center', marginTop: 8 }}>

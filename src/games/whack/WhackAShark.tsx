@@ -74,6 +74,7 @@ import { createLocalNetAdapter } from './net/localAdapter';
 import { ghostDeltaLine, lineDaySeed, lineDayXform, parkLocalDate, type LineDayEntry } from './net/lineDay';
 import { applyMastery, applyRunToBook, cardTitle, nextRunOfDay, type CardBook, type FinnCard, type MasteryBook } from './meta/collection';
 import type { DuelReveal, WhackDuelConfig, WhackGhost, WhackNetAdapter, WhackRaidConfig } from './net/types';
+import countText from '../../helpers/countText';
 
 registerStudioAudio(['whack', 'boss']);
 
@@ -658,7 +659,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         thresholds: ride || format === 'raid' || format === 'duel' ? undefined : thresholds,
         rival: format === 'duel' ? { name: duel?.rival.name ?? 'Captain Fin', score: rivalTotalRef.current }
           : target ? { name: target.name.split(' ')[0], score: target.score } : null,
-        buckets: ride ? undefined : [{ label: 'HITS', value: `${judged}` }, { label: 'COMBO', value: `+${combo.toLocaleString()}` }, { label: 'BONUS', value: `+${bonus.toLocaleString()}` }],
+        buckets: ride ? undefined : [{ label: 'HITS', value: `${judged}` }, { label: 'COMBO', value: `+${countText(combo)}` }, { label: 'BONUS', value: `+${countText(bonus)}` }],
         bucketValues: ride ? undefined : [base, combo, bonus],
         starStepMs: STAR_STEP_MS,
         stats: [
@@ -795,7 +796,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         ],
         next: nextTl.boss ? BOSS_NAMES[nextTl.bossKind] : nextTl.banner,
         readyAt: Date.now() + 1200,
-        goal: g.remaining > 0 ? `NEXT STAR AT ${g.target.toLocaleString()}` : 'THREE STARS! GO FOR A BEST',
+        goal: g.remaining > 0 ? `NEXT STAR AT ${countText(g.target)}` : 'THREE STARS! GO FOR A BEST',
         duelLine,
         incoming: incomingRef.current.length,
         feverReady,
@@ -803,7 +804,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         boost: pendingBoost.current === 'golden',
         split: !ride && format !== 'duel' && splitRef.current.known && splitRef.current.best > 0 ? (() => {
           const d = splitRef.current.mine - splitRef.current.best;
-          return { text: d >= 0 ? `+${d.toLocaleString()} AHEAD OF YOUR BEST` : `${d.toLocaleString()} BEHIND YOUR BEST`, ahead: d >= 0 };
+          return { text: d >= 0 ? `+${countText(d)} AHEAD OF YOUR BEST` : `${countText(d)} BEHIND YOUR BEST`, ahead: d >= 0 };
         })() : null,
       });
       setReadyOn(false);

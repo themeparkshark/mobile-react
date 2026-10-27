@@ -129,6 +129,32 @@ test('App holds the splash at module scope and Root releases it once fonts settl
   const app = read('App.tsx');
   assert.ok(app.indexOf('holdNativeSplash();') < app.indexOf('export default function App'));
   const rootSource = read('src/Root.tsx');
-  assert.match(rootSource, /if \(fontsLoaded\) releaseNativeSplash\(\)/);
+  assert.match(rootSource, /if \(fontsLoaded\) releaseNativeSplash\(\{ waitForArt: initialRouteName === 'Splash' \}\)/);
   assert.match(rootSource, /fontsReady \|\| !!fontError/);
+});
+
+test('opening on the launch scene, the native art waits for the JS art (capped by the safety)', () => {
+  const calls = [];
+  let timer = null;
+  const splash = loadTs('src/nativeSplash.ts', {
+    'expo-splash-screen': {
+      setOptions: () => undefined,
+      preventAutoHideAsync: async () => true,
+      hideAsync: async () => { calls.push('hide'); },
+    },
+  }, {
+    setTimeout: (fn, ms) => { timer = { fn, ms }; return 1; },
+    clearTimeout: () => undefined,
+  });
+  splash.holdNativeSplash();
+  splash.releaseNativeSplash({ waitForArt: true });
+  assert.deepEqual(calls, [], 'fonts alone do not hide it while the art is still decoding');
+  splash.nativeSplashArtDrawn();
+  splash.nativeSplashArtDrawn();
+  assert.deepEqual(calls, ['hide']);
+  timer.fn();
+  assert.deepEqual(calls, ['hide'], 'released once');
+  const scene = read('src/components/launch/LaunchScene.tsx');
+  assert.match(scene, /onLoad=\{onArt\} onError=\{onArt\}/);
+  assert.match(scene, /const onArt = \(\) => \{\s*launchArtDrawn = true;\s*setArtIn\(true\);\s*nativeSplashArtDrawn\(\);/);
 });

@@ -19,6 +19,7 @@ import {
   postedAgo,
   videoIdOf,
 } from './watchFeed';
+import { UpperText } from '../../ui/upper';
 
 export type PlayerResult = { readonly playedMs: number; readonly ended: boolean };
 
@@ -272,7 +273,7 @@ export default function YouTubePlayerModal({
                 <View style={[styles.cover, styles.wrap]}>
                   <Animated.View style={{ alignItems: 'center', gap: 8, opacity: wrapIn, transform: [{ scale: wrapIn.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }] }}>
                     <Image source={COIN} style={styles.wrapCoin} contentFit="contain" />
-                    <Text style={styles.wrapTitle}>{earnedHere ? `+${rewardCoins} earned!` : "That's a wrap!"}</Text>
+                    <UpperText style={styles.wrapTitle}>{earnedHere ? `+${rewardCoins} earned!` : "That's a wrap!"}</UpperText>
                   </Animated.View>
                   <View style={styles.wrapButtons}>
                     {next ? (
@@ -292,7 +293,7 @@ export default function YouTubePlayerModal({
               {failed && (
                 <View style={[styles.cover, styles.wrap]}>
                   <GameIcon name="info" size={40} />
-                  <Text style={styles.wrapTitle}>This video can't play right now</Text>
+                  <UpperText style={styles.wrapTitle}>This video can't play right now</UpperText>
                   <View style={styles.wrapButtons}>
                     <GameButton label="Back to videos" fullWidth onPress={close} />
                   </View>
@@ -320,9 +321,9 @@ export default function YouTubePlayerModal({
                     <Image source={COIN} style={styles.coinIcon} contentFit="contain" />
                   </Animated.View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.coinText}>
+                    <UpperText style={styles.coinText}>
                       {unlocked ? `+${rewardCoins} unlocked!` : waiting ? 'Video starting…' : paused ? `Paused · +${rewardCoins}` : `Keep watching · +${rewardCoins}`}
-                    </Text>
+                    </UpperText>
                     <View style={styles.track}>
                       <View style={[styles.fill, { width: `${Math.round(progress * 100)}%` }, unlocked && styles.fillDone]} />
                     </View>
@@ -335,7 +336,7 @@ export default function YouTubePlayerModal({
 
               {upNext.length > 0 && (
                 <>
-                  <Text style={styles.upNext}>Up next</Text>
+                  <UpperText style={styles.upNext}>Up next</UpperText>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 16 }}>
                     {upNext.map(post => (
                       <Pressable

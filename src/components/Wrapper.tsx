@@ -13,6 +13,7 @@ import Button from './Button';
 import { AuthContext } from '../context/AuthProvider';
 import { warmStandings } from '../screens/LeaderboardsScreen/standingsV2Store';
 import { emitTabReselect } from '../utils/tabReselect';
+import { UpperText } from '../ui/upper';
 
 /**
  * How far the center compass button rises above the bottom bar into the
@@ -20,6 +21,12 @@ import { emitTabReselect } from '../utils/tabReselect';
  * end at least this far above the bar.
  */
 export const BOTTOM_BAR_OVERHANG = 56;
+
+/**
+ * Bottom padding for any scroll list on a screen with the 5-icon footer, so the
+ * last row can scroll fully clear of the MAP compass. One value for every screen.
+ */
+export const FOOTER_CLEARANCE = BOTTOM_BAR_OVERHANG + 36;
 
 export default function Wrapper({
   children,
@@ -162,12 +169,16 @@ export default function Wrapper({
                         }}
                         source={item.icon}
                         contentFit="contain"
+                        // Warmed into memory on the launch screen: drawn on the map's first frame.
+                        cachePolicy="memory-disk"
+                        priority="high"
+                        transition={0}
                       />
                     </Button>
                     {/* Capped: past 1.2x the five labels run into each other ("NEWSSTANDINGS") and over the page. */}
                     {/* The word under the icon is part of the button too: a kid who taps
                         "PROFILE" instead of the picture still goes there. */}
-                    <Text
+                    <UpperText
                       onPress={() => { playSound(item.sound); goTo(item); }}
                       suppressHighlighting
                       accessibilityRole="button"
@@ -189,7 +200,7 @@ export default function Wrapper({
                       }}
                     >
                       {item.text}
-                    </Text>
+                    </UpperText>
                   </View>
                 </View>
               );

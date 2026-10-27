@@ -14,6 +14,7 @@ import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { Canvas, Path, Skia, rect } from '@shopify/react-native-skia';
+import countText from '../../../helpers/countText';
 
 const NAVY = '#05346e';
 const GOLD = '#ffcf3b';
@@ -118,8 +119,8 @@ export function Breather(p: BreatherProps) {
       <View style={styles.dim} pointerEvents="none" />
       <Animated.View style={[styles.card, cardStyle]}>
         <Text style={styles.cardKicker}>{`BURST ${p.burstNumber} OF ${p.bursts} BANKED`}</Text>
-        <Text style={styles.cardScore}>{`+${count.toLocaleString()}`}</Text>
-        <Text style={styles.cardRun}>{`RUN ${p.runScore.toLocaleString()}`}</Text>
+        <Text style={styles.cardScore}>{`+${countText(count)}`}</Text>
+        <Text style={styles.cardRun}>{`RUN ${countText(p.runScore)}`}</Text>
         <View style={styles.chips}>
           {p.stats.map((s) => (
             <View key={s.label} style={styles.chip}>
@@ -198,9 +199,9 @@ export function DuelCard({ me, rival, rivalName, winner, wins, onEmote }: {
     <View style={styles.duel}>
       <Text style={styles.duelTitle}>{winner === 'me' ? 'BURST TO YOU!' : winner === 'rival' ? `BURST TO ${rivalName.toUpperCase()}` : 'DEAD HEAT!'}</Text>
       <View style={styles.duelRow}>
-        <Text style={styles.duelScore}>{me.toLocaleString()}</Text>
+        <Text style={styles.duelScore}>{countText(me)}</Text>
         <Text style={styles.duelWins}>{`${wins[0]} - ${wins[1]}`}</Text>
-        <Text style={[styles.duelScore, { color: CORAL }]}>{rival.toLocaleString()}</Text>
+        <Text style={[styles.duelScore, { color: CORAL }]}>{countText(rival)}</Text>
       </View>
       <View style={styles.tug}>
         <Animated.View style={[styles.tugFill, fill]} />

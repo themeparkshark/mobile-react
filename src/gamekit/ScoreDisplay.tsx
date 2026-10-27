@@ -24,6 +24,7 @@ import Animated, {
   cancelAnimation,
 } from 'react-native-reanimated';
 import { GAME_COLORS, SCORE_TWEEN_MS, COMBO_TIER_COLORS, JUICE } from './theme';
+import countText from '../helpers/countText';
 
 interface ScoreDisplayProps {
   /** Target score. Animates up (or down) from the previous value. */
@@ -158,7 +159,7 @@ export function ScoreDisplay({
           ]}
           numberOfLines={1}
         >
-          {display.toLocaleString()}
+          {countText(display)}
         </Text>
         {showBadge ? (
           <Animated.View

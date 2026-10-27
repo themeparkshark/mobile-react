@@ -22,6 +22,7 @@ import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost, shouldFlexReveal, ty
 import {
   HELD_COPY, RANK_COUNTDOWN_MS, canClaim, extraRows, isHeld, rankCountdownValue, rankLabel, revealTimeline, ribbonLabel, rewardRows,
 } from './homeHuntResultsModel';
+import countText from '../../helpers/countText';
 
 const CHEST_CLOSED = require('../../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../../assets/images/daily/chest-open.png');
@@ -138,7 +139,7 @@ export default function HomeHuntResultsModal({ result, visible, onClose, onClaim
               <Text style={{ fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft }}>{`in the ${result.board_label}`}</Text>
             )}
             <Text style={{ fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy, marginTop: 2 }}>
-              {(result.points ?? 0).toLocaleString()} points, {result.finds ?? 0} {(result.finds ?? 0) === 1 ? 'find' : 'finds'}
+              {countText(result.points ?? 0)} points, {result.finds ?? 0} {(result.finds ?? 0) === 1 ? 'find' : 'finds'}
             </Text>
 
             {phase >= 2 && (

@@ -23,10 +23,11 @@ import PlaceCoinModal from '../../components/GymBattle/PlaceCoinModal';
 import DefendMiniGameModal from '../../components/GymBattle/DefendMiniGameModal';
 import { battleHUDEvents } from '../../components/GymBattle/battleHUDEvents';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
-import { GameIcon } from '../../ui';
+import { GameButton, GameIcon } from '../../ui';
 import useMatchLink from '../../hooks/useMatchLink';
 import MatchLinkBanner from '../../components/match/MatchLinkBanner';
 import { friendlyActionError, isLinkFailure } from '../../services/match/matchLink';
+import countText from '../../helpers/countText';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -260,7 +261,7 @@ const AnimatedPillar = ({
 
         {/* Score badge */}
         <View style={[styles.scoreBadge, { backgroundColor: teamColor }]}>
-          <Text style={styles.scoreText}>{(score ?? 0).toLocaleString()}</Text>
+          <Text style={styles.scoreText}>{countText(score ?? 0)}</Text>
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -802,7 +803,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
               onTap={(t) => {
                 const teamName = TEAM_NAMES[t as keyof typeof TEAM_NAMES];
                 const pts = gymData?.scores?.[t as keyof typeof gymData.scores] ?? 0;
-                setPillarToast(`${teamName}: ${pts.toLocaleString()} pts`);
+                setPillarToast(`${teamName}: ${countText(pts)} pts`);
                 setTimeout(() => setPillarToast(null), 2000);
               }}
             />
@@ -813,19 +814,13 @@ export default function GymBattleScreen({ navigation, route }: Props) {
               <View style={styles.noTeamBox}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><GameIcon name="swords" size={26} /><Text style={styles.noTeamTitle}>Join a Team!</Text></View>
                 <Text style={styles.noTeamText}>Pick a team to enter the arena battle.</Text>
-                <TouchableOpacity
-                  style={[styles.pickTeamButton, styles.pickTeamGradient]}
-                  onPress={() => { playButtonSound(); navigation?.navigate('TeamSelection'); }}
-                >
-                  <Text style={styles.pickTeamText}>PICK YOUR TEAM</Text>
-                </TouchableOpacity>
+                <GameButton label="Pick your team" icon="crown"
+                  onPress={() => { playButtonSound(); navigation?.navigate('TeamSelection'); }} />
+                {/* One yellow button on this card: Back is the quiet text action under it. */}
+                <GameButton label="Back" variant="ghost" tone="onBlue" onPress={handleGoBack} style={styles.joinBack} />
               </View>
             </BlurView>
           </View>
-          
-          <TouchableOpacity style={styles.backButtonAbsolute} onPress={handleGoBack}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><GameIcon name="back" size={20} /><Text style={styles.backButtonText}>BACK</Text></View>
-          </TouchableOpacity>
         </ImageBackground>
       </Animated.View>
     );
@@ -842,9 +837,9 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             <View style={styles.linkSlot}>
               <MatchLinkBanner phase={gymLink.phase} onRetry={gymLink.retryNow} onLeave={handleGoBack} leaveLabel="Leave arena" />
             </View>
-            {gymLink.phase !== 'lost' && <TouchableOpacity style={styles.goBackBtn} onPress={handleGoBack} accessibilityRole="button">
-              <Text style={styles.goBackText}>GO BACK</Text>
-            </TouchableOpacity>}
+            {gymLink.phase !== 'lost' && <View style={styles.goBackBtn}>
+              <GameButton label="Go back" icon="back" variant="secondary" onPress={handleGoBack} />
+            </View>}
           </View>
         </ImageBackground>
       </Animated.View>
@@ -917,7 +912,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             onTap={(t) => {
               const teamName = TEAM_NAMES[t as keyof typeof TEAM_NAMES];
               const pts = gymData.scores?.[t as keyof typeof gymData.scores] ?? 0;
-              setPillarToast(`${teamName}: ${pts.toLocaleString()} pts`);
+              setPillarToast(`${teamName}: ${countText(pts)} pts`);
               setTimeout(() => setPillarToast(null), 2000);
             }}
           />
@@ -1331,20 +1326,18 @@ const styles = StyleSheet.create({
   },
   goBackBtn: {
     marginTop: 24,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 12,
-    backgroundColor: 'rgba(5, 70, 143, 0.9)',
+    alignSelf: 'stretch',
+    alignItems: 'center',
   },
-  goBackText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  // Below the three pillars, drawn on top of everything: the pillars used to
+  // cover the card's title, words and button (they have their own zIndex; this card had none).
   noTeamOverlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
+    paddingBottom: 72,
+    zIndex: 10,
+    elevation: 10,
   },
   noTeamBlur: {
     borderRadius: 24,
@@ -1352,51 +1345,27 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
   },
   noTeamBox: {
-    backgroundColor: 'rgba(7, 104, 185, 0.85)',
-    padding: 32,
+    backgroundColor: 'rgba(7, 104, 185, 0.92)',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(251, 191, 36, 0.5)',
+    borderRadius: 24,
+    borderWidth: 3,
+    // Brand gold at full strength, the same gold as the GameButton (a half-alpha gold read olive on blue).
+    borderColor: '#fec90e',
   },
   noTeamTitle: {
+    fontFamily: 'Shark',
     fontSize: 28,
-    fontWeight: '900',
-    color: '#FBBF24',
-    marginBottom: 12,
+    color: '#fec90e',
+    marginBottom: 8,
   },
   noTeamText: {
-    fontSize: 16,
-    color: '#CBD5E1',
+    fontFamily: 'Knockout',
+    fontSize: 17,
+    color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 28,
+    marginBottom: 16,
   },
-  pickTeamButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  pickTeamGradient: {
-    paddingHorizontal: 36,
-    paddingVertical: 18,
-    backgroundColor: '#FBBF24',
-  },
-  pickTeamText: {
-    color: '#0768b9',
-    fontWeight: '900',
-    fontSize: 18,
-  },
-  backButtonAbsolute: {
-    position: 'absolute',
-    bottom: 40,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(5, 70, 143, 0.9)',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  joinBack: { marginTop: 6 },
 });

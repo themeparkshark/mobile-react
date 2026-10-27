@@ -16,6 +16,7 @@
 
 import { Audio } from 'expo-av';
 import { Asset } from 'expo-asset';
+import { audioStartOpen, audioWanted, whenAudioMayStart } from './startGate';
 
 /**
  * react-native-audio-api 0.6 AudioParam automation is unsafe from JS: the
@@ -324,6 +325,22 @@ export class ExpoAvBackend implements AudioBackend {
     this.master = gain;
   }
 
+  /**
+   * Frees one cue's voices once any play in progress has finished (HybridBackend calls this after
+   * the cue moved to the audio-api graph, so it is never held in memory twice). Music sources stay.
+   */
+  unload(key: string): void {
+    const pool = this.pools.get(key);
+    if (!pool) return;
+    this.pools.delete(key);
+    const wait = Math.max(0, ...pool.map((v) => v.busyUntil - Date.now()));
+    setTimeout(() => pool.forEach((v) => {
+      if (v.stopTimer) clearTimeout(v.stopTimer);
+      if (v.token) this.tokens.delete(v.token);
+      v.sound.unloadAsync().catch(() => undefined);
+    }), wait + 50);
+  }
+
   async unloadAll(): Promise<void> {
     const all: Promise<unknown>[] = [];
     this.pools.forEach((pool) => pool.forEach((v) => all.push(v.sound.unloadAsync().catch(() => undefined))));
@@ -391,8 +408,41 @@ export class AudioApiBackend implements AudioBackend {
     if (!this.mod) throw new Error('react-native-audio-api unavailable');
   }
 
+  /**
+   * Light on purpose: the graph (and the AudioContext that wakes the audio hardware) starts on the
+   * first load that may use it, after launch and only while the player can hear something
+   * (startGate.ts). A stalled audio server can then never abort the app during launch.
+   */
   async init(): Promise<void> {
-    if (this.ctx) return;
+    // Nothing to do yet: see startGraph.
+  }
+
+  private graphTry: Promise<boolean> | null = null;
+  private pendingMaster = 1;
+
+  /** Start the graph if the gate allows it. False means: play this cue on expo-av instead. */
+  private startGraph(): Promise<boolean> {
+    if (this.ctx) return Promise.resolve(true);
+    if (this.graphTry) return this.graphTry;
+    const attempt = (async () => {
+      await whenAudioMayStart();
+      if (this.ctx) return true;
+      if (!audioWanted()) return false;
+      try {
+        this.buildGraph();
+        return true;
+      } catch {
+        this.ctx = null;
+        return false;
+      }
+    })();
+    this.graphTry = attempt;
+    // A quiet player (both sounds off) may turn sound on later: ask the gate again then.
+    void attempt.then((ok) => { if (!ok && this.graphTry === attempt) this.graphTry = null; });
+    return attempt;
+  }
+
+  private buildGraph(): void {
     this.ctx = new this.mod.AudioContext();
     try {
       this.mod.AudioManager?.setAudioSessionOptions?.({ iosCategory: 'ambient', iosMode: 'default', iosOptions: ['mixWithOthers'], iosAllowHaptics: true });
@@ -409,6 +459,7 @@ export class AudioApiBackend implements AudioBackend {
     this.musicLowpass.connect(this.master);
     this.musicBus = this.ctx.createGain();
     this.musicBus.connect(this.musicLowpass);
+    this.master.gain.value = this.pendingMaster;
   }
 
   isLoaded(key: string): boolean {
@@ -433,6 +484,7 @@ export class AudioApiBackend implements AudioBackend {
     if (inFlight) return inFlight;
     const job = this.decodeChain.then(async () => {
       if (this.buffers.has(key)) return true;
+      if (!(await this.startGraph())) return false;
       const path = await localPath(src);
       if (!path) return false;
       try {
@@ -571,6 +623,7 @@ export class AudioApiBackend implements AudioBackend {
   }
 
   setMasterGain(gain: number): void {
+    this.pendingMaster = gain;
     if (this.master) this.master.gain.value = gain;
   }
 
@@ -631,6 +684,23 @@ export class HybridBackend implements AudioBackend {
   }
 
   async load(key: string, src: number, voices: number): Promise<boolean> {
+    if (!AV_ONLY_TYPES.has(assetType(src)) && !audioStartOpen()) {
+      // Launch is not over (startGate.ts): never wait on the gate. The cue loads on expo-av now (it
+      // plays at once, a little later than the graph would), then moves to the low-latency graph
+      // once the gate opens, for every later play.
+      const ok = await this.av.load(key, src, voices);
+      if (ok) this.routes.set(key, this.av);
+      void whenAudioMayStart()
+        .then(() => this.api.load(key, src))
+        .then((up) => {
+          if (!up || !this.routes.has(key)) return;
+          this.routes.set(key, this.api);
+          // The expo-av copy is no longer played: free it (after any play in progress ends).
+          this.av.unload(key);
+        })
+        .catch(() => undefined);
+      return ok;
+    }
     if (!AV_ONLY_TYPES.has(assetType(src)) && (await this.api.load(key, src))) {
       this.routes.set(key, this.api);
       return true;

@@ -20,6 +20,7 @@ import ShareCardArtwork from '../../components/ShareCardArtwork';
 import { BRAND, GameIcon } from '../../ui';
 import { RarityGems, rarityLook } from './dexLook';
 import { PHOTO_GRADE_LABEL, type PhotoGrade } from './dexModel';
+import { UpperText } from '../../ui/upper';
 
 const SCENE_FAR = require('../../../assets/images/ride-photo/scene-far.webp');
 const SCENE_NEAR = require('../../../assets/images/ride-photo/scene-near.webp');
@@ -83,7 +84,7 @@ export function RidePhoto({ grade, art, photoUrl, width, showGrade = true }: {
       </View>
       {showGrade && (
         <View style={[styles.stamp, grade === 'frame_it' ? styles.stampGold : grade === 'great' ? styles.stampSilver : styles.stampPlain]}>
-          <Text style={[styles.stampText, grade === 'good' && { color: BRAND.navy }]}>{PHOTO_GRADE_LABEL[grade]}</Text>
+          <UpperText style={[styles.stampText, grade === 'good' && { color: BRAND.navy }]}>{PHOTO_GRADE_LABEL[grade]}</UpperText>
         </View>
       )}
     </View>

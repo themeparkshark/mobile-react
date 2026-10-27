@@ -10,6 +10,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import countText from '../../../helpers/countText';
 
 /** Tile codes: 0 LATE, 1 GOOD, 2 QUICK, 9 decoy hit. */
 export const TILE_LATE = 0;
@@ -65,7 +66,7 @@ export function ShareCardButton({ tiles, rideName, score, stars }: { tiles: numb
         <View ref={ref} collapsable={false} style={styles.card}>
           <Text style={styles.title}>WHACK-A-SHARK</Text>
           {rideName ? <Text style={styles.ride}>{rideName.toUpperCase()}</Text> : null}
-          <Text style={styles.score}>{score.toLocaleString()}</Text>
+          <Text style={styles.score}>{countText(score)}</Text>
           <View style={styles.stars}>
             {[0, 1, 2].map((k) => <View key={k} style={[styles.star, k < stars ? styles.starOn : null]} />)}
           </View>

@@ -113,8 +113,9 @@ test('XP numbers format on the UI thread', () => {
   const { groupDigits } = require('./helpers/ts-module.cjs').loadTs('src/components/xpPotionModel.ts');
   assert.equal(groupDigits(0), '0');
   assert.equal(groupDigits(760), '760');
-  assert.equal(groupDigits(4600), '4,600');
-  assert.equal(groupDigits(1234567.4), '1,234,567');
+  // No commas: the display font draws them like periods (src/helpers/countText.ts).
+  assert.equal(groupDigits(4600), '4600');
+  assert.equal(groupDigits(1234567.4), '1.2M');
 });
 
 test('Social chest: squash on press, lid pop, wiggle, stars, haptic, Chris sounds, then the sheet', () => {

@@ -56,7 +56,19 @@ test('the unused 3D avatar, its model and its GL stack are gone from the binary'
 });
 
 test('the JS splash and the native launch screen use the same art', () => {
-  assert.match(read('src/screens/SplashScreen.tsx'), /assets\/images\/splash-bg\.png/);
+  // The Splash route, the Loading screen and the map's first cover all draw the one launch scene.
+  assert.match(read('src/screens/SplashScreen.tsx'), /return <LaunchScene active=\{focused\} \/>;/);
+  // The native launch screen draws splash-bg.png; the JS scene draws the same art as a small JPEG
+  // (same picture and proportions, decoded fast while the native splash is up).
+  assert.match(read('src/components/launch/LaunchScene.tsx'), /assets\/images\/launch-art\.jpg/);
+  assert.match(read('app.config.js'), /image: '\.\/assets\/images\/splash-bg\.png'/);
+  const jpg = fs.readFileSync(path.join(root, 'assets/images/launch-art.jpg'));
+  assert.ok(jpg.length < 300 * 1024, `launch-art.jpg is ${jpg.length} bytes`);
+  const png = fs.readFileSync(path.join(root, 'assets/images/splash-bg.png'));
+  let i = 2; let size = null;
+  while (i < jpg.length) { const m = jpg[i + 1]; const len = jpg.readUInt16BE(i + 2); if (m >= 0xc0 && m <= 0xc2) { size = [jpg.readUInt16BE(i + 7), jpg.readUInt16BE(i + 5)]; break; } i += 2 + len; }
+  assert.ok(size && size[0] <= 800, `launch-art.jpg is ${size}`);
+  assert.ok(Math.abs(size[1] / size[0] - png.readUInt32BE(20) / png.readUInt32BE(16)) < 0.01, 'same proportions as the native art');
   assert.ok(!fs.existsSync(path.join(root, 'assets/splash.png')), 'the old black 1-bit splash.png is gone');
 });
 

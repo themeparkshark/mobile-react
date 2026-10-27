@@ -173,7 +173,7 @@ function Sparkle({ x, y, size, phase, color, animated }: { x: number; y: number;
 /** Colour-blind safe rarity mark: Uncommon 1 pip, Rare 2, Epic a gem, Legendary a crown. */
 function RarityMark({ tier }: { tier: number }) {
   if (tier <= 1) return null;
-  return tier >= 4 ? <Text style={styles.markGlyph}>{tier === 5 ? '♛' : '◆'}</Text>
+  return tier >= 4 ? <GameIcon name={tier === 5 ? 'crown' : 'star'} size={14} />
     : <>{Array.from({ length: tier - 1 }, (_, i) => <View key={i} style={styles.pip} />)}</>;
 }
 
@@ -318,7 +318,6 @@ const styles = StyleSheet.create({
     borderWidth: 3, borderColor: BRAND.white },
   sparkle: { position: 'absolute' },
   pip: { width: 6, height: 6, borderRadius: 3, backgroundColor: BRAND.white },
-  markGlyph: { fontSize: 12, lineHeight: 13, color: BRAND.white },
   cameraBadge: { position: 'absolute', top: B / 2 + A / 2 - 20, right: B / 2 - A / 2 - 22, height: 26, borderRadius: 13, flexDirection: 'row',
     gap: 3, paddingHorizontal: 6, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
   cameraBadgeFar: { height: 16, minWidth: 16, borderRadius: 8, paddingHorizontal: 1, top: B / 2 - A / 2 + 8, right: B / 2 - A / 2 + 4 },

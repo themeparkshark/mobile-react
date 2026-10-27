@@ -3,6 +3,7 @@
  */
 import type { SharkPassReward, SharkPassState, SharkPassTier } from '../../api/endpoints/me/shark-pass';
 import type { GameIconName } from '../../ui/iconNames';
+import countText from '../../helpers/countText';
 
 /** The server's events in the player's words. Unknown events are left out. */
 export const EVENT_COPY: Record<string, { label: string; icon: GameIconName }> = {
@@ -43,7 +44,7 @@ export function rewardWords(reward: SharkPassReward): string {
     case 'rescue_passes': return reward.amount === 1 ? '1 Rescue Pass' : `${reward.amount} Rescue Passes`;
     case 'tickets': return `${reward.amount} ${reward.amount === 1 ? 'ticket' : 'tickets'}`;
     case 'energy': return `${reward.amount} energy`;
-    default: return `${reward.amount.toLocaleString('en-US')} coins`;
+    default: return `${countText(reward.amount)} coins`;
   }
 }
 
@@ -59,7 +60,7 @@ export function passSummary(tiers: readonly SharkPassTier[]): string {
   const parts = [
     items ? `${items} season ${items === 1 ? 'item' : 'items'}` : null,
     boxes ? `${boxes} Mystery Pin ${boxes === 1 ? 'Box' : 'Boxes'}` : null,
-    coins ? `${coins.toLocaleString('en-US')} coins` : null,
+    coins ? `${countText(coins)} coins` : null,
   ].filter(Boolean);
   return parts.length ? `${parts.join(', ')} and more` : 'A reward on every step';
 }
@@ -84,7 +85,7 @@ export function readyNowLine(tiers: readonly SharkPassTier[]): string | null {
   const items = ready.filter(isWearable).map(r => rewardWords(r));
   const coins = ready.reduce((n, r) => n + (r.type === 'coins' ? r.amount : 0), 0);
   const boxes = ready.reduce((n, r) => n + (r.type === 'mystery_box' ? r.boxes : 0), 0);
-  const parts = [...items, boxes ? `${boxes} Mystery Pin ${boxes === 1 ? 'Box' : 'Boxes'}` : null, coins ? `${coins.toLocaleString('en-US')} coins` : null]
+  const parts = [...items, boxes ? `${boxes} Mystery Pin ${boxes === 1 ? 'Box' : 'Boxes'}` : null, coins ? `${countText(coins)} coins` : null]
     .filter(Boolean).slice(0, 3);
   return `Get ${ready.length} Shark Pass ${ready.length === 1 ? 'reward' : 'rewards'} right away: ${parts.join(', ')}${ready.length > parts.length ? ' and more' : ''}.`;
 }

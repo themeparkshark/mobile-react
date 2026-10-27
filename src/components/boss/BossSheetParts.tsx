@@ -7,6 +7,7 @@ import { TEAM_ORDER, TEAMS, teamShortName } from '../../constants/teams';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
 import { CountUpText } from '../../gamekit/fx/CountUpText';
+import countText from '../../helpers/countText';
 
 /**
  * The shared HP bar. When HP drops the red fill snaps down and a pale "damage
@@ -49,7 +50,7 @@ export function AttackPips({ raid }: { readonly raid: BossRaid }) {
         <View style={[parts.pip, hit && (hit.remote ? parts.pipRemote : parts.pipUsed)]}>
           {hit ? <GameIcon name="swords" size={18} /> : <Text style={parts.pipNumber}>{i + 1}</Text>}
         </View>
-        <Text style={parts.pipDamage} numberOfLines={1}>{hit ? hit.damage.toLocaleString() : ' '}</Text>
+        <Text style={parts.pipDamage} numberOfLines={1}>{hit ? countText(hit.damage) : ' '}</Text>
       </View>;
     })}
   </View>;
@@ -88,7 +89,7 @@ export function TopFighters({ raid }: { readonly raid: BossRaid }) {
       <View key={`${fighter.username}-${i}`} style={parts.topRow}>
         <GameIcon name={MEDALS[i] ?? 'medal3'} size={22} accessibilityLabel={`Place ${i + 1}`} />
         <Text style={[parts.topName, fighter.you && parts.topYou]} numberOfLines={1}>{fighter.username}{fighter.you ? ' (you)' : ''}</Text>
-        <Text style={[parts.topDamage, fighter.you && parts.topYou]}>{fighter.damage.toLocaleString()}</Text>
+        <Text style={[parts.topDamage, fighter.you && parts.topYou]}>{countText(fighter.damage)}</Text>
       </View>
     ))}
   </View>;

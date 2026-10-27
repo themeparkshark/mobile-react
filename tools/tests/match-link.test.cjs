@@ -190,7 +190,7 @@ test('Gym arena: loading, reconnecting and lost all have a visible way out', () 
   const waiting = src.slice(src.indexOf('if (!gymData) {'), src.indexOf('const { player } = gymData;'));
   assert.ok(waiting.length > 0);
   assert.match(waiting, /Loading Arena/);
-  assert.match(waiting, /GO BACK/);
+  assert.match(waiting, /label="Go back"/);
   assert.match(waiting, /MatchLinkBanner phase=\{gymLink\.phase\}[^\n]*onLeave=\{handleGoBack\}/);
   assert.doesNotMatch(src, /if \(loading\) \{\s*return/, 'the old loading screen had no back button');
   const main = src.slice(src.indexOf('{/* Connection:'));

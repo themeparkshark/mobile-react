@@ -29,6 +29,10 @@ import { copyrightLine } from '../../api/platform';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SPLASH_VIDEO = require('../../../assets/videos/splash-loop.mp4');
+/** The loop's first frame (no new art: a still of the same video). */
+const SPLASH_POSTER = require('../../../assets/images/screens/login/splash-loop-poster.jpg');
+/** Same blue as the native splash (app.config.js splash.backgroundColor). */
+const SPLASH_BLUE = '#0768B9';
 const SPLASH_LOGO = require('../../../assets/images/splash-logo.png');
 const whooshSound = require('../../../assets/sounds/whoosh.mp3');
 // Floating bubble component
@@ -260,10 +264,15 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
   }, [focused]);
 
   return (
-    <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: '#09268f' }}>
-      {/* Looping video background: exact screen dimensions */}
+    // The native splash blue behind everything, and the video's own first frame as its poster,
+    // so launch goes splash, then the same picture, then motion: no dark navy flash in between.
+    <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: SPLASH_BLUE }}>
+      {/* Looping video background, exact screen dimensions */}
       <Video
         source={SPLASH_VIDEO}
+        usePoster
+        posterSource={SPLASH_POSTER}
+        posterStyle={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, resizeMode: 'cover' }}
         resizeMode={ResizeMode.COVER}
         shouldPlay={focused}
         isLooping

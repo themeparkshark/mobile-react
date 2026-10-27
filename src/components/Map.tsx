@@ -1,6 +1,9 @@
 import { openExternal } from '../services/external';
+import MapLaunchCover from './map/MapLaunchCover';
+import TileWaitSheet, { TILE_WAIT_MAX_MS } from './map/TileWaitSheet';
+import { beginMapCover, mapCoverDrawn, mapTilesShown, releaseMapCover, useMapCovered } from './map/mapCover';
 import { Image } from 'expo-image';
-import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, type MutableRefObject, ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BackgroundLayer, Camera, CircleLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { PlayerSharkMarker } from './map/PlayerSharkMarker';
@@ -44,6 +47,7 @@ import { DeclutterContext } from './map/declutter/Placed';
 import useMapDeclutter, { type MapDeclutterInput } from './map/declutter/useMapDeclutter';
 import type { InsetRect, LayoutItem, Rect } from './map/declutter/solver';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
+import { clearOfflineChipDock, offlineChipDock, publishOfflineChipDock } from './map/offlineDock';
 import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
 import { MOTION_PROBE, MotionProbeFrames, probeCamera, probeCount } from '../dev/motionProbe';
 import { useTrail } from '../services/trail/TrailProvider';
@@ -77,6 +81,10 @@ const SHARK_TAP_SOUND = require('../../assets/sounds/inventory_item_tap.mp3');
 
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const FOLLOW_ZOOM = 17.6;
+/** The trees and bushes fade in over this long the first time they are planted (no hard pop after the lift). */
+const DECO_FADE_MS = 240;
+/** The cover color while park tiles load: the game's light sky blue, never a dark scene. */
+export { MAP_COVER_SKY } from './map/MapCoverSky';
 
 // Radial falloff texture: soft round shadows and light pools with no hard edge.
 const GROUND_GLOW = require('../../assets/images/map/fx/glow.png');
@@ -118,7 +126,18 @@ export function pointsPerMeter(zoom: number, latitude: number): number {
 /** Stable empty data for always-mounted sources that are off (never a new object per render). */
 const NO_FEATURES: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, chromeHidden = false, fright = null, onUserPan, declutter = null, trailHidden = false }: {
+/** The map's round buttons: 54 pt, 8 pt apart. */
+const RAIL_BUTTON = 54;
+const RAIL_GAP = 8;
+/** Clear map kept between the rail and the screen's bottom-right buttons. */
+const RAIL_FLOOR_GAP = 8;
+/** The extras the screen can stack under the compass (the daily chest and Daily 3). */
+const RAIL_EXTRAS_PLANNED = 2;
+export function railColumnHeight(buttons: number): number {
+  return buttons <= 0 ? 0 : buttons * RAIL_BUTTON + (buttons - 1) * RAIL_GAP;
+}
+
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, railFloor = 0, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self', trailHidden = false }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -144,6 +163,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly extraControls?: ReactNode;
   /** How many 54 pt buttons extraControls stacks (default 1 when present), for the declutter inset. */
   readonly extraControlsCount?: number;
+  /**
+   * Room the screen keeps at the bottom right for its own buttons (Energy, Trail Boxes, the avatar),
+   * in points from the map's bottom edge. When the rail's stack would reach into it (a short phone
+   * with the chest and Daily 3 up), the extra buttons stand in a second column beside the compass.
+   */
+  readonly railFloor?: number;
   /** In-park marker declutter (src/components/map/declutter): footprints, insets and the placement store. */
   readonly declutter?: MapDeclutterInput | null;
   /** A full-screen moment owns the screen: hide the map buttons and the data credit (shown again after). */
@@ -154,6 +179,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly onUserPan?: () => void;
   /** The screen says the player is free (no dialog, chest, lesson or game): the compass may show its one-time hint. */
   readonly hintReady?: boolean;
+  /** Who draws the loading cover: the map itself, or the screen above its HUD (MapLaunchCover). */
+  readonly coverHost?: 'self' | 'screen';
   /** Something to catch right here (a ride coin in range): the shark perks up and cheers now and then. */
   readonly sharkCheer?: boolean;
   /** Trail Boxes (steps stream): the box filling as you walk rides on the shark; it hops when one is ready. */
@@ -350,21 +377,28 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     }
   }, [location?.latitude, location?.longitude]);
 
-  // A water-and-sparkle cover hides the blank map while tiles stream in, then
-  // lifts away once the map has fully drawn (or after 4 s, whatever happens).
-  const cover = useRef(new Animated.Value(1)).current;
-  const [covered, setCovered] = useState(true);
-  const revealed = useRef(false);
-  const revealMap = () => {
-    if (revealed.current) return;
-    revealed.current = true;
-    Animated.timing(cover, { toValue: 0, duration: 450, easing: Easing.out(Easing.quad), useNativeDriver: true })
-      .start(() => setCovered(false));
-  };
+  // A light sky cover hides the blank map while tiles stream in. Its bar continues the
+  // splash's bar; once the map has fully drawn (or at the cover's deadline, scheduled on the UI
+  // thread so busy JS cannot hold it) the bar fills and the cover lifts away. The map screen
+  // draws the cover above its HUD (coverHost "screen"); preview screens let the map draw it.
+  const covered = useMapCovered();
+  const coverToken = useRef(0);
+  // Tiles drawn at least once: until then a light sheet hides the bare lawn if the cover lifted early.
+  const [tilesDrawn, setTilesDrawn] = useState(false);
+  const revealMap = () => { mapCoverDrawn(coverToken.current); if (!tilesDrawn) setTilesDrawn(true); };
+  // A JS backstop for the sheet's own UI-thread fade: whatever happens, it is gone shortly after its cap.
+  const [tileWaitOver, setTileWaitOver] = useState(false);
   useEffect(() => {
-    const t = setTimeout(revealMap, 4000);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (covered || tilesDrawn || tileWaitOver) return;
+    const timer = setTimeout(() => { setTileWaitOver(true); mapTilesShown(coverToken.current); }, TILE_WAIT_MAX_MS + 500);
+    return () => clearTimeout(timer);
+  }, [covered, tilesDrawn, tileWaitOver]);
+  // A layout effect, so the cover is up before this map's first frame paints (a park map that
+  // replaces the home map never shows a blank blue frame).
+  useLayoutEffect(() => {
+    const tok = beginMapCover();
+    coverToken.current = tok;
+    return () => releaseMapCover(tok);
   }, []);
   const mapViewRef = useRef<MapViewRef>(null);
   const rootRef = useRef<View>(null);
@@ -389,8 +423,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     return () => { snapshotter.current = null; };
   }, [snapshotter]);
   const window = useWindowDimensions();
+  // A map that unmounted (the home map handing over to the park map at launch) is never queried:
+  // the native view is gone and the query would raise "Invalid react tag".
+  const mapAlive = useRef(true);
+  useEffect(() => { mapAlive.current = true; return () => { mapAlive.current = false; }; }, []);
   const mapQuery = useMemo(() => ({
     findWater: async (latitude: number, longitude: number, margin?: number) => {
+      if (!mapAlive.current) return null;
       // MapLibre's rect is [top, right, bottom, left] with top the larger y.
       const found = await mapViewRef.current?.queryRenderedFeaturesInRect(
         [window.height, window.width, 0, 0], undefined, ['water']);
@@ -400,6 +439,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
 
   // Trees, bushes and ripples are planted as icons for what's on screen.
   const [decorations, setDecorations] = useState<GeoJSON.FeatureCollection>(NO_FEATURES);
+  const [decoShown, setDecoShown] = useState(false);
   const [glints, setGlints] = useState<{ latitude: number; longitude: number; seed: number }[]>([]);
   const [lampPoints, setLampPoints] = useState<GeoJSON.FeatureCollection>(NO_FEATURES);
   const decoKey = useRef('');
@@ -408,12 +448,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     clearTimeout(decoTimer.current);
     decoTimer.current = setTimeout(async () => {
       const map = mapViewRef.current;
-      if (!map) return;
+      if (!map || !mapAlive.current) return;
       try {
         const [zoom, [[east, north], [west, south]]] = await Promise.all([map.getZoom(), map.getVisibleBounds()]);
         // Skip rebuilding for tiny camera nudges (walking follow) at the same density.
         const key = `${decorationBand(zoom)}|${(north * 4000).toFixed(0)}|${(west * 4000).toFixed(0)}|${((north - south) * 400).toFixed(0)}`;
-        if (key === decoKey.current) return;
+        if (key === decoKey.current || !mapAlive.current) return;
         const rect: [number, number, number, number] = [window.height, window.width, 0, 0];
         const [wood, green, water, homes, buildings, roads] = await Promise.all([
           map.queryRenderedFeaturesInRect(rect, undefined, ['wood']),
@@ -424,6 +464,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           map.queryRenderedFeaturesInRect(rect, undefined, ['road', 'path']),
         ]);
         decoKey.current = key;
+        // The first planting fades in (the layer's opacity eases 0 to 1 in MapLibre), so the trees
+        // never pop in a beat after the cover lifts; later plantings (panning) draw at full opacity.
+        setDecoShown(true);
         setDecorations(buildDecorations({ wood: wood.features, green: green.features, water: water.features,
           homes: homes.features, buildings: buildings.features, roads: roads.features },
           { north, south, east, west }, zoom));
@@ -431,7 +474,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         const lamps = buildLampPoints(roads.features, { north, south, east, west }, zoom);
         setLampPoints(lamps);
       } catch { /* map not ready yet; the next camera change retries */ }
-    }, 250);
+    // The first planting goes almost at once (the map just drew); later ones wait for the camera to settle.
+    }, decoKey.current === '' ? 60 : 250);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [window.height, window.width]);
   useEffect(() => () => clearTimeout(decoTimer.current), []);
@@ -531,22 +575,40 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   [!!declutter, location?.latitude, location?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
   const hasExtraControls = !!extraControls;
   const extraCount = hasExtraControls ? Math.max(1, extraControlsCount ?? 1) : 0;
+  // A short phone: the one column (compass, then each extra 62 pt lower) would reach the screen's
+  // bottom-right buttons, so the extras stand in a column of their own to the compass's left. It
+  // plans for both extras (the chest and Daily 3), so a chest that shows up later never makes the
+  // buttons jump from one column to two.
+  const railSide = extraCount > 0 && !!viewSize && railFloor > 0
+    && controlsTop + railColumnHeight(1 + Math.max(extraCount, RAIL_EXTRAS_PLANNED)) + RAIL_FLOOR_GAP > viewSize.height - railFloor;
   // Screen-space art over the map is an inset too: the Fin-ister moon (FrightMapLayer draws it
-  // at 66 % across, 15 % down, 40 pt glow) and Explore's docked offline chip (OfflineBanner:
-  // 44 pt, 16 pt from the right, 43 % down the window) while it shows.
+  // at 66 % across, 15 % down, 40 pt glow) and Explore's docked offline chip (OfflineBanner, at
+  // this map's chip dock) while it shows.
   const [offline, setOffline] = useState(isOffline());
   useEffect(() => onConnectivityChange(setOffline), []);
   const [viewTop, setViewTop] = useState<number | null>(null);
-  const windowHeight = window.height;
   const frightOn = !!fright?.active;
+  // The offline chip's dock: under the whole planned rail, so going offline never puts the chip on the
+  // compass, Daily 3 or the chest. On a short phone (extras in their own column) it takes the free
+  // slot under the compass, beside the chest. OfflineBanner reads it.
+  const chipDock = useMemo(() => (viewSize && viewTop !== null ? offlineChipDock({
+    viewTop, viewHeight: viewSize.height, controlsTop, railFloor,
+    railHeight: railSide ? RAIL_BUTTON : railColumnHeight(1 + RAIL_EXTRAS_PLANNED),
+    railWidth: railSide ? RAIL_BUTTON * 2 + RAIL_GAP : RAIL_BUTTON,
+  }) : null), [viewSize?.height, viewTop, controlsTop, railFloor, railSide]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dockOwner = useRef({}).current;
+  useEffect(() => { if (chipDock) publishOfflineChipDock(dockOwner, chipDock); }, [chipDock, dockOwner]);
+  useEffect(() => () => clearOfflineChipDock(dockOwner), [dockOwner]);
   const declutterControls = useMemo<InsetRect[]>(() => {
     if (!declutter || !viewSize) return [];
     // The compass (and chest) column: a hard inset with a 6 pt gap (share 0: no art under a button).
-    const out: InsetRect[] = [{ x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6, w: 54 + 12, h: 54 + extraCount * 62 + 12, share: 0 }];
+    const out: InsetRect[] = [railSide
+      ? { x: viewSize.width - 16 - 54 - 8 - 54 - 6, y: controlsTop - 6, w: 54 * 2 + 8 + 12, h: railColumnHeight(extraCount) + 12, share: 0 }
+      : { x: viewSize.width - 16 - 54 - 6, y: controlsTop - 6, w: 54 + 12, h: 54 + extraCount * 62 + 12, share: 0 }];
     if (frightOn) out.push({ x: Math.round(viewSize.width * 0.66) - 44, y: Math.round(viewSize.height * 0.15) - 44, w: 88, h: 88, share: 0.2 });
-    if (offline && viewTop !== null) out.push({ x: viewSize.width - 16 - 44 - 8, y: Math.round(windowHeight * 0.43) - viewTop - 8, w: 60, h: 60, share: 0.2 });
+    if (offline && viewTop !== null && chipDock) out.push({ x: viewSize.width - chipDock.right - 44 - 8, y: chipDock.top - viewTop - 8, w: 60, h: 60, share: 0.2 });
     return out;
-  }, [!!declutter, viewSize?.width, viewSize?.height, controlsTop, extraCount, frightOn, offline, viewTop, windowHeight]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [!!declutter, viewSize?.width, viewSize?.height, controlsTop, extraCount, railSide, frightOn, offline, viewTop, chipDock]); // eslint-disable-line react-hooks/exhaustive-deps
   // Development overlay (EXPO_PUBLIC_DECLUTTER_DEBUG=1): every footprint and chip box the solver placed.
   const [debugRects, setDebugRects] = useState<Map<string, { body: Rect; tag: Rect | null; point?: { x: number; y: number } }> | null>(null);
   const debugOn = __DEV__ && process.env.EXPO_PUBLIC_DECLUTTER_DEBUG === '1';
@@ -750,7 +812,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           right: 16,
           zIndex: 10,
           gap: 8,
-        }, chromeStyle]}
+        }, railSide && styles.railSide, chromeStyle]}
         onLayout={event => {
           const { x, y, width, height } = event.nativeEvent.layout;
           setRail(prev => (prev && Math.abs(prev.x - x) < 1 && Math.abs(prev.y - y) < 1 && Math.abs(prev.height - height) < 1
@@ -762,7 +824,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           reducedMotion={reducedMotion} hint={compassHint.visible && haveHeading} onHintDone={compassHint.dismiss}
           noCompassFlash={noCompassFlash}
           awayArt={hasDressedShark(lookInventory) ? <View style={styles.awaySharkScale}><MapSharkLook inventory={lookInventory} t={fxClock} kick={fxKick} animate={false} playing={false} /></View> : undefined} />
-        {extraControls}
+        {/* The extras always sit in this one wrapper (beside the compass on a short phone, under it
+            otherwise): only its style changes, so a rail that changes sides never remounts a button. */}
+        <View pointerEvents="box-none" style={railSide ? styles.railExtras : extraCount > 0 ? styles.railExtrasUnder : styles.railExtrasNone}>
+          {extraControls}
+        </View>
       </Reanimated.View>
 
       {/* Every marker inside the map (islands, finds, haunts) reads its placement from here. */}
@@ -797,6 +863,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           }
           onPress?.();
         }}
+        // The cover lifts on the first frame drawn with every visible tile loaded (the map never idles
+        // while its markers animate, so "map fully rendered" can come many seconds late). Only while
+        // the cover is up: after that the per-frame event is switched off.
+        onDidFinishLoadingMap={revealMap}
+        onDidFinishRenderingFrameFully={covered || !tilesDrawn ? revealMap : undefined}
         onDidFinishRenderingMapFully={() => { refreshDecorations(); revealMap(); cam.resync();
           void mapViewRef.current?.getZoom().then(zoom => {
             if (Number.isFinite(zoom)) { setCameraZoom(zoom); onZoomChange?.(zoom); }
@@ -895,6 +966,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             iconRotationAlignment: 'viewport',
             iconPitchAlignment: 'viewport',
             symbolSortKey: ['get', 'k'],
+            iconOpacity: decoShown ? 1 : 0,
+            iconOpacityTransition: { duration: reducedMotion || power.lowPower ? 0 : DECO_FADE_MS, delay: 0 },
           }} />
         </ShapeSource>
         {/* Time of day: one tint over the tiles only, so every pin stays bright on top. */}
@@ -909,12 +982,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             crashes MapLibre's subview insert (-[MLRNMapView insertReactSubview:atIndex:]). */}
         {(
           <ShapeSource id="tps-lamps" shape={light.lamps >= 0.05 ? lampPoints : NO_FEATURES}>
-            <CircleLayer id="tps-lamp-glow" style={{ circleColor: '#ffc95e', circleBlur: 1,
-              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 7, 17, 13, 19, 34],
-              circleOpacity: 0.7 * light.lamps, circlePitchAlignment: 'map' }} />
-            <CircleLayer id="tps-lamp-core" style={{ circleColor: '#fff3c4', circleBlur: 0.4,
-              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 1, 17, 1.6, 19, 3.6],
-              circleOpacity: 0.9 * light.lamps }} />
+            {/* Small crisp gold glints, not big orange smudges (they read as dirt on the night map). */}
+            <CircleLayer id="tps-lamp-glow" style={{ circleColor: '#ffd23f', circleBlur: 0.85,
+              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 4, 17, 7, 19, 18],
+              circleOpacity: 0.6 * light.lamps, circlePitchAlignment: 'map' }} />
+            <CircleLayer id="tps-lamp-core" style={{ circleColor: '#fffbe6', circleBlur: 0.15,
+              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 1.2, 17, 2, 19, 4.2],
+              circleOpacity: 0.95 * light.lamps }} />
           </ShapeSource>
         )}
         {/* Crowd haze: static GL heatmap (no per-frame cost), warm where the lines are long. */}
@@ -961,6 +1035,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}
       </MapView>
       </DeclutterContext.Provider>
+      {/* Mounted under the cover from the map's first frame (not after the lift), so a cover that
+          fades before a busy JS thread catches up never shows a bare map for even a frame. */}
+      {!tileWaitOver && <TileWaitSheet drawn={tilesDrawn} armed={!covered} />}
       {/* Light, cloud shadows, gulls and fireflies: above the map, under the controls and the shark. */}
       {viewSize && <MapLightOverlay width={viewSize.width} height={viewSize.height} />}
       {viewSize && <MapSkyOverlay width={viewSize.width} height={viewSize.height} />}
@@ -984,13 +1061,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <Text style={styles.attributionText}>© OpenStreetMap</Text>
         </Pressable>
       </Reanimated.View>
-      {covered && (
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, {
-          opacity: cover, transform: [{ scale: cover.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1] }) }] }]}>
-          {/* The player's shark (drawn above) swims on the water until the map lands under it. */}
-          <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
-        </Animated.View>
-      )}
+      {/* The light sky with Alex's drawn clouds and a bobbing shark while the park tiles stream in
+          (the old underwater scene read dark, and a flat sheet read blank). */}
+      {coverHost === 'self' && <MapLaunchCover style={styles.cover} />}
       {__DEV__ && MOTION_PROBE && <MotionProbeFrames />}
       {location && (
         <View pointerEvents={focusedOnPlayer ? 'box-none' : 'none'} style={[styles.centerOverlay, { opacity: focusedOnPlayer ? 1 : 0 }]}>
@@ -1070,6 +1143,11 @@ function FrightBearing({ store, children }: { readonly store: BearingStore; read
 }
 
 const styles = StyleSheet.create({
+  // The compass on the right, the extra buttons in their own column to its left (short phones).
+  railSide: { flexDirection: 'row-reverse', alignItems: 'flex-start' },
+  railExtras: { gap: 8 },
+  railExtrasUnder: { gap: 8 },
+  railExtrasNone: { display: 'none' },
   debugBody: { position: 'absolute', borderWidth: 1, borderColor: '#ff3df5', backgroundColor: 'rgba(255,61,245,0.08)' },
   debugTag: { position: 'absolute', borderWidth: 1, borderColor: '#3dffb0' },
   debugPoint: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: '#00e5ff' },
@@ -1078,7 +1156,7 @@ const styles = StyleSheet.create({
   attribution: { position: 'absolute', left: 8, bottom: 6, zIndex: 4, paddingHorizontal: 6, paddingVertical: 2,
     borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.7)' },
   attributionText: { fontFamily: 'Knockout', fontSize: 10, color: BRAND.navySoft },
-  cover: { zIndex: 5, backgroundColor: '#0768b9' },
+  cover: { zIndex: 5 },
   centerOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',

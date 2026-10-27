@@ -16,6 +16,7 @@ import RaceStrip, { type RacerLine } from '../../../gamekit/party/RaceStrip';
 import type { Seat } from '../../../gamekit/net/partyTypes';
 import { ParadeBoard } from './ParadeBoard';
 import { botTaps, buildBoard, resolve, resultHash, type SprintProfile, type SprintTap } from './paradeSprint';
+import countText from '../../../helpers/countText';
 
 const BOTS: { name: string; profile: SprintProfile }[] = [
   { name: 'Captain Fin', profile: 'ace' },
@@ -106,7 +107,7 @@ export default function SprintLab({ seed = 1, autoplay = null, onClose }: { seed
           <Text style={styles.title}>LINE PARTY: PARADE SPRINT</Text>
           <RaceStrip lines={lines} />
           <View style={styles.row}>
-            <Text style={styles.score}>{live.toLocaleString('en-US')}</Text>
+            <Text style={styles.score}>{countText(live)}</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Hold my board" onPress={toggleHold} style={[styles.hold, held && styles.holdOn]}>
               <Text style={styles.holdTxt}>{held ? 'PLAY' : 'HOLD'}</Text>
             </Pressable>

@@ -7,7 +7,7 @@
  * (a Rush, a boss) simply takes the lead; one landing behind the button makes
  * it pulse once.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInUp, FadeOutUp, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../../gamekit/Haptics';
@@ -48,7 +48,20 @@ export default function MapStatusStack({ entries, defaultOpen = false }: {
   const [open, setOpen] = useState(defaultOpen);
   const reduced = useReducedGameMotion();
   const keys = entries.map(entry => entry.key).join('|');
+  // The row is whole from the first map frame. When a different status takes the lead (a live event
+  // answering after the standings, a Rush starting), the new lead swaps in on the same render and fades
+  // up from 0.2 on the UI thread: never a blank slot while a busy JS thread catches up.
   const lead = entries[0];
+  const leadIn = useSharedValue(1);
+  const lastLead = useRef(lead?.key);
+  useLayoutEffect(() => {
+    if (!lead || lead.key === lastLead.current) return;
+    lastLead.current = lead.key;
+    if (reduced) return;
+    leadIn.value = 0.2;
+    leadIn.value = withTiming(1, { duration: 220 });
+  }, [lead?.key, reduced, leadIn]);
+  const leadStyle = useAnimatedStyle(() => ({ opacity: leadIn.value }));
   const rest = entries.slice(1);
   // A different lead or set of statuses folds the stack (nothing moves under a finger for long).
   const lastKeys = useRef(keys);
@@ -76,11 +89,11 @@ export default function MapStatusStack({ entries, defaultOpen = false }: {
     <>
       {open && <Pressable testID="status-stack-scrim" accessibilityLabel="Close the status list" onPress={() => setOpen(false)}
         style={styles.scrim} />}
-      <View style={styles.wrap} pointerEvents="box-none">
+      <Animated.View style={styles.wrap} pointerEvents="box-none">
         {/* Open, the pills sit on one solid card: nothing on the map peeks between them. */}
         {open && <View pointerEvents="none" style={styles.backing} />}
         <View style={styles.row} pointerEvents="box-none">
-          <View style={styles.lead}>{lead.node}</View>
+          <Animated.View style={[styles.lead, leadStyle]}>{lead.node}</Animated.View>
           {rest.length > 0 && (
             <Animated.View style={pulseStyle}>
               <Pressable accessibilityRole="button" onPress={toggle} hitSlop={6}
@@ -103,7 +116,7 @@ export default function MapStatusStack({ entries, defaultOpen = false }: {
             {entry.node}
           </Animated.View>
         ))}
-      </View>
+      </Animated.View>
     </>
   );
 }

@@ -47,6 +47,7 @@ import { milestoneHeadline, nextUnlockLine, partsProgress, rewardChips } from '.
 import { adsAvailable, rewardText, watchForReward } from '../services/ads';
 import { hasWinNote, holdWinNotes, takeWinNote } from '../screens/LeaderboardsScreen/standingsCache';
 import StarRideStamp from './liveEvents/StarRideStamp';
+import countText from '../helpers/countText';
 
 const { width: SW } = Dimensions.get('window');
 const HERO = 150;
@@ -143,7 +144,7 @@ function CountUp({ value, start, reduced, style }: { value: number; start: boole
     timer = setTimeout(tick, 34);
     return () => clearTimeout(timer);
   }, [value, start, reduced]);
-  return <Text style={style}>+{shown.toLocaleString()}</Text>;
+  return <Text style={style}>+{countText(shown)}</Text>;
 }
 
 /* ─── One reward chip; pops in on the shared entrance clock ─── */

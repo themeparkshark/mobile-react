@@ -17,6 +17,7 @@ import type { Pill, PieceState } from '../../helpers/shopShelves';
 import type { ShopSetPiece } from '../../models/shop-today';
 import { BRAND, BUTTON, BUTTON_ART, FONT, GameIcon, type GameIconName } from '../../ui';
 import { artButtonFontSize } from '../../ui/artButtonText';
+import { UpperText } from '../../ui/upper';
 
 /** Max Dynamic Type growth inside tiles and pills, so a big font never breaks a tile. */
 export const MAX_FONT = 1.3;
@@ -203,8 +204,8 @@ export function ShopCta({ label, icon, width, onPress, loading = false, disabled
       style={StyleSheet.absoluteFill}>
     <Animated.View style={[StyleSheet.absoluteFill, styles.ctaLabel, labelStyle]}>
       {(done || muted || icon) && <GameIcon name={done ? 'check' : muted ? 'timer' : icon!} size={Math.round(fontSize * 1.2)} style={{ marginRight: Math.round(fontSize * 0.3) }} />}
-      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={1.2}
-        style={[styles.ctaText, { fontSize }]}>{label}</Text>
+      <UpperText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={1.2}
+        style={[styles.ctaText, { fontSize }]}>{label}</UpperText>
     </Animated.View>
     </Animated.View>
   );
@@ -388,7 +389,7 @@ function ArcCoin({ i, from, to }: { i: number; from: { x: number; y: number }; t
   return (
     <>
       <Animated.View style={[styles.spark, spark]} />
-      <Animated.View style={[styles.arcCoin, coin]}><GameIcon name="coin" size={22} /></Animated.View>
+      <Animated.View style={[styles.arcCoin, coin]}><GameIcon name="coins" size={22} /></Animated.View>
     </>
   );
 }

@@ -32,6 +32,13 @@ function harness() {
     'expo-av': { ResizeMode: { COVER: 'cover' }, Video: 'Video' },
     'lodash': { sample: list => list?.[0] },
     '../services/push': { openColdStartPush() {} },
+    // The launch scene and its shared bar (visual-defects lane): plain stand-ins.
+    '../components/launch/LaunchScene': { default: 'LaunchScene', launchFill: { value: 0 }, setLaunchFact() {}, getLaunchFact: () => null, moveLaunchBar() {} },
+    '../api/defaults/crumbs.json': { default: { labels: { splash_screen_facts: ['Sharks have no bones.'] } } },
+    '../constants/launchHandoff': { SPLASH_CREEP_MS: 1, SPLASH_LONG_CREEP_MS: 1, SPLASH_LONG_SHARE: 0.3, SPLASH_ROUTE_SHARE: 0.2,
+      COVER_LAUNCH_MAX_MS: 1, COVER_STEPS: { armed: 0.9 }, LAUNCH_HANDOFF_SHARE: 0.56 },
+    '../helpers/launchArt': { warmLaunchArt: async () => undefined },
+    '../context/CurrencyProvider': { CurrencyContext: { value: { currencies: [] } } },
   };
   return { nav, state, auth, crumbs, common };
 }

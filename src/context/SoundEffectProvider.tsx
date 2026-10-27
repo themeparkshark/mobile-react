@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { AuthContext } from './AuthProvider';
 import { SFX } from '../gamekit/SFX';
+import { setAudioWanted } from '../gamekit/audio/startGate';
 import { QUIET_CAPTURE, sfxAllowed } from './sfxPolicy';
 
 export interface SoundEffectContextType {
@@ -58,6 +59,11 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
       activeSounds.current.clear();
     };
   }, []);
+
+  // The low-latency audio graph only wakes the audio hardware while the player can hear something.
+  useEffect(() => {
+    setAudioWanted(!(isReady && !player?.enabled_sound_effects), !(isReady && !player?.enabled_music));
+  }, [isReady, player?.enabled_sound_effects, player?.enabled_music]);
 
   const releaseSound = (sound: Audio.Sound) => {
     if (!activeSounds.current.delete(sound)) return;

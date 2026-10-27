@@ -38,6 +38,7 @@ import {
   StarBurst,
   CelebrationLevel,
 } from './CelebrationEffects';
+import { UpperText } from '../ui/upper';
 
 // Map rarity number to celebration level
 const RARITY_TO_CELEBRATION: Record<number, CelebrationLevel> = {
@@ -620,7 +621,7 @@ export default function PrepItemRedeemModal({
                       </View>
                     )}
 
-                    <Text
+                    <UpperText
                       style={{
                         fontFamily: 'Shark',
                         fontSize: 28,
@@ -638,7 +639,7 @@ export default function PrepItemRedeemModal({
                       {pickupOutcome?.replayed ? 'Already in your book'
                         : prepItem.rarity >= 4 ? 'Epic find!'
                         : prepItem.rarity >= 3 ? 'Rare find!' : 'Got it!'}
-                    </Text>
+                    </UpperText>
 
                     <Text
                       style={{
@@ -786,10 +787,10 @@ export default function PrepItemRedeemModal({
                         marginTop: 12, borderWidth: 2, borderColor: '#FFC842',
                         borderRadius: 12, backgroundColor: '#063965', padding: 10,
                       }}>
-                        <Text style={{ fontFamily: 'Shark', color: '#FFE078', fontSize: 19,
+                        <UpperText style={{ fontFamily: 'Shark', color: '#FFE078', fontSize: 19,
                           textAlign: 'center', textTransform: 'uppercase' }}>
                           {progressLabel}
-                        </Text>
+                        </UpperText>
                         <Text style={{ fontFamily: 'Knockout', color: '#fff', fontSize: 17,
                           textAlign: 'center', marginTop: 1 }}>
                           {prepItem.set_name || 'Collection'} · {setProgress.collected}/{setProgress.total} found

@@ -16,6 +16,7 @@ import { battleHUDEvents } from './battleHUDEvents';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import { GameIcon, GameRichText } from '../../ui';
 import { useBudgetedPoll } from '../../power';
+import countText from '../../helpers/countText';
 
 // Format seconds into H:MM:SS or MM:SS
 function formatCountdown(totalSeconds: number): string {
@@ -251,7 +252,7 @@ export default function BattleHUD({ parkId }: Props) {
                           {TEAM_NAMES[team]}
                         </Text>
                         <Text style={[styles.standingScore, { color: TEAM_COLORS[team] }]}>
-                          {scores[team].toLocaleString()}
+                          {countText(scores[team])}
                         </Text>
                       </View>
                     ))}

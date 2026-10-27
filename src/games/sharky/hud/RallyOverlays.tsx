@@ -13,6 +13,7 @@ import type { RaceMember, RaceResult, RaceRound, RaceState } from '../net/raceTr
 import { SHARKY_ART, SHARKY_PLACE_STAMPS } from '../assets';
 import { playHaptic } from '../../../gamekit/Haptics';
 import { INK, REWARD as GOLD } from '../render/palette';
+import countText from '../../../helpers/countText';
 
 function useNow(active: boolean, ms = 100): number {
   const [now, setNow] = useState(Date.now());
@@ -150,7 +151,7 @@ export function RallyPodium({ results, you, verdict, nextAtMs, toLocal, onAgain,
             <View style={{ flex: 1 }}>
               <Text style={styles.rowName} numberOfLines={1}>{r.seat === you ? 'You' : r.name}</Text>
               <Text style={styles.rowSub}>
-                {r.finished ? `${r.score.toLocaleString()}` : 'DNF'}
+                {r.finished ? `${countText(r.score)}` : 'DNF'}
                 {r.closeSkims !== undefined ? `  ·  ${r.closeSkims} Close` : ''}
                 {r.filledBy === 'ghost' ? '  ·  ghost finished' : r.kind === 'bot' ? '  ·  GHOST' : ''}
               </Text>

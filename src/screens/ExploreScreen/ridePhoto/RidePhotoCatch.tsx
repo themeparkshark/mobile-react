@@ -1308,9 +1308,9 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
           {/* Miss: a car and a big arrow toward where the car should have been (no words) */}
           {missNote && <View pointerEvents="none" accessibilityLabel={missNote.dir === 'early' ? 'Too soon' : 'Too late'}
             style={[styles.missChip, { left: Math.max(16, Math.min(sceneW - 130, box.x + box.w / 2 - 57)), top: box.y - 64 }]}>
-            {missDirLeft && <Text style={styles.arrow}>◀</Text>}
+            {missDirLeft && <GameIcon name="arrow" size={30} style={{ transform: [{ scaleX: -1 }] }} />}
             <Image source={VEHICLE_ICON[stage.kind] ?? VEHICLE_ICON.coaster} style={styles.missCar} contentFit="contain" transition={0} />
-            {!missDirLeft && <Text style={styles.arrow}>▶</Text>}
+            {!missDirLeft && <GameIcon name="arrow" size={30} />}
           </View>}
           {/* No tap this pass: a camera and a pulsing finger (no words) */}
           {nudge && <Animated.View pointerEvents="none" accessibilityLabel="Tap the shutter"
@@ -1383,7 +1383,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
             <View style={[styles.bandSide, { alignItems: 'flex-end' }]} pointerEvents="none">
               <View style={[styles.rarity, { backgroundColor: color }]}>
                 <View style={styles.bevel} />
-                {tier >= 4 ? <Text style={styles.markGlyph}>{tier === 5 ? '♛' : '◆'}</Text>
+                {tier >= 4 ? <GameIcon name={tier === 5 ? 'crown' : 'star'} size={18} />
                   : Array.from({ length: Math.max(0, tier - 1) }, (_, i) => <View key={i} style={styles.pip} />)}
                 <Text style={styles.rarityText}>{rarityLabel(item.rarity).toUpperCase()}</Text>
               </View>
@@ -1408,7 +1408,7 @@ const RidePhotoCatch = forwardRef<RideStageHandle, RidePhotoProps>(function Ride
         importantForAccessibility={visible && !closing ? 'auto' : 'no-hide-descendants'} style={[styles.closeWrap, { top: insets.top + 8 }, closeStyle]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close the camera" hitSlop={10} onPress={handleClose} style={styles.close}
           disabled={!(visible && !closing)}>
-          <Text style={styles.closeText}>✕</Text>
+          <GameIcon name="close" size={28} />
         </Pressable>
       </Animated.View>
 
@@ -1507,10 +1507,8 @@ const styles = StyleSheet.create({
   bevel: { position: 'absolute', left: 0, right: 0, top: 0, height: 1.5, backgroundColor: 'rgba(255,255,255,0.6)' },
   rarityText: { color: '#ffffff', fontFamily: 'Shark', fontSize: 14, letterSpacing: 0.6 },
   pip: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ffffff' },
-  markGlyph: { color: '#ffffff', fontSize: 14, lineHeight: 16 },
   closeWrap: { position: 'absolute', left: 16 },
   close: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
-  closeText: { color: '#ffffff', fontSize: 20, lineHeight: 22 },
   missChip: { position: 'absolute', width: 114, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     paddingVertical: 6, borderRadius: 18, backgroundColor: INK, borderWidth: 2, borderColor: '#ffffff' },
   missCar: { width: 46, height: 29 },

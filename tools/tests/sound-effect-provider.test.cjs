@@ -30,6 +30,7 @@ function soundHarness(enabled = true, auth = null) {
     console: { warn: (...args) => warnings.push(args) },
     require(name) {
       if (name === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props }) };
+      if (name === '../gamekit/audio/startGate') return { setAudioWanted() {} };
       if (name === 'react') return {
         createContext: () => ({ Provider: 'provider' }),
         useContext: () => auth ?? ({ isReady: true, player: { enabled_sound_effects: enabled } }),

@@ -158,6 +158,7 @@ import {
 } from './race/raceSim';
 import { RivalStrip, type Racer } from './race/RivalStrip';
 import type { MemoryPartyBinding } from './race/partyBinding';
+import countText from '../../helpers/countText';
 
 export type { MemoryMode } from './modes/mode';
 
@@ -1030,7 +1031,7 @@ export default function MemoryGame({
       numbers.push({ label: 'TURNS', value: `${e.turns}/${par}`, hot: e.turns <= par });
       if (!r.signal) numbers.push({ label: 'TIME', value: `${(chargedMs / 1000).toFixed(1)}s` });
       if (x.ridePb != null && !r.signal) numbers.push({ label: 'BEST', value: `${(x.ridePb / 1000).toFixed(1)}s`, hot: x.newRidePb });
-      if (won) numbers.push({ label: 'SCORE', value: finalScore.toLocaleString('en-US') });
+      if (won) numbers.push({ label: 'SCORE', value: countText(finalScore) });
       // The luck chip contradicts PERFECT!, and it is jargon on a loss.
       chipText = won && !perfect ? luckyChip(e) : null;
       if (perfect && won) banner = 'PERFECT!';
@@ -1948,7 +1949,7 @@ export default function MemoryGame({
               });
             });
             setPot(null);
-            if (flags.scoreOnHud) scorePlate.current?.tally(`POT ${ev.value.toLocaleString('en-US')}`);
+            if (flags.scoreOnHud) scorePlate.current?.tally(`POT ${countText(ev.value)}`);
             const ticks = Math.min(12, Math.max(1, Math.floor(ev.value / 200)));
             for (let i = 0; i < ticks; i++) {
               later(i * SIXTEENTH_MS, () => GameAudio.playLadder('coin_tick', i, { volume: 0.8 }));

@@ -5,6 +5,9 @@ import shortenNumber from '../../helpers/shorten-number';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { useHelp } from '../help/HelpProvider';
 import { glossaryKeyForName } from '../../services/help/glossary';
+import countText from '../../helpers/countText';
+import { UpperText } from '../../ui/upper';
+import { useCoverArt } from '../map/mapCover';
 
 interface CurrencyProps {
   /** Remote icon URL or a bundled require(); falls back to the gold coin. */
@@ -12,11 +15,14 @@ interface CurrencyProps {
   count: number;
   name?: string;
   flyTarget?: string;
+  /** On the map's header: the loading cover waits for this icon, so the pill never shows a number alone. */
+  coverArt?: boolean;
 }
 
 const FALLBACK_ICON = require('../../../assets/images/coingold.png');
 
-export default function Currency({ image, count, name, flyTarget }: CurrencyProps) {
+export default function Currency({ image, count, name, flyTarget, coverArt = false }: CurrencyProps) {
+  const artDrawn = useCoverArt(coverArt);
   const { registerTarget } = useCurrencyFly();
   const containerRef = useRef<View>(null);
 
@@ -175,6 +181,8 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
     }
   }, [count, displayCount]);
 
+  const [iconFailed, setIconFailed] = useState(false);
+  useEffect(() => { setIconFailed(false); }, [image]);
   const { explain, glossary } = useHelp();
   const term = glossaryKeyForName(name);
   // Known currencies open the "What's this?" sheet; anything else keeps the name tooltip.
@@ -200,16 +208,22 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
               ],
             }}
           >
+            {/* No placeholder: while a 36 pt icon decoded, the big coin placeholder drew as a flat
+                gold square. The launch warms these icons, and a failed load falls back to the coin. */}
             <Image
-              source={typeof image === 'number' ? image : image ? { uri: image } : FALLBACK_ICON}
-              placeholder={FALLBACK_ICON}
+              source={iconFailed || !image ? FALLBACK_ICON : typeof image === 'number' ? image : { uri: image }}
+              onLoad={artDrawn}
+              onError={() => { if (iconFailed || !image) artDrawn(); setIconFailed(true); }}
+              cachePolicy="memory-disk"
+              priority="high"
+              transition={0}
               style={styles.icon}
               contentFit="contain"
             />
           </Animated.View>
-          <Text style={styles.countText} numberOfLines={1} adjustsFontSizeToFit>
+          <UpperText style={styles.countText} numberOfLines={1} adjustsFontSizeToFit>
             {shortenNumber(displayCount)}
-          </Text>
+          </UpperText>
         </View>
       </TouchableOpacity>
       
@@ -232,8 +246,8 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
       >
         <View style={styles.tooltipArrow} />
         <View style={styles.tooltipContent}>
-          <Text style={styles.tooltipName}>{name || 'Your stuff'}</Text>
-          <Text style={styles.tooltipCount}>{count.toLocaleString()}</Text>
+          <UpperText style={styles.tooltipName}>{name || 'Your stuff'}</UpperText>
+          <Text style={styles.tooltipCount}>{countText(count)}</Text>
         </View>
       </Animated.View>
     </View>

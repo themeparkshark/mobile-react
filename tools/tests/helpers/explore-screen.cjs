@@ -123,7 +123,11 @@ exports.exploreScreen = function exploreScreen(options = {}) {
       return { value: target[key], writable: true, enumerable: true, configurable: true };
     },
   });
-  const app = runtime(options.file ?? 'src/screens/ExploreScreen.tsx', imports, options.props ?? {},
-    { setInterval: () => 0, clearInterval: () => undefined, Promise, ...options.globals });
+  // The map screen itself (ExploreScreenBody): the exported screen is a thin shell that mounts it
+  // a commit after the launch cover, and this runtime renders one component, not its children.
+  const file = options.file ?? 'src/screens/ExploreScreen.tsx';
+  const app = runtime(file, imports, options.props ?? {},
+    { setInterval: () => 0, clearInterval: () => undefined, Promise, ...options.globals },
+    { exportName: options.exportName ?? (file === 'src/screens/ExploreScreen.tsx' ? 'ExploreScreenBody' : undefined) });
   return Object.assign(app, { navigation, contexts });
 };

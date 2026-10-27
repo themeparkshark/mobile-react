@@ -537,7 +537,8 @@ test('the ride card share sheets keep their buttons reachable: the backdrop and 
     const code = fs.readFileSync(path.join(__dirname, '..', '..', file), 'utf8');
     assert.match(code, /style=\{\w+\.modalOverlay\} onPress=\{\(\) => set\w+\(null\)\} accessible=\{false\}>/, file);
     assert.match(code, /style=\{\w+\.modalContent\} onPress=\{\(\) => \{\}\} accessible=\{false\}>/, file);
-    assert.match(code, /style=\{\w+\.modalClose\} accessibilityRole="button" accessibilityLabel="Close">/, file);
+    // A plain Pressable needs its own role and label; the kit's GameButton carries both from its label.
+    assert.match(code, /style=\{\w+\.modalClose\} accessibilityRole="button" accessibilityLabel="Close">|<GameButton label="Close"[^\n]*style=\{\w+\.modalClose\} \/>/, file);
   }
 });
 

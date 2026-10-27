@@ -1,6 +1,7 @@
 import { BlurView } from 'expo-blur';
 import { ReactNode } from 'react';
 import { Dimensions, Text } from 'react-native';
+import { UpperText } from '../../ui/upper';
 
 export default function WarningMessage({
   title,
@@ -27,7 +28,7 @@ export default function WarningMessage({
         paddingRight: 48,
       }}
     >
-      <Text
+      <UpperText
         style={{
           color: 'white',
           fontFamily: 'Shark',
@@ -43,7 +44,7 @@ export default function WarningMessage({
         }}
       >
         {title}
-      </Text>
+      </UpperText>
       <Text
         style={{
           color: 'white',

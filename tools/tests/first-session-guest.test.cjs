@@ -712,7 +712,8 @@ test('warm-up sky: four outlined clouds and a two-card picture cue replace the s
 test('first hunt map: no Trail Box pill or badge, no chest buttons during the 30 s, ticket chip dimmed, level chests wait too', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /\{player && !park && permissionGranted && !firstHunt && !finnOwnsMap && \(\s*<View pointerEvents="box-none"[^>]*>\s*<TrailHost/);
-  assert.match(explore, /const mapControls = firstVisitHold \? null :/);
+  assert.match(explore, /const mapControlsCount = firstVisitHold \? 0 :/);
+  assert.match(explore, /const mapControls = mapControlsCount > 0 \?/);
   assert.match(explore, /screenFree: chestScreenFree && !firstVisitHold && !chestShowing/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /trailHidden=\{firstHunt\}/);

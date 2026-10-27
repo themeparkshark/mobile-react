@@ -41,6 +41,7 @@ import { faceFor } from './faces';
 import { setFirstWinCoinSpot } from './firstWinHandoff';
 import { AlbumBody, ChallengeBody, NewChip, ShareBack, type DailySummary, type RunRewards } from './MemoryExtras';
 import { MM } from './theme';
+import countText from '../../helpers/countText';
 
 const BANNER = require('../../assets/games/memory/v8/results_banner.png');
 const CROWN = require('../../assets/games/memory/studio/crown.png');
@@ -576,7 +577,7 @@ function Numbers({ data, reducedMotion, tallyOnly = false, statsOnly = false }: 
       {data.tally && !statsOnly ? (
         <View style={styles.tally}>
           <Animated.Text style={[styles.tallyParts, jigSt]} numberOfLines={1} adjustsFontSizeToFit>{data.tally.parts}</Animated.Text>
-          <Animated.Text style={[styles.tallyTotal, totSt]}>{data.tally.total.toLocaleString('en-US')}</Animated.Text>
+          <Animated.Text style={[styles.tallyTotal, totSt]}>{countText(data.tally.total)}</Animated.Text>
         </View>
       ) : null}
       {tallyOnly ? null : <View style={styles.numRow}>

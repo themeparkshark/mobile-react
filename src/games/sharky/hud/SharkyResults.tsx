@@ -31,6 +31,7 @@ import { SHARKY_ART } from '../assets';
 import { INK, NEUTRAL, REWARD, REWARD_PALE, DANGER } from '../render/palette';
 import type { MissionUpdate } from '../meta/missions';
 import { missionTarget, missionText } from '../meta/missions';
+import countText from '../../../helpers/countText';
 
 export interface SharkyResultsData {
   score: number;
@@ -175,7 +176,7 @@ export function SharkyResults({ data, playAgain, claim, claimLabel, challenge, c
       </View>
 
       <Animated.View style={[styles.card, cardStyle]}>
-        <Animated.Text style={[styles.score, scoreStyle]}>{shown.toLocaleString()}</Animated.Text>
+        <Animated.Text style={[styles.score, scoreStyle]}>{countText(shown)}</Animated.Text>
         {data.newBest ? <Text style={styles.newBest}>NEW BEST</Text> : null}
         <View style={styles.stars}>
           {[0, 1, 2].map((i) => <Star key={i} index={i} on={i < data.stars} delayMs={1450 + i * 220} reduced={reducedMotion} />)}

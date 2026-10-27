@@ -55,6 +55,7 @@ import {
   bleedFraction, fillFraction, earnedDate, hasRewards, hasShine, progressLabel, rarityRank, remainingLine, requirement, rewardChips, rewardSpeech, whereFor,
   type BookStamp, type Where,
 } from './model';
+import countText from '../../helpers/countText';
 
 const ART = 220;
 /** Dev-only capture aid: EXPO_PUBLIC_SLAM_SLOWMO=4 plays the first-view slam 4x slower so an overloaded simulator records every beat. Always 1 in release. */
@@ -274,7 +275,7 @@ function Frame(props: Props & { stamp: BookStamp }) {
                 hudLayout.current.hud[kind] = { x: x + width / 2, y: y + height / 2 };
               }}>
                 <GameIcon name={KIND_ICON[kind]} size={22} />
-                <Text style={styles.hudText} maxFontSizeMultiplier={1.4}>{shown[kind].toLocaleString('en-US')}</Text>
+                <Text style={styles.hudText} maxFontSizeMultiplier={1.4}>{countText(shown[kind])}</Text>
               </View>
             ))}
           </View>

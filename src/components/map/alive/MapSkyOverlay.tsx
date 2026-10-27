@@ -180,7 +180,7 @@ export const MapLightOverlay = memo(function MapLightOverlay({ width, height }: 
       {vignette && (
         <Rect x={0} y={0} width={width} height={height}>
           <RadialGradient c={vec(width / 2, height * 0.55)} r={Math.hypot(width, height) * 0.6}
-            colors={['rgba(8,20,58,0)', 'rgba(8,20,58,0)', `rgba(8,20,58,${(0.5 * light.vignette).toFixed(3)})`]} positions={[0, 0.5, 1]} />
+            colors={['rgba(6,62,140,0)', 'rgba(6,62,140,0)', `rgba(6,62,140,${(0.5 * light.vignette).toFixed(3)})`]} positions={[0, 0.5, 1]} />
         </Rect>
       )}
     </Canvas>

@@ -1,5 +1,6 @@
 import { Text, View } from 'react-native';
 import config from '../config';
+import { UpperText } from '../ui/upper';
 
 export default function Heading({ text }: { readonly text: string }) {
   return (
@@ -10,7 +11,7 @@ export default function Heading({ text }: { readonly text: string }) {
         paddingHorizontal: 4,
       }}
     >
-      <Text
+      <UpperText
         style={{
           fontFamily: 'Shark',
           fontSize: 18,
@@ -20,7 +21,7 @@ export default function Heading({ text }: { readonly text: string }) {
         }}
       >
         {text}
-      </Text>
+      </UpperText>
       <View
         style={{
           height: 3,

@@ -9,17 +9,23 @@ import {
 } from '../context/SoundEffectProvider';
 import ProfileStatIcon from './ProfileStatIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import countText from '../helpers/countText';
+import GameIcon, { type GameIconName } from '../ui/GameIcon';
+import { UpperText } from '../ui/upper';
 
 export function AnimatedStat({
   label,
   value,
   iconIndex,
   delay,
+  gameIcon,
 }: {
   label: string;
   value: number;
   iconIndex: number;
   delay: number;
+  /** A drawn GameIcon in place of the stat atlas cell (coins you spend wear the coin stack app-wide). */
+  gameIcon?: GameIconName;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const animValue = useRef(new Animated.Value(0)).current;
@@ -127,7 +133,7 @@ export function AnimatedStat({
         <Animated.View style={{ alignItems: 'center', opacity: animValue,
           transform: [{ scale: cardScale }] }}>
         <Animated.View style={{ marginBottom: 6, transform: [{ translateY: iconBounce }] }}>
-          <ProfileStatIcon index={iconIndex} />
+          {gameIcon ? <GameIcon name={gameIcon} size={36} /> : <ProfileStatIcon index={iconIndex} />}
         </Animated.View>
         <Text
           style={{
@@ -137,9 +143,9 @@ export function AnimatedStat({
             textAlign: 'center',
           }}
         >
-          {displayNum.toLocaleString()}
+          {countText(displayNum)}
         </Text>
-        <Text
+        <UpperText
           numberOfLines={1}
           adjustsFontSizeToFit
           style={{
@@ -152,7 +158,7 @@ export function AnimatedStat({
           }}
         >
           {label}
-        </Text>
+        </UpperText>
         </Animated.View>
       </View>
     </Pressable>
@@ -166,8 +172,12 @@ export function visibleCount(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export default function Stats({ player, hideBalances = false }: {
+export default function Stats({ player, hideBalances = false, rideCoins = null, parks = null }: {
   readonly player: PlayerType;
+  /** Parks counted from the Your Parks rows (one source with the park list); null keeps the player count. */
+  readonly parks?: number | null;
+  /** Ride coins summed from the Your Parks rows (one source with the park list); null keeps the player count. */
+  readonly rideCoins?: number | null;
   /** Another player who is not your friend: balances and park history are private (the kid-safety backend sends 0 or null). */
   readonly hideBalances?: boolean;
 }) {
@@ -181,18 +191,19 @@ export default function Stats({ player, hideBalances = false }: {
     },
     {
       label: 'Ride Coins',
-      value: visibleCount(player.park_coins_count),
+      value: rideCoins ?? visibleCount(player.park_coins_count),
       iconIndex: 1,
     },
     {
       label: 'Parks',
-      value: hideBalances || limited ? null : visibleCount(player.visited_parks_count),
+      value: hideBalances || limited ? null : parks ?? visibleCount(player.visited_parks_count),
       iconIndex: 2,
     },
     {
       label: 'Coins',
       value: hideBalances ? null : visibleCount(player.coins),
       iconIndex: 3,
+      gameIcon: 'coins' as GameIconName,
     },
     {
       label: 'Ride Wins',
