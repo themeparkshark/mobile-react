@@ -941,9 +941,9 @@ function BananaRun({
       note: stars === 0 ? undefined : cmp ? cmp.line : next ? `+${next.delta} TO ${next.label}` : undefined,
       spokenNote: stars === 0 ? tipLine(facts) : undefined,
       rival: g ? { name: g.name, score: g.final } : null,
+      // The juggle and the pile are pictures in the rows under the score (ResultsRows): the chips
+      // never say them twice, and no percent is drawn.
       stats: [
-        { label: 'BALL SHARE', value: `${share}%` },
-        { label: 'BEST JUGGLE', value: `${s.bestLife}` },
         { label: 'PERFECT', value: `${s.perfects}` },
       ],
       meta: {
