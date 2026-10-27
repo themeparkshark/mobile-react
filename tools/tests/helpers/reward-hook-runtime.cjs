@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+let motionModule;
+const loadMotion = () => (motionModule ??= require('./ts-module.cjs').loadTs('src/ui/motion.ts'));
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -55,9 +57,9 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
   }).outputText;
   const code = transpile(fs.readFileSync(path.join(root, file), 'utf8'));
   // Shared app hooks that every poll uses run for real in the component's realm.
-  const realModules = { useLivePoll: 'src/hooks/useLivePoll.ts', livePollPolicy: 'src/hooks/livePollPolicy.ts',
+  const realModules = { countText: 'src/helpers/countText.ts', useLivePoll: 'src/hooks/useLivePoll.ts', livePollPolicy: 'src/hooks/livePollPolicy.ts',
     gpsWatchPolicy: 'src/context/gpsWatchPolicy.ts', positionFilter: 'src/context/positionFilter.ts', useUserIdle: 'src/hooks/useUserIdle.ts', powerPolicy: 'src/power/powerPolicy.ts', appActive: 'src/hooks/appActive.ts',
-    matchLink: 'src/services/match/matchLink.ts', useMatchLink: 'src/hooks/useMatchLink.ts' };
+    matchLink: 'src/services/match/matchLink.ts', useMatchLink: 'src/hooks/useMatchLink.ts', gameMoments: 'src/gamekit/core/gameMoments.ts' };
   const realCache = new Map();
   let sandbox;
   const loadReal = name => {
@@ -80,6 +82,11 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (name === 'react-native-reanimated') { const transition = { duration() { return this; }, delay() { return this; } }; return { default: { View: 'ReanimatedView', createAnimatedComponent: type => type }, FadeIn: transition, FadeOut: transition, SlideOutDown: transition,
         useSharedValue: value => react.useRef({ value }).current, makeMutable: value => ({ value }), useAnimatedStyle: fn => fn(),
         useDerivedValue: fn => react.useEffect(fn),
+        // A frame callback runs its frames at once (16 ms apart) while it is active: no real display here.
+        useFrameCallback: fn => { const ref = react.useRef(null); if (!ref.current) { const h = { isActive: false, running: false, setActive(on) {
+          h.isActive = on; if (!on || h.running) return; h.running = true;
+          for (let i = 0; i < 2000 && h.isActive; i++) h.fn({ timestamp: i * 16, timeSincePreviousFrame: i === 0 ? null : 16, timeSinceFirstFrame: i * 16 });
+          h.running = false; } }; ref.current = h; } ref.current.fn = fn; return ref.current; },
         Easing: native.Easing, cancelAnimation: value => cancelled.push(value),
         runOnJS: fn => (...args) => { jsCalls.push({ fn, args }); return fn(...args); },
         withTiming: value => { motions.push('timing'); return value; }, withSpring: value => { motions.push('spring'); return value; }, withDelay: (ms, value) => value,
@@ -99,12 +106,24 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)power$/.test(name)) return { usePowerBudget: () => ({ level: 'full', ambient: true, animate: true,
         pollMultiplier: 1, particleScale: 1, gpsRest: false, compass: true, lowPower: false, idle: false }),
         useBudgetedPoll() {}, budgetedInterval: (ms, b) => (Number.isFinite(b.pollMultiplier) && ms > 0 ? ms * Math.max(1, b.pollMultiplier) : null), useBatterySaver: () => false, setBatterySaver() {} };
+      // The shared motion language (src/ui/motion.ts): real timings, stub curves; the gold art is a plain node.
+      if (/(^|\/)ui\/motionEasing$/.test(name) || /(^|\/)ui\/motion$/.test(name)) {
+        const motion = loadMotion();
+        return { ...motion, EASE: { out: native.Easing?.out, in: native.Easing?.in, inOut: native.Easing?.inOut, charge: native.Easing?.inOut } };
+      }
+      // iOS Dim Flashing Lights reads off unless a test stubs it.
+      if (/(^|\/)modules\/flash-safety$/.test(name)) return { isDimFlashingLightsEnabled: () => false };
+      if (/(^|\/)ui\/GoldBurst$/.test(name)) return { GoldBurst: 'GoldBurst', SparkleBurst: 'SparkleBurst', ShineSweep: 'ShineSweep' };
       // Money offers on reward sheets (money stream): no server multiplier, so the generic VIP line.
       if (/(^|\/)services\/money\/offers$/.test(name)) return { vipWinLine: () => null };
       if (/(^|\/)services\/money\/vipNudge$/.test(name)) return { useVipNudge: () => false, markVipNudgeShown() {} };
       if (/(^|\/)services\/money\/vipPerks$/.test(name)) return { warmVipPerks: async () => undefined, vipRideMultiplierNow: () => null };
       // Shark Events: no event, no Star Rides (the flag is off on an old server).
       if (/(^|\/)services\/liveEvents\/useLiveEvent$/.test(name)) return { useStarRides: () => new Set(), resetLiveEvent() {} };
+      // The in-game moment layer (wow-games): sound, buzz and the drawn count and last-5 are plain nodes.
+      if (/(^|\/)audio\/gameMomentSound$/.test(name)) return { playGameMoment() {}, playGameHaptic() {}, setGameMomentStudio() {}, gameMomentStudioOn: () => false };
+      if (/(^|\/)fx\/CountdownStage$/.test(name)) return { CountdownStage: 'CountdownStage' };
+      if (/(^|\/)fx\/FinalSeconds$/.test(name)) return { FinalSeconds: 'FinalSeconds' };
       if (name.includes('assets/')) return name;
       return { default: name };
     },

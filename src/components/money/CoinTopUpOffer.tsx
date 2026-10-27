@@ -31,6 +31,7 @@ import { storeAvailable } from '../../services/purchases';
 import { BRAND, FONT, GameIcon, gameAlert } from '../../ui';
 import { CARD, GotIt, MAX_FONT, PackArt, PriceBar, currencyIcon, packArtKey, unitWord, type PackArtKey } from './moneyUi';
 import { topUpHeadline, type TopUpCurrency, type TopUpReason } from '../../services/money/copy';
+import countText from '../../helpers/countText';
 
 export type { TopUpCurrency, TopUpReason };
 
@@ -99,11 +100,11 @@ export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins
             <View style={st.artWell}><PackArt art={packArtKey(pack, Math.max(0, tier))} size={58} /></View>
             <View style={{ flex: 1, minWidth: 0, paddingVertical: 8 }}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={st.packName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>
-                {pack.section === 'featured' ? pack.title : `${amount.toLocaleString('en-US')} ${unitWord(kind, amount)}`}
+                {pack.section === 'featured' ? pack.title : `${countText(amount)} ${unitWord(kind, amount)}`}
               </Text>
               {pack.section === 'featured' && (
                 <Text maxFontSizeMultiplier={MAX_FONT} style={st.packSub} numberOfLines={2}>
-                  {`${amount.toLocaleString('en-US')} ${unitWord(kind, amount)} and more`}
+                  {`${countText(amount)} ${unitWord(kind, amount)} and more`}
                 </Text>
               )}
               <Text maxFontSizeMultiplier={MAX_FONT} style={st.packSub}>A grown-up buys it</Text>

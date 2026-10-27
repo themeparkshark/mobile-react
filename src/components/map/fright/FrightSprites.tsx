@@ -8,6 +8,7 @@
  */
 import { BlurMask, Circle, Group, Image as SkImage, ImageShader, Oval, Path, RadialGradient, Rect, Skia, vec, type SkImage as SkImageType } from '@shopify/react-native-skia';
 import { FrightCanvas } from './frightRepaint';
+import { GameIcon } from '../../../ui';
 import { Image } from 'expo-image';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -425,7 +426,7 @@ export const HauntLantern = memo(function HauntLantern({ spotKey, flicker, windo
         accessibilityElementsHidden={!done} accessibilityLabel={beads > 1 ? `Survived ${beads} times tonight` : 'Survived'}>
         <Image source={survivedPin ? { uri: survivedPin } : null} style={[styles.survivedPin, !survivedPin && styles.gone]}
           contentFit="contain" cachePolicy="memory-disk" transition={0} />
-        <View style={styles.check}><Text style={styles.checkText}>✓</Text></View>
+        <GameIcon name="check" size={20} style={styles.check} />
       </View>
       <View style={[styles.chip, dim && styles.chipDim, done && styles.chipDone, !label && styles.gone, shift ? { transform: [{ translateX: shift }] } : null]}
         onLayout={event => {
@@ -808,8 +809,7 @@ const styles = StyleSheet.create({
   // Survived: the pin at the facade's top right with a check badge (replaces the old "1" bead).
   survived: { position: 'absolute', top: 2, left: LANTERN_W / 2 + 14, width: 34, height: 34 },
   survivedPin: { width: 34, height: 34 },
-  check: { position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: 9, alignItems: 'center',
-    justifyContent: 'center', backgroundColor: NIGHT.candy, borderWidth: 2, borderColor: NIGHT.ink },
-  checkText: { fontSize: 11, lineHeight: 13, fontWeight: '900', color: NIGHT.ink },
+  // The drawn check from the icon kit (a text check is not in the game fonts).
+  check: { position: 'absolute', right: -4, bottom: -4 },
   chipDone: { borderColor: NIGHT.candy },
 });

@@ -119,7 +119,7 @@ export const FlyHeart = memo(function FlyHeart({ dx, dy, onDone }: { readonly dx
   return (
     <View pointerEvents="none" style={styles.fly}>
       <Animated.View style={heart}><GameIcon name="heart" size={30} /></Animated.View>
-      <Animated.View style={[styles.flyCoin, coin]}><GameIcon name="coin" size={24} /></Animated.View>
+      <Animated.View style={[styles.flyCoin, coin]}><GameIcon name="coins" size={24} /></Animated.View>
     </View>
   );
 });

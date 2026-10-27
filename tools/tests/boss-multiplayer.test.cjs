@@ -156,7 +156,7 @@ test('crew ticker and raid log: positive lines, names for self and friends, park
     { playerId: 3, name: 'Secret', alias: 'Tide Pup 2', self: false, friend: false, crewmate: true, damage: 910, breaks: [], skillStar: false, gotUp: true, at: 4000 },
     { playerId: 2, name: 'Maya', alias: 'Reef Ray 9', self: false, friend: true, crewmate: true, damage: 300, breaks: [], skillStar: false, gotUp: false, at: 500 },
   ];
-  assert.equal(ts.crewTickerLine('the Kraken', bouts, day), 'Your crew hit the Kraken for 4,210 today. Maya broke the hat.');
+  assert.equal(ts.crewTickerLine('the Kraken', bouts, day), 'Your crew hit the Kraken for 4210 today. Maya broke the hat.');
   assert.equal(ts.crewTickerLine('the Kraken', [], day), null);
   const log = ts.raidLog(bouts);
   assert.equal(JSON.stringify(log.map((r) => r.who)), JSON.stringify(['Maya', 'You', 'Tide Pup 2']));

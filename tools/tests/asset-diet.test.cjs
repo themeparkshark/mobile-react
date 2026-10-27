@@ -56,7 +56,19 @@ test('the unused 3D avatar, its model and its GL stack are gone from the binary'
 });
 
 test('the JS splash and the native launch screen use the same art', () => {
-  assert.match(read('src/screens/SplashScreen.tsx'), /assets\/images\/splash-bg\.png/);
+  // The Splash route, the Loading screen and the map's first cover all draw the one launch scene.
+  assert.match(read('src/screens/SplashScreen.tsx'), /return <LaunchScene active=\{focused\} \/>;/);
+  // The native launch screen draws splash-bg.png; the JS scene draws the same art as a small JPEG
+  // (same picture and proportions, decoded fast while the native splash is up).
+  assert.match(read('src/components/launch/LaunchScene.tsx'), /assets\/images\/launch-art\.jpg/);
+  assert.match(read('app.config.js'), /image: '\.\/assets\/images\/splash-bg\.png'/);
+  const jpg = fs.readFileSync(path.join(root, 'assets/images/launch-art.jpg'));
+  assert.ok(jpg.length < 300 * 1024, `launch-art.jpg is ${jpg.length} bytes`);
+  const png = fs.readFileSync(path.join(root, 'assets/images/splash-bg.png'));
+  let i = 2; let size = null;
+  while (i < jpg.length) { const m = jpg[i + 1]; const len = jpg.readUInt16BE(i + 2); if (m >= 0xc0 && m <= 0xc2) { size = [jpg.readUInt16BE(i + 7), jpg.readUInt16BE(i + 5)]; break; } i += 2 + len; }
+  assert.ok(size && size[0] <= 800, `launch-art.jpg is ${size}`);
+  assert.ok(Math.abs(size[1] / size[0] - png.readUInt32BE(20) / png.readUInt32BE(16)) < 0.01, 'same proportions as the native art');
   assert.ok(!fs.existsSync(path.join(root, 'assets/splash.png')), 'the old black 1-bit splash.png is gone');
 });
 
@@ -68,4 +80,17 @@ test('map sprites are sized for their marker (3x the largest display size)', () 
     ['assets/images/sword-marker.gif', 160], ['assets/images/screens/explore/vault_animation.gif', 210]]) {
     assert.ok(Math.max(...dims(file)) <= maxSide, `${file} is ${dims(file).join('x')}`);
   }
+});
+
+// app.config.js `icon` and `splash.image` are hashed into the runtime
+// fingerprint (@expo/fingerprint expoConfigAssets). Changing their bytes in an
+// OTA sends the update to a runtime no binary has, so new splash art ships as
+// a separate JS asset that fades in over the unchanged launch art.
+test('fingerprinted config art keeps the 1.7.3 binary bytes', () => {
+  const crypto = require('node:crypto');
+  const sha1 = file => crypto.createHash('sha1').update(fs.readFileSync(path.join(root, file))).digest('hex');
+  assert.equal(sha1('assets/images/splash-bg.png'), 'f5871f674fb979d5721e342eb7003a85fd0c2498', 'splash-bg.png is the native launch art: change it only with a new binary');
+  assert.equal(sha1('assets/icon.png'), '924255ffa6ebe1697ce3d1acaf23c942a82553e2', 'icon.png is native: change it only with a new binary');
+  // New splash art is a JS asset: the launch scene's launch-art.jpg (foam finger plus the title).
+  assert.match(read('src/screens/SplashScreen.tsx'), /<LaunchScene /);
 });

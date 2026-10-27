@@ -4,6 +4,7 @@ import * as Haptics from '../helpers/haptics';
 import { colors, shadows, borderRadius, spacing, typography } from '../design-system';
 import { onToast } from '../utils/toast';
 import { BRAND, GameIcon, GameRichText, iconForEmoji, resolveIconName, type GameIconName } from '../ui';
+import { UpperText } from '../ui/upper';
 
 // Toast types
 type ToastType = 'success' | 'error' | 'warning' | 'info' | 'reward';
@@ -199,7 +200,7 @@ function ToastItem({
               hide();
             }}
           >
-            <Text style={styles.actionText}>{toast.action.label}</Text>
+            <UpperText style={styles.actionText}>{toast.action.label}</UpperText>
           </TouchableOpacity>
         )}
       </TouchableOpacity>

@@ -2,9 +2,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
+import RideTrackerFrame from './RideTrackerFrame';
+import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import * as Haptics from 'expo-haptics';
 import { getRideCollections, RideCollection } from '../../api/endpoints/rides/collections';
 import RideTypeIcon from '../../components/RideTracker/RideTypeIcon';
@@ -12,6 +11,8 @@ import { colors, shadows, borderRadius } from '../../design-system';
 import { GameIcon, gameAlert, SharkLoader } from '../../ui';
 import { serverIcon } from '../../components/RideTracker/rideIcons';
 
+import RideTrackerEmpty from './RideTrackerEmpty';
+import { useNavigation } from '@react-navigation/native';
 // ─── Collection Card ───
 interface CollectionCardProps {
   collection: RideCollection;
@@ -103,14 +104,7 @@ export default function RideCollectionsScreen() {
   }, [fetchData]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
-          <GameIcon name="back" size={36} accessibilityLabel="Back" />
-        </Pressable>
-        <Text style={styles.title}>COLLECTIONS</Text>
-        <View style={{ width: 40 }} />
-      </LinearGradient>
+    <RideTrackerFrame title="Collections" style={styles.container}>
 
       {loading || (failed && !collections.length) ? (
         <SharkLoader state={loading ? 'loading' : 'error'} title={loading ? undefined : "Collections didn't load"} onRetry={firstLoad} />
@@ -120,11 +114,8 @@ export default function RideCollectionsScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
         >
           {collections.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <GameIcon name="trophy" size={72} />
-              <Text style={styles.emptyTitle}>No collections yet!</Text>
-              <Text style={styles.emptySubtitle}>Collections will appear here as they're added</Text>
-            </View>
+            <RideTrackerEmpty title="No collections yet!" body="Ride sets show up here. Log rides to start filling them."
+              action={{ label: 'Log a ride', icon: 'ride', onPress: () => navigation.navigate('RideLog') }} />
           ) : (
             collections.map(c => (
               <CollectionCard key={c.id} collection={c} onPress={() => {
@@ -138,7 +129,7 @@ export default function RideCollectionsScreen() {
           )}
         </ScrollView>
       )}
-    </SafeAreaView>
+    </RideTrackerFrame>
   );
 }
 
@@ -170,7 +161,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
-  content: { padding: 16, paddingBottom: 60 },
+  content: { padding: 16, paddingBottom: FOOTER_CLEARANCE },
   // Collection card
   collCard: {
     backgroundColor: '#FFFFFF', 

@@ -10,6 +10,8 @@ import {
 import LottieView from 'lottie-react-native';
 import * as Haptics from '../helpers/haptics';
 import config from '../config';
+import { GameIcon } from '../ui';
+import countText from '../helpers/countText';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -216,21 +218,21 @@ function StarParticle({ angle, color, delay }: { angle: number; color: string; d
     outputRange: ['0deg', '360deg'],
   });
 
+  // A drawn star from the icon kit on a soft tinted disc (never the star emoji). The disc is a
+  // plain rounded view, not an iOS shadow: a shadow on a moving view renders offscreen every frame.
   return (
-    <Animated.Text
+    <Animated.View
       style={{
         position: 'absolute',
-        fontSize: 24,
-        color,
         transform: [{ translateX }, { translateY }, { rotate: spin }, { scale }],
         opacity,
-        textShadowColor: color,
-        textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
     >
-      ⭐
-    </Animated.Text>
+      <View style={{ position: 'absolute', width: 32, height: 32, borderRadius: 16, backgroundColor: color, opacity: 0.3 }} />
+      <GameIcon name="star" size={26} />
+    </Animated.View>
   );
 }
 
@@ -465,7 +467,7 @@ export function AnimatedCounter({
 
   return (
     <Animated.Text style={[style, { transform: [{ scale }] }]}>
-      {prefix}{displayValue.toLocaleString()}{suffix}
+      {prefix}{countText(displayValue)}{suffix}
     </Animated.Text>
   );
 }

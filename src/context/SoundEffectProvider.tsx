@@ -9,6 +9,10 @@ import {
 } from 'react';
 import { AuthContext } from './AuthProvider';
 import { SFX } from '../gamekit/SFX';
+import { setAudioWanted } from '../gamekit/audio/startGate';
+import { loadStudioSoundFlag } from '../gamekit/audio/studioSwitch';
+import { studioTraceOn, traceEvent } from '../gamekit/audio/studioTrace';
+import getFeatureFlags from '../api/endpoints/platform/feature-flags';
 import { QUIET_CAPTURE, sfxAllowed } from './sfxPolicy';
 
 export interface SoundEffectContextType {
@@ -47,6 +51,12 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
     if (isReady) SFX.settingsKnown();
   }, [isReady]);
 
+  // Studio sound switch (wow-sound): reads the `studio_sound` flag once the player's settings are in
+  // (STUDIO_SOUND_DEFAULT is on since Dustin's yes, Oct 24).
+  useEffect(() => {
+    if (isReady) void loadStudioSoundFlag(getFeatureFlags);
+  }, [isReady]);
+
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -59,6 +69,11 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
     };
   }, []);
 
+  // The low-latency audio graph only wakes the audio hardware while the player can hear something.
+  useEffect(() => {
+    setAudioWanted(!(isReady && !player?.enabled_sound_effects), !(isReady && !player?.enabled_music));
+  }, [isReady, player?.enabled_sound_effects, player?.enabled_music]);
+
   const releaseSound = (sound: Audio.Sound) => {
     if (!activeSounds.current.delete(sound)) return;
     sound.setOnPlaybackStatusUpdate(null);
@@ -69,6 +84,14 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
     <SoundEffectContext.Provider
       value={{
         playSound: async (pendingSound: any, options?: { volume?: number; rate?: number }) => {
+          if (studioTraceOn()) {
+            // Silent trace (dev lanes): log the legacy sound, never open an expo-av player.
+            // Lazy: the trace backend (and expo-asset) loads only in a dev trace build.
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { assetPath } = require('../gamekit/audio/traceBackend') as typeof import('../gamekit/audio/traceBackend');
+            traceEvent('legacy', 'playSound', `asset ${assetPath(pendingSound)}${options?.volume !== undefined ? ` vol ${options.volume}` : ''}`);
+            return;
+          }
           if (!allowed) {
             return;
           }

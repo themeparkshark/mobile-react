@@ -30,6 +30,7 @@ import useMatchLink from '../../hooks/useMatchLink';
 import MatchLinkBanner from '../match/MatchLinkBanner';
 import { LINK_COPY, type LinkPhase } from '../../services/match/matchLink';
 import { idlePollInterval } from '../../hooks/useUserIdle';
+import countText from '../../helpers/countText';
 
 /** Poll the park's raid while at a park. `loaded` is false until the first answer for this player and park. */
 export function useParkRaid(parkId: number | null | undefined, { focused = true, idle = false }: {
@@ -170,7 +171,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     if (sentAtBell.current) setReceipt(result.ok ? { state: 'saved', note: null } : { state: 'error', note: ERRORS[result.error] });
     if (result.ok) {
       onState(result.state);
-      setNote(`Confirmed! You hit ${BOSS_NAMES[checkpoint.boss]} for ${result.damage.toLocaleString()}.`);
+      setNote(`Confirmed! You hit ${BOSS_NAMES[checkpoint.boss]} for ${countText(result.damage)}.`);
     } else {
       if (result.state) onState(result.state);
       setNote(ERRORS[result.error]);

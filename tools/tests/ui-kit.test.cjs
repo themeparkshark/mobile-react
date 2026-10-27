@@ -258,11 +258,11 @@ test("GameButton: Dustin's own button art and YellowButton's label, sized from t
   const style = label(view).props.style;
   for (const [key, value] of Object.entries({ fontFamily: 'Shark', color: 'white', textTransform: 'uppercase',
     textShadowColor: 'rgba(0, 0, 0, .5)', textShadowRadius: 0 })) assert.equal(style[key], value, `label ${key}`);
-  assert.equal(labelArea(view).props.style.opacity, 0, 'label hidden for the frame before layout');
+  assert.equal(labelArea(view).props.style.opacity, undefined, 'the label draws with the art from the first frame (never a missing button)');
+  assert.ok(label(view).props.style.fontSize < 72, 'before layout the label size comes from a width guess, not the 72 pt ceiling');
   labelArea(view).props.onLayout({ nativeEvent: { layout: { height: 52 } } });
   view.render();
   assert.equal(label(view).props.style.fontSize, 24, 'label size follows the measured label area');
-  assert.equal(labelArea(view).props.style.opacity, 1);
   const outer = [].concat(pressable().props.style).find(entry => entry && entry.maxWidth);
   assert.equal(outer.maxWidth, 320);
   const before = view.motions.length;

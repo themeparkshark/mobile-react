@@ -20,6 +20,7 @@ import Wrapper from '../components/Wrapper';
 import { SocialPostType } from '../models/social-post-type';
 import { BRAND, FONT, GameButton, GameDialog, GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { UpperText } from '../ui/upper';
 
 export default function WatchScreen() {
   const [loading, setLoading] = useState<boolean>(true);
@@ -304,9 +305,9 @@ export default function WatchScreen() {
                   <View style={[styles.banner, toEarn === 0 && styles.bannerDone]}>
                     <Image source={COIN_ART} style={styles.bannerCoin} contentFit="contain" />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.bannerTitle}>
+                      <UpperText style={styles.bannerTitle}>
                         {toEarn === 0 ? 'All caught up!' : `Watch a video, get +${COIN_REWARD} coins`}
-                      </Text>
+                      </UpperText>
                       <WatchMeter watched={watchedCount} total={videos.length} />
                     </View>
                     {toEarn === 0 && <GameIcon name="check" size={28} />}
@@ -322,7 +323,7 @@ export default function WatchScreen() {
                 {gridVideos.length > 0 && (
                   <View style={styles.sectionRow}>
                     <GameIcon name="play" size={20} />
-                    <Text style={styles.section}>More videos</Text>
+                    <UpperText style={styles.section}>More videos</UpperText>
                   </View>
                 )}
               </View>
@@ -335,7 +336,7 @@ export default function WatchScreen() {
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={videos.length > 0 ? null : (
               <View style={styles.empty}>
-                <Text style={styles.emptyTitle}>{failed ? 'Videos are taking a break' : 'No videos yet'}</Text>
+                <UpperText style={styles.emptyTitle}>{failed ? 'Videos are taking a break' : 'No videos yet'}</UpperText>
                 <Text style={styles.emptyText}>
                   {failed ? 'Check your internet and try again.' : 'Pull down to check for new ones.'}
                 </Text>

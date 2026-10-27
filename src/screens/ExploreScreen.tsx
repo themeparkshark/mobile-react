@@ -4,11 +4,11 @@ import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
-import { Text, View, Pressable, StyleSheet } from 'react-native';
+import { Dimensions, Text, View, Pressable, StyleSheet } from 'react-native';
 import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
 import useLivePoll from '../hooks/useLivePoll';
 import useUserIdle, { idlePollInterval, markUserActivity } from '../hooks/useUserIdle';
-import { everyRideTrulyOpen, nearbyOpportunityOpen, opportunityIsActive } from './ExploreScreen/mapOpportunityTiming';
+import { nearbyOpportunityOpen, opportunityIsActive } from './ExploreScreen/mapOpportunityTiming';
 import { TaskType } from '../models/task-type';
 import currencyBalance from '../helpers/currency-balance';
 import * as RootNavigation from '../RootNavigation';
@@ -26,6 +26,8 @@ import Currency from '../components/Topbar/Currency';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import UsernameBanner from '../components/Topbar/UsernameBanner';
 import Wrapper from '../components/Wrapper';
+import MapLaunchCover from '../components/map/MapLaunchCover';
+import { holdMapCover, launchCoverAhead, useCoverArt, useMapCovered, useMapOnScreen } from '../components/map/mapCover';
 import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import { LocationContext } from '../context/LocationProvider';
@@ -117,6 +119,7 @@ import { playSfx } from '../gamekit/SFX';
 import { AWAY_LINE, awayHeadline, awayMessage, stallAction } from '../components/fright/halloweenShop';
 import { useHelp } from '../components/help/HelpProvider';
 import OneTimeTip from '../components/help/OneTimeTip';
+import CoinTipPicture, { COIN_TIP_PICTURE_IMAGES } from '../components/help/CoinTipPicture';
 import HelpButton from '../components/help/HelpButton';
 import { mapTipReady, parkTipFor } from '../services/help/tipGate';
 // Map declutter: one HUD row, and every marker placed by priority (no overlaps).
@@ -134,8 +137,52 @@ import { limitedLabel } from '../services/collection/limitedCoins';
 import FindMarker from './ExploreScreen/FindMarker';
 import { SLOTS, useMarkerSlots } from '../components/map/markerSlots';
 import { PARKED } from '../components/map/Marker';
-import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, parkMapInsets, rideLayoutId, rideTagFor,
+import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, energyGap, parkMapInsets, rideLayoutId, rideTagFor,
   type FindLayoutInput, type FixedLayoutInput, type HauntLayoutInput } from './ExploreScreen/parkMapLayout';
+import { UpperText } from '../ui/upper';
+
+/** After the map cover lifts, Finn's park tips wait this long (the map, its pins and PLAY RIDE arrive first). */
+const MAP_CALM_MS = 5000;
+const WINDOW_WIDTH = Dimensions.get('window').width;
+/** Energy and Swords sit this far above the avatar, so the Energy pill always clears PLAY RIDE's top. */
+const ENERGY_GAP = energyGap(WINDOW_WIDTH);
+/**
+ * The two loading covers' styles, made once: the covers never re-render while they lift (a re-render
+ * resets an animated view to its mount-time opacity for a frame), so their props must not change.
+ */
+const SKY_COVER_STYLE = { top: 70 + (Constants.statusBarHeight ?? 0), zIndex: 45 } as const;
+const LAUNCH_COVER_STYLE = { zIndex: 100 } as const;
+/**
+ * Finn's "Tap PLAY RIDE!" card: one line and a picture, on the left just above the help button,
+ * ending before the Energy pill on the right, with a pointer down at PLAY RIDE. It never covers the
+ * player's shark, the chest or the right column. On a short phone (iPhone SE) Finn is smaller.
+ */
+const SHORT_MAP = Dimensions.get('window').height < 740;
+const COIN_TIP_WIDTH = Math.min(300, WINDOW_WIDTH - 124);
+/** Below this much room beside the right column, the card's title takes two lines and OK steps aside. */
+const COIN_TIP_ROOMY = 236;
+/** Below this much room, the card moves up a row, above the right column, instead of squeezing. */
+const COIN_TIP_MIN = 180;
+/**
+ * The card is as wide as its content (so OK sits close) and ends at least 8 pt before the right
+ * column (Energy, and the Trail Boxes pill above it when there is one, which is wider), measured
+ * live. With little room it gets narrow (two-line title, no OK word); with too little it moves up a
+ * row, above the column. The pointer aims at PLAY RIDE (the middle of the screen).
+ */
+function coinTipLayout(stores: number, column: { readonly width: number; readonly height: number }) {
+  const room = WINDOW_WIDTH - 12 - 16 - column.width - 8;
+  const above = room < COIN_TIP_MIN;
+  const maxWidth = above ? COIN_TIP_WIDTH : Math.min(COIN_TIP_WIDTH, room);
+  // On a short phone the card sits 3 pt lower (still 3 pt clear of the help button) so its top clears the player's island.
+  const bottom = above ? Math.max(bottomLeftColumnHeight(stores), 32 + column.height) + 8 : bottomLeftColumnHeight(stores) + (SHORT_MAP ? 3 : 6);
+  return {
+    style: { position: 'absolute', left: 12, maxWidth, bottom, zIndex: 40 } as const,
+    narrow: maxWidth < COIN_TIP_ROOMY,
+    pointer: Math.round(Math.min(maxWidth - 36, WINDOW_WIDTH * 0.42 - 12)),
+  };
+}
+/** Finn's park welcome: under the adventure card, ending before the right-hand button column (VIP, chest). */
+const PARK_WELCOME_TIP_STYLE = { position: 'absolute', left: 12, right: 78, top: 132, zIndex: 40 } as const;
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -163,10 +210,22 @@ const PARKED_TIME = '2000-01-01T00:00:00Z';
 // Friends drawn as ghost sharks at most (the closest).
 const GHOST_CAP = 5;
 
+/** True two frames after `after` is true (one commit later), for parts of the screen that can wait. */
+function useLateMount(after = true): boolean {
+  // With no frame clock (a test runner) there is nothing to draw between commits: mount at once.
+  const [late, setLate] = useState(typeof requestAnimationFrame !== 'function');
+  useEffect(() => {
+    if (late || !after) return undefined;
+    let second = 0;
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => setLate(true)); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+  }, [after]); // eslint-disable-line react-hooks/exhaustive-deps
+  return late;
+}
 /** A player whose home never confirms (weak GPS indoors) still meets Finn after this long. */
 export const ONBOARDING_FALLBACK_MS = 8000;
 
-function ExploreScreen() {
+export function ExploreScreenBody() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const mapFocused = useIsFocused();
   // Idle (no touch, no walking for 2 min): the map's live polls slow down.
@@ -278,6 +337,33 @@ function ExploreScreen() {
   const homeLocationConfirmed = !park && (isConfirmedOutsidePark(location, parkLookupRecord) ||
     isHomeMapConfirmed(location, homeAnchorRef.current));
 
+  // The map's loading cover is up: tips, tutorials and slams wait for the map to arrive.
+  const mapCovered = useMapCovered();
+  // A light first mount: the map, its HUD and the launch cover mount first; the overlays that start
+  // hidden (Community Center, Too Far, events, Fin-ister Nights, Home Hunt results, Daily 3 sheets)
+  // join two frames later in their own commit, so the phone draws the loading bar's creep in between.
+  const lateOverlays = useLateMount();
+  // The first seconds after the cover lifts belong to the map, its pins and PLAY RIDE: Finn's park
+  // tips wait MAP_CALM_MS, so a kid never meets a pile of cards (at most one card in that window).
+  // The window starts at the first VISIBLE map frame: this screen is on top (the Splash and Loading
+  // routes are gone), the cover has lifted and the map's tiles have drawn (or their wait ran out).
+  // Timing it from the cover's JS lift let a busy phone spend the 5 s behind the launch screens.
+  const mapOnScreen = useMapOnScreen() && mapFocused;
+  const [mapCalm, setMapCalm] = useState(false);
+  useEffect(() => {
+    if (!mapOnScreen) { setMapCalm(false); return; }
+    const timer = setTimeout(() => setMapCalm(true), MAP_CALM_MS);
+    return () => clearTimeout(timer);
+  }, [mapOnScreen]);
+  // At launch the home map can show for a moment before the park check settles and swaps in the
+  // park map. Hold the one cover (never past its deadline) until the screen knows which map it is.
+  const mapChoicePending = !!player && permissionGranted && !park && !homeLocationConfirmed;
+  // A park map also waits (inside the same budget) for its ride pins, so they arrive in the cover's
+  // fade instead of popping in a second after it.
+  const pinsPending = !!player && !!park && !redeemables && !mapLoadFailed;
+  const coverHold = mapChoicePending || pinsPending;
+  useEffect(() => { holdMapCover(coverHold); }, [coverHold]);
+  useEffect(() => () => holdMapCover(false), []);
   useEffect(() => {
     if (homeLocationConfirmed) return;
     setShowPrepItemModal(false);
@@ -287,7 +373,7 @@ function ExploreScreen() {
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
   const { startTutorial, hasCompleted, isReady, isActive, findLanded } = useTutorial();
-  const { explain, openHelpSheet } = useHelp();
+  const { explain, openHelpSheet, activeTip } = useHelp();
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
   const [adventureOccluded, setAdventureOccluded] = useState(false);
@@ -343,7 +429,7 @@ function ExploreScreen() {
   // for the first find to land next to the player, and only says "it landed
   // right next to you" when it really did.
   useEffect(() => {
-    if (!(mapFocused && player && isReady && permissionGranted && !isActive && !hasCompleted('onboarding') && !frightIntroOwns)) return;
+    if (!(mapOnScreen && player && isReady && permissionGranted && !isActive && !hasCompleted('onboarding') && !frightIntroOwns)) return;
     if (!parkLoaded || (!park && !homeLocationConfirmed)) {
       // Weak GPS indoors: home never confirms. Finn still comes, with the
       // honest "walk around" line (no find is promised), instead of a silent map.
@@ -357,7 +443,7 @@ function ExploreScreen() {
       startTutorial('onboarding', { inPark: !!park, findReady: !park && homeFindReady, looking: !park && !homeFindReady });
     }, wait);
     return () => clearTimeout(timer);
-  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns,
+  }, [mapOnScreen, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns,
     homeLocationConfirmed, homeFindReady]);
   // A find that lands while Finn already said "walk around" upgrades his line to "Grab it!".
   useEffect(() => { if (homeFindReady && isActive) findLanded?.(); }, [homeFindReady, isActive, findLanded]);
@@ -365,11 +451,13 @@ function ExploreScreen() {
   // A player who learned the home hunt should meet the park loop when they
   // actually arrive. Park-first players already saw these steps in onboarding.
   useEffect(() => {
-    if (!mapFocused || !player || !isReady || !parkLoaded || !permissionGranted || !park || isActive ||
+    // Finn's park lesson waits for the same calm window as his tips: the first seconds of a visible
+    // map belong to the map, its pins and PLAY RIDE.
+    if (!mapOnScreen || !mapCalm || !player || !isReady || !parkLoaded || !permissionGranted || !park || isActive ||
       !hasCompleted('onboarding') || hasCompleted('park_arrival') || frightIntroOwns) return;
-    const timer = setTimeout(() => startTutorial('park_arrival'), 1500);
+    const timer = setTimeout(() => startTutorial('park_arrival'), 300);
     return () => clearTimeout(timer);
-  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
+  }, [mapOnScreen, mapCalm, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial, frightIntroOwns]);
   
   const collectedOnce = useRef(false);
   const [caughtThisSession, setCaughtThisSession] = useState(false);
@@ -390,11 +478,17 @@ function ExploreScreen() {
   const [homeIntroOpen, setHomeIntroOpen] = useState(false);
   // The generic park tip is on screen: the Fin-ister intro waits for it (never two first-run cards at once).
   const [parkTipShowing, setParkTipShowing] = useState(false);
+  // The right column's widest pill (Energy, or Trail Boxes above it) and the column's height: Finn's
+  // coin card ends before it (or sits above it when the pills leave too little room).
+  const [rightColumnWidth, setRightColumnWidth] = useState(92);
+  const [rightColumnHeight, setRightColumnHeight] = useState(0);
   const [redeemFlowOpen, setRedeemFlowOpen] = useState(false);
 
   // Collect moment: after a ride win, back on the map, the coin flies from its island onto the shelf button.
   const mapProjector = useRef<MapProjector | null>(null);
   const avatarRef = useRef<View>(null);
+  // The map's loading cover waits for the player's shark on the HUD (never an empty circle after the lift).
+  const avatarArtDrawn = useCoverArt(!!player);
   const flightLayerRef = useRef<View>(null);
   const reducedMotion = useReducedGameMotion();
   const [pendingCollect, setPendingCollect] = useState<{ latitude: number; longitude: number; coinUrl: string | null; first: boolean } | null>(null);
@@ -715,6 +809,10 @@ function ExploreScreen() {
   ], [redeemables]);
   const mapNow = useMapOpportunityClock(timedOpportunities, refreshMapOpportunities, !!park && !!player);
   useEffect(() => { setMapLoadFailed(false); }, [mapContext]);
+  // Under a loading cover, the lift also waits for the park's ride list (never past the cover's cap),
+  // so the first lifted frame has the ride islands and PLAY RIDE, not a bare park map that fills in
+  // seconds later on a slow server. A failed load lifts at once (the retry note shows instead).
+  useCoverArt(!!park && !!player && !redeemables && !mapLoadFailed);
   const mapRetry = useParkMapRetry(mapLoadFailed && !!park && !!player, mapFocused, refreshMapOpportunities);
   const visibleTasks = useMemo(() => (redeemables?.tasks ?? [])
     .filter(task => opportunityIsActive(task, mapNow)), [redeemables?.tasks, mapNow]);
@@ -776,9 +874,12 @@ function ExploreScreen() {
     .map((id, index) => [id, index])), [rideTasks, taskDistance]);
   // First reveal of a park's islands: nearest drop in first.
   const revealRef = useRef<{ context: string; delays: globalThis.Map<number, number> } | null>(null);
+  // Pins that land under the loading cover are simply there when it fades (no drop nobody sees);
+  // pins that arrive after it lifts drop in nearest first, 40 ms apart, all landed within 0.4 s.
   if (redeemables && visibleTasks.length && revealRef.current?.context !== mapContext) {
-    revealRef.current = { context: mapContext, delays: revealDelays([...visibleTasks]
-      .sort((a, b) => (taskDistance.get(a.id) ?? 0) - (taskDistance.get(b.id) ?? 0)).map(task => task.id)) };
+    revealRef.current = { context: mapContext, delays: mapCovered ? new globalThis.Map<number, number>()
+      : revealDelays([...visibleTasks].sort((a, b) => (taskDistance.get(a.id) ?? 0) - (taskDistance.get(b.id) ?? 0))
+        .map(task => task.id), 40, 400) };
   }
   const [mapFocusRequest, setMapFocusRequest] = useState<{ latitude: number; longitude: number; zoom: number; requestId: number } | null>(null);
   // Dev-only stress for the MapLibre marker guard (EXPO_PUBLIC_FRIGHT_STRESS=1): pans and zooms
@@ -956,10 +1057,15 @@ function ExploreScreen() {
     }
   }, [fetchGymData]);
 
+  // The first in-range check after the ride list loads: until it answers, a loading cover waits
+  // (within its cap), so PLAY RIDE for the ride you stand at is on the first lifted map frame.
+  const [rangeChecked, setRangeChecked] = useState(false);
+  useCoverArt(!!park && !!player && !!redeemables && !!location?.latitude && !rangeChecked);
   useEffect(() => {
     if (!mapFocused || !park || !location?.latitude || !location?.longitude || !redeemables) return;
     let current = true;
     void checkForRedeemable().then(redeemable => {
+      setRangeChecked(true);
       if (!current) return;
       if (redeemable?.type === 'task' && failedTaskIds.has(redeemable.model.id)) {
         setActiveRedeemable(undefined);
@@ -992,6 +1098,8 @@ function ExploreScreen() {
   const leftSlotSwapGuard = useSwapTapGuard(leftSlotKey);
   // The Daily 3 / level chest overlay is up: other map moments wait their turn.
   const [retentionOccluding, setRetentionOccluding] = useState(false);
+  // PLAY RIDE (or a closed ride's sign) is on screen: the declutter keeps ride art out from under it.
+  const [playRideShown, setPlayRideShown] = useState(false);
   // Finn's "Let's hunt!" line closed on a first visit: free hunting starts now, and the chest may come 30 s later.
   const huntFree = caughtThisSession && !isActive && !firstLineGap && hasCompleted('home_first_find');
   useEffect(() => {
@@ -1004,7 +1112,9 @@ function ExploreScreen() {
     return () => clearTimeout(timer);
   }, [huntStartedAt]);
   const firstVisitHold = firstVisitChestWaits({
-    firstVisit: !!firstVisit.current, catchesThisVisit, huntStartedAt, now: chestClock >= 0 ? Date.now() : 0,
+    // The first hunt is the home map's (home catches count it down). In a park there is no home catch
+    // to make, so a park-first new player's chest and Daily 3 never wait on it (they never showed).
+    firstVisit: !!firstVisit.current && !park, catchesThisVisit, huntStartedAt, now: chestClock >= 0 ? Date.now() : 0,
   });
   const chestReady = !firstVisitHold && chestMayPresent({
     // In the half second between the first catch and Finn's "Nice catch!" line, the chest waits too (no flash).
@@ -1037,7 +1147,8 @@ function ExploreScreen() {
     setChestDismissals(count => count + 1);
   }, [dailyGiftId]);
   const chestButton = chestUnclaimed && !chestShowing
-    ? <ChestMapButton onPress={() => setChestRequested(true)} /> : null;
+    // Keyed by the day's gift: a new day's chest is a new button that pops in once.
+    ? <ChestMapButton key={dailyGiftId ?? 0} giftId={dailyGiftId ?? 0} onPress={() => setChestRequested(true)} /> : null;
   // Daily 3, the Weekly Box and level-up chests (server flags daily_three / level_chests, off by default).
   const openParam = (route.params as { open?: string } | undefined)?.open;
   // The nearest ride coin on this park map, guided like a checklist tap.
@@ -1087,9 +1198,14 @@ function ExploreScreen() {
     if (nextUpWasBusy.current && !nextUpBusy) void nextUpRefresh();
     nextUpWasBusy.current = nextUpBusy;
   }, [nextUpBusy, nextUpRefresh]);
+  // Daily 3 first, the chest after it: the chest waits for today's gift to load (often a beat after
+  // the map lifts), so it joins at the end of the rail and never pushes Daily 3 down a slot. A claimed
+  // chest leaves from the end too, so no button ever moves. The two always sit in the same two slots
+  // of one fragment (an empty slot is null), so one arriving never remounts the other: a chest that
+  // drew first never blinks out and pops in again when Daily 3 joins.
   // A brand new player's first 30 s of hunting: no chest or goal buttons yet, just the treats (the chest comes after).
-  const mapControls = firstVisitHold ? null : retention.button ? <>{chestButton}{retention.button}</> : chestButton;
   const mapControlsCount = firstVisitHold ? 0 : (chestButton ? 1 : 0) + (retention.button ? 1 : 0);
+  const mapControls = mapControlsCount > 0 ? <>{retention.button}{chestButton}</> : null;
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
@@ -1103,7 +1219,7 @@ function ExploreScreen() {
       rideCoinInRange: openRedeemable?.type === 'task' || openRedeemable?.type === 'secret_task' });
   const parkOfferSlot = !!player && !!park && !railShowing && suggestionSlots.left == null && suggestionSlots.right == null
     && !parkTip && !isActive && !liveEvt.event;
-  const parkTipReady = mapTipReady({
+  const parkTipReady = !mapCovered && mapCalm && mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
     dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial,
     bossOrChest: bossOpen || bossOccluded || dailyGiftOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
@@ -1199,11 +1315,15 @@ function ExploreScreen() {
     right: suggestionSlots.right === 'ride' || projectPillShown ? { top: slotTop, stub: suggestionSlots.rightStub } : null,
     bottomLeft: bottomLeftColumnHeight(park?.stores.length ?? 0),
     // With the gym and swords off, the hidden swords pill frees its space.
-    bottomRight: bottomRightColumnHeight(mapFlags.gymSwords),
-  }), [slotTop, suggestionSlots.left, suggestionSlots.leftStub, suggestionSlots.right, suggestionSlots.rightStub, projectPillShown, park?.stores.length, mapFlags.gymSwords]);
+    bottomRight: bottomRightColumnHeight(mapFlags.gymSwords, ENERGY_GAP),
+    // While PLAY RIDE is up, a ride island mostly under the pill and its chip fades out (never half hidden).
+    playRide: playRideShown ? WINDOW_WIDTH : null,
+  }), [slotTop, suggestionSlots.left, suggestionSlots.leftStub, suggestionSlots.right, suggestionSlots.rightStub, projectPillShown, park?.stores.length, mapFlags.gymSwords, playRideShown]);
   const declutter = useMemo<MapDeclutterInput | null>(() => park ? { store: declutterStore, items: declutterItems, insets: declutterInsets } : null,
     [park, declutterStore, declutterItems, declutterInsets]);
 
+  // The HUD row is whole from the first map frame (the team bar says its plain no-leader line until
+  // today's standings answer); a later lead change cross-fades inside MapStatusStack.
   // The one HUD row: the most urgent status leads, the rest wait behind "+N".
   const statusEntries: StatusEntry[] = player && park ? statusOrder({
     live: busyLiveSlot, show: nightPill ? (nightShow.phase === 'live' ? 'live' : 'teaser') : null,
@@ -1227,7 +1347,7 @@ function ExploreScreen() {
     // No own "?": the map's one "?" offers the Fin-ister tutorial while the mode is on.
     if (key === 'fright') return { key, label: frightNight.title, tone: TONES.night, node: <FrightPill inline night={frightNight} engine={frightEngine} /> };
     return { key, label: 'Ride Control', tone: TONES.park, node: <RideControlBar inline control={rideControl} tasks={visibleTasks}
-      hideAllOpen={!everyRideTrulyOpen({ loaded: !!redeemables, restingCount: restingTasks.length, liveStatuses: visibleTasks.map(task => liveByTask.get(task.id)?.status) }) || hideEveryRideOpen({ modeOn: frightNight.modeOn, eventPark: frightNight.eventPark, hasNight: !!frightNight.tonight?.night })}
+      hideAllOpen={hideEveryRideOpen({ modeOn: frightNight.modeOn, eventPark: frightNight.eventPark, hasNight: !!frightNight.tonight?.night })}
       onFocusTask={(task) => setSelectedTask(task)} /> };
   }) : [];
 
@@ -1241,7 +1361,7 @@ function ExploreScreen() {
                 event currencies (and the unused legacy park coin) stay hidden. */}
             {park && theme?.currency && (
               <TopbarColumn>
-                <Currency image={theme.currency.icon_url} count={currencyBalance(player, theme.currency.name)}
+                <Currency coverArt image={theme.currency.icon_url} count={currencyBalance(player, theme.currency.name)}
                   name={theme.currency.name} flyTarget="theme_currency" />
               </TopbarColumn>
             )}
@@ -1250,14 +1370,14 @@ function ExploreScreen() {
                 (['Coins', 'Keys'].includes(currency.name) || currencyBalance(player, currency.name) > 0))
               .map((currency) => (
                 <TopbarColumn key={currency.id}>
-                  <Currency image={currency.icon_url} count={currencyBalance(player, currency.name)}
+                  <Currency coverArt image={currency.icon_url} count={currencyBalance(player, currency.name)}
                     name={currency.name === 'Coins' ? 'Coins' : currency.name}
                     flyTarget={currency.name === 'Coins' ? 'coins' : currency.name === 'Keys' ? 'keys' : undefined} />
                 </TopbarColumn>
               ))}
             {park && (
               <TopbarColumn>
-                <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
+                <Currency coverArt image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
               </TopbarColumn>
             )}
             {/* Away from a park: Coins | HOME HUNT | Tickets. It names the mode the map is in. */}
@@ -1265,14 +1385,14 @@ function ExploreScreen() {
               <>
                 <TopbarColumn>
                   {currencies[0] && (
-                    <Currency image={currencies[0].icon_url} count={currencyBalance(player, currencies[0].name)}
+                    <Currency coverArt image={currencies[0].icon_url} count={currencyBalance(player, currencies[0].name)}
                       name="Coins" flyTarget="coins" />
                   )}
                 </TopbarColumn>
                 <TopbarColumn>
                   <Pressable accessibilityRole="button" accessibilityLabel="Home Hunt" accessibilityHint="Explains Home Hunt"
                     hitSlop={8} onPress={() => explain('travel_mode')}>
-                    <Text style={{
+                    <UpperText style={{
                       fontSize: 16,
                       color: 'white',
                       fontFamily: 'Shark',
@@ -1282,18 +1402,18 @@ function ExploreScreen() {
                       textShadowOffset: { width: 2, height: 2 },
                       textShadowRadius: 0,
                       textAlign: 'center',
-                    }}>Home Hunt</Text>
+                    }}>Home Hunt</UpperText>
                   </Pressable>
                 </TopbarColumn>
                 <TopbarColumn>
-                  <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
+                  <Currency coverArt image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
                 </TopbarColumn>
               </>
             )}
           </>
         ) : (
           <TopbarColumn>
-            <Text style={{
+            <UpperText style={{
               fontSize: 16,
               color: 'white',
               fontFamily: 'Shark',
@@ -1303,7 +1423,7 @@ function ExploreScreen() {
               textShadowOffset: { width: 2, height: 2 },
               textShadowRadius: 0,
               textAlign: 'center',
-            }}>Guest Mode</Text>
+            }}>Guest Mode</UpperText>
           </TopbarColumn>
         )}
       </Topbar>
@@ -1326,14 +1446,14 @@ function ExploreScreen() {
       {chestShowing && dailyGift &&
         <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} onClosed={onChestClosed}
           simple={!!firstVisit.current} />}
-      {retention.overlay}
-      {player && liveEvt.event && <EventSheet event={liveEvt.event} visible={eventOpen} onClose={() => setEventOpen(false)} atPark={!!park}
+      {lateOverlays && retention.overlay}
+      {lateOverlays && player && liveEvt.event && <EventSheet event={liveEvt.event} visible={eventOpen} onClose={() => setEventOpen(false)} atPark={!!park}
         onShowRide={id => { const t = visibleTasks.find(task => task.id === id); if (t) { setEventOpen(false); setSelectedTask(t); } }} />}
-      {player && liveEvt.event && <EventRecapCard event={liveEvt.event} visible={recapDue && mapFocused && !eventOpen && !finnOwnsMap} onClose={recapSeen}
+      {lateOverlays && player && liveEvt.event && <EventRecapCard event={liveEvt.event} visible={recapDue && mapFocused && !eventOpen && !finnOwnsMap} onClose={recapSeen}
         onOpenChests={() => { recapSeen(); setEventOpen(true); }} />}
       {/* Monday Home Hunt results come through the presentation queue, after the daily chest (2 full-screen moments per app open). */}
-      <HomeHuntResultsHost enabled={!!player && !park && mapFocused && permissionGranted && hasCompleted('onboarding') && chestReady
-        && !dailyGiftOccluded && !chestShowing && !(chestUnclaimed && !chestDismissed(dailyGift!.id))} />
+      {lateOverlays && <HomeHuntResultsHost enabled={!!player && !park && mapFocused && permissionGranted && hasCompleted('onboarding') && chestReady
+        && !dailyGiftOccluded && !chestShowing && !(chestUnclaimed && !chestDismissed(dailyGift!.id))} />}
       {/* Home Mode: the map always renders without a park, even before the
           first park check settles (it shows the park-check card until then).
           Gating it on parkLoaded left a blank grey screen whenever park state
@@ -1343,7 +1463,7 @@ function ExploreScreen() {
           catching={homeCatch} onCatchCollected={onHomeCatchCollected} onCatchDone={onHomeCatchDone}
           onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
-          introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
+          introAllowed={mapOnScreen && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
           onIntroOpenChange={setHomeIntroOpen} chestButton={mapControls} chestButtonCount={mapControlsCount} compassHintReady={parkTipReady} highlightNearestFind={highlightNearestFind}
           parkStory={activeParkProject && !finnOwnsMap ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null}
@@ -1361,9 +1481,10 @@ function ExploreScreen() {
       {!player && <GuestTaste />}
       
       {/* The park buttons never wait on the map data: a failed load keeps them and shows a retry note. */}
-      {park && !redeemables && mapLoadFailed && (
+      {/* While Finn's park tip is up, the retry note waits (one card at a time in the top half). */}
+      {park && !redeemables && mapLoadFailed && !(parkTip && activeTip === parkTip) && (
         <View pointerEvents="box-none" style={{ position: 'absolute', left: 16, right: 16, bottom: 250, zIndex: 11 }}>
-          <ParkMapRetryCard retrying={mapRetry.retrying} onRetry={mapRetry.retryNow} />
+          <ParkMapRetryCard retrying={mapRetry.retrying || mapRetry.calm} onRetry={mapRetry.retryNow} />
         </View>
       )}
       {park && (
@@ -1450,12 +1571,19 @@ function ExploreScreen() {
               width: '50%',
             }}
           >
+            {/* A ride already in range when the map opens: PLAY RIDE and its chip get ready under
+                the loading cover, standing still at rest (no slide, which on iOS could draw above the
+                cover), and the cover's own fade reveals them with the map. One found after the lift
+                slides up as before. They wait while Finn's card is up (his first adventure dims the
+                map): one thing at a time. */}
             <RedeemModal
-              redeemable={mapFocused ? activeRedeemable : undefined}
+              redeemable={mapFocused && !isActive ? activeRedeemable : undefined}
+              covered={mapCovered}
               park={park}
               selectedTaskId={selectedTask?.id ?? null}
               liveStatus={activeLiveStatus}
               onOpenChange={setRedeemFlowOpen}
+              onShownChange={setPlayRideShown}
               onPress={async () => {
                 await getRedeemables();
                 await refreshPlayer();
@@ -1504,9 +1632,11 @@ function ExploreScreen() {
               zIndex: 10,
               alignItems: 'center',
             }}
+            onLayout={event => setRightColumnHeight(Math.round(event.nativeEvent.layout.height))}
           >
             {/* Energy and Swords: bright pills in the header's Currency language. */}
-            <View style={{ marginBottom: 12, gap: 6, alignItems: 'flex-end' }}>
+            <View style={{ marginBottom: ENERGY_GAP, gap: 6, alignItems: 'flex-end' }}
+              onLayout={event => setRightColumnWidth(Math.round(event.nativeEvent.layout.width))}>
               {/* Trail Boxes (server flag trail_boxes): walk in the park to open them. */}
               <TrailHost active={mapFocused && !isActive} openRequest={trailOpenRequest} />
               <MapResourcePill icon="energy" label="Energy" count={player?.energy ?? 0}
@@ -1522,7 +1652,7 @@ function ExploreScreen() {
                     RootNavigation.navigate('Park', { park: park.id, player: player.id });
                   }}
                 >
-                  <Avatar player={player} size="lg" />
+                  <Avatar player={player} size="lg" onArtDrawn={avatarArtDrawn} />
                 </Button>
               </Animated.View>
             )}
@@ -1538,12 +1668,15 @@ function ExploreScreen() {
         }}
       >
         {/* One-time Finn tips: the park welcome, then the first ride coin in range. Never over a game or dialog. */}
-        {player && parkTip && (
-          <OneTimeTip key={parkTip} id={parkTip} ready={parkTipReady}
-            style={parkTip === 'coin_in_range'
-              ? { position: 'absolute', left: 12, right: 12, bottom: 196, zIndex: 40 }
-              : { position: 'absolute', left: 12, right: 12, top: 132, zIndex: 40 }} />
-        )}
+        {player && parkTip && (() => {
+          const coin = parkTip === 'coin_in_range'
+            ? coinTipLayout(park.stores.length, { width: rightColumnWidth, height: rightColumnHeight }) : null;
+          return <OneTimeTip key={parkTip} id={parkTip} ready={parkTipReady}
+            small={!!coin && (SHORT_MAP || coin.narrow)} fit={!!coin} narrow={coin?.narrow}
+            art={coin ? <CoinTipPicture /> : undefined} artImages={coin ? COIN_TIP_PICTURE_IMAGES : 0}
+            pointerLeft={coin?.pointer}
+            style={coin?.style ?? PARK_WELCOME_TIP_STYLE} />;
+        })()}
         {/* One HUD row floats over the map (the map runs right up to the header). */}
         {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} />}
         {/* The "what now" rail: one row in the suggestion slot, only while no suggestion card holds it. */}
@@ -1580,7 +1713,7 @@ function ExploreScreen() {
         {adventure && suggestionSlots.left === 'adventure' && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
           ticket={adventure} data={tripGoalData} stale={tripGoalStale} gate={adventureGate} detours={adventureDetours}
           closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={slotTop} collapsed={suggestionSlots.leftStub}
-          slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
+          slam={mapCovered ? undefined : adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
           onOcclusionChange={setAdventureOccluded} onRefresh={refreshTripGoal}
           onSelect={selectAdventureRide} onDismiss={dismissAdventure}
           onCelebrate={() => celebrateTicket(adventure.id)}
@@ -1654,6 +1787,7 @@ function ExploreScreen() {
           </Text>
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
+          coverHost="screen"
           hintReady={parkTipReady && !parkTipShowing}
           sharkCheer={openRedeemable?.type === 'task' || openRedeemable?.type === 'secret_task'}
           projector={mapProjector}
@@ -1663,7 +1797,7 @@ function ExploreScreen() {
           declutter={declutter}
           crowdHaze={parkHaze}
           guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
-          controlsTop={slotTop + (queueRide ? 104 : 76)} extraControls={mapControls} extraControlsCount={mapControlsCount} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
+          controlsTop={slotTop + (queueRide ? 104 : 76)} extraControls={mapControls} extraControlsCount={mapControlsCount} railFloor={rightColumnHeight > 0 ? 32 + rightColumnHeight : bottomRightColumnHeight(mapFlags.gymSwords, ENERGY_GAP)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : mapFocusRequest}>
@@ -1743,14 +1877,17 @@ function ExploreScreen() {
         </Map>
       </View>
       )}
-      
+      {/* A later loading sky (walking into a park) sits above every map button, card and tip (under
+          the header and footer), so a kid sees one loading bar finish, then the map and its buttons in one fade. */}
+      <MapLaunchCover variant="sky" blockTouches style={SKY_COVER_STYLE} />
+
       {/* Community Center Modal */}
-      <CommunityCenterModal
+      {lateOverlays && <CommunityCenterModal
         visible={showCommunityCenterModal}
         center={communityCenter}
         onClose={() => setShowCommunityCenterModal(false)}
         onAction={refreshCommunityCenter}
-      />
+      />}
       
       {/* The collect moment flies over everything on the map screen. */}
       <View ref={flightLayerRef} collapsable={false} pointerEvents="none"
@@ -1761,11 +1898,33 @@ function ExploreScreen() {
           onDone={() => setCollectFlight(null)} />}
       </View>
       {/* Too Far Away: ribbon + blue card with a distance meter */}
-      <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}
-        homeItem={tooFarIsHomeItem} onClose={() => setShowTooFarModal(false)} />
+      {lateOverlays && <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}
+        homeItem={tooFarIsHomeItem} onClose={() => setShowTooFarModal(false)} />}
       {/* Fin-ister Nights overlays (sheet, rank card, tutorial, exit moment, Marquee); outside the park block on purpose. */}
-      {player && <FrightLayer night={frightNight} engine={frightEngine} top={slotTop + 64} />}
+      {lateOverlays && player && <FrightLayer night={frightNight} engine={frightEngine} top={slotTop + 64} />}
     </Wrapper>
+  );
+}
+
+/**
+ * The map screen. Under the app's first cover, the screen's first commit is only that cover (the
+ * same splash, bar and fun fact the Loading screen showed), so its bar and bubbles start animating
+ * on the UI thread before anything heavy runs; the whole map screen (its state, effects, map, HUD
+ * and markers) mounts two frames later underneath. A profile showed the cover's bar frozen for
+ * about a second when the cover started in the same commit as the map screen's render and effects.
+ * A later visit (no launch cover) mounts everything at once, as before.
+ */
+function ExploreScreen() {
+  const [deferBody] = useState(launchCoverAhead);
+  const late = useLateMount();
+  return (
+    <>
+      {(late || !deferBody) && <ExploreScreenBody />}
+      {/* The app's first cover: the launch scene over the whole screen, header and footer included,
+          so the splash and its one bar carry on until the park map has drawn, then the whole game
+          (map, header, footer, buttons) arrives in one fade with no label swapping underneath. */}
+      <MapLaunchCover variant="launch" armOnMount blockTouches style={LAUNCH_COVER_STYLE} />
+    </>
   );
 }
 

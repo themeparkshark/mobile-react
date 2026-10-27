@@ -174,7 +174,7 @@ test('the Welcome tip waits for its own tap and sits under the wait card, never 
   const tip = read('src/components/help/OneTimeTip.tsx');
   assert.match(tip, /autoHideMs != null \? \{ autoHideMs \} : null/);
   const coach = read('src/components/help/CoachTip.tsx');
-  assert.match(coach, /if \(autoHideMs <= 0\) return;/, 'CoachTip: 0 means no timer');
+  assert.match(coach, /if \(autoHideMs <= 0\) return(?: undefined)?;/, 'CoachTip: 0 means no timer');
   // The card itself is one Pressable: a tap on OK (or anywhere on it) closes it and nothing under it.
   assert.match(coach, /<Pressable accessibilityRole="button"[^>]*\n\s*onPress=\{onDismiss\}/);
 });

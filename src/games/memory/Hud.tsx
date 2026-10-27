@@ -26,6 +26,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { MM } from './theme';
+import countText from '../../helpers/countText';
 
 const STREAK = require('../../assets/games/memory/studio/streak.png');
 
@@ -258,7 +259,7 @@ export const ScorePlate = forwardRef<ScorePlateHandle, { score: number; pb: numb
   return (
     <View style={styles.scorePlate}>
       {onFire ? <Image source={FLAME[flame]} style={styles.flame} resizeMode="contain" /> : null}
-      <Animated.Text style={[styles.scoreText, st]}>{score.toLocaleString('en-US')}</Animated.Text>
+      <Animated.Text style={[styles.scoreText, st]}>{countText(score)}</Animated.Text>
       <Animated.Text style={[styles.tallyText, tallySt]} numberOfLines={1}>{tallyText}</Animated.Text>
     </View>
   );
@@ -327,7 +328,8 @@ const styles = StyleSheet.create({
     borderRadius: 14, borderWidth: 2.5, borderColor: '#fff',
   },
   chipScout: { backgroundColor: MM.scout },
-  chipSlip: { backgroundColor: MM.coral },
+  // A slip is a shrug, not an alarm: calm navy, never coral or red.
+  chipSlip: { backgroundColor: '#3d6fa8' },
   chipText: { fontFamily: 'Shark', fontSize: 18, color: '#fff', marginLeft: 4 },
   callout: {
     fontFamily: 'Shark', fontSize: 30, textShadowColor: MM.ink, textShadowOffset: { width: 2, height: 3 }, textShadowRadius: 1,

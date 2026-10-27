@@ -7,14 +7,16 @@ import {
   StyleSheet,
   Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import RideTrackerFrame from './RideTrackerFrame';
+import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { getRideStats, RideStatsType } from '../../api/endpoints/player-rides';
 import SharkRating from '../../components/RideTracker/SharkRating';
 import { colors } from '../../design-system';
 import { GameIcon, SharkLoader, type GameIconName } from '../../ui';
 
+import RideTrackerEmpty from './RideTrackerEmpty';
+import { UpperText } from '../../ui/upper';
 // ─── Animated Counter ───
 interface AnimatedCounterProps {
   value: number;
@@ -66,34 +68,30 @@ export default function RideStatsScreen() {
 
   if (loading || !stats) {
     return (
-      <SafeAreaView style={styles.container}>
+      <RideTrackerFrame title="Ride Stats" style={styles.container}>
         <SharkLoader state={loading ? 'loading' : 'error'} title={loading ? undefined : "Ride stats didn't load"} onRetry={load} />
-      </SafeAreaView>
+      </RideTrackerFrame>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
-          <GameIcon name="back" size={36} accessibilityLabel="Back" />
-        </Pressable>
-        <Text style={styles.title}>RIDE STATS</Text>
-        <View style={{ width: 40 }} />
-      </LinearGradient>
+    <RideTrackerFrame title="Ride Stats" style={styles.container}>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Big Stats */}
-        <View style={styles.statGrid}>
-          <StatCard label="Total Rides" value={stats.total_rides} icon="shark" />
-          <StatCard label="Unique Rides" value={stats.unique_rides} icon="star" />
-          <StatCard label="Park days in a row" value={stats.current_streak} icon="ride" />
-        </View>
+        {/* Big Stats. With no rides yet, three zero tiles are noise: the empty card goes first,
+            so its LOG A RIDE button sits above the footer even on an iPhone SE. */}
+        {stats.total_rides > 0 && (
+          <View style={styles.statGrid}>
+            <StatCard label="Total Rides" value={stats.total_rides} icon="shark" />
+            <StatCard label="Unique Rides" value={stats.unique_rides} icon="star" />
+            <StatCard label="Park days in a row" value={stats.current_streak} icon="ride" />
+          </View>
+        )}
 
         {/* Per Park */}
         {stats.per_park.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>RIDES BY PARK</Text>
+            <UpperText style={styles.sectionTitle}>Rides by park</UpperText>
             {stats.per_park.map(p => (
               <View key={p.park_id} style={styles.parkRow}>
                 <Text style={styles.parkName}>{p.park_name}</Text>
@@ -109,7 +107,7 @@ export default function RideStatsScreen() {
         {/* Top Rated */}
         {stats.top_rated.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>TOP RATED RIDES</Text>
+            <UpperText style={styles.sectionTitle}>Top rated rides</UpperText>
             {stats.top_rated.slice(0, 5).map((r, i) => (
               <View key={r.id} style={styles.rankRow}>
                 <Text style={styles.rankNum}>#{i + 1}</Text>
@@ -126,7 +124,7 @@ export default function RideStatsScreen() {
         {/* Most Ridden */}
         {stats.most_ridden.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>MOST RIDDEN</Text>
+            <UpperText style={styles.sectionTitle}>Most ridden</UpperText>
             {stats.most_ridden.slice(0, 5).map((r, i) => (
               <View key={r.id} style={styles.rankRow}>
                 <Text style={styles.rankNum}>#{i + 1}</Text>
@@ -157,13 +155,11 @@ export default function RideStatsScreen() {
         )}
 
         {stats.total_rides === 0 && (
-          <View style={styles.emptyContainer}>
-            <GameIcon name="ride" size={72} />
-            <Text style={styles.emptyText}>Start logging rides to see your stats!</Text>
-          </View>
+          <RideTrackerEmpty title="No stats yet" body="Log your first ride and your stats start here."
+            action={{ label: 'Log a ride', icon: 'ride', onPress: () => navigation.navigate('RideLog') }} />
         )}
       </ScrollView>
-    </SafeAreaView>
+    </RideTrackerFrame>
   );
 }
 
@@ -195,7 +191,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
-  content: { padding: 16, paddingBottom: 60 },
+  content: { padding: 16, paddingBottom: FOOTER_CLEARANCE },
   statGrid: { flexDirection: 'row', gap: 10, marginBottom: 24 },
   statCard: {
     flex: 1, 

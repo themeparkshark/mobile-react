@@ -19,6 +19,7 @@ import { useBudgetedPoll } from '../../power';
 import TeamCrest from '../TeamBadge';
 
 const TeamBadge = ({ team, size = 18 }: { team: TeamId; size?: number }) => <TeamCrest team={team} size={size} />;
+import countText from '../../helpers/countText';
 
 // Format seconds into H:MM:SS or MM:SS
 function formatCountdown(totalSeconds: number): string {
@@ -252,7 +253,7 @@ export default function BattleHUD({ parkId }: Props) {
                           {TEAM_NAMES[team]}
                         </Text>
                         <Text style={[styles.standingScore, { color: TEAM_COLORS[team] }]}>
-                          {scores[team].toLocaleString()}
+                          {countText(scores[team])}
                         </Text>
                       </View>
                     ))}

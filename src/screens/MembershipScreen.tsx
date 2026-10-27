@@ -17,7 +17,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeInDown, FadeInUp,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import SafeScreen from '../components/SafeScreen';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -38,6 +38,7 @@ import { scheduleTrialReminder } from '../services/money/trialReminder';
 import { getVipGift, type VipPlanTime } from '../api/endpoints/me/vip-gift';
 import GrownUpsInfo from '../components/money/GrownUpsInfo';
 
+import countText from '../helpers/countText';
 // Every line here is backed by live server logic: ride wins pay VIP double
 // (CompleteTaskAction), VIP home maps spawn two extra finds and double their
 // rewards (PrepItemSpawner, PrepItemController). VIP gear is left
@@ -213,7 +214,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
     <View style={s.root}>
       <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <LinearGradient pointerEvents="none" colors={['rgba(9,90,170,0.82)', 'rgba(7,72,150,0.9)', 'rgba(5,52,110,0.95)']} style={StyleSheet.absoluteFill} />
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeScreen style={{ flex: 1 }}>
         {/* The X sits in its own row, so nothing ever scrolls under it. */}
         <View style={s.closeRow}>
           <Pressable style={s.close} onPress={close} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
@@ -332,7 +333,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
             <Pressable onPress={close} hitSlop={8}><Text style={s.skip}>{labels?.skip_for_now ?? 'Skip for now'}</Text></Pressable>
           )}
         </ScrollView>
-      </SafeAreaView>
+      </SafeScreen>
 
       {busy && (
         <View style={s.overlay}>
@@ -410,7 +411,7 @@ const GROWN_UP_NOTES: { icon: GameIconName; text: string }[] = [
 
 /** "This month VIP got you": only the player's own real totals, never averages. */
 export function recapLines(recap: NonNullable<VipPlanTime['recap']>): string[] {
-  const n = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const n = (v: number) => countText(v);
   const lines = [
     // "Skipped an ad" only means something once ads exist. While nobody sees ads (adConfig),
     // this line would name a reward a kid never saw, so it stays off.

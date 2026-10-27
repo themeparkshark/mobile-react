@@ -56,7 +56,7 @@ function Burst({ i, go }: { readonly i: number; readonly go: boolean }) {
     transform: [{ translateX: Math.cos(angle) * dist * t.value }, { translateY: Math.sin(angle) * dist * t.value + 60 * t.value * t.value },
       { rotate: `${t.value * 300}deg` }],
   }));
-  return <Animated.View style={[styles.coin, style]}><GameIcon name="coin" size={22} /></Animated.View>;
+  return <Animated.View style={[styles.coin, style]}><GameIcon name="coins" size={22} /></Animated.View>;
 }
 
 /**

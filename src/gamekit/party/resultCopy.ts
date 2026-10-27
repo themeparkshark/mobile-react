@@ -4,8 +4,9 @@
  */
 import type { KeyMoment, SeatResult, StarHighlight } from '../net/partyTypes';
 import { isGhostFinished, isNoContest } from '../net/partyTypes';
+import countText from '../../helpers/countText';
 
-const n = (v: number) => v.toLocaleString('en-US');
+const n = (v: number) => countText(v);
 
 /** The explain() sentence: "A lure cost you 410." */
 export function keyMomentLine(m: KeyMoment | null | undefined): string | null {

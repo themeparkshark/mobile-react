@@ -1,6 +1,7 @@
 import { ResizeMode, Video } from 'expo-av';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
+import { SPLASH_LOGO, SPLASH_POSTER, splashLogoFrame } from '../splashFrame';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useIsFocused } from '@react-navigation/native';
 import { useContext, useEffect, useRef } from 'react';
@@ -29,7 +30,10 @@ import { copyrightLine } from '../../api/platform';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SPLASH_VIDEO = require('../../../assets/videos/splash-loop.mp4');
-const SPLASH_LOGO = require('../../../assets/images/splash-logo.png');
+/** Same blue as the native splash (app.config.js splash.backgroundColor). The loop's first frame
+ * (SPLASH_POSTER, shared with Splash and Loading) is drawn under the video, so there is no blue flash. */
+const SPLASH_BLUE = '#0768B9';
+
 const whooshSound = require('../../../assets/sounds/whoosh.mp3');
 // Floating bubble component
 function FloatingBubble({
@@ -166,8 +170,10 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
     ], 'secure-text');
   };
   // Entrance animations
-  const logoScale = useRef(new Animated.Value(0)).current;
-  const logoOpacity = useRef(new Animated.Value(0)).current;
+  // The title is already on screen from the splash (same spot, same art), so
+  // it stays put: popping it in from nothing read as the title vanishing.
+  const logoScale = useRef(new Animated.Value(1)).current;
+  const logoOpacity = useRef(new Animated.Value(1)).current;
   const titleY = useRef(new Animated.Value(30)).current;
   const titleOpacity = useRef(new Animated.Value(0)).current;
   const buttonsY = useRef(new Animated.Value(40)).current;
@@ -181,22 +187,8 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
   useEffect(() => {
     // Entrance sequence
     Animated.sequence([
-      // Logo bounces in
-      Animated.parallel([
-        Animated.spring(logoScale, {
-          toValue: 1,
-          tension: 50,
-          friction: 7,
-          useNativeDriver: true,
-          delay: 300,
-        }),
-        Animated.timing(logoOpacity, {
-          toValue: 1,
-          duration: 400,
-          delay: 300,
-          useNativeDriver: true,
-        }),
-      ]),
+      // Let the splash fade settle, then bring in the rest.
+      Animated.delay(250),
       // Title slides up
       Animated.parallel([
         Animated.spring(titleY, {
@@ -260,10 +252,19 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
   }, [focused]);
 
   return (
-    <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: '#09268f' }}>
+    <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: SPLASH_BLUE }}>
+      <Image
+        source={SPLASH_POSTER}
+        contentFit="cover"
+        transition={0}
+        style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
+      />
       {/* Looping video background: exact screen dimensions */}
       <Video
         source={SPLASH_VIDEO}
+        usePoster
+        posterSource={SPLASH_POSTER}
+        posterStyle={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, resizeMode: 'cover' }}
         resizeMode={ResizeMode.COVER}
         shouldPlay={focused}
         isLooping
@@ -273,11 +274,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
       {/* Logo: bounces in + gentle float */}
       <Animated.View
         style={{
-          position: 'absolute',
-          top: SCREEN_HEIGHT * 0.12,
-          width: SCREEN_WIDTH * 0.9,
-          height: SCREEN_WIDTH * 0.9 * (322 / 1284),
-          left: SCREEN_WIDTH * 0.05,
+          ...splashLogoFrame(SCREEN_WIDTH, SCREEN_HEIGHT),
           opacity: logoOpacity,
           transform: [
             { scale: logoScale },
@@ -286,7 +283,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
         }}
       >
         <Image
-          source={require('../../../assets/images/screens/login/logo.png')}
+          source={SPLASH_LOGO}
           style={{ width: '100%', height: '100%' }}
           contentFit="contain"
         />

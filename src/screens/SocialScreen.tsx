@@ -20,7 +20,7 @@ import Avatar from '../components/Avatar';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper from '../components/Wrapper';
+import Wrapper, { FOOTER_CLEARANCE } from '../components/Wrapper';
 import { isTeam, TEAMS, type TeamId } from '../constants/teams';
 import TeamBadge from '../components/TeamBadge';
 import { outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
@@ -316,7 +316,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
           estimatedItemSize={260}
           ListHeaderComponent={header}
           ListEmptyComponent={empty}
-          ListFooterComponent={loadingMore ? <SharkLoader compact tone="onLight" style={{ marginVertical: 12 }} /> : <View style={{ height: 24 + insets.bottom }} />}
+          ListFooterComponent={loadingMore ? <SharkLoader compact tone="onLight" style={{ marginVertical: 12 }} /> : <View style={{ height: FOOTER_CLEARANCE }} /> /* scrolls WRITE A POST clear of the MAP compass */}
           onEndReached={onEndReached}
           onEndReachedThreshold={0.6}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND.navySoft} colors={[BRAND.blueBright]} />}

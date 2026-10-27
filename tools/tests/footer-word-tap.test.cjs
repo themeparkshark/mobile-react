@@ -12,7 +12,7 @@ test('footer icon and its word go through the same goTo handler', () => {
   assert.match(src, /const goTo = \(item: \{ screen: string; permission\?: PermissionEnums \}\) => \{/);
   assert.match(src, /<Button[\s\S]*?onPress=\{\(\) => goTo\(item\)\}/);
   const label = src.slice(src.indexOf('The word under the icon is part of the button too'));
-  assert.match(label, /<Text\s+onPress=\{\(\) => \{ playSound\(item\.sound\); goTo\(item\); \}\}/);
+  assert.match(label, /<(?:Upper)?Text\s+onPress=\{\(\) => \{ playSound\(item\.sound\); goTo\(item\); \}\}/);
   assert.match(label, /accessibilityRole="button"/);
   assert.match(label, /suppressHighlighting/);
 });

@@ -34,6 +34,8 @@ import {
 } from './homeHuntModel';
 import StandingsPodium from './StandingsPodium';
 import { StandingsInvite, StandingsListCard, StandingsRow } from './StandingsRow';
+import countText from '../../helpers/countText';
+import { UpperText } from '../../ui/upper';
 
 const rewardSound = require('../../../assets/sounds/reward.mp3');
 const STALE_MS = 60_000;
@@ -85,7 +87,7 @@ function HeaderCard({ week, label, now, onInfo }: {
     }}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <GameIcon name="map" size={26} />
-        <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, textTransform: 'uppercase' }}>{label}</Text>
+        <UpperText numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, textTransform: 'uppercase' }}>{label}</UpperText>
         <Pressable accessibilityRole="button" accessibilityLabel="How Home Hunt works" onPress={onInfo} hitSlop={10}
           style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -8, marginTop: -8 }}>
           <GameIcon name="info" size={28} />
@@ -94,7 +96,7 @@ function HeaderCard({ week, label, now, onInfo }: {
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 2 }}>
         <View style={{ flex: 1 }}>
           <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: BRAND.navySoft, letterSpacing: 0.6 }}>YOUR POINTS</Text>
-          <Text style={{ fontFamily: 'Shark', fontSize: 34, color: BRAND.navy, fontVariant: ['tabular-nums'] }}>{(week?.points ?? 0).toLocaleString()}</Text>
+          <Text style={{ fontFamily: 'Shark', fontSize: 34, color: BRAND.navy, fontVariant: ['tabular-nums'] }}>{countText(week?.points ?? 0)}</Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <RankOdometer rank={week?.rank ?? null} unranked={unranked} />

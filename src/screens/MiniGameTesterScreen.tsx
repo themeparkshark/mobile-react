@@ -26,10 +26,11 @@ import JuiceLab from '../gamekit/demo/JuiceLab';
 import { CurrentQuestGame, CurrentQuestHub, type HubPick } from '../games/current-quest';
 import LagoonDashPreview from '../games/current-quest/party/LagoonDashPreview';
 import { LinePlayMovementContext } from '../gamekit/LinePlayMovementContext';
+import { PerfOverlay, usePerfProbe } from '../gamekit/perf/PerfOverlay';
 import { RhythmTapGame } from '../games/rhythm';
 import SprintLab from '../games/rhythm/multiplayer/SprintLab';
 
-type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'photo' | 'random';
+type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'photo' | 'current' | 'banana' | 'random';
 
 const GAMES: { type: GameType; label: string; emoji: string; desc: string }[] = [
   { type: 'random', label: 'Random', emoji: '[?]', desc: 'Randomly picks a mini-game' },
@@ -47,6 +48,17 @@ const RIDE_SPRINTS: { type: GameType; number: string; label: string; desc: strin
   { type: 'trivia', number: '04', label: 'Park Trivia', desc: 'Two fast park questions', cue: 'THINK' },
 ];
 
+/**
+ * Release-like Whack frame-rate captures only (EXPO_PUBLIC_MOTION_CAPTURE=Whack with EXPO_PUBLIC_WHACK_PERF=1,
+ * never set in store builds): the same frame probe on this still list, the control the game's numbers are
+ * read against on the same simulator and machine state.
+ */
+const WHACK_PERF_CONTROL = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'Whack' && process.env.EXPO_PUBLIC_WHACK_PERF === '1';
+function PerfControl() {
+  const probe = usePerfProbe(true, false);
+  return <PerfOverlay probe={probe} visible extra={() => 'control: still list'} style={{ top: 120, right: undefined, left: 6 }} />;
+}
+
 export default function MiniGameTesterScreen() {
   const navigation = useNavigation<any>();
   const ridePreview = __DEV__ && process.env.EXPO_PUBLIC_RIDE_GAME_PREVIEW === '1';
@@ -55,8 +67,16 @@ export default function MiniGameTesterScreen() {
     : 'Space Mountain';
   // Studio lab (dev only): EXPO_PUBLIC_SHARKY_PREVIEW=queue|ride opens Sharky Swim on launch.
   const sharkyPreview = __DEV__ ? process.env.EXPO_PUBLIC_SHARKY_PREVIEW : undefined;
-  const [activeGame, setActiveGame] = useState<GameType | null>(sharkyPreview ? 'shark' : null);
+  // Release-like capture (EXPO_PUBLIC_MOTION_CAPTURE=Whack, never set in store builds): open Whack on launch.
+  const whackCapture = process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'Whack';
+  const [activeGame, setActiveGame] = useState<GameType | null>(sharkyPreview ? 'shark' : whackCapture ? 'tap' : null);
   const [showPostWin, setShowPostWin] = useState(false);
+  // Dev only: lane captures open a game straight from the debugger (globalThis.__wowPlay('tap')).
+  useEffect(() => {
+    if (!__DEV__) return undefined;
+    (globalThis as { __wowPlay?: (t: GameType | null) => void }).__wowPlay = setActiveGame;
+    return () => { delete (globalThis as { __wowPlay?: unknown }).__wowPlay; };
+  }, []);
   const [lastResult, setLastResult] = useState<string>('');
   // Studio engine demo. EXPO_PUBLIC_ENGINE_DEMO=1 opens it on launch with the
   // scripted autoplay tour (used to capture the engine demo video).
@@ -289,6 +309,7 @@ export default function MiniGameTesterScreen() {
         </ScrollView>}
       </SafeAreaView>
       </Wrapper>
+      {WHACK_PERF_CONTROL ? <PerfControl /> : null}
 
       {/* Mini-Game */}
       <MiniGameSelector

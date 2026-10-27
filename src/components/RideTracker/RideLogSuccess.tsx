@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, ScrollView, Pressable, ImageBackground } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
+import { studioMoment } from '../../gamekit/audio/playMoment';
 import ShareableRideCard from './ShareableRideCard';
 import ConfettiBurst from './ConfettiBurst';
 import { PlayerRideType } from '../../api/endpoints/player-rides';
@@ -59,7 +60,7 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
     if (!celebrated.current) {
       celebrated.current = true;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-      playSound(require('../../../assets/sounds/success.mp3'), { volume: 0.65 });
+      if (!studioMoment('reward.rideLogged', { volume: 0.8 })) playSound(require('../../../assets/sounds/success.mp3'), { volume: 0.65 });
     }
   }, [playSound]);
 

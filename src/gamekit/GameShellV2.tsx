@@ -41,6 +41,7 @@ import {
   Modal,
   AppState,
   BackHandler,
+  type LayoutChangeEvent,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -50,6 +51,11 @@ import Animated, {
   withSequence,
   Easing,
   cancelAnimation,
+  runOnJS,
+  withRepeat,
+  useFrameCallback,
+  type FrameInfo,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { GAME_COLORS, COUNTDOWN, JUICE, LINE_MOVING_TOAST } from './theme';
 import { ScoreDisplay } from './ScoreDisplay';
@@ -74,6 +80,25 @@ import {
 } from './core/session';
 import { clearSnapshot, saveSnapshot } from './session/snapshotStore';
 import { GameAudio } from './audio/GameAudio';
+import { playGameHaptic, playGameMoment } from './audio/gameMomentSound';
+import { CountdownStage } from './fx/CountdownStage';
+import { FinalSeconds } from './fx/FinalSeconds';
+import { COACH_EXIT_MS, COACH_LEAD_MS, COUNT_END_MS, COUNT_WATCHDOG_MS, advanceCountClock, GO_AT_MS, GO_SPARKLES, type CountStep, RARE_GO_SPARKLES, STAGE_READY_MAX_MS, countPose, countStartsOf, countSteps, finalSecondsBeat, isRareGo, noteCountStart } from './core/gameMoments';
+import { AMBIENT, DURATION, flashPeak, momentParticles } from '../ui/motion';
+import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
+
+/** Dev capture only: hold the drawn count on this clock time (ms) for 6 s. Never set in release. */
+const COUNT_HOLD_MS = __DEV__ ? Number(process.env.EXPO_PUBLIC_COUNT_HOLD_MS || -1) : -1;
+/** Dev capture only: how long a capture hold lasts (EXPO_PUBLIC_DEV_HOLD_FOR_MS, default 6 s). */
+const CAPTURE_HOLD_FOR = __DEV__ ? Number(process.env.EXPO_PUBLIC_DEV_HOLD_FOR_MS || 6000) : 6000;
+/**
+ * Capture only (EXPO_PUBLIC_COUNT_TRACE=1 with the Whack capture; store builds never set it): after each start a
+ * small line shows how many UI frames drew 3, 2, 1 and GO, the longest frame gap, and the game's clock on GO's
+ * frame and at the tail's end, so a screenshot proves the start even when a screen recorder drops frames.
+ */
+const COUNT_TRACE = process.env.EXPO_PUBLIC_COUNT_TRACE === '1';
+import { EASE } from '../ui/motionEasing';
+import { usePowerBudget } from '../power';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -160,6 +185,37 @@ interface GameShellV2Props {
   personalBest?: number;
   /** Short objective line shown under the countdown. */
   objective?: string;
+  /**
+   * A picture demo of how to play, shown in the countdown pill instead of the objective text (a
+   * 7-year-old reads it with zero words). The objective stays as the VoiceOver label.
+   */
+  countdownDemo?: React.ReactNode;
+  /** Seat the countdown pill this far below the top of the play field (pt), under the game's own HUD row. */
+  countdownPillFieldY?: number;
+  /**
+   * Whole seconds left on a timed round. From 5 down the clock turns gold, a
+   * soft gold edge breathes and each second stamps in; 0 slams TIME! (the
+   * game still owns its own end). Pass only while the round runs.
+   */
+  secondsLeft?: number | null;
+  /** Where the last-5 stamps land (pt from the top of the screen). Default: the count's spot. */
+  finalStampY?: number;
+  /** Where the last-5 stamps land, in pt from the top of the play field (wins over finalStampY). */
+  finalStampFieldY?: number;
+  /** UI-thread ms left on the round: the last-5 stamps follow it frame-exact (secondsLeft still drives sound). */
+  remainingMs?: SharedValue<number> | null;
+  /** Show TIME! at 0 (false when the game ends on its own banner, like Whack's FINISH!). Default true. */
+  finalTimeStamp?: boolean;
+  /**
+   * The stage is drawn (board, art, cards). The 3-2-1 waits for it so the count never slams
+   * over a blank stage; the field fades in when it turns true. Default true. A stage that
+   * never reports ready still counts after STAGE_READY_MAX_MS.
+   */
+  stageReady?: boolean;
+  /** Where the 3-2-1-GO lands, as a fraction of the screen height (default 0.5): put it in the stage's clear space. */
+  countdownY?: number;
+  /** The shell plays the last-5 tick, haptic and TIME! whistle (default). False when the game owns its own ticks. */
+  finalSecondsFeedback?: boolean;
   /** Ride-challenge goal ("10 SHARKS"). */
   goal?: { current: number; target: number; label: string };
   /** Set when the round is over: shell transitions to results. */
@@ -227,6 +283,15 @@ interface GameShellV2Props {
 
 const DEFAULT_STAR_MULT: Record<number, number> = { 0: 0, 1: 1, 2: 1.5, 3: 2 };
 const RESUME_STEP_MS = 300;
+// The count clock always runs: Reduce Motion is handled by the drawing (fades, no travel), and
+/** No demo pill exit on this start (the anchored count clock's sentinel). */
+const NO_PILL_EXIT = -1e9;
+// One frame later (requestAnimationFrame where the platform has it; a 16 ms timer otherwise).
+const nextFrame = (fn: () => void): unknown => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : setTimeout(fn, 16));
+const cancelFrame = (id: unknown): void => {
+  if (typeof cancelAnimationFrame === 'function' && typeof id === 'number') cancelAnimationFrame(id);
+  else clearTimeout(id as ReturnType<typeof setTimeout>);
+};
 const RESUME_GO_MS = 220;
 const HEADS_UP_MS = 2600;
 
@@ -241,6 +306,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       fever = false,
       personalBest,
       objective,
+      countdownDemo,
+      countdownPillFieldY,
       goal,
       result,
       starMultipliers = DEFAULT_STAR_MULT,
@@ -269,6 +336,14 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       sessionKey,
       getSnapshot,
       onWrapUp,
+      secondsLeft,
+      finalStampY,
+      finalStampFieldY,
+      remainingMs,
+      finalTimeStamp = true,
+      stageReady = true,
+      finalSecondsFeedback = true,
+      countdownY = 0.5,
       children,
     },
     ref,
@@ -367,29 +442,216 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       );
     }, [countScale]);
 
+    // The start (core/gameMoments): 3, 2, 1 slam in at 0, 700, 1400 ms, GO bursts at 2100 and play
+    // opens on that frame; the GO tail (sparkles, scrim fade) clears by 2700 over live play.
+    // w5r3: ONE anchored clock on the UI thread runs the whole start: the demo pill's exit, every number,
+    // GO and the tail. Each frame moves it on by that frame's real time, capped at COUNT_MAX_STEP_MS, and
+    // each step (its sound, buzz and text, and play itself on GO) fires from the very frame that draws it.
+    // A stalled frame clock now slows the count instead of skipping 1 and GO (w5r2 release: 3, 2, then a
+    // Burst already 2 s in), and the game's Burst clock starts on GO's own frame.
+    const cdClock = useSharedValue(-1);
+    const cdT = useSharedValue(-1);
+    const cdAts = useSharedValue<number[]>([]);
+    const cdNext = useSharedValue(0);
+    const cdFrom = useSharedValue(0);
+    const cdLive = useSharedValue(false);
+    const cdHeld = useSharedValue(0);
+    const cdPillExitAt = useSharedValue(NO_PILL_EXIT);
+    const cdReduced = useSharedValue(reducedMotion);
+    const cdTrace = useSharedValue({ f0: 0, f1: 0, f2: 0, f3: 0, maxDt: 0, goRem: -1 });
+    const [countTrace, setCountTraceRaw] = useState<string | null>(null);
+    const traceMountAt = useRef(Date.now());
+    const traceStageMs = useRef(0);
+    const setCountTrace = useCallback((s: string) => setCountTraceRaw(`open to count ${traceStageMs.current}ms, ${s}`), []);
+    useEffect(() => { cdReduced.value = reducedMotion; }, [reducedMotion, cdReduced]);
+    // w5r2, one callout at a time: a game's picture demo (countdownDemo) plays alone in its pill on the first
+    // start, then shrinks away BEFORE the 3 lands (w5r3: no frame shows the pill and a number together); a
+    // repeat start never shows it (the kid already knows the game).
+    const pillOut = useSharedValue(0);
+    const [goTail, setGoTail] = useState(false);
+    const walkingRef = useRef(false);
+    walkingRef.current = !!linePlayMovement?.moving;
+    const fireCountStep = useCallback((step: ReturnType<typeof countSteps>[number]) => {
+      setCountText(step.label);
+      // Walking in a line drops the buzz one rung (the count still reads with the eyes and ears).
+      const walking = walkingRef.current;
+      const buzz = walking ? (step.haptic === 'incoming' ? 'tap' : 'tick') : step.haptic;
+      playGameHaptic(buzz);
+      playGameMoment(step.cue, step.variant, step.sfx);
+    }, []);
+
+    // The count reads the latest callbacks through refs, so a game re-rendering during the count
+    // (a new onStart each render) never restarts it from 3.
+    const beginPlayRef = useRef(beginPlay);
+    beginPlayRef.current = beginPlay;
+    const fireStepRef = useRef(fireCountStep);
+    fireStepRef.current = fireCountStep;
+    const countStepsRef = useRef<readonly CountStep[]>([]);
+    const hasDemo = !!countdownDemo;
+    const hasDemoRef = useRef(hasDemo);
+    hasDemoRef.current = hasDemo;
+    const [pillGone, setPillGone] = useState(() => hasDemo && countStartsOf(gameId ?? 'game') > 0);
+    const [demoRun, setDemoRun] = useState(0);
+    // Runs on JS from the frame that drew step i.
+    const onCountStep = useCallback((i: number) => {
+      const step = countStepsRef.current[i];
+      if (!step) return;
+      if (i === 0 && hasDemoRef.current) setPillGone(true);
+      fireStepRef.current(step);
+      if (step.at >= GO_AT_MS) beginPlayRef.current();
+    }, []);
+    const countFrameRef = useRef<{ setActive: (on: boolean) => void } | null>(null);
+    const onCountDone = useCallback(() => {
+      countFrameRef.current?.setActive(false);
+      setGoTail(false);
+    }, []);
+    const countFrameFn = useCallback((frame: FrameInfo) => {
+      'worklet';
+      if (!cdLive.value) return;
+      let t = cdT.value;
+      // Dev capture only (EXPO_PUBLIC_COUNT_HOLD_MS): the whole start pauses on one pose for a few seconds,
+      // so a screenshot shows an exact frame on a loaded machine.
+      if (COUNT_HOLD_MS >= 0 && t >= COUNT_HOLD_MS && cdHeld.value < CAPTURE_HOLD_FOR) cdHeld.value = advanceCountClock(cdHeld.value, frame.timeSincePreviousFrame);
+      else t = advanceCountClock(t, frame.timeSincePreviousFrame);
+      cdT.value = t;
+      const exitAt = cdPillExitAt.value;
+      if (exitAt > NO_PILL_EXIT) {
+        const p = Math.min(1, Math.max(0, (t - exitAt) / COACH_EXIT_MS));
+        pillOut.value = cdReduced.value ? (p > 0 ? 1 : 0) : p * p;
+      }
+      cdClock.value = t >= cdFrom.value && t < COUNT_END_MS ? t : -1;
+      if (COUNT_TRACE) {
+        const tr = cdTrace.value;
+        const ix = countPose(cdClock.value, false, false).index;
+        if (ix === 0) tr.f0 += 1; else if (ix === 1) tr.f1 += 1; else if (ix === 2) tr.f2 += 1; else if (ix === 3) tr.f3 += 1;
+        const raw = frame.timeSincePreviousFrame ?? 0;
+        if (raw > tr.maxDt) tr.maxDt = raw;
+        if (ix === 3 && tr.goRem < 0) tr.goRem = remainingMs ? remainingMs.value : -2;
+      }
+      const ats = cdAts.value;
+      const i = cdNext.value;
+      // At most one step per frame, so every number and GO is drawn on its own frame.
+      if (i < ats.length && t >= ats[i]) {
+        cdNext.value = i + 1;
+        runOnJS(onCountStep)(i);
+      }
+      if (t >= COUNT_END_MS && cdNext.value >= ats.length) {
+        cdLive.value = false;
+        cdClock.value = -1;
+        if (COUNT_TRACE) {
+          const tr = cdTrace.value;
+          runOnJS(setCountTrace)(`frames 3:${tr.f0} 2:${tr.f1} 1:${tr.f2} GO:${tr.f3} maxgap ${Math.round(tr.maxDt)}ms clock@GO ${Math.round(tr.goRem)} @end ${remainingMs ? Math.round(remainingMs.value) : -2}`);
+        }
+        runOnJS(onCountDone)();
+      }
+    }, [cdTrace, remainingMs, cdLive, cdT, cdHeld, cdPillExitAt, cdReduced, pillOut, cdClock, cdFrom, cdAts, cdNext, onCountStep, onCountDone]);
+    const countFrame = useFrameCallback(countFrameFn, false);
+    countFrameRef.current = countFrame;
+    // Start the anchored clock `lead` ms before the first step (the demo pill's time, then its exit).
+    const startCount = useCallback((steps: readonly CountStep[], lead: number) => {
+      if (steps.length === 0) return;
+      const from = steps[0].at;
+      countStepsRef.current = steps;
+      cdAts.value = steps.map((s) => s.at);
+      cdNext.value = 0;
+      cdFrom.value = from;
+      cdHeld.value = 0;
+      cdPillExitAt.value = lead > 0 ? from - COACH_EXIT_MS : NO_PILL_EXIT;
+      cdT.value = from - lead;
+      cdClock.value = -1;
+      if (COUNT_TRACE) {
+        cdTrace.value = { f0: 0, f1: 0, f2: 0, f3: 0, maxDt: 0, goRem: -1 };
+        traceStageMs.current = Date.now() - traceMountAt.current;
+      }
+      cdLive.value = true;
+      setGoTail(true);
+      countFrame.setActive(true);
+      // Safety only: if the UI thread never ticks (it always does in the foreground), JS opens play.
+      const expected = lead + (steps[steps.length - 1].at - from);
+      countdownTimers.current.push(setTimeout(() => {
+        if (startedRef.current) return;
+        cdLive.value = false;
+        countFrame.setActive(false);
+        cdClock.value = -1;
+        setGoTail(false);
+        const last = steps[steps.length - 1];
+        fireStepRef.current(last);
+        beginPlayRef.current();
+      }, expected * 3 + COUNT_WATCHDOG_MS));
+    }, [cdAts, cdNext, cdFrom, cdHeld, cdPillExitAt, cdT, cdClock, cdLive, countFrame]);
+    // Stop the start where it is (a hold, a close): nothing keeps ticking.
+    const stopCountStage = useCallback(() => {
+      cdLive.value = false;
+      countFrame.setActive(false);
+      cdClock.value = -1;
+      setGoTail(false);
+    }, [cdLive, countFrame, cdClock]);
+
+    // The stage reports ready (art drawn); a stage that never does still counts after a cap.
+    const [readyCap, setReadyCap] = useState(false);
     useEffect(() => {
-      if (phase !== 'countdown' || !visible) return;
+      if (stageReady || !visible) { setReadyCap(false); return undefined; }
+      const t = setTimeout(() => setReadyCap(true), STAGE_READY_MAX_MS);
+      return () => clearTimeout(t);
+    }, [stageReady, visible]);
+    const stageOn = stageReady || readyCap;
+    const fieldIn = useSharedValue(stageReady ? 1 : 0);
+    useEffect(() => {
+      if (stageOn) fieldIn.value = withTiming(1, { duration: DURATION.enter, easing: EASE.out });
+      else fieldIn.value = 0;
+    }, [stageOn, fieldIn]);
+    // A repeat start of the same game (play again, a second burst of play) counts 2-1-GO; now and
+    // then GO throws gold confetti (never on a first play).
+    const [rareGo, setRareGo] = useState(false);
+    useEffect(() => {
+      if (phase !== 'countdown' || !visible || !stageOn) return;
       clearCountdown();
       if (countdownStyle === 'none') {
-        beginPlay();
+        beginPlayRef.current();
         return;
       }
-      const steps = countdownStyle === 'go' ? ['GO!'] : ['3', '2', '1', 'GO!'];
-      steps.forEach((label, i) => {
-        const t = setTimeout(() => {
-          setCountText(label);
-          punchCount();
-          Haptic.tickSelection();
-          playSfx(label === 'GO!' ? 'go' : 'countdown');
-        }, i * COUNTDOWN.stepMs);
-        countdownTimers.current.push(t);
+      const n = noteCountStart(gameId ?? 'game');
+      const quick = n > 1;
+      setRareGo(isRareGo(n, Math.random()) || (__DEV__ && process.env.EXPO_PUBLIC_RARE_GO === '1'));
+      const steps = countSteps(countdownStyle, quick);
+      // The demo pill plays alone for COACH_LEAD_MS, then shrinks away over COACH_EXIT_MS, then the 3 lands.
+      const lead = hasDemoRef.current && !quick ? COACH_LEAD_MS + COACH_EXIT_MS : 0;
+      if (hasDemoRef.current) {
+        cancelAnimation(pillOut);
+        pillOut.value = lead > 0 ? 0 : 1;
+        setPillGone(lead <= 0);
+        // The demo restarts as the pill shows, so its first beat (the bonk) plays in full.
+        if (lead > 0) setDemoRun((r) => r + 1);
+      }
+      // Start once the game has drawn its first frames (never count over a blank stage).
+      let raf2: unknown = 0;
+      const raf1 = nextFrame(() => {
+        raf2 = nextFrame(() => startCount(steps, lead));
       });
-      const done = setTimeout(() => {
-        beginPlay();
-      }, steps.length * COUNTDOWN.stepMs - (COUNTDOWN.stepMs - COUNTDOWN.goMs));
-      countdownTimers.current.push(done);
-      return clearCountdown;
-    }, [phase, visible, beginPlay, clearCountdown, punchCount, countdownStyle]);
+      return () => {
+        cancelFrame(raf1);
+        cancelFrame(raf2);
+        clearCountdown();
+        // Play opened on GO: the GO tail keeps running on its own clock over live play.
+        if (!startedRef.current) stopCountStage();
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase, visible, clearCountdown, countdownStyle, stageOn]);
+
+    // The last 5 seconds: one tick, one soft buzz and one stamp per second, TIME! at 0 (core/gameMoments).
+    const lastFinal = useRef<number | null>(null);
+    useEffect(() => {
+      if (phase !== 'playing' || !visible) { lastFinal.current = null; return; }
+      const beat = finalSecondsBeat(secondsLeft);
+      if (beat.second == null) { lastFinal.current = null; return; }
+      if (beat.second === lastFinal.current) return;
+      lastFinal.current = beat.second;
+      if (!finalSecondsFeedback) return;
+      if (beat.haptic) playGameHaptic(walkingRef.current && beat.haptic === 'finisher' ? 'tap' : beat.haptic);
+      playGameMoment(beat.cue, beat.variant, beat.sfx, { volume: 0.7 });
+    }, [secondsLeft, phase, visible, finalSecondsFeedback]);
+
+    const budget = usePowerBudget();
 
     // -- Play again: the game cleared its result, so run a fresh start count. --
     const hadResultRef = useRef(false);
@@ -471,7 +733,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const doHold = useCallback(
       (reason: HoldReason, label?: string) => {
         if (phase !== 'playing' && phase !== 'countdown' && phase !== 'resuming') return;
-        if (phase === 'countdown') clearCountdown();
+        if (phase === 'countdown') { clearCountdown(); stopCountStage(); }
         if (phase === 'resuming') clearResume();
         setPhase('paused');
         setPauseReason(label);
@@ -483,7 +745,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         }
         Haptic.tickSelection();
       },
-      [onPause, phase, clearCountdown, clearResume, persist],
+      [onPause, phase, clearCountdown, clearResume, persist, stopCountStage],
     );
 
     const finishResume = useCallback(() => {
@@ -660,12 +922,16 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       }
     }, [phase, doHold, handleClaim, requestQuit]);
 
+    // Tap anywhere skips straight to GO (the burst still plays over live play).
     const skipCountdown = useCallback(() => {
-      if (phase === 'countdown') {
-        clearCountdown();
-        beginPlay();
-      }
-    }, [phase, clearCountdown, beginPlay]);
+      if (phase !== 'countdown') return;
+      clearCountdown();
+      const steps = countSteps(countdownStyle === 'none' ? 'go' : countdownStyle);
+      const go = steps[steps.length - 1];
+      // Straight to GO on the same anchored clock: the next frame draws GO, fires its cue and opens play.
+      if (hasDemoRef.current) { cancelAnimation(pillOut); pillOut.value = 1; setPillGone(true); }
+      startCount([go], 0);
+    }, [phase, clearCountdown, countdownStyle, startCount, pillOut]);
 
     // Paid games share the ride flow's native presentation. Opening another
     // native Modal inside it races both dismissals against the coin reward.
@@ -691,7 +957,44 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const countStyle = useAnimatedStyle(() => ({
       transform: [{ scale: countScale.value }],
     }));
+    const resultsScrimStyle = useAnimatedStyle(() => ({ opacity: resultsOpacity.value }));
     const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value * 0.35 }));
+    const calmMotion = reducedMotion || !!linePlayMovement?.moving;
+    // GO's screen kick (KICK.maxPt, none while walking or reduced) and the scrim fading out over live play.
+    const kickStyle = useAnimatedStyle(() => ({ transform: [{ translateY: countPose(cdClock.value, reducedMotion, calmMotion).kick }] }));
+    const cdScrimStyle = useAnimatedStyle(() => ({ opacity: countPose(cdClock.value, reducedMotion, calmMotion).scrim }));
+    const fieldInStyle = useAnimatedStyle(() => ({ opacity: fieldIn.value }));
+    // The pill breathes while the stage loads, so the start never holds still (no dead frame).
+    const pillT = useSharedValue(0);
+    const pillShown = phase === 'countdown' && !(hasDemo && pillGone);
+    useEffect(() => {
+      if (!pillShown || !visible || reducedMotion) { cancelAnimation(pillT); pillT.value = 0; return undefined; }
+      pillT.value = 0;
+      pillT.value = withRepeat(withTiming(1, { duration: AMBIENT.breathMs / 2, easing: EASE.inOut }), -1, true);
+      return () => cancelAnimation(pillT);
+    }, [pillShown, visible, reducedMotion, pillT]);
+    // r5: the pill arrives with the stage (it fades in on the field's own fade), so a coach card never floats
+    // over an empty blue frame while the art loads.
+    // w5r2: on its way out the demo pill shrinks and drops toward the count, then the 3 owns the frame.
+    const pillBreath = useAnimatedStyle(() => ({
+      opacity: fieldIn.value * (1 - pillOut.value),
+      transform: [{ translateY: 36 * pillOut.value }, { scale: (1 + 0.03 * pillT.value) * (1 - 0.45 * pillOut.value) }],
+    }));
+    // The walking chip pulses 1.0 to 1.08 every 1200 ms (still with Reduce Motion: it holds at 1).
+    const walkT = useSharedValue(0);
+    const walking = !!linePlayMovement?.moving && phase === 'playing';
+    useEffect(() => {
+      if (!walking || reducedMotion) { cancelAnimation(walkT); walkT.value = 0; return undefined; }
+      walkT.value = withRepeat(withTiming(1, { duration: 600, easing: EASE.inOut }), -1, true);
+      return () => cancelAnimation(walkT);
+    }, [walking, reducedMotion, walkT]);
+    const walkChipStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.08 * walkT.value }] }));
+    // Where the play field sits in the shell, so a game can place its last-5 stamp in its own open space.
+    const [fieldY, setFieldY] = useState(0);
+    const onFieldLayout = useCallback((e: LayoutChangeEvent) => {
+      const y = e.nativeEvent.layout.y;
+      setFieldY((v) => (Math.abs(v - y) < 1 ? v : y));
+    }, []);
 
     const stars = effectiveResult?.stars ?? 0;
     const won = stars > 0;
@@ -740,10 +1043,21 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           {goal ? <GoalMeter {...goal} reducedMotion={reducedMotion} /> : null}
 
           {/* Play field */}
-          <View style={styles.field}>{children}</View>
+          <Animated.View style={[styles.field, kickStyle, fieldInStyle]} onLayout={onFieldLayout}>{children}</Animated.View>
+
+          {/* The last 5 seconds: gold edge, stamped seconds, TIME!. */}
+          <FinalSeconds secondsLeft={secondsLeft} remainingMs={remainingMs} timeStamp={finalTimeStamp} width={SCREEN_W} height={SCREEN_H}
+            stampY={finalStampFieldY != null ? fieldY + finalStampFieldY : finalStampY ?? SCREEN_H * countdownY}
+            reduced={reducedMotion} active={phase === 'playing'} edge={budget.level !== 'calm' || !!budget.ambient} />
 
           {/* Heads-up: the line advanced a lot. Never pauses, never buzzes. */}
           <Animated.View pointerEvents="none" style={[styles.edgeGlow, glowStyle]} />
+          {/* Line moving: play never pauses; a small chip with walking feet breathes in the corner. */}
+          {linePlayMovement?.moving && phase === 'playing' ? (
+            <Animated.View pointerEvents="none" style={[styles.walkChip, walkChipStyle]} accessibilityLabel="The line is moving. Keep playing.">
+              <GameIcon name="queue" size={18} />
+            </Animated.View>
+          ) : null}
           {headsUp && phase === 'playing' ? (
             <View pointerEvents="none" style={styles.headsUp} accessibilityLiveRegion="polite">
               <GameIcon name="queue" size={20} />
@@ -751,16 +1065,35 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </View>
           ) : null}
 
-          {/* Countdown overlay */}
+          {COUNT_TRACE && countTrace ? <Text style={styles.countTrace}>{countTrace}</Text> : null}
+          {/* Countdown: scrim (fades at GO), the bubble numbers, the instruction pill, tap anywhere to skip. */}
+          {/* Mounted for the whole count (drawing nothing until the clock starts), so the 3 lands on the
+              first frame of the count instead of waiting for a canvas to mount. */}
+          {goTail || (phase === 'countdown' && countdownStyle !== 'none') ? (
+            <Animated.View pointerEvents="none" style={[styles.cdScrim,
+              countdownScrim === 'light' ? styles.scrimLight : countdownScrim === 'none' ? styles.scrimNone : null, cdScrimStyle]} />
+          ) : null}
+          {goTail || (phase === 'countdown' && countdownStyle !== 'none') ? (
+            <CountdownStage clock={cdClock} width={SCREEN_W} height={SCREEN_H} centerY={SCREEN_H * countdownY}
+              reduced={reducedMotion} calm={calmMotion} rare={rareGo}
+              sparkles={momentParticles(rareGo ? RARE_GO_SPARKLES : GO_SPARKLES, budget, reducedMotion)}
+              confetti={rareGo ? momentParticles(24, budget, reducedMotion) : 0}
+              flash={flashPeak(isDimFlashingLightsEnabled(), reducedMotion)} />
+          ) : null}
           {phase === 'countdown' ? (
             <Pressable
-              style={[styles.overlay, countdownScrim === 'light' ? styles.scrimLight : countdownScrim === 'none' ? styles.scrimNone : null]}
+              style={styles.cdTouch}
               onPress={skipCountdown}
+              accessibilityRole="button"
+              accessibilityLabel={`${objective ? `${objective} ` : ""}Starting in ${countText}. Tap to skip.`}
             >
-              {goal ? <Text style={styles.goalHeadline}>{`${goal.target} ${goal.label}`}</Text> : null}
-              <Animated.Text style={[styles.count, countStyle]}>{countText}</Animated.Text>
-              {objective ? <Text style={styles.objective}>{objective}</Text> : null}
-              <Text style={styles.skipHint}>tap to skip</Text>
+              {pillShown ? (
+              <Animated.View style={[styles.cdPill, countdownPillFieldY != null && fieldY > 0 ? { top: Math.max(188, fieldY + countdownPillFieldY) } : null, pillBreath]} pointerEvents="none">
+                {goal ? <Text style={styles.goalHeadline}>{`${goal.target} ${goal.label}`}</Text> : null}
+                {countdownDemo ? <React.Fragment key={demoRun}>{countdownDemo}</React.Fragment> : (objective ? <Text style={styles.cdPillText} numberOfLines={2}>{objective}</Text> : null)}
+                {countdownDemo ? null : <Text style={styles.skipHint}>tap to skip</Text>}
+              </Animated.View>
+              ) : null}
             </Pressable>
           ) : null}
 
@@ -791,7 +1124,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
           {/* Results */}
           {phase === 'results' && renderResults && effectiveResult ? (
-            <View style={[styles.overlay, resultsScrim === 'light' ? styles.scrimLight : resultsScrim === 'none' ? styles.scrimNone : null]} pointerEvents="box-none">
+            <View style={[styles.overlay, styles.scrimNone]} pointerEvents="box-none">
+              {/* w5r2: the scrim fades in with the card (it used to land a frame early: a navy board with no card). */}
+              <Animated.View pointerEvents="none" style={[styles.scrimFill, resultsScrim === 'light' ? styles.scrimLight : resultsScrim === 'none' ? styles.scrimNone : null,
+                reducedMotion ? null : resultsScrimStyle]} />
               <Animated.View style={[{ width: '100%', alignItems: 'center' }, reducedMotion ? styles.resultsStill : resultsStyle]}>
                 {renderResults({
                   result: effectiveResult,
@@ -904,6 +1240,7 @@ function GoalMeter({ current, target, label, reducedMotion }: { current: number;
 }
 
 const styles = StyleSheet.create({
+  countTrace: { position: 'absolute', left: 4, right: 4, bottom: 4, fontSize: 11, color: '#05346e', backgroundColor: 'rgba(255,255,255,0.85)' },
   resultsStill: { opacity: 1, transform: [{ scale: 1 }] },
   root: {
     flex: 1,
@@ -940,6 +1277,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(8,56,128,0.45)',
   },
+  scrimFill: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,56,128,0.45)' },
   scrimLight: { backgroundColor: 'rgba(255,255,255,0.3)' },
   scrimNone: { backgroundColor: 'transparent' },
   overlayLight: {
@@ -975,7 +1313,18 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 0,
   },
-  skipHint: { color: '#e4f7ff', fontSize: 13, marginTop: 18, letterSpacing: 1, fontFamily: 'Knockout' },
+  // Inside the pill, never over the board (a Whack ring sat under the old bottom hint).
+  skipHint: { color: '#0768b9', fontSize: 12, letterSpacing: 1, fontFamily: 'Knockout', marginTop: 2, opacity: 0.8 },
+  // A pale sky tint (round 3: the 38% navy wash dimmed the board); the light behind each number does the focus.
+  cdScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(36,140,224,0.2)' },
+  cdTouch: { ...StyleSheet.absoluteFillObject },
+  walkChip: { position: 'absolute', left: 12, bottom: 34, width: 36, height: 36, borderRadius: 18, backgroundColor: '#fff8e4',
+    borderWidth: 2.5, borderColor: '#05346e', alignItems: 'center', justifyContent: 'center' },
+  // The instruction sits in a pill near the top so the number lands in clear space (audit defect 7).
+  cdPill: { position: 'absolute', top: 188, alignSelf: 'center', maxWidth: '88%', backgroundColor: '#fff8e4', borderRadius: 22,
+    borderWidth: 3, borderColor: '#05346e', paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center',
+    shadowColor: '#05346e', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 0, elevation: 3 },
+  cdPillText: { color: '#05346e', fontSize: 18, lineHeight: 22, fontFamily: 'Knockout', textAlign: 'center' },
   edgeGlow: {
     ...StyleSheet.absoluteFillObject,
     borderWidth: 6,

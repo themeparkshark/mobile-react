@@ -21,6 +21,7 @@ import { ordinal } from '../net/roomState';
 import type { EmoteId, Seat } from '../net/partyTypes';
 import SeatAvatar from './SeatAvatar';
 import { EmotePop } from './EmoteBar';
+import countText from '../../helpers/countText';
 
 export interface RacerLine {
   seat: Seat;
@@ -65,7 +66,7 @@ function Score({ value, me }: { value: number; me: boolean }) {
     last.current = value;
   }, [s, value]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
-  return <Animated.Text style={[styles.score, me && styles.scoreMe, style]}>{value.toLocaleString('en-US')}</Animated.Text>;
+  return <Animated.Text style={[styles.score, me && styles.scoreMe, style]}>{countText(value)}</Animated.Text>;
 }
 
 function Chip({ line }: { line: RacerLine }) {

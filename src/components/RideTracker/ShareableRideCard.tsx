@@ -1,17 +1,24 @@
-import { shareFileExternal } from '../../services/external';
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useContext, useRef, useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated, Easing } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
-import { colors, shadows, borderRadius } from '../../design-system';
+import { shadows } from '../../design-system';
 import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import SharkReactionIcon, { reactionLabel } from './SharkReactionIcon';
 import { GameIcon, gameAlert } from '../../ui';
+import countText from '../../helpers/countText';
+import { ShareFace } from '../../share/FlexShareButton';
+import { captureFlex, openShareSheet } from '../../share/capture';
+import { campaignUrl, shareMessage } from '../../share/link';
+import { OFFSCREEN, StoryShareFrame } from '../../share/StoryShareFrame';
+import { LocationStatusContext } from '../../context/LocationProvider';
+
+/** While the player is inside a park, the ride card waits: a shared ride and park would say where a kid is right now. */
+export const RIDE_SHARE_HELD_LABEL = 'Share it after you leave the park';
 
 interface ShareableRideCardProps {
   ride: PlayerRideType;
@@ -25,25 +32,29 @@ interface ShareableRideCardProps {
 /** How long the "Shared!" check stays on the button. Shown only when iOS says it really went. */
 export const SHARED_STAMP_MS = 2000;
 
-// The card itself (captured by ViewShot)
+/** "Ridden 1 time", "Ridden 12 times". Exported for tests. */
+export function riddenLine(count: number): string {
+  return `Ridden ${count} ${count === 1 ? 'time' : 'times'}`;
+}
+
+/**
+ * The card itself, exactly as it is shared (the in-sheet preview is the same card): no date, no
+ * wait, no typed note, no player name, and no brand marks of its own (the story frame carries
+ * the one logo, link and QR), sized to its content. There is no other variant, so a date or a
+ * typed note can never reach a picture.
+ */
 const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = React.memo(({ ride, rideCount }) => {
-  const date = new Date(ride.rode_at);
-  const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const parkName = PARK_DISPLAY_ORDER.find(park => park.id === ride.park_id)?.name ?? 'Theme Park';
   const rating = Math.max(0, Math.min(5, Math.trunc(ride.rating ?? 0)));
+  const count = rideCount != null && rideCount > 0 ? rideCount : null;
 
   return (
     <View style={cardStyles.wrapper}>
-      <LinearGradient colors={['#20AAE8', '#0B83C9', '#07569D']} style={cardStyles.card}
+      <LinearGradient colors={['#20AAE8', '#0B83C9', '#07569D']} style={[cardStyles.card, cardStyles.cardShared]}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <View style={cardStyles.bubbleOne} />
         <View style={cardStyles.bubbleTwo} />
         <View style={cardStyles.bubbleThree} />
-        <View style={cardStyles.topBar}>
-          <Text style={cardStyles.brandText}>THEME PARK SHARK</Text>
-          <View style={cardStyles.memoryBadge}><Text style={cardStyles.memoryBadgeText}>RIDE MEMORY</Text></View>
-        </View>
-
         <View style={cardStyles.heroRow}>
           <View style={cardStyles.heroCopy}>
             <Text style={cardStyles.parkName} numberOfLines={2}>{parkName}</Text>
@@ -62,44 +73,35 @@ const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = Reac
             style={cardStyles.heroShark} contentFit="contain" />
         </View>
 
-        <View style={cardStyles.detailsPanel}>
-          {ride.reaction && (
-            <View style={cardStyles.reactionRow}>
-              <SharkReactionIcon reaction={ride.reaction} size={28} />
-              <Text style={cardStyles.reactionLabel}>{reactionLabel(ride.reaction) ?? 'My reaction'}</Text>
+        {/* One hero stat, sized to its content like a trophy plate: the big ride count and the
+            shark's reaction side by side (no wide panel with one small line in it). */}
+        {(!!ride.reaction || !!count) && (
+            <View style={cardStyles.heroStat} accessible
+              accessibilityLabel={[count ? (count === 1 ? 'First ride' : riddenLine(count)) : null, ride.reaction ? reactionLabel(ride.reaction) : null].filter(Boolean).join('. ')}>
+              {count && (
+                <View style={cardStyles.heroStatCount}>
+                  {/* A first ride leads with the brag, not a lonely "1". */}
+                  <Text style={[cardStyles.heroStatNumber, count === 1 && cardStyles.heroStatFirst]} numberOfLines={1} adjustsFontSizeToFit>
+                    {count === 1 ? 'FIRST RIDE!' : countText(count)}</Text>
+                  {count > 1 && <Text style={cardStyles.heroStatLabel}>TIMES RIDDEN</Text>}
+                </View>
+              )}
+              {count && ride.reaction && <View style={cardStyles.heroStatRule} />}
+              {ride.reaction && (
+                <View style={cardStyles.heroStatReaction}>
+                  <SharkReactionIcon reaction={ride.reaction} size={46} />
+                  <Text style={cardStyles.heroStatLabel} numberOfLines={1}>{(reactionLabel(ride.reaction) ?? 'My reaction').toUpperCase()}</Text>
+                </View>
+              )}
             </View>
           )}
-          <View style={cardStyles.statsRow}>
-            <View style={cardStyles.stat}>
-              <Text style={cardStyles.statLabel}>RIDE DATE</Text>
-              <Text style={cardStyles.statValue}>{dateStr}</Text>
-            </View>
-            {rideCount != null && rideCount > 0 && (
-              <View style={cardStyles.stat}>
-                <Text style={cardStyles.statLabel}>TIMES RIDDEN</Text>
-                <Text style={cardStyles.statValue}>{rideCount.toLocaleString()}×</Text>
-              </View>
-            )}
-            {ride.wait_time_minutes != null && (
-              <View style={cardStyles.stat}>
-                <Text style={cardStyles.statLabel}>WAITED</Text>
-                <Text style={cardStyles.statValue}>{ride.wait_time_minutes} min</Text>
-              </View>
-            )}
-          </View>
-          {ride.note && <Text style={cardStyles.note} numberOfLines={2}>“{ride.note}”</Text>}
-        </View>
-        <View style={cardStyles.watermark}>
-          <Text style={cardStyles.watermarkText}>MY SHARK STORY</Text>
-          <Text style={cardStyles.watermarkUrl}>themeparkshark.com</Text>
-        </View>
       </LinearGradient>
     </View>
   );
 });
 CardContent.displayName = 'CardContent';
 
-/** A small turning arrow inside the share button while the ride total loads. Still with Reduce Motion. */
+/** A small turning arrow beside the share pill while the ride total loads. Still with Reduce Motion. */
 const ButtonSpinner: React.FC<{ still: boolean }> = ({ still }) => {
   const turn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -117,7 +119,7 @@ const ButtonSpinner: React.FC<{ still: boolean }> = ({ still }) => {
 };
 
 const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, onShare, queued = false }) => {
-  const viewShotRef = useRef<ViewShot>(null);
+  const storyRef = useRef<View>(null);
   const busy = useRef(false);
   const [sharing, setSharing] = useState(false);
   // A gold check and "Shared!" for a moment, only when the share really went (never after a cancel).
@@ -130,6 +132,8 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
   const [loadingCount, setLoadingCount] = useState(rideCount == null);
   const [confirmedCount, setConfirmedCount] = useState(rideCount);
   const reducedMotion = useReducedGameMotion();
+  const { park } = useContext(LocationStatusContext);
+  const inPark = !!park;
 
   useEffect(() => {
     let current = true;
@@ -144,7 +148,8 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
   }, [ride.ride_id, rideCount, queued]);
 
   const handleShare = useCallback(async () => {
-    if (busy.current || loadingCount) return;
+    if (busy.current || loadingCount || inPark) return;
+    if (queued) return;
     busy.current = true;
     setSharing(true);
     try {
@@ -156,15 +161,13 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
         return;
       }
 
-      const uri = await viewShotRef.current?.capture?.();
-      if (!uri) throw new Error('Card capture unavailable');
+      const uri = await captureFlex(storyRef, 'story');
 
-      const outcome = await shareFileExternal(uri, {
-        mimeType: 'image/png',
-        dialogTitle: `My ${ride.ride_name} experience on Theme Park Shark!`,
-      }, `${ride.ride_name} Ride Card`);
-      // Back on the card after the sheet (even a cancel): a kid who backs out lands on their card,
-      // with the plain Share Ride Card button again. The check is only for a share that went.
+      // The same share path as the Share Studio cards (grown-up gate first, then the share sheet).
+      // The gate shows above this card's sheet (GrownUpGateSlot). Back on the card after the sheet
+      // (even a cancel): a kid who backs out lands on their card, with the plain Share Ride Card
+      // button again. The Shared! check is only for a share iOS says really went (never a cancel).
+      const { ended: outcome } = await openShareSheet(uri, shareMessage(campaignUrl('ride_log')), `${ride.ride_name} Ride Card`);
       if (outcome === 'shared') setShared(true);
       if (outcome === 'shared' || outcome === 'closed') onShare?.();
     } catch {
@@ -173,39 +176,55 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
       busy.current = false;
       setSharing(false);
     }
-  }, [ride, onShare, loadingCount]);
+  }, [ride, onShare, loadingCount, inPark, queued]);
 
   return (
     <View>
-      {queued ? (
+      {/* The preview is exactly the card that gets shared (no date, no note, no extra marks). */}
+      <View style={cardStyles.shotContainer}>
+        <CardContent ride={ride} rideCount={confirmedCount} />
+      </View>
+      {inPark ? (
+        // Held in the park: a park icon with the line, so a kid who can't read yet still gets "later".
+        <View style={cardStyles.heldRow} accessible accessibilityLabel={RIDE_SHARE_HELD_LABEL}>
+          <GameIcon name="map" size={28} />
+          <Text style={cardStyles.heldText}>{RIDE_SHARE_HELD_LABEL}</Text>
+        </View>
+      ) : queued ? (
         // The ride is not in the journal yet, so its total is not known: a calm line, not a button.
         <Text style={cardStyles.shareLater} accessibilityRole="text">Share once it joins your journal</Text>
       ) : (
+        // The one share button, the same gold-rimmed pill as every reveal.
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Share Ride Card"
+          accessibilityHint={sharing ? 'Making your card' : loadingCount ? 'Getting your ride total' : undefined}
           accessibilityState={{ disabled: sharing || loadingCount, busy: sharing || loadingCount }}
           disabled={sharing || loadingCount}
           onPress={handleShare}
-          style={({ pressed }) => [cardStyles.shareBtn, pressed && { opacity: 0.85,
-            transform: [{ scale: reducedMotion ? 1 : 0.97 }] }]}
+          style={({ pressed }) => [cardStyles.shareRow, pressed && { transform: [{ scale: reducedMotion ? 1 : 0.96 }] }]}
         >
-          {/* While the ride total loads, a small spinner sits inside the same button shape. */}
-          <View style={cardStyles.shareBtnRow}>
+          {/* While the ride total loads, a small spinner sits beside the same pill. */}
+          <View style={cardStyles.sharePillRow}>
             {loadingCount && <ButtonSpinner still={reducedMotion} />}
-            {shared && !sharing && <GameIcon name="check" size={20} />}
-            <Text style={[cardStyles.shareBtnText, loadingCount && { opacity: 0.6 }]}>
-              {sharing ? 'Making your card…' : shared ? 'Shared!' : 'Share Ride Card'}</Text>
+            {shared && !sharing ? (
+              <View style={cardStyles.sharedStamp} accessibilityLiveRegion="polite">
+                <GameIcon name="check" size={20} />
+                <Text style={cardStyles.sharedText}>Shared!</Text>
+              </View>
+            ) : <ShareFace size="reveal" dim={sharing || loadingCount} />}
           </View>
         </Pressable>
       )}
-      <ViewShot
-        ref={viewShotRef}
-        options={{ format: 'png', quality: 1, result: 'tmpfile' }}
-        style={cardStyles.shotContainer}
-      >
-        <CardContent ride={ride} rideCount={confirmedCount} />
-      </ViewShot>
+      {/* Off screen: the story-size picture that gets shared. */}
+      <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        {/* Story size with the link and QR. Kid safety: no typed note, no player name, no date. */}
+        {!inPark && (
+          <StoryShareFrame ref={storyRef} ribbon="MY RIDE!" cta="Track your rides with me!" campaign="ride_log">
+            <View style={cardStyles.sharedWidth}><CardContent ride={ride} rideCount={confirmedCount} /></View>
+          </StoryShareFrame>
+        )}
+      </View>
     </View>
   );
 };
@@ -220,6 +239,28 @@ const cardStyles = StyleSheet.create({
     borderRadius: 22,
     overflow: 'hidden',
   },
+  cardShared: { minHeight: 0, paddingBottom: 16 },
+  sharedWidth: { width: 320 },
+  // The share variant's hero stat: a white plate with a gold rim, as wide as what is on it.
+  heroStat: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, minWidth: '62%', backgroundColor: '#FFFFFF',
+    borderRadius: 18, paddingVertical: 8, paddingHorizontal: 18, borderWidth: 3, borderBottomWidth: 6,
+    borderColor: '#FFCF3B', borderBottomColor: '#D99A00' },
+  heroStatCount: { alignItems: 'center', minWidth: 70 },
+  heroStatNumber: { color: '#05346E', fontSize: 44, lineHeight: 48, fontFamily: 'Shark' },
+  heroStatFirst: { fontSize: 34, lineHeight: 40, paddingHorizontal: 6 },
+  heroStatLabel: { color: '#39759C', fontSize: 12, fontFamily: 'Knockout', letterSpacing: 0.8 },
+  heroStatRule: { width: 2, alignSelf: 'stretch', backgroundColor: '#D7EEFB', marginVertical: 4 },
+  heroStatReaction: { alignItems: 'center', gap: 2, maxWidth: 120 },
+  shareRow: { alignItems: 'center', marginTop: 12, marginBottom: 4 },
+  heldRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12, marginBottom: 4,
+    backgroundColor: '#DCEFFB', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 2, borderColor: '#B8E5F8' },
+  sharePillRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  // The Shared! check takes the pill's place for a moment (about the same size, so nothing jumps).
+  sharedStamp: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 52, paddingHorizontal: 22, borderRadius: 26,
+    backgroundColor: '#fff6d8', borderWidth: 3, borderColor: '#ffcf3b' },
+  sharedText: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },
+  shareLater: { color: '#315C7C', fontSize: 15, fontFamily: 'Knockout', textAlign: 'center', marginTop: 12, marginBottom: 4 },
+  heldText: { color: '#0B4B83', fontSize: 16, fontFamily: 'Knockout', flexShrink: 1 },
   card: {
     padding: 18,
     paddingBottom: 14,
@@ -235,21 +276,6 @@ const cardStyles = StyleSheet.create({
     borderRadius: 18, borderWidth: 2, borderColor: 'rgba(255,255,255,0.26)' },
   bubbleThree: { position: 'absolute', top: 192, left: 44, width: 17, height: 17,
     borderRadius: 9, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)' },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  brandText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    letterSpacing: 2,
-    fontFamily: 'Knockout',
-  },
-  memoryBadge: { backgroundColor: '#FFD655', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4,
-    borderWidth: 1, borderColor: '#E6A830' },
-  memoryBadgeText: { color: '#664009', fontSize: 9, fontFamily: 'Knockout', letterSpacing: 1 },
   heroRow: { flexDirection: 'row', alignItems: 'center', minHeight: 137, marginBottom: 11 },
   heroCopy: { flex: 1, justifyContent: 'center', paddingRight: 2 },
   heroShark: { width: 112, height: 137, marginRight: -9 },
@@ -266,38 +292,6 @@ const cardStyles = StyleSheet.create({
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   ratingStar: { width: 22, height: 22 },
   ratingText: { color: '#FFFFFF', fontSize: 12, fontFamily: 'Knockout', marginLeft: 5 },
-  detailsPanel: { backgroundColor: '#F3FBFF', borderRadius: 14, padding: 13,
-    borderWidth: 1, borderColor: '#B8E5F8' },
-  reactionRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10 },
-  reactionLabel: { color: '#0B4B83', fontSize: 14, fontFamily: 'Knockout' },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
-  stat: { flex: 1 },
-  statValue: { color: '#0B4B83', fontSize: 13, fontFamily: 'Knockout', marginTop: 3 },
-  statLabel: { color: '#39759C', fontSize: 9, fontFamily: 'Knockout', letterSpacing: 0.5 },
-  note: { color: '#315C7C', fontSize: 12, fontFamily: 'Knockout', fontStyle: 'italic', marginTop: 10 },
-  watermark: {
-    marginTop: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  watermarkText: { color: '#D6F3FF', fontSize: 9, fontFamily: 'Knockout', letterSpacing: 1.4 },
-  watermarkUrl: { color: '#FFFFFF', fontSize: 10, fontFamily: 'Knockout' },
-  shareBtn: {
-    backgroundColor: colors.tertiary,
-    borderRadius: borderRadius.lg,
-    paddingVertical: 11,
-    alignItems: 'center',
-    marginBottom: 10,
-    ...shadows.md,
-  },
-  shareBtnRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  shareLater: { color: '#315C7C', fontSize: 15, fontFamily: 'Knockout', textAlign: 'center', marginBottom: 10 },
-  shareBtnText: {
-    color: '#000',
-    fontSize: 16,
-    fontFamily: 'Knockout',
-  },
 });
 
 export default ShareableRideCard;

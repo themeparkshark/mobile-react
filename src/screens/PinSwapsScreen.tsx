@@ -41,6 +41,7 @@ import SwapCelebration from './pinTrading/SwapCelebration';
 import TradeSheet from './pinTrading/TradeSheet';
 import { beat, preloadTradeAudio } from './pinTrading/tradeAudio';
 import { warmPinImages } from './pinTrading/pinImageCache';
+import { UpperText } from '../ui/upper';
 
 /** Trades since this screen opened (for the "Trade #n this visit!" line). */
 let sessionTrades = 0;
@@ -533,7 +534,7 @@ export default function PinSwapsScreen() {
             <View style={styles.heroRow}>
               <Image source={LANYARD} style={styles.heroArt} contentFit="contain" />
               <View style={{ flex: 1 }}>
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.eyebrow}>{COPY.boardEyebrow}</Text>
+                <UpperText maxFontSizeMultiplier={MAX_FONT} style={styles.eyebrow}>{COPY.boardEyebrow}</UpperText>
                 <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={styles.heroTitle}>{COPY.boardTitle}</Text>
               </View>
             </View>
@@ -560,7 +561,7 @@ export default function PinSwapsScreen() {
               {boardState === 'ready' && board.length > 0 && (
                 <>
                   <View style={styles.countChip}>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.countText}>{COPY.boardCount(board.length)}</Text>
+                    <UpperText maxFontSizeMultiplier={MAX_FONT} style={styles.countText}>{COPY.boardCount(board.length)}</UpperText>
                   </View>
                   <View style={styles.grid}>
                     {board.map((swap, i) => (

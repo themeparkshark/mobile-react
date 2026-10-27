@@ -20,6 +20,7 @@ import { frightLinePlayRide } from './frightLinePlay';
 import ArtImage from './ArtImage';
 import { NightButton } from './ui';
 import type { FrightEngine } from './useFrightEngine';
+import { UpperText } from '../../ui/upper';
 
 function statusText(spot: FrightSpot): string {
   if (spot.status && spot.status !== 'OPERATING') return 'Closed right now';
@@ -128,7 +129,7 @@ export default function FrightSheet({ night, engine }: { readonly night: FrightN
               </View>
             );
           })}
-          {reefs.length > 0 && <Text style={styles.section}>Fright Reefs</Text>}
+          {reefs.length > 0 && <UpperText style={styles.section}>Fright Reefs</UpperText>}
           {reefs.map(spot => {
             const found = me?.found_tonight.includes(spot.key);
             return (

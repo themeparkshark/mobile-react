@@ -94,7 +94,10 @@ const INK = '#23263a';
 const CORAL = '#ff5a4e';
 const GOLD = '#fec90e';
 const BLUE = '#2d9cff';
-const TIER_COLORS = [INK, INK, BLUE, GOLD, CORAL];
+// Combo tiers climb ink, ink, blue, gold, then a hot deep gold at the top (never coral: gold means good).
+const HOT = '#f5a300';
+const HOT_LIGHT = '#ffe680';
+const TIER_COLORS = [INK, INK, BLUE, GOLD, HOT];
 const TIME_X = 112;
 const TIME_W = 262;
 const TRACK_Y = 116;
@@ -644,7 +647,7 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   const trailColor = useDerivedValue(() => {
     tick.value;
     const n = sim.value.bN;
-    return sim.value.bGold ? GOLD : n >= 20 ? CORAL : n >= 10 ? GOLD : n >= 5 ? BLUE : '#ffffff';
+    return sim.value.bGold ? GOLD : n >= 20 ? HOT_LIGHT : n >= 10 ? GOLD : n >= 5 ? BLUE : '#ffffff';
   });
 
   // -- shark and basket ---------------------------------------------------------------------
@@ -827,7 +830,7 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   const ballRingColor = useDerivedValue(() => {
     tick.value;
     const n = sim.value.bN;
-    return n >= 20 ? CORAL : n >= 10 ? GOLD : n >= 5 ? BLUE : '#ffffff';
+    return n >= 20 ? HOT_LIGHT : n >= 10 ? GOLD : n >= 5 ? BLUE : '#ffffff';
   });
   const ballRingOp = useDerivedValue(() => {
     tick.value;
@@ -1016,7 +1019,8 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   const timeColor = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
-    if (s.rushOn) return CORAL;
+    // The last rush is a gold drumroll (it still pulses), never a red alarm.
+    if (s.rushOn) return HOT;
     return GOLD;
   });
   const timePulse = useDerivedValue(() => {
@@ -1410,7 +1414,8 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     tick.value;
     const st = vis.value.stamp;
     if (st === ST_GOLDEN) return GOLD;
-    if (st === ST_OUT) return CORAL;
+    // OUT! ends a set like TIME!: a white stamp, never a red one.
+    if (st === ST_OUT) return '#ffffff';
     return '#ffffff';
   });
   const stampOpacity = useDerivedValue(() => {

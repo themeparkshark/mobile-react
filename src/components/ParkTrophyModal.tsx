@@ -4,6 +4,7 @@ import { Dimensions, Pressable, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import Button from '../components/Button';
 import config from '../config';
+import { UpperText } from '../ui/upper';
 
 export default function ParkTrophyModal({
   children,
@@ -57,7 +58,7 @@ export default function ParkTrophyModal({
                 marginBottom: 32,
               }}
             >
-              <Text
+              <UpperText
                 style={{
                   color: 'white',
                   fontFamily: 'Knockout',
@@ -67,7 +68,7 @@ export default function ParkTrophyModal({
                 }}
               >
                 {trophy.name} Trophy
-              </Text>
+              </UpperText>
             </View>
             <Image
               source={trophy.image}
@@ -85,7 +86,7 @@ export default function ParkTrophyModal({
                 marginTop: 32,
               }}
             >
-              <Text
+              <UpperText
                 style={{
                   color: 'white',
                   fontFamily: 'Knockout',
@@ -95,7 +96,7 @@ export default function ParkTrophyModal({
                 }}
               >
                 Unlocks at {trophy.unlockCount} ride coins
-              </Text>
+              </UpperText>
             </View>
           </View>
         </View>

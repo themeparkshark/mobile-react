@@ -11,7 +11,7 @@ import Animated, {
   Easing, FadeInDown, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue,
   withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import SafeScreen from '../components/SafeScreen';
 import updatePlayer from '../api/endpoints/me/update-player';
 import FindOriginalAccount from '../components/FindOriginalAccount';
 import { AuthContext } from '../context/AuthProvider';
@@ -134,7 +134,7 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={styles.root}>
         <Image source={require('../../assets/images/screens/welcome/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <SafeAreaView style={styles.safe}>
+        <SafeScreen style={styles.safe}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.column}>
             <Animated.View entering={ZoomIn.delay(100).springify().damping(12)}>
               <Image source={require('../../assets/images/screens/login/logo.png')} style={styles.logo} contentFit="contain" />
@@ -201,7 +201,7 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
               </Animated.Text>
             )}
           </KeyboardAvoidingView>
-        </SafeAreaView>
+        </SafeScreen>
         <FindOriginalAccount visible={findingOriginal} onClose={() => setFindingOriginal(false)} />
       </View>
     </TouchableWithoutFeedback>

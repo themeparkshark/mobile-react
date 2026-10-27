@@ -408,6 +408,7 @@ test('GameAudio: pan plays only on a headphone route (Whack v5); the speaker is 
   }
   stubs['./backends'] = { ExpoAvBackend: Fake, AudioApiBackend: Fake, HybridBackend: Fake, audioApiAvailable: () => false };
   const { GameAudio } = loadTs('src/gamekit/audio/GameAudio.ts', stubs, { setInterval, clearInterval });
+  GameAudio.setSfxEnabled(true); GameAudio.setMusicEnabled(true);
   await GameAudio.init();
   await GameAudio.preload(['fx.hit', 'fx.whoosh', 'fx.nope']);
   GameAudio.play('fx.hit', { pan: -0.6 });
@@ -452,15 +453,18 @@ test('shell: countdownStyle none starts at once (Parade Beat counts in itself); 
   assert.equal(legacy.calls.start, 1);
   legacy.view.unmount();
   const go = shell({ countdownStyle: 'go' });
-  assert.ok(go.view.find((n) => n.props?.children === 'GO!'), 'the first label is GO!');
+  // The drawn count is a UI-thread stage (fx/CountdownStage); the skip target names the label for screen readers.
+  assert.ok(go.view.find((n) => n.type === 'Pressable' && /GO!/.test(n.props?.accessibilityLabel ?? '')), 'the first label is GO!');
   go.view.unmount();
 });
 
 test('shell: header score hide / replace, scrim none, hold-sheet extras, results note and extras, challenge label', () => {
   const { view } = shell({ hideHeaderScore: true, countdownScrim: 'none', pauseExtras: 'RELAXED PACE', resultExtras: 'ALBUM ROW', challengeLabel: 'Race a friend', onChallenge() {}, onRematch() {} });
   assert.equal(view.find((n) => n.type === 'ScoreDisplay'), undefined);
+  // The scrim layer is mounted for the whole count (w5r3: the count itself runs on one UI-thread frame clock).
+  const layer = view.find((n) => n.type === 'ReanimatedView' && Array.isArray(n.props?.style) && n.props.style[1]?.backgroundColor === 'transparent');
+  assert.ok(layer, 'countdownScrim none draws no scrim colour');
   const scrim = view.find((n) => n.type === 'Pressable');
-  assert.equal(scrim.props.style[1].backgroundColor, 'transparent');
   scrim.props.onPress(); view.render();
   view.find((n) => n.type === 'TouchableOpacity' && n.props.accessibilityLabel === 'Pause').props.onPress(); view.render();
   assert.ok(view.find((n) => n === 'RELAXED PACE' || n.props?.children === 'RELAXED PACE' || (Array.isArray(n.props?.children) && n.props.children.includes('RELAXED PACE'))));

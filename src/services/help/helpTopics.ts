@@ -107,10 +107,11 @@ export interface TipCopy { readonly title: string; readonly body: string }
 export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy>> = {
   // The map's shark finder button (FollowButton draws its own bubble from FOLLOW_COPY; this is the record).
   map_compass: { title: 'Map spin', body: 'The map spins with you. Tap to keep it still.' },
-  park_hud: { title: 'You\'re at the park!',
-    body: 'Ride coins wait at the rides. Tap a number up top to learn about it. Tap your shark to see your shelf.' },
-  coin_in_range: { title: 'A ride coin is in range',
-    body: 'Tap Play Ride! One Ticket gets you one try at a quick game. Win to add the coin to your shelf.' },
+  // One short line: it shows over the map on the first park frame, so a 7-year-old reads it at a glance.
+  park_hud: { title: 'You\'re at the park!', body: 'Walk to a ride to win its coin.' },
+  // Matches the button word for word (PLAY RIDE!); the card shows a ticket, an arrow and the coin
+  // instead of this line, which VoiceOver reads.
+  coin_in_range: { title: 'Tap PLAY RIDE!', body: 'One Ticket gets one try. Win the ride coin!' },
   ride_challenge: { title: 'How a ride challenge works',
     body: 'Spend a Ticket to start. The game picks itself. Win to get this coin and the prizes shown here.' },
   lineplay_intro: { title: 'Welcome to LinePlay',
@@ -124,7 +125,7 @@ export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy
   bonus_ads: { title: 'Bonus ads are optional',
     body: 'Watch a short ad for a small extra, like a free Ticket or more coins. Skip it and you lose nothing.' },
   first_level_up: { title: 'First level up!',
-    body: 'There are 10 levels, all the way up to Shark Crown.' },
+    body: 'Every level gives your coin a new look. Fill all the dots to max it out!' },
 };
 
 /** Mini-game types the selector can start. */

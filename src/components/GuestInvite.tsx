@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SignInButtons from './SignInButtons';
 import { BRAND, GameIcon, RADIUS, SHADOW, textPreset, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { UpperText } from '../ui/upper';
 
 const SHARK = require('../../assets/images/screens/welcome/shark.png');
 const LOGO = require('../../assets/images/screens/login/logo.png');
@@ -84,7 +85,7 @@ export default function GuestInvite() {
           <Image source={SHARK} style={styles.shark} contentFit="contain" accessibilityIgnoresInvertColors />
         </Animated.View>
         <Image source={LOGO} style={styles.logo} contentFit="contain" accessibilityLabel="Theme Park Shark" />
-        <Text style={styles.title}>{GUEST_COPY.title}</Text>
+        <UpperText style={styles.title}>{GUEST_COPY.title}</UpperText>
         <View style={styles.promises}>
           {GUEST_PROMISES.map((promise, index) => (
             <Animated.View key={promise.icon}

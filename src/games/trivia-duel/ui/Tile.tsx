@@ -15,7 +15,7 @@
  * time is the moment the ring closes. Both stop a bump in a moving line from
  * becoming an answer.
  *
- * Reveal: correct = 2-frame white silhouette then gold; wrong = coral with
+ * Reveal: correct = 2-frame white silhouette then gold; wrong = calm blue rock (was coral) with
  * Alex's X. Avatar heads drop onto picked tiles (Quiplash) and a thermometer
  * fills with the pick share (Kahoot) once the stamp has gone.
  */
@@ -27,7 +27,7 @@ import Animated, {
   Easing, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import Svg, { Path as SvgPath } from 'react-native-svg';
-import { ART, BADGES, C, SHARKS, type SharkLook } from '../art';
+import { BADGES, C, SHARKS, type SharkLook } from '../art';
 import { FINAL_HOLD_MS } from '../engine/config';
 
 export type TileState = 'down' | 'up' | 'dim' | 'locked' | 'amber' | 'correct' | 'truth' | 'wrong' | 'removed' | 'reveal-dim';
@@ -78,6 +78,8 @@ export const Tile = React.memo(function Tile({
   const shareFill = useSharedValue(0);
   const ring = useSharedValue(0);
   const rimOn = useSharedValue(0);
+  // A wrong pick rocks like a cartoon double-take (degrees); never a red alarm.
+  const rock = useSharedValue(0);
   const faceUp = state !== 'down';
   const compact = label.length > TILE_COMPACT_CHARS && width < 260;
   const [showFace, setShowFace] = React.useState(faceUp);
@@ -120,16 +122,23 @@ export const Tile = React.memo(function Tile({
       pop.value = reducedMotion ? 1 : withSequence(withTiming(1.06, { duration: 90 }), withSpring(1, { damping: 8, stiffness: 300 }));
       rimOn.value = 1;
     } else if (state === 'truth') {
-      // You picked wrong: the correct tile pulses green twice, 2 x 180 ms. No stamp.
+      // You picked wrong: the right tile glows gold for 600 ms (two soft pulses and a white glint) so the
+      // kid learns the answer. Gold means right, everywhere.
       press.value = withTiming(0, { duration: 60 });
+      white.value = withSequence(withTiming(0.5, { duration: 60 }), withTiming(0, { duration: 240 }));
       pop.value = reducedMotion ? 1 : withSequence(
-        withTiming(1.06, { duration: 90 }), withTiming(1, { duration: 90 }),
-        withTiming(1.06, { duration: 90 }), withTiming(1, { duration: 90 }),
+        withTiming(1.08, { duration: 150 }), withTiming(1, { duration: 150 }),
+        withTiming(1.08, { duration: 150 }), withSpring(1, { damping: 9, stiffness: 220 }),
       );
-      rimOn.value = 0;
+      rimOn.value = 1;
     } else if (state === 'wrong') {
       press.value = withTiming(0, { duration: 60 });
-      pop.value = reducedMotion ? 1 : withSequence(withTiming(0.92, { duration: 70 }), withSpring(0.98, { damping: 10, stiffness: 300 }));
+      pop.value = reducedMotion ? 1 : withSequence(withTiming(0.94, { duration: 70 }), withSpring(0.98, { damping: 10, stiffness: 300 }));
+      // +-5 deg twice over 280 ms, then still.
+      rock.value = reducedMotion ? 0 : withSequence(
+        withTiming(5, { duration: 56 }), withTiming(-5, { duration: 56 }), withTiming(5, { duration: 56 }),
+        withTiming(-5, { duration: 56 }), withTiming(0, { duration: 56 }),
+      );
       rimOn.value = 0;
     } else if (state === 'up' || state === 'down') {
       press.value = 0;
@@ -217,6 +226,7 @@ export const Tile = React.memo(function Tile({
     transform: [
       { translateX: wig.value },
       { translateY: -3 * lift.value + 5 * press.value },
+      { rotate: `${rock.value}deg` },
       { scaleX: flip.value * pop.value },
       { scaleY: pop.value },
     ],
@@ -238,7 +248,8 @@ export const Tile = React.memo(function Tile({
 
   const badge = BADGES[index % 4];
   const dim = state === 'dim' || state === 'reveal-dim' || state === 'removed';
-  const bg = state === 'correct' ? C.gold : state === 'truth' ? C.green : state === 'wrong' ? C.coral : state === 'amber' ? '#ffb347' : state === 'locked' ? '#fff3c4' : C.cream;
+  // Gold means right (yours or the one you learn); a miss is a calm blue, never red or neon green.
+  const bg = state === 'correct' ? C.gold : state === 'truth' ? C.gold : state === 'wrong' ? '#b9d3ef' : state === 'amber' ? '#ffb347' : state === 'locked' ? '#fff3c4' : C.cream;
   const border = state === 'locked' || state === 'amber' ? C.goldDeep : C.ink;
   if (state === 'removed' && !chomped) return <View style={{ width, height: height + LIP }} />;
 
@@ -258,7 +269,7 @@ export const Tile = React.memo(function Tile({
             <Badge shape={badge.shape} color={badge.color} size={compact ? 22 : Math.min(28, height * 0.34)} />
             {showFace ? (
               <Text
-                style={[styles.label, compact && styles.labelCompact, { fontSize, lineHeight: Math.round(fontSize * 1.12), color: state === 'wrong' ? '#fff' : C.navy }]}
+                style={[styles.label, compact && styles.labelCompact, { fontSize, lineHeight: Math.round(fontSize * 1.12), color: C.navy }]}
                 numberOfLines={3}
                 adjustsFontSizeToFit
                 minimumFontScale={0.92}
@@ -267,7 +278,7 @@ export const Tile = React.memo(function Tile({
               </Text>
             ) : null}
           </View>
-          {state === 'wrong' ? <Image source={ART.xBadge} style={styles.x} /> : null}
+          {/* No red X on a miss: the rock and the gold answer say it. */}
           <Animated.View style={[StyleSheet.absoluteFill, rimStyle]} pointerEvents="none">
             {RIM.map(([x, y], i) => (
               <View key={i} style={[styles.rimBulb, { left: x * (width - 14) + 1, top: y * (height - 14) + 1 }]} />

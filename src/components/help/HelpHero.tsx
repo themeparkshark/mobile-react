@@ -536,7 +536,7 @@ function Tile({ tile, item, w, price, itemScale = 0.66 }: {
       )}
       {price && (
         <View style={[styles.price, { top: th * 0.765, height: th * 0.17 }]}>
-          <GameIcon name="coin" size={th * 0.13} />
+          <GameIcon name="coins" size={th * 0.13} />
         </View>
       )}
     </View>
@@ -841,7 +841,7 @@ function ChestScene({ t, w, h }: SceneProps) {
       <Shadow x={cx} y={base} w={cw * 0.9} />
       <Abs x={cx - cw / 2} y={base - closedH} w={cw} h={closedH} style={shake}><Art source={ART.chestClosed} w={cw} h={closedH} /></Abs>
       <Abs x={cx - cw / 2} y={base - openH} w={cw} h={openH} style={open}><Art source={ART.chestOpen} w={cw} h={openH} /></Abs>
-      <Burst t={t} cx={cx} cy={base - openH * 0.55} reach={cw * 0.62} icon="coin" dx={-1.5} dy={0.55} at={0.46} size={32} />
+      <Burst t={t} cx={cx} cy={base - openH * 0.55} reach={cw * 0.62} icon="coins" dx={-1.5} dy={0.55} at={0.46} size={32} />
       <Burst t={t} cx={cx} cy={base - openH * 0.55} reach={cw * 0.62} src={ART.ticket} aspect={549 / 799} dx={-0.75} dy={0.95} at={0.5} size={42} />
       <Burst t={t} cx={cx} cy={base - openH * 0.55} reach={cw * 0.62} src={ART.energy} aspect={284 / 196} dx={0.75} dy={0.95} at={0.54} size={24} />
       <Burst t={t} cx={cx} cy={base - openH * 0.55} reach={cw * 0.62} src={ART.cap} aspect={146 / 200} dx={1.5} dy={0.55} at={0.58} size={44} />
@@ -963,7 +963,7 @@ function TreasureScene({ t, w, h, caption }: SceneProps & { readonly caption: st
       <Abs x={px} y={py} w={pw} h={ph} style={pile}><Art source={ART.treasure} w={pw} h={ph} /></Abs>
       <Abs x={w / 2 - s / 2} y={py - s * 0.35} w={s} h={s} style={dive}><Art source={ART.sharks[0]} w={s} h={s} /></Abs>
       {[-1.3, -0.5, 0.4, 1.2].map((dx, i) => (
-        <Burst key={dx} t={t} cx={w / 2} cy={py + ph * 0.3} reach={Math.min(pw * 0.32, py * 0.8)} icon="coin" dx={dx} dy={0.9 - Math.abs(dx) * 0.25} at={0.31 + i * 0.03} size={24} />
+        <Burst key={dx} t={t} cx={w / 2} cy={py + ph * 0.3} reach={Math.min(pw * 0.32, py * 0.8)} icon="coins" dx={dx} dy={0.9 - Math.abs(dx) * 0.25} at={0.31 + i * 0.03} size={24} />
       ))}
       {caption ? (
         <Abs x={w / 2 - 110} y={8} w={220} h={32} style={{ alignItems: 'center' }}>

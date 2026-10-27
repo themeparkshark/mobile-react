@@ -20,6 +20,7 @@ import {
 import { RedeemableType } from '../models/redeemable-type';
 import YellowButton from './YellowButton';
 import { BRAND, gameAlert } from '../ui';
+import { UpperText } from '../ui/upper';
 
 export default function RedeemCurrentRedeemableModel({
   open,
@@ -166,7 +167,7 @@ export default function RedeemCurrentRedeemableModel({
               width: '80%',
             }}
           >
-            <Text
+            <UpperText
               style={{
                 fontFamily: 'Shark',
                 textTransform: 'uppercase',
@@ -183,7 +184,7 @@ export default function RedeemCurrentRedeemableModel({
               }}
             >
               {`1 ${redeemable.theme.currency.singular_name}`}
-            </Text>
+            </UpperText>
             <Image
               source={{
                 uri: redeemable.theme.currency.icon_url,

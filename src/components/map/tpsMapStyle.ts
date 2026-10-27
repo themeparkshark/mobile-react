@@ -10,9 +10,15 @@ const NOT_ROADS = [...PATHS, 'rail', 'transit', 'ferry'];
 const line = ['==', ['geometry-type'], 'LineString'];
 const w = (z15: number, z19: number, base = 1.6) => ['interpolate', ['exponential', base], ['zoom'], 15, z15, 19, z19];
 
+/**
+ * Development captures only: a lane-local tile proxy that serves the same tiles slowly, so the
+ * slow-tile sky can be seen on screen. Never set in store or over-the-air builds (__DEV__ is false).
+ */
+const DEV_TILE_SOURCE = __DEV__ ? process.env.EXPO_PUBLIC_DEV_TILE_SOURCE : undefined;
+
 export const TPS_MAP_STYLE = {
   version: 8,
-  sources: { omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' } },
+  sources: { omt: { type: 'vector', url: DEV_TILE_SOURCE || 'https://tiles.openfreemap.org/planet' } },
   layers: [
     // The world is soft lawn (like a hand-drawn park map); paved and built-up
     // areas lay cream on top of it, so neighborhoods read green and friendly.

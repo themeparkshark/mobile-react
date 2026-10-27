@@ -22,12 +22,31 @@ const COINS = [
   COIN('5u5ygBhsuGZtaYIK1JExUSbItVbCoJT19pYuUaXg'),
 ];
 
-/** A dressed sample shark: tee, shades and a camera (real production papers). */
+/** A dressed sample shark: tee, shades and a camera (real production papers), on the classic skin (a shop set card needs one). */
 export const SAMPLE_INVENTORY = {
+  skin_item: { id: 2, name: 'Classic shark', paper_url: `${PROD}/HX7UIrHDV28b7e5VGzBxt86jQ0eradyh8hsldNmR.png` },
   body_item: { id: 9001, name: 'Tee', paper_url: `${PROD}/WwCOXJ7rMpwaUGjQwvG0TDNEW2EC4sdQwQZskaVC.png` },
   face_item: { id: 9002, name: 'Shades', paper_url: `${PROD}/63Z80KzmnLJLLZOO3xolJ0IMkd0tnYirHzOjiCPe.png` },
   neck_item: { id: 9003, name: 'Camera', paper_url: `${PROD}/EIbKxOUH3iQftK6iTkGzXaQtir5hOz94AqVqdaBp.png` },
 } as unknown as InventoryType;
+
+/**
+ * The PolishShare player's real look (witch hat, ghost costume, ghost blaster: production papers),
+ * the widest look in the catalog. EXPO_PUBLIC_SHARE_STUDIO_LOOK=ghost renders every sample in it.
+ */
+export const GHOST_INVENTORY = {
+  skin_item: { id: 2, name: 'Classic shark', paper_url: `${PROD}/HX7UIrHDV28b7e5VGzBxt86jQ0eradyh8hsldNmR.png` },
+  head_item: { id: 27, name: 'Witch Hat', paper_url: `${PROD}/oQi4oC4uE8tVRBP97LkCag19XCDCt4O6BLg04bwf.png` },
+  body_item: { id: 219, name: 'Ghost Costume', paper_url: `${PROD}/sOubrLKHE8xVFwmWtG7xiHsd2IayiuZpzgnb3TQO.png` },
+  hand_item: { id: 434, name: 'Ghost Blaster', paper_url: `${PROD}/2IPHn8UVfl5hHN2wdayZWq8ZiqZTEmKwnMv5pkIn.png` },
+} as unknown as InventoryType;
+
+/** The real Snowflake Beanie (the Shark Pass reward art the reveal shows). */
+const SNOWFLAKE_BEANIE = require('../../assets/images/sharkpass/snowflake-beanie.webp') as number;
+
+function wearingPin(icon: string | number): InventoryType {
+  return { ...SAMPLE_INVENTORY, pin_item: { id: 9010, name: 'Prize pin', icon_url: icon } } as unknown as InventoryType;
+}
 
 export interface FlexSample<K extends FlexKind = FlexKind> {
   readonly name: string;
@@ -42,10 +61,21 @@ export const FLEX_SAMPLES: readonly FlexSample[] = [
   s('find-legendary', 'find', { itemName: 'Legendary Golden Churro', artUrl: art('golden-churro.webp'), rarity: 5, setName: 'Churro Cart', setFound: 4, setTotal: 9, ownedPct: 0.03 }),
   s('find-golden-hour', 'find', { itemName: 'Giant Dragon Plush', artUrl: art('dragon-plush.webp'), rarity: 5, goldenHour: true, setName: 'Souvenirs', setFound: 7, setTotal: 10 }),
   s('find-epic', 'find', { itemName: 'Firework Rocket Toy', artUrl: art('firework-rocket.webp'), rarity: 4, setName: 'Night Glow', setFound: 3, setTotal: 8 }),
+  // Earned prizes (Shark Pass step, member pin): own campaign link and QR, no rarity.
+  // Worn right away (Wear it now): the prize shows on the shark's chest, like the real reveal.
+  s('find-sharkpass', 'find', { itemName: 'Snowflake Beanie', artUrl: SNOWFLAKE_BEANIE, prize: 'pass', sourceLine: 'Earned at Step 12', sourceSub: 'Frosty Fun Winter Wonderland',
+    inventory: wearingPin(SNOWFLAKE_BEANIE) }),
+  s('find-member', 'find', { itemName: 'Golden Fin Pin', artUrl: art('shooting-star.webp'), prize: 'member', sourceLine: 'This month\u2019s member pin',
+    inventory: wearingPin(art('shooting-star.webp')) }),
   s('ride-photo', 'ride_photo', { itemName: 'Wishing Star', artUrl: art('shooting-star.webp'), rarity: 5, grade: 'frame_it' }),
   s('set-complete', 'set_complete', {
     setName: 'Snack Stand', badgeUrl: art('snack-stand.webp'), found: 12, total: 12, title: 'Snack Boss', source: 'home_hunt',
     artUrls: ['popcorn-bucket', 'corn-dog', 'pizza-slice', 'nacho-tray', 'turkey-leg'].map(f => art(`${f}.webp`)),
+  }),
+  // A shop set: the card's hero is the player's own shark wearing it (FlexCard LookHero).
+  s('set-complete-look', 'set_complete', {
+    setName: 'Spooky Squad', badgeUrl: art('snack-stand.webp'), found: 3, total: 3, source: 'shop',
+    artUrls: ['popcorn-bucket', 'corn-dog', 'pizza-slice'].map(f => art(`${f}.webp`)),
   }),
   s('boss-win', 'boss_win', { bossName: 'The Kraken', artUrl: require('../../assets/images/boss/kraken.png'), difficulty: 'shark', title: 'Kraken Tamer', mvp: true }),
   s('stamp', 'stamp', { name: 'Wild Legend Finder', artUrl: art('wild-legend-finder.png'), rarity: 'legendary', how: 'Caught 2 different Legendaries', ownedPct: 0.04, artHasShark: true }),

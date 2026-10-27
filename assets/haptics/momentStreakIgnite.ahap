@@ -1,0 +1,91 @@
+{
+  "Version": 1,
+  "Metadata": {
+    "Project": "Theme Park Shark studio",
+    "Created": "gamekit",
+    "Description": "momentStreakIgnite"
+  },
+  "Pattern": [
+    {
+      "Event": {
+        "Time": 0,
+        "EventType": "HapticTransient",
+        "EventParameters": [
+          {
+            "ParameterID": "HapticIntensity",
+            "ParameterValue": 0.6
+          },
+          {
+            "ParameterID": "HapticSharpness",
+            "ParameterValue": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "Event": {
+        "Time": 0,
+        "EventType": "HapticContinuous",
+        "EventDuration": 0.45,
+        "EventParameters": [
+          {
+            "ParameterID": "HapticIntensity",
+            "ParameterValue": 0.7
+          },
+          {
+            "ParameterID": "HapticSharpness",
+            "ParameterValue": 0.2
+          }
+        ]
+      }
+    },
+    {
+      "ParameterCurve": {
+        "ParameterID": "HapticIntensityControl",
+        "Time": 0,
+        "ParameterCurveControlPoints": [
+          {
+            "Time": 0,
+            "ParameterValue": 1
+          },
+          {
+            "Time": 0.45,
+            "ParameterValue": 0.214
+          }
+        ]
+      }
+    },
+    {
+      "ParameterCurve": {
+        "ParameterID": "HapticSharpnessControl",
+        "Time": 0,
+        "ParameterCurveControlPoints": [
+          {
+            "Time": 0,
+            "ParameterValue": 0
+          },
+          {
+            "Time": 0.45,
+            "ParameterValue": -0.1
+          }
+        ]
+      }
+    },
+    {
+      "Event": {
+        "Time": 0.3,
+        "EventType": "HapticTransient",
+        "EventParameters": [
+          {
+            "ParameterID": "HapticIntensity",
+            "ParameterValue": 0.55
+          },
+          {
+            "ParameterID": "HapticSharpness",
+            "ParameterValue": 0.85
+          }
+        ]
+      }
+    }
+  ]
+}

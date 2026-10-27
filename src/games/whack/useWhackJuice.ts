@@ -25,11 +25,12 @@ import type { CameraRig } from '../../gamekit/fx/useCamera';
 import type { StampLayerHandle } from '../../gamekit/fx/StampLayer';
 import { useFeel, type FeelDef } from '../../gamekit/feel';
 import { createFxGovernor, govHitStop, GOVERNOR_PRESETS } from '../../gamekit/core/fxGovernor';
+import { tierFlyLook } from '../../gamekit/core/gameMoments';
 import { whackLayerLevel } from '../../gamekit/core/beatLayers';
 import type { BeatLayerPlayer } from '../../gamekit/audio/BeatLayers';
 import { WHACK_PRIO } from '../../gamekit/core/hapticBus';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
-import { configureHaptics, playPattern } from '../../gamekit/Haptics';
+import { configureHaptics, playHaptic, playPattern } from '../../gamekit/Haptics';
 import { createFlurry, flurryHit, flurryResolve, FLURRY_GROW, FLURRY_START, type FlurryState } from '../../gamekit/core/scoring';
 import {
   E_BREAK, E_BRUISER, E_BUTTER, E_COIN_BUBBLE, E_DECOY, E_DOUBLE, E_EMERGE, E_ESCAPE, E_FEVER, E_FEVER_READY, E_FREEZE, E_HELMET, E_HIT,
@@ -39,9 +40,24 @@ import { E_HAT_BOUNCE } from './useWhackRuntime';
 import { G_CRIT, G_GOOD, G_QUICK, K_ANGLER, K_BRUISER, K_FINN, K_GOLDEN, K_HELMET, K_PUFFER, K_TENTACLE, K_TWIN, MULT_CAP, SIXTEENTH_MS, TIER_AT, TIER_MULT } from './waves';
 import type { BoardLayout } from './render/layout';
 import type { WhackRuntime } from './useWhackRuntime';
+import { calloutAdmit, comboTierRank, comboTierStyle, createCalloutGate } from '../../gamekit/core/gameMoments';
+import { KICK } from '../../ui/motion';
+import { budgetedParticles, type PowerBudget } from '../../power/powerPolicy';
+import { TINT } from '../../gamekit/core/particles';
 
 const GOLD = '#ffcf3b';
 const CORAL = '#ff6b5c';
+
+/** Board kick (pt) per combo tier rank (x1, x2, x3, x5): it grows with the combo, capped at KICK.maxPt. */
+export function kickPtForRank(rank: number): number {
+  return Math.min(KICK.maxPt, rank >= 3 ? KICK.maxPt : rank === 2 ? 3 : 2);
+}
+
+const BONKS = new Set(['late', 'good', 'goodLite', 'goodStars', 'quick', 'quickLite', 'crit', 'critImpact', 'golden', 'helmet']);
+/** Feel names that are a real bonk on a friendly target (they get the spray and the kick). */
+export function isBonk(name: string): boolean {
+  return BONKS.has(name);
+}
 
 export function pickCue(...names: string[]): string {
   for (const n of names) if (GameAudio.hasCue(n)) return n;
@@ -120,6 +136,13 @@ export interface WhackJuiceOpts {
   layers?: BeatLayerPlayer | null;
   onFever?: (on: boolean) => void;
   onFeverReady?: () => void;
+  /**
+   * True while a big stamp owns the sky band (the last 5 seconds, FINISH!): world words stay quiet
+   * (hits keep their particles, sound and haptic), and a combo slab becomes a bump on the HUD medallion.
+   */
+  quiet?: MutableRefObject<boolean>;
+  /** The power budget: Battery Saver thins the hit spray (Reduce Motion drops it). */
+  budget?: Pick<PowerBudget, 'particleScale' | 'animate'>;
 }
 
 export interface WhackJuice {
@@ -140,7 +163,7 @@ export interface WhackJuice {
 }
 
 export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
-  const { fx, stamps, camera, cues, runtime, layout, width, reducedMotion, walking, party } = opts;
+  const { fx, stamps, camera, cues, runtime, layout, width, reducedMotion, walking, party, quiet, budget } = opts;
   const onFeverRef = useRef(opts.onFever);
   onFeverRef.current = opts.onFever;
   const onReadyRef = useRef(opts.onFeverReady);
@@ -155,14 +178,14 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     // v5 three FX tiers (8.6); hit-stops teach the grade (6.6). The costume poses already draw their
     // dizzy stars and impact dashes (8.5), so Finn-class bonks never add procedural stars or impact stars:
     // the ring, splash and flash carry the hit, and the fly-up travels to the score.
-    late: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackLate', priority: WHACK_PRIO.good, burst: [{ emitter: 'bubbles', count: 3 }],
+    late: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackLate', priority: WHACK_PRIO.good, localStop: 40, burst: [{ emitter: 'bubbles', count: 3 }],
       ring: { from: 8, to: 40, ms: 150 }, flyUp: { size: 'sm', to: scoreAt } },
     good: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackGood', priority: WHACK_PRIO.good, localStop: 50, burst: [{ emitter: 'splash', count: 4 }],
       ring: { from: 10, to: 70, ms: 180 }, flyUp: { size: 'md', to: scoreAt } },
     goodLite: { sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackGood', priority: WHACK_PRIO.good, localStop: 50, burst: [{ emitter: 'splash', count: 2 }],
       ring: { from: 10, to: 60, ms: 180 } },
     quick: { prio: 1, sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackQuick', priority: WHACK_PRIO.quick, localStop: 80,
-      burst: [{ emitter: 'splash', count: 8 }], ring: { color: GOLD, from: 12, to: 80, ms: 200 },
+      burst: [{ emitter: 'splash', count: 8 }, { emitter: 'sparks', count: 4 }], ring: { color: GOLD, from: 12, to: 80, ms: 200 },
       bloom: { radius: 80, peak: 0.55, ms: 160 }, flyUp: { size: 'lg', color: GOLD, to: scoreAt } },
     quickLite: { prio: 1, sfx: cues.bonk, ladder: true, spatial: true, pattern: 'whackQuick', priority: WHACK_PRIO.quick, localStop: 80,
       burst: [{ emitter: 'splash', count: 3 }], ring: { color: GOLD, from: 12, to: 70, ms: 200 } },
@@ -179,7 +202,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
       burst: [{ emitter: 'speedLines', count: 12 }, { emitter: 'coins', count: 16, magnet: true }, { emitter: 'sparkles' }],
       vignette: { color: GOLD, peak: 0.35, inMs: 40, holdMs: 60, outMs: 260 }, flyUp: { size: 'xl', color: GOLD, to: scoreAt }, duckDb: 6 },
     // v5 PERFECT pip: a small gold word above the fly-up (accent on the 16th grid).
-    perfect: { flyUp: { size: 'sm', color: GOLD, dy: -52 } },
+    perfect: { burst: [{ emitter: 'sparkles', count: 5, color: 0xffffcf3b }] },
     ripeStage: { pattern: [{ t: 0, kind: 'transient', i: 0.3, s: 0.9 }], priority: WHACK_PRIO.goldenTell, tell: true, burst: [{ emitter: 'sparkles', count: 4 }] },
     ripeBolt: { sfx: cues.ripeBolt, volume: 0.8, pattern: [{ t: 0, kind: 'transient', i: 0.3, s: 0.1 }], priority: WHACK_PRIO.flow,
       burst: [{ emitter: 'splash', count: 8 }], flyUp: { size: 'md', color: '#ff9f1c' } },
@@ -190,12 +213,16 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     double: { sfx: cues.double, pattern: 'whackCrit', priority: WHACK_PRIO.golden, localStop: 80, burst: [{ emitter: 'bubbles', count: 8 }, { emitter: 'stars', count: 6 }],
       flyUp: { size: 'lg', color: '#7fd6ff' } },
     whiff: { sfx: cues.whiff, volume: 0.32, burst: [{ emitter: 'puff', count: 4 }] },
-    butter: { sfx: cues.breakCue, pattern: [{ t: 0, kind: 'transient', i: 0.6, s: 0.2 }, { t: 70, kind: 'transient', i: 0.4, s: 0.2 }], priority: WHACK_PRIO.decoy,
-      flyUp: { size: 'md', color: CORAL } },
+    // A mash is a gag, never a scolding: one soft bump, one white 'Too fast!' that replaces any callout up (key).
+    butter: { sfx: cues.whiff, volume: 0.5, pattern: [{ t: 0, kind: 'transient', i: 0.35, s: 0.1 }], priority: WHACK_PRIO.decoy,
+      burst: [{ emitter: 'puff', count: 5 }], flyUp: { size: 'md', color: '#ffffff', key: 'callout', rise: 36 } },
     escape: { sfx: cues.duck, volume: 0.5, spatial: true },
-    tierUp: { sfx: cues.tier, ladder: true, pattern: 'tierUp', priority: WHACK_PRIO.golden, burst: [{ emitter: 'confetti', count: 16 }] },
+    // Tier-up: the haptic and sparkles climb with the tier look (x2 goodHit 8, x3 crit 10, x5 feverStart 12); fired in E_TIER.
+    tierUp: { sfx: cues.tier, ladder: true, priority: WHACK_PRIO.golden },
     tierDrop: { sfx: cues.comboDrop, volume: 0.7, pattern: 'tierDrop', priority: WHACK_PRIO.flow },
-    comboBreak: { sfx: cues.breakCue, pattern: [{ t: 0, kind: 'transient', i: 0.6, s: 0.2 }, { t: 70, kind: 'transient', i: 0.4, s: 0.2 }], priority: WHACK_PRIO.decoy },
+    // A break is a soft puff, never a scolding: the medallion cracks into shards that fall and fade, one soft bump.
+    comboBreak: { sfx: cues.breakCue, volume: 0.45, pattern: [{ t: 0, kind: 'transient', i: 0.3, s: 0.1 }], priority: WHACK_PRIO.decoy,
+      burst: [{ emitter: 'shards', count: 4 }, { emitter: 'puff', count: 4 }] },
     feverReady: { sfx: cues.tier, pattern: 'tierUp', priority: WHACK_PRIO.golden, burst: [{ emitter: 'sparkles', count: 10 }], flyUp: { size: 'lg', color: GOLD } },
     fever: { prio: 4, sfx: cues.feverStart, pattern: 'tierUp', priority: WHACK_PRIO.golden, hitStop: 80, hitStopSim: true, forceStop: true,
       flash: { color: '#ffffff', peak: 0.4, ms: 160 }, burst: [{ emitter: 'speedLines', count: 16 }, { emitter: 'confetti', count: 26 }],
@@ -208,7 +235,8 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     coinBubble: { sfx: cues.coinLayer, pattern: 'whackLate', priority: WHACK_PRIO.good, burst: [{ emitter: 'coins', count: 4, magnet: true }], flyUp: { size: 'sm', color: GOLD } },
     tellGolden: { pattern: 'goldenTell', priority: WHACK_PRIO.goldenTell, tell: true, burst: [{ emitter: 'sparkles', count: 6 }] },
     tellAngler: { pattern: 'purrTell', priority: WHACK_PRIO.decoy, tell: true },
-    combo: { sfx: cues.tally, volume: 0.85, stamp: { style: 'slab', color: GOLD, size: 30 } },
+    // r5: the combo slab sits on a cream plate with a navy edge (never bare tilted text over the board).
+    combo: { sfx: cues.tally, volume: 0.85, stamp: { style: 'slab', color: GOLD, size: 30, plate: true } },
   }), [cues, scoreAt]);
   // One governor per board (v5 8.7): counted flashes 334 ms apart, 3 per second, merged inside the window.
   const governor = useMemo(() => createFxGovernor({ ...GOVERNOR_PRESETS.whack, calm: reducedMotion || walking }), [reducedMotion, walking]);
@@ -216,13 +244,20 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
   layersRef.current = opts.layers;
   const feverOn = useRef(false);
   const syncLayers = () => layersRef.current?.setLevel(whackLayerLevel(TIER_MULT[tier.current] ?? 1, feverOn.current));
-  const feel = useFeel(table, { fx, camera, clock: null, width, calm: reducedMotion || walking, governor, stamps });
+  const feelRaw = useFeel(table, { fx, camera, clock: null, width, calm: reducedMotion || walking, governor, stamps });
+  // Callout traffic control: while a big stamp owns the sky band, world words stay quiet (the mash gag keeps
+  // its own soft word, at the hole, below the band).
+  const feel = useCallback((name: Extract<keyof typeof table, string>, at: Parameters<typeof feelRaw>[1] = {}) => {
+    if (quiet?.current && (at.text || at.stamp) && name !== 'butter') feelRaw(name, { ...at, text: undefined, stamp: undefined });
+    else feelRaw(name, at);
+  }, [feelRaw, quiet]) as typeof feelRaw;
   const liveScore = useRef(0);
   const streak = useRef(0);
   const tier = useRef(0);
   const flurry = useRef(createFlurry(900, 3));
   const lastHit = useRef({ x: 0, y: 0, mult: 1 });
   const busy = useRef(new Set<number>());
+  const callouts = useRef(createCalloutGate());
   const ripeHit = useRef(-1);
   const ripeWord = useRef('GOLDEN!');
   const hud = useMemo(() => ({ x: width / 2, y: 34 }), [width]);
@@ -233,11 +268,48 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     return { x: G.cx[h], y: G.my[h] - G.spriteH[h] * 0.7 };
   }, [layout]);
 
+  const lastKick = useRef(0);
   const fireHit = (name: string, h: number, text: string | undefined, step: number) => {
     const p = holeXY(h);
     const clock = runtime.clock;
     const def = table[name];
-    feel(name as never, { ...p, slot: h, step, text, magnetTo: hud, dx: 0, dy: -1, input: true });
+    // One icon-plus-number per hit: the size steps up and the colour climbs with the combo tier.
+    const rank = comboTierRank(multNow());
+    const look = def?.flyUp ? tierFlyLook(def.flyUp.size ?? 'md', rank) : {};
+    feel(name as never, { ...p, slot: h, step, text, magnetTo: hud, dx: 0, dy: -1, input: true, ...look });
+    // Hot hands hit harder: from x3 every bonk kicks the board down 2 pt (3 pt in fever), one kick per
+    // KICK.ms at most; never while walking, with Reduce Motion or on a shared party board.
+    // Every bonk lands (r4): a spray of small gold and white stars pops from the contact point and falls,
+    // 6 on a light hit, 8 from QUICK up, thinned by the clutter governor when 3+ wells are busy.
+    // r5: bigger stars (12 to 18 pt) that read at arm's length, a white contact ring on the hit frame, and
+    // from x3 the spray turns gold-only and flies further. The power budget thins it (Battery Saver about
+    // half, 3 to 4 stars) and Reduce Motion drops the spray (the squash, sound and haptic stay).
+    if (isBonk(name)) {
+      const heavy = name !== 'late' && name !== 'good' && name !== 'goodLite' && name !== 'goodStars';
+      const want = busy.current.size >= 3 ? 4 : heavy ? 8 : 6;
+      const n = reducedMotion || !budget ? (reducedMotion ? 0 : want) : Math.min(want, budgetedParticles(want, budget));
+      const cy = p.y + (layout.current?.spriteH[h] ?? 60) * 0.28;
+      if (n > 0) {
+        fx.current?.burst('impactSpray', p.x, cy, rank >= 2
+          ? { count: n, color: TINT.gold, speed: rank >= 3 ? 1.35 : 1.18, size: rank >= 3 ? 1.15 : 1.05 }
+          : { count: n });
+        // r6: Battery Saver (a thinned particle budget) keeps the stars but drops the contact ring,
+        // so the thinner-effects mode is consistent.
+        if (!budget || budget.particleScale >= 0.75) {
+          fx.current?.ring(p.x, cy, { color: '#ffffff', from: 14, to: rank >= 2 ? 86 : 64, ms: 120 });
+        }
+      }
+    }
+    // Hot hands hit harder (r4: from the first bonk): the board kicks 2 pt away from the touch at x1 and
+    // x2, 3 pt at x3 and 4 pt (KICK.maxPt) in fever, one kick per KICK.ms at most; never while walking,
+    // with Reduce Motion or on a shared party board.
+    const nowMs = Date.now();
+    if (isBonk(name) && camera && !reducedMotion && !walking && !party && nowMs - lastKick.current >= KICK.ms) {
+      lastKick.current = nowMs;
+      const G = layout.current;
+      const side = G ? Math.sign(G.cx[h] - G.w / 2) : 0;
+      camera.kick(side, kickPtForRank(rank));
+    }
     // Local hit-stop and global freezes go straight to the Bonk Rush clock.
     if (clock && def) {
       if (def.localStop) clock.localStop(h, reducedMotion ? Math.min(40, def.localStop) : def.localStop);
@@ -306,7 +378,8 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         busy.current.delete(h);
         liveScore.current += pts;
         streak.current += 1;
-        const step = Math.max(0, streak.current - TIER_AT[tier.current]) % 8;
+        // The bonk pitch climbs inside a tier and starts higher at each tier (x1 0-7, x2 2-9, x3 4-11, x5 6-12).
+        const step = Math.min(12, (Math.max(0, streak.current - TIER_AT[tier.current]) % 8) + comboTierRank(multNow()) * 2);
         const fl = flurryHit(flurry.current, now, pts);
         const quiet = fl === FLURRY_GROW || (fl === FLURRY_START && flurry.current.hits > 2);
         const crowded = busy.current.size >= 3;
@@ -326,9 +399,9 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
             setTimeout(() => { camera.frame(1); camera.lean(0, 0); }, 420);
           }
         } else if (grade === G_CRIT) {
-          fireHit(poseHit ? 'crit' : 'critImpact', h, quiet ? undefined : `CRIT! +${pts}`, step);
+          fireHit(poseHit ? 'crit' : 'critImpact', h, quiet ? undefined : `+${pts}`, step);
           GameAudio.play(cues.bonk, { volume: 0.7 });
-        } else if (grade === G_QUICK) fireHit(crowded ? 'quickLite' : 'quick', h, quiet ? undefined : `QUICK +${pts}`, step);
+        } else if (grade === G_QUICK) fireHit(crowded ? 'quickLite' : 'quick', h, quiet ? undefined : `+${pts}`, step);
         else if (grade === G_GOOD) fireHit(crowded ? 'goodLite' : poseHit ? 'good' : 'goodStars', h, quiet ? undefined : `+${pts}`, step);
         else fireHit('late', h, quiet ? undefined : `+${pts}`, step);
         return true;
@@ -337,7 +410,8 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         // Accent on the grid (8.8): the ping snaps to the next 16th of the bed; the pip shows at once.
         liveScore.current += b;
         const xy = holeXY(a);
-        feel('perfect', { ...xy, text: 'PERFECT' });
+        // The PERFECT pip is a picture now: a little burst of gold stars over the number (no word).
+        feel('perfect', { ...xy });
         const step = Math.min(14, (Math.max(0, streak.current - TIER_AT[tier.current]) % 8) + 2);
         const asked = Date.now();
         void GameAudio.music.positionMs().then((pos) => {
@@ -377,7 +451,9 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         feel('whiff', { ...holeXY(a) });
         return true;
       case E_BUTTER:
-        feel('butter', { ...holeXY(a), text: 'BUTTERFINGERS!' });
+        // One callout at a time (audit defect 2): the same word waits 600 ms, a newer word replaces the old.
+        if (calloutAdmit(callouts.current, 'Too fast!', now)) feel('butter', { ...holeXY(a), text: 'Too fast!' });
+        else feel('whiff', { ...holeXY(a) });
         return true;
       case E_DECOY:
         busy.current.delete(a);
@@ -405,11 +481,26 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         feel('double', { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2, text: 'DOUBLE BONK!' });
         return true;
       }
-      case E_TIER:
+      case E_TIER: {
+        const before = comboTierRank(multNow());
         tier.current = a;
-        if (G) feel('tierUp', { x: G.w / 2, y: 40, step: a - 1 });
+        const look = comboTierStyle(multNow());
+        if (G) {
+          feel('tierUp', { x: G.w / 2, y: 40, step: a - 1 });
+          fx.current?.burst('sparkles', G.w / 2, 34, { count: Math.max(6, look.sparkles) });
+        }
+        // The buzz grows with the tier; walking drops it one rung.
+        const rank = comboTierRank(multNow());
+        const buzz = rank > before ? look.haptic : 'tap';
+        // A real tier-up holds one beat (55 ms, through the governor) so the stamp lands with weight.
+        if (rank > before && runtime.clock && !party) {
+          const ms = govHitStop(governor, Date.now(), reducedMotion ? 30 : 55, 3, false);
+          if (ms > 0) runtime.clock.hitStop(ms, {});
+        }
+        playHaptic(walking && buzz !== 'tap' ? (buzz === 'feverStart' ? 'crit' : buzz === 'crit' ? 'goodHit' : 'tap') : buzz);
         syncLayers();
         return true;
+      }
       case E_TIER_DROP:
         tier.current = a;
         streak.current = b;
@@ -417,7 +508,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         syncLayers();
         return true;
       case E_BREAK:
-        if (a >= 5) feel('comboBreak');
+        if (a >= 5 && G) feel('comboBreak', { x: G.w / 2, y: 34 });
         streak.current = 0;
         tier.current = 0;
         syncLayers();
@@ -470,12 +561,19 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
       if (flurryResolve(flurry.current, Date.now()) && hits >= 3) {
         const at = lastHit.current;
         const m = at.mult;
-        const label = `${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}`;
-        feel('combo', { x: at.x, y: at.y - 20, stamp: `x${label} COMBO +${pts}` });
+        if (quiet?.current) {
+          // The sky band belongs to the last-5 stamp or FINISH!: the combo lands on the medallion instead.
+          GameAudio.play(cues.tally, { volume: 0.7 });
+          fx.current?.ring(width / 2, 34, { color: GOLD, from: 22, to: 48, ms: 220 });
+          fx.current?.burst('sparkles', width / 2, 34, { count: 6 });
+          return;
+        }
+        // The bubble font has no decimal point (x1.5 read as x15): a half multiplier just says COMBO.
+        feel('combo', { x: at.x, y: at.y - 20, stamp: m % 1 === 0 && m > 1 ? `x${m.toFixed(0)} COMBO +${pts}` : `COMBO +${pts}` });
       }
     }, 100);
     return () => clearInterval(iv);
-  }, [feel]);
+  }, [feel, quiet, cues.tally, fx, width]);
 
   const reset = useCallback((s: number) => {
     liveScore.current = 0;

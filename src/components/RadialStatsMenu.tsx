@@ -12,6 +12,7 @@ import { ws7Preview } from '../dev/ws7Preview';
 import { useHelp } from './help/HelpProvider';
 import type { GlossaryKey } from '../services/help/glossary';
 import useFlameStreak from '../services/retention/useFlameStreak';
+import countText from '../helpers/countText';
 
 /** The one Energy sentence (docs/economy-glossary.md, GET /api/economy). */
 export const ENERGY_RULE = 'Energy powers boss raids and coin upgrades. It never runs out on a timer.';
@@ -130,7 +131,7 @@ export default function RadialStatsMenu() {
   const tickets = player.tickets ?? 0;
   
   // Format large numbers with commas (like Stardust in Pokemon GO)
-  const formatNumber = (n: number) => n.toLocaleString();
+  const formatNumber = (n: number) => countText(n);
 
   const toggleMenu = () => {
     const opening = !isOpen;

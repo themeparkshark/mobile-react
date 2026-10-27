@@ -537,7 +537,8 @@ test('the ride card share sheets keep their buttons reachable: the backdrop and 
     const code = fs.readFileSync(path.join(__dirname, '..', '..', file), 'utf8');
     assert.match(code, /style=\{\w+\.modalOverlay\} onPress=\{\(\) => set\w+\(null\)\} accessible=\{false\}>/, file);
     assert.match(code, /style=\{\w+\.modalContent\} onPress=\{\(\) => \{\}\} accessible=\{false\}>/, file);
-    assert.match(code, /style=\{\w+\.modalClose\} accessibilityRole="button" accessibilityLabel="Close">/, file);
+    // A plain Pressable needs its own role and label; the kit's GameButton carries both from its label.
+    assert.match(code, /style=\{\w+\.modalClose\} accessibilityRole="button" accessibilityLabel="Close">|<GameButton label=(?:"Close"|\{CLOSE_WORD\} accessibilityLabel="Close")[^\n]*style=\{\w+\.modalClose\} \/>/, file);
   }
 });
 
@@ -560,6 +561,8 @@ test('useGameMusic: a mid-game Music off stops only this game\'s bed and never w
     '../../context/AuthProvider': { AuthContext: auth },
     '../../context/MusicProvider': { MusicContext: { value: null } },
     './GameAudio': { GameAudio },
+    // Battery Saver rest (wow-sound): awake and on mains here, so the bed never rests.
+    '../../power/PowerProvider': { usePowerBudget: () => ({ lowPower: false, idle: false }) },
   });
   const Game = props => { useGameMusic(props.bed, { at: 'bar', enabled: props.enabled }); return null; };
   const game = rt.mount(Game, { bed: 'mm_loop_main', enabled: true });

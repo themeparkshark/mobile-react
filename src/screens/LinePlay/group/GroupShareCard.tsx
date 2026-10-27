@@ -3,16 +3,25 @@
  * water background, the TPS logo, rendered off-screen and captured at
  * 1080x1920. No ride names, logos or park art on a shared image (BEST_IN_LINE
  * 17); the coin art is our own. Shared only by the player, never auto-posted.
+ * Kid safety: no typed names and no date on the picture. Each crew member is
+ * "Shark 1", "Shark 2"... by seat, and the link and QR go to the app.
  */
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import ShareCardArtwork from '../../../components/ShareCardArtwork';
 import { FLEX_SIZE } from '../../../share/formats';
+import { SHARE_LINK_DISPLAY } from '../../../share/link';
+import { QR_BY_CAMPAIGN } from '../../../share/campaignQr';
 import type { GroupRecap } from '../../../services/lineplay/lineGroup';
 import PlayerBadge from './PlayerBadge';
 import { GameIcon } from '../../../ui';
 
 const { width: SHARE_CARD_WIDTH, height: SHARE_CARD_HEIGHT } = FLEX_SIZE.story;
+
+/** A crew member on the shared picture, by seat: "Shark 1", "Shark 2"... Exported for tests. */
+export function crewLabel(seat: number): string {
+  return `Shark ${Math.max(0, Math.floor(seat)) + 1}`;
+}
 
 export interface GroupShareCardProps {
   readonly recap: GroupRecap;
@@ -20,20 +29,23 @@ export interface GroupShareCardProps {
   readonly waitLine: string;
   readonly partsEarned: number | null;
   readonly coin: { readonly url: string; readonly level: number; readonly maxLevel: number } | null;
-  readonly dateLabel: string;
+  /** Kept for callers; the date is never printed on the picture (kid safety). */
+  readonly dateLabel?: string;
   readonly onReadyChange?: (ready: boolean) => void;
 }
 
 /** Up to 6 rows of stars: a crew's whole wait in one glance. */
 const GroupShareCard = forwardRef<View, GroupShareCardProps>(function GroupShareCard(
-  { recap, seats, waitLine, partsEarned, coin, dateLabel, onReadyChange }, ref) {
+  { recap, seats, waitLine, partsEarned, coin, onReadyChange }, ref) {
   const [loaded, setLoaded] = useState<ReadonlySet<string>>(() => new Set());
-  const required = useMemo(() => ['background', 'logo', 'crew', ...(coin ? [`coin:${coin.url}`] : [])], [coin?.url]);
+  const required = useMemo(() => ['background', 'logo', 'crew', 'qr', ...(coin ? [`coin:${coin.url}`] : [])], [coin?.url]);
   const markReady = useCallback((key: string) => setLoaded(previous =>
     previous.has(key) ? previous : new Set([...previous, key])), []);
   const ready = required.every(key => loaded.has(key));
   useEffect(() => { onReadyChange?.(ready); }, [ready, onReadyChange]);
-  const champion = recap.champions.length === 1 ? recap.champions[0].name : null;
+  // Typed names stay on the phone: the picture says "Shark 2", by seat.
+  const label = (id: string) => crewLabel(seats[id] ?? 0);
+  const champion = recap.champions.length === 1 ? label(recap.champions[0].id) : null;
 
   return (
     <View ref={ref} collapsable={false} style={styles.card}>
@@ -49,18 +61,17 @@ const GroupShareCard = forwardRef<View, GroupShareCardProps>(function GroupShare
         <View style={styles.heroCopy}>
           <Text style={styles.kicker}>OUR LINE CREW</Text>
           <Text style={styles.headline} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.7}>
-            {champion ? `${champion} wins the line!` : recap.headline}
+            {champion ? `${champion} wins the line!` : recap.champions.length > 1 ? 'A tie for the crown!' : 'Crew wait complete'}
           </Text>
-          <Text style={styles.date}>{dateLabel}</Text>
         </View>
       </View>
 
       <View style={styles.board}>
         {recap.standings.slice(0, 6).map(row => <View key={row.player.id} style={styles.row}>
           <Text style={styles.place}>{row.place}</Text>
-          <PlayerBadge name={row.player.name} index={seats[row.player.id] ?? 0} size={34} kid={row.player.kid} />
+          <PlayerBadge name={String((seats[row.player.id] ?? 0) + 1)} index={seats[row.player.id] ?? 0} size={34} kid={row.player.kid} />
           <View style={styles.rowCopy}>
-            <Text style={styles.rowName} numberOfLines={1}>{row.player.name}</Text>
+            <Text style={styles.rowName} numberOfLines={1}>{label(row.player.id)}</Text>
             <Text style={styles.rowAward} numberOfLines={1}>{row.award}</Text>
           </View>
           <View style={styles.rowStars}>
@@ -89,8 +100,11 @@ const GroupShareCard = forwardRef<View, GroupShareCardProps>(function GroupShare
       <Text style={styles.wait}>{waitLine}</Text>
 
       <View style={styles.footer}>
-        <Text style={styles.cta}>Play your next line with us!</Text>
-        <Text style={styles.handle}>Theme Park Shark app · @themeparkshark</Text>
+        <View style={styles.footerCopy}>
+          <Text style={styles.cta}>Play your next line with us!</Text>
+          <Text style={styles.handle}>{SHARE_LINK_DISPLAY}</Text>
+        </View>
+        <ShareCardArtwork artworkKey="qr" onReady={markReady} source={QR_BY_CAMPAIGN.crew} style={styles.qr} contentFit="contain" />
       </View>
     </View>
   );
@@ -126,7 +140,9 @@ const styles = StyleSheet.create({
   statLabel: { fontFamily: 'Knockout', fontSize: 13, color: '#cdeaff' },
   coin: { width: 38, height: 38 },
   wait: { fontFamily: 'Shark', fontSize: 17, color: '#fff', textAlign: 'center' },
-  footer: { alignItems: 'center' },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  footerCopy: { flex: 1, alignItems: 'center' },
+  qr: { width: 64, height: 64, borderRadius: 8, backgroundColor: '#ffffff' },
   cta: { fontFamily: 'Shark', fontSize: 21, color: '#ffcf3b',
     textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   handle: { fontFamily: 'Knockout', fontSize: 14, color: '#fff', marginTop: 2 },

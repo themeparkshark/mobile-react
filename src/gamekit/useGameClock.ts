@@ -102,7 +102,8 @@ export function useGameClock({
     if (onFrame) onFrame(stepAlpha(c, stepMs), c.lastFxDt, c);
     const scale = c.paused ? 0 : c.fxScale;
     if (fxScale.value !== scale) fxScale.value = scale;
-    simMs.value = c.simMs;
+    // Written only when it moves: an idle clock (paused, or a game at rest) never wakes a mapper.
+    if (simMs.value !== c.simMs) simMs.value = c.simMs;
     if (fxMs.value !== c.fxMs) fxMs.value = c.fxMs;
     const tf = Math.floor((c.fxMs * 12) / 1000);
     if (twos.value !== tf) twos.value = tf;

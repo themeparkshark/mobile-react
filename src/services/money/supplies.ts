@@ -12,6 +12,7 @@ import { askGrownUp, type GateReason } from '../../components/GrownUpGate';
 import { getShop, type ShopCatalog, type ShopGrants, type ShopProduct } from '../../api/endpoints/me/shop';
 import { trackMoney } from './track';
 import { buyShopProduct, loadShopPrices, storeAvailable, type ShopPrice, type ShopPurchaseOutcome } from '../purchases';
+import countText from '../../helpers/countText';
 
 export type SuppliesState = {
   readonly catalog: ShopCatalog | null;
@@ -90,7 +91,7 @@ const WORDS: Record<keyof ShopGrants, [string, string]> = {
 /** "15 tickets, 1,500 coins and 2 Rescue Passes". */
 export function grantsText(grants: ShopGrants): string {
   const parts = ORDER.filter(k => (grants[k] ?? 0) > 0)
-    .map(k => `${(grants[k] ?? 0).toLocaleString('en-US')} ${grants[k] === 1 ? WORDS[k][0] : WORDS[k][1]}`);
+    .map(k => `${countText(grants[k] ?? 0)} ${grants[k] === 1 ? WORDS[k][0] : WORDS[k][1]}`);
   return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0] ?? '';
 }
 

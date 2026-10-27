@@ -2,15 +2,16 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet, RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import RideTrackerFrame from './RideTrackerFrame';
+import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { getWishlist, toggleWishlist, WishlistRide } from '../../api/endpoints/rides/wishlist';
 import RideTypeIcon from '../../components/RideTracker/RideTypeIcon';
 import { colors } from '../../design-system';
 import { GameIcon, gameAlert, SharkLoader } from '../../ui';
 
+import RideTrackerEmpty from './RideTrackerEmpty';
 // ─── Wishlist Item ───
 interface WishlistItemProps {
   ride: WishlistRide;
@@ -79,14 +80,7 @@ export default function RideWishlistScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
-          <GameIcon name="back" size={36} accessibilityLabel="Back" />
-        </Pressable>
-        <Text style={styles.title}>WISHLIST</Text>
-        <View style={{ width: 40 }} />
-      </LinearGradient>
+    <RideTrackerFrame title="Wishlist" style={styles.container}>
 
       {loading || (failed && !rides.length) ? (
         <SharkLoader state={loading ? 'loading' : 'error'} title={loading ? undefined : "Wishlist didn't load"} onRetry={firstLoad} />
@@ -104,17 +98,12 @@ export default function RideWishlistScreen() {
           contentContainerStyle={styles.content}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <GameIcon name="star" size={72} />
-              <Text style={styles.emptyTitle}>Your wishlist is empty</Text>
-              <Text style={styles.emptySubtitle}>
-                Add rides you want to try from their detail page!
-              </Text>
-            </View>
+            <RideTrackerEmpty title="Your wishlist is empty" body="Tap the star on any ride to save it here."
+              action={{ label: 'Find a ride', icon: 'search', onPress: () => navigation.navigate('RideLog') }} />
           }
         />
       )}
-    </SafeAreaView>
+    </RideTrackerFrame>
   );
 }
 
@@ -146,7 +135,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
-  content: { padding: 16, paddingBottom: 60 },
+  content: { padding: 16, paddingBottom: FOOTER_CLEARANCE },
   item: {
     flexDirection: 'row', 
     alignItems: 'center', 

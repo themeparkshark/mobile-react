@@ -135,13 +135,15 @@ function Tag({ text, color, size }: { readonly text: string; readonly color: str
 function FindHero({ p, size }: { readonly p: FlexPayloads['find']; readonly size: number }) {
   const rarity = normalizeRarity(p.rarity);
   const look = RARITY_RAMP[rarity];
-  const colors: [string, string] = p.goldenHour ? ['#fff4c2', '#ffcf3b'] : ['#ffffff', look.chip];
+  // An earned prize (Shark Pass, member pin) has no rarity: a plain gold prize panel, no rarity stars.
+  const prize = !!p.prize;
+  const colors: [string, string] = p.goldenHour || prize ? ['#fff4c2', '#ffcf3b'] : ['#ffffff', look.chip];
   return (
     <View style={{ width: size, height: size }}>
-      <Panel size={size} colors={colors} lip={p.goldenHour ? '#d99a00' : look.frame} rim={look.frame}>
+      <Panel size={size} colors={colors} lip={p.goldenHour || prize ? '#d99a00' : look.frame} rim={prize ? '#ffffff' : look.frame}>
         <FlexArtwork art={p.artUrl} fallback={HERO_ART.gift} style={{ width: size * 0.76, height: size * 0.76 }} />
       </Panel>
-      {(rarity >= 4 || p.goldenHour) && <Stars size={size} count={rarity === 5 || p.goldenHour ? 5 : 3} />}
+      {!prize && (rarity >= 4 || p.goldenHour) && <Stars size={size} count={rarity === 5 || p.goldenHour ? 5 : 3} />}
       {p.dailyRare && <View style={{ position: 'absolute', right: -size * 0.06, top: size * 0.02 }}><Tag text="DAILY RARE" color="#9b4dff" size={size} /></View>}
     </View>
   );
@@ -286,12 +288,17 @@ function CoinHero({ art, level, size, tag, crest = false }: {
   );
 }
 
-/** Podium: Alex's trophy (gold, silver, bronze by rank); the giant "#2" sticker carries the rank. */
+/**
+ * Podium: Alex's trophy (gold, silver, bronze by rank); the giant "#2" sticker carries the rank.
+ * The trophy sits a little right of centre so the sticker (bottom left) never covers the name
+ * plate on the trophy's base.
+ */
+export const PODIUM_TROPHY_SHIFT = 0.12;
 function StandingsHero({ p, size }: { readonly p: FlexPayloads['standings']; readonly size: number }) {
   const rank = Math.floor(Number(p.rank));
   const art = rank === 2 ? HERO_ART.trophySilver : rank === 3 ? HERO_ART.trophyBronze : HERO_ART.trophy;
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'flex-end' }}>
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'flex-end', transform: [{ translateX: size * PODIUM_TROPHY_SHIFT }] }}>
       <View style={{ position: 'absolute', top: size * 0.04, width: size * 0.86, height: size * 0.86, borderRadius: size, backgroundColor: 'rgba(255,255,255,0.18)' }} />
       <FlexArtwork art={art} fallback={HERO_ART.trophy} style={{ width: size * 0.78, height: size * 0.84, marginBottom: size * 0.04 }} />
       <Stars size={size} count={3} />

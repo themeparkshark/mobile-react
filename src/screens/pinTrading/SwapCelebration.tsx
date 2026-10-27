@@ -36,6 +36,7 @@ import type { SlotRect } from './PinTradeParts';
 import { balanceName, PIN_TRADE_COPY as COPY, pinName, SWAP_TIMELINE as T } from './pinTradeModel';
 import { beat, stopBeat } from './tradeAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
+import { UpperText } from '../../ui/upper';
 
 const SHARK = require('../../../assets/images/howto/shark-happy.webp');
 const never = { reduceMotion: ReduceMotion.Never } as const;
@@ -322,7 +323,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
             style={[styles.pin, { width: bigSize, height: bigSize }, still ? { transform: [{ translateX: cx - bigSize / 2 }, { translateY: cy - bigSize / 2 }] } : gotStyle]}>
             <Animated.View style={restStyle}>
               <Animated.View style={[styles.abs, { left: -bigSize * 0.08, top: -bigSize * 0.1, zIndex: 2 }, stampStyle]}>
-                <View style={styles.newStamp}><Text maxFontSizeMultiplier={1} style={styles.newStampText}>{upgradeSerial ? `#${upgradeSerial}` : COPY.newStamp}</Text></View>
+                <View style={styles.newStamp}><UpperText maxFontSizeMultiplier={1} style={styles.newStampText}>{upgradeSerial ? `#${upgradeSerial}` : COPY.newStamp}</UpperText></View>
               </Animated.View>
               <EnamelPin uri={got.icon_url} size={bigSize} tilt={-4} shine={still ? undefined : shine} surface="panel" transition={0}
                 recyclingKey={`slot-${got.id}`} />
@@ -353,7 +354,7 @@ export default function SwapCelebration({ got, gave, from, still, onDone, onStar
           <View style={styles.gaveRow} accessible accessibilityLabel={`${COPY.gaveCaption} ${pinName(gave)}. ${COPY.doneGave(pinName(gave), gave.spares ?? 0)}`}>
             <View style={styles.gaveChip}><EnamelPin uri={gave.icon_url} size={34} surface="none" flat recyclingKey={`mine-${gave.id}`} /></View>
             <View style={{ flexShrink: 1 }}>
-              <Text maxFontSizeMultiplier={1.2} style={styles.gaveCaption}>{COPY.gaveCaption}</Text>
+              <UpperText maxFontSizeMultiplier={1.2} style={styles.gaveCaption}>{COPY.gaveCaption}</UpperText>
               <Text maxFontSizeMultiplier={1.25} style={styles.gaveLine}>{upgradeSerial && gave.serial ? `Your #${gave.serial} is on the board for another fan.` : COPY.doneGave(pinName(gave), gave.spares ?? 0)}</Text>
             </View>
           </View>

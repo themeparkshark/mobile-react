@@ -77,6 +77,12 @@ export const GATE_DISMISS_FALLBACK_MS = 2000;
  * Long enough that a slow or hot phone still gets its gate (presenting can take 3 s or more there).
  */
 export const GATE_SHOW_WATCHDOG_MS = 5000;
+/** Real money (a buy, a plan, VIP) waits longer: a busy phone must not close a gate a grown-up is reading. */
+export const GATE_SHOW_WATCHDOG_MONEY_MS = 8000;
+/** The watchdog wait for one ask. Exported for tests. */
+export function gateWatchdogMs(reason: GateReason | null | undefined): number {
+  return reason && (reason.kind === 'money' || reason.kind === 'renews' || reason.kind === 'vip') ? GATE_SHOW_WATCHDOG_MONEY_MS : GATE_SHOW_WATCHDOG_MS;
+}
 /** How long the kind "tap again" hint stays up after the gate could not show. */
 export const GATE_HINT_MS = 2200;
 /**
@@ -401,7 +407,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
       showRetryHint(gateRetryHint(reqRef.current.reason));
       answerRef.current = false;
       finish();
-    }, GATE_SHOW_WATCHDOG_MS);
+    }, gateWatchdogMs(req?.reason));
     return () => clearTimeout(t);
   }, [presenting, req, finish]);
   useEffect(() => {

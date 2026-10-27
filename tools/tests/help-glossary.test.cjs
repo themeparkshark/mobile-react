@@ -90,7 +90,7 @@ test('the server glossary still serves every currency the app overlays (EconomyG
 });
 
 test('a balance line reads naturally', () => {
-  assert.equal(glossary.balanceLine({ label: 'Shark Coins' }, 1377), 'You have 1,377 Shark Coins.');
+  assert.equal(glossary.balanceLine({ label: 'Shark Coins' }, 1377), 'You have 1377 Shark Coins.');
   assert.equal(glossary.balanceLine({ label: 'Energy' }, -3), 'You have 0 Energy.');
   assert.equal(glossary.balanceLine({ label: 'Energy' }, null), null);
   assert.equal(glossary.balanceLine({ label: 'Energy' }, Number.NaN), null);

@@ -29,10 +29,26 @@ export interface FlexBase {
 export interface FlexPayloads {
   readonly crowned: FlexBase & { readonly coinUrl: FlexArt; readonly tierName?: string; readonly timesCollected?: number };
   readonly find: FlexBase & {
-    readonly itemName: string; readonly artUrl: FlexArt; readonly rarity: RarityInput; readonly setName?: string;
+    readonly itemName: string; readonly artUrl: FlexArt;
+    /** Left out for an earned prize (see prize): those pieces have no rarity. */
+    readonly rarity?: RarityInput; readonly setName?: string;
     readonly goldenHour?: boolean; readonly dailyRare?: boolean; readonly caughtCount?: number;
+    /** A gold chaser's own number ("Limited edition #12"). */
+    readonly serial?: number | null;
     /** Set progress after this find ("4 of 6"). */
     readonly setFound?: number; readonly setTotal?: number;
+    /**
+     * Where the piece came from when it is not part of a set ("Shark Pass · Step 12",
+     * "October member pin"): shown as the stat exactly as given, never with " set" added.
+     */
+    readonly sourceLine?: string;
+    /** A small second line under sourceLine (the season name). Dropped if it would be cut off. */
+    readonly sourceSub?: string;
+    /**
+     * Earned, not found: a Shark Pass prize ('pass') or a monthly member pin ('member'). The card says
+     * "My Shark Pass Prize" / "My Member Pin", never "FIND", and shows no rarity (these have none).
+     */
+    readonly prize?: 'pass' | 'member';
   };
   readonly ride_photo: FlexBase & {
     readonly itemName: string; readonly artUrl: FlexArt; readonly rarity: RarityInput;
@@ -65,7 +81,7 @@ export interface FlexPayloads {
     readonly limited?: boolean; readonly milestone?: { readonly percent: number; readonly collected: number; readonly available: number } | null;
   };
   readonly streak: FlexBase & { readonly days: number; readonly best?: number };
-  readonly level_up: FlexBase & { readonly level: number; readonly unlockName?: string };
+  readonly level_up: FlexBase & { readonly level: number; readonly unlockName?: string; /** Lifetime XP, for the subtitle. */ readonly xp?: number };
   readonly title: FlexBase & { readonly title: string; readonly how?: string };
   readonly park_day: FlexBase & {
     readonly coinsCaught: number; readonly newCoins?: number; readonly coinUrls: readonly FlexArt[];
@@ -87,6 +103,14 @@ export interface FlexOptions {
   readonly surface: string;
   /** Format the sheet opens on. Default story. */
   readonly format?: FlexFormat;
+  /**
+   * Once-only Flex moments (revealOnce.ts): the brag's storage key. A newer call with the same
+   * key updates the waiting request's payload instead of queueing a second one, and the key is
+   * saved as shown only when the moment is really on screen.
+   */
+  readonly onceKey?: string;
+  /** Runs right before a held moment shows, for the newest numbers (a park day's final count). Null keeps the payload. */
+  readonly refresh?: () => Promise<unknown>;
 }
 
 /** A queued request, as the host sees it. */

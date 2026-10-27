@@ -17,7 +17,7 @@ import type { LiveRide } from '../../api/endpoints/parks/live';
 import { TEAMS } from '../../constants/teams';
 import { MapQueryContext } from '../../components/Map';
 import { BEHIND, RideAmbience, WaterAmbience } from '../../components/map/RideAmbience';
-import { ambienceNow, rideLook, WATER_AMBIENCE, type LandmarkId } from '../../services/rideLandmark';
+import { ambienceNow, rideLook, WATER_AMBIENCE, type AmbienceId, type LandmarkId } from '../../services/rideLandmark';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, GameIcon } from '../../ui';
 import { formatDistance } from './adventureTicketPresentation';
@@ -28,6 +28,7 @@ import type { Placement } from '../../components/map/declutter/solver';
 import { RIDE_BODY, RIDE_BOX, SELECTED_TAG, rideLayoutId, rideTagKind, rideTagSize, selectedCardSide } from './parkMapLayout';
 import { findClock } from './FindLife';
 import StarRideBadge from '../../components/liveEvents/StarRideBadge';
+import { useIslandMount } from './islandMount';
 
 const LANDMARKS: Record<LandmarkId, number> = {
   shark: require('../../../assets/images/map/landmarks/shark.png'),
@@ -412,44 +413,10 @@ function TaskMarker({
   const glow = useMemo(() => resting ? null : waitGlow(live), [live, resting]);
   const waterSpot = useWaterSpot(waterKind, latitude, longitude);
 
-  // Selection: anticipation dip, spring lift to 1.15, settle. Haptic on the lift.
-  const lift = useSharedValue(isSelected ? 1 : 0);
-  const wasSelected = useRef(isSelected);
-  useEffect(() => {
-    if (isSelected && !wasSelected.current) haptic('tapLight');
-    wasSelected.current = isSelected;
-    if (reducedMotion) { lift.value = isSelected ? 1 : 0; return; }
-    lift.value = isSelected
-      ? withSequence(withTiming(-0.2, { duration: 70 }), withSpring(1, { damping: 8, stiffness: 260, mass: 0.7 }))
-      : withSpring(0, { damping: 14, stiffness: 220 });
-  }, [isSelected, reducedMotion, lift]);
-  const liftStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -lift.value * 8 }, { scale: 1 + lift.value * 0.15 }],
-  }));
-
-  // First reveal: islands drop in one after another, bounce and settle.
-  const drop = useSharedValue(revealDelay === undefined || reducedMotion ? 1 : 0);
-  useEffect(() => {
-    if (revealDelay === undefined || reducedMotion) { drop.value = 1; return; }
-    drop.value = withDelay(revealDelay, withSpring(1, { damping: 10, stiffness: 170 }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const dropStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, drop.value * 2),
-    transform: [{ translateY: (1 - drop.value) * -36 }, { scale: 0.7 + drop.value * 0.3 }],
-  }));
-
-  // Entering the ride's range: a burst (motion permitting) and a happy buzz, once in a while.
-  const [burst, setBurst] = useState(0);
-  const wasPlayable = useRef(playable);
-  useEffect(() => {
-    if (playable && !wasPlayable.current && arrivalBurstAllowed(lastArrival.get(task.id), Date.now())) {
-      lastArrival.set(task.id, Date.now());
-      haptic('success');
-      if (!calm) setBurst(value => value + 1);
-    }
-    wasPlayable.current = playable;
-  }, [playable, task.id, calm]);
+  // The island's art (its animated styles and views) mounts only once the slot has a ride, a few
+  // islands per frame (islandMount): an empty slot is one bare box, so the map screen's first
+  // commit no longer builds 80 full islands at once (that held the launch bar still for seconds).
+  const materialized = useIslandMount(!parked, aliveRank);
 
   const press = () => { if (shownRef.current) onPress(task); };
   const status = live && (live.status === 'OPERATING' && live.wait !== null ? `${live.wait} min wait`
@@ -469,6 +436,92 @@ function TaskMarker({
       hidden={parked}
       anchor={{ x: 0.5, y: 0.9 }}
     >
+      {/* Same 72 x 96 box either way, so the marker's layout never changes (no corner blink). */}
+      {materialized ? <IslandArt placement={placement} task={task} isSelected={isSelected} cardSide={cardSide}
+        distanceMeters={distanceMeters} restingUntil={restingUntil} ticketCost={ticketCost} status={status}
+        isTripGoal={isTripGoal} adventure={adventure} limited={limited} minsLeft={minsLeft} expiresAt={expiresAt}
+        timerUrgent={timerUrgent} tagKind={tagKind} tagSize={tagSize} playable={playable} rush={rush} live={live}
+        timerTicking={timerTicking} star={star} parked={parked} alive={alive} badge={badge} showTimer={showTimer}
+        glow={glow} calm={calm} aliveRank={aliveRank} ringColor={ringColor} resting={resting} reducedMotion={reducedMotion}
+        control={control} flagRaiseKey={flagRaiseKey} behindKinds={behindKinds} frontKinds={frontKinds} near={near}
+        look={look} owned={owned} down={down} folded={folded} revealDelay={revealDelay} /> : <View style={styles.bare} />}
+    </Marker>
+  </>);
+}
+
+
+type IslandArtProps = {
+  readonly placement: Placement; readonly task: TaskType; readonly isSelected: boolean;
+  readonly cardSide: ReturnType<typeof selectedCardSide>; readonly distanceMeters: number | null;
+  readonly restingUntil: number | null; readonly ticketCost: number; readonly status: string | null | undefined;
+  readonly isTripGoal: boolean; readonly adventure: boolean; readonly limited: string | null; readonly minsLeft: number | null;
+  readonly expiresAt: number | null; readonly timerUrgent: boolean; readonly tagKind: ReturnType<typeof rideTagKind> | null;
+  readonly tagSize: ReturnType<typeof rideTagSize>; readonly playable: boolean; readonly rush: NonNullable<LiveRide['rush']> | null;
+  readonly live: LiveRide | undefined; readonly timerTicking: boolean; readonly star: boolean; readonly parked: boolean;
+  readonly alive: ReturnType<typeof useMapAlive>; readonly badge: ReturnType<typeof markerBadge>; readonly showTimer: boolean;
+  readonly glow: WaitGlowLook | null; readonly calm: boolean; readonly aliveRank: number | undefined; readonly ringColor: string;
+  readonly resting: boolean; readonly reducedMotion: boolean; readonly control: RideControlRide | undefined;
+  readonly flagRaiseKey: string | undefined; readonly behindKinds: readonly AmbienceId[]; readonly frontKinds: readonly AmbienceId[];
+  readonly near: boolean; readonly look: ReturnType<typeof rideLook>; readonly owned: boolean; readonly down: boolean;
+  readonly folded: number; readonly revealDelay: number | undefined;
+};
+
+/**
+ * A ride island's art (landmark, ring, chips, glows, scenes) and its own animations. Mounted only
+ * once its slot has had a ride (see useIslandMount), then it stays mounted for good: a slot whose
+ * ride leaves draws it parked and hidden, and nothing inside a marker mounts or unmounts again.
+ */
+function IslandArt({
+  placement, task, isSelected, cardSide, distanceMeters, restingUntil, ticketCost, status, isTripGoal, adventure, limited,
+  minsLeft, expiresAt, timerUrgent, tagKind, tagSize, playable, rush, live, timerTicking, star, parked, alive, badge, showTimer,
+  glow, calm, aliveRank, ringColor, resting, reducedMotion, control, flagRaiseKey, behindKinds, frontKinds, near, look, owned,
+  down, folded, revealDelay,
+}: IslandArtProps) {
+  // Selection: anticipation dip, spring lift to 1.15, settle. Haptic on the lift.
+  const lift = useSharedValue(isSelected ? 1 : 0);
+  const wasSelected = useRef(isSelected);
+  useEffect(() => {
+    if (isSelected && !wasSelected.current) haptic('tapLight');
+    wasSelected.current = isSelected;
+    if (reducedMotion) { lift.value = isSelected ? 1 : 0; return; }
+    lift.value = isSelected
+      ? withSequence(withTiming(-0.2, { duration: 70 }), withSpring(1, { damping: 8, stiffness: 260, mass: 0.7 }))
+      : withSpring(0, { damping: 14, stiffness: 220 });
+  }, [isSelected, reducedMotion, lift]);
+  const liftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -lift.value * 8 }, { scale: 1 + lift.value * 0.15 }],
+  }));
+
+  // First reveal: islands drop in one after another, bounce and settle. Ride slots are mounted empty
+  // (parked) before the park's rides load, so the drop runs when a slot first gets its ride, not at
+  // mount: an empty slot waits at 0 and a ride that lands after the cover lifts drops in on its
+  // stagger. A ride that lands under the cover (no delay) is simply there. UI thread; Reduce Motion skips.
+  const drop = useSharedValue(reducedMotion ? 1 : parked ? 0 : revealDelay === undefined ? 1 : 0);
+  useEffect(() => {
+    if (parked) { if (!reducedMotion) drop.value = 0; return; }
+    if (revealDelay === undefined || reducedMotion) { drop.value = 1; return; }
+    drop.value = 0;
+    drop.value = withDelay(revealDelay, withSpring(1, { damping: 10, stiffness: 170 }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parked]);
+  const dropStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, drop.value * 2),
+    transform: [{ translateY: (1 - drop.value) * -36 }, { scale: 0.7 + drop.value * 0.3 }],
+  }));
+
+  // Entering the ride's range: a burst (motion permitting) and a happy buzz, once in a while.
+  const [burst, setBurst] = useState(0);
+  const wasPlayable = useRef(playable);
+  useEffect(() => {
+    if (playable && !wasPlayable.current && arrivalBurstAllowed(lastArrival.get(task.id), Date.now())) {
+      lastArrival.set(task.id, Date.now());
+      haptic('success');
+      if (!calm) setBurst(value => value + 1);
+    }
+    wasPlayable.current = playable;
+  }, [playable, task.id, calm]);
+
+  return (<>
       {/* One chip at a time keeps the map calm, on the free side the declutter picked (unscaled: the
           solver sized it around the scaled art); the info card replaces it when selected. */}
       <Placed placement={placement} anchor={RIDE_BOX.anchor} overlay={isSelected ? (
@@ -564,7 +617,6 @@ function TaskMarker({
         {burst > 0 && <ArrivalBurst key={burst} onDone={() => setBurst(0)} />}
       </Animated.View>
       </Placed>
-    </Marker>
   </>);
 }
 
@@ -580,6 +632,8 @@ const styles = StyleSheet.create({
   // The player's shark (about 70 pt with its cone) stands on a playable island; its chips lift above it.
   standingLift: { transform: [{ translateY: -STANDING_LIFT }] },
   container: { width: 72, height: 96, position: 'relative', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 10 },
+  // An empty slot's whole child: the island box's size, nothing drawn.
+  bare: { width: 72, height: 96, opacity: 0 },
   goalBadge: { backgroundColor: BRAND.gold,
     borderRadius: 9, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 2, borderColor: BRAND.navy },
   goalText: { color: BRAND.navy, fontSize: 10, fontFamily: 'Knockout', letterSpacing: 0.5 },

@@ -36,6 +36,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'ParkDayRecapPreview', getComponent: () => require('./screens/ParkDayRecapPreviewScreen').default },
       { name: 'ShareStudioPreview', getComponent: () => require('./screens/ShareStudioPreviewScreen').default },
       { name: 'ShareModalEvidence', getComponent: () => require('./screens/ShareModalEvidenceScreen').default },
+      { name: 'SharePicturesPreview', getComponent: () => require('./screens/SharePicturesPreviewScreen').default },
       { name: 'LineGroupPreview', getComponent: () => require('./screens/LinePlay/LineGroupPreviewScreen').default },
       { name: 'CrewGridPreview', getComponent: () => require('./screens/LinePlay/CrewGridPreviewScreen').default },
       { name: 'StreakFlamePreview', getComponent: () => require('./components/retention/StreakFlamePreview').default },
@@ -49,6 +50,8 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'RideLogSuccessPreview', getComponent: () => require('./screens/RideLogSuccessPreviewScreen').default },
       { name: 'UiKitGym', getComponent: () => require('./ui/UiKitGym').default },
       { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
+      { name: 'SharkPassRevealPreview', getComponent: () => require('./screens/SharkPassRevealPreviewScreen').default },
+      { name: 'BoxRevealPreview', getComponent: () => require('./screens/pins/BoxRevealPreviewScreen').default },
       { name: 'FrightIntroPreview', getComponent: () => require('./components/fright/tutorial/FrightIntroPreviewScreen').default },
       { name: 'SecretShopPreview', getComponent: () => require('./screens/StoreScreen/SecretShopPreviewScreen').default },
       { name: 'MoneyPreview', getComponent: () => require('./screens/MoneyPreviewScreen').default },
@@ -60,14 +63,48 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
   // so this branch folds away like the dev list.
   : process.env.EXPO_PUBLIC_PERF_CAPTURE === '1'
     ? [{ name: 'BossMapPreview', getComponent: () => require('./screens/BossMapPreviewScreen').default }]
-    : [];
+    // Release-like share walks only (EXPO_PUBLIC_SHARE_WALK=1 with `expo start --no-dev`): the real reveals and
+    // the grown-up gate in release JS, with stub saves. Store builds never set it, so this folds away too.
+    : process.env.EXPO_PUBLIC_SHARE_WALK === '1'
+      ? [
+        { name: 'SharePicturesPreview', getComponent: () => require('./screens/SharePicturesPreviewScreen').default },
+        { name: 'SharkPassRevealPreview', getComponent: () => require('./screens/SharkPassRevealPreviewScreen').default },
+        { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
+      ]
+    // Release-mode captures of the big moments (EXPO_PUBLIC_MOTION_CAPTURE=<route> with `expo start --no-dev`), so a
+    // reveal can be recorded in release-like JS when the scratch server cannot reach it for real. Store builds never
+    // set it, so this folds away like the dev list.
+    // wow-sound w5r2: the daily loop's hooks (Daily 3 checks, the flame, both chests), alone on their capture.
+    : process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'HookSoundPreview'
+      ? [{ name: 'HookSoundPreview', getComponent: () => require('./components/retention/HookSoundPreviewScreen').default }]
+    : process.env.EXPO_PUBLIC_MOTION_CAPTURE
+      ? [
+          { name: 'BoxRevealPreview', getComponent: () => require('./screens/pins/BoxRevealPreviewScreen').default },
+          { name: 'PostWinRewardsPreview', getComponent: () => require('./screens/PostWinRewardsPreviewScreen').default },
+          { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
+          { name: 'CoinLevelingPreview', getComponent: () => require('./screens/CoinLevelingPreviewScreen').default },
+          // EXPO_PUBLIC_MOTION_CAPTURE=Whack only: the tester opens Whack-a-Shark on launch (release-JS frame-rate proof).
+          ...(process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'Whack'
+            ? [{ name: 'MiniGameTester', getComponent: () => require('./screens/MiniGameTesterScreen').default }]
+            : []),
+          { name: 'HomeCatchPreview', getComponent: () => require('./screens/ExploreScreen/HomeCatchPreviewScreen').default },
+        ]
+      : [];
 
 /**
  * First matching EXPO_PUBLIC_*_PREVIEW flag wins; order matches the original
  * Root chain. Each flag is a literal process.env access so Expo inlines it.
  */
 export function devInitialRoute(): string | null {
-  if (!__DEV__) return process.env.EXPO_PUBLIC_PERF_CAPTURE === '1' ? 'BossMapPreview' : null;
+  if (!__DEV__) {
+    if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1') return 'BossMapPreview';
+    if (process.env.EXPO_PUBLIC_SHARE_WALK === '1') return 'SharePicturesPreview';
+    const motion = process.env.EXPO_PUBLIC_MOTION_CAPTURE;
+    if (motion === 'Whack') return 'MiniGameTester';
+    if (motion === 'HookSoundPreview') return motion;
+    return motion === 'BoxRevealPreview' || motion === 'PostWinRewardsPreview' || motion === 'SetRevealPreview'
+      || motion === 'CoinLevelingPreview' || motion === 'HomeCatchPreview' ? motion : null;
+  }
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
     [!!process.env.EXPO_PUBLIC_SHOP_TABS_PREVIEW, 'ShopTabsPreview'],
@@ -125,6 +162,7 @@ export function devInitialRoute(): string | null {
     [!!process.env.EXPO_PUBLIC_FRIGHT_INTRO_PREVIEW, 'FrightIntroPreview'],
     [!!process.env.EXPO_PUBLIC_SECRET_SHOP_PREVIEW, 'SecretShopPreview'],
     [on(process.env.EXPO_PUBLIC_SET_REVEAL_PREVIEW), 'SetRevealPreview'],
+    [on(process.env.EXPO_PUBLIC_SHARKPASS_REVEAL_PREVIEW), 'SharkPassRevealPreview'],
     [on(process.env.EXPO_PUBLIC_NEWS_PREVIEW), 'News'],
   ];
   return table.find(([enabled]) => enabled)?.[1] ?? null;

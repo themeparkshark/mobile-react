@@ -16,6 +16,7 @@ import type { BossAttackCheckpoint } from '../services/boss/attackRecovery';
 import type { RushPick } from '../services/live/rush';
 import { BRAND, GameIcon } from '../ui';
 import { BOSS_ART } from './boss/bossArt';
+import countText from '../helpers/countText';
 
 export type { RushPick };
 
@@ -88,7 +89,7 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, styles.victoryTitle]} numberOfLines={1}>{title}</Text>
           <Text style={[styles.sub, styles.victorySub]} numberOfLines={1}>{shown ? `${teamName(mapFlag!.team)}  ·  ${mapMoment.impact.rideName}`
-            : `${mapMoment.impact.yourDamage.toLocaleString()} damage counted  ·  ${mapMoment.impact.rideName}`}</Text>
+            : `${countText(mapMoment.impact.yourDamage)} damage counted  ·  ${mapMoment.impact.rideName}`}</Text>
         </View>
         <Text style={[styles.go, styles.victoryTitle]}>SEE</Text>
         <GameIcon name="arrow" size={18} />

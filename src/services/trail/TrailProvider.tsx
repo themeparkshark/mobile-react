@@ -50,6 +50,8 @@ export const useTrail = () => useContext(TrailContext);
 const PENDING_KEY = 'trail.pending.v1';
 const AWAY_KEY = 'trail.away.v1';
 const MAX_PENDING = 40;
+/** Waits between flag checks that got no answer (then the next app return tries again). */
+const FLAG_RETRY_MS = [4_000, 15_000, 45_000] as const;
 
 const trailFlag = (__DEV__ && process.env.EXPO_PUBLIC_TRAIL_FORCE === '1')
   ? async () => true
@@ -120,7 +122,25 @@ export function TrailProvider({ children }: { readonly children: ReactNode }) {
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
 
-  useEffect(() => { let on = true; void trailFlag().then(v => { if (on && v !== null) setFlag(v); }); return () => { on = false; }; }, [player?.id]);
+  // Only once signed in: the flag answer is per player (preview groups), and an anonymous answer
+  // read at launch would be cached for 10 minutes and hide Trail Boxes from a player who has them.
+  // No answer yet (a busy launch can time the check out): try again a little later, so a slow
+  // first check never hides the feature until the app next comes back from the background.
+  // Signed out (or a different player): the last player's answer never carries over to the next one.
+  useEffect(() => {
+    if (!player?.id) { setFlag(false); return undefined; }
+    let on = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const check = (attempt: number) => {
+      void trailFlag().then(v => {
+        if (!on) return;
+        if (v !== null) { setFlag(v); return; }
+        if (attempt < FLAG_RETRY_MS.length) timer = setTimeout(() => check(attempt + 1), FLAG_RETRY_MS[attempt]);
+      });
+    };
+    check(0);
+    return () => { on = false; if (timer) clearTimeout(timer); setFlag(false); };
+  }, [player?.id]);
   useEffect(() => { if (enabled) { void readMotion().then(setMotion); void hydrateTrailSeen(); } }, [enabled]);
 
   // Restore what a killed app left behind: windows not yet sent, and where it went to sleep.

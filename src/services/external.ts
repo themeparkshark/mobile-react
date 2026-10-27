@@ -60,19 +60,27 @@ export const SHARE_SHEET_WAIT_MS = 30_000;
 /** The share sheet never answered within SHARE_SHEET_WAIT_MS (it may still be up): not a share, not a cancel. */
 export const SHARE_TIMED_OUT = 'timeout' as const;
 
+/** Runs a share's after-yes step; its failure never blocks the sheet. */
+async function runAfterYes(afterYes?: () => Promise<void> | void): Promise<void> {
+  if (!afterYes) return;
+  try { await afterYes(); } catch { /* the picture still shares */ }
+}
+
 /**
  * The system share sheet (text, a link or a file url) after the grown-up gate. Null when the
  * grown-up said no, SHARE_TIMED_OUT when the sheet never answered within SHARE_SHEET_WAIT_MS.
  * `name` titles a file url in the sheet header ("Golden Churro" becomes Golden-Churro.jpg),
  * like shareFileExternal. The named copy is made while the grown-up answers.
  */
-export async function shareExternal(content: ShareContent, options?: ShareOptions, name?: string) {
+export async function shareExternal(content: ShareContent, options?: ShareOptions, name?: string, afterYes?: () => Promise<void> | void) {
   const url = 'url' in content && content.url ? content.url : null;
   const copying = url && name ? namedShareCopy(url, name) : null;
   if (!(await askGrownUp(SHARE))) {
     void copying?.then(copy => copy.release());
     return null;
   }
+  // Only after the grown-up's yes (a link on the clipboard, for one): a "Not now" changes nothing.
+  await runAfterYes(afterYes);
   const copy = copying ? await copying : { file: url ?? '', release: () => undefined };
   const named = copying ? { ...content, url: copy.file } : content;
   return waitForSheet<Awaited<ReturnType<typeof Share.share>> | typeof SHARE_TIMED_OUT>(Share.share(named, options), copy, SHARE_TIMED_OUT);
@@ -166,11 +174,12 @@ export type ShareFileOutcome = 'shared' | 'closed' | 'declined' | 'timeout';
  * Whack-a-Shark-460.png). On iOS this is the same system sheet through Share.share,
  * which tells a real share apart from a cancel.
  */
-export async function shareFileExternal(uri: string, options?: Sharing.SharingOptions, name?: string): Promise<ShareFileOutcome> {
+export async function shareFileExternal(uri: string, options?: Sharing.SharingOptions, name?: string, afterYes?: () => Promise<void> | void): Promise<ShareFileOutcome> {
   // The named copy is made while the grown-up answers, so the sheet opens right after OK.
   const copying = namedShareCopy(uri, name);
   const drop = (outcome: ShareFileOutcome) => { void copying.then(copy => copy.release()); return outcome; };
   if (!(await askGrownUp(SHARE))) return drop('declined');
+  await runAfterYes(afterYes);
   if (Platform.OS === 'ios') {
     const copy = await copying;
     const file = copy.file.startsWith('/') ? `file://${copy.file}` : copy.file;

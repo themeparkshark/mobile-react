@@ -10,11 +10,12 @@ import * as Haptics from 'expo-haptics';
 import { getPlayerRides, getRideStats, PlayerRideType, RideStatsType } from '../../api/endpoints/player-rides';
 import { getRideProfileStats, RideProfileStats } from '../../api/endpoints/player-rides/profileStats';
 import RideCard from '../../components/RideTracker/RideCard';
-import Wrapper from '../../components/Wrapper';
+import Wrapper, { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import Topbar, { BackButton } from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import countText from '../../helpers/countText';
 import { clearLetGoRideLog, drainRideLogs, letGoRideLogs, onRideLogOutboxChange, pendingRideLogs, rideCountWords,
   type LetGoRideLog, type QueuedRideLog } from '../../services/rideLogOutbox';
 import { GameIcon, showGameDialog } from '../../ui';
@@ -95,7 +96,7 @@ function CountUp({ to, style, duration = 800 }: { to: number; style?: any; durat
     animation.start();
     return () => { animation.stop(); a.removeListener(id); };
   }, [to, duration, reducedMotion, a]);
-  return <Text style={style}>{v.toLocaleString()}</Text>;
+  return <Text style={style}>{countText(v)}</Text>;
 }
 
 // ─── Menu Row ───
@@ -215,7 +216,7 @@ export default function RideTrackerScreen() {
       <ScrollView
         style={s.root}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 28 }}
+        contentContainerStyle={{ paddingBottom: FOOTER_CLEARANCE }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
       >
         {/* Ride journal hero below the app's original curved header. */}

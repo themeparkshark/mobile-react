@@ -15,6 +15,7 @@
  *   coins short is offered 500 coins, not 7,000.
  */
 import type { ShopCurrency, ShopGrants, ShopProduct } from '../../api/endpoints/me/shop';
+import countText from '../../helpers/countText';
 
 export type Price = { readonly price: string; readonly amount: number };
 export type PriceMap = Readonly<Record<string, Price | undefined>>;

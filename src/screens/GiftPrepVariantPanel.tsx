@@ -157,7 +157,7 @@ export default function GiftPrepVariantPanel({ item, imageSource, onBack, onClos
           <Text style={{ color: '#276991', fontFamily: 'Knockout', fontSize: 14 }}>BACK TO ITEM</Text>
         </TouchableOpacity>
         {eligibility?.eligible_friends.length === 0 && <TouchableOpacity accessibilityRole="button" onPress={onFindFriends}>
-          <Text style={{ color: '#276991', fontFamily: 'Knockout', fontSize: 14 }}>OPEN FRIENDS →</Text>
+          <Text style={{ color: '#276991', fontFamily: 'Knockout', fontSize: 14 }}>OPEN FRIENDS</Text>
         </TouchableOpacity>}
       </View>
     </>}

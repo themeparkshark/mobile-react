@@ -15,6 +15,7 @@ import GameIcon from '../../ui/GameIcon';
 import { BRAND, FONT } from '../../ui/tokens';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { INK, Pill } from './SocialKit';
+import { UpperText } from '../../ui/upper';
 
 const HOLD_MS = 3000;
 const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
@@ -116,7 +117,7 @@ export function GrownUpGate({ visible, onDone }: { readonly visible: boolean; re
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.scrim}>
         <View style={styles.card} accessibilityViewIsModal>
           <GameIcon name="lock" size={56} />
-          <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.2}>For grown-ups</Text>
+          <UpperText style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.2}>For grown-ups</UpperText>
           {step === 'hold' ? (
             <>
               <Text style={styles.body} maxFontSizeMultiplier={1.3}>
@@ -129,9 +130,9 @@ export function GrownUpGate({ visible, onDone }: { readonly visible: boolean; re
                 onAccessibilityAction={() => { if (gateLockedFor()) return; console.info('social.gate.a11y_skip'); held(); }}
                 disabled={locked > 0}>
                 <Animated.View style={[styles.holdFill, ring]} />
-                <Text style={styles.holdText} maxFontSizeMultiplier={1.2}>
+                <UpperText style={styles.holdText} maxFontSizeMultiplier={1.2}>
                   {locked > 0 ? `Try again in ${locked} s` : 'Grown-ups: press and hold'}
-                </Text>
+                </UpperText>
               </Pressable>
             </>
           ) : (

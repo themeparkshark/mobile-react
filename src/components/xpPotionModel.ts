@@ -102,16 +102,15 @@ export function createPotionDriver(initial: PotionState | null, hooks: PotionDri
   };
 }
 
-/** 1234567 -> "1,234,567" on the UI thread. */
+/** 4600 -> "4600", 1234567 -> "1.2M" on the UI thread (the countText rule: no commas). */
 export function groupDigits(n: number): string {
   'worklet';
-  const s = String(Math.max(0, Math.round(n)));
-  let out = '';
-  for (let i = 0; i < s.length; i++) {
-    if (i > 0 && (s.length - i) % 3 === 0) out += ',';
-    out += s[i];
-  }
-  return out;
+  // Same rule as src/helpers/countText.ts (kept inline: this file stays import-free).
+  const v = Math.max(0, Math.round(Number(n) || 0));
+  if (v < 100000) return String(v);
+  const [size, suffix] = v >= 1e9 ? [1e9, 'B'] : v >= 1e6 ? [1e6, 'M'] : [1e3, 'K'];
+  const x = v / size;
+  return `${x >= 100 ? Math.floor(x) : Math.floor(x * 10) / 10}${suffix}`;
 }
 
 /**

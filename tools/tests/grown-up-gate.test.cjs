@@ -267,7 +267,7 @@ test('the gate answers only after it has faded out, so the share sheet can prese
   const gate = read('src/components/GrownUpGate.tsx');
   assert.match(gate, /<Modal visible=\{closing === null && !devRefuse\(\)\}[\s\S]{0,200}?onShow=\{\(\) => \{ shownRef\.current = true; \}\} onDismiss=\{finish\}>/);
   assert.match(gate, /setTimeout\(finish, GATE_DISMISS_FALLBACK_MS\)/, 'a missed onDismiss still answers');
-  assert.match(gate, /if \(shownRef\.current \|\| !reqRef\.current \|\| answerRef\.current !== null\) return;[\s\S]{0,200}?showRetryHint\(gateRetryHint\(reqRef\.current\.reason\)\);\s*answerRef\.current = false;\s*finish\(\);\s*\}, GATE_SHOW_WATCHDOG_MS\)/, 'a refused gate answers no at once, with a kind hint');
+  assert.match(gate, /if \(shownRef\.current \|\| !reqRef\.current \|\| answerRef\.current !== null\) return;[\s\S]{0,200}?showRetryHint\(gateRetryHint\(reqRef\.current\.reason\)\);\s*answerRef\.current = false;\s*finish\(\);\s*\}, gateWatchdogMs\(req\?\.reason\)\)/, 'a refused gate answers no at once, with a kind hint (real money waits longer)');
   const g = gateModule();
   assert.equal(g.GATE_DISMISS_FALLBACK_MS, 2000);
   assert.match(gate, /if \(Platform\.OS !== 'ios'\) \{ finish\(\); return; \}/, 'Android answers at once');
@@ -372,5 +372,6 @@ test('Memory Daily (and its SHARE NOW) is dev-only in 1.7.3: no player-facing sc
   assert.deepEqual(engine.split('\n').filter(l => /\bquick: true\b/.test(l)).map(l => l.trim().split(':')[0]), ['timeAttack']);
   assert.match(menu, /if \(pick\?\.kind === 'timeAttack'\) return <MemoryGame \{\.\.\.props\} mode="timeAttack"/);
   // If the Daily ever ships, its share must go through the gated helper like every other card.
-  assert.match(read('src/games/memory/MemoryExtras.tsx'), /await shareFileExternal\(uri, \{ mimeType: 'image\/png', dialogTitle: 'Share your Daily' \}, `Memory Daily \$\{daily\.day\}`\)/);
+  // The lane's share path: the gate and named file come from openShareSheet (services/external underneath).
+  assert.match(read('src/games/memory/MemoryExtras.tsx'), /await openShareSheet\(uri, shareMessage\(campaignUrl\('memory'\)\), `Memory Daily \$\{daily\.day\}`\)/);
 });

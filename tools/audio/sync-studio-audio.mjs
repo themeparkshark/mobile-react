@@ -261,6 +261,7 @@ function reqPath(game, file) {
 // stay stereo): react-native-audio-api 0.6 decodes WAV/MP3 but not AAC, and
 // WAV has no AAC priming delay. Music beds stay .m4a (streamed by expo-av).
 const SFX_FORMAT = process.env.STUDIO_SFX_FORMAT || 'wav';
+const ONE_SHOT_LIMITER = 'aresample=176400,alimiter=limit=0.84:attack=1:release=20:level=false:latency=true,aresample=44100';
 
 function asOneShot(f) {
   // Stingers cut from Chris's music stay compressed (seconds long, expo-av).
@@ -275,7 +276,11 @@ function copy(game, f) {
   const stale = !fs.existsSync(dest) || fs.statSync(dest).mtimeMs < fs.statSync(f.full).mtimeMs;
   if (!stale) return;
   if (f.convert) {
-    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', f.full, '-c:a', 'pcm_s16le', '-ar', '44100', dest]);
+    // AAC decodes with inter-sample overshoot (up to +4 dB on the studio's bonks and tells), and a
+    // straight cast to 16-bit hard-clips it (wow-sound inventory, Oct 24: 35 clipped cues). Decode in
+    // float, run a 4x-oversampled lookahead limiter at -1.5 dBFS (latency compensated, no auto level),
+    // then write PCM: the master's -1 dBTP intent survives and nothing clips.
+    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', f.full, '-af', ONE_SHOT_LIMITER, '-c:a', 'pcm_s16le', '-ar', '44100', dest]);
     if (r.status !== 0) throw new Error(`ffmpeg failed for ${f.full}: ${r.stderr}`);
   } else {
     fs.copyFileSync(f.full, dest);

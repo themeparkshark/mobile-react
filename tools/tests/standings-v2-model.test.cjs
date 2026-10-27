@@ -235,7 +235,7 @@ test('round 5: your row visibility from geometry, the goal note held while the w
   assert.match(board, /if \(becameActive\) setSnapId/, 'the You card snaps only on the hidden-to-active edge; refreshes spring');
   const stats = read('src/components/Stats.tsx');
   // RC: Stats is profile-v2's (hideBalances, visibleCount) plus standings' profile_limited rule.
-  assert.match(stats, /hideBalances \|\| limited \? null : visibleCount\(player\.visited_parks_count\)/, 'a stranger profile hides Parks');
+  assert.match(stats, /hideBalances \|\| limited \? null : parks \?\? visibleCount\(player\.visited_parks_count\)/, 'a stranger profile hides Parks');
   assert.match(stats, /Number\.isFinite\(n\) \? n : null/, 'no number can crash toLocaleString (a hidden value drops its tile)');
   const modal = read('src/components/PostWinRewardsModal.tsx');
   assert.ok(modal.indexOf('{(noteSlot || goalNote) && (') > modal.indexOf('<View style={styles.footer}>'), 'the goal note sits in the footer flow');

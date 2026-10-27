@@ -43,7 +43,7 @@ test('sustained outside readings leave the park; a new park is entered at once',
   assert.equal(nextParkPresence(NO_PARK_PRESENCE, { outcome: 'outside', at: 1 }).park, undefined);
 });
 
-function mount() {
+function mount({ lastKnown = null } = {}) {
   const watchers = [];
   let resolveFix;
   const Location = {
@@ -58,6 +58,8 @@ function mount() {
     },
     // A slow first fix: it resolves only when the test says so.
     getCurrentPositionAsync: () => new Promise(resolve => { resolveFix = resolve; }),
+    // The phone's own recent fix (none by default: a fresh install or a fix older than 5 minutes).
+    getLastKnownPositionAsync: async () => lastKnown,
   };
   const lookups = [];
   let answer = async () => DISNEYLAND;
@@ -77,7 +79,8 @@ function mount() {
     console: { ...console, warn() {}, error() {} },
   }, { exportName: 'LocationProvider' });
   const settle = async () => { for (let i = 0; i < 4; i++) { app.render(); await app.settle(); } };
-  return { app, watchers, lookups, settle, resolveFix: fix => resolveFix(fix),
+  const fixAsked = async () => { for (let i = 0; i < 50 && !resolveFix; i++) await new Promise(r => setImmediate(r)); };
+  return { app, watchers, lookups, settle, fixAsked, resolveFix: fix => resolveFix(fix),
     setAnswer: fn => { answer = fn; }, value: () => app.tree.props.value };
 }
 
@@ -102,12 +105,21 @@ test('a slow launch GPS fix never clears the park the watcher already found', as
 });
 
 test('a launch with no fix yet looks up the park from the first fix instead of clearing it', async () => {
-  const { lookups, settle, resolveFix, value } = mount();
+  const { lookups, settle, fixAsked, resolveFix, value } = mount();
   await value().requestPermission(); await settle();
   const pending = value().requestPark();
+  await fixAsked();
   resolveFix({ coords: { latitude: 33.8121, longitude: -117.9190 } });
   await pending; await settle();
   assert.equal(value().park?.id, 8);
+  assert.deepEqual(lookups[0], [33.8121, -117.9190]);
+});
+
+test('a launch with a recent phone fix picks the park map at once, without waiting on a fresh fix', async () => {
+  const { lookups, settle, value } = mount({ lastKnown: fix(33.8121, -117.9190, 30) });
+  await value().requestPermission(); await settle();
+  await value().requestPark(); await settle();
+  assert.equal(value().park?.id, 8, 'the map opens on the park');
   assert.deepEqual(lookups[0], [33.8121, -117.9190]);
 });
 

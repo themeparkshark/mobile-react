@@ -24,6 +24,7 @@ import {
   GameShellV2, ParticleField, useFlash, useShake, haptic, playSfx,
   type GameResult, type GameShellV2Handle, type ParticleHandle,
 } from '../../../gamekit';
+import countText from '../../../helpers/countText';
 
 export { BOSS_ART };
 
@@ -302,7 +303,7 @@ export function BossBrawl({ visible, boss, bossName, hpLeft, hpMax, damageRate =
           <View style={styles.hpTrack}>
             <View style={[styles.hpFill, { width: `${Math.max(0, (preview / Math.max(1, hpMax)) * 100)}%` }]} />
           </View>
-          <Text style={styles.hpText}>{preview.toLocaleString()} / {hpMax.toLocaleString()} HP</Text>
+          <Text style={styles.hpText}>{countText(preview)} / {countText(hpMax)} HP</Text>
           <View style={styles.roundTrack}><Animated.View style={[styles.roundFill, roundStyle]} /></View>
         </View>
 

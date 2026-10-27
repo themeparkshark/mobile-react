@@ -34,7 +34,7 @@ import Animated, {
 import { SharkMood, SharkPosition } from './types';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { BRAND, GameButton } from '../../ui';
-import { REVEAL_START_MS, revealSchedule, splitWords } from './teacherReveal';
+import { REVEAL_START_MS, revealSchedule, splitWords, visibleParts } from './teacherReveal';
 import TapHint from '../TapHint';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -171,14 +171,16 @@ export default function TeacherShark({
     firstLine.current = false;
     const times = revealSchedule(parts);
     setShown(0);
-    let index = 0;
+    // Each tick shows every word that is due by the clock, so a busy first frame (a fresh phone
+    // loading a list) catches up at once instead of sitting on the first word under the button.
+    let startedAt = 0;
     const step = () => {
-      index += 1;
-      while (index < times.length && times[index] === times[index - 1]) index += 1;
+      const index = Math.max(1, visibleParts(parts, Date.now() - startedAt));
       setShown(index);
-      if (index < times.length) revealTimer.current = setTimeout(step, times[index] - times[index - 1]);
+      if (index < times.length) revealTimer.current = setTimeout(step, Math.max(16, times[index] - (Date.now() - startedAt)));
     };
     revealTimer.current = setTimeout(() => {
+      startedAt = Date.now();
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
       step();
     }, startDelay);

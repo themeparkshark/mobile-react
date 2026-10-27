@@ -18,7 +18,7 @@ import { openFeedbackReport } from '../components/Feedback/FeedbackHost';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper from '../components/Wrapper';
+import Wrapper, { FOOTER_CLEARANCE } from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationStatusContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -34,6 +34,7 @@ import {
 } from './Settings/accountDeletion';
 import { copyrightLine } from '../api/platform';
 import { setBatterySaver, useBatterySaver } from '../power';
+import { UpperText } from '../ui/upper';
 
 /** Settings-only art (GPT Image 2.5 from Alex's references, see tps-prime-time-audit/art-ws8). */
 const SETTINGS_ART = {
@@ -58,7 +59,7 @@ function Section({ title, index, children }: { readonly title: string; readonly 
   const reduced = useUiReducedMotion();
   return (
     <Animated.View entering={reduced ? undefined : FadeInDown.delay(60 + index * 55).springify().damping(16).stiffness(180)}>
-      <Text style={styles.sectionHeader}>{title}</Text>
+      <UpperText style={styles.sectionHeader}>{title}</UpperText>
       <View style={styles.card}>{children}</View>
     </Animated.View>
   );
@@ -85,7 +86,7 @@ function SettingsRow({
     <View style={[styles.row, !isLast && styles.rowBorder, pressed && styles.rowPressed]}>
       <View style={styles.iconWell}><RowIcon art={art} /></View>
       <View style={styles.rowContent}>
-        <Text style={[styles.rowTitle, destructive && { color: BRAND.redLip }]}>{title}</Text>
+        <UpperText style={[styles.rowTitle, destructive && { color: BRAND.redLip }]}>{title}</UpperText>
         {!!detail && <Text style={styles.rowDetail} numberOfLines={2}>{detail}</Text>}
       </View>
       {accessory ?? (onPress ? <GameIcon name="arrow" size={22} /> : null)}
@@ -491,6 +492,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
     paddingTop: 12,
+    paddingBottom: FOOTER_CLEARANCE,
   },
   sectionHeader: {
     fontFamily: 'Shark',

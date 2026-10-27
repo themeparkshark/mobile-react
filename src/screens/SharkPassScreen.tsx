@@ -29,19 +29,21 @@ import type { InventoryType } from '../models/inventory-type';
 import Animated, {
   Easing, FadeInDown, FadeInUp, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   buyGoldEdition, claimAllSharkPass, claimSharkPassReward, getSharkPass, markSharkPassSeen, sharkPassErrorCode, wearFrame,
   type SharkPassReward, type SharkPassState, type SharkPassTier,
 } from '../api/endpoints/me/shark-pass';
 import { askGrownUp } from '../components/GrownUpGate';
 import { GotIt, MAX_FONT, PackArt, artSource, type PackArtKey } from '../components/money/moneyUi';
+import WearFirstReward, { WornLook } from '../components/money/WearFirstReward';
 import MemberFlex from '../components/money/MemberFlex';
 import { lastSharkPassSeen, noteSharkPassPoints } from '../components/money/SharkPassBanner';
 import { playSfx } from '../gamekit/SFX';
 import CoinTopUpOffer from '../components/money/CoinTopUpOffer';
 import { FRAME_ART, GOLD_ART } from '../components/money/frames';
-import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost } from '../share';
+import { FlexShareButton } from '../share';
+import { useModalHandoff } from '../share/handoff';
 import RealMoneyMark from '../components/RealMoneyMark';
 import { AuthContext } from '../context/AuthProvider';
 import { haptic } from '../gamekit/Haptics';
@@ -54,6 +56,7 @@ import { wearItem } from './StoreScreen/inventoryQueue';
 import { trackImpression, trackMoney } from '../services/money/track';
 import { baseRates, formatLike, regularValue } from '../services/money/offers';
 import { useSupplies } from '../services/money/supplies';
+import countText from '../helpers/countText';
 
 const SEASON_ART: Record<string, number> = {
   'frosty-scarf': require('../../assets/images/sharkpass/frosty-scarf.webp'),
@@ -79,7 +82,7 @@ const EMBLEM = require('../../assets/images/sharkpass/pass-emblem.webp');
 const SCENE = require('../../assets/images/sharkpass/scene-northern-lights.webp');
 
 /** The player's own look with a season pin on its pin spot (nothing is saved): the hero's "this could be you". */
-function withSeasonPin(base: InventoryType | undefined, reward: SharkPassReward | null | undefined): InventoryType | null {
+export function withSeasonPin(base: InventoryType | undefined, reward: SharkPassReward | null | undefined): InventoryType | null {
   if (!base?.skin_item || !reward || reward.type !== 'item' || reward.slot !== 'pin') return base ?? null;
   const bundled = SEASON_ART[reward.art];
   const uri = bundled ? RNImage.resolveAssetSource(bundled)?.uri : reward.icon_url;
@@ -140,13 +143,15 @@ function Flake({ x, size, dur, delay, drift, height, running }: { x: number; siz
 }
 
 const CELL_W = 92;
-/** "1,500": thousands commas without relying on the device's Intl. */
-const commas = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/** Drawn counts use the one countText rule (1500, 12.5K), never commas. */
+const commas = (n: number) => countText(n);
 
 /** A payoff card; `next` plays right after this one closes (e.g. the set bonus after its last pin). */
 type Landed = {
   reward: SharkPassReward; title: string; caption?: string; itemId?: number; frameKey?: string; emblem?: boolean;
   group?: SharkPassReward[]; twin?: string; locked?: SharkPassReward[]; next?: Landed; gold?: boolean;
+  /** The Shark Pass step this reward came from (one claim), for the share picture's "Shark Pass · Step 12". */
+  step?: number;
 };
 /** The "with the Shark Pass you'd also have" row shows once per app visit, never on every claim. */
 let twinShown = false;
@@ -173,6 +178,7 @@ export default function SharkPassScreen() {
   const focused = useIsFocused();
   const [active, setActive] = useState(AppState.currentState === 'active');
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [state, setState] = useState<SharkPassState | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [price, setPrice] = useState<ShopPrice | null>(null);
@@ -181,6 +187,8 @@ export default function SharkPassScreen() {
   // The season set's try-on: the kid's own shark wearing a piece (nothing is saved).
   const [tryOn, setTryOn] = useState<SetPiece | null>(null);
   const [landed, setLanded] = useState<Landed | null>(null);
+  // Share from the reward card: it closes first, then the Share Studio sheet opens (share/handoff.ts).
+  const landedShare = useModalHandoff(useCallback(() => setLanded(null), []));
   const [goldBusy, setGoldBusy] = useState<string | null>(null);
   const [goldShort, setGoldShort] = useState<number>(0);
   const buying = useRef(false);
@@ -272,7 +280,7 @@ export default function SharkPassScreen() {
       const bonus = res.set_bonus;
       const bonusLanded: Landed | undefined = bonus ? { reward: { type: 'frame', name: bonus.name, art: bonus.frame.slice(bonus.frame.lastIndexOf(':') + 1), ready: true },
         title: 'Set complete!', caption: `You collected all ${state && state.enabled ? state.cosmetics?.free_set.total ?? 4 : 4} free pins. The ${bonus.name} is yours.`, frameKey: bonus.frame } : undefined;
-      setLanded({ reward, title: reward.type === 'frame' ? 'New frame!' : reward.type === 'item' ? (reward.slot === 'background' ? 'New scene!' : 'New season pin!') : 'You got it!', itemId, frameKey,
+      setLanded({ reward, title: reward.type === 'frame' ? 'New frame!' : reward.type === 'item' ? (reward.slot === 'background' ? 'New scene!' : 'New season pin!') : 'You got it!', itemId, frameKey, step: tier.tier,
         caption: passTwin ? `${rewardWords(reward)}. ${passTwin}` : undefined, next: bonusLanded });
       void refreshPlayer?.().catch(() => undefined);
     } catch (error) {
@@ -362,7 +370,7 @@ export default function SharkPassScreen() {
       setState(res.pass);
       haptic('success');
       setLanded({ reward: { type: 'item', name: res.name, slot: 'pin', art, icon_url: null, ready: true }, title: 'Gold!',
-        gold: true, caption: `${res.name}. ${res.spent.toLocaleString('en-US')} coins.`, itemId: Number(res.granted.item_id) || undefined });
+        gold: true, caption: `${res.name}. ${countText(res.spent)} coins.`, itemId: Number(res.granted.item_id) || undefined });
       void refreshPlayer?.().catch(() => undefined);
     } catch (error) {
       const code = sharkPassErrorCode(error);
@@ -435,13 +443,60 @@ export default function SharkPassScreen() {
     return (ahead.length ? ahead : items).slice(0, 5);
   }, [tiers, premium]);
   const readyCount = tiers.filter(t => t.unlocked && !t.paid_claimed).length;
-  
+
+  // The reward card's wear button and Share: Share is the last reveal's, and a wearable piece asks to wear it first.
+  const landedCanShare = !!landed && !landed.twin && isWearable(landed.reward) && !landed.emblem && !landed.next;
+  // The save is timed out on its own; the refresh after it is raced (wearThenRefresh), so a slow
+  // refresh never says "That didn't work" for a wear that saved.
+  const landedWear: { label: string; run: () => Promise<unknown>; refresh?: () => unknown } | undefined = !landed ? undefined
+    : landed.frameKey ? { label: 'Wear it now', run: () => wearFrame(landed.frameKey!), refresh: () => load() }
+    : landed.itemId ? { label: landed.reward.type === 'item' && landed.reward.slot === 'background' ? 'Set as my scene' : 'Wear it now',
+      run: () => wearItem({ id: landed.itemId! }), refresh: () => refreshPlayer?.() }
+    : undefined;
+  // Worn: the kid's own shark wearing the new piece (a season pin on its pin spot, a frame around it).
+  const wornLook = landed && landed.reward.type === 'item' && landed.reward.slot === 'pin'
+    ? withSeasonPin(player?.inventory as InventoryType | undefined, landed.reward) : null;
+  const landedWornPicture = !landed ? undefined
+    : landed.reward.type === 'frame' ? <MemberFlex inventory={player?.inventory as InventoryType | undefined} frame={landed.reward.art} vip={!!player?.is_subscribed} size={190} still={reduced} />
+    : wornLook?.skin_item && landed.reward.type === 'item'
+      // One signal: the pin on the shark's chest is the prize (no second copy of it as a disc beside it).
+      ? <WornLook inventory={wornLook} art={null} still={reduced} />
+    : undefined;
+  const landedChoice = landedCanShare && !!landedWear;
+  const landedPicture = !landed ? null : landed.emblem ? <Image source={EMBLEM} style={{ width: 180, height: 180 }} contentFit="contain" />
+    : landed.gold && landed.reward.type === 'item' && GOLD_ART[landed.reward.art] ? <Image source={GOLD_ART[landed.reward.art]} style={{ width: 180, height: 180 }} contentFit="contain" />
+    : landed.group && landed.group.length > 1 ? (
+      <View style={s.trio}>
+        {landed.group.map((r, i) => <View key={i} style={i === 1 ? s.trioMid : s.trioSide}><RewardPicture reward={r} size={i === 1 ? 150 : 96} /></View>)}
+      </View>
+    ) : <RewardPicture reward={landed.reward} size={180} />;
+  const landedFooter = landed?.twin ? (
+    <View style={s.twin}>
+      <Text maxFontSizeMultiplier={MAX_FONT} style={s.twinText}>WITH THE SHARK PASS YOU’D ALSO HAVE</Text>
+      <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+        {(landed.locked ?? []).map((r, i) => (
+          <View key={i} style={s.twinCell}><RewardPicture reward={r} size={44} /><View style={s.twinLock}><GameIcon name="lock" size={16} /></View></View>
+        ))}
+      </View>
+    </View>
+  ) : undefined;
+  // Show it off: the kid's shark wearing the new piece and the step it came from. No price, no "bought".
+  // The last reveal in a chain only, so Share never skips a reward still waiting to show.
+  const landedShareButton = (worn: boolean) => landed && landedCanShare && isWearable(landed.reward) ? (
+    <FlexShareButton kind="find" surface="sharkpass" size="reveal" handoff={landedShare.handoff}
+      payload={{ itemName: landed.reward.name, artUrl: (landed.reward.type === 'frame' ? FRAME_ART[landed.reward.art] : SEASON_ART[landed.reward.art]) ?? (landed.reward.type === 'item' ? landed.reward.icon_url : null) ?? EMBLEM,
+        prize: 'pass', sourceLine: landed.step ? `Earned at ${stepLabel(landed.step)}` : undefined, sourceSub: season?.title,
+        // Worn: the card's shark wears it even if the fresh look is still on its way.
+        inventory: worn && wornLook?.skin_item ? wornLook : undefined }} />
+  ) : undefined;
 
   return (
     <View style={s.root}>
       <LinearGradient colors={['#0d73c9', '#0a4f96', '#083d7a']} style={StyleSheet.absoluteFill} />
       <Snow width={width} height={height} running={running} />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+      {/* The top inset from the JS hook, not a native SafeAreaView: on Dynamic Island phones the
+          native view sometimes kept a 0 inset on this route, so the title sat under the island. */}
+      <View style={{ flex: 1, paddingTop: insets.top }}>
         <View style={s.top}>
           <Pressable onPress={() => RootNavigation.goBack()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back" style={s.back}>
             <GameIcon name="back" size={40} />
@@ -505,7 +560,7 @@ export default function SharkPassScreen() {
                   <View style={{ flex: 1 }}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextKicker}>{nextPrize.pass && !premium ? 'NEXT SHARK PASS PRIZE' : 'NEXT PRIZE'}</Text>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextPrizeText}>
-                      {`${rewardWords(nextPrize.reward)} · ${nextPrize.pointsAway.toLocaleString('en-US')} points away`}
+                      {`${rewardWords(nextPrize.reward)} · ${countText(nextPrize.pointsAway)} points away`}
                     </Text>
                     {winsAwayText(nextPrize.pointsAway, progress.today) && (
                       <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextWins}>{winsAwayText(nextPrize.pointsAway, progress.today)}</Text>
@@ -795,7 +850,7 @@ export default function SharkPassScreen() {
             </Text>
           </ScrollView>
         )}
-      </SafeAreaView>
+      </View>
       {climbed && !landed && (
         <GotIt grants={{}} art="gift" title={`Step ${climbed.to}!`} onDone={() => setClimbed(null)}
           picture={heroLook ? (
@@ -819,43 +874,21 @@ export default function SharkPassScreen() {
           </View>
         </Pressable>
       )}
-      {landed && (
-        <GotIt grants={{}} art="gift" title={landed.title} onDone={() => setLanded(landed.next ?? null)} picture={landed.emblem ? <Image source={EMBLEM} style={{ width: 180, height: 180 }} contentFit="contain" />
-            : landed.gold && landed.reward.type === 'item' && GOLD_ART[landed.reward.art] ? <Image source={GOLD_ART[landed.reward.art]} style={{ width: 180, height: 180 }} contentFit="contain" />
-            : landed.group && landed.group.length > 1 ? (
-              <View style={s.trio}>
-                {landed.group.map((r, i) => <View key={i} style={i === 1 ? s.trioMid : s.trioSide}><RewardPicture reward={r} size={i === 1 ? 150 : 96} /></View>)}
-              </View>
-            ) : <RewardPicture reward={landed.reward} size={180} />}
-          footer={landed.twin ? (
-            <View style={s.twin}>
-              <Text maxFontSizeMultiplier={MAX_FONT} style={s.twinText}>WITH THE SHARK PASS YOU’D ALSO HAVE</Text>
-              <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
-                {(landed.locked ?? []).map((r, i) => (
-                  <View key={i} style={s.twinCell}><RewardPicture reward={r} size={44} /><View style={s.twinLock}><GameIcon name="lock" size={16} /></View></View>
-                ))}
-              </View>
-            </View>
-          ) : SHARE_IN_MODALS && isWearable(landed.reward) && !landed.emblem ? (
-            // Show it off: the kid's shark wearing the new piece, the season and the step. No price, no "bought".
-            <View style={{ alignItems: 'center', marginTop: 8 }}>
-              <FlexShareButton kind="find" surface="sharkpass" size="sm" caption
-                payload={{ itemName: landed.reward.name, artUrl: (landed.reward.type === 'frame' ? FRAME_ART[landed.reward.art] : SEASON_ART[landed.reward.art]) ?? (landed.reward.type === 'item' ? landed.reward.icon_url : null) ?? EMBLEM,
-                  rarity: 4, setName: season ? `${season.title}${step ? ` · Step ${step}` : ''}` : undefined }} />
-              <ShareStudioHost portal />
-            </View>
-          ) : undefined}
+      {landed && landedChoice ? (
+        // A wearable piece asks first ("Wear it now" or "Not now"); Share shows only after that choice,
+        // so bragging never skips the wear (WearFirstReward, tested in sharkPassModel).
+        <WearFirstReward resetOn={landed} title={landed.title} picture={landedPicture} wornPicture={landedWornPicture} footer={landedFooter}
+          caption={landed.caption ?? rewardWords(landed.reward)} wear={landedWear!} frame={landed.reward.type === 'frame'}
+          share={landedShareButton} onDone={() => setLanded(landed.next ?? null)} />
+      ) : landed && (
+        <GotIt grants={{}} art="gift" title={landed.title} onDone={() => setLanded(landed.next ?? null)}
+          picture={landedPicture} footer={landedFooter}
+          share={landedCanShare && !landedWear ? landedShareButton(false) : undefined}
           caption={landed.caption ?? rewardWords(landed.reward)}
-          action={landed.frameKey ? { label: 'Wear it now', onPress: () => {
-            const key = landed.frameKey!;
+          action={landedWear ? { label: landedWear.label, onPress: () => {
             setLanded(landed.next ?? null);
-            void wearFrame(key).then(() => load()).then(() => gameAlert('Looking sharp!', 'Your frame shows on your profile now.'))
-              .catch(() => gameAlert('That didn’t work', 'Try again from Your Frames on this screen.'));
-          } } : landed.itemId ? { label: landed.reward.type === 'item' && landed.reward.slot === 'background' ? 'Set as my scene' : 'Wear it now', onPress: () => {
-            const id = landed.itemId!;
-            setLanded(landed.next ?? null);
-            void wearItem({ id }).then(() => refreshPlayer?.()).then(() => gameAlert('Looking sharp!', 'Your shark is wearing it now. Everyone can see it.'))
-              .catch(() => gameAlert('That didn’t work', 'Find it in your closet and put it on there.'));
+            void landedWear.run().then(() => { void Promise.resolve().then(landedWear.refresh).catch(() => undefined); }).then(() => gameAlert('Looking sharp!', landed.frameKey ? 'Your frame shows on your profile now.' : 'Your shark is wearing it now. Everyone can see it.'))
+              .catch(() => gameAlert('That didn’t work', landed.frameKey ? 'Try again from Your Frames on this screen.' : 'Find it in your closet and put it on there.'));
           } } : undefined} />
       )}
     </View>
