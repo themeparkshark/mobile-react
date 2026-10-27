@@ -210,3 +210,16 @@ test('every picture the new results art asks for exists (a bad path breaks the w
     }
   }
 });
+
+test('countText is safe on the UI thread: no module constant in a default value (a worklet does not capture it)', () => {
+  const src = read('src/helpers/countText.ts');
+  const fn = src.slice(src.indexOf('export default function countText'));
+  const head = fn.slice(0, fn.indexOf('{'));
+  assert.doesNotMatch(head, /=\s*SHORT_FROM/, 'release JS threw "Property SHORT_FROM doesn\'t exist" from a count-up');
+  assert.match(fn, /const limit = shortFrom \?\? 100000;/);
+  assert.match(src, /export const SHORT_FROM = 100000;/, 'the written-out limit matches the exported one');
+  const countText = loadTs('src/helpers/countText.ts').default;
+  assert.equal(countText(99999), '99999');
+  assert.equal(countText(125000), '125K');
+  assert.equal(countText(12590, 10000), '12.5K');
+});
