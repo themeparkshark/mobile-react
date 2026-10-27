@@ -412,21 +412,17 @@ export function railPageIcon(kind: string | undefined): GameIconName | undefined
 /** The wait card's top row (ride name, ARCADE, pause) and its bottom row (Details), measured on an iPhone SE. */
 export const WAIT_CARD_TOP_ROW = 56;
 export const WAIT_CARD_DETAILS_ROW = 42;
-/** A queue toast's height with a two-line body, and the slim one-line toast for a short card (no Ride Parts). */
+/** A queue toast's height with a two-line body, and the slim one-line toast (the one LinePlay uses). */
 export const QUEUE_TOAST_H = 86;
 export const QUEUE_TOAST_SLIM_H = 54;
 /**
- * Where a queue toast lands: inside the wait card, centred between its top row and Details, so it never covers
- * the ride name, ARCADE, pause or Details (and never the page's PLAY below). A short card (no Ride Parts) gets the
- * slim one-line toast; a card too short even for that (a moving line's compact card) puts it just under the card.
- * Before the card is measured: null (the default spot).
+ * Where a queue toast lands: just under the wait card, in the crew row's slot (that row fades while the toast is
+ * up), as the slim one-line toast. Never inside the card: on a short card its middle band IS the stat row
+ * (SIGN SAYS, IN LINE), and the one number a kid or parent is watching must never be covered (honesty, wave 6).
+ * Never over the header either. Before the card is measured: null (the default spot).
  */
 export function queueToastSpot(cardTop: number | null, cardBottom: number | null): { top: number; slim: boolean } | null {
   if (cardTop == null || cardBottom == null || cardBottom <= cardTop) return null;
-  const highest = cardTop + WAIT_CARD_TOP_ROW;
-  const band = cardBottom - WAIT_CARD_DETAILS_ROW - highest;
-  if (band >= QUEUE_TOAST_H) return { top: Math.round(highest + (band - QUEUE_TOAST_H) / 2), slim: false };
-  if (band >= QUEUE_TOAST_SLIM_H) return { top: Math.round(highest + (band - QUEUE_TOAST_SLIM_H) / 2), slim: true };
   return { top: cardBottom + 6, slim: true };
 }
 

@@ -355,7 +355,7 @@ const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
       finish: 'Your three words become this mission’s signal. Stay in your place in line.',
     } },
     { id: 'mk-sm-note-3', title: 'Two Flight Paths', body: 'Disney calls this ride’s two tracks Alpha and Omega. Which name would your shark choose for a first flight?', source: 'Disney Parks Blog', challenge: {
-      prompt: 'Which path inspires your clue?',
+      prompt: 'Pick a path for your shark!',
       options: [
         { label: 'Alpha', task: 'Tell your crew why your shark would follow the known Alpha signal.' },
         { label: 'Omega', task: 'Tell your crew why your shark would search along the Omega trail.' },
@@ -587,7 +587,7 @@ const DISNEYLAND_SPACE_MOUNTAIN: LinePlayChapter = {
       finish: 'Your memory becomes the second signal. No photo or extra walking needed.',
     } },
     { id: 'dl-sm-note-3', title: 'Solar or Nebula?', body: 'Disney describes a solar field and a spiral nebula. Which path should your shark explore in this fictional mission?', source: 'Disneyland Resort', challenge: {
-      prompt: 'Which path inspires your clue?',
+      prompt: 'Pick a path for your shark!',
       options: [
         { label: 'Solar route', task: 'Give one reason your shark would follow the light.' },
         { label: 'Nebula route', task: 'Give one reason your shark would explore the swirl.' },

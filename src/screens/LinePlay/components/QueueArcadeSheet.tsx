@@ -19,6 +19,8 @@ export interface QueueArcadeChoice {
   readonly completed: boolean;
   /** Best stars this wait (0-3); undefined when the game has not been played. */
   readonly bestStars?: number;
+  /** NEW: never played on this account, and one of the first two such tiles (playedGames.arcadeNewFlags). */
+  readonly isNew?: boolean;
 }
 
 const ICONS: Record<string, number> = {
@@ -60,7 +62,7 @@ export function ArcadeIconWarmup() {
 
 export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, onHidden, onShowing,
   kicker = 'LINEPLAY', title = 'QUEUE ARCADE', intro = 'Pick a quick game while you wait.',
-  note = 'Your wait still counts while you play.', newLabel = 'New this wait.', showNew = true }: {
+  note = 'Your wait still counts while you play.', newLabel = 'New game.', showNew = true }: {
   readonly visible: boolean;
   /** Header and helper lines; the defaults are the queue's. The home arcade passes its own. */
   readonly kicker?: string;
@@ -68,7 +70,7 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
   readonly intro?: string;
   readonly note?: string | null;
   readonly newLabel?: string;
-  /** The NEW pill on unplayed games (off at home, where every game is always open). */
+  /** The NEW pill on tiles marked isNew (off at home, where every game is always open). */
   readonly showNew?: boolean;
   readonly choices: readonly QueueArcadeChoice[];
   readonly onChoose: (index: number) => void;
@@ -105,11 +107,11 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
             entering={visible && !reducedMotion ? tileSettle(60 + order * 45) : undefined}>
             <Pressable accessibilityRole="button"
               accessibilityLabel={`${choice.completed ? 'Replay' : 'Play'} ${choice.title}.${choice.bestStars == null
-                ? showNew ? ` ${newLabel}` : '' : ` Best ${choice.bestStars} of 3 stars.`}`}
+                ? showNew && choice.isNew ? ` ${newLabel}` : '' : ` Best ${choice.bestStars} of 3 stars.`}`}
               onPress={() => onChoose(choice.index)}
               style={({ pressed }) => [styles.game, pressed && { backgroundColor: '#FFF3C7',
                 borderColor: '#E4B238', transform: [{ scale: reducedMotion ? 1 : 0.96 }] }]}>
-              {showNew && choice.bestStars == null && <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View>}
+              {showNew && choice.isNew && choice.bestStars == null && <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View>}
               {!!choice.gameId && ICONS[choice.gameId] != null &&
                 <Image source={ICONS[choice.gameId]} style={styles.gameIcon} contentFit="contain" />}
               <Text style={styles.gameTitle} numberOfLines={2}>{choice.title}</Text>

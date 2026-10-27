@@ -157,6 +157,7 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
     : error ?? (busy ? 'Leveling up…' : progress.chip);
   /** The plain "2 of 4" count: the Parts gem beside it says what is counted. */
   const showCount = owned && !error && !busy && !progress.ready && !progress.partsReady && !progress.maxed;
+  const chipShown = owned && (busy || error != null || progress.ready);
   const accessibility = owned
     ? `${coin?.rideName ?? 'Ride'} coin, Level ${level} ${tier.name}. ${leveledTo != null ? `You leveled it up to Level ${leveledTo} this wait. ` : ''}${progress.label}.`
     : 'This ride coin is not collected yet. Parts you earn here wait for it.';
@@ -208,8 +209,10 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
           </View>
         )}
       </Pressable>
-      {/* Spoken as the whole sentence ("1 of 6 Parts to Level 3"), never a bare "1 of 6". */}
-      <View style={[styles.labelChip, progress.ready && owned && styles.labelChipReady]} accessible
+      {/* One coin, one ring, one sentence (kid clarity, wave 6): the ring already shows how full the coin is,
+          so the chip under it only appears when there is something to DO or to know right now (tap to level
+          up, leveling, an error). The count ("1 of 6 Parts to Level 3") stays in the coin's spoken label. */}
+      {(chipShown) && <View style={[styles.labelChip, progress.ready && owned && styles.labelChipReady]} accessible
         accessibilityLabel={showCount ? progress.label : label}>
         {progress.ready && owned && !busy && <GameIcon name="sparkle" size={14} />}
         {showCount && <GameIcon name="parts" size={17} />}
@@ -219,7 +222,7 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
           adjustsFontSizeToFit minimumFontScale={0.8}>
           {progress.ready && owned && !busy && !error ? 'TAP TO LEVEL UP' : label}
         </KidText>
-      </View>
+      </View>}
       {crowningId && coin && (
         <Modal visible={crowning.visible} transparent animationType="fade" onRequestClose={() => { crowning.done(); setCrowningId(null); }}>
           <View style={styles.crowningWrap}>

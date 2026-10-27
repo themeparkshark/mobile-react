@@ -155,6 +155,18 @@ export function heroSignDetail(input: Pick<WaitEstimateInput, 'postedMinutes' | 
   return input.waitSource === 'last_known' ? 'That sign time is from a while ago.' : null;
 }
 
+/**
+ * The sign line in Details now that the closed card no longer prints SIGN SAYS (wave 6: one coin, one
+ * ring, one sentence): a fresh, different reading at the line if there is one, else the sign's own number
+ * ("The ride sign said 35m." / "... a while ago." / "No sign time when you started."). Said once, here.
+ */
+export function detailsSignLine(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'> & {
+  readonly freshReadingMinutes?: number | null;
+}): string {
+  const fresh = heroSignDetail(input);
+  return fresh != null && fresh.startsWith('The ride sign now says') ? fresh : waitSourceHint(input);
+}
+
 export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
   const posted = signMinutes(input);
   const elapsedMinutes = Math.max(0, input.elapsedSeconds) / 60;

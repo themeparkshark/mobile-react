@@ -68,6 +68,8 @@ export interface ActivitySlotProps {
   readonly nextLabel?: string;
   /** Best stars earned in this game during the wait, or undefined when never played. */
   readonly bestStars?: number;
+  /** A queue game this account has never played (the arcade's NEW rule). */
+  readonly newGame?: boolean;
 }
 
 const GAME_LABELS: Record<string, string> = {
@@ -136,11 +138,12 @@ export default function ActivitySlot({
   circuitTheme,
   nextLabel,
   bestStars,
+  newGame,
 }: ActivitySlotProps) {
   switch (item.kind) {
     case 'minigame':
       return <MiniGameSlot title={missionTitle} item={item} navigator={navigationPanel && item.id === `${chapterId}-star-chart`} completed={completed} paused={paused}
-        currentQuestBonusStatus={currentQuestBonusStatus} bestStars={bestStars} onPlayGame={onPlayGame} />;
+        currentQuestBonusStatus={currentQuestBonusStatus} bestStars={bestStars} newGame={newGame} onPlayGame={onPlayGame} />;
     case 'circuit':
       if (!onNavigationTurn || !onNavigationReplay || !onNavigationNext) return null;
       return <NavigationPanelCard mode="free" theme={circuitTheme} nextLabel={nextLabel} seed={item.seed}
@@ -174,6 +177,7 @@ function MiniGameSlot({
   paused,
   currentQuestBonusStatus,
   bestStars,
+  newGame = false,
   onPlayGame,
   title,
 }: {
@@ -185,6 +189,7 @@ function MiniGameSlot({
   paused: boolean;
   currentQuestBonusStatus: 'available' | 'pending' | 'verified' | null;
   bestStars?: number;
+  newGame?: boolean;
   onPlayGame: (item: Extract<ActivityItem, { kind: 'minigame' }>) => void;
 }) {
   const isStarChart = item.id.endsWith('-star-chart');
@@ -194,14 +199,15 @@ function MiniGameSlot({
       {/* A short window (iPhone SE): Play comes right under the slim banner, so a non-reader sees it first. */}
       <ActionFirstWhenShort
         hero={<ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE ARCADE'} title={label} navigator={navigator} />}
-        story={<>
-          <View style={styles.bestRow} accessible
-            accessibilityLabel={bestStars == null ? 'New game this wait' : `Best this wait: ${bestStars} of 3 stars`}>
-            {bestStars == null ? <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View>
-              : [1, 2, 3].map(slot => <GameIcon key={slot} name="star" size={24}
-                mono={slot <= bestStars ? undefined : '#b7cfe2'} />)}
-            <Text style={styles.bestLabel}>{bestStars == null ? 'Not played this wait' : 'Your best this wait'}</Text>
-          </View>
+        story={short => <>
+          {/* A slim page (iPhone SE) never shows this row half under the fade: NEW rides on PLAY's corner instead. */}
+          {!short && <View style={styles.bestRow} accessible
+            accessibilityLabel={bestStars != null ? `Best this wait: ${bestStars} of 3 stars` : newGame ? 'New game' : 'Not played this wait'}>
+            {bestStars != null ? [1, 2, 3].map(slot => <GameIcon key={slot} name="star" size={24}
+              mono={slot <= bestStars ? undefined : '#b7cfe2'} />)
+              : newGame ? <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View> : null}
+            <Text style={styles.bestLabel}>{bestStars != null ? 'Your best this wait' : newGame ? 'New game' : 'Not played this wait'}</Text>
+          </View>}
           <View style={styles.gamePlaceholder}>
             <Text style={styles.gamePlaceholderText}>
               {item.preview ?? (isStarChart
@@ -210,11 +216,13 @@ function MiniGameSlot({
             </Text>
           </View>
         </>}
-        action={<>
+        action={short => <View>
           <GameButton label={completed && item.gameId === 'showdown' ? 'Rematch' : completed ? 'Play again' : 'Play'}
             icon={completed ? 'retry' : 'play'} disabled={paused} fullWidth onPress={() => onPlayGame(item)}
-            accessibilityLabel={`${completed ? 'Play again' : 'Play'}: ${label}`} />
-        </>} />
+            accessibilityLabel={`${completed ? 'Play again' : 'Play'}: ${label}${short && newGame && bestStars == null ? '. New game' : ''}`} />
+          {short && newGame && bestStars == null && <View pointerEvents="none" style={[styles.newPill, styles.newCorner]}>
+            <Text style={styles.newPillText}>NEW</Text></View>}
+        </View>} />
       {item.gameId === 'current' && currentQuestBonusStatus && (
         <Text style={styles.note}>
           {currentQuestBonusStatus === 'verified'
@@ -355,9 +363,12 @@ function TriviaSlot({
  * under the slim banner, before the story, so a non-reader sees an action without scrolling. Taller windows
  * keep the story first.
  */
-function ActionFirstWhenShort({ hero, story, action }: { hero: ReactNode; story: ReactNode; action: ReactNode }) {
+type Slot = ReactNode | ((short: boolean) => ReactNode);
+function ActionFirstWhenShort({ hero, story, action }: { hero: ReactNode; story: Slot; action: Slot }) {
   const short = heroSlim(useContext(PageHeightContext));
-  return <>{hero}{short ? <><View style={styles.actionFirst}>{action}</View>{story}</> : <>{story}{action}</>}</>;
+  const s = typeof story === 'function' ? story(short) : story;
+  const a = typeof action === 'function' ? action(short) : action;
+  return <>{hero}{short ? <><View style={styles.actionFirst}>{a}</View>{s}</> : <>{s}{a}</>}</>;
 }
 
 function LoreSlot({
@@ -408,17 +419,21 @@ function LoreSlot({
           <Text style={styles.loreBody}>{lore.body}</Text>
           {factSourceLine(lore.source) ? <Text style={styles.loreSource}>{factSourceLine(lore.source)}</Text> : null}
         </>}
-        action={<>
+        action={short => <>
           {lore.challenge && !completed && selectedClue == null && (
-            <View style={styles.clueChallenge}>
-              <Text style={styles.cluePrompt}>{lore.challenge.prompt}</Text>
-              {lore.challenge.options.map((option, index) => (
-                <Pressable key={`${lore.id}-${index}`} accessibilityRole="button"
-                  disabled={paused} onPress={() => onChoose(index)}
-                  style={[styles.choice, styles.clueChoice, paused && styles.disabled]}>
-                  <Text style={styles.choiceText}>{option.label}</Text>
-                </Pressable>
-              ))}
+            <View style={[styles.clueChallenge, short && styles.clueChallengeShort]}>
+              <Text style={[styles.cluePrompt, short && styles.cluePromptShort]}>{lore.challenge.prompt}</Text>
+              {/* A slim page (iPhone SE): the choices sit side by side, so every one is in view at once. */}
+              <View style={short && styles.clueRow}>
+                {lore.challenge.options.map((option, index) => (
+                  <Pressable key={`${lore.id}-${index}`} accessibilityRole="button" accessibilityLabel={option.label}
+                    disabled={paused} onPress={() => onChoose(index)}
+                    style={[styles.choice, short ? styles.clueChoiceSide : styles.clueChoice, paused && styles.disabled]}>
+                    <Text style={[styles.choiceText, short && styles.choiceTextSide]} numberOfLines={2}
+                      adjustsFontSizeToFit={short} minimumFontScale={0.85}>{option.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
           )}
           {lore.challenge && selectedClue != null && (
@@ -633,6 +648,11 @@ const styles = StyleSheet.create({
   clueChallenge: { marginTop: spacing.lg },
   cluePrompt: { color: '#093d77', fontFamily: 'Knockout', fontSize: 17, marginBottom: spacing.sm },
   clueChoice: { marginTop: spacing.sm },
+  clueChallengeShort: { marginTop: 0 },
+  cluePromptShort: { fontSize: 16, marginBottom: 6 },
+  clueRow: { flexDirection: 'row', gap: 6 },
+  clueChoiceSide: { flex: 1, minHeight: 52, paddingHorizontal: 6, paddingVertical: 4 },
+  choiceTextSide: { fontSize: 15, lineHeight: 17 },
   clueFinish: { color: '#244d70', fontFamily: 'Knockout', fontSize: 13, lineHeight: 19,
     marginTop: spacing.md, marginBottom: spacing.lg },
   clueBack: { alignItems: 'center', paddingVertical: spacing.md },
@@ -686,6 +706,8 @@ const styles = StyleSheet.create({
   newPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: BRAND.gold,
     borderWidth: 2, borderColor: BRAND.navy },
   newPillText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 14 },
+  // NEW on PLAY's top-right corner (slim page).
+  newCorner: { position: 'absolute', top: -8, right: -4 },
   predictBtnHint: { color: BRAND.navySoft, fontFamily: 'Knockout', fontSize: 13, marginTop: 2 },
   disabled: { opacity: 0.45 },
   pressed: {

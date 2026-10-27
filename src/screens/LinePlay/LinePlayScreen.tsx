@@ -34,7 +34,7 @@ import Wrapper from '../../components/Wrapper';
 import * as Haptics from 'expo-haptics';
 import { StackActions, useNavigation, useRoute } from '@react-navigation/native';
 import { colors, spacing, borderRadius } from '../../design-system';
-import { GameDialog, gameAlert } from '../../ui';
+import { BRAND, GameButton, GameDialog, gameAlert } from '../../ui';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { useLinePlaySession } from '../../services/lineplay/useLinePlaySession';
@@ -85,6 +85,7 @@ import ChapterCard from './components/ChapterCard';
 import CrewRelayCard from './components/CrewRelayCard';
 import ProjectMissionModal from './components/ProjectMissionModal';
 import QueueArcadeSheet, { ArcadeIconWarmup } from './components/QueueArcadeSheet';
+import { arcadeNewFlags, loadPlayedGames, notePlayedGames } from '../../services/lineplay/playedGames';
 import BonusPicker from './components/BonusPicker';
 import BonusPartFlight, { type FlightPoint } from './components/BonusPartFlight';
 import type { RailChip } from './components/LinePlayLiveRail';
@@ -471,7 +472,7 @@ export default function LinePlayScreen() {
     if (snapshot.queueAdvanceAt == null || snapshot.state !== 'active') return;
     // Bonus rounds show the "Line moving. Eyes up." rail chip instead.
     if (snapshot.bonus?.enabled) { session.acknowledgeQueueAdvance(); return; }
-    showToast({ icon: 'ride', title: 'The line is moving!', body: 'Keep playing as you walk. Your round is safe.' });
+    showToast({ icon: 'ride', title: 'The line is moving!', body: 'Keep playing as you walk.' });
     session.acknowledgeQueueAdvance();
   }, [snapshot.queueAdvanceAt, snapshot.state, session, showToast]);
 
@@ -482,7 +483,7 @@ export default function LinePlayScreen() {
     const subscription = AppState.addEventListener('change', state => {
       if (state !== 'active') { awayAt ??= Date.now(); return; }
       if (awayAt != null && Date.now() - awayAt >= WELCOME_BACK_AFTER_MS) {
-        showToast({ icon: 'timer', title: 'Welcome back!', body: 'Your wait kept counting and your games are saved.' });
+        showToast({ icon: 'timer', title: 'Welcome back!', body: 'Your wait and games are saved.' });
       }
       awayAt = null;
     });
@@ -533,6 +534,21 @@ export default function LinePlayScreen() {
     if (snapshot.state !== 'complete' || !snapshot.chapter?.adaptive || !player?.id) return;
     void noteFoundAdventure(player.id, snapshot.chapter.title).then(setAdventuresFound);
   }, [snapshot.state, snapshot.chapter?.adaptive, snapshot.chapter?.title, player?.id]);
+  // Games this account has played (any wait), for the arcade's NEW pills. Null while loading: no NEW yet.
+  const [playedEver, setPlayedEver] = useState<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    if (!player?.id) return;
+    let live = true;
+    void loadPlayedGames(player.id).then(set => { if (live) setPlayedEver(set); });
+    return () => { live = false; };
+  }, [player?.id]);
+  const playedThisWait = Object.keys(snapshot.gameBestStars).sort().join(',');
+  useEffect(() => {
+    if (!player?.id || !playedThisWait) return;
+    let live = true;
+    void notePlayedGames(player.id, playedThisWait.split(',')).then(set => { if (live) setPlayedEver(set); });
+    return () => { live = false; };
+  }, [playedThisWait, player?.id]);
   const nudged = useRef(false);
   useEffect(() => {
     if (snapshot.state !== 'active' || activeGame != null) return undefined;
@@ -541,7 +557,7 @@ export default function LinePlayScreen() {
         alreadyNudged: nudged.current, quietMs: Date.now() - lastTouch.current })) return;
       nudged.current = true;
       haptic('tapLight');
-      showToastRef.current?.({ icon: 'queue', title: 'Next adventure is ready!', body: 'Swipe or tap Play to keep the fun going.' });
+      showToastRef.current?.({ icon: 'play', title: 'Next adventure is ready!', body: 'Tap Play!' });
     }, 1_000);
     return () => clearInterval(id);
   }, [snapshot.state, activeGame]);
@@ -783,7 +799,7 @@ export default function LinePlayScreen() {
     sessionPartCap: snapshot.sessionPartCap,
     partsRemainingToday: snapshot.partsRemainingToday,
   });
-  const arcadeChoices = queueArcadeDestinations(activityPages, completedActivityIds)
+  const arcadeBase = queueArcadeDestinations(activityPages, completedActivityIds)
     .map(choice => ({
       id: choice.id,
       title: GAME_NAMES[choice.gameId] ?? 'Queue Game',
@@ -792,6 +808,9 @@ export default function LinePlayScreen() {
       completed: choice.completed,
       bestStars: snapshot.gameBestStars[choice.gameId as keyof typeof snapshot.gameBestStars],
     }));
+  // NEW only on games this account has never played, two at most (all six NEW meant nothing).
+  const arcadeNew = arcadeNewFlags(arcadeBase, playedEver);
+  const arcadeChoices = arcadeBase.map((choice, i) => ({ ...choice, isNew: arcadeNew[i] }));
   showToastRef.current = showToast;
 
   // -- Play together (L3): session start, crew, pass-and-play turns ----------
@@ -826,6 +845,12 @@ export default function LinePlayScreen() {
   const reducedFx = useReducedGameMotion();
   // Details open or close: the page window dips softly to PAGES_DIP_OPACITY (84%, never empty), takes its new size
   // inside its own rounded frame, then rises back (UI thread, under 220 ms in all).
+  // The crew row ("Here with friends?") steps aside while a queue toast sits in its slot under the card (UI thread).
+  const crewFade = useSharedValue(1);
+  useEffect(() => {
+    crewFade.value = reducedFx ? (toast ? 0 : 1) : withTiming(toast ? 0 : 1, { duration: 160 });
+  }, [toast != null, reducedFx]); // eslint-disable-line react-hooks/exhaustive-deps
+  const crewFadeStyle = useAnimatedStyle(() => ({ opacity: crewFade.value }));
   const pagesFade = useSharedValue(1);
   const pagesFadeStyle = useAnimatedStyle(() => ({ opacity: pagesFade.value }));
   // The rise starts once the window has its new size (its onLayout). A timer covers a size that did not change.
@@ -974,7 +999,7 @@ export default function LinePlayScreen() {
   const [partTarget, setPartTarget] = useState<FlightPoint>({ x: 48, y: 140 });
   /** The wait card's bottom edge: the welcome tip sits just under the card it explains, never on its Details button. */
   const [waitCardBottom, setWaitCardBottom] = useState<number | null>(null);
-  /** Its top edge: a queue toast lands inside the card, under its top row and above Details. */
+  /** Its top edge (a queue toast needs a measured card before it uses the spot under it). */
   const [waitCardTop, setWaitCardTop] = useState<number | null>(null);
   const toastSpot = queueToastSpot(waitCardTop, waitCardBottom);
   const measureWaitCard = useCallback(() => {
@@ -1025,7 +1050,7 @@ export default function LinePlayScreen() {
         ? page.kind === 'minigame' && page.id.startsWith('mg-') : page.kind === kind)),
       openArcade: open => setArcadeOpen(open),
       openEndSheet: open => setWaitEndPrompt(open ? { tab: null } : null),
-      showAdvanceToast: () => showToast({ icon: 'ride', title: 'The line is moving!', body: 'Keep playing as you walk. Your round is safe.' }),
+      showAdvanceToast: () => showToast({ icon: 'ride', title: 'The line is moving!', body: 'Keep playing as you walk.' }),
       startResume: () => setResuming(true),
     });
     steps.forEach((step, index) => setTimeout(step, 4000 + index * LINEPLAY_TOUR_STEP_MS));
@@ -1034,11 +1059,17 @@ export default function LinePlayScreen() {
 
   if (!ride) {
     return (
-      <SafeScreen style={styles.centered}>
-        <Text style={styles.errorText}>No ride picked. Go back and pick a ride.</Text>
-        <Pressable onPress={() => navigation.goBack()} style={styles.ghostBtn}>
-          <Text style={styles.ghostBtnText}>Go back</Text>
-        </Pressable>
+      // No ride: Alex's look (water, a cream card, Finn, one gold button), never plain text on a dark page.
+      <SafeScreen style={styles.noRide}>
+        <Image source={require('../../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <View style={styles.noRideCard} accessible accessibilityLabel="Pick a ride first. Walk to a ride on the map, then tap Play.">
+          <Image source={require('../../../assets/images/tutorial/teacher-shark.png')} style={styles.noRideFinn} contentFit="contain" />
+          <Text style={styles.noRideTitle}>Pick a ride first!</Text>
+          <Text style={styles.noRideBody}>Walk to a ride on the map, then tap Play.</Text>
+        </View>
+        <View style={styles.noRideButton}>
+          <GameButton label="Back to the map" icon="map" fullWidth onPress={() => navigation.goBack()} />
+        </View>
       </SafeScreen>
     );
   }
@@ -1252,7 +1283,8 @@ export default function LinePlayScreen() {
             squeezed for a moment. */}
         {!crewLent && <Reanimated.View entering={reducedFx ? undefined : FadeIn.duration(200)}
           exiting={reducedFx || fit.short ? undefined : FadeOut.duration(140)}
-          onLayout={event => setCrewRowHeight(Math.round(event.nativeEvent.layout.height))}>{groupPlay.strip}</Reanimated.View>}
+          onLayout={event => setCrewRowHeight(Math.round(event.nativeEvent.layout.height))}>
+          <Reanimated.View style={crewFadeStyle}>{groupPlay.strip}</Reanimated.View></Reanimated.View>}
 
         {/* Activity area (bottom) */}
         <View style={[styles.activityArea, { marginTop: fit.activityGap }, !pagesShown && styles.activityAreaAside]}>
@@ -1422,6 +1454,8 @@ export default function LinePlayScreen() {
                       nextLabel={pageName(activityPages[index + 1 < activityPages.length ? index + 1 : 0], snapshot.chapter)}
                       bestStars={item.kind === 'minigame'
                         ? snapshot.gameBestStars[(item as Extract<ActivityItem, { kind: 'minigame' }>).gameId] : undefined}
+                      newGame={item.kind === 'minigame' && playedEver != null
+                        && !playedEver.has((item as Extract<ActivityItem, { kind: 'minigame' }>).gameId)}
                       rideId={ride.rideId}
                       parkId={ride.parkId}
                       chapterId={snapshot.chapter?.id}
@@ -1595,7 +1629,7 @@ export default function LinePlayScreen() {
       <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending && pagesShown && waitCardBottom != null} autoHideMs={0}
         style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} onVisibleChange={onPartTip} />
 
-      {/* Toasts land inside the wait card between its top row and Details: never over the ride name, ARCADE, pause or PLAY. */}
+      {/* Toasts land just under the wait card, in the crew row's slot: never over the card's numbers, its buttons or the header. */}
       <QueueToast message={toast} onDone={() => setToast(null)} top={toastSpot?.top} slim={toastSpot?.slim} />
 
       <ResumeCountdown active={resuming || resumeHandoff != null} onDone={() => {
@@ -1702,6 +1736,13 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
   },
   errorText: { color: colors.textSecondary, fontSize: 15, marginBottom: spacing.lg },
+  noRide: { flex: 1, backgroundColor: '#07569e', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  noRideCard: { alignSelf: 'stretch', alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: 24, borderWidth: 4,
+    borderColor: BRAND.white, paddingTop: 18, paddingBottom: 22, paddingHorizontal: 18 },
+  noRideFinn: { width: 110, height: 110 },
+  noRideTitle: { fontFamily: 'Shark', fontSize: 26, color: BRAND.navy, marginTop: 8, textAlign: 'center' },
+  noRideBody: { fontFamily: 'Knockout', fontSize: 17, lineHeight: 22, color: BRAND.navySoft, marginTop: 6, textAlign: 'center' },
+  noRideButton: { alignSelf: 'stretch', marginTop: 18 },
   endPlaceholder: { width: 45 },
   endBtn: {
     paddingHorizontal: spacing.md,

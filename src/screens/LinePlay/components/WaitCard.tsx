@@ -19,7 +19,7 @@ import { GameIcon, type GameIconName } from '../../../ui';
 import type { LineBonusSummary } from '../../../api/endpoints/me/inline-timer/types';
 import { bonusDoneToday, nextBonusSeconds, ringInfoCopy, ringPill, visiblePips,
   type PipState } from '../../../services/lineplay/bonusRounds';
-import { heroSignDetail, waitSourceHint, waitStamps, type WaitStamp } from '../../../services/lineplay/waitScreen';
+import { detailsSignLine, inLineLabel, waitSourceHint, waitStamps, type WaitStamp } from '../../../services/lineplay/waitScreen';
 import WaitStampBadge from './waitscreen/WaitStampBadge';
 
 /** A detail line with its art, never an emoji. */
@@ -130,14 +130,16 @@ function fmt(seconds: number): string {
 }
 
 /**
- * Details under the coin hero: at most two short lines (where the wait number
- * came from, then one Parts idea), the Marathon and Night marks as badges, and
+ * Details under the coin hero: at most three short lines (the sign's time, your
+ * time in line, then one Parts idea), the Marathon and Night marks as badges, and
  * a ticket line only while a ticket is in play. The per-wait cap is never
  * listed ahead of time; the status line says so once a kid reaches it.
  */
 export function heroDetailLines(input: {
-  /** Null when SIGN SAYS already prints the sign's number (a plain posted sign). */
+  /** Where the wait number came from ("The ride sign said 35m."). */
   readonly signLine: string | null;
+  /** Your own time in line ("You have been in line 20m."). */
+  readonly inLineLine?: string | null;
   readonly sublineInHeadline: boolean;
   readonly subline: string;
   readonly rewardTrackingAvailable: boolean;
@@ -146,7 +148,7 @@ export function heroDetailLines(input: {
 }): readonly string[] {
   const partsLine = !input.sublineInHeadline ? input.subline
     : input.rewardTrackingAvailable && !input.atCap ? 'Stay near the ride to earn more Parts.' : null;
-  return [input.signLine, partsLine].filter((line): line is string => line != null);
+  return [input.signLine, input.inLineLine ?? null, partsLine].filter((line): line is string => line != null);
 }
 
 /** One short ticket line, in kid words. */
@@ -177,7 +179,7 @@ export function stampIcon(kind: WaitStamp['kind']): GameIconName {
 
 /** The picture beside each Details line: the ride car for the sign's time, the Parts gem for Parts. */
 export function heroDetailIcon(line: string): GameIconName {
-  return /ride sign|sign time/i.test(line) ? 'ride' : 'parts';
+  return /ride sign|sign time/i.test(line) ? 'ride' : /in line \d|been in line/i.test(line) ? 'timer' : 'parts';
 }
 
 function HeroDetails({ stamps, lines, ticket }: {
@@ -335,7 +337,7 @@ export default function WaitCard({
   const headline = completed ? 'Wait complete' : paused
     ? 'Paused'
     : !rewardTrackingAvailable
-      ? lineRewardsReady === false || rewardUnavailable ? 'PLAY ANYTIME'
+      ? lineRewardsReady === false || rewardUnavailable ? 'No Ride Parts here. Games are ready!'
         : rewardConnectionIssue ? 'Games ready' : 'Checking location…'
       : atCap ? 'Max Parts reached'
         : countdown.needsCheck ? 'Checking you’re in line…'
@@ -391,12 +393,13 @@ export default function WaitCard({
 
         {compact && hero}
         {compact ? <View style={styles.compactMeter}>
-          {hero ? null : noPartsHere ? <GameIcon name="queue" size={34} />
+          {/* The coin is the picture when Parts are on; otherwise the queue picture (never the Parts gem: no Parts here). */}
+          {hero && rewardTrackingAvailable ? null : !rewardTrackingAvailable ? <GameIcon name="queue" size={34} />
             : <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />}
           <View style={styles.compactCopy} accessible accessibilityLabel={compactCopyLabel({ hero: hero != null, earned, headline, subline })}>
             <KidText style={styles.compactHeadline} numberOfLines={1}>{`${headline}${sublineInHeadline
               ? ` ${subline}` : !hero && rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}`}</KidText>
-            {noPartsHere && <Text style={styles.compactNote} numberOfLines={1}>No Parts at this ride</Text>}
+            {/* One sentence: "No Ride Parts here. Games are ready!" is the headline itself (no second note line). */}
             {bonusOn && <View style={styles.bonusRow}>
               {bonusDone ? <Text style={styles.bonusDone} numberOfLines={1}>Bonus Parts done at this ride today</Text>
                 : <PipRow pips={pips} />}
@@ -465,14 +468,18 @@ export default function WaitCard({
 
         {!compact && <Pressable accessibilityRole="button" accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
           onPress={toggleDetails} style={[styles.detailsButton, compact && styles.compactDetails]} hitSlop={6}>
-          <Text style={styles.detailsButtonText}>{expanded ? 'Hide details' : `${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m · details`}</Text>
+          {/* Kid words only (no "Session" or "game plan"): the time in line, then Details. */}
+          <Text style={styles.detailsButtonText}>{expanded ? 'Hide details' : `In line ${fmt(elapsedSeconds)} · Details`}</Text>
         </Pressable>}
         {expanded && hero && <Reanimated.View entering={reducedMotion ? undefined : detailsEnter}
           exiting={reducedMotion ? undefined : FadeOut.duration(120)}><HeroDetails stamps={stamps} lines={heroDetailLines({
           // SIGN SAYS already prints the sign's number, so a plain sign gets no line here (said once on
           // screen). A fresh, different reading at the line is new, so it is said, written like SIGN SAYS.
-          signLine: heroSignDetail({ postedMinutes: postedWaitMinutes, waitSource,
+          // The closed card no longer prints SIGN SAYS (one coin, one ring, one sentence), so Details always says
+          // the sign's time (a fresh, different reading at the line wins) and your own time in line.
+          signLine: detailsSignLine({ postedMinutes: postedWaitMinutes, waitSource,
             freshReadingMinutes: entranceFresh ? entranceWaitMinutes : null }),
+          inLineLine: `You have been in line ${inLineLabel(elapsedSeconds)}.`,
           sublineInHeadline, subline, rewardTrackingAvailable, atCap, intervalSeconds: interval,
         })} ticket={rewardTrackingAvailable && ticketAvailable !== null
           ? ticketHint(ticketAvailable, verifiedEligibleSeconds, ticketIntervalSeconds) : null} /></Reanimated.View>}

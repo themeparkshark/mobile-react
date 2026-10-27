@@ -59,6 +59,21 @@ export function playedSummary(names: readonly string[]): string {
   return Array.from(counts, ([name, count]) => count > 1 ? `${name} x${count}` : name).join(' · ');
 }
 
+/**
+ * The recap's stat tiles, zeros left out: a short wait never shows "0 / +0 / +0 / 0" (a row of zeros
+ * reads like nothing happened). Empty when nothing was earned or played: the keepsake card shows instead.
+ */
+export function recapStats(r: { activityCount: number; earnedEnergy: number; experience: number; partsCount: number;
+  ticketsEarned: number; rewardsConfirmed: boolean }): { key: string; icon: GameIconName; value: number; prefix: string; label: string }[] {
+  const out: { key: string; icon: GameIconName; value: number; prefix: string; label: string }[] = [];
+  if (r.activityCount > 0) out.push({ key: 'activities', icon: 'star', value: r.activityCount, prefix: '', label: r.activityCount === 1 ? 'activity' : 'activities' });
+  if (r.rewardsConfirmed && r.earnedEnergy > 0) out.push({ key: 'energy', icon: 'energy', value: r.earnedEnergy, prefix: '+', label: 'energy' });
+  if (r.rewardsConfirmed && r.experience > 0) out.push({ key: 'xp', icon: 'xp', value: r.experience, prefix: '+', label: 'xp' });
+  if (r.rewardsConfirmed && r.partsCount > 0) out.push({ key: 'parts', icon: 'parts', value: r.partsCount, prefix: '', label: 'parts' });
+  if (r.rewardsConfirmed && r.ticketsEarned > 0) out.push({ key: 'tickets', icon: 'ticket', value: r.ticketsEarned, prefix: '+', label: r.ticketsEarned === 1 ? 'ticket' : 'tickets' });
+  return out;
+}
+
 function RecapStat({ icon, value, prefix = '', label, index, reducedMotion }: {
   icon: GameIconName; value: number; prefix?: string; label: string; index: number; reducedMotion: boolean;
 }) {
@@ -173,6 +188,7 @@ export default function SessionRecap({
     (coin.available_parts ?? 0) >= coin.parts_to_next_level && playerEnergy != null &&
     playerEnergy >= coin.energy_to_next_level;
   let stat = 0;
+  const shownStats = recapStats({ activityCount, earnedEnergy, experience, partsCount, ticketsEarned, rewardsConfirmed });
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.recapCard}>
@@ -213,16 +229,22 @@ export default function SessionRecap({
 
       {groupSlot}
 
-      <Text style={styles.recapSectionTitle}>{rewardsConfirmed ? 'WHAT YOU EARNED' : 'YOUR LINEPLAY ADVENTURE'}</Text>
-      <View style={styles.recapStats}>
-        <RecapStat icon="star" value={activityCount} label={activityCount === 1 ? 'activity' : 'activities'}
-          index={stat++} reducedMotion={reducedMotion} />
-        {rewardsConfirmed && <RecapStat icon="energy" value={earnedEnergy} prefix="+" label="energy" index={stat++} reducedMotion={reducedMotion} />}
-        {rewardsConfirmed && <RecapStat icon="xp" value={experience} prefix="+" label="xp" index={stat++} reducedMotion={reducedMotion} />}
-        {rewardsConfirmed && <RecapStat icon="parts" value={partsCount} label="parts" index={stat++} reducedMotion={reducedMotion} />}
-        {rewardsConfirmed && ticketsEarned > 0 && <RecapStat icon="ticket" value={ticketsEarned} prefix="+"
-          label={ticketsEarned === 1 ? 'ticket' : 'tickets'} index={stat++} reducedMotion={reducedMotion} />}
-      </View>
+      <Text style={styles.recapSectionTitle}>{shownStats.some(t => t.key !== 'activities') ? 'WHAT YOU EARNED' : 'YOUR LINEPLAY ADVENTURE'}</Text>
+      {shownStats.length ? <View style={styles.recapStats}>
+        {shownStats.map(t => <RecapStat key={t.key} icon={t.icon} value={t.value} prefix={t.prefix} label={t.label}
+          index={stat++} reducedMotion={reducedMotion} />)}
+      </View> : (
+        // Nothing played or earned yet (a short wait): a keepsake of the wait itself, never a row of zeros.
+        <Animated.View entering={enter(0)} style={styles.keepsake} accessible
+          accessibilityLabel={`Wait saved. ${Math.floor(elapsedSeconds / 60)} minutes ${secs} seconds in line at ${rideName}. Next time, play a clue while you wait.`}>
+          <View style={styles.keepsakeBadge}><GameIcon name="ride" size={34} /></View>
+          <View style={styles.keepsakeCopy}>
+            <Text style={styles.keepsakeTitle}>Wait saved!</Text>
+            <Text style={styles.keepsakeBody} numberOfLines={2}>{`${Math.floor(elapsedSeconds / 60)}m ${secs}s at ${rideName}`}</Text>
+            <Text style={styles.keepsakeHint}>Next time, play a clue while you wait!</Text>
+          </View>
+        </Animated.View>
+      )}
 
       {rewardsConfirmed && queueStamp?.earned && onOpenStampBook && (
         <Animated.View entering={enter(0)}>
@@ -440,6 +462,14 @@ const styles = StyleSheet.create({
   recapTime: { color: '#ffffff', fontFamily: 'Shark', fontSize: 36, marginTop: spacing.xs,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   recapSub: { color: '#d6f4ff', fontFamily: 'Knockout', fontSize: 14 },
+  keepsake: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, padding: spacing.md,
+    borderRadius: borderRadius.lg, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.cream },
+  keepsakeBadge: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: BRAND.gold, borderWidth: 3, borderColor: BRAND.navy },
+  keepsakeCopy: { flex: 1, minWidth: 0 },
+  keepsakeTitle: { color: '#073b74', fontFamily: 'Shark', fontSize: 20 },
+  keepsakeBody: { color: '#073b74', fontFamily: 'Knockout', fontSize: 16, marginTop: 2 },
+  keepsakeHint: { color: '#315d77', fontFamily: 'Knockout', fontSize: 14, lineHeight: 18, marginTop: 2 },
   recapSectionTitle: { color: '#073b74', fontFamily: 'Shark', fontSize: 17, textAlign: 'center', marginTop: spacing.lg },
   recapStats: {
     flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm, paddingVertical: spacing.md,

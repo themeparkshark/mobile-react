@@ -9,7 +9,8 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import useUiReducedMotion from '../../../ui/useUiReducedMotion';
 import type { LinePlayChapter } from '../../../services/lineplay/chapters';
 import { crewRelayEpilogue, type CrewRelayProgress } from '../../../services/lineplay/crewRelay';
@@ -57,6 +58,9 @@ interface Props {
 const riseFor = (reduced: boolean) => (index: number) => reduced ? undefined
   : FadeInDown.delay(60 + index * 70).springify().damping(15);
 
+/** Why a locked chapter cannot start, in seven-year-old words. */
+export const LOCKED_LINE = 'Get in line to play';
+
 export default function ChapterCard({ chapter, completedIds, crewRelay, chapterClue = null, paused, locked = false, signalAvailable = false, onChooseMission, compact: shortScreen = false, windowHeight }: Props) {
   const [storyOpen, setStoryOpen] = useState(false);
   // The page's real height decides what leads (it shrinks while Details is open), so PLAY NOW
@@ -88,7 +92,8 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
     const timer = setTimeout(() => { entered.current = true; }, 900);
     return () => clearTimeout(timer);
   }, []);
-  const rise = riseFor(useUiReducedMotion() || entered.current);
+  const reducedUi = useUiReducedMotion();
+  const rise = riseFor(reducedUi || entered.current);
   const epilogue = crewRelay ? crewRelayEpilogue(crewRelay, chapter.relay.epilogues) : null;
   const epilogueDone = epilogue ? completedIds.has(`${chapter.id}-route-${epilogue.route}`) : false;
   // The same pick the rail uses to skip this target, so its Next never opens what PLAY NOW opens.
@@ -100,7 +105,17 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
   const crewGridId = `${chapter.id}-crew-grid`;
   // Locked: plain words (nothing to resume) and an off state; paused: the tap resumes first.
   const playVerb = !locked && paused ? 'Resume and play' : done === 3 ? 'Play' : 'Start';
-  const off = { disabled: locked, accessibilityState: { disabled: locked } } as const;
+  const off = { accessibilityState: { disabled: locked } } as const;
+  // Locked never means a dead tap: the button gives a small no-shake and a soft buzz, and its own line says why.
+  const shake = useSharedValue(0);
+  const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.value }] }));
+  const choose = (id: string) => {
+    if (!locked) { onChooseMission(id); return; }
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+    if (reducedUi) return;
+    shake.value = withSequence(withTiming(-7, { duration: 50 }), withTiming(7, { duration: 70 }),
+      withTiming(-4, { duration: 60 }), withTiming(0, { duration: 60 }));
+  };
 
   const header = (
     <Animated.View key="header" entering={rise(compact ? 1 : 0)} style={[styles.header, compact && styles.headerCompact]}
@@ -126,19 +141,20 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
   const playNow = (
     <Animated.View key="play-now" entering={rise(compact ? 0 : 1)} style={compact && styles.playFirst}
       onLayout={event => { if (!compact) setLeadBottom(layoutBottom(event)); }}>
-      <Pressable accessibilityRole="button"
-        accessibilityLabel={`${playVerb} ${nextName}`} {...off}
-        onPress={() => onChooseMission(nextId)}
-        style={({ pressed }) => [styles.playNow, compact && styles.playNowCompact, paused && styles.playResting, locked && styles.locked, pressed && styles.pressed]}>
+      <Animated.View style={shakeStyle}><Pressable accessibilityRole="button"
+        accessibilityLabel={locked ? `${nextName}. ${LOCKED_LINE}` : `${playVerb} ${nextName}`} {...off}
+        onPress={() => choose(nextId)}
+        style={({ pressed }) => [styles.playNow, compact && styles.playNowCompact, paused && styles.playResting, locked && styles.lockedPlay, pressed && styles.pressed]}>
         <View style={styles.playNowCopy}>
           {/* No count here: the numbered bubbles below own it (one count per screen). PLAY, the same
               word as the SE strip, so every phone size says one word for one idea. */}
-          <KidText style={styles.playNowKicker}>{done === 3 ? 'KEEP THE WAIT FUN' : 'PLAY'}</KidText>
-          <Text style={styles.playNowTitle}>{nextName}</Text>
-          {!compact && <Text style={styles.playNowHint}>One phone · play solo or with your crew</Text>}
+          <KidText style={[styles.playNowKicker, locked && styles.lockedKicker]}>{locked ? 'LOCKED' : done === 3 ? 'KEEP THE WAIT FUN' : 'PLAY'}</KidText>
+          <Text style={[styles.playNowTitle, locked && styles.lockedText]}>{nextName}</Text>
+          {locked ? <Text style={[styles.playNowHint, styles.lockedText]}>{LOCKED_LINE}</Text>
+            : !compact && <Text style={styles.playNowHint}>One phone · play solo or with your crew</Text>}
         </View>
-        <GameIcon name="play" size={compact ? 48 : 56} />
-      </Pressable>
+        <View style={locked && styles.lockWell}><GameIcon name={locked ? 'lock' : 'play'} size={locked ? (compact ? 30 : 36) : compact ? 48 : 56} /></View>
+      </Pressable></Animated.View>
     </Animated.View>
   );
 
@@ -158,26 +174,26 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
     return (
       <PageScroll fill={FRAME_FILL} contentStyle={[styles.contentStrip, withTrail && styles.contentStripTrail]}
         onLayout={measure} still>
-        <Pressable accessibilityRole="button"
-          accessibilityLabel={`${playVerb} ${nextName}`} {...off}
-          onPress={() => onChooseMission(nextId)}
-          style={({ pressed }) => [styles.playStrip, !withTrail && styles.playStripFill, paused && styles.playResting, locked && styles.locked, pressed && styles.pressed]}>
+        <Animated.View style={[shakeStyle, !withTrail && styles.playStripFill]}><Pressable accessibilityRole="button"
+          accessibilityLabel={locked ? `${nextName}. ${LOCKED_LINE}` : `${playVerb} ${nextName}`} {...off}
+          onPress={() => choose(nextId)}
+          style={({ pressed }) => [styles.playStrip, !withTrail && styles.playStripFill, paused && styles.playResting, locked && styles.lockedPlay, pressed && styles.pressed]}>
           <View style={styles.playStripCopy}>
-            <Text style={styles.playStripText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-              <Text style={styles.playStripKicker}>{'PLAY  '}</Text>{nextName}
+            <Text style={[styles.playStripText, locked && styles.lockedText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+              <Text style={[styles.playStripKicker, locked && styles.lockedKicker]}>{locked ? 'LOCKED  ' : 'PLAY  '}</Text>{locked ? LOCKED_LINE : nextName}
             </Text>
             {dotsInStrip && <ClueDots size={16} onGold current={done === 3 ? -1 : nextMissionIndex}
               done={missionIds.map(id => completedIds.has(id))} accessibilityLabel={`${done} of 3 ${chapter.progressNoun}`} />}
           </View>
-          <GameIcon name="play" size={40} />
-        </Pressable>
+          <View style={locked && styles.lockWellSmall}><GameIcon name={locked ? 'lock' : 'play'} size={locked ? 26 : 40} /></View>
+        </Pressable></Animated.View>
         {withTrail && <View style={styles.stripTrail} accessibilityLabel={`${done} of 3 ${chapter.progressNoun}`}>
           {chapter.missionNames.map((name, index) => {
             const complete = completedIds.has(missionIds[index]);
             const current = index === nextMissionIndex;
             return <Pressable key={name} accessibilityRole="button"
               accessibilityLabel={`${complete ? 'Replay' : 'Open'} ${name}`} {...off}
-              onPress={() => onChooseMission(missionIds[index])}
+              onPress={() => choose(missionIds[index])}
               style={({ pressed }) => [styles.step, styles.stepStrip, current && styles.stepCurrent, complete && styles.stepDone,
                 paused && styles.missionPaused, locked && styles.locked, pressed && styles.pressed]}>
               <View style={[styles.stepBadge, styles.stepBadgeStrip, current && !complete && styles.stepBadgeCurrent, complete && styles.stepBadgeDone]}>
@@ -211,7 +227,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
           const current = index === nextMissionIndex;
           return <Pressable key={name} accessibilityRole="button"
             accessibilityLabel={`${complete ? 'Replay' : 'Open'} ${name}`} {...off}
-            onPress={() => onChooseMission(missionIds[index])}
+            onPress={() => choose(missionIds[index])}
             style={({ pressed }) => [styles.step, compact && styles.stepCompact, current && styles.stepCurrent, complete && styles.stepDone,
               paused && styles.missionPaused, locked && styles.locked, pressed && styles.pressed]}>
             <View style={[styles.stepBadge, current && !complete && styles.stepBadgeCurrent, complete && styles.stepBadgeDone]}>
@@ -225,7 +241,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
       <Animated.View entering={rise(3)} style={[styles.crewRow, { marginTop: foldGap(viewHeight, trailBottom, crewHeight, CREW_ROW_GAP) }]}
         onLayout={event => setCrewHeight(Math.round(event.nativeEvent.layout.height))}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chapter.relay.title}`} {...off}
-          onPress={() => onChooseMission(relayId)}
+          onPress={() => choose(relayId)}
           style={({ pressed }) => [styles.crewChip, paused && styles.missionPaused, locked && styles.locked, pressed && styles.pressed]}>
           <GameIcon name={relayDone ? 'check' : 'shark'} size={30} />
           <View style={styles.crewChipCopy}>
@@ -234,7 +250,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
           </View>
         </Pressable>
         {signalAvailable && <Pressable accessibilityRole="button" accessibilityLabel="Open community Crew Route" {...off}
-          onPress={() => onChooseMission('crew-signal')}
+          onPress={() => choose('crew-signal')}
           style={({ pressed }) => [styles.crewChip, styles.crewChipBlue, paused && styles.missionPaused, locked && styles.locked, pressed && styles.pressed]}>
           <GameIcon name="map" size={30} />
           <View style={styles.crewChipCopy}>
@@ -268,7 +284,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
           : `${epilogue.prompt} Swipe past the relay to play the new round.`}</Text>
       </View>}
       <Pressable accessibilityRole="button" accessibilityLabel="Open Crew Prompts" {...off}
-        onPress={() => onChooseMission(crewGridId)} style={[styles.promptsLink, locked && styles.locked]}>
+        onPress={() => choose(crewGridId)} style={[styles.promptsLink, locked && styles.locked]}>
         <GameIcon name={completedIds.has(crewGridId) ? 'check' : 'sparkle'} size={22} />
         <Text style={styles.promptsText}>Crew Prompts: nine talk-and-notice prompts for the end of your wait</Text>
       </Pressable>
@@ -369,8 +385,17 @@ const styles = StyleSheet.create({
   promptsText: { flex: 1, color: BRAND.blue, fontFamily: 'Knockout', fontSize: 15, lineHeight: 19 },
   // Paused: the clue buttons rest (still live: one tap runs the 3 2 1, then opens the page).
   missionPaused: { opacity: 0.7 },
-  // Off (the wait is not running): clearly faded, and the press never fires.
-  locked: { opacity: 0.45 },
+  // Off (the wait is not running): the small buttons rest at 60% on their own pale fill (never gold at
+  // low opacity over blue, which read as olive). A tap shakes the PLAY button and buzzes, never opens.
+  locked: { opacity: 0.6 },
+  // The big PLAY when locked: a solid pale blue-white strip, navy words, a lock in a navy ring, and its reason.
+  lockedPlay: { backgroundColor: '#eef6fd', borderColor: '#7d9cbc' },
+  lockedText: { color: 'rgba(5,52,110,0.6)' },
+  lockedKicker: { color: 'rgba(5,52,110,0.6)' },
+  lockWell: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#7d9cbc', marginRight: 4 },
+  lockWellSmall: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#7d9cbc', marginRight: 4 },
   // Paused PLAY rests like the paused ARCADE: pale blue with a navy outline, never a faded olive gold.
   playResting: { backgroundColor: '#e8f6ff', borderColor: '#0b4f8a' },
   footer: { color: '#376888', fontFamily: 'Knockout', fontSize: 13, lineHeight: 18, marginTop: spacing.md },

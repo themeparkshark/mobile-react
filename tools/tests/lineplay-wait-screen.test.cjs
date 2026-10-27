@@ -71,10 +71,9 @@ test('sharks in line, time in line and Parts this wait', () => {
   // The card shows the crowd as shark pictures, never a number: 1 is you, 2 a few, 3 ten or more.
   assert.equal(m.sharksInLine(1).sharks, 1); assert.equal(m.sharksInLine(4).sharks, 2); assert.equal(m.sharksInLine(9).sharks, 2);
   assert.equal(m.sharksInLine(10).sharks, 3);
+  // Wave 6 (kid clarity): the closed card is one coin, one ring and one sentence: no crowd stat beside the coin.
   const hero = read(DIR + 'WaitCoinHero.tsx');
-  assert.match(hero, /<CrowdStat align="right" sharks=\{sharks\.sharks\} label=\{sharks\.label\}\n\s*accessibilityLabel=\{sharks\.accessibilityLabel\} \/>/);
-  const crowd = hero.slice(hero.indexOf('function CrowdStat'), hero.indexOf('function WaitCoinHero('));
-  assert.doesNotMatch(crowd, /value/, 'no number printed for the crowd; the spoken label keeps it');
+  assert.doesNotMatch(hero, /CrowdStat|SHARKS HERE|sharksInLine/);
   assert.equal(m.inLineLabel(23 * 60 + 40), '23m'); assert.equal(m.inLineLabel(65 * 60), '1h 05m');
   assert.equal(m.partsThisWait(3, 1), 4); assert.equal(m.partsThisWait(null), 0);
 });
@@ -133,29 +132,21 @@ test('copy: no em dashes and no emoji in the wait screen files; preview is dev-o
   assert.match(read(DIR + 'waitScreenPreview.ts'), /__DEV__ && process\.env\.EXPO_PUBLIC_LINEPLAY_WAIT_PREVIEW === '1'/);
 });
 
-test('no server rewards: the coin space collapses into one stat strip, no empty hole', () => {
+test('one coin, one ring, one sentence: no stat columns on the closed card; no server rewards renders nothing', () => {
   const m = model();
   assert.equal(m.waitHeroLayout(true), 'coin');
   assert.equal(m.waitHeroLayout(false), 'strip');
   const hero = read(DIR + 'WaitCoinHero.tsx');
-  const strip = hero.slice(hero.indexOf("if (waitHeroLayout(rewardsOn) === 'strip')"), hero.indexOf('  return (\n    <View style={styles.row}>'));
-  assert.ok(strip.length > 0, 'the strip branch returns before the coin row');
-  assert.match(strip, /testID="wait-hero-strip"/);
-  assert.doesNotMatch(strip, /WaitCoinStage|coinSize|statSpacer|PARTS THIS WAIT/, 'no coin, no placeholder, no Parts stat');
-  assert.doesNotMatch(hero, /<View style=\{\{ width: coinSize \}\} \/>/, 'the old coin-sized placeholder is gone');
-  assert.match(strip, /\{signStat\}/); assert.match(strip, /\{inLineStat\}/);
-  // Fewer labels for kids: one short word under each number, no second line of fine print.
-  assert.doesNotMatch(hero, /SIGN SAYS \(MIN\)|tracking|PARTS THIS WAIT/);
-  // Round 4: the sign's number sits under the ride car, the kid's own time under the stopwatch.
-  // Never two clocks, never "MIN" (which reads as "minimum").
-  assert.match(hero, /label="SIGN SAYS"\n\s+accessibilityLabel=\{estimate\.accessibilityLabel\} icon="ride"/);
-  assert.match(hero, /label="IN LINE"\n\s+accessibilityLabel=\{`In line \$\{inLineLabel\(elapsedSeconds\)\}\.`\} icon="timer"/);
-  assert.doesNotMatch(hero, /MIN WAIT|icon="queue"/);
-  // Round 3: one Parts idea. The ring chip says "2 of 4 Parts"; no second "+4 PARTS" number beside it,
-  // and no level number or Marathon/Night chip on the coin.
-  assert.doesNotMatch(hero, /label="PARTS"|partsThisWait|waitStamps/);
+  assert.match(hero, /if \(waitHeroLayout\(rewardsOn\) === 'strip'\) return null;/, 'no coin, no placeholder, no hole');
+  assert.match(hero, /<View style=\{styles\.row\} testID="wait-hero-coin">\n\s*<WaitCoinStage /);
+  assert.doesNotMatch(hero, /SIGN SAYS|IN LINE|SHARKS HERE|<Stat |PARTS THIS WAIT|MIN WAIT|label="PARTS"|partsThisWait|waitStamps/);
   const stage = read(DIR + 'WaitCoinStage.tsx');
   assert.doesNotMatch(stage, /WaitStampBadge|levelPipText/);
+  // The count chip under the coin shows only for an action or a state (tap to level up, leveling, an error).
+  assert.match(stage, /const chipShown = owned && \(busy \|\| error != null \|\| progress\.ready\);/);
+  // The numbers live in Details, said once with their pictures: the sign (ride car) and your time (stopwatch).
+  const cardSrc = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.match(cardSrc, /freshReadingMinutes: entranceFresh \? entranceWaitMinutes : null \}\),\n\s*inLineLine: `You have been in line \$\{inLineLabel\(elapsedSeconds\)\}\.`/);
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(card, /waitStamps\(elapsedSeconds/, 'the marks moved into Details');
   assert.match(card, /const \[expandedState, setExpanded\] = useState\(false\);\n\s*const expanded = detailsOpen \?\? expandedState;/,
@@ -211,7 +202,7 @@ test('one wait source of truth: "no sign time" never shows next to a SIGN SAYS n
   assert.doesNotMatch(read(DIR + 'WaitCoinHero.tsx'), /rewardsOn: true/);
 });
 
-test('Details under the coin hero: two short lines at most, one Parts idea, the cap only once reached', () => {
+test('Details under the coin hero: three short lines at most (sign, your time, one Parts idea), the cap only once reached', () => {
   const card = loadTs('src/screens/LinePlay/components/WaitCard.tsx', {
     react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {}, Fragment: 'Fragment' }, 'react-native': { StyleSheet: { create: x => x } }, 'expo-linear-gradient': {}, 'react-native-svg': {}, 'react-native-reanimated': {},
     '../../../design-system': { colors: { textPrimary: '#fff' }, spacing: { sm: 8, xs: 4, md: 12 }, borderRadius: { xxl: 24 }, shadows: { lg: {} } },
@@ -227,7 +218,7 @@ test('Details under the coin hero: two short lines at most, one Parts idea, the 
   const capped = card.heroDetailLines({ ...base, sublineInHeadline: false, atCap: true, subline: 'You got the most Parts for one wait. Great job!' });
   assert.deepEqual(plain(capped), [base.signLine, 'You got the most Parts for one wait. Great job!']);
   for (const lines of [card.heroDetailLines(base), capped]) {
-    assert.ok(lines.length <= 2, 'two short lines at most');
+    assert.ok(lines.length <= 3, 'three short lines at most');
     for (const line of lines) {
       assert.doesNotMatch(line, /per wait|up to \d|Time near the ride/, 'no per-wait cap ahead of time, no 0:00 clock');
       assert.ok(line.split(/\s+/).length <= 12, `short line: ${line}`);
@@ -237,10 +228,16 @@ test('Details under the coin hero: two short lines at most, one Parts idea, the 
   assert.equal(card.ticketHint(true, 700, 600), 'You get a ticket when this wait ends.');
   const src = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(src, /\{expanded && hero && <Reanimated\.View [^>]*\n[^>]*><HeroDetails/);
-  assert.match(src, /signLine: heroSignDetail\(\{ postedMinutes: postedWaitMinutes, waitSource,\n\s*freshReadingMinutes: entranceFresh \? entranceWaitMinutes : null \}\)/,
-    'the sign number already on the card is never repeated in Details');
-  // A plain posted sign: SIGN SAYS prints 35m, so Details has no sign line at all (the number is said once).
+  // Wave 6: the closed card no longer prints SIGN SAYS, so Details always names the sign's number once.
+  assert.match(src, /signLine: detailsSignLine\(\{ postedMinutes: postedWaitMinutes, waitSource,\n\s*freshReadingMinutes: entranceFresh \? entranceWaitMinutes : null \}\),/);
   const m = model();
+  assert.equal(m.detailsSignLine({ postedMinutes: 35, waitSource: 'posted' }), 'The ride sign said 35m.');
+  assert.equal(m.detailsSignLine({ postedMinutes: 60, waitSource: 'last_known' }), 'The ride sign said 1h 00m a while ago.');
+  assert.equal(m.detailsSignLine({ postedMinutes: 35, waitSource: 'posted', freshReadingMinutes: 90 }), 'The ride sign now says 1h 30m.');
+  assert.equal(m.detailsSignLine({ postedMinutes: 35, waitSource: 'estimate' }), 'No sign time when you started. Games still work.');
+  assert.deepEqual(plain(card.heroDetailLines({ ...base, inLineLine: 'You have been in line 20m.' })),
+    [base.signLine, 'You have been in line 20m.', 'Stay near the ride to earn more Parts.']);
+  assert.equal(card.heroDetailIcon('You have been in line 20m.'), 'timer');
   assert.equal(m.heroSignDetail({ postedMinutes: 35, waitSource: 'posted' }), null);
   assert.deepEqual(plain(card.heroDetailLines({ ...base, signLine: null })), ['Stay near the ride to earn more Parts.']);
   assert.equal(m.heroSignDetail({ postedMinutes: 35, waitSource: 'posted', freshReadingMinutes: 35 }), null, 'same reading: nothing new');
