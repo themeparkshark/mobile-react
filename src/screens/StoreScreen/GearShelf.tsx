@@ -17,7 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated as RNAnimated, Dimensions, Easing as RNEasing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addToWishlist, getWishlist, removeFromWishlist } from '../../api/endpoints/me/wishlist';
@@ -25,7 +25,8 @@ import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { formatCoins, slotWord, passesFilter, restockPill, shelfFilters, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
 import { useAnyModalLayer } from '../../ui/modalLayers';
-import { GRID_AFTER_HERO_MS, GRID_STAGGER, gridRiseIn, headerDropIn, heroRiseIn } from '../../ui/stagger';
+import { GRID_AFTER_HERO_MS, GRID_FILL, GRID_STAGGER, gridDelay, headerDropIn } from '../../ui/stagger';
+import GridFillCell from '../../ui/GridFillCell';
 import Playercard from '../../components/Playercard';
 import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import { previewLook } from './TryOnSheet';
@@ -285,6 +286,14 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
     const t = setTimeout(() => setAllIn(true), GRID_STAGGER.pushLeadMs + GRID_STAGGER.capMs + 120);
     return () => clearTimeout(t);
   }, [allIn, items.length]);
+  // The first screenful drops in on one UI-thread clock, started once the shelf has laid out (its views are there).
+  const fill = useSharedValue(still ? GRID_FILL.endMs : 0);
+  const fillStarted = useRef(still);
+  const startFill = () => {
+    if (fillStarted.current || !items.length) return;
+    fillStarted.current = true;
+    fill.value = withTiming(GRID_FILL.endMs + 1, { duration: GRID_FILL.endMs + 1, easing: Easing.linear });
+  };
   const cells = shelf.filter(i => (filter !== 'all' || i.id !== star?.id) && passesFilter(i, filter, balance));
   const shownCells = allIn || filter !== 'all' ? cells : cells.slice(0, GRID_STAGGER.maxItems);
 
@@ -319,7 +328,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
         {/* The panel is there at once (a quick fade): its cells drop in one by one, never a whole faded shelf. */}
         {/* The panel is simply there (no entering of its own: Reanimated skips a child's entering animation inside an
             entering parent, so the cells used to land all at once); its cells drop in one by one. */}
-        <View style={styles.panel}>
+        <View style={styles.panel} onLayout={startFill}>
           {filters.length === 0 && (
             <View style={styles.header}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title} accessibilityRole="header">ON THE SHELF</Text>
@@ -346,17 +355,18 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
           ) : (
             <View style={styles.grid}>
               {star && filter === 'all' && (
-                <Animated.View key={`star-${star.id}`} entering={still ? undefined : heroRiseIn({ afterMs: GRID_STAGGER.pushLeadMs })} style={{ width: 2 * TILE_W + GAP }}>
+                <GridFillCell key={`star-${star.id}`} fill={fill} delay={still ? null : GRID_STAGGER.pushLeadMs + GRID_STAGGER.headerLeadMs}
+                  rise={GRID_STAGGER.heroRisePt} from={GRID_STAGGER.heroFromScale} style={{ width: 2 * TILE_W + GAP }}>
                   <StarTile item={star as ShopItem} balance={balance} still={still || !focused || !!open || covered || idle} onOpen={openItem} onWish={wish} />
-                </Animated.View>
+                </GridFillCell>
               )}
               {shownCells.map((item, i) => (
-                <Animated.View key={`${filter}:${item.id}`} entering={still ? undefined : !firstIds.current?.has(item.id) || filter !== 'all' ? FadeIn.duration(160)
-                  : gridRiseIn(i, { leadMs: star ? GRID_AFTER_HERO_MS : GRID_STAGGER.headerLeadMs, afterMs: GRID_STAGGER.pushLeadMs })
-                  ?? FadeIn.delay(GRID_STAGGER.pushLeadMs + GRID_STAGGER.capMs).duration(160)}>
+                <GridFillCell key={`${filter}:${item.id}`} fill={fill} rise={GRID_STAGGER.risePt} from={GRID_STAGGER.fromScale}
+                  delay={still || !firstIds.current?.has(item.id) || filter !== 'all' ? null
+                    : GRID_STAGGER.pushLeadMs + (gridDelay(i, star ? GRID_AFTER_HERO_MS : GRID_STAGGER.headerLeadMs) ?? GRID_STAGGER.capMs)}>
                   <ShopTile item={item as ShopItem} width={TILE_W} still={still} vipLocked={!!item.is_member_item && !vip}
                     affordable={balance >= item.cost} balance={balance} justBought={bought.includes(item.id)} onOpen={openItem} onWish={wish} />
-                </Animated.View>
+                </GridFillCell>
               ))}
             </View>
           )}

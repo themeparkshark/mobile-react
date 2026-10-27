@@ -230,3 +230,23 @@ test('goal glance: a gold ring rings out off Daily 3 and a glint crosses it when
   assert.match(d3, /const g = goalGlint\(reducedMotion \? 0 : glint\.value\);/, 'never with Reduce Motion');
   assert.doesNotMatch(d3, /Text[^>]*>\s*\+?\d/, 'no counts or words added');
 });
+
+test('shop fill: the Shop Pick and the rows drop on one UI-thread clock (entering animations did not run in release)', () => {
+  const stagger = loadTs('src/ui/stagger.ts', { 'react-native-reanimated': { Easing: { bezierFn: () => t => t }, FadeInDown: {} }, './motion': motion });
+  const { gridFillStyle, GRID_FILL, GRID_STAGGER: G } = stagger;
+  const before = gridFillStyle(0, 300, 20, 0.86);
+  assert.equal(before.opacity, 0, 'hidden until its turn');
+  assert.equal(before.transform[0].translateY, 20);
+  const mid = gridFillStyle(300 + GRID_FILL.cellMs * 0.5, 300, 20, 0.86);
+  assert.ok(mid.opacity === 1 && mid.transform[0].translateY < 10, 'solid fast, rising');
+  const peak = Math.max(...Array.from({ length: 50 }, (_, k) => gridFillStyle(300 + (GRID_FILL.cellMs * k) / 49, 300, 20, 0.86).transform[1].scale));
+  assert.ok(peak > 1 && peak < 1.08, 'one small overshoot');
+  const landed = gridFillStyle(300 + GRID_FILL.cellMs, 300, 20, 0.86);
+  assert.ok(Math.abs(landed.transform[1].scale - 1) < 1e-9 && landed.opacity === 1);
+  const end = gridFillStyle(GRID_FILL.endMs, 300, 20, 0.86);
+  assert.ok(end.opacity < 1 && end.opacity > 0.999, 'says its final look again after the fill');
+  assert.ok(GRID_FILL.endMs >= G.pushLeadMs + G.capMs + GRID_FILL.cellMs, 'the clock outlasts the last cell');
+  const shelf = read('src/screens/StoreScreen/GearShelf.tsx');
+  assert.match(shelf, /fill\.value = withTiming\(GRID_FILL\.endMs \+ 1, \{ duration: GRID_FILL\.endMs \+ 1, easing: Easing\.linear \}\);/);
+  assert.doesNotMatch(shelf, /gridRiseIn|heroRiseIn/);
+});

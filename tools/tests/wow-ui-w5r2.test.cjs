@@ -165,7 +165,7 @@ test('store: the coin pile bounces in first, then the Shop Pick, then the shelf 
   const shelf = read('src/screens/StoreScreen/GearShelf.tsx');
   assert.match(shelf, /<Animated\.View entering=\{still \? undefined : headerDropIn\(\{ afterMs: GRID_STAGGER\.pushLeadMs \}\)\} style=\{\{ flex: 1 \}\}>\n\s+<Shopkeeper/);
   // Round 3: the panel has no entering of its own (a child's entering inside an entering parent is skipped).
-  assert.match(shelf, /<View style=\{styles\.panel\}>/, 'the panel is there at once; only its cells drop in');
+  assert.match(shelf, /<View style=\{styles\.panel\} onLayout=\{startFill\}>/, 'the panel is there at once; only its cells drop in');
   assert.doesNotMatch(shelf, /style=\{styles\.panel\}>[\s\S]{0,40}entering/);
 });
 

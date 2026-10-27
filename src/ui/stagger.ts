@@ -106,3 +106,30 @@ export function staggerIn(index: number, options: { readonly count?: number; rea
   if (delay === null) return undefined;
   return FadeInDown.delay(delay).duration(DURATION.base).easing(OUT);
 }
+
+/** One grid cell's drop-in, driven by a shared fill clock (ms since the fill started) instead of a layout animation. */
+export const GRID_FILL = {
+  /** Each cell's drop takes this long. */
+  cellMs: 380,
+  /** The fill clock runs this long (every cell has landed), then the cells say their final look again. */
+  endMs: GRID_STAGGER.pushLeadMs + GRID_STAGGER.capMs + 380 + 120,
+} as const;
+
+/**
+ * Cell at fill time `clock` (ms) that starts `delay` ms in: rises from `rise` pt below and `from` scale with one small
+ * overshoot (ease out back), solid quickly. Past the end it says its final look again (a value one part in ten
+ * thousand off), so a view drawn late can never be left at an earlier frame. Pure worklet (unit tested).
+ */
+export function gridFillStyle(clock: number, delay: number, rise: number, from: number) {
+  'worklet';
+  const t = Math.min(1, Math.max(0, (clock - delay) / GRID_FILL.cellMs));
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  const u = t - 1;
+  const e = t <= 0 ? 0 : 1 + c3 * u * u * u + c1 * u * u;
+  const settle = clock >= GRID_FILL.endMs ? 0.9999 : 1;
+  return {
+    opacity: Math.min(1, t * 3) * settle,
+    transform: [{ translateY: (1 - e) * rise }, { scale: (from + (1 - from) * e) * settle }],
+  };
+}
