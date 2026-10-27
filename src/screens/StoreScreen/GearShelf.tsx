@@ -317,7 +317,9 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
           </View>
         </View>
         {/* The panel is there at once (a quick fade): its cells drop in one by one, never a whole faded shelf. */}
-        <Animated.View entering={still ? undefined : FadeIn.duration(GRID_STAGGER.fadeMs)} style={styles.panel}>
+        {/* The panel is simply there (no entering of its own: Reanimated skips a child's entering animation inside an
+            entering parent, so the cells used to land all at once); its cells drop in one by one. */}
+        <View style={styles.panel}>
           {filters.length === 0 && (
             <View style={styles.header}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.title} accessibilityRole="header">ON THE SHELF</Text>
@@ -358,7 +360,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
               ))}
             </View>
           )}
-        </Animated.View>
+        </View>
       </ScrollView>
       {/* The shelf slides under the tab row through a short fade (no hard cut across the shopkeeper). */}
       <LinearGradient pointerEvents="none" colors={[BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />

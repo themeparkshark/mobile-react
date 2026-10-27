@@ -38,7 +38,7 @@ export const GRID_STAGGER = {
    * A shelf on a screen that slides in (a stack push, DURATION.enter) starts its fill this late, so the drop-in plays on
    * the settled screen instead of hiding inside the slide (the panel slides in empty, then fills).
    */
-  pushLeadMs: 260,
+  pushLeadMs: 180,
 } as const;
 
 /** When the grid starts after the header and the hero (ms). */
