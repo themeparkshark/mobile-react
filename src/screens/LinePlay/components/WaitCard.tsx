@@ -337,7 +337,7 @@ export default function WaitCard({
   const headline = completed ? 'Wait complete' : paused
     ? 'Paused'
     : !rewardTrackingAvailable
-      ? lineRewardsReady === false || rewardUnavailable ? 'No Ride Parts here. Games are ready!'
+      ? lineRewardsReady === false || rewardUnavailable ? 'No Parts here. Play anytime!'
         : rewardConnectionIssue ? 'Games ready' : 'Checking location…'
       : atCap ? 'Max Parts reached'
         : countdown.needsCheck ? 'Checking you’re in line…'
@@ -397,9 +397,9 @@ export default function WaitCard({
           {hero && rewardTrackingAvailable ? null : !rewardTrackingAvailable ? <GameIcon name="queue" size={34} />
             : <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />}
           <View style={styles.compactCopy} accessible accessibilityLabel={compactCopyLabel({ hero: hero != null, earned, headline, subline })}>
-            <KidText style={styles.compactHeadline} numberOfLines={1}>{`${headline}${sublineInHeadline
+            <KidText style={styles.compactHeadline} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{`${headline}${sublineInHeadline
               ? ` ${subline}` : !hero && rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}`}</KidText>
-            {/* One sentence: "No Ride Parts here. Games are ready!" is the headline itself (no second note line). */}
+            {/* One sentence: "No Parts here. Play anytime!" is the headline itself (no second note line). */}
             {bonusOn && <View style={styles.bonusRow}>
               {bonusDone ? <Text style={styles.bonusDone} numberOfLines={1}>Bonus Parts done at this ride today</Text>
                 : <PipRow pips={pips} />}
