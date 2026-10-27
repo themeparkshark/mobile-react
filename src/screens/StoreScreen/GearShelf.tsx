@@ -27,6 +27,7 @@ import { formatCoins, slotWord, passesFilter, restockPill, shelfFilters, shelfOr
 import { useAnyModalLayer } from '../../ui/modalLayers';
 import { GRID_AFTER_HERO_MS, GRID_FILL, GRID_STAGGER, gridDelay, headerDropIn } from '../../ui/stagger';
 import GridFillCell from '../../ui/GridFillCell';
+import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import Playercard from '../../components/Playercard';
 import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import { previewLook } from './TryOnSheet';
@@ -280,15 +281,18 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
   const todayIds = useMemo(() => items.map(i => i.id), [items]);
   // The first paint mounts only the Shop Pick and the first screenful (light, so the drop-in starts at once); the
   // cells below it mount once the fill has landed (they were waiting for it anyway).
-  const [allIn, setAllIn] = useState(still);
+  const [allIn, setAllIn] = useState(false);
   useEffect(() => {
     if (allIn || !items.length) return undefined;
     const t = setTimeout(() => setAllIn(true), GRID_STAGGER.pushLeadMs + GRID_STAGGER.capMs + 120);
     return () => clearTimeout(t);
   }, [allIn, items.length]);
   // The first screenful drops in on one UI-thread clock, started once the shelf has laid out (its views are there).
-  const fill = useSharedValue(still ? GRID_FILL.endMs : 0);
-  const fillStarted = useRef(still);
+  // Reduce Motion as known on the first render (useUiReducedMotion): the shop's `still` starts true until the OS
+  // answers, which used to skip the whole drop-in when the shelf was already in hand on the first render.
+  const motionOff = useUiReducedMotion();
+  const fill = useSharedValue(motionOff ? GRID_FILL.endMs : 0);
+  const fillStarted = useRef(motionOff);
   const startFill = () => {
     if (fillStarted.current || !items.length) return;
     fillStarted.current = true;
@@ -314,7 +318,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
         <View style={styles.stage}>
           {BUBBLES.slice(0, bubbleCount).map((b, i) => <Bubble key={i} {...b} still={stageStill} />)}
           {/* The coin pile bounces in first, then the Shop Pick, then the shelf row by row. */}
-          <Animated.View entering={still ? undefined : headerDropIn({ afterMs: GRID_STAGGER.pushLeadMs })} style={{ flex: 1 }}>
+          <Animated.View entering={motionOff ? undefined : headerDropIn({ afterMs: GRID_STAGGER.pushLeadMs })} style={{ flex: 1 }}>
             <Shopkeeper imageUrl={promoUrl} still={stageStill} />
           </Animated.View>
           {/* The restock day rides on the stage's corner: small, calm, out of the shelf's way. */}
@@ -355,14 +359,14 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
           ) : (
             <View style={styles.grid}>
               {star && filter === 'all' && (
-                <GridFillCell key={`star-${star.id}`} fill={fill} delay={still ? null : GRID_STAGGER.pushLeadMs + GRID_STAGGER.headerLeadMs}
+                <GridFillCell key={`star-${star.id}`} fill={fill} delay={motionOff ? null : GRID_STAGGER.pushLeadMs + GRID_STAGGER.headerLeadMs}
                   rise={GRID_STAGGER.heroRisePt} from={GRID_STAGGER.heroFromScale} style={{ width: 2 * TILE_W + GAP }}>
                   <StarTile item={star as ShopItem} balance={balance} still={still || !focused || !!open || covered || idle} onOpen={openItem} onWish={wish} />
                 </GridFillCell>
               )}
               {shownCells.map((item, i) => (
                 <GridFillCell key={`${filter}:${item.id}`} fill={fill} rise={GRID_STAGGER.risePt} from={GRID_STAGGER.fromScale}
-                  delay={still || !firstIds.current?.has(item.id) || filter !== 'all' ? null
+                  delay={motionOff || !firstIds.current?.has(item.id) || filter !== 'all' ? null
                     : GRID_STAGGER.pushLeadMs + (gridDelay(i, star ? GRID_AFTER_HERO_MS : GRID_STAGGER.headerLeadMs) ?? GRID_STAGGER.capMs)}>
                   <ShopTile item={item as ShopItem} width={TILE_W} still={still} vipLocked={!!item.is_member_item && !vip}
                     affordable={balance >= item.cost} balance={balance} justBought={bought.includes(item.id)} onOpen={openItem} onWish={wish} />

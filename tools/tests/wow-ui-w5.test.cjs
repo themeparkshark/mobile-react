@@ -133,7 +133,7 @@ test('store fill: the Shop Pick hero lands first, then row by row, spread over 4
   assert.equal(stagger.heroRiseIn({ reduced: true }), undefined);
   const shelf = read('src/screens/StoreScreen/GearShelf.tsx');
   // Round 3: the hero and the cells drop on one UI-thread fill clock (GridFillCell), the hero first.
-  assert.match(shelf, /<GridFillCell key=\{`star-\$\{star\.id\}`\} fill=\{fill\} delay=\{still \? null : GRID_STAGGER\.pushLeadMs \+ GRID_STAGGER\.headerLeadMs\}/);
+  assert.match(shelf, /<GridFillCell key=\{`star-\$\{star\.id\}`\} fill=\{fill\} delay=\{motionOff \? null : GRID_STAGGER\.pushLeadMs \+ GRID_STAGGER\.headerLeadMs\}/);
   assert.match(shelf, /\?\? GRID_STAGGER\.capMs\)\}>/, 'a cell past the first screenful waits for the fill');
 });
 

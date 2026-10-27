@@ -250,3 +250,10 @@ test('shop fill: the Shop Pick and the rows drop on one UI-thread clock (enterin
   assert.match(shelf, /fill\.value = withTiming\(GRID_FILL\.endMs \+ 1, \{ duration: GRID_FILL\.endMs \+ 1, easing: Easing\.linear \}\);/);
   assert.doesNotMatch(shelf, /gridRiseIn|heroRiseIn/);
 });
+
+test('shop fill: Reduce Motion is read as known on the first render (the shop\'s own still flag starts true and skipped the fill)', () => {
+  const shelf = read('src/screens/StoreScreen/GearShelf.tsx');
+  assert.match(shelf, /const motionOff = useUiReducedMotion\(\);/);
+  assert.match(shelf, /delay=\{motionOff \|\| !firstIds\.current\?\.has\(item\.id\) \|\| filter !== 'all' \? null/);
+  assert.match(read('src/hooks/useReducedGameMotion.ts'), /useState\(true\)/, 'the reason: still until the OS answers');
+});
