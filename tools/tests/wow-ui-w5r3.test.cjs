@@ -85,7 +85,7 @@ test('prize to the shelf: drawn by the dialog above its backdrop from shared val
   // The Profile icon on screen squashes and throws gold stars as it lands (only the focused footer).
   const wrapper = read('src/components/Wrapper.tsx');
   assert.match(wrapper, /useAnimatedReaction\(\(\) => prizeHits\.value, \(now, before\) => \{\n\s+if \(before !== null && now > before && shelfLive\.value === 1\) landOnShelf\(\);/);
-  assert.match(wrapper, /\{stars && <SparkleBurst progress=\{stars\} count=\{10\}/);
+  assert.match(wrapper, /stars \? stars\.value : 0\)\);/, 'the Profile icon\'s own stars pop (no extra views per footer)');
   // The trail is plain dots moved on the UI thread (a canvas's first draw stalled the start of the flight).
   assert.doesNotMatch(read('src/ui/GameDialog.tsx'), /@shopify\/react-native-skia/);
   assert.match(src, /\{Array\.from\(\{ length: PRIZE_FLIGHT\.trailDots \}, \(_, k\) => <PrizeDot key=\{k\} s=\{s\} k=\{k \+ 1\} \/>\)\}/);

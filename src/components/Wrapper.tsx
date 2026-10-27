@@ -390,7 +390,9 @@ function FooterIcon({ index, children, anchor, hit, stars }: { readonly index: n
     return { opacity: F.rareSunPeak * (r < 0.12 ? r / 0.12 : Math.max(0, 1 - (r - 0.12) / 0.6)), transform: [{ scale: 0.8 + 1.6 * Math.min(1, r * 2) }] };
   });
   // A small icon's own stars, only when it is the one picked.
-  const smallBurst = useDerivedValue(() => (footerMotion.hopIndex.value === index ? footerMotion.burstSmall.value : 0));
+  // The Profile icon's stars also pop when a prize lands in it (the same stars: no extra views on every footer).
+  const smallBurst = useDerivedValue(() => Math.max(footerMotion.hopIndex.value === index ? footerMotion.burstSmall.value : 0,
+    stars ? stars.value : 0));
   const glint = useAnimatedStyle(() => {
     const g = footerMotion.glint.value;
     return { opacity: g > 0 && g < 1 ? 0.8 : 0, transform: [{ translateX: -64 + 128 * g }, { rotate: '20deg' }] };
@@ -437,8 +439,6 @@ function FooterIcon({ index, children, anchor, hit, stars }: { readonly index: n
       {compass && <RareFans size={size} />}
       {!compass && <SparkleBurst progress={smallBurst} count={F.smallSparkles} x={size / 2} y={size / 2}
         spread={[-175, -5]} dist={F.smallDist} size={F.smallSize} gravity={10} seed={index + 11} />}
-      {stars && <SparkleBurst progress={stars} count={10} x={size / 2} y={size / 2} spread={[-200, 20]} dist={[30, 58]}
-        size={[16, 24]} gravity={14} seed={index + 31} />}
     </View>
   );
 }
