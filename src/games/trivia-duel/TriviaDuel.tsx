@@ -5,15 +5,15 @@
  * A bright boardwalk game show you play one-thumbed while the line moves.
  * Race Captain Fin (or a recorded crew ghost) to the right answer. Answers
  * stay face-down until unlock, a ring of 24 marquee bulbs burns out as your
- * points drain, the bell lets you bet you know it before you see the
- * choices, and the Final is a wager.
+ * points drain, the bell lets you show you know it before you see the
+ * choices, and the Final is a no-risk bonus question worth double points.
  *
  * The whole rulebook:
  *  1. Faster lock, more points. Watch the bulbs.
  *  2. Right answers in a row multiply your points. Three in a row gives you a Shield.
  *  3. Chomp clears 2 wrong answers, but caps your speed bonus.
  *  4. Buzz to see the answers first. Miss and you lose 100, and they get to steal.
- *  5. In the Final, whoever is behind picks the topic, then everyone bets.
+ *  5. In the Final, whoever is behind picks the topic. A right answer is worth double; a miss costs nothing.
  *
  * Clocks: the question clock lives on the UI thread (useGameClock onFrame):
  * read-lock, unlock, the window, Fin's calibrated lock and buzz, the fuse
@@ -49,7 +49,7 @@ import { mixSeed } from '../../gamekit/core/rng';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { AuthContext } from '../../context/AuthProvider';
 import {
-  BUZZ, CATEGORY_PICK, CEREMONY, FIN_RANKS, FIN_RANK_ORDER, FIN_RESOLVE_AFTER_MS, HOLD, POINTS, READ_LOCK, RIDE_QUESTIONS, UNLOCK_GUARD_MS, WAGER,
+  BUZZ, CATEGORY_PICK, CEREMONY, FIN_RANKS, FIN_RANK_ORDER, FIN_RESOLVE_AFTER_MS, HOLD, POINTS, READ_LOCK, RIDE_QUESTIONS, UNLOCK_GUARD_MS, FINAL_BONUS,
   type DuelMode, type FinRank, type SpeedTier,
 } from './engine/config';
 import { factKeysOf, type PoolQuestion } from './engine/content';
@@ -61,7 +61,7 @@ import {
 } from './engine/match';
 import { nearMiss, rideNearMiss } from './engine/nearMiss';
 import {
-  bellValue, duelStars, flameTier, rideStars, rideWon, speedPoints, streakMult, suggestWager, wagerStakes,
+  bellValue, duelStars, flameTier, rideStars, rideWon, speedPoints, streakMult,
 } from './engine/scoring';
 import { ART, C, FIN_POSE_ORDER, type FinPose, type SharkLook } from './art';
 import {
@@ -76,7 +76,7 @@ import { Stage, type StageActors } from './ui/Stage';
 import { Rail, type PipState } from './ui/Rail';
 import { BOARD_H, QuestionCard, ROPE_H } from './ui/Card';
 import { TILE_COMPACT_CHARS, Tile, type TileState } from './ui/Tile';
-import { Bark, BuzzBell, CategoryPick, ClosestSlider, LifelineButton, OutlinedText, Stamp, VsIntro, WagerChips, type StampSpec } from './ui/Overlays';
+import { Bark, BuzzBell, CategoryPick, ClosestSlider, LifelineButton, OutlinedText, Stamp, VsIntro, type StampSpec } from './ui/Overlays';
 import { DuelResults, type ResultsModel } from './ui/DuelResults';
 import { DeskFront } from './ui/DeskFront';
 import { RideCoinCrate } from './ui/RideCoinCrate';
@@ -141,7 +141,7 @@ function freshClock(): QClock {
 }
 
 type SubMode = 'buzzAnswer' | 'steal' | 'open' | null;
-type Phase = 'loading' | 'intro' | 'question' | 'finalIntro' | 'category' | 'wager' | 'reveal' | 'between' | 'crate' | 'results';
+type Phase = 'loading' | 'intro' | 'question' | 'finalIntro' | 'category' | 'bonus' | 'reveal' | 'between' | 'crate' | 'results';
 type Framing = 'wide' | 'two' | 'singleMe' | 'singleOpp';
 
 export interface TriviaDuelProps {
@@ -242,7 +242,6 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const [bellOn, setBellOn] = useState(false);
   const [bellKey, setBellKey] = useState(0);
   const [chip, setChip] = useState<string | null>(null);
-  const [wager, setWager] = useState<{ stakes: number[]; picked: number; suggested: number; reason: string; ifRight: number[]; left: number } | null>(null);
   const [relaxed, setRelaxed] = useState(false);
   useEffect(() => { void loadMemory().then((m) => setRelaxed(!!m.relaxed)); }, []);
   const toggleRelaxed = useCallback(() => {
@@ -289,11 +288,9 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const barkN = useRef(0);
   const nextTap = useRef<(() => void) | null>(null);
   const factsRef = useRef<FactCard[]>([]);
-  const finalWager = useRef(0);
   const seedRef = useRef(baseSeed >>> 0);
   const rankRef = useRef<FinRank>('deckhand');
   const flashes = useRef(0);
-  const wagerOpen = useRef(false);
   const lastCut = useRef(0);
   const decisiveDone = useRef(false);
 
@@ -734,7 +731,6 @@ export function TriviaDuel(props: TriviaDuelProps) {
     factsRef.current = [];
     flashes.current = 0;
     decisiveDone.current = false;
-    wagerOpen.current = false;
     setFeatures({ ...p.features });
     setStreakView({ streak: carry.streak, shield: carry.shield && p.features.shield });
     setScores({ me: 0, opp: 0 });
@@ -865,7 +861,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
   }, [isRide, setClock, ghost, frame, reducedMotion]);
 
   // FIN'S FINAL (5.5): stamp on a half-beat (flash 1 of 2), music lifts to duel_loop_final on the bar,
-  // category pick (2.5s, trailing player, vs Fin only), then the wager (4.0s, 3 chips, suggestion glows).
+  // category pick (2.5s, trailing player, vs Fin only), then the DOUBLE POINTS banner (rev 8: a no-risk
+  // bonus, nothing to bet and nothing to lose), then the question.
   const runFinalIntro = useCallback(async (p: MatchPlan, r: PlannedRound) => {
     setPhase('finalIntro');
     setMusicBed(BEDS.final);
@@ -881,41 +878,20 @@ export function TriviaDuel(props: TriviaDuelProps) {
       flash();
       setFin(t0.opp.score > t0.me.score ? 'point' : 'nervous');
     });
-    const toWager = (fr: PlannedRound) => {
+    const toBonus = (fr: PlannedRound) => {
       const t = tally.current;
-      if (t.me.score <= 0) {
-        // Nothing to bet: every chip is 0, so the wager beat is skipped (no dead 4s in a moving line).
-        meIn.current.stake = 0;
-        setStakes({ me: '0', opp: '?' });
-        later(300, () => F.current.presentQuestion(p, fr));
-        return;
-      }
-      say(t.opp.score > t.me.score ? 'finalLead' : 'finalTrail');
+      say(t.opp.score > t.me.score ? 'finalTrail' : 'finalLead');
       frame('two');
-      const st = wagerStakes(t.me.score);
-      const m = streakMult(t.me.streak.streak + 1);
-      const sug = suggestWager(t.me.score, t.opp.score, m);
-      finalWager.current = sug.index;
-      const ifRight = st.map((s) => t.me.score + Math.round(POINTS.base * m) + s);
-      setWager({ stakes: st, picked: -1, suggested: sug.index, reason: sug.reason, ifRight, left: Math.round(WAGER.pickMs / 1000) });
-      setPhase('wager');
+      setPhase('bonus');
+      // Both sides show x2: the same bonus for everyone, points can only go up.
+      setStakes({ me: `x${FINAL_BONUS.multiplier}`, opp: isRide ? null : `x${FINAL_BONUS.multiplier}` });
+      stamp('DOUBLE POINTS', C.gold, 0.7, W / 2, RAIL_H + STAGE_BAND * 0.5, 'Bonus question!');
       sfx(CUE.chip, { volume: 0.7 });
-      wagerOpen.current = true;
-      let left = Math.round(WAGER.pickMs / 1000);
-      const tick = () => {
-        if (!wagerOpen.current) return;
-        left -= 1;
-        if (left <= 0) {
-          F.current.lockWager(p, fr);
-          return;
-        }
-        setWager((w) => (w ? { ...w, left } : w));
-        later(1000, tick);
-      };
-      later(1000, tick);
+      Haptic.hitMedium();
+      later(FINAL_BONUS.bannerMs, () => { frame('wide'); F.current.presentQuestion(p, fr); });
     };
     if (!alt) {
-      later(d + 600, () => toWager(r));
+      later(d + 600, () => toBonus(r));
       return;
     }
     const picker = finalPicker(tally.current);
@@ -933,7 +909,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       setCatPick((c) => (c ? { ...c, picked: i } : c));
       sfx(CUE.chip);
       Haptic.hitMedium();
-      later(420, () => { setCatPick(null); toWager(fr); });
+      later(420, () => { setCatPick(null); toBonus(fr); });
     };
     later(d + 600, () => {
       setPhase('category');
@@ -953,30 +929,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [W, H, reducedMotion, ghost, STAGE_BAND]);
 
-  const lockWager = useCallback((p: MatchPlan, r: PlannedRound) => {
-    // One lock per Final: the countdown and a tap can both get here; only the first counts.
-    if (!wagerOpen.current) return;
-    wagerOpen.current = false;
-    const st = wagerStakes(tally.current.me.score);
-    meIn.current.stake = st[finalWager.current] ?? 0;
-    setWager(null);
-    setStakes({ me: '?', opp: '?' });
-    sfx(CUE.chip);
-    Haptic.hitMedium();
-    frame('wide');
-    later(250, () => F.current.presentQuestion(p, r));
-  }, [later, frame]);
-
   const pickCategory = useCallback((i: number) => { catDone.current?.(i); }, []);
-
-  const pickWager = useCallback((i: number) => {
-    finalWager.current = i;
-    setWager((w) => (w ? { ...w, picked: i } : w));
-    sfx(CUE.chip);
-    Haptic.tapLight();
-    if (i === WAGER.percents.length - 1) say('allIn');
-    if (plan && round) later(220, () => F.current.lockWager(plan, round));
-  }, [plan, round, later, say]);
 
   // -- Events from the UI thread ------------------------------------------------------------------
   const lockLabel = useCallback((ms: number) => `${(ms / 1000).toFixed(1)}s`, []);
@@ -1265,7 +1218,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     } else if (q.slider) {
       stamp(String(q.slider.truth), C.gold, 0.4, W / 2, BOARD_TOP + ROPE_H + 20, res.me.bullseye ? 'BULLSEYE!' : `You: ${meIn.current.guess ?? '-'}`);
     }
-    setStakes(final ? { me: `${res.me.stake}`, opp: isRide ? null : `${res.opp.stake}` } : { me: null, opp: null });
+    setStakes({ me: null, opp: null });
 
     const meOK = res.me.correct;
     const tier = res.me.tier;
@@ -1643,13 +1596,12 @@ export function TriviaDuel(props: TriviaDuelProps) {
   };
   useEffect(() => {
     if (!AUTOPLAY) return;
-    if (phase === 'wager' && wager) later(1600, () => pickWager((mixSeed(seedRef.current, 77) % 10) < 7 ? wager.suggested : (wager.suggested + 1) % 3));
     if (phase === 'category' && catPick?.picker === 'me') later(900, () => pickCategory(1));
     if (phase === 'results' && results && !isRide) later(6500, () => (playsRef.current < 3 ? onRematch() : playsRef.current === 3 && !ghost ? void onPassToCrew() : onContinue()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, results]);
 
-  F.current = { startRound, presentQuestion, runFinalIntro, reveal, advance, finishMatch, lockWager };
+  F.current = { startRound, presentQuestion, runFinalIntro, reveal, advance, finishMatch };
 
   // -- Chomp (6): server-removed in graded modes; speed capped at 50 ----------------------------------
   const twoTile = (round?.question.choices.length ?? 4) <= 2;
@@ -1789,7 +1741,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const roundLabel = round
     ? (isRide ? `QUESTION ${round.index + 1} OF ${plan?.rounds.length ?? 3}` : `ROUND ${round.index + 1}  ${ROUND_NAMES[round.spec.type]}`)
     : (isRide ? 'QUESTION 1 OF 3' : 'ROUND 1  QUICK DRAW');
-  const showBoard = (preview && visible) || (!!round && (phase === 'question' || phase === 'reveal' || phase === 'between' || phase === 'finalIntro' || phase === 'category' || phase === 'wager'));
+  const showBoard = (preview && visible) || (!!round && (phase === 'question' || phase === 'reveal' || phase === 'between' || phase === 'finalIntro' || phase === 'category' || phase === 'bonus'));
   const showTiles = !!round && (phase === 'question' || phase === 'reveal' || phase === 'between');
   const mult = isRide ? 1 : streakMult(streakView.streak + 1);
   const multChip = !isRide && mult > 1 ? `x${mult}` : null;
@@ -1797,11 +1749,11 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const finalRound = round?.spec.type === 'final';
   const zoneTiles = q?.choices.length ? q.choices : ['', '', '', ''];
   const finStripes = FIN_RANKS[rankRef.current].stripes;
-  // Before the Final's read-lock the board never shows its question: the intro, the topic pick and the wager say what is coming.
+  // Before the Final's read-lock the board never shows its question: the intro, the topic pick and the bonus banner say what is coming.
   const finalTopic = plan?.rounds[roundIdx]?.question.category ?? '';
   const boardText = phase === 'finalIntro' ? "Fin's Final is next"
     : phase === 'category' ? (catPick?.picker === 'me' ? 'You pick the topic' : `${oppName} picks the topic`)
-    : phase === 'wager' ? `Topic: ${finalTopic}. Place your bet.`
+    : phase === 'bonus' ? `Bonus question: ${finalTopic}. Double points!`
     : preview ? '' : q?.prompt ?? '';
 
   return (
@@ -1963,22 +1915,6 @@ export function TriviaDuel(props: TriviaDuelProps) {
             </View>
           ) : null}
 
-          {wager ? (
-            <View style={[styles.zone, { top: ZONE_TOP - 18, height: ZONE_H + 18, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2 }]}>
-              <WagerChips
-                stakes={wager.stakes}
-                labels={WAGER.labels}
-                picked={wager.picked}
-                suggested={wager.suggested}
-                reason={wager.reason}
-                ifRight={wager.ifRight}
-                onPick={pickWager}
-                secondsLeft={wager.left}
-                category={plan?.rounds[roundIdx]?.question.category ?? 'Trivia'}
-                height={ZONE_H + 18}
-              />
-            </View>
-          ) : null}
           {catPick ? (
             <View style={[styles.zone, { top: ZONE_TOP - 18, height: ZONE_H + 18, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2 }]}>
               <CategoryPick cats={catPick.cats} mine={catPick.picker === 'me'} picked={catPick.picked} left={catPick.left} oppName={oppName} onPick={pickCategory} height={ZONE_H + 18} />

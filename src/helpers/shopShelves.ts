@@ -665,7 +665,7 @@ const EVENT_ICON: [RegExp, string][] = [
   [/^halloween/, 'streak'], [/birthday/, 'gift'], [/^(new_year|july_4th)/, 'sparkle'], [/^valentines/, 'heart'],
   [/^summer/, 'ride'], [/^holiday/, 'gift'], [/^(winter|spring|harvest|st_patricks|lunar_new_year|mardi_gras)/, 'sparkle'],
 ];
-const ICON_FALLBACKS = ['sparkle', 'medal1', 'ride', 'star', 'dice'];
+const ICON_FALLBACKS = ['sparkle', 'medal1', 'ride', 'star', 'crown'];
 /** Measured from each banner's art (its most saturated mid tone). */
 export const EVENT_ART_TINT: Record<string, string> = {
   epic_universe_birthday: '#4e50bd', halloween: '#58359e', halloween_finale: '#5a3b97', harvest: '#b16923', holiday: '#1d6ab7',

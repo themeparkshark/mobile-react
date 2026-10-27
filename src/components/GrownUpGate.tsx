@@ -130,7 +130,8 @@ const MISS_KEY = 'grown-up-gate:misses';
  * - share: the share sheet.
  */
 export type GateReason =
-  | { readonly kind: 'money'; readonly price: string; readonly gets: string }
+  /** `worth`: a bundle's worth at regular pack prices, shown only here, after the grown-up answers. */
+  | { readonly kind: 'money'; readonly price: string; readonly gets: string; readonly worth?: string }
   /** A plan that renews by itself (VIP). `period` is "month", "year" or "3 months". */
   | { readonly kind: 'renews'; readonly what: string; readonly price: string; readonly period: string; readonly trial: string | null }
   | { readonly kind: 'vip'; readonly prices?: string }
@@ -165,7 +166,8 @@ function perPeriod(period: string): string {
 export function gateDetails(reason: GateReason | null | undefined): { head: string; lines: string[] } | null {
   if (!reason) return null;
   switch (reason.kind) {
-    case 'money': return { head: `${reason.price}`, lines: [`For ${reason.gets}.`, 'Paid with the Apple ID on this device.'] };
+    case 'money': return { head: `${reason.price}`, lines: [`For ${reason.gets}.`,
+      ...(reason.worth ? [`Bought as single packs, this would cost ${reason.worth}.`] : []), 'Paid with the Apple ID on this device.'] };
     case 'renews': return {
       head: reason.trial ? `${reason.trial}, then ${reason.price} ${perPeriod(reason.period)}` : `${reason.price} ${perPeriod(reason.period)}`,
       lines: [

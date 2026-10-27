@@ -548,7 +548,7 @@ function IslandArt({
                     </Text>}
                   </View>
                 </View>
-                {minsLeft !== null && expiresAt! > Date.now() && <Text style={[styles.tooltipTimer, timerUrgent && styles.timerTextUrgent]}>{minsLeft} min left</Text>}
+                {minsLeft !== null && expiresAt! > Date.now() && <Text style={[styles.tooltipTimer, timerUrgent && styles.tooltipTimerSoon]}>{minsLeft} min left</Text>}
               </View>
               {cardSide === 'above' && <View style={styles.tooltipArrow} />}
             </View>
@@ -651,9 +651,11 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: BRAND.navy },
   // Under a badge, the timer sits on the art's shoulder.
   timerLow: { position: 'absolute', top: -2, zIndex: 20 },
-  timerBadgeUrgent: { borderColor: BRAND.red },
+  // The last 5 minutes: a calm gold chip, never a red ticking clock (kid-trust).
+  timerBadgeUrgent: { backgroundColor: BRAND.gold, borderColor: BRAND.goldLip },
   timerText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, textAlign: 'center' },
-  timerTextUrgent: { color: BRAND.red },
+  timerTextUrgent: { color: BRAND.navy },
+  tooltipTimerSoon: { color: '#9a6a00' },
   cardSlot: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   cardBelow: { justifyContent: 'flex-start' },
   cardBeside: { justifyContent: 'center' },

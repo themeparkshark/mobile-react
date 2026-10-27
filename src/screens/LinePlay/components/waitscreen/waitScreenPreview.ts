@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import type { LineWaitScreenSummary } from '../../../../api/endpoints/me/inline-timer/types';
 import type { WaitCoin } from './useWaitScreenCoin';
 import type { WaitSource } from '../../../../services/lineplay/LinePlaySession';
+import type { LinePartsState } from '../../../../services/help/helpTopics';
 
 /** The preview's sign time when the session has none: a posted 60. */
 export const PREVIEW_WAIT = { plannedWaitMinutes: 60, waitSource: 'posted' } as const;
@@ -108,6 +109,15 @@ export function shownRewards(
 ): { readonly tracking: boolean; readonly unavailable: boolean; readonly ready: boolean | undefined } {
   return waitScreenPreviewEnabled() ? { tracking: true, unavailable: false, ready: true }
     : { tracking: session.serverSessionId != null, unavailable: session.rewardUnavailable, ready: ride.lineRewardsReady };
+}
+
+/**
+ * What the wait card says about Ride Parts, as one value the Welcome tip reads too: 'on' (the Parts
+ * ring), 'none' ("No Parts at this ride", the same test as WaitCard's noPartsHere) or 'unknown'.
+ */
+export function linePartsState(rewards: { readonly tracking: boolean; readonly unavailable: boolean; readonly ready: boolean | undefined }): LinePartsState {
+  if (rewards.tracking) return 'on';
+  return rewards.ready === false || rewards.unavailable ? 'none' : 'unknown';
 }
 
 /** Three steps after the preview's level up (step 5), one more Part lands, so a capture shows the ribbon swap to the next goal. */

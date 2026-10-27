@@ -2,7 +2,6 @@
  * Near-miss line for a loss (design 11.9): find the smallest single change
  * that flips the result and say it in one friendly line.
  *   speed: "Lost by 35. A GREAT answer on question 2 wins it."
- *   wager: "Lost by 120. ALL IN on the Final wins it."
  *   miss:  "Lost by 60. One more right answer wins it."
  */
 import { POINTS } from './config';
@@ -11,7 +10,7 @@ import { streakMult } from './scoring';
 
 export interface NearMiss {
   gap: number;
-  kind: 'speed' | 'wager' | 'miss' | 'tie' | 'none';
+  kind: 'speed' | 'final' | 'miss' | 'tie' | 'none';
   line: string;
 }
 
@@ -40,13 +39,11 @@ export function nearMiss(plan: MatchPlan, tally: MatchTally, results: readonly R
     return { gap, kind: 'speed', line: `Lost by ${gap}. A ${word} answer on question ${b.round + 1} wins it.` };
   }
 
-  // 2) Wager: a bigger stake on a correct Final.
+  // 2) Final: a right answer on the double-points bonus question.
   const fi = plan.rounds.findIndex((r) => r.spec.type === 'final');
   const fr = fi >= 0 ? results[fi] : undefined;
-  if (fr && fr.me.correct) {
-    const scoreBefore = tally.me.score - fr.me.points;
-    const allIn = Math.max(0, scoreBefore) - fr.me.stake;
-    if (allIn >= need) return { gap, kind: 'wager', line: `Lost by ${gap}. ALL IN on the Final wins it.` };
+  if (fr && !fr.me.correct && POINTS.base * 2 >= need) {
+    return { gap, kind: 'final', line: `Lost by ${gap}. A right answer on the bonus question wins it.` };
   }
 
   // 3) Miss: one more right answer.

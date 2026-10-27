@@ -73,7 +73,8 @@ import ResumeCountdown from './components/ResumeCountdown';
 import { LINEPLAY_TOUR_STEP_MS, linePlayTourEnabled, linePlayTourSteps } from './devTour';
 import WaitCard from './components/WaitCard';
 import WaitCoinHero from './components/waitscreen/WaitCoinHero';
-import { shownClock, shownRewards, shownWait } from './components/waitscreen/waitScreenPreview';
+import { linePartsState, shownClock, shownRewards, shownWait } from './components/waitscreen/waitScreenPreview';
+import { LINEPLAY_INTRO_BODY } from '../../services/help/helpTopics';
 import NewRoundsBanner from './components/NewRoundsBanner';
 import ActivitySlot from './components/ActivitySlot';
 import ActivityPageRail from './components/ActivityPageRail';
@@ -1097,6 +1098,8 @@ export default function LinePlayScreen() {
   const clock = shownClock(snapshot);
   const wait = shownWait(snapshot);
   const rewards = shownRewards(snapshot, ride);
+  // The Welcome tip says what the card shows: never "earns Ride Parts" beside "No Parts at this ride".
+  const introBody = LINEPLAY_INTRO_BODY[linePartsState(rewards)];
 
   return (
     <View onTouchStart={onAnyTouch} onLayout={event => setRootHeight(event.nativeEvent.layout.height)}
@@ -1587,7 +1590,7 @@ export default function LinePlayScreen() {
       {/* They stay until tapped (a kid reads at their own pace), so a tip never vanishes under a finger and lets the tap land on Details. */}
       {/* Never shown before the card is measured, so not one frame sits at a guessed spot over Details. */}
       {/* While the page window has stepped aside (an iPhone SE reading long Details), a tip waits: it would sit over the rail's one button. */}
-      <OneTimeTip id="lineplay_intro" ready={lineTipReady && pagesShown && waitCardBottom != null} autoHideMs={0}
+      <OneTimeTip id="lineplay_intro" ready={lineTipReady && pagesShown && waitCardBottom != null} autoHideMs={0} body={introBody}
         style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} onVisibleChange={onIntroTip} />
       <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending && pagesShown && waitCardBottom != null} autoHideMs={0}
         style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} onVisibleChange={onPartTip} />

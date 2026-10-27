@@ -25,23 +25,23 @@ export default function Redeemable({
   const gone = useFindExpiry(redeemable.active_to, onExpire);
 
   const themeColor = redeemable.theme?.currency?.color || '#9C27B0';
-  const lightColor = themeColor + '30';
 
   return (
     <FindFade gone={gone}>
       {/* Timer chip: the declutter places it on a free side (TagSlot). */}
       <TagSlot tag={tag} anchor={FIND_BOX.anchor} width={FIND_TAG.w} height={FIND_TAG.h}
         fallback={{ x: -FIND_TAG.w / 2, y: REDEEMABLE_BODY.y - FIND_TAG.h - 3 }}>
+        {/* Every timed find counts down in the same calm gold chip (never the theme's red). */}
         <View style={{
-          backgroundColor: lightColor,
+          backgroundColor: '#FFF8E7',
           borderRadius: 12,
           paddingHorizontal: 12,
           paddingVertical: 5,
           borderWidth: 2,
-          borderColor: themeColor,
-          shadowColor: themeColor,
+          borderColor: '#FFD700',
+          shadowColor: '#FFD700',
           shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.4,
+          shadowOpacity: 0.3,
           shadowRadius: 4,
           elevation: 4,
         }}>
@@ -51,7 +51,7 @@ export default function Redeemable({
               <Text style={{
                 fontFamily: 'Shark',
                 fontSize: 15,
-                color: themeColor,
+                color: '#B8860B',
                 textAlign: 'center',
               }}>
                 {findClock(total)}

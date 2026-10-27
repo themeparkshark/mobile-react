@@ -74,7 +74,7 @@ function iconSources() {
 
 test('icon set covers the plan list, and every icon is a PNG that exists', () => {
   const required = ['energy', 'ticket', 'rush', 'wrench', 'pin', 'gift', 'crown', 'medal1', 'medal2', 'medal3',
-    'timer', 'streak', 'dice', 'bell', 'check', 'close', 'pause', 'star', 'sparkle', 'heart', 'map', 'swords', 'shark',
+    'timer', 'streak', 'bell', 'check', 'close', 'pause', 'star', 'sparkle', 'heart', 'map', 'swords', 'shark',
     'fin', 'ride', 'camera', 'play', 'retry', 'arrow', 'lock', 'info', 'trophy', 'chest', 'settings', 'xp', 'edit', 'coin', 'coins'];
   for (const name of required) assert.ok(names.isGameIconName(name), `missing icon ${name}`);
   assert.equal(new Set(names.GAME_ICON_NAMES).size, names.GAME_ICON_NAMES.length, 'icon names are unique');

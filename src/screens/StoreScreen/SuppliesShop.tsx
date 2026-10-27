@@ -9,7 +9,8 @@
  *   always beside the green "$". Every pack shows exactly what it holds.
  * - Every value note is computed from the catalog and Apple's prices
  *   (services/money/offers.ts, tested): "+21% more" against the smallest
- *   pack, "worth $6.60" for a bundle at regular pack prices. Nothing invented.
+ *   pack; a bundle's worth at regular pack prices ("$6.60") only inside the
+ *   grown-up gate, never on a card a kid sees. Nothing invented.
  * - Only tickets, coins, energy and Rescue Passes are sold. Ride Parts, ride
  *   coins and coin levels are earned at the park, never sold.
  * - No countdown on anything you can buy; the deal says it changes each day.

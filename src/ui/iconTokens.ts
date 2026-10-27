@@ -31,7 +31,7 @@ const LEGACY_EMOJI: Readonly<Record<string, GameIconName>> = {
   '⏰': 'timer',
   '⌛': 'timer',
   '⏳': 'timer',
-  '\u{1F3B2}': 'dice',
+  '\u{1F3B2}': 'sparkle',
   '\u{1F514}': 'bell',
   '✅': 'check',
   '✔': 'check',

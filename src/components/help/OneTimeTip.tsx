@@ -9,7 +9,7 @@ import { useOneTimeTip } from './HelpProvider';
  * Drop-in one-time tip. `ready` is the caller's "the player is free" signal:
  * false during a mini-game, a moving line, a dialog or a Finn lesson.
  */
-export default function OneTimeTip({ id, ready, style, compact, autoHideMs, onVisibleChange, small, art, pointerLeft, fit, narrow, artImages }: {
+export default function OneTimeTip({ id, ready, style, compact, autoHideMs, onVisibleChange, body, small, art, pointerLeft, fit, narrow, artImages }: {
   readonly id: Exclude<TipId, `game:${string}`>;
   readonly ready: boolean;
   readonly style?: StyleProp<ViewStyle>;
@@ -18,6 +18,8 @@ export default function OneTimeTip({ id, ready, style, compact, autoHideMs, onVi
   readonly autoHideMs?: number;
   /** Tells the screen when the tip is up, so nothing else (a toast, a nudge) asks at the same time. */
   readonly onVisibleChange?: (visible: boolean) => void;
+  /** A body that fits what the screen shows right now (for example, no Parts at this ride). Default: TIP_COPY. */
+  readonly body?: string;
   readonly small?: boolean;
   readonly art?: ReactNode;
   readonly pointerLeft?: number;
@@ -33,7 +35,7 @@ export default function OneTimeTip({ id, ready, style, compact, autoHideMs, onVi
   }, [visible, onVisibleChange]);
   if (!visible) return null;
   const copy = TIP_COPY[id];
-  return <CoachTip title={copy.title} body={copy.body} onDismiss={dismiss} style={style} compact={compact}
+  return <CoachTip title={copy.title} body={body ?? copy.body} onDismiss={dismiss} style={style} compact={compact}
     small={small} art={art} pointerLeft={pointerLeft} fit={fit} narrow={narrow} artImages={artImages}
     {...(autoHideMs != null ? { autoHideMs } : null)} />;
 }

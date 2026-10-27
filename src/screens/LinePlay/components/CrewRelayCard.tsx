@@ -30,12 +30,12 @@ import CrewStoryPayoff from './CrewStoryPayoff';
  * colour chips for colours, each with its name for colour-blind players.
  */
 const MEMORY_ICONS: Record<'shape' | 'sound', readonly GameIconName[]> = {
-  shape: ['sparkle', 'crown', 'fin', 'dice'],
+  shape: ['sparkle', 'crown', 'fin', 'heart'],
   sound: ['bell', 'timer', 'ride', 'camera'],
 };
 const MEMORY_COLORS = ['#ef4a3c', '#1e8ae0', '#ffcf3b', '#3cb85c'] as const;
 const MEMORY_SYMBOL_NAMES: Record<CrewObservation, readonly string[]> = {
-  shape: ['Star', 'Crown', 'Fin', 'Dice'],
+  shape: ['Star', 'Crown', 'Fin', 'Heart'],
   color: ['Red', 'Blue', 'Yellow', 'Green'],
   sound: ['Bell', 'Tick', 'Rumble', 'Click'],
 };

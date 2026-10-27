@@ -19,7 +19,7 @@ interface Props {
 
 /** Each prompt wears one of his drawn icons; no dingbats. */
 const SYMBOLS: Record<string, GameIconName> = {
-  color: 'pin', shape: 'dice', sound: 'bell', name: 'edit', memory: 'search',
+  color: 'pin', shape: 'moon', sound: 'bell', name: 'edit', memory: 'search',
   captain: 'crown', prediction: 'ride', 'three-words': 'info', pattern: 'retry',
   vote: 'check', story: 'star', symbol: 'fin', question: 'heart', direction: 'map',
   snack: 'gift', pose: 'shark', 'story-clue': 'sparkle',
