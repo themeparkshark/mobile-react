@@ -148,7 +148,7 @@ test('reward dialog: the rays reach past the card behind the ribbon, and OK flie
 test('queued dialogs: one backdrop for the queue, the card swaps (the bare screen never flashes), and cards open solid', () => {
   const src = read('src/ui/GameDialog.tsx');
   // Round 3: the next card is drawn hidden under the open one and pops in on the UI thread at HANDOFF_AT of the shrink.
-  assert.match(src, /s\.exit\.value = withTiming\(HANDOFF_AT, \{ duration: DIALOG_CLOSE\.cardMs \* HANDOFF_AT, easing: EASE\.in \}, done => \{\n\s+if \(!done\) return;\n\s+openSlot\(back, opts\);/);
+  assert.match(src, /s\.exit\.value = withTiming\(HANDOFF_AT, \{ duration: DIALOG_CLOSE\.cardMs \* HANDOFF_AT, easing: EASE\.in \}, done => \{\n\s+if \(!done\) return;\n[\s\S]{0,240}openSlot\(back, opts\);/);
   assert.match(src, /if \(!handedOver\) \{\n\s+scrim\.value = withTiming\(1,/, 'the backdrop only fades in for the first dialog');
   assert.match(src, /s\.fade\.value = o\.handedOver \? 1 : withTiming\(1, \{ duration: o\.reduced \? MOTION\.fadeMs : CARD_SOLID_MS/);
   assert.match(src, /<GameDialog contentKey=\{request\.id\} visible=\{visible\}/, 'the host keeps one dialog for the queue');
@@ -163,7 +163,7 @@ test('store: the coin pile bounces in first, then the Shop Pick, then the shelf 
   assert.equal(typeof stagger.headerDropIn(), 'function');
   assert.equal(stagger.headerDropIn({ reduced: true }), undefined);
   const shelf = read('src/screens/StoreScreen/GearShelf.tsx');
-  assert.match(shelf, /<Animated\.View entering=\{still \? undefined : headerDropIn\(\)\} style=\{\{ flex: 1 \}\}>\n\s+<Shopkeeper/);
+  assert.match(shelf, /<Animated\.View entering=\{still \? undefined : headerDropIn\(\{ afterMs: GRID_STAGGER\.pushLeadMs \}\)\} style=\{\{ flex: 1 \}\}>\n\s+<Shopkeeper/);
   assert.match(shelf, /entering=\{still \? undefined : FadeIn\.duration\(GRID_STAGGER\.fadeMs\)\} style=\{styles\.panel\}/,
     'the panel is there at once; only its cells drop in');
 });

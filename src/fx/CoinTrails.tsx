@@ -6,7 +6,7 @@
 import { Dimensions } from 'react-native';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { Canvas, Path, Skia, type SkPath } from '@shopify/react-native-skia';
-import { COIN_FLIGHT, IN_OUT, PRIZE_FLIGHT, PRIZE_OUT, coinAt, prizeAt, type Point } from '../ui/CoinFlight';
+import { COIN_FLIGHT, IN_OUT, PRIZE_OUT, coinAt, type Point } from '../ui/CoinFlight';
 import { GOLD_FX } from '../ui/motionEasing';
 
 export default function CoinTrails({ clock, count, from, to, prize = false }: {
@@ -38,29 +38,3 @@ export default function CoinTrails({ clock, count, from, to, prize = false }: {
   );
 }
 
-/**
- * A reward dialog's prize on its way to the shelf (src/ui/GameDialog.tsx): shrinking gold dots along its own path a
- * moment earlier, drawn from the flight's progress and its measured ends (shared values; one Skia path, UI thread).
- */
-export function PrizeTrail({ progress, from, to }: {
-  readonly progress: SharedValue<number>; readonly from: SharedValue<Point>; readonly to: SharedValue<Point>;
-}) {
-  const { width, height } = Dimensions.get('window');
-  const dots = useDerivedValue<SkPath>(() => {
-    const path = Skia.Path.Make();
-    const raw = progress.value;
-    if (raw <= 0.02 || raw >= 0.98) return path;
-    for (let k = 1; k <= PRIZE_FLIGHT.trailDots; k++) {
-      const back = raw - k * PRIZE_FLIGHT.trailStep;
-      if (back <= 0) break;
-      const at = prizeAt(back, from.value, to.value);
-      path.addCircle(at.x, at.y, PRIZE_FLIGHT.trailPt * (1 - (k - 1) / (PRIZE_FLIGHT.trailDots + 1)));
-    }
-    return path;
-  });
-  return (
-    <Canvas pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, width, height }}>
-      <Path path={dots} color={GOLD_FX.glow} opacity={0.85} />
-    </Canvas>
-  );
-}

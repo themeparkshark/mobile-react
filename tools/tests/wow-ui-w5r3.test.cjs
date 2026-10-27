@@ -86,8 +86,10 @@ test('prize to the shelf: drawn by the dialog above its backdrop from shared val
   const wrapper = read('src/components/Wrapper.tsx');
   assert.match(wrapper, /useAnimatedReaction\(\(\) => prizeHits\.value, \(now, before\) => \{\n\s+if \(before !== null && now > before && shelfLive\.value === 1\) landOnShelf\(\);/);
   assert.match(wrapper, /\{stars && <SparkleBurst progress=\{stars\} count=\{10\}/);
-  assert.doesNotMatch(read('src/ui/GameDialog.tsx'), /@shopify\/react-native-skia/, 'the trail is drawn in src/fx (CoinTrails)');
-  assert.match(read('src/fx/CoinTrails.tsx'), /export function PrizeTrail\(/);
+  // The trail is plain dots moved on the UI thread (a canvas's first draw stalled the start of the flight).
+  assert.doesNotMatch(read('src/ui/GameDialog.tsx'), /@shopify\/react-native-skia/);
+  assert.match(src, /\{Array\.from\(\{ length: PRIZE_FLIGHT\.trailDots \}, \(_, k\) => <PrizeDot key=\{k\} s=\{s\} k=\{k \+ 1\} \/>\)\}/);
+  assert.match(launch, /runOnUI\(\(\) => \{\n\s+'worklet';\n\s+s\.iconGone\.value = 1;/, 'the gift hides on the frame the flying one appears');
 });
 
 test('queued dialogs: the next card is drawn hidden under the open one and pops in on the UI thread (no empty frame)', () => {
@@ -110,7 +112,10 @@ test('queued dialogs: the next card is drawn hidden under the open one and pops 
   assert.match(src, /export function openSlot\(s: CardSlot,[\s\S]*?\{\n\s+'worklet';/, 'opening a card is a worklet');
   const close = src.slice(src.indexOf('const close = (index: number | null) => {'), src.indexOf('useEffect(() => {\n    if (!visible && mounted'));
   assert.match(close, /openSlot\(back, opts\);\n\s+runOnJS\(nextOpened\)\(\);/, 'the waiting card pops on the UI thread mid-shrink');
-  assert.match(close, /if \(gone\) runOnJS\(finishHandOff\)\(nextKey\);/, 'the old card is answered once it has gone');
+  assert.match(close, /openSlot\(back, opts\);\n\s+runOnJS\(nextOpened\)\(\);\n\s+s\.exit\.value = 1;\n\s+runOnJS\(finishHandOff\)\(nextKey\);/,
+    'the old card goes on the frame the next one pops in under it (never one card seen through another)');
+  // Card slots are made only once a dialog first shows (screens keep closed dialogs mounted).
+  assert.match(src, /if \(mounted && !slotsRef\.current\) slotsRef\.current = \[makeCardSlot\(\), makeCardSlot\(\), makeCardSlot\(\)\];/);
   assert.match(src, /setLeaving\(current\);\n\s+openedFor\.current = nextKey;/, 'the card already showing is never opened twice');
   assert.match(src, /\{card\.role === 'front' \? children : null\}/);
   assert.match(src, /pointerEvents=\{isFront \? 'box-none' : 'none'\} accessibilityElementsHidden=\{!isFront\}/, 'a waiting card takes no touches');
@@ -160,7 +165,7 @@ test('shop: Profile reads the shelf ahead, the first render already has it, and 
     assert.match(profile, /InteractionManager\.runAfterInteractions\(\(\) => prefetchShop\(/, 'Profile reads it once it has settled');
     const shelf = read('src/screens/StoreScreen/GearShelf.tsx');
     assert.match(shelf, /const shownCells = allIn \|\| filter !== 'all' \? cells : cells\.slice\(0, GRID_STAGGER\.maxItems\);/);
-    assert.match(shelf, /setTimeout\(\(\) => setAllIn\(true\), GRID_STAGGER\.capMs \+ 120\)/, 'the rest mount once the fill has landed');
+    assert.match(shelf, /setTimeout\(\(\) => setAllIn\(true\), GRID_STAGGER\.pushLeadMs \+ GRID_STAGGER\.capMs \+ 120\)/, 'the rest mount once the fill has landed');
   })();
 });
 

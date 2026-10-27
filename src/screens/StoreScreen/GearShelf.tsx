@@ -282,7 +282,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
   const [allIn, setAllIn] = useState(still);
   useEffect(() => {
     if (allIn || !items.length) return undefined;
-    const t = setTimeout(() => setAllIn(true), GRID_STAGGER.capMs + 120);
+    const t = setTimeout(() => setAllIn(true), GRID_STAGGER.pushLeadMs + GRID_STAGGER.capMs + 120);
     return () => clearTimeout(t);
   }, [allIn, items.length]);
   const cells = shelf.filter(i => (filter !== 'all' || i.id !== star?.id) && passesFilter(i, filter, balance));
@@ -305,7 +305,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
         <View style={styles.stage}>
           {BUBBLES.slice(0, bubbleCount).map((b, i) => <Bubble key={i} {...b} still={stageStill} />)}
           {/* The coin pile bounces in first, then the Shop Pick, then the shelf row by row. */}
-          <Animated.View entering={still ? undefined : headerDropIn()} style={{ flex: 1 }}>
+          <Animated.View entering={still ? undefined : headerDropIn({ afterMs: GRID_STAGGER.pushLeadMs })} style={{ flex: 1 }}>
             <Shopkeeper imageUrl={promoUrl} still={stageStill} />
           </Animated.View>
           {/* The restock day rides on the stage's corner: small, calm, out of the shelf's way. */}
@@ -344,13 +344,14 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
           ) : (
             <View style={styles.grid}>
               {star && filter === 'all' && (
-                <Animated.View key={`star-${star.id}`} entering={still ? undefined : heroRiseIn()} style={{ width: 2 * TILE_W + GAP }}>
+                <Animated.View key={`star-${star.id}`} entering={still ? undefined : heroRiseIn({ afterMs: GRID_STAGGER.pushLeadMs })} style={{ width: 2 * TILE_W + GAP }}>
                   <StarTile item={star as ShopItem} balance={balance} still={still || !focused || !!open || covered || idle} onOpen={openItem} onWish={wish} />
                 </Animated.View>
               )}
               {shownCells.map((item, i) => (
                 <Animated.View key={`${filter}:${item.id}`} entering={still ? undefined : !firstIds.current?.has(item.id) || filter !== 'all' ? FadeIn.duration(160)
-                  : gridRiseIn(i, { leadMs: star ? GRID_AFTER_HERO_MS : GRID_STAGGER.headerLeadMs }) ?? FadeIn.delay(GRID_STAGGER.capMs).duration(160)}>
+                  : gridRiseIn(i, { leadMs: star ? GRID_AFTER_HERO_MS : GRID_STAGGER.headerLeadMs, afterMs: GRID_STAGGER.pushLeadMs })
+                  ?? FadeIn.delay(GRID_STAGGER.pushLeadMs + GRID_STAGGER.capMs).duration(160)}>
                   <ShopTile item={item as ShopItem} width={TILE_W} still={still} vipLocked={!!item.is_member_item && !vip}
                     affordable={balance >= item.cost} balance={balance} justBought={bought.includes(item.id)} onOpen={openItem} onWish={wish} />
                 </Animated.View>

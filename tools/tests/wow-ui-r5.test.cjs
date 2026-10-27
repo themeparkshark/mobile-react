@@ -146,7 +146,7 @@ test('grids fill like a vending machine: a further drop and a pop, row by row, f
   for (let i = 0; i < G.maxItems; i++) assert.ok(stagger.gridDelay(i, G.heroLeadMs) < G.capMs, 'every start inside the cap');
   assert.equal(stagger.gridDelay(G.maxItems), null);
   assert.equal(stagger.gridRiseIn(0, { reduced: true }), undefined, 'Reduce Motion: simply there');
-  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /gridRiseIn\(i, \{ leadMs: star \? GRID_AFTER_HERO_MS : GRID_STAGGER\.headerLeadMs \}\) \?\? FadeIn\.delay\(GRID_STAGGER\.capMs\)\.duration\(160\)/);
+  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /gridRiseIn\(i, \{ leadMs: star \? GRID_AFTER_HERO_MS : GRID_STAGGER\.headerLeadMs, afterMs: GRID_STAGGER\.pushLeadMs \}\)\n\s+\?\? FadeIn\.delay\(GRID_STAGGER\.pushLeadMs \+ GRID_STAGGER\.capMs\)\.duration\(160\)/);
 });
 
 test('refresh shark: anchored to the content, its bottom edge always clears the first row', () => {

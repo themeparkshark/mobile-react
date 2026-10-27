@@ -33,6 +33,8 @@ import { Alert, Dimensions, Image as RNImage, KeyboardAvoidingView, Modal, Platf
 import Animated, {
   Easing,
   runOnJS,
+  makeMutable,
+  runOnUI,
   useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
@@ -44,11 +46,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import useUiReducedMotion from './useUiReducedMotion';
 import { haptic, queueHaptic } from '../gamekit/Haptics';
-import { DURATION, EASE, SPRING, STAGGER } from './motionEasing';
+import { DURATION, EASE, GOLD_FX, SPRING, STAGGER } from './motionEasing';
 import SparkleBurst from './SparkleBurst';
 import { GoldBurst } from './GoldBurst';
-import { COIN_FLIGHT, measureShelfTarget, prizeAt, shelfHitsValue, type Point } from './CoinFlight';
-import { PrizeTrail } from '../fx/CoinTrails';
+import { PRIZE_FLIGHT, measureShelfTarget, prizeAt, shelfHitsValue, type Point } from './CoinFlight';
 import { glanceGoal } from './goalGlance';
 import { LinearGradient } from 'expo-linear-gradient';
 import GameButton from './GameButton';
@@ -267,20 +268,20 @@ type CardSlot = {
   readonly from: SharedValue<Point>;
   readonly to: SharedValue<Point>;
   readonly ready: SharedValue<number>;
-  /** Gold stars where the prize lands. */
-  readonly land: SharedValue<number>;
 };
 
-function useCardSlot(): CardSlot {
+/** One card's shared values (made only once a dialog first shows: a closed dialog on a screen costs nothing). */
+function makeCardSlot(): CardSlot {
   return {
-    shown: useSharedValue(0), pop: useSharedValue(0), fade: useSharedValue(0), exit: useSharedValue(0),
-    life: useSharedValue(0), parts: useSharedValue(0), ribbon: useSharedValue(0), tails: useSharedValue(0),
-    iconPop: useSharedValue(1), iconSpark: useSharedValue(0), prizeGlow: useSharedValue(0), prizeBloom: useSharedValue(0),
-    stampArmed: useSharedValue(0), raysX: useSharedValue(0), raysY: useSharedValue(0), raysOn: useSharedValue(0),
-    prize: useSharedValue(0), iconGone: useSharedValue(0), from: useSharedValue<Point>({ x: 0, y: 0 }),
-    to: useSharedValue<Point>({ x: 0, y: 0 }), ready: useSharedValue(0), land: useSharedValue(0),
+    shown: makeMutable(0), pop: makeMutable(0), fade: makeMutable(0), exit: makeMutable(0),
+    life: makeMutable(0), parts: makeMutable(0), ribbon: makeMutable(0), tails: makeMutable(0),
+    iconPop: makeMutable(1), iconSpark: makeMutable(0), prizeGlow: makeMutable(0), prizeBloom: makeMutable(0),
+    stampArmed: makeMutable(0), raysX: makeMutable(0), raysY: makeMutable(0), raysOn: makeMutable(0),
+    prize: makeMutable(0), iconGone: makeMutable(0), from: makeMutable<Point>({ x: 0, y: 0 }),
+    to: makeMutable<Point>({ x: 0, y: 0 }), ready: makeMutable(0),
   };
 }
+const NO_SLOTS: CardSlot[] = [];
 
 /**
  * Open a card: it pops from CARD_FROM with one overshoot, solid from its first frames, the ribbon stamps down, and a
@@ -294,7 +295,6 @@ export function openSlot(s: CardSlot, o: { readonly handedOver: boolean; readonl
   s.pop.value = 0;
   s.iconGone.value = 0;
   s.prize.value = 0;
-  s.land.value = 0;
   s.shown.value = 1;
   s.life.value = 0;
   s.life.value = withTiming(2, { duration: 2 * OPEN_SETTLE_MS, easing: Easing.linear });
@@ -373,7 +373,10 @@ export function GameDialog({
   const scrim = useSharedValue(0);
   /** The backdrop's own settle clock (settleFactor): its final look is said again after it has faded in. */
   const scrimLife = useSharedValue(0);
-  const slots = [useCardSlot(), useCardSlot(), useCardSlot()];
+  // Three card slots, made the first time this dialog shows (most screens keep a closed dialog mounted).
+  const slotsRef = useRef<CardSlot[] | null>(null);
+  if (mounted && !slotsRef.current) slotsRef.current = [makeCardSlot(), makeCardSlot(), makeCardSlot()];
+  const slots = slotsRef.current ?? NO_SLOTS;
   const key = contentKey ?? 'one';
   const current: DialogCardContent = { key, title, message, icon, buttons, dismissible, haptic: hapticKind, equalChoices };
   /** A card that handed over to a queued one and is still mounted while its prize lands. */
@@ -483,15 +486,19 @@ export function GameDialog({
       const id = ++flight.current.seq;
       flight.current.flying.add(id);
       const hits = shelfHitsValue();
-      s.iconGone.value = 1;
-      // The rays it leaves behind soften as the card shrinks.
-      s.prizeGlow.value = withTiming(0.4, { duration: DIALOG_CLOSE.cardMs, easing: EASE.out });
-      s.prize.value = 0;
-      s.prize.value = withTiming(1, { duration: DIALOG_PRIZE.flyMs, easing: Easing.linear }, done => {
-        // The Profile icon squashes and throws its stars on the landing frame (Wrapper, UI thread).
-        if (done) hits.value += 1;
-        runOnJS(prizeLanded)(id, done === true);
-      });
+      // One UI-thread step, so the card's gift hides on the very frame the flying one appears in its spot.
+      runOnUI(() => {
+        'worklet';
+        s.iconGone.value = 1;
+        // The rays it leaves behind soften as the card shrinks.
+        s.prizeGlow.value = withTiming(0.4, { duration: DIALOG_CLOSE.cardMs, easing: EASE.out });
+        s.prize.value = 0;
+        s.prize.value = withTiming(1, { duration: DIALOG_PRIZE.flyMs, easing: Easing.linear }, done => {
+          // The Profile icon squashes and throws its stars on the landing frame (Wrapper, UI thread).
+          if (done) hits.value += 1;
+          runOnJS(prizeLanded)(id, done === true);
+        });
+      })();
       // A backstop only (never what times the move): a flight that never reports back cannot hold the dialog up.
       setTimeout(() => prizeLanded(id, false), DIALOG_PRIZE.flyMs + 1500);
     };
@@ -526,11 +533,12 @@ export function GameDialog({
       const nextKey = queued.content.key;
       s.exit.value = withTiming(HANDOFF_AT, { duration: DIALOG_CLOSE.cardMs * HANDOFF_AT, easing: EASE.in }, done => {
         if (!done) return;
+        // The next card pops in from CARD_FROM under this one, which goes on that same frame: a card in every frame,
+        // never one seen through another.
         openSlot(back, opts);
         runOnJS(nextOpened)();
-        s.exit.value = withTiming(1, { duration: DIALOG_CLOSE.cardMs * (1 - HANDOFF_AT), easing: Easing.linear }, gone => {
-          if (gone) runOnJS(finishHandOff)(nextKey);
-        });
+        s.exit.value = 1;
+        runOnJS(finishHandOff)(nextKey);
       });
       return;
     }
@@ -767,18 +775,32 @@ function PrizeFlight({ s, icon }: { readonly s: CardSlot; readonly icon: GameIco
     return { opacity: raw > 0 && raw < 1 ? 1 : 0, display: raw >= 1 ? 'none' : 'flex',
       transform: [{ translateX: at.x - half }, { translateY: at.y - half }, { rotate: `${at.rot}deg` }, { scale: at.scale }] };
   });
-  const landStyle = useAnimatedStyle(() => ({ transform: [{ translateX: s.to.value.x }, { translateY: s.to.value.y }] }));
   return <>
-    <PrizeTrail progress={s.prize} from={s.from} to={s.to} />
+    {Array.from({ length: PRIZE_FLIGHT.trailDots }, (_, k) => <PrizeDot key={k} s={s} k={k + 1} />)}
     <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0, width: size, height: size }, style]}>
       {/* A plain image view (a pooled expo-image view handed on after a flight showed its gift on a map marker). */}
       <RNImage source={ICON_SOURCES[resolveIconName(icon) ?? 'gift']} fadeDuration={0} resizeMode="contain"
         style={{ width: size, height: size }} />
     </Animated.View>
-    <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0, width: 0, height: 0 }, landStyle]}>
-      <SparkleBurst progress={s.land} count={COIN_FLIGHT.big.endSparkles} x={0} y={0} dist={[30, 62]} size={[16, 24]} gravity={14} seed={21} />
-    </Animated.View>
   </>;
+}
+
+/**
+ * One gold dot of the prize's trail: where the prize was k trail steps ago, smaller the further back. A plain view
+ * moved by transforms on the UI thread (no canvas to draw, so the flight starts on the frame of the tap).
+ */
+function PrizeDot({ s, k }: { readonly s: CardSlot; readonly k: number }) {
+  const pt = 2 * PRIZE_FLIGHT.trailPt;
+  const style = useAnimatedStyle(() => {
+    const raw = s.prize.value;
+    const back = raw - k * PRIZE_FLIGHT.trailStep;
+    if (raw <= 0.02 || raw >= 0.98 || back <= 0) return { opacity: 0, transform: [{ translateX: -pt }, { translateY: -pt }, { scale: 1 }] };
+    const at = prizeAt(back, s.from.value, s.to.value);
+    return { opacity: 0.85, transform: [{ translateX: at.x - pt / 2 }, { translateY: at.y - pt / 2 },
+      { scale: 1 - (k - 1) / (PRIZE_FLIGHT.trailDots + 1) }] };
+  });
+  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0, width: pt, height: pt, borderRadius: pt / 2,
+    backgroundColor: GOLD_FX.glow }, style]} />;
 }
 
 /**

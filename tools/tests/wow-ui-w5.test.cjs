@@ -132,8 +132,8 @@ test('store fill: the Shop Pick hero lands first, then row by row, spread over 4
   assert.ok(typeof stagger.heroRiseIn() === 'function');
   assert.equal(stagger.heroRiseIn({ reduced: true }), undefined);
   const shelf = read('src/screens/StoreScreen/GearShelf.tsx');
-  assert.match(shelf, /entering=\{still \? undefined : heroRiseIn\(\)\}/);
-  assert.match(shelf, /FadeIn\.delay\(GRID_STAGGER\.capMs\)/, 'a cell past the first screenful waits for the fill');
+  assert.match(shelf, /entering=\{still \? undefined : heroRiseIn\(\{ afterMs: GRID_STAGGER\.pushLeadMs \}\)\}/);
+  assert.match(shelf, /FadeIn\.delay\(GRID_STAGGER\.pushLeadMs \+ GRID_STAGGER\.capMs\)/, 'a cell past the first screenful waits for the fill');
 });
 
 test('rare compass pick: inked gold stars in two low fans along the footer, a new layout each rare pick', () => {
