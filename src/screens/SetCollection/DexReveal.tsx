@@ -27,6 +27,7 @@ import { BRAND, GameButton, GameIcon } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { RIBBON, setBadge, StarBurst } from './DexParts';
 import { prizeChips, type DexReward, type DexSet } from './dexModel';
+import countText from '../../helpers/countText';
 
 export const REVEAL_TAP_GUARD_MS = 1200;
 const RAYS = require('../../../assets/images/reveal/rays.webp');
@@ -292,7 +293,7 @@ function HudCounter({ icon, value, gain, onDone }: { readonly icon: HudKey; read
   return (
     <Animated.View style={[styles.hudItem, style]}>
       <GameIcon name={icon} size={26} />
-      <Text style={styles.hudText} numberOfLines={1}>{shown.toLocaleString('en-US')}</Text>
+      <Text style={styles.hudText} numberOfLines={1}>{countText(shown)}</Text>
     </Animated.View>
   );
 }

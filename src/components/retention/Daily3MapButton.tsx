@@ -8,6 +8,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { useAmbient } from './power';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
 import type { ButtonAttention } from '../../services/retention/logic';
+import { useCaptureMark } from '../../dev/captureMark';
 
 const WEEKLY = require('../../../assets/images/retention/weekly-box-closed.png');
 
@@ -65,6 +66,10 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, popI
     pop.value = reducedMotion ? 1 : withSequence(withTiming(1, { duration: 160 }), withDelay(500, withTiming(0, { duration: 260 })));
   }, [popKey, popIndex, reducedMotion, pop]);
 
+  // Release-like hook capture only (an empty call in every other bundle): the pip's pop start and peak frames.
+  useCaptureMark(pop, 'pip-pop-start', 0.05);
+  useCaptureMark(pop, 'pip-pop-peak', 0.995);
+  useCaptureMark(bounce, 'ready-hop-peak', -6.95, 'down');
   const buttonStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bounce.value }] }));
   const flameStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + flicker.value * 0.12 }, { rotate: `${(flicker.value - 0.5) * 8}deg` }] }));
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pop.value * 0.9 }] }));

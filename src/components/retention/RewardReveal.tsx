@@ -7,6 +7,8 @@ import Animated, {
 import type { PaidRewards } from '../../api/endpoints/retention';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
+import { playChestOpen } from '../../gamekit/audio/loopSound';
+import { useCaptureMark } from '../../dev/captureMark';
 import { doneDelay, isBigReward, rewardRows, rowSchedule, type RewardRow } from '../../services/retention/logic';
 import { BRAND, GameIcon } from '../../ui';
 import RewardBurst from '../RewardBurst';
@@ -63,6 +65,9 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const glow = useSharedValue(0);
   const burst = useSharedValue(0);
   const drop = useSharedValue(dropIn && !reducedMotion ? 1 : 0);
+  // Release-like hook capture only (an empty call in every other bundle): the squash, the lid's pop peak.
+  useCaptureMark(squash, 'level-chest-squash', 0.83, 'down');
+  useCaptureMark(pop, 'level-chest-lid-peak', 1.175);
   const [landed, setLanded] = useState(0);
   const [swapped, setSwapped] = useState(false);
   const [stalled, setStalled] = useState(false);
@@ -138,7 +143,11 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
     pop.value = withDelay(110, withSequence(withTiming(1.18, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 })));
     burst.value = 0;
     burst.value = withDelay(120, withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }));
-    later(() => { haptic('success'); playSfx('fx.reward'); }, 120);
+    // Studio sound (approved Oct 24): the chest pops with its own sound and shaped buzz (wave 5); off: today's. Round 2:
+    // the pop's short form (lid pop, heavy land on the lid's peak), since the reward rows buzz from 420 ms on. It starts
+    // at 100 ms, on the flash, so its heavy (120 ms later) lands on the lid's peak at 220 (the w5r2 capture measured
+    // the heavy 33 ms after the peak when it started at 120).
+    later(() => { if (!playChestOpen({ rowsFollow: true })) { haptic('success'); playSfx('fx.reward'); } }, 100);
     const schedule = rowSchedule(rows);
     later(() => setButtonReady(true), (schedule[schedule.length - 1] ?? 400) + doneDelay(rows));
     schedule.forEach((ms, i) => later(() => {

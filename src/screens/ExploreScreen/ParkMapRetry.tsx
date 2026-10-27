@@ -25,7 +25,9 @@ export function useParkMapRetry(failed: boolean, active: boolean, retry: () => P
     const timer = setTimeout(() => { attempt.current += 1; run(); }, mapRetryDelay(attempt.current));
     return () => clearTimeout(timer);
   }, [failed, active, retrying, run]);
-  return { retrying, retryNow: run };
+  // The first miss (often a slow launch) reads as "looking" while the first quiet retry runs;
+  // "can't see the rides" waits until a retry has failed too.
+  return { retrying, retryNow: run, calm: failed && attempt.current === 0 };
 }
 
 /** The one quiet note over the park map when rides could not load. The park buttons stay put. */

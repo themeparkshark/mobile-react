@@ -15,6 +15,7 @@
  *   coins short is offered 500 coins, not 7,000.
  */
 import type { ShopCurrency, ShopGrants, ShopProduct } from '../../api/endpoints/me/shop';
+import countText from '../../helpers/countText';
 
 export type Price = { readonly price: string; readonly amount: number };
 export type PriceMap = Readonly<Record<string, Price | undefined>>;
@@ -149,8 +150,8 @@ export function vipRideMultiplier(perks: readonly { key?: string; title: string 
 export function vipWinLine(coins: number, xp: number, multiplier: number | null): string | null {
   if (!multiplier || multiplier < 2 || (coins <= 0 && xp <= 0)) return null;
   const parts = [
-    coins > 0 ? `${(coins * multiplier).toLocaleString('en-US')} coins` : null,
-    xp > 0 ? `${(xp * multiplier).toLocaleString('en-US')} XP` : null,
+    coins > 0 ? `${countText(coins * multiplier)} coins` : null,
+    xp > 0 ? `${countText(xp * multiplier)} XP` : null,
   ].filter(Boolean);
   return `VIP would make this ${parts.join(' and ')}`;
 }

@@ -16,9 +16,11 @@ test('the Whack pace chip shows only during play: never at FINISH!, between burs
   const uses = whack.match(/showPace=\{[^}]*\}/g) || [];
   assert.equal(uses.length, 2);
   uses.forEach((u) => assert.match(u, /phase === 'play'/));
-  // FINISH! is flashed after the phase leaves play.
+  // FINISH! stamps on the UI frame the clock hits 0 and the phase leaves play right after; the board's own
+  // pace chip yields to the chase track whenever one is drawn.
   const end = whack.slice(whack.indexOf('const onBurstEnd = useCallback'));
-  assert.ok(end.indexOf("setPhase('finish')") < end.indexOf("flash('FINISH!'"));
+  assert.ok(end.indexOf("setPhase('finish')") >= 0);
+  assert.match(read('src/games/whack/render/WhackBoard.tsx'), /showPace=\{showPace && !chase\}/);
 });
 
 test('the new Finn waits for the card to settle: its panel pops in with it (never an empty box) and it plays the reward cue', () => {
@@ -95,9 +97,9 @@ test('every Duel star stamps with the same sound and feel as every other card, a
 test('PLAY AGAIN starts one run, after the 3-2-1: Whack only gets the next run ready, and the count never restarts on a re-render', () => {
   const whack = read('src/games/whack/WhackAShark.tsx');
   const i = whack.indexOf('const handleRematch = useCallback');
-  const rematch = whack.slice(i, whack.indexOf('}, [clearAutoReady]);', i));
+  const rematch = whack.slice(i, whack.indexOf('restBoard, clearAutoReady]);', i));
   assert.doesNotMatch(rematch, /startBurst\(/, 'the shell countdown starts the run through onStart');
-  assert.match(rematch, /setRunIndex\(\(n\) => n \+ 1\);/);
+  assert.match(rematch, /setRunIndex\(nextRun\);/);
   assert.match(rematch, /setResult\(null\);/);
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.match(shell, /const onStartRef = useRef\(onStart\);\n\s+onStartRef\.current = onStart;/);

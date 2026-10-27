@@ -15,6 +15,7 @@ import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native
 import { SoundEffectContext, SoundEffectContextType } from '../../context/SoundEffectProvider';
 import HapticPatterns from '../../helpers/hapticPatterns';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { UpperText } from '../../ui/upper';
 
 type ChipProps = {
   icon: number;
@@ -57,9 +58,9 @@ function Chip({ icon, title, caption, fill, lip, ink, sub, label, hint, onPress 
           <Image source={icon} style={styles.icon} contentFit="contain" />
         </View>
         <View style={{ flexShrink: 1 }}>
-          <Text style={[styles.title, { color: ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+          <UpperText style={[styles.title, { color: ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
             {title}
-          </Text>
+          </UpperText>
           <Text style={[styles.caption, { color: sub }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
             {caption}
           </Text>
@@ -114,13 +115,13 @@ export default function StatusBadges({ isVip, isVerified, own }: {
           <View style={styles.card} accessibilityViewIsModal>
             <Image source={require('../../../assets/images/screens/profile/verified.png')}
               style={{ width: 64, height: 64, marginBottom: 12 }} contentFit="contain" />
-            <Text style={styles.cardTitle}>Official shark</Text>
+            <UpperText style={styles.cardTitle}>Official shark</UpperText>
             <Text style={styles.cardBody}>
               The Theme Park Shark team checked this account. It really is who it says.
             </Text>
             <Pressable onPress={() => setVerifiedOpen(false)} accessibilityRole="button" accessibilityLabel="Got it"
               style={styles.cardButton}>
-              <Text style={styles.cardButtonText}>Got it</Text>
+              <UpperText style={styles.cardButtonText}>Got it</UpperText>
             </Pressable>
           </View>
         </Pressable>

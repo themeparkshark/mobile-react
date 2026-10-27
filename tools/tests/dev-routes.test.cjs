@@ -26,6 +26,20 @@ test('a release-JS results capture can open only the queue results check, and on
   assert.equal(plain.devInitialRoute(), null);
 });
 
+test('a release-mode motion capture (EXPO_PUBLIC_MOTION_CAPTURE=<route>, never set in store builds) exposes only the reveal galleries', () => {
+  const routes = load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'BoxRevealPreview' });
+  assert.equal(routes.DEV_SCREENS.map(screen => screen.name).join(','), 'BoxRevealPreview,PostWinRewardsPreview,SetRevealPreview,CoinLevelingPreview,HomeCatchPreview');
+  assert.equal(load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'CoinLevelingPreview' }).devInitialRoute(), 'CoinLevelingPreview');
+  // Wave 4: the map catch's release-like capture (frame-rate and timing proof).
+  assert.equal(load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'HomeCatchPreview' }).devInitialRoute(), 'HomeCatchPreview');
+  assert.equal(routes.devInitialRoute(), 'BoxRevealPreview');
+  assert.equal(load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'MiniGameTester' }).devInitialRoute(), null, 'only the reveal galleries');
+  // wow-games r6: the Whack capture adds the tester (opening Whack) for release-JS frame-rate proof, and only then.
+  const whack = load(false, { EXPO_PUBLIC_MOTION_CAPTURE: 'Whack' });
+  assert.equal(whack.devInitialRoute(), 'MiniGameTester');
+  assert.ok(whack.DEV_SCREENS.map(screen => screen.name).includes('MiniGameTester'));
+});
+
 test('development keeps every preview route and the original flag priority', () => {
   const dev = load(true);
   const names = dev.DEV_SCREENS.map(screen => screen.name);

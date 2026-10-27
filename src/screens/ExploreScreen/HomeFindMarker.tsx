@@ -3,6 +3,7 @@ import { Marker } from '../../components/map/Marker';
 import type { PrepItemType } from '../../models/prep-item-type';
 import PrepItemMarker, { PREP_MARKER_ANCHOR, type FingerSide } from './PrepItem';
 import { catchStyleFor } from './ridePhoto';
+import { squashFind } from './catchPresence';
 
 /** "Mac and Cheese Cone, Rare, ride photo, in range" or "Nachos, Uncommon, 65 meters away". */
 export function findLabel(item: PrepItemType, distance: number | null, inRange: boolean): string {
@@ -36,7 +37,7 @@ function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onEx
   readonly plainDistance?: boolean;
 }) {
   const coordinate = useMemo(() => ({ latitude: item.latitude!, longitude: item.longitude! }), [item.latitude, item.longitude]);
-  const press = useCallback(() => onTap(item, distance, inRange), [onTap, item, distance, inRange]);
+  const press = useCallback(() => { squashFind(item.pivot_id); onTap(item, distance, inRange); }, [onTap, item, distance, inRange]);
   return (
     // Kids press and hold: a long-press is the same as a tap (no report dialog here).
     <Marker coordinate={coordinate} anchor={PREP_MARKER_ANCHOR} onPress={press} onLongPress={press}

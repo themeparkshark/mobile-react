@@ -33,7 +33,7 @@ import ShopShelves from './ShopShelves';
 
 const WARDROBE = 'file:///Users/dustinsparage/apps/tps-prime-time-audit/next-wave/wardrobe-v2/';
 const uri = (asset: number) => RNImage.resolveAssetSource(asset).uri;
-const COIN = { id: 1, name: 'Coins', icon_url: uri(require('../../../assets/images/coingold.png')) };
+const COIN = { id: 1, name: 'Coins', icon_url: uri(require('../../../assets/icons/game/coins.png')) };
 const TYPES: Record<number, string> = { 1: 'Head', 2: 'Face', 3: 'Neck', 4: 'Body', 5: 'Hand', 6: 'Background', 7: 'Skin', 8: 'Pin' };
 const rare: ShopRarity = { tier: 'rare', label: 'Rare find: few sharks have this' };
 const veryRare: ShopRarity = { tier: 'very_rare', label: 'Super rare find: hardly any sharks have this' };

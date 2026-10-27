@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Text, TextStyle, View, ViewStyle } from 'react-native';
 import * as Haptics from '../helpers/haptics';
+import countText from '../helpers/countText';
 
 interface Props {
   value: number;
@@ -84,7 +85,7 @@ export default function AnimatedCounter({
   }, []);
 
   const formattedValue = formatNumber
-    ? displayValue.toLocaleString()
+    ? countText(displayValue)
     : displayValue.toString();
 
   return (
@@ -143,7 +144,7 @@ export function XPCounter({
     <View style={{ alignItems: 'center' }}>
       <AnimatedCounter
         value={value}
-        suffix={` / ${maxValue.toLocaleString()}`}
+        suffix={` / ${countText(maxValue)}`}
         {...props}
       />
     </View>

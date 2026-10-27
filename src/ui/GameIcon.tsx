@@ -85,16 +85,18 @@ export type GameIconProps = {
   readonly accessibilityLabel?: string;
   readonly style?: StyleProp<ViewStyle>;
   readonly testID?: string;
+  /** Called once the art has drawn (or failed), for a card that waits for all of its pictures. */
+  readonly onLoad?: () => void;
 };
 
-function GameIcon({ name, size = 24, mono, accessibilityLabel, style, testID }: GameIconProps) {
+function GameIcon({ name, size = 24, mono, accessibilityLabel, style, testID, onLoad }: GameIconProps) {
   const a11y = accessibilityLabel
     ? { accessible: true, accessibilityRole: 'image' as const, accessibilityLabel }
     : { accessible: false, importantForAccessibility: 'no-hide-descendants' as const };
   const resolved = resolveIconName(name);
   return <View {...a11y} testID={testID} pointerEvents="none" style={[{ width: size, height: size }, style]}>
     {resolved && <Image source={ICON_SOURCES[resolved]} contentFit="contain" tintColor={mono}
-      cachePolicy="memory-disk" style={{ width: size, height: size }} />}
+      cachePolicy="memory-disk" style={{ width: size, height: size }} onLoad={onLoad} onError={onLoad} />}
   </View>;
 }
 

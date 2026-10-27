@@ -22,6 +22,7 @@ import {
   TriviaQuestion,
 } from '../../../services/lineplay/content';
 import { SoundEffectContext } from '../../../context/SoundEffectProvider';
+import { studioMoment } from '../../../gamekit/audio/playMoment';
 import HapticPatterns from '../../../helpers/hapticPatterns';
 import NavigationPanelCard from './NavigationPanelCard';
 import type { NavigationPanelProgress } from '../../../services/lineplay/navigationPanel';
@@ -244,9 +245,11 @@ function TriviaSlot({
     onAnswered();
     if (correct) HapticPatterns.success();
     else HapticPatterns.selection();
-    void playSound?.(correct
-      ? require('../../../../assets/sounds/success.mp3')
-      : require('../../../../assets/sounds/tap.mp3'));
+    if (!(correct ? studioMoment('game.correct') : studioMoment('game.nearMiss', { volume: 0.7 }))) {
+      void playSound?.(correct
+        ? require('../../../../assets/sounds/success.mp3')
+        : require('../../../../assets/sounds/tap.mp3'));
+    }
     void AccessibilityInfo.announceForAccessibility(correct
       ? 'Correct answer.' : `Good try. The answer is ${q.choices[q.correctIndex]}.`);
     void AccessibilityInfo.isReduceMotionEnabled().then(reduced => {

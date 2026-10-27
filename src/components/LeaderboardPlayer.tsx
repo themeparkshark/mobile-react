@@ -6,6 +6,8 @@ import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { PlayerType } from '../models/player-type';
 import Avatar from './Avatar';
 import Button from './Button';
+import countText from '../helpers/countText';
+import { UpperText } from '../ui/upper';
 
 const tapSound = require('../../assets/sounds/tap.mp3');
 const revealSound = require('../../assets/sounds/reveal.mp3');
@@ -55,7 +57,7 @@ function AnimatedScore({ value, color, fontSize }: { value: number; color: strin
         textAlign: 'center',
       }}
     >
-      {display.toLocaleString()}
+      {countText(display)}
     </Text>
   );
 }
@@ -222,7 +224,7 @@ export default function LeaderboardPlayer({
           alignItems: 'center',
         }}
       >
-        <Text
+        <UpperText
           style={{
             textAlign: 'center',
             fontFamily: 'Shark',
@@ -236,7 +238,7 @@ export default function LeaderboardPlayer({
           numberOfLines={1}
         >
           {player.screen_name}
-        </Text>
+        </UpperText>
       </View>
 
       {/* Animated score badge */}

@@ -211,11 +211,11 @@ test('the shell never ends on a dark screen: fallback timer, shared card, no-sta
 });
 
 test('Sharky Swim results brag and point at a goal instead of listing zeros', () => {
-  const lines = load('src/games/sharky/hud/resultLines.ts', { '../../../gamekit/results/feelings': load('src/gamekit/results/feelings.ts') });
+  const lines = load('src/games/sharky/hud/resultLines.ts', { '../../../gamekit/results/feelings': load('src/gamekit/results/feelings.ts'), '../../../helpers/countText': load('src/helpers/countText.ts') });
   assert.equal(lines.sharkyBragLine(1, 0), '', 'x1 chain and 0 Close Skims is nothing to show');
   assert.equal(lines.sharkyBragLine(4, 9), 'Best chain x4  ·  9 Close Skims');
   assert.equal(lines.sharkyBragLine(1, 1), '1 Close Skim');
-  assert.equal(lines.sharkyStarGoalLine(238, 2500), 'Next star at 2,500', 'far away is a target, not "Only 2262"');
+  assert.equal(lines.sharkyStarGoalLine(238, 2500), 'Next star at 2500', 'far away is a target, not "Only 2262"');
   assert.equal(lines.sharkyStarGoalLine(2300, 2500), 'So close! 200 more for a star');
   assert.equal(lines.showSplits([-64, -12]), false, 'a row of red bars never shows');
   assert.equal(lines.showSplits([30, -64]), false, 'one lucky gate in a run that ended behind shows nothing');
@@ -235,12 +235,12 @@ test('Whack: true buckets, no zeros, dropped score words fold into one total, no
   const whack = read('src/games/whack/WhackAShark.tsx');
   assert.match(whack, /\{ label: 'POINTS', value: base \}, \{ label: 'COMBO', value: combo \}, \{ label: 'BONUS', value: bonus \}\]\.filter\(\(t\) => t\.value > 0\)/);
   assert.match(whack, /const tallies = filled\.length >= 2 \? filled : \[\];/, 'one bucket would just repeat the score');
-  assert.doesNotMatch(whack, /label: 'QUICK', value: `\$\{b\.result\.quick\}`/, 'the between-bursts card has no counts');
+  // The between-bursts card draws pictures (bonk heads and a flame) when it has bonks (wow-games Breather).
+  assert.match(whack, /bonks: b\.result\.hits,/);
   assert.doesNotMatch(whack, /BEHIND YOUR BEST/);
   assert.match(whack, /pips: \[banked\.length, totalBursts\]/);
   const overlays = read('src/games/whack/ui/Overlays.tsx');
-  assert.match(overlays, /p\.burstScore > 0 \? `\+\$\{count\.toLocaleString\(\)\}` : 'WARMING UP'/, 'never "+0"');
-  assert.match(overlays, /p\.boostReady \|\| p\.walkMeters >= 1/, 'never "+0m walked"');
+  assert.match(overlays, /const walkOn = p\.showWalk !== false && \(p\.walkPct > 0\.01 \|\| !!p\.boostReady\);/, 'never "+0m walked"');
   assert.equal(wordGate.droppedPoints('QUICK +80'), 80);
   assert.equal(wordGate.droppedPoints('KNOCKOUT! +1,200'), 1200);
   assert.equal(wordGate.droppedPoints('BOLTED!'), 0);
@@ -249,11 +249,11 @@ test('Whack: true buckets, no zeros, dropped score words fold into one total, no
   assert.match(juice, /foldedPts\.current \+= droppedPoints\(at\.text\);/);
   assert.match(juice, /stamp: `\+\$\{foldedPts\.current\}`/);
   const board = read('src/games/whack/render/WhackBoard.tsx');
-  assert.match(board, /const paceOp = useDerivedValue\(\(\) => \(pace\.value >= 1 \? 1 : 0\)\);/, 'VS BEST shows only when ahead');
+  assert.match(board, /return d > 0 \? `\+\$\{countText\(d\)\} \$\{paceLabel\}` : paceLabel;/, 'only a lead shows a number');
 });
 
 test('round 3: one rule everywhere (x3 chains, one RUN SAVED stamp, saved said once, no percents, short buttons)', () => {
-  const lines = load('src/games/sharky/hud/resultLines.ts', { '../../../gamekit/results/feelings': load('src/gamekit/results/feelings.ts') });
+  const lines = load('src/games/sharky/hud/resultLines.ts', { '../../../gamekit/results/feelings': load('src/gamekit/results/feelings.ts'), '../../../helpers/countText': load('src/helpers/countText.ts') });
   assert.equal(lines.sharkyBragLine(2, 0), '', 'a x2 chain is not a brag (the shared rule is x3)');
   assert.equal(lines.sharkyBragLine(3, 0), 'Best chain x3');
   assert.equal(lines.sharkyGateWord(0.9), 'ALMOST AT THE GATE!');
@@ -690,7 +690,7 @@ test('a Sharky win is cheap to reveal: one confetti stage, a resting game stage,
   assert.match(engine, /if \(!running\.value && sv\.phase === PH_DONE\) \{\n\s+if \(doneFrames\.value >= DONE_SETTLE_FRAMES\) return;/);
   assert.match(engine, /const DONE_SETTLE_FRAMES = 30;/);
   const count = read('src/gamekit/fx/CountUpText.tsx');
-  assert.match(count, /const first = reducedMotion \? value : fromProp \?\? value;/, 'counts from 0 on a results card, lands at once under Reduce Motion');
+  assert.match(count, /const fromValue = fromValueProp \?\? fromProp;\n  const first = reducedMotion \|\| fromValue == null \? value : fromValue;/, 'counts from 0 on a results card, lands at once under Reduce Motion');
   assert.match(read('src/gamekit/results/ResultsCard.tsx'), /<CountUpText value=\{score\} from=\{0\}/);
   // The shell frame and the Sharky autoplay exist for captures only.
   assert.match(read('src/gamekit/ShellFrameContext.ts'), /createContext<\{ readonly width: number; readonly height: number \} \| null>\(null\)/);
@@ -1051,8 +1051,8 @@ test('a results chip reads one of a thing as singular (1 RIGHT ANSWER, 1 BURST),
   assert.match(src, /accessibilityLabel=\{chipA11y\(pips \? pips\[0\] : value, label\)\}/);
 });
 
-test('the duel card writes scores like every other card (1,925 vs 1,628)', () => {
+test('the duel card writes scores like every other card (digits only: 1925 vs 1628)', () => {
   const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
-  assert.match(duel, /\{model\.myScore\.toLocaleString\(\)\}/);
-  assert.match(duel, /\{model\.oppScore\.toLocaleString\(\)\}/);
+  assert.match(duel, /\{countText\(model\.myScore\)\}/);
+  assert.match(duel, /\{countText\(model\.oppScore\)\}/);
 });

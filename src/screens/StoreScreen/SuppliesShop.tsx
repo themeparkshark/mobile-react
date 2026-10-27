@@ -52,6 +52,7 @@ import {
   Band, CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, packArtKey, unitWord, type PackArtKey,
 } from '../../components/money/moneyUi';
 import type { GlossaryKey } from '../../services/help/glossary';
+import countText from '../../helpers/countText';
 
 export { grantsText, gateReasonFor } from '../../services/money/supplies';
 
@@ -205,7 +206,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
             onPress={() => explain(w.term, { count: catalog.wallet[w.key] ?? 0 })}>
             <GameIcon name={w.icon} size={22} />
             {/* Rescue Passes have no picture of their own yet, so the chip says the word too. */}
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.walletText}>{(catalog.wallet[w.key] ?? 0).toLocaleString('en-US')}{w.key === 'rescue_passes' ? ((catalog.wallet[w.key] ?? 0) === 1 ? ' pass' : ' passes') : ''}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.walletText}>{countText(catalog.wallet[w.key] ?? 0)}{w.key === 'rescue_passes' ? ((catalog.wallet[w.key] ?? 0) === 1 ? ' pass' : ' passes') : ''}</Text>
           </Pressable>
         ))}
       </View>
@@ -370,11 +371,11 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
         <View style={[st.packArtWell, wide && st.packArtWide]}>
           <PackArt art={packArtKey(product, tier)} size={wide ? 70 : columns === 2 ? 82 : 64} bob={false} />
         </View>
-        <Band text={`${n.toLocaleString('en-US')} ${main === 'rescue_passes' ? (n === 1 ? 'RESCUE PASS' : 'RESCUE PASSES') : unitWord(main, n).toUpperCase()}`}
+        <Band text={`${countText(n)} ${main === 'rescue_passes' ? (n === 1 ? 'RESCUE PASS' : 'RESCUE PASSES') : unitWord(main, n).toUpperCase()}`}
           color={best ? 'gold' : 'navy'} size={columns === 3 ? 14 : 16} />
         {gear && <Text maxFontSizeMultiplier={MAX_FONT} style={st.gearLine} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.85}>{gear}</Text>}
         <PriceBar price={price} busy={busy} note={note} />
-        <WishHeart id={product.product_id} name={`${n.toLocaleString('en-US')} ${unitWord(main, n)}`} />
+        <WishHeart id={product.product_id} name={`${countText(n)} ${unitWord(main, n)}`} />
         {sticker && <Sticker text={sticker} style={{ top: 6, right: 4 }} />}
       </ShopCard>
       {best && <View style={st.bestPill} pointerEvents="none"><Text maxFontSizeMultiplier={1.1} style={st.bestPillText}>BEST VALUE</Text></View>}

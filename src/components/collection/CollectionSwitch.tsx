@@ -18,7 +18,7 @@ export default function CollectionSwitch({ active }: { readonly active: Side }) 
   };
   return (
     <View style={styles.row} accessibilityRole="tablist">
-      {([['stamps', 'Stamps', 'star'], ['coins', 'Ride Coins', 'coins']] as const).map(([side, label, icon]) => {
+      {([['stamps', 'Stamps', 'star'], ['coins', 'Ride Coins', 'coin']] as const).map(([side, label, icon]) => {
         const on = side === active;
         return (
           <Pressable key={side} onPress={() => go(side)} accessibilityRole="tab" accessibilityState={{ selected: on }}

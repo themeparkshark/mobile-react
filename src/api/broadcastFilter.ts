@@ -1,12 +1,15 @@
 /**
  * A request that shows its own reward moment (the Watch page's +25 coin
- * modal) marks itself with QUIET_COIN_BROADCAST, so the server's matching
- * "You earned N Shark Coins!" banner is not shown a second time. Every other
- * broadcast in the same response (level ups, unlocks) still shows.
+ * modal, the daily chest's flying coins and ticket punch) marks itself with
+ * QUIET_COIN_BROADCAST, so the server's matching "You earned 25 coins!" or
+ * "You earned 1 Ticket!" banner is not shown a second time (or, worse, slid in
+ * behind the chest while it is still opening). Every other broadcast in the
+ * same response (level ups, unlocks, XP) still shows.
  */
 export const QUIET_COIN_BROADCAST = 'quietCoinBroadcast';
 
-const COIN_EARNED = /^You earned \d+ Shark Coins?!$/;
+// The server says "You earned 25 coins!" (HasCurrency) and older copy said "Shark Coins"; tickets the same way.
+const COIN_EARNED = /^You earned \d+ (?:Shark )?(?:coins?|tickets?)!$/i;
 
 export function visibleBroadcasts<T>(broadcasts: readonly T[], quietCoins: boolean): T[] {
   if (!quietCoins) return [...broadcasts];

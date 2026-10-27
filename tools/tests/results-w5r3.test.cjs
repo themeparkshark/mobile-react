@@ -123,15 +123,11 @@ test('the new Finn tile is compact (72 pt) so a tall Whack win keeps room for th
   assert.match(podium, /const tallPhone = useWindowDimensions\(\)\.height >= PEEK_TALL_PHONE_PT;/);
 });
 
-test('the live pace chip writes thousands commas and says it races the best Burst', () => {
-  const commaInt = fnFrom('src/games/whack/render/WhackBoard.tsx', 'commaInt');
-  assert.equal(commaInt(8610), '8,610');
-  assert.equal(commaInt(-12465), '12,465');
-  assert.equal(commaInt(999), '999');
-  assert.equal(commaInt(1000000), '1,000,000');
+test('the live pace chip draws digits only (countText, no commas) and says it races the best Burst', () => {
   const board = read('src/games/whack/render/WhackBoard.tsx');
-  assert.match(board, /return `\$\{d >= 0 \? '\+' : '-'\}\$\{commaInt\(d\)\} \$\{paceLabel\}`;/);
-  assert.match(board, /'worklet';\n  const s = String\(Math\.abs\(Math\.round\(n\)\)\);/);
+  assert.doesNotMatch(board, /commaInt/);
+  assert.match(board, /return d > 0 \? `\+\$\{countText\(d\)\} \$\{paceLabel\}` : paceLabel;/);
+  assert.match(board, /paceLabel \?\? 'VS BEST BURST'/);
   const whack = read('src/games/whack/WhackAShark.tsx');
   assert.match(whack, /export const PACE_BEST_LABEL = 'VS BEST BURST';/);
   assert.equal((whack.match(/: PACE_BEST_LABEL\}/g) || []).length, 2);
@@ -146,11 +142,11 @@ test('a Memory run with no turns shows no TURNS chip (a gold 0/13 reads like a s
 
 test('PLAY AGAIN\'s 3-2-1 is just the count: the how-to shows on the first play of each opening, and the header says BURST 1', () => {
   const shell = read('src/gamekit/GameShellV2.tsx');
-  assert.match(shell, /\{objective && !playedOnceRef\.current \? <Text style=\{styles\.objective\}>/);
+  assert.match(shell, /\(objective && !playedOnceRef\.current \? <Text style=\{styles\.cdPillText\}/);
   assert.match(shell, /if \(!visible\) return;\n      playedOnceRef\.current = false;/);
   assert.match(shell, /startedRef\.current = true;\n      playedOnceRef\.current = true;/);
   const whack = read('src/games/whack/WhackAShark.tsx');
-  const rematch = whack.slice(whack.indexOf('const handleRematch = useCallback'), whack.indexOf('}, [clearAutoReady]);', whack.indexOf('const handleRematch = useCallback')));
+  const rematch = whack.slice(whack.indexOf('const handleRematch = useCallback'), whack.indexOf('restBoard, clearAutoReady]);', whack.indexOf('const handleRematch = useCallback')));
   assert.match(rematch, /setBurstIdx\(0\);/);
 });
 

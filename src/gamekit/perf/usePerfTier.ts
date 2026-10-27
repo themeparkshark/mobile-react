@@ -11,7 +11,7 @@
  * tier for the MiniGameTester.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { runOnJS, runOnUI, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { createTierProbe, tierFrame, TIER_FULL, type TierConfig, type TierProbe } from '../core/perfTier';
 
@@ -36,7 +36,7 @@ export function usePerfTier(opts: { active?: boolean; config?: Partial<TierConfi
     onChange?.(t);
   }, [onChange]);
 
-  useFrameCallback((info) => {
+  const frame = useFrameCallback((info) => {
     'worklet';
     const dt = info.timeSincePreviousFrame;
     if (dt == null) return;
@@ -45,6 +45,12 @@ export function usePerfTier(opts: { active?: boolean; config?: Partial<TierConfi
       runOnJS(publish)(probe.value.tier);
     }
   }, opts.active !== false);
+  // useFrameCallback reads its autostart once, on mount: a later `active` change has to switch the
+  // callback itself, so a game at rest (or hidden) stops sampling frames (w5r2: the flag was ignored).
+  const active = opts.active !== false;
+  useEffect(() => {
+    frame.setActive(active);
+  }, [active, frame]);
 
   const force = useCallback((t: number) => {
     runOnUI((v: number) => {

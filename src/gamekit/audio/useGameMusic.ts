@@ -13,6 +13,7 @@ import { useContext, useEffect, useRef } from 'react';
 import { AuthContext } from '../../context/AuthProvider';
 import { MusicContext } from '../../context/MusicProvider';
 import { GameAudio } from './GameAudio';
+import { usePowerBudget } from '../../power/PowerProvider';
 
 export interface GameMusicOptions {
   at?: 'now' | 'beat' | 'bar';
@@ -50,6 +51,24 @@ export function useGameMusic(bed: string | null, { at = 'bar', fadeMs = 300, ena
       return GameAudio.music.switchTo(bed, at, fadeMs);
     });
   }, [bed, musicOn, at, fadeMs]);
+
+  // Battery Saver and no touch for 2 minutes: the bed fades out (it is decoration) and comes back
+  // from the same spot on the next touch. Only a bed this hook paused is resumed, so a game's own
+  // pause sheet or hold is never undone. Walking (-3 dB) and the background fade live in GameShellV2.
+  const power = usePowerBudget();
+  const rest = power.lowPower && power.idle;
+  const restPaused = useRef(false);
+  useEffect(() => {
+    if (rest) {
+      if (GameAudio.music.playing) {
+        restPaused.current = true;
+        void GameAudio.music.pause(400);
+      }
+    } else if (restPaused.current) {
+      restPaused.current = false;
+      void GameAudio.music.resume(300);
+    }
+  }, [rest]);
 
   useEffect(() => () => {
     started.current = false;

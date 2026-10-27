@@ -717,6 +717,7 @@ export function SharkySwim({
       movementPolicy="playThrough"
       countdownStyle={runIdx > 0 ? 'go' : 'full'}
       countdownScrim="light"
+      countdownY={0.34}
       getSnapshot={getSnapshot}
       onWrapUp={onWrapUp}
       onStart={onStart}

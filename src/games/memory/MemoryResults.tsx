@@ -46,6 +46,7 @@ import { AlbumBody, ChallengeBody, NewChip, ShareBack, type DailySummary, type R
 import { MM } from './theme';
 import { bestAwareTitle } from '../../gamekit/results/feelings';
 import { RESULTS_RIBBON_ART, ResultsRibbon } from '../../gamekit/results/ResultsRibbon';
+import countText from '../../helpers/countText';
 
 const COIN = require('../../assets/games/memory/studio/coin_alex.png');
 
@@ -594,7 +595,7 @@ function Numbers({ data, reducedMotion, tallyOnly = false, statsOnly = false }: 
       {data.tally && !statsOnly ? (
         <View style={styles.tally}>
           <Animated.Text style={[styles.tallyParts, jigSt]} numberOfLines={1} adjustsFontSizeToFit>{data.tally.parts}</Animated.Text>
-          <Animated.Text style={[styles.tallyTotal, totSt]}>{data.tally.total.toLocaleString('en-US')}</Animated.Text>
+          <Animated.Text style={[styles.tallyTotal, totSt]}>{countText(data.tally.total)}</Animated.Text>
         </View>
       ) : null}
       {tallyOnly ? null : <View style={styles.numRow}>

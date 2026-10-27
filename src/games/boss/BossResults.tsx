@@ -21,6 +21,7 @@ import { STAR_POINTS } from './sim/constants';
 import { WORDMARK_SRC } from './CalloutLayer';
 import { STICKERS, type StickerId } from './localMeta';
 import { BossPortrait } from './BossPortrait';
+import countText from '../../helpers/countText';
 
 const STAR = require('../../assets/games/boss/fx_small_dizzy_star.png');
 const RIBBON = require('../../../assets/images/ribbon.png');
@@ -140,7 +141,7 @@ export function BossResults({ result, extras, reducedMotion, claim, rematch }: P
   const ratingWm = stars >= 3 ? 'superb' : stars === 2 ? 'great' : stars === 1 ? 'nice' : null;
   const headline = result.message ?? '';
   const goal = useMemo(() => {
-    if (stars >= 3) return crown ? null : `${(STAR_POINTS.crown - s.damage).toLocaleString()} to the Crown`;
+    if (stars >= 3) return crown ? null : `${countText(STAR_POINTS.crown - s.damage)} to the Crown`;
     return s.nextStar;
   }, [stars, crown, s]);
   const chipsList: { label: string; value: string }[] = [
@@ -167,7 +168,7 @@ export function BossResults({ result, extras, reducedMotion, claim, rematch }: P
           </View>
           <View style={styles.scoreCol}>
             <Text style={styles.scoreLabel}>DAMAGE</Text>
-            <Text style={styles.score}>{shown.toLocaleString()}</Text>
+            <Text style={styles.score}>{countText(shown)}</Text>
             <View style={styles.starRow}>
               {[0, 1, 2].map((i) => (
                 <View key={i} style={styles.starSlot}>
@@ -199,7 +200,7 @@ export function BossResults({ result, extras, reducedMotion, claim, rematch }: P
           {goal ? <Text style={styles.goal}>{`NEXT: ${goal}`}</Text> : null}
           {extras.ghost ? (
             <Text style={styles.ghost}>
-              {extras.ghost.delta >= 0 ? `Beat ${extras.ghost.name} by ${extras.ghost.delta.toLocaleString()}` : `${(-extras.ghost.delta).toLocaleString()} short of ${extras.ghost.name}`}
+              {extras.ghost.delta >= 0 ? `Beat ${extras.ghost.name} by ${countText(extras.ghost.delta)}` : `${countText(-extras.ghost.delta)} short of ${extras.ghost.name}`}
             </Text>
           ) : null}
           {extras.daily ? (

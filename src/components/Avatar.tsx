@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useContext, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
@@ -13,12 +13,16 @@ export default function Avatar({
   size = 'md',
   showLevel = false,
   showOnline = false,
+  onArtDrawn,
 }: {
   readonly size?: 'sm' | 'md' | 'lg' | 'xl';
   readonly player: PlayerType;
   readonly showLevel?: boolean;
   readonly showOnline?: boolean;
+  /** The shark has drawn (the map's loading cover waits for it, so the HUD button is never an empty circle). */
+  readonly onArtDrawn?: () => void;
 }) {
+  const artDrawn = onArtDrawn;
   const sizes = {
     sm: 50,
     md: 60,
@@ -45,6 +49,9 @@ export default function Avatar({
   // the friends list (QA P2-7): fall back to the TPS shark instead.
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const photo = player.avatar_url && player.avatar_url !== failedPhoto ? player.avatar_url : null;
+  const baseLayers = dressed ? sharkBaseLayers(inventory) : [];
+  // A dressed shark with no base art has nothing to wait for.
+  useEffect(() => { if (dressed && baseLayers.length === 0) artDrawn?.(); }, [dressed, baseLayers.length, artDrawn]);
 
   return (
     <View
@@ -170,8 +177,9 @@ export default function Avatar({
                 <Image source={{ uri: inventory.background_item.paper_url }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
               )}
               {/* Skin (or Alex's Classic) and eyes */}
-              {sharkBaseLayers(inventory).map((source, index) => (
-                <Image key={`base-${index}`} source={source} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
+              {baseLayers.map((source, index) => (
+                <Image key={`base-${index}`} source={source} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain"
+                  onLoad={index === 0 ? artDrawn : undefined} onError={index === 0 ? artDrawn : undefined} />
               ))}
               {/* Items */}
               {outfitLayerUrls(inventory).map((uri) => (
@@ -183,7 +191,8 @@ export default function Avatar({
               // No outfit or photo yet: Dustin's TPS shark instead of an empty ring.
               source={photo ?? DEFAULT_PORTRAIT}
               placeholder={DEFAULT_PORTRAIT}
-              onError={() => { if (photo) setFailedPhoto(photo); }}
+              onLoad={artDrawn}
+              onError={() => { if (photo) setFailedPhoto(photo); else artDrawn?.(); }}
               contentFit="contain"
               style={{ width: s * 1.2, height: s * 1.2, position: 'absolute', left: '-10%' }}
             />

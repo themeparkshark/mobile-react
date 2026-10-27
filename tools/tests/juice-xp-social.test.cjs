@@ -113,8 +113,9 @@ test('XP numbers format on the UI thread', () => {
   const { groupDigits } = require('./helpers/ts-module.cjs').loadTs('src/components/xpPotionModel.ts');
   assert.equal(groupDigits(0), '0');
   assert.equal(groupDigits(760), '760');
-  assert.equal(groupDigits(4600), '4,600');
-  assert.equal(groupDigits(1234567.4), '1,234,567');
+  // No commas: the display font draws them like periods (src/helpers/countText.ts).
+  assert.equal(groupDigits(4600), '4600');
+  assert.equal(groupDigits(1234567.4), '1.2M');
 });
 
 test('Social chest: squash on press, lid pop, wiggle, stars, haptic, Chris sounds, then the sheet', () => {
@@ -161,11 +162,14 @@ test('every Social tap clicks once: PressScale clicks by default, actions with t
   assert.ok(!exists('src/components/PlayerButtons.tsx'));
 });
 
-test('no Social sound points at the broken success.mp3', () => {
+test('Social keeps its own sounds; success.mp3 is a real sound again (wow-sound, Oct 24)', () => {
   for (const file of ['src/screens/threads/Composer.tsx', 'src/screens/ThreadScreen.tsx', 'src/screens/SocialScreen.tsx']) {
     assert.doesNotMatch(read(file).replace(/\/\/.*$/gm, ''), /sounds\/success\.mp3/, file);
   }
-  assert.ok(fs.statSync(path.join(root, 'assets/sounds/success.mp3')).size < 200, 'still the broken file: keep it unused');
+  // Was a 111-byte S3 AccessDenied page; now Chris's reveal sparkle at -16 LUFS (see wow-sound inventory).
+  const head = fs.readFileSync(path.join(root, 'assets/sounds/success.mp3')).subarray(0, 3);
+  assert.ok(fs.statSync(path.join(root, 'assets/sounds/success.mp3')).size > 4000, 'a real mp3, not an error page');
+  assert.ok(head.toString('latin1') === 'ID3' || (head[0] === 0xff && (head[1] & 0xe0) === 0xe0), 'starts with an ID3 tag or an MPEG frame');
 });
 
 test('level-up gate: refill once, the moment the drain ends, with the latest data', () => {

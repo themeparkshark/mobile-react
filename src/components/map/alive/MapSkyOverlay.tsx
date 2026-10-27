@@ -17,8 +17,9 @@ import { useMapAlive } from './MapAliveContext';
 
 // A cloud is a few overlapping soft puffs; offsets are in cloud-local px.
 const PUFFS: readonly [number, number, number][] = [[0, 0, 92], [70, 14, 70], [-68, 16, 64], [24, -30, 58]];
-const SHADOW_INK = 'rgba(18,52,96,0.11)';
-const SHADOW_CLEAR = 'rgba(18,52,96,0)';
+// Wave 4: house blue at half the old strength, so a passing cloud reads as a cartoon shadow, never grey dirt on the art.
+const SHADOW_INK = 'rgba(7,104,185,0.055)';
+const SHADOW_CLEAR = 'rgba(7,104,185,0)';
 
 function Cloud({ clock, i, width, height, strength }: {
   clock: SharedValue<number>; i: number; width: number; height: number; strength: number;
@@ -180,7 +181,7 @@ export const MapLightOverlay = memo(function MapLightOverlay({ width, height }: 
       {vignette && (
         <Rect x={0} y={0} width={width} height={height}>
           <RadialGradient c={vec(width / 2, height * 0.55)} r={Math.hypot(width, height) * 0.6}
-            colors={['rgba(8,20,58,0)', 'rgba(8,20,58,0)', `rgba(8,20,58,${(0.5 * light.vignette).toFixed(3)})`]} positions={[0, 0.5, 1]} />
+            colors={['rgba(6,62,140,0)', 'rgba(6,62,140,0)', `rgba(6,62,140,${(0.5 * light.vignette).toFixed(3)})`]} positions={[0, 0.5, 1]} />
         </Rect>
       )}
     </Canvas>

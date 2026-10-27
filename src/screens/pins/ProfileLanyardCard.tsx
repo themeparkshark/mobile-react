@@ -15,6 +15,7 @@ import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { Lanyard } from './Lanyard';
 import { PIN_ART } from './PinArt';
 import type { LanyardPin } from './pinsModel';
+import { lanyardCountLabel, lanyardEmptyHint } from '../../components/profile/profileCounts';
 
 export default function ProfileLanyardCard({ playerId, own }: { playerId: number; own: boolean }) {
   const [data, setData] = useState<{
@@ -43,7 +44,7 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
         {chasers > 0 && <View style={styles.chip}><Image source={PIN_ART.chaser} style={styles.icon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>{chasers}</Text></View>}
         {!!data.best_serial && <View style={[styles.chip, styles.serialChip]}><Text maxFontSizeMultiplier={1.1} style={[styles.chipText, { color: BRAND.gold }]}>#{data.best_serial}</Text></View>}
         {!!data.first_finds && <View style={[styles.chip, { backgroundColor: BRAND.gold }]} accessible accessibilityLabel={`First to find ${data.first_finds} park pins`}><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>First finder x{data.first_finds}</Text></View>}
-        <Text maxFontSizeMultiplier={1.1} style={styles.count}>{data.pins} pins</Text>
+        <Text maxFontSizeMultiplier={1.1} style={styles.count}>{lanyardCountLabel(data.lanyard.length, data.pins)}</Text>
       </View>
       {(!!data.title || !!data.showcase) && (
         // The flex row: an earned title and their rarest pin, big.
@@ -71,7 +72,7 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
       {data.lanyard.length > 0 ? (
         <Lanyard pins={data.lanyard} width={width - 32 - SPACE.md * 2} height={140} still={still} active={focused} />
       ) : (
-        <Text maxFontSizeMultiplier={1.35} style={styles.empty}>Wear your best pins here</Text>
+        <Text maxFontSizeMultiplier={1.35} style={styles.empty}>{own ? lanyardEmptyHint(data.pins) : 'Wear your best pins here'}</Text>
       )}
     </View>
   );

@@ -61,7 +61,7 @@ test('share sheets can save images: the add-to-Photos purpose string names the r
   assert.match(info.NSPhotoLibraryAddUsageDescription, /Save Image in the share sheet/);
   const src = read;
   // Both through the grown-up gate (services/external).
-  assert.match(src('src/share/capture.ts'), /shareExternal\(\{ url: uri \}/);
+  assert.match(src('src/share/capture.ts'), /shareExternal\(message \? \{ url: uri, message \} : \{ url: uri \}, undefined, name, afterYes\)/);
   assert.match(src('src/share/capture.ts'), /shareFileExternal\(uri/);
   assert.match(src('src/components/RideTracker/ShareableRideCard.tsx'), /from 'expo-sharing'/);
 });
@@ -121,14 +121,65 @@ test('native splash is held until the first JS frame and released once', async (
   assert.equal(timer.ms, splash.NATIVE_SPLASH_SAFETY_MS);
   splash.releaseNativeSplash();
   splash.releaseNativeSplash();
-  timer.fn();
-  assert.deepEqual(calls.slice(2), [['clearSafety'], ['hide']]);
+  // Not opening on the launch scene: fonts are enough, it hides once.
+  assert.deepEqual(calls.slice(2), [['clearSafety'], ['hide']], 'hides once');
+  assert.equal(splash.isNativeSplashUp(), false);
+});
+
+test('native splash hides at once when the splash art was drawn before fonts settled', () => {
+  const calls = [];
+  const splash = loadTs('src/nativeSplash.ts', {
+    'expo-splash-screen': {
+      setOptions: () => {},
+      preventAutoHideAsync: async () => true,
+      hideAsync: async () => { calls.push('hide'); },
+    },
+  }, { setTimeout: () => 1, clearTimeout: () => {} });
+  splash.holdNativeSplash();
+  assert.equal(splash.isNativeSplashUp(), true);
+  splash.splashArtShown();
+  assert.deepEqual(calls, []);
+  splash.releaseNativeSplash({ waitForArt: true });
+  assert.deepEqual(calls, ['hide']);
+  assert.equal(splash.isNativeSplashUp(), false);
+});
+
+test('Splash is the launch scene, which tells the native launch screen when its art is drawn', () => {
+  const src = read('src/screens/SplashScreen.tsx');
+  assert.match(src, /return <LaunchScene active=\{focused\} \/>;/);
+  assert.match(read('src/nativeSplash.ts'), /export const splashArtShown = nativeSplashArtDrawn;/);
 });
 
 test('App holds the splash at module scope and Root releases it once fonts settle', () => {
   const app = read('App.tsx');
   assert.ok(app.indexOf('holdNativeSplash();') < app.indexOf('export default function App'));
   const rootSource = read('src/Root.tsx');
-  assert.match(rootSource, /if \(fontsLoaded\) releaseNativeSplash\(\)/);
+  assert.match(rootSource, /if \(fontsLoaded\) releaseNativeSplash\(\{ waitForArt: initialRouteName === 'Splash' \}\)/);
   assert.match(rootSource, /fontsReady \|\| !!fontError/);
+});
+
+test('opening on the launch scene, the native art waits for the JS art (capped by the safety)', () => {
+  const calls = [];
+  let timer = null;
+  const splash = loadTs('src/nativeSplash.ts', {
+    'expo-splash-screen': {
+      setOptions: () => undefined,
+      preventAutoHideAsync: async () => true,
+      hideAsync: async () => { calls.push('hide'); },
+    },
+  }, {
+    setTimeout: (fn, ms) => { timer = { fn, ms }; return 1; },
+    clearTimeout: () => undefined,
+  });
+  splash.holdNativeSplash();
+  splash.releaseNativeSplash({ waitForArt: true });
+  assert.deepEqual(calls, [], 'fonts alone do not hide it while the art is still decoding');
+  splash.nativeSplashArtDrawn();
+  splash.nativeSplashArtDrawn();
+  assert.deepEqual(calls, ['hide']);
+  timer.fn();
+  assert.deepEqual(calls, ['hide'], 'released once');
+  const scene = read('src/components/launch/LaunchScene.tsx');
+  assert.match(scene, /onLoad=\{onArt\} onError=\{onArt\}/);
+  assert.match(scene, /const onArt = \(\) => \{\s*launchArtDrawn = true;\s*setArtIn\(true\);\s*nativeSplashArtDrawn\(\);/);
 });

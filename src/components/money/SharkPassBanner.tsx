@@ -15,6 +15,7 @@ import * as RootNavigation from '../../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../../ui';
 import { MAX_FONT } from './moneyUi';
 import { isWearable, passGain, rewardWords } from '../../services/money/sharkPassModel';
+import countText from '../../helpers/countText';
 
 const EMBLEM = require('../../../assets/images/sharkpass/pass-emblem.webp');
 
@@ -24,7 +25,7 @@ export function bannerLine(state: SharkPassState | null): string | null {
   const { claimable, premium } = state.progress;
   if (claimable > 0) return `${claimable} ${claimable === 1 ? 'reward' : 'rewards'} to claim`;
   const next = nextBannerPrize(state, premium);
-  if (next) return `${next.pointsAway.toLocaleString('en-US')} points to ${rewardWords(next.reward)}`;
+  if (next) return `${countText(next.pointsAway)} points to ${rewardWords(next.reward)}`;
   const { progress, season } = state;
   const step = progress.tier;
   const steps = season.tier_count;

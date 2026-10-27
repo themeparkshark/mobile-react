@@ -4,7 +4,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Modal from 'react-native-modal';
 import Animated, {
-  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import update from '../api/endpoints/daily-gifts/update';
@@ -14,15 +14,21 @@ import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { AuthContext } from '../context/AuthProvider';
 import { playSfx } from '../gamekit/SFX';
+import { playChestOpen, preloadLoopMoments } from '../gamekit/audio/loopSound';
+import { useCaptureMark } from '../dev/captureMark';
 import type { DailyGiftAmountsType, DailyGiftRewardType, DailyGiftType } from '../models/daily-gift-type';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../ui';
 import { ws7Preview } from '../dev/ws7Preview';
 import Ribbon from './Ribbon';
 import RewardBurst from './RewardBurst';
+import { GoldBurst } from '../ui/GoldBurst';
+import shortenNumber from '../helpers/shorten-number';
+import { DURATION, EASE, SPRING } from '../ui/motionEasing';
 import TapHint from './TapHint';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
+const WALLET_GLOW = require('../../assets/images/reveal/soft-spot.webp');
 
 type PrizeKind = 'coins' | 'energy' | 'tickets';
 const PRIZE: Record<PrizeKind, { icon: 'coins' | 'energy' | 'ticket'; one: string; many: string; fly: string }> = {
@@ -74,13 +80,15 @@ export function countStart(amount: number): number {
 export function prizeBlockHeight(extraLines: number, hasMilestone: boolean, ticketDay: boolean): number {
   return (ticketDay ? 0 : 60) + 38 + extraLines * 24 + (hasMilestone ? 24 : 0);
 }
-export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', simple = false }: {
+export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', claim = update, simple = false }: {
   readonly dailyGift: DailyGiftType;
   readonly onMapOcclusionChange?: (busy: boolean) => void;
   /** After the card has gone: whether today's chest was claimed (false for "Back to map"). */
   readonly onClosed?: (claimed: boolean) => void;
   /** Dev visual QA only: open the chest without a tap. */
   readonly autoOpen?: boolean;
+  /** The claim call (the release-like hook capture opens a local chest without the server). */
+  readonly claim?: typeof update;
   /**
    * A brand new player's first visit: one big chest to tap, no 7-day strip,
    * streak or day count to read. The ladder shows from the next visit on.
@@ -90,8 +98,12 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const occlusion = useRef(onMapOcclusionChange); occlusion.current = onMapOcclusionChange;
   const closed = useRef(onClosed); closed.current = onClosed;
   useEffect(() => () => { occlusion.current?.(false); }, []);
+  // The chest's pop is decoded before the tap (wow-sound round 2: a first-play load rang it after the lid).
+  useEffect(() => { preloadLoopMoments(); }, []);
   const { player, refreshPlayer } = useContext(AuthContext);
-  const { triggerFly } = useCurrencyFly();
+  const currencyFly = useCurrencyFly();
+  const { triggerFly } = currencyFly;
+  const getTarget = currencyFly.getTarget ?? (() => null);
   const dims = useWindowDimensions();
   const width = dims.width;
   const height = dims.height ?? 800;
@@ -135,13 +147,17 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const bob = useSharedValue(0);
   const shake = useSharedValue(0);
   const pop = useSharedValue(1);
-  const glow = useSharedValue(0);
   const prize = useSharedValue(0);
   const stamp = useSharedValue(0);
   const burst = useSharedValue(0);
   const punch = useSharedValue(0);
   const cardShake = useSharedValue(0);
   const spark = useSharedValue(0);
+  // The shared gold (ui/GoldBurst): gathers while the chest shakes, blooms when the lid pops.
+  const gold = useSharedValue(0);
+  const goldBloom = useSharedValue(0);
+  // Release-like hook capture only (an empty call in every other bundle): the lid's pop peak.
+  useCaptureMark(pop, 'daily-chest-lid-peak', 1.245);
 
   useEffect(() => {
     if (!dailyGift.redeemed_at && player?.username) setVisible(true);
@@ -149,23 +165,23 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
 
   useEffect(() => {
     bob.value = 0;
-    glow.value = 0;
     if (visible && phase === 'closed' && !reducedMotion) {
       bob.value = withRepeat(withSequence(
         withTiming(-8, { duration: 900, easing: Easing.inOut(Easing.sin) }),
         withTiming(0, { duration: 900, easing: Easing.inOut(Easing.sin) }),
       ), -1);
-      glow.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.sin) }), -1, true);
     }
-    return () => { cancelAnimation(bob); cancelAnimation(glow); };
-  }, [visible, phase, reducedMotion, bob, glow]);
+    return () => { cancelAnimation(bob); };
+  }, [visible, phase, reducedMotion, bob]);
   useEffect(() => () => {
-    [shake, pop, prize, stamp, burst, punch, cardShake, spark].forEach(cancelAnimation);
-  }, [shake, pop, prize, stamp, burst, punch, cardShake, spark]);
+    [shake, pop, prize, stamp, burst, punch, cardShake, spark, gold, goldBloom].forEach(cancelAnimation);
+  }, [shake, pop, prize, stamp, burst, punch, cardShake, spark, gold, goldBloom]);
   useEffect(() => {
     if (!reducedMotion) return;
     [shake, pop, prize, stamp, burst, punch, cardShake, spark].forEach(cancelAnimation);
     shake.value = 0; pop.value = 1; burst.value = 0; cardShake.value = 0; spark.value = 0;
+    cancelAnimation(gold); cancelAnimation(goldBloom); goldBloom.value = 0;
+    gold.value = phase === 'open' ? 0.8 : 0;
     prize.value = phase === 'open' ? 1 : 0;
     stamp.value = phase === 'open' ? 1 : 0;
     punch.value = phase === 'open' ? 1 : 0;
@@ -175,7 +191,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   useEffect(() => {
     if (phase !== 'open') { setShown(0); return; }
     setShown(countStart(amount));
-    if (reducedMotion || amount <= 1) { setShown(amount); return; }
+    if (reducedMotion || amount <= 1) { setShown(amount); flyToWallet(); return; }
     // ~650 ms in 20 frames; frame-counted so a stalled JS thread never skips the end.
     const frames = 20;
     let frame = 0;
@@ -186,19 +202,56 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       const eased = 1 - Math.pow(1 - t, 3);
       setShown(t >= 1 ? amount : Math.max(1, Math.round(amount * eased)));
       if (t < 1) countTimer.current = setTimeout(step, 32);
-      else void Haptics.selectionAsync?.().catch(() => undefined);
+      else { void Haptics.selectionAsync?.().catch(() => undefined); flyToWallet(); }
     };
     countTimer.current = setTimeout(step, 260);
     return () => { if (countTimer.current) clearTimeout(countTimer.current); };
   }, [phase, amount, reducedMotion]);
 
+  // The wallet only changes when the coins land in it: the player refresh waits for the
+  // count-up, then 3 to 5 coins fly from the pile to the coin chip, a tick each, and the chip bumps.
+  const refreshed = useRef(false);
+  const settleWallet = () => {
+    if (refreshed.current || !acknowledgedGift.current) return;
+    refreshed.current = true;
+    void refreshPlayer?.();
+  };
+  const [walletFly, setWalletFly] = useState<{ from: { x: number; y: number }; to: { x: number; y: number }; count: number; start: number } | null>(null);
+  const [landed, setLanded] = useState(0);
+  const wrapRef = useRef<View>(null);
+  const stageRef = useRef<View>(null);
+  const flown = useRef(false);
+  // The balance before this claim, taken at the chest tap: the chip counts up from here even if
+  // something refreshes the player before the coins fly (it used to start 25 too high, then drop).
+  const walletBefore = useRef<number | null>(null);
+  const flyToWallet = () => {
+    if (flown.current || !mounted.current) return;
+    flown.current = true;
+    const target = kind === 'coins' ? getTarget('coins') : null;
+    const wrap = wrapRef.current; const stageView = stageRef.current;
+    if (!target || !wrap || !stageView || reducedMotionRef.current) { settleWallet(); return; }
+    wrap.measureInWindow((wx, wy) => stageView.measureInWindow((sx, sy, sw, sh) => {
+      if (![wx, wy, sx, sy, sw, sh].every(Number.isFinite) || !mounted.current) { settleWallet(); return; }
+      setWalletFly({ from: { x: sx - wx + sw / 2, y: sy - wy + sh * 0.45 }, to: { x: target.x - wx, y: target.y - wy },
+        count: walletCoins(amount), start: Math.max(0, walletBefore.current ?? (player?.coins ?? 0)) });
+    }));
+  };
+  const onCoinLand = (i: number, count: number) => {
+    if (mounted.current) setLanded(n => Math.max(n, i + 1));
+    playSfx('tick', 0.7 + i * 0.05);
+    void Haptics.selectionAsync?.().catch(() => undefined);
+    if (i === count - 1) settleWallet();
+  };
+
   const dismiss = () => {
     setVisible(false);
+    settleWallet();
     if (acknowledgedGift.current) {
-      // The reward lands in its counter, drawn with the same art as the prize.
+      // The reward lands in its counter, drawn with the same art as the prize
+      // (coins that already flew from the pile are not sent twice).
       const paid = chestAmounts(acknowledgedGift.current, today);
       (['coins', 'tickets', 'energy'] as PrizeKind[]).forEach(k => {
-        if (paid[k] > 0) {
+        if (paid[k] > 0 && !(k === 'coins' && walletFly)) {
           triggerFly({ imageSource: ICON_SOURCES[PRIZE[k].icon],
             amount: Math.min(8, paid[k]), startX: width / 2, startY: height * 0.55, targetPosition: PRIZE[k].fly });
         }
@@ -209,13 +262,16 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
 
   const celebrate = (isTicket: boolean) => {
     if (reducedMotionRef.current) {
-      shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1; punch.value = 1;
+      shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1; punch.value = 1; gold.value = 0.8;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       playSfx('win');
       return;
     }
     // Anticipation done: lid pops with overshoot, the prize rises, confetti bursts.
-    pop.value = withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 }));
+    pop.value = withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, SPRING.pop));
+    gold.value = withTiming(1, { duration: 200, easing: EASE.out });
+    goldBloom.value = withSequence(withTiming(1, { duration: 140, easing: EASE.out }),
+      withTiming(0, { duration: DURATION.bloom, easing: EASE.out }));
     burst.value = 0;
     burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) });
     prize.value = withDelay(120, withSpring(1, { damping: 9, stiffness: 150 }));
@@ -244,6 +300,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         playSfx('hit');
       }, 650);
     }
+    // Studio sound (approved Oct 24): the chest's own pop and coin spill, with its shaped buzz (wave 5: lid pop,
+    // heavy land, coins patter) on the lid's frame. Switch off: exactly today's success buzz and sounds.
+    if (playChestOpen()) return;
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     playSfx('win'); playSfx('coin', 0.9);
   };
@@ -251,21 +310,25 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const open = async () => {
     if (claiming.current || phase !== 'closed') return;
     claiming.current = true;
+    walletBefore.current = player?.coins ?? null;
     setPhase('opening');
     const startedAt = Date.now();
     if (!reducedMotion) {
       shake.value = withSequence(
         ...[10, -12, 14, -16, 18, -18, 0].map(v => withTiming(v, { duration: 60 })),
       );
+      // Anticipation: the chest squashes down (and holds two frames) while the gold gathers behind it.
+      pop.value = withSequence(withTiming(0.85, { duration: 340, easing: EASE.in }), withTiming(0.85, { duration: 40 }));
+      gold.value = withTiming(0.45, { duration: 420, easing: EASE.charge });
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     }
     playSfx('tick', 0.8);
     try {
-      const confirmed = await update(dailyGift.id);
+      const confirmed = await claim(dailyGift.id);
       if (!confirmed.redeemed_at) throw new Error('Chest was not confirmed');
       acknowledgedGift.current = confirmed;
-      void refreshPlayer?.();
-      if (!mounted.current) { setDailyGift(confirmed); return; }
+      // The wallet refresh waits for the coins to land (flyToWallet); a closed screen refreshes now.
+      if (!mounted.current) { void refreshPlayer?.(); setDailyGift(confirmed); return; }
       setConfirmedGift(confirmed);
       const confirmedLadder = confirmed.ladder?.length ? confirmed.ladder : fallbackLadder(confirmed);
       const confirmedToday = confirmedLadder[Math.min(confirmedLadder.length, Math.max(1, confirmed.day ?? 1)) - 1];
@@ -282,6 +345,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       if (!mounted.current) return;
       claiming.current = false;
       cancelAnimation(shake); shake.value = 0;
+      cancelAnimation(pop); pop.value = 1; cancelAnimation(gold); gold.value = 0;
       if (current?.id === dailyGift.id && current.redeemed_at) {
         setDailyGift(current);
         void refreshPlayer?.();
@@ -305,12 +369,21 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const chestStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: phase === 'closed' ? bob.value : 0 }, { rotate: `${shake.value}deg` }, { scale: pop.value }],
   }));
-  const glowStyle = useAnimatedStyle(() => ({ opacity: 0.35 + glow.value * 0.4, transform: [{ scale: 0.9 + glow.value * 0.15 }] }));
   // The prize rises out of the chest (from above), so it never slides into the lines below it.
   const prizeStyle = useAnimatedStyle(() => ({
     opacity: prize.value, transform: [{ translateY: (1 - prize.value) * -36 }, { scale: 0.5 + prize.value * 0.5 }],
   }));
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: cardShake.value }] }));
+  // Light pours out of the open chest with the lid pop (bright over the pile on a non-coin day).
+  const mouthStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, prize.value * 1.4) * (kind === 'coins' ? 0.55 : 0.9),
+    transform: [{ scaleY: 0.6 + Math.min(1.1, prize.value) * 0.4 }],
+  }));
+  // The prize climbs out of the chest mouth with a springy overshoot, then rests just above it.
+  const riseStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, prize.value * 2),
+    transform: [{ translateY: (1 - prize.value) * 40 }, { scale: 0.4 + prize.value * 0.6 }],
+  }));
   // The Ticket falls from above tilted, squashes on impact, then settles.
   const ticketStyle = useAnimatedStyle(() => {
     const p = punch.value;
@@ -329,8 +402,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   }));
 
   const chestSize = simple ? Math.min(width * 0.62, 260) : Math.min(width * 0.52, 230);
-  // Only a coin day opens onto the pile of coins; other prizes rise from the chest.
-  const openArt = kind === 'coins' ? CHEST_OPEN : CHEST_CLOSED;
+  // A coin day opens onto the pile of coins. Any other day never shows coins it did not pay: the lid pops,
+  // light bursts out from under it and the prize itself climbs out and stays above the chest.
+  const coinDay = kind === 'coins';
 
   return (
     <Modal isVisible={visible} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
@@ -343,12 +417,12 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       backdropColor={BRAND.navy}
       backdropOpacity={0.55} onBackdropPress={phase !== 'opening' ? dismiss : undefined}
       onBackButtonPress={phase !== 'opening' ? dismiss : undefined}>
-      <Animated.View style={[styles.wrap, cardStyle]}>
+      <Animated.View ref={wrapRef} collapsable={false} style={[styles.wrap, cardStyle]}>
         <Ribbon text="Daily Chest" />
         <View style={styles.card}>
           {simple ? null : <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Today’s chest: day ${day} of ${ladder.length}`}</Text>}
 
-          {simple ? null : <View style={styles.ladder}>
+          {simple ? null : <View style={[styles.ladder, styles.aboveGold]}>
             {ladder.map((r) => (
               <LadderDay key={r.day} reward={r} state={r.day < day ? 'done' : r.day === day ? 'today' : 'future'}
                 stamp={r.day === day ? stamp : undefined} />
@@ -361,14 +435,37 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
             </View>
           )}
 
-          <Pressable onPress={onChestPress} disabled={phase !== 'closed'} accessibilityRole="button"
+          <Pressable ref={stageRef} collapsable={false} onPress={onChestPress} disabled={phase !== 'closed'} accessibilityRole="button"
             accessibilityState={{ disabled: phase !== 'closed', busy: phase === 'opening' }}
             accessibilityLabel={phase === 'open' ? `Opened: ${amount} ${prizeLabel(kind, amount)}` : 'Open today’s chest'}
             style={[styles.stage, { height: chestSize + 12 }]}>
-            <Animated.View style={[styles.glow, { width: chestSize * 1.3, height: chestSize * 1.3, borderRadius: chestSize }, glowStyle]} />
+            <View pointerEvents="none" style={styles.goldWrap}>
+              {/* Big enough that the rays clear the chest by 40 pt or more on every side (they fade out by
+                  about 74% of the radius); it overflows the stage and sits under the ladder. */}
+              <GoldBurst size={chestSize * CHEST_GOLD_SCALE} amount={gold} bloom={goldBloom} reduced={reducedMotion} />
+            </View>
             <Animated.View style={chestStyle}>
-              <Image source={phase === 'open' ? openArt : CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
+              {phase === 'open' && !coinDay && (
+                // Light bursting out from under the popped lid, behind the chest (no coins it did not pay).
+                <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 1.1, height: chestSize * 0.7,
+                  left: -chestSize * 0.05, top: -chestSize * 0.22 }, mouthStyle]}>
+                  <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff3b0" />
+                </Animated.View>
+              )}
+              <Image source={phase === 'open' && coinDay ? CHEST_OPEN : CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
+              {phase === 'open' && coinDay && (
+                <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 0.8, height: chestSize * 0.42,
+                  left: chestSize * 0.12, top: chestSize * 0.1 }, mouthStyle]}>
+                  <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff3b0" />
+                </Animated.View>
+              )}
             </Animated.View>
+            {phase === 'open' && !coinDay && !ticketDay && (
+              // The prize rises out of the open chest and stays there, so the settled card shows what came out.
+              <Animated.View pointerEvents="none" style={[styles.risePrize, { top: chestSize * 0.02 }, riseStyle]}>
+                <GameIcon name={PRIZE[kind].icon} size={chestSize * 0.4} />
+              </Animated.View>
+            )}
             {phase === 'open' && ticketDay && (
               <Animated.View style={[styles.ticketPunch, ticketStyle]} pointerEvents="none">
                 <GameIcon name="ticket" size={chestSize * 0.62} />
@@ -411,8 +508,112 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
           </Pressable>}
         </View>
         <RewardBurst progress={burst} x={width * 0.47} y={height * 0.36} />
+        {walletFly && <WalletChip at={walletFly.to} start={walletFly.start} amount={amount} landed={landed} count={walletFly.count}
+          caughtUp={(player?.coins ?? 0) >= walletFly.start + amount} />}
+        {walletFly && Array.from({ length: walletFly.count }, (_, i) => (
+          <WalletCoin key={i} index={i} from={walletFly.from} to={walletFly.to} onLand={() => onCoinLand(i, walletFly.count)} />
+        ))}
+        {walletFly && <WalletBump at={walletFly.to} count={walletFly.count} />}
       </Animated.View>
     </Modal>
+  );
+}
+
+/** How many coins fly from the pile to the wallet: 3 for a small prize, up to 5. */
+export function walletCoins(amount: number): number {
+  return amount >= 50 ? 5 : amount >= 20 ? 4 : 3;
+}
+
+/** The chest gold fan, as a multiple of the chest art (rays visible to about 0.74 x half of this). */
+export const CHEST_GOLD_SCALE = 2.4;
+const WALLET_COIN = 42;
+const WALLET_CHIP_HOLD = 500;
+const WALLET_CHIP_MAX = 5000;
+const WALLET_STAGGER = 110;
+const WALLET_FLIGHT = 520;
+
+/** One coin hopping out of the pile and arcing into the wallet chip (UI thread). */
+function WalletCoin({ index, from, to, onLand }: {
+  readonly index: number; readonly from: { x: number; y: number }; readonly to: { x: number; y: number }; readonly onLand: () => void;
+}) {
+  const t = useSharedValue(0);
+  const land = useRef(onLand); land.current = onLand;
+  useEffect(() => {
+    t.value = withDelay(index * WALLET_STAGGER, withTiming(1, { duration: WALLET_FLIGHT, easing: Easing.in(Easing.quad) }));
+    const timer = setTimeout(() => land.current(), index * WALLET_STAGGER + WALLET_FLIGHT);
+    return () => { clearTimeout(timer); cancelAnimation(t); };
+  }, [index, t]);
+  const spread = (index - 2) * 14;
+  const style = useAnimatedStyle(() => {
+    const k = t.value;
+    const x = from.x + spread * (1 - k) + (to.x - from.x) * k;
+    // A hop up out of the pile, then a smooth arc into the chip.
+    const y = from.y + (to.y - from.y) * k - Math.sin(Math.PI * Math.min(1, k * 1.1)) * 70;
+    return {
+      opacity: k <= 0 || k >= 1 ? 0 : 1,
+      transform: [{ translateX: x - WALLET_COIN / 2 }, { translateY: y - WALLET_COIN / 2 }, { scale: interpolate(k, [0, 0.2, 1], [0.6, 1.15, 0.7]) }],
+    };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[styles.walletCoin, style]}>
+      <Image source={ICON_SOURCES.coins} style={{ width: WALLET_COIN, height: WALLET_COIN }} contentFit="contain" transition={0} />
+    </Animated.View>
+  );
+}
+
+/**
+ * A bright copy of the header coin chip drawn in the modal layer, right over the real one (which sits
+ * under the navy scrim), so a kid sees the coins land in the wallet and the number go up. It counts
+ * up one step per landing coin, then fades once the real chip has the new balance.
+ */
+function WalletChip({ at, start, amount, landed, count, caughtUp }: {
+  readonly at: { x: number; y: number }; readonly start: number; readonly amount: number; readonly landed: number; readonly count: number;
+  /** The real header chip already shows the new balance (the player refresh came back). */
+  readonly caughtUp: boolean;
+}) {
+  const show = useSharedValue(0);
+  const bump = useSharedValue(1);
+  const done = landed >= count;
+  useEffect(() => {
+    show.value = withTiming(1, { duration: DURATION.quick });
+    return () => cancelAnimation(show);
+  }, [show]);
+  useEffect(() => {
+    if (landed <= 0) return;
+    bump.value = withSequence(withTiming(1.16, { duration: 70 }), withSpring(1, SPRING.pop));
+  }, [landed, bump]);
+  // It fades only once the real chip has caught up (a slow refresh must never flash the old number back),
+  // or after WALLET_CHIP_MAX if the refresh never answers.
+  useEffect(() => {
+    if (!done) return undefined;
+    if (caughtUp) { show.value = withDelay(WALLET_CHIP_HOLD, withTiming(0, { duration: DURATION.quick })); return undefined; }
+    const t = setTimeout(() => { show.value = withTiming(0, { duration: DURATION.quick }); }, WALLET_CHIP_MAX);
+    return () => clearTimeout(t);
+  }, [done, caughtUp, show]);
+  const style = useAnimatedStyle(() => ({ opacity: show.value, transform: [{ scale: bump.value }] }));
+  const value = start + Math.round(amount * Math.min(1, landed / Math.max(1, count)));
+  // The real chip registers its container centre; its pill starts 14 pt in (marginLeft), so it is centred 7 pt right.
+  return (
+    <Animated.View pointerEvents="none" style={[styles.walletChip, { left: at.x + 7 - 43, top: at.y - 15 }, style]}>
+      <Image source={ICON_SOURCES.coins} style={styles.walletChipIcon} contentFit="contain" transition={0} />
+      <Text style={styles.walletChipText} numberOfLines={1}>{shortenNumber(value)}</Text>
+    </Animated.View>
+  );
+}
+
+/** A gold pop on the wallet chip, once per landing coin. */
+function WalletBump({ at, count }: { readonly at: { x: number; y: number }; readonly count: number }) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    const beats = Array.from({ length: count }, () => withSequence(withTiming(1, { duration: 70 }), withTiming(0, { duration: WALLET_STAGGER - 70 })));
+    t.value = withDelay(WALLET_FLIGHT, withSequence(...beats));
+    return () => cancelAnimation(t);
+  }, [count, t]);
+  const style = useAnimatedStyle(() => ({ opacity: t.value * 0.9, transform: [{ scale: 0.7 + t.value * 0.5 }] }));
+  return (
+    <Animated.View pointerEvents="none" style={[styles.walletBump, { left: at.x - 40, top: at.y - 40 }, style]}>
+      <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor={BRAND.gold} />
+    </Animated.View>
   );
 }
 
@@ -444,6 +645,7 @@ const styles = StyleSheet.create({
   card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
     paddingTop: 22, paddingBottom: 18, paddingHorizontal: 12, alignItems: 'center' },
   subtitle: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff', marginBottom: 10, textAlign: 'center' },
+  aboveGold: { zIndex: 2 },
   ladder: { flexDirection: 'row', gap: 4, alignSelf: 'stretch', justifyContent: 'center' },
   day: { flex: 1, maxWidth: 48, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 10,
     paddingVertical: 5 },
@@ -458,7 +660,15 @@ const styles = StyleSheet.create({
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
   streakText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold },
   stage: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginTop: 6 },
-  glow: { position: 'absolute', backgroundColor: 'rgba(255, 226, 92, 0.35)' },
+  goldWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  mouthGlow: { position: 'absolute' },
+  risePrize: { position: 'absolute', alignSelf: 'center', alignItems: 'center' },
+  walletCoin: { position: 'absolute', left: 0, top: 0 },
+  walletBump: { position: 'absolute', width: 80, height: 80 },
+  walletChip: { position: 'absolute', width: 86, height: 30, borderRadius: 15, borderWidth: 2, borderColor: BRAND.white,
+    backgroundColor: '#0b3f7d', flexDirection: 'row', alignItems: 'center', paddingLeft: 24, paddingRight: 8 },
+  walletChipIcon: { position: 'absolute', left: -18, top: -5, width: 36, height: 36 },
+  walletChipText: { flex: 1, textAlign: 'center', fontFamily: 'Shark', fontSize: 19, color: BRAND.white },
   ticketPunch: { position: 'absolute', alignItems: 'center', justifyContent: 'center', top: 0 },
   spark: { position: 'absolute', right: '8%', top: '10%' },
   prizeSlot: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },

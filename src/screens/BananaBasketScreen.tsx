@@ -16,7 +16,6 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
@@ -26,6 +25,7 @@ import * as Haptics from 'expo-haptics';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faXmark } from '@fortawesome/free-solid-svg-icons';
 
+import SafeScreen from '../components/SafeScreen';
 const BANANA_HTML = require('../assets/minigames/banana-basket/banana-basket.html');
 
 type BridgeMsg =
@@ -117,7 +117,7 @@ export default function BananaBasketScreen({ navigation }: any) {
         </View>
       )}
 
-      <SafeAreaView style={styles.topBar} pointerEvents="box-none">
+      <SafeScreen style={styles.topBar} pointerEvents="box-none">
         <Pressable
           onPress={handleClose}
           style={styles.closeBtn}
@@ -126,7 +126,7 @@ export default function BananaBasketScreen({ navigation }: any) {
         >
           <FontAwesomeIcon icon={faXmark} size={22} color="#fff" />
         </Pressable>
-      </SafeAreaView>
+      </SafeScreen>
     </View>
   );
 }

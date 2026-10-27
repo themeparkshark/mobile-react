@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, useContext } from 'react';
 import {
   AppState,
   View,
@@ -23,12 +23,35 @@ import PlaceCoinModal from '../../components/GymBattle/PlaceCoinModal';
 import DefendMiniGameModal from '../../components/GymBattle/DefendMiniGameModal';
 import { battleHUDEvents } from '../../components/GymBattle/battleHUDEvents';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
-import { GameIcon } from '../../ui';
+import { GameButton, GameIcon } from '../../ui';
 import useMatchLink from '../../hooks/useMatchLink';
 import MatchLinkBanner from '../../components/match/MatchLinkBanner';
 import { friendlyActionError, isLinkFailure } from '../../services/match/matchLink';
+import countText from '../../helpers/countText';
+import { LocationStatusContext } from '../../context/LocationProvider';
+import { usePowerBudget } from '../../power';
+import Reanimated, { ZoomIn, FadeOut } from 'react-native-reanimated';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+// Bottom edge of the ARENA BATTLE title and the three header cards.
+const HEADER_BOTTOM = 180;
+
+// Action row: three equal cells across the floor.
+const ACTION_CELL_W = (SCREEN_W - 56) / 3;
+// Ready button art, drawn to its visible bounds (the PNGs carry transparent
+// rows above and below the button). Sizes are the PNG size and the box that
+// holds the visible art, in image pixels.
+const READY_ART = {
+  defend: { src: require('../../../assets/images/btn-defend.png'), w: 313, h: 155, x: 2, y: 12, vw: 309, vh: 128 },
+  checkin: { src: require('../../../assets/images/btn-checkin.png'), w: 332, h: 128, x: 0, y: 0, vw: 332, vh: 127 },
+  battle: { src: require('../../../assets/images/btn-battle.png'), w: 314, h: 153, x: 3, y: 16, vw: 309, vh: 127 },
+} as const;
+type ReadyArtName = keyof typeof READY_ART;
+// Every ready button is the same height, as big as the widest one allows.
+const READY_H = Math.min(...Object.values(READY_ART).map(a => ACTION_CELL_W * a.vh / a.vw));
+// A waiting pill is clearly smaller than a ready button (go outweighs wait).
+const WAIT_H = Math.max(34, Math.round(READY_H * 0.78));
+const WAIT_W = Math.round(ACTION_CELL_W * 0.84);
 
 // Pillar images
 const PILLAR_IMAGES = {
@@ -150,8 +173,16 @@ const AnimatedPillar = ({
 
   // Position styles
   const positionStyle = useMemo(() => {
-    const baseSize = isWinner ? SCREEN_W * 0.45 : SCREEN_W * 0.32;
     const aspectRatio = 1.8; // Approximate pillar aspect ratio
+    // On short screens (iPhone SE) the winner tower grew up into the header
+    // cards. Cap the tower height to the room between the header and the
+    // tower bases (58% down), keeping the winner-to-side size ratio.
+    const maxWinner = (SCREEN_H * 0.58 - (HEADER_BOTTOM + 22)) / aspectRatio;
+    const winnerSize = Math.min(SCREEN_W * 0.45, maxWinner);
+    // Short screens: side towers stay close to the winner's size so their
+    // crests still read (they sit lower, so they never reach the header).
+    const sideRatio = SCREEN_H < 750 ? 0.9 : 0.75;
+    const baseSize = isWinner ? winnerSize : Math.min(SCREEN_W * 0.32, winnerSize * sideRatio);
     
     switch (position) {
       case 'left':
@@ -230,18 +261,23 @@ const AnimatedPillar = ({
           },
         ]}
       >
-        {/* Winner glow effect */}
+        {/* Winner stage: always fully solid. It breathes in scale only (native
+            driver), on a plain wrapper so the navy outline stays in step with
+            the fill. */}
         {isWinner && (
           <Animated.View
+            pointerEvents="none"
             style={[
-              styles.pillarGlow,
+              styles.pillarStageWrap,
               {
-                backgroundColor: teamColor,
-                opacity: glowAnim,
-                shadowColor: teamColor,
+                transform: [
+                  { scale: glowAnim.interpolate({ inputRange: [0.3, 1], outputRange: [1, 1.06] }) },
+                ],
               },
             ]}
-          />
+          >
+            <View style={[styles.pillarGlow, { backgroundColor: teamColor }]} />
+          </Animated.View>
         )}
         
         {/* Pillar image */}
@@ -260,7 +296,10 @@ const AnimatedPillar = ({
 
         {/* Score badge */}
         <View style={[styles.scoreBadge, { backgroundColor: teamColor }]}>
-          <Text style={styles.scoreText}>{(score ?? 0).toLocaleString()}</Text>
+          {/* The team crest rides on the score, so a non-reader can tell the
+              three towers apart on any phone size. */}
+          <Image source={TEAMS[team].badge} style={styles.scoreCrest} contentFit="contain" />
+          <Text style={styles.scoreText}>{countText(score ?? 0)}</Text>
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -283,7 +322,8 @@ const FloatingParticle = ({ delay, startX, color }: { delay: number; startX: num
 
       Animated.parallel([
         Animated.timing(translateY, {
-          toValue: SCREEN_H * 0.2,
+          // Fade out before the header cards, never over their text.
+          toValue: HEADER_BOTTOM + 10,
           duration: 4000 + Math.random() * 3000,
           easing: Easing.linear,
           useNativeDriver: true,
@@ -306,7 +346,7 @@ const FloatingParticle = ({ delay, startX, color }: { delay: number; startX: num
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-      ]).start(() => animate());
+      ]).start(({ finished }) => { if (finished) animate(); });
     };
 
     const timeout = setTimeout(animate, delay);
@@ -449,6 +489,42 @@ const AnimatedButton = ({
   );
 };
 
+const clock = (secs: number) => `${Math.floor(secs / 60)}:${(secs % 60).toString().padStart(2, '0')}`;
+
+// A ready button's art, cropped to what you can see, at the row's ready height.
+const ReadyArt = ({ name }: { name: ReadyArtName }) => {
+  const art = READY_ART[name];
+  const s = READY_H / art.vh;
+  return (
+    <View style={{ width: art.vw * s, height: READY_H }}>
+      <Image
+        source={art.src}
+        style={{ position: 'absolute', left: -art.x * s, top: -art.y * s, width: art.w * s, height: art.h * s }}
+        contentFit="fill"
+      />
+    </View>
+  );
+};
+
+// "Come back soon" state of an arena button. A solid cream pill at full
+// opacity (never a see-through, broken-looking button): the button's name, then
+// a clock and the time left in navy. The ready state is the full-colour art.
+const RestingButton = ({ label, line, icon = 'timer', style, big }: {
+  label: string;
+  line: string;
+  icon?: 'timer' | 'swords' | 'check' | 'pin';
+  style: any;
+  big?: boolean;
+}) => (
+  <View style={[style, styles.restingBtn]} accessible accessibilityLabel={`${label}, ${line}`}>
+    <Text style={[styles.restingLabel, big && styles.restingLabelBig]} numberOfLines={1}>{label}</Text>
+    <View style={styles.restingRow}>
+      <GameIcon name={icon} size={big ? 22 : 16} />
+      <Text style={[styles.restingTime, big && styles.restingTimeBig]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{line}</Text>
+    </View>
+  </View>
+);
+
 // Sparkle component
 const Sparkle = ({ x, y, delay }: { x: number; y: number; delay: number }) => {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -515,10 +591,42 @@ export default function GymBattleScreen({ navigation, route }: Props) {
   const [showPlaceCoin, setShowPlaceCoin] = useState(false);
   const [showDefend, setShowDefend] = useState(false);
   const [pillarToast, setPillarToast] = useState<string | null>(null);
+  // One toast at a time: a new one restarts the 2 s clock (an older timer
+  // used to clear a newer toast early).
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = useCallback((message: string) => {
+    setPillarToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setPillarToast(null), 2000);
+  }, []);
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
   const [countdown, setCountdown] = useState<string>('--:--:--');
   const [attackCooldown, setAttackCooldown] = useState<number>(0);
   const [checkinCooldown, setCheckinCooldown] = useState<number>(0);
   const [defendCooldown, setDefendCooldown] = useState<number>(0);
+
+  // The server refuses every arena action outside this park. Once the app
+  // knows the kid is somewhere else, the buttons say GET CLOSER instead of
+  // READY (a 25 s Defend round outside the park used to end in OOPS).
+  // While the park check is still running, the buttons stay as they are.
+  const { park: currentPark, parkLoaded, parkLookupRecord } = useContext(LocationStatusContext);
+  const awayFromArena = Boolean(parkLoaded && parkId > 0 &&
+    (currentPark ? currentPark.id !== parkId : parkLookupRecord?.outcome === 'outside'));
+
+  // Ready buttons bob a little (native driver), only when ambient motion is
+  // allowed (not with Reduce Motion, Battery Saver or an idle phone).
+  const { ambient, particleScale } = usePowerBudget();
+  const readyBob = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!ambient) { readyBob.setValue(0); return; }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(readyBob, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(readyBob, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => { loop.stop(); readyBob.setValue(0); };
+  }, [ambient, readyBob]);
+  const readyBobStyle = { transform: [{ translateY: readyBob.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) }] };
   
   const screenOpacity = useRef(new Animated.Value(0)).current;
   const screenScale = useRef(new Animated.Value(1.1)).current;
@@ -637,6 +745,17 @@ export default function GymBattleScreen({ navigation, route }: Props) {
   }, [parkId]);
   fetchGymRef.current = () => { void fetchGym(); };
 
+  // A cooldown that ran out on this phone before the server agreed (the
+  // button says ALMOST): ask again shortly, so it turns READY on its own.
+  const staleWait = Boolean(gymData?.player && battleActive && !awayFromArena && (
+    (checkinCooldown <= 0 && !gymData.player.can_checkin) ||
+    (defendCooldown <= 0 && gymData.player.can_defend === false)));
+  useEffect(() => {
+    if (!staleWait) return;
+    const retry = setTimeout(() => { void fetchGym(); }, 4000);
+    return () => clearTimeout(retry);
+  }, [staleWait, gymData, fetchGym]);
+
   // Countdown timers - single interval, refetch when any cooldown expires
   useEffect(() => {
     const timer = setInterval(() => {
@@ -731,15 +850,13 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     try {
       const result = await checkinGym(parkId);
       // Show toast with points earned
-      setPillarToast(`+${result.points_earned} points!`);
-      setTimeout(() => setPillarToast(null), 2000);
+      showToast(`+${result.points_earned} points!`);
       // Refetch gym data + notify BattleHUD on ExploreScreen
       fetchGym();
       battleHUDEvents.emit();
     } catch (error) {
       console.error('Check-in failed:', error);
-      setPillarToast(friendlyActionError(error, 'Check-in failed'));
-      setTimeout(() => setPillarToast(null), 2000);
+      showToast(friendlyActionError(error, 'Check-in failed'));
     }
   };
 
@@ -763,22 +880,24 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     navigation?.goBack();
   };
 
-  // Generate particles for winning team color
+  // Gold specks rising off the arena floor. Capped, and none with Reduce
+  // Motion, Battery Saver or an idle phone.
+  const particleCount = ambient ? Math.round(14 * Math.min(1, Math.max(0, particleScale))) : 0;
   const particles = useMemo(() => {
-    const winnerColor = TEAM_COLORS[winningTeam] || '#FBBF24';
-    return Array(20).fill(0).map((_, i) => ({
+    return Array(particleCount).fill(0).map((_, i) => ({
       id: `p-${i}`,
       x: SCREEN_W * 0.2 + Math.random() * SCREEN_W * 0.6,
-      color: i % 3 === 0 ? winnerColor : i % 3 === 1 ? '#FFD700' : '#fff',
-      delay: i * 300,
+      color: i % 2 === 0 ? '#FFD54A' : '#FFF1B8',
+      delay: i * 400,
     }));
-  }, [winningTeam]);
+  }, [particleCount]);
 
   const sparkles = useMemo(() => 
     Array(12).fill(0).map((_, i) => ({
       id: `s-${i}`,
       x: Math.random() * SCREEN_W,
-      y: SCREEN_H * 0.15 + Math.random() * (SCREEN_H * 0.35),
+      // Start below the header cards (about 180 pt) so no star crosses their text.
+      y: HEADER_BOTTOM + Math.random() * Math.max(40, SCREEN_H * 0.5 - HEADER_BOTTOM),
       delay: i * 400,
     }))
   , []);
@@ -787,45 +906,43 @@ export default function GymBattleScreen({ navigation, route }: Props) {
   if (!loading && gymData && !gymData.player) {
     return (
       <Animated.View style={[styles.container, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
-        <ImageBackground source={require('../../../assets/images/arena-bg.png')} style={styles.bgImage} resizeMode="cover">
+        <ImageBackground source={require('../../../assets/images/arena-bg.jpg')} style={styles.bgImage} resizeMode="cover">
           {particles.map((p) => <FloatingParticle key={p.id} delay={p.delay} startX={p.x} color={p.color} />)}
           {sparkles.map((s) => <Sparkle key={s.id} x={s.x} y={s.y} delay={s.delay} />)}
           
-          {/* Show pillars anyway */}
-          {pillarOrder.map((team, idx) => (
-            <AnimatedPillar
-              key={team}
-              team={team}
-              isWinner={hasWinner && idx === 1}
-              position={idx === 0 ? 'left' : idx === 1 ? 'center' : 'right'}
-              score={gymData?.scores?.[team] ?? 0}
-              onTap={(t) => {
-                const teamName = TEAM_NAMES[t as keyof typeof TEAM_NAMES];
-                const pts = gymData?.scores?.[t as keyof typeof gymData.scores] ?? 0;
-                setPillarToast(`${teamName}: ${pts.toLocaleString()} pts`);
-                setTimeout(() => setPillarToast(null), 2000);
-              }}
-            />
-          ))}
-          
+          {/* Show pillars anyway, in their own layer under the prompt, so
+              "Join a Team!" and its button are never covered and always
+              tappable. collapsable={false} keeps the layer: a flattened
+              wrapper would hand the towers' zIndex back to this level. */}
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none" collapsable={false}>
+            {pillarOrder.map((team, idx) => (
+              <AnimatedPillar
+                key={team}
+                team={team}
+                isWinner={hasWinner && idx === 1}
+                position={idx === 0 ? 'left' : idx === 1 ? 'center' : 'right'}
+                score={gymData?.scores?.[team] ?? 0}
+                onTap={(t) => {
+                  const teamName = TEAM_NAMES[t as keyof typeof TEAM_NAMES];
+                  const pts = gymData?.scores?.[t as keyof typeof gymData.scores] ?? 0;
+                  showToast(`${teamName}: ${countText(pts)} pts`);
+                }}
+              />
+            ))}
+          </View>
+
           <View style={styles.noTeamOverlay}>
             <BlurView intensity={30} style={styles.noTeamBlur}>
               <View style={styles.noTeamBox}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><GameIcon name="swords" size={26} /><Text style={styles.noTeamTitle}>Join a Team!</Text></View>
                 <Text style={styles.noTeamText}>Pick a team to enter the arena battle.</Text>
-                <TouchableOpacity
-                  style={[styles.pickTeamButton, styles.pickTeamGradient]}
-                  onPress={() => { playButtonSound(); navigation?.navigate('TeamSelection'); }}
-                >
-                  <Text style={styles.pickTeamText}>PICK YOUR TEAM</Text>
-                </TouchableOpacity>
+                <GameButton label="Pick your team" icon="crown"
+                  onPress={() => { playButtonSound(); navigation?.navigate('TeamSelection'); }} />
+                {/* One yellow button on this card: Back is the quiet text action under it. */}
+                <GameButton label="Back" variant="ghost" tone="onLight" onPress={handleGoBack} style={styles.joinBack} />
               </View>
             </BlurView>
           </View>
-          
-          <TouchableOpacity style={styles.backButtonAbsolute} onPress={handleGoBack}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><GameIcon name="back" size={20} /><Text style={styles.backButtonText}>BACK</Text></View>
-          </TouchableOpacity>
         </ImageBackground>
       </Animated.View>
     );
@@ -836,15 +953,15 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     const title = loadError && gymLink.phase === 'live' && !loading ? 'Arena Did Not Load' : 'Loading Arena...';
     return (
       <Animated.View style={[styles.container, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
-        <ImageBackground source={require('../../../assets/images/arena-bg.png')} style={styles.bgImage} resizeMode="cover">
+        <ImageBackground source={require('../../../assets/images/arena-bg.jpg')} style={styles.bgImage} resizeMode="cover">
           <View style={styles.loadingOverlay}>
             <Text style={styles.loadingText}>{title}</Text>
             <View style={styles.linkSlot}>
               <MatchLinkBanner phase={gymLink.phase} onRetry={gymLink.retryNow} onLeave={handleGoBack} leaveLabel="Leave arena" />
             </View>
-            {gymLink.phase !== 'lost' && <TouchableOpacity style={styles.goBackBtn} onPress={handleGoBack} accessibilityRole="button">
-              <Text style={styles.goBackText}>GO BACK</Text>
-            </TouchableOpacity>}
+            {gymLink.phase !== 'lost' && <View style={styles.goBackBtn}>
+              <GameButton label="Go back" icon="back" variant="secondary" onPress={handleGoBack} />
+            </View>}
           </View>
         </ImageBackground>
       </Animated.View>
@@ -857,10 +974,19 @@ export default function GymBattleScreen({ navigation, route }: Props) {
   const canAttack = player?.can_attack ?? false;
   const secondsUntilAttack = player?.seconds_until_attack ?? 0;
   const hasPlacedToday = player?.has_placed_today ?? false;
+  // Ready only when the server would say yes: battle open, no cooldown, and
+  // the kid is in this park (the server refuses every arena action outside it).
+  const defendReady = battleActive && !awayFromArena && defendCooldown <= 0 && (player?.can_defend ?? true);
+  const checkinReady = battleActive && !awayFromArena && canCheckIn;
+  const battleReady = battleActive && !awayFromArena && canAttack;
+  // What a waiting button says: what the kid needs, or when it comes back.
+  const waitLine = (cooldown: number) =>
+    !battleActive ? 'SOON' : awayFromArena ? 'GET CLOSER' : cooldown > 0 ? clock(cooldown) : 'ALMOST';
+  const waitIcon: 'timer' | 'pin' = battleActive && awayFromArena ? 'pin' : 'timer';
 
   return (
     <Animated.View style={[styles.container, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
-      <ImageBackground source={require('../../../assets/images/arena-bg.png')} style={styles.bgImage} resizeMode="cover">
+      <ImageBackground source={require('../../../assets/images/arena-bg.jpg')} style={styles.bgImage} resizeMode="cover">
         
         {/* Floating particles */}
         {particles.map((p) => <FloatingParticle key={p.id} delay={p.delay} startX={p.x} color={p.color} />)}
@@ -876,16 +1002,21 @@ export default function GymBattleScreen({ navigation, route }: Props) {
         {/* Arena Header */}
         <View style={styles.arenaHeader}>
           {/* Title */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name="swords" size={30} /><Text style={styles.arenaTitle}>ARENA BATTLE</Text><GameIcon name="swords" size={30} /></View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: pillarToast ? 0 : 1 }}><GameIcon name="swords" size={30} /><Text style={styles.arenaTitle}>ARENA BATTLE</Text><GameIcon name="swords" size={30} /></View>
           
           {/* Stats Row */}
           <View style={styles.statsRow}>
             {/* Your Team */}
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>YOUR TEAM</Text>
-              <Text style={[styles.statValue, { color: TEAM_COLORS[player?.team as keyof typeof TEAM_COLORS] || '#fff' }]}>
-                {player?.team ? TEAM_NAMES[player.team as keyof typeof TEAM_NAMES]?.replace('Team ', '') : 'None'}
-              </Text>
+              <View style={styles.statTeamRow}>
+                {player?.team && TEAMS[player.team as TeamId] ? (
+                  <Image source={TEAMS[player.team as TeamId].badge} style={styles.statCrest} contentFit="contain" />
+                ) : null}
+                <Text style={[styles.statValue, { color: TEAM_COLORS[player?.team as keyof typeof TEAM_COLORS] || '#123A6B' }]}>
+                  {player?.team ? TEAM_NAMES[player.team as keyof typeof TEAM_NAMES]?.replace('Team ', '') : 'None'}
+                </Text>
+              </View>
             </View>
             
             {/* Countdown */}
@@ -899,9 +1030,14 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             {/* Leader */}
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>LEADING</Text>
-              <Text style={[styles.statValue, { color: hasWinner ? TEAM_COLORS[winningTeam] : '#fff' }]}>
-                {hasWinner ? TEAM_NAMES[winningTeam]?.replace('Team ', '') : 'TIE'}
-              </Text>
+              <View style={styles.statTeamRow}>
+                {hasWinner ? (
+                  <Image source={TEAMS[winningTeam].badge} style={styles.statCrest} contentFit="contain" />
+                ) : null}
+                <Text style={[styles.statValue, { color: hasWinner ? TEAM_COLORS[winningTeam] : '#123A6B' }]}>
+                  {hasWinner ? TEAM_NAMES[winningTeam]?.replace('Team ', '') : 'TIE'}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
@@ -917,8 +1053,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             onTap={(t) => {
               const teamName = TEAM_NAMES[t as keyof typeof TEAM_NAMES];
               const pts = gymData.scores?.[t as keyof typeof gymData.scores] ?? 0;
-              setPillarToast(`${teamName}: ${pts.toLocaleString()} pts`);
-              setTimeout(() => setPillarToast(null), 2000);
+              showToast(`${teamName}: ${countText(pts)} pts`);
             }}
           />
         ))}
@@ -931,104 +1066,114 @@ export default function GymBattleScreen({ navigation, route }: Props) {
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
-          {/* Top row: Defend, Check In, Battle */}
+          {/* Top row: Defend, Check In, Battle. Ready = READY tag + the
+              full-colour button at the full ready height, bobbing gently.
+              Waiting = a smaller solid cream pill with a clock (or what the
+              kid needs: GET CLOSER with a pin, NEED 2 swords). */}
           <View style={styles.actionRow}>
             {/* Defend button - 30 min cooldown */}
-            <View style={{ alignItems: 'center' }}>
-              {!battleActive && player ? (
-                <View style={styles.cooldownBadge}>
-                  <Text style={styles.cooldownText}>WAITING</Text>
-                </View>
-              ) : player && defendCooldown > 0 ? (
-                <View style={styles.cooldownBadge}>
-                  <Text style={styles.cooldownText}>
-                    {Math.floor(defendCooldown / 60)}:{(defendCooldown % 60).toString().padStart(2, '0')}
-                  </Text>
-                </View>
-              ) : player ? (
-                <View style={styles.readyBadge}>
-                  <Text style={styles.readyText}>READY</Text>
-                </View>
-              ) : null}
-              <AnimatedButton 
-                onPress={handleDefend}
-                disabled={!battleActive || defendCooldown > 0}
-                source={require('../../../assets/images/btn-defend.png')}
-                style={styles.actionBtnImage}
-              />
+            <View style={styles.actionCell}>
+              {defendReady ? (
+                <Animated.View style={[styles.readyStack, readyBobStyle]}>
+                  <View style={styles.readyBadge}>
+                    <Text style={styles.readyText}>READY</Text>
+                  </View>
+                  <AnimatedButton onPress={handleDefend} noShimmer>
+                    <ReadyArt name="defend" />
+                  </AnimatedButton>
+                </Animated.View>
+              ) : (
+                <>
+                  <View style={styles.badgeSpacer} />
+                  <View style={styles.readySlot}>
+                    <RestingButton
+                      label="DEFEND"
+                      line={waitLine(defendCooldown)}
+                      icon={waitIcon}
+                      style={styles.waitPill}
+                    />
+                  </View>
+                </>
+              )}
             </View>
-            
+
             {/* Check In button */}
-            <View style={{ alignItems: 'center' }}>
-              {!battleActive && player ? (
-                <View style={styles.cooldownBadge}>
-                  <Text style={styles.cooldownText}>WAITING</Text>
-                </View>
-              ) : player && !canCheckIn ? (
-                <View style={styles.cooldownBadge}>
-                  <Text style={styles.cooldownText}>
-                    {checkinCooldown > 0 
-                      ? `${Math.floor(checkinCooldown / 60)}:${(checkinCooldown % 60).toString().padStart(2, '0')}`
-                      : 'WAIT'}
-                  </Text>
-                </View>
-              ) : player && canCheckIn ? (
-                <View style={styles.readyBadge}>
-                  <Text style={styles.readyText}>READY</Text>
-                </View>
-              ) : null}
-              <AnimatedButton 
-                onPress={handleCheckIn}
-                disabled={!battleActive || !canCheckIn}
-                source={require('../../../assets/images/btn-checkin.png')}
-                style={styles.actionBtnImage}
-              />
+            <View style={styles.actionCell}>
+              {checkinReady ? (
+                <Animated.View style={[styles.readyStack, readyBobStyle]}>
+                  <View style={styles.readyBadge}>
+                    <Text style={styles.readyText}>READY</Text>
+                  </View>
+                  <AnimatedButton onPress={handleCheckIn} noShimmer>
+                    <ReadyArt name="checkin" />
+                  </AnimatedButton>
+                </Animated.View>
+              ) : (
+                <>
+                  <View style={styles.badgeSpacer} />
+                  <View style={styles.readySlot}>
+                    <RestingButton
+                      label="CHECK IN"
+                      line={waitLine(checkinCooldown)}
+                      icon={waitIcon}
+                      style={styles.waitPill}
+                    />
+                  </View>
+                </>
+              )}
             </View>
-            
+
             {/* Battle button */}
-            <View style={{ alignItems: 'center' }}>
-              {!battleActive && player ? (
-                <View style={styles.cooldownBadge}>
-                  <Text style={styles.cooldownText}>WAITING</Text>
-                </View>
-              ) : player && !canAttack ? (
-                attackCooldown > 0 ? (
-                  <View style={styles.cooldownBadge}>
-                    <Text style={styles.cooldownText}>
-                      {Math.floor(attackCooldown / 60)}:{(attackCooldown % 60).toString().padStart(2, '0')}
-                    </Text>
+            <View style={styles.actionCell}>
+              {battleReady ? (
+                <Animated.View style={[styles.readyStack, readyBobStyle]}>
+                  <View style={styles.readyBadge}>
+                    <Text style={styles.readyText}>READY</Text>
                   </View>
-                ) : !hasSwords ? (
-                  <View style={styles.lockedBadge}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}><Text style={styles.lockedText}>NEED 2</Text><GameIcon name="swords" size={14} /></View>
+                  <AnimatedButton onPress={handleBattle} noShimmer>
+                    <ReadyArt name="battle" />
+                  </AnimatedButton>
+                </Animated.View>
+              ) : (
+                <>
+                  <View style={styles.badgeSpacer} />
+                  <View style={styles.readySlot}>
+                    {battleActive && !awayFromArena && attackCooldown <= 0 && !hasSwords ? (
+                      <RestingButton label="BATTLE" line="NEED 2" icon="swords" style={styles.waitPill} />
+                    ) : (
+                      <RestingButton
+                        label="BATTLE"
+                        line={waitLine(attackCooldown)}
+                        icon={waitIcon}
+                        style={styles.waitPill}
+                      />
+                    )}
                   </View>
-                ) : (
-                  <View style={styles.cooldownBadge}>
-                    <Text style={styles.cooldownText}>WAIT</Text>
-                  </View>
-                )
-              ) : player && canAttack ? (
-                <View style={styles.readyBadge}>
-                  <Text style={styles.readyText}>READY</Text>
-                </View>
-              ) : null}
-              <AnimatedButton 
-                onPress={handleBattle}
-                disabled={!battleActive || !canAttack}
-                source={require('../../../assets/images/btn-battle.png')}
-                style={styles.actionBtnImage}
-              />
+                </>
+              )}
             </View>
           </View>
 
-          {/* Leave a Coin button */}
-          <AnimatedButton 
-            onPress={handleLeaveCoin}
-            disabled={!battleActive || hasPlacedToday}
-            source={require('../../../assets/images/btn-leavecoin.png')}
-            style={styles.leaveCoinBtnImage}
-            noShimmer
-          />
+          {/* Leave a Coin: the gold art when it can be used, otherwise a solid
+              cream "done for today", "get closer" or "soon" pill in the same spot. */}
+          {battleActive && !hasPlacedToday && !awayFromArena ? (
+            <AnimatedButton
+              onPress={handleLeaveCoin}
+              source={require('../../../assets/images/btn-leavecoin.png')}
+              style={styles.leaveCoinBtnImage}
+              noShimmer
+            />
+          ) : (
+            <View style={[styles.leaveCoinBtnImage, styles.leaveCoinRestSlot]}>
+              <RestingButton
+                label="LEAVE A COIN"
+                line={hasPlacedToday ? 'DONE TODAY' : battleActive && awayFromArena ? 'GET CLOSER' : 'SOON'}
+                icon={hasPlacedToday ? 'check' : battleActive && awayFromArena ? 'pin' : 'timer'}
+                style={styles.leaveCoinRest}
+                big
+              />
+            </View>
+          )}
 
           {/* Go Back button */}
           <AnimatedButton 
@@ -1041,9 +1186,11 @@ export default function GymBattleScreen({ navigation, route }: Props) {
 
         {/* Pillar Toast */}
         {pillarToast && (
-          <Animated.View style={styles.pillarToast}>
-            <Text style={styles.pillarToastText}>{pillarToast}</Text>
-          </Animated.View>
+          <Reanimated.View key={pillarToast} entering={ZoomIn.duration(180)} exiting={FadeOut.duration(150)} style={styles.pillarToastSlot} pointerEvents="none">
+            <View style={styles.pillarToast}>
+              <Text style={styles.pillarToastText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{pillarToast}</Text>
+            </View>
+          </Reanimated.View>
         )}
 
         {/* Modals */}
@@ -1094,16 +1241,24 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
   },
-  pillarGlow: {
+  // Winner cue in Alex's flat style: a hard team-colour stage behind the
+  // tower base with a navy outline, peeking out around the base. No soft glow
+  // (Dustin asked to drop the glow-filter look). The render passes
+  // shadowColor; shadowOpacity 0 keeps it from drawing anything soft.
+  pillarStageWrap: {
     position: 'absolute',
-    top: '10%',
-    left: '10%',
-    right: '10%',
-    bottom: '10%',
-    borderRadius: 100,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 50,
+    bottom: '1%',
+    left: '6%',
+    right: '6%',
+    height: '9%',
+  },
+  pillarGlow: {
+    flex: 1,
+    borderRadius: 999,
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    shadowOpacity: 0,
+    shadowRadius: 0,
   },
   pillarImage: {
     width: '100%',
@@ -1112,45 +1267,50 @@ const styles = StyleSheet.create({
   winnerCrown: {
     position: 'absolute',
     top: -30,
-    fontSize: 40,
-    textShadowColor: '#FFD700',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 15,
   },
   scoreBadge: {
     position: 'absolute',
     top: -25,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingLeft: 4,
+    paddingRight: 12,
+    paddingVertical: 3,
     borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
+    borderWidth: 2.5,
+    borderColor: '#123A6B',
+    // Flat navy drop, no blur (Alex style).
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  scoreCrest: {
+    width: 26,
+    height: 26,
   },
   scoreText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '900',
     fontFamily: 'Shark',
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 1, height: 1.5 },
+    textShadowRadius: 0,
   },
+  // Small solid gold specks that match the sparkles (an outlined dot read
+  // as a grey bubble or dirt on the light floor).
   particle: {
     position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    shadowColor: '#fff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   sparkle: {
     position: 'absolute',
     fontSize: 20,
     color: '#FFD700',
-    textShadowColor: '#FFD700',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
   },
   bottomGradient: {
     position: 'absolute',
@@ -1177,11 +1337,6 @@ const styles = StyleSheet.create({
   imageBtn: {
     // Container for image buttons
   },
-  actionBtnImage: {
-    // Top row buttons: ~2.5:1 aspect ratio (avg of all 3)
-    width: (SCREEN_W - 56) / 3,
-    height: ((SCREEN_W - 56) / 3) / 2.4,
-  },
   leaveCoinBtnImage: {
     // Leave a coin: 788x262 = 3:1 aspect ratio
     width: SCREEN_W - 48,
@@ -1196,67 +1351,125 @@ const styles = StyleSheet.create({
   btnDisabled: {
     opacity: 0.4,
   },
-  pillarToast: {
+  // Same solid cream pill as the header cards (no see-through navy).
+  // It takes the ARENA BATTLE title's place for 2 s, so on every phone size
+  // it covers no tower and no button (on an SE there is no free floor band).
+  pillarToastSlot: {
     position: 'absolute',
-    bottom: SCREEN_H * 0.36,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(5, 52, 110, 0.75)',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FBBF24',
+    top: 47,
+    left: 16,
+    right: 16,
+    alignItems: 'center',
+    zIndex: 30,
+  },
+  pillarToast: {
+    maxWidth: '100%',
+    backgroundColor: '#FFF8E6',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 2.5,
+    borderColor: '#123A6B',
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   pillarToastText: {
-    color: '#FBBF24',
-    fontSize: 13,
+    textAlign: 'center',
+    color: '#123A6B',
+    fontSize: 15,
     fontWeight: '700',
     fontFamily: 'Shark',
   },
-  cooldownBadge: {
-    backgroundColor: 'rgba(5, 52, 110, 0.8)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: '#EF4444',
+  actionCell: {
+    width: ACTION_CELL_W,
+    alignItems: 'center',
   },
-  cooldownText: {
-    color: '#EF4444',
-    fontSize: 12,
-    fontWeight: '800',
-    fontFamily: 'Shark',
+  readyStack: {
+    alignItems: 'center',
   },
+  // Both states share one slot at the ready height, so the row never jumps
+  // and a smaller waiting pill sits centred where the ready art would be.
+  readySlot: {
+    height: READY_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waitPill: {
+    width: WAIT_W,
+    height: WAIT_H,
+  },
+  // Solid green READY tag with the navy outline (go). Same height as the
+  // spacer a waiting button keeps, so the row never jumps.
   readyBadge: {
-    backgroundColor: 'rgba(5, 52, 110, 0.8)',
+    height: 24,
+    justifyContent: 'center',
+    backgroundColor: '#22C55E',
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: 12,
     marginBottom: 4,
-    borderWidth: 1,
-    borderColor: '#22C55E',
+    borderWidth: 2,
+    borderColor: '#123A6B',
   },
   readyText: {
-    color: '#22C55E',
+    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800',
     fontFamily: 'Shark',
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 0,
   },
-  lockedBadge: {
-    backgroundColor: 'rgba(5, 52, 110, 0.8)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+  badgeSpacer: {
+    height: 24,
     marginBottom: 4,
-    borderWidth: 1,
-    borderColor: '#6B7280',
   },
-  lockedText: {
-    color: '#6B7280',
+  // Waiting (come back soon): a solid, quieter cream pill at full opacity.
+  restingBtn: {
+    backgroundColor: '#EFE6D2',
+    borderRadius: 999,
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  restingLabel: {
+    color: '#5A6F8C',
     fontSize: 10,
+    lineHeight: 12,
     fontWeight: '800',
     fontFamily: 'Shark',
+    letterSpacing: 0.5,
+  },
+  restingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    maxWidth: '100%',
+    paddingHorizontal: 8,
+  },
+  restingTime: {
+    flexShrink: 1,
+    color: '#123A6B',
+    fontSize: 14,
+    lineHeight: 17,
+    fontWeight: '900',
+    fontFamily: 'Shark',
+  },
+  restingLabelBig: { fontSize: 14, lineHeight: 17 },
+  restingTimeBig: { fontSize: 20, lineHeight: 24 },
+  leaveCoinRestSlot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leaveCoinRest: {
+    width: '78%',
+    height: '56%',
   },
   arenaHeader: {
     position: 'absolute',
@@ -1271,9 +1484,9 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#FBBF24',
     fontFamily: 'Shark',
-    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowColor: '#123A6B',
     textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+    textShadowRadius: 0,
     marginBottom: 12,
   },
   statsRow: {
@@ -1281,37 +1494,57 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 12,
   },
+  // Same bright cream card as Join a Team and Defend: solid fill (nothing
+  // shows through), 3 pt navy outline and a hard navy drop.
   statBox: {
     flex: 1,
-    backgroundColor: 'rgba(5, 52, 110, 0.6)',
-    borderRadius: 12,
-    padding: 10,
+    backgroundColor: '#FFF8E6',
+    borderRadius: 14,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.3)',
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
+  // The timer card is the gold one, so the middle reads as "the clock".
   countdownBox: {
-    borderColor: '#FBBF24',
-    borderWidth: 2,
+    backgroundColor: '#FFD54A',
   },
   statLabel: {
     fontSize: 10,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '800',
+    color: '#123A6B',
     letterSpacing: 1,
-    marginBottom: 4,
+    marginBottom: 3,
+  },
+  statTeamRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  // Big enough at 375 pt for a non-reader to match it to the tower crest.
+  statCrest: {
+    width: 28,
+    height: 28,
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '900',
     fontFamily: 'Shark',
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 1, height: 1.5 },
+    textShadowRadius: 0,
   },
   countdownText: {
     fontSize: 18,
     fontWeight: '900',
-    color: '#FBBF24',
+    color: '#123A6B',
     fontFamily: 'Shark',
-    letterSpacing: 2,
+    letterSpacing: 1,
   },
   linkSlot: { alignSelf: 'stretch', paddingHorizontal: 24 },
   linkOverlay: { position: 'absolute', left: 16, right: 16, bottom: 150, zIndex: 50 },
@@ -1325,78 +1558,58 @@ const styles = StyleSheet.create({
     color: '#FBBF24',
     fontSize: 24,
     fontWeight: '800',
-    textShadowColor: '#FBBF24',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 20,
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 0,
   },
   goBackBtn: {
     marginTop: 24,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 12,
-    backgroundColor: 'rgba(5, 70, 143, 0.9)',
+    alignSelf: 'stretch',
+    alignItems: 'center',
   },
-  goBackText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  // Below the three pillars, drawn on top of everything: the pillars used to
+  // cover the card's title, words and button (they have their own zIndex; this card had none).
   noTeamOverlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
+    // Sits on the arena floor just above BACK, so the towers stay in view
+    // on tall phones and only their bases tuck behind it on an SE. The towers
+    // have their own layer under it; zIndex keeps the card above them anyway.
+    justifyContent: 'flex-end',
     alignItems: 'center',
+    paddingBottom: 104,
+    zIndex: 10,
+    elevation: 10,
   },
+  // Same cream card language as Defend: navy outline, flat drop, bright.
   noTeamBlur: {
-    borderRadius: 24,
+    alignSelf: 'stretch',
+    borderRadius: 28,
     overflow: 'hidden',
     marginHorizontal: 20,
+    borderWidth: 3,
+    borderColor: '#123A6B',
   },
   noTeamBox: {
-    backgroundColor: 'rgba(7, 104, 185, 0.85)',
-    padding: 32,
+    backgroundColor: '#FFF8E6',
+    paddingHorizontal: 24,
+    paddingVertical: 24,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(251, 191, 36, 0.5)',
   },
   noTeamTitle: {
+    fontFamily: 'Shark',
     fontSize: 28,
-    fontWeight: '900',
-    color: '#FBBF24',
-    marginBottom: 12,
+    color: '#0768B9',
+    textShadowColor: '#FFD700',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 0,
+    marginBottom: 10,
   },
   noTeamText: {
-    fontSize: 16,
-    color: '#CBD5E1',
+    fontFamily: 'Knockout',
+    fontSize: 17,
+    color: '#123A6B',
     textAlign: 'center',
-    marginBottom: 28,
+    marginBottom: 22,
   },
-  pickTeamButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  pickTeamGradient: {
-    paddingHorizontal: 36,
-    paddingVertical: 18,
-    backgroundColor: '#FBBF24',
-  },
-  pickTeamText: {
-    color: '#0768b9',
-    fontWeight: '900',
-    fontSize: 18,
-  },
-  backButtonAbsolute: {
-    position: 'absolute',
-    bottom: 40,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(5, 70, 143, 0.9)',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  joinBack: { marginTop: 6 },
 });

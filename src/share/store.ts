@@ -50,10 +50,35 @@ export function subscribeWarm(listener: Listener): () => void {
   return () => { warmListeners.delete(listener); };
 }
 
+/**
+ * A once-only moment that is already waiting (queued, or held in the park) takes the newer
+ * payload in place: one moment, with the latest numbers. True when one was updated.
+ */
+function updateWaiting(request: FlexRequest): boolean {
+  const key = request.options.onceKey;
+  if (!key) return false;
+  for (const list of [queue, held]) {
+    const index = list.findIndex(waiting => waiting.mode === 'reveal' && waiting.options.onceKey === key);
+    if (index < 0) continue;
+    // The one on screen (queue[0]) keeps what it shows; the next load is not lost, it is the same brag.
+    if (list === queue && index === 0) return true;
+    list[index] = { ...list[index], payload: request.payload, options: request.options };
+    return true;
+  }
+  return false;
+}
+
 /** Full-screen Flex moment right after an earn, with a big Share button. */
 export function flexReveal<K extends FlexKind>(kind: K, payload: FlexPayload<K>, options: FlexOptions): void {
   warmFlex(kind);
-  push({ id: nextId++, mode: 'reveal', kind, payload, options } as FlexRequest);
+  const request = { id: nextId++, mode: 'reveal', kind, payload, options } as FlexRequest;
+  if (updateWaiting(request)) return;
+  push(request);
+}
+
+/** Tests only: what is waiting in the park. */
+export function __heldFlex(): readonly FlexRequest[] {
+  return held;
 }
 
 /** The Flex sheet (preview, Story/Square, Share) for re-sharing where the thing lives. */

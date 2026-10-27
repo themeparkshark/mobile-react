@@ -26,6 +26,8 @@ import Animated, {
   FadeInDown,
   type SharedValue,
 } from 'react-native-reanimated';
+import { GoldBurst } from '../ui/GoldBurst';
+import { DURATION, EASE, SPRING } from '../ui/motionEasing';
 import Ribbon from './Ribbon';
 import RewardBurst from './RewardBurst';
 import { haptic } from '../gamekit/Haptics';
@@ -47,6 +49,7 @@ import { milestoneHeadline, nextUnlockLine, partsProgress, rewardChips } from '.
 import { adsAvailable, rewardText, watchForReward } from '../services/ads';
 import { hasWinNote, holdWinNotes, takeWinNote } from '../screens/LeaderboardsScreen/standingsCache';
 import StarRideStamp from './liveEvents/StarRideStamp';
+import countText from '../helpers/countText';
 
 const { width: SW } = Dimensions.get('window');
 const HERO = 150;
@@ -143,7 +146,7 @@ function CountUp({ value, start, reduced, style }: { value: number; start: boole
     timer = setTimeout(tick, 34);
     return () => clearTimeout(timer);
   }, [value, start, reduced]);
-  return <Text style={style}>+{shown.toLocaleString()}</Text>;
+  return <Text style={style}>+{countText(shown)}</Text>;
 }
 
 /* ─── One reward chip; pops in on the shared entrance clock ─── */
@@ -264,6 +267,11 @@ export default function PostWinRewardsModal({
   const isNewCoin = coinTimesCollected === 1;
   const [coinArtFailed, setCoinArtFailed] = useState(false);
   useEffect(() => { setCoinArtFailed(false); }, [taskCoinUrl, visible]);
+  // Warm the coin art while the game is still being played (this modal is mounted, hidden, the whole time),
+  // so the catch reveal of a brand-new coin shows its real art on time instead of waiting on the download.
+  useEffect(() => {
+    if (taskCoinUrl && typeof Image.prefetch === 'function') void Image.prefetch([taskCoinUrl], 'memory-disk').catch(() => undefined);
+  }, [taskCoinUrl]);
   // The coin catch plays first and hands its coin to the summary's hero slot.
   const [caught, setCaught] = useState(false);
   // Standings: the weekly goal note lands on this screen right as the coin reveal ends.
@@ -323,18 +331,19 @@ export default function PostWinRewardsModal({
     const values = [enter, heroSquash, burst, spin, partsFill, readyPop];
     if (!visible || !caught) { values.forEach(value => cancelAnimation(value)); return undefined; }
     if (reducedMotion) {
-      enter.value = 1; heroSquash.value = 1; burst.value = 0; spin.value = 0;
+      enter.value = 1; heroSquash.value = 1; burst.value = 0; spin.value = isNewCoin ? 0.6 : 0.35;
       partsFill.value = parts ? parts.after : 0; readyPop.value = upgradeReady ? 1 : 0;
       return undefined;
     }
     enter.value = 0;
     enter.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
     // The coin arrives from the catch: land with a squash and settle.
-    heroSquash.value = withSequence(withTiming(0.88, { duration: 80 }), withSpring(1, { damping: 6, stiffness: 240 }));
+    heroSquash.value = withSequence(withTiming(0.88, { duration: 80 }), withSpring(1, SPRING.pop));
     burst.value = 0;
     burst.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.quad) });
+    // The same gold as the catch that handed the coin over (GoldBurst turns only while it shows and power allows).
     spin.value = 0;
-    if (isNewCoin) spin.value = withRepeat(withTiming(360, { duration: 14000, easing: Easing.linear }), -1, false);
+    spin.value = withTiming(isNewCoin ? 0.6 : 0.35, { duration: DURATION.enter, easing: EASE.out });
     if (parts) {
       partsFill.value = parts.before;
       partsFill.value = withDelay(650, withTiming(parts.after, { duration: 700, easing: Easing.out(Easing.cubic) }));
@@ -342,7 +351,7 @@ export default function PostWinRewardsModal({
     const timers: ReturnType<typeof setTimeout>[] = [];
     if (upgradeReady) {
       readyPop.value = 0;
-      readyPop.value = withDelay(1400, withSpring(1, { damping: 7, stiffness: 200 }));
+      readyPop.value = withDelay(1400, withSpring(1, SPRING.stamp));
       timers.push(setTimeout(() => {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
         playSfx('star', 0.8);
@@ -363,7 +372,6 @@ export default function PostWinRewardsModal({
     transform: [{ scale: 0.94 + 0.06 * Math.min(1, enter.value * 2.2) }],
   }));
   const heroStyle = useAnimatedStyle(() => ({ transform: [{ scaleY: heroSquash.value }, { scaleX: 2 - heroSquash.value }] }));
-  const raysStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }, { scale: 0.85 + 0.15 * enter.value }] }));
   const burstStyle = useAnimatedStyle(() => ({
     opacity: burst.value === 0 ? 0 : 1 - burst.value,
     transform: [{ scale: 0.7 + burst.value * 0.9 }],
@@ -430,10 +438,9 @@ export default function PostWinRewardsModal({
 
             {/* ── Hero coin ── */}
             <View style={styles.heroStage}>
-              <Animated.View style={[styles.rays, raysStyle]} pointerEvents="none">
-                <Image source={require('../../assets/images/screens/explore/starburst.png')} contentFit="contain"
-                  style={{ width: HERO * 2.1, height: HERO * 2.1, opacity: 0.3 }} tintColor="#ffe07a" />
-              </Animated.View>
+              <View style={styles.rays} pointerEvents="none">
+                <GoldBurst size={HERO * 2.4} amount={spin} reduced={reducedMotion} />
+              </View>
               <Animated.View style={[styles.burstRing, burstStyle]} pointerEvents="none" />
               {/* Confetti off the same entrance clock as the ring. */}
               {!reducedMotion && <View pointerEvents="none" style={{ position: 'absolute', width: HERO, height: HERO }}>

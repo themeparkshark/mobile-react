@@ -19,7 +19,7 @@
  *   BoardFxOver (above the cards, pointerEvents none)
  *     link arc   gold arc from the card you saw earlier to the one you just
  *                flipped (chain 2+): 3px core, 1px ink edge, trims in 140ms
- *     slip arc   coral dashed arc from the forgotten card to the wrong card,
+ *     slip arc   calm white dashed arc from the forgotten card to the wrong card,
  *                1px ink edge, draws in 200ms and holds 440ms
  *     flash      Photo Flash light confined to the chosen cards
  *     trail      the seagull's dotted gold carry trail (stays 1000ms)
@@ -339,7 +339,7 @@ export const BoardFxOver = memo(function BoardFxOver({ arc, slipArc, flash, flas
         <Path path={slipPath} style="stroke" strokeWidth={4} strokeCap="round" color={MM.ink} start={0} end={slipEnd}>
           <DashPathEffect intervals={[9, 6]} />
         </Path>
-        <Path path={slipPath} style="stroke" strokeWidth={2} strokeCap="round" color={MM.coral} start={0} end={slipEnd}>
+        <Path path={slipPath} style="stroke" strokeWidth={2.5} strokeCap="round" color="#ffffff" start={0} end={slipEnd}>
           <DashPathEffect intervals={[9, 6]} />
         </Path>
       </Group>

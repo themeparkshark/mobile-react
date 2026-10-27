@@ -269,6 +269,14 @@ export interface HoleAnim {
   ghostHole: number[];
   ghostC: number[];
   ghostNext: number;
+  /**
+   * Curtain call (wow-games r4): fx ms when the burst ended, -1 off. Every empty well pops a shark up on a
+   * reading-order stagger and they wave together, so FINISH! lands on a full, happy board (cosmetic only:
+   * the sim has ended, nothing is tappable).
+   */
+  curtainAt: number;
+  /** Which curtain this Burst ends with (CURTAIN_FULL, CURTAIN_SHORT, CURTAIN_GOLDEN). */
+  curtainKind: number;
 }
 
 export function createHoleAnim(): HoleAnim {
@@ -284,6 +292,7 @@ export function createHoleAnim(): HoleAnim {
     fingerAt: -99999, fingerX: 0, fingerY: 0, fingerSpin: 0, fxNow: 0, veil: 0, fever: 0,
     hatAt: arr(-1), hatCrit: arr(0), releaseAt: -99999, releaseX: 0, releaseY: 0,
     ghostAt: arr(-99999, GHOST_SLOTS), ghostHole: arr(0, GHOST_SLOTS), ghostC: arr(0, GHOST_SLOTS), ghostNext: 0,
+    curtainAt: -1, curtainKind: 0,
   };
 }
 
@@ -382,6 +391,83 @@ function launchHat(an: HoleAnim, L: BoardLayout, i: number, seed: number, ox?: n
   an.hatFloor[slot] = L.rimY[i] + L.rimH[i] * 0.98;
   an.hatBounced[slot] = 0;
   an.hatSlid[slot] = 0;
+}
+
+/** Curtain call timing: each well joins CURTAIN_STEP_MS after the one before it, rising over CURTAIN_RISE_MS. */
+export const CURTAIN_STEP_MS = 45;
+export const CURTAIN_RISE_MS = 150;
+/** Dev capture holds keep the sharks up for the whole held frame. */
+const CURTAIN_HOLD = __DEV__ && process.env.EXPO_PUBLIC_FINISH_HOLD_MS ? Number(process.env.EXPO_PUBLIC_DEV_HOLD_FOR_MS || 6000) : 0;
+/**
+ * The bow starts here (ms after the curtain starts): the sharks duck back, so the next card owns a calm board.
+ * r5: the full wave bows at 620 (FINISH!, wave, bow, card: each beat clean), the short ripple at 380.
+ */
+export const CURTAIN_BOW_MS = CURTAIN_HOLD || 620;
+export const CURTAIN_SHORT_BOW_MS = CURTAIN_HOLD || 380;
+export const CURTAIN_DUCK_MS = 160;
+/** The duck runs in the same order as the rise, CURTAIN_DUCK_STEP_MS apart (exits faster than entrances). */
+export const CURTAIN_DUCK_STEP_MS = 22;
+/** The curtain starts this long after the end frame (useWhackRuntime: a.curtainAt = a.fxNow + 90). */
+export const CURTAIN_LEAD_MS = 90;
+/** Reading order from the centre out, so the wave starts where the eye already is. */
+export const CURTAIN_ORDER = [4, 1, 3, 5, 7, 0, 2, 6, 8];
+/** The short ripple (Bursts 2 and up): just the middle row, centre first. */
+export const CURTAIN_SHORT_ORDER = [4, 3, 5];
+/**
+ * Curtain kinds: FULL (the first Burst and the last), SHORT (the Bursts in between: a quick middle-row
+ * ripple, so the 10th run is never slower), GOLDEN (rare, about 1 run in 8: the full wave with the centre
+ * shark in gold, a small surprise for the kid who has seen it all).
+ */
+export const CURTAIN_FULL = 0;
+export const CURTAIN_SHORT = 1;
+export const CURTAIN_GOLDEN = 2;
+
+/** Pick the curtain for a Burst (pure): first and last get the full wave, a rare seeded run gets the gold one. */
+export function curtainKindFor(burstIndex: number, totalBursts: number, seed: number): number {
+  const last = burstIndex >= totalBursts - 1;
+  // A cheap seeded hash so the rare one is stable for a run and lands about 1 in 8.
+  const h = Math.abs(Math.imul((seed | 0) ^ 0x5bd1e995, 0x27d4eb2d) + burstIndex * 7919) % 8;
+  if ((last || burstIndex === 0) && h === 3) return CURTAIN_GOLDEN;
+  if (last || burstIndex === 0) return CURTAIN_FULL;
+  return CURTAIN_SHORT;
+}
+
+/** When the last shark of a curtain is back down, in ms after the end frame (the next card waits for it). */
+export function curtainEndMs(kind: number): number {
+  'worklet';
+  const n = kind === CURTAIN_SHORT ? CURTAIN_SHORT_ORDER.length : CURTAIN_ORDER.length;
+  const bow = kind === CURTAIN_SHORT ? CURTAIN_SHORT_BOW_MS : CURTAIN_BOW_MS;
+  return CURTAIN_LEAD_MS + bow + (n - 1) * CURTAIN_DUCK_STEP_MS + CURTAIN_DUCK_MS;
+}
+
+/**
+ * Curtain-call pose for well `i` at fx time `now` (pure, unit-tested): rise 0..1 on an outBack pop, a wave
+ * sway in degrees and a small hop. Returns rise -1 before the well's turn (and for wells a short ripple skips).
+ */
+export function curtainPose(i: number, now: number, at: number, reduced: boolean, kind = CURTAIN_FULL): { rise: number; rot: number; hop: number } {
+  'worklet';
+  if (at < 0) return { rise: -1, rot: 0, hop: 0 };
+  const short = kind === CURTAIN_SHORT;
+  let order = -1;
+  if (short) {
+    for (let k = 0; k < 3; k++) if (CURTAIN_SHORT_ORDER[k] === i) order = k;
+  } else {
+    for (let k = 0; k < 9; k++) if (CURTAIN_ORDER[k] === i) order = k;
+  }
+  if (order < 0) return { rise: -1, rot: 0, hop: 0 };
+  const c = now - at - order * CURTAIN_STEP_MS;
+  if (c < 0) return { rise: -1, rot: 0, hop: 0 };
+  // The bow: every shark ducks back in the same order (exits faster than entrances), then the well is calm.
+  const d = now - at - (short ? CURTAIN_SHORT_BOW_MS : CURTAIN_BOW_MS) - order * CURTAIN_DUCK_STEP_MS;
+  if (d >= CURTAIN_DUCK_MS) return { rise: -1, rot: 0, hop: 0 };
+  if (reduced) return d > 0 ? { rise: -1, rot: 0, hop: 0 } : { rise: 1, rot: 0, hop: 0 };
+  // The duck eases in (a bow, not a blink): the shark sinks on an ease-in curve over the whole 160 ms.
+  const duck = d > 0 ? d / CURTAIN_DUCK_MS : 0;
+  const rise = (c < CURTAIN_RISE_MS ? 0.3 + 0.7 * outBack(c / CURTAIN_RISE_MS, 1.8) : 1) * (1 - duck * duck);
+  // Everyone waves together (1.6 Hz, alternate wells lean the other way) and hops on the beat; a bow tips forward.
+  const w = Math.sin((now - at) * 0.01005 + (i % 2) * Math.PI);
+  const hop = c > CURTAIN_RISE_MS && d <= 0 ? Math.max(0, Math.sin((now - at) * 0.02010)) * 5 : 0;
+  return { rise, rot: d > 0 ? 7 * w * (1 - duck) : 7 * w, hop };
 }
 
 /**
@@ -699,13 +785,17 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
         const t = clamp01(a / (k === K_GOLDEN && s.evUg[ev] > 0 ? 90 : 140));
         if (t < 1) rs.foam[i] = 1.5;
         if (t < 1) {
-          const frame = finnish ? F_DUCK : k === K_GOLDEN ? F_GOLDEN : k === K_ANGLER ? F_ANGLER : k === K_BRUISER ? F_BRUISER : k === K_PUFFER ? (s.hPuffed[i] ? F_PUFFED : F_PUFFER) : F_POP;
+          // r5: a miss is a gag, not a loss: a plain shark that got away blows a raspberry (tongue out, a
+          // cheeky wiggle) as it ducks, so the kid laughs and taps again. Helmets and tentacles keep their duck.
+          const cheeky = finnish && (k === K_FINN || k === K_TWIN || k === K_SPRINTER) && wob > 0;
+          const frame = cheeky ? F_TONGUE : finnish ? F_DUCK : k === K_GOLDEN ? F_GOLDEN : k === K_ANGLER ? F_ANGLER : k === K_BRUISER ? F_BRUISER : k === K_PUFFER ? (s.hPuffed[i] ? F_PUFFED : F_PUFFER) : F_POP;
           rs.frame[i] = frame;
           rise = 1 - inQuad(t);
           if (isPoseFrame(frame)) {
             const ph2 = placePose(rs, i, boxes[frame], popBox, cx, base, H, poseScale ? poseScale[frame] : 1);
             rs.iy[i] += inQuad(t) * ph2 * 0.95;
             rs.py[i] += inQuad(t) * ph2 * 0.95;
+            if (cheeky) rs.rot[i] = 7 * Math.sin(t * Math.PI * 3);
           } else {
             rs.sy[i] = 1.1;
             rs.sx[i] = 0.94;
@@ -726,6 +816,19 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
       }
     } else {
       rs.rimLight[i] = 0;
+    }
+    // Curtain call: the burst is over and this well is empty, so its shark pops up and waves.
+    if (rs.frame[i] === F_NONE && s.ended && an.curtainAt >= 0) {
+      const cp = curtainPose(i, now, an.curtainAt, reducedMotion, an.curtainKind);
+      if (cp.rise >= 0) {
+        rise = cp.rise;
+        // The rare gold curtain: the centre shark bows in gold with a gold rim light.
+        const fr = an.curtainKind === CURTAIN_GOLDEN && i === 4 ? F_GOLDEN : F_POP;
+        rs.frame[i] = fr;
+        rs.rot[i] = cp.rot;
+        if (fr === F_GOLDEN) rs.rimLight[i] = 0.85;
+        placePose(rs, i, boxes[fr], popBox, cx, base + (1 - rise) * H * 0.9 - cp.hop, H, poseScale ? poseScale[fr] : 1);
+      }
     }
     // Contact shadow on the water disc grows with the rise (0.3 -> 0.7 cell).
     if (rs.frame[i] !== F_NONE && rise > 0) {

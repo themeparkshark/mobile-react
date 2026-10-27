@@ -36,6 +36,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { SPRING } from '../../ui/motion';
 import GameIcon, { type GameIconName } from '../../ui/GameIcon';
 import { compareBest, countUpMs, formatScore, nextStarGoal, type StarThresholds } from '../core/scoring';
 import { nearMissLine } from '../core/nearMiss';
@@ -242,7 +243,7 @@ export function ResultsCard({
       bestScale.value = withDelay(countDelay + 900, withSequence(
         withTiming(1.4, { duration: 0 }),
         withTiming(0.92, { duration: 130, easing: Easing.in(Easing.quad) }),
-        withSpring(1, { damping: 9, stiffness: 320 }),
+        withSpring(1, SPRING.stamp),
       ));
       const t = setTimeout(() => {
         GameAudio.play('fx.purchase');
@@ -459,7 +460,7 @@ function BucketTally({ index, label, text, value, delayMs, foldAt, reducedMotion
     }
     pop.value = withDelay(delayMs, withSequence(
       withTiming(1.15, { duration: 90, easing: Easing.out(Easing.back(1.6)) }),
-      withSpring(1, { damping: 10, stiffness: 300 }),
+      withSpring(1, SPRING.stamp),
     ));
     fold.value = withDelay(foldAt, withTiming(1, { duration: TALLY_FOLD_MS, easing: Easing.in(Easing.quad) }));
     // One soft tick per bucket as it pops, each a step higher (never a full
@@ -510,7 +511,7 @@ function StarSlot({ index, earned, close, reducedMotion, stepMs, small = false, 
       scale.value = withDelay(delay, withSequence(
         withTiming(2.2, { duration: 0 }),
         withTiming(0.9, { duration: 120, easing: Easing.in(Easing.quad) }),
-        withSpring(1, { damping: 9, stiffness: 320 }, (finished) => {
+        withSpring(1, SPRING.stamp, (finished) => {
           'worklet';
           if (finished && onLanded) runOnJS(onLanded)();
         }),

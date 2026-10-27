@@ -12,6 +12,7 @@ import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import { SoundEffectContext } from '../../../context/SoundEffectProvider';
 import { haptic } from '../../../gamekit/Haptics';
+import { studioMoment } from '../../../gamekit/audio/playMoment';
 import { BRAND } from '../../../ui';
 import { flightPoint, type Point } from './presence';
 
@@ -68,7 +69,7 @@ export const CoinCollectFlight = memo(function CoinCollectFlight({ from, to, coi
     tag.value = withDelay(flight, withSequence(withTiming(1, { duration: 220 }), withDelay(1100, withTiming(0, { duration: 300 }))));
     const land = setTimeout(() => {
       haptic('success');
-      void playSound(LAND_SOUND, { volume: 0.55, rate: 1.15 });
+      if (!studioMoment('park.shelfLand', { volume: 0.8 })) void playSound(LAND_SOUND, { volume: 0.55, rate: 1.15 });
       onLand?.();
     }, flight);
     const done = setTimeout(onDone, flight + 1700);

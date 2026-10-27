@@ -14,6 +14,7 @@ import type { GameIconName } from '../../ui/iconNames';
 import { BRAND, FONT } from '../../ui/tokens';
 import { CLEAN_SCREEN_INK, CLEAN_SCREEN_INK_SOFT } from '../../components/CleanScreenBackground';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import { UpperText } from '../../ui/upper';
 
 export const INK = '#05346E';
 export const CARD = '#FFFFFF';
@@ -83,9 +84,9 @@ export const Pill = memo(function Pill({
             {image ? <Image source={image} style={{ width: compact ? 28 : 32, height: compact ? 28 : 32 }} contentFit="contain" />
               : icon && <GameIcon name={icon} size={compact ? 24 : 28} />}
             {!iconOnly && (
-              <Text style={[kit.pillText, { color: t.text, fontSize: compact ? 16 : 18 }]} numberOfLines={1} maxFontSizeMultiplier={1.25}>
+              <UpperText style={[kit.pillText, { color: t.text, fontSize: compact ? 16 : 18 }]} numberOfLines={1} maxFontSizeMultiplier={1.25}>
                 {label}
-              </Text>
+              </UpperText>
             )}
           </View>
         </View>
@@ -110,7 +111,7 @@ export const SectionHeader = memo(function SectionHeader({ label, count, icon, r
     <View style={kit.sectionHead}>
       <View style={kit.sectionLeft} accessibilityRole="header" accessible accessibilityLabel={count ? `${label}, ${count}` : label}>
         {icon && <GameIcon name={icon} size={22} />}
-        <Text style={kit.sectionText} maxFontSizeMultiplier={1.2}>{label}</Text>
+        <UpperText style={kit.sectionText} maxFontSizeMultiplier={1.2}>{label}</UpperText>
         {count != null && count > 0 && <BouncyCount count={count} />}
       </View>
       <View style={kit.sectionRule} />
@@ -160,7 +161,7 @@ export function SocialError({ title, onRetry }: { readonly title: string; readon
         {/* Exactly one offline mark: this sticker; the global banner hides while this card is up. */}
         {<Image source={require('../../../assets/images/offline/offline.png')} style={kitError.sticker} contentFit="contain" />}
       </View>
-      <Text style={kitError.title} maxFontSizeMultiplier={1.2}>{title}</Text>
+      <UpperText style={kitError.title} maxFontSizeMultiplier={1.2}>{title}</UpperText>
       <Text style={kitError.text} maxFontSizeMultiplier={1.3}>Check your connection and try again.</Text>
       <Pill label="Try again" icon="retry" tone="gold" onPress={onRetry} style={{ marginTop: 16 }} />
     </View>

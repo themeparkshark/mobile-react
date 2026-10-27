@@ -153,7 +153,11 @@ test('daily chest: "Back to map" puts it away, and the map chest button brings i
   assert.equal(app.find(named('DailyGiftModal')), undefined, 'dismissed: it stays away');
   await app.settle(); await app.settle();
   assert.equal(app.find(named('DailyGiftModal')), undefined, 'and does not come back on the next render');
-  const button = app.find(named('Map')).props.extraControls;
+  // The rail's extras are always one fragment with two fixed slots (Daily 3, then the chest).
+  const controls = app.find(named('Map')).props.extraControls;
+  const slots = [].concat(controls?.props?.children);
+  assert.equal(slots.length, 2, 'two fixed slots, so one arriving never remounts the other');
+  const button = slots[1];
   assert.equal(button?.type?.name, 'ChestMapButton', 'the map shows the chest button while unclaimed');
   button.props.onPress(); app.render();
   const reopened = app.find(named('DailyGiftModal'));

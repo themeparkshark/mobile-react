@@ -202,11 +202,12 @@ test('Ride Photo frames: plain for Good, nicer for Great, gold with a plaque for
   // The photo is the map catch's Alex-style ride layers with the real shark in the car, never placeholder vector art.
   for (const layer of ['scene-far.webp', 'scene-near.webp', 'car-back.webp', 'car-front.webp', 'howto/shark.webp']) assert.ok(src.includes(layer), layer);
   assert.doesNotMatch(src, /RIDE PHOTO<|speed:|sun:/);
-  // The share card mounts only on tap, then captures at 1080x1920 through the share sheet; no in-app signage background.
+  // Share goes through Share Studio (the ride_photo flex card, 1080x1920 with the link and QR): the card
+  // closes first, then the sheet and its grown-up gate open from Root. No in-app signage background.
   const card = read('src/screens/SetCollection/DexItemCard.tsx');
-  assert.match(card, /photo && shareMount &&/);
-  assert.match(card, /captureRef\(shareRef, \{ format: 'jpg', quality: 0\.92, \.\.\.parkDayCaptureSize/);
-  assert.match(card, /shareFileExternal\(uri/, 'the share sheet goes through the grown-up gate');
+  assert.match(card, /shareFlexAfterHandoff\(shareHandoff\.handoff, 'ride_photo'/);
+  assert.match(card, /onDismiss=\{shareHandoff\.onDismiss\}/);
+  assert.doesNotMatch(card, /shareFileExternal|captureRef/, 'one share path: Share Studio, then the grown-up gate');
   assert.match(src, /ShareCardArtwork/);
   assert.doesNotMatch(src, /water_background/, 'the TASKS-sign background is gone');
 });

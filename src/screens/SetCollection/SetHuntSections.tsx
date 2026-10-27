@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 import { BRAND, GameButton, GameIcon, RADIUS } from '../../ui';
 import { ADDED_TO_INVENTORY, WEAR_IT, validPick, type ClaimOutcome, type MilestoneView } from './setHuntModel';
+import { UpperText } from '../../ui/upper';
 
 const card = {
   marginHorizontal: 16, marginBottom: 12, padding: 12, borderRadius: RADIUS.lg, backgroundColor: BRAND.cream,
@@ -28,7 +29,7 @@ export function MilestonePickSheet({ view, busy, onConfirm, onClose, overlay }: 
     <Modal visible={view != null} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable accessibilityLabel="Close" onPress={onClose} style={{ flex: 1, backgroundColor: BRAND.scrim }} />
       <View style={{ backgroundColor: BRAND.cream, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, borderWidth: 3, borderBottomWidth: 0, borderColor: BRAND.white, padding: 18, paddingBottom: 28 }}>
-        <Text style={{ fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, textTransform: 'uppercase', textAlign: 'center' }}>Pick a shark item</Text>
+        <UpperText style={{ fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, textTransform: 'uppercase', textAlign: 'center' }}>Pick a shark item</UpperText>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginVertical: 12 }}>
           {(view?.choices ?? []).map(choice => {
             const selected = picked === choice.id;

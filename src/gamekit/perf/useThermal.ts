@@ -13,7 +13,7 @@
  * MiniGameTester (-1 = auto).
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { runOnJS, runOnUI, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { createThermal, thermalFrame, thermalNative, thermalRunEnd, type ThermalConfig, type ThermalState } from '../core/thermal';
 
@@ -40,7 +40,7 @@ export function useThermal(opts: { active?: boolean; config?: Partial<ThermalCon
     onChange?.(l, s60);
   }, [onChange]);
 
-  useFrameCallback((info) => {
+  const frame = useFrameCallback((info) => {
     'worklet';
     const dt = info.timeSincePreviousFrame;
     if (dt == null || forced.value >= 0) return;
@@ -50,6 +50,12 @@ export function useThermal(opts: { active?: boolean; config?: Partial<ThermalCon
       runOnJS(publish)(state.value.level, state.value.step60);
     }
   }, opts.active !== false);
+  // useFrameCallback reads its autostart once, on mount: a later `active` change has to switch the
+  // callback itself, so a game at rest (or hidden) stops sampling frames (w5r2: the flag was ignored).
+  const active = opts.active !== false;
+  useEffect(() => {
+    frame.setActive(active);
+  }, [active, frame]);
 
   const setNative = useCallback((l: number) => {
     runOnUI((v: number) => {

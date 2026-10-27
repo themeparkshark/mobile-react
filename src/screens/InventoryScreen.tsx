@@ -20,10 +20,11 @@ import Item, { COMPACT_HEIGHT } from '../components/Item';
 import HapticPatterns from '../helpers/hapticPatterns';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
+import { LookShareButton } from '../share/LookShareButton';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper from '../components/Wrapper';
+import Wrapper, { FOOTER_CLEARANCE } from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
@@ -279,6 +280,8 @@ export default function InventoryScreen() {
                 marginTop: -50,
               }}
             />
+            {/* Show off this look (a picture of the shark, then the grown-up gate and the share sheet). */}
+            <LookShareButton inventory={worn} style={{ position: 'absolute', top: 14, right: 14, zIndex: 20 }} />
             {!!toast && (
               <Animated.View
                 pointerEvents="none"
@@ -422,6 +425,7 @@ export default function InventoryScreen() {
                   estimatedItemSize={compact ? 116 : 150}
                   keyExtractor={(item) => item.id.toString()}
                   numColumns={3}
+                  contentContainerStyle={{ paddingBottom: FOOTER_CLEARANCE }}
                   onEndReached={() => {
                     if (!hasMore || itemsLoading || loadError) return;
                     setItemsLoading(true);

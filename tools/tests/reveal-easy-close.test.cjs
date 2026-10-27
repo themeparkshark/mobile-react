@@ -11,7 +11,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 test('every reward reveal closes easily without wearing anything (Dustin: "tap off easier")', () => {
   const reveal = read('src/screens/StoreScreen/SetCompleteReveal.tsx');
   // Shop set: WEAR IT ALL stays the main action; a real second button leaves.
-  assert.ok(reveal.indexOf('<ShopCta label={allCopy.label}') < reveal.indexOf('leaveLabel(all === \'done\''), 'Wear it all comes first');
+  assert.ok(reveal.indexOf('<ShopCta label={allCopy.label}') < reveal.indexOf('leaveLabel(false, titleOnly'), 'Wear it all comes first');
   assert.match(reveal, /accessibilityLabel="Close"/, 'an X in the corner');
   // Panel r1: a full-screen reveal has no outside; a tap in a gap between its parts never closes it.
   assert.doesNotMatch(reveal, /StyleSheet\.absoluteFill\} onPress=\{\(\) => leave/);
@@ -24,7 +24,8 @@ test('every reward reveal closes easily without wearing anything (Dustin: "tap o
   assert.match(reveal, /catch \{ setAll\(s => wearAllNext\(s, 'fail'\)\); settle\(false\); \}/);
   assert.match(reveal, /catch \{ setTitleOnly\('failed'\); settle\(false\); \}/);
   assert.match(reveal, /PanResponder\.create/, 'swipe down');
-  assert.match(reveal, /onRequestClose=\{\(\) => leave\(false\)\}/, 'Android back');
+  assert.match(reveal, /onClose=\{\(\) => leave\(false\)\}/, 'Android back');
+  assert.match(reveal, /onRequestClose=\{onClose\}/, 'Android back reaches the reveal modal');
   assert.doesNotMatch(reveal, />Awesome!</, 'no ambiguous "Awesome!" link');
   const ts = require(path.join(root, 'node_modules/typescript'));
   const fnSrc = reveal.slice(reveal.indexOf('export function leaveLabel'), reveal.indexOf('}', reveal.indexOf('export function leaveLabel')) + 1);
@@ -52,4 +53,19 @@ test('every reward reveal closes easily without wearing anything (Dustin: "tap o
   assert.match(stamp, /accessibilityLabel="Close"/);
   const claim = read('src/screens/SetCollection/SetHuntSections.tsx');
   assert.match(claim, /label="Close" variant="ghost"/, 'the book claim card has its own Close next to Wear it');
+});
+
+test('Android back closes the Set Complete reveal when it plays inline inside the try-on', () => {
+  const reveal = read('src/screens/StoreScreen/SetCompleteReveal.tsx');
+  const tryOn = read('src/screens/StoreScreen/TryOnSheet.tsx');
+  // The inline reveal registers its close with the host modal.
+  assert.match(reveal, /const back = useContext\(InlineBackContext\)/);
+  assert.match(reveal, /if \(!inline \|\| !back\) return undefined;/);
+  assert.match(reveal, /back\.current = fn;/);
+  assert.match(reveal, /if \(back\.current === fn\) back\.current = null;/, 'unregisters only its own handler');
+  // The try-on's onRequestClose routes back to the reveal after the hand-off (closeAnimated ignores it then).
+  assert.match(tryOn, /onRequestClose=\{onRequestClose\}/);
+  assert.match(tryOn, /if \(handedOff\.current\) \{ inlineBack\.current\?\.\(\); return; \}/);
+  assert.match(tryOn, /<InlineBackContext\.Provider value=\{inlineBack\}>\{handOff\}<\/InlineBackContext\.Provider>/);
+  assert.match(tryOn, /const closeAnimated = useCallback\(\(\) => \{\n\s*if \(handedOff\.current\) return;/, 'the sheet itself stays put once handed off');
 });

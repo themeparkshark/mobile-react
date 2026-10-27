@@ -19,6 +19,7 @@ import { getFriendStamps, type FriendBook, type FriendStamp } from '../api/endpo
 import GameIcon from '../ui/GameIcon';
 import { stampRarity } from './stampbook/rarity';
 import { INK, MUTED_INK, PAPER, SLOT, SLOT_EDGE, tiltFor } from './stampbook/StampTile';
+import { UpperText } from '../ui/upper';
 
 /** Last friend books this session: a reopen draws at once and refreshes behind (friends-only data, memory only). */
 const friendBooks = new Map<number, FriendBook>();
@@ -100,7 +101,7 @@ export default function FriendStampBookScreen() {
                 <View style={styles.stitch} pointerEvents="none" />
                 <View style={styles.coverTop}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.coverName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.3}>{who}</Text>
+                    <UpperText style={styles.coverName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.3}>{who}</UpperText>
                     <Text style={styles.coverCount} maxFontSizeMultiplier={1.4}>{book.summary.earned} of {book.summary.total} stamps</Text>
                   </View>
                   <View style={styles.sharkTitle} accessible accessibilityLabel={book.player.title ? `Title: ${book.player.title}` : 'No title'}>
@@ -126,7 +127,7 @@ export default function FriendStampBookScreen() {
                     <View style={styles.pageHead} accessible accessibilityRole="header"
                       accessibilityLabel={`${section.label}, ${section.earned} of ${section.total}${section.total > 0 && section.earned >= section.total ? ', page complete' : ''}`}>
                       <View style={[styles.dot, { backgroundColor: section.color }]} />
-                      <Text style={styles.pageTitle} maxFontSizeMultiplier={1.3}>{section.label}</Text>
+                      <UpperText style={styles.pageTitle} maxFontSizeMultiplier={1.3}>{section.label}</UpperText>
                       <Text style={styles.pageCount} maxFontSizeMultiplier={1.3}>{section.earned} / {section.total}</Text>
                       {section.total > 0 && section.earned >= section.total && (
                         <View style={styles.seal} accessible accessibilityLabel="Page complete"><GameIcon name="check" size={16} /></View>
@@ -157,7 +158,7 @@ function Owned({ stamp, size }: { stamp: FriendStamp; size: number }) {
       <View style={[styles.owned, { width: size, height: size, borderColor: look.frame, transform: [{ rotate: `${tiltFor(stamp.id)}deg` }] }]}>
         <Image source={stamp.icon_thumb_url ? { uri: stamp.icon_thumb_url, cacheKey: stamp.icon_thumb_url } : FALLBACK} style={StyleSheet.absoluteFill} contentFit="contain" />
       </View>
-      <Text style={styles.ownedName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.1}>{stamp.short_name}</Text>
+      <UpperText style={styles.ownedName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.1}>{stamp.short_name}</UpperText>
     </View>
   );
 }

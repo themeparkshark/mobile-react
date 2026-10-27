@@ -36,6 +36,7 @@ import { actorOf, isUnread, kindOf, mergePage, resolveRoute, sectionize, type In
 import { LeavingRow, Pill, SectionHeader, SocialError } from './social/SocialKit';
 import CleanScreenBackground, { CLEAN_SCREEN_ACCENT, CLEAN_SCREEN_INK, CLEAN_SCREEN_INK_SOFT } from '../components/CleanScreenBackground';
 import { SurfaceContext, useFriendOverrides } from './social/socialStore';
+import { UpperText } from '../ui/upper';
 
 /** Mark-all-read only makes sense when something is unread. */
 export function showMarkAllRead(notifications: readonly { read_at?: string | null; id?: string }[], readIds?: ReadonlySet<string>): boolean {
@@ -66,7 +67,7 @@ function CaughtUp() {
       <Reanimated.View style={bellStyle}>
         <GameIcon name="bell" size={110} />
       </Reanimated.View>
-      <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.2}>All caught up!</Text>
+      <UpperText style={styles.emptyTitle} maxFontSizeMultiplier={1.2}>All caught up!</UpperText>
       <Text style={styles.emptyText} maxFontSizeMultiplier={1.3}>Friend requests, hearts and prizes show up here.</Text>
       <Pill label="Find friends" icon="search" tone="gold" style={{ marginTop: 18 }}
         onPress={() => RootNavigation.navigate('Friends', { tab: 'find' })} />

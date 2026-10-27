@@ -32,6 +32,7 @@ import api from '../api/client';
 import * as Haptics from '../helpers/haptics';
 import { GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { kioskLayout, KIOSK_COLORS } from './CommunityCenter/leaveGiftLayout';
 import { ticketLabel, ticketsEarnedFrom } from './CommunityCenter/communityCenterRewards';
 
 /** A small busy mark for buttons and slots: his fin bobbing, still under reduced motion. */
@@ -72,9 +73,54 @@ const LOCKER_HEIGHT_RATIO = 0.12;
 const Q_BUTTON_Y_RATIO = 0.315;
 const Q_BUTTON_SIZE = 60; // slightly larger tap target
 
-// Leave Gift button position (bottom right area)
-const LEAVE_GIFT_Y_RATIO = 0.74;
-const LEAVE_GIFT_X_RATIO = 0.66;
+// Leave Gift: the painted kiosk (price plus an empty green slot) runs to the art's right edge,
+// so a button on the painted slot sat 4 to 5 pt from the screen edge. A drawn kiosk face covers
+// the painted price and slot, and LEAVE GIFT sits on it 16 pt from the edge (leaveGiftLayout.ts).
+const KIOSK = kioskLayout(SCREEN_WIDTH, SCALED_HEIGHT);
+/** What leaving a gift costs (the painted plaque said 350; ours draws it with the spend coin). */
+const GIFT_COST = 350;
+const LEAVE_GIFT_W = KIOSK.button.width;
+const LEAVE_GIFT_H = KIOSK.button.height;
+const LEAVE_GIFT_LEFT = KIOSK.button.left;
+/**
+ * The button never grows: it pulses with a soft white shine instead of a scale, so it never
+ * moves toward the screen edge. The press squish also never goes past full size.
+ */
+export const LEAVE_GIFT_SHINE = 0.3;
+/**
+ * The art is sized to the screen width, so it is taller than every phone (20 pt on a 17 Pro,
+ * 167 pt on an iPhone SE). Buttons that must always be reachable sit on the screen, not on the
+ * art's hidden bottom: GO BACK keeps its spot above the screen bottom, LEAVE GIFT never drops
+ * below the bottom edge.
+ */
+const ART_OVERFLOW = Math.max(0, SCALED_HEIGHT - SCREEN_HEIGHT);
+/**
+ * Short phones (iPhone SE: 167 pt of art below the screen). The art slides up just enough that the
+ * painted LEAVE GIFT plinth sits fully on screen with 16 pt to spare, and GO BACK joins it in one
+ * bottom row on the open floor, left of the plinth, instead of landing on the glowing portal.
+ * The wallet and the gift badge stay where they were on screen. Taller phones are unchanged.
+ */
+const SHORT_SCREEN = ART_OVERFLOW > 60;
+const BOTTOM_GAP = 16;
+/** The white price plaque (over the painted plinth and its gem) ends at about 0.82 of the art's height. */
+const LEAVE_GIFT_PLINTH_BOTTOM_RATIO = 0.82;
+/** The LEAVE GIFT art is taller than the pill we show (its stone foot and gem are cropped off). */
+const LEAVE_GIFT_ART_H = KIOSK.button.artHeight;
+const ART_SHIFT = SHORT_SCREEN
+  ? Math.round(Math.min(ART_OVERFLOW, Math.max(0, SCALED_HEIGHT * LEAVE_GIFT_PLINTH_BOTTOM_RATIO - (SCREEN_HEIGHT - BOTTOM_GAP))))
+  : 0;
+/** LEAVE GIFT's top in the art's frame (the art moves up by ART_SHIFT on short phones). */
+const LEAVE_GIFT_TOP = SHORT_SCREEN
+  ? KIOSK.button.top
+  : Math.min(KIOSK.button.top, SCREEN_HEIGHT - LEAVE_GIFT_H - 2);
+/** The drawn kiosk moves with the button when a tall phone clamps it on screen. */
+const KIOSK_NUDGE = LEAVE_GIFT_TOP - KIOSK.button.top;
+const GO_BACK_W = 180;
+const GO_BACK_H = 55;
+/** GO BACK: the bottom row beside LEAVE GIFT on short phones, else its old spot above the screen bottom. */
+const GO_BACK_POSITION = SHORT_SCREEN
+  ? { left: Math.max(BOTTOM_GAP, Math.round((LEAVE_GIFT_LEFT - GO_BACK_W) / 2)), top: LEAVE_GIFT_TOP + LEAVE_GIFT_H / 2 - GO_BACK_H / 2, alignSelf: 'auto' as const }
+  : { bottom: 80 + ART_OVERFLOW };
 
 interface Gift {
   id: number;
@@ -164,8 +210,8 @@ export default function CommunityCenterScreen() {
   const bounceAnim3 = useRef(new Animated.Value(0)).current;
   const bounceAnims = [bounceAnim1, bounceAnim2, bounceAnim3];
   
-  // Pulse animation for Leave Gift button
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  // Shine pulse for the Leave Gift button (opacity of a white copy on top, 0 to LEAVE_GIFT_SHINE)
+  const pulseAnim = useRef(new Animated.Value(0)).current;
   
   // Wiggle animation for question marks
   const wiggleAnim = useRef(new Animated.Value(0)).current;
@@ -297,17 +343,17 @@ export default function CommunityCenterScreen() {
   
   // Pulse animation for Leave Gift button when available
   useEffect(() => {
-    if (!reduced && center?.can_give && (player?.coins ?? 0) >= 350) {
+    if (!reduced && center?.can_give && (player?.coins ?? 0) >= GIFT_COST) {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.08,
+            toValue: LEAVE_GIFT_SHINE,
             duration: 800,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
-            toValue: 1,
+            toValue: 0,
             duration: 800,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
@@ -317,7 +363,7 @@ export default function CommunityCenterScreen() {
       pulse.start();
       return () => pulse.stop();
     } else {
-      pulseAnim.setValue(1);
+      pulseAnim.setValue(0);
     }
   }, [center?.can_give, player?.coins, reduced]);
   
@@ -415,13 +461,13 @@ export default function CommunityCenterScreen() {
     
     if (slotIndex === 'give') {
       // From Leave Gift button
-      startX = SCREEN_WIDTH * LEAVE_GIFT_X_RATIO + 80;
-      startY = SCALED_HEIGHT * LEAVE_GIFT_Y_RATIO;
+      startX = LEAVE_GIFT_LEFT + LEAVE_GIFT_W / 2;
+      startY = LEAVE_GIFT_TOP + LEAVE_GIFT_H / 2 - ART_SHIFT;
     } else {
       // From gift slot
       const leftPositions = [0.11, 0.39, 0.67];
       startX = SCREEN_WIDTH * leftPositions[slotIndex] + (SCREEN_WIDTH * LOCKER_WIDTH_RATIO) / 2;
-      startY = SCALED_HEIGHT * LOCKER_Y_RATIO;
+      startY = SCALED_HEIGHT * LOCKER_Y_RATIO - ART_SHIFT;
     }
     
     setFlyingTicket({ startX, startY, count: ticketCount });
@@ -577,7 +623,7 @@ export default function CommunityCenterScreen() {
     animatePress(leaveGiftScale);
     playSound('buttonPress');
     
-    const hasEnoughCoins = (player?.coins ?? 0) >= 350;
+    const hasEnoughCoins = (player?.coins ?? 0) >= GIFT_COST;
     if (!hasEnoughCoins) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       playSound('nope');
@@ -848,11 +894,11 @@ export default function CommunityCenterScreen() {
     );
   };
   
-  const hasEnoughCoins = (player?.coins ?? 0) >= 350;
+  const hasEnoughCoins = (player?.coins ?? 0) >= GIFT_COST;
   
   return (
     <View style={styles.container}>
-      <View style={[styles.background, { height: SCALED_HEIGHT }]}>
+      <View style={[styles.background, { height: SCALED_HEIGHT, marginTop: -ART_SHIFT }]}>
         {/* Video Background */}
         <Video
           source={require('../../assets/videos/community-center-bg.mp4')}
@@ -868,6 +914,7 @@ export default function CommunityCenterScreen() {
           style={[
             styles.goBackContainer,
             {
+              ...GO_BACK_POSITION,
               transform: [{ scale: goBackScale }],
             },
           ]}
@@ -903,9 +950,9 @@ export default function CommunityCenterScreen() {
         </Animated.View>
         
         {/* Currency display */}
-        <View style={styles.currencyDisplay}>
+        <View style={[styles.currencyDisplay, ART_SHIFT > 0 && { top: 60 + ART_SHIFT }]}>
           <Image
-            source={require('../../assets/images/screens/community-center-coin.png')}
+            source={require('../../assets/icons/game/coins.png')}
             style={styles.coinIcon}
             contentFit="contain"
           />
@@ -929,6 +976,10 @@ export default function CommunityCenterScreen() {
             <Animated.View 
               style={[
                 styles.giftCountBadge,
+                // iPhone SE: the bubble shares the wallet's row on the left (one short line), so it
+                // never sits on the gift-bag medallion or the wallet.
+                SHORT_SCREEN && styles.giftCountBadgeShort,
+                SHORT_SCREEN && { top: 60 + ART_SHIFT },
                 {
                   opacity: entranceAnim,
                   transform: [{ 
@@ -940,39 +991,66 @@ export default function CommunityCenterScreen() {
                 },
               ]}
             >
-              <Text style={styles.giftCountText}>
+              <Text style={styles.giftCountText} numberOfLines={SHORT_SCREEN ? 1 : undefined}
+                adjustsFontSizeToFit={SHORT_SCREEN} minimumFontScale={0.8}>
                 {(center?.available_gifts ?? 0) > 0
                   ? `${center?.available_gifts} gift${center?.available_gifts !== 1 ? 's' : ''} available`
-                  : 'No gifts yet. Leave the first one!'}
+                  : SHORT_SCREEN ? 'No gifts yet!' : 'No gifts yet. Leave the first one!'}
               </Text>
             </Animated.View>
             
             {/* Three gift slots */}
             {[0, 1, 2].map(renderSlot)}
             
+            {/* The drawn kiosk face over the painted price and slot: our price with the coin stack
+                (the coin you spend everywhere) and LEAVE GIFT 16 pt from the screen edge. */}
+            <View pointerEvents="none" style={[styles.kioskSide, {
+              left: KIOSK.cap.left, top: KIOSK.cap.top + KIOSK_NUDGE, width: KIOSK.cap.width, height: KIOSK.cap.height }]} />
+            <View pointerEvents="none" style={[styles.kioskFace, {
+              left: KIOSK.face.left, top: KIOSK.face.top + KIOSK_NUDGE, width: KIOSK.face.width, height: KIOSK.face.height }]} />
+            <View pointerEvents="none" accessible accessibilityLabel={`A gift costs ${GIFT_COST} coins`}
+              style={[styles.kioskPrice, { left: KIOSK.price.left, top: KIOSK.price.top + KIOSK_NUDGE, width: KIOSK.price.width, height: KIOSK.price.height }]}>
+              <Image source={require('../../assets/icons/game/coins.png')} style={styles.kioskCoin} contentFit="contain" />
+              <Text style={styles.kioskPriceText}>{GIFT_COST}</Text>
+            </View>
+
             {/* Leave Gift button with pulse animation */}
             <Animated.View
               style={[
                 styles.leaveGiftButton,
                 {
-                  left: SCREEN_WIDTH * LEAVE_GIFT_X_RATIO,
-                  top: SCALED_HEIGHT * LEAVE_GIFT_Y_RATIO,
+                  left: LEAVE_GIFT_LEFT,
+                  top: LEAVE_GIFT_TOP,
                   transform: [
-                    { scale: Animated.multiply(pulseAnim, leaveGiftScale) },
+                    { scale: leaveGiftScale.interpolate({ inputRange: [0, 1, 2], outputRange: [0, 1, 1] }) },
                   ],
                 },
               ]}
             >
               <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Leave a gift for ${GIFT_COST} coins`}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 onPress={handleLeaveGiftPress}
                 disabled={giving}
                 activeOpacity={0.8}
               >
-                <Image
-                  source={require('../../assets/images/screens/community-center-leave-gift.png')}
-                  style={styles.leaveGiftImage}
-                  contentFit="contain"
-                />
+                {/* Alex's whole button (pill, gold rim, stone base, gem); only the loose glow under it is cropped. */}
+                <View style={styles.leaveGiftCrop}>
+                  <Image
+                    source={require('../../assets/images/screens/community-center-leave-gift.png')}
+                    style={styles.leaveGiftImage}
+                    contentFit="contain"
+                  />
+                  <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: pulseAnim }]}>
+                    <Image
+                      source={require('../../assets/images/screens/community-center-leave-gift.png')}
+                      style={styles.leaveGiftImage}
+                      contentFit="contain"
+                      tintColor="#ffffff"
+                    />
+                  </Animated.View>
+                </View>
                 {giving && (
                   <View style={styles.leaveGiftSpinner}>
                     <SharkLoaderDot />
@@ -983,7 +1061,7 @@ export default function CommunityCenterScreen() {
             
             {/* Cooldown message - live countdown */}
             {liveCooldown > 0 && (
-              <View style={styles.cooldownBadge}>
+              <View style={[styles.cooldownBadge, { bottom: SHORT_SCREEN ? ART_OVERFLOW - ART_SHIFT + BOTTOM_GAP + LEAVE_GIFT_H + 70 : 145 + ART_OVERFLOW }]}>
                 <GameIcon name="timer" size={20} />
                 <Text style={styles.cooldownText}>
                   {Math.floor(liveCooldown / 60)}:{(liveCooldown % 60).toString().padStart(2, '0')} until you can give again
@@ -1092,11 +1170,11 @@ export default function CommunityCenterScreen() {
             <View style={styles.exchangeContainer}>
               <View style={styles.exchangeItem}>
                 <Image
-                  source={require('../../assets/images/screens/community-center-coin.png')}
+                  source={require('../../assets/icons/game/coins.png')}
                   style={styles.exchangeIcon}
                   contentFit="contain"
                 />
-                <Text style={styles.exchangeValue}>-350</Text>
+                <Text style={styles.exchangeValue}>-{GIFT_COST}</Text>
                 <Text style={styles.exchangeLabel}>Coins</Text>
               </View>
               <GameIcon name="arrow" size={32} />
@@ -1181,14 +1259,14 @@ export default function CommunityCenterScreen() {
           <View style={styles.notEnoughModalContent}>
             <Text style={styles.notEnoughModalTitle}>Not Enough Coins!</Text>
             <Text style={styles.notEnoughModalMessage}>
-              You need 350 coins to leave a gift for another player.
+              You need {GIFT_COST} coins to leave a gift for another player.
             </Text>
             <View style={styles.coinCompareContainer}>
               <View style={styles.coinCompareItem}>
                 <Text style={styles.coinCompareLabel}>You have</Text>
                 <View style={styles.coinCompareRow}>
                   <Image
-                    source={require('../../assets/images/screens/community-center-coin.png')}
+                    source={require('../../assets/icons/game/coins.png')}
                     style={styles.coinCompareIcon}
                     contentFit="contain"
                   />
@@ -1200,11 +1278,11 @@ export default function CommunityCenterScreen() {
                 <Text style={styles.coinCompareLabel}>Required</Text>
                 <View style={styles.coinCompareRow}>
                   <Image
-                    source={require('../../assets/images/screens/community-center-coin.png')}
+                    source={require('../../assets/icons/game/coins.png')}
                     style={styles.coinCompareIcon}
                     contentFit="contain"
                   />
-                  <Text style={styles.coinCompareValueGreen}>350</Text>
+                  <Text style={styles.coinCompareValueGreen}>{GIFT_COST}</Text>
                 </View>
               </View>
             </View>
@@ -1248,6 +1326,18 @@ export default function CommunityCenterScreen() {
   );
 }
 
+/**
+ * The three light cards (wallet, gifts bubble, LEAVE GIFT price plaque) glow warm, like lit signs in the painted room (lamp light on warm white), so
+ * they belong to the scene instead of reading as stickers on it. iOS draws the halo from the shadow.
+ */
+const SIGN_GLOW = {
+  shadowColor: '#ffc95c',
+  shadowOpacity: 0.75,
+  shadowRadius: 14,
+  shadowOffset: { width: 0, height: 0 },
+  elevation: 6,
+} as const;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1270,25 +1360,28 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   goBackImage: {
-    width: 180,
-    height: 55,
+    width: GO_BACK_W,
+    height: GO_BACK_H,
   },
   currencyDisplay: {
     position: 'absolute',
     top: 60,
     right: 20,
-    backgroundColor: 'rgba(5,52,110,0.6)',
+    backgroundColor: KIOSK_COLORS.face,
+    borderWidth: 3,
+    borderColor: KIOSK_COLORS.edge,
     borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
     zIndex: 100,
     flexDirection: 'row',
     alignItems: 'center',
+    ...SIGN_GLOW,
   },
   currencyDivider: {
     width: 1,
     height: 16,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(5,52,110,0.25)',
     marginHorizontal: 12,
   },
   coinIcon: {
@@ -1299,7 +1392,7 @@ const styles = StyleSheet.create({
   coinText: {
     fontFamily: 'Shark',
     fontSize: 18,
-    color: '#fbbf24',
+    color: KIOSK_COLORS.ink,
   },
   ticketIcon: {
     width: 28,
@@ -1309,7 +1402,7 @@ const styles = StyleSheet.create({
   ticketText: {
     fontFamily: 'Shark',
     fontSize: 18,
-    color: '#f472b6',
+    color: KIOSK_COLORS.ink,
   },
   flyingTicket: {
     position: 'absolute',
@@ -1337,20 +1430,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // The game's light card (warm white, navy rim), like the LEAVE GIFT plaque: never a dark pill on the dark room.
   giftCountBadge: {
     position: 'absolute',
     top: 120,
     alignSelf: 'center',
-    backgroundColor: 'rgba(5,52,110,0.7)',
+    backgroundColor: KIOSK_COLORS.face,
+    borderWidth: 3,
+    borderColor: KIOSK_COLORS.edge,
     borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
     zIndex: 50,
+    ...SIGN_GLOW,
+  },
+  giftCountBadgeShort: {
+    left: 12,
+    alignSelf: 'flex-start',
+    maxWidth: 150,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
   },
   giftCountText: {
     fontFamily: 'Shark',
     fontSize: 16,
-    color: '#fff',
+    color: KIOSK_COLORS.ink,
+    textAlign: 'center',
   },
   slotContainer: {
     position: 'absolute',
@@ -1414,14 +1519,49 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
   },
+  kioskSide: {
+    position: 'absolute',
+    backgroundColor: KIOSK_COLORS.side,
+  },
+  kioskFace: {
+    position: 'absolute',
+    backgroundColor: KIOSK_COLORS.face,
+    borderColor: KIOSK_COLORS.edge,
+    borderWidth: 4,
+    borderRadius: 14,
+    // The third light card (the LEAVE GIFT price plaque) glows like the wallet and the gifts bubble:
+    // all three read as one lit set in the painted room.
+    ...SIGN_GLOW,
+  },
+  kioskPrice: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kioskCoin: {
+    width: 22,
+    height: 22,
+    marginRight: 5,
+  },
+  kioskPriceText: {
+    fontFamily: 'Shark',
+    fontSize: 20,
+    color: KIOSK_COLORS.ink,
+  },
   leaveGiftButton: {
     position: 'absolute',
     justifyContent: 'center',
     alignItems: 'center',
   },
+  leaveGiftCrop: {
+    width: LEAVE_GIFT_W,
+    height: LEAVE_GIFT_H,
+    overflow: 'hidden',
+  },
   leaveGiftImage: {
-    width: 160,
-    height: 65,
+    width: LEAVE_GIFT_W,
+    height: LEAVE_GIFT_ART_H,
   },
   leaveGiftSpinner: {
     position: 'absolute',

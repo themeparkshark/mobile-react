@@ -13,7 +13,7 @@
  *   Press      0.94 plus a 3deg lean toward the touch, around its own centre
  *   Stamp      1.0 -> 1.12 (60ms), pair-only hit-stop, drop to 0.96 (80ms)
  *              with a 1-frame overexposed face, settle 1.0 (60ms)
- *   Slip       coral outline + crack, an in-place wobble +4/-3/+2/-1/0deg;
+ *   Slip       calm navy outline + crack, a double-take wobble +-5 deg twice;
  *              the forgotten card lifts 6px, pops to 1.1 face-up and holds to
  *              640ms (type a); a known wrong tap gets a SEEN tag (type b)
  *   Idle       one shared shimmer band; a gold Showtime tint; a gold eye pip
@@ -309,9 +309,10 @@ export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function Memo
     slip(wobble) {
       v.slipRim.value = withTiming(1, { duration: 120 });
       if (rm || !wobble) return;
+      // A cartoon double-take: +-5 deg twice over 280 ms, then the cards flip back (a gag, not a scolding).
       v.wobble.value = withDelay(240, withSequence(
-        withTiming(4 / 2, { duration: 40 }), withTiming(-3 / 2, { duration: 40 }), withTiming(2 / 2, { duration: 40 }),
-        withTiming(-1 / 2, { duration: 40 }), withTiming(0, { duration: 40 }),
+        withTiming(5 / 2, { duration: 56 }), withTiming(-5 / 2, { duration: 56 }), withTiming(5 / 2, { duration: 56 }),
+        withTiming(-5 / 2, { duration: 56 }), withTiming(0, { duration: 56 }),
       ));
     },
     forgot() {
@@ -631,7 +632,7 @@ function Crack({ size }: { size: number }) {
     <View style={styles.center} pointerEvents="none">
       <Svg width={size} height={size} viewBox="0 0 40 40">
         <Path d="M20 2 L16 14 L23 19 L14 28 L19 31 L15 38" stroke="#ffffff" strokeWidth={7} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-        <Path d="M20 2 L16 14 L23 19 L14 28 L19 31 L15 38" stroke={MM.coral} strokeWidth={3.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+        <Path d="M20 2 L16 14 L23 19 L14 28 L19 31 L15 38" stroke="#3d6fa8" strokeWidth={3.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
       </Svg>
     </View>
   );
@@ -670,7 +671,8 @@ const styles = StyleSheet.create({
   glint: { position: 'absolute', left: 0, top: 0, backgroundColor: 'rgba(255,240,170,0.8)' },
   eye: { position: 'absolute' },
   leak: { borderWidth: 4, borderColor: '#ffd84a' },
-  slipRim: { borderWidth: 4, borderColor: MM.coral },
+  // A slip is a shrug: a calm navy rim, never a red alarm.
+  slipRim: { borderWidth: 4, borderColor: '#3d6fa8' },
   slipInner: { borderWidth: 1.5, borderColor: '#ffffff' },
   movedRim: { borderWidth: 2, borderColor: '#ffffff', borderStyle: 'dashed' },
   movedGlow: { borderWidth: 3, borderColor: MM.gold },
@@ -679,9 +681,9 @@ const styles = StyleSheet.create({
   center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   cornerTR: { position: 'absolute', top: -6, right: -6 },
   seenTag: {
-    position: 'absolute', width: 52, alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 8, borderWidth: 2, borderColor: MM.coral,
+    position: 'absolute', width: 52, alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 8, borderWidth: 2, borderColor: '#0768b9',
   },
-  seenText: { fontFamily: 'Shark', fontSize: 13, color: MM.coral },
+  seenText: { fontFamily: 'Shark', fontSize: 13, color: '#0768b9' },
 });
 
 export type { SharedValue };

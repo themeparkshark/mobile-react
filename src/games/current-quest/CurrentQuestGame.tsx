@@ -74,6 +74,7 @@ import {
 } from './showdown';
 import { boardLayout, cellAt, cellCenter, CQ, type BoardLayout } from './theme';
 import { themeSubtitle } from './themeSubtitle';
+import { COUNT_END_MS, GO_AT_MS } from '../../gamekit/core/gameMoments';
 import {
   bedFor, bedSetFor, CQ_PRELOAD, registerCqAudio, sfxAim, sfxAmbience, sfxBeached, sfxBump, sfxButton, sfxCarry, sfxChest, sfxFinalClear,
   sfxGolden, sfxHandoff, sfxLeftover, sfxOpponentClear, sfxPearl, sfxRingLost, sfxRingOn, sfxRiptide, sfxShells, sfxShieldPop, sfxSoClose,
@@ -739,6 +740,9 @@ export default function CurrentQuestGame({
 
   // ---- starting a voyage ---------------------------------------------------------------------
   const showRibbon = useCallback((run: RunState) => {
+    // One banner at a time: before GO the shell's instruction pill owns the screen; handleStart
+    // shows the voyage ribbon once the GO burst has cleared.
+    if (!playing.current) return;
     const b = currentBoard(run);
     const deep = b.slot === 'treasure';
     const label = SLOT_LABEL[b.slot] ?? 'Voyage';
@@ -2013,8 +2017,11 @@ export default function CurrentQuestGame({
       void saveProgress((p) => ({ ...p, replays: p.replays.map((x, i) => (i === p.replays.length - 1 ? { ...x, again: true } : x)) }));
     }
 
-    if (run && run.voyage.strokes === 0) { showRibbon(run); svRef.current.tourT0.value = svRef.current.fxT.value + 100; }
-  }, [restore.snapshot, showRibbon, context]);
+    if (run && run.voyage.strokes === 0) {
+      svRef.current.tourT0.value = svRef.current.fxT.value + 100;
+      later(COUNT_END_MS - GO_AT_MS, () => { if (playing.current && run.voyage.strokes === 0) showRibbon(run); });
+    }
+  }, [restore.snapshot, showRibbon, context, later]);
   // Ride Challenge: the stake card is the pre-start, then GO (0.A.5); the shell's own count is off for rides.
   const onStakeDone = useCallback(() => {
     setStake(false);
@@ -2190,6 +2197,8 @@ export default function CurrentQuestGame({
       thresholds={thresholds}
       resumeStyle="instant"
       countdownStyle={context === 'ride' ? 'none' : 'go'}
+      // GO waits for the lagoon to draw (never bursts over an empty field).
+      stageReady={!!(layout && board && stableImages.idle)}
       countdownScrim="light"
       resultsScrim="none"
       renderResults={renderResults}

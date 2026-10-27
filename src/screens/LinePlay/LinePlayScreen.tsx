@@ -22,7 +22,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { openAppSettings } from '../../services/external';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, FlatList, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import SafeScreen from '../../components/SafeScreen';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { Image } from 'expo-image';
@@ -862,12 +862,12 @@ export default function LinePlayScreen() {
 
   if (!ride) {
     return (
-      <SafeAreaView style={styles.centered}>
+      <SafeScreen style={styles.centered}>
         <Text style={styles.errorText}>No ride picked. Go back and pick a ride.</Text>
         <Pressable onPress={() => navigation.goBack()} style={styles.ghostBtn}>
           <Text style={styles.ghostBtnText}>Go back</Text>
         </Pressable>
-      </SafeAreaView>
+      </SafeScreen>
     );
   }
 

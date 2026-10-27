@@ -4,12 +4,13 @@
  *   EXPO_PUBLIC_SHARE_STUDIO_RENDER=1    renders every sample in both formats and logs
  *                                        "SHARE_RENDER <name> <file>" for the r1 sheet
  *   EXPO_PUBLIC_SHARE_STUDIO_OPEN=<sample>:<sheet|reveal>  opens one straight away
+ *   EXPO_PUBLIC_SHARE_STUDIO_LOOK=ghost  renders in the widest real look (ghost costume, blaster, witch hat)
  */
 import { useEffect, useRef, useState } from 'react';
 import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import { FLEX_EXPORT, FLEX_SIZE, FlexCard, flexReveal, shareFlex, type FlexFormat } from '../share';
-import { FLEX_SAMPLES, SAMPLE_INVENTORY, type FlexSample } from '../share/samples';
+import { FLEX_SAMPLES, GHOST_INVENTORY, SAMPLE_INVENTORY, type FlexSample } from '../share/samples';
 import { ArtReadinessProvider } from '../share/FlexArtwork';
 import { currentFlex, finishFlex } from '../share/store';
 import { Outlined } from '../share/Outlined';
@@ -17,9 +18,16 @@ import { Outlined } from '../share/Outlined';
 const RENDER = process.env.EXPO_PUBLIC_SHARE_STUDIO_RENDER === '1';
 const PROBE = process.env.EXPO_PUBLIC_SHARE_STUDIO_RENDER === 'probe';
 const OPEN = process.env.EXPO_PUBLIC_SHARE_STUDIO_OPEN ?? '';
+const RENDER_LOOK = process.env.EXPO_PUBLIC_SHARE_STUDIO_LOOK === 'ghost' ? GHOST_INVENTORY : SAMPLE_INVENTORY;
+
+/** A sample in the render look: a worn prize pin stays on. */
+function inLook(sample: FlexSample): FlexSample {
+  if (RENDER_LOOK === SAMPLE_INVENTORY || !sample.payload.inventory) return sample;
+  return { ...sample, payload: { ...sample.payload, inventory: { ...RENDER_LOOK, pin_item: sample.payload.inventory.pin_item } } } as FlexSample;
+}
 
 function open(sample: FlexSample, mode: 'sheet' | 'reveal', format: FlexFormat = 'story') {
-  const payload = { ...sample.payload, inventory: SAMPLE_INVENTORY } as typeof sample.payload;
+  const payload = { ...sample.payload, inventory: sample.payload.inventory ?? SAMPLE_INVENTORY } as typeof sample.payload;
   if (mode === 'reveal') flexReveal(sample.kind, payload, { surface: 'dev' });
   else shareFlex(sample.kind, payload, { surface: 'dev', format });
 }
@@ -78,7 +86,7 @@ export default function ShareStudioPreviewScreen() {
 function RenderAll() {
   const only = process.env.EXPO_PUBLIC_SHARE_STUDIO_ONLY;
   const jobs = FLEX_SAMPLES.filter(sample => !only || only.split(',').includes(sample.name))
-    .flatMap(sample => (['story', 'square'] as const).map(format => ({ sample, format })));
+    .flatMap(sample => (['story', 'square'] as const).map(format => ({ sample: inLook(sample), format })));
   const [index, setIndex] = useState(0);
   const [ready, setReady] = useState(false);
   const ref = useRef<View>(null);
@@ -106,7 +114,7 @@ function RenderAll() {
   return (
     <View style={[styles.root, { alignItems: 'flex-start' }]}>
       <FlexCard key={`${job.sample.name}-${job.format}`} ref={ref} kind={job.sample.kind} payload={job.sample.payload}
-        format={job.format} inventory={SAMPLE_INVENTORY} onReadyChange={setReady} />
+        format={job.format} inventory={RENDER_LOOK} onReadyChange={setReady} />
       <Text style={styles.name}>{index + 1}/{jobs.length} {job.sample.name} {job.format} {FLEX_SIZE[job.format].width}</Text>
     </View>
   );

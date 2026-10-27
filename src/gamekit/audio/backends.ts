@@ -16,6 +16,8 @@
 
 import { Audio } from 'expo-av';
 import { Asset } from 'expo-asset';
+import { audioStartOpen, audioWanted, whenAudioMayStart } from './startGate';
+import { captureLine, captureTraceOn } from './studioTrace';
 
 /**
  * react-native-audio-api 0.6 AudioParam automation is unsafe from JS: the
@@ -34,7 +36,7 @@ export function rampParamValue(param: { value: number }, to: number, ms: number,
   if (prev) clearInterval(prev);
   rampTimers.delete(param);
   const from = param.value;
-  if (ms <= 16 || !Number.isFinite(from)) {
+  if (ms <= 16 || !Number.isFinite(from) || Math.abs(to - from) < 1e-4) {
     param.value = to;
     return;
   }
@@ -70,7 +72,7 @@ export interface MusicArgs {
 }
 
 export interface AudioBackend {
-  readonly name: 'audio-api' | 'expo-av';
+  readonly name: 'audio-api' | 'expo-av' | 'silent' | 'trace';
   readonly supportsPan: boolean;
   readonly supportsFilter: boolean;
   /** Typical tap-to-sound latency (ms) used for haptic/visual alignment. */
@@ -94,6 +96,8 @@ export interface AudioBackend {
   clockMs?(): number;
   /** True when musicPosition(deck) is a cheap clock read (audio-api), false for an expo-av status call. */
   positionIsCheap?(deck: string): boolean;
+  /** Output latency for one loaded key (the hybrid routes AAC to expo-av); defaults to latencyMs. */
+  latencyOf?(key: string): number;
 }
 
 // =============================================================================
@@ -105,6 +109,8 @@ interface AvVoice {
   busyUntil: number;
   token: number;
   stopTimer: ReturnType<typeof setTimeout> | null;
+  /** A delayed start still waiting (stop() cancels it, so a cut voice never starts late). */
+  startTimer?: ReturnType<typeof setTimeout> | null;
 }
 
 /**
@@ -198,9 +204,12 @@ export class ExpoAvBackend implements AudioBackend {
     this.tokens.set(token, voice);
     if (voice.stopTimer) clearTimeout(voice.stopTimer);
     voice.stopTimer = null;
+    if (voice.startTimer) clearTimeout(voice.startTimer);
+    voice.startTimer = null;
     voice.busyUntil = now + a.delayMs + (a.durationMs > 0 ? a.durationMs : 1500);
     const v = voice;
     const start = () => {
+      v.startTimer = null;
       v.sound
         .setStatusAsync({
           shouldPlay: true,
@@ -217,7 +226,7 @@ export class ExpoAvBackend implements AudioBackend {
         }, a.durationMs / Math.max(0.25, a.rate));
       }
     };
-    if (a.delayMs > 0) setTimeout(start, a.delayMs);
+    if (a.delayMs > 0) v.startTimer = setTimeout(start, a.delayMs);
     else start();
     return token;
   }
@@ -225,6 +234,8 @@ export class ExpoAvBackend implements AudioBackend {
   stop(token: number): void {
     const v = this.tokens.get(token);
     if (!v) return;
+    if (v.startTimer) clearTimeout(v.startTimer);
+    v.startTimer = null;
     v.sound.pauseAsync().catch(() => undefined);
     v.busyUntil = 0;
     this.tokens.delete(token);
@@ -261,7 +272,7 @@ export class ExpoAvBackend implements AudioBackend {
     if (d.ramp) clearInterval(d.ramp);
     d.ramp = null;
     const from = d.gain;
-    if (rampMs <= AV_RAMP_STEP_MS) {
+    if (rampMs <= AV_RAMP_STEP_MS || Math.abs(gain - from) < 1e-4) {
       d.gain = gain;
       pushDeckVolume(d, gain * this.master);
       return;
@@ -324,6 +335,22 @@ export class ExpoAvBackend implements AudioBackend {
     this.master = gain;
   }
 
+  /**
+   * Frees one cue's voices once any play in progress has finished (HybridBackend calls this after
+   * the cue moved to the audio-api graph, so it is never held in memory twice). Music sources stay.
+   */
+  unload(key: string): void {
+    const pool = this.pools.get(key);
+    if (!pool) return;
+    this.pools.delete(key);
+    const wait = Math.max(0, ...pool.map((v) => v.busyUntil - Date.now()));
+    setTimeout(() => pool.forEach((v) => {
+      if (v.stopTimer) clearTimeout(v.stopTimer);
+      if (v.token) this.tokens.delete(v.token);
+      v.sound.unloadAsync().catch(() => undefined);
+    }), wait + 50);
+  }
+
   async unloadAll(): Promise<void> {
     const all: Promise<unknown>[] = [];
     this.pools.forEach((pool) => pool.forEach((v) => all.push(v.sound.unloadAsync().catch(() => undefined))));
@@ -370,6 +397,39 @@ async function localPath(src: number): Promise<string | null> {
   }
 }
 
+/** A voice is released this long after it must have ended, if its end event never came. */
+const VOICE_RELEASE_SLACK_MS = 300;
+
+/**
+ * Wave 5 round 3 (memory): react-native-audio-api 0.6.5 always decodes to two channels (its miniaudio decoder is set
+ * to 2), so a mono file (399 of the 400 studio files, and Chris's bank) comes back as two identical channels. Every
+ * voice then copies both (AudioBufferSourceNode::setBuffer) and sizes its buses and time stretcher for two channels.
+ * When the two channels are sample-for-sample identical, keep one: the engine up-mixes a mono voice to both speakers
+ * at the same level (AudioBus speakers rule: left = right = mono), so it sounds exactly the same, with half the
+ * decoded cache and half of every voice's native allocations. A true stereo file (a bed) differs on its first
+ * samples and is kept as it is. Returns null when nothing changed (or anything about the buffer is unexpected).
+ */
+export function dualMonoToMono(ctx: AnyNode, buffer: AnyNode): AnyNode {
+  try {
+    if (!ctx || !buffer || buffer.numberOfChannels !== 2 || typeof ctx.createBuffer !== 'function') return null;
+    const length = buffer.length as number;
+    if (!(length > 0)) return null;
+    // Views over the decoded buffer's own memory, read only here while `buffer` is held (no copy).
+    const left = buffer.getChannelData(0) as Float32Array;
+    const right = buffer.getChannelData(1) as Float32Array;
+    if (left.length !== length || right.length !== length) return null;
+    // Every third sample (a few ms of JS per second of audio, once per cue): a real stereo file differs almost
+    // everywhere, a mono file decoded to two channels never does.
+    for (let i = 0; i < length; i += 3) if (left[i] !== right[i]) return null;
+    if (left[length - 1] !== right[length - 1]) return null;
+    const mono = ctx.createBuffer(1, length, buffer.sampleRate);
+    mono.copyToChannel(left, 0, 0);
+    return mono;
+  } catch {
+    return null;
+  }
+}
+
 export class AudioApiBackend implements AudioBackend {
   readonly name = 'audio-api' as const;
   readonly supportsPan = true;
@@ -382,17 +442,52 @@ export class AudioApiBackend implements AudioBackend {
   private musicBus: AnyNode = null;
   private musicLowpass: AnyNode = null;
   private buffers = new Map<string, AnyNode>();
-  private voices = new Map<number, { src: AnyNode; gain: AnyNode }>();
+  private voices = new Map<number, { src: AnyNode; gain: AnyNode; pan: AnyNode; timer: ReturnType<typeof setTimeout> | null }>();
   private decks = new Map<string, { src: AnyNode; gain: AnyNode; startedAt: number; offset: number; loopMs: number }>();
   private nextToken = 1;
+  /** How many decoded cues were kept as one channel (dualMonoToMono); read by the capture summary. */
+  monoKeys = 0;
 
   constructor() {
     this.mod = loadAudioApi();
     if (!this.mod) throw new Error('react-native-audio-api unavailable');
   }
 
+  /**
+   * Light on purpose: the graph (and the AudioContext that wakes the audio hardware) starts on the
+   * first load that may use it, after launch and only while the player can hear something
+   * (startGate.ts). A stalled audio server can then never abort the app during launch.
+   */
   async init(): Promise<void> {
-    if (this.ctx) return;
+    // Nothing to do yet: see startGraph.
+  }
+
+  private graphTry: Promise<boolean> | null = null;
+  private pendingMaster = 1;
+
+  /** Start the graph if the gate allows it. False means: play this cue on expo-av instead. */
+  private startGraph(): Promise<boolean> {
+    if (this.ctx) return Promise.resolve(true);
+    if (this.graphTry) return this.graphTry;
+    const attempt = (async () => {
+      await whenAudioMayStart();
+      if (this.ctx) return true;
+      if (!audioWanted()) return false;
+      try {
+        this.buildGraph();
+        return true;
+      } catch {
+        this.ctx = null;
+        return false;
+      }
+    })();
+    this.graphTry = attempt;
+    // A quiet player (both sounds off) may turn sound on later: ask the gate again then.
+    void attempt.then((ok) => { if (!ok && this.graphTry === attempt) this.graphTry = null; });
+    return attempt;
+  }
+
+  private buildGraph(): void {
     this.ctx = new this.mod.AudioContext();
     try {
       this.mod.AudioManager?.setAudioSessionOptions?.({ iosCategory: 'ambient', iosMode: 'default', iosOptions: ['mixWithOthers'], iosAllowHaptics: true });
@@ -409,6 +504,7 @@ export class AudioApiBackend implements AudioBackend {
     this.musicLowpass.connect(this.master);
     this.musicBus = this.ctx.createGain();
     this.musicBus.connect(this.musicLowpass);
+    this.master.gain.value = this.pendingMaster;
   }
 
   isLoaded(key: string): boolean {
@@ -433,11 +529,16 @@ export class AudioApiBackend implements AudioBackend {
     if (inFlight) return inFlight;
     const job = this.decodeChain.then(async () => {
       if (this.buffers.has(key)) return true;
+      if (!(await this.startGraph())) return false;
       const path = await localPath(src);
       if (!path) return false;
       try {
-        const buffer = await this.ctx.decodeAudioDataSource(path);
+        const decoded = await this.ctx.decodeAudioDataSource(path);
+        // A mono file comes back as two identical channels: keep one (see dualMonoToMono).
+        const buffer = dualMonoToMono(this.ctx, decoded) ?? decoded;
+        if (buffer !== decoded) this.monoKeys += 1;
         this.buffers.set(key, buffer);
+        if (captureTraceOn()) captureLine(`[audio-decode] ${Date.now()} ${key} ch=${buffer.numberOfChannels} mono=${this.monoKeys}/${this.buffers.size}`);
         return true;
       } catch (e) {
         if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[GameAudio] decode failed', path, String(e));
@@ -459,8 +560,9 @@ export class AudioApiBackend implements AudioBackend {
       src.playbackRate.value = a.rate;
       const gain = this.ctx.createGain();
       gain.gain.value = a.gain;
+      let pan: AnyNode = null;
       if (a.pan !== 0) {
-        const pan = this.ctx.createStereoPanner();
+        pan = this.ctx.createStereoPanner();
         pan.pan.value = Math.max(-1, Math.min(1, a.pan));
         src.connect(gain);
         gain.connect(pan);
@@ -474,8 +576,11 @@ export class AudioApiBackend implements AudioBackend {
       if (a.durationMs > 0) src.start(when, offset, a.durationMs / 1000);
       else src.start(when, offset);
       const token = this.nextToken++;
-      this.voices.set(token, { src, gain });
-      src.onEnded = () => this.voices.delete(token);
+      // A voice is released once it ends (or, if the end event never comes, a little after it must have ended).
+      const playMs = (a.durationMs > 0 ? a.durationMs : Math.max(0, (buffer.duration ?? 0) * 1000 - a.startMs)) / Math.max(0.25, a.rate || 1);
+      const timer = setTimeout(() => this.release(token), a.delayMs + playMs + VOICE_RELEASE_SLACK_MS);
+      this.voices.set(token, { src, gain, pan, timer });
+      src.onEnded = () => this.release(token);
       return token;
     } catch {
       return 0;
@@ -492,7 +597,29 @@ export class AudioApiBackend implements AudioBackend {
     } catch {
       // Already stopped.
     }
+    // Released once the 15 ms stop has passed (its end event usually comes first).
+    if (v.timer) clearTimeout(v.timer);
+    v.timer = setTimeout(() => this.release(token), 60);
+  }
+
+  /**
+   * Wave 5 round 2: let a finished voice go. react-native-audio-api 0.6.5 gives every buffer source its own copy of
+   * the decoded sound (AudioBufferSourceNode::setBuffer copies the bus) plus a time stretcher, and frees them only when
+   * the JS host object is garbage collected. Hermes collects by JS heap pressure, and these host objects are tiny on
+   * it, so a 50-catch release run held about 3 MB more per catch with studio sound on (RSS +529 MB against +374 MB
+   * off). Dropping the buffer and the graph links when the voice ends frees the copy at once; the small host
+   * objects go whenever the collector runs.
+   */
+  private release(token: number): void {
+    const v = this.voices.get(token);
+    if (!v) return;
     this.voices.delete(token);
+    if (v.timer) clearTimeout(v.timer);
+    try { v.src.onEnded = null; } catch { /* already gone */ }
+    try { v.src.disconnect(); } catch { /* already gone */ }
+    try { v.gain.disconnect(); } catch { /* already gone */ }
+    try { v.pan?.disconnect(); } catch { /* already gone */ }
+    try { v.src.buffer = null; } catch { /* already gone */ }
   }
 
   stopAll(): void {
@@ -544,6 +671,12 @@ export class AudioApiBackend implements AudioBackend {
     } catch {
       // Already stopped.
     }
+    // Round 2: the stopped bed lets its copy of the loop go (see release()).
+    setTimeout(() => {
+      try { d.src.disconnect(); } catch { /* already gone */ }
+      try { d.gain.disconnect(); } catch { /* already gone */ }
+      try { d.src.buffer = null; } catch { /* already gone */ }
+    }, Math.max(20, fadeMs) + VOICE_RELEASE_SLACK_MS);
   }
 
   async musicPosition(deck: string): Promise<number> {
@@ -571,6 +704,7 @@ export class AudioApiBackend implements AudioBackend {
   }
 
   setMasterGain(gain: number): void {
+    this.pendingMaster = gain;
     if (this.master) this.master.gain.value = gain;
   }
 
@@ -586,9 +720,18 @@ export class AudioApiBackend implements AudioBackend {
 // Hybrid: audio-api where it can decode, expo-av for everything else
 // =============================================================================
 
-const AV_ONLY_TYPES = new Set(['m4a', 'aac', 'caf', 'mp4']);
+export const AV_ONLY_TYPES = new Set(['m4a', 'aac', 'caf', 'mp4']);
 
-function assetType(src: number): string {
+/** Metro's metadata for a bundled asset (name, type, dev folder or URI); never its bytes. */
+export function assetMeta(src: number): { name?: string; type?: string; httpServerLocation?: string; uri?: string } | null {
+  try {
+    return Asset.fromModule(src) as unknown as { name?: string; type?: string; httpServerLocation?: string; uri?: string };
+  } catch {
+    return null;
+  }
+}
+
+export function assetType(src: number): string {
   try {
     return (Asset.fromModule(src).type || '').toLowerCase();
   } catch {
@@ -630,7 +773,28 @@ export class HybridBackend implements AudioBackend {
     return b ? b.name : null;
   }
 
+  latencyOf(key: string): number {
+    return (this.routes.get(key) ?? this.api).latencyMs;
+  }
+
   async load(key: string, src: number, voices: number): Promise<boolean> {
+    if (!AV_ONLY_TYPES.has(assetType(src)) && !audioStartOpen()) {
+      // Launch is not over (startGate.ts): never wait on the gate. The cue loads on expo-av now (it
+      // plays at once, a little later than the graph would), then moves to the low-latency graph
+      // once the gate opens, for every later play.
+      const ok = await this.av.load(key, src, voices);
+      if (ok) this.routes.set(key, this.av);
+      void whenAudioMayStart()
+        .then(() => this.api.load(key, src))
+        .then((up) => {
+          if (!up || !this.routes.has(key)) return;
+          this.routes.set(key, this.api);
+          // The expo-av copy is no longer played: free it (after any play in progress ends).
+          this.av.unload(key);
+        })
+        .catch(() => undefined);
+      return ok;
+    }
     if (!AV_ONLY_TYPES.has(assetType(src)) && (await this.api.load(key, src))) {
       this.routes.set(key, this.api);
       return true;
@@ -700,4 +864,46 @@ export class HybridBackend implements AudioBackend {
     this.routes.clear();
     this.deckRoutes.clear();
   }
+}
+
+// =============================================================================
+// silent (dev studio mute)
+// =============================================================================
+
+/**
+ * Dev only (EXPO_PUBLIC_STUDIO_MUTE=1): a backend that never touches the audio
+ * hardware. Every cue "loads" and "plays" with a token, so the mix, voice
+ * budget, beat clocks and the play log behave exactly as on a phone, but no
+ * AVAudioEngine starts (a simulator whose output device is stuck aborts the
+ * app in AVAudioEngine start). Music position runs on the wall clock.
+ */
+export class SilentBackend implements AudioBackend {
+  readonly name = 'silent' as const;
+  readonly supportsPan = true;
+  readonly supportsFilter = false;
+  readonly latencyMs = 0;
+  private keys = new Set<string>();
+  private token = 1;
+  private decks = new Map<string, number>();
+  async init(): Promise<void> { /* nothing to start */ }
+  async load(key: string): Promise<boolean> { this.keys.add(key); return true; }
+  isLoaded(key: string): boolean { return this.keys.has(key); }
+  play(): number { return this.token++; }
+  stop(): void { /* silent */ }
+  stopAll(): void { /* silent */ }
+  musicStart(deck: string, key: string, args: MusicArgs): void {
+    this.decks.set(deck, Date.now() - (args.fromMs ?? 0));
+    if (process.env.EXPO_PUBLIC_AUDIO_LOG === '1') console.log(`[wow-audio] ${Date.now() % 100000} music ${key}`);
+  }
+  musicGain(): void { /* silent */ }
+  musicStop(deck: string): void { this.decks.delete(deck); }
+  async musicPosition(deck: string): Promise<number> {
+    const at = this.decks.get(deck);
+    return at === undefined ? 0 : Date.now() - at;
+  }
+  musicFilter(): void { /* silent */ }
+  setMasterGain(): void { /* silent */ }
+  async unloadAll(): Promise<void> { this.keys.clear(); this.decks.clear(); }
+  clockMs(): number { return Date.now(); }
+  positionIsCheap(): boolean { return true; }
 }

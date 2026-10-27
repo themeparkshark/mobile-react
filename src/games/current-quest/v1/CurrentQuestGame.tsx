@@ -215,7 +215,7 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
       {resting ? null : <Text style={styles.hint} accessibilityLiveRegion="polite">{hint}</Text>}
       {resting ? null : stageClear ? <Pressable accessibilityRole="button" accessibilityLabel="Start next voyage"
         onPress={nextStage} style={styles.nextButton}>
-        <Text style={styles.nextButtonText}>NEXT VOYAGE  →</Text>
+        <Text style={styles.nextButtonText}>NEXT VOYAGE</Text>
       </Pressable> : <Text style={styles.instruction}>Tap a neighboring tile · tap back to change course</Text>}
       </View>
     </View>

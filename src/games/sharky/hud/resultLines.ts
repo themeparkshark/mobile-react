@@ -9,6 +9,7 @@
  */
 
 import { BEST_COMBO_MIN } from '../../../gamekit/results/feelings';
+import countText from '../../../helpers/countText';
 
 /**
  * The brag line under the stars. Empty when there is nothing to brag about.
@@ -27,8 +28,8 @@ export function sharkyBragLine(bestChainMult: number, closeSkims: number): strin
  */
 export function sharkyStarGoalLine(score: number, nextStarAt: number): string {
   const gap = Math.max(1, Math.round(nextStarAt - score));
-  if (gap <= 0.25 * nextStarAt) return `So close! ${gap.toLocaleString()} more for a star`;
-  return `Next star at ${Math.round(nextStarAt).toLocaleString()}`;
+  if (gap <= 0.25 * nextStarAt) return `So close! ${countText(gap)} more for a star`;
+  return `Next star at ${countText(nextStarAt)}`;
 }
 
 /**

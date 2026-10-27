@@ -2,7 +2,8 @@ import { Image } from 'expo-image';
 import { ReactNode, useContext, useEffect } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
-import { catchShown, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { catchDim, catchShown, isCatchDimmed, isCatchShown } from '../screens/ExploreScreen/catchPresence';
+import { chromeHeal, touchHeal, useCommitHeal } from './map/alive/commitHeal';
 import * as RootNavigation from '../RootNavigation';
 import { NotificationContext } from '../context/NotificationProvider';
 import { SoundEffectContext, SoundEffectContextType } from '../context/SoundEffectProvider';
@@ -13,6 +14,7 @@ import Button from './Button';
 import { AuthContext } from '../context/AuthProvider';
 import { warmStandings } from '../screens/LeaderboardsScreen/standingsV2Store';
 import { emitTabReselect } from '../utils/tabReselect';
+import { UpperText } from '../ui/upper';
 
 /**
  * How far the center compass button rises above the bottom bar into the
@@ -20,6 +22,13 @@ import { emitTabReselect } from '../utils/tabReselect';
  * end at least this far above the bar.
  */
 export const BOTTOM_BAR_OVERHANG = 56;
+
+/**
+ * Bottom padding for any scroll list on a screen with the 5-icon footer, so the
+ * last row can scroll fully clear of the MAP compass. One value for every screen.
+ */
+export const FOOTER_CLEARANCE = BOTTOM_BAR_OVERHANG + 36;
+const catchHasChrome = () => isCatchDimmed() || isCatchShown();
 
 export default function Wrapper({
   children,
@@ -43,7 +52,11 @@ export default function Wrapper({
   const { notificationCount } = useContext(NotificationContext);
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   // A catch moment owns the whole screen: the tab bar slides away on the UI thread (no re-render).
-  const barSlide = useAnimatedStyle(() => ({ transform: [{ translateY: 160 * catchShown.value }] }));
+  // A common catch keeps the tab bar in place and only softens it (catchDim): the header and footer never move for it.
+  // Round 5: a commit here mid-catch re-sends the softened bar (commitHeal), so it never flashes back to full.
+  // Wave 4: only while a catch has the chrome (Wrapper is on every screen; nothing heals at rest).
+  useCommitHeal(chromeHeal, catchHasChrome);
+  const barSlide = useAnimatedStyle(() => ({ opacity: 1 - 0.4 * catchDim.value + touchHeal(chromeHeal), transform: [{ translateY: 160 * catchShown.value }] }));
 
   const goTo = (item: { screen: string; permission?: PermissionEnums }) => {
     if (isCatchShown()) return;
@@ -162,12 +175,16 @@ export default function Wrapper({
                         }}
                         source={item.icon}
                         contentFit="contain"
+                        // Warmed into memory on the launch screen: drawn on the map's first frame.
+                        cachePolicy="memory-disk"
+                        priority="high"
+                        transition={0}
                       />
                     </Button>
                     {/* Capped: past 1.2x the five labels run into each other ("NEWSSTANDINGS") and over the page. */}
                     {/* The word under the icon is part of the button too: a kid who taps
                         "PROFILE" instead of the picture still goes there. */}
-                    <Text
+                    <UpperText
                       onPress={() => { playSound(item.sound); goTo(item); }}
                       suppressHighlighting
                       accessibilityRole="button"
@@ -189,7 +206,7 @@ export default function Wrapper({
                       }}
                     >
                       {item.text}
-                    </Text>
+                    </UpperText>
                   </View>
                 </View>
               );

@@ -66,9 +66,12 @@ test('timers use the server clock offset', () => {
 });
 
 test('coins format the same everywhere', () => {
-  assert.equal(shelves.formatCoins(5000), '5,000');
+  // No commas: the display font draws them like periods (src/helpers/countText.ts).
+  assert.equal(shelves.formatCoins(5000), '5000');
   assert.equal(shelves.formatCoins(750), '750');
-  assert.equal(shelves.formatCoins(1234567), '1,234,567');
+  assert.equal(shelves.formatCoins(12500), '12500');
+  assert.equal(shelves.formatCoins(125000), '125K');
+  assert.equal(shelves.formatCoins(1234567), '1.2M');
   assert.equal(shelves.shortfall(630, 750), 120);
   assert.equal(shelves.shortfall(900, 750), 0);
 });
@@ -838,7 +841,11 @@ test('polish 3: the hand-off covers the whole screen, the reveal shows at once, 
   assert.match(screen, /\{shopHandoff && <View pointerEvents="none" style=\{\[StyleSheet\.absoluteFill, \{ backgroundColor: REVEAL_NAVY, zIndex: 50 \}\]\} \/>\}/);
   assert.match(code, /bridged=\{handoff\}/);
   assert.match(code, /const coverHandoff = useCallback\(\(on: boolean\) => \{ setHandoff\(on\); handoffRef\.current\?\.\(on\); \}/, 'both covers flip in one tick');
-  assert.match(reveal, /entering=\{still \|\| bridged \? undefined : FadeIn\.duration\(260\)\}/);
+  assert.match(reveal, /entering=\{still \|\| bridged \? undefined : FadeIn\.duration\(inline \? DURATION\.base : 260\)\}/);
+  // Round 3: a set-completing buy hands off inside the try-on's own modal (no modal swap, no navy frames).
+  assert.match(code, /onHandOff=\{startInlineReveal\}/);
+  assert.match(code, /<SetCompleteReveal key=\{reveal\.reward\.slug\} inline /);
+  assert.match(src('src/screens/StoreScreen/TryOnSheet.tsx'), /if \(rewardPendingRef\.current && onHandOffRef\.current\) \{ handOffNow\(\); return; \}/);
   assert.match(code, /if \(shownRef\.current !== revealSlug\) holdReveal\(\); \}, 1200\)/, 'watchdog remounts a reveal iOS dropped');
 });
 

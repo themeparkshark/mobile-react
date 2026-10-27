@@ -14,6 +14,7 @@ import { PinCollectionType } from '../models/pin-collection-type';
 import Pin from './Pin';
 import Ribbon from './Ribbon';
 import Stars from './Stars';
+import { UpperText } from '../ui/upper';
 
 export default function pinCollectionModal({
   pinCollection,
@@ -106,7 +107,7 @@ export default function pinCollectionModal({
                   backgroundColor: config.primary,
                 }}
               >
-                <Text
+                <UpperText
                   style={{
                     color: '#fff',
                     textAlign: 'center',
@@ -116,7 +117,7 @@ export default function pinCollectionModal({
                   }}
                 >
                   {pinCollection.name}
-                </Text>
+                </UpperText>
               </View>
             </View>
           </View>

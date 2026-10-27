@@ -37,6 +37,18 @@ export function rarityColor(rarity: number | null | undefined): string {
   return RARITY_COLORS[rarityTier(rarity)];
 }
 
+/**
+ * Map glows (auras, rays, sparkles, rings) per tier in Alex's palette: gold for common and the top tiers,
+ * TPS blues in between. Rarity chips and cards keep RARITY_COLORS; the map never glows purple or magenta.
+ */
+export const MAP_GLOW_COLORS: Readonly<Record<number, string>> = {
+  1: '#ffd54a', 2: '#7cc8ff', 3: '#3fa9f5', 4: '#ffc21a', 5: '#ffe27a',
+};
+
+export function mapGlowColor(rarity: number | null | undefined): string {
+  return MAP_GLOW_COLORS[rarityTier(rarity)];
+}
+
 export function rarityLabel(rarity: number | null | undefined, serverLabel?: string | null): string {
   return typeof serverLabel === 'string' && serverLabel.trim() ? serverLabel.trim() : RARITY_LABELS[rarityTier(rarity)];
 }

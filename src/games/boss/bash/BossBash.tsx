@@ -33,6 +33,7 @@ import { useGameMusic } from '../../../gamekit/audio/useGameMusic';
 import { BASH_ART, BOSS_SKINS, type BossSkin } from './art';
 import type { StyleProp, ViewStyle } from 'react-native';
 import type { AnimatedStyle } from 'react-native-reanimated';
+import countText from '../../../helpers/countText';
 type AnimStyle = StyleProp<AnimatedStyle<ViewStyle>>;
 import WaterFront from './WaterFront';
 import { usePowerBudget } from '../../../power';
@@ -903,8 +904,8 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, las
       }}
       hideHeaderScore={!!result}
       headerScore={<View style={styles.dmgChip} accessible accessibilityLabel={`Damage ${hud.damage}`}>
-        <Text style={styles.dmgLabel} maxFontSizeMultiplier={1.1}>{best > 0 ? `DAMAGE  ·  BEST ${best.toLocaleString()}` : 'DAMAGE'}</Text>
-        <Text style={styles.dmgNum} maxFontSizeMultiplier={1.1}>{(capLeft === undefined ? hud.damage : Math.min(hud.damage, capLeft)).toLocaleString()}</Text>
+        <Text style={styles.dmgLabel} maxFontSizeMultiplier={1.1}>{best > 0 ? `DAMAGE  ·  BEST ${countText(best)}` : 'DAMAGE'}</Text>
+        <Text style={styles.dmgNum} maxFontSizeMultiplier={1.1}>{countText(capLeft === undefined ? hud.damage : Math.min(hud.damage, capLeft))}</Text>
       </View>}
       onWrapUp={() => {
         // Boarding the ride mid-round keeps what you earned (the server needs at least 12 s since FIGHT, which the intro covers).
@@ -989,7 +990,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, las
           <View style={styles.hpRow}>
             <Text style={styles.hpName} numberOfLines={1} maxFontSizeMultiplier={1.15}>{bossName.toUpperCase()}</Text>
             <Text style={styles.hpCount} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.15}>
-              {hpNow.toLocaleString()} HP{fighters > 0 ? `  ·  ${fighters} fighting` : ''}</Text>
+              {countText(hpNow)} HP{fighters > 0 ? `  ·  ${fighters} fighting` : ''}</Text>
           </View>
           <View style={styles.clockRow}>
             <View style={[styles.hpTrack, { flex: 1, marginTop: 0 }]}>
@@ -1002,7 +1003,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, las
           </View>
           <View style={styles.chipRow}>
             {damageRate < 1 ? <View style={styles.homeChip}><Text style={styles.homeText}>From home: {Math.round(damageRate * 100)}% power</Text></View> : <View />}
-            {teamHit !== null && <View style={styles.teamChip}><GameIcon name="sparkle" size={14} /><Text style={styles.teamText} numberOfLines={1}>{lastTeammate ? `${lastTeammate} hit it` : 'Team hit it'}: -{teamHit.toLocaleString()} HP</Text></View>}
+            {teamHit !== null && <View style={styles.teamChip}><GameIcon name="sparkle" size={14} /><Text style={styles.teamText} numberOfLines={1}>{lastTeammate ? `${lastTeammate} hit it` : 'Team hit it'}: -{countText(teamHit)} HP</Text></View>}
           </View>
         </View>}
         {L.w > 0 && !result && <View pointerEvents="none" style={styles.finDock}>

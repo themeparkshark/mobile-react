@@ -15,7 +15,7 @@ test('no player-facing screen says Travel Mode', () => {
   }
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /accessibilityLabel="Home Hunt" accessibilityHint="Explains Home Hunt"/);
-  assert.match(explore, /\}\}>Home Hunt<\/Text>/);
+  assert.match(explore, /\}\}>Home Hunt<\/(?:Upper)?Text>/);
 });
 
 test('the header term opens a Home Hunt explanation, and old names still resolve', () => {

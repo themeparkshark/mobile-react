@@ -102,7 +102,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
     pages: [
       { key: 'gear', hero: 'shop_gear', headline: 'Dress up your shark',
         points: [
-          { icon: 'coin', text: 'Spend Coins on gear.' },
+          { icon: 'coins', text: 'Spend Coins on gear.' },
           { icon: 'shark', text: 'Try it on before you buy.' },
           { icon: 'heart', text: 'Tap the heart to save it for later.' },
         ] },

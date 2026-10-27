@@ -14,6 +14,7 @@ import { HELP_TOPICS, type HelpArtKey, type HelpTopic } from '../../services/hel
 import { BOTTOM_BAR_OVERHANG } from '../../components/Wrapper';
 import { playSfx } from '../../gamekit/SFX';
 import { BRAND, GameButton, GameIcon, gameAlert, RADIUS, SHADOW, textPreset } from '../../ui';
+import { UpperText } from '../../ui/upper';
 
 /** Existing hand-drawn art only (Alex's originals and the kit art players already know). */
 const ART: Readonly<Record<HelpArtKey, number>> = {
@@ -98,7 +99,7 @@ export default function HowToPlayMore({ focus }: { readonly focus: HelpTopicId |
         );
       })}
 
-      <Text style={styles.section}>Every word in the game</Text>
+      <UpperText style={styles.section}>Every word in the game</UpperText>
       <View style={styles.list}>
         {GLOSSARY_KEYS.map((key, index) => {
           const term = glossary[key];
@@ -108,7 +109,7 @@ export default function HowToPlayMore({ focus }: { readonly focus: HelpTopicId |
               style={({ pressed }) => [styles.row, index < GLOSSARY_KEYS.length - 1 && styles.rowBorder, pressed && styles.chipPressed]}>
               <GameIcon name={term.icon} size={26} />
               <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={styles.rowTitle}>{term.label}</Text>
+                <UpperText style={styles.rowTitle}>{term.label}</UpperText>
                 <Text style={styles.rowBody} numberOfLines={2}>{term.what}</Text>
               </View>
               <GameIcon name="arrow" size={20} />
@@ -117,7 +118,7 @@ export default function HowToPlayMore({ focus }: { readonly focus: HelpTopicId |
         })}
       </View>
 
-      <Text style={styles.section}>Want the tips again?</Text>
+      <UpperText style={styles.section}>Want the tips again?</UpperText>
       <View style={[styles.card, { alignItems: 'stretch' }]}>
         <Text style={styles.cardLine}>Replay every tutorial and tip. Finn shows each one again the next time it comes up.</Text>
         <GameButton label="Replay tutorials" icon="retry" loading={replaying} onPress={() => { void replay(); }}

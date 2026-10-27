@@ -41,7 +41,11 @@ export interface PerfProbe {
 
 const EMPTY: PerfSummary = { fpsAvg: 0, fpsP5: 0, frameP95: 0, frameP99: 0, over16Pct: 0, worstMs: 0, frames: 0 };
 
-export function usePerfProbe(enabled = true): PerfProbe {
+/**
+ * `jsLoop` runs a JS requestAnimationFrame counter for the overlay's JS fps (dev overlays only by default):
+ * a shipped game never spins the JS thread every frame just to measure itself.
+ */
+export function usePerfProbe(enabled = true, jsLoop: boolean = __DEV__): PerfProbe {
   const stats = useSharedValue<FrameStats>(createFrameStats(240));
   const tick = useSharedValue(0);
   const acc = useSharedValue(0);
@@ -55,16 +59,17 @@ export function usePerfProbe(enabled = true): PerfProbe {
     const dt = info.timeSincePreviousFrame;
     if (dt == null) return;
     recordFrame(stats.value, dt);
-    tick.value = tick.value + 1;
     acc.value += dt;
     if (acc.value >= 250) {
       acc.value = 0;
+      // The graph redraws on this 4 Hz publish, not every frame (the meter must not load what it measures).
+      tick.value = tick.value + 1;
       runOnJS(publish)(summarize(stats.value));
     }
   }, enabled);
 
   useEffect(() => {
-    if (!enabled) return undefined;
+    if (!enabled || !jsLoop) return undefined;
     let raf = 0;
     const loop = () => {
       const j = js.current;
@@ -79,7 +84,7 @@ export function usePerfProbe(enabled = true): PerfProbe {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [enabled]);
+  }, [enabled, jsLoop]);
 
   return useMemo(() => ({
     stats,

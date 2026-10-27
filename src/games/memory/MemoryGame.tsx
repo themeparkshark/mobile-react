@@ -158,6 +158,7 @@ import {
 } from './race/raceSim';
 import { RivalStrip, type Racer } from './race/RivalStrip';
 import type { MemoryPartyBinding } from './race/partyBinding';
+import countText from '../../helpers/countText';
 
 export type { MemoryMode } from './modes/mode';
 
@@ -430,6 +431,8 @@ export default function MemoryGame({
   const [score, setScore] = useState(0);
   const [personalBest, setPersonalBest] = useState(0);
   const [result, setResult] = useState<GameResult | null>(null);
+  // The last 5 seconds on the shell (gold edge, stamped seconds, TIME!); the game keeps its own tick sound.
+  const [finalLeft, setFinalLeft] = useState<number | null>(null);
   const [resultData, setResultData] = useState<MemoryResultsData | null>(null);
   const [hud, setHud] = useState({
     seconds: null as number | null, urgent: false, chain: 0, gauge: 0, showtime: false, showLeft: 0, showWarn: false,
@@ -726,6 +729,8 @@ export default function MemoryGame({
     setPot(null);
     setSlotIds(Array.from({ length: cols * rows }, (_, i) => i));
     setBoardKey((k) => k + 1);
+    // A new board re-deals: the count (Play again) waits for this deal too.
+    setStageDealt(false);
     flights.current?.clear();
   }, []);
 
@@ -750,6 +755,8 @@ export default function MemoryGame({
   }, [later, reducedMotion]);
 
   const dealtKey = useRef(-1);
+  // The 3-2-1 waits for the deal to land (never counts over empty card slots).
+  const [stageDealt, setStageDealt] = useState(false);
   useEffect(() => {
     if (!geo || !runRef.current || dealtKey.current === boardKey) return;
     const key = boardKey;
@@ -757,9 +764,11 @@ export default function MemoryGame({
       if (dealtKey.current === key) return;
       dealtKey.current = key;
       dealCards(false);
+      const n = geo.cols * geo.rows;
+      later(reducedMotion ? 60 : n * 38 + 240, () => setStageDealt(true));
     }, 30);
     return () => clearTimeout(t);
-  }, [geo, boardKey, dealCards]);
+  }, [geo, boardKey, dealCards, later, reducedMotion]);
 
   // Keep card positions right if the layout changes (first layout, rotation).
   useEffect(() => {
@@ -1034,7 +1043,7 @@ export default function MemoryGame({
       if (e.turns > 0) numbers.push({ label: 'TURNS', value: `${e.turns}/${par}`, hot: e.turns <= par });
       if (!r.signal) numbers.push({ label: 'TIME', value: `${(chargedMs / 1000).toFixed(1)}s` });
       if (x.ridePb != null && !r.signal) numbers.push({ label: 'BEST', value: `${(x.ridePb / 1000).toFixed(1)}s`, hot: x.newRidePb });
-      if (won) numbers.push({ label: 'SCORE', value: finalScore.toLocaleString('en-US') });
+      if (won) numbers.push({ label: 'SCORE', value: countText(finalScore) });
       // The luck chip contradicts PERFECT!, and it is jargon on a loss.
       chipText = won && !perfect ? luckyChip(e) : null;
       if (perfect && won) banner = 'PERFECT!';
@@ -1848,7 +1857,7 @@ export default function MemoryGame({
             cards.current[e.ids[ev.a]]?.slip(wob);
             cards.current[e.ids[ev.b]]?.slip(wob);
             if (ev.kind === 'a' && ev.ghost >= 0) {
-              // Teaching beat (a): the forgotten card lifts and shows its face, a coral dashed arc to the wrong card.
+              // Teaching beat (a): the forgotten card lifts and shows its face, a calm white dashed arc to the wrong card.
               const gid = e.ids[ev.ghost];
               cards.current[gid]?.forgot();
               const cg = slotCenter(g, ev.ghost);
@@ -1954,7 +1963,7 @@ export default function MemoryGame({
               });
             });
             setPot(null);
-            if (flags.scoreOnHud) scorePlate.current?.tally(`POT ${ev.value.toLocaleString('en-US')}`);
+            if (flags.scoreOnHud) scorePlate.current?.tally(`POT ${countText(ev.value)}`);
             const ticks = Math.min(12, Math.max(1, Math.floor(ev.value / 200)));
             for (let i = 0; i < ticks; i++) {
               later(i * SIXTEENTH_MS, () => GameAudio.playLadder('coin_tick', i, { volume: 0.8 }));
@@ -2018,17 +2027,20 @@ export default function MemoryGame({
           break;
         }
         case 'second': {
+          const nextLeft = ev.left <= 5 && ev.left > 0 && e.cfg.clockMs != null ? ev.left : null;
+          setFinalLeft((v) => (v === nextLeft ? v : nextLeft));
           if (ev.left <= 5 && ev.left > 0 && e.cfg.clockMs != null) {
             GameAudio.play('mm_clock_tick');
             Haptic.tickSelection();
-            if (ev.left === 5) stage.current?.pose('gasp');
+            // The barker cheers the kid on through the last 5 (no sweating shark, no pressure).
+            if (ev.left === 5) stage.current?.pose('fist');
           }
           syncHud();
           break;
         }
         case 'clock': {
           const top = g.rope.y + 18;
-          flights.current?.tag(`${ev.deltaMs > 0 ? '+' : '-'}${(Math.abs(ev.deltaMs) / 1000).toFixed(ev.deltaMs % 1000 ? 1 : 0)}s`, g.W / 2, top, 56, ev.deltaMs > 0 ? 'gold' : 'coral');
+          flights.current?.tag(`${ev.deltaMs > 0 ? '+' : '-'}${(Math.abs(ev.deltaMs) / 1000).toFixed(ev.deltaMs % 1000 ? 1 : 0)}s`, g.W / 2, top, 56, ev.deltaMs > 0 ? 'gold' : 'blue');
           if (ev.deltaMs > 0) GameAudio.play('ui.tap', { volume: 0.2 });
           break;
         }
@@ -2147,6 +2159,8 @@ export default function MemoryGame({
           break;
         }
         case 'timeout':
+          setFinalLeft(0);
+          later(1400, () => setFinalLeft((v) => (v === 0 ? null : v)));
           if (r.race) { endRace(gameNow()); break; }
           if (r.mode === 'timeAttack') {
             r.busy = true;
@@ -2507,7 +2521,11 @@ export default function MemoryGame({
       multiplier={hud.chain >= 3 ? 2 : hud.chain === 2 ? 1.5 : 1}
       fever={hud.showtime}
       personalBest={personalBest}
-      objective={mode === 'ride' ? (r?.signal ? 'Low signal: clear in 24 turns' : 'Clear the board') : mode === 'daily' ? 'Two slips and you are out' : mode === 'race' ? 'Same board, four sharks. First to clear wins.' : mode === 'warmup' ? 'Find the pairs. Remember where you saw them.' : 'Race the clock. Chain the cards you remember.'}
+      secondsLeft={finalLeft}
+      finalSecondsFeedback={false}
+      countdownY={0.62}
+      stageReady={stageDealt}
+      objective={mode === 'ride' ? (r?.signal ? 'Low signal: clear in 24 turns' : 'Clear the board') : mode === 'daily' ? 'Two slips and you are out' : mode === 'race' ? 'Same board, four sharks. First to clear wins.' : mode === 'warmup' ? 'Find the pairs. Remember where you saw them.' : 'Find the pairs. Beat the clock!'}
       result={result}
       gameId="memory"
       onStart={onStart}
@@ -2744,7 +2762,7 @@ const styles = StyleSheet.create({
   parPlate: { height: 34, borderRadius: 12, backgroundColor: '#ffffff', borderWidth: 2.5, borderColor: MM.ink, paddingHorizontal: 10, justifyContent: 'center', marginRight: 8 },
   parText: { fontFamily: 'Shark', fontSize: 15, color: MM.navyText },
   incomingRim: { position: 'absolute', borderRadius: 24, borderWidth: 5, borderColor: MM.urgent },
-  stumble: { position: 'absolute', borderRadius: 14, backgroundColor: 'rgba(120,132,150,0.45)', borderWidth: 4, borderColor: MM.coral },
+  stumble: { position: 'absolute', borderRadius: 14, backgroundColor: 'rgba(120,132,150,0.45)', borderWidth: 4, borderColor: '#0768b9' },
   wash: { position: 'absolute', backgroundColor: '#ffffff', borderRadius: 14 },
   gullFrame: { position: 'absolute', left: 0, top: 0, width: 80, height: 70 },
   headsUp: { borderWidth: 6, borderColor: MM.gold },
@@ -2762,7 +2780,7 @@ const styles = StyleSheet.create({
   arrowHeadL: { width: 0, height: 0, borderTopWidth: 8, borderBottomWidth: 8, borderRightWidth: 10, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRightColor: MM.navyText },
   arrowHeadR: { width: 0, height: 0, borderTopWidth: 8, borderBottomWidth: 8, borderLeftWidth: 10, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: MM.navyText },
   tip: { position: 'absolute', alignSelf: 'center', backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 3, borderColor: MM.scout, paddingHorizontal: 14, paddingVertical: 6 },
-  tipSlip: { borderColor: MM.coral },
+  tipSlip: { borderColor: '#0768b9' },
   tipText: { fontFamily: 'Knockout', fontSize: 16, color: MM.navyText },
   unlock: { position: 'absolute', left: 40, right: 40, alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 3, borderColor: MM.gold, paddingVertical: 10 },
   unlockKicker: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, letterSpacing: 1 },

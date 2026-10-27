@@ -43,6 +43,8 @@ export interface CameraOptions {
   reducedMotion?: boolean;
   /** Player is walking in line: shakes x0.3 (design rule). */
   walking?: boolean;
+  /** False stops the camera's frame callback (a game at rest under a card: nothing to shake). */
+  active?: boolean;
 }
 
 export interface CameraRig {
@@ -65,7 +67,7 @@ export interface CameraRig {
   configure: (cfg: Partial<CameraConfig>) => void;
 }
 
-export function useCamera({ width, height, config, timeScale, reducedMotion = false, walking = false }: CameraOptions): CameraRig {
+export function useCamera({ width, height, config, timeScale, reducedMotion = false, walking = false, active = true }: CameraOptions): CameraRig {
   const state = useSharedValue<CameraState>(createCamera(config, 11));
   const x = useSharedValue(0);
   const y = useSharedValue(0);
@@ -80,7 +82,7 @@ export function useCamera({ width, height, config, timeScale, reducedMotion = fa
     })(intensity);
   }, [reducedMotion, walking, config?.intensity, state]);
 
-  useFrameCallback((info) => {
+  const frame = useFrameCallback((info) => {
     'worklet';
     const raw = info.timeSincePreviousFrame;
     if (raw == null) return;
@@ -92,6 +94,9 @@ export function useCamera({ width, height, config, timeScale, reducedMotion = fa
     if (rot.value !== c.rot) rot.value = c.rot;
     if (zoom.value !== c.zoom) zoom.value = c.zoom;
   });
+  useEffect(() => {
+    frame.setActive(active);
+  }, [active, frame]);
 
   const transform = useDerivedValue<Transforms3d>(() => [
     { translateX: x.value },

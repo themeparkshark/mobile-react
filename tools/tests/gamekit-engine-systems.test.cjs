@@ -68,6 +68,8 @@ function loadAudioEngine(dev = false) {
   }
   stubs['./backends'] = { ExpoAvBackend: FakeBackend, AudioApiBackend: FakeBackend, HybridBackend: FakeBackend, audioApiAvailable: () => false };
   const mod = loadTs('src/gamekit/audio/GameAudio.ts', stubs, { __DEV__: dev, setInterval, clearInterval });
+  // Sound starts off until the player setting is known (SoundEffectProvider); these tests play as a player with sound on.
+  mod.GameAudio.setSfxEnabled(true); mod.GameAudio.setMusicEnabled(true);
   return { GameAudio: mod.GameAudio, calls };
 }
 

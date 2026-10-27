@@ -24,6 +24,9 @@ import Animated, {
   withRepeat,
   runOnJS,
   Easing,
+  ReduceMotion,
+  cancelAnimation,
+  useAnimatedReaction,
   interpolate,
   FadeIn,
   FadeOut,
@@ -34,6 +37,14 @@ import { defendGym } from '../../api/endpoints/gym-battle';
 import { friendlyActionError } from '../../services/match/matchLink';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+// iPhone SE and other short screens: a smaller shield and a lower score
+// plaque, so nothing overlaps the shield.
+const SHORT = SCREEN_H < 700;
+const SHIELD = SHORT ? 180 : 220;
+// The ring around the shield and how far a +N rises: every +N starts and
+// ends inside the ring, under the header and the bonus pill.
+const RING = SHIELD + 50;
+const FLOAT_RISE = SHORT ? 56 : 72;
 
 interface Props {
   visible: boolean;
@@ -65,7 +76,7 @@ const FloatingPlusOne = ({ id, x, y, value, onComplete }: FloatingPlusOneProps) 
     // Bigger animation for multiplied values
     const targetScale = value > 1 ? 1.5 : 1.2;
     scale.value = withSpring(targetScale, { damping: 6, stiffness: 300 });
-    translateY.value = withTiming(-100, { duration: 700, easing: Easing.out(Easing.quad) });
+    translateY.value = withTiming(-FLOAT_RISE, { duration: 700, easing: Easing.out(Easing.quad) });
     opacity.value = withDelay(400, withTiming(0, { duration: 300 }, () => {
       runOnJS(onComplete)(id);
     }));
@@ -106,7 +117,7 @@ export default function DefendMiniGameModal({
   const [taps, setTaps] = useState(0);
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [countdown, setCountdown] = useState(3);
-  const [result, setResult] = useState<{ points: number; message: string } | null>(null);
+  const [result, setResult] = useState<{ points: number; message: string; failed?: boolean } | null>(null);
   const [floatingPlusOnes, setFloatingPlusOnes] = useState<Array<{ id: number; x: number; y: number; value: number }>>([]);
   const plusOneIdRef = useRef(0);
   const [multiplier, setMultiplier] = useState<1 | 2 | 3>(1);
@@ -124,7 +135,7 @@ export default function DefendMiniGameModal({
   const glowIntensity = useSharedValue(0.3);
   const multiplierScale = useSharedValue(1);
   const countdownScale = useSharedValue(1);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load sounds
   useEffect(() => {
@@ -161,9 +172,13 @@ export default function DefendMiniGameModal({
     }
   }, [visible]);
 
-  // Activate random multiplier (x2 or x3) at 7 seconds remaining
+  // Activate random multiplier (x2 or x3) at 7 seconds remaining. "<= 7" plus
+  // a once flag: a busy phone can step the clock from 8 straight to 6.
+  const bonusFiredRef = useRef(false);
   useEffect(() => {
-    if (gameState === 'playing' && timeLeft === 7) {
+    if (gameState !== 'playing') bonusFiredRef.current = false;
+    if (gameState === 'playing' && timeLeft <= 7 && timeLeft > 0 && !bonusFiredRef.current) {
+      bonusFiredRef.current = true;
       const randomMultiplier = Math.random() < 0.5 ? 2 : 3;
       setMultiplier(randomMultiplier as 2 | 3);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -197,23 +212,55 @@ export default function DefendMiniGameModal({
     }
   }, [gameState, countdown]);
 
-  // Timer countdown during game
+  // Round clock. The 25 seconds run on the UI thread (a linear Reanimated
+  // timing, never skipped for Reduce Motion), which ticks the shown seconds
+  // and ends the round. JS timers can run seconds late on a busy phone (dev JS
+  // on a loaded Mac showed one tick every 8 s), so they are only a backup.
+  // The deadline is also kept as a timestamp: every tap refreshes the clock,
+  // and a tap after the buzzer does not count.
+  const endsAtRef = useRef(0);
+  const gameStateRef = useRef<GameState>(gameState);
+  gameStateRef.current = gameState;
+  const roundClock = useSharedValue(GAME_DURATION);
+  const secondsLeft = () =>
+    Math.max(0, Math.ceil((endsAtRef.current - Date.now()) / 1000 - 1e-6));
+  const syncClock = useCallback((uiSeconds: number) => {
+    if (gameStateRef.current !== 'playing') return;
+    const left = Math.min(uiSeconds, secondsLeft());
+    setTimeLeft(t => (t === left ? t : left));
+  }, []);
+  useAnimatedReaction(
+    () => Math.ceil(roundClock.value - 1e-6),
+    (now, before) => {
+      if (now !== before) runOnJS(syncClock)(now);
+    },
+  );
   useEffect(() => {
-    if (gameState === 'playing' && timeLeft > 0) {
-      timerRef.current = setTimeout(() => {
-        setTimeLeft(t => t - 1);
-        // Urgency haptics in last 5 seconds
-        if (timeLeft <= 6) {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
-      }, 1000);
-    } else if (gameState === 'playing' && timeLeft === 0) {
-      handleGameEnd();
-    }
-
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+    if (gameState !== 'playing') return;
+    endsAtRef.current = Date.now() + GAME_DURATION * 1000;
+    roundClock.value = GAME_DURATION;
+    roundClock.value = withTiming(0, {
+      duration: GAME_DURATION * 1000,
+      easing: Easing.linear,
+      reduceMotion: ReduceMotion.Never,
+    });
+    const tick = () => {
+      const left = secondsLeft();
+      setTimeLeft(t => (t === left ? t : left));
+      if (left === 0 && timerRef.current) clearInterval(timerRef.current);
     };
+    timerRef.current = setInterval(tick, 500);
+    return () => {
+      cancelAnimation(roundClock);
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [gameState]);
+
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+    // Urgency haptics in the last 5 seconds
+    if (timeLeft > 0 && timeLeft <= 5) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (timeLeft === 0) handleGameEnd();
   }, [gameState, timeLeft]);
 
   // Continuous shield glow pulse during play
@@ -238,6 +285,9 @@ export default function DefendMiniGameModal({
 
   const handleTap = useCallback((event: any) => {
     if (gameState !== 'playing') return;
+    const left = secondsLeft();
+    setTimeLeft(t => (t === left ? t : left));
+    if (left === 0) return; // after the buzzer: the round is over, the tap does not count
 
     // Haptic feedback - stronger during multiplier
     const intensity = multiplier > 1 ? Haptics.ImpactFeedbackStyle.Heavy :
@@ -248,13 +298,13 @@ export default function DefendMiniGameModal({
     setTaps(t => t + 1);
     setTotalPoints(p => p + multiplier);
 
-    // Add floating +N at tap location - closer to center (shield area)
-    const { locationX, locationY } = event.nativeEvent;
-    // Keep X centered around shield, Y in middle area
+    // Add a floating +N on the shield. The shield sits in the middle of the
+    // screen; a +N starts in its lower half and rises, so even at its biggest
+    // it stays inside the ring (never into the clock or the bonus pill).
     const centerX = SCREEN_W / 2;
-    const centerY = SCREEN_H * 0.45; // Shield is roughly at 45% from top
-    const offsetX = (Math.random() - 0.5) * 100;
-    const offsetY = (Math.random() - 0.5) * 80;
+    const centerY = SCREEN_H / 2;
+    const offsetX = (Math.random() - 0.5) * RING * 0.4;
+    const offsetY = RING * 0.12 + Math.random() * RING * 0.18;
     const newId = plusOneIdRef.current++;
     setFloatingPlusOnes(prev => [...prev, { 
       id: newId, 
@@ -300,8 +350,10 @@ export default function DefendMiniGameModal({
   const handleGameEnd = async () => {
     setGameState('submitting');
     try {
-      // Send totalPoints (which includes multiplied taps)
-      const response = await defendGym(parkId, totalPoints);
+      // Send totalPoints (which includes multiplied taps). The server takes at
+      // most 500 and scores at most 300, so a fast kid with the x3 bonus never
+      // gets a refused send for tapping too well.
+      const response = await defendGym(parkId, Math.min(totalPoints, 500));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setResult({
         points: response.points_earned,
@@ -314,6 +366,7 @@ export default function DefendMiniGameModal({
       setResult({
         points: 0,
         message: friendlyActionError(error, 'That didn’t work. Check your internet and try again.'),
+        failed: true,
       });
       setGameState('finished');
     }
@@ -347,8 +400,11 @@ export default function DefendMiniGameModal({
     transform: [{ scale: countdownScale.value }],
   }));
 
+  // Flat burst behind the shield: a fully solid ring (nothing shows through)
+  // that breathes a little in scale only, on the UI thread. glowIntensity
+  // runs 0.3 to 0.6.
   const glowAnimStyle = useAnimatedStyle(() => ({
-    opacity: glowIntensity.value,
+    transform: [{ scale: 0.95 + (glowIntensity.value - 0.3) * 0.25 }],
   }));
 
   // Simple tier based on taps (just for fun labels)
@@ -380,6 +436,7 @@ export default function DefendMiniGameModal({
           {/* Ready State */}
           {gameState === 'ready' && (
             <Animated.View entering={FadeIn.duration(300)} style={styles.readyContent}>
+              <View style={styles.lightCard}>
               <Image
                 source={require('../../../assets/images/shield.png')}
                 style={styles.readyShield}
@@ -387,8 +444,7 @@ export default function DefendMiniGameModal({
               />
               <Text style={styles.readyTitle}>DEFEND YOUR TEAM!</Text>
               <Text style={styles.readySubtitle}>
-                Tap the shield as fast as you can{'\n'}
-                25 seconds. The more taps, the more points!
+                Tap the shield as fast as you can for 25{'\u00A0'}seconds. More taps, more points!
               </Text>
               <TouchableOpacity style={styles.startButton} onPress={startGame}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name="swords" size={24} /><Text style={styles.startButtonText}>READY FOR BATTLE</Text></View>
@@ -396,6 +452,7 @@ export default function DefendMiniGameModal({
               <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
                 <Text style={styles.cancelButtonText}>Not now</Text>
               </TouchableOpacity>
+              </View>
             </Animated.View>
           )}
 
@@ -403,7 +460,7 @@ export default function DefendMiniGameModal({
           {gameState === 'countdown' && (
             <View style={styles.countdownContent}>
               <Animated.Text style={[styles.countdownNumber, countdownAnimStyle]}>
-                {countdown}
+                {countdown > 0 ? countdown : 'GO!'}
               </Animated.Text>
               <Text style={styles.countdownLabel}>GET READY!</Text>
             </View>
@@ -414,7 +471,18 @@ export default function DefendMiniGameModal({
             <View style={styles.playingContainer}>
               {/* TAP TO DEFEND header */}
               <View style={styles.headerContainer}>
-                <Text style={styles.tapToDefend}>TAP TO DEFEND!</Text>
+                {/* In the last 7 s the bonus pill takes this line's place, so
+                    it never covers the shield or the +N pops. */}
+                <View style={styles.headerLine}>
+                  {multiplier > 1 ? (
+                    <Animated.View entering={ZoomIn.duration(220)} style={styles.multiplierBanner}>
+                      <GameIcon name="streak" size={22} />
+                      <Text style={styles.multiplierBannerText}>x{multiplier} BONUS!</Text>
+                    </Animated.View>
+                  ) : (
+                    <Text style={styles.tapToDefend}>TAP TO DEFEND!</Text>
+                  )}
+                </View>
                 {/* Timer */}
                 <Text style={[
                   styles.timer,
@@ -436,20 +504,19 @@ export default function DefendMiniGameModal({
                 />
               ))}
 
-              {/* Multiplier banner when active */}
-              {multiplier > 1 && (
-                <View style={styles.multiplierBanner}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><GameIcon name="streak" size={22} /><Text style={styles.multiplierBannerText}>x{multiplier} BONUS!</Text></View>
-                </View>
-              )}
-
               {/* Shield tap area */}
               <Pressable
                 style={styles.tapArea}
                 onPress={handleTap}
               >
                 {/* Glow behind shield */}
-                <Animated.View style={[styles.shieldGlow, glowAnimStyle]} />
+                {/* The scale runs on a plain wrapper: a bordered view that is
+                    scaled directly draws its outline out of step with its fill. */}
+                <Animated.View style={[styles.shieldGlowWrap, glowAnimStyle]}>
+                  <View style={styles.shieldGlow}>
+                    <View style={styles.shieldGlowInner} />
+                  </View>
+                </Animated.View>
                 
                 {/* The Shield */}
                 <Animated.View style={[styles.shieldContainer, shieldAnimatedStyle]}>
@@ -462,10 +529,16 @@ export default function DefendMiniGameModal({
               </Pressable>
 
               {/* Points and tier at bottom */}
+              {/* Light score plaque drawn in code: it sits right behind the
+                  score on every screen height and keeps the scene bright. */}
               <Animated.View style={[styles.defenseContainer, multiplierAnimStyle]}>
-                <Text style={styles.tapCountBig}>{totalPoints}</Text>
-                <Text style={styles.defenseLabel}>POINTS</Text>
-                <Text style={styles.tierLabel}>{getTierName(totalPoints)}</Text>
+                <View style={styles.scorePlaque}>
+                  <View style={styles.scorePlaqueInner}>
+                    <Text style={styles.tapCountBig}>{totalPoints}</Text>
+                    <Text style={styles.defenseLabel}>POINTS</Text>
+                    <Text style={styles.tierLabel}>{getTierName(totalPoints)}</Text>
+                  </View>
+                </View>
               </Animated.View>
             </View>
           )}
@@ -485,24 +558,32 @@ export default function DefendMiniGameModal({
           {/* Finished State */}
           {gameState === 'finished' && result && (
             <Animated.View entering={ZoomIn.duration(400)} style={styles.finishedContent}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name="trophy" size={34} /><Text style={styles.resultTitle}>DEFENDED!</Text></View>
+              <View style={styles.lightCard}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{!result.failed && <GameIcon name={totalPoints < 50 ? 'trophyBronze' : 'trophy'} size={34} />}<Text style={styles.resultTitle}>{result.failed ? 'OOPS!' : totalPoints < 50 ? 'GOOD TRY!' : 'DEFENDED!'}</Text></View>
               <Image
                 source={require('../../../assets/images/shield.png')}
                 style={styles.resultShield}
                 contentFit="contain"
               />
-              <Text style={styles.resultTier}>{getTierName(totalPoints)}</Text>
+              {/* One message per score: a low score already says GOOD TRY! up top. */}
+              {!result.failed && totalPoints >= 50 && <Text style={styles.resultTier}>{getTierName(totalPoints)}</Text>}
               <Text style={styles.resultTaps}>{taps} taps</Text>
-              {multiplier > 1 && (
+              {/* Only claim the bonus when bonus taps really landed. */}
+              {!result.failed && multiplier > 1 && totalPoints > taps && (
                 <Text style={styles.resultBonus}>x{multiplier} bonus in the final 7s!</Text>
               )}
-              <Text style={styles.resultPoints}>
-                +{result.points} points for your team!
-              </Text>
+              {result.failed ? (
+                <Text style={styles.resultError}>{result.message}</Text>
+              ) : (
+                <Text style={styles.resultPoints}>
+                  {result.points > 0 ? `+${result.points} points for your team!` : 'Tap faster next time to score for your team!'}
+                </Text>
+              )}
               
               <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
-                <Text style={styles.doneButtonText}>NICE!</Text>
+                <Text style={styles.doneButtonText}>DONE</Text>
               </TouchableOpacity>
+              </View>
             </Animated.View>
           )}
         </ImageBackground>
@@ -528,47 +609,67 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
-    backgroundColor: 'rgba(5, 52, 110, 0.5)',
+    padding: 24,
+    backgroundColor: 'rgba(7, 104, 185, 0.18)',
+  },
+
+  // Alex-style light card for the start and result screens: cream face,
+  // thick navy outline, flat drop. Keeps Defend bright (no dark scrim).
+  lightCard: {
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    backgroundColor: '#FFF8E6',
+    borderRadius: 28,
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    paddingHorizontal: 22,
+    paddingVertical: 22,
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 0,
   },
   readyShield: {
-    width: 180,
-    height: 180,
-    marginBottom: 24,
+    width: 150,
+    height: 150,
+    marginBottom: 14,
   },
   readyTitle: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '900',
-    color: '#FFD700',
+    color: '#0768B9',
     textAlign: 'center',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 8,
-    marginBottom: 12,
+    textShadowColor: '#FFD700',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 0,
+    marginBottom: 10,
     letterSpacing: 2,
   },
+
   readySubtitle: {
     fontSize: 16,
-    color: 'white',
+    fontWeight: '600',
+    color: '#123A6B',
     textAlign: 'center',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
-    marginBottom: 32,
-    lineHeight: 24,
+    marginBottom: 24,
+    lineHeight: 23,
   },
+
   startButton: {
     backgroundColor: '#FFD700',
-    paddingHorizontal: 32,
-    paddingVertical: 16,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
     borderRadius: 30,
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
-    elevation: 10,
-    marginBottom: 16,
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 0,
+    marginBottom: 8,
   },
+
   startButtonText: {
     color: '#05346e',
     fontSize: 18,
@@ -579,31 +680,33 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   cancelButtonText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 14,
+    color: '#4B6584',
+    fontSize: 15,
+    fontWeight: '700',
   },
+
   // Countdown state
   countdownContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(5, 52, 110, 0.6)',
+    backgroundColor: 'rgba(7, 104, 185, 0.28)',
   },
   countdownNumber: {
     fontSize: 150,
     fontWeight: '900',
-    color: '#FFD700',
-    textShadowColor: '#FF6B00',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 30,
+    color: '#FFFFFF',
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 0, height: 6 },
+    textShadowRadius: 0,
   },
   countdownLabel: {
     fontSize: 28,
     fontWeight: '800',
     color: 'white',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 0,
     marginTop: 16,
     letterSpacing: 4,
   },
@@ -623,44 +726,56 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '900',
     color: '#FFD700',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 2, height: 3 },
+    textShadowRadius: 0,
     letterSpacing: 3,
   },
   timer: {
     fontSize: 48,
     fontWeight: '900',
     color: 'white',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 2, height: 3 },
+    textShadowRadius: 0,
     marginTop: 8,
   },
   timerUrgent: {
     color: '#FF4444',
-    textShadowColor: '#FF0000',
-    textShadowRadius: 20,
+    textShadowColor: '#7F1D1D',
+    textShadowRadius: 0,
   },
   tapArea: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  shieldGlow: {
+  // Alex-style flat burst: gold ring with a hard navy outline around a cream
+  // disc. No soft shadow (cheaper to draw, and no glow-filter look).
+  shieldGlowWrap: {
     position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: '#FFD700',
-    shadowColor: '#FF6B00',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 60,
+    width: SHIELD + 50,
+    height: SHIELD + 50,
+  },
+  shieldGlow: {
+    width: SHIELD + 50,
+    height: SHIELD + 50,
+    borderRadius: (SHIELD + 50) / 2,
+    backgroundColor: '#FFD54A',
+    borderWidth: 4,
+    borderColor: '#123A6B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shieldGlowInner: {
+    width: SHIELD + 10,
+    height: SHIELD + 10,
+    borderRadius: (SHIELD + 10) / 2,
+    backgroundColor: '#FFF6DC',
   },
   shieldContainer: {
-    width: 220,
-    height: 220,
+    width: SHIELD,
+    height: SHIELD,
   },
   shield: {
     width: '100%',
@@ -671,63 +786,84 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: '900',
     color: '#FFD700',
-    textShadowColor: '#FF6B00',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
-    zIndex: 100,
+    textShadowColor: '#B4400A',
+    textShadowOffset: { width: 1.5, height: 2 },
+    textShadowRadius: 0,
+    zIndex: 5,
   },
   defenseContainer: {
     position: 'absolute',
-    bottom: 120,
+    bottom: SHORT ? 64 : 120,
     left: 0,
     right: 0,
     alignItems: 'center',
   },
+  // Alex-style plaque: cream face, gold rim, thick navy outline, flat drop.
+  scorePlaque: {
+    borderRadius: 26,
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    backgroundColor: '#F5B800',
+    padding: 4,
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 0,
+  },
+  scorePlaqueInner: {
+    minWidth: 190,
+    alignItems: 'center',
+    borderRadius: 21,
+    backgroundColor: '#FFF8E6',
+    paddingHorizontal: 26,
+    paddingTop: 2,
+    paddingBottom: 10,
+  },
   tapCountBig: {
-    fontSize: 80,
+    fontSize: SHORT ? 60 : 72,
     fontWeight: '900',
-    color: '#FFD700',
-    textShadowColor: '#FF6B00',
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 20,
+    color: '#0768B9',
+    textShadowColor: '#FFD700',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 0,
   },
   defenseLabel: {
-    fontSize: 32,
+    fontSize: 26,
     fontWeight: '900',
-    color: '#FFD700',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
+    color: '#123A6B',
     marginTop: -8,
     letterSpacing: 4,
   },
   tierLabel: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
-    color: '#FF6B00',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
-    marginTop: 4,
+    color: '#B4400A',
+    marginTop: 2,
     letterSpacing: 2,
   },
-  multiplierBanner: {
-    position: 'absolute',
-    top: 220,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(255, 68, 68, 0.9)',
-    paddingVertical: 12,
-    borderRadius: 16,
+  headerLine: {
+    height: 42,
     alignItems: 'center',
-    zIndex: 50,
-    shadowColor: '#FF0000',
-    shadowOffset: { width: 0, height: 0 },
+    justifyContent: 'center',
+  },
+  // Solid red pill (nothing shows through) in the TAP TO DEFEND! line.
+  multiplierBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E5484D',
+    paddingHorizontal: 18,
+    height: 40,
+    borderRadius: 999,
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
-    shadowRadius: 20,
+    shadowRadius: 0,
   },
   multiplierBannerText: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '900',
     color: 'white',
     letterSpacing: 2,
@@ -743,16 +879,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: 'rgba(255,255,255,0.8)',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 1, height: 1.5 },
+    textShadowRadius: 0,
   },
   // Submitting state
   centerContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(5, 52, 110, 0.6)',
+    backgroundColor: 'rgba(7, 104, 185, 0.28)',
   },
   submittingShield: {
     width: 120,
@@ -762,89 +898,94 @@ const styles = StyleSheet.create({
   submittingText: {
     fontSize: 20,
     color: 'white',
-    fontWeight: '700',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
+    fontWeight: '800',
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 0,
   },
   // Finished state
   finishedContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
-    backgroundColor: 'rgba(5, 52, 110, 0.6)',
+    padding: 24,
+    backgroundColor: 'rgba(7, 104, 185, 0.18)',
   },
+
   resultTitle: {
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '900',
-    color: '#FFD700',
-    textShadowColor: '#FF6B00',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 20,
-    marginBottom: 16,
+    color: '#0768B9',
+    textShadowColor: '#FFD700',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 0,
+    marginBottom: 12,
     letterSpacing: 2,
   },
+
   resultShield: {
-    width: 140,
-    height: 140,
-    marginBottom: 16,
+    width: 120,
+    height: 120,
+    marginBottom: 10,
   },
   resultTaps: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.8)',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    color: '#123A6B',
     marginBottom: 4,
   },
-  resultBonus: {
+
+  resultError: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FF8800',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    color: '#123A6B',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  resultBonus: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#B4400A',
     marginBottom: 8,
   },
+
   resultMultiplier: {
     fontSize: 32,
     fontWeight: '900',
     color: '#FFD700',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
+    textShadowColor: '#123A6B',
+    textShadowOffset: { width: 2, height: 3 },
+    textShadowRadius: 0,
   },
   resultTier: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '900',
-    color: '#FF6B00',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
-    marginTop: 8,
+    color: '#B4400A',
+    marginTop: 4,
   },
+
   resultPoints: {
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: '800',
-    color: '#4ADE80',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
-    marginTop: 16,
-    marginBottom: 32,
+    color: '#15803D',
+    textAlign: 'center',
+    marginTop: 12,
+    marginBottom: 24,
   },
+
   doneButton: {
     backgroundColor: '#FFD700',
     paddingHorizontal: 50,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 30,
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
+    borderWidth: 3,
+    borderColor: '#123A6B',
+    shadowColor: '#123A6B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 0,
   },
+
   doneButtonText: {
     color: '#05346e',
     fontSize: 24,

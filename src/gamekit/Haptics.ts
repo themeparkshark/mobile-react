@@ -99,7 +99,14 @@ export function areHapticsEnabled(): boolean {
   return enabled;
 }
 
+/** Dev trace (wow-sound studio trace): told on every pulse that actually fires. */
+let traceListener: ((intent: HapticIntent) => void) | null = null;
+export function setHapticTraceListener(fn: ((intent: HapticIntent) => void) | null): void {
+  traceListener = fn;
+}
+
 function run(intent: HapticIntent): void {
+  if (traceListener) traceListener(intent);
   switch (intent) {
     case 'tapLight':
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -184,6 +191,14 @@ export interface HapticGate {
   request(intent: HapticIntent, priority?: number): 'fired' | 'queued' | 'dropped';
   /** The intent waiting for the window, if any. */
   pending(): HapticIntent | null;
+  /** When the last pulse fired (ms, the gate's clock), or -Infinity. */
+  lastFiredAt(): number;
+  /**
+   * A choreographed beat (the catch's tap, wobbles and burst): fire now, never wait.
+   * The window still restarts from here, so other callers keep their spacing after
+   * it, and a weaker pulse waiting for the window is dropped (the beat replaced it).
+   */
+  force(intent: HapticIntent): void;
 }
 
 /**
@@ -230,6 +245,11 @@ export function createHapticGate(options: {
       return 'queued';
     },
     pending: () => waiting?.intent ?? null,
+    lastFiredAt: () => lastAt,
+    force(intent) {
+      if (waiting && waiting.priority <= HAPTIC_PRIORITY[intent]) waiting = null;
+      fireNow(intent);
+    },
   };
 }
 
@@ -251,6 +271,23 @@ const appGate = createHapticGate({
 export function queueHaptic(intent: HapticIntent, priority?: number): void {
   if (!enabled) return;
   appGate.request(intent, priority);
+}
+
+/**
+ * A choreographed beat outside games (the map catch's tap, wobbles and burst):
+ * fires in this same call, so the buzz leaves the JS thread with its sound and
+ * its frame, never held behind the shared 120 ms window. The beats are spaced
+ * 130 ms or more by design; the window restarts from the beat, so everything
+ * else stays gated. Use only for timed choreography, never for repeated taps.
+ */
+export function beatHaptic(intent: HapticIntent): void {
+  if (!enabled) return;
+  appGate.force(intent);
+}
+
+/** When the app-wide gate last fired a pulse (ms), so a choreographed beat can avoid a flam. */
+export function lastAppHapticAt(): number {
+  return appGate.lastFiredAt();
 }
 // =============================================================================
 // Haptic grammar: patterns + priority scheduling (studio engine)
@@ -423,8 +460,40 @@ export function setNativeHapticPlayer(player: NativeHapticPlayer | null): void {
   nativePlayer = player;
 }
 
+/**
+ * The Core Haptics module a future binary ships (NATIVE_QUEUE, wow-sound round 3):
+ * an Expo module named TpsCoreHaptics wrapping CHHapticEngine, with
+ * playPattern(ahapJson: string, delayMs: number): void and isSupported(): boolean.
+ * When it is present it registers itself here on first use, so the shaped catch,
+ * combo, fever, flame, chest and park patterns turn on with no JS change; until
+ * then every pattern keeps its expo-haptics fallback. Never throws.
+ */
+export const NATIVE_HAPTICS_MODULE = 'TpsCoreHaptics';
+let nativeChecked = false;
+function detectNativeHaptics(): void {
+  if (nativeChecked || nativePlayer) return;
+  nativeChecked = true;
+  try {
+    const mod = (globalThis as unknown as { expo?: { modules?: Record<string, { playPattern?: (json: string, delayMs: number) => void; isSupported?: () => boolean } | undefined> } })
+      .expo?.modules?.[NATIVE_HAPTICS_MODULE];
+    if (!mod || typeof mod.playPattern !== 'function') return;
+    if (typeof mod.isSupported === 'function' && !mod.isSupported()) return;
+    const play = mod.playPattern.bind(mod);
+    nativePlayer = { play: (ahap, delayMs) => { try { play(JSON.stringify(ahap), delayMs); } catch { /* the fallback is fine */ } } };
+  } catch {
+    // No module in this binary: expo-haptics fallbacks.
+  }
+}
+
 export function hasNativeHaptics(): boolean {
+  detectNativeHaptics();
   return nativePlayer !== null;
+}
+
+/** Tests only. */
+export function resetNativeHapticsForTests(): void {
+  nativePlayer = null;
+  nativeChecked = false;
 }
 
 /**
@@ -442,6 +511,7 @@ export function playPattern(
   if (!def || def.length === 0) return false;
   const priority = opts.priority ?? (opts.tell ? HP.telegraph : HP.own);
   const lead = opts.alignToAudio ? offsetMs : 0;
+  detectNativeHaptics();
   return offerToBus(priority, patternBusStrength(def), opts, () => {
     const player = nativePlayer;
     if (player) {

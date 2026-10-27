@@ -20,8 +20,8 @@ test('every Duel card (Line Trivia, duel, ride) stamps the same star row, and it
   assert.match(duel, /const stars = model\.won && !model\.ride \? Math\.max\(1, model\.stars\) : model\.stars;/);
   assert.match(read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx'), /stars: 2, practice: false,/);
   // Scores read like the plate above (1,925 vs 1,628).
-  assert.match(duel, /\{model\.myScore\.toLocaleString\(\)\}/);
-  assert.match(duel, /\{model\.oppScore\.toLocaleString\(\)\}/);
+  assert.match(duel, /\{countText\(model\.myScore\)\}/);
+  assert.match(duel, /\{countText\(model\.oppScore\)\}/);
 });
 
 test('a new costume Finn is a picture in the card, never the title', () => {

@@ -15,6 +15,7 @@
 
 import { mixSeed } from '../../../gamekit/core/rng';
 import type { WhackGhost } from './types';
+import countText from '../../../helpers/countText';
 
 /** FNV-1a 32 of a string (ride ids can be numeric or slugs). */
 export function hashString(s: string): number {
@@ -102,5 +103,5 @@ export function ghostDeltaLine(myScore: number, rival: LineDayEntry | null): str
   if (!rival) return null;
   const d = myScore - rival.score;
   const first = rival.name.split(' ')[0].toUpperCase();
-  return d >= 0 ? `+${d.toLocaleString()} AHEAD OF ${first}` : `${(-d).toLocaleString()} BEHIND ${first} (${rival.timeLabel})`;
+  return d >= 0 ? `+${countText(d)} AHEAD OF ${first}` : `${countText(-d)} BEHIND ${first} (${rival.timeLabel})`;
 }

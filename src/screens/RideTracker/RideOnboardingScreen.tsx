@@ -11,7 +11,7 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import SafeScreen from '../../components/SafeScreen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../../design-system';
 import { GameIcon, type GameIconName } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import { UpperText } from '../../ui/upper';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -158,7 +159,7 @@ const AnimatedSlide: React.FC<AnimatedSlideProps> = React.memo(
             <GameIcon name={item.accentIcon} size={30} style={slideStyles.accent} />
 
             {/* Title */}
-            <Text style={slideStyles.title}>{item.title}</Text>
+            <UpperText style={slideStyles.title}>{item.title}</UpperText>
 
             {/* Subtitle */}
             <Text style={slideStyles.subtitle}>{item.subtitle}</Text>
@@ -408,13 +409,13 @@ export default function RideOnboardingScreen() {
   return (
     <View style={styles.container}>
       {/* Skip button */}
-      <SafeAreaView edges={['top']} style={styles.skipContainer}>
+      <SafeScreen edges={['top']} style={styles.skipContainer}>
         {!isLastSlide && (
           <Pressable onPress={handleSkip} hitSlop={16} style={styles.skipPressable}>
             <Text style={styles.skipText}>Skip</Text>
           </Pressable>
         )}
-      </SafeAreaView>
+      </SafeScreen>
 
       {/* Slides */}
       <FlatList
@@ -436,7 +437,7 @@ export default function RideOnboardingScreen() {
       />
 
       {/* Bottom controls */}
-      <SafeAreaView edges={['bottom']} style={styles.bottomContainer}>
+      <SafeScreen edges={['bottom']} style={styles.bottomContainer}>
         <PaginationDots count={SLIDES.length} scrollX={scrollX} />
 
         {isLastSlide ? (
@@ -448,7 +449,7 @@ export default function RideOnboardingScreen() {
                 pressed && styles.ctaPressed,
               ]}
             >
-              <Text style={styles.primaryCtaText}>Log Your First Ride</Text>
+              <UpperText style={styles.primaryCtaText}>Log Your First Ride</UpperText>
             </Pressable>
 
             <Pressable
@@ -470,12 +471,12 @@ export default function RideOnboardingScreen() {
             ]}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={styles.nextBtnText}>Next</Text>
+              <UpperText style={styles.nextBtnText}>Next</UpperText>
               <GameIcon name="arrow" size={24} />
             </View>
           </Pressable>
         )}
-      </SafeAreaView>
+      </SafeScreen>
     </View>
   );
 }

@@ -16,7 +16,7 @@
  * keeps presses instant.
  */
 import { useEffect, useState } from 'react';
-import { Image, ImageBackground, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, ImageBackground, Pressable, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -131,7 +131,14 @@ export default function GameButton({
     scale.value = withTiming(down ? BUTTON.pressScale : 1, { duration: down ? BUTTON.pressInMs : BUTTON.pressOutMs });
   };
 
-  const fontSize = look.art ? artButtonFontSize(labelAreaHeight) : size === 'compact' ? 16 : 18;
+  // The art and its words draw together on the very first frame: until the label area is measured,
+  // its height is guessed from the phone's width (a full-width button with the usual 16 pt sides),
+  // and the measured size replaces the guess a frame later. Never hidden while waiting for a layout
+  // pass (on a busy phone that pass came 10 s late and LOG THIS RIDE was missing on the iPhone SE).
+  const { width: windowWidth } = useWindowDimensions();
+  const guessedLabelHeight = look.art ? Math.min(windowWidth - 32, look.maxWidth ?? windowWidth) / BUTTON.labelAspectRatio : 0;
+  const labelHeight = labelAreaHeight > 0 ? labelAreaHeight : guessedLabelHeight;
+  const fontSize = look.art ? artButtonFontSize(labelHeight) : size === 'compact' ? 16 : 18;
   const iconSize = Math.round(fontSize * 1.25);
   const content = <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', maxWidth: '100%' }, labelStyle]}>
     {image ? <Image source={image} style={{ width: iconSize * 1.2, height: iconSize * 1.2, marginRight: Math.round(fontSize * 0.3) }} />
@@ -177,10 +184,10 @@ export default function GameButton({
       <Animated.View style={[{ opacity: disabled ? 0.5 : 1 }, pressStyle]}>
         {look.art
           ? <ImageBackground source={BUTTON_ART[look.art]} resizeMode="contain"
+            // The art and its words are one piece and draw together from the first frame.
             style={{ width: '100%', aspectRatio: BUTTON.aspectRatio }}>
             <View onLayout={event => setLabelAreaHeight(event.nativeEvent.layout.height)}
-              style={{ aspectRatio: BUTTON.labelAspectRatio, justifyContent: 'center', paddingHorizontal: 24,
-                opacity: labelAreaHeight > 0 ? 1 : 0 }}>
+              style={{ aspectRatio: BUTTON.labelAspectRatio, justifyContent: 'center', paddingHorizontal: 24 }}>
               {content}
             </View>
           </ImageBackground>

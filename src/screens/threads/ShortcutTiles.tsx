@@ -13,6 +13,7 @@ import type { ButtonType } from '../../models/button-type';
 import { BRAND } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { PressScale } from './socialLook';
+import { UpperText } from '../../ui/upper';
 
 const LOCK = require('../../../assets/images/locked.png');
 
@@ -31,7 +32,7 @@ export default function ShortcutTiles({ tiles }: { readonly tiles: readonly Butt
               style={styles.tile}>
               <Image source={tile.image} style={styles.art} contentFit="contain" />
               {locked && <Image source={LOCK} style={styles.lock} contentFit="contain" />}
-              {!!tile.text && <Text style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{tile.text}</Text>}
+              {!!tile.text && <UpperText style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{tile.text}</UpperText>}
             </PressScale>
           </Animated.View>
         );

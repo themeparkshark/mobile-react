@@ -22,6 +22,7 @@ import { playHaptic } from '../../../gamekit/Haptics';
 import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { feelingChips, type FeelingStat } from '../../../gamekit/results/feelings';
 import GameIcon, { type GameIconName } from '../../../ui/GameIcon';
+import countText from '../../../helpers/countText';
 
 /**
  * The polaroid sits this far above the card's top edge (root paddingBottom +
@@ -262,11 +263,11 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             It waits for the last star, like Sharky, Whack and Boss. */}
         <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} delayMs={rideRibbonDelay(stars, reducedMotion)} />
         <View style={styles.head}>
-          {/* Same number style as the score plate above and every other card (1,925, never 1925). */}
+          {/* Same number style as the score plate above and every other card (countText: digits only). */}
           <View style={styles.scoreRow}>
-            <Text style={styles.scoreMe}>{model.myScore.toLocaleString()}</Text>
+            <Text style={styles.scoreMe}>{countText(model.myScore)}</Text>
             <Text style={styles.scoreVs}>vs</Text>
-            <Text style={styles.scoreOpp}>{model.oppScore.toLocaleString()}</Text>
+            <Text style={styles.scoreOpp}>{countText(model.oppScore)}</Text>
           </View>
         </View>
         {/* Right answers and a low score agree: the Big Final that missed is
@@ -524,13 +525,13 @@ function BigFinalLost({ points, reducedMotion }: { points: number; reducedMotion
   }, [o, drop, reducedMotion]);
   const st = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ translateY: drop.value }] }));
   return (
-    <View style={styles.finalLostPill} accessible accessibilityLabel={`The Big Final missed, so ${points.toLocaleString()} points went away`}>
+    <View style={styles.finalLostPill} accessible accessibilityLabel={`The Big Final missed, so ${countText(points)} points went away`}>
       <GameIcon name="rush" size={22} />
       <Text style={styles.finalLostText}>BIG FINAL</Text>
       <Animated.View style={st}>
         <View style={styles.finalDrop}>
           <GameIcon name="arrow" size={20} style={styles.arrowDown} />
-          <Text style={styles.finalDropText}>{points.toLocaleString()}</Text>
+          <Text style={styles.finalDropText}>{countText(points)}</Text>
         </View>
       </Animated.View>
     </View>
