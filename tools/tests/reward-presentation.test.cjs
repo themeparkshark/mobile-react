@@ -158,6 +158,7 @@ test('a coin that cannot power up offers its one next step, never a dead end', (
     './YellowButton': {}, './CoinUpgradeDemo': {}, '../context/AuthProvider': {}, '../context/SoundEffectProvider': {},
     '../hooks/useReducedGameMotion': {}, '../ui/GameIcon': {}, '../RootNavigation': {}, '../services/purchases': { storeAvailable: () => false }, './money/CoinTopUpOffer': { default: 'CoinTopUpOffer' },
     ...progressionStubs, './coin/CoinStand': {}, './coin/Crowning': {}, './coin/LevelUpBurst': {}, './coin/PerkTrack': {}, './help/OneTimeTip': {},
+    'react-native-reanimated': { default: {}, useSharedValue: () => ({}), useAnimatedStyle: () => ({}) }, '../ui/GoldBurst': {}, '../ui/motionEasing': {}, '../power': {},
     '../share': {}, '../share/devDrive': { useDevAutoPress() {} }, '../share/handoff': { useModalHandoff: () => ({ handoff: async () => {}, onDismiss() {} }) },
   });
   assert.equal(missingResourceAction(1, 40).label, 'Get 1 Ride Part');

@@ -328,7 +328,8 @@ const styles = StyleSheet.create({
     borderRadius: 14, borderWidth: 2.5, borderColor: '#fff',
   },
   chipScout: { backgroundColor: MM.scout },
-  chipSlip: { backgroundColor: MM.coral },
+  // A slip is a shrug, not an alarm: calm navy, never coral or red.
+  chipSlip: { backgroundColor: '#3d6fa8' },
   chipText: { fontFamily: 'Shark', fontSize: 18, color: '#fff', marginLeft: 4 },
   callout: {
     fontFamily: 'Shark', fontSize: 30, textShadowColor: MM.ink, textShadowOffset: { width: 2, height: 3 }, textShadowRadius: 1,

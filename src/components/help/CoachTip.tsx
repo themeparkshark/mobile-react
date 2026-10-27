@@ -85,7 +85,9 @@ export default function CoachTip({ title, body, onDismiss, style, autoHideMs = 9
           <Text style={styles.title} numberOfLines={art ? (narrow ? 2 : 1) : undefined} adjustsFontSizeToFit={!!art} minimumFontScale={0.8}>{title}</Text>
           {art ? <View style={styles.art}>{art}</View> : <Text style={styles.body}>{body}</Text>}
         </View>
-        {!narrow && <Text style={styles.ok}>OK</Text>}
+        {/* The whole tip is the button; OK looks like one (a big gold pill), so nobody hunts for a tiny link.
+            With little room (narrow) the OK steps aside; a tap anywhere still closes it. */}
+        {!narrow && <View style={styles.okPill}><Text style={styles.ok}>OK</Text></View>}
       </Pressable>
       {pointerLeft !== undefined && <View pointerEvents="none"
         style={[styles.pointer, { left: cardWidth > 0 ? Math.min(pointerLeft, cardWidth - 34) : pointerLeft }]} />}
@@ -114,5 +116,7 @@ const styles = StyleSheet.create({
   fitCopy: { flexShrink: 1 },
   title: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, marginBottom: 2 },
   body: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 19, color: BRAND.navySoft },
-  ok: { fontFamily: 'Shark', fontSize: 15, color: BRAND.blue, marginLeft: 8 },
+  okPill: { marginLeft: 8, minWidth: 52, minHeight: 40, paddingHorizontal: 12, borderRadius: 999, backgroundColor: BRAND.gold,
+    borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  ok: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy, paddingTop: 2 },
 });

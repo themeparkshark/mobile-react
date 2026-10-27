@@ -54,12 +54,15 @@ function chest({ reconciled = null, reduced = false } = {}) {
         ImpactFeedbackStyle: { Medium: 1, Heavy: 2 }, NotificationFeedbackType: { Success: 1 } };
       if (name === '../context/AuthProvider') return { AuthContext };
       if (name === '../context/DailyGiftProvider') return { DailyGiftContext };
-      if (name === '../context/CurrencyFlyProvider') return { useCurrencyFly: () => ({ triggerFly(value) { flights.push(value); } }) };
+      if (name === '../context/CurrencyFlyProvider') return { useCurrencyFly: () => ({ triggerFly(value) { flights.push(value); }, getTarget: () => null }) };
       if (name === '../dev/ws7Preview') return { ws7Preview: () => '' };
       if (name === '../ui') return { BRAND: { navy: '#05346e', blue: '#0768b9', white: '#fff', gold: '#ffcf3b', goldLip: '#d99a00' },
         GameIcon: 'GameIcon', ICON_SOURCES: { coins: 'icon:coins', energy: 'icon:energy', ticket: 'icon:ticket' },
         gameAlert(title) { alerts.push(title); } };
       if (name === './RewardBurst') return { default: 'RewardBurst' };
+      if (name === '../helpers/shorten-number') return { default: value => String(value) };
+      if (name === '../ui/GoldBurst') return { GoldBurst: 'GoldBurst' };
+      if (name === '../ui/motionEasing') return { ...require('./helpers/ts-module.cjs').loadTs('src/ui/motion.ts'), EASE: {} };
       if (name === './TapHint') return { default: 'TapHint' };
       if (name === '../hooks/useReducedGameMotion') return { default: () => reduced };
       if (name === '../gamekit/SFX') return { playSfx: name => sounds.push(name) };

@@ -1024,7 +1024,8 @@ test('coin card: no 200 pt floor, sized to its content, narrow or a row up when 
   assert.match(explore, /const above = room < COIN_TIP_MIN;/);
   assert.match(explore, /small=\{!!coin && \(SHORT_MAP \|\| coin\.narrow\)\} fit=\{!!coin\} narrow=\{coin\?\.narrow\}/);
   const tip = read('src/components/help/CoachTip.tsx');
-  assert.match(tip, /\{!narrow && <Text style=\{styles\.ok\}>OK<\/Text>\}/);
+  // The OK is wow-games' gold pill; with little room (narrow) it still steps aside.
+  assert.match(tip, /\{!narrow && <View style=\{styles\.okPill\}><Text style=\{styles\.ok\}>OK<\/Text><\/View>\}/);
   assert.match(tip, /fitCopy: \{ flexShrink: 1 \}/);
   const picture = read('src/components/help/CoinTipPicture.tsx');
   assert.match(picture, /<GameIcon name="ticket" size=\{36\} onLoad=\{\(\) => loaded\('ticket'\)\} \/>/);

@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, View, Text, StyleSheet, Animated, Easing, Platform } from 'react-native';
+import { useEffect, useState } from 'react';
+import { AccessibilityInfo, View, Text, StyleSheet, Platform, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
+import Reanimated, { useAnimatedStyle, useFrameCallback, useSharedValue, type AnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { COIN_TIERS } from '../constants/coinTiers';
 import { UpperText } from '../ui/upper';
+import { usePowerBudget } from '../power';
 
 interface Props {
   level: number;
@@ -27,6 +29,7 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
   const cfg = LEVEL_CONFIG[Math.min(level - 1, LEVEL_CONFIG.length - 1)];
   const effectArea = size * 1.5; // total effect zone
   const [reducedMotion, setReducedMotion] = useState(true);
+  const budget = usePowerBudget();
 
   useEffect(() => {
     if (!animate) return;
@@ -43,284 +46,47 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
     };
   }, [animate]);
 
-  // ── Shared animations ──
-  const shimmerAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowPulse = useRef(new Animated.Value(0.2)).current;
-  const floatAnim = useRef(new Animated.Value(0)).current;
+  // One clock for every effect on this coin, on the UI thread. A level change only changes which
+  // effects are drawn: nothing restarts (it used to stop and start about 25 Animated loops on the
+  // same frame, which held the Legendary level-up burst for about a second). The clock stops when
+  // the coin is still (Reduce Motion, animate off) or ambient loops are not allowed (idle, background).
+  const running = animate && !reducedMotion && budget.ambient;
+  const t = useCoinClock(running);
+  const on = useSharedValue(running ? 1 : 0);
+  useEffect(() => { on.value = running ? 1 : 0; }, [on, running]);
 
-  // ── Lv2: Mercury shimmer - 3 blobs that orbit the edge ──
-  const mercuryAnims = useRef(
-    Array.from({ length: 3 }, () => new Animated.Value(0))
-  ).current;
-
-  // ── Lv3: Orbiting motes ──
-  const moteAnims = useRef(
-    Array.from({ length: 6 }, () => ({
-      orbit: new Animated.Value(0),
-      twinkle: new Animated.Value(0.4),
-    }))
-  ).current;
-
-  // ── Lv4: Prismatic light rays ──
-  const rayAnims = useRef(
-    Array.from({ length: 8 }, () => ({
-      opacity: new Animated.Value(0),
-      scale: new Animated.Value(0.3),
-    }))
-  ).current;
-
-  // ── Lv5: Electric crackle + plasma ring + constellation ──
-  const plasmaAnim = useRef(new Animated.Value(0)).current;
-  const crackleAnims = useRef(
-    Array.from({ length: 12 }, () => ({
-      opacity: new Animated.Value(0),
-      x: new Animated.Value(0),
-      y: new Animated.Value(0),
-      scale: new Animated.Value(0),
-    }))
-  ).current;
-  const constellationAnims = useRef(
-    Array.from({ length: 8 }, () => ({
-      orbit: new Animated.Value(0),
-      pulse: new Animated.Value(0.5),
-    }))
-  ).current;
-
-  useEffect(() => {
-    if (!animate || reducedMotion) {
-      rayAnims.forEach(ray => ray.opacity.setValue(0));
-      crackleAnims.forEach(bolt => bolt.opacity.setValue(0));
-      shimmerAnim.setValue(0);
-      pulseAnim.setValue(1);
-      floatAnim.setValue(0);
-      return;
-    }
-    const anims: Animated.CompositeAnimation[] = [];
-
-    // ── ALL LEVELS: Shimmer sweep (Lv2+) ──
-    if (level >= 2) {
-      anims.push(Animated.loop(
-        Animated.timing(shimmerAnim, {
-          toValue: 1, duration: 2200, easing: Easing.linear, useNativeDriver: true,
-        })
-      ));
-    }
-
-    // ── Lv2+: Breathing glow ──
-    if (level >= 2) {
-      anims.push(Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowPulse, { toValue: 0.7, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(glowPulse, { toValue: 0.15, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ])
-      ));
-    }
-
-    // ── Lv2: Mercury blobs orbiting ──
-    if (level >= 2 && level < 4) {
-      mercuryAnims.forEach((anim, i) => {
-        anims.push(Animated.loop(
-          Animated.timing(anim, {
-            toValue: 1,
-            duration: 3000 + i * 800,
-            easing: Easing.linear,
-            useNativeDriver: true,
-          })
-        ));
-      });
-    }
-
-    // ── Lv3+: Float/bob ──
-    if (level >= 3) {
-      anims.push(Animated.loop(
-        Animated.sequence([
-          Animated.timing(floatAnim, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(floatAnim, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ])
-      ));
-
-      // Orbiting motes
-      moteAnims.forEach((mote, i) => {
-        anims.push(Animated.loop(
-          Animated.timing(mote.orbit, {
-            toValue: 1,
-            duration: 4000 + i * 600,
-            easing: Easing.linear,
-            useNativeDriver: true,
-          })
-        ));
-        anims.push(Animated.loop(
-          Animated.sequence([
-            Animated.timing(mote.twinkle, { toValue: 1, duration: 400 + i * 100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-            Animated.timing(mote.twinkle, { toValue: 0.2, duration: 400 + i * 100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          ])
-        ));
-      });
-    }
-
-    // ── Lv4: Prismatic cycle + rays ──
-    if (level >= 4) {
-      anims.push(Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.08, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ])
-      ));
-
-      // Staggered light rays
-      rayAnims.forEach((ray, i) => {
-        ray.opacity.setValue(0);
-        ray.scale.setValue(0.3);
-        anims.push(Animated.loop(Animated.sequence([
-          Animated.delay(i * 180),
-          Animated.parallel([
-            Animated.sequence([
-              Animated.timing(ray.opacity, { toValue: 0.6, duration: 200, useNativeDriver: true }),
-              Animated.timing(ray.opacity, { toValue: 0, duration: 600, useNativeDriver: true }),
-            ]),
-            Animated.timing(ray.scale, { toValue: 1.5, duration: 800,
-              easing: Easing.out(Easing.ease), useNativeDriver: true }),
-          ]),
-          Animated.delay(1200),
-        ])));
-      });
-    }
-
-    // ── Lv5: Plasma + crackle + constellation ──
-    if (level >= 5) {
-      anims.push(Animated.loop(
-        Animated.timing(plasmaAnim, {
-          toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: true,
-        })
-      ));
-
-      // Electric crackle bolts
-      crackleAnims.forEach((bolt, i) => {
-        const angle = (i / crackleAnims.length) * Math.PI * 2;
-        const dist = size * (0.35 + (i % 4) * 0.08);
-        bolt.opacity.setValue(0);
-        bolt.scale.setValue(0.2);
-        bolt.x.setValue(Math.cos(angle) * size * 0.3);
-        bolt.y.setValue(Math.sin(angle) * size * 0.3);
-        anims.push(Animated.loop(Animated.sequence([
-          Animated.delay(i * 120),
-          Animated.parallel([
-            Animated.sequence([
-              Animated.timing(bolt.opacity, { toValue: 1, duration: 50, useNativeDriver: true }),
-              Animated.timing(bolt.opacity, { toValue: 0.8, duration: 30, useNativeDriver: true }),
-              Animated.timing(bolt.opacity, { toValue: 1, duration: 30, useNativeDriver: true }),
-              Animated.timing(bolt.opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-            ]),
-            Animated.timing(bolt.x, { toValue: Math.cos(angle) * dist,
-              duration: 310, useNativeDriver: true }),
-            Animated.timing(bolt.y, { toValue: Math.sin(angle) * dist,
-              duration: 310, useNativeDriver: true }),
-            Animated.timing(bolt.scale, { toValue: 1, duration: 310, useNativeDriver: true }),
-          ]),
-          Animated.delay(1800),
-        ])));
-      });
-
-      // Constellation orbits (slower, wider, varied sizes)
-      constellationAnims.forEach((star, i) => {
-        anims.push(Animated.loop(
-          Animated.timing(star.orbit, {
-            toValue: 1,
-            duration: 6000 + i * 1000,
-            easing: Easing.linear,
-            useNativeDriver: true,
-          })
-        ));
-        anims.push(Animated.loop(
-          Animated.sequence([
-            Animated.timing(star.pulse, { toValue: 1, duration: 600 + i * 150, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-            Animated.timing(star.pulse, { toValue: 0.3, duration: 600 + i * 150, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          ])
-        ));
-      });
-    }
-
-    anims.forEach(a => a.start());
-    return () => {
-      anims.forEach(a => a.stop());
-    };
-  }, [animate, reducedMotion, level, size]);
-
-  // ── Interpolations ──
-  const shimmerX = shimmerAnim.interpolate({
-    inputRange: [0, 1], outputRange: [-size, size],
-  });
-  const floatY = floatAnim.interpolate({
-    inputRange: [0, 1], outputRange: [0, -4],
-  });
-  const plasmaRotation = plasmaAnim.interpolate({
-    inputRange: [0, 1], outputRange: ['0deg', '360deg'],
-  });
+  const floatStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -4 * wave(t.value, 4000) }] }));
+  const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.08 * wave(t.value, 2400) }] }));
+  const plasmaStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${360 * phase(t.value, 2000)}deg` }, { scale: 1 + 0.08 * wave(t.value, 2400) }],
+  }));
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: 0.15 + 0.55 * wave(t.value, 3000),
+    transform: [{ scale: 1 + 0.08 * wave(t.value, 2400) }],
+  }));
+  const ringGlowStyle = useAnimatedStyle(() => ({ opacity: 0.15 + 0.55 * wave(t.value, 3000) }));
+  const shimmerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: -size + 2 * size * phase(t.value, 2200) }, { rotate: '20deg' }],
+  }));
   // Ring size
   const ringSize = size + 8;
 
   return (
     <View style={[s.container, { width: effectArea, height: effectArea }]}>
       {/* ── Lv5: Electric crackle bolts ── */}
-      {level >= 5 && crackleAnims.map((bolt, i) => (
-        <Animated.View
-          key={'bolt' + i}
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: effectArea / 2 - 1,
-            top: effectArea / 2 - 1,
-            width: 2, height: i % 3 === 0 ? 12 : 8,
-            borderRadius: 1,
-            backgroundColor: i % 2 === 0 ? '#ffffff' : '#ffcf3b',
-            opacity: bolt.opacity,
-            transform: [
-              { translateX: bolt.x },
-              { translateY: bolt.y },
-              { scale: bolt.scale },
-              { rotate: `${(i * 47) % 360}deg` },
-            ],
-          }}
-        />
-      ))}
+      {level >= 5 && BOLTS.map(i => <Bolt key={'bolt' + i} i={i} t={t} on={on} size={size} effectArea={effectArea} />)}
 
       {/* ── Lv4+: Light rays ── */}
-      {level >= 4 && rayAnims.map((ray, i) => {
-        return (
-          <Animated.View
-            key={'ray' + i}
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              left: effectArea / 2 - 1.5,
-              top: effectArea / 2 - size * 0.4,
-              width: 3, height: size * 0.8,
-              borderRadius: 1.5,
-              backgroundColor: level >= 5 ? '#ffcf3b' : '#bfe5ff',
-              opacity: ray.opacity,
-              transform: [
-                { rotate: `${(i * 45)}deg` },
-                { scaleY: ray.scale },
-              ],
-              // ray emanates from center
-            }}
-          />
-        );
-      })}
+      {level >= 4 && RAYS.map(i => <Ray key={'ray' + i} i={i} t={t} on={on} size={size} effectArea={effectArea} gold={level >= 5} />)}
 
       {/* ── Main coin group (floats on Lv3+) ── */}
-      <Animated.View style={{
-        alignItems: 'center',
-        justifyContent: 'center',
-        transform: level >= 3 ? [{ translateY: floatY }] : [],
-      }}>
+      <Reanimated.View style={[{ alignItems: 'center', justifyContent: 'center' }, level >= 3 ? floatStyle : null]}>
 
         {/* ── Lv5: Plasma ring ── */}
         {level >= 5 && (
-          <Animated.View
+          <Reanimated.View
             pointerEvents="none"
-            style={{
+            style={[{
               position: 'absolute',
               width: ringSize + 8,
               height: ringSize + 8,
@@ -328,103 +94,67 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
               borderWidth: 2.5,
               borderColor: '#ffb400',
               opacity: 0.7,
-              transform: [{ rotate: plasmaRotation }, { scale: pulseAnim }],
               ...Platform.select({
                 ios: { shadowColor: '#ffb400', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 12 },
                 android: { elevation: 8 },
               }),
-            }}
+            }, plasmaStyle]}
           />
         )}
 
         {/* ── Lv4: Prismatic animated border ring ── */}
         {level >= 4 && level < 5 && (
-          <Animated.View
+          <Reanimated.View
             pointerEvents="none"
-            style={{
+            style={[{
               position: 'absolute',
               width: ringSize,
               height: ringSize,
               borderRadius: ringSize / 2,
               borderWidth: 2.5,
               borderColor: cfg.borderColor,
-              transform: [{ scale: pulseAnim }],
               ...Platform.select({
                 ios: { shadowColor: '#5fd0ff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 10 },
                 android: { elevation: 6 },
               }),
-            }}
+            }, pulseStyle]}
           />
         )}
 
         {/* ── Lv2-3: Glow aura ── */}
         {level >= 2 && level < 4 && (
-          <Animated.View
+          <Reanimated.View
             pointerEvents="none"
-            style={{
+            style={[{
               position: 'absolute',
               width: size + 16,
               height: size + 16,
               borderRadius: (size + 16) / 2,
               backgroundColor: level === 3 ? 'rgba(251,191,36,0.15)' : 'rgba(148,163,184,0.1)',
-              opacity: glowPulse,
-              transform: [{ scale: pulseAnim }],
-            }}
+            }, glowStyle]}
           />
         )}
 
         {/* ── Lv2+: Breathing inner ring ── */}
         {level >= 2 && level < 4 && (
-          <Animated.View
+          <Reanimated.View
             pointerEvents="none"
-            style={{
+            style={[{
               position: 'absolute',
               width: size + 4,
               height: size + 4,
               borderRadius: (size + 4) / 2,
               borderWidth: 1.5,
               borderColor: cfg.borderColor,
-              opacity: glowPulse,
-            }}
+            }, ringGlowStyle]}
           />
         )}
 
         {/* ── Lv2: Mercury blobs orbiting edge ── */}
-        {level >= 2 && level < 4 && mercuryAnims.map((anim, i) => {
-          const orbitRadius = size / 2 + 2;
-          const rotation = anim.interpolate({
-            inputRange: [0, 1], outputRange: [`${i * 120}deg`, `${i * 120 + 360}deg`],
-          });
-          return (
-            <Animated.View
-              key={'merc' + i}
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                width: level === 3 ? 6 : 5,
-                height: level === 3 ? 6 : 5,
-                borderRadius: 3,
-                backgroundColor: level === 3 ? '#fbbf24' : '#e2e8f0',
-                transform: [
-                  { rotate: rotation },
-                  { translateY: -orbitRadius },
-                ],
-                ...Platform.select({
-                  ios: {
-                    shadowColor: level === 3 ? '#fbbf24' : '#e2e8f0',
-                    shadowOffset: { width: 0, height: 0 },
-                    shadowOpacity: 0.9,
-                    shadowRadius: 4,
-                  },
-                  android: {},
-                }),
-              }}
-            />
-          );
-        })}
+        {level >= 2 && level < 4 && MERCURY.map(i => <Mercury key={'merc' + i} i={i} t={t} size={size} gold={level === 3} />)}
 
         {/* ── THE COIN ── */}
-        <Animated.View style={[s.coinWrap, {
+        <View style={[s.coinWrap, {
           width: size,
           height: size,
           borderRadius: size / 2,
@@ -456,7 +186,7 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
 
           {/* Shimmer sweep (Lv2+) */}
           {level >= 2 && (
-            <Animated.View
+            <View
               pointerEvents="none"
               style={{
                 position: 'absolute',
@@ -465,87 +195,23 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
                 overflow: 'hidden',
               }}
             >
-              <Animated.View style={{
+              <Reanimated.View style={[{
                 position: 'absolute',
                 top: -5,
                 width: level >= 4 ? 16 : 10,
                 height: size + 10,
                 backgroundColor: level >= 5 ? 'rgba(251,191,36,0.35)' : level >= 4 ? 'rgba(95,208,255,0.3)' : 'rgba(255,255,255,0.25)',
-                transform: [{ translateX: shimmerX }, { rotate: '20deg' }],
-              }} />
-            </Animated.View>
+              }, shimmerStyle]} />
+            </View>
           )}
-        </Animated.View>
+        </View>
 
         {/* ── Lv3+: Orbiting motes ── */}
-        {level >= 3 && moteAnims.map((mote, i) => {
-          const orbitRadius = size / 2 + (level >= 5 ? 14 : level >= 4 ? 10 : 8);
-          const moteSize = level >= 5 ? 4 : level >= 4 ? 3.5 : 3;
-          const rotation = mote.orbit.interpolate({
-            inputRange: [0, 1],
-            outputRange: [`${i * 60}deg`, `${i * 60 + (i % 2 === 0 ? 360 : -360)}deg`],
-          });
-          const color = level >= 5
-            ? (i % 3 === 0 ? '#ffb400' : i % 3 === 1 ? '#ffcf3b' : '#ffffff')
-            : level >= 4
-              ? PRISMATIC_COLORS[i % PRISMATIC_COLORS.length]
-              : '#fbbf24';
-          return (
-            <Animated.View
-              key={'mote' + i}
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                width: moteSize,
-                height: moteSize,
-                borderRadius: moteSize / 2,
-                backgroundColor: color,
-                opacity: mote.twinkle,
-                transform: [
-                  { rotate: rotation },
-                  { translateY: -orbitRadius },
-                ],
-                ...Platform.select({
-                  ios: { shadowColor: color, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 3 },
-                  android: {},
-                }),
-              }}
-            />
-          );
-        })}
+        {level >= 3 && MOTES.map(i => <Mote key={'mote' + i} i={i} t={t} size={size} level={level} />)}
 
         {/* ── Lv5: Constellation stars (wider orbit) ── */}
-        {level >= 5 && constellationAnims.map((star, i) => {
-          const orbitRadius = size / 2 + 22 + (i % 3) * 6;
-          const starSize = 2 + (i % 3);
-          const rotation = star.orbit.interpolate({
-            inputRange: [0, 1],
-            outputRange: [`${i * 45}deg`, `${i * 45 + (i % 2 === 0 ? 360 : -360)}deg`],
-          });
-          return (
-            <Animated.View
-              key={'star' + i}
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                width: starSize,
-                height: starSize,
-                borderRadius: starSize / 2,
-                backgroundColor: i % 2 === 0 ? '#fde68a' : '#fed7aa',
-                opacity: star.pulse,
-                transform: [
-                  { rotate: rotation },
-                  { translateY: -orbitRadius },
-                ],
-                ...Platform.select({
-                  ios: { shadowColor: '#fbbf24', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 2 },
-                  android: {},
-                }),
-              }}
-            />
-          );
-        })}
-      </Animated.View>
+        {level >= 5 && STARS.map(i => <Star key={'star' + i} i={i} t={t} size={size} />)}
+      </Reanimated.View>
 
       {/* ── Label ── */}
       {showLabel && <View style={s.labelWrap}>
@@ -553,6 +219,150 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
         <UpperText style={[s.labelName, { color: labelColor ?? cfg.labelColor }]}>{cfg.label}</UpperText>
       </View>}
     </View>
+  );
+}
+
+const MERCURY = [0, 1, 2];
+const MOTES = [0, 1, 2, 3, 4, 5];
+const RAYS = [0, 1, 2, 3, 4, 5, 6, 7];
+const BOLTS = Array.from({ length: 12 }, (_, i) => i);
+const STARS = [0, 1, 2, 3, 4, 5, 6, 7];
+
+/** 0..1 through one period of `ms`. */
+function phase(t: number, ms: number): number {
+  'worklet';
+  return (t % ms) / ms;
+}
+
+/** A smooth 0 -> 1 -> 0 swing over one period (the old inOut(sin) there-and-back loops). */
+function wave(t: number, ms: number): number {
+  'worklet';
+  return 0.5 - 0.5 * Math.cos(2 * Math.PI * phase(t, ms));
+}
+
+/** The old Animated default curve (ease in and out). */
+function easeInOut(x: number): number {
+  'worklet';
+  return x * x * (3 - 2 * x);
+}
+
+type Clock = SharedValue<number>;
+
+/** Milliseconds since the coin started moving, advanced on the UI thread while `running` (a hitch never jumps more than 50 ms). */
+function useCoinClock(running: boolean): Clock {
+  const t = useSharedValue(0);
+  const frame = useFrameCallback((info) => {
+    'worklet';
+    t.value += Math.min(info.timeSincePreviousFrame ?? 16, 50);
+  }, false);
+  useEffect(() => {
+    frame.setActive(running);
+    return () => frame.setActive(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+  return t;
+}
+
+/**
+ * A moving light dot with its glow drawn as a soft halo disc (no iOS shadow): a shadow on a moving view is
+ * recomputed every frame the whole time the card is up, the halo costs nothing extra.
+ */
+function GlowDot({ size, color, halo = color, style }: {
+  readonly size: number; readonly color: string; readonly halo?: string;
+  readonly style: StyleProp<AnimatedStyle<ViewStyle>>;
+}) {
+  const outer = size * 2.6;
+  return (
+    <Reanimated.View pointerEvents="none" style={[{
+      position: 'absolute', width: outer, height: outer, borderRadius: outer / 2, backgroundColor: `${halo}40`,
+      alignItems: 'center', justifyContent: 'center',
+    }, style]}>
+      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
+    </Reanimated.View>
+  );
+}
+
+function Mercury({ i, t, size, gold }: { readonly i: number; readonly t: Clock; readonly size: number; readonly gold: boolean }) {
+  const orbitRadius = size / 2 + 2;
+  const style = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${i * 120 + 360 * phase(t.value, 3000 + i * 800)}deg` }, { translateY: -orbitRadius }],
+  }));
+  const color = gold ? '#fbbf24' : '#e2e8f0';
+  return <GlowDot size={gold ? 6 : 5} color={color} style={style} />;
+}
+
+function Mote({ i, t, size, level }: { readonly i: number; readonly t: Clock; readonly size: number; readonly level: number }) {
+  const orbitRadius = size / 2 + (level >= 5 ? 14 : level >= 4 ? 10 : 8);
+  const moteSize = level >= 5 ? 4 : level >= 4 ? 3.5 : 3;
+  const dir = i % 2 === 0 ? 1 : -1;
+  const color = level >= 5
+    ? (i % 3 === 0 ? '#ffb400' : i % 3 === 1 ? '#ffcf3b' : '#ffffff')
+    : level >= 4
+      ? PRISMATIC_COLORS[i % PRISMATIC_COLORS.length]
+      : '#fbbf24';
+  const style = useAnimatedStyle(() => ({
+    opacity: 0.2 + 0.8 * wave(t.value, 2 * (400 + i * 100)),
+    transform: [{ rotate: `${i * 60 + dir * 360 * phase(t.value, 4000 + i * 600)}deg` }, { translateY: -orbitRadius }],
+  }));
+  return <GlowDot size={moteSize} color={color} style={style} />;
+}
+
+function Star({ i, t, size }: { readonly i: number; readonly t: Clock; readonly size: number }) {
+  const orbitRadius = size / 2 + 22 + (i % 3) * 6;
+  const starSize = 2 + (i % 3);
+  const dir = i % 2 === 0 ? 1 : -1;
+  const style = useAnimatedStyle(() => ({
+    opacity: 0.3 + 0.7 * wave(t.value, 2 * (600 + i * 150)),
+    transform: [{ rotate: `${i * 45 + dir * 360 * phase(t.value, 6000 + i * 1000)}deg` }, { translateY: -orbitRadius }],
+  }));
+  return <GlowDot size={starSize} color={i % 2 === 0 ? '#fde68a' : '#fed7aa'} halo="#fbbf24" style={style} />;
+}
+
+/** A light ray that flares out from the centre: wait i x 180 ms, flare for 800 ms, rest 1.2 s, repeat. */
+function Ray({ i, t, on, size, effectArea, gold }: {
+  readonly i: number; readonly t: Clock; readonly on: Clock; readonly size: number; readonly effectArea: number; readonly gold: boolean;
+}) {
+  const style = useAnimatedStyle(() => {
+    const local = (t.value % (2000 + i * 180)) - i * 180;
+    if (on.value === 0 || local < 0 || local > 800) return { opacity: 0, transform: [{ rotate: `${i * 45}deg` }, { scaleY: 0.3 }] };
+    const x = local / 800;
+    const opacity = local < 200 ? 0.6 * (local / 200) : 0.6 * (1 - (local - 200) / 600);
+    return { opacity, transform: [{ rotate: `${i * 45}deg` }, { scaleY: 0.3 + 1.2 * (1 - (1 - x) * (1 - x)) }] };
+  });
+  return (
+    <Reanimated.View pointerEvents="none" style={[{
+      position: 'absolute', left: effectArea / 2 - 1.5, top: effectArea / 2 - size * 0.4, width: 3, height: size * 0.8,
+      borderRadius: 1.5, backgroundColor: gold ? '#ffcf3b' : '#bfe5ff',
+    }, style]} />
+  );
+}
+
+/** An electric crackle: wait i x 120 ms, flicker out from the rim for 310 ms, rest 1.8 s, repeat. */
+function Bolt({ i, t, on, size, effectArea }: {
+  readonly i: number; readonly t: Clock; readonly on: Clock; readonly size: number; readonly effectArea: number;
+}) {
+  const angle = (i / BOLTS.length) * Math.PI * 2;
+  const dist = size * (0.35 + (i % 4) * 0.08);
+  const fromX = Math.cos(angle) * size * 0.3;
+  const fromY = Math.sin(angle) * size * 0.3;
+  const toX = Math.cos(angle) * dist;
+  const toY = Math.sin(angle) * dist;
+  const turn = `${(i * 47) % 360}deg`;
+  const style = useAnimatedStyle(() => {
+    const local = (t.value % (i * 120 + 310 + 1800)) - i * 120;
+    if (on.value === 0 || local < 0 || local > 310) return { opacity: 0, transform: [{ translateX: fromX }, { translateY: fromY }, { scale: 0.2 }, { rotate: turn }] };
+    const opacity = local < 50 ? local / 50 : local < 80 ? 1 - 0.2 * ((local - 50) / 30) : local < 110 ? 0.8 + 0.2 * ((local - 80) / 30) : 1 - (local - 110) / 200;
+    const k = easeInOut(local / 310);
+    return {
+      opacity,
+      transform: [{ translateX: fromX + (toX - fromX) * k }, { translateY: fromY + (toY - fromY) * k }, { scale: 0.2 + 0.8 * k }, { rotate: turn }],
+    };
+  });
+  return (
+    <Reanimated.View pointerEvents="none" style={[{
+      position: 'absolute', left: effectArea / 2 - 1, top: effectArea / 2 - 1, width: 2, height: i % 3 === 0 ? 12 : 8,
+      borderRadius: 1, backgroundColor: i % 2 === 0 ? '#ffffff' : '#ffcf3b',
+    }, style]} />
   );
 }
 

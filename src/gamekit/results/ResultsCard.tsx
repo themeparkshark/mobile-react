@@ -31,6 +31,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { SPRING } from '../../ui/motion';
 import { Image } from 'expo-image';
 import GameIcon from '../../ui/GameIcon';
 import { compareBest, formatScore, nextStarGoal, tallySchedule, tallyTickCount, type StarThresholds } from '../core/scoring';
@@ -114,14 +115,14 @@ export function ResultsCard({
     }
     ribbon.value = withSequence(
       withTiming(1.25, { duration: 160, easing: Easing.out(Easing.back(2)) }),
-      withSpring(1, { damping: 10, stiffness: 260 }),
+      withSpring(1, SPRING.pop),
     );
     bar.value = withDelay(countDelay + 300, withTiming(goal?.progress ?? 0, { duration: 700, easing: Easing.out(Easing.cubic) }));
     if (best.isNewBest) {
       bestScale.value = withDelay(countDelay + 900, withSequence(
         withTiming(1.4, { duration: 0 }),
         withTiming(0.92, { duration: 130, easing: Easing.in(Easing.quad) }),
-        withSpring(1, { damping: 9, stiffness: 320 }),
+        withSpring(1, SPRING.stamp),
       ));
       const t = setTimeout(() => {
         GameAudio.play('fx.purchase');
@@ -244,7 +245,7 @@ function BucketTally({ label, text, value, delayMs, reducedMotion }: {
     }
     pop.value = withDelay(delayMs, withSequence(
       withTiming(1.15, { duration: 90, easing: Easing.out(Easing.back(1.6)) }),
-      withSpring(1, { damping: 10, stiffness: 300 }),
+      withSpring(1, SPRING.stamp),
     ));
     const n = value !== undefined ? tallyTickCount(value) : 0;
     const plan = tallySchedule(n, BUCKET_MS);
@@ -290,7 +291,7 @@ function StarSlot({ index, earned, close, reducedMotion, stepMs, onLanded }: {
       scale.value = withDelay(delay, withSequence(
         withTiming(2.2, { duration: 0 }),
         withTiming(0.9, { duration: 120, easing: Easing.in(Easing.quad) }),
-        withSpring(1, { damping: 9, stiffness: 320 }, (finished) => {
+        withSpring(1, SPRING.stamp, (finished) => {
           'worklet';
           if (finished && onLanded) runOnJS(onLanded)();
         }),

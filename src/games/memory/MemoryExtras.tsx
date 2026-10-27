@@ -137,7 +137,8 @@ const CELL_STYLE: Record<ShareCell, { bg: string; glyph: 'check' | 'star' | 'mag
   recall: { bg: MM.gold, glyph: 'check' },
   lucky: { bg: '#ffffff', glyph: 'star' },
   scout: { bg: MM.scout, glyph: 'mag' },
-  slip: { bg: MM.coral, glyph: 'crack' },
+  // A slip is a shrug: calm navy, never coral.
+  slip: { bg: '#0b3a66', glyph: 'crack' },
   gull: { bg: '#bfe5ff', glyph: 'gull' },
 };
 

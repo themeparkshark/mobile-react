@@ -51,6 +51,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'UiKitGym', getComponent: () => require('./ui/UiKitGym').default },
       { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
       { name: 'SharkPassRevealPreview', getComponent: () => require('./screens/SharkPassRevealPreviewScreen').default },
+      { name: 'BoxRevealPreview', getComponent: () => require('./screens/pins/BoxRevealPreviewScreen').default },
       { name: 'FrightIntroPreview', getComponent: () => require('./components/fright/tutorial/FrightIntroPreviewScreen').default },
       { name: 'SecretShopPreview', getComponent: () => require('./screens/StoreScreen/SecretShopPreviewScreen').default },
       { name: 'MoneyPreview', getComponent: () => require('./screens/MoneyPreviewScreen').default },
@@ -70,6 +71,20 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
         { name: 'SharkPassRevealPreview', getComponent: () => require('./screens/SharkPassRevealPreviewScreen').default },
         { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
       ]
+    // Release-mode captures of the big moments (EXPO_PUBLIC_MOTION_CAPTURE=<route> with `expo start --no-dev`), so a
+    // reveal can be recorded in release-like JS when the scratch server cannot reach it for real. Store builds never
+    // set it, so this folds away like the dev list.
+    : process.env.EXPO_PUBLIC_MOTION_CAPTURE
+      ? [
+          { name: 'BoxRevealPreview', getComponent: () => require('./screens/pins/BoxRevealPreviewScreen').default },
+          { name: 'PostWinRewardsPreview', getComponent: () => require('./screens/PostWinRewardsPreviewScreen').default },
+          { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
+          { name: 'CoinLevelingPreview', getComponent: () => require('./screens/CoinLevelingPreviewScreen').default },
+          // EXPO_PUBLIC_MOTION_CAPTURE=Whack only: the tester opens Whack-a-Shark on launch (release-JS frame-rate proof).
+          ...(process.env.EXPO_PUBLIC_MOTION_CAPTURE === 'Whack'
+            ? [{ name: 'MiniGameTester', getComponent: () => require('./screens/MiniGameTesterScreen').default }]
+            : []),
+        ]
       : [];
 
 /**
@@ -77,7 +92,14 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
  * Root chain. Each flag is a literal process.env access so Expo inlines it.
  */
 export function devInitialRoute(): string | null {
-  if (!__DEV__) return process.env.EXPO_PUBLIC_PERF_CAPTURE === '1' ? 'BossMapPreview' : process.env.EXPO_PUBLIC_SHARE_WALK === '1' ? 'SharePicturesPreview' : null;
+  if (!__DEV__) {
+    if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1') return 'BossMapPreview';
+    if (process.env.EXPO_PUBLIC_SHARE_WALK === '1') return 'SharePicturesPreview';
+    const motion = process.env.EXPO_PUBLIC_MOTION_CAPTURE;
+    if (motion === 'Whack') return 'MiniGameTester';
+    return motion === 'BoxRevealPreview' || motion === 'PostWinRewardsPreview' || motion === 'SetRevealPreview'
+      || motion === 'CoinLevelingPreview' ? motion : null;
+  }
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
     [!!process.env.EXPO_PUBLIC_SHOP_TABS_PREVIEW, 'ShopTabsPreview'],

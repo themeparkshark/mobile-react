@@ -108,6 +108,9 @@ export interface FeelAt {
   input?: boolean;
   /** Stamp text for def.stamp (e.g. 'x4 COMBO'). */
   stamp?: string;
+  /** Fly-up look overrides (combo tier: colour and size climb with the multiplier). */
+  flyColor?: string;
+  flySize?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
 export interface FeelDeps {
@@ -190,7 +193,10 @@ export function fireFeel(def: FeelDef, at: FeelAt, deps: FeelDeps): void {
     }
     if (def.bloom) fx.bloom(x, y, def.bloom);
     if (def.vignette && screenOk) fx.vignette(def.vignette);
-    if (def.flyUp && at.text) fx.flyUp(at.text, x, y + (def.flyUp.dy ?? -24), def.flyUp);
+    if (def.flyUp && at.text) {
+      const look = at.flyColor || at.flySize ? { ...def.flyUp, ...(at.flyColor ? { color: at.flyColor } : null), ...(at.flySize ? { size: at.flySize } : null) } : def.flyUp;
+      fx.flyUp(at.text, x, y + (def.flyUp.dy ?? -24), look);
+    }
   }
   const stampText = at.stamp ?? def.stamp?.text;
   if (def.stamp && stampText && screenOk) deps.stamps?.current?.push(stampText, { x, y: y - 40, ...def.stamp });

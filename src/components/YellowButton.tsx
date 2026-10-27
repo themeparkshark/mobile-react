@@ -35,22 +35,33 @@ function StandInPill({ opacity }: { readonly opacity: Animated.Value }) {
   );
 }
 
+/** The label area's width / height inside the button art. */
+const LABEL_AREA_ASPECT = 4.4;
+
 export default function YellowButton({
   disabled = false,
   text,
   onPress,
   onArtReady,
+  estimatedWidth,
 }: {
   readonly disabled?: boolean;
   readonly text: string;
   readonly onPress?: () => void;
   /** The pill art has drawn: a caller can show the button, its label and anything under it together. */
   readonly onArtReady?: () => void;
+  /**
+   * The button's width when the caller knows it up front. The label then shows on the very first
+   * frame (sized from width / 4.4) instead of waiting for a layout pass, which a busy JS thread can
+   * hold back for a second (a blank yellow slab on the level-up success card). Layout still refines it.
+   */
+  readonly estimatedWidth?: number;
 }) {
   const animated = useRef(new Animated.Value(1)).current;
   const reducedMotion = useReducedGameMotion();
   // Label size follows the button's height so every label on this button matches (was a fixed 72pt shrink-to-fit).
-  const [labelAreaHeight, setLabelAreaHeight] = useState(0);
+  const [labelAreaHeight, setLabelAreaHeight] = useState(() =>
+    estimatedWidth && estimatedWidth > 0 ? estimatedWidth / LABEL_AREA_ASPECT : 0);
   // The label never draws on its own: it waits for the pill art, so a kid never sees words with no button.
   const [artReady, setArtReady] = useState(false);
   const readyRef = useRef(onArtReady); readyRef.current = onArtReady;

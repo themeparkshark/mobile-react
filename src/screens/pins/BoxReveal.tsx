@@ -43,15 +43,19 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  Easing, ZoomIn, cancelAnimation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  Easing, Extrapolation, ZoomIn, cancelAnimation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Defs, G, Path, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { queueHaptic } from '../../gamekit/Haptics';
 import { BRAND, FONT, GameButton, GameIcon } from '../../ui';
 import EnamelPin from '../pinTrading/EnamelPin';
+import { GoldBurst, RadialFlash, SparkleBurst, Twinkles } from '../../ui/GoldBurst';
+import { DURATION, PARTICLES, SLAM_SQUASH, SPRING, chaserRattles, flashPeak, momentBeats, momentParticles } from '../../ui/motion';
+import { usePowerBudget } from '../../power';
+import { isDimFlashingLightsEnabled } from '../../../modules/flash-safety';
 import { BOX_ART, PIN_ART, type BoxTone } from './PinArt';
 import { PINS_COPY, revealOrder, serialLabel, type Pull } from './pinsModel';
 import { FlexShareButton } from '../../share/FlexShareButton';
@@ -154,6 +158,11 @@ function play(cue: typeof REVEAL_CUES[number], opts: { volume?: number; pitch?: 
 const CONFETTI = 22;
 const CONFETTI_COLORS = ['#ffcf3b', '#ffffff', '#7cc6f5', '#ffe07a', '#ef4a3c', '#3cb85c'];
 const GOLD_COLORS = ['#ffcf3b', '#ffe07a', '#ffffff', '#f2a900'];
+/** When the serial stamp (or the catch seal) hits the card: its delay plus the slam. */
+const STAMP_HIT = 250 + DURATION.slam;
+
+/** The chaser's gold foil (EnamelPin tint): a polished rim and a warm glint around its own light-blue art. */
+const CHASER_GOLD = '#f2b72c';
 
 /** Seeded so a reveal looks the same frame to frame (no Math.random in worklets). */
 function pieces(seed: number, gold: boolean) {
@@ -187,32 +196,9 @@ function ConfettiPiece({ p, burst }: { p: ReturnType<typeof pieces>[number]; bur
   );
 }
 
-/** Gold rays behind gold moments (one small SVG, turned on the UI thread). */
-function Rays({ size: full, spin, on }: { size: number; spin: SharedValue<number>; on: SharedValue<number> }) {
-  const size = Math.round(full / LOWRES);
-  const style = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ rotate: `${spin.value}deg` }, { scale: (0.8 + on.value * 0.2) * LOWRES }] }));
-  const r = size / 2;
-  const wedges = Array.from({ length: 12 }, (_, i) => {
-    const a0 = (i / 12) * Math.PI * 2; const a1 = a0 + Math.PI / 18;
-    return `M${r},${r} L${r + Math.cos(a0) * r},${r + Math.sin(a0) * r} L${r + Math.cos(a1) * r},${r + Math.sin(a1) * r} Z`;
-  }).join(' ');
-  return (
-    <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size }, style]}>
-      <Svg width={size} height={size}>
-        <Defs>
-          <RadialGradient id="rayfade" cx="50%" cy="50%" r="50%">
-            <Stop offset="0.15" stopColor="#ffe07a" stopOpacity="0.85" />
-            <Stop offset="1" stopColor="#ffcf3b" stopOpacity="0" />
-          </RadialGradient>
-        </Defs>
-        <G><Path d={wedges} fill="url(#rayfade)" /></G>
-      </Svg>
-    </Animated.View>
-  );
-}
-
 /** Soft gradients are drawn at a third of their size and scaled up: same look, a ninth of the memory. */
 const LOWRES = 3;
+const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
 
 function Glow({ size: full, color, amount, id }: { size: number; color: string; amount: SharedValue<number>; id: string }) {
   const size = Math.round(full / LOWRES);
@@ -314,7 +300,6 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const shake = useSharedValue(0);
   const glow = useSharedValue(0);
   const rays = useSharedValue(0);
-  const raySpin = useSharedValue(0);
   const opened = useSharedValue(0);
   const lid = useSharedValue(0);
   const flash = useSharedValue(0);
@@ -331,9 +316,17 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const hint = useSharedValue(0);
   const seal = useSharedValue(0);
   const stamp = useSharedValue(0);
+  // The small squash when the stamp hits (0 rest, 1 full squash), separate from the slam so the size never dips.
+  const stampSquash = useSharedValue(0);
   const plusOne = useSharedValue(0);
   const wearFly = useSharedValue(0);
   const crown = useSharedValue(0);
+  // The chaser's escalation: light leaking from the lid, a second sparkle wave, the serial's own hit-stop.
+  const leak = useSharedValue(0);
+  const sparkle = useSharedValue(0);
+  const sparkle2 = useSharedValue(0);
+  const stampFlash = useSharedValue(0);
+  const budget = usePowerBudget();
   const popped = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = (ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); };
@@ -351,15 +344,34 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     const p = pulls[index];
     if (!still) {
       shine.value = 0;
-      shine.value = withDelay(450, withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }));
+      // The gold chaser keeps catching the light while it rests (a glint every couple of seconds, only while
+      // the power budget allows ambient motion); every other pin gets one sweep.
+      shine.value = p?.is_chaser && ambient
+        ? withDelay(450, withRepeat(withSequence(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }),
+          withTiming(0, { duration: 0 }), withDelay(DURATION.glintGap, withTiming(0, { duration: 0 }))), -1, false))
+        : withDelay(450, withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }));
       // The gold-foil card catches the light once, just after the pin lands on it.
       foil.value = 0;
       if (p?.is_chaser) foil.value = withDelay(650, withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }));
-      if (p?.is_chaser || isCatch) {
-        stamp.value = withDelay(250, withSpring(1, { damping: 9, stiffness: 220 }));
+      if (p?.is_chaser) {
+        // The serial stamps in with its own hit-stop: the stage freezes a beat bigger, a gold flash
+        // pops on the number, the heaviest buzz, then it springs home.
+        // The stamp accelerates into the card and lands on a known frame (no spring, so it never shrinks
+        // back below its size); the hit, the punch, the flash and a small squash all fire on that frame.
+        stamp.value = withDelay(250, withTiming(1, { duration: DURATION.slam, easing: Easing.in(Easing.quad) }));
+        stampSquash.value = withDelay(STAMP_HIT, withSequence(withTiming(1, { duration: 45 }), withSpring(0, SPRING.settle)));
+        later(STAMP_HIT, () => { play('fx.hit', { pitch: 0.7 }); queueHaptic('comboHeavy', 2); });
+        later(STAMP_HIT + 90, () => queueHaptic('success', 2));
+        punch.value = withDelay(STAMP_HIT, withSequence(withTiming(1.06, { duration: 40 }), withTiming(1.06, { duration: 70 }),
+          withSpring(1, { damping: 9, stiffness: 240 })));
+        stampFlash.value = withDelay(STAMP_HIT, withSequence(withTiming(flashPeak(isDimFlashingLightsEnabled(), false), { duration: 40 }),
+          withTiming(0, { duration: 320 })));
+      } else if (isCatch) {
+        stamp.value = withDelay(250, withTiming(1, { duration: DURATION.slam, easing: Easing.in(Easing.quad) }));
+        stampSquash.value = withDelay(STAMP_HIT, withSequence(withTiming(1, { duration: 45 }), withSpring(0, SPRING.settle)));
         // The stamp lands with a thud you feel: the number is the flex.
-        later(330, () => { play('fx.hit', { pitch: 0.8 }); queueHaptic('hitMedium', 2); });
-        punch.value = withDelay(330, withSequence(withTiming(1.025, { duration: 50 }), withSpring(1, { damping: 10 })));
+        later(STAMP_HIT, () => { play('fx.hit', { pitch: 0.8 }); queueHaptic('hitMedium', 2); });
+        punch.value = withDelay(STAMP_HIT, withSequence(withTiming(1.025, { duration: 50 }), withSpring(1, { damping: 10 })));
       }
       // An extra: a "+1" token rises toward the traders count.
       if (p?.duplicate && !isCatch) {
@@ -373,7 +385,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (p) {
       AccessibilityInfo.announceForAccessibility(`You got ${p.name}. ${p.is_chaser ? 'The gold chaser! ' : ''}${p.duplicate ? 'An extra to trade.' : 'New!'}`);
     }
-  }, [index, pulls, still, isCatch]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [index, pulls, still, isCatch, ambient]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** The payoff: plays exactly once per pin, whether you waited or tapped through. */
   const pop = useCallback(() => {
@@ -388,7 +400,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     dim.value = withTiming(0, { duration: 200 });
     // Reduce Motion: no full-screen gold flash on the Golden Box.
     // Golden Box: no full-screen wash (it read as a flat yellow screen); the gold glow and rays bloom on the box instead.
-    flash.value = golden ? 0 : withSequence(withTiming(1, { duration: 60 }), withTiming(0, { duration: 260 }));
+    // The flash is capped like every big moment (ui/motion.ts) and off with Dim Flashing Lights.
+    flash.value = golden ? 0 : withSequence(withTiming(flashPeak(isDimFlashingLightsEnabled(), still), { duration: 60 }), withTiming(0, { duration: 260 }));
     ring.value = 0; ring.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
     opened.value = 1;
     if (still) {
@@ -403,7 +416,13 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       settle.value = withDelay(380, withSpring(1, { damping: 14, stiffness: 180 }));
       burst.value = 0; burst.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.quad) });
       glow.value = withTiming(isGold || golden ? 1 : 0.65, { duration: 200 });
-      if (isGold || golden) rays.value = withTiming(1, { duration: 300 });
+      if (isGold || golden) {
+        rays.value = withTiming(1, { duration: 300 });
+        sparkle.value = 0; sparkle.value = withTiming(1, { duration: 900 });
+        leak.value = withTiming(0, { duration: 200 });
+      }
+      // The chaser gets a second, wider sparkle wave.
+      if (p?.is_chaser) { sparkle2.value = 0; sparkle2.value = withDelay(380, withTiming(1, { duration: 1000 })); }
       if (golden) {
         if (!isGold) punch.value = withSequence(withTiming(1.05, { duration: 70 }), withSpring(1, { damping: 8, stiffness: 240 }));
         crown.value = 0; crown.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.quad) });
@@ -462,6 +481,25 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (still) { play('fx.whooshRev', { volume: 0.6 }); pop(); return; }
     setPhase('shake');
     play('fx.whooshRev', { volume: 0.9 });
+    if (p?.is_chaser && !golden) {
+      // The rarest pull: three rattles, each stronger, a held beat between them, light leaking
+      // brighter from the lid each time. Then the held breath and the pop.
+      const rattles = chaserRattles(momentBeats('chaser', { reduced: false }));
+      const swing = (deg: number) => [withTiming(-deg, { duration: 45 }), withTiming(deg, { duration: 45 }),
+        withTiming(-deg * 0.7, { duration: 45 }), withTiming(0, { duration: 45 })];
+      const gap = rattles.length > 1 ? rattles[1].at - rattles[0].at : 380;
+      shake.value = withSequence(...rattles.flatMap((r, i) => (i === 0 ? swing(r.deg) : [withDelay(gap - 180, swing(r.deg)[0]), ...swing(r.deg).slice(1)])),
+        withDelay(160, withTiming(0, { duration: 40 }, done => { if (done) runOnJS(afterShake)(); })));
+      leak.value = withSequence(...rattles.map((_, i) => withDelay(i === 0 ? 60 : gap - 200, withTiming(0.35 + i * 0.33, { duration: 200 }))));
+      glow.value = withTiming(0.95, { duration: rattles.length * gap });
+      rays.value = withDelay(gap, withTiming(0.5, { duration: rattles.length * gap - gap }));
+      rattles.forEach((r, i) => later(r.at, () => {
+        play('fx.coinTick', { pitch: 0.8 + i * 0.2, volume: 0.9 });
+        play('fx.hit', { pitch: 0.55 + i * 0.08, volume: 0.6 + i * 0.15 });
+        queueHaptic(i === 2 ? 'comboHeavy' : 'hitMedium', 2);
+      }));
+      return;
+    }
     // Golden Box: the heaviest shake in the game, every time (the chaser still gets its held breath after).
     const beats = golden ? [8, 11, 14, 17, 21] : isGold ? [6, 8, 10, 12, 15] : [5, 7, 10];
     const step = golden ? 200 : isGold ? 190 : 175;
@@ -486,7 +524,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     if (!pull) return;
     clearTimers();
     popped.current = false;
-    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, lift, plusOne, wearFly, foil, crown].forEach(v => { cancelAnimation(v); v.value = 0; });
+    [shake, glow, rays, opened, lid, flash, ring, dim, rise, flip, settle, burst, shine, stamp, stampSquash, lift, plusOne, wearFly, foil, crown, leak, sparkle, sparkle2, stampFlash].forEach(v => { cancelAnimation(v); v.value = 0; });
     punch.value = 1;
     setPhase('drop');
     if (noBox) {
@@ -517,13 +555,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     } else { cancelAnimation(hint); hint.value = 0; }
   }, [phase, still, ambient, hint]);
 
-  // Gold rays keep turning slowly while a gold moment is on screen.
-  useEffect(() => {
-    if (goldStage && !still && ambient && phase !== 'summary' && phase !== 'drop' && phase !== 'ready') {
-      raySpin.value = withRepeat(withTiming(360, { duration: 14000, easing: Easing.linear }), -1, false);
-    } else { cancelAnimation(raySpin); }
-    return () => cancelAnimation(raySpin);
-  }, [goldStage, still, ambient, phase, raySpin]);
+  // Gold rays (the shared GoldBurst) turn slowly on their own while the power budget allows.
 
   const next = useCallback(() => {
     play('ui.tap');
@@ -578,17 +610,17 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     opacity: still ? settle.value : Math.min(1, rise.value * 3),
     transform: [
       { translateY: interpolate(rise.value, [0, 1], [boxSize * 0.15, -boxSize * 0.5]) + settle.value * -8 },
-      { perspective: 600 },
-      { rotateY: `${(1 - flip.value) * 540}deg` },
+      // The flip is a flat turn (scaleX by the cosine), not a 3D turn: on iOS the 3D turn cut the pin in
+      // half against the card behind it (the split frame), and a flat turn costs less too.
+      { scaleX: Math.max(0.04, Math.abs(Math.cos(((1 - flip.value) * 540 * Math.PI) / 180))) },
       { scale: (still ? 1 : interpolate(rise.value, [0, 1], [0.35, 1])) * (1 - wearFly.value * 0.75) },
       { translateY: -wearFly.value * height * 0.9 },
     ],
   }));
-  const stampStyle = useAnimatedStyle(() => ({ opacity: stamp.value > 0 ? 1 : 0, transform: [{ scale: interpolate(stamp.value, [0, 1], [2.4, 1]) }, { rotate: '-8deg' }] }));
-  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
+  const stampStyle = useAnimatedStyle(() => ({ opacity: stamp.value > 0 ? 1 : 0, transform: [{ scale: interpolate(stamp.value, [0, 1], [2.4, 1], Extrapolation.CLAMP) * (1 - SLAM_SQUASH * Math.max(0, Math.min(1, stampSquash.value))) }, { rotate: '-8deg' }] }));
   const foilStyle = useAnimatedStyle(() => ({ opacity: foil.value <= 0 || foil.value >= 1 ? 0 : 0.85, transform: [{ translateX: -pinSize * 0.9 + foil.value * pinSize * 2.4 }, { rotate: '20deg' }] }));
   const backerStyle = useAnimatedStyle(() => ({ opacity: settle.value * (1 - wearFly.value), transform: [{ scale: 0.9 + settle.value * 0.1 }] }));
-  // rotateY = (1 - flip) * 540: the front faces you when cos(angle) > 0.
+  // The turn angle is (1 - flip) * 540: the front faces you when cos(angle) > 0.
   const frontStyle = useAnimatedStyle(() => ({ opacity: Math.cos(((1 - flip.value) * 540 * Math.PI) / 180) >= 0 ? 1 : 0 }));
   const backStyle = useAnimatedStyle(() => ({ opacity: Math.cos(((1 - flip.value) * 540 * Math.PI) / 180) < 0 ? 1 : 0 }));
   const ghostStyle = useAnimatedStyle(() => ({ opacity: 1 - rise.value, transform: [{ rotate: `${shake.value}deg` }, { scale: 0.85 + glow.value * 0.1 }] }));
@@ -600,6 +632,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value * 0.55 }));
   const infoStyle = useAnimatedStyle(() => ({ opacity: settle.value, transform: [{ translateY: (1 - settle.value) * 16 }] }));
   const hintStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -hint.value * 8 }, { scale: 1 + hint.value * 0.05 }] }));
+  const leakStyle = useAnimatedStyle(() => ({ opacity: leak.value * (1 - lid.value), transform: [{ scaleX: 0.7 + leak.value * 0.4 }] }));
   const spotStyle = useAnimatedStyle(() => ({ opacity: 0.55 + settle.value * 0.45, transform: [{ scale: LOWRES }] }));
 
   if (!pull) return null;
@@ -677,8 +710,14 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
         <Animated.View pointerEvents="none" style={[styles.stage, { top: centerY - boxSize / 2, width, height: boxSize }, stageStyle]}>
           <Glow size={boxSize * 2.3} color={glowColor} amount={glow} id={goldStage ? 'glowGold' : 'glowSky'} />
-          {goldStage && !still && <Rays size={boxSize * 2.6} spin={raySpin} on={rays} />}
+          {goldStage && !still && (
+            <View pointerEvents="none" style={styles.goldWrap}>
+              <GoldBurst size={boxSize * 2.7} amount={rays} reduced={still || !ambient} />
+            </View>
+          )}
           <Ring size={boxSize * 1.2} t={ring} />
+          {/* The hit-stop flash pops on the box, never as a full-screen wash (ui/motion.ts). */}
+          <RadialFlash flash={flash} size={boxSize * 1.7} />
           {!noBox && (
             <Animated.View style={[{ width: boxSize, height: boxSize }, boxStyle]}>
               <Animated.View style={[StyleSheet.absoluteFill, closedStyle]}>
@@ -691,6 +730,13 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               <Animated.View style={[tone === 'gold' ? { position: 'absolute', left: 0, top: 0, width: boxSize, height: boxSize } : { position: 'absolute', left: boxSize * 0.044, top: -boxSize * 0.146, width: boxSize * 0.915, height: boxSize * 0.915 }, lidStyle]}>
                 <Image source={art.lid} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
               </Animated.View>
+              {pull.is_chaser && !still && (
+                // Light leaking out of the lid seam while the chaser box rattles.
+                <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: boxSize * 0.02, width: boxSize * 0.96,
+                  top: boxSize * 0.24, height: boxSize * 0.26 }, leakStyle]}>
+                  <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff2b0" />
+                </Animated.View>
+              )}
             </Animated.View>
           )}
           {variant === 'pick' && pull.icon_url && (
@@ -707,25 +753,41 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               <Image source={PIN_ART.seal} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
             </Animated.View>
           )}
-          {/* A Disney-style pin card behind a regular pin once it lands (gold moments keep their rays). */}
-          {(!gold || pull.is_chaser) && (phase === 'show' || phase === 'pop') && (
-            <Animated.View style={[styles.backer, pull.is_chaser && styles.backerGold, { width: pinSize * 1.25, height: pinSize * 1.3, top: (boxSize - pinSize) / 2 - boxSize * 0.5 - pinSize * 0.14 }, backerStyle]}>
+          {/* Every pin lands on the same pin card, coloured by how special it is: cream for a box pin, a gold
+              frame for a Golden Box pin, a series Completer or a catch, blue in thick gold for the chaser. */}
+          {(phase === 'show' || phase === 'pop') && (
+            <Animated.View style={[styles.backer, !pull.is_chaser && (golden || gold) && styles.backerGolden, pull.is_chaser && styles.backerGold, { width: pinSize * 1.25, height: pinSize * 1.3, top: (boxSize - pinSize) / 2 - boxSize * 0.5 - pinSize * 0.14 }, backerStyle]}>
               <View style={styles.backerHole} />
               {/* The best pin gets the best card: gold foil, limited edition, its number. */}
               {pull.is_chaser && <Animated.View pointerEvents="none" style={[styles.foilSheen, { height: pinSize * 1.8, top: -pinSize * 0.25 }, foilStyle]} />}
-              {/* The number lives on the pin's stamp and the GOLD CHASER line: the card says LIMITED once. */}
-              {pull.is_chaser && <Text maxFontSizeMultiplier={1} style={styles.backerFoilText}>LIMITED</Text>}
+              {/* The number lives on the pin's stamp and the GOLD CHASER line: the card says LIMITED once.
+                  Every other card says what it holds, so a kid sees "pin", never "coin". */}
+              {pull.is_chaser
+                ? <Text maxFontSizeMultiplier={1} style={styles.backerFoilText}>LIMITED</Text>
+                : <Text maxFontSizeMultiplier={1} style={styles.backerPinText}>PIN</Text>}
             </Animated.View>
           )}
           {/* The pin is mounted (and its art decoding) from the start, hidden until it rises. */}
           <Animated.View style={[styles.pin, { width: pinSize, height: pinSize, top: (boxSize - pinSize) / 2 }, pinStyle]}>
             <Animated.View style={[StyleSheet.absoluteFill, frontStyle]}>
-              {pull.icon_url && <EnamelPin uri={pull.icon_url} size={pinSize} shine={still ? undefined : shine} lag={0} lagSpan={0} surface="panel" />}
+              {/* The chaser is the gold edition: the same art re-coloured gold, so "Gold" is what a kid sees. */}
+              {pull.icon_url && <EnamelPin uri={pull.icon_url} size={pinSize} shine={still ? undefined : shine} lag={0} lagSpan={0} surface="panel"
+                tint={pull.is_chaser ? CHASER_GOLD : undefined} />}
+              {/* A few gold twinkles keep winking around the chaser while it rests (ambient only, never with Reduce Motion). */}
+              {pull.is_chaser && <Twinkles radius={pinSize * 0.58} on={phase === 'show' && !still && ambient} />}
             </Animated.View>
-            {/* The back of the pin (a silver back stamp) shows while it turns, never a mirrored front. */}
-            <Animated.View style={[styles.pinBack, { width: pinSize * 0.7, height: pinSize * 0.7, borderRadius: pinSize * 0.35, left: pinSize * 0.15, top: pinSize * 0.15 }, backStyle]}>
-              <View style={[styles.pinBackPost, { width: pinSize * 0.16, height: pinSize * 0.16, borderRadius: pinSize * 0.08 }]} />
+            {/* The back of the pin shows while it turns, never a mirrored front: a metal back (gold for the
+                chaser, silver for the rest) with a navy outline, a pressed ring and the pin post. */}
+            <Animated.View style={[styles.pinBack, pull.is_chaser && styles.pinBackGold,
+              { width: pinSize * 0.86, height: pinSize * 0.86, borderRadius: pinSize * 0.43, left: pinSize * 0.07, top: pinSize * 0.07 }, backStyle]}>
+              <View style={[styles.pinBackRing, pull.is_chaser && styles.pinBackRingGold, { width: pinSize * 0.62, height: pinSize * 0.62, borderRadius: pinSize * 0.31 }]} />
+              <View style={[styles.pinBackPost, pull.is_chaser && styles.pinBackPostGold, { width: pinSize * 0.18, height: pinSize * 0.18, borderRadius: pinSize * 0.09 }]} />
             </Animated.View>
+            {pull.is_chaser && !still && (
+              <View pointerEvents="none" style={[styles.stamp, { right: -30, bottom: -26, width: 120, height: 90, alignItems: 'center', justifyContent: 'center' }]}>
+                <RadialFlash flash={stampFlash} size={120} />
+              </View>
+            )}
             {(pull.is_chaser || isCatch) && (
               <Animated.View style={[styles.stamp, stampStyle]}>
                 {/* A chaser's number is on the GOLD CHASER ribbon under it, so the stamp is the gold star (one #12, not two). */}
@@ -734,6 +796,12 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             )}
           </Animated.View>
           {golden && !still && !noBox && <CrownBurst t={crown} size={boxSize} />}
+          {goldStage && !still && (
+            <SparkleBurst progress={sparkle} radius={boxSize * 0.95} count={momentParticles(PARTICLES.sparkles, budget, still)} />
+          )}
+          {pull.is_chaser && !still && (
+            <SparkleBurst progress={sparkle2} radius={boxSize * 1.35} count={momentParticles(PARTICLES.sparkles, budget, still)} />
+          )}
           <View style={[styles.confettiOrigin, { top: boxSize * 0.2 }]}>
             {!still && phase !== 'summary' && confetti.map((p, i) => <ConfettiPiece key={i} p={p} burst={burst} />)}
           </View>
@@ -816,7 +884,6 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
           </View>
         )}
 
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, golden && styles.flashGold, flashStyle]} />
 
         {(phase === 'show' || phase === 'summary') && (
           <View style={[styles.footer, { paddingBottom: insets.bottom + (short ? 14 : 18) }, short && { gap: 6 }]}>
@@ -907,12 +974,14 @@ const styles = StyleSheet.create({
   stage: { position: 'absolute', left: 0, alignItems: 'center', justifyContent: 'center' },
   pin: { position: 'absolute', alignSelf: 'center' },
   stamp: { position: 'absolute', right: -6, bottom: 4 },
-  pinBack: { position: 'absolute', backgroundColor: '#c9d3df', borderWidth: 5, borderColor: '#8b98a8', alignItems: 'center', justifyContent: 'center' },
-  pinBackPost: { backgroundColor: '#e8edf3', borderWidth: 3, borderColor: '#8b98a8' },
+  pinBack: { position: 'absolute', backgroundColor: '#dfe6ee', borderWidth: 5, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  pinBackGold: { backgroundColor: '#ffd75e' },
+  pinBackRing: { position: 'absolute', borderWidth: 4, borderColor: '#a9b8c8' },
+  pinBackRingGold: { borderColor: '#d99a00' },
+  pinBackPost: { backgroundColor: '#ffffff', borderWidth: 4, borderColor: BRAND.navy },
+  pinBackPostGold: { backgroundColor: '#fff3c4' },
   confettiOrigin: { position: 'absolute', alignSelf: 'center', width: 1, height: 1 },
-  flash: { backgroundColor: '#ffffff' },
-  // Golden Box: a warm gold flash (a white wash read as a dropped frame on the gold stage).
-  flashGold: { backgroundColor: '#ffd75a' },
+  goldWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   dim: { backgroundColor: '#000814' },
   tapHint: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 6 },
   tapText: { fontFamily: FONT.display, fontSize: 22, color: BRAND.navy, paddingTop: 3 },
@@ -925,16 +994,20 @@ const styles = StyleSheet.create({
   guaranteedPill: { backgroundColor: BRAND.navy, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.gold, marginTop: 4 },
   guaranteed: { fontFamily: FONT.display, fontSize: 20, color: BRAND.gold, paddingTop: 2 },
   name: { fontFamily: FONT.display, fontSize: 32, color: BRAND.white, textAlign: 'center', textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
-  subtitle: { fontFamily: FONT.body, fontSize: 18, color: '#cfeaff' },
+  subtitle: { fontFamily: FONT.display, fontSize: 19, color: BRAND.white, paddingTop: 2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   ticket: {
     flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.cream, borderColor: BRAND.goldLip, borderWidth: 3, borderStyle: 'dashed',
     borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4, maxWidth: '96%',
   },
-  ticketText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 3, flexShrink: 1 },
-  backer: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center' },
-  backerGold: { backgroundColor: '#f6d77a', borderColor: '#8a5a12', justifyContent: 'space-between', paddingBottom: 8, overflow: 'hidden' },
+  ticketText: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy, paddingTop: 3, flexShrink: 1 },
+  backer: { position: 'absolute', alignSelf: 'center', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 4, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'space-between', paddingBottom: 8 },
+  // The chaser card is blue with a thick gold frame, so the gold pin stands out on it (gold on gold blended).
+  backerGold: { backgroundColor: BRAND.blue, borderColor: BRAND.gold, borderWidth: 6, justifyContent: 'space-between', paddingBottom: 8, overflow: 'hidden' },
+  // A Golden Box pin sits on a cream card with a gold edge (the chaser's card is all gold).
+  backerGolden: { borderColor: BRAND.gold, borderWidth: 5 },
   foilSheen: { position: 'absolute', left: 0, width: 26, backgroundColor: 'rgba(255,255,255,0.75)' },
-  backerFoilText: { fontFamily: FONT.display, fontSize: 14, color: '#5a3a08', letterSpacing: 1 },
+  backerFoilText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.gold, letterSpacing: 1 },
+  backerPinText: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy, letterSpacing: 2 },
   backerHole: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#021a45', marginTop: 10 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, borderWidth: 3, paddingHorizontal: 14, paddingVertical: 4 },
   tagNew: { backgroundColor: BRAND.gold, borderColor: BRAND.navy },

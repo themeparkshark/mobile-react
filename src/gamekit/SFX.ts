@@ -70,6 +70,8 @@ class SfxManager {
    */
   async play(name: SfxName | string, volumeScale = 1): Promise<void> {
     try {
+      // Sound effects off: no-op before the engine starts, so a muted player never powers up audio.
+      if (!GameAudio.isSfxEnabled()) return;
       const cue = LEGACY_SFX_TO_CUE[name] ?? name;
       if (!GameAudio.backend) await GameAudio.init();
       const id = GameAudio.play(cue, { volume: volumeScale });

@@ -479,7 +479,7 @@ test('first visit: "Let\'s hunt!" leads to hunting; the daily chest waits for a 
   assert.match(explore, /const chestReady = !firstVisitHold && chestMayPresent\(/);
   assert.match(explore, /simple=\{!!firstVisit\.current\}/);
   const chest = read('src/components/DailyGiftModal.tsx');
-  assert.match(chest, /\{simple \? null : <View style=\{styles\.ladder\}>/, 'first visit: no 7-day strip');
+  assert.match(chest, /\{simple \? null : <View style=\{(?:styles\.ladder|\[styles\.ladder, styles\.aboveGold\])\}>/, 'first visit: no 7-day strip');
   assert.match(chest, /simple && phase === 'closed' && <TapHint/, 'a hand taps the one big chest');
 });
 

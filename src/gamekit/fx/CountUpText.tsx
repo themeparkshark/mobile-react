@@ -15,6 +15,7 @@ import Animated, {
   Easing,
   cancelAnimation,
   runOnJS,
+  withDelay,
   useAnimatedProps,
   useAnimatedReaction,
   useAnimatedStyle,
@@ -34,10 +35,16 @@ export interface CountUpTextProps {
   durationMs?: number;
   /** Delay before counting (results cards stagger). */
   delayMs?: number;
+  /** Count up from this value on mount (a card that mounts with its final score still rolls). */
+  fromValue?: number;
   prefix?: string;
   suffix?: string;
   /** Punch scale on change (1 = none). */
   punch?: number;
+  /** When the punch lands: as the count starts (default) or on its last digit (a payoff counter). */
+  punchAt?: 'start' | 'end';
+  /** The roll's curve (worklet easing); default ease-out cubic. Ease-out quad keeps the climb visible longer. */
+  easing?: (t: number) => number;
   /** Call onTick every N points counted (JS thread). */
   tickEvery?: number;
   onTick?: () => void;
@@ -61,13 +68,16 @@ export function shortCount(value: number): string {
 }
 
 export function CountUpText({
-  value, durationMs, delayMs = 0, prefix = '', suffix = '', punch = 1.12, tickEvery = 0,
+  value, durationMs, delayMs = 0, fromValue, prefix = '', suffix = '', punch = 1.12, punchAt = 'start', easing, tickEvery = 0,
   onTick, onDone, reducedMotion = false, format = 'full', style,
 }: CountUpTextProps) {
-  const shown = useSharedValue(value);
+  const first = reducedMotion || fromValue == null ? value : fromValue;
+  const shown = useSharedValue(first);
   const scale = useSharedValue(1);
-  const from = useRef(value);
-  const lastTick = useSharedValue(value);
+  const from = useRef(first);
+  /** The text on the first native frame: the count's start, not its end (a mounting card still rolls). */
+  const firstText = useRef(first).current;
+  const lastTick = useSharedValue(first);
 
   useEffect(() => {
     const start = from.current;
@@ -79,20 +89,17 @@ export function CountUpText({
       return;
     }
     const ms = durationMs ?? countUpMs(start, value);
-    const run = () => {
-      shown.value = withTiming(value, { duration: ms, easing: Easing.out(Easing.cubic) }, (finished) => {
-        'worklet';
-        if (finished && onDone) runOnJS(onDone)();
-      });
-      scale.value = withSequence(withTiming(punch, { duration: 90 }), withSpring(1, { damping: 10, stiffness: 300 }));
-    };
-    if (delayMs > 0) {
-      const t = setTimeout(run, delayMs);
-      return () => clearTimeout(t);
-    }
-    run();
-    return undefined;
-  }, [value, durationMs, delayMs, punch, reducedMotion, onDone, shown, scale]);
+    // The delay runs on the UI thread (withDelay), so a busy JS thread can never hold the roll on its first
+    // number and then snap it (the r5 breather showed +0 for 500 ms, then the total in one frame).
+    const wait = Math.max(0, delayMs);
+    shown.value = withDelay(wait, withTiming(value, { duration: ms, easing: easing ?? Easing.out(Easing.cubic) }, (finished) => {
+      'worklet';
+      if (finished && onDone) runOnJS(onDone)();
+    }));
+    const pop = withSequence(withTiming(punch, { duration: 90 }), withSpring(1, { damping: 10, stiffness: 300 }));
+    scale.value = withDelay(punchAt === 'end' ? wait + ms : wait, pop);
+    return () => { cancelAnimation(shown); cancelAnimation(scale); };
+  }, [value, durationMs, delayMs, punch, punchAt, easing, reducedMotion, onDone, shown, scale]);
 
   useAnimatedReaction(
     () => Math.floor(shown.value),
@@ -118,7 +125,7 @@ export function CountUpText({
       caretHidden
       pointerEvents="none"
       underlineColorAndroid="transparent"
-      defaultValue={prefix + (format === 'short' ? shortCount(value) : formatScore(value)) + suffix}
+      defaultValue={prefix + (format === 'short' ? shortCount(firstText) : formatScore(firstText)) + suffix}
       animatedProps={animatedProps}
       style={[styles.text, style, animatedStyle]}
     />

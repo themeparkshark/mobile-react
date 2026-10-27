@@ -18,6 +18,7 @@
  * ever changes, so there is no blank button frame.
  */
 import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
+import { InlineBackContext } from './inlineBack';
 import * as Haptics from 'expo-haptics';
 import { openMembership } from '../../components/GrownUpGate';
 import { FxSceneBackdrop } from '../../fx/FxSolo';
@@ -27,12 +28,13 @@ import { UnlockBeat } from './SecretShopUi';
 import { Image } from 'expo-image';
 import { PEARLS, leavingIcon, lifeLines, pearlFor, retiringWishHint, sentence } from '../../helpers/shopLifecycle';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing, FadeIn, Keyframe, SlideInDown, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
+import { DURATION, EASE, SPRING } from '../../ui/motionEasing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import purchase from '../../api/endpoints/me/inventory/purchase-item';
@@ -161,7 +163,8 @@ function LookSwitch({ on, still, onPress }: { on: boolean; still: boolean; onPre
 }
 
 export default function TryOnSheet({ item, set, todayIds, still, accent, startFullLook = false, startBought = false, startConfirm = false,
-  onClose, onLeaving, onWish, onPurchased, onWorn, checkOwned, buyPaused = false, rewardPending = false, secret = false }: {
+  onClose, onLeaving, onWish, onPurchased, onWorn, checkOwned, buyPaused = false, rewardPending = false, secret = false,
+  onHandOff, handOff = null }: {
   readonly item: ShopItem | null;
   readonly set: ShopSetSummary | null;
   readonly todayIds: number[];
@@ -195,6 +198,14 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   readonly rewardPending?: boolean;
   /** Opened from the Secret Shop: midnight sheet, "Unlock with VIP" for non-members. */
   readonly secret?: boolean;
+  /**
+   * With a set reward waiting, the sheet slides away over the navy dusk and, instead of hiding its
+   * modal, asks the shelf for the reveal (onHandOff) and shows it (handOff) inside this same modal.
+   * No modal swap, so no navy frames between the buy and the Set Complete stage. The shelf closes
+   * the try-on when the reveal is done.
+   */
+  readonly onHandOff?: () => void;
+  readonly handOff?: ReactNode;
 }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   // A sheet layer: dialogs and the grown-up gate wait until it is gone (ui/modalLayers.ts).
@@ -274,7 +285,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
       { scale: stageScale.value * (1 + 0.04 * Math.sin(Math.PI * Math.min(1, k))) },
     ] };
   });
-  const wiggle = () => { if (!still) stageScale.value = withSequence(withTiming(1.05, { duration: 90 }), withSpring(1, { damping: 7 })); };
+  const wiggle = () => { if (!still) stageScale.value = withSequence(withTiming(1.05, { duration: DURATION.tap }), withSpring(1, SPRING.pop)); };
 
   // Every exit slides the sheet away first (close, scrim, Keep shopping, swipe), then hides the
   // modal and reports closed only once iOS has finished dismissing it (onDismiss), so the shelf
@@ -309,18 +320,37 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   // away, so the kid goes from the landing straight into the payoff (no idle shelf).
   const dusk = useSharedValue(0);
   const duskStyle = useAnimatedStyle(() => ({ opacity: dusk.value }));
+  const onHandOffRef = useRef(onHandOff);
+  onHandOffRef.current = onHandOff;
+  const handedOff = useRef(false);
+  const handOffNow = useCallback(() => {
+    if (handedOff.current) return;
+    handedOff.current = true;
+    onHandOffRef.current?.();
+  }, []);
   const closeAnimated = useCallback(() => {
+    if (handedOff.current) return;
+    // A set reward waiting: the reveal mounts over the sheet right now and fades in across it (no slide,
+    // no navy dusk), so the landing cross-fades straight into the Set Complete stage.
+    if (rewardPendingRef.current && onHandOffRef.current) { handOffNow(); return; }
     if (rewardPendingRef.current) dusk.value = withTiming(1, { duration: still ? 0 : 200 });
     if (still) { leave(); return; }
-    drag.value = withTiming(SHEET_H, { duration: 200, easing: Easing.in(Easing.quad) }, done => { if (done) runOnJS(leave)(); });
-  }, [still, leave]);
+    drag.value = withTiming(SHEET_H, { duration: DURATION.exit, easing: EASE.in }, done => { if (done) runOnJS(leave)(); });
+  }, [still, leave, handOffNow]);
   const closeRef = useRef(closeAnimated);
   closeRef.current = closeAnimated;
+  // Android back: once the Set Complete reveal is handed off inside this modal, back closes the reveal
+  // (closeAnimated ignores it after the hand-off, so back used to do nothing).
+  const inlineBack = useRef<(() => void) | null>(null);
+  const onRequestClose = useCallback(() => {
+    if (handedOff.current) { inlineBack.current?.(); return; }
+    closeAnimated();
+  }, [closeAnimated]);
   const pan = Gesture.Pan().activeOffsetY(8)
     .onUpdate(e => { drag.value = Math.max(0, e.translationY); })
     .onEnd(e => {
       if (e.translationY > 120 || e.velocityY > 900) drag.value = withTiming(SHEET_H, { duration: 180 }, () => runOnJS(leave)());
-      else drag.value = withSpring(0, { damping: 18 });
+      else drag.value = withSpring(0, SPRING.settle);
     });
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: drag.value }] }));
 
@@ -425,7 +455,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
         setCoins(c => c + 1);
         playSound(require('../../../assets/sounds/coin.mp3'));
         // The stage pops as the first coins hit and the piece lands with them: one beat inside 400 ms.
-        later(() => { stageScale.value = withSequence(withTiming(1.06, { duration: 80 }), withSpring(1, { damping: 8 })); }, 340);
+        later(() => { stageScale.value = withSequence(withTiming(1.06, { duration: 80 }), withSpring(1, SPRING.pop)); }, 340);
         later(land, 390);
       }
       void refreshPlayer();
@@ -508,13 +538,13 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const confirming = phase === 'confirm' || phase === 'buying' || phase === 'landing';
 
   return (
-    <Modal visible={!leaving} transparent animationType="none" onRequestClose={closeAnimated} onDismiss={finishClose} statusBarTranslucent>
+    <Modal visible={!leaving} transparent animationType="none" onRequestClose={onRequestClose} onDismiss={finishClose} statusBarTranslucent>
       <ModalLayerContext.Provider value>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={styles.scrim}>
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }, duskStyle]} />
           <Pressable style={StyleSheet.absoluteFill} onPress={closeAnimated} accessibilityLabel="Close try-on" />
-          <Animated.View entering={still ? undefined : SlideInDown.springify().damping(18).stiffness(180)}
+          <Animated.View entering={still ? undefined : SlideInDown.springify().damping(SPRING.settle.damping).stiffness(SPRING.settle.stiffness)}
             style={[styles.sheet, secret && { backgroundColor: SECRET_THEME.panel, borderColor: 'rgba(255,255,255,0.35)' },
               { height: SHEET_H, paddingBottom: Math.max(16, insets.bottom + 8) }, sheetStyle]}>
             <GestureDetector gesture={pan}>
@@ -713,6 +743,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
             <CoinArc from={{ x: 60, y: 44 }} to={{ x: (SCREEN_W - 28) / 2 + 14, y: STAGE_TOP + stageH * 0.5 }} still={still} trigger={coins} />
           </Animated.View>
         </Animated.View>
+        <InlineBackContext.Provider value={inlineBack}>{handOff}</InlineBackContext.Provider>
       </GestureHandlerRootView>
       </ModalLayerContext.Provider>
     </Modal>

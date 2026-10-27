@@ -23,14 +23,22 @@
  * finish dismissing it (onDismiss), and only then leaves, so the Share sheet and its grown-up
  * gate can open from Root. Offering it only after the wear choice means bragging never costs
  * the kid WEAR IT ALL.
- * Reduce Motion: no rays, stamp or confetti, a plain fade.
+ * The celebration follows the shared motion language (ui/motion.ts,
+ * momentBeats 'setComplete'): the stage pops up while gold gathers behind it,
+ * the shark drops onto the plinth, then the gold blooms around the stage,
+ * sparkles fly, the confetti bursts, the title stamps and the XP counts up.
+ * The stage is never empty: no wearable look falls back to the player's own
+ * shark, and no shark at all falls back to the gold crown medal.
+ * Reduce Motion: no rays, stamp or confetti, a plain fade (the gold glow
+ * stays, still).
  */
 import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
+import { InlineBackContext } from './inlineBack';
 import * as Haptics from 'expo-haptics';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Dimensions, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
-  Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  Easing, FadeIn, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { equipShopTitle } from '../../api/endpoints/me/shop-sets';
@@ -48,6 +56,12 @@ import { wearItem } from './inventoryQueue';
 import { FlexShareButton } from '../../share/FlexShareButton';
 import { HERO_ART } from '../../share/FlexHero';
 import { useModalHandoff } from '../../share/handoff';
+import { Image } from 'expo-image';
+import { GoldBurst, SparkleBurst } from '../../ui/GoldBurst';
+import { DURATION, EASE, GOLD_FX, PARTICLES, SPRING, momentBeats, momentParticles, pieceSnapTimes } from '../../ui/motionEasing';
+import { usePowerBudget } from '../../power';
+
+const MEDAL = require('../../../assets/images/alex-ui/medal-gold.webp');
 
 const { width: W, height: H } = Dimensions.get('window');
 // A short phone (iPhone SE) gets a smaller stage and tighter gaps, so WEAR IT ALL, Share and Done
@@ -61,6 +75,9 @@ const CARD = stageCard(STAGE - 8, STAGE - 8, HOP + 6);
 const CARD_STYLE = { position: 'absolute' as const, ...CARD.box };
 
 type Busy = 'idle' | 'busy' | 'done' | 'failed';
+
+/** The XP bar and its count start this long after the burst (together). */
+const XP_AFTER_BURST = 150;
 
 /** A tap or swipe this soon after the reveal opens is the buy tap carrying over: ignored. */
 export const REVEAL_GUARD_MS = 900;
@@ -86,7 +103,7 @@ export function leaveLabel(wornAll: boolean, titleOn: boolean): string {
 /** How long Share waits for the fresh look after WEAR IT ALL before it turns on anyway. */
 export const REFRESH_WAIT_MS = 4000;
 
-export default function SetCompleteReveal({ reward, set, still, onDone, onShown, bridged = false }: {
+export default function SetCompleteReveal({ reward, set, still, onDone, onShown, bridged = false, inline = false }: {
   readonly reward: ShopSetReward | null;
   readonly set: ShopSetSummary | null;
   readonly still: boolean;
@@ -95,6 +112,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   readonly onShown?: () => void;
   /** Coming straight from the buy over a navy cover: show at once, no fade. */
   readonly bridged?: boolean;
+  /** Drawn inside the try-on's own modal (TryOnSheet handOff), not a modal of its own: no modal swap. */
+  readonly inline?: boolean;
 }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
@@ -109,8 +128,22 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
 
   const pieceIds = reward?.item_ids ?? set?.item_ids ?? [];
   const pieces = useMemo(() => (set?.pieces ?? []).filter(p => pieceIds.includes(p.id)), [set, pieceIds.join(',')]);
+  const beats = momentBeats('setComplete', { reduced: still });
+  // The backdrop lands first, then each piece snaps onto the shark, one beat each, before the bloom.
+  const snapOrder = useMemo(() => [...pieces].sort((a, b) => Number(isBackdrop(b)) - Number(isBackdrop(a))), [pieces]);
+  const snapTimes = useMemo(() => pieceSnapTimes(snapOrder.length, beats), [snapOrder.length, beats.fx]);
+  const [snapped, setSnapped] = useState(() => (snapTimes.length ? 0 : snapOrder.length));
   // Only this set's pieces, on the shark's own skin; the set's backdrop becomes the stage.
-  const stage = useMemo(() => previewLook(player?.inventory, pieces.map(asWearable), 'base'), [player?.inventory?.skin_item?.id, pieces]);
+  // Never an empty plinth: no set look (no skin art yet) falls back to the player's own look.
+  const stage = useMemo(() => previewLook(player?.inventory, snapOrder.slice(0, snapped).map(asWearable), 'base')
+    ?? previewLook(player?.inventory, [], 'player'), [player?.inventory?.skin_item?.id, snapOrder, snapped]);
+  const budget = usePowerBudget();
+  const snap = useSharedValue(1);
+  const gold = useSharedValue(still ? 1 : 0);
+  const bloom = useSharedValue(0);
+  const sparkle = useSharedValue(0);
+  const pop = useSharedValue(still ? 1 : 0.82);
+  const drop = useSharedValue(still ? 1 : 0);
   // The share picture's shark: the kid's own look with this set put on (what WEAR IT ALL saves),
   // so the card never shows yesterday's outfit under "My Complete Look".
   const shareLook = useMemo(() => previewLook(player?.inventory, pieces.map(asWearable), 'player')?.look ?? null, [player?.inventory, pieces]);
@@ -126,14 +159,31 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   useEffect(() => {
     if (!reward) return;
     playSound(require('../../../assets/sounds/reward.mp3'));
-    if (still) { setShownLevel(xp?.level ?? null); return; }
-    stampOpacity.value = withDelay(500, withTiming(1, { duration: 80 }));
-    stamp.value = withDelay(500, withSpring(1, { damping: 8, stiffness: 240 }));
+    if (still) { setShownLevel(xp?.level ?? null); setSnapped(snapOrder.length); return; }
+    // 1. Anticipation: the stage pops up and the gold gathers behind it; the shark drops in.
+    pop.value = withSpring(1, SPRING.pop);
+    gold.value = withSequence(withTiming(0.4, { duration: beats.anticipation, easing: EASE.charge }),
+      withDelay(DURATION.hitStop, withTiming(1, { duration: 200, easing: EASE.out })));
+    drop.value = withDelay(120, withSpring(1, SPRING.land));
+    // 2-3. Burst: bloom, sparkles, confetti and the heavy haptic on one frame; the title stamps.
+    bloom.value = withDelay(beats.burstAt, withSequence(withTiming(1, { duration: 140, easing: EASE.out }),
+      withTiming(0, { duration: DURATION.bloom, easing: EASE.out })));
+    sparkle.value = withDelay(beats.burstAt, withTiming(1, { duration: DURATION.sparkle }));
+    stampOpacity.value = withDelay(beats.labelAt, withTiming(1, { duration: 80 }));
+    stamp.value = withDelay(beats.labelAt, withSpring(1, SPRING.stamp));
     const timers = [
-      setTimeout(() => { setBurst(true); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined); }, 560),
+      setTimeout(() => { setBurst(true); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined); }, beats.burstAt),
     ];
+    // Each piece snaps on with a squash and a light tap (the last one a medium tap).
+    snapTimes.forEach((ms, i) => timers.push(setTimeout(() => {
+      setSnapped(i + 1);
+      snap.value = withSequence(withTiming(1.07, { duration: 70, easing: EASE.out }), withSpring(1, SPRING.stamp));
+      void Haptics.impactAsync(i === snapTimes.length - 1 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light)
+        .catch(() => undefined);
+    }, ms)));
+    // 4. The XP counts up with the bar on the UI thread (XpCount), so nothing re-renders on the burst frame.
     if (xp) {
-      bar.value = withDelay(900, withTiming(xp.levelUp ? 1 : xp.to, { duration: 700, easing: Easing.out(Easing.cubic) }));
+      bar.value = withDelay(beats.burstAt + XP_AFTER_BURST, withTiming(xp.levelUp ? 1 : xp.to, { duration: 700, easing: Easing.out(Easing.cubic) }));
       if (xp.levelUp) {
         // Fill to the top, roll to the new level with a pop, then fill to where the player is now.
         timers.push(setTimeout(() => {
@@ -142,7 +192,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
           levelPulse.value = withSequence(withTiming(1.45, { duration: 160 }), withSpring(1, { damping: 6 }));
           bar.value = 0;
           bar.value = withTiming(xp.to, { duration: 500, easing: Easing.out(Easing.cubic) });
-        }, 1650));
+        }, beats.burstAt + XP_AFTER_BURST + 750));
       }
     }
     return () => timers.forEach(clearTimeout);
@@ -150,6 +200,12 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   const stampStyle = useAnimatedStyle(() => ({ opacity: stampOpacity.value, transform: [{ scale: stamp.value }, { rotate: '-4deg' }] }));
   const barStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.001, bar.value) }] }));
   const levelStyle = useAnimatedStyle(() => ({ transform: [{ scale: levelPulse.value }] }));
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  const snapStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: 2 - snap.value }, { scaleY: snap.value }] }));
+  const dropStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, drop.value * 3),
+    transform: [{ translateY: (1 - drop.value) * -60 }, { scaleY: 0.9 + 0.1 * Math.min(1, drop.value) }],
+  }));
   const hopStyle = useAnimatedStyle(() => ({ transform: [
     { translateY: -HOP * Math.sin(Math.PI * Math.min(1, hop.value)) },
     { rotate: `${Math.sin(hop.value * Math.PI * 4) * 8 * (1 - hop.value)}deg` },
@@ -235,11 +291,10 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   };
 
   return (
-    <Modal visible={!hidden} transparent animationType="none" onRequestClose={() => leave(false)} onShow={onShown}
-      onDismiss={modal.onDismiss} statusBarTranslucent>
-      <ModalLayerContext.Provider value>
+    <RevealLayer inline={inline} hidden={hidden} onDismiss={modal.onDismiss} onClose={() => leave(false)} onShown={onShown}>
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
-      <Animated.View entering={still || bridged ? undefined : FadeIn.duration(260)} style={styles.fill} {...swipe.panHandlers}>
+      {/* Inline (over the try-on): a quick cross-fade across the sheet. Bridged (over the navy cover): at once. */}
+      <Animated.View entering={still || bridged ? undefined : FadeIn.duration(inline ? DURATION.base : 260)} style={styles.fill} {...swipe.panHandlers}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />
         {/* Once it is all on, Done is the one way out (with Share under it), like the box and Shark Pass. */}
         {all !== 'done' && (
@@ -251,10 +306,26 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
         <View style={[styles.content, { paddingTop: insets.top + (SHORT ? 12 : 20), paddingBottom: insets.bottom + 12 }, SHORT && { gap: 6 }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.kicker}>SET COMPLETE</Text>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setName}>{reward.name}</Text>
+          <Animated.View style={[{ width: STAGE, height: STAGE, alignItems: 'center', justifyContent: 'center' }, popStyle]}>
+          {/* The gold blooms around the stage frame (behind it). */}
+          <View pointerEvents="none" style={styles.burstWrap}>
+            <GoldBurst size={STAGE * 2.3} amount={gold} bloom={bloom} reduced={still} />
+          </View>
           <View style={[styles.stage, { width: STAGE, height: STAGE, borderColor: color }]}>
-            <ShopStage rim={color} backdropUrl={stage?.backdrop} tone="night" rays still={still}>
+            <ShopStage rim={color} backdropUrl={stage?.backdrop} tone="night" rays={GOLD_FX.rays} still={still}>
+              <Animated.View style={[StyleSheet.absoluteFill, dropStyle]}>
+              <Animated.View style={[StyleSheet.absoluteFill, snapStyle]}>
               <Animated.View style={[StyleSheet.absoluteFill, hopStyle]}>
-                {stage && <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={CARD.shadow} liftRoom={CARD.box.top} style={CARD_STYLE} />}
+                {stage
+                  ? <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={CARD.shadow} liftRoom={CARD.box.top} style={CARD_STYLE} />
+                  : (
+                    <View style={styles.medalWrap} accessible accessibilityLabel={`${reward.name} set badge`}>
+                      <Image source={MEDAL} style={{ width: STAGE * 0.5, height: STAGE * 0.5 }} contentFit="contain" transition={0} />
+                      <View style={styles.medalCrown}><GameIcon name="crown" size={STAGE * 0.2} /></View>
+                    </View>
+                  )}
+              </Animated.View>
+              </Animated.View>
               </Animated.View>
             </ShopStage>
             {/* One signal per state: NOW WEARING while it saves; once it is all on, the All on! chip says it. */}
@@ -264,6 +335,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
               </Animated.View>
             )}
           </View>
+          {!still && <SparkleBurst progress={sparkle} radius={STAGE * 0.72} count={momentParticles(PARTICLES.sparkles, budget, still)} />}
+          </Animated.View>
           {/* Inside the content and before the plate: it bursts from behind the title, never over it. */}
           {burst && !still && <Confetti color={color} originY={insets.top + 20 + 90 + STAGE + 40} />}
           <View style={styles.plateWrap}>
@@ -290,8 +363,9 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
               <View style={{ flex: 1, gap: 4 }}>
                 <View style={styles.xpTrack}><Animated.View style={[styles.xpFill, barStyle]} /></View>
                 {/* The caption follows the badge: "+160 XP" until the level rolls, then "Level up!". */}
-                <Text maxFontSizeMultiplier={MAX_FONT} style={styles.xpCaption}>
-                  {xp?.levelUp && shownLevel === xp.level ? xp.caption : `+${reward.xp} XP`}</Text>
+                {xp?.levelUp && shownLevel === xp.level
+                  ? <Text maxFontSizeMultiplier={MAX_FONT} style={styles.xpCaption}>{xp.caption}</Text>
+                  : <XpCount xp={reward.xp} still={still} delay={beats.burstAt + XP_AFTER_BURST} />}
               </View>
             </View>
           )}
@@ -340,10 +414,63 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
           </View>
         </View>
       </Animated.View>
-      </ModalLayerContext.Provider>
+    </RevealLayer>
+  );
+}
+
+/** Its own modal, or (inline) a full-screen layer inside the modal it was handed off from. */
+function RevealLayer({ inline, hidden = false, onDismiss, onClose, onShown, children }: {
+  readonly inline: boolean; readonly onClose: () => void; readonly onShown?: () => void; readonly children: ReactNode;
+  /** Share hands off: the reveal hides first (its modal dismisses, then onDismiss), so the share sheet can open. */
+  readonly hidden?: boolean; readonly onDismiss?: () => void;
+}) {
+  const shown = useRef(onShown);
+  shown.current = onShown;
+  useEffect(() => { if (inline) shown.current?.(); }, [inline]);
+  // Inline: Android back reaches the host modal, which routes it here (see InlineBackContext).
+  const back = useContext(InlineBackContext);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    if (!inline || !back) return undefined;
+    const fn = () => close.current();
+    back.current = fn;
+    return () => { if (back.current === fn) back.current = null; };
+  }, [inline, back]);
+  // Inline there is no modal of our own to dismiss: hiding just removes the layer (the share handoff's
+  // own timer stands in for onDismiss).
+  if (inline) return hidden ? null : <View style={StyleSheet.absoluteFill}>{children}</View>;
+  return (
+    <Modal visible={!hidden} transparent animationType="none" onRequestClose={onClose} onShow={onShown}
+      onDismiss={onDismiss} statusBarTranslucent>
+      <ModalLayerContext.Provider value>{children}</ModalLayerContext.Provider>
     </Modal>
   );
 }
+
+function isBackdrop(piece: { item_type_id?: number | null }): boolean {
+  return slotForItem({ item_type: { id: piece.item_type_id } } as never) === 'background_item';
+}
+
+const AnimatedInput = Animated.createAnimatedComponent(TextInput);
+
+/**
+ * "+160 XP", counted up on the UI thread from the moment the bar starts (no React render per
+ * step, so the burst frame stays free). Starts a little above zero: never "+0 XP".
+ */
+export const XpCount = memo(function XpCount({ xp, still, delay }: { readonly xp: number; readonly still: boolean; readonly delay: number }) {
+  const floor = Math.max(1, Math.round(xp * 0.1));
+  const shown = useSharedValue(still ? xp : floor);
+  useEffect(() => {
+    shown.value = still ? xp : withDelay(delay, withTiming(xp, { duration: 700, easing: Easing.out(Easing.cubic) }));
+  }, [xp, still, delay]);
+  const props = useAnimatedProps(() => {
+    const text = `+${Math.max(1, Math.round(shown.value))} XP`;
+    return { text, defaultValue: text } as never;
+  });
+  return <AnimatedInput editable={false} underlineColorAndroid="transparent" animatedProps={props} pointerEvents="none"
+    defaultValue={`+${still ? xp : floor} XP`} maxFontSizeMultiplier={MAX_FONT} style={[styles.xpCaption, styles.xpInput]} />;
+});
 
 /** 64 pieces burst from behind the title plate, then fall (one pass, nothing keeps running). */
 function Confetti({ color, originY }: { color: string; originY: number }) {
@@ -377,9 +504,12 @@ function Bit({ index, color }: { index: number; color: string }) {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   content: { flex: 1, alignItems: 'center', paddingHorizontal: 20, gap: 10 },
-  kicker: { fontFamily: FONT.display, fontSize: 16, letterSpacing: 2, color: BRAND.goldLight },
-  setName: { fontFamily: FONT.display, fontSize: 34, color: BRAND.white, textAlign: 'center' },
+  kicker: { fontFamily: FONT.display, fontSize: 16, letterSpacing: 2, color: BRAND.goldLight, zIndex: 2 },
+  setName: { fontFamily: FONT.display, fontSize: 34, color: BRAND.white, textAlign: 'center', zIndex: 2 },
   stage: { borderRadius: 28, overflow: 'hidden', borderWidth: 4 },
+  burstWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  medalWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: '12%' },
+  medalCrown: { position: 'absolute', alignItems: 'center', justifyContent: 'center', top: 0, bottom: '12%', left: 0, right: 0 },
   wearing: { position: 'absolute', left: 12, top: 12, backgroundColor: BRAND.green, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
     borderWidth: 2, borderColor: BRAND.white, transform: [{ rotate: '-6deg' }] },
   wearingText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.white, letterSpacing: 1 },
@@ -398,6 +528,7 @@ const styles = StyleSheet.create({
   xpTrack: { height: 14, borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },
   xpFill: { height: 14, width: '100%', borderRadius: 7, backgroundColor: BRAND.gold, transformOrigin: 'left' },
   xpCaption: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white },
+  xpInput: { padding: 0, margin: 0 },
   alert: { backgroundColor: SHOP_SURFACE.alert, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 2, borderColor: BRAND.white, marginBottom: 6 },
   alertText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white, textAlign: 'center' },
   allOnChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3,

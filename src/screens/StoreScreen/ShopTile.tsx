@@ -19,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect, useRef, useState } from 'react';
 import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import { SPRING } from '../../ui/motion';
 import { formatCoins, slotFitsBand, slotWord, tileBand, tileLanes, type TileRibbon } from '../../helpers/shopShelves';
 import { itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
 import { ShopItem } from '../../models/shop-today';
@@ -122,7 +123,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   useEffect(() => {
     if (firstHeart.current) { firstHeart.current = false; return; }
     if (still) return;
-    heart.value = withSequence(withTiming(1.45, { duration: 110 }), withSpring(1, { damping: 6, stiffness: 260 }));
+    heart.value = withSequence(withTiming(1.45, { duration: 110 }), withSpring(1, SPRING.pop));
   }, [wished]);
   const heartStyle = useAnimatedStyle(() => ({ transform: [{ scale: heart.value }] }));
 
@@ -133,7 +134,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
   useEffect(() => {
     if (!justBought || still) return;
     setSlam(true);
-    stamp.value = withSpring(1, { damping: 9, stiffness: 220 });
+    stamp.value = withSpring(1, SPRING.stamp);
     stampOpacity.value = withDelay(1000, withTiming(0, { duration: 260 }));
     const t = setTimeout(() => setSlam(false), 1300);
     return () => clearTimeout(t);
@@ -148,7 +149,7 @@ function ShopTile({ item, width, vipLocked, affordable, still, justBought, quiet
       onPress={() => onOpen(item)}
       // Every tap squishes and clicks (game feel, Oct 8): a spring, not a flat snap.
       onPressIn={() => { void Haptics.selectionAsync().catch(() => undefined); if (!still) press.value = withTiming(0.94, { duration: 70 }); }}
-      onPressOut={() => { press.value = still ? 1 : withSpring(1, { damping: 12, stiffness: 320 }); }}
+      onPressOut={() => { press.value = still ? 1 : withSpring(1, SPRING.stamp); }}
       onLayout={e => { const w = Math.round(e.nativeEvent.layout.width); if (Math.abs(w - measured) >= 1) setMeasured(w); }}
       accessibilityRole="button"
       accessibilityLabel={a11y}

@@ -114,7 +114,7 @@ export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy
   bonus_ads: { title: 'Bonus ads are optional',
     body: 'Watch a short ad for a small extra, like a free Ticket or more coins. Skip it and you lose nothing.' },
   first_level_up: { title: 'First level up!',
-    body: 'There are 10 levels, all the way up to Shark Crown.' },
+    body: 'Every level gives your coin a new look. Fill all the dots to max it out!' },
 };
 
 /** Mini-game types the selector can start. */

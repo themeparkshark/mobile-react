@@ -605,10 +605,15 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
     const t = setTimeout(() => { if (shownRef.current !== revealSlug) holdReveal(); }, 1200);
     return () => clearTimeout(t);
   }, [revealMounted, revealSlug]);
+  // The reveal drawn inside the try-on's own modal (TryOnSheet handOff): set when the sheet has slid away
+  // with a reward waiting. Its Done closes the try-on and the reveal in one step.
+  const [inlineReveal, setInlineReveal] = useState(false);
+  const startInlineReveal = useCallback(() => { setInlineReveal(true); }, []);
   const finishReveal = useCallback(() => {
+    if (inlineReveal) { setInlineReveal(false); setOpen(null); }
     holdReveal();
     setReveals(list => (list[0] ? dropReveal(list.map(x => ({ ...x, slug: x.reward.slug })), list[0].reward.slug).map(({ slug: _s, ...x }) => x) : list));
-  }, [holdReveal]);
+  }, [holdReveal, inlineReveal]);
 
   const trySet = useCallback((set: ShopSetSummary) => {
     const target = allItems.find(i => i.shop?.set?.slug === set.slug && !(i.shop?.is_owned ?? i.has_purchased))
@@ -864,7 +869,10 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
         <TryOnSheet item={open.item} set={openSet} todayIds={todayIds} still={still} accent={open.accent}
           startFullLook={open.fullLook} startBought={open.bought} startConfirm={!!open.confirm}
           onClose={closeTryOn} onLeaving={leavingTryOn} onWish={wish} onPurchased={onPurchased} onWorn={onWorn}
-          checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={rewardPendingFor(reveals, open.item.shop?.set?.slug)} secret={secret} />
+          checkOwned={checkOwned} buyPaused={!!today.fallback} rewardPending={rewardPendingFor(reveals, open.item.shop?.set?.slug)} secret={secret}
+          onHandOff={startInlineReveal}
+          handOff={inlineReveal && reveal ? <SetCompleteReveal key={reveal.reward.slug} inline reward={reveal.reward} set={reveal.set}
+            still={still} onDone={finishReveal} onShown={revealShown} /> : null} />
       )}
       {reveal && !open && revealGate && <SetCompleteReveal key={reveal.reward.slug} reward={reveal.reward} set={reveal.set} still={still}
         bridged={handoff} onDone={finishReveal} onShown={revealShown} />}

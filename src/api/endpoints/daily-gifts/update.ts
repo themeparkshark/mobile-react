@@ -1,12 +1,16 @@
 import { ApiResponseType } from '../../../models/api-response-type';
 import { DailyGiftType } from '../../../models/daily-gift-type';
 import client from '../../client';
+import { QUIET_COIN_BROADCAST } from '../../broadcastFilter';
 
 export default async function update(
   dailyGift: number
 ): Promise<DailyGiftType> {
   const { data } = await client.put<ApiResponseType<DailyGiftType>>(
-    `/daily-gifts/${dailyGift}`
+    `/daily-gifts/${dailyGift}`,
+    undefined,
+    // The chest shows its own reward (coins fly to the wallet, the ticket punches in); skip the duplicate banner.
+    { [QUIET_COIN_BROADCAST]: true } as Record<string, unknown>,
   );
 
   return data.data;

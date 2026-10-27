@@ -144,6 +144,21 @@ export function levelRibbon(level: number): string {
 }
 
 /** The reveal card under the ribbon ("NEW BONUS: Ride Regular"). */
+/** Plain words for perks whose server line is grown-up maths (a 7-year-old reads these). */
+const KID_PERK_LINES: Readonly<Record<string, string>> = {
+  queue_crew: 'More Parts when you play in line',
+};
+
+/** The reveal card's prizes as a picture and a big number each, the words second (kid readable). */
+export function revealBadges(unlocks: LevelUpUnlocks | null, xp: number): { icon: 'xp' | 'coins' | 'swords'; label: string; say: string }[] {
+  if (!unlocks) return [];
+  return [
+    xp > 0 ? { icon: 'xp' as const, label: `+${xp}`, say: `${xp} XP` } : null,
+    unlocks.coins > 0 ? { icon: 'coins' as const, label: `+${unlocks.coins}`, say: `${unlocks.coins} coins` } : null,
+    unlocks.glimpse_unlocked ? { icon: 'swords' as const, label: 'Boss peek', say: 'Boss Glimpse unlocked' } : null,
+  ].filter((badge): badge is { icon: 'xp' | 'coins' | 'swords'; label: string; say: string } => badge !== null);
+}
+
 export function revealCard(unlocks: LevelUpUnlocks | null, xp: number): { title: string; line: string; chips: string[] } | null {
   if (!unlocks) return null;
   const title = unlocks.kind === 'perk' ? `NEW BONUS: ${unlocks.name ?? ''}`
@@ -151,7 +166,8 @@ export function revealCard(unlocks: LevelUpUnlocks | null, xp: number): { title:
       : `NEW LOOK: ${unlocks.name ?? unlocks.tier}`;
   const chips = [xp > 0 ? `+${xp} XP` : null, unlocks.coins > 0 ? `+${unlocks.coins} coins` : null,
     unlocks.glimpse_unlocked ? 'Boss Glimpse unlocked' : null].filter((chip): chip is string => chip !== null);
-  return { title, line: unlocks.short ?? coinTier(unlocks.level).look, chips };
+  const line = (unlocks.key && KID_PERK_LINES[unlocks.key]) || unlocks.short || coinTier(unlocks.level).look;
+  return { title, line, chips };
 }
 
 // ── Perk track (9.3) ───────────────────────────────────────────────
@@ -269,4 +285,19 @@ export function remintCard(notice: RemintNotice | null | undefined) {
 export function clientMaxLevel(serverMax: number | null | undefined): number {
   const max = Math.round(Number(serverMax) || LEGENDARY_COIN_LEVEL);
   return Math.max(1, Math.min(MAX_COIN_LEVEL, max));
+}
+
+/** A level-up bonus as a picture plus a big number, for kids who do not read yet ("+500" with a trophy). */
+export function perkChip(perk: { readonly type: string; readonly value: number; readonly name: string }): {
+  readonly icon: 'trophy' | 'parts' | 'energy' | 'swords' | 'sparkle';
+  readonly label: string;
+} {
+  const value = Math.round(Number(perk.value) || 0);
+  switch (perk.type) {
+    case 'gym_points': return { icon: 'trophy', label: value > 0 ? `+${value}` : perk.name };
+    case 'bonus_parts': return { icon: 'parts', label: value > 0 ? `+${value}` : perk.name };
+    case 'energy_discount': return { icon: 'energy', label: perk.name };
+    case 'boss_access': return { icon: 'swords', label: perk.name };
+    default: return { icon: 'sparkle', label: perk.name };
+  }
 }

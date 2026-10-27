@@ -71,7 +71,7 @@ export interface MusicArgs {
 }
 
 export interface AudioBackend {
-  readonly name: 'audio-api' | 'expo-av';
+  readonly name: 'audio-api' | 'expo-av' | 'silent';
   readonly supportsPan: boolean;
   readonly supportsFilter: boolean;
   /** Typical tap-to-sound latency (ms) used for haptic/visual alignment. */
@@ -770,4 +770,46 @@ export class HybridBackend implements AudioBackend {
     this.routes.clear();
     this.deckRoutes.clear();
   }
+}
+
+// =============================================================================
+// silent (dev studio mute)
+// =============================================================================
+
+/**
+ * Dev only (EXPO_PUBLIC_STUDIO_MUTE=1): a backend that never touches the audio
+ * hardware. Every cue "loads" and "plays" with a token, so the mix, voice
+ * budget, beat clocks and the play log behave exactly as on a phone, but no
+ * AVAudioEngine starts (a simulator whose output device is stuck aborts the
+ * app in AVAudioEngine start). Music position runs on the wall clock.
+ */
+export class SilentBackend implements AudioBackend {
+  readonly name = 'silent' as const;
+  readonly supportsPan = true;
+  readonly supportsFilter = false;
+  readonly latencyMs = 0;
+  private keys = new Set<string>();
+  private token = 1;
+  private decks = new Map<string, number>();
+  async init(): Promise<void> { /* nothing to start */ }
+  async load(key: string): Promise<boolean> { this.keys.add(key); return true; }
+  isLoaded(key: string): boolean { return this.keys.has(key); }
+  play(): number { return this.token++; }
+  stop(): void { /* silent */ }
+  stopAll(): void { /* silent */ }
+  musicStart(deck: string, key: string, args: MusicArgs): void {
+    this.decks.set(deck, Date.now() - (args.fromMs ?? 0));
+    if (process.env.EXPO_PUBLIC_AUDIO_LOG === '1') console.log(`[wow-audio] ${Date.now() % 100000} music ${key}`);
+  }
+  musicGain(): void { /* silent */ }
+  musicStop(deck: string): void { this.decks.delete(deck); }
+  async musicPosition(deck: string): Promise<number> {
+    const at = this.decks.get(deck);
+    return at === undefined ? 0 : Date.now() - at;
+  }
+  musicFilter(): void { /* silent */ }
+  setMasterGain(): void { /* silent */ }
+  async unloadAll(): Promise<void> { this.keys.clear(); this.decks.clear(); }
+  clockMs(): number { return Date.now(); }
+  positionIsCheap(): boolean { return true; }
 }

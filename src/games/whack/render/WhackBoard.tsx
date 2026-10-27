@@ -29,7 +29,8 @@ import {
   FRAME_COUNT, F_ANGLER, F_ANGLER_ANGRY, F_ANGLER_PEEK, F_BRUISER, F_BRUISER_DAZED, F_CONTACT, F_DAZED, F_DUCK, F_GLANCE, F_GOLDEN,
   F_GOLDEN_DAZED, F_HATOFF, F_PEEK, F_POP, F_PUFFED, F_PUFFER, F_SPIRAL, F_TONGUE, type RenderState,
 } from './renderState';
-import { TIER_COLORS, TIER_MULT, MULT_CAP } from '../waves';
+import { TIER_MULT, MULT_CAP } from '../waves';
+import { chaseOffset, comboTierRank, comboTierStyle, timerPulse } from '../../../gamekit/core/gameMoments';
 
 const NAVY = '#0b3a66';
 const GOLD = '#ffcf3b';
@@ -171,10 +172,25 @@ export interface WhackBoardProps {
   hudOutside?: boolean;
 }
 
+/**
+ * The picture-first chase (round 3): a little race track under the HUD where a gold "you" bead runs
+ * against a white ghost fin (your best, or a rival), plus one big star that fills toward the next star
+ * and pops when it lights. No digits: ahead reads as gold and to the right, behind as a calm gap.
+ */
+export interface WhackChase {
+  /** 0..1 progress to the next star this run. */
+  star: SharedValue<number>;
+  /** 0 to 1 to 0 when a star lights mid-burst (the pop). */
+  starPop: SharedValue<number>;
+  /** Stars already earned this run (0..3): the star shows gold once one is earned. */
+  earned: SharedValue<number>;
+  showStar: boolean;
+}
+
 /** The HUD plate and stage prompts in their own canvas, outside the camera transform (they never shake). */
-export const WhackHud = React.memo(function WhackHud({ L, sim, rs, tick, hud, pace, showPace, paceLabel }: {
+export const WhackHud = React.memo(function WhackHud({ L, sim, rs, tick, hud, pace, showPace, paceLabel, chase }: {
   L: BoardLayout; sim: SharedValue<WhackSim>; rs: SharedValue<RenderState>; tick: SharedValue<number>; hud: HudProps;
-  pace: SharedValue<number>; showPace: boolean; paceLabel?: string;
+  pace: SharedValue<number>; showPace: boolean; paceLabel?: string; chase?: WhackChase;
 }) {
   const fontS = useFont(FONT, 13);
   const fontM = useFont(FONT, 20);
@@ -182,10 +198,100 @@ export const WhackHud = React.memo(function WhackHud({ L, sim, rs, tick, hud, pa
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
       <HudPlate L={L} sim={sim} rs={rs} tick={tick} hud={hud} fontS={fontS} fontM={fontM} fontL={fontL} />
-      <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace} paceLabel={paceLabel ?? 'VS BEST'} />
+      {chase ? <ChaseTrack L={L} pace={pace} showPace={showPace} chase={chase} />
+        : null}
+      <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace && !chase} paceLabel={paceLabel ?? 'VS BEST'} />
     </Canvas>
   );
 });
+
+/** A five-point star path centred on 0,0 (outer radius 1). */
+function starPath() {
+  const p = Skia.Path.Make();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const r = i % 2 === 0 ? 1 : 0.46;
+    if (i === 0) p.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else p.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  p.close();
+  return p;
+}
+
+/** A small shark fin centred on its base (height 1). */
+function finPath() {
+  const p = Skia.Path.Make();
+  p.moveTo(-0.62, 0.42);
+  p.quadTo(-0.1, 0.2, 0.08, -0.62);
+  p.quadTo(0.32, -0.05, 0.62, 0.42);
+  p.close();
+  return p;
+}
+
+function ChaseTrack({ L, pace, showPace, chase }: { L: BoardLayout; pace: SharedValue<number>; showPace: boolean; chase: WhackChase }) {
+  const star = useMemo(starPath, []);
+  const fin = useMemo(finPath, []);
+  const y = L.hudH + 8;
+  const h = 24;
+  const tx = 10;
+  const tw = 116;
+  const cy = y + h / 2;
+  const gx = tx + tw / 2;
+  const half = tw / 2 - 13;
+  const bx = useDerivedValue(() => gx + chaseOffset(pace.value, half));
+  const ahead = useDerivedValue(() => (pace.value > 0 ? 1 : 0));
+  // The lead (gold, ghost to you) or the gap (pale, you to ghost).
+  const segX = useDerivedValue(() => Math.min(gx, bx.value));
+  const segW = useDerivedValue(() => Math.abs(bx.value - gx));
+  const segColor = useDerivedValue(() => (pace.value > 0 ? GOLD : '#cfe9fb'));
+  const beadGlow = useDerivedValue(() => 0.25 + 0.5 * ahead.value);
+  // The star: an outline that fills with gold from the centre as the next star gets close, and pops when it lights.
+  const sx = showPace ? tx + tw + 20 : tx + 18;
+  const sr = 15;
+  const fillT = useDerivedValue(() => {
+    const k = Math.max(0.12, Math.min(1, chase.star.value));
+    return [{ translateX: sx }, { translateY: cy }, { scale: sr * 0.78 * k }];
+  });
+  const fillA = useDerivedValue(() => 0.35 + 0.65 * Math.min(1, chase.star.value));
+  const starT = useDerivedValue(() => [{ translateX: sx }, { translateY: cy }, { scale: sr * (1 + 0.35 * chase.starPop.value) }]);
+  const shellColor = useDerivedValue(() => (chase.earned.value > 0 ? '#ffeeb8' : CREAM));
+  const popA = useDerivedValue(() => chase.starPop.value);
+  const popR = useDerivedValue(() => sr * (1.2 + 1.6 * (1 - chase.starPop.value)));
+  return (
+    <Group>
+      {showPace ? (
+        <Group>
+          <RoundedRect x={tx - 2.5} y={y - 2.5} width={tw + 5} height={h + 5} r={(h + 5) / 2} color={NAVY} />
+          <RoundedRect x={tx} y={y} width={tw} height={h} r={h / 2} color={CREAM} />
+          <RoundedRect x={segX} y={cy - 4} width={segW} height={8} r={4} color={segColor} />
+          {/* The ghost: a white fin on a soft disc (your best or the rival). */}
+          <Circle cx={gx} cy={cy} r={9} color="#ffffff" opacity={0.85} />
+          <Circle cx={gx} cy={cy} r={9} color={NAVY} style="stroke" strokeWidth={1.5} opacity={0.45} />
+          <Group transform={[{ translateX: gx }, { translateY: cy + 1 }, { scale: 9 }]}>
+            <Path path={fin} color={NAVY} opacity={0.45} />
+          </Group>
+          {/* You: a gold bead that glows brighter while ahead. */}
+          <Circle cx={bx} cy={cy} r={12} color={GOLD} opacity={beadGlow} />
+          <Circle cx={bx} cy={cy} r={8.5} color={NAVY} />
+          <Circle cx={bx} cy={cy} r={6.5} color={GOLD} />
+          <Circle cx={bx} cy={cy - 2} r={2.4} color="#fffbea" />
+        </Group>
+      ) : null}
+      {chase.showStar ? (
+        <Group>
+          <Circle cx={sx} cy={cy} r={popR} color={GOLD} style="stroke" strokeWidth={3} opacity={popA} />
+          <Group transform={starT}>
+            <Path path={star} color={NAVY} style="stroke" strokeWidth={0.32} strokeJoin="round" />
+            <Path path={star} color={shellColor} />
+          </Group>
+          <Group transform={fillT} opacity={fillA}>
+            <Path path={star} color={GOLD} />
+          </Group>
+        </Group>
+      ) : null}
+    </Group>
+  );
+}
 
 export const WhackBoard = React.memo(function WhackBoard({ L, sim, rs, tick, images, hud, theme = 'park', bossFx, pace, showPace, paceLabel, hudOutside }: WhackBoardProps) {
   const fontS = useFont(FONT, 13);
@@ -314,34 +420,73 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
     p.addArc(rect(tcx - tr, tcy - tr, tr * 2, tr * 2), -90, 360 * left);
     return p;
   });
-  const timerColor = useDerivedValue(() => {
+  // The last 5 seconds turn the clock gold and pulse it once a second (never red: tension without fear).
+  const timerColor = useDerivedValue(() => (tick.value, GOLD));
+  const timerHot = useDerivedValue(() => {
+    tick.value;
+    const left = sim.value.len - sim.value.t;
+    return left > 0 && left <= 5000;
+  });
+  const timerT = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
     const left = s.len - s.t;
-    return left < 3000 && Math.floor(left / 500) % 2 === 0 ? CORAL : GOLD;
+    const sc = left > 0 && left <= 5000 ? timerPulse(1000 - (left % 1000 || 1000)) : 1;
+    return [{ translateX: tcx }, { translateY: tcy }, { scale: sc }, { translateX: -tcx }, { translateY: -tcy }];
   });
+  const timerFace = useDerivedValue(() => (timerHot.value ? GOLD : '#0a6fc2'));
+  const timerNum = useDerivedValue(() => (timerHot.value ? NAVY : '#ffffff'));
   const timerText = useDerivedValue(() => (tick.value, `${Math.ceil(Math.max(0, sim.value.len - sim.value.t) / 1000)}`));
   const timerTextX = useDerivedValue(() => tcx - (fontM ? fontM.measureText(timerText.value).width / 2 : 8));
   // Combo medallion (52pt): streak, multiplier, tier colour; slams on tier-up, shakes on a tier drop.
   const mr = 26;
   const mcx = W / 2;
   const mcy = py + ph / 2;
+  // Combo tiers climb in size and colour (core/gameMoments): x1 white, x2 sky, x3 gold, fever (x5) white-hot gold with a flame ring.
+  const medMult = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    return Math.min(MULT_CAP, TIER_MULT[s.tier] * (s.fever ? 2 : 1));
+  });
   const medT = useDerivedValue(() => {
     tick.value;
     const r = rs.value;
-    return [{ translateX: mcx + r.medShake }, { translateY: mcy }, { scale: r.medSlam }];
+    return [{ translateX: mcx + r.medShake }, { translateY: mcy }, { scale: r.medSlam * comboTierStyle(medMult.value).size }];
   });
-  const tierColor = useDerivedValue(() => (tick.value, TIER_COLORS[sim.value.tier] ?? '#ffffff'));
+  const tierColor = useDerivedValue(() => comboTierStyle(medMult.value).fill);
+  const medCore = useDerivedValue(() => (comboTierStyle(medMult.value).core ? 0.9 : 0));
+  // Fever flame: three cartoon tongues built once; only their transforms flicker (no per-frame path).
+  const tongue = useMemo(() => {
+    const p = Skia.Path.Make();
+    const H = mr * 0.7;
+    p.moveTo(9, 0);
+    p.quadTo(9.9, -H / 2, 0, -H);
+    p.quadTo(-9.9, -H / 2, -9, 0);
+    p.close();
+    return p;
+  }, [mr]);
+  const flameOn = useDerivedValue(() => (comboTierRank(medMult.value) >= 3 ? 1 : 0));
   const streakText = useDerivedValue(() => (tick.value, `${sim.value.streak}`));
   const streakX = useDerivedValue(() => -(fontL ? fontL.measureText(streakText.value).width / 2 : 10));
-  const multText = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    const m = Math.min(MULT_CAP, TIER_MULT[s.tier] * (s.fever ? 2 : 1));
-    return `x${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}`;
+  // The multiplier: the small display font drops the decimal point (x2.5 read as x25), so the point
+  // is a drawn dot between the whole and the half: x2 . 5.
+  const multInt = useDerivedValue(() => `x${Math.floor(medMult.value)}`);
+  const multFrac = useDerivedValue(() => {
+    const f = Math.round((medMult.value % 1) * 10);
+    return f > 0 ? `${f}` : '';
   });
-  const multX = useDerivedValue(() => -(fontS ? fontS.measureText(multText.value).width / 2 : 8));
-  const medText = useDerivedValue(() => (tick.value, sim.value.tier === 0 ? NAVY : '#ffffff'));
+  const multGeo = useDerivedValue(() => {
+    const wi = fontS ? fontS.measureText(multInt.value).width : 14;
+    const wf = multFrac.value && fontS ? fontS.measureText(multFrac.value).width : 0;
+    const dot = multFrac.value ? 6 : 0;
+    const total = wi + dot + wf;
+    return { x0: -total / 2, dotX: -total / 2 + wi + dot / 2, fx: -total / 2 + wi + dot };
+  });
+  const multX = useDerivedValue(() => multGeo.value.x0);
+  const multDotX = useDerivedValue(() => multGeo.value.dotX);
+  const multFracX = useDerivedValue(() => multGeo.value.fx);
+  const multDotA = useDerivedValue(() => (multFrac.value ? 1 : 0));
+  const medText = useDerivedValue(() => comboTierStyle(medMult.value).text);
   const readyGlow = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
@@ -358,7 +503,7 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
     if (s.fever) return mW * (s.feverLeft / 7000);
     return mW * Math.min(1, s.meter / 100);
   });
-  const meterColor = useDerivedValue(() => (tick.value, sim.value.fever ? CORAL : GOLD));
+  const meterColor = useDerivedValue(() => (tick.value, sim.value.fever ? '#ffe07a' : GOLD));
   const meterLabel = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
@@ -382,19 +527,27 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
       <RoundedRect x={px} y={py} width={pw} height={ph} r={14} color={NAVY} style="stroke" strokeWidth={2.5} />
       {hud.compact ? null : (
         <Group>
-          <Circle cx={tcx} cy={tcy} r={tr + 3} color={NAVY} />
-          <Circle cx={tcx} cy={tcy} r={tr} color="#0a6fc2" />
-          <Path path={timerPath} style="stroke" strokeWidth={5} strokeCap="round" color={timerColor} />
-          {fontM ? <Text x={timerTextX} y={tcy + 7} text={timerText} font={fontM} color="#ffffff" /> : null}
+          <Group transform={timerT}>
+            <Circle cx={tcx} cy={tcy} r={tr + 3} color={NAVY} />
+            <Circle cx={tcx} cy={tcy} r={tr} color={timerFace} />
+            <Path path={timerPath} style="stroke" strokeWidth={5} strokeCap="round" color={timerColor} />
+            {fontM ? <Text x={timerTextX} y={tcy + 7} text={timerText} font={fontM} color={timerNum} /> : null}
+          </Group>
           {fontS ? <Text x={labelX} y={tcy + 5} text={hud.burstLabel} font={fontS} color={NAVY} /> : null}
         </Group>
       )}
       <Group transform={medT}>
+        <Group opacity={flameOn}>
+          {[0, 1, 2].map((k) => <FlameTongue key={k} k={k} mr={mr} tongue={tongue} rs={rs} tick={tick} />)}
+        </Group>
         <Circle cx={0} cy={0} r={mr + 7} color={GOLD} opacity={readyGlow} />
         <Circle cx={0} cy={0} r={mr + 3} color={NAVY} />
         <Circle cx={0} cy={0} r={mr} color={tierColor} />
+        <Circle cx={0} cy={-3} r={mr * 0.55} color="#fffbea" opacity={medCore} />
         {fontL ? <Text x={streakX} y={5} text={streakText} font={fontL} color={medText} /> : null}
-        {fontS ? <Text x={multX} y={19} text={multText} font={fontS} color={medText} /> : null}
+        {fontS ? <Text x={multX} y={19} text={multInt} font={fontS} color={medText} /> : null}
+        <Circle cx={multDotX} cy={17} r={1.9} color={medText} opacity={multDotA} />
+        {fontS ? <Text x={multFracX} y={19} text={multFrac} font={fontS} color={medText} /> : null}
       </Group>
       {showMeter ? (
         <Group>
@@ -425,18 +578,21 @@ function StagePrompts({ L, rs, tick, fontS, fontM, pace, showPace, paceLabel }: 
     return [{ translateX: W / 2 }, { translateY: midY }, { scale: sc }];
   });
   const promptW = fontM ? fontM.measureText('TAP TO KEEP BONKING').width : 200;
+  // Kid-safe pace: ahead is a gold pill with the lead; behind is a calm cream pill that only names the
+  // chase (no minus number, never red).
   const paceText = useDerivedValue(() => {
     const d = Math.round(pace.value);
-    return d >= 0 ? `+${d} ${paceLabel}` : `${d} ${paceLabel}`;
+    return d > 0 ? `+${d} ${paceLabel}` : paceLabel;
   });
-  const paceColor = useDerivedValue(() => (pace.value >= 0 ? '#11823b' : '#c2412f'));
+  const paceColor = useDerivedValue(() => (pace.value > 0 ? '#5a3200' : NAVY));
+  const paceFill = useDerivedValue(() => (pace.value > 0 ? '#FFD54A' : CREAM));
   const paceW = useDerivedValue(() => (fontS ? fontS.measureText(paceText.value).width + 18 : 120));
   const py = L.hudH + 8;
   return (
     <Group>
       {showPace && fontS ? (
         <Group>
-          <RoundedRect x={10} y={py} width={paceW} height={22} r={11} color={CREAM} />
+          <RoundedRect x={10} y={py} width={paceW} height={22} r={11} color={paceFill} />
           <RoundedRect x={10} y={py} width={paceW} height={22} r={11} color={NAVY} style="stroke" strokeWidth={2} />
           <Text x={19} y={py + 16} text={paceText} font={fontS} color={paceColor} />
         </Group>
@@ -447,6 +603,27 @@ function StagePrompts({ L, rs, tick, fontS, fontM, pace, showPace, paceLabel }: 
           <Text x={-promptW / 2} y={3} text="TAP TO KEEP BONKING" font={fontM} color="#ffffff" />
         </Group>
       ) : null}
+    </Group>
+  );
+}
+
+/** One flame tongue on the fever medallion: a static path, flickering through its transform only. */
+function FlameTongue({ k, mr, tongue, rs, tick }: {
+  k: number; mr: number; tongue: ReturnType<typeof Skia.Path.Make>; rs: SharedValue<RenderState>; tick: SharedValue<number>;
+}) {
+  const a = -Math.PI / 2 + (k - 1) * 0.62;
+  const bx = Math.cos(a) * (mr + 1);
+  const by = Math.sin(a) * (mr + 1);
+  const transform = useDerivedValue(() => {
+    tick.value;
+    const t = rs.value.tick * 0.11;
+    const h = (0.62 + 0.18 * Math.sin(t * (1.3 + k * 0.4) + k * 2.1)) * (k === 1 ? 1.25 : 1) / 0.7;
+    return [{ translateX: bx }, { translateY: by }, { rotate: a + Math.PI / 2 + 0.08 * Math.sin(t * 1.7 + k) }, { scaleY: h }];
+  });
+  return (
+    <Group transform={transform}>
+      <Path path={tongue} color={GOLD} />
+      <Path path={tongue} color="#ffffff" style="stroke" strokeWidth={2} opacity={0.85} />
     </Group>
   );
 }

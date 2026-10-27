@@ -378,7 +378,9 @@ test('Set Complete and the box reveal offer Share only after the wear choice, an
   assert.match(set, /\{all === 'done' && \(\s*<>\s*<Animated\.View[^>]*style=\{styles\.allOnChip\}/);
   assert.match(set, /<GameButton label=\{waiting \? 'Saving\.\.\.' : 'Done'\} icon="check" onPress=\{\(\) => leave\(true\)\}[^\n]*\n[^\n]*\/>\s*\{\/\*[^*]*\*\/\}\s*<FlexShareButton kind="set_complete" surface="shop_set" size="reveal" handoff=\{shareHandoff\} disabled=\{savingNow > 0\}/);
   // The handoff hides the Modal and resolves on its onDismiss (not a bare timer), then leaves.
-  assert.match(set, /<Modal visible=\{!hidden\}[\s\S]{0,200}onDismiss=\{modal\.onDismiss\}/);
+  // Merged with motion's RevealLayer (wave 5): the layer's Modal hides and reports onDismiss for the handoff.
+  assert.match(set, /<RevealLayer inline=\{inline\} hidden=\{hidden\} onDismiss=\{modal\.onDismiss\}/);
+  assert.match(set, /<Modal visible=\{!hidden\}[\s\S]{0,200}onDismiss=\{onDismiss\}/);
   assert.match(set, /const modal = useModalHandoff\(useCallback\(\(\) => setHidden\(true\), \[\]\)\);/);
   assert.match(set, /await modal\.handoff\(\);\s*doneRef\.current\(\);/);
   assert.doesNotMatch(set, /MODAL_HANDOFF_MS/);
@@ -693,7 +695,7 @@ test('the ride story leads a first ride with FIRST RIDE!, and the Memory story h
 
 test('the coin level-up uses the same labeled Share pill, under its main button', () => {
   const coin = src('src/components/CoinLevelingModal.tsx');
-  assert.match(coin, /<YellowButton text="Awesome!" onPress=\{handleClose\} \/>\s*\{\/\*[\s\S]*?\*\/\}\s*\{nextLevel >= 5 && nextLevel < 10 && \(\s*<FlexShareButton kind="coin_level" surface="coin_sheet" size="md"/);
+  assert.match(coin, /<YellowButton text="Awesome!" onPress=\{handleClose\}(?: estimatedWidth=\{SUCCESS_CTA_WIDTH\})? \/>\s*\{\/\*[\s\S]*?\*\/\}\s*\{nextLevel >= 5 && nextLevel < 10 && \(\s*<FlexShareButton kind="coin_level" surface="coin_sheet" size="md"/);
   assert.doesNotMatch(coin, /size="sm" caption style=\{\{ position: 'absolute'/);
   // On a short phone (iPhone SE) the sheet slides down after the level-up so Awesome and Share both show.
   assert.match(coin, /if \(state !== 'success' \|\| SCREEN_H >= 740 \|\| scrolledForSuccess\.current\) return;\s*scrolledForSuccess\.current = true;/, 'slides once per level-up');
@@ -912,7 +914,7 @@ test('Android shares put the line with the link on the clipboard and say so on t
 test('the release share walk routes exist only behind EXPO_PUBLIC_SHARE_WALK, and the box preview closes', () => {
   const routes = src('src/devRoutes.tsx');
   assert.match(routes, /: process\.env\.EXPO_PUBLIC_SHARE_WALK === '1'\n\s*\? \[/);
-  assert.match(routes, /process\.env\.EXPO_PUBLIC_SHARE_WALK === '1' \? 'SharePicturesPreview' : null;/);
+  assert.match(routes, /if \(process\.env\.EXPO_PUBLIC_SHARE_WALK === '1'\) return 'SharePicturesPreview';/);
   assert.match(src('src/screens/SharePicturesPreviewScreen.tsx'), /onDone=\{\(\) => navigation\.goBack\(\)\}/);
 });
 
