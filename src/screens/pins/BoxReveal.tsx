@@ -32,6 +32,11 @@
  * own completion on the UI thread, confetti is capped at 22 pieces on one
  * shared value, rays only for gold moments. Reduce Motion: no shake, flip or
  * confetti; the pin fades in with the same sounds.
+ *
+ * Share (a gold chaser or a Golden Box pin) is the gold-rimmed pill under Done, and it shows
+ * only after the wear choice ("Wear it", or "Not now"), so bragging never costs the
+ * kid that choice. Share hides the reveal, waits for iOS to finish dismissing it (onDismiss),
+ * then finishes, so the Share sheet and its grown-up gate can open from Root.
  */
 import { useAmbient } from '../../services/money/useAmbient';
 import { Image } from 'expo-image';
@@ -49,6 +54,9 @@ import { BRAND, FONT, GameButton, GameIcon } from '../../ui';
 import EnamelPin from '../pinTrading/EnamelPin';
 import { BOX_ART, PIN_ART, type BoxTone } from './PinArt';
 import { PINS_COPY, revealOrder, serialLabel, type Pull } from './pinsModel';
+import { FlexShareButton } from '../../share/FlexShareButton';
+import { useModalHandoff } from '../../share/handoff';
+import { withWearTimeout } from '../../services/money/sharkPassModel';
 
 type Phase = 'drop' | 'ready' | 'shake' | 'hold' | 'pop' | 'show' | 'summary';
 
@@ -268,9 +276,24 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const phaseRef = useRef<Phase>('drop');
   const setPhase = (p: Phase) => { phaseRef.current = p; setPhaseState(p); };
   const [worn, setWorn] = useState<Set<number>>(new Set());
+  /** Pins the kid chose to keep off the lanyard ("Not now"): the wear choice is made. */
+  const [kept, setKept] = useState<Set<number>>(new Set());
+  const [hidden, setHidden] = useState(false);
+  const modal = useModalHandoff(useCallback(() => setHidden(true), []));
   const ambient = useAmbient();
   const [swappedOut, setSwappedOut] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
+  // The wear save: in flight (one busy button), or failed (Try again, and Share may go ahead).
+  const [wearing, setWearing] = useState(false);
+  const [wearFailed, setWearFailed] = useState(false);
+  // The same as wearing, for a late save's callback (a new try in flight wins).
+  const wearingRef = useRef(false);
+  // A first save that landed late while a retry was in flight (that pin is on, whatever the retry says).
+  const lateOn = useRef<{ id: number; removed: string | null } | null>(null);
+  // Done or Share was tapped: a save that lands after that shows the pin as worn, silently.
+  const leaving = useRef(false);
+  const live = useRef(true);
+  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   // Paid opens: the coins visibly go into the box (3 for one box, 5 for a bundle).
   const [spending, setSpending] = useState(() => (spend > 0 && !still && variant === 'box' ? (rawPulls.length > 1 || spend >= 1000 ? 5 : 3) : 0));
   const landed = useRef(0);
@@ -282,7 +305,10 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const art = BOX_ART[tone];
   const boxSize = Math.min(240, width * 0.58);
   const pinSize = Math.min(210, width * 0.52);
-  const centerY = height * 0.45;
+  // A short phone (iPhone SE) lifts the stage and tightens the footer, so Wear it, Done and Share
+  // fit under the pin's name without covering its tag.
+  const short = height < 740;
+  const centerY = height * (short ? 0.41 : 0.45);
 
   const drop = useSharedValue(0);
   const shake = useSharedValue(0);
@@ -508,6 +534,7 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
       if (!still) pulls.forEach((_, i) => later(120 + i * 110, () => play('fx.coinTick', { pitch: 1 + i * 0.1, volume: 0.7 })));
       return;
     }
+    leaving.current = true;
     onDone(pulls);
   }, [index, pulls, phase, onDone]);
 
@@ -524,7 +551,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
     else if (phase === 'shake') { if (isGold) holdBreath(); else pop(); }
     else if (phase === 'hold') { /* the breath is short; let it land */ }
     // The result screen ignores stray taps for a moment; gold pins and catches close only with a button.
-    else if (phase === 'show' && !isGold && Date.now() - shownAt.current > 700) next();
+    // While the wear saves, a stray tap never closes the reveal (the busy button says what is happening).
+    else if (phase === 'show' && !isGold && !wearing && Date.now() - shownAt.current > 700) next();
   };
 
   const stageStyle = useAnimatedStyle(() => ({ transform: [{ scale: punch.value }] }));
@@ -582,19 +610,53 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const subtitle = subtitleFor?.(pull) ?? null;
   const wearable = !!onWear && !!canWear?.(pull) && !worn.has(pull.item_id);
   const doWear = (removeId?: number) => {
-    void onWear?.(pull, removeId).then(({ ok, removed }) => {
-      if (!ok) return;
+    if (!onWear || wearing) return;
+    setWearing(true); wearingRef.current = true; setWearFailed(false);
+    // A save that hangs on park Wi-Fi turns into Try again after 8 s instead of spinning forever.
+    const id = pull.item_id;
+    const putOn = (removed: string | null | undefined) => {
+      setWearFailed(false);
       setSwappedOut(removed ?? null);
+      setWorn(w => new Set(w).add(id));
+      // Gone from this pin (Done, Share, the next box): no sound, haptic or flight for a screen that left.
+      if (leaving.current || phaseRef.current !== 'show') return;
       queueHaptic('success', 1); play('fx.whoosh', { volume: 0.6 }); later(380, () => play('fx.hit', { pitch: 1.4 }));
       // The pin flies up to your lanyard, then comes back to rest.
       if (!still) wearFly.value = withSequence(withTiming(1, { duration: 380, easing: Easing.in(Easing.quad) }), withDelay(250, withTiming(0, { duration: 1 })), withSpring(0));
-      setWorn(w => new Set(w).add(pull.item_id));
+    };
+    // A save that lands after the timeout (Try again is showing) still puts it on: the screen never
+    // says "That didn't work" for a pin that is on. Wearing again is safe too (the server keeps one copy).
+    const late = (r: { ok: boolean; removed?: string | null }) => {
+      if (!live.current || !r.ok) return;
+      // A retry is still saving: remember that this pin is on, so a failed retry shows worn, not Try again.
+      if (wearingRef.current) { lateOn.current = { id, removed: r.removed ?? null }; return; }
+      putOn(r.removed);
+    };
+    void withWearTimeout(onWear(pull, removeId), undefined, late).catch(() => ({ ok: false, removed: null })).then(({ ok, removed }) => {
+      if (!live.current) return;
+      setWearing(false); wearingRef.current = false;
+      const landed = lateOn.current?.id === id ? lateOn.current : null;
+      lateOn.current = null;
+      if (!ok && landed) { putOn(landed.removed); return; }
+      if (!ok) { setWearFailed(true); queueHaptic('warning', 1); return; }
+      putOn(removed);
     });
   };
   const summarySize = Math.min(104, (width - 100) / 3.3);
+  // Show off a gold chaser or a Golden Box pin (never a park pin: its card would say where the kid is).
+  // Only once the last box is shown, so Share never skips a box still waiting to open.
+  const brag = (p: RevealPull | undefined) => !!p && !isCatch && !p.rare && (p.is_chaser || (golden && !p.duplicate));
+  // A wearable pin waits for the wear choice first (see the header).
+  // The one box worth bragging about asks first, like the Shark Pass card: a yellow "Wear it" and a
+  // quiet "Not now", then Done with Share right under it. Either choice reaches Share in 2 taps.
+  const wearFirst = phase === 'show' && pulls.length === 1 && brag(pull) && wearable && !kept.has(pull.item_id);
+  const sharePull = phase === 'summary' ? pulls.find(p => p.is_chaser) ?? null
+    : phase === 'show' && pulls.length === 1 && brag(pull) && (!wearable || kept.has(pull.item_id) || wearFailed) && !wearing ? pull : null;
+  const shareHandoff = async () => { leaving.current = true; await modal.handoff(); onDone(pulls); };
 
   return (
-    <Modal transparent visible animationType="fade" statusBarTranslucent onRequestClose={() => (phase === 'show' || phase === 'summary') && next()}>
+    <Modal transparent visible={!hidden} animationType="fade" statusBarTranslucent onDismiss={modal.onDismiss}
+      onRequestClose={() => (phase === 'show' || phase === 'summary') && !wearing && next()}>
       <Pressable style={styles.scrim} onPress={onBackdrop} accessibilityRole="button"
         accessibilityLabel={phase === 'ready' ? 'Open the box' : 'Mystery box'}>
         {/* A soft spotlight: the stage reads as a stage, not the page behind. */}
@@ -651,7 +713,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
               <View style={styles.backerHole} />
               {/* The best pin gets the best card: gold foil, limited edition, its number. */}
               {pull.is_chaser && <Animated.View pointerEvents="none" style={[styles.foilSheen, { height: pinSize * 1.8, top: -pinSize * 0.25 }, foilStyle]} />}
-              {pull.is_chaser && <Text maxFontSizeMultiplier={1} style={styles.backerFoilText}>{pull.serial ? `LIMITED \u00b7 #${pull.serial}` : 'LIMITED'}</Text>}
+              {/* The number lives on the pin's stamp and the GOLD CHASER line: the card says LIMITED once. */}
+              {pull.is_chaser && <Text maxFontSizeMultiplier={1} style={styles.backerFoilText}>LIMITED</Text>}
             </Animated.View>
           )}
           {/* The pin is mounted (and its art decoding) from the start, hidden until it rises. */}
@@ -665,9 +728,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
             </Animated.View>
             {(pull.is_chaser || isCatch) && (
               <Animated.View style={[styles.stamp, stampStyle]}>
-                {pull.is_chaser
-                  ? <View style={styles.serialStamp}><Text maxFontSizeMultiplier={1} style={styles.serialStampText}>{serialLabel(pull.serial)}</Text></View>
-                  : <Image source={PIN_ART.seal} style={{ width: 64, height: 64 }} contentFit="contain" />}
+                {/* A chaser's number is on the GOLD CHASER ribbon under it, so the stamp is the gold star (one #12, not two). */}
+                <Image source={pull.is_chaser ? PIN_ART.chaser : PIN_ART.seal} style={{ width: 64, height: 64 }} contentFit="contain" />
               </Animated.View>
             )}
           </Animated.View>
@@ -757,14 +819,14 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, golden && styles.flashGold, flashStyle]} />
 
         {(phase === 'show' || phase === 'summary') && (
-          <View style={[styles.footer, { paddingBottom: insets.bottom + 18 }]}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + (short ? 14 : 18) }, short && { gap: 6 }]}>
             {pulls.length > 1 && phase === 'show' && (
               <View style={styles.pips} accessible accessibilityLabel={`Box ${index + 1} of ${pulls.length}`}>
                 {pulls.map((p, i) => <View key={p.id} style={[styles.pip, i <= index && styles.pipOn, p.is_chaser && i <= index && styles.pipGold]} />)}
               </View>
             )}
-            {phase === 'show' && wearable && !choosing && (
-              <Pressable onPress={() => {
+            {phase === 'show' && wearable && !choosing && !wearFirst && !kept.has(pull.item_id) && (
+              <Pressable disabled={wearing} onPress={() => {
                 // A full lanyard: the kid chooses which pin comes off (nothing is removed for them).
                 if (lanyard.length >= lanyardMax) { queueHaptic('tapLight', 1); setChoosing(true); return; }
                 doWear();
@@ -784,9 +846,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                     </Pressable>
                   ))}
                 </View>
-                <Pressable onPress={() => { queueHaptic('tapLight', 1); setChoosing(false); }} hitSlop={6} accessibilityRole="button" accessibilityLabel="Keep my lanyard as it is">
-                  <Text maxFontSizeMultiplier={1.2} style={styles.offPickKeep}>Keep my lanyard</Text>
-                </Pressable>
+                <GameButton label="Not now" variant="ghost" tone="onBlue" accessibilityLabel="Not now, keep my lanyard as it is"
+                  onPress={() => { queueHaptic('tapLight', 1); setChoosing(false); setKept(k => new Set(k).add(pull.item_id)); }} />
               </View>
             )}
             {phase === 'show' && worn.has(pull.item_id) && (
@@ -794,8 +855,45 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
                 <Text maxFontSizeMultiplier={1.2} style={styles.wornText}>On your lanyard!{swappedOut ? ` ${swappedOut} came off.` : ''}</Text>
               </View>
             )}
-            <GameButton label={index < pulls.length - 1 ? 'Next box' : pulls.length > 1 && phase === 'show' ? 'See all' : 'Done'}
-              icon={index < pulls.length - 1 ? 'gift' : 'check'} onPress={next} />
+            {/* Not now: the same kind of chip says where the pin went, so the choice is clear without reading the buttons. */}
+            {phase === 'show' && !worn.has(pull.item_id) && kept.has(pull.item_id) && brag(pull) && (
+              <View style={[styles.wornChip, styles.keptChip]}>
+                <Text maxFontSizeMultiplier={1.2} style={[styles.wornText, styles.keptText]}>Saved in My Pins</Text>
+              </View>
+            )}
+            {/* The status line sits where "On your lanyard!" does: status, the yellow button, Share, the quiet one. */}
+            {wearFirst && wearFailed && !choosing && (
+              <Text maxFontSizeMultiplier={1.2} style={styles.wearFailed}>That didn’t work. Tap Try again.</Text>
+            )}
+            {wearFirst && !choosing && (
+              <GameButton label={wearing ? 'Putting it on...' : wearFailed ? 'Try again' : 'Wear it'} icon={wearFailed ? 'retry' : 'sparkle'}
+                loading={wearing} accessibilityLabel={wearFailed ? 'Try again to wear it on your lanyard' : 'Wear it on your lanyard'}
+                onPress={() => {
+                  // A full lanyard: the kid chooses which pin comes off (nothing is removed for them).
+                  if (lanyard.length >= lanyardMax) { queueHaptic('tapLight', 1); setChoosing(true); return; }
+                  doWear();
+                }} />
+            )}
+            {!wearFirst && (
+              <GameButton label={index < pulls.length - 1 ? 'Next box' : pulls.length > 1 && phase === 'show' ? 'See all' : 'Done'}
+                icon={index < pulls.length - 1 ? 'gift' : 'check'} onPress={next} />
+            )}
+            {sharePull && !choosing && (
+              <FlexShareButton kind="find" surface={golden ? 'golden_box' : 'pin_box'} size="reveal" handoff={shareHandoff}
+                style={{ alignSelf: 'center' }}
+                payload={{ itemName: sharePull.name, artUrl: sharePull.icon_url ?? PIN_ART.chaser, rarity: sharePull.is_chaser ? 5 : 4,
+                  serial: sharePull.is_chaser ? sharePull.serial : null }} />
+            )}
+            {/* The quiet choice, last: Not now (then Done and Share), or Done after a failed save. While it
+                saves, its slot stays (invisible), so "Putting it on..." never jumps down. */}
+            {wearFirst && !choosing && (
+              <View style={wearing && styles.slotHold} pointerEvents={wearing ? 'none' : 'auto'}
+                accessibilityElementsHidden={wearing} importantForAccessibility={wearing ? 'no-hide-descendants' : 'auto'}>
+                <GameButton label={wearFailed ? 'Done' : 'Not now'} variant="ghost" tone="onBlue" disabled={wearing}
+                  accessibilityLabel={wearFailed ? 'Done' : 'Not now, keep my lanyard as it is'}
+                  onPress={() => { queueHaptic('tapLight', 1); if (wearFailed) { next(); return; } setKept(k => new Set(k).add(pull.item_id)); }} />
+              </View>
+            )}
           </View>
         )}
       </Pressable>
@@ -811,8 +909,6 @@ const styles = StyleSheet.create({
   stamp: { position: 'absolute', right: -6, bottom: 4 },
   pinBack: { position: 'absolute', backgroundColor: '#c9d3df', borderWidth: 5, borderColor: '#8b98a8', alignItems: 'center', justifyContent: 'center' },
   pinBackPost: { backgroundColor: '#e8edf3', borderWidth: 3, borderColor: '#8b98a8' },
-  serialStamp: { backgroundColor: '#3b2a05', borderColor: BRAND.gold, borderWidth: 3, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 2 },
-  serialStampText: { fontFamily: FONT.display, fontSize: 26, color: BRAND.gold, paddingTop: 3 },
   confettiOrigin: { position: 'absolute', alignSelf: 'center', width: 1, height: 1 },
   flash: { backgroundColor: '#ffffff' },
   // Golden Box: a warm gold flash (a white wash read as a dropped frame on the gold stage).
@@ -871,9 +967,12 @@ const styles = StyleSheet.create({
   wearText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.white, paddingTop: 3 },
   offPick: { alignItems: 'center', gap: 6, backgroundColor: 'rgba(3,32,79,0.85)', borderRadius: 16, borderWidth: 2, borderColor: BRAND.gold, padding: 8 },
   offPickTitle: { fontFamily: FONT.display, fontSize: 17, color: BRAND.white, paddingTop: 2 },
-  offPickKeep: { fontFamily: FONT.display, fontSize: 16, color: BRAND.gold, paddingTop: 4, textDecorationLine: 'underline' },
+  wearFailed: { fontFamily: FONT.display, fontSize: 17, color: '#ffe08a', textAlign: 'center', paddingTop: 2 },
   offPickRow: { flexDirection: 'row', gap: 6 },
   offPickPin: { width: 48, height: 48, borderRadius: 24, backgroundColor: BRAND.cream, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  keptChip: { backgroundColor: BRAND.white },
+  keptText: { color: BRAND.navy },
+  slotHold: { opacity: 0 },
   wornChip: { backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 4 },
   wornText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.navy, paddingTop: 2 },
 });

@@ -18,11 +18,16 @@
  * the buy tap carrying over never skips the reveal. Leaving while a wear is
  * saving waits for the save: it closes on success and stays open on a failure,
  * so "Try again" is seen.
+ * Share (the set's Flex card) shows once WEAR IT ALL is done, as the gold-rimmed pill right
+ * under it, and waits while that save is still going. Share hides this reveal, waits for iOS to
+ * finish dismissing it (onDismiss), and only then leaves, so the Share sheet and its grown-up
+ * gate can open from Root. Offering it only after the wear choice means bragging never costs
+ * the kid WEAR IT ALL.
  * Reduce Motion: no rays, stamp or confetti, a plain fade.
  */
 import { ModalLayerContext, useModalLayer } from '../../ui/modalLayers';
 import * as Haptics from 'expo-haptics';
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
@@ -36,13 +41,19 @@ import { stageCard, wearAllCopy, wearAllNext, wearAllSlots, xpBar, type WearAllS
 import { isItemWorn, slotForItem } from '../../helpers/wardrobe';
 import { getLook, putLook } from '../../api/endpoints/me/look';
 import { ShopSetReward, ShopSetSummary } from '../../models/shop-today';
-import { BRAND, FONT, GameIcon } from '../../ui';
+import { BRAND, FONT, GameButton, GameIcon } from '../../ui';
 import { asWearable, previewLook } from './TryOnSheet';
 import { MAX_FONT, REVEAL_NAVY, SHOP_SURFACE, ShopCta, ShopStage } from './shopUi';
 import { wearItem } from './inventoryQueue';
+import { FlexShareButton } from '../../share/FlexShareButton';
+import { HERO_ART } from '../../share/FlexHero';
+import { useModalHandoff } from '../../share/handoff';
 
 const { width: W, height: H } = Dimensions.get('window');
-const STAGE = Math.min(W - 40, H * 0.4);
+// A short phone (iPhone SE) gets a smaller stage and tighter gaps, so WEAR IT ALL, Share and Done
+// all stay on screen.
+const SHORT = H < 740;
+const STAGE = Math.min(W - 40, H * (SHORT ? 0.3 : 0.4));
 // The WEAR IT ALL hop lifts the shark HOP pt (and tilts it): the card leaves room above the
 // tallest hat so the head never clips at the top of the hop.
 const HOP = 24;
@@ -53,6 +64,7 @@ type Busy = 'idle' | 'busy' | 'done' | 'failed';
 
 /** A tap or swipe this soon after the reveal opens is the buy tap carrying over: ignored. */
 export const REVEAL_GUARD_MS = 900;
+
 /** A downward swipe this long (or a fast flick) closes the reveal. */
 export const SWIPE_CLOSE_DY = 140;
 /** A flick this fast (pt/ms) closes too, but only after at least SWIPE_MIN_DY. */
@@ -70,6 +82,9 @@ export function leaveLabel(wornAll: boolean, titleOn: boolean): string {
   return wornAll || titleOn ? 'Done' : 'Not now';
 }
 
+
+/** How long Share waits for the fresh look after WEAR IT ALL before it turns on anyway. */
+export const REFRESH_WAIT_MS = 4000;
 
 export default function SetCompleteReveal({ reward, set, still, onDone, onShown, bridged = false }: {
   readonly reward: ShopSetReward | null;
@@ -96,6 +111,9 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   const pieces = useMemo(() => (set?.pieces ?? []).filter(p => pieceIds.includes(p.id)), [set, pieceIds.join(',')]);
   // Only this set's pieces, on the shark's own skin; the set's backdrop becomes the stage.
   const stage = useMemo(() => previewLook(player?.inventory, pieces.map(asWearable), 'base'), [player?.inventory?.skin_item?.id, pieces]);
+  // The share picture's shark: the kid's own look with this set put on (what WEAR IT ALL saves),
+  // so the card never shows yesterday's outfit under "My Complete Look".
+  const shareLook = useMemo(() => previewLook(player?.inventory, pieces.map(asWearable), 'player')?.look ?? null, [player?.inventory, pieces]);
 
   const stamp = useSharedValue(still ? 1 : 1.7);
   const stampOpacity = useSharedValue(still ? 1 : 0);
@@ -145,6 +163,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   doneRef.current = onDone;
   // Saves in flight (WEAR IT ALL, Just the title). Leaving waits for them (see the header).
   const saving = useRef(0);
+  // The same count as state, so Share can wait for the save (the ref alone never re-renders).
+  const [savingNow, setSavingNow] = useState(0);
   const leaveAfterSave = useRef(false);
   const [waiting, setWaiting] = useState(false);
   const leave = (guarded: boolean) => {
@@ -153,13 +173,22 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
     if (saving.current > 0) { leaveAfterSave.current = true; setWaiting(true); return; }
     doneRef.current();
   };
+  const startSave = () => { saving.current += 1; setSavingNow(saving.current); };
   const settle = (ok: boolean) => {
     saving.current = Math.max(0, saving.current - 1);
+    setSavingNow(saving.current);
     if (saving.current > 0) return;
     if (ok && leaveAfterSave.current) { doneRef.current(); return; }
     leaveAfterSave.current = false;
     setWaiting(false);
   };
+  // Share: hide the reveal, wait for iOS to let it go (onDismiss, or the handoff timer), then leave.
+  const [hidden, setHidden] = useState(false);
+  const modal = useModalHandoff(useCallback(() => setHidden(true), []));
+  const shareHandoff = useCallback(async () => {
+    await modal.handoff();
+    doneRef.current();
+  }, [modal.handoff]);
   const leaveRef = useRef(leave);
   leaveRef.current = leave;
   const swipe = useRef(PanResponder.create({
@@ -177,7 +206,7 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
     playSound(require('../../../assets/sounds/whoosh.mp3'));
     if (!still) { hop.value = 0; hop.value = withTiming(1, { duration: 640, easing: Easing.out(Easing.quad) }); }
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    saving.current += 1;
+    startSave();
     try {
       const slots = wearAllSlots(pieces.map(p => ({ id: p.id, worn: isItemWorn(player?.inventory, p),
         slot: slotForItem({ item_type: { id: p.item_type_id } } as never) })));
@@ -190,7 +219,9 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
         })
         : Promise.resolve();
       await Promise.all([reward.title ? equipShopTitle(reward.slug) : Promise.resolve(null), look]);
-      void refreshPlayer();
+      // Share stays off until the fresh look is back (savingNow), so the picture is the set as worn.
+      // At most REFRESH_WAIT_MS: a refresh that hangs on park Wi-Fi never keeps Share off (it shares previewLook).
+      await Promise.race([Promise.resolve(refreshPlayer()).catch(() => undefined), new Promise(r => setTimeout(r, REFRESH_WAIT_MS))]);
       settle(true);
     } catch { setAll(s => wearAllNext(s, 'fail')); settle(false); }
   };
@@ -198,22 +229,26 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
   const justTitle = async () => {
     if (titleOnly === 'busy' || !reward.title) return;
     setTitleOnly('busy');
-    saving.current += 1;
+    startSave();
     try { await equipShopTitle(reward.slug); await refreshPlayer(); setTitleOnly('done'); settle(true); }
     catch { setTitleOnly('failed'); settle(false); }
   };
 
   return (
-    <Modal visible transparent animationType="none" onRequestClose={() => leave(false)} onShow={onShown} statusBarTranslucent>
+    <Modal visible={!hidden} transparent animationType="none" onRequestClose={() => leave(false)} onShow={onShown}
+      onDismiss={modal.onDismiss} statusBarTranslucent>
       <ModalLayerContext.Provider value>
       {/* Opaque layers only (no translucent colour over navy), so the fade never mixes to mud. */}
       <Animated.View entering={still || bridged ? undefined : FadeIn.duration(260)} style={styles.fill} {...swipe.panHandlers}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY }]} />
-        <Pressable onPress={() => leave(false)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close"
-          style={[styles.close, { top: insets.top + 10 }]}>
-          <GameIcon name="close" size={40} />
-        </Pressable>
-        <View style={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 12 }]}>
+        {/* Once it is all on, Done is the one way out (with Share under it), like the box and Shark Pass. */}
+        {all !== 'done' && (
+          <Pressable onPress={() => leave(false)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close"
+            style={[styles.close, { top: insets.top + 10 }]}>
+            <GameIcon name="close" size={40} />
+          </Pressable>
+        )}
+        <View style={[styles.content, { paddingTop: insets.top + (SHORT ? 12 : 20), paddingBottom: insets.bottom + 12 }, SHORT && { gap: 6 }]}>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.kicker}>SET COMPLETE</Text>
           <Text maxFontSizeMultiplier={MAX_FONT} style={styles.setName}>{reward.name}</Text>
           <View style={[styles.stage, { width: STAGE, height: STAGE, borderColor: color }]}>
@@ -222,7 +257,8 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
                 {stage && <Playercard inventory={stage.look} still={still} showBackground={false} pinAnchor="body" shadow shadowAt={CARD.shadow} liftRoom={CARD.box.top} style={CARD_STYLE} />}
               </Animated.View>
             </ShopStage>
-            {allCopy.wearing && (
+            {/* One signal per state: NOW WEARING while it saves; once it is all on, the All on! chip says it. */}
+            {allCopy.wearing && all !== 'done' && (
               <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={styles.wearing}>
                 <Text style={styles.wearingText}>NOW WEARING</Text>
               </Animated.View>
@@ -240,7 +276,13 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
               </Animated.View>
             )}
           </View>
-          {reward.xp > 0 && (
+          {/* No level numbers from the server (older servers): just the XP, never an empty "LV" ring. */}
+          {reward.xp > 0 && !xp && (
+            <View style={styles.xpChip} accessible accessibilityLabel={`Plus ${reward.xp} XP`}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.xpCaption}>{`+${reward.xp} XP`}</Text>
+            </View>
+          )}
+          {reward.xp > 0 && !!xp && (
             <View style={styles.xpBlock} accessible accessibilityLabel={xp ? (xp.levelUp ? `Level up! Level ${xp.level}. Plus ${reward.xp} XP` : `Plus ${reward.xp} XP, level ${xp.level}`) : `Plus ${reward.xp} XP`}>
               <Animated.View style={[styles.levelBadge, levelStyle, xp?.levelUp && shownLevel === xp.level && styles.levelBadgeUp]}>
                 <Text maxFontSizeMultiplier={MAX_FONT} style={styles.levelText}>{shownLevel ? `LV ${shownLevel}` : 'LV'}</Text>
@@ -257,9 +299,30 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
             {allCopy.note && (
               <View style={styles.alert} accessibilityLiveRegion="polite"><Text maxFontSizeMultiplier={MAX_FONT} style={styles.alertText}>{allCopy.note}</Text></View>
             )}
-            <ShopCta label={allCopy.label} icon="crown" width={Math.min(320, W - 48)}
-              onPress={() => void wearAll()} done={all === 'done'} still={still}
-              accessibilityHint="Puts on the title and every piece of the set" />
+            {all !== 'done' && (
+              <ShopCta label={allCopy.label} icon="crown" width={Math.min(320, W - 48)}
+                onPress={() => void wearAll()} done={false} still={still}
+                accessibilityHint="Puts on the title and every piece of the set" />
+            )}
+            {/* All on: the same after-choice stack as the box and Shark Pass reveals. A status chip (not a
+                button), the yellow Done, then Share right under it, and nothing else. */}
+            {all === 'done' && (
+              <>
+                <Animated.View entering={still ? undefined : FadeIn.duration(160)} style={styles.allOnChip} accessibilityLiveRegion="polite">
+                  <GameIcon name="check" size={20} />
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={styles.allOnText}>All on!</Text>
+                </Animated.View>
+                <GameButton label={waiting ? 'Saving...' : 'Done'} icon="check" onPress={() => leave(true)} disabled={waiting}
+                  style={{ width: Math.min(320, W - 48) }} accessibilityHint="Closes the reveal" />
+                {/* Show it off once it is on: the set's name, its pieces and the count (see the header). */}
+                <FlexShareButton kind="set_complete" surface="shop_set" size="reveal" handoff={shareHandoff} disabled={savingNow > 0}
+                  style={{ marginTop: 6 }}
+                  payload={{ setName: reward.name, badgeUrl: pieces[0]?.icon_thumb_url ?? pieces[0]?.icon_url ?? HERO_ART.trophy,
+                    artUrls: pieces.map(p => p.icon_thumb_url ?? p.icon_url).filter((u): u is string => !!u).slice(0, 5),
+                    found: set?.total ?? pieces.length, total: set?.total ?? pieces.length, title: reward.title ?? undefined, source: 'shop',
+                    inventory: shareLook ?? undefined }} />
+              </>
+            )}
             {reward.title && all !== 'done' && (
               <Pressable onPress={() => void justTitle()} accessibilityRole="button" style={styles.textButton}>
                 <Text maxFontSizeMultiplier={MAX_FONT} style={styles.link}>
@@ -267,12 +330,13 @@ export default function SetCompleteReveal({ reward, set, still, onDone, onShown,
                 </Text>
               </Pressable>
             )}
-            {/* Leave without wearing anything: a real button, not a link (Dustin: "tap off easier"). */}
-            <Pressable onPress={() => leave(true)} disabled={waiting} accessibilityRole="button"
-              accessibilityHint={all === 'done' || titleOnly === 'done' ? 'Closes the reveal' : 'Closes without wearing anything'}
-              style={({ pressed }) => [styles.leave, { width: Math.min(320, W - 48) }, pressed && styles.leavePressed]}>
-              <Text maxFontSizeMultiplier={MAX_FONT} style={styles.leaveText}>{waiting ? 'Saving...' : leaveLabel(all === 'done', titleOnly === 'done')}</Text>
-            </Pressable>
+            {/* Leave without wearing anything: the same quiet ghost button as every reveal's "Not now"
+                (the box and the Shark Pass card), full-size hit area. */}
+            {all !== 'done' && (
+              <GameButton label={waiting ? 'Saving...' : leaveLabel(false, titleOnly === 'done')} variant="ghost" tone="onBlue"
+                onPress={() => leave(true)} disabled={waiting} style={{ width: Math.min(320, W - 48) }}
+                accessibilityHint={titleOnly === 'done' ? 'Closes the reveal' : 'Closes without wearing anything'} />
+            )}
           </View>
         </View>
       </Animated.View>
@@ -326,6 +390,7 @@ const styles = StyleSheet.create({
     shadowColor: BRAND.goldLip, shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 4 } },
   plateText: { fontFamily: FONT.display, fontSize: 24, color: BRAND.navy },
   xpBlock: { flexDirection: 'row', alignItems: 'center', gap: 10, width: '86%' },
+  xpChip: { alignSelf: 'center', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 4 },
   levelBadge: { width: 52, height: 52, borderRadius: 26, backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center' },
   levelBadgeUp: { backgroundColor: BRAND.gold },
@@ -335,12 +400,11 @@ const styles = StyleSheet.create({
   xpCaption: { fontFamily: FONT.display, fontSize: 16, color: BRAND.white },
   alert: { backgroundColor: SHOP_SURFACE.alert, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 2, borderColor: BRAND.white, marginBottom: 6 },
   alertText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.white, textAlign: 'center' },
+  allOnChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3,
+    borderRadius: 999, paddingHorizontal: 14, paddingVertical: 4, marginBottom: 6 },
+  allOnText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.navy, paddingTop: 2 },
   buttons: { width: '100%', alignItems: 'center', gap: 4, marginTop: 'auto' },
   close: { position: 'absolute', right: 14, zIndex: 3 },
-  leave: { minHeight: 52, borderRadius: 18, borderWidth: 3, borderColor: 'rgba(255,255,255,0.85)', alignItems: 'center',
-    justifyContent: 'center', marginTop: 4 },
-  leavePressed: { transform: [{ scale: 0.97 }], backgroundColor: 'rgba(255,255,255,0.08)' },
-  leaveText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.white, letterSpacing: 0.5 },
   textButton: { minHeight: 44, minWidth: 120, alignItems: 'center', justifyContent: 'center' },
   link: { fontFamily: FONT.display, fontSize: 16, color: BRAND.goldLight, textDecorationLine: 'underline' },
   bit: { position: 'absolute', top: 0, left: 0, height: 12, borderRadius: 2 },

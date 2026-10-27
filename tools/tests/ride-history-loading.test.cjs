@@ -75,6 +75,8 @@ function journal() {
       if (name === './RideTrackerEmpty') return { default: 'RideTrackerEmpty', __esModule: true };
       if (name === '../../ui/gameChip') return { GAME_CHIP: {} };
       if (name === '../../components/Wrapper') return { default: 'Wrapper', FOOTER_CLEARANCE: 92, __esModule: true };
+      if (name === '../../share/handoff') return { useModalHandoff: () => ({ handoff: async () => {}, onDismiss() {} }) };
+      if (name === '../../share/closeWord') return { CLOSE_WORD: 'Nice!' };
       if (name.includes('assets/')) return 1;
       if (name.includes('RideCard') || name.includes('ShareableRideCard')) return name;
       if (name === '../../components/GrownUpGate') return { GrownUpGateSlot: 'GrownUpGateSlot' };

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -45,7 +45,8 @@ import OneTimeTip from './help/OneTimeTip';
 import CoinTopUpOffer from './money/CoinTopUpOffer';
 import { storeAvailable } from '../services/purchases';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
-import { FlexShareButton, SHARE_IN_MODALS, ShareStudioHost } from '../share';
+import { FlexShareButton } from '../share';
+import { useModalHandoff } from '../share/handoff';
 import { useDevAutoPress } from '../share/devDrive';
 import { UpperText } from '../ui/upper';
 
@@ -92,6 +93,10 @@ export default function CoinLevelingModal({
   const [featured, setFeatured] = useState(false);
   const [featureBusy, setFeatureBusy] = useState(false);
   const featureBusyRef = useRef(false);
+  const sheetScroll = useRef<ScrollView>(null);
+  // The short-phone slide happens once per level-up, never on every layout change.
+  const scrolledForSuccess = useRef(false);
+  useEffect(() => { if (state !== 'success') scrolledForSuccess.current = false; }, [state]);
   const [featureError, setFeatureError] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const upgradeBusy = useRef(false);
@@ -129,6 +134,9 @@ export default function CoinLevelingModal({
   const [levelXp, setLevelXp] = useState(0);
   const [crowningId, setCrowningId] = useState<string | null>(null);
   const crowningSlot = usePresentationSlot(crowningId, 'crowning', 'coin_shelf');
+  // Share from this sheet: it closes first, then the Share Studio sheet opens from Root (share/handoff.ts).
+  const shareClose = useRef<() => void>(() => undefined);
+  const shareHandoff = useModalHandoff(useCallback(() => shareClose.current(), []));
   const pendingLinePlayRef = useRef(false);
   const pendingExploreRef = useRef(false);
   // Short on Tickets or Energy: the Supplies tab, opened after the sheet hides.
@@ -189,7 +197,8 @@ export default function CoinLevelingModal({
   // `!rideCoin` return: TaskCoinModal mounts this sheet with no coin, so a hook after the
   // return ran only once a coin loaded ("Rendered more hooks", a fatal crash on coin tap).
   const levelUpPress = useRef<() => void>(() => undefined);
-  useDevAutoPress(visible ? 'level_up' : 'level_up_off', () => levelUpPress.current(), 2500);
+  // Bound to a real spend, so it only ever runs on the dev evidence screen (EXPO_PUBLIC_SHARE_EVIDENCE).
+  useDevAutoPress(visible && __DEV__ && !!process.env.EXPO_PUBLIC_SHARE_EVIDENCE ? 'level_up' : 'level_up_off', () => levelUpPress.current(), 2500);
 
   if (!rideCoin) return null;
 
@@ -337,6 +346,11 @@ export default function CoinLevelingModal({
     });
   };
 
+  shareClose.current = () => {
+    if (crowningSlot.visible) { crowningSlot.done(); setCrowningId(null); }
+    handleClose();
+  };
+
   // ── Interpolations ──
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1], outputRange: ['0%', '100%'],
@@ -360,6 +374,7 @@ export default function CoinLevelingModal({
       animationOutTiming={reducedMotion ? 120 : 200}
       onBackButtonPress={state !== 'leveling' ? handleClose : undefined}
       onModalHide={() => {
+        shareHandoff.onDismiss();
         if (pendingLinePlayRef.current) {
           pendingLinePlayRef.current = false;
           onPlayInLine?.();
@@ -417,9 +432,17 @@ export default function CoinLevelingModal({
           overflow: 'hidden',
         }}>
           <ScrollView
+            ref={sheetScroll}
             bounces={false}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 14 }}
+            // A short phone (iPhone SE): once the level-up shows, slide down so Awesome and Share both fit.
+            // Once per level-up (a kid who scrolls back up is never pulled down again), and only as far as Share needs.
+            onContentSizeChange={(_w, h) => {
+              if (state !== 'success' || SCREEN_H >= 740 || scrolledForSuccess.current) return;
+              scrolledForSuccess.current = true;
+              sheetScroll.current?.scrollTo({ y: Math.max(0, h - SCREEN_H * 0.82 + 16), animated: !reducedMotion });
+            }}
           >
             <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 185,
               backgroundColor: '#168AD7', borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }} />
@@ -471,15 +494,8 @@ export default function CoinLevelingModal({
                     : state === 'maxed' ? 'MAX LEVEL REACHED' : 'LEVEL UP YOUR COIN'}
                 </UpperText>
 
-                {/* Share Studio: a fresh Lv5-9 level-up (the Crowning has its own). A round button pinned
-                    over the coin art's top-left corner, so it adds no height (the CTA stays on an SE screen). */}
-                {SHARE_IN_MODALS && state === 'success' && nextLevel >= 5 && nextLevel < 10 && (
-                  <FlexShareButton kind="coin_level" surface="coin_sheet" size="sm" caption style={{ position: 'absolute', left: 14, top: 30, zIndex: 5 }}
-                    payload={{ coinUrl: rideCoin.coin_url, level: nextLevel, tierName: coinTierName(nextLevel), tierIndex: nextLevel, timesCollected: rideCoin.times_collected }} />
-                )}
-
-                {/* ── Level Badge Row (compact) ── */}
-                <View style={{
+                {/* ── Level Badge Row (compact). Not on success: the ribbon already says the level and its name. ── */}
+                {state !== 'success' && <View style={{
                   flexDirection: 'row',
                   alignItems: 'center',
                   marginBottom: 6,
@@ -492,10 +508,10 @@ export default function CoinLevelingModal({
                     textTransform: 'uppercase',
                     letterSpacing: 0.5,
                   }}>
-                    Lv.{state === 'success' ? nextLevel : currentLevel} {state === 'success' ? nextTierName : tierName}
+                    Lv.{currentLevel} {tierName}
                   </UpperText>
 
-                  {!isMaxLevel && state !== 'success' && (
+                  {!isMaxLevel && (
                     <>
                       <GameIcon name="arrow" size={16} />
                       <UpperText style={{
@@ -510,7 +526,7 @@ export default function CoinLevelingModal({
                       </UpperText>
                     </>
                   )}
-                </View>
+                </View>}
 
                 {!!rideCoin.editions?.length && (state === 'preview' || state === 'maxed') && (
                   <TouchableOpacity accessibilityRole="button"
@@ -919,17 +935,11 @@ export default function CoinLevelingModal({
                         textShadowOffset: { width: 2, height: 2 },
                         textShadowRadius: 0,
                       }}>
-                        {nextTierName}!
+                        New look!
                       </UpperText>
-                      <Text style={{
-                        fontFamily: 'Knockout', fontSize: 14,
-                        color: '#315D7B',
-                        marginTop: 4,
-                      }}>
-                        Your coin evolved to Level {nextLevel}
-                      </Text>
-                      <Text style={{ fontFamily: 'Knockout', fontSize: 14,
-                        color: '#19496B', marginTop: 5, textAlign: 'center' }}>
+                      {/* One line of what changed (the ribbon already names the level): every line says something new. */}
+                      <Text style={{ fontFamily: 'Knockout', fontSize: 15,
+                        color: '#19496B', marginTop: 4, textAlign: 'center' }}>
                         {nextVisualReward}
                       </Text>
 
@@ -973,6 +983,14 @@ export default function CoinLevelingModal({
                     <OneTimeTip id="first_level_up" ready={visible && state === 'success'} compact
                       style={{ alignSelf: 'stretch', marginBottom: 8 }} />
                     <YellowButton text="Awesome!" onPress={handleClose} />
+                    {/* Share Studio: a fresh Lv5-9 level-up (the Crowning has its own). The same Share pill
+                        as every reveal, right under the main button. */}
+                    {nextLevel >= 5 && nextLevel < 10 && (
+                      <FlexShareButton kind="coin_level" surface="coin_sheet" size="md" style={{ marginTop: 10 }}
+                        handoff={shareHandoff.handoff}
+                        payload={{ coinUrl: rideCoin.coin_url, level: nextLevel, tierName: coinTierName(nextLevel), tierIndex: nextLevel,
+                          timesCollected: rideCoin.times_collected, ownedRef: nextLevel }} />
+                    )}
                   </Animated.View>
                 )}
 
@@ -1063,6 +1081,7 @@ export default function CoinLevelingModal({
       {crowningSlot.visible && (
         <Crowning rideName={rideCoin.ride_name} coinUrl={rideCoin.coin_url} boss={rideCoin.boss ?? null}
           reduced={reducedMotion} playSound={playSound}
+          shareHandoff={shareHandoff.handoff}
           onDone={() => { crowningSlot.done(); setCrowningId(null); }} />
       )}
 
@@ -1072,8 +1091,6 @@ export default function CoinLevelingModal({
         name={rideCoin.ride_name}
         onClose={() => setHoloVisible(false)}
       />
-      {/* Share Studio presents from inside this modal (a root sheet can't present over it on iOS). */}
-      {SHARE_IN_MODALS && visible && <ShareStudioHost portal />}
     </Modal>
   );
 }

@@ -8,6 +8,10 @@
  * the bell and profiles through the social store) and undone on failure.
  */
 import { shareExternal } from '../services/external';
+import { INVITE_URL } from '../share/link';
+import { captureFlex } from '../share/capture';
+import { InviteCard, inviteMessage } from '../share/InviteCard';
+import { OFFSCREEN } from '../share/StoryShareFrame';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -47,7 +51,6 @@ const CREST = require('../../assets/images/screens/friends/noti.png');
 const REQUEST_ART = require('../../assets/images/screens/notifications/badges/friend_request.png');
 const ADD_ART = require('../../assets/images/screens/friends/add_friend.png');
 const NOOP = () => undefined;
-const APP_LINK = 'https://apps.apple.com/app/theme-park-shark/id6758812566';
 
 type Row =
   | { readonly type: 'header'; readonly key: string; readonly label: string; readonly icon?: GameIconName; readonly count?: number }
@@ -66,11 +69,22 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
   const [listReady, setListReady] = useState(false);
   useTutorialWhenReady('friends', listReady);
 
+  const inviteRef = useRef<View>(null);
+  const inviting = useRef(false);
   const invite = useCallback(async () => {
+    if (inviting.current) return;
+    inviting.current = true;
     playSfx('tap');
+    // The shark name is the friend code; the link opens the app's download page (never the dead store page).
+    const message = inviteMessage(player?.screen_name, INVITE_URL);
     try {
-      await shareExternal({ message: `Play Theme Park Shark with me! Add me as a friend: ${player?.screen_name ?? ''}\n${APP_LINK}`, url: APP_LINK });
-    } catch { /* closed */ }
+      // The "Add my shark" picture (story size, invite QR) with the text and link beside it.
+      let picture: string | null = null;
+      try { picture = await captureFlex(inviteRef, 'story'); } catch { picture = null; }
+      await shareExternal(picture ? { url: picture, message } : { message, url: INVITE_URL });
+    } catch { /* closed */ } finally {
+      inviting.current = false;
+    }
   }, [player?.screen_name]);
 
   return (
@@ -81,6 +95,9 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
         <TopbarColumn stretch={false}><View style={{ width: 44 }} /></TopbarColumn>
       </Topbar>
       <CleanScreenBackground underTopbar>
+        <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <InviteCard ref={inviteRef} inventory={player?.inventory} />
+        </View>
         <Hero count={player?.friends_count ?? 0} onInvite={invite} />
         <Tabs tab={tab} pending={pending} onChange={next => { if (next !== tab) { playSfx('whoosh'); haptic('tickSelection'); setTab(next); } }} />
         {/* All three tabs stay mounted: switching keeps scroll and search text and never shows a spinner again. */}

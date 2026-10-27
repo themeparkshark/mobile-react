@@ -36,6 +36,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'ParkDayRecapPreview', getComponent: () => require('./screens/ParkDayRecapPreviewScreen').default },
       { name: 'ShareStudioPreview', getComponent: () => require('./screens/ShareStudioPreviewScreen').default },
       { name: 'ShareModalEvidence', getComponent: () => require('./screens/ShareModalEvidenceScreen').default },
+      { name: 'SharePicturesPreview', getComponent: () => require('./screens/SharePicturesPreviewScreen').default },
       { name: 'LineGroupPreview', getComponent: () => require('./screens/LinePlay/LineGroupPreviewScreen').default },
       { name: 'CrewGridPreview', getComponent: () => require('./screens/LinePlay/CrewGridPreviewScreen').default },
       { name: 'StreakFlamePreview', getComponent: () => require('./components/retention/StreakFlamePreview').default },
@@ -49,6 +50,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'RideLogSuccessPreview', getComponent: () => require('./screens/RideLogSuccessPreviewScreen').default },
       { name: 'UiKitGym', getComponent: () => require('./ui/UiKitGym').default },
       { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
+      { name: 'SharkPassRevealPreview', getComponent: () => require('./screens/SharkPassRevealPreviewScreen').default },
       { name: 'FrightIntroPreview', getComponent: () => require('./components/fright/tutorial/FrightIntroPreviewScreen').default },
       { name: 'SecretShopPreview', getComponent: () => require('./screens/StoreScreen/SecretShopPreviewScreen').default },
       { name: 'MoneyPreview', getComponent: () => require('./screens/MoneyPreviewScreen').default },
@@ -60,14 +62,22 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
   // so this branch folds away like the dev list.
   : process.env.EXPO_PUBLIC_PERF_CAPTURE === '1'
     ? [{ name: 'BossMapPreview', getComponent: () => require('./screens/BossMapPreviewScreen').default }]
-    : [];
+    // Release-like share walks only (EXPO_PUBLIC_SHARE_WALK=1 with `expo start --no-dev`): the real reveals and
+    // the grown-up gate in release JS, with stub saves. Store builds never set it, so this folds away too.
+    : process.env.EXPO_PUBLIC_SHARE_WALK === '1'
+      ? [
+        { name: 'SharePicturesPreview', getComponent: () => require('./screens/SharePicturesPreviewScreen').default },
+        { name: 'SharkPassRevealPreview', getComponent: () => require('./screens/SharkPassRevealPreviewScreen').default },
+        { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
+      ]
+      : [];
 
 /**
  * First matching EXPO_PUBLIC_*_PREVIEW flag wins; order matches the original
  * Root chain. Each flag is a literal process.env access so Expo inlines it.
  */
 export function devInitialRoute(): string | null {
-  if (!__DEV__) return process.env.EXPO_PUBLIC_PERF_CAPTURE === '1' ? 'BossMapPreview' : null;
+  if (!__DEV__) return process.env.EXPO_PUBLIC_PERF_CAPTURE === '1' ? 'BossMapPreview' : process.env.EXPO_PUBLIC_SHARE_WALK === '1' ? 'SharePicturesPreview' : null;
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
     [!!process.env.EXPO_PUBLIC_SHOP_TABS_PREVIEW, 'ShopTabsPreview'],
@@ -125,6 +135,7 @@ export function devInitialRoute(): string | null {
     [!!process.env.EXPO_PUBLIC_FRIGHT_INTRO_PREVIEW, 'FrightIntroPreview'],
     [!!process.env.EXPO_PUBLIC_SECRET_SHOP_PREVIEW, 'SecretShopPreview'],
     [on(process.env.EXPO_PUBLIC_SET_REVEAL_PREVIEW), 'SetRevealPreview'],
+    [on(process.env.EXPO_PUBLIC_SHARKPASS_REVEAL_PREVIEW), 'SharkPassRevealPreview'],
     [on(process.env.EXPO_PUBLIC_NEWS_PREVIEW), 'News'],
   ];
   return table.find(([enabled]) => enabled)?.[1] ?? null;

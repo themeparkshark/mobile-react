@@ -11,7 +11,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 test('every reward reveal closes easily without wearing anything (Dustin: "tap off easier")', () => {
   const reveal = read('src/screens/StoreScreen/SetCompleteReveal.tsx');
   // Shop set: WEAR IT ALL stays the main action; a real second button leaves.
-  assert.ok(reveal.indexOf('<ShopCta label={allCopy.label}') < reveal.indexOf('leaveLabel(all === \'done\''), 'Wear it all comes first');
+  assert.ok(reveal.indexOf('<ShopCta label={allCopy.label}') < reveal.indexOf('leaveLabel(false, titleOnly'), 'Wear it all comes first');
   assert.match(reveal, /accessibilityLabel="Close"/, 'an X in the corner');
   // Panel r1: a full-screen reveal has no outside; a tap in a gap between its parts never closes it.
   assert.doesNotMatch(reveal, /StyleSheet\.absoluteFill\} onPress=\{\(\) => leave/);

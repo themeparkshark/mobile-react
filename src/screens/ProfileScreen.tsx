@@ -62,6 +62,7 @@ import SharkPassBanner from '../components/money/SharkPassBanner';
 import StreakFlame from '../components/retention/StreakFlame';
 import useOwnStreak from '../services/retention/useOwnStreak';
 import { UpperText } from '../ui/upper';
+import { flexRevealOnce } from '../share/revealOnce';
 
 /** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
 // Short phones (iPhone SE, 667 pt) get a 230 pt stage so the Shop / Stamp Book / Pins labels sit clear of the center compass at rest.
@@ -95,6 +96,13 @@ export default function ProfileScreen() {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const reducedMotion = useReducedGameMotion();
   const focused = useIsFocused();
+  // A streak milestone (3, 7, 14, 30... days) gets the Flex moment once, the first time Profile shows it.
+  useEffect(() => {
+    if (!focused || !player?.id || !ownStreak || isProfilePreview) return;
+    const today = new Date();
+    const day = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
+    void flexRevealOnce('streak', `${player.id}:${ownStreak.days}:${day}`, { days: ownStreak.days, best: ownStreak.best }, { surface: 'profile_streak' });
+  }, [focused, player?.id, ownStreak?.days]); // eslint-disable-line react-hooks/exhaustive-deps
   // The XP potion only animates while its card is on screen.
   const levelCard = useCardOnScreen();
   const [stampsToClaim, setStampsToClaim] = useState(0);

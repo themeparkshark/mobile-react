@@ -16,7 +16,16 @@ const track = loadTs('src/share/track.ts', {
 });
 
 const shared = { result: { action: 'sharedAction', activityType: 'com.burbn.instagram.shareextension' } };
+const fsCalls = [];
+const clipboardCalls = [];
 const capture = loadTs('src/share/capture.ts', {
+  'expo-clipboard': { setStringAsync: async (s) => { clipboardCalls.push(s); } },
+  'expo-file-system': {
+    cacheDirectory: 'file:///cache/',
+    makeDirectoryAsync: async (...a) => { fsCalls.push(['mkdir', ...a]); },
+    deleteAsync: async (...a) => { fsCalls.push(['delete', ...a]); },
+    copyAsync: async (a) => { fsCalls.push(['copy', a]); },
+  },
   'expo-sharing': { isAvailableAsync: async () => true, shareAsync: async () => undefined },
   'react-native': {
     PixelRatio: { get: () => 3 }, Platform: { OS: 'ios' },
@@ -24,7 +33,11 @@ const capture = loadTs('src/share/capture.ts', {
   },
   'react-native-view-shot': { captureRef: async () => 'file:///tmp/card.jpg' },
   // The grown-up gate passes here; its own tests cover a no.
-  '../services/external': { SHARE_TIMED_OUT: 'timeout', shareExternal: async () => shared.result, shareFileExternal: async () => true },
+  // Like services/external: a file url is shared under a readable name (shareFileName), never its UUID.
+  '../services/external': { SHARE_TIMED_OUT: 'timeout', shareExternal: async (content, _o, name) => {
+      shared.last = content.url && name ? { ...content, url: `file:///cache/share-card/${name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'Theme-Park-Shark'}.jpg` } : content;
+      return shared.result; }, shareFileExternal: async () => 'closed',
+    shareFileName: (name, ext) => `${name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'Theme-Park-Shark'}.${ext}` },
 });
 
 const MONTHS = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d/i;
@@ -71,7 +84,8 @@ test('the percent-of-players line only shows when it is a real brag', () => {
   assert.equal(copy.ownedLine(Number.NaN), null);
   assert.equal(copy.ownedLine(-1), null);
   const common = copy.flexCopy('find', { itemName: 'Pretzel', artUrl: 'x', rarity: 1, ownedPct: 0.9 });
-  assert.equal(common.stat, 'A Common find');
+  // The rarity word is on the kicker already ("My Common Find"): the stat says something new.
+  assert.equal(common.stat, 'Added to my collection');
 });
 
 test('rarity accepts numbers and names; Frame It! reads as a brag line', () => {
@@ -137,14 +151,16 @@ test('export sizes are exactly 1080x1920 and 1080x1080 at every density', () => 
 
 test('the iOS share sheet reports the destination as a short label; dismissal is not a share', async () => {
   shared.result = { action: 'sharedAction', activityType: 'com.burbn.instagram.shareextension' };
-  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { shared: true, activity: 'instagram' });
+  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { ended: 'shared', opened: true, shared: true, activity: 'instagram' });
   shared.result = { action: 'dismissedAction' };
-  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { shared: false, activity: null });
-  // A sheet that never answered is its own outcome, never logged as a cancel.
+  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { ended: 'closed', opened: true, shared: false, activity: null });
+  shared.result = null; // the grown-up said no
+  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { ended: 'declined', opened: false, shared: false, activity: null });
+  // A sheet that never answered is its own outcome, never logged as a cancel (hotfix wave 3).
   shared.result = 'timeout';
-  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { shared: null, activity: null, timedOut: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(await capture.openShareSheet('file:///tmp/a.jpg'))), { ended: 'timeout', opened: true, shared: null, timedOut: true, activity: null });
   const host = require('node:fs').readFileSync(require('node:path').resolve(__dirname, '../../src/share/ShareStudioHost.tsx'), 'utf8');
-  assert.ok(host.indexOf('if (outcome.timedOut) return;') > 0 && host.indexOf('if (outcome.timedOut) return;') < host.indexOf("event('dismissed')"),
+  assert.ok(host.indexOf('else if (outcome.timedOut) return;') > 0 && host.indexOf('else if (outcome.timedOut) return;') < host.indexOf("else if (outcome.shared === false) event('dismissed')"),
     'a timeout returns before the dismissed event');
   assert.equal(capture.activityLabel('com.apple.UIKit.activity.SaveToCameraRoll'), 'save_photo');
   assert.equal(capture.activityLabel('com.zhiliaoapp.musically.ShareExtension'), 'tiktok');
@@ -331,11 +347,17 @@ test('event titles carry no year and finds do not say their rarity twice', () =>
   assert.equal(copy.flexCopy('find', { itemName: 'Legendary Golden Churro', artUrl: 'x', rarity: 5 }).title, 'Golden Churro');
 });
 
-test('the coin level-up Share button matches the reveal rule (level 5+), and modal buttons are off in release', () => {
+test('the coin level-up Share button matches the reveal rule (level 5+), and modal buttons hand off instead of nesting', () => {
   const sheet = fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8');
   assert.match(sheet, /nextLevel >= 5 && nextLevel < 10/);
-  assert.match(sheet, /<ShareStudioHost portal \/>/);
-  assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/home/HomeHuntResultsModal.tsx'), 'utf8'), /<ShareStudioHost portal \/>/);
+  // A share inside a modal closes the modal first (useModalHandoff), then the Root sheet and gate open.
+  assert.match(sheet, /handoff=\{shareHandoff\.handoff\}/);
+  assert.match(sheet, /onModalHide=\{\(\) => \{\s*shareHandoff\.onDismiss\(\);/);
+  assert.doesNotMatch(sheet, /<ShareStudioHost portal \/>/, 'no nested share host inside the coin sheet');
+  const hunt = fs.readFileSync(pathMod.join(repo, 'src/components/home/HomeHuntResultsModal.tsx'), 'utf8');
+  assert.match(hunt, /handoff=\{shareHandoff\.handoff\}/);
+  assert.match(hunt, /onDismiss=\{shareHandoff\.onDismiss\}/);
+  assert.doesNotMatch(hunt, /<ShareStudioHost portal \/>/);
   const index = fs.readFileSync(pathMod.join(repo, 'src/share/index.ts'), 'utf8');
   assert.match(index, /SHARE_IN_MODALS: boolean = __DEV__ && process\.env\.EXPO_PUBLIC_SHARE_IN_MODALS === '1'/);
   const { SHARE_IN_MODALS } = loadTs('src/share/index.ts', {
@@ -437,9 +459,30 @@ test('art is warmed per kind when a share-eligible screen or a share asks, never
   assert.doesNotMatch(host, /setTimeout\(\(\) => setPhase\('warm'\), 3000\)/);
 });
 
-test('the coin sheet Share icon carries a word and the stamp payload must say whether its art has a shark', () => {
-  assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8'), /size="sm" caption/);
+test('the coin sheet Share carries a word (the md pill says Share) and the stamp payload must say whether its art has a shark', () => {
+  // The coin sheet uses the same labeled pill as every reveal, under its main button.
+  assert.match(fs.readFileSync(pathMod.join(repo, 'src/components/CoinLevelingModal.tsx'), 'utf8'), /kind="coin_level" surface="coin_sheet" size="md"/);
   assert.match(fs.readFileSync(pathMod.join(repo, 'src/share/types.ts'), 'utf8'), /readonly artHasShark: boolean;/);
+});
+
+test('the share sheet names the picture (no random id) and sends the link line with it', async () => {
+  shared.result = { action: 'sharedAction', activityType: 'com.apple.UIKit.activity.Message' };
+  fsCalls.length = 0;
+  await capture.openShareSheet('file:///tmp/B80AB5AF-733B.jpg', 'Come play Theme Park Shark with me! https://themeparkshark.com/app?c=flex_find');
+  assert.equal(capture.SHARE_FILE_NAME, 'Theme Park Shark');
+  assert.equal(shared.last.url, 'file:///cache/share-card/Theme-Park-Shark.jpg');
+  assert.equal(shared.last.message, 'Come play Theme Park Shark with me! https://themeparkshark.com/app?c=flex_find');
+  // A card's own name (the hotfix's readable names): Whack-a-Shark-12840.jpg.
+  await capture.openShareSheet('file:///tmp/x.jpg', 'm', 'Whack-a-Shark 12840');
+  assert.equal(shared.last.url, 'file:///cache/share-card/Whack-a-Shark-12840.jpg');
+  // No message: the picture alone.
+  await capture.openShareSheet('file:///tmp/a.jpg');
+  assert.equal(shared.last.message, undefined);
+  const link = loadTs('src/share/link.ts', {});
+  assert.equal(link.shareMessage(link.flexShareUrl('find', { prize: 'pass' })), 'Come play Theme Park Shark with me! https://themeparkshark.com/app?c=flex_sharkpass');
+  for (const f of ['src/share/ShareStudioHost.tsx', 'src/games/whack/ui/ShareCard.tsx', 'src/games/memory/MemoryExtras.tsx', 'src/share/LookShareButton.tsx', 'src/components/RideTracker/ShareableRideCard.tsx']) {
+    assert.match(fs.readFileSync(pathMod.join(repo, f), "utf8"), /openShareSheet\(uri, shareMessage\(/, `${f}: the link rides with the picture`);
+  }
 });
 
 test('a park day card never goes out with an empty coin frame, and reads "My Park Day"', () => {

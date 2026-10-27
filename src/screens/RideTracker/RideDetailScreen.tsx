@@ -23,6 +23,7 @@ import { withNumberFont, NUMBER_FONT } from '../../ui/numberText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { scoreText, ratingCount, riderSharksCaption, COMPACT_COMMUNITY_LOGS, RIDE_DETAIL_HEADER } from './rideDetailModel';
 import { plainRideName } from '../../helpers/plainRideName';
+import { CLOSE_WORD } from '../../share/closeWord';
 
 export { scoreText, COMPACT_COMMUNITY_LOGS, RIDE_DETAIL_HEADER } from './rideDetailModel';
 
@@ -233,6 +234,7 @@ export default function RideDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [shareEntry, setShareEntry] = useState<PlayerRideType | null>(null);
+  const closeShare = useCallback(() => setShareEntry(null), []);
   const [imageError, setImageError] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const loadedOnce = useRef(false);
@@ -441,14 +443,15 @@ export default function RideDetailScreen() {
       />
 
       {/* Share Modal */}
-      <Modal visible={!!shareEntry} animationType="slide" transparent onRequestClose={() => setShareEntry(null)}>
+      <Modal visible={!!shareEntry} animationType="slide" transparent onRequestClose={closeShare}>
         {/* Not accessible themselves, so VoiceOver reaches Share Ride Card and Close one by one. */}
         <Pressable style={s.modalOverlay} onPress={() => setShareEntry(null)} accessible={false}>
           <Pressable style={s.modalContent} onPress={() => {}} accessible={false}>
             {shareEntry && (
               <>
                 <ShareableRideCard ride={shareEntry} rideCount={totalRides} />
-                <GameButton label="Close" variant="secondary" onPress={() => setShareEntry(null)} style={s.modalClose} />
+                {/* The game's chunky button, saying the one close word the share flow uses everywhere. */}
+                <GameButton label={CLOSE_WORD} accessibilityLabel="Close" variant="secondary" onPress={() => setShareEntry(null)} style={s.modalClose} />
               </>
             )}
           </Pressable>

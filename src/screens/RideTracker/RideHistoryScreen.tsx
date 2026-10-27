@@ -8,7 +8,6 @@ import {
   RefreshControl,
 } from 'react-native';
 import RideTrackerFrame from './RideTrackerFrame';
-import { GameButton } from '../../ui';
 import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides';
@@ -21,7 +20,8 @@ import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import { Modal } from 'react-native';
 import { Image } from 'expo-image';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { GameIcon, SharkLoader } from '../../ui';
+import { GameButton, GameIcon, SharkLoader } from '../../ui';
+import { CLOSE_WORD } from '../../share/closeWord';
 
 import { GAME_CHIP } from '../../ui/gameChip';
 import RideTrackerEmpty from './RideTrackerEmpty';
@@ -188,6 +188,7 @@ export default function RideHistoryScreen() {
   const handleShare = useCallback((ride: PlayerRideType) => {
     setShareRide(ride);
   }, []);
+  const closeShare = useCallback(() => setShareRide(null), []);
 
   const renderItem = useCallback(({ item }: { item: PlayerRideType }) => (
     <RideCard ride={item} onPress={() => handleRidePress(item)} onShare={handleShare} />
@@ -258,7 +259,7 @@ export default function RideHistoryScreen() {
       )}
       {/* Share Modal */}
       <Modal visible={!!shareRide} animationType={reducedMotion ? 'fade' : 'slide'} transparent
-        onRequestClose={() => setShareRide(null)}>
+        onRequestClose={closeShare}>
         {/* Not accessible themselves, so VoiceOver reaches Share Ride Card and Close one by one. */}
         <Pressable style={styles.modalOverlay} onPress={() => setShareRide(null)} accessible={false}>
           <Pressable style={styles.modalContent} onPress={() => {}} accessible={false}>
@@ -266,7 +267,7 @@ export default function RideHistoryScreen() {
               <>
                 <ShareableRideCard ride={shareRide} />
                 <Pressable onPress={() => setShareRide(null)} style={styles.modalClose} accessibilityRole="button" accessibilityLabel="Close">
-                  <Text style={styles.modalCloseText}>Close</Text>
+                  <Text style={styles.modalCloseText}>{CLOSE_WORD}</Text>
                 </Pressable>
               </>
             )}
