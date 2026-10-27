@@ -197,3 +197,16 @@ test('Sharky never shows a still 0 or ALL 3 STARS! ahead of its stars; Memory an
   assert.equal(duel.polaroidBolts([]), 1);
   assert.doesNotMatch(read('src/games/trivia-duel/ui/DuelResults.tsx'), /styles\.polTime/, 'no bare "0.4s" on the polaroid');
 });
+
+test('every picture the new results art asks for exists (a bad path breaks the whole bundle)', () => {
+  for (const f of ['src/games/banana-basket/BananaBasketGame.tsx', 'src/games/memory/MemoryResults.tsx', 'src/games/memory/MemoryExtras.tsx',
+    'src/gamekit/results/UnlockTile.tsx', 'src/games/whack/FinnUnlock.tsx', 'src/games/sharky/hud/SharkyUnlock.tsx']) {
+    const src = read(f);
+    for (const m of src.matchAll(/require\('(\.[^']+\.(?:png|jpe?g|webp))'\)/g)) {
+      // Metro also takes the @2x and @3x files for a picture.
+      const full = path.resolve(root, path.dirname(f), m[1]);
+      const scaled = ['', '@2x', '@3x'].map((k) => full.replace(/(\.[a-z]+)$/, `${k}$1`));
+      assert.ok(scaled.some((x) => fs.existsSync(x)), `${f}: ${m[1]}`);
+    }
+  }
+});

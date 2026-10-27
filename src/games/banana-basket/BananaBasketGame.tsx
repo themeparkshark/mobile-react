@@ -1163,8 +1163,8 @@ interface ResultsExtras {
 }
 
 /** The game's own art for the result pictures (no new art). */
-const BALL_ART = require('../../../assets/games/banana-basket/v2/ball.png');
-const PILE_ART = require('../../../assets/games/banana-basket/v2/bunch.png');
+const BALL_ART = require('../../assets/games/banana-basket/v2/ball.png');
+const PILE_ART = require('../../assets/games/banana-basket/v2/bunch.png');
 
 /**
  * Results rows (7.7) as pictures, bare on the card's blue like every family card:
