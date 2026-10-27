@@ -171,11 +171,11 @@ test('a locked chapter shows why and answers a tap: pale strip, a lock, "Get in 
   assert.doesNotMatch(card, /disabled: locked,/, 'never a dead tap');
 });
 
-test('"No ride picked" is a styled card (water, cream card, Finn, a gold button), never plain text on black', () => {
+test('"No ride picked" is a styled card (bright blue, cream card, Finn, a gold button), never plain text on black', () => {
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
   const block = screen.slice(screen.indexOf('if (!ride) {'), screen.indexOf('// The shared signal selects'));
   assert.match(block, /<SafeScreen style=\{styles\.noRide\}>/);
-  assert.match(block, /water_background\.png/);
+  assert.match(block, /<LinearGradient colors=\{\['#13a8e9', '#0879ca', '#0768b9'\]\}/, 'bright blue, never a dark page');
   assert.match(block, /teacher-shark\.png/);
   assert.match(block, /<GameButton label="Back to the map" icon="map" fullWidth onPress=\{\(\) => navigation\.goBack\(\)\} \/>/);
   assert.doesNotMatch(block, /No ride picked|styles\.centered|colors\.bgDark/);
@@ -199,4 +199,9 @@ test('the recap after a short wait never shows a row of zeros: zero tiles drop o
   assert.match(src, /<Text style=\{styles\.keepsakeTitle\}>Wait saved!<\/Text>/);
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.doesNotMatch(card, /'game plan' : 'posted wait'\} \$\{postedWaitMinutes\}m · details/, 'no "Session 1:21 · game plan 20m · details" jargon');
+});
+
+test('a finished wait at a ride with no Parts never shows an empty ring and a "0" gem', () => {
+  const card = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.match(card, /\{!rewardTrackingAvailable \? <View style=\{styles\.noPartsWell\}[^>]*>\n\s*<GameIcon name="queue" size=\{54\} \/>/);
 });

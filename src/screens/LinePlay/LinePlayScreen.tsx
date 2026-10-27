@@ -1059,9 +1059,9 @@ export default function LinePlayScreen() {
 
   if (!ride) {
     return (
-      // No ride: Alex's look (water, a cream card, Finn, one gold button), never plain text on a dark page.
+      // No ride: Alex's look (bright blue, a cream card, Finn, one gold button), never plain text on a dark page.
       <SafeScreen style={styles.noRide}>
-        <Image source={require('../../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <LinearGradient colors={['#13a8e9', '#0879ca', '#0768b9']} style={StyleSheet.absoluteFill} />
         <View style={styles.noRideCard} accessible accessibilityLabel="Pick a ride first. Walk to a ride on the map, then tap Play.">
           <Image source={require('../../../assets/images/tutorial/teacher-shark.png')} style={styles.noRideFinn} contentFit="contain" />
           <Text style={styles.noRideTitle}>Pick a ride first!</Text>

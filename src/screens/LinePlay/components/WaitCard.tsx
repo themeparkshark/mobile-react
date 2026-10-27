@@ -423,7 +423,10 @@ export default function WaitCard({
             </View>
           </Pressable>
         </View> : <View style={styles.meterRow}>
-          <View style={[{ width: RING, height: RING }, outOfRange && styles.ringOutOfRange]}
+          {/* A ride with no Parts never shows an empty ring and a "0" gem: the queue picture says "games only". */}
+          {!rewardTrackingAvailable ? <View style={styles.noPartsWell} accessible accessibilityLabel={`${headline} ${subline}`}>
+            <GameIcon name="queue" size={54} />
+          </View> : <View style={[{ width: RING, height: RING }, outOfRange && styles.ringOutOfRange]}
             accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}${pill ? ` ${pill}.` : ''}`}>
             <Svg width={RING} height={RING} style={StyleSheet.absoluteFill}>
               <Circle cx={RING / 2} cy={RING / 2} r={RING_R} stroke="rgba(255,255,255,0.22)"
@@ -442,7 +445,7 @@ export default function WaitCard({
             {pill && <View pointerEvents="none" style={styles.pill}>
               <Text style={styles.pillText}>{pill}</Text>
             </View>}
-          </View>
+          </View>}
           <View style={styles.meterCopy}>
             <Text style={styles.meterHeadline} numberOfLines={1} adjustsFontSizeToFit>{headline}</Text>
             <Text style={styles.meterSub}>{outOfRange && bonusOn ? 'Step back into the line area' : subline}</Text>
@@ -550,6 +553,8 @@ const styles = StyleSheet.create({
   compactNote: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 13, lineHeight: 16, marginTop: 1 },
   compactContent: { paddingTop: 6 },
   compactRideName: { fontSize: 19, lineHeight: 22, marginRight: 7 },
+  noPartsWell: { width: RING, height: RING, borderRadius: RING / 2, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)' },
   compactMeter: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 2 },
   compactGem: { width: 28, height: 28, resizeMode: 'contain' },
   compactCopy: { flex: 1 },
