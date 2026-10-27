@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { logRide, type LogRidePayload } from '../api/endpoints/player-rides';
+import { logRide, type LogRidePayload, type LogRideResponse } from '../api/endpoints/player-rides';
 import { RedeemRetryQueue } from './lineplay/RedeemRetryQueue';
 
 /**
@@ -73,6 +73,8 @@ export function rideLogWaitLine(reason: RideLogWaitReason, count = 1): string {
 
 let signedInPlayerId: number | null = null;
 let queue: RedeemRetryQueue<QueuedRideLog> | null = null;
+/** Rides the Ride Journal is sending right now: a drain leaves them alone so one save is one send. */
+const sendingNow = new Set<string>();
 const listeners = new Set<(count: number) => void>();
 
 function tooOld(item: QueuedRideLog, now: number): boolean {
@@ -86,6 +88,7 @@ function outbox(): RedeemRetryQueue<QueuedRideLog> {
     maxAttempts: Number.POSITIVE_INFINITY,
     executor: async item => {
       const now = Date.now();
+      if (sendingNow.has(item.payload.source_detection_id)) return false;
       // Someone else's ride (or nobody signed in): it waits for its own player.
       if (signedInPlayerId === null || item.player_id !== signedInPlayerId) {
         return tooOld(item, now) && letGo(item, 'expired', now);
@@ -227,7 +230,52 @@ export function setRideLogOutboxPlayer(playerId: number | null): void {
 
 /** Keep a ride on the phone until it can be sent. Safe to call twice for the same ride. */
 export async function queueRideLog(item: QueuedRideLog): Promise<void> {
-  await outbox().enqueue(item, item.payload.source_detection_id);
+  await outbox().enqueue(item, item.payload.source_detection_id, { replace: true });
+  await announce();
+}
+
+/**
+ * Save a ride memory the moment Save is tapped. The full draft (stars, face,
+ * wait, note) goes into the outbox first, then one direct send; a server
+ * answer takes it back out. If the screen goes away mid-save (a park change, a
+ * remount, an app switch) the draft is already on the phone and the next drain
+ * sends it. `kept` says whether the draft made it onto the phone. On a failed
+ * send the draft stays kept and the error is thrown with `kept` attached; the
+ * caller lets it go (dropRideLog) only when the server said no.
+ */
+export async function saveRideLogKeptFirst(item: QueuedRideLog): Promise<{ result: LogRideResponse; kept: boolean }> {
+  const id = item.payload.source_detection_id;
+  let kept = false;
+  sendingNow.add(id);
+  try {
+    try {
+      await outbox().enqueue(item, id, { replace: true });
+      kept = true;
+    } catch {
+      // Storage hiccup: the direct send below still runs; the caller retries the keep on weak signal.
+    }
+    try {
+      const result = await logRide(item.payload);
+      if (kept) await outbox().remove(id).catch(() => undefined);
+      return { result, kept };
+    } catch (error) {
+      if (error && typeof error === 'object') (error as { rideLogKept?: boolean }).rideLogKept = kept;
+      throw error;
+    }
+  } finally {
+    sendingNow.delete(id);
+    void announce().catch(() => undefined);
+  }
+}
+
+/** Did saveRideLogKeptFirst keep this failed save's draft on the phone? */
+export function rideLogWasKept(error: unknown): boolean {
+  return !!(error && typeof error === 'object' && (error as { rideLogKept?: boolean }).rideLogKept);
+}
+
+/** Take a kept ride back out (the server said no and the Ride Journal is handling it). */
+export async function dropRideLog(id: string): Promise<void> {
+  await outbox().remove(id);
   await announce();
 }
 

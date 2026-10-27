@@ -5,7 +5,7 @@ import { useContext, useState, useEffect, useCallback, useMemo, useRef } from 'r
 import { useFocusEffect, useIsFocused, useNavigation, type NavigationProp } from '@react-navigation/native';
 import { AppState, ImageBackground, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import getWikiTimes, { type WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
-import { loadParkShelf } from '../services/collection/parkShelfPrefetch';
+import { loadParkShelf, peekParkShelf } from '../services/collection/parkShelfPrefetch';
 import Ribbon from '../components/Ribbon';
 import InformationModal from '../components/InformationModal';
 import Loading from '../components/Loading';
@@ -64,20 +64,23 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const [landedKey, setLandedKey] = useState<string | null>(null);
   const [closedKey, setClosedKey] = useState<string | null>(null);
   const [inspection, setInspection] = useState<{ section: ShelfSection; taskId: number; key: number } | null>(null);
-  const [currentPark, setCurrentPark] = useState<ParkType>();
-  const [archivedTasks, setArchivedTasks] = useState<TaskType[]>([]);
-  const [tasks, setTasks] = useState<TaskType[]>([]);
+  // "See It On Your Shelf": the win already loaded this shelf, so the first frame is the shelf
+  // (never a Loading screen) and the coin can fly straight to its slot.
+  const [seed] = useState(() => isEarnedShelfArrival(earnedCoin) ? peekParkShelf(Number(park), Number(player)) : null);
+  const [currentPark, setCurrentPark] = useState<ParkType | undefined>(seed?.visitedPark);
+  const [archivedTasks, setArchivedTasks] = useState<TaskType[]>(seed?.archived ?? []);
+  const [tasks, setTasks] = useState<TaskType[]>(seed?.available ?? []);
   const [completedArchivedTasks, setCompletedArchivedTasks] = useState<
     TaskType[]
-  >([]);
-  const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>([]);
-  const [completedTasks, setCompletedTasks] = useState<TaskType[]>([]);
-  const [limitedTasks, setLimitedTasks] = useState<TaskType[]>([]);
+  >(seed?.completedArchived ?? []);
+  const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>(seed?.secret ?? []);
+  const [completedTasks, setCompletedTasks] = useState<TaskType[]>(seed?.completed ?? []);
+  const [limitedTasks, setLimitedTasks] = useState<TaskType[]>(seed?.limited ?? []);
   const [catalogRides, setCatalogRides] = useState<RideType[]>([]);
   const [completedSecretTasks, setCompletedSecretTasks] = useState<
     SecretTaskType[]
-  >([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  >(seed?.completedSecret ?? []);
+  const [loading, setLoading] = useState<boolean>(!seed);
   const [progressStale, setProgressStale] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [waitSnapshot, setWaitSnapshot] = useState<{
@@ -320,7 +323,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
           {row.map((task, index) => {
             const owned = completedFor(section).find(done => done.id === task.id);
             const arriving = matchesArrival(section, task.id);
-            const hidden = arriving && !!arrival.target && landedKey !== requestKey;
+            // The earned coin is off its slot from the first frame until it lands (never in place, then flown in).
+            const hidden = arriving && landedKey !== requestKey && closedKey !== requestKey && (!!arrival.target || arrival.pending);
             const focused = focusSlot?.section === section && focusSlot.task.id === task.id;
             return <View key={task.id} style={{ paddingLeft: index === 0 ? 0 : 7 }}>
               {owned ? (

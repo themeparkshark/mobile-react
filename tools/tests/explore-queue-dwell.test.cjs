@@ -84,11 +84,14 @@ test('DwellCard Play that cannot load says so instead of failing silently', asyn
   assert.ok(app.find(n => n.props?.children === 'Could not open this line. Tap to try again.'), 'the chip shows a readable reason');
 });
 
-test('the dwell Play resolves by ride id first, then by name, and throws a readable error when neither loads', () => {
+test('the dwell and Adventure Ticket Play resolve by ride id, then name, then the template story, and never throw', () => {
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
   const block = src.slice(src.indexOf('<DwellCard'), src.indexOf('<AdventureTicketCard'));
-  assert.match(block, /resolveRideContextById\(park\.id, queueDwell\.rideId\)/);
-  assert.match(block, /throw new Error/);
+  assert.match(block, /resolveQueueStoryContext\(park\.id, queueDwell\.rideId, queueDwell\.rideName\)/);
+  assert.doesNotMatch(block, /throw new Error/);
+  const ticket = src.slice(src.indexOf('<AdventureTicketCard'), src.indexOf('onShelf={() => {', src.indexOf('<AdventureTicketCard')));
+  assert.match(ticket, /resolveQueueStoryContext\(adventure\.park_id, adventure\.ride\.ride_id,/);
+  assert.doesNotMatch(ticket, /throw new Error/);
 });
 
 test('dwell queue types match the server Adventure Ticket ride types', () => {

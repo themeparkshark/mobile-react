@@ -30,7 +30,7 @@ import { BRAND, GameButton, gameAlert } from '../ui';
 import { ModalLayerContext, useModalLayer } from '../ui/modalLayers';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
-import { captureFlex, openShareSheet } from './capture';
+import { captureFlex, openShareSheet, shareCardFileName } from './capture';
 import { FLEX_ART_FALLBACK_MS } from './FlexArtwork';
 import { flexCopy } from './copy';
 import { CARD_CHROME, FLEX_SIZE, FlexCard } from './FlexCard';
@@ -210,12 +210,13 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
         setStage('leaving');
         setTimeout(onDismiss, HANDOFF_MS);
       });
-      // The card's title names the file in the share sheet ("Golden-Churro.jpg"), never a UUID.
+      // The card type names the file in the share sheet ("Theme-Park-Shark-Coin-Card.jpg"): never a UUID,
+      // never a ride or prize title.
       // After the grown-up's yes (never before, so a "Not now" changes nothing), the link (with its
       // per-kind or prize campaign, never a player id) goes on the clipboard for an Instagram link sticker.
       const link = flexShareUrl(request.kind, request.payload);
       const copyLink = () => Clipboard.setStringAsync(link).then(() => setLinkCopied(true)).catch(() => undefined);
-      const outcome = await openShareSheet(uri, shareMessage(link), flexCopy(request.kind, request.payload).title, copyLink);
+      const outcome = await openShareSheet(uri, shareMessage(link), shareCardFileName(request.kind), copyLink);
       if (!outcome.opened) { reopen = true; event('dismissed'); }
       // A sheet that never answered (it may still be up) is neither a cancel nor a share: record nothing.
       else if (outcome.timedOut) return;

@@ -83,6 +83,10 @@ const GAMES = [
 type FlowState = 'recovering' | 'auth-required' | 'preview' | 'retrying' | 'wheel' | 'spinning' | 'minigame' | 'postwin' | 'lost' | 'claim-error' | 'spend-error' | 'save-error' | 'expired';
 type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'photo';
 
+
+/** After "See It On Your Shelf", the map behind refreshes once the coin has landed (the flight takes about 1 s). */
+export const SHELF_MAP_REFRESH_DELAY_MS = 1800;
+
 export default function RedeemRedeemableModal({
   open,
   close,
@@ -599,18 +603,19 @@ export default function RedeemRedeemableModal({
     const focusCoinAssetId = attemptRef.current?.rewards?.coin_asset_id;
     const earnedCoin = createEarnedShelfArrival(attemptRef.current);
     const ownerId = player?.id;
-    await clearAttemptCheckpoint().catch(error =>
+    void clearAttemptCheckpoint().catch(error =>
       console.warn('Could not clear confirmed ride win:', error));
-    onPress();
-    afterRewardsHidden.current = () => {
-      if (earnedCoin && ownerId) RootNavigation.navigate('Park', {
-        park: park.id, player: ownerId, earnedCoin, ...(openMastery ? { openMastery: true } : {}),
-      });
-      else RootNavigation.navigate('CoinShelf', {
-        focusCoin: focusCoinAssetId ? { assetId: focusCoinAssetId } : undefined,
-      });
-    };
+    // Coin to shelf in one move: the shelf (already loaded during the win card) opens right now
+    // under the fading card, never after the card has faded and the map has held still. The
+    // map's own refresh waits until the coin has landed, so it never competes with the flight.
+    if (earnedCoin && ownerId) RootNavigation.navigate('Park', {
+      park: park.id, player: ownerId, earnedCoin, ...(openMastery ? { openMastery: true } : {}),
+    });
+    else RootNavigation.navigate('CoinShelf', {
+      focusCoin: focusCoinAssetId ? { assetId: focusCoinAssetId } : undefined,
+    });
     close();
+    setTimeout(onPress, SHELF_MAP_REFRESH_DELAY_MS);
   }, [onPress, close, clearAttemptCheckpoint, player?.id, park.id]);
 
   const handleViewStampBook = useCallback(async () => {

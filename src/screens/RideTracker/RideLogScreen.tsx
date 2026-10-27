@@ -20,12 +20,15 @@ import ReactionPicker from '../../components/RideTracker/ReactionPicker';
 import RideTypeIcon from '../../components/RideTracker/RideTypeIcon';
 import RideLogSuccess from '../../components/RideTracker/RideLogSuccess';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
-import Wrapper, { FOOTER_CLEARANCE } from '../../components/Wrapper';
+import Wrapper, { BOTTOM_BAR_OVERHANG, FOOTER_CLEARANCE } from '../../components/Wrapper';
 import Topbar from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import { removePendingDetection } from '../../services/RideDetectionService';
-import { clearLetGoRideLog, drainRideLogs, keepRideLogForLater, manualRideLogId, queueRideLog, rideLogWaitReason, shouldQueueRideLog, type RideLogWaitReason } from '../../services/rideLogOutbox';
+import {
+  clearLetGoRideLog, drainRideLogs, dropRideLog, keepRideLogForLater, manualRideLogId, queueRideLog, rideLogWaitReason,
+  rideLogWasKept, saveRideLogKeptFirst, shouldQueueRideLog, type RideLogWaitReason,
+} from '../../services/rideLogOutbox';
 import { journalRides, rideLogError } from './rideJournalModel';
 import { AuthContext } from '../../context/AuthProvider';
 import ProfileStatIcon from '../../components/ProfileStatIcon';
@@ -101,6 +104,8 @@ export default function RideLogScreen() {
   const { player } = useContext(AuthContext);
   const rideLoadSequence = useRef(0);
   const saving = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const reducedMotion = useReducedGameMotion();
 
   const [showSuccess, setShowSuccess] = useState(false);
@@ -268,8 +273,12 @@ export default function RideLogScreen() {
       park_id: selectedRide.park_id,
     };
 
+    // The full draft goes into the outbox the moment Save is tapped, before the
+    // network: a park change, a remount or weak signal can never drop the stars and face.
+    const keep = player?.id != null ? { payload, ride_name: selectedRide.name, park_id: selectedRide.park_id ?? null,
+      player_id: player.id, queued_at: Date.now() } : null;
     try {
-      const result = await logRide(payload);
+      const result = keep ? (await saveRideLogKeptFirst(keep)).result : await logRide(payload);
       if (detectionId) void removePendingDetection(detectionId).catch(() => undefined);
       if (again) void clearLetGoRideLog(again.id).catch(() => undefined);
       logId.current = null;
@@ -288,6 +297,12 @@ export default function RideLogScreen() {
       if (!shouldQueueRideLog(e)) {
         // The server read the ride and said no: kid words and a next step, never server text.
         const problem = rideLogError(e);
+        if (rideLogWasKept(e)) {
+          // Still here: the kid picks the next step below. Gone (a park change): it waits on the
+          // Ride Tracker with Log it again, never dropped in silence.
+          if (mounted.current) void dropRideLog(payload.source_detection_id).catch(() => undefined);
+          else if (keep) { void keepRideLogForLater(keep).then(ok => { if (ok) return dropRideLog(payload.source_detection_id); }).catch(() => undefined); return; }
+        }
         // The full memory, kept for "Try later" even after a plain retry.
         const memory: LogRidePayload & { source_detection_id: string } = {
           ride_id: selectedRide.id, source_detection_id: payload.source_detection_id, rode_at: payload.rode_at,
@@ -305,11 +320,10 @@ export default function RideLogScreen() {
             : [{ text: 'Fix it' }]);
         return;
       }
-      // Weak signal: keep the ride on the phone and send it later. Never throw it away.
+      // Weak signal: the ride is already kept on the phone and goes later. Never throw it away.
       try {
-        if (player?.id == null) throw new Error('signed out');
-        await queueRideLog({ payload, ride_name: selectedRide.name, park_id: selectedRide.park_id ?? null,
-          player_id: player.id, queued_at: Date.now() });
+        if (!keep) throw new Error('signed out');
+        if (!rideLogWasKept(e)) await queueRideLog(keep);
       } catch {
         gameAlert('Ride not saved', "We couldn't save it. Check your signal and try again.");
         return;
@@ -483,6 +497,7 @@ export default function RideLogScreen() {
 
       {/* Step: Rate & Details */}
       {step === 'details' && selectedRide && (
+        <View style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.detailsContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View>
             <Text style={s.stepEyebrow}>RIDE JOURNAL · 3 OF 3</Text>
@@ -525,7 +540,9 @@ export default function RideLogScreen() {
             maxLength={255}
             accessibilityLabel="Your ride memory, optional"
           />
-
+        </ScrollView>
+        {/* Pinned above the MAP compass: a tap on Save is always Save, never the map. */}
+        <View style={s.saveBar}>
           <Pressable
             onPress={handleSubmit}
             disabled={submitting}
@@ -542,7 +559,8 @@ export default function RideLogScreen() {
               <Text style={[s.submitBtnText, submitting && { opacity: 0.6 }]}>{submitting ? 'Saving' : 'Save Ride Memory'}</Text>
             </LinearGradient>
           </Pressable>
-        </ScrollView>
+        </View>
+        </View>
       )}
       </ImageBackground>
     </Wrapper>
@@ -615,7 +633,8 @@ const s = StyleSheet.create({
   emptyText: { color: '#64748b', textAlign: 'center', marginTop: 40, fontSize: 15, fontFamily: 'Knockout' },
 
   // Details
-  detailsContainer: { padding: 20, paddingBottom: FOOTER_CLEARANCE + 24 },
+  detailsContainer: { padding: 20, paddingBottom: 16 },
+  saveBar: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: BOTTOM_BAR_OVERHANG + 6 },
   selectedRideCard: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 20,
@@ -633,7 +652,7 @@ const s = StyleSheet.create({
   },
   noteInput: { minHeight: 80, textAlignVertical: 'top' },
   submitBtn: {
-    borderRadius: 16, overflow: 'hidden', marginTop: 30,
+    borderRadius: 16, overflow: 'hidden',
     shadowColor: '#d4a70a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
   },
   submitBtnGradient: {
