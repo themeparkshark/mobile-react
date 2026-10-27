@@ -97,6 +97,8 @@ const MODE_ID: Record<SharkyMode, number> = { queue: MODE_QUEUE, ride: MODE_RIDE
 const QUEUE_STARS = { one: 2500, two: 6000, three: 11000 };
 const RIDE_STARS = { one: 1, two: 4000, three: 7000 };
 const RIVAL_COLORS = [NEUTRAL, '#ffe27a', '#bff3ff'];
+/** After TIME!'s hold, the replay and saves may take this long to hand the shell the card before the end watch steps in. */
+export const SHARKY_END_WATCH_MS = 5000;
 
 /** Themed course label (design 5.10): never the ride's real name. */
 export function courseLabel(category?: string): string {
@@ -277,6 +279,9 @@ export function SharkySwim({
     // TIME! holds its beat while the card is worked out, so a moving line
     // gets the card at the end of the hold, never hold + replay time.
     const holdMs = finishHoldMs(reason, cfg.mode);
+    // The shell's one end watch: if the replay or a save never hands back a card,
+    // the shared card shows the live score (a live rally waits for its podium instead).
+    if (!liveRally) shell.current?.endWatch(holdMs + SHARKY_END_WATCH_MS);
     const endedAt = Date.now();
     setTimeout(() => {
       const s = replay(cfg, entries, 60 * 60 * 20);

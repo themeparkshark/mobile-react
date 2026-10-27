@@ -115,16 +115,21 @@ export function NewChip({ index, label, face, foil, stamp, reducedMotion, dark, 
   }, [index, r, reducedMotion, startMs]);
   const back = useAnimatedStyle(() => ({ opacity: r.value < 0.5 ? 1 : 0, transform: [{ perspective: 600 }, { rotateY: `${r.value * 180}deg` }] }));
   const front = useAnimatedStyle(() => ({ opacity: r.value >= 0.5 ? 1 : 0, transform: [{ perspective: 600 }, { rotateY: `${r.value * 180 - 180}deg` }] }));
+  // A picture, not a caption: one gold NEW tag on the card's corner (the same tag every unlock wears).
+  // The words (NEW CARD, NEW FOIL, NEW STAMP) are only spoken.
+  void dark;
   return (
-    <View style={styles.newChip}>
+    <View style={styles.newChip} accessible accessibilityLabel={label.toLowerCase()}>
       <View style={{ width: 40, height: 50 }}>
         <Animated.Image source={CARD_BACK} style={[styles.chipCard, back]} resizeMode="cover" />
         <Animated.View style={[styles.chipCard, front]}>
           {stamp ? <Image source={STAMP} style={{ width: 40, height: 40, marginTop: 5 }} resizeMode="contain" />
             : face ? <FaceThumb face={face} w={40} h={50} foil={foil} /> : null}
         </Animated.View>
+        <Animated.View style={[styles.newTagPos, front]} pointerEvents="none">
+          <View style={styles.newTag}><Text style={styles.newTagText}>NEW</Text></View>
+        </Animated.View>
       </View>
-      <Text style={[styles.newLabel, dark && { color: MM.navyText }, foil && { color: dark ? MM.goldDeep : MM.gold }]}>{label}</Text>
     </View>
   );
 }
@@ -465,7 +470,9 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 8 },
   newChip: { alignItems: 'center', width: 64 },
   chipCard: { position: 'absolute', left: 0, top: 0, width: 40, height: 50, borderRadius: 6, overflow: 'hidden', backfaceVisibility: 'hidden' },
-  newLabel: { fontFamily: 'Knockout', fontSize: 11, color: '#ffffff', marginTop: 3, letterSpacing: 0.5 },
+  newTagPos: { position: 'absolute', top: -9, right: -18 },
+  newTag: { backgroundColor: '#ffcf3b', borderRadius: 8, borderWidth: 2, borderColor: '#05346e', paddingHorizontal: 4, paddingVertical: 0, transform: [{ rotateZ: '8deg' }] },
+  newTagText: { fontFamily: 'Shark', fontSize: 11, color: '#05346e' },
   foilDone: { fontFamily: 'Knockout', fontSize: 13, color: MM.gold, marginBottom: 6 },
   btnRow: { flexDirection: 'row', gap: 8, justifyContent: 'center' },
   smallBtn: { backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 3, borderColor: MM.ink, paddingHorizontal: 14, paddingVertical: 8, minHeight: 44, justifyContent: 'center' },

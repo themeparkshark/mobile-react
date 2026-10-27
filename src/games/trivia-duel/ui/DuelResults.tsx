@@ -23,6 +23,7 @@ import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { feelingChips, type FeelingStat } from '../../../gamekit/results/feelings';
 import GameIcon, { type GameIconName } from '../../../ui/GameIcon';
 import countText from '../../../helpers/countText';
+import { STAR_SLOT } from '../../../gamekit/results/starSlot';
 
 /**
  * The polaroid sits this far above the card's top edge (root paddingBottom +
@@ -139,6 +140,12 @@ export function polaroidAt(beatMs: number, banners: number, rankUp: boolean, sta
 export function bestMomentTime(label: string): string | null {
   const m = /^(\d+(?:\.\d+)?)s\b/.exec(label.trim());
   return m ? `${m[1]}s` : null;
+}
+
+/** The polaroid's picture caption: the fastest answer's speed as 1 to 3 bolts (never a number to read). */
+export function polaroidBolts(rows: readonly { label: string; value: string }[]): number {
+  const word = rows.find((r) => r.label === 'Fastest answer')?.value ?? '';
+  return Math.max(1, speedBolts(word));
 }
 
 /** What VoiceOver says for the Best Moment ("0.4s on Q2" -> "Best moment: 0.4 seconds on question 2"). */
@@ -345,10 +352,9 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
         <Animated.View style={[styles.polaroid, { bottom: POL_BOTTOM_PAD + cardH + POL_GAP }, polStyle]} pointerEvents="none"
           accessible accessibilityLabel={bestMomentSpoken(model.best.label)}>
           <Image source={ART.polaroid} style={{ width: POL_W * polK, height: POL_H * polK }} resizeMode="contain" />
-          {/* A picture, not a sentence: a bolt and the big time (the rest is spoken). */}
+          {/* A picture, not a number: the fastest answer as bolts (1 to 3, like the speed chip). The time is spoken. */}
           <View style={[styles.polCaption, { bottom: -6 * polK }]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-            <GameIcon name="rush" size={Math.round(30 * polK)} />
-            {bestMomentTime(model.best.label) ? <Text style={[styles.polTime, { fontSize: Math.round(26 * polK) }]}>{bestMomentTime(model.best.label)}</Text> : null}
+            {Array.from({ length: polaroidBolts(model.rows) }, (_, i) => <GameIcon key={i} name="rush" size={Math.round(30 * polK)} />)}
           </View>
         </Animated.View>
       ) : null}
@@ -373,7 +379,7 @@ function StarPip({ on, i, reducedMotion }: { on: boolean; i: number; reducedMoti
   // The same star every results card draws: pale blue until it is earned.
   return (
     <Animated.View style={[styles.starPip, st]}>
-      <GameIcon name="star" size={i === 2 ? 46 : 38} mono={on ? undefined : '#9cc9ec'} />
+      <GameIcon name="star" size={i === 2 ? 46 : 38} mono={on ? undefined : STAR_SLOT} />
     </Animated.View>
   );
 }

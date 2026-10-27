@@ -71,7 +71,8 @@ test('the Best Moment caption is a picture (a bolt and the big time), the senten
   assert.equal(time('on Q2'), null);
   assert.equal(spoken('0.4s on Q2'), 'Best moment: 0.4 seconds on question 2');
   assert.doesNotMatch(duel, />BEST MOMENT</);
-  assert.match(duel, /<GameIcon name="rush" size=\{Math\.round\(30 \* polK\)\} \/>/);
+  // Wave 6: the caption is bolts for the speed (no bare 0.4s to read).
+  assert.match(duel, /polaroidBolts\(model\.rows\)/);
   assert.match(duel, /accessibilityLabel=\{bestMomentSpoken\(model\.best\.label\)\}/);
 });
 
@@ -84,9 +85,9 @@ test('Sharky shows its unlock as a picture with a gold NEW tag inside the card, 
   assert.ok(sharky.indexOf('styles.mRow') < sharky.indexOf('<ResultPrimaryButton'), 'missions above the buttons');
   const unlock = read('src/games/sharky/hud/SharkyUnlock.tsx');
   assert.match(unlock, /'PRIZE BOXES': SHARKY_ART\.prizeBox/);
-  assert.match(unlock, /accessibilityLabel=\{`New unlocked: \$\{unlockName\(card\)\.toLowerCase\(\)\}`\}/);
-  assert.match(unlock, /GameAudio\.play\('fx\.reward'/);
-  assert.match(unlock, /<Text style=\{styles\.tagText\}>NEW<\/Text>/);
+  assert.match(unlock, /label=\{`New unlocked: \$\{unlockName\(card\)\.toLowerCase\(\)\}`\}/);
+  // Wave 6: the one unlock tile (the reward cue and the NEW tag live there).
+  assert.match(unlock, /<UnlockTile /);
   const name = fnFrom('src/games/sharky/hud/SharkyUnlock.tsx', 'unlockName');
   assert.equal(name('NEW: Prize Boxes'), 'Prize Boxes');
   assert.equal(name('Overdrive'), 'Overdrive');
@@ -113,8 +114,8 @@ test('a spent Ticket reads GOOD TRY!, and the ad retry leads with pictures (play
 
 test('the new Finn tile is compact (72 pt) so a tall Whack win keeps room for the peek shark', () => {
   const finn = read('src/games/whack/FinnUnlock.tsx');
-  assert.match(finn, /export const FINN_TILE_PT = 72;/);
-  assert.match(finn, /card: \{ width: FINN_TILE_PT, height: FINN_TILE_PT,/);
+  assert.match(finn, /export const FINN_TILE_PT = UNLOCK_TILE_PT;/);
+  assert.match(read('src/gamekit/results/UnlockTile.tsx'), /export const UNLOCK_TILE_PT = 72;/);
   assert.doesNotMatch(finn, /width: 92/);
   // A tall phone keeps the smallest peek even when the card fills the stage; an SE keeps none.
   const podium = read('src/gamekit/results/ResultsPodium.tsx');
@@ -161,9 +162,9 @@ test('the warm-up first win wears the family card: blue, white border, the share
 
 test('the extras panel never sits at scale 0 (its cream fill came back missing for seconds on iOS)', () => {
   const card = read('src/gamekit/results/ResultsCard.tsx');
-  // The fill lives on a plain view inside the popping wrapper.
-  assert.match(card, /<Animated\.View style=\{\[styles\.extrasPop, extrasStyle\]\}>\s*<View style=\{\[styles\.extras, styles\.extrasInPop\]\}>/);
-  assert.match(card, /const extrasStyle = useAnimatedStyle\(\(\) => \(\{ opacity: extrasIn\.value > 0\.02 \? 1 : 0, transform: \[\{ scale: 0\.6 \+ 0\.4 \* extrasIn\.value \}\] \}\)\);/);
+  // Wave 6: the unlock sits bare on the blue, so there is no panel to scale at all.
+  assert.doesNotMatch(card, /extrasStyle|extrasIn\b/);
+  assert.match(card, /extrasBare: \{ width: '100%', marginTop: 4, alignItems: 'center' \},/);
 });
 
 test('a record Banana Basket or Sharky run is a NEW BEST: the shell compares with the best from before the run, not the one just saved', () => {
@@ -182,6 +183,7 @@ test('a record Banana Basket or Sharky run is a NEW BEST: the shell compares wit
 
 test('a 0-star Banana Basket card keeps one short tip, not three sentences of reading', () => {
   const banana = read('src/games/banana-basket/BananaBasketGame.tsx');
-  assert.match(banana, /note: stars === 0 \? tipLine\(facts\) :/);
+  // Wave 6: the one tip is spoken, never drawn.
+  assert.match(banana, /spokenNote: stars === 0 \? tipLine\(facts\) : undefined,/);
   assert.doesNotMatch(banana, /whyLine\(facts\)/);
 });

@@ -37,7 +37,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import SparkleBurst from '../../components/SparkleBurst';
 import TapHint from '../../components/TapHint';
 import { GameAudio, Haptic } from '../../gamekit';
-import GameIcon from '../../ui/GameIcon';
+import GameIcon, { type GameIconName } from '../../ui/GameIcon';
 import type { CoinEdition, Grade } from './engine';
 import { deckById } from './decks';
 import { faceFor } from './faces';
@@ -47,11 +47,12 @@ import { MM } from './theme';
 import { bestAwareTitle } from '../../gamekit/results/feelings';
 import { RESULTS_RIBBON_ART, ResultsRibbon } from '../../gamekit/results/ResultsRibbon';
 import countText from '../../helpers/countText';
+import { STAR_SLOT } from '../../gamekit/results/starSlot';
 
 const COIN = require('../../assets/games/memory/studio/coin_alex.png');
 
 /** The shared results card colors (gamekit ResultsCard, TryCard, Sharky). */
-export const FAMILY = { card: '#0768b9', border: '#ffffff', gold: '#ffcf3b', navy: '#05346e', panel: '#fff8e4', starOff: '#9cc9ec' } as const;
+export const FAMILY = { card: '#0768b9', border: '#ffffff', gold: '#ffcf3b', navy: '#05346e', panel: '#fff8e4', starOff: STAR_SLOT } as const;
 
 export const EIGHTH_MS = 232;
 
@@ -176,7 +177,8 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
   // late tap to open over CLEARED (a kid still tapping the board lands right there).
   // This covers firstWin too (firstWin is a won warm-up).
   const canStats = data.mode !== 'warmup' && (data.numbers.length > 0 || !!data.grades);
-  const canShare = !!data.daily;
+  // A 0-star loss is not a post anyone wants: Share shows only with a star.
+  const canShare = !!data.daily && data.stars > 0;
   const canChallenge = !!data.daily?.ranked;
 
   if (firstWin) return <FirstWinCard banner={data.banner} claim={claim} reducedMotion={reducedMotion} />;
@@ -427,14 +429,14 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
           <ResultsRibbon title={banner} reducedMotion style={styles.firstWinRibbon} />
         </Animated.View>
         <Animated.View style={[styles.firstWinNext, nextSt]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-          {/* A ride car with the coin it gives: coins come from rides, no reading needed. */}
+          {/* A ride car with the coin it gives: coins come from rides, no reading needed (no words drawn). */}
           <View style={styles.firstWinPic}>
             <Image source={FIRST_WIN_RIDE} style={styles.firstWinRide} resizeMode="contain" />
             <View ref={coinRef} collapsable={false} style={styles.firstWinCoinSpot}>
               <Animated.Image source={FIRST_WIN_COIN} style={[styles.firstWinCoin, coinSt]} resizeMode="contain" />
             </View>
           </View>
-          <Text style={styles.firstWinNextText}>{FIRST_WIN_COPY.next}</Text>
+          {/* "Ride coins!" is spoken with the title (FIRST_WIN_COPY.a11y); the picture says it on screen. */}
         </Animated.View>
         <Animated.View style={[styles.firstWinBtnWrap, btnSt]} pointerEvents={live ? 'auto' : 'none'}>
           <Pressable onPress={onContinue} disabled={!live} style={({ pressed }) => [styles.bigBtn, pressed && styles.pressed]}
@@ -579,6 +581,10 @@ function Star({ index, on, delay, hang, reducedMotion }: { index: number; on: bo
   );
 }
 
+/** A flipped card stands for TURNS on the STATS row (the deck's own card back). */
+const TURN_CARD = require('../../assets/games/memory/card-back.png');
+const NUM_ICON: Partial<Record<string, GameIconName>> = { TIME: 'timer', BEST: 'crown', SCORE: 'star' };
+
 function Numbers({ data, reducedMotion, tallyOnly = false, statsOnly = false }: { data: MemoryResultsData; reducedMotion: boolean; tallyOnly?: boolean; statsOnly?: boolean }) {
   const jig = useSharedValue(0);
   const total = useSharedValue(0);
@@ -600,8 +606,11 @@ function Numbers({ data, reducedMotion, tallyOnly = false, statsOnly = false }: 
       ) : null}
       {tallyOnly ? null : <View style={styles.numRow}>
         {data.numbers.map((n) => (
-          <View key={n.label} style={[styles.num, n.hot && styles.numHot]}>
-            <Text style={styles.numLabel}>{n.label}</Text>
+          <View key={n.label} style={[styles.num, n.hot && styles.numHot]} accessible accessibilityLabel={`${n.label.toLowerCase()} ${n.value}`}>
+            {/* Pictures, not words: a flipped card for TURNS, a clock for TIME, a crown for BEST. */}
+            {n.label === 'TURNS' ? <Image source={TURN_CARD} style={styles.numPic} resizeMode="contain" />
+              : NUM_ICON[n.label] ? <GameIcon name={NUM_ICON[n.label]!} size={22} />
+                : <Text style={styles.numLabel}>{n.label}</Text>}
             <Text style={styles.numValue} numberOfLines={1} adjustsFontSizeToFit>{n.value}</Text>
           </View>
         ))}
@@ -745,6 +754,7 @@ const styles = StyleSheet.create({
   numRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6 },
   num: { minWidth: 76, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: '#cfe3f7', paddingHorizontal: 8, paddingVertical: 3, alignItems: 'center' },
   numHot: { borderColor: MM.gold },
+  numPic: { width: 20, height: 26, marginBottom: 1 },
   numLabel: { fontFamily: 'Knockout', fontSize: 11, color: MM.ink, letterSpacing: 0.5 },
   numValue: { fontFamily: 'Shark', fontSize: 18, color: MM.navyText },
   luckChip: { marginTop: 6, backgroundColor: '#ffffff', borderRadius: 10, borderWidth: 1.5, borderColor: MM.ink, paddingHorizontal: 8, paddingVertical: 2 },

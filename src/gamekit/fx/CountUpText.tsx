@@ -52,7 +52,9 @@ export interface CountUpTextProps {
   onTick?: () => void;
   onDone?: () => void;
   reducedMotion?: boolean;
-  /** 'short' shows 950, 1.2k, 12k (tight pills). Default: full number with commas. */
+  /** Draw nothing until the count starts (a card never shows a still 0 before its roll). */
+  hideUntilCount?: boolean;
+  /** 'short' shows 950, 1.2k, 12k (tight pills). Default: the full number (countText, no commas). */
   format?: 'full' | 'short';
   style?: StyleProp<TextStyle>;
 }
@@ -71,7 +73,7 @@ export function shortCount(value: number): string {
 
 export function CountUpText({
   value, from: fromProp, durationMs, delayMs = 0, fromValue: fromValueProp, prefix = '', suffix = '', punch = 1.12, punchAt = 'start', easing, tickEvery = 0,
-  onTick, onDone, reducedMotion = false, format = 'full', style,
+  onTick, onDone, reducedMotion = false, format = 'full', style, hideUntilCount = false,
 }: CountUpTextProps) {
   const fromValue = fromValueProp ?? fromProp;
   const first = reducedMotion || fromValue == null ? value : fromValue;
@@ -81,6 +83,7 @@ export function CountUpText({
   /** The text on the first native frame: the count's start, not its end (a mounting card still rolls). */
   const firstText = useRef(first).current;
   const lastTick = useSharedValue(first);
+  const vis = useSharedValue(hideUntilCount && first !== value ? 0 : 1);
 
   useEffect(() => {
     const start = from.current;
@@ -88,6 +91,7 @@ export function CountUpText({
     cancelAnimation(shown);
     if (reducedMotion || start === value) {
       shown.value = value;
+      vis.value = 1;
       if (start !== value) onDone?.();
       return;
     }
@@ -99,10 +103,12 @@ export function CountUpText({
       'worklet';
       if (finished && onDone) runOnJS(onDone)();
     }));
+    // The number appears on the frame its roll starts (same UI-thread delay), never as a still 0 first.
+    if (vis.value < 1) vis.value = withDelay(wait, withTiming(1, { duration: 60 }));
     const pop = withSequence(withTiming(punch, { duration: 90 }), withSpring(1, { damping: 10, stiffness: 300 }));
     scale.value = withDelay(punchAt === 'end' ? wait + ms : wait, pop);
     return () => { cancelAnimation(shown); cancelAnimation(scale); };
-  }, [value, durationMs, delayMs, punch, punchAt, easing, reducedMotion, onDone, shown, scale]);
+  }, [value, durationMs, delayMs, punch, punchAt, easing, reducedMotion, onDone, shown, scale, vis]);
 
   useAnimatedReaction(
     () => Math.floor(shown.value),
@@ -120,7 +126,7 @@ export function CountUpText({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return { text, defaultValue: text } as any;
   });
-  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: vis.value, transform: [{ scale: scale.value }] }));
 
   return (
     <AnimatedInput

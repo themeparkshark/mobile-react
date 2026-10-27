@@ -170,7 +170,7 @@ test('one button rule on every results card: PLAY AGAIN leads, the run is counte
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.match(shell, /const playAgainFirst = rematchOffered && \(!won \|\| canBankRun\);/);
   assert.match(shell, /\{playAgainFirst \? 'PLAY AGAIN' : claimLabel\}/);
-  assert.match(shell, /linePlayMovement\.onRunDone\(effectiveResult\.stars \?\? 0, effectiveResult\.meta\?\.partial === true\);\n\s+\}\n\s+onRematch\(\);/,
+  assert.match(shell, /linePlayMovement\.onRunDone\(effectiveResult\.stars \?\? 0, effectiveResult\.meta\?\.partial === true\);\n\s+\}\n[\s\S]{0,120}?onRematch\(\);/,
     'PLAY AGAIN in a queue counts the run before replaying');
   assert.match(shell, /footer=\{resultCardFooter\}/, 'SHARE sits inside the card');
   assert.doesNotMatch(shell, />Close<|>Play again</, 'one caps font family on every button');
@@ -180,7 +180,8 @@ test('one button rule on every results card: PLAY AGAIN leads, the run is counte
   const cq = read('src/games/current-quest/ResultsCard.tsx');
   assert.match(cq, />PLAY AGAIN</);
   const whack = read('src/games/whack/WhackAShark.tsx');
-  assert.match(whack, /resultCardFooter=\{result \? <ShareCardButton chip/);
+  // Wave 6: no Share on a 0-star loss.
+  assert.match(whack, /resultCardFooter=\{result && \(result\.stars \?\? 0\) > 0 \? <ShareCardButton chip/);
 });
 
 test('every wait opens with a showpiece (Whack or Sharky); Current Quest v1 is never first or second', () => {
@@ -462,7 +463,7 @@ test('a ride-up or left-line end is never a loss, even at 0 points', () => {
   assert.match(shell, /wrapReason=\{wrap\?\.reason \?\? null\}/);
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /const sendOff = wrapUp && stars === 0 && !saved && !\(score > 0\);/);
-  assert.match(card, /\{sendOff \? null : <View accessible accessibilityLabel=\{nBuckets/, 'no score 0 on a send-off');
+  assert.match(card, /\{sendOff \? null : <View accessible accessibilityLabel=\{\(nBuckets/, 'no score 0 on a send-off');
   assert.match(card, /wrapReason === 'boarding' \? 'HAVE FUN!' : 'SEE YOU SOON!'/);
   assert.match(card, /\{chips\.length && !sendOff \? \(/, 'no brag chip (a lone burst dot) on a 0-point send-off');
 });
@@ -623,7 +624,7 @@ test('Boss hit card: shared chips (two at most, singular 1 PERFECT), shared star
   assert.doesNotMatch(src, /textDecorationLine: 'underline'/);
   assert.doesNotMatch(src, />You \{damage|You have <Text/, 'no "You 268 · Team 3,874" or "You have 110 Energy · 4 attacks left" lines');
   assert.match(src, /You have \$\{n\.energyAfter\} Energy and \$\{n\.attacksAfter\}/);
-  assert.match(src, /<GameIcon name="star" size=\{46\} mono="#9cc9ec" \/>/);
+  assert.match(src, /<GameIcon name="star" size=\{46\} mono=\{STAR_SLOT\} \/>/);
   assert.doesNotMatch(src, />MIN</, 'the raid clock is spoken, not drawn');
   assert.doesNotMatch(src, /% power<\/Text>|Perfects/);
 });
@@ -737,7 +738,7 @@ test('round 3: one card per ride miss, one surface, one exit word, honest ticks 
   assert.match(duel, /\{model\.ride\?\.won \? 'CONTINUE' : 'DONE'\}/);
   assert.match(read('src/games/sharky/SharkySwim.tsx'), /claimLabel=\{runMode === 'ride' && args\.won \? 'COLLECT' : args\.claimLabel\}/);
   // The safety net still falls back to the shared card when a surface empties after the fade.
-  assert.match(shell, /resultsSafeRef\.current = true;\s*if \(surfaceAtFade/);
+  assert.match(shell, /resultsSafeRef\.current = true;[\s\S]{0,320}?if \(surfaceAtFade/);
   // The game HUD steps back while results are up.
   assert.match(shell, /styles\.headerCenter, hudBack && styles\.headerHidden/);
   assert.match(read('src/games/trivia-duel/TriviaDuel.tsx'), /lockLabel: resultsUp \? null : locks\.me, stake: resultsUp \? null : stakes\.me/);
@@ -821,7 +822,7 @@ test('Line Trivia results step the HUD back like every card: no title, no score,
   assert.match(shell, /styles\.iconBtn, hudBack && styles\.headerDim/);
   assert.match(shell, /name=\{phase === 'playing' && !hudBack \? 'pause' : 'close'\}/);
   assert.match(shell, /if \(ownResultsDoneRef\.current\) \{ ownResultsDoneRef\.current\(\); return; \}/, 'the X is the card\'s DONE');
-  assert.match(shell, /if \(ownResultsDoneRef\.current\) return;/, 'backgrounding or a line move never pauses a finished game');
+  assert.match(shell, /if \(ownResultsDoneRef\.current \|\| endWatchRun\.current\) return;/, 'backgrounding or a line move never pauses a finished game');
   const duel = read('src/games/trivia-duel/TriviaDuel.tsx');
   assert.match(duel, /ownResultsDone=\{results && phase === 'results' && !isRide \? onContinue : null\}/);
 });

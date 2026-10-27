@@ -47,6 +47,7 @@ import { SavedStamp } from './SavedStamp';
 import { ResultsRibbon } from './ResultsRibbon';
 import { playHaptic } from '../Haptics';
 import { GameAudio } from '../audio/GameAudio';
+import { STAR_SLOT } from './starSlot';
 
 
 export interface ResultStat {
@@ -85,6 +86,8 @@ export interface ResultsCardProps {
   stats?: ResultStat[];
   /** Shown when a queue event wrapped the run ("Your ride's up!"). */
   note?: string;
+  /** Spoken with the score (VoiceOver), never drawn. */
+  spokenNote?: string;
   reducedMotion?: boolean;
   /** Called when the reveal (stars + count-up) has finished. */
   onRevealed?: () => void;
@@ -183,7 +186,7 @@ export function titleDelayMs(stars: number, stepMs: number, reducedMotion: boole
 }
 
 export function ResultsCard({
-  score, stars, message, thresholds, personalBest, maxCombo, stats, note, reducedMotion = false, onRevealed, rival,
+  score, stars, message, thresholds, personalBest, maxCombo, stats, note, spokenNote, reducedMotion = false, onRevealed, rival,
   buckets, bucketValues, starStepMs = STAR_STEP, streakKey, runToken, saved = false, footer, onNewBestLanded, wrapUp = false, starGoal, wrapReason = null, extras, extrasBeat = false, peek = 0, children: actions,
 }: ResultsCardProps) {
   // The ride came up (or the kid left the line) before any points: a happy
@@ -258,24 +261,9 @@ export function ResultsCard({
 
   const bestStyle = useAnimatedStyle(() => ({ transform: [{ scale: bestScale.value }], opacity: bestScale.value > 0.05 ? 1 : 0 }));
 
-  // The extras beat: one UI-thread pop after everything else landed.
+  // The extras beat: an unlock waits for the card's settle moment and pops itself in
+  // (UnlockTile). It sits bare on the blue: no panel, so never an empty box before it lands.
   const settle = extrasBeat ? settleMs({ stars, stepMs: starStepMs, nBuckets, score, newBest: best.isNewBest, reducedMotion }) : 0;
-  const extrasIn = useSharedValue(extrasBeat && !reducedMotion ? 0 : 1);
-  useEffect(() => {
-    if (!extrasBeat || reducedMotion) {
-      extrasIn.value = 1;
-      return undefined;
-    }
-    extrasIn.value = withDelay(settle, withSequence(
-      withTiming(1.06, { duration: 150, easing: Easing.out(Easing.back(2)) }),
-      withSpring(1, { damping: 11, stiffness: 300 }),
-    ));
-    return () => cancelAnimation(extrasIn);
-  }, [extrasBeat, reducedMotion, settle, extrasIn]);
-  // The panel never sits at scale 0: on iOS a view held at scale 0 came back with its
-  // cream fill missing (only the border drew) for seconds after it popped in. It grows
-  // from 0.6 while hidden, so the pop still reads, and its fill is drawn from the first frame.
-  const extrasStyle = useAnimatedStyle(() => ({ opacity: extrasIn.value > 0.02 ? 1 : 0, transform: [{ scale: 0.6 + 0.4 * extrasIn.value }] }));
 
   return (
     <View style={[styles.card, short && styles.cardShort]}>
@@ -308,8 +296,9 @@ export function ResultsCard({
           A star run's tally (POINTS, COMBO, BONUS) pops in on the score's own
           spot, then folds into it as the total counts up: the drama of the
           add-up, and a settled card that shows one number, not four. */}
-      {sendOff ? null : <View accessible accessibilityLabel={nBuckets
-        ? `Score ${formatScore(score)}. ${buckets!.map((b) => `${b.label} ${b.value}`).join(', ')}` : `Score ${formatScore(score)}`} style={styles.scoreWrap}>
+      {sendOff ? null : <View accessible accessibilityLabel={(nBuckets
+        ? `Score ${formatScore(score)}. ${buckets!.map((b) => `${b.label} ${b.value}`).join(', ')}` : `Score ${formatScore(score)}`)
+        + (spokenNote ? `. ${spokenNote}` : '')} style={styles.scoreWrap}>
         {nBuckets ? (
           <TallyFold foldAt={countDelay} reducedMotion={reducedMotion}>
             <CountUpText value={score} from={0} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
@@ -369,14 +358,9 @@ export function ResultsCard({
 
       {extras ? (
         extrasBeat ? (
-          // The pop rides a wrapper; the cream fill lives on a plain view inside it, so
-          // iOS always draws the fill (on the animated view itself it came back
-          // missing, only the border, while the Finn inside it was still springing).
-          <Animated.View style={[styles.extrasPop, extrasStyle]}>
-            <View style={[styles.extras, styles.extrasInPop]}>
-              <ResultsSettleContext.Provider value={settle}>{extras}</ResultsSettleContext.Provider>
-            </View>
-          </Animated.View>
+          <View style={styles.extrasBare}>
+            <ResultsSettleContext.Provider value={settle}>{extras}</ResultsSettleContext.Provider>
+          </View>
         ) : <View style={styles.extras}>{extras}</View>
       ) : null}
 
@@ -535,7 +519,7 @@ function StarSlot({ index, earned, close, reducedMotion, stepMs, small = false, 
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }, { rotate: `${tilt.value}deg` }] }));
   return (
     <Animated.View style={[styles.star, index === 2 && styles.starMiddle, style]}>
-      <GameIcon name="star" size={small ? (index === 2 ? 54 : 44) : index === 2 ? 64 : 52} mono={earned ? undefined : '#9cc9ec'} />
+      <GameIcon name="star" size={small ? (index === 2 ? 54 : 44) : index === 2 ? 64 : 52} mono={earned ? undefined : STAR_SLOT} />
     </Animated.View>
   );
 }
@@ -620,8 +604,7 @@ const styles = StyleSheet.create({
   pipOn: { backgroundColor: '#ffcf3b' },
   // The tally sits on the score's spot (no row of its own), then folds into it.
   buckets: { position: 'absolute', left: -60, right: -60, top: 0, bottom: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  extrasPop: { width: '100%', marginTop: 10 },
-  extrasInPop: { marginTop: 0 },
+  extrasBare: { width: '100%', marginTop: 4, alignItems: 'center' },
   extras: { width: '100%', marginTop: 10, backgroundColor: '#fff8e4', borderRadius: 16, borderWidth: 3, borderColor: '#05346e',
     paddingVertical: 6, paddingHorizontal: 8, alignItems: 'center' },
   // The clip's bottom edge sits a few points under the card's top edge, about a

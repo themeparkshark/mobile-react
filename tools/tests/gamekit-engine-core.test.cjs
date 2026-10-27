@@ -242,7 +242,10 @@ test('scoring: stars, next-star goal with near-miss, best, count-up, flurry tall
   assert.equal(score.nextStarGoal(3000, t).nextStar, 0);
   assert.equal(score.compareBest(900, 800).isNewBest, true);
   assert.equal(score.compareBest(0, undefined).isNewBest, false);
-  assert.equal(score.formatScore(1234567), '1,234,567');
+  // Drawn scores follow countText (no commas: the Shark font draws a comma like a period).
+  assert.equal(score.formatScore(1200), '1200');
+  assert.equal(score.formatScore(99999), '99999');
+  assert.equal(score.formatScore(1234567), '1.2M');
   assert.equal(score.countUpValue(0, 1000, 0, 500), 0);
   assert.equal(score.countUpValue(0, 1000, 500, 500), 1000);
   assert.ok(score.countUpMs(0, 10) < score.countUpMs(0, 100000));

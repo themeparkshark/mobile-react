@@ -92,7 +92,8 @@ test('the Duel takeover zoom keeps both sharks inside the screen (cap 1.16)', ()
 test('no percentage drawn on a results card extra (Banana Basket ball share is a bar, the number is spoken)', () => {
   const banana = read('src/games/banana-basket/BananaBasketGame.tsx');
   assert.doesNotMatch(banana, /BALL \{x\.share\}%/);
-  assert.match(banana, /accessibilityLabel=\{`Your ball share, \$\{x\.share\} percent`\}/);
+  // Wave 6: the rows are pictures (ball, bunch, badges); every number and word is spoken.
+  assert.match(banana, /accessibilityLabel=\{`Best juggle: \$\{x\.juggle\}/);
 });
 
 test('a Memory run that ran out of time shows the pairs it found as coins, never MEMORY 0%', () => {

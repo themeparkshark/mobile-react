@@ -85,6 +85,8 @@ import { RideCoinCrate } from './ui/RideCoinCrate';
 // -- Question clock (UI thread) ------------------------------------------------------
 
 const GUARD_MS: number = UNLOCK_GUARD_MS;
+/** From the last answer to a lit card: the takeover beats, the ride crate and the card rise fit well inside this. */
+export const DUEL_END_WATCH_MS = 9000;
 const PH_IDLE = 0;
 const PH_READ = 1;
 const PH_LIVE = 2;
@@ -1493,6 +1495,9 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const finishMatch = useCallback(async () => {
     const p = plan;
     if (!p) return;
+    // The shell's one end watch: the takeover, the crate and the card take a few beats; if a
+    // save never answers or a beat is lost, the ride card's result (or the shared card) shows.
+    shell.current?.endWatch(DUEL_END_WATCH_MS, () => pendingShell.current ?? null);
     clearTimers();
     setClock({ phase: PH_IDLE });
     setRound(null);

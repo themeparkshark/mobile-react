@@ -52,6 +52,7 @@ import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { bestAwareTitle } from '../../../gamekit/results/feelings';
 import { missionIcon } from './missionIcons';
 import { SharkyUnlock } from './SharkyUnlock';
+import { STAR_SLOT } from '../../../gamekit/results/starSlot';
 
 /** The shared results card blue (ResultsCard). */
 const CARD_BLUE = '#0768b9';
@@ -137,7 +138,7 @@ function Star({ on, index, delayMs, reduced, small = false }: { on: boolean; ind
   const st = useAnimatedStyle(() => ({ transform: [{ scale: sc.value }] }));
   return (
     <Animated.View style={[styles.star, st]}>
-      <GameIcon name="star" size={(index === 1 ? 62 : 52) - (small ? 12 : 0)} mono={on ? undefined : '#9cc9ec'} />
+      <GameIcon name="star" size={(index === 1 ? 62 : 52) - (small ? 12 : 0)} mono={on ? undefined : STAR_SLOT} />
     </Animated.View>
   );
 }
@@ -270,7 +271,8 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
         )}
         {/* The score counts up on the UI thread (no re-render of this card per step). */}
         <Animated.View style={[styles.scoreWrap, scoreStyle]}>
-          <CountUpText value={data.score} from={0} delayMs={150} durationMs={600} punch={1} reducedMotion={reducedMotion}
+          {/* No still 0 while the card lands: the number shows on the frame its roll starts. */}
+          <CountUpText value={data.score} from={0} delayMs={150} durationMs={600} punch={1} reducedMotion={reducedMotion} hideUntilCount
             style={[styles.score, short && styles.scoreShort]} />
         </Animated.View>
         {newBest ? (
@@ -285,10 +287,11 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
           </View>
         ) : null}
         {/* The shared card's order: stars, score, label and bar, then the chips. */}
-        {goal && !(short && goal.nextStar === 0) ? <NextStarBar goal={goal} delayMs={STAR_AT + 50} reducedMotion={reducedMotion} /> : null}
+        {/* The bar and its word (ALL 3 STARS!) wait for the last star they describe. */}
+        {goal && !(short && goal.nextStar === 0) ? <NextStarBar goal={goal} delayMs={titleAt} reducedMotion={reducedMotion} /> : null}
         {gate !== null ? (
           <NextStarBar goal={{ nextStar: 1, progress: gate, near: gate >= 0.85, remaining: 0 }} word={sharkyGateWord(gate)}
-            a11yLabel={`${Math.round(gate * 100)} percent of the way to the Ride Gate`} delayMs={STAR_AT + 50} reducedMotion={reducedMotion} />
+            a11yLabel={`${Math.round(gate * 100)} percent of the way to the Ride Gate`} delayMs={titleAt} reducedMotion={reducedMotion} />
         ) : null}
         {chips.length && !(short && showMissions) ? (
           <View style={styles.chips} accessible accessibilityLabel={brag}>

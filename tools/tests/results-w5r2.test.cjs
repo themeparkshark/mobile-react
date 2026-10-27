@@ -27,14 +27,16 @@ test('the new Finn waits for the card to settle: its panel pops in with it (neve
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /export function settleMs\(/);
   assert.match(card, /export const ResultsSettleContext = React\.createContext<number>\(0\);/);
-  assert.match(card, /<Animated\.View style=\{\[styles\.extrasPop, extrasStyle\]\}>\s*<View style=\{\[styles\.extras, styles\.extrasInPop\]\}>/);
+  // Wave 6: no panel at all for an unlock, so never an empty box; the tile pops itself on the settle moment.
+  assert.match(card, /<View style=\{styles\.extrasBare\}>/);
   // settle = count delay + the total's count-up + the NEW BEST beat.
   assert.match(card, /return countDelay \+ Math\.max\(900, countUpMs\(0, Math\.max\(0, args\.score\)\)\) \+ \(args\.newBest \? 520 : 160\);/);
   const finn = read('src/games/whack/FinnUnlock.tsx');
   assert.match(finn, /const settle = useContext\(ResultsSettleContext\);/);
-  assert.match(finn, /pop\.value = withDelay\(at,/);
-  assert.doesNotMatch(finn, /fx\.coinFull/, 'the coin sound is for coins');
-  assert.match(finn, /GameAudio\.play\('fx\.reward'/);
+  assert.match(finn, /atMs=\{at\}/);
+  const tile = read('src/gamekit/results/UnlockTile.tsx');
+  assert.doesNotMatch(tile, /fx\.coinFull/, 'the coin sound is for coins');
+  assert.match(tile, /GameAudio\.play\('fx\.reward'/);
   const whack = read('src/games/whack/WhackAShark.tsx');
   assert.match(whack, /resultExtrasBeat=\{!!unlockedTheme\}/);
   const shell = read('src/gamekit/GameShellV2.tsx');

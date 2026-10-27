@@ -54,6 +54,7 @@ import {
   useWalkSense,
   type FxStageHandle,
   type GameResult,
+  type GameShellV2Handle,
 } from '../../gamekit';
 import { memoryLossBanner, memoryLossCopy } from './lossCopy';
 import { TryCard } from './TryCard';
@@ -1015,8 +1016,8 @@ export default function MemoryGame({
     }
   }, [deck.id, deck.label, deck.symbols.length, taskName]);
 
-  /** The run whose result card is set, and the end watchdog (see armEndWatch). */
-  const endWatch = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The run whose result card is set (see armEndWatch: the shell's end watch rescues it). */
+  const shellRef = useRef<GameShellV2Handle>(null);
   const resultFor = useRef<Run | null>(null);
   /**
    * The end of a run as a result card, built with no waiting: everything the
@@ -1129,10 +1130,10 @@ export default function MemoryGame({
    * timer lives outside `later`, so clearTimers can never cancel it.
    */
   const armEndWatch = useCallback((r: Run, won: boolean, ms: number) => {
-    if (endWatch.current) clearTimeout(endWatch.current);
-    endWatch.current = setTimeout(() => {
-      endWatch.current = null;
-      if (runRef.current !== r || resultFor.current === r) return;
+    // The shell's one end watch (core/endWatch.ts) owns the timer; this is Memory's rescue.
+    shellRef.current?.endWatch(ms, () => {
+      // A newer run, or this run's card already came: nothing to rescue.
+      if (runRef.current !== r || resultFor.current === r) return false;
       if (!r.ended) {
         r.ended = true;
         r.playing = false;
@@ -1141,9 +1142,9 @@ export default function MemoryGame({
       // A ride win still mints its coin edition, even on the watchdog's card.
       const edition = r.mode === 'ride' && won ? editionForStars(rideStars(r.eng)) : null;
       showEnd(r, won, { ...NO_END_EXTRAS, edition });
-    }, ms);
+      return null;
+    });
   }, [showEnd]);
-  useEffect(() => () => { if (endWatch.current) clearTimeout(endWatch.current); }, []);
 
   const finishRun = useCallback((won: boolean) => {
     const r = runRef.current;
@@ -2513,6 +2514,7 @@ export default function MemoryGame({
 
   return (
     <GameShellV2
+      ref={shellRef}
       visible={visible}
       title={title}
       subtitle={subtitle}

@@ -134,7 +134,8 @@ test('one results language: Memory\'s end card is the blue family card (ribbon, 
   assert.match(src, /cardBack: \{ position: 'absolute', padding: 16, alignItems: 'center', backgroundColor: FAMILY\.panel \}/);
   // New cards keep a readable label on blue (white, foil gold).
   const extras = fs.readFileSync(path.join(root, 'src/games/memory/MemoryExtras.tsx'), 'utf8');
-  assert.match(extras, /foil && \{ color: dark \? MM\.goldDeep : MM\.gold \}/);
+  // Wave 6: a gold NEW tag on the card picture; the words (NEW FOIL) are spoken, never a caption.
+  assert.match(extras, /<View style=\{styles\.newTag\}><Text style=\{styles\.newTagText\}>NEW<\/Text><\/View>/);
   assert.doesNotMatch(src, /reducedMotion=\{reducedMotion\} dark startMs/);
 });
 

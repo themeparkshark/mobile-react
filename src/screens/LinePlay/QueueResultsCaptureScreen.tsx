@@ -43,6 +43,7 @@ import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { silenceForCapture } from '../../gamekit/audio/captureSilence';
 import { Haptic, hapticTrace } from '../../gamekit/Haptics';
 import { CUE_LOG_CAP, cueName, finishCueLine, finishCues } from '../../gamekit/results/cueLog';
+import { endTrace } from '../../gamekit/core/endWatch';
 import { WhackAShark } from '../../games/whack';
 import { SharkySwim } from '../../games/sharky';
 import { RhythmTapGame } from '../../games/rhythm';
@@ -67,7 +68,23 @@ type Run = {
   memoryBot?: 'clean' | 'mixed' | 'novice' | 'timeout';
   /** Sharky: this run unlocks Prize Boxes (capture only). */
   sharkyUnlock?: boolean;
+  /** Banana soak: the bot lets go when time is up, or a teaching card opens on the last step. */
+  bananaLift?: boolean;
+  bananaEndCard?: boolean;
 };
+
+/**
+ * BANANA SOAK x10: ten Banana Basket runs in a row, played by the bot, in release-like JS. Runs 7-8
+ * let go of the thumb the moment time is up; runs 9-10 force a teaching card open on the last step.
+ * Each run's row in the shell's end trace (core/endWatch.ts) says when its card was lit and who lit
+ * it (the game, the game's rescue, or the shared card), so a dark end can never pass unseen.
+ */
+const SOAK_RUNS = 10;
+const soakRun = (i: number): Omit<Run, 'key'> => ({
+  game: 'banana', groupTurn: false, rideUpAfterMs: null, autoplay: true, bananaLift: i === 6 || i === 7, bananaEndCard: i >= 8,
+});
+/** A soak run with no lit card this long after it started is a dark end (a queue run is about 75 s). */
+const SOAK_DARK_MS = 150000;
 
 const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'WHACK IN LINE', run: { game: 'tap', groupTurn: false, rideUpAfterMs: null } },
@@ -87,6 +104,7 @@ const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   // The card with a game's own extra row inside it, above DONE: Rhythm's TRY TWO THUMBS? offer and Banana Basket's rows.
   { label: 'RHYTHM, TWO THUMBS OFFER', run: { game: 'timingTwo', groupTurn: false, rideUpAfterMs: null } },
   { label: 'BANANA BASKET IN LINE', run: { game: 'banana', groupTurn: false, rideUpAfterMs: null } },
+  { label: 'BANANA BASKET, AUTOPLAY', run: { game: 'banana', groupTurn: false, rideUpAfterMs: null, autoplay: true } },
   // Memory Match's ride try card (TIME'S UP!, TRY AGAIN with tries left, DONE): play it and let the clock run out.
   { label: 'MEMORY RIDE TRY CARD', run: { game: 'memoryRide', groupTurn: false, rideUpAfterMs: null } },
   // Memory Match played by the capture bot: a cleared board with turns (the end card, STATS star pips).
@@ -141,6 +159,40 @@ export default function QueueResultsCaptureScreen() {
   const [tryCard, setTryCard] = useState<'back' | 'spent' | null>(null);
   const [duelCard, setDuelCard] = useState(0);
   const realWindow = useRef(Dimensions.get('window'));
+  // BANANA SOAK: which run (0-based) is playing, and one line per finished run.
+  const [soak, setSoak] = useState<{ i: number; startedAt: number; traceFrom: number } | null>(null);
+  const [soakLog, setSoakLog] = useState<string[]>([]);
+  const startSoakRun = (i: number) => {
+    cues.current = [];
+    finishAt.current = -1;
+    setQueueEnded(null);
+    setSoak({ i, startedAt: Date.now(), traceFrom: endTrace().length ? endTrace()[endTrace().length - 1].run : 0 });
+    setRun({ ...soakRun(i), key: Date.now() % 100000 + 500 + i });
+  };
+  useEffect(() => {
+    if (!soak) return undefined;
+    const id = setInterval(() => {
+      const row = endTrace().find((r) => r.run > soak.traceFrom && r.game === 'banana');
+      const tag = soakRun(soak.i).bananaLift ? ' (thumb up at TIME!)' : soakRun(soak.i).bananaEndCard ? ' (card on the last step)' : '';
+      const finish = (line: string) => {
+        clearInterval(id);
+        setSoakLog((l) => [...l, line]);
+        const next = soak.i + 1;
+        if (next < SOAK_RUNS) setTimeout(() => startSoakRun(next), 1500);
+        else {
+          setSoak(null);
+          setRun(null);
+        }
+      };
+      if (row?.litAt != null) {
+        finish(`Soak ${soak.i + 1}/${SOAK_RUNS}: lit ${((row.litAt - row.overAt) / 1000).toFixed(1)} s after time up, by ${row.by}${tag}`);
+      } else if (Date.now() - soak.startedAt > SOAK_DARK_MS) {
+        finish(`Soak ${soak.i + 1}/${SOAK_RUNS}: DARK END, no lit card${row ? ' (time was up)' : ' (time never ran out)'}${tag}`);
+      }
+    }, 500);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soak]);
 
   // SHORT PHONE: the window reports an SE size (cards read it through
   // useWindowDimensions); the real size comes back when it is turned off or
@@ -300,6 +352,12 @@ export default function QueueResultsCaptureScreen() {
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>QUEUE RESULTS CHECK</Text>
+        {soakLog.length ? (
+          <View style={styles.log}>
+            {soakLog.map((line, i) => <Text key={`${i}:${line}`} style={styles.logText}>{line}</Text>)}
+            <Text style={styles.logText}>{`Soak: ${soakLog.filter((l) => / lit /.test(l)).length} of ${soakLog.length} lit${soak ? ' (running)' : ''}`}</Text>
+          </View>
+        ) : null}
         <TouchableOpacity accessibilityRole="button" style={[styles.btn, shortPhone && styles.btnOn]} onPress={() => setShortPhone((v) => !v)}>
           <Text style={styles.btnText}>{shortPhone ? 'SHORT PHONE: ON (SE)' : 'SHORT PHONE: OFF'}</Text>
         </TouchableOpacity>
@@ -313,6 +371,9 @@ export default function QueueResultsCaptureScreen() {
             <Text style={styles.btnText}>{c.label}</Text>
           </TouchableOpacity>
         ))}
+        <TouchableOpacity accessibilityRole="button" style={styles.btn} onPress={() => { setSoakLog([]); startSoakRun(0); }}>
+          <Text style={styles.btnText}>BANANA SOAK x10</Text>
+        </TouchableOpacity>
         <TouchableOpacity accessibilityRole="button" style={styles.btn} onPress={() => setDuelCard(Date.now())}>
           <Text style={styles.btnText}>DUEL WIN CARD</Text>
         </TouchableOpacity>
@@ -359,7 +420,8 @@ export default function QueueResultsCaptureScreen() {
         {run && common && run.game === 'shark' ? <SharkySwim key={run.key} {...common} difficulty={2} captureAutoplay={run.autoplay} captureUnlock={run.sharkyUnlock} /> : null}
         {run && common && run.game === 'timing' ? <RhythmTapGame key={run.key} {...common} /> : null}
         {run && common && run.game === 'timingTwo' ? <RhythmTapGame key={run.key} {...common} captureOfferTwo /> : null}
-        {run && common && run.game === 'banana' ? <BananaBasketGame key={run.key} {...common} mode="queue" /> : null}
+        {run && common && run.game === 'banana' ? <BananaBasketGame key={run.key} {...common} mode="queue" autoplay={run.autoplay}
+          captureLiftAtEnd={run.bananaLift} captureEndCard={run.bananaEndCard} /> : null}
         {run && common && run.game === 'memoryRide' ? <MemoryGame key={run.key} {...common} mode="ride" difficulty={1} menu={false} taskName="Space Mountain" captureAutoplay={run.memoryBot} /> : null}
         {run && common && run.game === 'memoryWarmup' ? <MemoryGame key={run.key} {...common} mode="warmup" menu={false} captureAutoplay={run.memoryBot} /> : null}
         {run && common && run.game === 'current' ? <CurrentQuestQueueGame key={run.key} {...common} taskName="Space Mountain" /> : null}

@@ -31,12 +31,14 @@ test('a new costume Finn is a picture in the card, never the title', () => {
   assert.match(whack, /resultExtras=\{result && unlockedTheme \? <FinnUnlock theme=\{unlockedTheme\} reducedMotion=\{reducedMotion\} \/> : undefined\}/);
   assert.match(whack, /setUnlockedTheme\(null\);/);
   const unlock = read('src/games/whack/FinnUnlock.tsx');
-  assert.match(unlock, /<Image source=\{THEMED_SHARK_FRAMES\[theme\]\[1\]\}/, "Alex's cheering costume Finn, existing art");
-  assert.match(unlock, /<Text style=\{styles\.tagText\}>NEW<\/Text>/);
-  assert.match(unlock, /accessibilityLabel=\{`New Finn unlocked: \$\{name\}`\}/, 'the name is spoken only');
-  assert.doesNotMatch(unlock, /withRepeat/, 'one pop, then it rests');
-  assert.match(unlock, /if \(reducedMotion\) return undefined;/);
-  assert.match(unlock, /return \(\) => \{ clearTimeout\(t\); cancelAnimation\(pop\); cancelAnimation\(tag\); \};/);
+  assert.match(unlock, /<UnlockTile source=\{THEMED_SHARK_FRAMES\[theme\]\[1\]\}/, "Alex's cheering costume Finn, existing art");
+  assert.match(unlock, /label=\{`New Finn unlocked: \$\{name\}`\}/, 'the name is spoken only');
+  // Wave 6: the one unlock tile every game shares.
+  const tile = read('src/gamekit/results/UnlockTile.tsx');
+  assert.match(tile, /<Text style=\{styles\.tagText\}>NEW<\/Text>/);
+  assert.doesNotMatch(tile, /withRepeat/, 'one pop, then it rests');
+  assert.match(tile, /if \(reducedMotion\) return undefined;/);
+  assert.match(tile, /return \(\) => \{ clearTimeout\(t\); cancelAnimation\(pop\); cancelAnimation\(tag\); \};/);
 });
 
 test('the capture autoplay ready tap is cleared when a run ends, restarts or unmounts', () => {

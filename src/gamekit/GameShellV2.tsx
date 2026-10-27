@@ -74,6 +74,7 @@ import { ResultsPodium } from './results/ResultsPodium';
 import { initialWindowMetrics } from 'react-native-safe-area-context';
 import { endFeel } from './results/feelings';
 import { compareBest, starsFor, type StarThresholds } from './core/scoring';
+import { END_WATCH_GRACE_MS, END_WATCH_MS, endWatchResult, traceLit, traceRunOver } from './core/endWatch';
 import {
   wrapUpCopy,
   createHeadsUp,
@@ -142,6 +143,8 @@ export interface GameResult {
   meta?: Record<string, unknown>;
   /** One line under the card (a coaching tip). A wrap-up note wins over it. */
   note?: string;
+  /** A tip that is only spoken (VoiceOver), never drawn: a 7-year-old reads nothing. */
+  spokenNote?: string;
   /**
    * The next-star bar for a game whose stars are not points (Rhythm stars by
    * timing). progress is 0..1 toward the next star; the words for it live in
@@ -188,7 +191,20 @@ export interface GameShellV2Handle {
   wrapUp: (reason?: WrapUpReason) => void;
   /** Current phase (read on demand). */
   getPhase: () => ShellPhase;
+  /**
+   * The run is over: its results card must follow. If the game's result has not
+   * arrived `ms` later (default END_WATCH_MS), `rescue` is asked for one from the
+   * game's live state (it may also show the game's own card and return nothing);
+   * if there is still nothing END_WATCH_GRACE_MS after that, the shared card shows
+   * the score. A rescue that returns false stands the watch down (the run that armed
+   * it is gone, or its card is already up). The one results watchdog for every game
+   * (core/endWatch.ts).
+   */
+  endWatch: (ms?: number, rescue?: EndWatchRescue) => void;
 }
+
+/** The end watch's rescue: a result, null (the game is showing its own card), or false (stand down). */
+export type EndWatchRescue = () => GameResult | null | false | void;
 
 /** Snapshot payload a game hands the shell when it is held. */
 export interface ShellSnapshotData {
@@ -420,6 +436,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const [pauseReason, setPauseReason] = useState<string | undefined>();
     const [holdReason, setHoldReason] = useState<HoldReason | null>(null);
     const [wrap, setWrap] = useState<{ reason: WrapUpReason; result: GameResult; gameMessage?: string } | null>(null);
+    // The end watch's card for a finished run whose result never came (core/endWatch.ts).
+    const [rescue, setRescue] = useState<GameResult | null>(null);
     const [headsUp, setHeadsUp] = useState(false);
     // Safety net: once the results have had RESULTS_FALLBACK_MS to appear, show them with no fade.
     const [resultsSafe, setResultsSafe] = useState(false);
@@ -462,11 +480,75 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // after the wrap (Whack banks the burst it was in) still gets the wrap-up
     // credit, title and RUN SAVED flag, so its card never looks like a plain loss.
     const effectiveResult = useMemo((): GameResult | null => {
-      if (!wrap) return result ?? null;
+      // The game's own result always wins over the end watch's rescue (it may arrive late).
+      if (!wrap) return result ?? rescue ?? null;
       if (!result) return wrap.result;
       // Title from this result's own saved flag, so title, stamp and note agree.
       return creditWrapResult(result, wrap.reason, !!rideChallenge, wrap.gameMessage);
-    }, [result, wrap, rideChallenge]);
+    }, [result, wrap, rideChallenge, rescue]);
+
+    // -- The end watch: a finished run always gets a lit card (core/endWatch.ts). --
+    const endWatchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    /** The trace row of the run being watched (0 = none). */
+    const endWatchRun = useRef(0);
+    /** A result is in: the game's, a wrap-up's, or the game's own card in the field. */
+    const resultInRef = useRef(false);
+    resultInRef.current = !!result || !!wrap || !!ownResultsDone;
+    const effectiveResultRef = useRef(effectiveResult);
+    effectiveResultRef.current = effectiveResult;
+    const thresholdsRef = useRef(thresholds);
+    thresholdsRef.current = thresholds;
+    const gameIdRef = useRef(gameId ?? title);
+    gameIdRef.current = gameId ?? title;
+    const clearEndWatch = useCallback(() => {
+      if (endWatchTimer.current) clearTimeout(endWatchTimer.current);
+      endWatchTimer.current = null;
+    }, []);
+    const armEndWatch = useCallback((ms: number = END_WATCH_MS, rescueFn?: EndWatchRescue) => {
+      clearEndWatch();
+      // One row per run: a game that re-arms (a longer finale) keeps its row.
+      if (!endWatchRun.current) endWatchRun.current = traceRunOver(gameIdRef.current, Date.now());
+      endWatchTimer.current = setTimeout(() => {
+        endWatchTimer.current = null;
+        if (resultInRef.current) return;
+        let fromGame: GameResult | null | false = null;
+        try {
+          fromGame = rescueFn?.() ?? null;
+        } catch {
+          // A rescue that throws is the same as no rescue: the shared card follows.
+          fromGame = null;
+        }
+        if (fromGame === false) {
+          endWatchRun.current = 0;
+          return;
+        }
+        if (fromGame) {
+          setRescue(endWatchResult(fromGame, scoreRef.current, thresholdsRef.current) as GameResult);
+          return;
+        }
+        endWatchTimer.current = setTimeout(() => {
+          endWatchTimer.current = null;
+          if (resultInRef.current) return;
+          setRescue(endWatchResult(null, scoreRef.current, thresholdsRef.current) as GameResult);
+        }, END_WATCH_GRACE_MS);
+      }, Math.max(0, ms));
+    }, [clearEndWatch]);
+    // A result arrived: the watch stands down. The game's own field card counts as lit at once,
+    // and when the game takes that card down to play again, the next run gets a fresh watch.
+    const hadOwnCard = useRef(false);
+    useEffect(() => {
+      if (!ownResultsDone && hadOwnCard.current) {
+        hadOwnCard.current = false;
+        endWatchRun.current = 0;
+      }
+      if (!result && !wrap && !ownResultsDone) return;
+      clearEndWatch();
+      if (ownResultsDone) {
+        hadOwnCard.current = true;
+        if (endWatchRun.current) traceLit(endWatchRun.current, Date.now(), 'game');
+      }
+    }, [result, wrap, ownResultsDone, clearEndWatch]);
+    useEffect(() => clearEndWatch, [clearEndWatch]);
 
     // Results animation values.
     const resultsScale = useSharedValue(0.7);
@@ -503,6 +585,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       setPhase('countdown');
       setCountText(firstCount);
       setWrap(null);
+      setRescue(null);
+      clearEndWatch();
+      endWatchRun.current = 0;
       setHoldReason(null);
       return () => {
         clearCountdown();
@@ -511,7 +596,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         clearHeadsUp();
         [resultsScale, resultsOpacity, countScale, glow].forEach(cancelAnimation);
       };
-    }, [visible, clearCountdown, clearCelebration, clearResume, clearHeadsUp, resultsScale, resultsOpacity, countScale, glow]);
+    }, [visible, clearCountdown, clearCelebration, clearResume, clearHeadsUp, clearEndWatch, resultsScale, resultsOpacity, countScale, glow]);
 
     useEffect(() => {
       if (!reducedMotion) return;
@@ -759,19 +844,20 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // -- Play again: the game cleared its result, so run a fresh start count. --
     const hadResultRef = useRef(false);
     useEffect(() => {
-      if (result) {
+      if (result || rescue) {
         hadResultRef.current = true;
         return;
       }
       if (!visible || !hadResultRef.current || phase !== 'results' || wrap) return;
       hadResultRef.current = false;
+      endWatchRun.current = 0;
       startedRef.current = false;
       claimedRef.current = false;
       clearCelebration();
       setCountText(firstCount);
       setPhase('countdown');
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [result, phase, wrap, visible]);
+    }, [result, rescue, phase, wrap, visible]);
 
     // -- Transition to results when the game (or a wrap-up) reports one. ----
     useEffect(() => {
@@ -860,6 +946,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       // Reduced motion has no fade to wait for: the results are safe at once.
       if (reducedMotionRef.current) {
         setResultsSafe(true);
+        if (endWatchRun.current) {
+          const by = effectiveResultRef.current?.meta?.endWatch;
+          traceLit(endWatchRun.current, Date.now(), by === 'shared' ? 'shared' : by === 'game' ? 'rescue' : 'game');
+        }
         return undefined;
       }
       // The results view that was on screen when the fade started.
@@ -868,6 +958,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         // The fade finished on a view that was already mounted: the card is
         // solid, so skip the extra re-render of the whole results tree.
         resultsSafeRef.current = true;
+        if (endWatchRun.current) {
+          const by = effectiveResultRef.current?.meta?.endWatch;
+          traceLit(endWatchRun.current, Date.now(), by === 'shared' ? 'shared' : by === 'game' ? 'rescue' : 'game');
+        }
         if (surfaceAtFade && surfaceShownRef.current && resultsOpacity.value >= 0.999 && resultsScale.value > 0.98) return;
         // Land the fade on its end values too, so the card is solid either way.
         cancelAnimation(resultsOpacity);
@@ -905,8 +999,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const doHold = useCallback(
       (reason: HoldReason, label?: string) => {
         if (phase !== 'playing' && phase !== 'countdown' && phase !== 'resuming') return;
-        // A finished game showing its own card never pauses behind it.
-        if (ownResultsDoneRef.current) return;
+        // A finished game never pauses behind its card: its own card in the field, or a
+        // run that is over and waiting for its results (the end watch is armed).
+        if (ownResultsDoneRef.current || endWatchRun.current) return;
         if (phase === 'countdown') { clearCountdown(); stopCountStage(); }
         if (phase === 'resuming') clearResume();
         setPhase('paused');
@@ -1081,8 +1176,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         resume: doResume,
         wrapUp,
         getPhase: () => phase,
+        endWatch: armEndWatch,
       }),
-      [doHold, doResume, wrapUp, phase],
+      [doHold, doResume, wrapUp, phase, armEndWatch],
     );
 
     // -- Completion: stars -> multiplier -> external contract. ----------------
@@ -1113,8 +1209,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         claimedRef.current = true;
         linePlayMovement.onRunDone(effectiveResult.stars ?? 0, effectiveResult.meta?.partial === true);
       }
+      clearEndWatch();
+      endWatchRun.current = 0;
+      setRescue(null);
       onRematch();
-    } : undefined), [onRematch, effectiveResult, linePlayMovement]);
+    } : undefined), [onRematch, effectiveResult, linePlayMovement, clearEndWatch]);
 
     // The extra replay button banks the finished run first, like PLAY AGAIN.
     const resultActionPress = useCallback(() => {
@@ -1459,6 +1558,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                     runToken={resultsRunRef.current}
                     saved={saved}
                     note={wrap ? wrapUpCopy(wrap.reason, saved || (effectiveResult?.score ?? 0) <= 0).body || undefined : effectiveResult?.note}
+                    spokenNote={wrap ? undefined : effectiveResult?.spokenNote}
                     footer={resultCardFooter}
                     onNewBestLanded={stars === 0 ? burstBest : undefined}
                     wrapUp={wrap != null}
@@ -1491,7 +1591,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                         ) : null}
                         {challengeOffered ? (
                           <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.rowBtn]} onPress={challengeOffered} accessibilityRole="button">
-                            <GameIcon name={/^race/i.test(challengeLabel) ? 'rush' : 'swords'} size={20} />
+                            <GameIcon name="rush" size={20} />
                             <Text style={[styles.secondaryBtnCaps, styles.btnGap]} numberOfLines={1} adjustsFontSizeToFit>{challengeLabel.toUpperCase()}</Text>
                           </TouchableOpacity>
                         ) : null}

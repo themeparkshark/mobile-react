@@ -23,6 +23,7 @@ import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { ResultSecondaryButton } from '../../../gamekit/results/ResultButtons';
 
 import { bashChips } from './bashChips';
+import { STAR_SLOT } from '../../../gamekit/results/starSlot';
 
 const CHEST_OPEN = require('../../../../assets/images/daily/chest-open.png');
 
@@ -167,9 +168,9 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           // The finisher's card: a gold KO crown where a grey third star would sit.
           ? <View key={i} style={styles.starSlot} accessible accessibilityLabel="Knockout crown: you finished the boss">
             <GameIcon name="crown" size={38} /><Text style={styles.koTag} maxFontSizeMultiplier={1}>KO</Text></View>
-          // The same star every results card draws: pale blue until it lands gold.
+          // The same star every results card draws: a dark slot until it lands gold.
           : <View key={i} style={styles.starSlot}>
-          <View style={StyleSheet.absoluteFill}><GameIcon name="star" size={46} mono="#9cc9ec" /></View>
+          <View style={StyleSheet.absoluteFill}><GameIcon name="star" size={46} mono={STAR_SLOT} /></View>
           <Animated.View style={[StyleSheet.absoluteFill, st]}><GameIcon name="star" size={46} /></Animated.View>
         </View>)}
       </View>}

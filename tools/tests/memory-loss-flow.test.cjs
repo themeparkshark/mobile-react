@@ -14,10 +14,10 @@ test('SO CLOSE only when the player really was close', () => {
   assert.equal(memoryLossCopy(0, 8).title, "TIME'S UP!");
   assert.doesNotMatch(memoryLossCopy(0, 8).line, /close/i);
   assert.equal(memoryLossCopy(2, 8).title, 'GOOD START!');
-  assert.equal(memoryLossCopy(1, 8).line, 'You found 1 of 8 pairs. Keep going!');
+  assert.equal(memoryLossCopy(1, 8).line, '1 of 8 pairs!');
   assert.equal(memoryLossCopy(4, 8).title, 'NICE TRY!');
   assert.equal(memoryLossCopy(6, 8).title, 'SO CLOSE!');
-  assert.equal(memoryLossCopy(7, 8).line, 'Just 1 pair to go!');
+  assert.equal(memoryLossCopy(7, 8).line, '7 of 8 pairs! Just 1 to go!');
   assert.equal(memoryLossBanner(0, 8), "TIME'S UP!");
   for (let p = 0; p <= 7; p++) assert.doesNotMatch(memoryLossCopy(p, 8).title, /\d/, 'no numbers jammed into the title');
 });
@@ -63,7 +63,7 @@ test('a low-signal turn limit says OUT OF FLIPS, not TIME\'S UP', () => {
   assert.equal(memoryLossCopy(0, 8, true).title, 'OUT OF FLIPS!');
   assert.equal(memoryLossCopy(3, 8, true).title, 'OUT OF FLIPS!');
   assert.equal(memoryLossCopy(7, 8, true).title, 'SO CLOSE!');
-  assert.equal(memoryLossCopy(0, 8).line, 'Flip 2 cards. Remember where they were.');
+  assert.equal(memoryLossCopy(0, 8).line, '0 of 8 pairs! Try again!', 'what the kid did, not the how-to again');
 });
 
 test('a lost ride shows no NEW BEST and no luck jargon; the board shows ~1.5 s before the card', () => {

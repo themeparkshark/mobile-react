@@ -148,6 +148,8 @@ export interface WhackHandle {
  * so: a Burst can run ahead while the whole run still ends under BEST.
  */
 export const PACE_BEST_LABEL = 'VS BEST BURST';
+/** How long a finished run may take to hand the shell its card (the Finn book read) before the end watch steps in. */
+export const WHACK_END_WATCH_MS = 3000;
 /** The last-5 ticks are queued this far ahead of each second crossing (absorbs a late JS thread). */
 // r6: 320 ms of lead (r5 measured JS lag up to 206 ms against 160), so every tick and the whistle land on the stamp.
 const LAST5_LEAD_MS = 320;
@@ -844,6 +846,13 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       finaleShown: false,
       ...(reason ? { reason } : {}),
     };
+    // The shell's one end watch: the card is due once the Finn book answers. If a save
+    // never answers, the watch shows this run's own numbers (core/endWatch.ts).
+    const plain: GameResult = {
+      score: total, stars, message, maxCombo: maxStreak,
+      thresholds: ride || format === 'raid' || format === 'duel' ? undefined : thresholds, meta,
+    };
+    shellRef.current?.endWatch(WHACK_END_WATCH_MS, () => plain);
     let unlocked: FinnCard | null = null;
     const forceFinn = !!props.captureNewFinn && (__DEV__ || process.env.EXPO_PUBLIC_PERF_CAPTURE === '1');
     const collect = (async () => {
@@ -886,7 +895,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         starStepMs: STAR_STEP_MS,
         // Feelings first (the shared card keeps two brag chips; BEST COMBO is the streak).
         stats: [
-          ...(ride ? [{ label: 'COIN', value: `${last?.result.coin ?? 0}%` }]
+          // A ride card says a feeling (COIN CAUGHT!, SO CLOSE!, GOOD TRY!), never "0% COIN" data.
+          ...(ride ? []
             : format === 'raid' ? [{ label: 'BOSS DAMAGE', value: `${last?.result.bossDamage ?? 0}` }]
               : [{ label: 'BURSTS', value: `${banked.length}/${totalBursts}`, pips: [banked.length, totalBursts] as const }]),
           ...(ghostLine ? [{ label: 'LINE OF THE DAY', value: ghostLine }] : []),
@@ -1383,7 +1393,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       onComplete={onComplete}
       resultExtras={result && unlockedTheme ? <FinnUnlock theme={unlockedTheme} reducedMotion={reducedMotion} /> : undefined}
       resultExtrasBeat={!!unlockedTheme}
-      resultCardFooter={result ? <ShareCardButton chip tiles={tilesRef.current} rideName={taskName ?? null} score={result.score} stars={result.stars ?? 0} /> : undefined}
+      resultCardFooter={result && (result.stars ?? 0) > 0 ? <ShareCardButton chip tiles={tilesRef.current} rideName={taskName ?? null} score={result.score} stars={result.stars ?? 0} /> : undefined}
       onClose={onClose}
       onQuit={onQuit}
     >
