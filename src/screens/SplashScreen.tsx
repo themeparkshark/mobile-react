@@ -29,7 +29,7 @@ export default function SplashScreen() {
   useEffectOnceWhen(() => {
     if (hasNavigated.current) return;
     hasNavigated.current = true;
-    
+
     if (player) {
       // User is authenticated - go to loading screen
       RootNavigation.navigate('Loading');

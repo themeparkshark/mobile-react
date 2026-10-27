@@ -97,7 +97,8 @@ test('launch screens sit on the splash blue with the video poster: no dark navy 
   // The Loading screen is the launch scene: the native splash's own art on the native splash blue.
   assert.doesNotMatch(read('src/screens/LoadingScreen.tsx'), /#09268f/);
   assert.match(read('src/components/launch/LaunchScene.tsx'), /export const LAUNCH_BLUE = '#0768B9';/);
-  assert.ok(fs.existsSync(path.join(ROOT, 'assets/images/screens/login/splash-loop-poster.jpg')));
+  // The poster is the art lane's shared loop frame (foam finger), the same one Splash ends on.
+  assert.ok(fs.existsSync(path.join(ROOT, 'assets/images/splash-loop-poster.jpg')));
 });
 
 test('Shark Pass pads its title below the Dynamic Island with the JS inset', () => {
@@ -315,7 +316,8 @@ test('VIP stage has no empty gray pill under the shark', () => {
 
 test('Gym Join card has one yellow button; Back is the quiet text action', () => {
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
-  assert.match(gym, /<GameButton label="Back" variant="ghost" tone="onBlue" onPress=\{handleGoBack\}/);
+  // The card is the art lane's bright cream (same as Defend), so the quiet Back reads in navy.
+  assert.match(gym, /<GameButton label="Back" variant="ghost" tone="onLight" onPress=\{handleGoBack\}/);
   assert.doesNotMatch(gym, /backButtonAbsolute/);
 });
 
@@ -574,10 +576,12 @@ test('VIP plaza art fills its white frame edge to edge (its baked frame is cropp
   assert.doesNotMatch(src, /scene: \{[^}]*backgroundColor: '#0b3a75'/);
 });
 
-test('Gym Join card uses the brand gold at full strength', () => {
+test('Gym Join card never uses a half-alpha gold (it read olive); it wears the Gym cream card', () => {
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
-  assert.match(gym, /noTeamBox: \{[^}]*borderColor: '#fec90e'/s);
-  assert.match(gym, /noTeamTitle: \{[^}]*color: '#fec90e'/s);
+  // Merged with the art lane (wave 5): the Join card is the same bright cream card as Defend,
+  // outlined in navy, with a full-strength gold shadow under its blue title.
+  assert.match(gym, /noTeamBox: \{[^}]*backgroundColor: '#FFF8E6'/s);
+  assert.match(gym, /noTeamTitle: \{[^}]*textShadowColor: '#FFD700'/s);
   assert.doesNotMatch(gym, /rgba\(251, 191, 36, 0\.5\)/);
 });
 

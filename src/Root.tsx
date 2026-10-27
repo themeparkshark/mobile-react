@@ -203,6 +203,8 @@ export default function App() {
           name="Loading"
           component={LoadingScreen}
           options={{
+            // Splash and Loading draw the same launch scene (one picture, one bar), so the
+            // hand-over has no transition: a fade would cross two copies of the same scene.
             animation: 'none',
             gestureEnabled: false,
           }}
@@ -211,7 +213,10 @@ export default function App() {
           name="Login"
           component={LoginScreen}
           options={{
-            animation: 'none',
+            // A short fade from the splash: the loop video's first frame
+            // never shows as a bare blue screen.
+            animation: 'fade',
+            animationDuration: 220,
             gestureEnabled: false,
           }}
         />
