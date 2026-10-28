@@ -361,3 +361,11 @@ test('a layer settles NATIVE_SETTLE_MS after the sheet reports its JS hide (reac
   assert.equal(h.M.modalLayers.count(), 0, 'freed after the short settle');
   assert.ok(h.M.NATIVE_SETTLE_MS <= 200 && h.M.NATIVE_SETTLE_MS < h.M.NATIVE_DISMISS_FALLBACK_MS);
 });
+
+test('the guide target\'s island never folds away or hides while it is the target', () => {
+  const L = loadTs('src/screens/ExploreScreen/parkMapLayout.ts', { '../../components/map/statusStack': { HUD_BOTTOM: 76 } });
+  const plain = { adventure: false, playable: false, goal: false, rush: false, closed: false, near: false, selected: false };
+  assert.ok(L.ridePriority({ ...plain, goal: true }, false) > L.ridePriority({ ...plain, near: true }, false), 'the target outranks its neighbours');
+  const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /goal: goalTaskId === task\.id \|\| guideTargetId === task\.id, rush, near, closed, tag \};/);
+});

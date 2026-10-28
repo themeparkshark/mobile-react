@@ -1149,6 +1149,7 @@ export function ExploreScreenBody() {
     daysAway: welcome.daysAway, welcomeBackDone: welcome.done,
   });
   const guideShown = !!player && !!park;
+  const guideTargetId = nextCoin.target?.taskId ?? null;
   // Until the first coin is won, the guide's "Tap PLAY!" picture shows every time PLAY! rises.
   const hasWonACoin = (player?.completed_tasks_count ?? 0) > 0 || (player?.ride_coins_collected ?? 0) > 0 || parkWins > 0;
   // Raids reach the map only after coin levels unlock (they cost Energy) and while the park is open (core loop 5.2).
@@ -1398,9 +1399,11 @@ export function ExploreScreenBody() {
     const tag = rideTagFor({ selected, rush, adventure: adventureTaskId === task.id, goal: goalTaskId === task.id,
       owned: (task.times_completed ?? 0) > 0, limitedText: task.limited?.active ? limitedLabel(task.limited) : null,
       expiresAt: gameTimestamp(task.active_to), near, now: mapNow, closed });
+    // The guide's target island keeps a pick's priority: it never folds away or hides while it is the target (core loop 4.1).
     return { id: task.id, latitude: Number(task.latitude), longitude: Number(task.longitude), selected,
-      adventure: adventureTaskId === task.id, playable: playableTaskId === task.id, goal: goalTaskId === task.id, rush, near, closed, tag };
-  }), [rideTasks, liveByTask, mapNow, restingTasks, selectedTask?.id, taskDistance, adventureTaskId, playableTaskId, goalTaskId]);
+      adventure: adventureTaskId === task.id, playable: playableTaskId === task.id,
+      goal: goalTaskId === task.id || guideTargetId === task.id, rush, near, closed, tag };
+  }), [rideTasks, liveByTask, mapNow, restingTasks, selectedTask?.id, taskDistance, adventureTaskId, playableTaskId, goalTaskId, guideTargetId]);
   const rideFactsKey = rideFacts.map(f => `${f.id}:${f.latitude},${f.longitude}:${+f.selected}${+f.adventure}${+f.playable}${+f.goal}${+f.rush}${+f.near}${+f.closed}:${f.tag ? `${f.tag.w}x${f.tag.h}` : '-'}`).join('|');
   const liveFinds = useMemo<FindLayoutInput[]>(() => [
     ...(redeemables?.coins ?? []).filter(coin => opportunityIsActive(coin, mapNow))
