@@ -385,7 +385,9 @@ test('map islands become guide coins: rides by live row or catalog, sights other
   const coins = GC.guideCoinsFor(tasks, 8, { rides, liveTaskIds: new Set([1]) });
   const by = Object.fromEntries(coins.map(c => [c.taskId, c]));
   assert.equal(coins.length, 5, 'a coin with no real position is skipped');
-  assert.deepEqual(plain([by[1].kind, by[1].queue, by[1].radiusMeters]), ['ride', true, 40]);
+  assert.deepEqual(plain([by[1].kind, by[1].queue, by[1].radiusMeters]), ['ride', true, GC.PLAY_RANGE_METERS],
+    'PLAY! range is the server redeem radius (16 m), not the queue zone');
+  assert.equal(GC.PLAY_RANGE_METERS, 16);
   assert.deepEqual(plain([by[2].kind, by[2].owned]), ['sight', true], 'a statue is a sight (always open)');
   assert.deepEqual(plain([by[3].kind, by[3].queue]), ['ride', false], 'a show has no line to play in');
   assert.equal(by[4].queue, false, 'transport has no line');
@@ -444,7 +446,8 @@ test('park day events: started on the first in-park reading of a day, done on le
 
 test('a tapped coin says "Walk closer: N m" until PLAY! can rise; calm timers say when, never a countdown', () => {
   assert.equal(C.calloutDistance(120, false), 'Walk closer: 120 m');
-  assert.equal(C.calloutDistance(30, false), 'You\'re here');
+  assert.equal(C.calloutDistance(30, false), 'Walk closer: 30 m');
+  assert.equal(C.calloutDistance(12, false), 'You\'re here', 'PLAY! rises within 16 m');
   assert.equal(C.calloutDistance(120, true), '120 m', 'a coin on your shelf just says how far');
   const marker = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/TaskMarker.tsx'), 'utf8');
   assert.match(marker, /\{calloutDistance\(distanceMeters, \(task\.times_completed \?\? 0\) > 0\)\}/);
@@ -480,4 +483,31 @@ test('guide flags: only true booleans count, per player', async () => {
   const offline = await GF.loadGuideFlags(46, async () => { throw new Error('offline'); }, Date.now() + 10 * 60 * 1000);
   assert.notEqual(offline.reveal_all, true);
   GF.resetGuideFlags();
+});
+
+test('"You\'re here" follows PLAY!: the server range check wins over the guide geometry', () => {
+  const near = tgt({ inRange: true });
+  assert.equal(GC.withPlayRange(near, null).inRange, false, 'PLAY! is not up: the card says walk closer, never "Tap PLAY!"');
+  assert.equal(GC.withPlayRange(tgt({ inRange: false }), 3).inRange, true, 'PLAY! is up for this coin');
+  assert.equal(GC.withPlayRange(near, undefined), near, 'before the first check the geometry stands');
+  assert.equal(GC.withPlayRange(near, 3), near, 'unchanged object when it already agrees');
+  assert.equal(GC.withPlayRange(null, 3), null);
+});
+
+test('a fresh pick holds against a line dwell: the target never changes without a win, a closure or a pick', () => {
+  const picked = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, pickedTaskId: 2, pickedSource: 'callout' }));
+  assert.equal(picked.taskId, 2);
+  const held = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, current: picked, currentPickedAt: NOW - 60_000, inLineTaskId: 1 }));
+  assert.equal(held.taskId, 2, 'standing near another line does not flip a coin the player just picked');
+  const later = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, current: picked, currentPickedAt: NOW - G.PICK_HOLD_MS, inLineTaskId: 1 }));
+  assert.equal(later.reason, 'in_line', 'after a while, standing in a line wins');
+  const guidePicked = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, current: { ...picked, source: 'guide' }, inLineTaskId: 1 }));
+  assert.equal(guidePicked.reason, 'in_line', 'a target the guide picked turns to the line at once');
+  // Through the store: the pick time is kept with the held coin.
+  G.guide.reset();
+  G.guide.setTarget(2, 'callout');
+  const base = { mode: 'park', parkId: 8, location: BASE, coins: RIDES, live: { 1: 'open', 2: 'open' } };
+  assert.equal(G.guide.resolve(base).taskId, 2);
+  assert.equal(G.guide.resolve({ ...base, inLineTaskId: 1 }).taskId, 2, 'held against the dwell');
+  G.guide.reset();
 });

@@ -73,8 +73,8 @@ export function guideDistance(meters: number | null): string | null {
   return `${Math.max(5, Math.round(meters / 5) * 5)} m`;
 }
 
-/** The PLAY! range a tapped coin's callout counts down to (the guide's in-range default). */
-export const CALLOUT_RANGE_METERS = 50;
+/** The PLAY! range a tapped coin's callout counts down to (the server's redeem radius, 16 m). */
+export const CALLOUT_RANGE_METERS = 16;
 
 /**
  * A tapped coin's distance line (core loop 4.1, must-fix 18): "Walk closer: 40 m" until PLAY! can

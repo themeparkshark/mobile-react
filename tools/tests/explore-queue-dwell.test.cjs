@@ -103,3 +103,19 @@ test('dwell queue types match the server Adventure Ticket ride types', () => {
   assert.match(src, /QUEUE_TYPES = new Set<string>\(QUEUE_RIDE_TYPES\)/);
   assert.match(src, /overlapping attractions\nconst AMBIGUOUS_DISTANCE_MARGIN/);
 });
+
+test('core loop 4.1: "In line?" needs the player nearly still for 90 s, and never asks about a wait that just ended', () => {
+  const D = loadTs('src/screens/ExploreScreen/useQueueDwell.ts', { react: {}, '../../services/RideDetectionService': {} });
+  const at = (s, m) => ({ at: s * 1000, latitude: 33.81 + m / 111320, longitude: -117.919 });
+  const shuffling = [at(0, 0), at(30, 8), at(60, 15), at(90, 22)];
+  assert.equal(D.nearlyStill(shuffling, 90_000), true, 'a line shuffles a few meters');
+  const walking = [at(0, 0), at(30, 40), at(60, 80), at(90, 120)];
+  assert.equal(D.nearlyStill(walking, 90_000), false, 'a walker passing the ride is not in line');
+  assert.equal(D.nearlyStill([], 90_000), true, 'no fixes while standing still (iOS) is still');
+  const dwell = { rideId: 80, rideName: 'Jungle Cruise', parkId: 8 };
+  assert.equal(D.dwellShows(dwell, { still: true, endedRideId: null, endedAt: null, now: 0 }), true);
+  assert.equal(D.dwellShows(dwell, { still: false, endedRideId: null, endedAt: null, now: 0 }), false);
+  assert.equal(D.dwellShows(dwell, { still: true, endedRideId: 80, endedAt: 0, now: D.WAIT_ENDED_QUIET_MS - 1 }), false, 'the wait just ended');
+  assert.equal(D.dwellShows(dwell, { still: true, endedRideId: 80, endedAt: 0, now: D.WAIT_ENDED_QUIET_MS }), true);
+  assert.equal(D.dwellShows(dwell, { still: true, endedRideId: 81, endedAt: 0, now: 1 }), true, 'another ride\'s line still asks');
+});

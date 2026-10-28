@@ -18,7 +18,7 @@ import {
 } from '../../services/guide/nextCoin';
 import { nextFreeTicket, type FreeTicketsInput } from '../../services/guide/freeTickets';
 import { guideCardCopy, restingSightCopy, type GuideCardCopy } from '../../services/guide/guideCopy';
-import { guideCoinsFor, inLineTaskFor, ridesByTask } from './guideCoins';
+import { guideCoinsFor, inLineTaskFor, ridesByTask, withPlayRange } from './guideCoins';
 
 export interface NextCoinGuideInput {
   readonly enabled: boolean;
@@ -36,6 +36,8 @@ export interface NextCoinGuideInput {
   readonly coinLevelsUnlocked: boolean;
   readonly wallet: FreeTicketsInput | null;
   readonly queueTicketsOn: boolean;
+  /** The coin PLAY! is up for right now (the server's own range check), or null. It decides "You're here". */
+  readonly playableTaskId?: number | null;
   /** Whole days since the last app open (14 or more is a welcome back), or null. */
   readonly daysAway?: number | null;
   readonly welcomeBackDone?: boolean;
@@ -139,7 +141,9 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
   const target = useSyncExternalStore(guide.subscribe, guide.current, guide.current);
-  const shown = enabled && target && target.parkId === parkId ? target : null;
+  const held = enabled && target && target.parkId === parkId ? target : null;
+  // "You're here" only while PLAY! is really up for this coin (the server's range check wins over geometry).
+  const shown = withPlayRange(held, input.playableTaskId);
   const state = guideState({
     mode: 'park', parkId, location: input.location ?? null, coins, live: answers, adventure, inLineTaskId,
     now: Date.now(), arrivedAt, daysAway: input.daysAway ?? null, welcomeBackDone: input.welcomeBackDone,

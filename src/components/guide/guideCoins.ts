@@ -14,10 +14,17 @@ import type { TaskType } from '../../models/task-type';
 import type { RideType } from '../../api/endpoints/rides';
 import type { StampData } from '../../api/endpoints/me/stamps';
 import { QUEUE_RIDE_TYPES } from '../../constants/queueRideTypes';
-import type { GuideCoin } from '../../services/guide/nextCoin';
+import type { GuideCoin, GuideTarget } from '../../services/guide/nextCoin';
 import type { ClaimSource, FreeTicketsInput } from '../../services/guide/freeTickets';
 
 const QUEUE = new Set<string>(QUEUE_RIDE_TYPES);
+
+/**
+ * PLAY! rises within the server's redeem radius (config mobile.redeem_radius, 16 m), so the guide
+ * says "You're here" only where PLAY! can really rise (a catalog ride's wider queue zone is for the
+ * in-line dwell, not for PLAY!).
+ */
+export const PLAY_RANGE_METERS = 16;
 
 /** Catalog rides by the coin they earn. */
 export function ridesByTask(rides: readonly RideType[] | null | undefined): Map<number, RideType> {
@@ -46,7 +53,6 @@ export function guideCoinFor(task: TaskType, parkId: number, opts: {
   if (latitude === null || longitude === null || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
   const type = opts.ride?.type ?? null;
   const isRide = !!opts.hasLiveRow || (type !== null && type !== 'other' && type !== 'restaurant');
-  const radius = finite(opts.ride?.radius);
   return {
     taskId: task.id,
     parkId,
@@ -54,7 +60,7 @@ export function guideCoinFor(task: TaskType, parkId: number, opts: {
     kind: isRide ? 'ride' : 'sight',
     latitude,
     longitude,
-    radiusMeters: radius !== null && radius > 0 ? radius : undefined,
+    radiusMeters: PLAY_RANGE_METERS,
     owned: (task.times_completed ?? 0) > 0,
     // Unknown catalog type: a ride with a live row counts as a queue ride; a sight never queues.
     queue: isRide ? (type === null ? true : QUEUE.has(type)) : false,
@@ -130,4 +136,15 @@ export function guideWallet(input: {
     extraTries: n(input.heldPasses),
     queueTicketsOn: input.queueTicketsOn === true,
   };
+}
+
+/**
+ * "You're here" only while PLAY! is really up for this coin: the server's range check (the map's
+ * PLAY! button) wins over the guide's own geometry. `playableTaskId` undefined: the map has not
+ * checked yet, so the geometry stands.
+ */
+export function withPlayRange(target: GuideTarget | null, playableTaskId: number | null | undefined): GuideTarget | null {
+  if (!target || playableTaskId === undefined) return target;
+  const inRange = playableTaskId === target.taskId;
+  return target.inRange === inRange ? target : { ...target, inRange };
 }

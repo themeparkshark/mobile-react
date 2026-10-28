@@ -96,7 +96,7 @@ import MapResourcePill from './ExploreScreen/MapResourcePill';
 import TrailHost from '../components/trail/TrailHost';
 import TooFarDialog from './ExploreScreen/TooFarDialog';
 import { withWs2Profiler } from './ExploreScreen/ws2Profiler';
-import useQueueDwell from './ExploreScreen/useQueueDwell';
+import useQueueDwell, { noteWaitEnded } from './ExploreScreen/useQueueDwell';
 import useSwapTapGuard from './ExploreScreen/useSwapTapGuard';
 import { revealDelays } from './ExploreScreen/mapMarkerPresentation';
 import { gameTimestamp } from './ExploreScreen/mapOpportunityTiming';
@@ -1108,7 +1108,8 @@ export function ExploreScreenBody() {
   // Every ride island, not the zoom-dependent clusters, so the beacon's spot stays put while zooming.
   const beaconAvoid = useMemo(() => [...visibleTasks, ...restingTasks].map(task => ({
     latitude: Number(task.latitude), longitude: Number(task.longitude) })), [visibleTasks, restingTasks]);
-  const queueDwell = useQueueDwell(park?.id ?? null, mapFocused && !!player);
+  // In line? Only at a real queue ride, 90 s nearly still, never right after that wait ended (core loop 4.1).
+  const queueDwell = useQueueDwell(park?.id ?? null, mapFocused && !!player, undefined, undefined, location ?? null);
 
   // The Next Coin guide (core loop 4.1): one card, one target, one button, in the one top-left slot.
   // It replaces the Adventure Ticket chip, the Next Up rail, the ride goal card, the in-line card and
@@ -1132,6 +1133,8 @@ export function ExploreScreenBody() {
     starTaskIds: starRides, rushTaskIds,
     starRushUnlocked: coinLevelsRung.open, coinLevelsUnlocked: coinLevelsRung.open,
     wallet, queueTicketsOn: guideFlags.queue_tickets === true,
+    // PLAY! itself decides "You're here": the server's range check, never the guide's geometry alone.
+    playableTaskId: rangeChecked ? playableTaskId : undefined,
   });
   const guideShown = !!player && !!park;
   // Raids reach the map only after coin levels unlock (they cost Energy) and while the park is open (core loop 5.2).
@@ -1442,12 +1445,15 @@ export function ExploreScreenBody() {
     }
     if (queueDwell && (!task || nextCoin.inLineTaskId === task.id)) {
       const ride = await resolveQueueStoryContext(park.id, queueDwell.rideId, queueDwell.rideName);
+      noteWaitEnded(queueDwell.rideId);
       navigation.navigate('LinePlay', { ride });
       return;
     }
     const ride = task ? await resolveMapQueueContext(park.id, task.name, task.id) : null;
+    const catalogRide = task ? nextCoin.rides.get(task.id) : undefined;
+    if (catalogRide) noteWaitEnded(catalogRide.id);
     navigation.navigate('LinePlay', ride ? { ride } : undefined);
-  }, [park, adventure, adventureOwner, queueDwell, nextCoin.inLineTaskId, navigation]);
+  }, [park, adventure, adventureOwner, queueDwell, nextCoin.inLineTaskId, nextCoin.rides, navigation]);
   const onGuideAction = useCallback((action: GuideAction) => {
     const task = nextCoin.targetTask;
     switch (action) {

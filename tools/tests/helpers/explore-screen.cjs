@@ -114,7 +114,7 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '../components/map/declutter/store': declutterStore,
     '../components/map/fright/geo': frightGeo,
     './ExploreScreen/ws2Profiler': { withWs2Profiler: component => component },
-    './ExploreScreen/useQueueDwell': { default: () => options.queueDwell ?? null },
+    './ExploreScreen/useQueueDwell': { default: () => options.queueDwell ?? null, noteWaitEnded: () => undefined },
     '../components/Tutorial': { useTutorial: () => ({ startTutorial: () => undefined, hasCompleted: () => true, isReady: true, isActive: false }) },
     '../components/boss/BossRaidFlow': { default: component('BossRaidFlow'), useParkRaid: () => ({ raid: null, setState: () => undefined }) },
     '../hooks/useBossMapMoment': { default: () => ({ moment: null, flag: null, enqueue: async () => undefined, dismiss: () => undefined, finishExit: () => undefined }) },

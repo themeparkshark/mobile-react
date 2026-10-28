@@ -106,6 +106,9 @@ export interface GuideInput {
   readonly live?: Readonly<Record<number, LiveAnswer>>;
   /** The target the guide holds now. It stays until won, done, closed, too far, or replaced by a pick. */
   readonly current?: GuideTarget | null;
+  /** When the player picked the held target (epoch ms), or null when the guide picked it. A fresh pick
+   * holds even against a line dwell (the target never changes without a win, a closure or a pick). */
+  readonly currentPickedAt?: number | null;
   /** A fresh player pick (guide.setTarget). It replaces the held target when it is a valid target. */
   readonly pickedTaskId?: number | null;
   readonly pickedSource?: string;
@@ -141,6 +144,8 @@ export const WELCOME_BACK_DAYS = 14;
 export const LIVE_FRESH_MS = 180_000;
 /** A known-closed ride stays closed this long with no fresh open answer (then a new park day starts). */
 export const CLOSED_HOLD_MS = 12 * 60 * 60 * 1000;
+/** A coin the player picked holds against a line dwell for this long (then standing in a line wins). */
+export const PICK_HOLD_MS = 10 * 60 * 1000;
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
@@ -270,9 +275,13 @@ export function pickNextCoin(input: GuideInput): GuideTarget | null {
     }
   }
 
-  // Standing in a ride's line turns the guide to that ride (the in-line state).
+  // Standing in a ride's line turns the guide to that ride (the in-line state), unless the player just
+  // picked another coin (a fresh pick holds: the target never changes without a win, a closure or a pick).
   const line = inLineCoin(input, coins);
-  if (line && input.current?.taskId !== line.taskId) return targetFor(input, line, 'in_line');
+  const now = finite(input.now) ? input.now : Date.now();
+  const freshPick = !!input.current && input.current.source !== 'guide' && finite(input.currentPickedAt) &&
+    now - input.currentPickedAt >= 0 && now - input.currentPickedAt < PICK_HOLD_MS && !!heldStillValid(input, coins, input.current);
+  if (line && input.current?.taskId !== line.taskId && !freshPick) return targetFor(input, line, 'in_line');
 
   // The held target stays until won, done, closed, too far, or replaced.
   if (input.current) {
@@ -422,6 +431,7 @@ export function liveAnswers(previous: Readonly<Record<number, LiveMemo>> | null 
 type Listener = () => void;
 
 let held: GuideTarget | null = null;
+let heldPickedAt: number | null = null;
 let pick: { taskId: number; source: string; at: number } | null = null;
 let plan: number | null = null;
 let declinedLineStory: number | null = null;
@@ -464,15 +474,21 @@ export const guide = {
   resolve(input: Omit<GuideInput, 'current' | 'pickedTaskId' | 'pickedSource'>): GuideTarget | null {
     const adventure = input.adventure && declinedLineStory === input.adventure.taskId
       ? { ...input.adventure, lineStoryDeclined: true } : input.adventure;
+    const fresh = pick;
     const next = pickNextCoin({
       ...input,
       adventure,
       current: held,
-      pickedTaskId: pick?.taskId ?? null,
-      pickedSource: pick?.source,
+      currentPickedAt: heldPickedAt,
+      pickedTaskId: fresh?.taskId ?? null,
+      pickedSource: fresh?.source,
       chosenTaskId: input.chosenTaskId ?? plan,
     });
     pick = null;
+    // Remember when the player picked the held coin (a fresh pick holds against a line dwell).
+    if (!next || next.source === 'guide') heldPickedAt = null;
+    else if (fresh && next.taskId === fresh.taskId) heldPickedAt = fresh.at;
+    else if (held?.taskId !== next.taskId) heldPickedAt = null;
     if (!sameTarget(held, next)) {
       held = next;
       emit();
@@ -501,7 +517,7 @@ export const guide = {
   },
   /** Sign-out and tests: forget everything. */
   reset(): void {
-    held = null; pick = null; plan = null; declinedLineStory = null;
+    held = null; heldPickedAt = null; pick = null; plan = null; declinedLineStory = null;
     emit();
   },
 };
