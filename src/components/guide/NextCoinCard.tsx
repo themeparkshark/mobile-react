@@ -40,6 +40,8 @@ function CardButton({ button, onPress, quiet = false }: { button: GuideButton; o
     style={({ pressed }) => [quiet ? styles.quiet : styles.button, pressed && styles.pressed]}>
     {button.badge === 'gift' && <GameIcon name="gift" size={18} />}
     {button.badge === 'ticket' && <GameIcon name="ticket" size={18} />}
+    {/* LinePlay's own icon (Dustin, Oct 28, ledger 37); the pocket watch means Wait Times only. */}
+    {button.action === 'lineplay' && <GameIcon name="queue" size={18} />}
     <Text style={quiet ? styles.quietText : styles.buttonText} numberOfLines={1}>{button.label}</Text>
   </Pressable>;
 }

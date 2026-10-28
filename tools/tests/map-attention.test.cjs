@@ -219,13 +219,37 @@ test('PLAY RIDE after a swipe-closed Ride Control sheet opens the card on the fi
   for (let run = 0; run < 20; run += 1) {
     sheetWanted = true; sheet.render();
     assert.equal(sheet.value.present, true, `run ${run}: the sheet opens`);
+    assert.equal(H.holdPlayTaps({ layers: h.M.modalLayers.leavingCount(), sinceChangeMs: 0, flowOpen: false }), false,
+      `run ${run}: an open sheet is not leaving (it covers PLAY! itself)`);
     sheetWanted = false; sheet.render();                       // swiped closed: React hides it at once
-    const held = H.holdPlayTaps({ layers: h.M.modalLayers.count(), sinceChangeMs: 0, flowOpen: false });
+    assert.equal(h.M.modalLayers.leavingCount(), 1, `run ${run}: the sheet is leaving`);
+    const held = H.holdPlayTaps({ layers: h.M.modalLayers.leavingCount(), sinceChangeMs: 0, flowOpen: false });
     assert.equal(held, true, `run ${run}: a press in the dismissal window cannot start the card`);
     sheet.value.onDismissed(); sheet.render();                  // UIKit: the sheet is gone
-    assert.equal(H.holdPlayTaps({ layers: h.M.modalLayers.count(), sinceChangeMs: 0, flowOpen: false }), false,
+    assert.equal(h.M.modalLayers.count(), 0, `run ${run}: the layer is free`);
+    assert.equal(H.holdPlayTaps({ layers: h.M.modalLayers.leavingCount(), sinceChangeMs: 0, flowOpen: false }), false,
       `run ${run}: the next press opens the card`);
   }
+});
+
+test('PLAY! never holds for a dialog that only waits its turn, and a sheet reopened before it was gone is not leaving', () => {
+  const h = harness();
+  h.M.modalLayers.reset();
+  let first = true; let second = true;
+  const a = h.mount(() => h.M.useNativeModalLayer(first, 'wait'));
+  const b = h.mount(() => h.M.useNativeModalLayer(second, 'wait'));
+  assert.equal(h.M.modalLayers.count(), 2);
+  assert.equal(h.M.modalLayers.leavingCount(), 0, 'a waiting dialog is registered but not leaving');
+  first = false; a.render();
+  assert.equal(h.M.modalLayers.leavingCount(), 1, 'the first one hides: leaving');
+  first = true; a.render();
+  assert.equal(h.M.modalLayers.leavingCount(), 0, 'wanted again before UIKit finished: not leaving any more');
+  first = false; a.render(); a.value.onDismissed(); a.render();
+  assert.equal(h.M.modalLayers.leavingCount(), 0, 'gone: nothing leaving');
+  b.render();
+  assert.equal(b.value.present, true, 'the waiting dialog is in front now');
+  second = false; b.render(); b.value.onDismissed(); b.render();
+  assert.equal(h.M.modalLayers.count(), 0);
 });
 
 test('every map-path sheet registers with the native modal layer list and frees it on the native dismissal', () => {

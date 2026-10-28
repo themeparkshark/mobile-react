@@ -18,6 +18,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, us
 
 let nextId = 1;
 let layers: number[] = [];
+// Layers whose sheet is hidden in JS but still being taken down by UIKit (useNativeModalLayer).
+let leaving: number[] = [];
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(l => l());
 
@@ -32,6 +34,7 @@ export const modalLayers = {
   remove(id: number): void {
     if (!layers.includes(id)) return;
     layers = layers.filter(l => l !== id);
+    leaving = leaving.filter(l => l !== id);
     note('remove', id);
     emit();
   },
@@ -40,12 +43,26 @@ export const modalLayers = {
     return layers.indexOf(id) === 0;
   },
   count(): number { return layers.length; },
+  /** Mark a registered layer as leaving: hidden in JS, still on screen natively until it is removed. */
+  markLeaving(id: number): void {
+    if (!layers.includes(id) || leaving.includes(id)) return;
+    leaving = [...leaving, id];
+    emit();
+  },
+  /** The sheet wants to show again before it was gone: it is no longer leaving. */
+  clearLeaving(id: number): void {
+    if (!leaving.includes(id)) return;
+    leaving = leaving.filter(l => l !== id);
+    emit();
+  },
+  /** How many layers are hidden in JS but not yet gone natively (PLAY! holds presses only then). */
+  leavingCount(): number { return leaving.length; },
   subscribe(listener: () => void): () => void {
     listeners.add(listener);
     return () => { listeners.delete(listener); };
   },
   /** Tests only. */
-  reset(): void { layers = []; emit(); },
+  reset(): void { layers = []; leaving = []; emit(); },
 };
 // Dev builds: the lane tools read the layer list over the debugger (never in a store or OTA bundle).
 const devLog: { t: number; op: string; id: number }[] = [];
@@ -145,13 +162,14 @@ export function useNativeModalLayer(wanted: boolean, mode: 'show' | 'wait' = 'wa
         const mine = modalLayers.add();
         idRef.current = mine;
         setId(mine);
-      }
+      } else modalLayers.clearLeaving(idRef.current);
       return;
     }
     if (idRef.current == null) return;
     // Never presented, or UIKit already said it is gone: free the layer now.
     if (!presentedRef.current || dismissedRef.current) { release(); return; }
     note('hidden', idRef.current);
+    modalLayers.markLeaving(idRef.current);
     if (!fallback.current) fallback.current = setTimeout(release, NATIVE_DISMISS_FALLBACK_MS);
   }, [wanted, nested, release]);
 
