@@ -69,6 +69,12 @@ interface Props {
   onLevelUp: (rideCoinId: number) => Promise<boolean | LevelUpResult>;
   onFeature: (assetId: number | null) => Promise<boolean>;
   onPlayInLine?: () => void;
+  /**
+   * GET RIDE PARTS at this park: the caller points the guide at this ride's line
+   * (guide.setTarget) and opens the map with the path. Runs after the sheet hides.
+   * Without it (away from this park) the sheet shows where Parts come from instead.
+   */
+  onGetParts?: () => void;
 }
 
 type ModalState = 'preview' | 'confirm' | 'leveling' | 'success' | 'maxed';
@@ -95,6 +101,7 @@ export default function CoinLevelingModal({
   onLevelUp,
   onFeature,
   onPlayInLine,
+  onGetParts,
 }: Props) {
   const [state, setState] = useState<ModalState>('preview');
   const [featured, setFeatured] = useState(false);
@@ -153,6 +160,7 @@ export default function CoinLevelingModal({
   const shareHandoff = useModalHandoff(useCallback(() => shareClose.current(), []));
   const pendingLinePlayRef = useRef(false);
   const pendingExploreRef = useRef(false);
+  const pendingGetPartsRef = useRef(false);
   // Short on Tickets or Energy: the Supplies tab, opened after the sheet hides.
   const pendingSuppliesRef = useRef<null | 'tickets' | 'featured'>(null);
   const [showPartsHelp, setShowPartsHelp] = useState(false);
@@ -207,6 +215,7 @@ export default function CoinLevelingModal({
     if (visible && rideCoin) {
       setFeatured(!!rideCoin.is_featured);
       setShowEditions(false);
+      setShowPartsHelp(false);
       setFeatureError(false);
       setUpgradeError(null);
       setFx(null); setUnlocks(null); setLevelXp(0); setSlowServer(false);
@@ -466,6 +475,10 @@ export default function CoinLevelingModal({
         if (pendingLinePlayRef.current) {
           pendingLinePlayRef.current = false;
           onPlayInLine?.();
+        }
+        if (pendingGetPartsRef.current) {
+          pendingGetPartsRef.current = false;
+          onGetParts?.();
         }
         if (pendingExploreRef.current) {
           pendingExploreRef.current = false;
@@ -947,7 +960,12 @@ export default function CoinLevelingModal({
                     /> : <YellowButton
                       text={missingAction.label}
                       onPress={() => {
-                        if (missingAction.kind === 'parts' && onPlayInLine) {
+                        // GET RIDE PARTS always does something you can see (must-fix 4):
+                        // at this park the guide walks you to the ride's line; away, the
+                        // sheet opens the picture card that says where Parts come from.
+                        if (missingAction.kind === 'parts' && onGetParts) {
+                          pendingGetPartsRef.current = true; handleClose();
+                        } else if (missingAction.kind === 'parts' && onPlayInLine) {
                           pendingLinePlayRef.current = true; handleClose();
                         } else if (missingAction.kind === 'energy') {
                           pendingExploreRef.current = true; handleClose();
@@ -957,18 +975,34 @@ export default function CoinLevelingModal({
                       }}
                     />}
 
+                    {/* Away from this park, GET RIDE PARTS opens this picture card: where Parts come from. */}
+                    {!canLevelUp && !hasParts && showPartsHelp && (
+                      <View accessible accessibilityLiveRegion="polite"
+                        accessibilityLabel={`Ride Parts for ${rideCoin.ride_name}: stand in its line on your park day. Time in line earns Parts, and winning its coin again earns one too.`}
+                        style={{ alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10,
+                          backgroundColor: '#E8F6FF', borderColor: '#7CC3EA', borderWidth: 2, borderRadius: 14, padding: 10 }}>
+                        <GameIcon name="ride" size={30} />
+                        <Image source={require('../../assets/images/ride-parts.png')} style={{ width: 30, height: 30 }} contentFit="contain" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontFamily: 'Shark', fontSize: 14, color: '#05346E' }}>Stand in its line</Text>
+                          <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: '#17476B' }}>
+                            On your park day, time in this ride's line earns Ride Parts. Winning its coin again earns one too.
+                          </Text>
+                        </View>
+                      </View>
+                    )}
                     {/* Helper text for what you're missing */}
-                    {!canLevelUp && (
+                    {!canLevelUp && !(showPartsHelp && !hasParts) && (
                       <Text style={{
                         fontFamily: 'Knockout', fontSize: 11,
                         color: '#315D7B',
                         textAlign: 'center', marginTop: 8,
                       }}>
                         {!hasParts
-                          ? showPartsHelp || !onPlayInLine
-                            ? 'Win this ride again or play LinePlay in its line to earn Ride Parts.'
-                            : 'Play LinePlay in this line to earn Ride Parts.'
-                          : 'Energy comes from finds on your home map.'}
+                          ? onGetParts
+                            ? 'Time in this ride\'s line earns Ride Parts. Tap to see the way there.'
+                            : 'Win this ride again or play LinePlay in its line to earn Ride Parts.'
+                          : 'Energy comes from treats on your home map and your daily chest.'}
                       </Text>
                     )}
                     {/* Ride Parts are earned at the ride and never sold. The shop

@@ -16,6 +16,7 @@ import { coinLevelLabel } from '../constants/coinTiers';
 import { gameAlert } from '../ui/GameDialog';
 import GameIcon from '../ui/GameIcon';
 import Ribbon from './Ribbon';
+import { guide } from '../services/guide/nextCoin';
 import YellowButton from './YellowButton';
 
 export default function TaskCoinModal({
@@ -25,6 +26,7 @@ export default function TaskCoinModal({
   timesCompleted,
   level,
   onPlayInLine,
+  onShowOnMap,
   size = 60,
   phase = 0,
   openRequestKey,
@@ -38,6 +40,8 @@ export default function TaskCoinModal({
   readonly trigger?: ReactNode;
   readonly readOnly?: boolean;
   readonly onPlayInLine?: () => void;
+  /** At this park: opens the map with the path to this ride (GET RIDE PARTS). */
+  readonly onShowOnMap?: () => void;
   readonly size?: number;
   /** Slot index, spreads the shared shelf shimmer. */
   readonly phase?: number;
@@ -177,8 +181,8 @@ export default function TaskCoinModal({
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#ffcf3b',
                   borderRadius: 12, borderBottomWidth: 4, borderBottomColor: '#d99a00',
                   paddingVertical: 12, paddingHorizontal: 20, marginTop: 18, marginBottom: 12 }}>
-                <GameIcon name="queue" size={24} />
-                <Text style={{ fontFamily: 'Shark', color: '#05346e', fontSize: 18 }}>Play in Line</Text>
+                <GameIcon name="ride" size={24} />
+                <Text style={{ fontFamily: 'Shark', color: '#05346e', fontSize: 18 }}>LinePlay</Text>
               </Pressable>}
               <YellowButton text="Close" onPress={() => setVisible(false)} />
             </View>
@@ -237,6 +241,11 @@ export default function TaskCoinModal({
           return saved;
         }}
         onPlayInLine={onPlayInLine}
+        onGetParts={onShowOnMap ? () => {
+          // GET RIDE PARTS (must-fix 4): the one pointer goes to this ride, then the map draws the path.
+          guide.setTarget(task.id, 'coin_parts');
+          onShowOnMap();
+        } : undefined}
       />}
     </>
   );

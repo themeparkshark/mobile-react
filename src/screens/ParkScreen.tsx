@@ -344,6 +344,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     onPlayInLine={section === 'normal' && canChooseGoal && inThisPark &&
                       currentPark?.ride_passport_task_ids?.includes(task.id)
                       ? () => openRideLinePlay(task as TaskType) : undefined}
+                    onShowOnMap={(section === 'normal' || section === 'limited') && canChooseGoal && inThisPark
+                      ? () => RootNavigation.navigate('Explore', { focusRide: { parkId: Number(park), task } }) : undefined}
                     timesCompleted={owned.times_completed ?? 0}
                     readOnly={!canChooseGoal}
                   />
