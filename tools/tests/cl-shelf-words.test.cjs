@@ -265,3 +265,11 @@ test('the coin card hides the park gym line while gyms are off; Energy shows on 
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /energy=\{canChooseGoal && coinLevels\.open \? viewer\?\.energy \?\? 0 : null\}/);
 });
+
+test('the vocabulary test is strict: shelf-words and every unowned file fail the build on a retired word', () => {
+  const v = require('./vocabulary.test.cjs');
+  assert.equal(v.STRICT, true);
+  assert.equal(v.PENDING_LANES.has('shelf-words'), false);
+  assert.equal(v.ownerOf('src/screens/SomeNewScreen.tsx').owner, 'shelf-words', 'a new unowned file is strict at once');
+  assert.equal(v.scanSource("const a = <Text>Rescue Pass</Text>;", 'x.tsx')[0].rule, 'rescue-pass');
+});

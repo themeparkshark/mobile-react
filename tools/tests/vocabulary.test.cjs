@@ -7,9 +7,11 @@
  * that owns each hit file (PLAN.json vocabulary_ownership, copied below; a
  * file no lane owns goes to shelf-words for copy-only edits).
  *
- * REPORT-ONLY for now: it lists every hit and passes. The shelf-words lane
- * turns it strict at the end of its lane by setting STRICT = true (and the
- * other lanes clear their own files first). Comments, import paths, console
+ * STRICT (shelf-words lane, October 28, 2026): the build fails on any hit in a
+ * file owned by a lane that is not in PENDING_LANES. Lanes still building in
+ * parallel stay report-only until they merge; the integrator removes each lane
+ * from PENDING_LANES as it lands (an empty list is the whole app strict, the
+ * PLAN.json integration check). Comments, import paths, console
  * text, identifier-like strings ("daily_three", "pins/mystery"), API
  * endpoints, models and dev-only screens are never hits.
  * A deliberate exception lives next to the string: // vocab-allow: <why>
@@ -21,8 +23,13 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '../..');
 const ts = require(path.join(ROOT, 'node_modules/typescript'));
 
-/** Flip to true at the end of the shelf-words lane. */
-const STRICT = false;
+/** Strict since the end of the shelf-words lane. */
+const STRICT = true;
+/**
+ * Lanes whose hits are reported but do not fail the build yet (they fix their own files on
+ * their own branches). Remove a lane when it merges; empty means every file is strict.
+ */
+const PENDING_LANES = new Set(['guide-map', 'ride-challenge', 'lineplay-ride', 'rewards-unlocks']);
 
 /** [id, pattern, say instead, files it skips]. Case matters only where the old word is a caps label. */
 const RULES = [
@@ -222,7 +229,7 @@ function scanVocabulary(root = ROOT) {
   return files;
 }
 
-module.exports = { RULES, OWNERS, LANE_FILES, ownerOf, scanSource, scanVocabulary, STRICT };
+module.exports = { RULES, OWNERS, LANE_FILES, ownerOf, scanSource, scanVocabulary, STRICT, PENDING_LANES };
 
 if (require.main === module || process.env.NODE_TEST_CONTEXT) {
   const test = require('node:test');
@@ -250,7 +257,7 @@ if (require.main === module || process.env.NODE_TEST_CONTEXT) {
     assert.equal(scanSource("const a = 'Snack Stand';", 'x.ts').length, 0, 'food snacks are fine');
   });
 
-  test(`vocabulary (${STRICT ? 'strict' : 'report only'}): banned UI words by owner lane`, t => {
+  test(`vocabulary (${STRICT ? `strict, pending lanes: ${[...PENDING_LANES].join(', ') || 'none'}` : 'report only'}): banned UI words by owner lane`, t => {
     const files = scanVocabulary().filter(f => f.owner !== 'allowlisted');
     const total = files.reduce((n, f) => n + f.hits.length, 0);
     const byOwner = {};
@@ -259,6 +266,11 @@ if (require.main === module || process.env.NODE_TEST_CONTEXT) {
       t.diagnostic(`${owner}: ${list.length} files, ${list.reduce((n, f) => n + f.hits.length, 0)} hits`);
       for (const f of list) t.diagnostic(`  ${f.file}${f.listed ? '' : f.unowned ? ' (new, no lane owns it)' : ' (new, lane owns_files)'}: ${[...new Set(f.hits.map(h => h.rule))].join(', ')}`);
     }
-    if (STRICT) assert.equal(total, 0, 'retired words in player-facing copy (see the diagnostics above)');
+    void total;
+    if (STRICT) {
+      const failing = files.filter(f => !PENDING_LANES.has(f.owner));
+      assert.deepEqual(failing.map(f => `${f.file} (${f.owner}): ${[...new Set(f.hits.map(h => h.rule))].join(', ')}`), [],
+        'retired words in player-facing copy (see the diagnostics above)');
+    }
   });
 }
