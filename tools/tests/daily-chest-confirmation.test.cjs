@@ -74,8 +74,10 @@ function chest({ reconciled = null, reduced = false } = {}) {
       if (name === '../api/endpoints/daily-gifts/create') return { default: async () => { if (reconciled) return reconciled; throw new Error('Offline'); } };
       if (name.includes('assets/')) return name;
       if (name === 'react-native-modal' || name === './Ribbon') return { default: name };
-      // Daily 3 off: the chest owns the flame and shows its streak.
-      if (name === '../services/retention/flags') return { loadRetentionFlags: async () => null, retentionFlagsNow: () => ({ dailyThree: false }), streakOwner: f => (f ? (f.dailyThree ? 'daily3' : 'chest') : null) };
+      // Core loop: the chest never shows a streak (the flame is Daily 3's); at home it shows when the map mounts it.
+      if (name === '../context/LocationProvider') return { LocationStatusContext: {} };
+      if (name === '../services/reveal/revealLadder') return { useRung: () => ({ open: false, isNew: false, markSeen() {} }) };
+      if (name === '../services/retention/rewardPresence') return require('./helpers/ts-module.cjs').loadTs('src/services/retention/rewardPresence.ts');
       throw new Error(`Unexpected import ${name}`);
     },
   }, { filename: file });
@@ -176,7 +178,8 @@ test('the celebration shows exactly what the server granted and never a coin pil
   assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+5 energy'), 'granted, not the ladder 20');
   const chestArt = daily.find(node => node.type === 'Image' && node.props.style?.width > 100);
   assert.match(chestArt.props.source, /chest-closed/, 'no pile of coins for an Energy prize');
-  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '2 day streak'));
+  assert.ok(!daily.find(node => node.type === 'Text' && /streak/i.test(String(text(node)))), 'the chest never shows a streak (one flame: Daily 3)');
+  assert.ok(daily.find(node => node.type === 'Text' && text(node) === 'Energy is saved for growing coins'), 'before coin levels, Energy says what it is for');
   daily.dismiss();
   assert.deepEqual(daily.flights.map(f => f.targetPosition), ['energy']);
   assert.equal(daily.flights[0].amount, 5);

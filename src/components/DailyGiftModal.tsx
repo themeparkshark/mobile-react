@@ -19,7 +19,9 @@ import { useCaptureMark } from '../dev/captureMark';
 import type { DailyGiftAmountsType, DailyGiftRewardType, DailyGiftType } from '../models/daily-gift-type';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../ui';
 import { ws7Preview } from '../dev/ws7Preview';
-import { loadRetentionFlags, retentionFlagsNow, streakOwner } from '../services/retention/flags';
+import { LocationStatusContext } from '../context/LocationProvider';
+import { useRung } from '../services/reveal/revealLadder';
+import { dailyChestAsked, dailyChestMayShow } from '../services/retention/rewardPresence';
 import Ribbon from './Ribbon';
 import RewardBurst from './RewardBurst';
 import { GoldBurst } from '../ui/GoldBurst';
@@ -81,8 +83,14 @@ export function countStart(amount: number): number {
 export function prizeBlockHeight(extraLines: number, hasMilestone: boolean, ticketDay: boolean): number {
   return (ticketDay ? 0 : 60) + 38 + extraLines * 24 + (hasMilestone ? 24 : 0);
 }
-export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', claim = update, simple = false }: {
+export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', claim = update, simple = false,
+  requested }: {
   readonly dailyGift: DailyGiftType;
+  /**
+   * The player tapped to open it (the Rewards button or sheet). At a park the card shows only then:
+   * it never opens by itself there (core loop blueprint 4.3). At home the map decides when it mounts.
+   */
+  readonly requested?: boolean;
   readonly onMapOcclusionChange?: (busy: boolean) => void;
   /** After the card has gone: whether today's chest was claimed (false for "Back to map"). */
   readonly onClosed?: (claimed: boolean) => void;
@@ -109,13 +117,11 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const width = dims.width;
   const height = dims.height ?? 800;
   const [visible, setVisible] = useState(false);
-  // The flame and "day streak" belong to Daily 3 while it is on: then the chest shows only its day ladder.
-  const [chestOwnsFlame, setChestOwnsFlame] = useState(() => streakOwner(retentionFlagsNow()) === 'chest');
-  useEffect(() => {
-    let live = true;
-    void loadRetentionFlags().then(flags => { if (live && flags) setChestOwnsFlame(streakOwner(flags) === 'chest'); });
-    return () => { live = false; };
-  }, []);
+  // At a park the chest never opens by itself: it waits in the Rewards button until the player asks.
+  const atPark = !!useContext(LocationStatusContext)?.park;
+  const mayShow = dailyChestMayShow({ atPark, requested, asked: dailyChestAsked() });
+  // Before coin levels unlock (rung 3), Energy is "saved for growing coins": the number alone means nothing yet.
+  const energyExplained = !useRung('coin_levels').open;
   const [phase, setPhase] = useState<'closed' | 'opening' | 'open'>('closed');
   const [confirmedGift, setConfirmedGift] = useState<DailyGiftType | null>(null);
   const [shown, setShown] = useState(0);
@@ -168,8 +174,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   useCaptureMark(pop, 'daily-chest-lid-peak', 1.245);
 
   useEffect(() => {
-    if (!dailyGift.redeemed_at && player?.username) setVisible(true);
-  }, [dailyGift.id, dailyGift.redeemed_at, player?.username]);
+    if (!dailyGift.redeemed_at && player?.username && mayShow) setVisible(true);
+  }, [dailyGift.id, dailyGift.redeemed_at, player?.username, mayShow]);
 
   useEffect(() => {
     bob.value = 0;
@@ -428,7 +434,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       <Animated.View ref={wrapRef} collapsable={false} style={[styles.wrap, cardStyle]}>
         <Ribbon text="Daily Chest" />
         <View style={styles.card}>
-          {simple ? null : <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Today’s chest: day ${day} of ${ladder.length}`}</Text>}
+          {/* The ladder's words are "Day N of 7": the word streak belongs to the Daily 3 flame only. */}
+          {simple ? null : <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Day ${day} of ${ladder.length}`}</Text>}
 
           {simple ? null : <View style={[styles.ladder, styles.aboveGold]}>
             {ladder.map((r) => (
@@ -436,12 +443,6 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                 stamp={r.day === day ? stamp : undefined} />
             ))}
           </View>}
-          {chestOwnsFlame && !simple && (displayedGift.streak ?? 0) > 1 && (
-            <View style={styles.streakRow}>
-              <GameIcon name="streak" size={18} />
-              <Text style={styles.streakText}>{`${displayedGift.streak} day streak`}</Text>
-            </View>
-          )}
 
           <Pressable ref={stageRef} collapsable={false} onPress={onChestPress} disabled={phase !== 'closed'} accessibilityRole="button"
             accessibilityState={{ disabled: phase !== 'closed', busy: phase === 'opening' }}
@@ -486,7 +487,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
             {simple && phase === 'closed' && <TapHint delay={1400} style={{ right: '22%', bottom: chestSize * 0.18 }} />}
           </Pressable>
 
-          <View style={[styles.prizeSlot, { height: prizeBlockHeight(extras.length, !!milestone, ticketDay) }]}>
+          <View style={[styles.prizeSlot, { height: prizeBlockHeight(extras.length + (energyExplained && (kind === 'energy' || extras.includes('energy')) ? 1 : 0), !!milestone, ticketDay) }]}>
           {phase === 'open' ? (
             <Animated.View style={[styles.prize, prizeStyle]}>
               {!ticketDay && <GameIcon name={PRIZE[kind].icon} size={56} />}
@@ -494,6 +495,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               {extras.map(k => (
                 <Text key={k} style={styles.prizeExtra}>+{amounts[k]} {prizeLabel(k, amounts[k])}</Text>
               ))}
+              {energyExplained && (kind === 'energy' || extras.includes('energy')) && (
+                <Text style={styles.prizeExtra}>Energy is saved for growing coins</Text>
+              )}
               {milestone && <Text style={styles.milestone}>{`${milestone.label} bonus!`}</Text>}
             </Animated.View>
           ) : (
@@ -665,8 +669,6 @@ const styles = StyleSheet.create({
   dayAmount: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
   check: { ...StyleSheet.absoluteFillObject, borderRadius: 10, backgroundColor: 'rgba(60, 184, 92, 0.85)',
     justifyContent: 'center', alignItems: 'center' },
-  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
-  streakText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold },
   stage: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginTop: 6 },
   goldWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   mouthGlow: { position: 'absolute' },

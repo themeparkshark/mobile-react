@@ -29,14 +29,15 @@ export function retentionFlagsNow(): RetentionFlags | null {
 }
 
 /**
- * One flame number in the whole game: while Daily 3 is on, the flame (and the
- * words "day streak") mean the Daily 3 streak; otherwise the Daily Chest
- * streak. Null while the flags are unknown, so nothing shows a number that
- * could turn out to be the other one.
+ * One flame number in the whole game (core loop blueprint 4.5): the flame is
+ * the Daily 3 streak and nothing else. The daily chest says "Day N of 7" on its
+ * ladder and never shows a streak, so with Daily 3 off there is no flame at
+ * all (never a second number that disagrees). Null while the flags are unknown
+ * or Daily 3 is off.
  */
-export function streakOwner(flags: RetentionFlags | null): 'daily3' | 'chest' | null {
+export function streakOwner(flags: RetentionFlags | null): 'daily3' | null {
   if (!flags) return null;
-  return flags.dailyThree ? 'daily3' : 'chest';
+  return flags.dailyThree ? 'daily3' : null;
 }
 
 /** Tests only. */

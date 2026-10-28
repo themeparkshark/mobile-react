@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { getDailyThree, type DailyThreePayload } from '../../api/endpoints/retention';
+import { useRung } from '../reveal/revealLadder';
 
 /** The own Daily 3 streak for the Profile flame, or null while the flag is off, the route 404s or it has not loaded. */
 export function ownStreakOf(payload: DailyThreePayload | null | undefined): { readonly days: number; readonly best: number } | null {
@@ -10,8 +11,12 @@ export function ownStreakOf(payload: DailyThreePayload | null | undefined): { re
   return { days, best };
 }
 
-/** Reads `/me/daily-three` once per focus of the host screen; errors (old server) leave it null. */
+/**
+ * Reads `/me/daily-three` once per focus of the host screen; errors (old server) leave it null.
+ * The flame shows only once Daily 3 has unlocked for this player (rung 4): one flame, from one place.
+ */
 export default function useOwnStreak(enabled = true) {
+  const daily = useRung('daily').open;
   const [streak, setStreak] = useState<{ readonly days: number; readonly best: number } | null>(null);
   useFocusEffect(useCallback(() => {
     if (!enabled) return undefined;
@@ -19,5 +24,5 @@ export default function useOwnStreak(enabled = true) {
     void getDailyThree().then(p => { if (live) setStreak(ownStreakOf(p)); }).catch(() => undefined);
     return () => { live = false; };
   }, [enabled]));
-  return streak;
+  return daily ? streak : null;
 }

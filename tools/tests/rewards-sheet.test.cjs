@@ -68,3 +68,46 @@ test('every chest with gear wears it through the same helper', () => {
   const trail = read('src/components/trail/TrailReveal.tsx');
   assert.match(trail, /wearAndOpenCloset\(wearable\.item_id, refreshPlayer\)/);
 });
+
+test('one flame: the Daily 3 streak is the only streak number', () => {
+  const flags = loadTs('src/services/retention/flags.ts', { '../../api/endpoints/platform/feature-flags': { default: async () => ({ flags: {} }) } });
+  assert.equal(flags.streakOwner({ dailyThree: true, levelChests: true }), 'daily3');
+  assert.equal(flags.streakOwner({ dailyThree: false, levelChests: true }), null, 'no chest flame: never a second number');
+  assert.equal(flags.streakOwner(null), null);
+  const chest = read('src/components/DailyGiftModal.tsx');
+  assert.doesNotMatch(chest, /day streak|displayedGift\.streak|GameIcon name="streak"/, 'the chest ladder never shows a streak');
+  assert.match(chest, /`Day \$\{day\} of \$\{ladder\.length\}`/, 'the chest says Day N of 7');
+  // Profile reads the same server number as the Daily 3 sheet and friend rows (daily3_streak), and only after rung 4.
+  const own = read('src/services/retention/useOwnStreak.ts');
+  assert.match(own, /useRung\('daily'\)\.open/);
+  assert.match(own, /return daily \? streak : null/);
+  for (const f of ['src/screens/social/PlayerRow.tsx', 'src/screens/LeaderboardsScreen/StandingsRow.tsx', 'src/screens/PlayerScreen.tsx']) {
+    assert.match(read(f), /StreakFlame streak=\{[a-zA-Z]+\.daily3_streak\}/, `${f} shows the Daily 3 number`);
+  }
+});
+
+test('rewards open by themselves only at calm moments at home (BLUEPRINT 4.3)', () => {
+  const p = loadTs('src/services/retention/rewardPresence.ts');
+  const base = { atPark: false, firstCatchDone: true, autoOpenUsed: false, dailyRungOpen: true };
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'daily_chest' }), true, 'home, after the first catch');
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'daily_chest', firstCatchDone: false }), false);
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'daily_chest', atPark: true }), false, 'never at a park');
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'daily_chest', autoOpenUsed: true }), false, 'one automatic open per app open');
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'level_chest' }), true);
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'level_chest', atPark: true }), false);
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'level_chest', dailyRungOpen: false }), false, 'level chests wait for rung 4');
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'freeze_saved', atPark: true }), false);
+  for (const kind of ['daily3_chest', 'weekly_box', 'event_chest', 'trail_box', 'stamps']) {
+    assert.equal(p.rewardMayAutoOpen({ ...base, kind }), false, `${kind} waits in the Rewards button`);
+  }
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'member_look', atPark: true }), false, 'member dialogs: home first');
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'member_look', atPark: true, parkBusy: false }), true);
+  // The chest card at a park shows only when asked for.
+  assert.equal(p.dailyChestMayShow({ atPark: false, asked: false }), true);
+  assert.equal(p.dailyChestMayShow({ atPark: true, asked: false }), false);
+  assert.equal(p.dailyChestMayShow({ atPark: true, requested: true, asked: false }), true);
+  assert.equal(p.dailyChestMayShow({ atPark: true, asked: true }), true);
+  p.askForDailyChest(1000);
+  assert.equal(p.dailyChestAsked(1000 + p.CHEST_ASK_MS - 1), true);
+  assert.equal(p.dailyChestAsked(1000 + p.CHEST_ASK_MS + 1), false);
+});
