@@ -1,5 +1,5 @@
 /**
- * Captain Fin (design 7.2): calibrated accuracy and quantile lock times.
+ * Captain Gill (design 7.2): calibrated accuracy and quantile lock times.
  *
  * Per question Fin reads calibration stats (p_correct and the correct-answer
  * lock-time quantiles t10/t30/t50/t70), or tier priors before 30 answers, and

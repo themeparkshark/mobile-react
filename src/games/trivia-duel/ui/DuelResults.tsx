@@ -2,7 +2,7 @@
  * Duel results on stage (design 11.9, rev 7). The crown lands on your avatar
  * up on the stage; this half-height cream card slides up over the bottom 45%
  * while the stage keeps acting above it. Big result line, the score drums,
- * FIN BEATEN / RANK UP / NEW BEST banners or the near-miss line with the gap
+ * GILL BEATEN / RANK UP / NEW BEST banners or the near-miss line with the gap
  * bar, four 18pt stat rows, the Fin rank bar, the Best Moment polaroid that
  * drops in for 1.5s then tucks into the corner, one Fact Card row with Read
  * on TPS, and REMATCH (pulses on the beat) / PASS TO CREW / CONTINUE.
@@ -125,7 +125,7 @@ export const RANK_UP_AT = 1100;
 export const RIBBON_SLAM_MS = 360;
 /**
  * When the Best Moment polaroid drops: after the last star, the title
- * (YOU WIN! lands right after the last star), FIN BEATEN, NEW BEST and the
+ * (YOU WIN! lands right after the last star), GILL BEATEN, NEW BEST and the
  * RANK UP badge have popped (it never lands while they do), and never before
  * two beats. It drops above the card, over the stage, so it covers no badge.
  */
@@ -196,7 +196,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   const polS = useSharedValue(1);
   // The Best Moment polaroid leaves the tree once it has popped away. Left
   // mounted at scale 0 over the card, it drew the banners under it hollow
-  // (FIN BEATEN and RANK UP lost their gold; NEW BEST, outside its box, kept it).
+  // (GILL BEATEN and RANK UP lost their gold; NEW BEST, outside its box, kept it).
   const [polGone, setPolGone] = useState(!model.best || reducedMotion);
   // The polaroid drops above the card (over the stage), never over its badges.
   const [cardH, setCardH] = useState(0);
@@ -495,7 +495,7 @@ function RankUpRow({ from, to, label, reducedMotion }: { from: number; to: numbe
   const popSt = useAnimatedStyle(() => ({ opacity: pop.value > 0.02 ? 1 : 0, transform: [{ scale: pop.value }] }));
   const sparkSt = useAnimatedStyle(() => ({ opacity: spark.value, transform: [{ scale: 0.6 + spark.value * 0.4 }] }));
   return (
-    <View style={[styles.rankRow, styles.rankUpRow]} accessible accessibilityLabel={`Rank up! Fin is now ${label}`}>
+    <View style={[styles.rankRow, styles.rankUpRow]} accessible accessibilityLabel={`Rank up! Gill is now ${label}`}>
       <RankHat stripes={from} big dim />
       <View style={styles.rankUpArrow}>
         <GameIcon name="arrow" size={30} />
@@ -516,7 +516,7 @@ function Banner({ text, i, reducedMotion }: { text: string; i: number; reducedMo
     sx.value = withDelay(BANNER_AT + i * BANNER_GAP, withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 300 })));
   }, [sx, i, reducedMotion]);
   // One even scale, like the rank fins and coin dots. The old squash and
-  // stretch (scaleX against scaleY) drew FIN BEATEN and RANK UP hollow, with
+  // stretch (scaleX against scaleY) drew GILL BEATEN and RANK UP hollow, with
   // no gold fill, on the current bundle. The pop rides a wrapper and the gold
   // sits on a plain view inside it.
   const st = useAnimatedStyle(() => ({ transform: [{ scale: sx.value }] }));

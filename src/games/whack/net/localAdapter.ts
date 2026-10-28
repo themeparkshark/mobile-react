@@ -78,7 +78,7 @@ export function createLocalNetAdapter(opts: LocalAdapterOptions = {}): WhackNetA
         return { ok: true, score: v.result.score, result: v.result, flagged: v.flagged, duel: reveal };
       }
       if (proof.format === 'raid') {
-        const crew = opts.crew ?? ['me', 'Bubbles', 'Captain Fin'];
+        const crew = opts.crew ?? ['me', 'Bubbles', 'Captain Gill'];
         if (!raid) {
           raid = createRaid(crew.length, now());
           adapter.raid = raid;

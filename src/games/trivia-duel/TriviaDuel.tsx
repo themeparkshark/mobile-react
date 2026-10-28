@@ -3,7 +3,7 @@
  * studio/design/trivia.md revision 7.
  *
  * A bright boardwalk game show you play one-thumbed while the line moves.
- * Race Captain Fin (or a recorded crew ghost) to the right answer. Answers
+ * Race Captain Gill (or a recorded crew ghost) to the right answer. Answers
  * stay face-down until unlock, a ring of 24 marquee bulbs burns out as your
  * points drain, the bell lets you show you know it before you see the
  * choices, and the Final is a no-risk bonus question worth double points.
@@ -183,7 +183,7 @@ const TIER_COLOR: Record<SpeedTier, string> = { lightning: '#fff3b0', great: C.g
 /** 11.6 stamp widths (share of screen width): tier stamps 38-45%, event stamps 55-70%. */
 const TIER_WIDTH: Record<SpeedTier, number> = { lightning: 0.45, great: 0.42, nice: 0.38, none: 0.3 };
 const TIER_SPARKS: Record<SpeedTier, number> = { lightning: 14, great: 10, nice: 6, none: 4 };
-const ROUND_NAMES = { quick: 'QUICK DRAW', buzz: 'BUZZ BELL', final: "FIN'S FINAL" } as const;
+const ROUND_NAMES = { quick: 'QUICK DRAW', buzz: 'BUZZ BELL', final: "GILL'S FINAL" } as const;
 const VOICE: Record<FinRank, BabbleVoice> = { deckhand: 'deckhand', firstmate: 'first_mate', captain: 'captain', admiral: 'admiral' };
 const MAX_FLASHES = 2;
 
@@ -321,7 +321,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const decisiveDone = useRef(false);
 
   const opponentLook: SharkLook | 'fin' = ghost ? ((ghost.look as SharkLook) || 'blue') : 'fin';
-  const oppName = ghost ? ghost.name : 'Fin';
+  const oppName = ghost ? ghost.name : 'Gill';
   // Only the ride challenge is graded today (local queue duels have no server window yet): a pocketed phone never burns a queue question.
   const graded = mode === 'ride';
 
@@ -699,7 +699,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     pushX.value = target.x;
   }, [push, pushX, reducedMotion, W]);
 
-  /** Full-frame flash: only the FIN'S FINAL stamp and the win crown, 35% peak, max 2 per match. */
+  /** Full-frame flash: only the GILL'S FINAL stamp and the win crown, 35% peak, max 2 per match. */
   const flash = useCallback(() => {
     if (reducedMotion || flashes.current >= MAX_FLASHES) return;
     flashes.current += 1;
@@ -895,7 +895,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRide, setClock, ghost, frame, reducedMotion]);
 
-  // FIN'S FINAL (5.5): stamp on a half-beat (flash 1 of 2), music lifts to duel_loop_final on the bar,
+  // GILL'S FINAL (5.5): stamp on a half-beat (flash 1 of 2), music lifts to duel_loop_final on the bar,
   // category pick (2.5s, trailing player, vs Fin only), then the DOUBLE POINTS banner (rev 8: a no-risk
   // bonus, nothing to bet and nothing to lose), then the question.
   const runFinalIntro = useCallback(async (p: MatchPlan, r: PlannedRound) => {
@@ -907,7 +907,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     const t0 = tally.current;
     const alt = !ghost ? p.finalAlt : undefined;
     later(d, () => {
-      stamp("FIN'S FINAL", C.gold, 0.66, W / 2, RAIL_H + STAGE_BAND * 0.5);
+      stamp("GILL'S FINAL", C.gold, 0.66, W / 2, RAIL_H + STAGE_BAND * 0.5);
       sfx(CUE.stamp);
       Haptic.comboHeavy();
       flash();
@@ -1467,7 +1467,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       // The on-stage half-height card (renderResults) reads this model; the shell keeps the claim contract.
       setResults({
         won, tie: false, myScore: t.me.score, oppScore: t.opp.score, oppName,
-        banners: won ? (t.me.score > t.opp.score ? ['FIN BEATEN'] : []) : [],
+        banners: won ? (t.me.score > t.opp.score ? ['GILL BEATEN'] : []) : [],
         nearMiss: rideNearMiss(resultsLog.current),
         rows: [
           { label: 'Correct', value: `${t.me.correct}/${p.rounds.length}` },
@@ -1479,7 +1479,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       const result: GameResult = {
         score: t.me.score,
         stars,
-        message: won ? (t.me.score > t.opp.score ? 'FIN BEATEN!' : 'Ride coin earned!') : `${t.me.correct} of ${p.rounds.length} right. 2 wins the coin.`,
+        message: won ? (t.me.score > t.opp.score ? 'GILL BEATEN!' : 'Ride coin earned!') : `${t.me.correct} of ${p.rounds.length} right. 2 wins the coin.`,
         thresholds: { one: 200, two: 420, three: 600 },
         stats: [
           { label: 'Correct', value: `${t.me.correct}/${p.rounds.length}` },
@@ -1522,7 +1522,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       m.carry = mode === 'queue' || mode === 'practice' ? { streak: t.me.streak.streak, shield: t.me.streak.shield, at: Date.now() } : null;
       saveGhost(m, makeGhost(p, t, myName, 'classic', Date.now()));
     });
-    if (won) banners.unshift(ghost ? `${oppName.toUpperCase()} BEATEN` : 'FIN BEATEN');
+    if (won) banners.unshift(ghost ? `${oppName.toUpperCase()} BEATEN` : 'GILL BEATEN');
     // No NEW BEST on a loss (core loop 5.3).
     if (won && t.me.score > prevBest && prevBest > 0) banners.push('NEW BEST');
 
@@ -1818,7 +1818,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const finStripes = FIN_RANKS[rankRef.current].stripes;
   // Before the Final's read-lock the board never shows its question: the intro, the topic pick and the bonus banner say what is coming.
   const finalTopic = plan?.rounds[roundIdx]?.question.category ?? '';
-  const boardText = phase === 'finalIntro' ? "Fin's Final is next"
+  const boardText = phase === 'finalIntro' ? "Gill's Final is next"
     : phase === 'category' ? (catPick?.picker === 'me' ? 'You pick the topic' : `${oppName} picks the topic`)
     // The topic sits crisp in the white card (never over the marquee bulbs).
     : phase === 'bonus' ? `Bonus question: ${finalTopic}. Double points!`
@@ -2061,7 +2061,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
           ) : null}
 
           {vs ? (
-            <VsIntro ms={vs.ms} meName={myName} oppName={ghost ? oppName : 'Captain Fin'} oppLook={opponentLook} rankLabel={ghost ? 'GHOST RUN' : FIN_RANKS[rankRef.current].label.replace(' Fin', '').toUpperCase()} onDone={onVsDone} reducedMotion={reducedMotion} />
+            <VsIntro ms={vs.ms} meName={myName} oppName={ghost ? oppName : 'Captain Gill'} oppLook={opponentLook} rankLabel={ghost ? 'GHOST RUN' : FIN_RANKS[rankRef.current].label.replace(' Gill', '').toUpperCase()} onDone={onVsDone} reducedMotion={reducedMotion} />
           ) : null}
           {results && phase === 'results' && !isRide ? (
             <DuelResults

@@ -507,3 +507,25 @@ test('a tap anywhere off the challenge card closes it: the wide card row lets sc
   assert.match(src, /<View pointerEvents="box-none"\n\s+style=\{\{ width: Dimensions\.get\('window'\)\.width - 40/);
   assert.match(src, /onBackdropPress=\{safeClose\}/);
 });
+
+/* ---------- Ledger 36: the bot rival is Captain Gill ---------- */
+
+test('no UI string or accessibility label in src/games names Captain Fin or Admiral Fin; the ladder is Gill', () => {
+  const walk = dir => fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap(e =>
+    e.isDirectory() ? walk(path.join(dir, e.name)) : /\.(ts|tsx)$/.test(e.name) ? [path.join(dir, e.name)] : []);
+  const hits = [];
+  for (const file of walk('src/games')) {
+    read(file).split('\n').forEach((line, i) => {
+      if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
+      if (/(Captain|Admiral|Deckhand|First Mate) Fin\b|FIN'S FINAL|Fin's Final|FIN BEATEN|Fin is now|: 'Fin'/.test(line)) hits.push(`${file}:${i + 1}`);
+    });
+  }
+  assert.deepEqual(hits, []);
+  const config = read('src/games/trivia-duel/engine/config.ts');
+  for (const label of ['Deckhand Gill', 'First Mate Gill', 'Captain Gill', 'Admiral Gill']) assert.ok(config.includes(`label: '${label}'`), label);
+  const duel = read('src/games/trivia-duel/TriviaDuel.tsx');
+  assert.match(duel, /ghost\.name : 'Gill'/);
+  assert.match(duel, /oppName=\{ghost \? oppName : 'Captain Gill'\}/);
+  assert.match(duel, /GILL'S FINAL/);
+  assert.match(read('src/games/trivia-duel/ui/DuelResults.tsx'), /Rank up! Gill is now/);
+});

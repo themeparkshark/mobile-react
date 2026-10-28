@@ -268,7 +268,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const thermalScale = THERMAL_SCALES[thermal.levelJs] ?? THERMAL_SCALES[0];
   const thermalMax = useRef(0);
   thermalMax.current = Math.max(thermalMax.current, thermal.levelJs);
-  const net = useMemo(() => props.net ?? ((format === 'duel' || format === 'raid') ? createLocalNetAdapter({ rivalName: duel?.rival.name ?? 'Captain Fin' }) : null), [props.net, format, duel?.rival.name]);
+  const net = useMemo(() => props.net ?? ((format === 'duel' || format === 'raid') ? createLocalNetAdapter({ rivalName: duel?.rival.name ?? 'Captain Gill' }) : null), [props.net, format, duel?.rival.name]);
   const today = useMemo(() => parkLocalDate(Date.now()), []);
 
   // ---------------------------------------------------------------- layout
@@ -908,7 +908,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         message,
         maxCombo: maxStreak,
         thresholds: ride || format === 'raid' || format === 'duel' ? undefined : thresholds,
-        rival: format === 'duel' ? { name: duel?.rival.name ?? 'Captain Fin', score: rivalTotalRef.current }
+        rival: format === 'duel' ? { name: duel?.rival.name ?? 'Captain Gill', score: rivalTotalRef.current }
           : target ? { name: target.name.split(' ')[0], score: target.score } : null,
         // Every number true to its label, and no zero buckets ("0 COMBO" is not a brag). Drawn digits only (countText).
         buckets: ride || !tallies.length ? undefined : tallies.map((t) => ({ label: t.label, value: `+${countText(t.value)}` })),
@@ -1374,7 +1374,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   // Countdown pill copy: six words or fewer, one name per thing (audit G6).
   const objective = ride
     ? defend ? HOME_DEFEND.objective(RIDE_WIN_NOTCHES) : `Bonk ${RIDE_WIN_NOTCHES} sharks. Not the anglerfish!`
-    : format === 'duel' ? `Beat ${duel?.rival.name ?? 'Captain Fin'}! Not the anglerfish!`
+    : format === 'duel' ? `Beat ${duel?.rival.name ?? 'Captain Gill'}! Not the anglerfish!`
       : format === 'raid' ? 'Bonk the tentacles together!'
         : lineRun ? 'Beat the sharks above you!'
           : 'Bonk sharks. Not the anglerfish!';
@@ -1500,7 +1500,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           {PERF_GRAPH ? <PerfOverlay probe={perf} visible extra={() => `phase ${phaseRef.current}`} style={{ top: undefined, bottom: 6, right: 6 }} /> : null}
           {phase === 'breather' && reveal && reveal.me && reveal.rival ? (
             <View style={styles.revealWrap} pointerEvents="box-none">
-              <DuelCard me={reveal.me.score} rival={reveal.rival.score} rivalName={duel?.rival.name ?? 'Captain Fin'} winner={reveal.winner}
+              <DuelCard me={reveal.me.score} rival={reveal.rival.score} rivalName={duel?.rival.name ?? 'Captain Gill'} winner={reveal.winner}
                 wins={reveal.wins} onEmote={net ? (id) => net.sendEmote(id) : undefined} />
             </View>
           ) : null}

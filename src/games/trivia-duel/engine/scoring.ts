@@ -184,7 +184,7 @@ export function closestPoints(guess: number, truth: number, tol: number, t: numb
 }
 
 /**
- * Fin's Final (rev 8): a no-risk bonus. Right = score + question points x FINAL_BONUS.multiplier;
+ * Gill's Final (rev 8): a no-risk bonus. Right = score + question points x FINAL_BONUS.multiplier;
  * wrong or timeout = the score as it was. A Final can never take points away.
  */
 export function applyFinal(score: number, correct: boolean, questionPts: number): number {

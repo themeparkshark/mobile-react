@@ -233,7 +233,7 @@ export function tileOrder(seed: number, question: SprintQuestion, userId: number
 
 export type SprintBotProfile = 'rookie' | 'regular' | 'ace';
 
-/** House crew (Captain Fin and friends): accuracy % and lock-time spread per profile. */
+/** House crew (Captain Gill and friends): accuracy % and lock-time spread per profile. */
 export const SPRINT_BOTS: Record<SprintBotProfile, { acc: number; reactMin: number; reactSpread: number }> = {
   rookie: { acc: 58, reactMin: 1900, reactSpread: 3000 },
   regular: { acc: 72, reactMin: 1300, reactSpread: 2400 },

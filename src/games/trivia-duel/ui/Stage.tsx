@@ -4,7 +4,7 @@
  * Layers, back to front: sky + sunburst, sea band with a stepped (12fps)
  * shimmer, boardwalk deck, marquee arch with beat-chasing bulbs and bunting,
  * two podiums, you (Alex's classic shark, mirrored to face the host) and
- * Captain Fin (gate-passed 12-cell sheet + spring hat layer), then a crowd
+ * Captain Gill (gate-passed 12-cell sheet + spring hat layer), then a crowd
  * of Alex's shark colours holding foam fingers that bob on the beat.
  *
  * Environment shapes are drawn in code with the charcoal outline rule; every
@@ -75,7 +75,7 @@ interface Props {
   /** Results zoom (UI thread, 1 = none): a short card zooms the dropped scene a little around the podiums. */
   zoomSv?: SharedValue<number>;
   actors: StageActors;
-  /** 'fin' draws Captain Fin; a shark look draws a ghost/rival shark. */
+  /** 'fin' draws Captain Gill; a shark look draws a ghost/rival shark. */
   opponent: 'fin' | SharkLook;
   ghost?: boolean;
   meLook?: SharkLook;
