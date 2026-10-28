@@ -797,7 +797,10 @@ export default function RedeemRedeemableModal({
                   style={{ position: 'absolute', width: 900, height: 400, top: 15, zIndex: 20, left: -80 }}
                 />}
               </Pressable>
-              <View style={{ width: Dimensions.get('window').width - 40, position: 'relative', zIndex: 10, alignItems: 'center' }}>
+              {/* box-none: a tap on the scrim beside the card (inside this wide row) reaches the close
+                  Pressable under it instead of the swipe handler, so tapping anywhere off the card closes it. */}
+              <View pointerEvents="box-none"
+                style={{ width: Dimensions.get('window').width - 40, position: 'relative', zIndex: 10, alignItems: 'center' }}>
                 <Ribbon text={isTaskType ? title : 'Congratulations'} />
                 <View style={{
                   backgroundColor: backgrounds[redeemable.type as keyof typeof backgrounds],

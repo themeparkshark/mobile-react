@@ -500,3 +500,10 @@ test('a card that UIKit refused to present comes back: the watchdog presents it 
     assert.match(src, /key=\{`(challenge|win)-\$\{(challengeWatch|watch)\.key\}`\}\n\s+onShow=\{(challengeWatch|watch)\.onShow\}/, file);
   }
 });
+
+test('a tap anywhere off the challenge card closes it: the wide card row lets scrim taps through', () => {
+  const src = read('src/components/RedeemRedeemableModal.tsx');
+  // Without box-none the row beside the card swallowed the tap (react-native-modal's swipe handler took it).
+  assert.match(src, /<View pointerEvents="box-none"\n\s+style=\{\{ width: Dimensions\.get\('window'\)\.width - 40/);
+  assert.match(src, /onBackdropPress=\{safeClose\}/);
+});
