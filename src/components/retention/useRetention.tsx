@@ -56,6 +56,8 @@ const ART = [LEVEL_CHEST, LEVEL_CHEST_OPEN, WEEKLY, WEEKLY_OPEN, FREEZE, BOX];
 
 /** Reads are cheap but not free: focus and app-resume reads wait at least 15 s; real events read at once. */
 const MIN_REFRESH_MS = 15000;
+/** No native onDismiss after the hide animation (Android, or a sheet UIKit never showed): carry on after this. */
+const NATIVE_GONE_FALLBACK_MS = 700;
 const COACH_KEY = 'tps.retention.coach.v1';
 
 type View_ =
@@ -559,6 +561,15 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   // overlay would sit "open" in React and invisible on screen, and every later tap on its doors would do nothing.
   // No show within 2 s: let it go, and give a sheet the player asked for one more try.
   const shownRef = useRef(false);
+  const dismissFallback = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (dismissFallback.current) clearTimeout(dismissFallback.current); }, []);
+  const nativeGone = () => {
+    if (dismissFallback.current) { clearTimeout(dismissFallback.current); dismissFallback.current = null; }
+    layer.onDismissed();
+    const next = afterHide.current;
+    afterHide.current = null;
+    next?.();
+  };
   const presentNow = layer.present && visible;
   useEffect(() => {
     if (!presentNow) { shownRef.current = false; return undefined; }
@@ -697,12 +708,14 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const overlay = (
     <Modal isVisible={layer.present && !!content} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
       onModalShow={() => { shownRef.current = true; }}
+      // onModalHide fires when the hide animation ends, which is when UIKit only STARTS dismissing. The next native
+      // sheet (the daily chest, Trail Boxes, the event sheet) waits for onDismiss, the real "gone" (a fallback covers
+      // a platform that never sends it), so two native modals never present at once (the PLAY RIDE freeze).
       onModalHide={() => {
-        layer.onDismissed();
-        const next = afterHide.current;
-        afterHide.current = null;
-        next?.();
+        if (dismissFallback.current) clearTimeout(dismissFallback.current);
+        dismissFallback.current = setTimeout(nativeGone, NATIVE_GONE_FALLBACK_MS);
       }}
+      onDismiss={nativeGone}
       animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'} animationInTiming={reducedMotion ? 120 : 240}
       animationOutTiming={reducedMotion ? 120 : 180} backdropColor={BRAND.navy} backdropOpacity={0.55}
       onBackdropPress={revealing ? undefined : close} onBackButtonPress={revealing ? undefined : close}

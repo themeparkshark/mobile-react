@@ -318,3 +318,12 @@ test('level chest: the pin box line only where mystery boxes are on; Energy says
   assert.match(hook, /energySaved=\{!coinLevelsOpen\} pinBoxes=\{flagOn\(flags, 'pin_mystery_boxes'\)\}/);
   assert.match(hook, /onPins=\{flagOn\(flags, 'pin_mystery_boxes'\) \?/);
 });
+
+test('one door: the next native sheet waits for the overlay native dismiss, and a refused present heals', () => {
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /const layer = useNativeModalLayer\(visible, 'wait'\);/);
+  assert.match(hook, /onDismiss=\{nativeGone\}/, 'after-hide work runs on the real native dismiss');
+  assert.match(hook, /dismissFallback\.current = setTimeout\(nativeGone, NATIVE_GONE_FALLBACK_MS\);/);
+  assert.match(hook, /onModalShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
+  assert.match(hook, /case 'daily_chest': askForDailyChest\(\); closeThen\(\(\) => o\.onOpenChest\(\)\); return;/);
+});
