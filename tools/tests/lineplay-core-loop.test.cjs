@@ -46,6 +46,15 @@ test('no seconds countdown text anywhere in src/screens/LinePlay', () => {
   assert.equal(card.calmPartsLine({ elapsedSeconds: 1500, earned: 2, intervalSeconds: 600 }), 'In line 25 min · 2 Parts');
   assert.equal(card.calmPartsLine({ elapsedSeconds: 20, earned: 0, intervalSeconds: 600 }), 'Just joined the line · first Part at 10 min');
   assert.equal(card.COIN_MISSING_LINE, 'Parts are saved for this coin. Win it on your way out.');
+  // No coin yet: the one line still shows progress toward the coin; the sentence moves to Details.
+  assert.equal(card.calmPartsLine({ elapsedSeconds: 720, earned: 1, intervalSeconds: 600, coinMissing: true }),
+    'In line 12 min · 1 Part saved for this coin');
+  assert.equal(card.calmPartsLine({ elapsedSeconds: 200, earned: 0, intervalSeconds: 600, coinMissing: true }),
+    'In line 3 min · first Part at 10 min');
+  const waitCard = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.match(waitCard, /calmPartsLine\(\{ elapsedSeconds, earned, intervalSeconds: interval, coinMissing \}\)/);
+  assert.match(waitCard, /: coinMissing \? COIN_MISSING_LINE/);
+  assert.match(waitCard, /const sublineInHeadline = Boolean\(hero\) && calmLine && !coinMissing;/);
   assert.doesNotMatch(card.ticketHint(true, 0, 600), /\d:\d\d/);
   assert.equal(card.fmt(450), '7 min');
 });
@@ -121,6 +130,10 @@ test('Story and Games: one word per tab, crew pages only for a crew, new rounds 
   assert.match(screen, /tabs=\{\{\n\s+active: visibleTab,/);
   const rail = read('src/screens/LinePlay/components/ActivityPageRail.tsx');
   assert.match(rail, /<Tab label="Story"/);
+  // Story's picture is the clue magnifier, never the compass (that is the MAP footer's picture).
+  assert.match(rail, /<Tab label="Story" icon="search"/);
+  assert.match(rail, /const calm = quiet;/, 'Next and More games stay quiet beside a page\'s own PLAY');
+  assert.match(screen, /const railQuiet = visibleItem != null;/);
   assert.match(rail, /<Tab label="Games"/);
   // No retired queue names on screen.
   for (const file of walk('src/screens/LinePlay').concat(walk('src/services/lineplay'))) {
@@ -270,4 +283,30 @@ test('the unlock ladder hears LinePlay: line_played at the first verified minute
   assert.match(screen, /const firstVerifiedMinute = snapshot\.verifiedEligibleSeconds >= 60;/);
   assert.match(screen, /recordProgress\('line_played', \{/);
   assert.match(screen, /if \(previous == null \|\| credited <= previous \|\| coinOwned !== true\) return;\n\s+recordProgress\('line_part_earned', \{/);
+});
+
+test('the recap GO and NEXT COIN follow the guide store, and a coin you do not own counts every Part in its slot', async () => {
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(screen, /const guideNext = useGuideTarget\(\);/);
+  assert.doesNotMatch(screen, /guide\.current\(\)/, 'no one-time read of the guide during render');
+  assert.match(screen, /partsEarned: slotTaskId != null \? slotPartsShown\(recapPartsEarned, slotParts\) : recapPartsEarned/);
+  const log = read('src/screens/RideTracker/RideLogScreen.tsx');
+  assert.match(log, /const nextCoin = useGuideTarget\(\);/);
+  assert.doesNotMatch(log, /guide\.current\(\)/);
+  const hook = read('src/services/lineplay/useGuideTarget.ts');
+  assert.match(hook, /useSyncExternalStore\(subscribe, snapshot, snapshot\)/);
+  // The slot count: never fewer than this wait's Parts, and a failed read falls back to them.
+  const calls = [];
+  const slot = loadTs('src/services/lineplay/slotParts.ts', { '../../api/api': { __esModule: true, default: {
+    get: async (url, opts) => { calls.push([url, opts.timeout]); if (url.endsWith('/0')) throw new Error('bad'); return { data: { data: { amount: 3 } } }; },
+  } } });
+  assert.equal(await slot.waitingSlotParts(583), 3);
+  assert.deepEqual(plain(calls), [['/me/ride-parts/583', 5000]]);
+  assert.equal(await slot.waitingSlotParts(0), null);
+  assert.equal(slot.slotPartsShown(1, 3), 3);
+  assert.equal(slot.slotPartsShown(2, null), 2);
+  assert.equal(slot.slotPartsShown(2, 0), 2, 'rewards still on their way: this wait\'s Parts');
+  const go = loadTs('src/services/lineplay/rideStep.ts', { '../guide/nextCoin': {} }).recapGo;
+  assert.equal(go({ rideName: 'Jungle Cruise', coinState: 'unowned', partsEarned: slot.slotPartsShown(1, 3), rideTaskId: 583,
+    upgradeReady: false, nextCoin: null }).label, 'Win Jungle Cruise’s coin: 3 Parts are waiting');
 });

@@ -41,6 +41,8 @@ import { dropAnsweredRideDetections } from '../../services/RideDetectionService'
 import { adventureRideStampDue, recapGo, rideStepJournalParams, rideStepLog, rideStepLogId, signSaidLine,
   timedWaitMinutes, type RecapGo } from '../../services/lineplay/rideStep';
 import { keepRideStepLog, releaseRideLogHold } from '../../services/rideLogOutbox';
+import { useGuideTarget } from '../../services/lineplay/useGuideTarget';
+import { slotPartsShown, waitingSlotParts } from '../../services/lineplay/slotParts';
 import { celebrateAdventureTicket, getTripGoal } from '../../api/endpoints/me/trip-goal';
 import { loadParkRides } from '../../services/lineplay/resolveRide';
 import { guide } from '../../services/guide/nextCoin';
@@ -84,7 +86,7 @@ import { LINEPLAY_TOUR_STEP_MS, linePlayTourEnabled, linePlayTourSteps } from '.
 import WaitCard from './components/WaitCard';
 import WaitCoinHero from './components/waitscreen/WaitCoinHero';
 import { linePartsState, shownClock, shownRewards, shownWait } from './components/waitscreen/waitScreenPreview';
-import { LINEPLAY_INTRO_BODY } from '../../services/help/helpTopics';
+import { LINEPLAY_INTRO_LINE } from '../../services/lineplay/labels';
 import ActivitySlot from './components/ActivitySlot';
 import ActivityPageRail from './components/ActivityPageRail';
 import CrewGridCard from './components/CrewGridCard';
@@ -369,7 +371,7 @@ export default function LinePlayScreen() {
   }, [snapshot.creditedParts, snapshot.state]);
 
   // First Ride Part ever: Finn explains what it is for, once, between games.
-  const { hasSeenTip, tipsReady } = useHelp();
+  const { hasSeenTip, tipsReady, markTipSeen } = useHelp();
   const [partTipPending, setPartTipPending] = useState(false);
   useEffect(() => {
     if (tipsReady && (snapshot.creditedParts ?? 0) > 0 && !hasSeenTip('first_ride_part')) setPartTipPending(true);
@@ -639,7 +641,6 @@ export default function LinePlayScreen() {
   const sheetOpenRef = useRef(false);
   // A one-time tip is up (they stay until tapped): the nudge waits for it, so only one message asks at a time.
   const tipsUp = useRef(new Set<string>());
-  const onIntroTip = useCallback((up: boolean) => { if (up) tipsUp.current.add('intro'); else tipsUp.current.delete('intro'); }, []);
   const onPartTip = useCallback((up: boolean) => { if (up) tipsUp.current.add('part'); else tipsUp.current.delete('part'); }, []);
   // Finishing a line files its shark adventure in the player's collection (recap: "Adventures found").
   const [adventuresFound, setAdventuresFound] = useState<{ count: number; isNew: boolean } | null>(null);
@@ -862,8 +863,17 @@ export default function LinePlayScreen() {
   const recapUpgradeReady = recapCoin != null && recapCoin.current_level < recapCoin.max_level &&
     (recapCoin.available_parts ?? 0) >= recapCoin.parts_to_next_level && recapEnergy != null &&
     recapEnergy >= recapCoin.energy_to_next_level;
-  const guideNext = guide.current();
+  const guideNext = useGuideTarget();
   const recapPartsEarned = snapshot.rewards?.rideParts.reduce((n, p) => n + p.quantity, 0) ?? 0;
+  // A coin not owned yet: the GO counts every Part waiting in its slot, not only this wait's.
+  const [slotParts, setSlotParts] = useState<number | null>(null);
+  const slotTaskId = recapCoinState === 'unowned' ? rideCatalog?.taskId ?? null : null;
+  useEffect(() => {
+    if (slotTaskId == null || snapshot.state !== 'complete') return;
+    let alive = true;
+    void waitingSlotParts(slotTaskId).then(amount => { if (alive) setSlotParts(amount); });
+    return () => { alive = false; };
+  }, [slotTaskId, snapshot.state, snapshot.rewards != null]);
   // The GO waits for the coin check when there is a coin to check (no flash from "shelf" to "win its coin");
   // rewards still on their way (no signal) still get a GO: the guide's next coin or the park shelf.
   const goReady = snapshot.rewards == null ? true
@@ -871,7 +881,7 @@ export default function LinePlayScreen() {
   const go: RecapGo | null = ride && snapshot.state === 'complete' && goReady ? recapGo({
     rideName: ride.rideName,
     coinState: recapCoinState,
-    partsEarned: recapPartsEarned,
+    partsEarned: slotTaskId != null ? slotPartsShown(recapPartsEarned, slotParts) : recapPartsEarned,
     rideTaskId: rideCatalog?.taskId ?? null,
     upgradeReady: coinLevelsRung.open && recapUpgradeReady,
     nextCoin: guideNext && guideNext.taskId !== rideCatalog?.taskId ? { taskId: guideNext.taskId, name: guideNext.name } : null,
@@ -999,6 +1009,14 @@ export default function LinePlayScreen() {
     sheetOpen: somethingAsks,
     finished: false,
   });
+  // First contact (core loop 4.3 rule 8): what LinePlay is, as one picture line inside the wait card for the
+  // player's first wait, never a floating card over PLAY. It is marked seen the moment it shows.
+  const [introLineOn, setIntroLineOn] = useState(false);
+  useEffect(() => {
+    if (introLineOn || !tipsReady || !lineTipReady || hasSeenTip('lineplay_intro')) return;
+    setIntroLineOn(true);
+    markTipSeen('lineplay_intro');
+  }, [introLineOn, tipsReady, lineTipReady, hasSeenTip, markTipSeen]);
 
   // -- Queue Bonus Rounds presentation ------------------------------------
   const bonus = snapshot.bonus?.enabled ? snapshot.bonus : null;
@@ -1298,9 +1316,9 @@ export default function LinePlayScreen() {
   const boardTargetHeight = lentBoardViewport(fit.short, detailsOpen, pagesHeight, pagesMeasuredLent, crewRowHeight);
   // Every page's scroll height from the window's own height (known the frame it changes).
   const pageViewHeight = pagesHeight > PAGE_FRAME_V ? pagesHeight - PAGE_FRAME_V : undefined;
-  // One gold button per screen: the chapter page has PLAY NOW and the board page is the game itself
-  // (its PLAY strip and "Next signal" are gold), so there the rail's Next is a quiet white button.
-  const railQuiet = visibleItem?.kind === 'chapter_intro' || boardPage;
+  // One gold button per screen: every page carries its own gold action (PLAY NOW, PLAY, PLAY AGAIN, the
+  // board's PLAY strip), so while a page is on screen the rail's Next (and More games) is a quiet white button.
+  const railQuiet = visibleItem != null;
   const jumpToPage = (index: number, animated = Math.abs(index - visiblePageIndex) <= 1) => {
     if (index < 0 || index >= activityPages.length) return;
     setPageIndex(index);
@@ -1330,8 +1348,8 @@ export default function LinePlayScreen() {
   const clock = shownClock(snapshot);
   const wait = shownWait(snapshot);
   const rewards = shownRewards(snapshot, ride);
-  // The Welcome tip says what the card shows: never "earns Ride Parts" beside "No Parts at this ride".
-  const introBody = LINEPLAY_INTRO_BODY[linePartsState(rewards)];
+  // The first-wait line says what the card shows: never "powers this coin" beside "No Parts here".
+  const introLine = introLineOn && snapshot.state === 'active' ? LINEPLAY_INTRO_LINE[linePartsState(rewards)] : null;
 
   return (
     <View onTouchStart={onAnyTouch} onLayout={event => setRootHeight(event.nativeEvent.layout.height)}
@@ -1390,6 +1408,7 @@ export default function LinePlayScreen() {
           ) : (
             <WaitCard
               compact
+              introLine={introLine}
               rideName={ride.rideName}
               postedWaitMinutes={wait.plannedWaitMinutes}
               waitSource={wait.waitSource}
@@ -1838,12 +1857,10 @@ export default function LinePlayScreen() {
 
       {groupPlay.overlays}
 
-      {/* One-time tips: what LinePlay is, then the first Ride Part. Only between games, never while the line moves. */}
+      {/* One-time tip: the first Ride Part (what LinePlay is lives inside the wait card). Only between games, never while the line moves. */}
       {/* They stay until tapped (a kid reads at their own pace), so a tip never vanishes under a finger and lets the tap land on Details. */}
       {/* Never shown before the card is measured, so not one frame sits at a guessed spot over Details. */}
       {/* While the page window has stepped aside (an iPhone SE reading long Details), a tip waits: it would sit over the rail's one button. */}
-      <OneTimeTip id="lineplay_intro" ready={lineTipReady && pagesShown && waitCardBottom != null} autoHideMs={0} body={introBody}
-        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} onVisibleChange={onIntroTip} />
       <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending && pagesShown && waitCardBottom != null} autoHideMs={0}
         style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} onVisibleChange={onPartTip} />
 

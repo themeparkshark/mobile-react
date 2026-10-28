@@ -165,7 +165,10 @@ test('Details opens smoothly: one commit, the crew row fades and the page window
 
 test('the Welcome tip waits for its own tap and sits under the wait card, never on Details', () => {
   const screen = read(SCREEN);
-  for (const id of ['lineplay_intro', 'first_ride_part']) {
+  // What LinePlay is now lives inside the wait card (one picture line); the first Ride Part tip stays a tip.
+  assert.doesNotMatch(screen, /<OneTimeTip id="lineplay_intro"/);
+  assert.match(read('src/screens/LinePlay/components/WaitCard.tsx'), /\{introLine \? <View style=\{styles\.introLine\}/);
+  for (const id of ['first_ride_part']) {
     const tag = screen.slice(screen.indexOf(`<OneTimeTip id="${id}"`), screen.indexOf('/>', screen.indexOf(`<OneTimeTip id="${id}"`)));
     assert.match(tag, /autoHideMs=\{0\}/, `${id}: no 9 s timer that could vanish under a finger`);
     assert.match(tag, /top: waitCardBottom \+ 6/, `${id}: anchored under the wait card`);
@@ -279,7 +282,6 @@ test('the chapter page in compact mode ends on whole trail bubbles, no small lab
 
 test('the Welcome tip never shows before the wait card is measured', () => {
   const screen = read(SCREEN);
-  assert.match(screen, /<OneTimeTip id="lineplay_intro" ready=\{lineTipReady && pagesShown && waitCardBottom != null\}/);
   assert.match(screen, /<OneTimeTip id="first_ride_part" ready=\{lineTipReady && partTipPending && pagesShown && waitCardBottom != null\}/);
 });
 
@@ -347,12 +349,12 @@ test('the window stepped aside: the rail stays put and the crew row comes back i
   assert.match(screen, /crewBand: \{ position: 'absolute', left: 0, right: 0, top: 0, justifyContent: 'center' \}/);
 });
 
-test('one gold button per screen: the rail Next is quiet on the chapter page and the board page', () => {
+test('one gold button per screen: the rail Next is quiet beside every page\'s own PLAY', () => {
   const screen = read(SCREEN);
-  assert.match(screen, /const railQuiet = visibleItem\?\.kind === 'chapter_intro' \|\| boardPage;/);
+  assert.match(screen, /const railQuiet = visibleItem != null;/);
   assert.match(screen, /mode=\{railMode\} onShowPages=\{onRailBack\} backAction=\{railBack\} quiet=\{railQuiet\}/);
   const rail = read('src/screens/LinePlay/components/ActivityPageRail.tsx');
-  assert.match(rail, /const calm = quiet && !showMore;/);
+  assert.match(rail, /const calm = quiet;/);
   assert.match(rail, /nextQuiet: \{ backgroundColor: '#ffffff'/);
 });
 
@@ -693,7 +695,6 @@ test('one name per clue on every chapter: PLAY, the bubble, the rail, the page h
 
 test('a one-time tip waits while the page window has stepped aside, so it never sits over the rail\'s one button', () => {
   const screen = read(SCREEN);
-  assert.match(screen, /<OneTimeTip id="lineplay_intro" ready=\{lineTipReady && pagesShown && waitCardBottom != null\}/);
   assert.match(screen, /<OneTimeTip id="first_ride_part" ready=\{lineTipReady && partTipPending && pagesShown && waitCardBottom != null\}/);
 });
 
@@ -833,7 +834,6 @@ test('one message asks at a time: the idle nudge never shows over a one-time tip
   assert.match(screen, /if \(!lineNudgeReady\(\{ busy: sheetOpenRef\.current, tipUp: tipsUp\.current\.size > 0,/);
   assert.match(screen, /sheetOpenRef\.current = somethingAsks;/);
   assert.match(screen, /const somethingAsks = groupPlay\.sheetOpen \|\| arcadeOpen \|\| projectOpen \|\| waitEndPrompt != null \|\| boardingAsk \|\| leftLineWrapUp \|\| resuming \|\|\n\s+resumeHandoff != null;/);
-  assert.match(screen, /onVisibleChange=\{onIntroTip\}/);
   assert.match(screen, /onVisibleChange=\{onPartTip\}/);
   const tip = read('src/components/help/OneTimeTip.tsx');
   assert.match(tip, /onVisibleChange\(visible\);\n\s+return visible \? \(\) => onVisibleChange\(false\) : undefined;/, 'it reports hiding too, even on unmount');

@@ -91,14 +91,15 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
   }
   const wrapsToFirst = index + 1 >= count;
   const showMore = wrapsToFirst && moreAvailable && !!onMore;
-  const calm = quiet && !showMore;
+  // Quiet beside a page's own gold PLAY, "More games" included: PLAY is the one gold button.
+  const calm = quiet;
   const nextWords = railNextText(nextLabel, width);
   const naming = !showMore && count > 1 && !wrapsToFirst;
   if (tabs) {
     // Story | Games, then the one Next offer inside the tab (or "More rounds" at the end of Games).
     const single = count <= 1;
     return <View style={styles.rail} accessibilityRole="tablist">
-      {tabs.hasStory && <Tab label="Story" icon="map" active={tabs.active === 'story'} onPress={tabs.onStory} />}
+      {tabs.hasStory && <Tab label="Story" icon="search" active={tabs.active === 'story'} onPress={tabs.onStory} />}
       <Tab label="Games" icon="play" active={tabs.active === 'games'} dot={tabs.gamesDot} disabled={tabs.paused}
         onPress={tabs.onGames} />
       <Pressable accessibilityRole="button"

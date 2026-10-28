@@ -50,3 +50,13 @@ export function chapterKicker(chapter: Pick<LinePlayChapter, 'parkLabel' | 'epis
   const lead = chapter.episodeLabel?.trim() || 'LINE STORY';
   return overrides.hideParkInKicker || !park ? lead : `${lead} · ${park}`;
 }
+
+/**
+ * LinePlay's first contact: one picture line inside the wait card on the player's first wait (it replaces the
+ * floating 3-line "Welcome to LinePlay" card). It matches the card: never Parts words where none are paid.
+ */
+export const LINEPLAY_INTRO_LINE: Readonly<Record<'on' | 'none' | 'unknown', string>> = {
+  on: 'Your wait powers this coin. Games are bonus fun.',
+  none: 'Play games while you wait.',
+  unknown: 'Play games while you wait.',
+};

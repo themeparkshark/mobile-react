@@ -39,6 +39,8 @@ export interface WaitCardProps {
   readonly rideName: string;
   /** The guest does not own this ride's coin yet: the one line says its Parts are saved for it. */
   readonly coinMissing?: boolean;
+  /** First wait only: what LinePlay is, as one picture line under the card's line (no floating card). */
+  readonly introLine?: string | null;
   /** queue_tickets is on for this player: only then is a line Ticket ever mentioned. */
   readonly queueTicketsOn?: boolean;
   /** Keep the current game in focus while its reward status stays visible. */
@@ -139,10 +141,14 @@ function fmt(seconds: number): string {
  * The calm top's one line (core loop 5.5): minutes in line and Parts, never a countdown.
  * "In line 3 min · first Part at 10 min", "In line 24 min · 2 Parts".
  */
-export function calmPartsLine(input: { elapsedSeconds: number; earned: number; intervalSeconds: number }): string {
+export function calmPartsLine(input: { elapsedSeconds: number; earned: number; intervalSeconds: number;
+  /** No coin yet: the Parts wait in the coin's slot, so the line says so ("1 Part saved for this coin"). */
+  coinMissing?: boolean }): string {
   const minutes = Math.max(0, Math.floor(input.elapsedSeconds / 60));
   const inLine = minutes < 1 ? 'Just joined the line' : `In line ${minutes} min`;
-  if (input.earned > 0) return `${inLine} · ${input.earned} Part${input.earned === 1 ? '' : 's'}`;
+  if (input.earned > 0) {
+    return `${inLine} · ${input.earned} Part${input.earned === 1 ? '' : 's'}${input.coinMissing ? ' saved for this coin' : ''}`;
+  }
   return `${inLine} · first Part at ${Math.max(1, Math.round(input.intervalSeconds / 60))} min`;
 }
 
@@ -241,6 +247,7 @@ export function compactCopyLabel({ hero, earned, headline, subline }: {
 export default function WaitCard({
   rideName,
   coinMissing = false,
+  introLine = null,
   queueTicketsOn = false,
   compact = false,
   postedWaitMinutes,
@@ -363,8 +370,9 @@ export default function WaitCard({
       : atCap ? 'Max Parts reached'
         : countdown.needsCheck ? 'Checking you’re in line…'
           : countdown.checking ? 'Part on the way…'
-            : coinMissing ? COIN_MISSING_LINE
-              : calmPartsLine({ elapsedSeconds, earned, intervalSeconds: interval });
+            // No coin yet: the same calm line, with the Parts saved for this coin; "Win it on your way out" is
+            // in Details and the recap.
+            : calmPartsLine({ elapsedSeconds, earned, intervalSeconds: interval, coinMissing });
   const subline = completed ? 'Your game recap is ready below.' : paused
     ? pauseReason === 'manual' ? 'Time near the ride still counts. Tap play when you’re ready.' : 'Time near the ride still counts.'
     : !rewardTrackingAvailable
@@ -378,17 +386,16 @@ export default function WaitCard({
         ? atDailyCap ? 'You’ve earned today’s Parts for this ride.' : 'You got the most Parts for one wait. Great job!'
         : countdown.needsCheck ? 'Keep playing. Stay near the ride to keep earning.'
           : countdown.checking ? 'Keep playing. It shows up soon.'
-          // No coin yet: the card says the Parts are saved; Details adds the Parts count once (its time line says the minutes).
-          : coinMissing ? earned > 0 ? `${earned} Part${earned === 1 ? '' : 's'} saved for this coin so far.`
-            : `First Part at ${Math.max(1, Math.round(interval / 60))} min near the ride.`
+          // No coin yet: the card's one line counts the Parts saved; Details says where they go.
+          : coinMissing ? COIN_MISSING_LINE
             : 'Stay near the ride to earn more Parts.';
 
   // With the coin hero the one line already says it ("In line 3 min · first Part at 10 min"), so Details
   // never repeats it. A missing coin keeps its own sentence on the card and the minutes go to Details.
   /** The card's one line is the calm line itself (minutes and Parts): nothing is added to it or read twice. */
-  const calmLine = rewardTrackingAvailable && !completed && !paused && !atCap && !countdown.needsCheck && !countdown.checking
-    && !coinMissing;
-  const sublineInHeadline = Boolean(hero) && calmLine;
+  const calmLine = rewardTrackingAvailable && !completed && !paused && !atCap && !countdown.needsCheck && !countdown.checking;
+  // A missing coin's Details still says where its Parts go (the one sentence that is not on the card).
+  const sublineInHeadline = Boolean(hero) && calmLine && !coinMissing;
 
   return (
     <View style={styles.wrap}>
@@ -425,7 +432,7 @@ export default function WaitCard({
           {hero && rewardTrackingAvailable ? null : !rewardTrackingAvailable ? <GameIcon name="line" size={34} />
             : <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />}
           <View style={styles.compactCopy} accessible accessibilityLabel={compactCopyLabel({ hero: hero != null, earned, headline, subline: calmLine ? '' : subline })}>
-            <KidText style={styles.compactHeadline} numberOfLines={coinMissing ? 2 : 1} adjustsFontSizeToFit minimumFontScale={0.85}>{`${headline}${
+            <KidText style={styles.compactHeadline} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{`${headline}${
               !hero && rewardTrackingAvailable && !coinMissing && !calmLine ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}`}</KidText>
             {/* One sentence: "No Parts here. Play anytime!" is the headline itself (no second note line). */}
             {bonusOn && <View style={styles.bonusRow}>
@@ -436,6 +443,10 @@ export default function WaitCard({
                   <GameIcon name="sparkle" size={14} /></View> : null}
               {outOfRange && <Text style={styles.compactNote} numberOfLines={1}>Step back into the line area</Text>}
             </View>}
+            {introLine ? <View style={styles.introLine} accessible accessibilityLabel={introLine}>
+              <GameIcon name="line" size={20} />
+              <Text style={styles.introLineText} numberOfLines={2}>{introLine}</Text>
+            </View> : null}
             {partBurst > 0 && <KidText style={styles.compactBurst}>{`+${partBurst} RIDE PART${partBurst === 1 ? '' : 'S'}!`}</KidText>}
           </View>
           <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
@@ -662,6 +673,8 @@ const styles = StyleSheet.create({
   detailsButton: { minHeight: 34, justifyContent: 'center', alignItems: 'center' },
   detailsButtonText: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14 },
   pauseButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
+  introLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  introLineText: { flex: 1, color: '#315d77', fontFamily: 'Knockout', fontSize: 14, lineHeight: 17 },
   hintLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
   hintLineText: { marginTop: 0, flexShrink: 1 },
   waitSourceHint: { color: '#d4edff', fontFamily: 'Knockout', fontSize: 11, marginTop: spacing.sm },

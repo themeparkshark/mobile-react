@@ -72,7 +72,7 @@ test('Trivia Duel\'s Final is a no-risk bonus on screen: no chips, no bet copy, 
 
 test('LinePlay Welcome tip never promises Ride Parts when the wait card says "No Parts at this ride"', () => {
   const { loadTs: loadModule } = require('./helpers/ts-module.cjs');
-  const help = loadModule('src/services/help/helpTopics.ts');
+  const labels = loadModule('src/services/lineplay/labels.ts');
   const preview = loadModule('src/screens/LinePlay/components/waitscreen/waitScreenPreview.ts', { react: { useEffect() {}, useState: v => [v, () => {}] } });
   const cases = [
     [{ tracking: true, unavailable: false, ready: true }, 'on'],
@@ -85,13 +85,14 @@ test('LinePlay Welcome tip never promises Ride Parts when the wait card says "No
     assert.equal(state, want);
     // The card's own no-Parts test (WaitCard noPartsHere, not completed).
     const cardSaysNoParts = !rewards.tracking && (rewards.ready === false || rewards.unavailable);
-    const body = help.LINEPLAY_INTRO_BODY[state];
-    if (cardSaysNoParts || state !== 'on') assert.doesNotMatch(body, /earns? Ride Parts/, JSON.stringify(rewards));
+    // LinePlay's first-wait line lives in the wait card now (core loop: one picture line, no floating card).
+    const body = labels.LINEPLAY_INTRO_LINE[state];
+    if (cardSaysNoParts || state !== 'on') assert.doesNotMatch(body, /Ride Parts|powers this coin/, JSON.stringify(rewards));
   }
-  assert.match(help.LINEPLAY_INTRO_BODY.on, /earns Ride Parts/);
+  assert.match(labels.LINEPLAY_INTRO_LINE.on, /powers this coin/);
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.match(screen, /const introBody = LINEPLAY_INTRO_BODY\[linePartsState\(rewards\)\];/);
-  assert.match(screen, /<OneTimeTip id="lineplay_intro"[^>]*body=\{introBody\}/);
+  assert.match(screen, /LINEPLAY_INTRO_LINE\[linePartsState\(rewards\)\]/);
+  assert.doesNotMatch(screen, /<OneTimeTip id="lineplay_intro"/);
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(card, /const noPartsHere = !completed && !rewardTrackingAvailable && \(lineRewardsReady === false \|\| rewardUnavailable\);/);
 });

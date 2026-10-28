@@ -34,7 +34,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import ProfileStatIcon from '../../components/ProfileStatIcon';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { GameIcon, gameAlert, SharkLoader } from '../../ui';
-import { guide } from '../../services/guide/nextCoin';
+import { useGuideTarget } from '../../services/lineplay/useGuideTarget';
 
 // ─── Park Selector ───
 interface ParkItemProps {
@@ -397,7 +397,8 @@ export default function RideLogScreen() {
     if (below === 'RideTracker') navigation.goBack();
     else navigation.dispatch(StackActions.replace('RideTracker'));
   }, [navigation]);
-  const nextCoin = guide.current();
+  // Follows the guide store, so NEXT COIN appears (or changes) when the map's resolver moves the pointer.
+  const nextCoin = useGuideTarget();
 
   if (showSuccess && successData) {
     return (
