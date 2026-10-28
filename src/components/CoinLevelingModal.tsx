@@ -134,7 +134,7 @@ export default function CoinLevelingModal({
   }, []);
   const [holoVisible, setHoloVisible] = useState(false);
   const [showEditions, setShowEditions] = useState(false);
-  const { refreshPlayer } = useContext(AuthContext);
+  const { refreshPlayer, player: viewer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
 
   // ── Animations ──
@@ -1021,7 +1021,7 @@ export default function CoinLevelingModal({
                       <CoinTopUpOffer currency="energy" reason="level-up" need={Math.max(1, rideCoin.energy_to_next_level - playerEnergy)}
                         style={{ marginTop: 8 }} />
                     )}
-                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && !hasParts && (
+                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && !hasParts && (viewer?.tickets ?? 0) === 0 && (
                       <TouchableOpacity onPress={() => { pendingSuppliesRef.current = !hasParts ? 'tickets' : 'featured'; handleClose(); }}
                         accessibilityRole="button" hitSlop={8}
                         accessibilityLabel={!hasParts ? 'Get tickets in Supplies. A grown-up buys these with real money.' : 'See Supplies packs with energy. A grown-up buys these with real money.'}>
@@ -1224,7 +1224,7 @@ export default function CoinLevelingModal({
                     onPress={() => { pendingLinePlayRef.current = true; handleClose(); }}
                     style={{ alignSelf: 'center', paddingVertical: 10, marginTop: 5 }}>
                     <Text style={{ color: '#075b9b', fontFamily: 'Shark', fontSize: 15,
-                      textDecorationLine: 'underline' }}>Waiting here? Play in Line</Text>
+                      textDecorationLine: 'underline' }}>In its line now? LinePlay</Text>
                   </TouchableOpacity>}
 
               </View>

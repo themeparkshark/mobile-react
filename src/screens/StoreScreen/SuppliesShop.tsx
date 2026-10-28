@@ -46,6 +46,7 @@ import RealMoneyMark, { REAL_MONEY_GREEN, REAL_MONEY_INK, REAL_MONEY_TINT } from
 import { openMembership } from '../../components/GrownUpGate';
 import { useHelp } from '../../components/help/HelpProvider';
 import * as RootNavigation from '../../RootNavigation';
+import { getSharkPass } from '../../api/endpoints/me/shark-pass';
 import BundleCard from '../../components/money/BundleCard';
 import WishHeart from '../../components/money/WishHeart';
 import { MYSTERY_BOX_COINS, VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../../services/money/flags';
@@ -321,7 +322,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
       )}
 
       {/* The Shark Pass door (Pass and Pass Plus), whenever its switch is on for this player. */}
-      {passOn && <SharkPassDoor />}
+      <SharkPassDoor switchOn={passOn} />
 
       {!vip && <VipCard perks={perks && boxesLive ? [...perks, VIP_WEEKLY_BOX_PERK as VipPerk] : perks} />}
       {/* Members: the VIP page, with the gift plans when their switch is on. */}
@@ -454,8 +455,19 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
   );
 }
 
-/** The Shark Pass door: the pass page lists the Shark Pass and Shark Pass Plus (grown-up gated there). */
-function SharkPassDoor() {
+/**
+ * The Shark Pass door: the pass page lists the Shark Pass and Shark Pass Plus (grown-up gated there).
+ * Shown when the switch says on, or when the player's own pass reads enabled with a season, so a
+ * switch read before sign-in can never hide the App Review path.
+ */
+function SharkPassDoor({ switchOn }: { readonly switchOn: boolean }) {
+  const [season, setSeason] = useState<boolean | null>(null);
+  useEffect(() => {
+    let live = true;
+    void getSharkPass().then(state => { if (live) setSeason(!!state?.enabled && !!state.season); }).catch(() => { if (live) setSeason(null); });
+    return () => { live = false; };
+  }, []);
+  if (season === false || (!switchOn && season !== true)) return null;
   return (
     <Pressable onPress={() => RootNavigation.navigate('SharkPass')} accessibilityRole="button"
       accessibilityLabel="Shark Pass and Shark Pass Plus. Opens the pass."
@@ -488,7 +500,9 @@ function VipGiftDoor() {
 
 /** The VIP door on the shelf: what VIP gives, no price (the page after the grown-up gate has it). */
 function VipCard({ perks }: { perks: VipPerk[] | null }) {
-  const lines = (perks ?? []).filter(p => p.icon !== 'member').slice(0, 4);
+  // One home word (4.5): an older server's perk lines say "finds"; the kid reads "treats".
+  const lines = (perks ?? []).filter(p => p.icon !== 'member').slice(0, 4)
+    .map(p => ({ ...p, title: p.title.replace(/\bfinds\b/g, 'treats').replace(/\bfind\b/g, 'treat') }));
   return (
     <Animated.View entering={FadeInUp.delay(180).springify().damping(15)} style={st.vipLip}>
       <View style={st.vip}>

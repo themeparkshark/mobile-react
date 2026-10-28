@@ -18,7 +18,7 @@ import { replayHomeIntro } from '../../screens/ExploreScreen/HomeIntro';
 import {
   LOCAL_GLOSSARY, glossaryForSwitches, mergeServerGlossary, type GlossaryKey, type GlossaryTerm, type HelpTopicId,
 } from '../../services/help/glossary';
-import { useMoneyFlag } from '../../services/money/flags';
+import getFeatureFlags from '../../api/endpoints/platform/feature-flags';
 import {
   createSeenTipStore, initialSeenFor, isExistingPlayer, shouldShowTip, type TipId,
 } from '../../services/help/seenTips';
@@ -87,8 +87,18 @@ export default function HelpProvider({ children }: { readonly children: React.Re
 
   const [serverGlossary, setGlossary] = useState<Record<GlossaryKey, GlossaryTerm>>(glossaryCache ?? { ...LOCAL_GLOSSARY });
   // Every line true for this player's switches: line Tickets only with Queue Tickets, no boss promise while bosses are off.
-  const queueTickets = useMoneyFlag('queue_tickets');
-  const rideBoss = useMoneyFlag('ride_boss');
+  // Read for the signed-in player only (preview switches are per player), never cached across accounts.
+  const [switches, setSwitches] = useState<{ queueTickets: boolean; rideBoss: boolean }>({ queueTickets: false, rideBoss: false });
+  useEffect(() => {
+    setSwitches({ queueTickets: false, rideBoss: false });
+    if (playerId == null) return undefined;
+    let live = true;
+    void getFeatureFlags().then(payload => {
+      if (live) setSwitches({ queueTickets: payload.flags.queue_tickets === true, rideBoss: payload.flags.ride_boss === true });
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [playerId]);
+  const { queueTickets, rideBoss } = switches;
   const glossary = useMemo(() => glossaryForSwitches(serverGlossary, { queueTickets, rideBoss }), [serverGlossary, queueTickets, rideBoss]);
   const [sheet, setSheet] = useState<{ key: GlossaryKey; count: number | null } | null>(null);
   const [helpId, setHelpId] = useState<HelpSheetId | null>(null);

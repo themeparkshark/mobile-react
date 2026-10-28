@@ -122,7 +122,11 @@ test('Supplies: free Ticket ways come before any pack; the line Ticket only whil
 test('Supplies: every purchase door is listed whenever its switch is on, regardless of rung (App Review path)', () => {
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
   assert.match(shop, /const passOn = useMoneyFlag\('shark_pass'\);/);
-  assert.match(shop, /\{passOn && <SharkPassDoor \/>\}/);
+  assert.match(shop, /<SharkPassDoor switchOn=\{passOn\} \/>/);
+  assert.match(shop, /getSharkPass\(\)\.then\(state => \{ if \(live\) setSeason\(!!state\?\.enabled && !!state\.season\); \}\)/,
+    'the door also trusts the player\'s own pass, so a switch read before sign-in never hides it');
+  // Flags are read per signed-in player in the help glossary (no anonymous cache that could hide a preview switch).
+  assert.doesNotMatch(read('src/components/help/HelpProvider.tsx'), /useMoneyFlag/);
   assert.match(shop, /The Shark Pass and Shark Pass Plus/);
   assert.match(shop, /\{!vip && <VipCard/);
   assert.match(shop, /\{vip && giftPlansOn && <VipGiftDoor \/>\}/);
