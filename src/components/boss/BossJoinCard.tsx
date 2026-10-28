@@ -192,7 +192,7 @@ export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, 
           <Text style={styles.howText} maxFontSizeMultiplier={1.3}>How to get {short.kind === 'energy' ? 'Energy' : 'Tickets'}</Text>
         </Pressable>
         {how && <View style={styles.howPanel}>
-          <HowRow icon="map" text="Home finds on your map" />
+          <HowRow icon="map" text="Treats on your map" />
           <HowRow icon="gift" text="Your daily chest" />
           {short.kind === 'energy' && <HowRow icon="ride" text="Rides at the park" />}
         </View>}

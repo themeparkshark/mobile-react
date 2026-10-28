@@ -511,3 +511,49 @@ test('a fresh pick holds against a line dwell: the target never changes without 
   assert.equal(G.guide.resolve({ ...base, inLineTaskId: 1 }).taskId, 2, 'held against the dwell');
   G.guide.reset();
 });
+
+test('the resting card tells the truth: closed only when no ride is open; far from every coin says head back in', () => {
+  const far = C.guideCardCopy('resting', null, ctx({ ridesResting: false, outOfReach: true }));
+  assert.equal(far.title, 'Head back into the park', 'one ride down at 2 PM is not a closed park');
+  const closed = C.guideCardCopy('resting', null, ctx({ ridesResting: true, outOfReach: true }));
+  assert.equal(closed.title, 'The park is closed');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/guide/useNextCoinGuide.ts'), 'utf8');
+  assert.match(src, /const ridesResting = known\.some\(answer => answer === 'closed'\) && !known\.some\(answer => answer === 'open'\);/);
+});
+
+test('home: two doors to the shelf (Shelf button and PLAN), Practice games from the 2nd home visit, Wait Times, no second streak', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const read = f => fs.readFileSync(path.join(__dirname, '../..', f), 'utf8');
+  const menu = read('src/components/QuickAccessMenu.tsx');
+  const fn = menu.slice(menu.indexOf('export function homeMenuItems'), menu.indexOf('\n}\n', menu.indexOf('export function homeMenuItems')) + 2);
+  assert.match(fn, /if \(input\.practice\) out\.push\(\{ id: 'practice', label: 'Practice games'/);
+  assert.match(fn, /label: 'Wait Times', icon: 'timer', round: 'blue', screen: 'QueueTimes', params: \{ park: input\.waitTimesPark \}, image: POCKET_WATCH/);
+  assert.match(menu, /practice: counters\.homeDays >= 2/, 'from the 2nd home visit');
+  assert.doesNotMatch(menu, /My shelf/, 'no third door to the shelf');
+  assert.match(menu, /afterDismiss\.current = \(\) => setArcadeOpen\(true\);/, 'the practice sheet opens after the menu sheet is gone');
+  const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(home, /<HomeShelfButton \/>/);
+  assert.doesNotMatch(home, /<RadialStatsMenu/, 'the avatar opens the shelf, the stats menu folded away');
+  assert.match(home, /testID="home-guide-card"/);
+  assert.match(home, /ticketHidden=\{guideShown\}/, 'the pips fold into the card\'s ticket meter');
+  const shelf = loadTs('src/components/guide/HomeShelfButton.tsx', { react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} },
+    'react-native': { StyleSheet: { create: v => v } }, '../Avatar': {}, '../Button': {}, '../../context/AuthProvider': {}, '../../RootNavigation': {}, '../../ui': { BRAND: {} } });
+  assert.equal(shelf.homeShelfPark(2), 2);
+  assert.equal(shelf.homeShelfPark(null), 8);
+  for (const file of ['src/screens/ExploreScreen/HomeTicketProgress.tsx', 'src/components/PrepItemRedeemModal.tsx']) {
+    assert.doesNotMatch(read(file), /HUNT STREAK|hunt streak|PARK TICKET/, `${file}: the flame is the one streak`);
+  }
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /homeGuide=\{homeGuide\}/);
+  assert.match(explore, /const homeGuide = useMemo<HomeGuide \| null>\(\(\) => player && !park \?/, 'home only: never a park goal or the Adventure');
+});
+
+test('welcome back after 14 days: whole days away, per player', () => {
+  const W = loadTs('src/components/guide/useWelcomeBack.ts', { react: {}, '@react-native-async-storage/async-storage': { default: {} } });
+  assert.equal(W.daysBetween(null, NOW), null);
+  assert.equal(W.daysBetween(NOW - 14 * 86_400_000, NOW), 14);
+  assert.equal(W.daysBetween(NOW - 13.9 * 86_400_000, NOW), 13);
+  assert.equal(W.daysBetween(NOW + 1000, NOW), null, 'a clock that went back is not a welcome back');
+  assert.equal(G.guideState(input({ daysAway: 14, coins: RIDES }), G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open' } }))), 'welcome_back');
+  assert.equal(G.guideState(input({ daysAway: 14, welcomeBackDone: true, coins: RIDES }), G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open' } }))), 'walk');
+});

@@ -12,7 +12,7 @@ import getPrepItems, { getCachedPrepItems } from '../../api/endpoints/me/prep-it
 import getCurrentPrepItem from '../../api/endpoints/me/prep-items/current';
 import HomeLive from '../../components/home/HomeLive';
 import HomeFindMarker from './HomeFindMarker';
-import RadialStatsMenu from '../../components/RadialStatsMenu';
+import HomeShelfButton from '../../components/guide/HomeShelfButton';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
 import { useMenuCardFade } from './menuCardFade';
 import { useChromeBack } from './useChromeBack';
@@ -24,6 +24,8 @@ import HomeIntro, { useHomeIntroSeen } from './HomeIntro';
 import HomeHuntChip, { chipWidthFor, type HuntChipMessage } from './HomeHuntChip';
 import { createMapAutoRetry } from './mapAutoRetry';
 import HomeHudChips, { type ParkStoryChip } from './HomeHudChips';
+import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../../components/guide/NextCoinCard';
+import { guideCardCopy, type GuideAction } from '../../services/guide/guideCopy';
 import HomeCatchMoment, { type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
 import { pickupFix } from './homeCatch';
 import { catchStyleFor } from './ridePhoto';
@@ -137,11 +139,25 @@ interface Props {
   /** Minute one: Finn is the only voice, so the live parks bar waits until he is done. */
   quiet?: boolean;
   /**
+   * The home guide card (core loop 4.1 "Home"): the next park day, Tickets ready and the ticket meter,
+   * with PLAN (your shelf). Null hides it (a brand new player's first hunt, signed out).
+   */
+  homeGuide?: HomeGuide | null;
+  /**
    * A brand new player's first hunt (Finn's lines done, before the next catch): the map
    * shows only the treats. Far treats show footsteps, not '35 m', and a failed refresh
    * keeps the saved treats up and retries by itself instead of a 'Saved map' pill.
    */
   firstHunt?: boolean;
+}
+
+export interface HomeGuide {
+  readonly parkName: string | null;
+  readonly planName: string | null;
+  readonly planCoinUrl: string | null;
+  readonly tickets: number;
+  readonly welcomeBack: boolean;
+  readonly onAction: (action: GuideAction) => void;
 }
 
 /**
@@ -151,7 +167,7 @@ interface Props {
 export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching = null, onCatchCollected, onCatchUnavailable,
   onCatchDone, refreshVersion, homeLocationConfirmed,
   introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, chestButtonCount, highlightNearestFind = null, parkStory = null, eventChip = null,
-  compassHintReady = false, quiet = false, firstHunt = false }: Props) {
+  compassHintReady = false, quiet = false, firstHunt = false, homeGuide = null }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -709,15 +725,26 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
     state.onPrepItemNearby(prepItem, prepItem.pivot_id, 'tap');
   }, []);
   const rowTop = TOP + (liveBar ? LIVE_BAR_ROW : 0);
+  const guideShown = !!homeGuide && homeLocationConfirmed && !firstHunt && !quiet;
+  const guideBlock = guideShown ? GUIDE_CARD_HEIGHT + 8 : 0;
   // Edge tokens (48 pt) centre below the chip row's home row, so a live boss bar pushes both down together.
-  const edgeTop = rowTop + 30 + 8 + 24;
+  const edgeTop = rowTop + guideBlock + 30 + 8 + 24;
   const tokens = useMemo(() => edgeFinds.map(edge => {
     const at = edgeArrowPlacement(edge.point, containerSize, { top: edgeTop, bottom: 190, side: 30 });
     return { x: at.x - 28, y: at.y - 28, w: 56, h: 56 };
   }), [edgeFinds, containerSize, edgeTop]);
   const obstacles = useMemo(() => footprints.concat(tokens), [footprints, tokens]);
   // The chip row drops a row when a find (or an edge token) sits under it, so a tap there reaches the find.
-  const hudTop = useMemo(() => (hudWidth > 0 ? hudRowTop(obstacles, rowTop, hudWidth) : rowTop), [obstacles, rowTop, hudWidth]);
+  // The guide card takes the top row (it drops a row while a find sits under it, like the chips); the chips sit under it.
+  const cardTop = useMemo(() => (guideShown && containerSize.width > 0
+    ? hudRowTop(obstacles, rowTop, containerSize.width - GUIDE_CARD_RIGHT - 12) : rowTop), [guideShown, obstacles, rowTop, containerSize.width]);
+  const chipsTop = guideShown ? cardTop + guideBlock : rowTop;
+  const hudTop = useMemo(() => (hudWidth > 0 ? hudRowTop(obstacles, chipsTop, hudWidth) : chipsTop), [obstacles, chipsTop, hudWidth]);
+  const homeCopy = useMemo(() => homeGuide ? guideCardCopy(homeGuide.welcomeBack ? 'welcome_back' : 'home', null, {
+    parkName: homeGuide.parkName, ridesResting: false, allOwned: false, tickets: homeGuide.tickets, freeStep: null,
+    queueTicketsOn: false, adventureDots: null, planName: homeGuide.planName,
+    treatsToTicket: ticket.capped ? null : ticket.until == null ? null : Math.max(1, Math.min(3, Math.round(ticket.until))),
+  }) : null, [homeGuide, ticket.until, ticket.capped]);
   // A tapped find's peek docks low, or higher until it covers no find (never another find's timer).
   const slotBottom = chip && containerSize.width > 0 ? peekBottom(obstacles, containerSize, BOTTOM_SLOT, hudTop + 30 + 8, chipWidthFor(chip)) : BOTTOM_SLOT;
 
@@ -767,6 +794,13 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
 
       {bottom && <Animated.View style={[styles.bottomSlot, { bottom: slotBottom }, cardFade.style]} pointerEvents={cardFade.pointerEvents}>{bottom}</Animated.View>}
 
+      {/* The home guide card: next park day, Tickets ready, the ticket meter and PLAN (core loop 4.1). */}
+      {guideShown && homeCopy && homeGuide && (
+        <Animated.View style={[StyleSheet.absoluteFill, chipsBack]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
+          <NextCoinCard testID="home-guide-card" copy={homeCopy} state={homeGuide.welcomeBack ? 'welcome_back' : 'home'} parkName={null}
+            coinUrl={homeGuide.planCoinUrl} top={cardTop} onAction={homeGuide.onAction} />
+        </Animated.View>
+      )}
       {/* Live bosses from home; the team race only when the Home Hunt board is on. */}
       {quiet ? null : <HomeLive top={TOP} onBarChange={setLiveBar} />}
 
@@ -775,7 +809,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
           {/* First hunt: the ticket chip steps back (dimmed, still tappable) so the treat is what pops. */}
           <View style={[StyleSheet.absoluteFill, firstHunt && styles.hudDim]} pointerEvents="box-none">
             <HomeHudChips top={hudTop} onWidth={setHudWidth} findsUntilTicket={ticket.until} ticketsCapped={ticket.capped} onTicketPress={showTicketLine}
-              parkStory={parkStory} eventChip={eventChip} />
+              parkStory={parkStory} eventChip={eventChip} ticketHidden={guideShown} />
           </View>
         </Animated.View>
       )}
@@ -789,8 +823,8 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
         {/* Quick Access Menu - hamburger on left */}
         <QuickAccessMenu position="left" />
 
-        {/* Radial Stats Menu - shark avatar on right */}
-        <RadialStatsMenu />
+        {/* Your shark, labeled "Shelf": it opens your shelf, the same as at a park (core loop 5.7). */}
+        <HomeShelfButton />
       </Animated.View>
       </View>
 

@@ -266,14 +266,14 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
       }} onDismiss={() => { layer.onDismissed(); runPending(); }} style={styles.modal}>
       <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.sheetHeader}>
-          <Text style={styles.sheetEyebrow}>PARK-DAY ADVENTURE  {ticket.park_day.slice(5).replace('-', '/')}</Text>
+          <Text style={styles.sheetEyebrow}>TODAY'S ADVENTURE  {ticket.park_day.slice(5).replace('-', '/')}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Close Adventure Ticket" onPress={close} hitSlop={8} style={styles.close}>
             <GameIcon name="close" size={34} />
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {picker ? <>
-            <Text style={styles.title}>{ticket.discover || ticket.play ? 'Choose your detour' : 'Pick another ride'}</Text>
+            <Text style={styles.title}>Pick another ride</Text>
             <Text style={styles.support}>A different ride, the same adventure. Every stamp you earned stays.</Text>
             {detours.map(choice => <Pressable key={choice.ride.task_id} accessibilityRole="button"
               accessibilityLabel={`Continue adventure at ${choice.ride.ride_name}`} disabled={busy} onPress={() => pick(choice)}
@@ -303,8 +303,8 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
             </View>
             {ticket.phase === 'discover' && data.wallet.tickets_needed > 0 && <View style={styles.resource}>
               <GameIcon name="ticket" size={34} />
-              <Text style={styles.resourceText}>{data.wallet.rescue_pass_available ? 'Your free first-coin pass is ready for this challenge.'
-                : `${data.wallet.tickets_needed} more ${data.wallet.tickets_needed === 1 ? 'Ticket' : 'Tickets'} needed. Time in line and home finds can earn more.`}</Text>
+              <Text style={styles.resourceText}>{data.wallet.rescue_pass_available ? 'Today\'s free try is ready for this coin.'
+                : `${data.wallet.tickets_needed} more ${data.wallet.tickets_needed === 1 ? 'Ticket' : 'Tickets'} needed. LinePlay and treats at home can earn more.`}</Text>
             </View>}
             <View style={styles.primaryRow}>
               <GameButton label={stale ? 'Refresh my ticket' : prompt.action} accessibilityLabel={stale ? 'Refresh Adventure Ticket' : prompt.action}

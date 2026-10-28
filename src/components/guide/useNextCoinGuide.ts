@@ -13,7 +13,7 @@ import type { LivePark } from '../../api/endpoints/parks/live';
 import type { AdventureTicket } from '../../api/endpoints/me/trip-goal';
 import { loadParkRides } from '../../services/lineplay/resolveRide';
 import {
-  ARRIVE_MS, guide, guideState, liveAnswers,
+  ARRIVE_MS, guide, guideMeters, guideState, liveAnswers, MAX_TARGET_METERS,
   type GuideAdventure, type GuideState, type GuideTarget, type LiveMemo,
 } from '../../services/guide/nextCoin';
 import { nextFreeTicket, type FreeTicketsInput } from '../../services/guide/freeTickets';
@@ -150,13 +150,18 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
     wallet: input.wallet,
   }, shown);
 
-  const ridesResting = Object.values(answers).some(answer => answer === 'closed');
+  // Resting = closed for the night: no ride known open, and some known closed (one ride down is not a closed park).
+  const known = Object.values(answers);
+  const ridesResting = known.some(answer => answer === 'closed') && !known.some(answer => answer === 'open');
   const allOwned = coins.length > 0 && coins.every(coin => coin.owned);
+  const here = input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null;
+  const outOfReach = !!here && coins.some(coin => !coin.owned) &&
+    coins.filter(coin => !coin.owned).every(coin => guideMeters(here, coin) > MAX_TARGET_METERS);
   const adventureDots: [boolean, boolean, boolean] | null = input.adventure && shown &&
     input.adventure.ride.task_id === shown.taskId && input.adventure.park_id === parkId
     ? [!!input.adventure.discover, !!input.adventure.play, input.adventure.phase === 'complete'] : null;
   const copy = restingSightCopy(guideCardCopy(state, shown, {
-    parkName: input.parkName, ridesResting, allOwned,
+    parkName: input.parkName, ridesResting, allOwned, outOfReach,
     tickets: input.wallet?.tickets ?? 0, freeStep: input.wallet ? nextFreeTicket(input.wallet) : null,
     queueTicketsOn: input.queueTicketsOn, adventureDots,
   }), shown, ridesResting);

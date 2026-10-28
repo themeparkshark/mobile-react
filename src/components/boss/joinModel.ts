@@ -49,9 +49,9 @@ export function rewardPreview(raid: Pick<BossRaid, 'remote' | 'you'> & { rewards
 export function shortfallCopy(short: JoinCost['short']): string | null {
   if (!short) return null;
   if (short.kind === 'energy') {
-    return `Need ${short.need - short.have} more Energy. Get it from home finds, rides and your daily chest.`;
+    return `Need ${short.need - short.have} more Energy. Get it from treats, rides and your daily chest.`;
   }
-  return 'Joining from home needs 1 Ticket. Grab home finds to get more.';
+  return 'Joining from home needs 1 Ticket. Grab treats to get more.';
 }
 
 /** The join button's verb: repeat attackers skip straight to ATTACK AGAIN. */

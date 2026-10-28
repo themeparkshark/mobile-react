@@ -15,7 +15,7 @@ import useFlameStreak from '../services/retention/useFlameStreak';
 import countText from '../helpers/countText';
 
 /** The one Energy sentence (docs/economy-glossary.md, GET /api/economy). */
-export const ENERGY_RULE = 'Energy powers boss raids and coin upgrades. It never runs out on a timer.';
+export const ENERGY_RULE = 'Energy is for growing your coins. It never runs out on a timer.';
 export const TICKET_RULE = 'One Ticket plays one ride challenge at the park.';
 
 interface StatItemProps {
@@ -160,7 +160,7 @@ export default function RadialStatsMenu() {
     { icon: 'energy' as const, label: 'Energy', value: formatNumber(energy), onPress: () => explainStat('energy', energy) },
     { icon: 'ticket' as const, label: 'Tickets', value: formatNumber(tickets), onPress: () => explainStat('tickets', tickets) },
     ...(streak != null && streak > 0
-      ? [{ icon: 'streak' as const, label: 'Day streak', value: String(streak), onPress: () => explainStat(streakFrom === 'daily3' ? 'daily3_streak' : 'day_streak', streak) }] : []),
+      ? [{ icon: 'streak' as const, label: 'Flame', value: String(streak), onPress: () => explainStat(streakFrom === 'daily3' ? 'daily3_streak' : 'day_streak', streak) }] : []),
   ];
 
   return (

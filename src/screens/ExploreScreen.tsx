@@ -148,6 +148,9 @@ import { currentAppOpen, useRung } from '../services/reveal/revealLadder';
 import { useTrail } from '../services/trail/TrailProvider';
 import { headlineBox, stepsToGo } from '../services/trail/trailModel';
 import useParkDayLadder from '../components/guide/useParkDayLadder';
+import useWelcomeBack from '../components/guide/useWelcomeBack';
+import { homeShelfPark } from '../components/guide/HomeShelfButton';
+import type { HomeGuide } from './ExploreScreen/HomeExplore';
 
 /**
  * Park stores move to a "Shops at this park" row on the park's shelf screen (shelf-words). The map
@@ -1127,6 +1130,8 @@ export function ExploreScreenBody() {
     queueTicketsOn: guideFlags.queue_tickets === true, claimable: claimable.sources,
   }) : null, [player, guideFlags, tripGoalData?.wallet?.rescue_pass_available, claimable.sources]);
   const rushTaskIds = useMemo(() => new Set(rushes.map(pick => pick.task.id)), [rushes]);
+  // Welcome back after 14+ days away: the guide's welcome back state comes first (core loop 4.1).
+  const welcome = useWelcomeBack(player?.id ?? null);
   const nextCoin = useNextCoinGuide({
     enabled: !!player && !!park, parkId: park?.id ?? null, parkName: park?.name ?? null, location,
     tasks: visibleTasks, live: livePark, adventure, dwellRideId: queueDwell?.rideId ?? null,
@@ -1135,6 +1140,7 @@ export function ExploreScreenBody() {
     wallet, queueTicketsOn: guideFlags.queue_tickets === true,
     // PLAY! itself decides "You're here": the server's range check, never the guide's geometry alone.
     playableTaskId: rangeChecked ? playableTaskId : undefined,
+    daysAway: welcome.daysAway, welcomeBackDone: welcome.done,
   });
   const guideShown = !!player && !!park;
   // Raids reach the map only after coin levels unlock (they cost Energy) and while the park is open (core loop 5.2).
@@ -1455,6 +1461,7 @@ export function ExploreScreenBody() {
     navigation.navigate('LinePlay', ride ? { ride } : undefined);
   }, [park, adventure, adventureOwner, queueDwell, nextCoin.inLineTaskId, nextCoin.rides, navigation]);
   const onGuideAction = useCallback((action: GuideAction) => {
+    welcome.finish();
     const task = nextCoin.targetTask;
     switch (action) {
       case 'go':
@@ -1477,7 +1484,17 @@ export function ExploreScreenBody() {
       default:
         if (park && player) RootNavigation.navigate('Park', { park: park.id, player: player.id });
     }
-  }, [nextCoin.targetTask, openLinePlayFor, claimable, refreshPlayer, guideFlags.queue_tickets, park, player]);
+  }, [nextCoin.targetTask, openLinePlayFor, claimable, refreshPlayer, guideFlags.queue_tickets, park, player, welcome]);
+  // The home guide card (core loop 4.1 "Home"): next park day, Tickets ready, the ticket meter, PLAN = your shelf.
+  const homePlan = tripGoal && !tripGoal.coin_owned ? tripGoal : null;
+  const homeGuide = useMemo<HomeGuide | null>(() => player && !park ? {
+    parkName: tripGoal?.park_name ?? null, planName: homePlan?.ride_name ?? null, planCoinUrl: homePlan?.coin_url || null,
+    tickets: player.tickets ?? 0, welcomeBack: welcome.daysAway != null && welcome.daysAway >= 14 && !welcome.done,
+    onAction: () => {
+      welcome.finish();
+      RootNavigation.navigate('Park', { park: tripGoal?.park_id ?? homeShelfPark(player.current_park_id), player: player.id });
+    },
+  } : null, [player, park, tripGoal, homePlan, welcome]);
   const onGuideCardPress = useCallback(() => {
     // On today's Adventure ride the card is the ticket's frame: it opens the ticket's sheet (stamps, souvenir).
     if (nextCoin.copy.dots) { setAdventureSheetRequest(n => n + 1); return; }
@@ -1636,7 +1653,7 @@ export function ExploreScreenBody() {
           parkStory={activeParkProject && !finnOwnsMap ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null}
           eventChip={liveEvt.event?.include_home && !finnOwnsMap ? <EventHomeChip event={liveEvt.event} onPress={() => setEventOpen(true)} /> : null}
-          quiet={finnOwnsMap} firstHunt={firstHunt} />
+          quiet={finnOwnsMap} firstHunt={firstHunt} homeGuide={homeGuide} />
       )}
       {/* Trail Boxes (core loop 4.2): no pill on the map; the Rewards button's ring shows the walk and opens
           the boxes. The host stays mounted (no pill drawn) so its sheet and reveal open from that button. */}

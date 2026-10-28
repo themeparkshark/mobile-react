@@ -132,6 +132,7 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     // The Next Coin guide and the unlock ladder (core loop): a stubbed guide, real words, rungs from options.
     '../components/guide/useNextCoinGuide': { default: () => options.guide ?? restingGuide() },
     '../components/guide/playTapHold': { usePlayTapHold: () => !!options.playTapHold },
+    '../components/guide/useWelcomeBack': { default: () => options.welcome ?? { daysAway: null, done: false, finish: () => undefined } },
     '../services/guide/nextCoin': { guide: { setTarget: (taskId, source) => guidePicks.push([taskId, source]),
       skipLineStory: () => guidePicks.push(['skip']), current: () => null, subscribe: () => () => undefined } },
     '../services/guide/freeTickets': freeTickets,

@@ -551,7 +551,7 @@ export default function PrepItemRedeemModal({
                             small
                             type="task"
                           />
-                          <Text style={FIND_REWARD_LABEL}>{'PARK TICKET'}</Text>
+                          <Text style={FIND_REWARD_LABEL}>{'TICKET'}</Text>
                         </View>
                       )}
                       {prepItem.experience_reward > 0 && (
@@ -752,22 +752,7 @@ export default function PrepItemRedeemModal({
                         </View>
                       )}
                     </View>}
-                    {!pickupOutcome?.replayed && streakInfo && streakInfo.current > 0 && (
-                      <View style={{ alignSelf: 'center', marginTop: 10,
-                        borderRadius: 12, borderWidth: 2, borderColor: '#fff',
-                        backgroundColor: '#ffca30', paddingHorizontal: 13, paddingVertical: 6 }}
-                        accessible accessibilityRole="text"
-                        accessibilityLabel={`${streakInfo.current} day hunt streak${streakInfo.multiplier > 1 ? `, ${streakInfo.multiplier.toFixed(1)} times Energy and experience` : ''}`}>
-                        <Text style={{ fontFamily: 'Shark', fontSize: 15,
-                          color: '#073b73', textAlign: 'center' }}>
-                          DAY {streakInfo.current} HUNT STREAK
-                        </Text>
-                        {streakInfo.multiplier > 1 && <Text style={{ fontFamily: 'Knockout',
-                          fontSize: 14, color: '#073b73', textAlign: 'center' }}>
-                          {streakInfo.multiplier.toFixed(1)}× ENERGY + XP
-                        </Text>}
-                      </View>
-                    )}
+                    {/* The flame on the Rewards button is the one streak (core loop 4.5): no second streak here. */}
                     {(() => {
                       // Only when the server sent hunt_points. Zero shows the server's line verbatim.
                       const chip = huntPointsChip(pickupOutcome?.hunt_points);

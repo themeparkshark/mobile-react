@@ -300,6 +300,19 @@ export function useRung(rung: Rung): { open: boolean; isNew: boolean; markSeen()
   return { open: key[0] === '1', isNew: key[1] === '1', markSeen };
 }
 
+/** The phone counters for the signed-in player (park days, home days, lines played), read only. */
+export function ladderCounters(): Readonly<Counters> {
+  return { ...record.counters };
+}
+
+const countersKey = () => (player && hydrated ? JSON.stringify(record.counters) : '');
+
+/** The phone counters as a hook (the home menu's Practice games appear from the 2nd home visit). */
+export function useLadderCounters(): Readonly<Counters> {
+  const key = useSyncExternalStore(subscribe, countersKey, () => '');
+  return key ? (JSON.parse(key) as Counters) : freshRecord().counters;
+}
+
 /** Read without React (tests, captures, the map's own logic). */
 export function rungState(rung: Rung): { open: boolean; isNew: boolean } {
   const key = rungKey(rung);

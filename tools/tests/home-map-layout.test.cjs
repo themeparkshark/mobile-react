@@ -139,7 +139,7 @@ test('home map polish: peek timing, hold and pan; status lines stay; edge tokens
   // Layout animation and swipe on separate views (the "Open debugger to view warnings" toast).
   assert.match(chip, /style=\{styles\.wrap\}>\s*<Animated\.View style=\{slide\}>/);
   // Live boss bar: rowTop moves down, and the edge tokens (48 pt) centre below the chip row.
-  assert.match(home, /const edgeTop = rowTop \+ 30 \+ 8 \+ 24;/);
+  assert.match(home, /const edgeTop = rowTop \+ guideBlock \+ 30 \+ 8 \+ 24;/);
   assert.match(home, /insetTop=\{edgeTop\}/);
   assert.match(read('src/screens/ExploreScreen/FindEdgeArrows.tsx'), /\{ top: insetTop, bottom: 190, side: 30 \}/);
 });

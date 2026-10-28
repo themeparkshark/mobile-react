@@ -66,6 +66,10 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   const wallet = state === 'claim' || state === 'free_try' || state === 'extra_try' || state === 'need_ticket';
   const art = wallet || !coinUrl ? (wallet ? TICKET : COIN_FALLBACK) : { uri: coinUrl };
   return <Animated.View testID={testID} style={[styles.slot, { top }, animated]}>
+    {/* The park name chip: a small tab on the card's top edge, so the kicker never shortens. */}
+    {parkName && state !== 'arrive' && copy.kicker !== parkName.toUpperCase() && <View pointerEvents="none" style={styles.parkChip}>
+      <Text style={styles.parkChipText} numberOfLines={1}>{parkName}</Text>
+    </View>}
     <Pressable accessible accessibilityRole="button" accessibilityLabel={copy.a11y} onPress={onCardPress}
       disabled={!onCardPress} style={styles.card}>
       <View style={styles.artCol}>
@@ -76,10 +80,7 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
         </View>}
       </View>
       <View style={styles.copy}>
-        <View style={styles.kickerRow}>
-          <Text style={styles.kicker} numberOfLines={1}>{copy.kicker}</Text>
-          {parkName && state !== 'arrive' && <View style={styles.parkChip}><Text style={styles.parkChipText} numberOfLines={1}>{parkName}</Text></View>}
-        </View>
+        <Text style={styles.kicker} numberOfLines={1}>{copy.kicker}</Text>
         <Text style={styles.title} numberOfLines={2}>{copy.title}</Text>
         {copy.dots && <Dots dots={copy.dots} />}
         {!!copy.line && <Text style={styles.line} numberOfLines={2}>{copy.line}</Text>}
@@ -103,9 +104,9 @@ const styles = StyleSheet.create({
   coin: { width: 46, height: 46 },
   pointer: { flexDirection: 'row', alignItems: 'center', transform: [{ rotate: '90deg' }] },
   copy: { flex: 1, minWidth: 0 },
-  kickerRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  kicker: { flexShrink: 1, color: '#ffdc61', fontFamily: 'Knockout', fontSize: 11, letterSpacing: 0.6 },
-  parkChip: { backgroundColor: BRAND.white, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, maxWidth: 110 },
+  kicker: { color: '#ffdc61', fontFamily: 'Knockout', fontSize: 11, letterSpacing: 0.6 },
+  parkChip: { position: 'absolute', top: -9, right: 14, zIndex: 2, backgroundColor: BRAND.white, borderRadius: 8,
+    borderWidth: 2, borderColor: BRAND.blueBright, paddingHorizontal: 6, paddingVertical: 0, maxWidth: 170 },
   parkChipText: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 10 },
   title: { color: BRAND.white, fontFamily: 'Shark', fontSize: 15, marginTop: 1 },
   line: { color: '#dff4ff', fontFamily: 'Knockout', fontSize: 12, marginTop: 1 },

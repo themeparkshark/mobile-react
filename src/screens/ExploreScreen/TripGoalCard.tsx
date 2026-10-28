@@ -248,7 +248,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
           <Text style={styles.heading}>{pickerMode || !goal ? 'CHOOSE YOUR NEXT RIDE'
             : goal.coin_owned ? 'MASTER YOUR COIN' : 'YOUR RIDE GOAL'}</Text>
           <Text style={styles.heroHint}>{pickerMode || !goal
-            ? 'Pick a coin to chase. Every home find helps prepare your park day.'
+            ? 'Pick a coin to chase. Every 3 treats = 1 Ticket for your park day.'
             : goal.coin_owned ? 'Ride Parts + home Energy make your favorite coin shine.'
             : `${goal.ride_name} is waiting at ${goal.park_name}.`}</Text>
           <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
@@ -300,7 +300,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
           onPress={() => goAfterClose(() => RootNavigation.navigate('CoinShelf', {
             focusCoin: { assetId: goal.asset_id },
           }))}>
-          <GameRichText style={styles.planEyebrow} iconSize={13}>{`[icon:sparkle] ${goal.coin_owned ? 'COIN MASTERY' : 'FIRST UPGRADE PLAN'}`}</GameRichText>
+          <GameRichText style={styles.planEyebrow} iconSize={13}>{`[icon:sparkle] ${goal.coin_owned ? 'LEVEL UP' : 'FIRST LEVEL UP PLAN'}`}</GameRichText>
           <Text style={styles.planTitle}>{plan.maxed ? 'Current max level reached'
             : goal.coin_owned ? `Level ${plan.current_level} to ${plan.next_level}`
             : 'Your first level-up'}</Text>

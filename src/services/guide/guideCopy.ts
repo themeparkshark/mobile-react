@@ -48,8 +48,10 @@ export interface GuideCardCopy {
 
 export interface GuideCopyContext {
   readonly parkName: string | null;
-  /** Rides known closed right now (the resting message names them as resting). */
+  /** No ride is known open and some are known closed: the park is resting (closed for the night). */
   readonly ridesResting: boolean;
+  /** Coins are left to win, but every one is farther than the guide points (1.5 km): head back in. */
+  readonly outOfReach?: boolean;
   /** Every coin in this park is already on the player's shelf. */
   readonly allOwned: boolean;
   readonly tickets: number;
@@ -225,6 +227,10 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
     default:
       if (ctx.allOwned) {
         return card({ kicker: park.toUpperCase(), title: 'Every coin here is on your shelf!', line: 'Level them up from your shelf',
+          button: { label: 'SHELF', action: 'shelf' }, dots: null });
+      }
+      if (ctx.outOfReach && !ctx.ridesResting) {
+        return card({ kicker: park.toUpperCase(), title: 'Head back into the park', line: 'The coins wait by the rides',
           button: { label: 'SHELF', action: 'shelf' }, dots: null });
       }
       return card({

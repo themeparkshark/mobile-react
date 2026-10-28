@@ -76,7 +76,7 @@ test('far from the queue, Play becomes "Show me the line"; near it plays',()=>{
  const far=card('play',{gate:{state:'far',meters:340}});
  assert.ok(far.button('Show me the line'));far.button('Show me the line').props.onPress();far.modal().props.onDismiss();
  assert.deepEqual(far.calls,['line']);
- const near=card('play',{gate:{state:'near',meters:8}});near.button('Play the queue adventure').props.onPress();near.modal().props.onDismiss();
+ const near=card('play',{gate:{state:'near',meters:8}});near.button('Play its line story').props.onPress();near.modal().props.onDismiss();
  assert.deepEqual(near.calls,['play']);
 });
 test('tuck away dismisses the ticket for the day',async()=>{

@@ -56,22 +56,22 @@ export interface AdventurePrompt {
  */
 export function adventurePrompt(ticket: AdventureTicket, closed = false,
   gate: { state: 'near' | 'far' | 'unknown'; meters: number | null } = { state: 'unknown', meters: null }): AdventurePrompt {
-  if (ticket.phase === 'complete') return { title: 'Your park-day souvenir', chip: 'Souvenir ready', action: 'Visit my coin', detail: 'A coin, a story, a day to remember.', intent: 'shelf' };
+  if (ticket.phase === 'complete') return { title: 'Your Adventure souvenir', chip: 'Souvenir ready', action: 'Visit my coin', detail: 'A coin, a story, a day to remember.', intent: 'shelf' };
   // A first ticket (nothing stamped yet) never says "detour": it simply offers another ride.
   if (closed && ticket.phase !== 'celebrate') return ticket.discover || ticket.play
-    ? { title: 'Adventure takes a detour', chip: 'Pick a detour', action: 'Pick another ride', detail: 'Keep every stamp you have earned.', intent: 'detour' }
+    ? { title: 'Today\'s Adventure moves on', chip: 'Pick another ride', action: 'Pick another ride', detail: 'Keep every stamp you have earned.', intent: 'detour' }
     : { title: 'This ride is resting', chip: 'Pick another ride', action: 'Pick another ride', detail: 'Today\'s Adventure can start at another ride.', intent: 'detour' };
   if (ticket.phase === 'discover') return { title: 'Your first chapter awaits', chip: 'Find your coin', action: 'Find this coin', detail: 'Win its coin challenge at the ride.', intent: 'discover' };
   if (ticket.phase === 'play') {
     if (ticket.play_hint === 'get_in_line') {
-      return { title: `Get in line at ${ticket.ride.ride_name}`, chip: 'Get in its line', action: gate.state === 'far' ? 'Show me the line' : 'Play the queue adventure',
+      return { title: `Get in line at ${ticket.ride.ride_name}`, chip: 'Get in its line', action: gate.state === 'far' ? 'Show me the line' : 'Play its line story',
         detail: 'Your story part is done. Play in this ride\'s line to punch the Play stamp.', intent: gate.state === 'far' ? 'find_line' : 'play' };
     }
     if (gate.state === 'far') {
       return { title: 'A story for your next wait', chip: 'Walk to its line', action: 'Show me the line',
         detail: `${formatDistance(gate.meters ?? 0)} away. The story opens when you are in its queue.`, intent: 'find_line' };
     }
-    return { title: 'A story for your next wait', chip: 'Play in this line', action: 'Play the queue adventure', detail: 'Three short missions, made to play as the line moves.', intent: 'play' };
+    return { title: 'A story for your next wait', chip: 'Play in this line', action: 'Play its line story', detail: 'Three short missions, made to play as the line moves.', intent: 'play' };
   }
   return { title: 'You made a park memory', chip: 'Unfold your souvenir', action: 'Unfold my souvenir', detail: 'Your coin and your story, together.', intent: 'celebrate' };
 }

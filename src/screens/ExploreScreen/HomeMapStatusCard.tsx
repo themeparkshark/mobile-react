@@ -62,7 +62,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections, in
   const title = mode === 'park_check' ? 'CHECKING YOUR MAP'
     : mode === 'loading' ? 'SCOUTING THE MAP'
     : mode === 'error' ? 'MAP SIGNAL LOST' : 'THE HUNT IS QUIET';
-  const detail = mode === 'park_check' ? 'Home finds come back once we see you are outside a park.'
+  const detail = mode === 'park_check' ? 'Treats come back once we see you are outside a park.'
     : mode === 'loading' ? 'Looking for nearby finds...'
     : mode === 'error' ? 'Could not load nearby finds. Check your internet. We will try again.'
       : 'New finds will show up soon. Check your collection while you wait.';
