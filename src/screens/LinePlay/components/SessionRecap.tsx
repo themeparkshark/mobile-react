@@ -24,6 +24,7 @@ import type { EndReason } from '../../../services/lineplay/LinePlaySession';
 import type { RideCoinLevelType } from '../../../models/ride-coin-level-type';
 import type { LinePlayFeedback, WaitRating, FavoriteLinePlayActivity } from '../../../api/endpoints/me/inline-timer/feedback';
 import Playercard from '../../../components/Playercard';
+import { FOOTER_CLEARANCE } from '../../../components/Wrapper';
 import type { InventoryType } from '../../../models/inventory-type';
 import { coinTierName } from '../../../constants/coinTiers';
 import { parkDayLine, recapRows, type RecapRewardsInput } from '../../../services/lineplay/bonusRounds';
@@ -218,7 +219,8 @@ export default function SessionRecap({
     showEnergy, showXp, showTickets });
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.recapCard}>
+    // The bottom clearance keeps the last row above the footer's rising MAP compass (a tap there is never the map).
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.recapCard, { paddingBottom: FOOTER_CLEARANCE }]}>
       <LinearGradient colors={['#13a8e9', '#0879ca', '#0768b9']} style={styles.recapHero}>
         <View style={styles.recapHeroCopy}>
           <Text style={styles.recapKicker}>{rideUp ? 'YOUR RIDE’S UP!' : leftQueue ? 'WAIT WRAPPED UP' : 'LINEPLAY COMPLETE'}</Text>
@@ -286,6 +288,23 @@ export default function SessionRecap({
             <Text style={styles.keepsakeBody} numberOfLines={2}>{`${Math.floor(elapsedSeconds / 60)}m ${secs}s at ${rideName}`}</Text>
             <Text style={styles.keepsakeHint}>Next time, play a clue while you wait!</Text>
           </View>
+        </Animated.View>
+      )}
+
+      {/* The one GO: win this ride's coin (its Parts wait in its slot), level it up, or the guide's next coin. */}
+      {go && onGo && (
+        <Animated.View entering={enter(4)} style={styles.goCard}>
+          {coinState === 'owned' && coin && coin.current_level < coin.max_level && (
+            <Text style={styles.coinNextBody}>{`${coin.available_parts ?? 0} of ${coin.parts_to_next_level} Parts to Level ${coin.current_level + 1}`}
+              {playerEnergy != null && !upgradeReady && coin.energy_to_next_level > playerEnergy
+                ? ` · ${coin.energy_to_next_level - playerEnergy} more Energy` : ''}</Text>
+          )}
+          <Text style={styles.goTitle}>{go.label}</Text>
+          {coinState === 'unowned' && partsCount > 0 && (
+            <Text style={styles.coinNextBody}>Parts are saved for this coin. Win it on your way out.</Text>
+          )}
+          <GameButton label={go.button} icon={go.kind === 'level_up' ? 'coin' : go.kind === 'shelf' ? 'map' : 'arrow'}
+            fullWidth onPress={onGo} style={styles.goButton} accessibilityLabel={go.label} />
         </Animated.View>
       )}
 
@@ -378,23 +397,6 @@ export default function SessionRecap({
         <Text style={styles.recapPending}>We can&apos;t load this coin right now. Check your Coin Shelf when you&apos;re back online.</Text>
       )}
 
-      {/* The one GO: win this ride's coin (its Parts wait in its slot), level it up, or the guide's next coin. */}
-      {go && onGo && (
-        <Animated.View entering={enter(4)} style={styles.goCard}>
-          {coinState === 'owned' && coin && coin.current_level < coin.max_level && (
-            <Text style={styles.coinNextBody}>{`${coin.available_parts ?? 0} of ${coin.parts_to_next_level} Parts to Level ${coin.current_level + 1}`}
-              {playerEnergy != null && !upgradeReady && coin.energy_to_next_level > playerEnergy
-                ? ` · ${coin.energy_to_next_level - playerEnergy} more Energy` : ''}</Text>
-          )}
-          <Text style={styles.goTitle}>{go.label}</Text>
-          {coinState === 'unowned' && partsCount > 0 && (
-            <Text style={styles.coinNextBody}>Parts are saved for this coin. Win it on your way out.</Text>
-          )}
-          <GameButton label={go.button} icon={go.kind === 'level_up' ? 'coin' : go.kind === 'shelf' ? 'map' : 'arrow'}
-            fullWidth onPress={onGo} style={styles.goButton} accessibilityLabel={go.label} />
-        </Animated.View>
-      )}
-
       {feedbackEnabled && (
         <View style={styles.waitFeedbackCard}>
           <Text style={styles.waitFeedbackTitle}>Did LinePlay make this wait better?</Text>
@@ -460,12 +462,12 @@ const styles = StyleSheet.create({
     padding: spacing.md, borderWidth: 3, borderColor: '#ffffff', ...shadows.lg,
   },
   recapHero: {
-    minHeight: 176, borderRadius: borderRadius.xl, overflow: 'hidden', borderWidth: 3,
+    minHeight: 148, borderRadius: borderRadius.xl, overflow: 'hidden', borderWidth: 3,
     borderColor: BRAND.navy, justifyContent: 'center', padding: spacing.lg,
   },
   recapHeroCopy: { width: '60%', zIndex: 1 },
   recapSharkWrap: { position: 'absolute', right: -5, bottom: -11 },
-  recapShark: { width: 168, height: 168 },
+  recapShark: { width: 146, height: 146 },
   recapKicker: { color: '#fff4ac', fontFamily: 'Knockout', fontSize: 15, letterSpacing: 0.7 },
   recapRide: { color: '#ffffff', fontFamily: 'Shark', fontSize: 21, marginTop: 6, lineHeight: 25,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
