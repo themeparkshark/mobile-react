@@ -22,7 +22,7 @@
  * dialog that mounts already open still springs.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { modalLayers, useModalLayer } from './modalLayers';
+import { modalLayers, NATIVE_DISMISS_FALLBACK_MS, useNativeModalLayer } from './modalLayers';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, {
@@ -40,6 +40,7 @@ import GameIcon from './GameIcon';
 import GameText from './GameText';
 import Ribbon from '../components/Ribbon';
 import {
+  createDialogCloseGate,
   createDialogStore,
   dialogTitleLayout,
   dismissAction,
@@ -139,12 +140,13 @@ export function GameDialog({
 }: GameDialogProps) {
   const reducedMotion = useUiReducedMotion();
   const [mounted, setMounted] = useState(() => visible && modalLayers.count() === 0);
-  // Never a second sibling <Modal>: wait until every sheet or dialog opened before this one is gone
-  // (ui/modalLayers.ts; a sibling iOS refuses to present froze the shop).
-  const front = useModalLayer(visible || mounted, 'wait');
-  const shown = visible && front;
-  const closing = useRef(false);
-  const chosen = useRef<number | null>(null);
+  // Never a second sibling <Modal>: wait until every sheet or dialog opened before this one is gone,
+  // and hold this dialog's layer until UIKit reports it gone (ui/modalLayers.ts, core loop 4.3 rule 10).
+  const layer = useNativeModalLayer(visible || mounted, 'wait');
+  const shown = visible && layer.present;
+  // The native dialog is still up (shown, or leaving): it stays rendered until UIKit says it is gone.
+  const [nativeUp, setNativeUp] = useState(false);
+  const gate = useRef(createDialogCloseGate()).current;
   const scrim = useSharedValue(0);
   const pop = useSharedValue(0);
   const actions = layoutActions(buttons, equalChoices);
@@ -158,9 +160,10 @@ export function GameDialog({
 
   useEffect(() => {
     if (shown) {
-      closing.current = false;
-      chosen.current = null;
+      // A (re)open: a close still finishing from before no longer counts (the late-fade race).
+      gate.open();
       setMounted(true);
+      setNativeUp(true);
       scrim.value = withTiming(1, { duration: MOTION.fadeMs });
       pop.value = reducedMotion
         ? withTiming(1, { duration: MOTION.fadeMs })
@@ -171,26 +174,42 @@ export function GameDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shown]);
 
-  const finish = () => {
-    setMounted(false);
-    const index = chosen.current;
-    onAnswer?.(index);
-    const button = index === null ? undefined : (buttons && buttons.length ? buttons : [{ text: 'OK' }])[index];
+  /** UIKit says the dialog is gone (or the fallback ran): answer once, then free the layer. */
+  const deliver = () => {
+    setNativeUp(false);
+    layer.onDismissed();
+    const answer = gate.answer();
+    if (!answer) return;
+    onAnswer?.(answer.index);
+    const button = answer.index === null ? undefined : (buttons && buttons.length ? buttons : [{ text: 'OK' }])[answer.index];
     if (runButtonHandlers) button?.onPress?.();
   };
+  const deliverRef = useRef(deliver); deliverRef.current = deliver;
+
+  /** The close fade finished: hide the native dialog, but only for the close still in progress. */
+  const fadeDone = (token: number) => {
+    if (!gate.fadeDone(token)) return;
+    setMounted(false);
+  };
+  // Hidden: wait for UIKit's dismissal (iOS onDismiss); Android and a silent sheet answer after a short fallback.
+  useEffect(() => {
+    if (mounted || !nativeUp) return;
+    if (Platform.OS !== 'ios') { deliverRef.current(); return; }
+    const timer = setTimeout(() => deliverRef.current(), NATIVE_DISMISS_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [mounted, nativeUp]);
 
   const close = (index: number | null) => {
-    if (closing.current) return;
-    closing.current = true;
-    chosen.current = index;
+    const token = gate.close(index);
+    if (token === null) return;
     scrim.value = withTiming(0, { duration: MOTION.dialogOutMs });
     pop.value = withTiming(0, { duration: MOTION.dialogOutMs, easing: Easing.in(Easing.quad) }, done => {
-      if (done) runOnJS(finish)();
+      if (done) runOnJS(fadeDone)(token);
     });
   };
 
   useEffect(() => {
-    if (!visible && mounted && !closing.current) close(null);
+    if (!visible && mounted && !gate.busy) close(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
@@ -203,11 +222,12 @@ export function GameDialog({
     ],
   }));
 
-  if (!mounted) return null;
+  if (!mounted && !nativeUp) return null;
   const dismiss = dismissAction(request);
 
   return (
-    <Modal transparent visible animationType="none" statusBarTranslucent
+    <Modal transparent visible={mounted} animationType="none" statusBarTranslucent
+      onDismiss={() => deliverRef.current()}
       onRequestClose={() => { if (dismiss !== null) close(dismiss); }}>
       <KeyboardAvoidingView testID={testID} enabled={avoidKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: Z.dialog }}>

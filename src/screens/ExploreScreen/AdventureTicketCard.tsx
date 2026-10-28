@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { playSfx } from '../../gamekit/SFX';
 import { haptic } from '../../gamekit/Haptics';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameButton, GameIcon, SHADOW } from '../../ui';
+import { useNativeModalLayer } from '../../ui/modalLayers';
 import {
   adventureErrorMessage, adventurePrompt, adventureStamps, detourDetail, type DetourPick,
 } from './adventureTicketPresentation';
@@ -148,6 +149,13 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
   const mounted = useRef(true), locked = useRef(false), pending = useRef<(() => void) | null>(null);
   const occlusion = useRef(onOcclusionChange); occlusion.current = onOcclusionChange;
   const reduced = useReducedGameMotion(), insets = useSafeAreaInsets();
+  // The sheet holds its modal layer until UIKit says it is gone; what a button asked for (a walk
+  // to the ride, LinePlay, the shelf) runs only then, never into a leaving sheet (core loop 4.3 rule 10).
+  const layer = useNativeModalLayer(open, 'show');
+  const runPending = () => {
+    const action = pending.current; pending.current = null;
+    if (mounted.current) action?.();
+  };
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; pending.current = null; occlusion.current?.(false); };
@@ -235,15 +243,15 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
         </Pressable>
       </ChipEntrance>
     )}
-    <Modal isVisible={open} onBackdropPress={close} onBackButtonPress={close}
+    <Modal isVisible={layer.present} onBackdropPress={close} onBackButtonPress={close}
       animationIn="slideInUp" animationOut="slideOutDown" animationInTiming={reduced ? 0 : 280} animationOutTiming={reduced ? 0 : 200}
       backdropColor={BRAND.navy} backdropOpacity={0.3}
       backdropTransitionInTiming={reduced ? 0 : 180} backdropTransitionOutTiming={reduced ? 0 : 180}
       onModalWillShow={() => occlusion.current?.(true)} onModalHide={() => {
         occlusion.current?.(false);
-        const action = pending.current; pending.current = null;
-        if (mounted.current) action?.();
-      }} style={styles.modal}>
+        // Android reports no native dismissal: run the pending action here.
+        if (Platform.OS !== 'ios') runPending();
+      }} onDismiss={() => { layer.onDismissed(); runPending(); }} style={styles.modal}>
       <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.sheetHeader}>
           <Text style={styles.sheetEyebrow}>PARK-DAY ADVENTURE  {ticket.park_day.slice(5).replace('-', '/')}</Text>

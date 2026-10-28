@@ -353,7 +353,8 @@ function dialogView(props, reduced = false) {
     './gameDialogModel': dialogModel,
     './tokens': tokens,
     // Nothing else is open: the dialog is the front layer (ui/modalLayers.ts has its own tests).
-    './modalLayers': { useModalLayer: () => true, modalLayers: { count: () => 0 } },
+    './modalLayers': { useModalLayer: () => true, useNativeModalLayer: wanted => ({ present: wanted, onDismissed() {} }),
+      modalLayers: { count: () => 0 }, NATIVE_DISMISS_FALLBACK_MS: 1200 },
   }, { visible: true, title: 'Leave the line?', buttons: [{ text: 'Stay', style: 'cancel' }, { text: 'Leave' }], ...props },
   {}, { exportName: 'GameDialog' });
 }

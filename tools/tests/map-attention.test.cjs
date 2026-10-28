@@ -196,3 +196,77 @@ test('every API request carries X-Core-Loop: 1 (the server stages ladder feature
   assert.equal(client.match(/X-Core-Loop/g).length, 1, 'one line, set once');
 });
 
+
+// ---------------------------------------------------------------------------
+// guide-map lane, round 1: the root fix on the map path.
+
+const PLAIN_REACT = { react: { createContext: v => ({ value: v }), useContext: () => false, useCallback: f => f, useRef: v => ({ current: v }), useEffect() {}, useState: v => [v, () => {}], useSyncExternalStore: (_s, g) => g() } };
+
+test('PLAY! holds presses while a sheet is still leaving, never longer than HOLD_MAX_MS, never over the open challenge', () => {
+  const H = loadTs('src/components/guide/playTapHold.ts', PLAIN_REACT);
+  assert.equal(H.holdPlayTaps({ layers: 1, sinceChangeMs: 0, flowOpen: false }), true, 'the swipe-closed sheet still holds its layer');
+  assert.equal(H.holdPlayTaps({ layers: 0, sinceChangeMs: 0, flowOpen: false }), false, 'UIKit said it is gone: PLAY! answers');
+  assert.equal(H.holdPlayTaps({ layers: 1, sinceChangeMs: H.HOLD_MAX_MS, flowOpen: false }), false, 'a leaked layer can never block PLAY! for good');
+  assert.equal(H.holdPlayTaps({ layers: 2, sinceChangeMs: 0, flowOpen: true }), false, 'the challenge flow owns its own sheet');
+});
+
+test('PLAY RIDE after a swipe-closed Ride Control sheet opens the card on the first press it takes, 20 out of 20 (sheet layer plus PLAY hold)', () => {
+  const h = harness();
+  const H = loadTs('src/components/guide/playTapHold.ts', PLAIN_REACT);
+  h.M.modalLayers.reset();
+  let sheetWanted = false;
+  const sheet = h.mount(() => h.M.useNativeModalLayer(sheetWanted, 'show'));
+  for (let run = 0; run < 20; run += 1) {
+    sheetWanted = true; sheet.render();
+    assert.equal(sheet.value.present, true, `run ${run}: the sheet opens`);
+    sheetWanted = false; sheet.render();                       // swiped closed: React hides it at once
+    const held = H.holdPlayTaps({ layers: h.M.modalLayers.count(), sinceChangeMs: 0, flowOpen: false });
+    assert.equal(held, true, `run ${run}: a press in the dismissal window cannot start the card`);
+    sheet.value.onDismissed(); sheet.render();                  // UIKit: the sheet is gone
+    assert.equal(H.holdPlayTaps({ layers: h.M.modalLayers.count(), sinceChangeMs: 0, flowOpen: false }), false,
+      `run ${run}: the next press opens the card`);
+  }
+});
+
+test('every map-path sheet registers with the native modal layer list and frees it on the native dismissal', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  for (const file of ['src/components/RideControlBar.tsx', 'src/screens/ExploreScreen/TooFarDialog.tsx',
+    'src/screens/ExploreScreen/AdventureTicketCard.tsx', 'src/components/SharkDropHandler.tsx']) {
+    const source = read(file);
+    assert.match(source, /useNativeModalLayer\(/, `${file} adopts useNativeModalLayer`);
+    assert.match(source, /isVisible=\{layer\.present\}/, `${file} presents only through its layer`);
+    assert.match(source, /onDismiss=\{[^}]*layer\.onDismissed/, `${file} frees the layer on UIKit's dismissal`);
+  }
+  assert.match(read('src/components/SharkDropHandler.tsx'), /useNativeModalLayer\(!!state, 'wait'\)/, 'a Shark Drop waits its turn');
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /usePlayTapHold\(redeemFlowOpen\)/);
+  assert.match(explore, /playTapHold && <View testID="play-ride-tap-hold"/);
+});
+
+test('a dialog: a late second request is never ended by the first one\'s leftover fade, 10 out of 10', () => {
+  const D = loadTs('src/ui/gameDialogModel.ts');
+  for (let run = 0; run < 10; run += 1) {
+    const gate = D.createDialogCloseGate();
+    gate.open();                                        // the first prize shows
+    const first = gate.close(0);                        // OK
+    assert.equal(typeof first, 'number');
+    assert.equal(gate.close(0), null, 'one close at a time');
+    gate.open();                                        // the second request arrives 0 to 180 ms after OK
+    assert.equal(gate.fadeDone(first), false, `run ${run}: the first close's late fade does not end the second card`);
+    assert.equal(gate.answer(), null, 'nothing is answered for the card that is showing');
+    assert.equal(gate.busy, false);
+    const second = gate.close(1);
+    assert.equal(gate.fadeDone(second), true, 'the close in progress ends the dialog');
+    assert.deepEqual({ ...gate.answer() }, { index: 1 }, 'answered once, after the native dialog is gone');
+    assert.equal(gate.answer(), null, 'never twice');
+  }
+});
+
+test('a dialog answers only after UIKit dismisses it, so the next dialog or sheet never presents into it', () => {
+  const source = fs.readFileSync(path.join(root, 'src/ui/GameDialog.tsx'), 'utf8');
+  assert.match(source, /useNativeModalLayer\(visible \|\| mounted, 'wait'\)/);
+  assert.match(source, /<Modal transparent visible=\{mounted\}[^>]*\n\s*onDismiss=\{\(\) => deliverRef\.current\(\)\}/);
+  assert.match(source, /runOnJS\(fadeDone\)\(token\)/, 'each close carries its token');
+  assert.match(source, /NATIVE_DISMISS_FALLBACK_MS/, 'a silent native dialog still answers');
+});
+

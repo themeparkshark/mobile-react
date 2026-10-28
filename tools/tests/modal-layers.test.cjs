@@ -50,8 +50,9 @@ test('every shop sheet registers as a layer and marks its children nested', () =
 
 test('dialogs and the grown-up gate wait their turn instead of stacking', () => {
   const dialog = src('src/ui/GameDialog.tsx');
-  assert.match(dialog, /useModalLayer\(visible \|\| mounted, 'wait'\)/);
-  assert.match(dialog, /const shown = visible && front;/);
+  // Held until UIKit reports the dialog gone (core loop 4.3 rule 10): useNativeModalLayer, not useModalLayer.
+  assert.match(dialog, /useNativeModalLayer\(visible \|\| mounted, 'wait'\)/);
+  assert.match(dialog, /const shown = visible && layer\.present;/);
   assert.match(dialog, /if \(shown\) \{/, 'the dialog opens only once it is the front layer');
   const gate = src('src/components/GrownUpGate.tsx');
   assert.match(gate, /const layerFront = useModalLayer\(!!req && !nested, 'wait'\);\s*const front = nested \? !!req : layerFront;/);

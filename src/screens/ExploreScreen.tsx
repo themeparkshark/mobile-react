@@ -140,6 +140,7 @@ import { PARKED } from '../components/map/Marker';
 import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, energyGap, parkMapInsets, rideLayoutId, rideTagFor,
   type FindLayoutInput, type FixedLayoutInput, type HauntLayoutInput } from './ExploreScreen/parkMapLayout';
 import { UpperText } from '../ui/upper';
+import { usePlayTapHold } from '../components/guide/playTapHold';
 
 /** After the map cover lifts, Finn's park tips wait this long (the map, its pins and PLAY RIDE arrive first). */
 const MAP_CALM_MS = 5000;
@@ -483,6 +484,8 @@ export function ExploreScreenBody() {
   const [rightColumnWidth, setRightColumnWidth] = useState(92);
   const [rightColumnHeight, setRightColumnHeight] = useState(0);
   const [redeemFlowOpen, setRedeemFlowOpen] = useState(false);
+  // A sheet or dialog is still leaving: PLAY! holds presses until UIKit has taken it down (the PLAY RIDE freeze).
+  const playTapHold = usePlayTapHold(redeemFlowOpen);
 
   // Collect moment: after a ride win, back on the map, the coin flies from its island onto the shelf button.
   const mapProjector = useRef<MapProjector | null>(null);
@@ -1623,6 +1626,11 @@ export function ExploreScreenBody() {
                 }
               }}
             />
+            {/* Over PLAY! (never the footer) only while a sheet is still leaving: a press there can never
+                present the challenge card into a half-dismissed sheet (core loop 4.3 rule 10). */}
+            {playTapHold && <View testID="play-ride-tap-hold" onStartShouldSetResponder={() => true}
+              accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+              style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 50 }} />}
           </View>
           <View
             style={{

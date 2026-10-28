@@ -45,6 +45,8 @@ export const modalLayers = {
   /** Tests only. */
   reset(): void { layers = []; emit(); },
 };
+// Dev builds: the lane tools read the layer list over the debugger (never in a store or OTA bundle).
+if (typeof __DEV__ !== 'undefined' && __DEV__) (globalThis as { __tpsModalLayers?: unknown }).__tpsModalLayers = { count: () => layers.length, ids: () => [...layers] };
 
 /** True while any sheet, dialog or the grown-up gate is up: ambient stage loops behind it rest. */
 export function useAnyModalLayer(): boolean {

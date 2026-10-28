@@ -9,6 +9,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, wi
 import client from '../api/client';
 import { AuthContext } from '../context/AuthProvider';
 import { playSfx } from '../gamekit/SFX';
+import { useNativeModalLayer } from '../ui/modalLayers';
 import Ribbon from './Ribbon';
 
 const PENDING_KEY = 'tps.pendingSharkDrop';
@@ -47,6 +48,9 @@ export default function SharkDropHandler() {
   const busy = useRef(false);
   const lid = useSharedValue(0);
   const prize = useSharedValue(0);
+  // A drop the player tapped a link for waits its turn behind any open sheet or dialog and holds its
+  // layer until UIKit says it is gone (core loop 4.3: through the queue and the native modal layer).
+  const layer = useNativeModalLayer(!!state, 'wait');
 
   const queue = async (url: string | null) => {
     const code = parseDropCode(url);
@@ -102,11 +106,11 @@ export default function SharkDropHandler() {
     r.item ? `${r.item.name} unlocked!` : null,
     r.tickets ? `+${r.tickets} ticket${r.tickets === 1 ? '' : 's'}` : null,
     r.coins ? `+${r.coins} coins` : null,
-    r.energy ? `+${r.energy} energy` : null,
+    r.energy ? `+${r.energy} Energy` : null,
   ].filter(Boolean) as string[] : [];
 
   return (
-    <Modal isVisible={!!state} backdropOpacity={0.75} animationIn="zoomIn" animationOut="zoomOut"
+    <Modal isVisible={layer.present} onDismiss={layer.onDismissed} backdropOpacity={0.75} animationIn="zoomIn" animationOut="zoomOut"
       onBackdropPress={state?.result || state?.error ? () => setState(null) : undefined}>
       <View style={styles.wrap}>
         <Ribbon text="Shark Drop!" />

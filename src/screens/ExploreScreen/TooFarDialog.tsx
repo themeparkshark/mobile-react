@@ -5,6 +5,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTimi
 import Ribbon from '../../components/Ribbon';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, DIALOG_CARD, GameButton, GameIcon, SPACE } from '../../ui';
+import { useNativeModalLayer } from '../../ui/modalLayers';
 
 /** Share of the walk already done, for the meter: 1 when in range, never below a sliver. */
 export function closenessFraction(distanceMeters: number | null, requiredMeters: number): number {
@@ -30,6 +31,8 @@ export default function TooFarDialog({ visible, distanceMeters, requiredMeters, 
   readonly onClose: () => void;
 }) {
   const reduced = useReducedGameMotion();
+  // Held until UIKit reports the card gone, so the next sheet never presents into it (core loop 4.3 rule 10).
+  const layer = useNativeModalLayer(visible, 'show');
   const fill = useSharedValue(0);
   const unknown = distanceMeters === null;
   const target = closenessFraction(distanceMeters, requiredMeters);
@@ -39,7 +42,7 @@ export default function TooFarDialog({ visible, distanceMeters, requiredMeters, 
   }, [visible, target, reduced, fill]);
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
   const title = unknown ? 'Finding you' : 'Almost there!';
-  return <Modal isVisible={visible} onBackdropPress={onClose} onBackButtonPress={onClose}
+  return <Modal isVisible={layer.present} onDismiss={layer.onDismissed} onBackdropPress={onClose} onBackButtonPress={onClose}
     animationIn={reduced ? 'fadeIn' : 'zoomIn'} animationOut={reduced ? 'fadeOut' : 'zoomOut'}
     animationInTiming={reduced ? 120 : 260} animationOutTiming={reduced ? 120 : 180}
     backdropColor={BRAND.navy} backdropOpacity={0.3}>

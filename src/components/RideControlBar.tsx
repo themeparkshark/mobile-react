@@ -11,6 +11,7 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import type { TaskType } from '../models/task-type';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, GameButton, GameIcon } from '../ui';
+import { useNativeModalLayer } from '../ui/modalLayers';
 import TeamBadge from './TeamBadge';
 
 /** The bar's title before any team holds a ride (never a ride-status claim). */
@@ -76,6 +77,9 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
   readonly onFocusTask: (task: TaskType) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // The sheet holds its modal layer until UIKit says it is gone, so PLAY! (or any sheet) that comes
+  // next never presents into a half-dismissed sheet (the PLAY RIDE freeze, core loop 4.3 rule 10).
+  const layer = useNativeModalLayer(open, 'show');
   const names = control?.team_names;
   useEffect(() => applyTeamNames(names), [names]);
   const held = control?.rides_held ?? { mouse: 0, globe: 0, shark: 0 };
@@ -129,7 +133,8 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
         </LinearGradient>
       </Pressable>
 
-      <Modal isVisible={open} onBackdropPress={() => setOpen(false)} onSwipeComplete={() => setOpen(false)}
+      <Modal isVisible={layer.present} onBackdropPress={() => setOpen(false)} onSwipeComplete={() => setOpen(false)}
+        onDismiss={layer.onDismissed}
         swipeDirection="down" style={styles.sheetModal} backdropColor={BRAND.navy} backdropOpacity={0.35}>
         <View style={styles.sheet}>
           <View style={styles.grabber} />
@@ -141,6 +146,8 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
                 : `Catch coins and earn Parts in line to win rides for ${teamName(yours, names)}.`
               : 'Pick a team to start winning rides.'}
           </Text>
+          {/* Team points and Captain are explained here, once, not on the win card (core loop 5.13). */}
+          <Text style={styles.sheetExplain}>Each coin you win gives your team points at that ride. The top player there is its Captain.</Text>
           <View style={styles.standings}>
             {TEAM_ORDER.map(team => (
               <View key={team} style={styles.standing}>
@@ -214,6 +221,7 @@ const styles = StyleSheet.create({
   sheetTitle: { fontFamily: 'Shark', fontSize: 28, color: BRAND.gold, textAlign: 'center', textShadowColor: BRAND.navy,
     textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   sheetSub: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff', textAlign: 'center', marginTop: 4 },
+  sheetExplain: { fontFamily: 'Knockout', fontSize: 13, color: '#cdeaff', textAlign: 'center', marginTop: 6 },
   standings: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 14 },
   standing: { alignItems: 'center' },
   standingBadge: { width: 54, height: 54 },

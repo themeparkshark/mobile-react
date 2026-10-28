@@ -7,6 +7,7 @@ const ui = { BRAND: new Proxy({}, { get: () => '#fff' }), DIALOG_CARD: {}, SPACE
 const load = (props, reduced = false) => runtime('src/screens/ExploreScreen/TooFarDialog.tsx', {
   '../../ui': ui, '../../components/Ribbon': { default: 'Ribbon' }, 'react-native-modal': { default: 'Modal' },
   '../../hooks/useReducedGameMotion': { default: () => reduced },
+  '../../ui/modalLayers': { useNativeModalLayer: wanted => ({ present: wanted, onDismissed() {} }) },
 }, { visible: true, distanceMeters: 42, requiredMeters: 14, homeItem: false, onClose: () => undefined, ...props });
 
 test('too-far dialog: ribbon title, blue card, a meter toward the pin, no emoji', () => {
@@ -19,13 +20,15 @@ test('too-far dialog: ribbon title, blue card, a meter toward the pin, no emoji'
   assert.ok(unknown.find(n => n.type === 'Ribbon' && n.props.text === 'Finding you'));
   assert.equal(unknown.find(n => n.props?.accessibilityLabel?.startsWith('You are')), undefined);
   assert.equal(load({}, true).find(n => n.type === 'Modal').props.animationIn, 'fadeIn');
+  // Held until UIKit reports the card gone (core loop 4.3 rule 10).
+  assert.equal(typeof app.find(n => n.type === 'Modal').props.onDismiss, 'function');
 });
 
 test('closeness meter fills toward the required radius', () => {
   const { closenessFraction, formatMeters } = loadTs('src/screens/ExploreScreen/TooFarDialog.tsx', {
     react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} }, 'react-native': { StyleSheet: { create: v => v } },
     'react-native-modal': {}, 'react-native-reanimated': { default: {} }, '../../components/Ribbon': {},
-    '../../hooks/useReducedGameMotion': {}, '../../ui': ui });
+    '../../hooks/useReducedGameMotion': {}, '../../ui': ui, '../../ui/modalLayers': {} });
   assert.equal(closenessFraction(10, 14), 1);
   assert.equal(closenessFraction(28, 14), 0.5);
   assert.equal(closenessFraction(100000, 14), 0.06);
