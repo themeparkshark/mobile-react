@@ -73,7 +73,7 @@ test('every PLAY can be pressed on 375 and 402 pt phones: PLAY first in its page
   const game = slot.slice(slot.indexOf('function MiniGameSlot('), slot.indexOf('// -- trivia'));
   // The game page is its own scroll window (PageScroll), like the clue and story pages, and PLAY leads it.
   assert.match(game, /<PageScroll fill=\{CARD_FILL\}>/);
-  const hero = game.indexOf('<ActivityHero'), play = game.indexOf('testID="lineplay-play"');
+  const hero = game.indexOf('<ActivityHero'), play = game.indexOf('<PlayFirst');
   assert.ok(hero >= 0 && play > hero, 'PLAY right under the banner');
   assert.ok(play < game.indexOf('styles.gamePlaceholder') && play < game.indexOf('styles.bestRow'), 'before any text');
   // Banner (110 pt, 46 pt slim) + gap + PLAY (about 56 pt) fits the smallest page window an iPhone SE shows (113 pt).

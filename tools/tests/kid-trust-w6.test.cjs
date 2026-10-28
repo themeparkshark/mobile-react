@@ -159,9 +159,13 @@ test('iPhone SE pages: the clue choices sit side by side, kid words, and the fin
   // Core loop must-fix 3: PLAY comes right under the banner on every phone, and NEW rides on PLAY's corner
   // (no NEW row that could sit half under the fade).
   const game = slot.slice(slot.indexOf('function MiniGameSlot('), slot.indexOf('// -- trivia'));
-  assert.ok(game.indexOf('testID="lineplay-play"') < game.indexOf('styles.bestRow'), 'PLAY before the best-stars row');
-  assert.ok(game.indexOf('testID="lineplay-play"') < game.indexOf('styles.gamePlaceholder'), 'PLAY before the game blurb');
-  assert.match(game, /\{newGame && bestStars == null && !completed && <View pointerEvents="none" style=\{\[styles\.newPill, styles\.newCorner\]\}>/, 'NEW leaves once the game was played');
+  assert.ok(game.indexOf('<PlayFirst') < game.indexOf('styles.bestRow'), 'PLAY before the best-stars row');
+  assert.ok(game.indexOf('<PlayFirst') < game.indexOf('styles.gamePlaceholder'), 'PLAY before the game blurb');
+  assert.match(game, /newTag=\{newGame && bestStars == null && !completed\}/, 'NEW leaves once the game was played');
+  const play = slot.slice(slot.indexOf('function PlayFirst('), slot.indexOf('function MiniGameSlot('));
+  assert.match(play, /\{newTag && <View pointerEvents="none" style=\{\[styles\.newPill, styles\.newCorner\]\}>/, 'NEW rides on PLAY');
+  assert.match(play, /const short = heroSlim\(useContext\(PageHeightContext\)\);/, 'inside the page window: it knows the window is short');
+  assert.match(play, /fullWidth=\{!short\} size=\{short \? 'compact' : 'regular'\}/);
   const chapters = read('src/services/lineplay/chapters.ts');
   assert.doesNotMatch(chapters, /inspires your clue/);
 });

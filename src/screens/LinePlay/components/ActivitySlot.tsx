@@ -170,6 +170,24 @@ export default function ActivitySlot({
 
 // -- minigame launch card ----------------------------------------------------
 
+/**
+ * The game page's PLAY, right under the banner. Inside the page window (it reads the window's height), so a
+ * short window (iPhone SE) gets a compact PLAY under the slim banner and all of it sits above the fade.
+ */
+function PlayFirst({ label, icon, paused, onPress, accessibilityLabel, newTag }: {
+  label: string; icon: 'play' | 'retry'; paused: boolean; onPress: () => void; accessibilityLabel: string; newTag: boolean;
+}) {
+  const short = heroSlim(useContext(PageHeightContext));
+  return <View testID="lineplay-play" style={[styles.playFirst, short && styles.playFirstShort]}>
+    <View>
+      <GameButton label={label} icon={icon} disabled={paused} fullWidth={!short} size={short ? 'compact' : 'regular'}
+        onPress={onPress} accessibilityLabel={accessibilityLabel} />
+      {newTag && <View pointerEvents="none" style={[styles.newPill, styles.newCorner]}>
+        <Text style={styles.newPillText}>NEW</Text></View>}
+    </View>
+  </View>;
+}
+
 function MiniGameSlot({
   item,
   navigator,
@@ -197,21 +215,15 @@ function MiniGameSlot({
   // A story clue (its mission name came in) says STORY; every free round says GAMES (the two LinePlay tabs).
   const kicker = title != null || isStarChart ? 'STORY' : 'GAMES';
   const playLabel = completed && item.gameId === 'showdown' ? 'Rematch' : completed ? 'Play again' : 'Play';
-  // A short window (iPhone SE): the slim banner and a compact PLAY, so the whole button sits above the fade.
-  const short = heroSlim(useContext(PageHeightContext));
   return (
     <PageScroll fill={CARD_FILL}>
       {/* PLAY comes right under the banner on every phone, so the one thing to press is on the first screen
           of the page (never below the fold or behind the rail on a 375 or 402 pt phone). What the game is
           and the best stars follow it. */}
       <ActivityHero kicker={kicker} title={label} navigator={navigator} />
-      <View testID="lineplay-play" style={[styles.playFirst, short && styles.playFirstShort]}>
-        <GameButton label={playLabel} icon={completed ? 'retry' : 'play'} disabled={paused} fullWidth={!short}
-          size={short ? 'compact' : 'regular'} onPress={() => onPlayGame(item)}
-          accessibilityLabel={`${playLabel}: ${label}${newGame && bestStars == null && !completed ? '. New game' : ''}`} />
-        {newGame && bestStars == null && !completed && <View pointerEvents="none" style={[styles.newPill, styles.newCorner]}>
-          <Text style={styles.newPillText}>NEW</Text></View>}
-      </View>
+      <PlayFirst label={playLabel} icon={completed ? 'retry' : 'play'} paused={paused} onPress={() => onPlayGame(item)}
+        accessibilityLabel={`${playLabel}: ${label}${newGame && bestStars == null && !completed ? '. New game' : ''}`}
+        newTag={newGame && bestStars == null && !completed} />
       {bestStars != null && <View style={styles.bestRow} accessible
         accessibilityLabel={`Best this wait: ${bestStars} of 3 stars`}>
         {[1, 2, 3].map(slot => <GameIcon key={slot} name="star" size={24}
