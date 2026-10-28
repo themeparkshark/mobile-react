@@ -70,7 +70,7 @@ test('BattleHUD: polls the gym on the shared clock, pauses in the background, re
   view.unmount();
 });
 
-test('QueueTimesScreen: the countdown only ticks on screen in the foreground, and a stale list refreshes on return', async () => {
+test('QueueTimesScreen: the minute refresh only runs on screen in the foreground, and a stale list refreshes on return', async () => {
   let now = 5_000_000;
   const intervals = new Map(); let seq = 0;
   const loads = [];
@@ -86,6 +86,7 @@ test('QueueTimesScreen: the countdown only ticks on screen in the foreground, an
     '../services/lineplay/queueWaitPresentation': loadTs('src/services/lineplay/queueWaitPresentation.ts'),
     // Wait Times plans the next coin through the guide (core loop 5.5).
     '../services/guide/nextCoin': loadTs('src/services/guide/nextCoin.ts'),
+    '../api/endpoints/me/ride-coins': { default: async () => ({ data: [] }), __esModule: true },
   }, { route: { params: { park: 7 } } }, {
     Date: { now: () => now },
     setInterval: (fn, ms) => { const id = ++seq; intervals.set(id, { fn, ms }); return id; },
@@ -93,9 +94,10 @@ test('QueueTimesScreen: the countdown only ticks on screen in the foreground, an
   });
   await view.settle();
   assert.equal(loads.length, 1, 'first load');
-  assert.equal(intervals.size, 1, 'countdown running on screen');
+  assert.equal(intervals.size, 1, 'the minute refresh runs on screen');
+  assert.deepEqual([...intervals.values()].map(i => i.ms), [60_000], 'one quiet fetch a minute, no ticking seconds');
   active = false; view.render();
-  assert.equal(intervals.size, 0, 'countdown stops in the background');
+  assert.equal(intervals.size, 0, 'the refresh stops in the background');
   now += 61_000;
   active = true; view.render(); await view.settle();
   assert.equal(loads.length, 2, 'stale after a minute away: refreshed at once');

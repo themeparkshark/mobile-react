@@ -331,6 +331,14 @@ test('Wait Times plans the next coin through the guide', () => {
   assert.match(screen, /guide\.setTarget\(taskId, 'wait_times'\);/);
   assert.match(screen, /Make this my next coin/);
   assert.match(screen, /Your next coin/);
+  // Never on a coin already on the shelf, and the chip follows the guide store, never the tap alone.
+  assert.match(screen, /coinTaskId=\{notOwned\(coinTasks\.get\(item\.name\)\)\}/);
+  assert.match(screen, /coin => coin\.ride_id/);
+  assert.match(screen, /isNextCoin=\{coinTasks\.get\(item\.name\) != null && coinTasks\.get\(item\.name\) === guidePick\.current\}/);
+  assert.doesNotMatch(screen, /setNextCoinTask\(taskId\)/);
+  // No ticking seconds on Wait Times (rule 7).
+  assert.doesNotMatch(screen, /refresh \$\{countdown\}s|countdown/);
+  assert.match(screen, /updates every minute/);
 });
 
 // -- One question per wait, across an app relaunch (round 1 grader blocker) ----------------------------

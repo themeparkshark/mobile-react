@@ -29,6 +29,7 @@ import {
 import { LocationContext } from '../context/LocationProvider';
 import { coinTasksByRideName, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
 import { guide } from '../services/guide/nextCoin';
+import getRideCoins from '../api/endpoints/me/ride-coins';
 import { queuePlayPolicy } from '../services/lineplay/queuePlayPolicy';
 import { compareQueueWaits, postedStandbyWait } from '../services/lineplay/queueWaitPresentation';
 import { UpperText } from '../ui/upper';
@@ -114,14 +115,17 @@ const RideCard = ({
   onStartSession,
   coinTaskId = null,
   isNextCoin = false,
+  isPlanned = false,
   onMakeNextCoin,
 }: {
   entry: WikiLiveEntry;
   onStartSession: (entry: WikiLiveEntry) => void;
   /** This ride's coin (null: no coin to win here). */
   coinTaskId?: number | null;
-  /** The guide already points at this ride's coin. */
+  /** The guide points at this ride's coin now (guide.current()). */
   isNextCoin?: boolean;
+  /** Kept as the player's plan (guide.plan()) while the guide points elsewhere, e.g. another park. */
+  isPlanned?: boolean;
   /** Plan the next coin: the guide's one pointer (guide.setTarget). */
   onMakeNextCoin?: (taskId: number, name: string) => void;
 }) => {
@@ -155,7 +159,7 @@ const RideCard = ({
               style={({ pressed }) => [styles.sessionBtn, pressed && styles.sessionBtnPressed]}
               hitSlop={6}
             >
-              {/* A drawn play icon: the game font has no play-arrow glyph (it drew a box). */}
+              {/* LinePlay's own picture (the line's posts and rope); the pocket watch is Wait Times. */}
               <GameIcon name="line" size={20} />
               <Text style={styles.sessionBtnText}>{entry.status === 'DOWN'
                 ? 'PLAY WHILE YOU WAIT' : 'PLAY IN LINE'}</Text>
@@ -163,10 +167,11 @@ const RideCard = ({
           )}
           {/* Wait Times plans the next coin (core loop 5.5): one tap makes this ride the guide's target. */}
           {coinTaskId != null && onMakeNextCoin && entry.status === 'OPERATING' && (
-            isNextCoin ? (
-              <View style={styles.nextCoinDone} accessible accessibilityLabel={`${entry.name} is your next coin`}>
+            isNextCoin || isPlanned ? (
+              <View style={styles.nextCoinDone} accessible
+                accessibilityLabel={isNextCoin ? `${entry.name} is your next coin` : `${entry.name} is in your plan`}>
                 <GameIcon name="check" size={16} />
-                <Text style={styles.nextCoinDoneText}>Your next coin</Text>
+                <Text style={styles.nextCoinDoneText}>{isNextCoin ? 'Your next coin' : 'In your plan'}</Text>
               </View>
             ) : (
               <Pressable onPress={() => onMakeNextCoin(coinTaskId, entry.name)} accessibilityRole="button"
@@ -257,7 +262,6 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   const [filterMode, setFilterMode] = useState<FilterMode>('open');
   const [lastUpdated, setLastUpdated] = useState<number>(0);
   const [feedError, setFeedError] = useState(false);
-  const [countdown, setCountdown] = useState(60);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fetchGeneration = useRef(0);
 
@@ -270,7 +274,6 @@ export default function QueueTimesScreen({ route }: { route: any }) {
       if (generation !== fetchGeneration.current) return;
       setAttractions(data);
       setLastUpdated(Date.now());
-      setCountdown(60);
     } catch (e) {
       if (generation === fetchGeneration.current) {
         setFeedError(true);
@@ -303,8 +306,8 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   };
 
   // Auto-refresh every 60s, only while this screen is on screen and the app is
-  // in front (a 1 s countdown plus a fetch kept running under other screens
-  // and in a pocket). Coming back past due refreshes at once.
+  // in front. No ticking seconds on screen (core loop 4.3 rule 7): one quiet
+  // fetch a minute. Coming back past due refreshes at once.
   const screenFocused = useIsFocused();
   const appActive = useAppActive();
   const ticking = screenFocused && appActive;
@@ -318,15 +321,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   }, [ticking]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!ticking) return undefined;
-    timerRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          fetchData(false);
-          return 60;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    timerRef.current = setInterval(() => { void fetchData(false); }, QUEUE_TIMES_REFRESH_MS);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -339,8 +334,20 @@ export default function QueueTimesScreen({ route }: { route: any }) {
 
   // Each row's coin task (for "Make this my next coin") and the coin the guide points at now.
   const [coinTasks, setCoinTasks] = useState<Map<string, number>>(new Map());
-  const [nextCoinTask, setNextCoinTask] = useState<number | null>(guide.current()?.taskId ?? guide.plan());
-  useEffect(() => guide.subscribe(() => setNextCoinTask(guide.current()?.taskId ?? guide.plan())), []);
+  // The chip follows the guide store: "Your next coin" only once the guide really points there, "In your
+  // plan" while the pick is kept as the plan (another park, or the map has not resolved yet).
+  const [guidePick, setGuidePick] = useState(() => ({ current: guide.current()?.taskId ?? null, plan: guide.plan() }));
+  useEffect(() => guide.subscribe(() => setGuidePick({ current: guide.current()?.taskId ?? null, plan: guide.plan() })), []);
+  // Coins already on the shelf never get "Make this my next coin": the guide never points at an owned coin.
+  const [ownedTasks, setOwnedTasks] = useState<ReadonlySet<number>>(new Set());
+  useEffect(() => {
+    if (previewEntries) return;
+    let live = true;
+    void getRideCoins(5_000).then(response => {
+      if (live) setOwnedTasks(new Set(response.data.map(coin => coin.ride_id).filter(id => Number.isInteger(id) && id > 0)));
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [previewEntries]);
   const attractionNames = attractions.map(entry => entry.name).join('|');
   useEffect(() => {
     if (!attractionNames) return;
@@ -349,9 +356,9 @@ export default function QueueTimesScreen({ route }: { route: any }) {
       .then(tasks => { if (live) setCoinTasks(tasks); }).catch(() => undefined);
     return () => { live = false; };
   }, [selectedPark, attractionNames]);
+  const notOwned = (taskId: number | undefined) => taskId != null && !ownedTasks.has(taskId) ? taskId : null;
   const makeNextCoin = useCallback((taskId: number) => {
     guide.setTarget(taskId, 'wait_times');
-    setNextCoinTask(taskId);
   }, []);
 
   // Start a LinePlay session for a wait-times row. Resolves the numeric ride id
@@ -456,7 +463,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
           </Text>
           <View style={styles.statusRight}>
             <Text style={styles.updatedText}>
-              {previewEntries ? 'SAMPLE DATA' : `${lastUpdated ? `Checked ${timeAgo(lastUpdated)}` : ''} · refresh ${countdown}s`}
+              {previewEntries ? 'SAMPLE DATA' : lastUpdated ? `Checked ${timeAgo(lastUpdated)} · updates every minute` : 'Updates every minute'}
             </Text>
           </View>
         </View>
@@ -497,9 +504,11 @@ export default function QueueTimesScreen({ route }: { route: any }) {
           data={processedData}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <RideCard entry={item} onStartSession={handleStartSession}
-            coinTaskId={coinTasks.get(item.name) ?? null} isNextCoin={coinTasks.get(item.name) === nextCoinTask}
+            coinTaskId={notOwned(coinTasks.get(item.name))}
+            isNextCoin={coinTasks.get(item.name) != null && coinTasks.get(item.name) === guidePick.current}
+            isPlanned={coinTasks.get(item.name) != null && coinTasks.get(item.name) === guidePick.plan}
             onMakeNextCoin={makeNextCoin} />}
-          extraData={`${nextCoinTask}-${coinTasks.size}`}
+          extraData={`${guidePick.current}-${guidePick.plan}-${coinTasks.size}-${ownedTasks.size}`}
           estimatedItemSize={80}
           contentContainerStyle={styles.listContent}
           refreshControl={
