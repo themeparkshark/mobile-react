@@ -9,7 +9,7 @@ import { openAppSettings } from '../../services/external';
 import type { MotionAccess } from '../../services/trail/TrailProvider';
 import { getSeen, setSeen } from '../../services/trail/trailSeen';
 import {
-  BOX_NAME, boxName, bonusLabel, boxFraction, formatDistance, formatSteps, knownContents, missNote, oddsTiers, percent, stepsToGo, usesMiles,
+  BOX_NAME, boxName, bonusLabel, boxFraction, formatDistance, formatSteps, knownContents, missNote, oddsTiers, stepsToGo, usesMiles,
   type TrailBox, type TrailOddsTier, type TrailState, type TrailTier,
 } from '../../services/trail/trailModel';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, confirmGame, type GameIconName } from '../../ui';
@@ -383,7 +383,6 @@ function Exclusives({ items }: { readonly items: NonNullable<TrailState['exclusi
 function Inside({ state }: { readonly state: TrailState }) {
   const known = knownContents(state);
   const odds = oddsTiers(state);
-  const [showChances, setShowChances] = useState(false);
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
       {known ? (
@@ -423,13 +422,8 @@ function Inside({ state }: { readonly state: TrailState }) {
         </>
       ) : odds ? (
         <>
-          {/* Random mode (preview only): what every box always holds, then the chances in a plain section you open. */}
-          {odds.map(t => <TierCard key={t.tier} tier={t.tier} t={t} showChances={showChances} />)}
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: showChances }} onPress={() => setShowChances(v => !v)}
-            style={[styles.card, styles.rowCard]}>
-            <GameIcon name="info" size={26} />
-            <Text style={[styles.body, { flex: 1 }]}>{showChances ? 'Hide the chances' : 'Show the chances'}</Text>
-          </Pressable>
+          {/* An older server still in random mode: what every box holds, in pictures. Never a percent (Dustin, Oct 28: no odds anywhere). */}
+          {odds.map(t => <TierCard key={t.tier} tier={t.tier} t={t} />)}
         </>
       ) : (
         <View style={[styles.card, { marginTop: 10 }]}>
@@ -440,7 +434,7 @@ function Inside({ state }: { readonly state: TrailState }) {
   );
 }
 
-function TierCard({ tier, t, showChances }: { readonly tier: TrailTier; readonly t: TrailOddsTier; readonly showChances: boolean }) {
+function TierCard({ tier, t }: { readonly tier: TrailTier; readonly t: TrailOddsTier }) {
   return (
     <View style={[styles.card, { marginTop: 10 }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -450,21 +444,19 @@ function TierCard({ tier, t, showChances }: { readonly tier: TrailTier; readonly
           <Text style={styles.body}>Opens after {formatSteps(t.goal_steps)} steps</Text>
         </View>
       </View>
-      <OddsRow icon="coins" label={`${formatSteps(t.coins)} Coins`} pct="ALWAYS" />
-      {t.always.map((a, i) => <OddsRow key={`a${i}`} icon={KIND_ICON[a.kind]} label={bonusLabel(a.kind, a.amount)} pct="ALWAYS" />)}
+      <OddsRow icon="coins" label={`${formatSteps(t.coins)} Coins`} />
+      {t.always.map((a, i) => <OddsRow key={`a${i}`} icon={KIND_ICON[a.kind]} label={bonusLabel(a.kind, a.amount)} />)}
       <Text style={[styles.earnSub, { marginTop: 6 }]}>Plus one of these:</Text>
-      {t.bonus.map((b, i) => <OddsRow key={i} icon={KIND_ICON[b.kind]} label={b.note === 'owns_all_exclusives' ? `${formatSteps(b.amount)} Coins (you have every Trail Exclusive!)` : bonusLabel(b.kind, b.amount)} pct={showChances ? percent(b.chance_bp) : ''} />)}
-      {showChances && <Text style={[styles.earnSub, { marginTop: 6 }]}>This box comes {percent(t.chance_bp)} of the time.</Text>}
+      {t.bonus.map((b, i) => <OddsRow key={i} icon={KIND_ICON[b.kind]} label={b.note === 'owns_all_exclusives' ? `${formatSteps(b.amount)} Coins (you have every Trail Exclusive!)` : bonusLabel(b.kind, b.amount)} />)}
     </View>
   );
 }
 
-function OddsRow({ icon, label, pct }: { readonly icon: GameIconName; readonly label: string; readonly pct: string }) {
+function OddsRow({ icon, label }: { readonly icon: GameIconName; readonly label: string }) {
   return (
-    <View style={styles.oddsRow} accessible accessibilityLabel={`${label}: ${pct}`}>
+    <View style={styles.oddsRow} accessible accessibilityLabel={label}>
       <GameIcon name={icon} size={24} />
       <Text style={[styles.body, { flex: 1, marginLeft: 8 }]}>{label}</Text>
-      <Text style={styles.oddsVal}>{pct}</Text>
     </View>
   );
 }
@@ -537,6 +529,4 @@ const styles = StyleSheet.create({
   knob: { width: 24, height: 24, borderRadius: 12, backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.navy },
   knobOn: { alignSelf: 'flex-end' },
   oddsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-  oddsVal: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },
-  oddsPct: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, marginTop: 2 },
 });

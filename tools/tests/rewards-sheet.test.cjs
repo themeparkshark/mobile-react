@@ -211,7 +211,7 @@ test('rungs: Daily 3, level chests, Trail Boxes, events and the pass banner wait
   assert.match(banner, /route\?\.name\?\.toLowerCase\(\) === 'store'/, 'Supplies keeps its own door (never waits for a rung)');
 });
 
-test('Trail Boxes: known contents in pictures with no percent sign; odds only collapsed in random mode', () => {
+test('Trail Boxes: known contents in pictures with no percent sign anywhere, even from an older random-mode server', () => {
   const trail = loadTs('src/services/trail/trailModel.ts');
   const fixed = { mode: 'fixed', contents: [{ tier: 'blue', goal_steps: 1500, rewards: [{ kind: 'coins', amount: 40 }, { kind: 'tickets', amount: 1 }] }] };
   assert.equal(trail.knownContents(fixed).length, 1);
@@ -226,7 +226,8 @@ test('Trail Boxes: known contents in pictures with no percent sign; odds only co
   assert.ok(knownPart.length > 200);
   assert.doesNotMatch(knownPart, /percent\(|%/, 'no percent anywhere in known contents');
   assert.doesNotMatch(sheet, /GrownUpGate|askGrownUp/, 'odds are never behind the grown-up gate');
-  assert.match(inside, /showChances \? 'Hide the chances' : 'Show the chances'/, 'random mode: chances in a plain collapsed section');
+  // Dustin, Oct 28: no odds anywhere. An older server in random mode still shows only what boxes hold.
+  assert.doesNotMatch(sheet, /percent\(|chance_bp|chances/i, 'the Trail sheet never shows a chance or a percent');
   assert.match(sheet, /inPark \? 'Today at the park' : 'Your walking'/, 'never park words at home');
   assert.match(sheet, /STEPS NOT COUNTED/, 'says why steps did not count');
   // The host decides home or park from the player's location when the map does not say.
@@ -327,4 +328,30 @@ test('one door: the next native sheet waits for the overlay native dismiss, and 
   assert.match(hook, /onModalShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
   assert.match(hook, /case 'daily_chest': closeThen\(\(\) => \{ askForDailyChest\(\); o\.onOpenChest\(\); \}\); return;/,
     'the chest is asked for only after the overlay is gone');
+});
+
+test("the map's attention gate: asked when guide-map publishes it, quiet fallback when this build has none", () => {
+  const without = loadTs('src/services/retention/mapAttention.ts', { '../../screens/ExploreScreen/mapPresentationQueue': {} });
+  assert.equal(without.mapAllows('membership'), null, 'no gate: callers keep their own calm rules');
+  assert.equal(without.mapTake('reward'), true);
+  const asked = [];
+  let calm = false;
+  const gate = {
+    allowed: kind => { asked.push(`allowed ${kind}`); return calm; },
+    request: kind => { asked.push(`request ${kind}`); return calm; },
+  };
+  const withGate = loadTs('src/services/retention/mapAttention.ts', { '../../screens/ExploreScreen/mapPresentationQueue': { attentionGate: gate } });
+  assert.equal(withGate.mapAllows('membership'), false, 'a busy park moment (first 30 s, walking, play, fresh win card) waits');
+  assert.equal(withGate.mapTake('reward'), false);
+  calm = true;
+  assert.equal(withGate.mapAllows('membership'), true);
+  assert.equal(withGate.mapTake('membership'), true, 'takes the one automatic open');
+  assert.deepEqual(asked, ['allowed membership', 'request reward', 'allowed membership', 'request membership']);
+  // The member look host and the retention auto opens both ask it.
+  const host = read('src/components/MemberLookHost.tsx');
+  assert.match(host, /parkBusy: mapSays === null \? undefined : !mapSays/);
+  assert.match(host, /!mapTake\('membership'\)/);
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /if \(!may\('level_chest'\) \|\| !mapTake\('reward'\)\) return;/);
+  assert.match(hook, /mapAllows\('reward'\) === false \|\| !mapTake\('reward'\)/, 'the reminders ask too');
 });

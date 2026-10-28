@@ -188,8 +188,9 @@ test('one flame number: Daily 3 owns the flame while it is on, and ride days nev
     '../../api/endpoints/retention': { getDailyThree: async () => null },
     './flags': flags,
     './useOwnStreak': { ownStreakOf: () => null },
+    '../reveal/revealLadder': { useRung: () => ({ open: true, isNew: false, markSeen() {} }) },
   });
-  assert.equal(flame.flameStreak('chest', 4, 9), 4);
+  assert.equal(flame.flameStreak('chest', 4, 9), null, 'core loop: the chest day ladder is never a flame');
   assert.equal(flame.flameStreak('daily3', 4, 9), 9);
   assert.equal(flame.flameStreak('daily3', 4, null), null, 'waits for the Daily 3 number, never shows the chest one');
   assert.equal(flame.flameStreak(null, 4, 9), null);
@@ -201,6 +202,7 @@ test('one flame number: Daily 3 owns the flame while it is on, and ride days nev
     '../../api/endpoints/retention': { getDailyThree: async () => null },
     './flags': { ...flags, loadRetentionFlags: async () => { reads += 1; return null; } },
     './useOwnStreak': { ownStreakOf: () => null },
+    '../reveal/revealLadder': { useRung: () => ({ open: true, isNew: false, markSeen() {} }) },
   });
   warm.default(4, false);
   assert.equal(reads, 1, 'reads once on mount, before the first open');

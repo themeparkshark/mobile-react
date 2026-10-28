@@ -33,6 +33,7 @@ import {
 } from '../../services/retention/rewardPresence';
 import { emptyLine, rewardsRows, rewardsSummary, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
 import { openRewardsDoor } from '../../services/retention/rewardsSignals';
+import { mapAllows, mapTake } from '../../services/retention/mapAttention';
 import { boxFraction, headlineBox } from '../../services/trail/trailModel';
 import { useTrail } from '../../services/trail/TrailProvider';
 import useLiveEvent from '../../services/liveEvents/useLiveEvent';
@@ -273,13 +274,14 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   // freeze that saved the flame says so once. At a park they wait in the Rewards sheet (BLUEPRINT 4.3).
   const pendingChest = wantChestsOn ? nextLevelChest(chests) : null;
   const freezeSaved = daily?.streak.freeze_saved ?? 0;
+  // The map's own attention rules (guide-map's gate) must agree too, when this build has them.
   const may = (kind: 'level_chest' | 'freeze_saved') => rewardMayAutoOpen({ kind, atPark, firstCatchDone: true,
-    autoOpenUsed: autoOpenUsed(), dailyRungOpen: dailyOpen });
+    autoOpenUsed: autoOpenUsed(), dailyRungOpen: dailyOpen }) && mapAllows('reward') !== false;
   useEffect(() => {
     if (view || !o.screenFree || !o.mapFocused || !o.enabled) return;
     if (pendingChest && may('level_chest')) {
       const timer = setTimeout(() => {
-        if (!may('level_chest')) return;
+        if (!may('level_chest') || !mapTake('reward')) return;
         noteAutoOpen();
         setView(v => v ?? { k: 'reveal', src: 'level', level: pendingChest.level, rewards: null, opening: false });
         playSfx('fx.reveal');
@@ -288,7 +290,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     }
     if (freezeSaved > 0 && daily && may('freeze_saved')) {
       const timer = setTimeout(() => {
-        if (!may('freeze_saved')) return;
+        if (!may('freeze_saved') || !mapTake('reward')) return;
         noteAutoOpen();
         setView(v => v ?? { k: 'freezeSaved', days: freezeSaved, streak: daily.streak.days });
       }, 700);
@@ -304,7 +306,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     let live = true;
     const timer = setTimeout(() => {
       void mayAskForPush().then(ok => {
-        if (!live || !ok || autoOpenUsed()) return;
+        if (!live || !ok || autoOpenUsed() || mapAllows('reward') === false || !mapTake('reward')) return;
         noteAutoOpen();
         setView(v => v ?? { k: 'push' });
       });

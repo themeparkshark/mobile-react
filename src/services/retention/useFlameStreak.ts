@@ -2,14 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { getDailyThree } from '../../api/endpoints/retention';
 import { loadRetentionFlags, retentionFlagsNow, streakOwner } from './flags';
 import { ownStreakOf } from './useOwnStreak';
+import { useRung } from '../reveal/revealLadder';
 
 /**
  * The one flame number (see streakOwner): the Daily 3 streak while Daily 3 is
- * on, else the Daily Chest streak. Null while unknown, so the row waits
- * instead of showing a number that disagrees with the Daily 3 button.
+ * on. The daily chest's day ladder is never a streak (core loop 4.5), so a
+ * 'chest' owner (an older caller) shows nothing. Null while unknown, so the
+ * row waits instead of showing a number that disagrees with the Daily 3 button.
  */
 export function flameStreak(owner: 'daily3' | 'chest' | null, chest: number | null | undefined, daily3: number | null): number | null {
-  if (owner === 'chest') return typeof chest === 'number' ? chest : null;
+  void chest;
   if (owner === 'daily3') return daily3;
   return null;
 }
@@ -21,6 +23,8 @@ export function flameStreak(owner: 'daily3' | 'chest' | null, chest: number | nu
  * `active` turns true. Closing the menu reads nothing.
  */
 export default function useFlameStreak(chest: number | null | undefined, active: boolean) {
+  // The flame arrives with Daily 3 (rung 4): before that there is no streak number anywhere.
+  const dailyOpen = useRung('daily').open;
   const [owner, setOwner] = useState(() => streakOwner(retentionFlagsNow()));
   const [daily3, setDaily3] = useState<number | null>(null);
   const warmed = useRef(false);
@@ -37,5 +41,5 @@ export default function useFlameStreak(chest: number | null | undefined, active:
     });
     return () => { live = false; };
   }, [active]);
-  return { owner, streak: flameStreak(owner, chest, daily3) };
+  return { owner, streak: dailyOpen ? flameStreak(owner, chest, daily3) : null };
 }

@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { LocationStatusContext } from '../context/LocationProvider';
 import { autoOpenUsed, noteAutoOpen, rewardMayAutoOpen } from '../services/retention/rewardPresence';
+import { mapAllows, mapTake } from '../services/retention/mapAttention';
 import { modalLayers } from '../ui/modalLayers';
 import { dismissMemberLook, memberLookNoteSeen, restoreMemberLook } from '../api/endpoints/me/member-look';
 import { AuthContext } from '../context/AuthProvider';
@@ -56,7 +57,11 @@ export default function MemberLookHost() {
 
   const check = async () => {
     if (busy.current || playerId == null) return;
-    if (!rewardMayAutoOpen({ kind: 'member_look', atPark: atParkRef.current, firstCatchDone: true, autoOpenUsed: autoOpenUsed(), dailyRungOpen: true })) {
+    // The map's attention rules (guide-map's gate) say when a park moment is calm; without the gate a park always waits.
+    const mapSays = mapAllows('membership');
+    const calm = () => rewardMayAutoOpen({ kind: 'member_look', atPark: atParkRef.current, firstCatchDone: true,
+      autoOpenUsed: autoOpenUsed(), dailyRungOpen: true, parkBusy: mapSays === null ? undefined : !mapSays }) && mapSays !== false;
+    if (!calm()) {
       deferred.current = true;
       return;
     }
@@ -68,8 +73,11 @@ export default function MemberLookHost() {
       const asks = (state.note && !state.member) || (state.restore && state.member && Object.keys(state.restore).length > 0);
       if (!asks) return;
       await whenNoLayer();
-      // Walked into a park, or something else opened by itself meanwhile: ask on the next calm home open.
-      if (atParkRef.current || autoOpenUsed()) { deferred.current = true; return; }
+      // Walked into a busy park moment, or something else opened by itself meanwhile: ask on the next calm open.
+      const nowSays = mapAllows('membership');
+      if (autoOpenUsed() || nowSays === false || (atParkRef.current && nowSays === null) || !mapTake('membership')) {
+        deferred.current = true; return;
+      }
       deferred.current = false;
       noteAutoOpen();
       if (state.note && !state.member) {
@@ -110,6 +118,12 @@ export default function MemberLookHost() {
   useEffect(() => { void check(); }, [playerId, member]);
   // Back home: a deferred ask gets its turn.
   useEffect(() => { if (!atPark && deferred.current) void check(); }, [atPark]); // eslint-disable-line react-hooks/exhaustive-deps
+  // At a park, a waiting ask looks again once a minute for a calm moment (no request until the map says calm).
+  useEffect(() => {
+    if (!atPark || playerId == null) return undefined;
+    const timer = setInterval(() => { if (deferred.current && !busy.current && mapAllows('membership') === true) void check(); }, 60_000);
+    return () => clearInterval(timer);
+  }, [atPark, playerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
