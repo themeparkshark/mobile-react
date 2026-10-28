@@ -136,7 +136,8 @@ test('a Share Studio sheet fades out before the grown-up gate, and is a layer wh
   const host = src('src/share/ShareStudioHost.tsx');
   assert.match(host, /const uri = await captureFlex\(cardRef, format\);[\s\S]{0,400}setStage\('leaving'\);[\s\S]{0,700}const outcome = await openShareSheet\(uri, shareMessage\(link\), shareCardFileName\(request\.kind\), copyLink\);/,
     'the picture is made first, then the sheet leaves, then the gate and share sheet');
-  assert.match(host, /useModalLayer\(stage !== 'gone', 'show'\)/, 'Root dialogs and the gate wait for the sheet');
+  assert.match(host, /useNativeModalLayer\(stage !== 'gone', 'wait'\)/, 'Root dialogs and the gate wait for the sheet, and it waits its turn');
+  assert.match(host, /visible: stage === 'shown' && layer\.present/, 'the Studio presents only when it is in front');
   assert.equal((host.match(/visible=\{visible\} onShow=\{onShow\} onDismiss=\{onDismiss\}/g) || []).length, 2, 'sheet and moment both hand off');
   assert.match(host, /finally \{[\s\S]{0,400}else finishFlex\(request\.id\);/, 'done or failed, the sheet closes so the retry note can show');
   // A grown-up "Not now" (the share sheet never opened) brings the Studio back instead of closing it.
@@ -277,10 +278,15 @@ test('the Flex moment has release callers: park day (held in the park), streak a
   assert.deepEqual(reveals.map(r => r[0]), ['level_up', 'level_up', 'level_up', 'streak', 'park_day']);
   // Park days stay held while the player is in the park (store.ts HOLD_IN_PARK).
   assert.match(src('src/share/store.ts'), /HOLD_IN_PARK: ReadonlySet<string> = new Set\(\['park_day', 'ride_coin'\]\)/);
+  // Core loop (blueprint 4.3): Flex reveals never open full screen by themselves. The park day lives
+  // on the shelf's story card with Share; level up and streak get a Share button where they show.
   const recap = src('src/screens/ParkDayRecapCard.tsx');
-  assert.match(recap, /flexRevealOnce\('park_day', `\$\{parkId\}:\$\{day\}`, parkDayFlexPayload\(result\), \{ surface: 'park_day',\s*refresh: \(\) => loadRecap\(parkId, day\)/);
-  assert.match(src('src/screens/ProfileScreen.tsx'), /flexRevealOnce\('streak'/);
-  assert.match(src('src/components/Experience.tsx'), /flexRevealOnce\('level_up', `\$\{player\.id\}:\$\{level\}`, \{ level, xp: Number\(player\.total_experience\) \|\| undefined \}/);
+  assert.doesNotMatch(recap, /flexRevealOnce/);
+  assert.match(recap, /shareFlex\('park_day', parkDayFlexPayload\(recap\)/);
+  assert.doesNotMatch(src('src/screens/ProfileScreen.tsx'), /flexRevealOnce/);
+  assert.match(src('src/screens/ProfileScreen.tsx'), /<FlexShareButton kind="streak"/);
+  assert.doesNotMatch(src('src/components/Experience.tsx'), /flexRevealOnce/);
+  assert.match(src('src/components/Experience.tsx'), /<FlexShareButton kind="level_up"/);
   // The host saves the key only from the moment's onShow.
   const host = src('src/share/ShareStudioHost.tsx');
   assert.match(host, /const onShow = \(\) => \{ onShowWatch\(\); markRevealShown\(request\.options\.onceKey\); \};/);

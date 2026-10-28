@@ -17,6 +17,7 @@ import { gameAlert } from '../ui/GameDialog';
 import GameIcon from '../ui/GameIcon';
 import Ribbon from './Ribbon';
 import { guide } from '../services/guide/nextCoin';
+import { useNativeModalLayer } from '../ui/modalLayers';
 import YellowButton from './YellowButton';
 
 export default function TaskCoinModal({
@@ -127,6 +128,8 @@ export default function TaskCoinModal({
   const shownLevel = Math.max(1, Math.min(5, Number(rideCoin?.current_level ?? level ?? publicLevel) || 1));
   const knownLevel = rideCoin?.current_level ?? level ?? publicLevel;
   const ignite = upgradedKey || igniteKey;
+  // The collected-coin card (read-only or offline) takes its turn like every other sheet.
+  const infoLayer = useNativeModalLayer(visible && (readOnly || coinUnavailable), 'wait');
 
   return (
     <>
@@ -136,8 +139,9 @@ export default function TaskCoinModal({
         {trigger ?? <ShelfCoin coinUrl={task.coin_url} level={shownLevel} size={size} phase={phase} igniteKey={ignite} />}
       </Button>
 
-      {readOnly || coinUnavailable ? <Modal isVisible={visible} onBackdropPress={() => setVisible(false)}
+      {readOnly || coinUnavailable ? <Modal isVisible={infoLayer.present} onBackdropPress={() => setVisible(false)}
         onModalHide={() => {
+          infoLayer.onDismissed();
           if (playAfterClose) {
             setPlayAfterClose(false);
             onPlayInLine?.();

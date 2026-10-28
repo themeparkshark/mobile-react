@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { goalCoinKind } from '../services/collection/nextCoinCopy';
 import { chunk } from 'lodash';
-import { useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useContext, useState, useEffect, useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useFocusEffect, useIsFocused, useNavigation, type NavigationProp } from '@react-navigation/native';
 import { AppState, ImageBackground, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import getWikiTimes, { type WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
@@ -39,6 +39,12 @@ import { loadParkRides, prefetchRideCatalog, resolveRideContextOrOffline } from 
 import { splitParkShelf } from '../services/collection/limitedCoins';
 import type { RideType } from '../api/endpoints/rides';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
+import { guide } from '../services/guide/nextCoin';
+import { useRung } from '../services/reveal/revealLadder';
+import GameIcon from '../ui/GameIcon';
+import { milestoneToday, nextTrophy, nextTrophyLine, partsWaiting, shelfCountLabel, shelfTabs, shelfTotals, storyOnTop,
+  visibleTabs, type ShelfTab } from '../services/collection/shelfModel';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
@@ -88,6 +94,27 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   } | null>(null);
   const [parkCoinUrl, setParkCoinUrl] = useState<string | null>(null);
   const [rideOnly, setRideOnly] = useState(false);
+  // The shelf's tabs: Rides, Sights and Limited (Past events at the bottom of Limited).
+  const [tab, setTab] = useState<ShelfTab>('rides');
+  useEffect(() => { setTab('rides'); }, [park]);
+  // Secret slots ("?") show once coin levels open (rung 3); veterans see them at once.
+  const coinLevels = useRung('coin_levels');
+  // The guide's plan: GO and "Make this my next coin" both point the one guide (guide.setTarget).
+  const guidePlan = useSyncExternalStore(guide.subscribe, guide.plan, guide.plan);
+  // Today's park day story, read once here so the card can sit on top after a park day.
+  const recapCache = useRef<{ at: number; parkId: number; recap: ParkDayRecap } | null>(null);
+  const [todayRecap, setTodayRecap] = useState<ParkDayRecap | null>(null);
+  useEffect(() => { setTodayRecap(null); recapCache.current = null; }, [park]);
+  const loadRecap = useCallback(async (parkId: number, date?: string) => {
+    const cached = recapCache.current;
+    if (!date && cached && cached.parkId === parkId && Date.now() - cached.at < 5_000) return cached.recap;
+    const recap = await getParkDayRecap(parkId, date);
+    if (!date && recap) {
+      recapCache.current = { at: Date.now(), parkId, recap };
+      setTodayRecap(recap);
+    }
+    return recap;
+  }, []);
   const scrollRef = useRef<ScrollView>(null);
   const checklistOffset = useRef(0);
   const guideOffset = useRef(0);
@@ -212,6 +239,23 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const alternateRide = goalReportedDown && freshWaitEntries
     ? nearbyUncollectedRide(tasks, completedTasks, location,
       task => reportedRideStatus(freshWaitEntries, Number(park), task.name) === 'OPERATING') : null;
+  // GO on the shelf's next coin, and "Make this my next coin" on a coin card: one pointer for the
+  // whole app (guide.setTarget). At this park the map opens with the path; away it is the plan.
+  const nextCoinTask = parkTripGoal && !parkTripGoal.coin_owned
+    ? [...tasks, ...limitedTasks].find(task => task.id === parkTripGoal.task_id) ?? null
+    : nearbySuggestion?.task ?? null;
+  const goToCoin = useCallback((task: TaskType, source: string) => {
+    guide.setTarget(task.id, source);
+    if (inThisPark) RootNavigation.navigate('Explore', { focusRide: { parkId: Number(park), task } });
+  }, [inThisPark, park]);
+  const chooseNextCoin = useCallback(async (task: TaskType) => {
+    guide.setTarget(task.id, 'shelf');
+    await chooseTripGoal(task.id);
+  }, [chooseTripGoal]);
+  const onGoNext = canChooseGoal && nextCoinTask ? () => {
+    if (inThisPark) goToCoin(nextCoinTask, 'shelf_next');
+    else void chooseNextCoin(nextCoinTask).catch(() => undefined);
+  } : undefined;
   const { startTutorial, hasCompleted, isReady: tutorialReady, isActive: tutorialActive } = useTutorial();
   
   // Trigger park tutorial on first visit
@@ -244,6 +288,16 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     ? (currentPark?.ride_coin_completion_rate ?? 0)
     : (currentPark?.completion_rate ?? 0);
   const passportMode = rideOnly && !!currentPark?.ride_passport_task_ids?.length;
+  // One count everywhere: the server's shelf total (the win card reads the same numbers).
+  const totals = shelfTotals(currentPark, { collected: hasRideCoinProgress ? rideCoinsCollected : 0,
+    available: hasRideCoinProgress ? rideCoinsAvailable : 0 });
+  const split = shelfTabs(permanentTasks, currentPark?.ride_passport_task_ids);
+  const tabs = visibleTabs(split.split, split.sights.length, limitedShelf.length, archivedTasks.length);
+  const shownTab: ShelfTab = tabs.includes(tab) ? tab : 'rides';
+  const storyTop = canChooseGoal && !!todayRecap && storyOnTop({ atPark: inThisPark,
+    ridesWonToday: todayRecap.distinct_rides_won, milestone: milestoneToday(totals, todayRecap.new_coins) });
+  const parkStores = inThisPark ? locationPark?.stores ?? [] : [];
+  const trophyNext = currentPark ? nextTrophy(currentPark.park_coins_count) : null;
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -351,17 +405,25 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                   />
                 </View>
               ) : section === 'normal' || section === 'limited' ? (
-                <UnfoundCoinModal task={task} size={coinSize} kind={rideKind(task.id)}
-                  limited={(task as TaskType).limited}
-                  isGoal={parkTripGoal?.task_id === task.id}
-                  onPlayInLine={canChooseGoal && inThisPark &&
-                    currentPark?.ride_passport_task_ids?.includes(task.id)
-                    ? () => openRideLinePlay(task as TaskType) : undefined}
-                  onChooseGoal={canChooseGoal ? () => chooseTripGoal(task.id).then(() => undefined) : undefined}
-                  onShowOnMap={canChooseGoal && inThisPark
-                    ? () => RootNavigation.navigate('Explore', {
-                      focusRide: { parkId: Number(park), task },
-                    }) : undefined} />
+                <View>
+                  <UnfoundCoinModal task={task} size={coinSize} kind={rideKind(task.id)}
+                    limited={(task as TaskType).limited}
+                    isGoal={parkTripGoal?.task_id === task.id || guidePlan === task.id}
+                    onPlayInLine={canChooseGoal && inThisPark &&
+                      currentPark?.ride_passport_task_ids?.includes(task.id)
+                      ? () => openRideLinePlay(task as TaskType) : undefined}
+                    onChooseGoal={canChooseGoal ? () => chooseNextCoin(task as TaskType) : undefined}
+                    onShowOnMap={canChooseGoal && inThisPark
+                      ? () => goToCoin(task as TaskType, 'shelf_slot') : undefined} />
+                  {/* Parts you earned in this ride's line before winning its coin wait in its slot. */}
+                  {canChooseGoal && partsWaiting(task) > 0 && <View pointerEvents="none" style={{ position: 'absolute',
+                    right: -6, bottom: -4, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#fff8e4',
+                    borderColor: '#ffcf3b', borderWidth: 2, borderRadius: 10, paddingHorizontal: 4, paddingVertical: 1 }}
+                    accessible accessibilityLabel={`${partsWaiting(task)} Ride Parts waiting for this coin`}>
+                    <GameIcon name="parts" size={14} />
+                    <Text style={{ fontFamily: 'Shark', fontSize: 12, color: '#05346e' }}>{partsWaiting(task)}</Text>
+                  </View>}
+                </View>
               ) : (
                 <UnfoundCoinModal task={task} size={coinSize} isSecret={section === 'secret'}
                   isArchived={section === 'archived'} />
@@ -427,11 +489,14 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
               <ScrollView ref={scrollRef} scrollEnabled={!arrival.target} onContentSizeChange={arrival.notifyLayout}>
                 <View ref={contentRef} collapsable={false}>
                 <View style={{ paddingTop: 16, paddingHorizontal: 16, paddingBottom: 14 }}>
+                  {/* After a park day (and on 25/50/75/100% days) the day's story waits on top, with Share. */}
+                  {storyTop && <ParkDayRecapCard parkId={Number(park)} atPark={inThisPark}
+                    refreshVersion={refreshVersion} loadRecap={loadRecap} />}
                   <ParkCollectionHeader
                     parkName={currentPark.display_name ?? currentPark.name}
                     isOwnPark={canChooseGoal}
-                    collected={hasRideCoinProgress ? rideCoinsCollected : 0}
-                    available={hasRideCoinProgress ? rideCoinsAvailable : 0}
+                    collected={totals.collected}
+                    available={totals.available}
                     completionRate={hasRideCoinProgress ? headlineRate : 0}
                     holdCount={!!arrival.target && landedKey !== requestKey && !!earnedCoin?.firstCollection}
                     tickKey={landedKey && landedKey === requestKey && earnedCoin?.firstCollection ? landedKey : null}
@@ -440,18 +505,11 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     limitedCollected={currentPark.limited_coins_collected}
                     limitedAvailable={currentPark.limited_coins_available}
                     limitedEndsOn={currentPark.limited_ends_on}
-                    onBrowseLimited={limitedShelf.length > 0 ? () => scrollRef.current?.scrollTo({
-                      y: Math.max(0, checklistOffset.current + limitedShelfOffset.current - 12), animated: !reducedMotion,
-                    }) : undefined}
-                    onOpenRidePassport={currentPark.ride_passport_task_ids?.length
-                      ? () => {
-                        setRideOnly(true);
-                        scrollRef.current?.scrollTo({ y: checklistOffset.current + guideOffset.current, animated: !reducedMotion });
-                      } : undefined}
+                    tab={shownTab}
+                    tabs={tabs}
+                    onTab={next => { setTab(next); setRideOnly(false); }}
+                    trophyWins={currentPark.park_coins_count}
                     onOpenStampBook={canChooseGoal ? () => RootNavigation.navigate('StampBook') : undefined}
-                    onBrowseSecrets={secretTasks.length > 0 ? () => scrollRef.current?.scrollTo({
-                      y: Math.max(0, checklistOffset.current + secretShelfOffset.current - 12), animated: !reducedMotion,
-                    }) : undefined}
                     nextRideName={parkTripGoal?.ride_name}
                     nextRideOwned={parkTripGoal?.coin_owned}
                     nextCoinKind={goalCoinKind(parkTripGoal?.task_id, tasks, completedTasks, archivedTasks)}
@@ -465,20 +523,51 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     goalReportedDown={goalReportedDown}
                     alternateRideName={alternateRide?.task.name}
                     secretMilestones={currentPark.completed_secret_tasks_count}
+                    onGo={onGoNext}
+                    goLabel={inThisPark ? 'GO' : 'PLAN'}
+                    planned={!!nextCoinTask && guidePlan === nextCoinTask.id}
                   />
                 </View>
                 <View
                   onLayout={event => { checklistOffset.current = event.nativeEvent.layout.y; }}
                   style={{ paddingHorizontal: 16, paddingBottom: shelfEndClearance }}
                 >
-                  {tasks.length > 0 && (
+                  {shownTab === 'rides' && permanentTasks.length > 0 && (
                     <View style={{ marginBottom: 16 }}>
                       <View style={{ marginHorizontal: 18, marginBottom: -26, zIndex: 2 }}>
-                        <Ribbon text={passportMode ? 'Ride Passport' : 'Ride Coins'} />
+                        <Ribbon text={split.split ? 'Rides' : 'Coins'} />
                       </View>
                       <View style={shelfPanel}>
-                        {shelfRows('normal', passportMode
-                          ? permanentTasks.filter(task => currentPark.ride_passport_task_ids?.includes(task.id)) : permanentTasks)}
+                        {shelfRows('normal', split.rides)}
+                        {/* Secret coins: a "?" slot once coin levels open (rung 3). */}
+                        {coinLevels.open && secretTasks.length > 0 && <View
+                          onLayout={event => { secretShelfOffset.current = event.nativeEvent.layout.y; }}>
+                          <Text style={{ fontFamily: 'Shark', color: '#fff', fontSize: 16, textAlign: 'center', marginBottom: 6 }}>
+                            {labels.secret_tasks || 'Secret Coins'}
+                          </Text>
+                          {shelfRows('secret', secretTasks)}
+                        </View>}
+                        {/* The Rides tab's finish line: every ride earns the Ride Passport stamp. */}
+                        {split.split && typeof currentPark.ride_passport_available === 'number' && currentPark.ride_passport_available > 0 &&
+                          <Pressable disabled={!canChooseGoal} onPress={() => RootNavigation.navigate('StampBook')}
+                            accessibilityRole={canChooseGoal ? 'button' : undefined}
+                            accessibilityLabel={`Finish line: all ${currentPark.ride_passport_available} rides earn the Ride Passport stamp. ${currentPark.ride_passport_collected ?? 0} of ${currentPark.ride_passport_available} so far.`}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff8e4',
+                              borderColor: '#ffcf3b', borderWidth: 2, borderRadius: 14, padding: 8, marginTop: 4 }}>
+                            <Image source={require('../../assets/images/stamps/ride-passport-complete-v1.png')}
+                              contentFit="contain" style={{ width: 40, height: 40,
+                                opacity: (currentPark.ride_passport_collected ?? 0) >= currentPark.ride_passport_available ? 1 : 0.55 }} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontFamily: 'Shark', color: '#05346e', fontSize: 15 }}>
+                                All {currentPark.ride_passport_available} rides: Ride Passport stamp
+                              </Text>
+                              <Text style={{ fontFamily: 'Knockout', color: '#3d5f8c', fontSize: 14 }}>
+                                {(currentPark.ride_passport_collected ?? 0) >= currentPark.ride_passport_available
+                                  ? 'Done! Claim it in your Stamp Book.'
+                                  : `${currentPark.ride_passport_collected ?? 0} of ${currentPark.ride_passport_available} rides`}
+                              </Text>
+                            </View>
+                          </Pressable>}
                         <View onLayout={event => { guideOffset.current = event.nativeEvent.layout.y; }}>
                           <ParkRideDirectory
                             rides={permanentTasks}
@@ -493,14 +582,15 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                             savedGoalReportedDown={goalReportedDown}
                             rideTaskIds={currentPark.ride_passport_task_ids}
                             rideOnly={passportMode}
-                            onRideOnlyChange={setRideOnly}
+                            shelfCount={shelfCountLabel(totals)}
                             onChooseGoal={canChooseGoal
-                              ? (taskId) => chooseTripGoal(taskId).then(() => undefined)
+                              ? (taskId) => {
+                                const task = [...permanentTasks, ...allLimited].find(item => item.id === taskId);
+                                return task ? chooseNextCoin(task) : chooseTripGoal(taskId).then(() => undefined);
+                              }
                               : undefined}
                             onShowOnMap={canChooseGoal && inThisPark
-                              ? (task) => RootNavigation.navigate('Explore', {
-                                focusRide: { parkId: Number(park), task },
-                              }) : undefined}
+                              ? (task) => goToCoin(task, 'coin_guide') : undefined}
                             onPlayInLine={canChooseGoal && inThisPark ? openRideLinePlay : undefined}
                             onPlayRideInLine={canChooseGoal && inThisPark ? openCatalogRideLinePlay : undefined}
                           />
@@ -508,7 +598,15 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                       </View>
                     </View>
                   )}
-                  {limitedShelf.length > 0 && (
+                  {shownTab === 'sights' && split.sights.length > 0 && (
+                    <View style={{ marginBottom: 16 }}>
+                      <View style={{ marginHorizontal: 18, marginBottom: -26, zIndex: 2 }}>
+                        <Ribbon text="Sights" />
+                      </View>
+                      <View style={shelfPanel}>{shelfRows('normal', split.sights)}</View>
+                    </View>
+                  )}
+                  {shownTab === 'limited' && limitedShelf.length > 0 && (
                     <View onLayout={event => { limitedShelfOffset.current = event.nativeEvent.layout.y; }}
                       style={{ marginBottom: 16 }}>
                       <View style={{ marginHorizontal: 18, marginBottom: -26, zIndex: 2 }}>
@@ -517,15 +615,15 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                       <View style={shelfPanel}>{shelfRows('limited', limitedShelf)}</View>
                     </View>
                   )}
-                  {secretTasks.length > 0 && (
-                    <View onLayout={event => { secretShelfOffset.current = event.nativeEvent.layout.y; }}
-                      style={{ marginBottom: 16 }}>
+                  {shownTab === 'limited' && archivedTasks.length > 0 && (
+                    <View style={{ marginBottom: 16 }}>
                       <View style={{ marginHorizontal: 18, marginBottom: -26, zIndex: 2 }}>
-                        <Ribbon text={labels.secret_tasks || 'Secret Coins'} />
+                        <Ribbon text="Past events" />
                       </View>
-                      <View style={shelfPanel}>{shelfRows('secret', secretTasks)}</View>
+                      <View style={shelfPanel}>{shelfRows('archived', archivedTasks)}</View>
                     </View>
                   )}
+                  {/* The labeled trophy shelf: each trophy named, and the next one called out. */}
                   <View style={{
                     paddingBottom: 16,
                     backgroundColor: '#075d9c',
@@ -534,10 +632,14 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     padding: 12,
                     marginBottom: 16,
                   }}>
+                    <Text style={{ fontFamily: 'Shark', color: '#fff', fontSize: 18, textAlign: 'center' }}>Trophies</Text>
+                    <Text style={{ fontFamily: 'Knockout', color: '#d8f1ff', fontSize: 15, textAlign: 'center', marginBottom: 4 }}>
+                      {nextTrophyLine(currentPark.park_coins_count)}
+                    </Text>
                     <View
                       style={{
                         position: 'relative',
-                        height: 185,
+                        height: 205,
                       }}
                     >
                       <View
@@ -551,97 +653,51 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                           justifyContent: 'center',
                         }}
                       >
-                        <View
-                          style={{
-                            flex: 1,
-                            alignItems: 'flex-end',
-                          }}
-                        >
-                          <ParkTrophyModal
-                            trophy={{
-                              name: 'Silver',
-                              image: silver,
-                              unlocked: currentPark.park_coins_count >= 50,
-                              unlockCount: 50,
-                            }}
-                          >
-                            <Image
-                              source={silver}
-                              style={{
-                                width: 90,
-                                height: 95,
-                                opacity:
-                                  currentPark.park_coins_count >= 50 ? 1 : 0.6,
-                                marginRight: 16,
-                              }}
-                            />
-                          </ParkTrophyModal>
-                        </View>
-                        <View
-                          style={{
-                            flex: 1,
-                            alignItems: 'center',
-                          }}
-                        >
-                          <ParkTrophyModal
-                            trophy={{
-                              name: 'Gold',
-                              image: gold,
-                              unlocked: currentPark.park_coins_count >= 100,
-                              unlockCount: 100,
-                            }}
-                          >
-                            <Image
-                              source={gold}
-                              style={{
-                                width: 100,
-                                height: 140,
-                                opacity:
-                                  currentPark.park_coins_count >= 100 ? 1 : 0.6,
-                              }}
-                            />
-                          </ParkTrophyModal>
-                        </View>
-                        <View
-                          style={{
-                            flex: 1,
-                            alignItems: 'flex-start',
-                          }}
-                        >
-                          <ParkTrophyModal
-                            trophy={{
-                              name: 'Bronze',
-                              image: bronze,
-                              unlocked: currentPark.park_coins_count >= 12,
-                              unlockCount: 12,
-                            }}
-                          >
-                            <Image
-                              source={bronze}
-                              style={{
-                                width: 70,
-                                height: 75,
-                                opacity:
-                                  currentPark.park_coins_count >= 12 ? 1 : 0.6,
-                                marginLeft: 16,
-                              }}
-                            />
-                          </ParkTrophyModal>
-                        </View>
+                        {([
+                          { name: 'Silver', image: silver, at: 50, size: { width: 90, height: 95 }, align: 'flex-end' as const },
+                          { name: 'Gold', image: gold, at: 100, size: { width: 100, height: 140 }, align: 'center' as const },
+                          { name: 'Bronze', image: bronze, at: 12, size: { width: 70, height: 75 }, align: 'flex-start' as const },
+                        ]).map(trophy => {
+                          const unlocked = currentPark.park_coins_count >= trophy.at;
+                          const isNext = trophyNext?.name === trophy.name;
+                          return <View key={trophy.name} style={{ flex: 1, alignItems: trophy.align }}>
+                            <ParkTrophyModal trophy={{ name: trophy.name, image: trophy.image, unlocked, unlockCount: trophy.at,
+                              wins: currentPark.park_coins_count }}>
+                              <View style={{ alignItems: 'center', marginHorizontal: 8 }}>
+                                <Image source={trophy.image} style={{ ...trophy.size, opacity: unlocked ? 1 : 0.6 }} />
+                                <View style={{ backgroundColor: unlocked ? '#ffcf3b' : isNext ? '#fff8e4' : '#cfe9f8',
+                                  borderRadius: 9, paddingHorizontal: 7, paddingVertical: 2, marginTop: 2 }}>
+                                  <Text style={{ fontFamily: 'Shark', fontSize: 13, color: '#05346e' }}>
+                                    {unlocked ? trophy.name : `${trophy.name} ${trophy.at}`}
+                                  </Text>
+                                </View>
+                              </View>
+                            </ParkTrophyModal>
+                          </View>;
+                        })}
                       </View>
                       <ParkShelfArtwork variant="normal" height={50} />
                     </View>
                   </View>
-                  {canChooseGoal && <ParkDayRecapCard parkId={Number(park)}
-                    atPark={locationPark?.id === Number(park)} refreshVersion={refreshVersion} />}
-                  {archivedTasks.length > 0 && (
-                    <View style={{ marginBottom: 16 }}>
-                      <View style={{ marginHorizontal: 18, marginBottom: -26, zIndex: 2 }}>
-                        <Ribbon text={labels.archived_tasks || 'Past Event Coins'} />
-                      </View>
-                      <View style={shelfPanel}>{shelfRows('archived', archivedTasks)}</View>
-                    </View>
-                  )}
+                  {/* Shops at this park: one tap to the same store as the map's store button (keeps its icon art). */}
+                  {canChooseGoal && parkStores.length > 0 && <View style={{ backgroundColor: '#eaf9ff', borderColor: '#fff',
+                    borderWidth: 2, borderRadius: 15, padding: 10, marginBottom: 16 }}>
+                    <Text style={{ fontFamily: 'Shark', color: '#075a99', fontSize: 18, marginBottom: 6 }}>Shops at this park</Text>
+                    {parkStores.map(store => <Pressable key={store.id} accessibilityRole="button"
+                      accessibilityLabel={`Open ${store.name ?? 'this park shop'}`}
+                      onPress={() => RootNavigation.navigate('Store', { store: store.id })}
+                      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff',
+                        borderColor: '#c5eafb', borderWidth: 2, borderRadius: 12, padding: 6, marginTop: 6,
+                        transform: [{ scale: pressed ? 0.98 : 1 }] })}>
+                      <Image source={{ uri: store.icon_url }} style={{ width: 48, height: 52 }} contentFit="contain" />
+                      <Text style={{ flex: 1, fontFamily: 'Shark', color: '#093e71', fontSize: 16 }} numberOfLines={1}>
+                        {store.event?.title ?? store.name ?? 'Park shop'}
+                      </Text>
+                      <GameIcon name="arrow" size={22} />
+                    </Pressable>)}
+                  </View>}
+                  {canChooseGoal && !storyTop && <ParkDayRecapCard parkId={Number(park)}
+                    atPark={inThisPark} refreshVersion={refreshVersion} loadRecap={loadRecap} />}
                 </View>
                 </View>
               </ScrollView>

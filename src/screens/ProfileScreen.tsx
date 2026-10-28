@@ -62,7 +62,9 @@ import SharkPassBanner from '../components/money/SharkPassBanner';
 import StreakFlame from '../components/retention/StreakFlame';
 import useOwnStreak from '../services/retention/useOwnStreak';
 import { UpperText } from '../ui/upper';
-import { flexRevealOnce } from '../share/revealOnce';
+import { FlexShareButton } from '../share/FlexShareButton';
+import { shouldFlexReveal } from '../share/copy';
+import { useRung } from '../services/reveal/revealLadder';
 
 /** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
 // Short phones (iPhone SE, 667 pt) get a 230 pt stage so the Shop / Stamp Book / Pins labels sit clear of the center compass at rest.
@@ -96,13 +98,10 @@ export default function ProfileScreen() {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const reducedMotion = useReducedGameMotion();
   const focused = useIsFocused();
-  // A streak milestone (3, 7, 14, 30... days) gets the Flex moment once, the first time Profile shows it.
-  useEffect(() => {
-    if (!focused || !player?.id || !ownStreak || isProfilePreview) return;
-    const today = new Date();
-    const day = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
-    void flexRevealOnce('streak', `${player.id}:${ownStreak.days}:${day}`, { days: ownStreak.days, best: ownStreak.best }, { surface: 'profile_streak' });
-  }, [focused, player?.id, ownStreak?.days]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A streak milestone (3, 7, 14, 30... days) gets a Share button beside the flame. Nothing opens full screen by itself.
+  const streakBrag = !!ownStreak && shouldFlexReveal('streak', { days: ownStreak.days, best: ownStreak.best });
+  // The Shark Pass banner waits for its rung (5); the pass stays in Supplies for anyone whose switch is on.
+  const sharkPassRung = useRung('shark_pass');
   // The XP potion only animates while its card is on screen.
   const levelCard = useCardOnScreen();
   const [stampsToClaim, setStampsToClaim] = useState(0);
@@ -541,7 +540,9 @@ export default function ProfileScreen() {
                   team={<TeamChip team={playerTeamId(player)} own
                     onPick={() => RootNavigation.navigate('TeamSelection', { onTeamSelected: () => { void refreshPlayer(); } })} />}
                   trophy={<><ProfileEventChip />
-                  {ownStreak && <StreakFlame streak={ownStreak.days} best={ownStreak.best} size={28} />}</>} onPress={() => setTitleSheet(true)}
+                  {ownStreak && <StreakFlame streak={ownStreak.days} best={ownStreak.best} size={28} />}
+                  {ownStreak && streakBrag && <FlexShareButton kind="streak" surface="profile_streak"
+                    payload={{ days: ownStreak.days, best: ownStreak.best }} />}</>} onPress={() => setTitleSheet(true)}
                   art={<TitleArt entry={null} title={player.title} size={28} />} />
                 {!player.title && (
                   <TitleUndoBar previous={undoTitle} onDone={clearUndo}
@@ -572,7 +573,7 @@ export default function ProfileScreen() {
                 <ProfileLanyardCard playerId={player.id} own />
                 <StatusBadges isVip={!!player.is_subscribed} isVerified={!!player.verified_at} own />
                 {/* Shark Pass: one line and a bar while a season runs (renders nothing when the flag is off). */}
-                <SharkPassBanner style={{ marginTop: 12 }} />
+                {sharkPassRung.open && <SharkPassBanner style={{ marginTop: 12 }} />}
                 {/* The showcase coin sits under the shortcuts so the row is visible on first view. */}
                 {!!player.featured_ride_coin && (
                   <FeaturedRideCoinCard coin={player.featured_ride_coin}

@@ -5,6 +5,14 @@ import Modal from 'react-native-modal';
 import Button from '../components/Button';
 import config from '../config';
 import { UpperText } from '../ui/upper';
+import { useNativeModalLayer } from '../ui/modalLayers';
+
+/** "Unlocks at 12 wins here" / "Yours! 14 wins here". Every coin win at this park counts. */
+export function trophyCopy(trophy: { readonly unlocked: boolean; readonly unlockCount: number; readonly wins?: number }): string {
+  if (trophy.unlocked) return typeof trophy.wins === 'number' ? `Yours! ${trophy.wins} wins here` : 'Yours!';
+  const left = typeof trophy.wins === 'number' ? Math.max(0, trophy.unlockCount - trophy.wins) : null;
+  return left !== null ? `${left} more ${left === 1 ? 'win' : 'wins'} here` : `Unlocks at ${trophy.unlockCount} wins here`;
+}
 
 export default function ParkTrophyModal({
   children,
@@ -16,18 +24,25 @@ export default function ParkTrophyModal({
     readonly image: string;
     readonly unlocked: boolean;
     readonly unlockCount: number;
+    /** Coin wins at this park (the server's park_coins_count). */
+    readonly wins?: number;
   };
 }) {
   const [visible, setVisible] = useState<boolean>(false);
+  // One door for every sheet (blueprint 4.3 rule 10): the trophy reveal holds its layer until UIKit says it is gone.
+  const layer = useNativeModalLayer(visible, 'show');
 
   return (
     <>
-      <Button onPress={() => setVisible(true)}>{children}</Button>
+      <Button onPress={() => setVisible(true)} accessibilityLabel={`${trophy.name} trophy. ${trophyCopy(trophy)}`}>{children}</Button>
       <Modal
         animationIn="zoomIn"
         animationOut="zoomOut"
         swipeDirection="down"
-        isVisible={visible}
+        onSwipeComplete={() => setVisible(false)}
+        onBackdropPress={() => setVisible(false)}
+        isVisible={layer.present}
+        onModalHide={layer.onDismissed}
       >
         <View
           style={{
@@ -37,6 +52,8 @@ export default function ParkTrophyModal({
           }}
         >
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close"
             style={{
               width: '100%',
               height: '100%',
@@ -75,6 +92,7 @@ export default function ParkTrophyModal({
               style={{
                 width: '80%',
                 aspectRatio: 1,
+                opacity: trophy.unlocked ? 1 : 0.6,
               }}
               contentFit="contain"
             />
@@ -95,8 +113,11 @@ export default function ParkTrophyModal({
                   textAlign: 'center',
                 }}
               >
-                Unlocks at {trophy.unlockCount} ride coins
+                {trophyCopy(trophy)}
               </UpperText>
+              <Text style={{ color: '#d8f1ff', fontFamily: 'Knockout', fontSize: 16, textAlign: 'center', marginTop: 4 }}>
+                Every coin you win at this park counts.
+              </Text>
             </View>
           </View>
         </View>

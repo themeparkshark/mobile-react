@@ -12,7 +12,8 @@ import { PlayerType } from '../models/player-type';
 import { useProgressionFlags } from '../services/progression/progressionFlags';
 import { GameIcon } from '../ui';
 import XpBar, { XP_BAR_HEIGHT, XP_BAR_LIP } from './XpBar';
-import { flexRevealOnce } from '../share/revealOnce';
+import { FlexShareButton } from '../share/FlexShareButton';
+import { shouldFlexReveal } from '../share/copy';
 import type { PotionTransition } from './xpPotionModel';
 import { UpperText } from '../ui/upper';
 
@@ -71,6 +72,8 @@ export default function Experience({
   // the bar and count up on the UI thread.
   const [shownLevel, setShownLevel] = useState(before?.level ?? level);
   const announced = useRef(0);
+  // The level just reached when it is a share-worthy one (every 5th): its Share button sits in this row.
+  const [bragLevel, setBragLevel] = useState<number | null>(null);
   const pop = useRef(new Animated.Value(1)).current;
   const wiggle = useRef(new Animated.Value(0)).current;
 
@@ -123,8 +126,8 @@ export default function Experience({
       if (announced.current !== level) {
         announced.current = level;
         AccessibilityInfo.announceForAccessibility(`Level ${level}!`);
-        // Every 5th level gets the Flex moment once (shouldFlexReveal), with a Share button.
-        void flexRevealOnce('level_up', `${player.id}:${level}`, { level, xp: Number(player.total_experience) || undefined }, { surface: 'profile_level' });
+        // Every 5th level gets a Share button inside this level card. It never opens full screen by itself.
+        if (shouldFlexReveal('level_up', { level })) setBragLevel(level);
       }
     }
     if (reduced) return;
@@ -198,6 +201,8 @@ export default function Experience({
           {caption && <Text style={styles.caption} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{caption}</Text>}
         </View>
       )}
+      {own && bragLevel === level && <FlexShareButton kind="level_up" surface="profile_level"
+        payload={{ level, xp: Number(player.total_experience) || undefined }} />}
     </View>
   );
 }

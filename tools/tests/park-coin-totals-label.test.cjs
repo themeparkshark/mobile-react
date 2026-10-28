@@ -23,11 +23,13 @@ test('the chips are parts that add back up to the park total', () => {
   assert.deepEqual(plain(split(3, 35, 9, 25)).sights, { collected: 0, available: 10 }, 'never negative');
 });
 
-test('the header labels: one RIDE COINS total, a RIDES part, a SIGHTS part', () => {
+test('the header labels: one "9 of 35 coins" total, a RIDES part, a SIGHTS part', () => {
   const src = read('src/screens/ParkCollectionHeader.tsx');
-  assert.match(src, />RIDE COINS</);
+  assert.match(src, /`\$\{shownCollected\} of \$\{available\}`/);
+  assert.match(src, /available === 1 \? 'COIN' : 'COINS'/);
+  assert.doesNotMatch(src, />RIDE COINS</, 'RIDE COINS counted sights too (blueprint 4.5)');
   assert.doesNotMatch(src, />PASSPORT \{/, 'no second "passport" total next to the park total');
-  assert.match(src, /RIDES \{parts\.rides\.collected\}\/\{parts\.rides\.available\}/);
+  assert.match(src, /`RIDES \$\{parts\.rides\.collected\}\/\$\{parts\.rides\.available\}`/);
   assert.match(src, /SIGHTS \{parts\.sights\.collected\}\/\{parts\.sights\.available\}/);
 });
 
@@ -47,5 +49,5 @@ test('the bar is two-tone keyed to the chips, and parts never use the held-back 
 });
 
 test('the empty-goal row fits one line on the real Park screen', () => {
-  assert.match(read('src/screens/ParkCollectionHeader.tsx'), /eyebrow: 'NEXT ADVENTURE', name: 'Pick a missing coin'/);
+  assert.match(read('src/screens/ParkCollectionHeader.tsx'), /eyebrow: 'NEXT COIN', name: 'Pick a missing coin'/);
 });

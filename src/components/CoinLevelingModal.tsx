@@ -54,6 +54,7 @@ import { FlexShareButton } from '../share';
 import { useModalHandoff } from '../share/handoff';
 import { useDevAutoPress } from '../share/devDrive';
 import { UpperText } from '../ui/upper';
+import { useNativeModalLayer } from '../ui/modalLayers';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 /** The success CTA's width: the card is 95% of (screen - 48), with 14 pt padding each side. */
@@ -164,6 +165,8 @@ export default function CoinLevelingModal({
   // Short on Tickets or Energy: the Supplies tab, opened after the sheet hides.
   const pendingSuppliesRef = useRef<null | 'tickets' | 'featured'>(null);
   const [showPartsHelp, setShowPartsHelp] = useState(false);
+  // One door for every sheet (4.3 rule 10): the coin card presents only in front, and holds its layer until UIKit says it is gone.
+  const layer = useNativeModalLayer(visible && !!rideCoin, 'wait');
 
   // The level-up show, on the UI thread: the charge bar, the gold gathering behind the coin,
   // the burst bloom, sparkles and one shine across the new coin (ui/motion.ts language).
@@ -466,11 +469,12 @@ export default function CoinLevelingModal({
     <Modal
       animationIn="fadeIn"
       animationOut="fadeOut"
-      isVisible={visible}
+      isVisible={layer.present}
       animationInTiming={reducedMotion ? 120 : 250}
       animationOutTiming={reducedMotion ? 120 : 200}
       onBackButtonPress={state !== 'leveling' ? handleClose : undefined}
       onModalHide={() => {
+        layer.onDismissed();
         shareHandoff.onDismiss();
         if (pendingLinePlayRef.current) {
           pendingLinePlayRef.current = false;

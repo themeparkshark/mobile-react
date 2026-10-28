@@ -163,6 +163,7 @@ test('a coin that cannot power up offers its one next step, never a dead end', (
     ...progressionStubs, './coin/CoinStand': {}, './coin/Crowning': {}, './coin/LevelUpBurst': {}, './coin/PerkTrack': {}, './help/OneTimeTip': {},
     'react-native-reanimated': { default: {}, useSharedValue: () => ({}), useAnimatedStyle: () => ({}) }, '../ui/GoldBurst': {}, '../ui/motionEasing': {}, '../power': {},
     '../share': {}, '../share/devDrive': { useDevAutoPress() {} }, '../share/handoff': { useModalHandoff: () => ({ handoff: async () => {}, onDismiss() {} }) },
+    '../ui/modalLayers': {},
   });
   assert.equal(missingResourceAction(1, 40).label, 'Get 1 Ride Part');
   assert.equal(missingResourceAction(3, 0).label, 'Get 3 Ride Parts');

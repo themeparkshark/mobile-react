@@ -352,7 +352,7 @@ test('the coin level-up Share button matches the reveal rule (level 5+), and mod
   assert.match(sheet, /nextLevel >= 5 && nextLevel < 10/);
   // A share inside a modal closes the modal first (useModalHandoff), then the Root sheet and gate open.
   assert.match(sheet, /handoff=\{shareHandoff\.handoff\}/);
-  assert.match(sheet, /onModalHide=\{\(\) => \{\s*shareHandoff\.onDismiss\(\);/);
+  assert.match(sheet, /onModalHide=\{\(\) => \{\s*layer\.onDismissed\(\);\s*shareHandoff\.onDismiss\(\);/);
   assert.doesNotMatch(sheet, /<ShareStudioHost portal \/>/, 'no nested share host inside the coin sheet');
   const hunt = fs.readFileSync(pathMod.join(repo, 'src/components/home/HomeHuntResultsModal.tsx'), 'utf8');
   assert.match(hunt, /handoff=\{shareHandoff\.handoff\}/);

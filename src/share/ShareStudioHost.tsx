@@ -27,7 +27,7 @@ import { LocationStatusContext } from '../context/LocationProvider';
 import { playSfx } from '../gamekit/SFX';
 import * as Haptics from '../helpers/haptics';
 import { BRAND, GameButton, gameAlert } from '../ui';
-import { ModalLayerContext, useModalLayer } from '../ui/modalLayers';
+import { ModalLayerContext, useNativeModalLayer } from '../ui/modalLayers';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 import { captureFlex, openShareSheet, shareCardFileName } from './capture';
@@ -176,14 +176,19 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
   const [linkCopied, setLinkCopied] = useState(false);
   // 'shown' -> 'leaving' (fading out for the grown-up gate) -> 'gone' (the gate may present).
   const [stage, setStage] = useState<'shown' | 'leaving' | 'gone'>('shown');
+  // One door for every sheet (core loop 4.3 rule 10): the Studio presents only when it is in front
+  // (a coin sheet that handed off is really gone), and holds its layer until UIKit reports the dismiss.
+  const layer = useNativeModalLayer(stage !== 'gone', 'wait');
+  const layerDismissed = layer.onDismissed;
   const dismissed = useRef<(() => void) | null>(null);
   const onDismiss = useCallback(() => {
+    layerDismissed();
     const done = dismissed.current;
     dismissed.current = null;
     if (!done) return;
     setStage('gone');
     done();
-  }, []);
+  }, [layerDismissed]);
   const busyRef = useRef(false);
   const readyRef = useRef(false);
   readyRef.current = ready;
@@ -244,9 +249,8 @@ function useFlexShare(request: FlexRequest, format: FlexFormat) {
         inventory={player?.inventory} onReadyChange={setReady} />
     </View>
   );
-  // A layer while it is up, so Root's dialogs and the grown-up gate wait for it (ui/modalLayers.ts).
-  useModalLayer(stage !== 'gone', 'show');
-  return { share, busy, ready, offscreen, event, linkCopied, inventory: player?.inventory, visible: stage === 'shown', onDismiss };
+  // The layer (above) is up while the sheet is, so Root's dialogs and the grown-up gate wait for it.
+  return { share, busy, ready, offscreen, event, linkCopied, inventory: player?.inventory, visible: stage === 'shown' && layer.present, onDismiss };
 }
 
 function LinkHint({ show }: { readonly show: boolean }) {

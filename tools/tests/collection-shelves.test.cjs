@@ -122,15 +122,16 @@ test('challenge copy: ride vs coin vs secret, and out-of-Tickets copy follows wh
 
 test('unfound coin copy is type-aware and leads with the gameplay action', () => {
   const source = fs.readFileSync('src/components/UnfoundCoinModal.tsx', 'utf8');
-  assert.match(source, /text=\{onPlayInLine \? 'Play in Line' : 'Show on Park Map'\}/);
+  assert.match(source, /text=\{onPlayInLine \? 'LinePlay' : 'Show on Park Map'\}/);
   const { unfoundCoinCopy } = loadTs('src/components/UnfoundCoinModal.tsx', {
     react: { useContext() {}, useState() {} }, 'react/jsx-runtime': { jsx() {}, jsxs() {} },
     'react-native': { StyleSheet: { create: v => v } }, 'react-native-modal': {}, 'expo-haptics': {}, 'expo-image': {},
     '../context/SoundEffectProvider': {}, './Ribbon': {}, './YellowButton': {}, './MysteryCoinArtwork': {},
     './collection/CoinSocket': {}, '../ui/GameIcon': {}, '../ui/GameRichText': {}, '../hooks/useReducedGameMotion': {},
+    '../ui/modalLayers': {}, '../services/reveal/revealLadder': {},
   });
   assert.equal(unfoundCoinCopy({ isSecret: false, isArchived: false, isResting: false, kind: 'ride' }).ribbon, 'Ride Coin');
-  assert.equal(unfoundCoinCopy({ isSecret: false, isArchived: false, isResting: false }).challenge, 'Coin Challenge');
+  assert.equal(unfoundCoinCopy({ isSecret: false, isArchived: false, isResting: false }).challenge, 'PLAY! at this spot');
   assert.match(unfoundCoinCopy({ isSecret: true, isArchived: false, isResting: true }).hint, /resting this week/);
 });
 
