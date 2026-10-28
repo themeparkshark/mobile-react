@@ -74,7 +74,7 @@ export interface ActivitySlotProps {
 
 const GAME_LABELS: Record<string, string> = {
   tap: 'Whack-a-Shark',
-  timing: 'Rhythm Tap',
+  timing: 'Parade Beat',
   memory: 'Memory Match+',
   trivia: 'Ride Trivia',
   shark: 'Sharky Swim',
@@ -194,35 +194,35 @@ function MiniGameSlot({
 }) {
   const isStarChart = item.id.endsWith('-star-chart');
   const label = title ?? item.title ?? (isStarChart ? 'Rebuild the Star Chart' : GAME_LABELS[item.gameId] ?? item.gameId);
+  // A story clue (its mission name came in) says STORY; every free round says GAMES (the two LinePlay tabs).
+  const kicker = title != null || isStarChart ? 'STORY' : 'GAMES';
+  const playLabel = completed && item.gameId === 'showdown' ? 'Rematch' : completed ? 'Play again' : 'Play';
   return (
     <PageScroll fill={CARD_FILL}>
-      {/* A short window (iPhone SE): Play comes right under the slim banner, so a non-reader sees it first. */}
-      <ActionFirstWhenShort
-        hero={<ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE ARCADE'} title={label} navigator={navigator} />}
-        story={short => <>
-          {/* A slim page (iPhone SE) never shows this row half under the fade: NEW rides on PLAY's corner instead. */}
-          {!short && <View style={styles.bestRow} accessible
-            accessibilityLabel={bestStars != null ? `Best this wait: ${bestStars} of 3 stars` : newGame ? 'New game' : 'Not played this wait'}>
-            {bestStars != null ? [1, 2, 3].map(slot => <GameIcon key={slot} name="star" size={24}
-              mono={slot <= bestStars ? undefined : '#b7cfe2'} />)
-              : newGame ? <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View> : null}
-            <Text style={styles.bestLabel}>{bestStars != null ? 'Your best this wait' : newGame ? 'New game' : 'Not played this wait'}</Text>
-          </View>}
-          <View style={styles.gamePlaceholder}>
-            <Text style={styles.gamePlaceholderText}>
-              {item.preview ?? (isStarChart
-                ? 'Match space symbols to restore your shark’s missing chart. Race solo or let your crew call out the pairs.'
-                : GAME_PREVIEWS[item.gameId] ?? 'Play a quick round while you wait.')}
-            </Text>
-          </View>
-        </>}
-        action={short => <View>
-          <GameButton label={completed && item.gameId === 'showdown' ? 'Rematch' : completed ? 'Play again' : 'Play'}
-            icon={completed ? 'retry' : 'play'} disabled={paused} fullWidth onPress={() => onPlayGame(item)}
-            accessibilityLabel={`${completed ? 'Play again' : 'Play'}: ${label}${short && newGame && bestStars == null ? '. New game' : ''}`} />
-          {short && newGame && bestStars == null && <View pointerEvents="none" style={[styles.newPill, styles.newCorner]}>
-            <Text style={styles.newPillText}>NEW</Text></View>}
-        </View>} />
+      {/* PLAY comes right under the banner on every phone, so the one thing to press is on the first screen
+          of the page (never below the fold or behind the rail on a 375 or 402 pt phone). What the game is
+          and the best stars follow it. */}
+      <ActivityHero kicker={kicker} title={label} navigator={navigator} />
+      <View testID="lineplay-play" style={styles.playFirst}>
+        <GameButton label={playLabel} icon={completed ? 'retry' : 'play'} disabled={paused} fullWidth
+          onPress={() => onPlayGame(item)}
+          accessibilityLabel={`${playLabel}: ${label}${newGame && bestStars == null ? '. New game' : ''}`} />
+        {newGame && bestStars == null && <View pointerEvents="none" style={[styles.newPill, styles.newCorner]}>
+          <Text style={styles.newPillText}>NEW</Text></View>}
+      </View>
+      {bestStars != null && <View style={styles.bestRow} accessible
+        accessibilityLabel={`Best this wait: ${bestStars} of 3 stars`}>
+        {[1, 2, 3].map(slot => <GameIcon key={slot} name="star" size={24}
+          mono={slot <= bestStars ? undefined : '#b7cfe2'} />)}
+        <Text style={styles.bestLabel}>Your best this wait</Text>
+      </View>}
+      <View style={styles.gamePlaceholder}>
+        <Text style={styles.gamePlaceholderText}>
+          {item.preview ?? (isStarChart
+            ? 'Match space symbols to restore your shark’s missing chart. Race solo or let your crew call out the pairs.'
+            : GAME_PREVIEWS[item.gameId] ?? 'Play a quick round while you wait.')}
+        </Text>
+      </View>
       {item.gameId === 'current' && currentQuestBonusStatus && (
         <Text style={styles.note}>
           {currentQuestBonusStatus === 'verified'
@@ -305,7 +305,7 @@ function TriviaSlot({
 
   return (
     <PageScroll fill={CARD_FILL}>
-      <ActivityHero kicker={chapterId ? 'RIDE MISSION' : 'PARK CHALLENGE'} title={title ?? 'Shark Trivia'} teacher />
+      <ActivityHero kicker={title != null ? 'STORY' : 'GAMES'} title={title ?? 'Shark Trivia'} teacher />
       <Text style={styles.question}>{q.question}</Text>
       {picked != null && <Animated.Text style={[styles.answerFeedback,
         picked === q.correctIndex ? styles.feedbackCorrect : styles.feedbackWrong, {
@@ -408,12 +408,12 @@ function LoreSlot({
     };
   }, [rideId, parkId, chapterId, seed]);
 
-  if (!lore) return <SkeletonCard label="QUEUE PROMPT" />;
+  if (!lore) return <SkeletonCard label="Story clue" />;
 
   return (
     <PageScroll fill={CARD_FILL}>
       <ActionFirstWhenShort
-        hero={<ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE QUEST'} title={title ?? (navigator ? 'Spot the clue' : 'Field Note')} navigator={navigator} />}
+        hero={<ActivityHero kicker={title != null || navigator ? 'STORY' : 'GAMES'} title={title ?? (navigator ? 'Spot the clue' : 'Field Note')} navigator={navigator} />}
         story={<>
           <Text style={styles.loreTitle}>{lore.title}</Text>
           <Text style={styles.loreBody}>{lore.body}</Text>
@@ -552,6 +552,7 @@ const styles = StyleSheet.create({
   shark: { width: 110, height: 110, marginRight: -7 },
   heroSlim: { height: 46, marginBottom: spacing.sm },
   actionFirst: { marginBottom: spacing.md },
+  playFirst: { marginBottom: spacing.sm },
   heroTitleSlim: { fontSize: 19, lineHeight: 23, marginTop: 2 },
   sharkSlim: { width: 52, height: 52, marginRight: -2 },
   heroKicker: { color: '#c8efff', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1 },

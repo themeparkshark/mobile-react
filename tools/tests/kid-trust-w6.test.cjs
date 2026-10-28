@@ -156,8 +156,12 @@ test('iPhone SE pages: the clue choices sit side by side, kid words, and the fin
   assert.match(slot, /<View style=\{short && styles\.clueRow\}>/);
   assert.match(slot, /clueRow: \{ flexDirection: 'row', gap: 6 \}/);
   assert.match(slot, /clueChoiceSide: \{ flex: 1, minHeight: 52,/);
-  assert.match(slot, /\{!short && <View style=\{styles\.bestRow\} accessible/, 'no NEW row half under the fade on a slim page');
-  assert.match(slot, /\{short && newGame && bestStars == null && <View pointerEvents="none" style=\{\[styles\.newPill, styles\.newCorner\]\}>/);
+  // Core loop must-fix 3: PLAY comes right under the banner on every phone, and NEW rides on PLAY's corner
+  // (no NEW row that could sit half under the fade).
+  const game = slot.slice(slot.indexOf('function MiniGameSlot('), slot.indexOf('// -- trivia'));
+  assert.ok(game.indexOf('testID="lineplay-play"') < game.indexOf('styles.bestRow'), 'PLAY before the best-stars row');
+  assert.ok(game.indexOf('testID="lineplay-play"') < game.indexOf('styles.gamePlaceholder'), 'PLAY before the game blurb');
+  assert.match(game, /\{newGame && bestStars == null && <View pointerEvents="none" style=\{\[styles\.newPill, styles\.newCorner\]\}>/);
   const chapters = read('src/services/lineplay/chapters.ts');
   assert.doesNotMatch(chapters, /inspires your clue/);
 });

@@ -897,7 +897,7 @@ test('on a short window (iPhone SE) a page banner is one slim row and the clue p
   assert.match(slot, /const slim = heroSlim\(useContext\(PageHeightContext\)\);/);
   assert.match(slot, /heroSlim: \{ height: 46, marginBottom: spacing\.sm \}/);
   assert.match(slot, /return <>\{hero\}\{short \? <><View style=\{styles\.actionFirst\}>\{a\}<\/View>\{s\}<\/> : <>\{s\}\{a\}<\/>\}<\/>;/);
-  assert.equal([...slot.matchAll(/<ActionFirstWhenShort\n/g)].length, 2, 'the clue page and the mini-game page (Play first)');
-  assert.match(slot, /<ActionFirstWhenShort\n\s+hero=\{<ActivityHero kicker=\{navigator \? 'STARPORT' : 'QUEUE QUEST'\}/);
+  assert.equal([...slot.matchAll(/<ActionFirstWhenShort\n/g)].length, 1, 'the clue page (the mini-game page puts Play first on every phone)');
+  assert.match(slot, /<ActionFirstWhenShort\n\s+hero=\{<ActivityHero kicker=\{title != null \|\| navigator \? 'STORY' : 'GAMES'\}/);
   assert.match(read('src/screens/LinePlay/components/PageScroll.tsx'), /<PageHeightContext\.Provider value=\{viewHeight\}>\{children\}<\/PageHeightContext\.Provider>/);
 });
