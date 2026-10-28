@@ -369,3 +369,18 @@ test('the guide target\'s island never folds away or hides while it is the targe
   const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
   assert.match(explore, /goal: goalTaskId === task\.id \|\| guideTargetId === task\.id, rush, near, closed, tag \};/);
 });
+
+test('attentionGate: other lanes ask the map\'s rules before opening by themselves (ride question, membership look)', () => {
+  const Q = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts', { '../../components/map/statusStack': { HUD_BOTTOM: 76 } });
+  Q.attentionQueue.reset(); Q.attentionGate.reset();
+  const t0 = Date.parse('2026-10-28T19:00:00Z');
+  Q.attentionGate.publish({ atPark: true, arrivedAt: t0, walkingToTarget: false, playing: false, winCardClosedAt: null }, 'open-1');
+  assert.equal(Q.attentionGate.request('ride_question', t0 + 5_000), false, 'never in the first 30 s at a park (the Ride Journal at launch)');
+  assert.equal(Q.attentionGate.request('ride_question', t0 + 60_000), true, 'a calm moment takes the one automatic open');
+  assert.equal(Q.attentionGate.request('membership', t0 + 61_000), false, 'one automatic open per app open');
+  Q.attentionGate.publish({ atPark: true, arrivedAt: t0, walkingToTarget: true, playing: false, winCardClosedAt: null }, 'open-2');
+  assert.equal(Q.attentionGate.allowed('ride_question', t0 + 60_000), false, 'never while walking to the target');
+  Q.attentionQueue.reset(); Q.attentionGate.reset();
+  const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /attentionGate\.publish\(\{ atPark: !!park, arrivedAt: nextCoin\.arrivedAt,/);
+});

@@ -57,7 +57,7 @@ import ParkProjectMapBeacon from './ExploreScreen/ParkProjectMapBeacon';
 import type { ParkProject } from '../api/endpoints/me/park-projects';
 import ItemMarker from './ExploreScreen/ItemMarker';
 import GuestTaste from './ExploreScreen/GuestTaste';
-import { attentionQueue, autoOpenAllowed, chestMayPresent, firstVisitChestWaits, FIRST_VISIT_CHEST_WAIT_MS, hasFirstCatch, homeIntroMayPresent, suggestionSlotScreenTop, suggestionSlotTop } from './ExploreScreen/mapPresentationQueue';
+import { attentionGate, attentionQueue, autoOpenAllowed, chestMayPresent, firstVisitChestWaits, FIRST_VISIT_CHEST_WAIT_MS, hasFirstCatch, homeIntroMayPresent, suggestionSlotScreenTop, suggestionSlotTop } from './ExploreScreen/mapPresentationQueue';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import RideControlBar from '../components/RideControlBar';
 import { rideLook } from '../services/rideLandmark';
@@ -1240,6 +1240,11 @@ export function ExploreScreenBody() {
     walkingToTarget: !!park && nextCoin.state === 'walk', playing: redeemFlowOpen, winCardClosedAt: flowClosedAt,
     autoOpenUsed: attentionQueue.used(appOpenId, kind),
   });
+  // Other lanes ask the same rules through attentionGate (the ride question, the membership look).
+  useEffect(() => {
+    attentionGate.publish({ atPark: !!park, arrivedAt: nextCoin.arrivedAt, walkingToTarget: !!park && nextCoin.state === 'walk',
+      playing: redeemFlowOpen, winCardClosedAt: flowClosedAt }, appOpenId);
+  }, [park, nextCoin.arrivedAt, nextCoin.state, redeemFlowOpen, flowClosedAt, appOpenId]);
   const chestReady = !firstVisitHold && attentionFor('daily_chest') && chestMayPresent({
     // In the half second between the first catch and Finn's "Nice catch!" line, the chest waits too (no flash).
     tutorialActive: isActive || firstLineGap, findOpen: showPrepItemModal, findPending: !!pendingFind,

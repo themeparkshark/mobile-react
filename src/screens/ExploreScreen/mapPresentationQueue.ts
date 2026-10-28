@@ -142,7 +142,8 @@ export const WIN_CARD_QUIET_MS = 10_000;
  *   at home only in a calm moment (the Rewards button holds them otherwise).
  * - event_recap, membership, help_page, monday_results: through the queue, one per app open.
  */
-export type AutoOpenKind = 'daily_chest' | 'reward' | 'event_recap' | 'membership' | 'help_page' | 'monday_results';
+export type AutoOpenKind = 'daily_chest' | 'reward' | 'event_recap' | 'membership' | 'help_page' | 'monday_results'
+  | 'ride_question' | 'share_drop';
 
 export interface AttentionState {
   readonly atPark: boolean;
@@ -190,4 +191,30 @@ export const attentionQueue = {
   },
   /** Tests only. */
   reset(): void { usedIn = null; usedBy = null; },
+};
+
+// ---------------------------------------------------------------------------
+// The gate other lanes ask (rewards-unlocks' membership look, lineplay-ride's ride question,
+// shelf-words' cards): the map publishes its attention state here; anything that wants to open by
+// itself asks request(kind) first and waits on its button when the answer is no.
+
+let published: { state: Omit<AttentionState, 'now' | 'autoOpenUsed'>; appOpenId: string } | null = null;
+
+export const attentionGate = {
+  /** The map only (guide-map): its current attention state and this app open's id. */
+  publish(state: Omit<AttentionState, 'now' | 'autoOpenUsed'>, appOpenId: string): void {
+    published = { state, appOpenId };
+  },
+  /** Whether `kind` may open by itself right now (does not take the one automatic open). */
+  allowed(kind: AutoOpenKind, now: number = Date.now()): boolean {
+    if (!published) return kind !== 'daily_chest' && kind !== 'reward';
+    return autoOpenAllowed(kind, { ...published.state, now, autoOpenUsed: attentionQueue.used(published.appOpenId, kind) });
+  },
+  /** Ask to open by itself: true takes this app open's one automatic open; false means wait on your button. */
+  request(kind: AutoOpenKind, now: number = Date.now()): boolean {
+    if (!attentionGate.allowed(kind, now)) return false;
+    return published ? attentionQueue.take(published.appOpenId, kind) : true;
+  },
+  /** Tests only. */
+  reset(): void { published = null; },
 };
