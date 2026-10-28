@@ -240,7 +240,8 @@ export default function RedeemRedeemableModal({
   const rideRewardTask = isTaskType ? redeemable.model as TaskType | SecretTaskType : null;
   // Before coin levels open the card promises Shark Coins only; Parts and Energy join at rung 3, XP at rung 4.
   const previewRideRewards = rideRewardTask ? [
-    { label: 'SHARK COINS', amount: doubleCoins ? rideRewardTask.coins * 2 : rideRewardTask.coins, icon: 'coins' as const, show: rideRewardTask.coins > 0 },
+    // The ride's own Shark Coins; a member's double coins show on the win card as their own "+N VIP" chip.
+    { label: 'SHARK COINS', amount: rideRewardTask.coins, icon: 'coins' as const, show: rideRewardTask.coins > 0 },
     { label: 'RIDE PARTS', amount: rideRewardTask.ride_parts_reward ?? (taskType === 'secret_task' ? 2 : 1), icon: 'parts' as const, show: coinLevelsOpen },
     { label: 'ENERGY', amount: rideRewardTask.energy_reward ?? (taskType === 'secret_task' ? 15 : 10), icon: 'energy' as const, show: coinLevelsOpen },
     { label: 'XP', amount: doubleXP ? rideRewardTask.experience * 2 : rideRewardTask.experience, icon: 'xp' as const, show: dailyOpen },
