@@ -214,6 +214,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   }, [flags, applyDaily, level, wantDaily, wantChestsOn]);
 
   useEffect(() => { if (o.enabled && o.mapFocused) void refresh(lastRead.current === 0); }, [o.enabled, o.mapFocused, flags, refresh]);
+  // Daily 3 or level chests just unlocked (rung 4 opened after the first read): read them now, not on the next focus.
+  useEffect(() => { if (o.enabled && (wantDaily || wantChestsOn)) void refresh(true); }, [wantDaily, wantChestsOn]); // eslint-disable-line react-hooks/exhaustive-deps
   // Home and park goals differ: a move between them reads the right ones.
   useEffect(() => { if (o.enabled && lastRead.current > 0) void refresh(true); }, [atPark]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (o.enabled) void refresh(true); }, [o.refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
