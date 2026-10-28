@@ -113,6 +113,7 @@ test('challenge copy: "Win the X coin", PLAY!, and the free ways in one order (c
   assert.equal(copy.punchLines('The Sword in the Stone').win, 'Win the Sword in the Stone coin!');
   assert.equal(copy.punchLines('Walt Statue').kicker, "THIS RIDE'S GAME");
   assert.equal(copy.challengeTitle('task', 'Indiana Jones Adventure Temple'), 'Win this coin', 'a long name keeps the short title');
+  assert.equal(copy.challengeTitle('task', 'Mad Tea Party'), 'Win the Mad Tea Party coin');
   assert.equal(copy.challengeTitle('secret_task', 'Anything'), 'Win the secret coin');
   for (const name of ['Walt Statue', 'Main Street Station', 'X'.repeat(40)])
     assert.ok(copy.challengeTitle('task', name).length <= copy.RIBBON_MAX_CHARS, `${name} fits the ribbon`);

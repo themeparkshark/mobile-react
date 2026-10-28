@@ -328,6 +328,7 @@ test('a ride loss skips the game\'s own card: one loss card, with TRY AGAIN, the
   assert.match(shell, /const gameResults = rideLoss \|\| isEmptyResultsNode\(ownSurface\) \? null : ownSurface;/);
   const memory = read('src/games/memory/MemoryGame.tsx');
   assert.match(memory, /if \(r\.mode === 'ride' && left <= 0 && rideChallengeRef\.current\) \{/, 'the last Memory try goes straight to the one card');
+  assert.match(memory, /if \(rideChallenge && r\?\.mode === 'ride'\) \{\n\s+\/\/ The ride's one loss card says how far this try got \("3 of 8 pairs\."\)\.\n\s+noteRideTry\(/, 'DONE on a try card notes the try too');
   const lost = loadTs('src/components/rewards/lostTryCard.ts');
   assert.equal(lost.lostTryCopy({ usedRescuePass: false, rescueRetryAvailable: false, firstCoinTicketReturned: true, lostTicketCost: 1 }).message,
     'Your Ticket came back. Same game, try again!');

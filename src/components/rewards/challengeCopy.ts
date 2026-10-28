@@ -10,8 +10,8 @@ import {
   type ClaimSource, type FreeTicketStep,
 } from '../../services/guide/freeTickets';
 
-/** The ribbon fits about this many letters before its words shrink too small to read. */
-export const RIBBON_MAX_CHARS = 24;
+/** The ribbon fits about this many letters before its words shrink too small to read (about 15 pt on an SE). */
+export const RIBBON_MAX_CHARS = 30;
 
 /** A coin's name inside a sentence: "the Sword in the Stone", never "the The Sword in the Stone". */
 export function coinName(name: string | null | undefined): string {

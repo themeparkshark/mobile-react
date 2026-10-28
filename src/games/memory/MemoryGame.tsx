@@ -2418,6 +2418,8 @@ export default function MemoryGame({
     // offers): go straight there in one tap instead of a second results card.
     const r = runRef.current;
     if (rideChallenge && r?.mode === 'ride') {
+      // The ride's one loss card says how far this try got ("3 of 8 pairs.").
+      noteRideTry({ stars: 0, meta: { game: 'memory', pairs: r.eng.pairs, pairsTotal: r.eng.pairsTotal } });
       r.ended = true;
       r.playing = false;
       clearTimers();
