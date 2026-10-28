@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing, FadeIn, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence,
@@ -17,6 +17,8 @@ import RewardBurst from '../RewardBurst';
 import { CountUpText } from '../../gamekit/fx/CountUpText';
 import { BOX_ART, BOX_OPEN_ART } from './TrailBoxArt';
 import { UpperText } from '../../ui/upper';
+import { AuthContext } from '../../context/AuthProvider';
+import { wearAndOpenCloset } from '../../services/retention/wearRewardLive';
 
 const ICON: Record<TrailReward['kind'], GameIconName> = {
   coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'gift', exclusive: 'star',
@@ -85,6 +87,15 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
   const pending = useRef<Promise<readonly TrailReward[]> | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const size = Math.min(width * 0.56, 230);
+  // WEAR IT on a Trail Exclusive: the piece goes on, then the closet opens on its tab with it worn (must-fix 5).
+  const { refreshPlayer } = useContext(AuthContext);
+  const [wearing, setWearing] = useState(false);
+  const wearable = rewards.find(r => r.kind === 'exclusive' && typeof r.item_id === 'number' && !r.instead_of);
+  const wear = async () => {
+    if (!wearable?.item_id || wearing) return;
+    setWearing(true);
+    try { await wearAndOpenCloset(wearable.item_id, refreshPlayer); } finally { setWearing(false); onClose(); }
+  };
   const stageTop = insets.top + 20 + 26 + 44;
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
@@ -234,7 +245,11 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
               </View>
             )}
             {left === 0 && !!nextHint && <Text style={styles.hint}>{nextHint}</Text>}
-            <GameButton label={left > 0 ? `Next box (${left})` : 'Nice!'} onPress={next} />
+            {left === 0 && wearable && (
+              <GameButton label={wearing ? 'Putting it on...' : 'WEAR IT'} icon="shark" loading={wearing} onPress={() => { void wear(); }}
+                accessibilityLabel={`Wear ${wearable.name ?? 'your Trail Exclusive'} now`} />
+            )}
+            <GameButton label={left > 0 ? `Next box (${left})` : 'Nice!'} onPress={next} variant={left === 0 && wearable ? 'secondary' : undefined} />
           </Animated.View>
         )}
         {phase === 'error' && (

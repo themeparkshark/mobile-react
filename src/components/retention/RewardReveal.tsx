@@ -30,7 +30,7 @@ const STALL_MS = 6000;
  * Shows only what the server paid.
  */
 export default function RewardReveal({ subtitle, closedArt, openArt, rewards, opening, onOpen, onDone, onWear, onPins,
-  reducedMotion, doneLabel, footer, dropIn = false }: {
+  reducedMotion, doneLabel, footer, dropIn = false, wearBusy = false }: {
   readonly subtitle: string;
   readonly closedArt: ImageSource | number;
   readonly openArt: ImageSource | number;
@@ -41,6 +41,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   readonly onDone: () => void;
   readonly onWear?: () => void;
   readonly onPins?: () => void;
+  /** WEAR IT is putting the piece on (the closet opens next). */
+  readonly wearBusy?: boolean;
   readonly reducedMotion: boolean;
   readonly doneLabel?: string;
   /** The closing beat (what comes next), shown with the button. */
@@ -206,7 +208,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
           ) : rows.map((row, i) => (
             <Row key={row.kind} row={row} shown={i < landed} reducedMotion={reducedMotion} compact={compact}
               slamKey={i === rows.length - 1 ? replay : 0} onLand={isBigReward(row.kind) ? pulseGlow : undefined}
-              onWear={row.kind === 'item' ? onWear : undefined} onPins={row.kind === 'mystery_boxes' ? onPins : undefined} />
+              onWear={row.kind === 'item' ? onWear : undefined} onPins={row.kind === 'mystery_boxes' ? onPins : undefined}
+              wearBusy={wearBusy} />
           ))}
         </ScrollView>
       </Pressable>
@@ -269,10 +272,10 @@ function useCountUp(target: number, run: boolean, instant: boolean): number {
   return n;
 }
 
-function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamKey = 0, onLand }: {
+function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamKey = 0, onLand, wearBusy = false }: {
   readonly row: RewardRow; readonly shown: boolean; readonly reducedMotion: boolean; readonly compact?: boolean;
   readonly slamKey?: number; readonly onLand?: () => void;
-  readonly onWear?: () => void; readonly onPins?: () => void;
+  readonly onWear?: () => void; readonly onPins?: () => void; readonly wearBusy?: boolean;
 }) {
   const big = isBigReward(row.kind);
   const t = useSharedValue(0);
@@ -311,9 +314,10 @@ function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamK
             <Text style={styles.bigName} numberOfLines={2}>{row.kind === 'item' ? row.label
               : row.kind === 'freezes' ? 'Your flame is safe if you miss a day' : 'A surprise pin is inside'}</Text>
             {(onWear || onPins) && (
-              <Pressable onPress={onWear ?? onPins} accessibilityRole="button" hitSlop={6}
+              <Pressable onPress={onWear ?? onPins} accessibilityRole="button" hitSlop={6} disabled={!!onWear && wearBusy}
+                accessibilityState={{ busy: !!onWear && wearBusy }}
                 style={({ pressed }) => [styles.smallBtn, pressed && styles.buttonPressed]}>
-                <Text style={styles.smallBtnText}>{onWear ? 'WEAR IT' : 'SEE PINS'}</Text>
+                <Text style={styles.smallBtnText}>{onWear ? (wearBusy ? 'PUTTING IT ON...' : 'WEAR IT') : 'SEE PINS'}</Text>
               </Pressable>
             )}
           </View>

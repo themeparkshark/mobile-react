@@ -21,6 +21,7 @@ import { enablePush } from '../../services/push';
 import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
 import { mayAskForPush, notePushAsked } from '../../services/retention/pushAsk';
+import { wearAndOpenCloset } from '../../services/retention/wearRewardLive';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../../ui';
 import { useModalLayer } from '../../ui/modalLayers';
 import Ribbon from '../Ribbon';
@@ -204,6 +205,22 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     send('energy', paid.energy, 'energy', 160);
   };
 
+  // WEAR IT: the piece goes on first, then the closet opens on its own tab with it worn (must-fix 5).
+  const [wearing, setWearing] = useState(false);
+  const wearItem = async (paid: PaidRewards | null) => {
+    const itemId = paid?.item?.id;
+    if (wearing || !itemId) return;
+    setWearing(true);
+    try {
+      await wearAndOpenCloset(itemId, refreshPlayer);
+    } finally {
+      if (mounted.current) setWearing(false);
+      if (paid) fly(paid);
+      void refresh(true);
+      if (mounted.current) setView(null);
+    }
+  };
+
   const finishReveal = async (paid: PaidRewards | null) => {
     if (paid) fly(paid);
     void refreshPlayer?.();
@@ -374,7 +391,8 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
           : r.src === 'weekly' ? 'A whole week of flames. Tap the box!' : 'All three goals done. Tap your chest!'}
         closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? WEEKLY : ICON_SOURCES.chest}
         openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? WEEKLY_OPEN : ICON_SOURCES.chestOpen}
-        onWear={() => { void finishReveal(r.rewards).then(() => RootNavigation.navigate('Inventory')); }}
+        wearBusy={wearing}
+        onWear={() => { void wearItem(r.rewards); }}
         onPins={() => { void finishReveal(r.rewards).then(() => RootNavigation.navigate('PinCollections')); }}
         onOpen={() => { void openReveal(); }} onDone={() => { void finishReveal(r.rewards); }} />
     );
