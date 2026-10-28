@@ -132,6 +132,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)services\/lineplay\/resolveRide$/.test(name)) return { resolveQueueStoryContext: async () => ({ rideId: 0 }) };
       if (/(^|\/)rewards\/teamOffer$/.test(name)) return { teamOffered: async () => true, markTeamOffered: async () => undefined,
         wantsTeamStep: () => false, teamExit: () => ({ kind: 'back' }) };
+      if (/(^|\/)rewards\/usePresentWatchdog$/.test(name)) return { usePresentWatchdog: () => ({ key: 0, onShow() {} }) };
       if (/(^|\/)rewards\/postWinModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/postWinModel.ts');
       if (/(^|\/)rewards\/challengeCopy$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/challengeCopy.ts');
       // Nobody signed in unless a test says so (PLAY! reads the Ticket count for its free-try badge).
