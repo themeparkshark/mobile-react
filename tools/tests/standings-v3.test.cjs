@@ -121,7 +121,7 @@ test('the one next step: top 10 if 3 or fewer away, a weekly goal if 2 or fewer,
   const leader = model.nextStep({ ...base, me: { rank: 1, score: 50 }, chase: null });
   assert.equal(leader.kind, 'leader');
   const home = model.nextStep({ ...base, me: { rank: null, score: 0 }, chase: null }, false);
-  assert.deepEqual(plain(home), { kind: 'join', canRide: false, text: 'Next park day: win 1 ride!' });
+  assert.deepEqual(plain(home), { kind: 'join', canRide: false, text: 'Next park day: win 1 coin!' });
   assert.equal(model.nextStep({ ...base, me: { rank: null, score: 0 }, chase: null }, true).canRide, true);
   const parsed = model.boardModel(firstPage({ chase: { id: 1119, screen_name: 'p1119', rank: 119, score: 381, to_pass: 1, tied: true, passes: 12, target_rank: 108 } }), 'week', 5);
   assert.deepEqual(plain([parsed.chase.passes, parsed.chase.targetRank]), [12, 108]);

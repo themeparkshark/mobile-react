@@ -400,7 +400,7 @@ export function nextStep(
     return { kind: 'review', text: 'Keep riding! Your rides are safe.' };
   }
   if (score <= 0 || model.me?.rank == null) {
-    const what = model.metric === 'ride_coins' ? 'ride coin' : 'ride';
+    const what = model.metric === 'ride_coins' ? 'ride coin' : 'coin';
     return inPark
       ? { kind: 'join', canRide: true, text: `Win 1 ${what} to join!` }
       : { kind: 'join', canRide: false, text: `Next park day: win 1 ${what}!` };

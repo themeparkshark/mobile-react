@@ -63,7 +63,7 @@ test('the server answer is read defensively: rows, rows around you, chase, goals
 
 test('the You card: NEW players are invited, ties are explained, chasers get one target, leaders hold', () => {
   const join = model.youLine(model.boardModel(dto({ me: { rank: null, id: 5, score: 0 } }), 'week', 5));
-  assert.deepEqual(plain(join), { state: 'join', text: 'Win 1 ride to join!', sub: null });
+  assert.deepEqual(plain(join), { state: 'join', text: 'Win 1 coin to join!', sub: null });
   const coinJoin = model.youLine(model.boardModel(dto({ board: 'all_time', metric: 'ride_coins', me: { rank: null, id: 5, score: 0 } }), 'all_time', 5));
   assert.equal(coinJoin.text, 'Win 1 ride coin to join!');
   const chasing = model.youLine(model.boardModel(dto(), 'week', 5));
@@ -72,7 +72,7 @@ test('the You card: NEW players are invited, ties are explained, chasers get one
   const tied = model.youLine(model.boardModel(dto({ chase: { id: 10, screen_name: 'zmaize', rank: 4, score: 8, to_pass: 1, tied: true } }), 'week', 5));
   assert.deepEqual(plain(tied), { state: 'tied', text: '1 more ride to pass zmaize!', sub: null });
   const away = model.youLine(model.boardModel(dto({ me: { rank: null, id: 5, score: 0 } }), 'week', 5), false);
-  assert.equal(away.text, 'Next park day: win 1 ride!', 'at home: no dead-end GO RIDE');
+  assert.equal(away.text, 'Next park day: win 1 coin!', 'at home: no dead-end GO RIDE');
   const leader = model.youLine(model.boardModel(dto({ me: { rank: 1, id: 5, score: 60 }, chase: null }), 'week', 5));
   assert.equal(leader.state, 'leader');
   for (const line of [join, coinJoin, chasing, tied, leader, away]) {
