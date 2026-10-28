@@ -311,7 +311,7 @@ export default function TeacherShark({
 
 const styles = StyleSheet.create({
   walkPicture: { alignSelf: 'center', marginTop: 6 },
-  winCoinsPicture: { alignSelf: 'center', marginTop: 4 },
+  winCoinsPicture: { alignSelf: 'center', marginTop: 16 },
   walkFeet: { width: 54, height: 54 },
   title: { fontFamily: 'Shark', fontSize: 23, lineHeight: 28, textAlign: 'center', color: BRAND.navy, marginBottom: 8 },
   container: {
