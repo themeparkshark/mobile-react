@@ -114,6 +114,15 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       // iOS Dim Flashing Lights reads off unless a test stubs it.
       if (/(^|\/)modules\/flash-safety$/.test(name)) return { isDimFlashingLightsEnabled: () => false };
       if (/(^|\/)ui\/GoldBurst$/.test(name)) return { GoldBurst: 'GoldBurst', SparkleBurst: 'SparkleBurst', ShineSweep: 'ShineSweep' };
+      // Native modal layers (core loop step 0): nothing else is up, so a wanted sheet presents at once.
+      if (/(^|\/)ui\/modalLayers$/.test(name)) return { useNativeModalLayer: wanted => ({ present: !!wanted, onDismissed() {} }),
+        useModalLayer: active => !!active, useAnyModalLayer: () => false, ModalLayerContext: react.createContext(false),
+        modalLayers: { add: () => 1, remove() {}, isFront: () => true, count: () => 0, subscribe: () => () => {}, reset() {} } };
+      // The unlock ladder (core loop step 0): every rung reads closed until the map feeds it, as on a new install.
+      if (/(^|\/)services\/reveal\/revealLadder$/.test(name)) return { useRung: () => ({ open: false, isNew: false, markSeen() {} }),
+        rungState: () => ({ open: false, isNew: false }), recordProgress() {} };
+      // The Next Coin guide (core loop step 0): no target until the map resolves one.
+      if (/(^|\/)services\/guide\/nextCoin$/.test(name)) return { guide: { current: () => null, subscribe: () => () => {}, setTarget() {}, plan: () => null } };
       // Money offers on reward sheets (money stream): no server multiplier, so the generic VIP line.
       if (/(^|\/)services\/money\/offers$/.test(name)) return { vipWinLine: () => null };
       if (/(^|\/)services\/money\/vipNudge$/.test(name)) return { useVipNudge: () => false, markVipNudgeShown() {} };

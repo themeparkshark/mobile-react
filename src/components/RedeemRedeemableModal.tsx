@@ -59,6 +59,7 @@ import CoinTopUpOffer from './money/CoinTopUpOffer';
 import { storeAvailable } from '../services/purchases';
 import { adsAvailable, watchForReward } from '../services/ads';
 import { gameAlert } from '../ui';
+import { useNativeModalLayer } from '../ui/modalLayers';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WHEEL_SIZE = Math.min(SCREEN_WIDTH * 0.7, 260);
@@ -649,10 +650,13 @@ export default function RedeemRedeemableModal({
     close();
   }, [onPress, close, clearAttemptCheckpoint]);
 
-  if (!redeemable) return null;
+  // One door for every sheet (blueprint 4.3 rule 10, the PLAY RIDE freeze): the
+  // challenge card waits until every sheet before it (a swipe-closed Ride
+  // Control sheet still sliding away) is really gone, and holds its own layer
+  // until UIKit reports it dismissed, so the win card never presents into it.
+  const challengeLayer = useNativeModalLayer(open === true && flowState !== 'postwin' && !!redeemable, 'wait');
 
-  // Determine what to show in the modal - keep it open during minigame too!
-  const showModal = open && flowState !== 'postwin';
+  if (!redeemable) return null;
 
   return (
     <>
@@ -660,9 +664,9 @@ export default function RedeemRedeemableModal({
         animationIn="zoomIn"
         animationOut="zoomOut"
         swipeDirection={flowState === 'preview' ? 'down' : undefined}
-        isVisible={showModal}
+        isVisible={challengeLayer.present}
         onModalWillShow={() => setChallengeModalHidden(false)}
-        onModalHide={() => setChallengeModalHidden(true)}
+        onModalHide={() => { setChallengeModalHidden(true); challengeLayer.onDismissed(); }}
         onSwipeComplete={safeClose}
         onBackdropPress={safeClose}
         onBackButtonPress={safeClose}

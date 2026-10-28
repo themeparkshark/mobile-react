@@ -20,6 +20,7 @@ import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import TeamBadge from '../../components/TeamBadge';
 import { GameIcon } from '../../ui';
 import { QUESTION_BANK } from './teamQuiz';
+import { teamExit, type TeamSelectionParams } from '../../components/rewards/teamOffer';
 
 const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
 const VIBE: Record<TeamId, { tag: string; line: string }> = {
@@ -35,7 +36,7 @@ type Stage = 'pick' | 'quiz' | 'confirm' | 'joining' | 'done' | 'error';
 
 interface Props {
   navigation?: any;
-  route?: { params?: { onTeamSelected?: () => void; isOnboarding?: boolean } };
+  route?: { params?: TeamSelectionParams };
 }
 
 function drawQuestions() {
@@ -99,12 +100,20 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
     }
   };
 
-  const finish = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    if (route?.params?.onTeamSelected) route.params.onTeamSelected();
-    else if (route?.params?.isOnboarding) navigation?.reset({ index: 0, routes: [{ name: 'Explore' }] });
+  const leave = () => {
+    const exit = teamExit(route?.params, navigation?.canGoBack?.() !== false);
+    if (exit.kind === 'next') {
+      if (typeof navigation?.replace === 'function') navigation.replace(exit.name, exit.params);
+      else navigation?.navigate(exit.name, exit.params);
+    } else if (exit.kind === 'reset') navigation?.reset({ index: 0, routes: [{ name: 'Explore' }] });
     else navigation?.goBack();
   };
+  const finish = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    try { route?.params?.onTeamSelected?.(); } catch { /* a refresh problem never keeps the player here */ }
+    leave();
+  };
+  const firstCoin = route?.params?.firstCoin === true;
 
   return (
     <View style={s.root}>
@@ -116,7 +125,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
       <View style={[StyleSheet.absoluteFill, s.tint]} />
       <SafeScreen style={s.safe}>
         {stage !== 'done' && (
-          <Pressable style={[s.close, { top: insets.top + CLOSE_GAP }]} onPress={() => navigation?.goBack()} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
+          <Pressable style={[s.close, { top: insets.top + CLOSE_GAP }]} onPress={leave} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
             <GameIcon name="close" size={36} />
           </Pressable>
         )}
@@ -125,7 +134,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
           <View style={s.page}>
             <Animated.Text entering={FadeInDown.duration(400)} style={s.title}>PICK YOUR TEAM</Animated.Text>
             <Animated.Text entering={FadeInDown.delay(80).duration(400)} style={s.sub}>
-              Your team battles for rides at every park. Catch coins, beat bosses and win rides for your crew.
+              Every ride coin you win takes that ride for your team.
             </Animated.Text>
             <View style={s.cards}>
               {ORDER.map((t, i) => (
@@ -143,6 +152,15 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
                 <GameIcon name="arrow" size={18} />
               </Pressable>
             </Animated.View>
+            {/* The first-coin step is one tap away from the map: pick a team, or later (Profile keeps "Pick your team"). */}
+            {firstCoin && (
+              <Animated.View entering={FadeIn.delay(700)} style={{ width: '100%' }}>
+                <Pressable style={s.later} onPress={leave} accessibilityRole="button"
+                  accessibilityLabel="Later. Pick a team any time from your Profile">
+                  <Text style={s.laterText}>LATER</Text>
+                </Pressable>
+              </Animated.View>
+            )}
           </View>
         )}
 
@@ -242,7 +260,7 @@ function Welcome({ team, onGo }: { team: TeamId; onGo: () => void }) {
         {teamName(team).toUpperCase()}!
       </Animated.Text>
       <Animated.Text entering={FadeInUp.delay(450)} style={s.line}>
-        Every ride coin you catch at a park now wins power for your team. Beat bosses and hold rides together!
+        Every ride coin you win now takes that ride for your team.
       </Animated.Text>
       <Animated.View entering={FadeInUp.delay(600)} style={{ width: '100%' }}>
         <Pressable style={[s.join, { backgroundColor: TEAMS[team].color }]} onPress={onGo} accessibilityRole="button">
@@ -294,6 +312,9 @@ const s = StyleSheet.create({
   answerPressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2, backgroundColor: '#fff7d6' },
   answerText: { fontFamily: 'Knockout', fontSize: 18, color: '#09268f', textAlign: 'center' },
   back: { fontFamily: 'Knockout', fontSize: 15, color: '#cdeaff', marginTop: 16 },
+  later: { width: '100%', marginTop: 14, borderRadius: 20, paddingVertical: 13, alignItems: 'center',
+    backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#bcd9f5' },
+  laterText: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },
   finnSays: { fontFamily: 'Shark', fontSize: 20, color: '#ffcf3b', marginBottom: 4 },
   teamName: { fontFamily: 'Shark', fontSize: 40, marginTop: 4, textShadowColor: '#021e45', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   tag: { fontFamily: 'Knockout', fontSize: 14, letterSpacing: 2, color: '#cdeaff' },

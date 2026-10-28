@@ -53,6 +53,7 @@ import { hasWinNote, holdWinNotes, takeWinNote } from '../screens/LeaderboardsSc
 import StarRideStamp from './liveEvents/StarRideStamp';
 import TeamBadge from './TeamBadge';
 import countText from '../helpers/countText';
+import { useNativeModalLayer } from '../ui/modalLayers';
 
 const { width: SW } = Dimensions.get('window');
 const HERO = 150;
@@ -411,6 +412,10 @@ export default function PostWinRewardsModal({
     });
   };
 
+  // The win card registers with the native modal layers (blueprint 4.3 rule 10): it presents only once
+  // the challenge card is really gone, and holds its layer until UIKit reports it dismissed.
+  const layer = useNativeModalLayer(visible, 'wait');
+
   const coinSource = taskCoinUrl && !coinArtFailed ? taskCoinUrl : null;
   const primaryLabel = hasCoin && onViewCoin
     ? upgradeReady && !isNewCoin ? 'Upgrade Your Coin' : 'See It On Your Shelf'
@@ -420,12 +425,13 @@ export default function PostWinRewardsModal({
     <Modal
       animationIn="fadeIn"
       animationOut="fadeOut"
-      isVisible={visible}
+      isVisible={layer.present}
       style={{ margin: 0 }}
       animationInTiming={reducedMotion ? 120 : 250}
       animationOutTiming={reducedMotion ? 120 : 200}
       onBackButtonPress={caught ? onClose : undefined}
       onModalHide={() => {
+        layer.onDismissed();
         const next = afterHide.current; afterHide.current = null;
         onHidden?.(); next?.();
       }}
