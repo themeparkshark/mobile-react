@@ -366,7 +366,7 @@ test('one count per screen: the bubbles and the rail own the clue count', () => 
   assert.doesNotMatch(nav, /MISSION 1 OF 3/);
   const labels = loadTs('src/services/lineplay/labels.ts');
   assert.equal(labels.chapterPageKicker({ parkLabel: 'MAGIC KINGDOM', episodeLabel: 'FLIGHT 1 OF 3' }), 'MAGIC KINGDOM');
-  assert.equal(labels.chapterPageKicker({ parkLabel: '' }), 'SHARK FAN MISSION');
+  assert.equal(labels.chapterPageKicker({ parkLabel: '' }), 'LINE STORY'); // core loop 4.5: one word, Line story
 });
 
 test('the chapter page ends on whole blocks: the crew row starts below the window instead of peeking', () => {
@@ -432,7 +432,8 @@ test('one name per activity: PLAY NOW, the rail and the board header say the sam
   assert.equal(m.railNextIndex(pages, 3, null), 0);
   assert.equal(m.railNextIndex(['chapter', 'x'], 0, 'x'), 1, 'two pages: nothing else to point at');
   const screen = read(SCREEN);
-  assert.match(screen, /const nextPageIndex = railNextIndex\(activityPages\.map\(page => page\.id\), visiblePageIndex, playNowId\);/);
+  // The one Next stays inside its tab (Story or Games); outside a tab the rail's own rule still skips PLAY NOW's game.
+  assert.match(screen, /const nextPageIndex = nextInTab\(activityPages, visiblePageIndex, snapshot\.chapter\?\.id, playNowId\)\n\s+\?\? railNextIndex\(activityPages\.map\(page => page\.id\), visiblePageIndex, playNowId\);/);
   assert.match(screen, /\? chapter\.missionNames\[0\] : 'Shark Trivia';/);
   assert.match(screen, /navigationTitle=\{snapshot\.chapter\?\.navigationPanel \? snapshot\.chapter\.missionNames\[0\] : undefined\}/);
   assert.doesNotMatch(screen, /'CHAPTER'/, 'Chapter is only ever the rail button word, never a plain label too');
@@ -831,7 +832,7 @@ test('one message asks at a time: the idle nudge never shows over a one-time tip
   const screen = read(SCREEN);
   assert.match(screen, /if \(!lineNudgeReady\(\{ busy: sheetOpenRef\.current, tipUp: tipsUp\.current\.size > 0,/);
   assert.match(screen, /sheetOpenRef\.current = somethingAsks;/);
-  assert.match(screen, /const somethingAsks = groupPlay\.sheetOpen \|\| arcadeOpen \|\| projectOpen \|\| waitEndPrompt != null \|\| boardingAsk \|\| lineDone \|\| resuming \|\|\n\s+resumeHandoff != null;/);
+  assert.match(screen, /const somethingAsks = groupPlay\.sheetOpen \|\| arcadeOpen \|\| projectOpen \|\| waitEndPrompt != null \|\| boardingAsk \|\| leftLineWrapUp \|\| resuming \|\|\n\s+resumeHandoff != null;/);
   assert.match(screen, /onVisibleChange=\{onIntroTip\}/);
   assert.match(screen, /onVisibleChange=\{onPartTip\}/);
   const tip = read('src/components/help/OneTimeTip.tsx');

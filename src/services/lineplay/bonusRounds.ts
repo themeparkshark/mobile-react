@@ -80,9 +80,10 @@ export function ringPill(bonus: LineBonusSummary | null | undefined): RingPill {
   return null;
 }
 
+/** Minutes in words ("4 min", "under 1 min"): LinePlay never shows a ticking m:ss clock (core loop 4.3 rule 7). */
 export function formatClock(seconds: number): string {
-  const safe = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, '0')}`;
+  const minutes = Math.ceil(Math.max(0, Math.floor(seconds)) / 60);
+  return minutes <= 1 ? (seconds <= 60 ? 'under 1 min' : '1 min') : `${minutes} min`;
 }
 
 export interface PickerBadge {

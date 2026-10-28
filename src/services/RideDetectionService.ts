@@ -25,7 +25,6 @@ import { QUEUE_RIDE_TYPES } from '../constants/queueRideTypes';
 const STORAGE_KEY = 'pending_ride_detections';
 const RIDES_CACHE_KEY = 'ride_detection_rides_cache';
 const DEFAULT_RIDE_RADIUS = 50; // fallback meters
-const DEFAULT_MIN_DWELL_MS = 90_000; // 1.5 min default
 const MAX_WALKTHROUGH_MS = 60_000; // anything under 1 min = walk-through
 const RE_RIDE_GAP_MS = 180_000; // 3 min gap before counting as re-ride
 const DETECTION_COOLDOWN_MS = 120_000; // 2 min cooldown per ride
@@ -67,6 +66,55 @@ const LINEPLAY_STORAGE_KEY = 'ride_detection_lineplay_ride';
 /** A LinePlay ride that ended this long ago no longer names the ride logged. */
 const LINEPLAY_STICKY_MAX_MS = 3 * 60 * 60_000;
 
+/** "I got to the ride" covers that ride for 30 minutes: no second question, no queue dwell offer. */
+export const RIDE_STEP_HOLD_MS = 30 * 60_000;
+
+/**
+ * The least time in a ride's zone that can be a real ride, by type. A walk past
+ * a 60 m zone at a stroll takes about 90 s; a real ride (even a walk-on) is a
+ * short queue plus the ride itself. The ride's own min_dwell_minutes (or its
+ * ride time) wins when it is longer.
+ */
+export const MIN_RIDE_DWELL_MS: Readonly<Record<string, number>> = {
+  attraction: 4 * 60_000,
+  coaster: 3 * 60_000,
+  dark_ride: 4 * 60_000,
+  flat_ride: 3 * 60_000,
+  water_ride: 4 * 60_000,
+};
+
+/** A ride with a real queue (the same list the Adventure Ticket and the in-line card use). */
+export function isQueueRideType(type: string | null | undefined): boolean {
+  return type != null && QUEUE_TYPES.has(type);
+}
+
+/** The shortest stay that can count as a ride of this type (null: never a ride question). */
+export function minRideDwellMs(type: string | null | undefined, rideMinDwellMinutes?: number | null,
+  rideDurationMinutes?: number | null): number | null {
+  if (!isQueueRideType(type)) return null;
+  const base = MIN_RIDE_DWELL_MS[type as string] ?? 4 * 60_000;
+  const own = rideMinDwellMinutes != null && rideMinDwellMinutes > 0 ? rideMinDwellMinutes * 60_000
+    : rideDurationMinutes != null && rideDurationMinutes > 0 ? rideDurationMinutes * 60_000 : 0;
+  return Math.max(base, own);
+}
+
+/** Rides the ride step logged, with when their hold ends. */
+const loggedRides = new Map<number, number>();
+
+/** "I got to the ride": that ride is logged, so nothing asks about it (or offers its line) for 30 minutes. */
+export function holdRideAfterRideStep(rideId: number, now = Date.now()): void {
+  if (!Number.isInteger(rideId) || rideId <= 0) return;
+  loggedRides.set(rideId, now + RIDE_STEP_HOLD_MS);
+}
+
+/** When the ride step's hold on this ride ends (null: no hold). */
+export function rideLoggedUntil(rideId: number, now = Date.now()): number | null {
+  const until = loggedRides.get(rideId);
+  if (until == null) return null;
+  if (until <= now) { loggedRides.delete(rideId); return null; }
+  return until;
+}
+
 interface QueueCandidate { ride: RideType; since: number; score: number }
 
 /** One attraction zone inside the current visit, with the time it was the closest. */
@@ -80,6 +128,17 @@ interface VisitZone { ride: RideType; enteredAt: number; nearestMs: number }
 interface ZoneVisit { zones: Map<number, VisitZone>; nearestId: number | null; lastFixAt: number }
 
 interface LinePlayRide { rideId: number; endedAt: number | null }
+
+/**
+ * Should the queue dwell ("In line? Your wait powers this coin") skip this ride? Yes while its LinePlay
+ * ended less than 30 minutes ago, or the ride step logged it: the guest just rode it, so standing near
+ * its exit is not a new line.
+ */
+export function dwellSkipsRide(rideId: number, lastLinePlayEnd: { rideId: number; at: number } | null, now: number,
+  loggedUntil: number | null = null): boolean {
+  if (loggedUntil != null && loggedUntil > now) return true;
+  return lastLinePlayEnd != null && lastLinePlayEnd.rideId === rideId && now - lastLinePlayEnd.at < RIDE_STEP_HOLD_MS;
+}
 
 function queueWeight(candidate: QueueCandidate, area: { lastSeenAt: number; nearestId: number | null }, now: number): number {
   const elapsed = Math.max(0, now - area.lastSeenAt);
@@ -163,6 +222,8 @@ class RideDetectionService {
   private visit: ZoneVisit | null = null;
   /** The ride of the current (or just finished) LinePlay session. */
   private linePlay: LinePlayRide | null = null;
+  /** The last LinePlay that ended: its ride is not offered as a new line for 30 minutes. */
+  private lastLinePlayEnd: { rideId: number; at: number } | null = null;
   /**
    * The "In line at X? Play" suggestion, tracked apart from ride logging.
    * Ride logging credits the visit's longest dwell (or the LinePlay ride) when
@@ -336,6 +397,7 @@ class RideDetectionService {
     if (rideId != null && Number.isInteger(rideId) && rideId > 0) {
       this.linePlay = { rideId, endedAt: null };
     } else if (this.linePlay && this.linePlay.endedAt == null) {
+      this.lastLinePlayEnd = { rideId: this.linePlay.rideId, at: now };
       this.linePlay = { ...this.linePlay, endedAt: now };
       if (!this.linePlayInVisit()) this.linePlay = null;
     } else {
@@ -347,6 +409,11 @@ class RideDetectionService {
   private linePlayInVisit(): boolean {
     const zone = this.linePlay && this.visit?.zones.get(this.linePlay.rideId);
     return !!zone && (this.linePlay!.endedAt == null || zone.enteredAt <= this.linePlay!.endedAt);
+  }
+
+  /** The ride LinePlay is running at right now (its own "I got to the ride" asks about it), or null. */
+  linePlayRideNow(): number | null {
+    return this.linePlay && this.linePlay.endedAt == null ? this.linePlay.rideId : null;
   }
 
   /** The LinePlay ride that still decides this fix, if any. */
@@ -458,13 +525,12 @@ class RideDetectionService {
     if (dwellMs <= MAX_WALKTHROUGH_MS) return;
     const history = this.rideHistory.get(ride.id);
     if (history && zone.enteredAt - history.lastDetectionTime < DETECTION_COOLDOWN_MS) return;
-    let minDwellMs = DEFAULT_MIN_DWELL_MS;
-    if (ride.min_dwell_minutes != null) {
-      minDwellMs = ride.min_dwell_minutes * 60_000;
-    } else if (ride.ride_duration_minutes != null) {
-      minDwellMs = ride.ride_duration_minutes * 60_000;
-    }
-    if (dwellMs <= minDwellMs) return;
+    // Only rides with a real queue are ever asked about (no shows, street vehicles, transport or
+    // walk-throughs), and only after a stay long enough for that kind of ride: a walk past is not a ride.
+    const minDwellMs = minRideDwellMs(ride.type, ride.min_dwell_minutes, ride.ride_duration_minutes);
+    if (minDwellMs == null || dwellMs < minDwellMs) return;
+    // "I got to the ride" already logged it: nothing asks again for 30 minutes.
+    if (rideLoggedUntil(ride.id, now) != null) return;
     const state: ZoneState = {
       rideId: ride.id,
       rideName: ride.name,
@@ -618,6 +684,8 @@ class RideDetectionService {
       }
     }
     if (!leader) return null;
+    // A ride whose LinePlay just ended (or the ride step just logged) is not a new line.
+    if (dwellSkipsRide(leader.ride.id, this.lastLinePlayEnd, now, rideLoggedUntil(leader.ride.id, now))) return null;
     const dwellMs = now - leader.since;
     if (dwellMs < minMs) return null;
     return { rideId: leader.ride.id, rideName: leader.ride.name, parkId: leader.ride.park_id, dwellMs };
@@ -635,7 +703,7 @@ class RideDetectionService {
 // Singleton
 const rideDetectionService = new RideDetectionService();
 
-// Background location task — must be defined at top level
+// Background location task: must be defined at top level
 TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
   if (error) {
     // Code 0 is CoreLocation's kCLErrorLocationUnknown: transient, the next fix
@@ -667,6 +735,8 @@ export function clearPendingDetections() { return rideDetectionService.clearPend
 export function removePendingDetection(id: string) { return rideDetectionService.removePendingDetection(id); }
 export function setDetectionRides(rides: RideType[]) { rideDetectionService.setRides(rides); }
 export function setLinePlayDetectionRide(rideId: number | null) { rideDetectionService.setLinePlayRide(rideId); }
+/** The ride LinePlay is running at right now, or null. */
+export function linePlayRideNow() { return rideDetectionService.linePlayRideNow(); }
 
 export default rideDetectionService;
 export function currentRideDwell(minMs?: number) { return rideDetectionService.currentDwell(minMs); }

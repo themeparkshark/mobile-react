@@ -371,7 +371,7 @@ export default function RideTrackerScreen() {
                 </View>
                 <View style={s.statPill}>
                   <Text style={s.statVal}>{stats.current_streak}</Text>
-                  <Text style={s.statLabel}>Park days in a row</Text>
+                  <Text style={s.statLabel}>Ride days in a row</Text>
                 </View>
               </View>
             </FadeIn>
@@ -393,7 +393,7 @@ export default function RideTrackerScreen() {
             />
             <MenuRow
               icon={require('../../../assets/images/screens/profile/pin_collections.png')}
-              title="Collections" sub="Ride every mountain, coaster, and more"
+              title="Ride sets" sub="Ride every mountain, coaster, and more"
               onPress={() => nav.navigate('RideCollections')} delay={480}
             />
             <MenuRow

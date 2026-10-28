@@ -1,9 +1,11 @@
 /**
- * The queue recap, shown when a wait ends. A confirmed boarding opens as
- * "Your ride's up!"; leaving the queue area opens as "Wait wrapped up" with a
- * "Still in line?" way back in. Verified rewards count up in a staggered row
- * with his currency art (the crew story plays once, on the relay card), and
- * the next coin move is one clear action.
+ * The queue recap, shown when a wait ends (core loop 5.5): one screen.
+ * A confirmed boarding opens as "Your ride's up!" with "Sign said 20, you
+ * waited 11" and the ride step's "Ride logged" row; leaving the queue area
+ * opens as "Wait wrapped up" with a "Still in line?" way back in (the Undo).
+ * Only what was earned shows (no "+0" rows), and the screen ends on one GO:
+ * win this ride's coin (its Parts wait in its slot), level it up, or the
+ * guide's next coin. The line Ticket shows only while queue_tickets is on.
  *
  * Only server-confirmed amounts are shown as earned; nothing here grants.
  */
@@ -25,6 +27,7 @@ import Playercard from '../../../components/Playercard';
 import type { InventoryType } from '../../../models/inventory-type';
 import { coinTierName } from '../../../constants/coinTiers';
 import { parkDayLine, recapRows, type RecapRewardsInput } from '../../../services/lineplay/bonusRounds';
+import type { RecapGo } from '../../../services/lineplay/rideStep';
 import { UpperText } from '../../../ui/upper';
 
 const QUEUE_STAMP_IMAGE = require('../../../../assets/images/stamps/stamp-09.png');
@@ -64,13 +67,16 @@ export function playedSummary(names: readonly string[]): string {
  * reads like nothing happened). Empty when nothing was earned or played: the keepsake card shows instead.
  */
 export function recapStats(r: { activityCount: number; earnedEnergy: number; experience: number; partsCount: number;
-  ticketsEarned: number; rewardsConfirmed: boolean }): { key: string; icon: GameIconName; value: number; prefix: string; label: string }[] {
+  ticketsEarned: number; rewardsConfirmed: boolean; showEnergy?: boolean; showXp?: boolean; showTickets?: boolean }):
+  { key: string; icon: GameIconName; value: number; prefix: string; label: string }[] {
   const out: { key: string; icon: GameIconName; value: number; prefix: string; label: string }[] = [];
-  if (r.activityCount > 0) out.push({ key: 'activities', icon: 'star', value: r.activityCount, prefix: '', label: r.activityCount === 1 ? 'activity' : 'activities' });
-  if (r.rewardsConfirmed && r.earnedEnergy > 0) out.push({ key: 'energy', icon: 'energy', value: r.earnedEnergy, prefix: '+', label: 'energy' });
-  if (r.rewardsConfirmed && r.experience > 0) out.push({ key: 'xp', icon: 'xp', value: r.experience, prefix: '+', label: 'xp' });
-  if (r.rewardsConfirmed && r.partsCount > 0) out.push({ key: 'parts', icon: 'parts', value: r.partsCount, prefix: '', label: 'parts' });
-  if (r.rewardsConfirmed && r.ticketsEarned > 0) out.push({ key: 'tickets', icon: 'ticket', value: r.ticketsEarned, prefix: '+', label: r.ticketsEarned === 1 ? 'ticket' : 'tickets' });
+  // Energy follows the coin levels rung, XP the Daily 3 rung, the line Ticket the queue_tickets switch:
+  // a reward whose system is still hidden is kept on the server, never shown as a chip here.
+  if (r.activityCount > 0) out.push({ key: 'activities', icon: 'star', value: r.activityCount, prefix: '', label: r.activityCount === 1 ? 'game' : 'games' });
+  if (r.rewardsConfirmed && r.partsCount > 0) out.push({ key: 'parts', icon: 'parts', value: r.partsCount, prefix: '+', label: r.partsCount === 1 ? 'part' : 'parts' });
+  if (r.rewardsConfirmed && r.showEnergy !== false && r.earnedEnergy > 0) out.push({ key: 'energy', icon: 'energy', value: r.earnedEnergy, prefix: '+', label: 'energy' });
+  if (r.rewardsConfirmed && r.showXp !== false && r.experience > 0) out.push({ key: 'xp', icon: 'xp', value: r.experience, prefix: '+', label: 'xp' });
+  if (r.rewardsConfirmed && r.showTickets !== false && r.ticketsEarned > 0) out.push({ key: 'tickets', icon: 'ticket', value: r.ticketsEarned, prefix: '+', label: r.ticketsEarned === 1 ? 'ticket' : 'tickets' });
   return out;
 }
 
@@ -164,6 +170,23 @@ export interface SessionRecapProps {
   nextAdventure?: string | null;
   /** Shark adventures finished across every line: [found, total]. */
   adventuresFound?: readonly [number, number, boolean] | null;
+  /** "Sign said 20, you waited 11" (only after the ride step). */
+  signLine?: string | null;
+  /** The ride step logged this ride (its timed wait in minutes, or null when unknown). */
+  rideLogged?: { readonly waited: number | null } | null;
+  /** Open the Ride Journal on this ride, the timed wait filled in. */
+  onAddMemory?: () => void;
+  /** The ride step stamped today's Adventure. */
+  adventureStamped?: boolean;
+  /** The recap's one GO, and what it does. */
+  go?: RecapGo | null;
+  onGo?: () => void;
+  /** Reward chips follow the unlock ladder and the switches (Energy: coin levels, XP: Daily 3, Ticket: queue_tickets). */
+  showEnergy?: boolean;
+  showXp?: boolean;
+  showTickets?: boolean;
+  /** Who's in line was 2 or more: crew lines show. */
+  crew?: boolean;
 }
 
 export default function SessionRecap({
@@ -174,6 +197,8 @@ export default function SessionRecap({
   onOpenCoin, onOpenPark, parkAvailable, feedbackEnabled = false, feedback = null, feedbackLoading = false,
   feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine,
   doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null, snackSlot = null, nextAdventure = null, adventuresFound = null,
+  signLine = null, rideLogged = null, onAddMemory, adventureStamped = false, go = null, onGo, showEnergy = true, showXp = true,
+  showTickets = false, crew = false,
 }: SessionRecapProps) {
   const bonusMode = rewardsConfirmed && bonusRecap != null;
   const rows = bonusMode ? recapRows(bonusRecap) : [];
@@ -181,6 +206,7 @@ export default function SessionRecap({
   const reducedMotion = useReducedGameMotion();
   const minutes = useCountUp(Math.floor(elapsedSeconds / 60), 120, reducedMotion);
   const secs = elapsedSeconds % 60;
+  const wholeMinutes = Math.floor(elapsedSeconds / 60);
   const rideUp = endReason === 'boarded';
   const leftQueue = endReason === 'left_queue';
   const enter = (index: number) => reducedMotion ? undefined : FadeInDown.delay(420 + index * 90).springify().damping(14);
@@ -188,7 +214,8 @@ export default function SessionRecap({
     (coin.available_parts ?? 0) >= coin.parts_to_next_level && playerEnergy != null &&
     playerEnergy >= coin.energy_to_next_level;
   let stat = 0;
-  const shownStats = recapStats({ activityCount, earnedEnergy, experience, partsCount, ticketsEarned, rewardsConfirmed });
+  const shownStats = recapStats({ activityCount, earnedEnergy, experience, partsCount, ticketsEarned, rewardsConfirmed,
+    showEnergy, showXp, showTickets });
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.recapCard}>
@@ -196,9 +223,9 @@ export default function SessionRecap({
         <View style={styles.recapHeroCopy}>
           <Text style={styles.recapKicker}>{rideUp ? 'YOUR RIDE’S UP!' : leftQueue ? 'WAIT WRAPPED UP' : 'LINEPLAY COMPLETE'}</Text>
           <Text style={styles.recapRide} numberOfLines={2}>{rideName}</Text>
-          <Text style={styles.recapTime} accessibilityLabel={`${Math.floor(elapsedSeconds / 60)} minutes ${secs} seconds`}>
-            {minutes}m {secs}s</Text>
-          <Text style={styles.recapSub}>{rideUp || leftQueue ? 'of line games, all saved' : 'time played'}</Text>
+          <Text style={styles.recapTime} accessibilityLabel={`${wholeMinutes} minutes`}>
+            {minutes} min</Text>
+          <Text style={styles.recapSub}>{signLine ?? (rideUp || leftQueue ? 'in line, all saved' : 'time played')}</Text>
         </View>
         {heroInventory && onOpenInventory ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Your shark. Open your closet"
@@ -216,7 +243,7 @@ export default function SessionRecap({
       {leftQueue && onStillInLine && (
         <Animated.View entering={enter(0)} style={styles.stillInLineCard}>
           <View style={styles.stillInLineRow}>
-            <GameIcon name="queue" size={34} />
+            <GameIcon name="shark" size={34} />
             <View style={styles.stillInLineCopy}>
               <Text style={styles.stillInLineTitle}>Still in line?</Text>
               <Text style={styles.stillInLineBody}>Pick up where you left off. You keep what you earned.</Text>
@@ -227,7 +254,23 @@ export default function SessionRecap({
         </Animated.View>
       )}
 
-      {groupSlot}
+      {rideLogged && (
+        <Animated.View entering={enter(0)}>
+          <Pressable accessibilityRole="button" disabled={!onAddMemory} onPress={onAddMemory}
+            accessibilityLabel={`Ride logged${rideLogged.waited != null ? `, ${rideLogged.waited} minute wait` : ''}. Add stars and a note.`}
+            style={({ pressed }) => [styles.rideLoggedRow, pressed && styles.pressed]}>
+            <GameIcon name="ride" size={30} />
+            <View style={styles.rideLoggedCopy}>
+              <Text style={styles.rideLoggedTitle}>Ride logged!</Text>
+              <Text style={styles.rideLoggedBody}>{adventureStamped ? 'Today’s Adventure: all 3 stamps!'
+                : rideLogged.waited != null ? `${rideLogged.waited} min in line, saved to your Ride Tracker` : 'Saved to your Ride Tracker'}</Text>
+            </View>
+            {onAddMemory && <Text style={styles.rideLoggedLink}>Add stars</Text>}
+          </Pressable>
+        </Animated.View>
+      )}
+
+      {crew ? groupSlot : null}
 
       <Text style={styles.recapSectionTitle}>{shownStats.some(t => t.key !== 'activities') ? 'WHAT YOU EARNED' : 'YOUR LINEPLAY ADVENTURE'}</Text>
       {shownStats.length ? <View style={styles.recapStats}>
@@ -246,18 +289,12 @@ export default function SessionRecap({
         </Animated.View>
       )}
 
-      {rewardsConfirmed && queueStamp?.earned && onOpenStampBook && (
-        <Animated.View entering={enter(0)}>
-          <Pressable accessibilityRole="button" accessibilityLabel="See your Queue Navigator stamp"
-            onPress={onOpenStampBook} style={styles.queueStampCard}>
-            <Image source={QUEUE_STAMP_IMAGE} style={styles.queueStampImage} contentFit="contain" />
-            <View style={styles.queueStampCopy}>
-              <Text style={styles.queueStampKicker}>{queueStamp.new ? 'NEW STAMP EARNED' : 'YOUR LINEPLAY STAMP'}</Text>
-              <Text style={styles.queueStampTitle}>QUEUE NAVIGATOR</Text>
-              <Text style={styles.queueStampAction}>Open your Stamp Book</Text>
-            </View>
-            <GameIcon name="arrow" size={32} />
-          </Pressable>
+      {/* A new stamp is one line (it waits in the Stamp Book); only a stamp earned on this wait shows. */}
+      {rewardsConfirmed && queueStamp?.earned && queueStamp.new && (
+        <Animated.View entering={enter(0)} style={styles.stampLine} accessible
+          accessibilityLabel="New stamp: Queue Navigator. It is in your Stamp Book.">
+          <Image source={QUEUE_STAMP_IMAGE} style={styles.stampLineImage} contentFit="contain" />
+          <Text style={styles.recapPredictionText}>New stamp: Queue Navigator</Text>
         </Animated.View>
       )}
 
@@ -268,7 +305,7 @@ export default function SessionRecap({
       </View>}
 
       {!bonusMode && rewardsConfirmed && masteryBonusParts > 0 && (
-        <BonusLine icon="star">{`Coin mastery gave you ${masteryBonusParts} extra Ride Part.`}</BonusLine>
+        <BonusLine icon="star">{`Your coin level gave you ${masteryBonusParts} extra Ride Part.`}</BonusLine>
       )}
       {!bonusMode && rewardsConfirmed && crewPuzzleBonusParts > 0 && (
         <BonusLine icon="lock">{`Your Crew Codebreaker guess gave you ${crewPuzzleBonusParts} Ride Part.`}</BonusLine>
@@ -277,7 +314,7 @@ export default function SessionRecap({
         <BonusLine icon="shark">{`Current Quest gave you ${currentQuestBonusParts} extra Ride Part.`}</BonusLine>
       )}
 
-      {crewRelay?.step === 'complete' && (
+      {crew && crewRelay?.step === 'complete' && (
         <Animated.View entering={enter(1)}>
           <View style={styles.recapPrediction}>
             <View style={styles.bonusLine}>
@@ -312,7 +349,7 @@ export default function SessionRecap({
         <Text style={styles.recapPending}>Your wait guess did not count. It only counts if you get to the ride.</Text>
       )}
 
-      {crewPuzzle && (
+      {crew && crewPuzzle && (
         <View style={styles.recapPrediction}>
           <Text style={styles.recapPredictionText}>
             {crewPuzzle.completed
@@ -337,53 +374,25 @@ export default function SessionRecap({
       {rewardsConfirmed && coinState === 'loading' && (
         <Text style={styles.recapPending}>Checking this ride&apos;s coin progress...</Text>
       )}
-
-      {rewardsConfirmed && coinState === 'owned' && coin && (
-        <Animated.View entering={enter(4)} style={styles.coinNextCard}>
-          <Text style={styles.coinNextLabel}>YOUR NEXT COIN MOVE</Text>
-          <Text style={styles.coinNextTitle}>{coin.ride_name} · Level {coin.current_level}/{coin.max_level}</Text>
-          {coin.current_level >= coin.max_level ? (
-            <Text style={styles.coinNextBody}>This coin is at its top level. Its Ride Parts stay with you.</Text>
-          ) : (
-            <>
-              <Text style={styles.coinNextBody}>
-                {coin.available_parts ?? 0}/{coin.parts_to_next_level} Ride Parts · {playerEnergy == null
-                  ? energyUnavailable ? 'Can’t load your energy' : 'Checking your energy'
-                  : `${playerEnergy}/${coin.energy_to_next_level} Energy`}
-                {'\n'}{playerEnergy == null
-                  ? energyUnavailable ? 'Check this coin when you are back online.' : 'Checking your next level up.'
-                  : upgradeReady
-                    ? 'Ready to level up now.'
-                    : `Next level needs ${Math.max(0, coin.parts_to_next_level - (coin.available_parts ?? 0))} more Parts and ${Math.max(0, coin.energy_to_next_level - playerEnergy)} more energy.`}
-              </Text>
-              {coin.next_level_perks.length > 0 && (
-                <Text style={styles.coinNextBody}>Next unlock: {coin.next_level_perks.map(perk => perk.name).join(' · ')}</Text>
-              )}
-            </>
-          )}
-          {bonusMode && coin.current_level < coin.max_level && <Text style={styles.progressLine}>
-            {`${coin.available_parts ?? 0}/${coin.parts_to_next_level} to ${coinTierName(coin.current_level + 1)}`}
-          </Text>}
-          {bonusMode && upgradeReady
-            ? <GameButton label="LEVEL UP" icon="coin" onPress={onOpenCoin} style={styles.coinNextButton}
-              accessibilityLabel="Level up this ride coin" />
-            : <GameButton label={upgradeReady ? 'Upgrade coin' : 'View this coin'} icon="coin" variant="secondary"
-              onPress={onOpenCoin} style={styles.coinNextButton} />}
-        </Animated.View>
-      )}
-      {rewardsConfirmed && coinState === 'unowned' && (
-        <Animated.View entering={enter(4)} style={styles.coinNextCard}>
-          <Text style={styles.coinNextLabel}>{partsCount > 0 ? 'PARTS SAVED' : 'YOUR NEXT PARK MOVE'}</Text>
-          <Text style={styles.coinNextTitle}>{rideName}</Text>
-          <Text style={styles.coinNextBody}>{partsCount > 0
-            ? 'Win this ride’s coin to use the Parts you earned in line.'
-            : 'Win this ride’s coin to start leveling it up. Your line games still count here.'}</Text>
-          <GameButton label={parkAvailable ? 'Open ride checklist' : 'Open Coin Shelf'} icon="map" variant="secondary"
-            onPress={onOpenPark} style={styles.coinNextButton} />
-        </Animated.View>
-      )}
       {rewardsConfirmed && coinState === 'unavailable' && (
         <Text style={styles.recapPending}>We can&apos;t load this coin right now. Check your Coin Shelf when you&apos;re back online.</Text>
+      )}
+
+      {/* The one GO: win this ride's coin (its Parts wait in its slot), level it up, or the guide's next coin. */}
+      {go && onGo && (
+        <Animated.View entering={enter(4)} style={styles.goCard}>
+          {coinState === 'owned' && coin && coin.current_level < coin.max_level && (
+            <Text style={styles.coinNextBody}>{`${coin.available_parts ?? 0} of ${coin.parts_to_next_level} Parts to Level ${coin.current_level + 1}`}
+              {playerEnergy != null && !upgradeReady && coin.energy_to_next_level > playerEnergy
+                ? ` · ${coin.energy_to_next_level - playerEnergy} more Energy` : ''}</Text>
+          )}
+          <Text style={styles.goTitle}>{go.label}</Text>
+          {coinState === 'unowned' && partsCount > 0 && (
+            <Text style={styles.coinNextBody}>Parts are saved for this coin. Win it on your way out.</Text>
+          )}
+          <GameButton label={go.button} icon={go.kind === 'level_up' ? 'coin' : go.kind === 'shelf' ? 'map' : 'arrow'}
+            fullWidth onPress={onGo} style={styles.goButton} accessibilityLabel={go.label} />
+        </Animated.View>
       )}
 
       {feedbackEnabled && (
@@ -426,10 +435,11 @@ export default function SessionRecap({
       {nextAdventure && <View style={styles.nextAdventure} accessible accessibilityLabel={`Next time in this line: ${nextAdventure}`}>
         <GameIcon name="map" size={22} />
         <Text style={styles.nextAdventureText} maxFontSizeMultiplier={1.3}>
-          {`Next time in this line: ${nextAdventure}`}{adventuresFound && adventuresFound[0] > 0 ? `\n${adventuresFound[2] ? 'New adventure found! ' : 'Adventures found: '}${adventuresFound[0]} of ${adventuresFound[1]}` : ''}
+          {`Next time in this line: ${nextAdventure}`}{adventuresFound && adventuresFound[0] > 0 ? `\n${adventuresFound[2] ? 'New line story found! ' : ''}Stories found ${adventuresFound[0]} of ${adventuresFound[1]}` : ''}
         </Text>
       </View>}
-      <GameButton label={doneLabel} onPress={onDone} fullWidth style={styles.recapBtn} />
+      {/* With a GO above, Done is the quiet second button (one gold button per screen). */}
+      <GameButton label={doneLabel} onPress={onDone} fullWidth variant={go && onGo ? 'ghost' : undefined} style={styles.recapBtn} />
     </ScrollView>
   );
 }
@@ -511,5 +521,18 @@ const styles = StyleSheet.create({
   waitFeedbackOptionText: { color: '#073b74', fontFamily: 'Knockout', fontSize: 14 },
   waitFeedbackNote: { color: '#4c758d', fontFamily: 'Knockout', fontSize: 13, lineHeight: 18, marginTop: spacing.md },
   waitFeedbackError: { color: colors.error, fontFamily: 'Knockout', fontSize: 13, marginTop: spacing.sm },
-  recapBtn: { marginTop: spacing.xl, marginBottom: spacing.sm, alignSelf: 'center' },
+  recapBtn: { marginTop: spacing.lg, marginBottom: spacing.sm, alignSelf: 'center' },
+  goCard: { marginTop: spacing.lg, padding: spacing.md, borderRadius: borderRadius.lg, borderWidth: 3,
+    borderColor: '#ffd443', backgroundColor: '#ffffff', gap: spacing.sm },
+  goButton: { alignSelf: 'stretch' },
+  goTitle: { color: '#073b74', fontFamily: 'Shark', fontSize: 19, lineHeight: 24 },
+  rideLoggedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md, padding: spacing.md,
+    borderRadius: borderRadius.lg, borderWidth: 3, borderColor: '#9fdc8c', backgroundColor: '#f2fff0' },
+  rideLoggedCopy: { flex: 1, minWidth: 0 },
+  rideLoggedTitle: { color: '#073b74', fontFamily: 'Shark', fontSize: 17 },
+  rideLoggedBody: { color: '#315d77', fontFamily: 'Knockout', fontSize: 14, lineHeight: 18, marginTop: 2 },
+  rideLoggedLink: { color: '#0874bb', fontFamily: 'Knockout', fontSize: 15, textDecorationLine: 'underline' },
+  pressed: { transform: [{ scale: 0.98 }] },
+  stampLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
+  stampLineImage: { width: 40, height: 40 },
 });

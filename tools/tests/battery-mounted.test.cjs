@@ -84,6 +84,8 @@ test('QueueTimesScreen: the countdown only ticks on screen in the foreground, an
     '../constants/parkWaitTimes': loadTs('src/constants/parkWaitTimes.ts'),
     '../services/lineplay/queuePlayPolicy': loadTs('src/services/lineplay/queuePlayPolicy.ts'),
     '../services/lineplay/queueWaitPresentation': loadTs('src/services/lineplay/queueWaitPresentation.ts'),
+    // Wait Times plans the next coin through the guide (core loop 5.5).
+    '../services/guide/nextCoin': loadTs('src/services/guide/nextCoin.ts'),
   }, { route: { params: { park: 7 } } }, {
     Date: { now: () => now },
     setInterval: (fn, ms) => { const id = ++seq; intervals.set(id, { fn, ms }); return id; },

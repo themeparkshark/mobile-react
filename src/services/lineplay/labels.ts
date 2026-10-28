@@ -41,12 +41,12 @@ export function factSourceLine(source: string | undefined | null,
 export function chapterPageKicker(chapter: Pick<LinePlayChapter, 'parkLabel' | 'episodeLabel'>,
   overrides: LinePlayLabelOverrides = LINEPLAY_LABEL_OVERRIDES): string {
   const park = chapter.parkLabel?.trim();
-  return overrides.hideParkInKicker || !park ? 'SHARK FAN MISSION' : park;
+  return overrides.hideParkInKicker || !park ? 'LINE STORY' : park;
 }
 
 export function chapterKicker(chapter: Pick<LinePlayChapter, 'parkLabel' | 'episodeLabel'>,
   overrides: LinePlayLabelOverrides = LINEPLAY_LABEL_OVERRIDES): string {
   const park = chapter.parkLabel?.trim();
-  const lead = chapter.episodeLabel?.trim() || 'SHARK FAN MISSION';
+  const lead = chapter.episodeLabel?.trim() || 'LINE STORY';
   return overrides.hideParkInKicker || !park ? lead : `${lead} · ${park}`;
 }

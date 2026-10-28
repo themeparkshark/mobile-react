@@ -66,7 +66,7 @@ const KINDS: readonly GroupKind[] = ['solo', 'couple', 'family', 'friends'];
 const GAME_IDS: readonly MiniGameId[] = ['tap', 'timing', 'memory', 'trivia', 'shark', 'banana', 'current', 'showdown'];
 
 export const GAME_LABELS: Readonly<Record<MiniGameId, string>> = {
-  tap: 'Whack-a-Shark', timing: 'Rhythm Tap', memory: 'Memory Match', trivia: 'Ride Trivia',
+  tap: 'Whack-a-Shark', timing: 'Parade Beat', memory: 'Memory Match', trivia: 'Ride Trivia',
   shark: 'Sharky Swim', banana: 'Banana Basket', current: 'Current Quest', showdown: 'Shark Showdown',
 };
 

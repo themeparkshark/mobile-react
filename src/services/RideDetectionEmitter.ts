@@ -6,8 +6,8 @@
  * and the UI overlay (foreground) without tight coupling.
  * 
  * Events:
- *   'rideDetected' — a single ride was detected while app is in foreground
- *   'pendingCleared' — pending detections were cleared (after batch confirm)
+ *   'rideDetected', a single ride was detected while app is in foreground
+ *   'pendingCleared', pending detections were cleared (after batch confirm)
  */
 import { DetectedRide } from './RideDetectionService';
 

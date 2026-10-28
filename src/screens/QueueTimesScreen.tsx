@@ -27,7 +27,8 @@ import {
   WAIT_COLOR_TIERS,
 } from '../constants/parkWaitTimes';
 import { LocationContext } from '../context/LocationProvider';
-import { resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
+import { coinTasksByRideName, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
+import { guide } from '../services/guide/nextCoin';
 import { queuePlayPolicy } from '../services/lineplay/queuePlayPolicy';
 import { compareQueueWaits, postedStandbyWait } from '../services/lineplay/queueWaitPresentation';
 import { UpperText } from '../ui/upper';
@@ -111,9 +112,18 @@ const SkeletonCard = () => {
 const RideCard = ({
   entry,
   onStartSession,
+  coinTaskId = null,
+  isNextCoin = false,
+  onMakeNextCoin,
 }: {
   entry: WikiLiveEntry;
   onStartSession: (entry: WikiLiveEntry) => void;
+  /** This ride's coin (null: no coin to win here). */
+  coinTaskId?: number | null;
+  /** The guide already points at this ride's coin. */
+  isNextCoin?: boolean;
+  /** Plan the next coin: the guide's one pointer (guide.setTarget). */
+  onMakeNextCoin?: (taskId: number, name: string) => void;
 }) => {
   const badge = getBadgeInfo(entry);
   const ll = entry.queue?.RETURN_TIME;
@@ -150,6 +160,22 @@ const RideCard = ({
               <Text style={styles.sessionBtnText}>{entry.status === 'DOWN'
                 ? 'PLAY WHILE YOU WAIT' : 'PLAY IN LINE'}</Text>
             </Pressable>
+          )}
+          {/* Wait Times plans the next coin (core loop 5.5): one tap makes this ride the guide's target. */}
+          {coinTaskId != null && onMakeNextCoin && entry.status === 'OPERATING' && (
+            isNextCoin ? (
+              <View style={styles.nextCoinDone} accessible accessibilityLabel={`${entry.name} is your next coin`}>
+                <GameIcon name="check" size={16} />
+                <Text style={styles.nextCoinDoneText}>Your next coin</Text>
+              </View>
+            ) : (
+              <Pressable onPress={() => onMakeNextCoin(coinTaskId, entry.name)} accessibilityRole="button"
+                accessibilityLabel={`Make ${entry.name} my next coin`} hitSlop={6}
+                style={({ pressed }) => [styles.nextCoinBtn, pressed && styles.sessionBtnPressed]}>
+                <GameIcon name="coin" size={16} />
+                <Text style={styles.nextCoinBtnText}>Make this my next coin</Text>
+              </Pressable>
+            )
           )}
         </View>
         {hasLL && (
@@ -311,6 +337,23 @@ export default function QueueTimesScreen({ route }: { route: any }) {
     fetchData(false);
   }, [fetchData]);
 
+  // Each row's coin task (for "Make this my next coin") and the coin the guide points at now.
+  const [coinTasks, setCoinTasks] = useState<Map<string, number>>(new Map());
+  const [nextCoinTask, setNextCoinTask] = useState<number | null>(guide.current()?.taskId ?? guide.plan());
+  useEffect(() => guide.subscribe(() => setNextCoinTask(guide.current()?.taskId ?? guide.plan())), []);
+  const attractionNames = attractions.map(entry => entry.name).join('|');
+  useEffect(() => {
+    if (!attractionNames) return;
+    let live = true;
+    void coinTasksByRideName(selectedPark, attractionNames.split('|'))
+      .then(tasks => { if (live) setCoinTasks(tasks); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [selectedPark, attractionNames]);
+  const makeNextCoin = useCallback((taskId: number) => {
+    guide.setTarget(taskId, 'wait_times');
+    setNextCoinTask(taskId);
+  }, []);
+
   // Start a LinePlay session for a wait-times row. Resolves the numeric ride id
   // by name (queue-times entries are name-keyed) then navigates to LinePlay.
   const handleStartSession = useCallback(
@@ -356,7 +399,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
       groups[groups.length - 1].parks.push(p);
     }
 
-    // Sort groups by distance to user — nearest park group shows first
+    // Sort groups by distance to user: nearest park group shows first
     if (location) {
       groups.sort((a, b) => {
         const coordsA = PARK_GROUP_COORDS[a.group];
@@ -453,7 +496,10 @@ export default function QueueTimesScreen({ route }: { route: any }) {
         <FlashList
           data={processedData}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <RideCard entry={item} onStartSession={handleStartSession} />}
+          renderItem={({ item }) => <RideCard entry={item} onStartSession={handleStartSession}
+            coinTaskId={coinTasks.get(item.name) ?? null} isNextCoin={coinTasks.get(item.name) === nextCoinTask}
+            onMakeNextCoin={makeNextCoin} />}
+          extraData={`${nextCoinTask}-${coinTasks.size}`}
           estimatedItemSize={80}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -690,6 +736,12 @@ const styles = StyleSheet.create({
     gap: 6,
     minHeight: 36,
   },
+  nextCoinBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: 6,
+    minHeight: 36, paddingHorizontal: 10, borderRadius: 18, borderWidth: 2, borderColor: '#0875c9', backgroundColor: '#ffffff' },
+  nextCoinBtnText: { color: '#075d9f', fontFamily: 'Knockout', fontSize: 14 },
+  nextCoinDone: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: 6,
+    minHeight: 36, paddingHorizontal: 10, borderRadius: 18, backgroundColor: '#fff3ba', borderWidth: 2, borderColor: '#e7ac00' },
+  nextCoinDoneText: { color: '#073b74', fontFamily: 'Knockout', fontSize: 14 },
   sessionBtnPressed: {
     opacity: 0.85,
   },

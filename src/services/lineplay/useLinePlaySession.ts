@@ -1,9 +1,9 @@
 /**
- * useLinePlaySession — React binding for the LinePlaySession controller.
+ * useLinePlaySession: React binding for the LinePlaySession controller.
  *
  * Owns a single LinePlaySession instance for the lifetime of the hook, keeps a
  * live snapshot in state, and feeds the session location samples from the
- * shared LocationContext (NO new watcher — we consume the context's `location`
+ * shared LocationContext (NO new watcher, we consume the context's `location`
  * value that LocationProvider already streams).
  */
 

@@ -44,13 +44,38 @@ interface Props {
   readonly quiet?: boolean;
   /** No count or label in the middle (the chapter page: its own bubbles own the count). */
   readonly hideCount?: boolean;
+  /**
+   * LinePlay's two tabs (core loop 5.5): Story and Games take the place of the Chapter button and
+   * the FREE PLAY label. Story opens the line story; Games opens the games picker. A dot on Games
+   * means new rounds were added (never a banner over a game).
+   */
+  readonly tabs?: {
+    readonly active: 'story' | 'games';
+    readonly hasStory: boolean;
+    readonly gamesDot: boolean;
+    readonly paused?: boolean;
+    readonly onStory: () => void;
+    readonly onGames: () => void;
+  } | null;
+}
+
+function Tab({ label, icon, active, dot = false, disabled = false, onPress }: {
+  label: string; icon: GameIconName; active: boolean; dot?: boolean; disabled?: boolean; onPress: () => void;
+}) {
+  return <Pressable accessibilityRole="tab" accessibilityState={{ selected: active, disabled }}
+    accessibilityLabel={`${label}${dot ? '. New rounds' : ''}`} disabled={disabled} onPress={onPress} hitSlop={4}
+    style={({ pressed }) => [styles.tab, active && styles.tabActive, disabled && styles.disabled, pressed && styles.pressed]}>
+    <GameIcon name={icon} size={22} />
+    <Text style={[styles.tabText, active && styles.tabTextActive]} numberOfLines={1}>{label}</Text>
+    {dot && <View pointerEvents="none" style={styles.tabDot} />}
+  </Pressable>;
 }
 
 /** Keeps the next playable round visible after a player finishes a queue activity. */
 export default function ActivityPageRail({ index, count, nextLabel, firstLabel = 'Chapter',
   progressText, progressAccessibilityLabel, onFirst, onArcade, arcadePaused = false, onNext,
   moreAvailable = false, morePaused = false, onMore, mode = 'pages', onShowPages, quiet = false,
-  backAction = 'show', progressDots = null, nextIcon, hideCount = false }: Props) {
+  backAction = 'show', progressDots = null, nextIcon, hideCount = false, tabs = null }: Props) {
   const { width } = useWindowDimensions();
   if (mode === 'back' && onShowPages) {
     const play = backAction === 'play';
@@ -69,6 +94,27 @@ export default function ActivityPageRail({ index, count, nextLabel, firstLabel =
   const calm = quiet && !showMore;
   const nextWords = railNextText(nextLabel, width);
   const naming = !showMore && count > 1 && !wrapsToFirst;
+  if (tabs) {
+    // Story | Games, then the one Next offer inside the tab (or "More rounds" at the end of Games).
+    const single = count <= 1;
+    return <View style={styles.rail} accessibilityRole="tablist">
+      {tabs.hasStory && <Tab label="Story" icon="map" active={tabs.active === 'story'} onPress={tabs.onStory} />}
+      <Tab label="Games" icon="play" active={tabs.active === 'games'} dot={tabs.gamesDot} disabled={tabs.paused}
+        onPress={tabs.onGames} />
+      <Pressable accessibilityRole="button"
+        accessibilityLabel={showMore ? 'Add more games' : single ? 'Only activity' : `Next: ${nextLabel}`}
+        disabled={showMore ? morePaused : single} onPress={showMore ? onMore : onNext}
+        style={[styles.next, calm && styles.nextQuiet, (showMore ? morePaused : single) && styles.disabled]}>
+        {nextIcon && !showMore && !single ? <GameIcon name={nextIcon} size={22} /> : null}
+        {/* Beside two tabs the name alone, on up to two lines (the arrow says "next"). */}
+        <Text style={[styles.nextText, !showMore && styles.nextTextTwoLines, calm && styles.nextTextQuiet]}
+          numberOfLines={showMore ? 1 : 2} adjustsFontSizeToFit minimumFontScale={0.85}>
+          {showMore ? morePaused ? 'Resume for more' : 'More games' : single ? 'Only activity' : nextLabel}
+        </Text>
+        {!single && <GameIcon name="arrow" size={24} />}
+      </Pressable>
+    </View>;
+  }
   return <View style={styles.rail}>
     {/* On the first page there is nowhere to return to, so the button is gone, not faded. */}
     {index > 0 && <Pressable accessibilityRole="button" accessibilityLabel={`Return to ${firstLabel.toLowerCase()}`}
@@ -133,4 +179,11 @@ const styles = StyleSheet.create({
   nextQuiet: { backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#0875c9', borderBottomWidth: 4,
     borderBottomColor: '#0875c9' },
   nextTextQuiet: { color: '#075d9f' },
+  tab: { minHeight: 48, minWidth: 64, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8,
+    borderRadius: borderRadius.md, borderWidth: 2, borderColor: '#0875c9', backgroundColor: '#ffffff' },
+  tabActive: { backgroundColor: '#0875c9' },
+  tabText: { color: '#075d9f', fontFamily: 'Knockout', fontSize: 13, marginTop: -1 },
+  tabTextActive: { color: '#ffffff' },
+  tabDot: { position: 'absolute', top: 4, right: 4, width: 11, height: 11, borderRadius: 6,
+    backgroundColor: '#e4462e', borderWidth: 2, borderColor: '#ffffff' },
 });

@@ -17,7 +17,7 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { shadows } from '../../design-system';
 import { DetectedRide } from '../../services/RideDetectionService';
-import { removePendingDetection } from '../../services/RideDetectionService';
+import { linePlayRideNow, removePendingDetection } from '../../services/RideDetectionService';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { navigationRef, navigate } from '../../RootNavigation';
 import { useTutorial } from '../Tutorial';
@@ -54,6 +54,8 @@ const RideDetectionOverlay: React.FC = () => {
   useEffect(() => {
     const unsubscribe = rideDetectionEmitter.on('rideDetected', (detection: DetectedRide) => {
       if (detection.confidence === 'low') return;
+      // LinePlay is running at this ride: its own "I got to the ride" is the one question (never two sheets).
+      if (linePlayRideNow() === detection.rideId) return;
 
       // Don't show popup if user is on batch confirm screen (ISSUE 15 fix)
       if (navigationRef.isReady()) {

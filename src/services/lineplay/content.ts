@@ -1,5 +1,5 @@
 /**
- * LinePlay content loaders — typed trivia, lore, and prediction sources.
+ * LinePlay content loaders: typed trivia, lore, and prediction sources.
  *
  * These feed the LinePlay activity playlist. Everything here is designed to
  * degrade gracefully offline: a ride's authored chapter leads into matching

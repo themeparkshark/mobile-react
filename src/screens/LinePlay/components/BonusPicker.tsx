@@ -44,7 +44,7 @@ export function crewTileLine(crew: CrewPuzzleSummary): string {
 export function crewStageLine(crew: CrewPuzzleSummary, now = Date.now()): string {
   if (crew.completed) {
     const at = crew.next_code_at ? Date.parse(crew.next_code_at) : NaN;
-    return Number.isFinite(at) ? `NEXT CODE IN ${formatClock(Math.max(0, (at - now) / 1000))}` : 'Code cracked';
+    return Number.isFinite(at) ? `NEXT CODE IN ${formatClock(Math.max(0, (at - now) / 1000)).toUpperCase()}` : 'Code cracked';
   }
   return `Stage ${crew.stage} of ${crew.total_stages}`;
 }

@@ -36,6 +36,15 @@ import { StackActions, useNavigation, useRoute } from '@react-navigation/native'
 import { colors, spacing, borderRadius } from '../../design-system';
 import { BRAND, GameButton, GameDialog, gameAlert } from '../../ui';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
+import { holdRideAfterRideStep, noteRidePrompt } from '../../services/lineplay/ridePromptGate';
+import { adventureRideStampDue, recapGo, rideStepJournalParams, rideStepLog, rideStepLogId, signSaidLine,
+  timedWaitMinutes, type RecapGo } from '../../services/lineplay/rideStep';
+import { keepRideStepLog, releaseRideLogHold } from '../../services/rideLogOutbox';
+import { celebrateAdventureTicket, getTripGoal } from '../../api/endpoints/me/trip-goal';
+import { loadParkRides } from '../../services/lineplay/resolveRide';
+import { guide } from '../../services/guide/nextCoin';
+import { recordProgress, useRung } from '../../services/reveal/revealLadder';
+import { useQueueTicketsOn } from '../../services/lineplay/lineFlags';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { useLinePlaySession } from '../../services/lineplay/useLinePlaySession';
 import { isRecentQueueSample, MAX_SESSION_ACTIVITY_SLOTS, queueEndedReason } from '../../services/lineplay/LinePlaySession';
@@ -75,7 +84,6 @@ import WaitCard from './components/WaitCard';
 import WaitCoinHero from './components/waitscreen/WaitCoinHero';
 import { linePartsState, shownClock, shownRewards, shownWait } from './components/waitscreen/waitScreenPreview';
 import { LINEPLAY_INTRO_BODY } from '../../services/help/helpTopics';
-import NewRoundsBanner from './components/NewRoundsBanner';
 import ActivitySlot from './components/ActivitySlot';
 import ActivityPageRail from './components/ActivityPageRail';
 import CrewGridCard from './components/CrewGridCard';
@@ -108,6 +116,8 @@ import { noteFoundAdventure } from '../../services/lineplay/foundAdventures';
 import { linePlayPages, queueArcadeDestinations } from '../../services/lineplay/presentation';
 import { personalizeChapterFinale, resolveChapterClue } from '../../services/lineplay/chapterClue';
 import { useGroupPlay, type GroupTurnLaunch } from './group/useGroupPlay';
+import { isPassAndPlay } from '../../services/lineplay/lineGroup';
+import { gamesDot, isCrewOnlyPage, nextInTab, pageTab, storyTabIndex } from '../../services/lineplay/linePlayTabs';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const DAY_BACKDROP = ['#0a7dd1', '#07569e', '#073e87'] as const;
@@ -126,7 +136,7 @@ const CREW_BAND_ROW = 44;
 const QUEUE_RECAP_SHARK = require('../../../assets/images/screens/lineplay/queue-recap-shark.png');
 
 const GAME_NAMES: Record<string, string> = {
-  tap: 'Whack-a-Shark', timing: 'Rhythm Tap', memory: 'Memory Match',
+  tap: 'Whack-a-Shark', timing: 'Parade Beat', memory: 'Memory Match',
   trivia: 'Ride Trivia', shark: 'Sharky Swim', banana: 'Banana Basket', current: 'Current Quest',
   showdown: 'Shark Showdown',
 };
@@ -306,6 +316,23 @@ export default function LinePlayScreen() {
     }
   };
 
+  // The "Keep LinePlay open, or Turn on" hint shows once per account (core loop 5.13), never every wait.
+  const trackingHintNeeded = snapshot.serverSessionId != null && snapshot.backgroundTrackingAvailable === false &&
+    snapshot.state !== 'complete';
+  const [trackingHint, setTrackingHint] = useState<'unknown' | 'show' | 'seen'>('unknown');
+  useEffect(() => {
+    if (!trackingHintNeeded || trackingHint !== 'unknown' || player?.id == null) return;
+    const key = `lineplay.trackingHint.v1@p${player.id}`;
+    let live = true;
+    void AsyncStorage.getItem(key).then(value => {
+      if (!live) return;
+      if (value) { setTrackingHint('seen'); return; }
+      setTrackingHint('show');
+      void AsyncStorage.setItem(key, '1').catch(() => undefined);
+    }).catch(() => { if (live) setTrackingHint('show'); });
+    return () => { live = false; };
+  }, [trackingHintNeeded, trackingHint, player?.id]);
+
   useEffect(() => {
     if (!snapshot.serverSessionId || snapshot.backgroundTrackingAvailable !== false) return;
     const subscription = AppState.addEventListener('change', state => {
@@ -410,6 +437,82 @@ export default function LinePlayScreen() {
     return () => { alive = false; };
   }, [snapshot.state, snapshot.rewards?.coinAssetId, player?.id]);
 
+  // -- The ride step: "I got to the ride" is the one ride record (core loop 2, step 6) ---------
+  const queueTicketsOn = useQueueTicketsOn();
+  // The ride's coin task (for the recap GO: guide.setTarget) and its type (for the journal's ride picture).
+  const [rideCatalog, setRideCatalog] = useState<{ taskId: number | null; type: string | null } | null>(null);
+  useEffect(() => {
+    if (!ride?.parkId) return;
+    let live = true;
+    void loadParkRides(ride.parkId).then(rides => {
+      const match = rides.find(item => item.id === ride.rideId);
+      if (live) setRideCatalog({ taskId: match?.task_id ?? null, type: match?.type ?? null });
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [ride?.parkId, ride?.rideId]);
+  const [rideLogged, setRideLogged] = useState<{ id: string; waited: number | null } | null>(null);
+  const [adventureStamped, setAdventureStamped] = useState(false);
+  const rideStepDone = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ride || snapshot.state !== 'complete' || !snapshot.boardingConfirmed || snapshot.startedAt == null) return;
+    const id = rideStepLogId(ride.rideId, snapshot.startedAt, snapshot.serverSessionId);
+    if (rideStepDone.current === id) return;
+    rideStepDone.current = id;
+    // That ride is logged and asked about: detection stays quiet about it for 30 minutes.
+    holdRideAfterRideStep(ride.rideId);
+    setRideLogged({ id, waited: timedWaitMinutes(snapshot.startedAt, snapshot.boardingAt) });
+    if (player?.id == null || !(ride.rideId > 0)) return;
+    // One ride, one row: kept on the phone with the timed wait, held so the journal can add its memory.
+    void keepRideStepLog(rideStepLog({ rideId: ride.rideId, rideName: ride.rideName, parkId: ride.parkId ?? null,
+      playerId: player.id, startedAt: snapshot.startedAt, boardingAt: snapshot.boardingAt,
+      sessionId: snapshot.serverSessionId })).catch(() => undefined);
+    // Today's Adventure ride with its line story done: riding it is the last stamp.
+    void getTripGoal().then(goal => {
+      const ticket = goal.adventure_ticket;
+      if (!adventureRideStampDue(ticket, ride.rideId)) return;
+      return celebrateAdventureTicket(ticket!.id).then(() => setAdventureStamped(true));
+    }).catch(() => undefined);
+  }, [ride, snapshot.state, snapshot.boardingConfirmed, snapshot.startedAt, snapshot.boardingAt,
+    snapshot.serverSessionId, player?.id]);
+  const rideLoggedRef = useRef<{ id: string } | null>(null);
+  rideLoggedRef.current = rideLogged;
+  useEffect(() => () => {
+    if (rideLoggedRef.current) void releaseRideLogHold(rideLoggedRef.current.id).catch(() => undefined);
+  }, []);
+  /** Leaving the recap sends the ride step's ride as it is (the journal did not add a memory). */
+  const releaseRideStep = useCallback(() => {
+    if (rideLogged) void releaseRideLogHold(rideLogged.id).catch(() => undefined);
+  }, [rideLogged]);
+  const openRideJournal = useCallback(() => {
+    if (!ride || !rideLogged) return;
+    RootNavigation.navigate('RideLog', {
+      ...rideStepJournalParams({ rideId: ride.rideId, rideName: ride.rideName, parkId: ride.parkId ?? null,
+        playerId: player?.id ?? 0, startedAt: snapshot.startedAt, boardingAt: snapshot.boardingAt,
+        rideType: rideCatalog?.type ?? null }),
+      detectionId: rideLogged.id,
+    } as never);
+  }, [ride, rideLogged, player?.id, snapshot.startedAt, snapshot.boardingAt, rideCatalog?.type]);
+
+  // -- Unlock ladder events (BLUEPRINT 4.4 "Who records what") --------------------------------
+  // line_played: the first verified minute of a wait. line_part_earned: a Part lands on a coin you own.
+  const linePlayedFor = useRef<number | null>(null);
+  const firstVerifiedMinute = snapshot.verifiedEligibleSeconds >= 60;
+  useEffect(() => {
+    if (!firstVerifiedMinute || snapshot.startedAt == null || linePlayedFor.current === snapshot.startedAt) return;
+    linePlayedFor.current = snapshot.startedAt;
+    recordProgress('line_played', { taskId: rideCatalog?.taskId ?? undefined, parkId: ride?.parkId });
+  }, [firstVerifiedMinute, snapshot.startedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [coinOwned, setCoinOwned] = useState<boolean | null>(null);
+  const lastCredited = useRef<number | null>(null);
+  useEffect(() => {
+    const credited = snapshot.creditedParts;
+    if (credited == null) return;
+    const previous = lastCredited.current;
+    lastCredited.current = credited;
+    if (previous == null || credited <= previous || coinOwned !== true) return;
+    recordProgress('line_part_earned', { taskId: rideCatalog?.taskId ?? undefined, parkId: ride?.parkId });
+  }, [snapshot.creditedParts, coinOwned]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Start the session once, on mount, if we have a ride.
   useEffect(() => {
     const previewPlayerId = __DEV__ && process.env.EXPO_PUBLIC_LINEPLAY_FLOW_PREVIEW === '1'
@@ -483,7 +586,8 @@ export default function LinePlayScreen() {
     const subscription = AppState.addEventListener('change', state => {
       if (state !== 'active') { awayAt ??= Date.now(); return; }
       if (awayAt != null && Date.now() - awayAt >= WELCOME_BACK_AFTER_MS) {
-        showToast({ icon: 'timer', title: 'Welcome back!', body: 'Your wait and games are saved.' });
+        // Quiet (no buzz), inside LinePlay only, one short toast (core loop 4.3 toast rule).
+        showToast({ icon: 'timer', title: 'Welcome back!', body: 'Your wait and games are saved.', quiet: true });
       }
       awayAt = null;
     });
@@ -492,10 +596,17 @@ export default function LinePlayScreen() {
 
   // Boarding detection: the ride tracker thinks this guest rode. One fix
   // outside the ride radius can fake that in an indoor queue, so it only asks.
+  // It asks once per wait: "Still in line" is an answer, and a second ask would be a repeat ride question.
+  const boardingAsked = useRef<number | null>(null);
   useEffect(() => {
     if (!ride) return;
     return rideDetectionEmitter.on('rideDetected', detection => {
-      if (detection.rideId === ride.rideId) session.suggestBoarded();
+      if (detection.rideId !== ride.rideId) return;
+      const waitKey = session.snapshot().startedAt ?? 0;
+      if (boardingAsked.current === waitKey) return;
+      boardingAsked.current = waitKey;
+      noteRidePrompt();
+      session.suggestBoarded();
     });
   }, [ride?.rideId, session]);
 
@@ -542,7 +653,10 @@ export default function LinePlayScreen() {
     void loadPlayedGames(player.id).then(set => { if (live) setPlayedEver(set); });
     return () => { live = false; };
   }, [player?.id]);
-  const playedThisWait = Object.keys(snapshot.gameBestStars).sort().join(',');
+  // Games played this wait: any star result, and any round played and closed (won, lost or quit).
+  const playedThisWait = Array.from(new Set([...Object.keys(snapshot.gameBestStars),
+    ...snapshot.playlist.filter(item => item.kind === 'minigame' && snapshot.completedActivityIds.includes(item.id))
+      .map(item => (item as Extract<ActivityItem, { kind: 'minigame' }>).gameId)])).sort().join(',');
   useEffect(() => {
     if (!player?.id || !playedThisWait) return;
     let live = true;
@@ -564,13 +678,14 @@ export default function LinePlayScreen() {
   const onAnyTouch = () => { lastTouch.current = Date.now(); nudged.current = false; };
 
 
-  // Leaving the queue area starts a wrap-up; it shows once no game covers it.
-  const lineDone = snapshot.state === 'ending' && snapshot.endReason === 'left_queue' && activeGame == null;
+  // Leaving the queue area starts a quiet wrap-up: the calm "Looks like you left the line" card with RESUME
+  // (no timer, no dialog). If the guest does not come back, the wait ends by itself and the recap offers Undo.
+  const leftLineWrapUp = snapshot.state === 'ending' && snapshot.endReason === 'left_queue' && activeGame == null;
   const boardingAsk = snapshot.boardingSuggested && activeGame == null &&
     (snapshot.state === 'active' || snapshot.state === 'paused');
   useEffect(() => {
-    if (lineDone || boardingAsk) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-  }, [lineDone, boardingAsk]);
+    if (boardingAsk) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  }, [boardingAsk]);
 
   // TriviaGame holds its question cursor in the source. Keep one source for
   // the whole round even while LinePlay emits a new timer snapshot each second.
@@ -605,7 +720,7 @@ export default function LinePlayScreen() {
       if (seen) return;
       eyesUpShown.current = true;
       void AsyncStorage.setItem(EYES_UP_KEY, '1');
-      showToastRef.current?.({ icon: 'queue', title: 'Eyes up in line.', body: 'Games never pause for walking.' });
+      showToastRef.current?.({ icon: 'shark', title: 'Eyes up in line.', body: 'Games never pause for walking.' });
     }).catch(() => undefined);
     // Bonus rounds: Current Quest plays the server's own seed and tier.
     if (item.gameId === 'current' && session.snapshot().bonus?.enabled) {
@@ -636,10 +751,16 @@ export default function LinePlayScreen() {
       groupPlayRef.current?.finishTurn(starsFromMultiplier(multiplier), score);
       handleGameDone();
     };
+    // A game played counts as played, won, lost or quit (core loop scope 3): closing a round marks its page
+    // played, so it reads "Play again" and joins the recap's Played line, never "NEW, not played this wait".
+    const closePlayed = () => {
+      session.markActivityCompleted(activeGame.id);
+      handleGameDone();
+    };
     const common = {
       visible: true,
       seed: activeGame.seed,
-      onClose: groupTurn ? () => finishTurn(0) : handleGameDone,
+      onClose: groupTurn ? () => finishTurn(0) : closePlayed,
       onComplete: groupTurn ? finishTurn : (multiplier: number, meta?: Record<string, unknown>) => {
         if (activeGame.gameId === 'current') session.recordCurrentQuest(meta);
         session.recordGameResult(activeGame.gameId, starsFromMultiplier(multiplier));
@@ -733,6 +854,36 @@ export default function LinePlayScreen() {
     navigation.dispatch(StackActions.replace('Park', { park: ride.parkId, player: player.id }));
   }, [navigation, session, snapshot.rewardsPending, ride?.parkId, player?.id, handleOpenCoin]);
 
+  // -- The recap's one GO -------------------------------------------------------------------
+  const coinLevelsRung = useRung('coin_levels');
+  const dailyRung = useRung('daily');
+  const recapUpgradeReady = recapCoin != null && recapCoin.current_level < recapCoin.max_level &&
+    (recapCoin.available_parts ?? 0) >= recapCoin.parts_to_next_level && recapEnergy != null &&
+    recapEnergy >= recapCoin.energy_to_next_level;
+  const guideNext = guide.current();
+  const recapPartsEarned = snapshot.rewards?.rideParts.reduce((n, p) => n + p.quantity, 0) ?? 0;
+  const go: RecapGo | null = ride && snapshot.state === 'complete' && snapshot.rewards != null ? recapGo({
+    rideName: ride.rideName,
+    coinState: recapCoinState,
+    partsEarned: recapPartsEarned,
+    rideTaskId: rideCatalog?.taskId ?? null,
+    upgradeReady: coinLevelsRung.open && recapUpgradeReady,
+    nextCoin: guideNext && guideNext.taskId !== rideCatalog?.taskId ? { taskId: guideNext.taskId, name: guideNext.name } : null,
+  }) : null;
+  const handleRecapGo = useCallback(async () => {
+    if (!go) return;
+    releaseRideStep();
+    if (go.kind === 'level_up') { await handleOpenCoin(); return; }
+    if (go.kind === 'shelf') { await handleOpenPark(); return; }
+    // Win this ride's coin, or the next coin: the guide points at it, and the map shows the way.
+    if (go.taskId != null) guide.setTarget(go.taskId, 'lineplay_recap');
+    try {
+      await session.complete();
+      if (!session.snapshot().rewardsPending) await session.forgetCheckpoint();
+    } catch { /* the recap already settled; the map still opens */ }
+    navigation.navigate('Explore' as never);
+  }, [go, releaseRideStep, session, navigation]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleOpenStampBook = useCallback(async () => {
     if (!snapshot.rewardsPending) await session.forgetCheckpoint();
     navigation.dispatch(StackActions.replace('StampBook'));
@@ -785,7 +936,7 @@ export default function LinePlayScreen() {
     snapshot.serverSessionId && snapshot.signal
       ? [{ kind: 'signal', id: 'crew-signal' }, { kind: 'puzzle', id: 'crew-puzzle' }]
       : [];
-  const activityPages = linePlayPages<
+  const allPages = linePlayPages<
     ActivityItem | { kind: 'signal' | 'puzzle'; id: string }
   >(chapterPages, sharedPages);
   useLinePlayLiveActivity({
@@ -799,6 +950,27 @@ export default function LinePlayScreen() {
     sessionPartCap: snapshot.sessionPartCap,
     partsRemainingToday: snapshot.partsRemainingToday,
   });
+  // -- Play together (L3): session start, crew, pass-and-play turns ----------
+  const openGroupTurn = useCallback((launch: GroupTurnLaunch) => {
+    if (session.getState() !== 'active') return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setActiveGame({ ...launch.item, seed: launch.seed, difficulty: launch.difficulty,
+      groupTurn: true, kidRound: launch.kidRound });
+  }, [session]);
+  const groupPlay = useGroupPlay({
+    session, snapshot,
+    playerId: player?.id ?? null,
+    ownerName: player?.username ?? null,
+    pages: allPages,
+    gameOpen: activeGame != null,
+    openTurn: openGroupTurn,
+    compact: fit.short,
+  });
+  groupPlayRef.current = groupPlay;
+  // Crew pages (Crew Relay, Crew Prompts and the relay's route game) show only for a crew of 2 or more
+  // ("Who's in line?"); a solo wait never meets a pass-the-phone page (core loop 5.5, lines 107 and 108).
+  const crewInLine = isPassAndPlay(groupPlay.group);
+  const activityPages = crewInLine ? allPages : allPages.filter(page => !isCrewOnlyPage(page, snapshot.chapter?.id));
   const arcadeBase = queueArcadeDestinations(activityPages, completedActivityIds)
     .map(choice => ({
       id: choice.id,
@@ -813,24 +985,7 @@ export default function LinePlayScreen() {
   const arcadeChoices = arcadeBase.map((choice, i) => ({ ...choice, isNew: arcadeNew[i] }));
   showToastRef.current = showToast;
 
-  // -- Play together (L3): session start, crew, pass-and-play turns ----------
-  const openGroupTurn = useCallback((launch: GroupTurnLaunch) => {
-    if (session.getState() !== 'active') return;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setActiveGame({ ...launch.item, seed: launch.seed, difficulty: launch.difficulty,
-      groupTurn: true, kidRound: launch.kidRound });
-  }, [session]);
-  const groupPlay = useGroupPlay({
-    session, snapshot,
-    playerId: player?.id ?? null,
-    ownerName: player?.username ?? null,
-    pages: activityPages,
-    gameOpen: activeGame != null,
-    openTurn: openGroupTurn,
-    compact: fit.short,
-  });
-  groupPlayRef.current = groupPlay;
-  const somethingAsks = groupPlay.sheetOpen || arcadeOpen || projectOpen || waitEndPrompt != null || boardingAsk || lineDone || resuming ||
+  const somethingAsks = groupPlay.sheetOpen || arcadeOpen || projectOpen || waitEndPrompt != null || boardingAsk || leftLineWrapUp || resuming ||
     resumeHandoff != null;
   sheetOpenRef.current = somethingAsks;
   const lineTipReady = linePlayTipReady({
@@ -975,7 +1130,7 @@ export default function LinePlayScreen() {
   useEffect(() => {
     if (!fxHead || fxHead.kind !== 'perk') return;
     setPerkChip({ key: `perk-${fxHead.id}`, tone: 'perk',
-      text: `+${fxHead.perk.parts} Part · ${fxHead.perk.kind === 'mastery' ? 'Mastery' : 'Queue Crew'}` });
+      text: `+${fxHead.perk.parts} Part · ${fxHead.perk.kind === 'mastery' ? 'Coin level' : 'Queue Crew'}` });
     const timer = setTimeout(() => { setPerkChip(null); session.consumeBonusFx(fxHead.id); }, 2_000);
     return () => clearTimeout(timer);
   }, [fxHead?.id]);
@@ -1120,7 +1275,11 @@ export default function LinePlayScreen() {
   // On the chapter page the rail's Next skips whatever PLAY NOW opens (one game, one button, one name).
   const playNowId = visibleItem?.kind === 'chapter_intro' && snapshot.chapter
     ? chapterPlayNow(snapshot.chapter, completedActivityIds).id : null;
-  const nextPageIndex = railNextIndex(activityPages.map(page => page.id), visiblePageIndex, playNowId);
+  // The one Next offer stays inside the tab the guest is on (Story or Games).
+  const nextPageIndex = nextInTab(activityPages, visiblePageIndex, snapshot.chapter?.id, playNowId)
+    ?? railNextIndex(activityPages.map(page => page.id), visiblePageIndex, playNowId);
+  const visibleTab = pageTab(visibleItem, snapshot.chapter?.id);
+  const storyIndex = storyTabIndex(activityPages, snapshot.chapter?.id);
   /** The navigation board (the first story clue on a space ride, or a free-play circuit). */
   const boardPage = isBoardPage(visibleItem, snapshot.chapter);
   // A short phone lends the crew row to a board page (as it does to Details), so the whole puzzle fits.
@@ -1143,6 +1302,18 @@ export default function LinePlayScreen() {
   };
   tourRef.current = { activityPages, jumpToPage };
 
+  /** The Games tab: the games picker (paused, the same 3 2 1 as the play button runs first). */
+  const openGames = () => {
+    setNewRoundNotice(null);
+    if (!arcadeChoices.length) return;
+    if (snapshot.state === 'paused' || resuming) {
+      arcadeAfterResume.current = true;
+      if (!resuming) setResuming(true);
+      void Haptics.selectionAsync();
+      return;
+    }
+    if (snapshot.state === 'active') setArcadeOpen(true);
+  };
   const newRoundIndex = newRoundNotice
     ? activityPages.findIndex(page => page.id === newRoundNotice.id) : -1;
   const projectMission = snapshot.parkProject ? resolveProjectMission(snapshot.parkProject) : null;
@@ -1187,8 +1358,7 @@ export default function LinePlayScreen() {
             ) : <View style={styles.endPlaceholder} />}
           </TopbarColumn>
         </Topbar>
-        {snapshot.serverSessionId && snapshot.backgroundTrackingAvailable === false &&
-          snapshot.state !== 'complete' && (
+        {trackingHintNeeded && trackingHint === 'show' && (
             <View style={styles.queueTrackingHint}>
               <Text style={styles.queueTrackingHintText}>
                 Keep LinePlay open to earn Parts. Or tap Turn on to play with your phone locked.
@@ -1207,12 +1377,13 @@ export default function LinePlayScreen() {
           )}
 
         {/* Wait card (top). One sign time and one clock feed both the card and its hero, so SIGN SAYS, IN LINE and the details agree. */}
-        <View style={styles.waitWrap} ref={waitCardRef} onLayout={measureWaitCard} collapsable={false}>
+        {/* The recap is one screen: the wait card steps away once the wait is over (the recap's hero says it all). */}
+        {snapshot.state !== 'complete' && <View style={styles.waitWrap} ref={waitCardRef} onLayout={measureWaitCard} collapsable={false}>
           {snapshot.startedAt == null ? (
             <WaitCardSkeleton rideName={ride.rideName} />
           ) : (
             <WaitCard
-              compact={snapshot.state !== 'complete'}
+              compact
               rideName={ride.rideName}
               postedWaitMinutes={wait.plannedWaitMinutes}
               waitSource={wait.waitSource}
@@ -1237,7 +1408,6 @@ export default function LinePlayScreen() {
               currentQuestVerified={snapshot.currentQuestVerified}
               currentQuestProofPending={snapshot.currentQuestProofPending}
               imageUrl={ride.imageUrl}
-              completed={snapshot.state === 'complete'}
               paused={snapshot.state === 'paused' || resuming}
               pauseReason={snapshot.pauseReason}
               onTogglePause={() => {
@@ -1245,21 +1415,12 @@ export default function LinePlayScreen() {
                 if (snapshot.state === 'paused') setResuming(true);
                 else { arcadeAfterResume.current = false; pageAfterResume.current = null; setResumeHandoff(null); session.pause('manual'); void Haptics.selectionAsync(); }
               }}
-              onPlayBonus={arcadeChoices.length ? () => {
-                // Paused: never a dead tap. The same 3 2 1 as the play button runs, then the arcade opens.
-                if (snapshot.state === 'paused' || resuming) {
-                  arcadeAfterResume.current = true;
-                  if (!resuming) setResuming(true);
-                  void Haptics.selectionAsync();
-                  return;
-                }
-                setArcadeOpen(true);
-              } : undefined}
+              // The calm top has no ARCADE button: Games is a tab on the rail (one door to the games).
               bonus={snapshot.bonus}
               gameOpen={activeGame != null}
               detailsOpen={detailsOpen}
               onDetailsChange={onDetailsChange}
-              hero={snapshot.state !== 'complete' ? <WaitCoinHero
+              hero={<WaitCoinHero
                 rideId={ride.rideId}
                 coinSize={fit.coinSize}
                 waitKey={snapshot.startedAt}
@@ -1273,21 +1434,21 @@ export default function LinePlayScreen() {
                 covered={activeGame != null || arcadeOpen || projectOpen}
                 rewardsOn={rewards.tracking && !rewards.unavailable}
                 onLeveled={() => void refreshPlayer().catch(() => undefined)}
-              /> : null}
+                onOwnership={setCoinOwned}
+              />}
+              coinMissing={coinOwned === false}
+              queueTicketsOn={queueTicketsOn}
             />
           )}
-        </View>
+        </View>}
 
-        {newRoundIndex > visiblePageIndex && snapshot.state !== 'complete' && (
-          <NewRoundsBanner count={newRoundNotice!.count} paused={snapshot.state !== 'active'}
-            onJump={() => { setNewRoundNotice(null); jumpToPage(newRoundIndex); }} />
-        )}
+        {/* New rounds are a dot on the Games tab, never a banner over a game (core loop 5.13). */}
 
-        {snapshot.leftLine && snapshot.state === 'active' && (
+        {((snapshot.leftLine && snapshot.state === 'active') || leftLineWrapUp) && (
           <View style={styles.leftLineCard} accessibilityLiveRegion="polite">
             <Text style={styles.leftLineText}>Looks like you left the line</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Resume, I am back in line"
-              onPress={() => session.resumeAfterLeftLine()} hitSlop={8} style={styles.leftLineButton}>
+              onPress={() => leftLineWrapUp ? session.undoEnd() : session.resumeAfterLeftLine()} hitSlop={8} style={styles.leftLineButton}>
               <Text style={styles.leftLineButtonText}>RESUME</Text>
             </Pressable>
           </View>
@@ -1382,8 +1543,20 @@ export default function LinePlayScreen() {
               onFavoriteActivity={(favorite) => {
                 if (feedback) void submitFeedback(feedback.rating, favorite);
               }}
+              signLine={snapshot.boardingConfirmed ? signSaidLine({ postedMinutes: snapshot.plannedWaitMinutes,
+                waitSource: snapshot.waitSource, waitedMinutes: timedWaitMinutes(snapshot.startedAt, snapshot.boardingAt) }) : null}
+              rideLogged={rideLogged}
+              onAddMemory={rideLogged && player?.id != null ? openRideJournal : undefined}
+              adventureStamped={adventureStamped}
+              go={go}
+              onGo={() => void handleRecapGo()}
+              showEnergy={coinLevelsRung.open}
+              showXp={dailyRung.open}
+              showTickets={queueTicketsOn}
+              crew={crewInLine}
               doneLabel={tabAfterRecap.current ? `Continue to ${tabLabel(tabAfterRecap.current)}` : 'Done'}
               onDone={() => {
+                releaseRideStep();
                 const nextTab = tabAfterRecap.current;
                 tabAfterRecap.current = null;
                 if (nextTab) handleNavigateTab(nextTab);
@@ -1525,6 +1698,21 @@ export default function LinePlayScreen() {
               onLayout={event => setRailBlock(Math.round(event.nativeEvent.layout.height))}>
             <ActivityPageRail index={visiblePageIndex} count={activityPages.length}
               mode={railMode} onShowPages={onRailBack} backAction={railBack} quiet={railQuiet}
+              tabs={{
+                active: visibleTab,
+                hasStory: storyIndex != null,
+                gamesDot: gamesDot(newRoundIndex, visiblePageIndex, visibleTab),
+                onStory: () => {
+                  if (storyIndex == null) return;
+                  if (snapshot.state === 'paused' || resuming) {
+                    pageAfterResume.current = storyIndex;
+                    if (!resuming) setResuming(true);
+                    return;
+                  }
+                  jumpToPage(storyIndex);
+                },
+                onGames: openGames,
+              }}
               firstLabel={activityPages[0]?.kind === 'chapter_intro' ? 'Chapter' : 'First round'}
               // On a clue, the count is the same 3 mini bubbles as the chapter page (one count form).
               progressDots={storyStep && snapshot.chapter ? { current: storyStep - 1,
@@ -1672,8 +1860,10 @@ export default function LinePlayScreen() {
         title="How did your wait end?"
         message={waitEndPrompt?.tab
           ? `Your recap opens first, then ${tabLabel(waitEndPrompt.tab)}. You keep what you earned either way.`
-          : 'You keep what you earned either way. Your wait guess only counts if you got to the ride.'}
-        icon="queue"
+          // The wait guess is named only when the guest made one.
+          : prediction ? 'You keep what you earned either way. Your wait guess counts if you got to the ride.'
+            : 'You keep what you earned either way.'}
+        icon="shark"
         buttons={[
           { text: 'I left the line' },
           { text: 'I got to the ride' },
@@ -1682,38 +1872,20 @@ export default function LinePlayScreen() {
         onAnswer={index => answerWaitEnd(index === 1 ? true : index === 0 ? false : null)}
       />
 
-      {/* Ride detection only asks: nothing counts down and play keeps going. */}
+      {/* The ride question, once per wait, in the ride step's own words: nothing counts down and play keeps going. */}
       <GameDialog
         visible={boardingAsk}
-        title="Did your ride start?"
-        message="Looks like you might be boarding. Your games and wait time are saved either way."
+        title="Did you get to the ride?"
+        message="Your games and wait are saved either way."
         icon="ride"
         haptic="none"
         buttons={[
           { text: 'Still in line', style: 'cancel', variant: 'secondary' },
-          { text: 'I’m boarding' },
+          { text: 'I got to the ride' },
         ]}
         onAnswer={index => {
           if (index !== 1) { session.dismissBoardingSuggestion(); return; }
           void session.endNow(true).catch(finishFailed);
-        }}
-      />
-
-      {/* Several minutes of away answers: the guest likely left the queue. */}
-      <GameDialog
-        visible={lineDone}
-        title="Line done?"
-        message={`Looks like you left the line. Your games and wait time are saved. This wait ends in ${Math.ceil(snapshot.graceMsRemaining / 1000)}s.`}
-        icon="queue"
-        haptic="none"
-        buttons={[
-          { text: 'I got to the ride', variant: 'secondary' },
-          { text: 'Still in line', style: 'cancel', variant: 'secondary' },
-          { text: 'I left the line' },
-        ]}
-        onAnswer={index => {
-          if (index == null || index === 1) { session.undoEnd(); return; }
-          void session.endNow(index === 0).catch(finishFailed);
         }}
       />
     </View>

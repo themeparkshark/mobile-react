@@ -47,10 +47,10 @@ test('label overrides keep today\'s copy by default and can relabel sources and 
   const labels = loadTs('src/services/lineplay/labels.ts');
   assert.equal(labels.factSourceLine('Disney Parks Blog'), 'Source: Disney Parks Blog');
   assert.equal(labels.factSourceLine('  '), null);
-  assert.equal(labels.chapterKicker({ parkLabel: 'MAGIC KINGDOM' }), 'SHARK FAN MISSION · MAGIC KINGDOM');
+  assert.equal(labels.chapterKicker({ parkLabel: 'MAGIC KINGDOM' }), 'LINE STORY · MAGIC KINGDOM');
   const pending = { sourceLabel: 'Park fact', hideParkInKicker: true };
   assert.equal(labels.factSourceLine('Disney Parks Blog', pending), 'Park fact');
-  assert.equal(labels.chapterKicker({ parkLabel: 'MAGIC KINGDOM' }, pending), 'SHARK FAN MISSION');
+  assert.equal(labels.chapterKicker({ parkLabel: 'MAGIC KINGDOM' }, pending), 'LINE STORY');
   // A returning player's episode leads the kicker; the park rule still applies.
   assert.equal(labels.chapterKicker({ parkLabel: 'MAGIC KINGDOM', episodeLabel: 'FLIGHT 2 OF 3' }), 'FLIGHT 2 OF 3 · MAGIC KINGDOM');
   assert.equal(labels.chapterKicker({ parkLabel: 'MAGIC KINGDOM', episodeLabel: 'FLIGHT 2 OF 3' }, pending), 'FLIGHT 2 OF 3');

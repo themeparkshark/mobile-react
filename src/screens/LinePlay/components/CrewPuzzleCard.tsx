@@ -60,8 +60,9 @@ function nextCodeLine(puzzle: CrewPuzzleSummary, now: number): string | null {
   if (!puzzle.completed || !puzzle.next_code_at) return null;
   const at = Date.parse(puzzle.next_code_at);
   if (!Number.isFinite(at)) return null;
-  const left = Math.max(0, Math.floor((at - now) / 1000));
-  return `NEXT CODE IN ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  // A real clock time in words, never a ticking countdown (core loop 4.3 rule 7).
+  if (at <= now) return 'NEW CODE SOON';
+  return `NEXT CODE AT ${new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 }
 
 interface Props {

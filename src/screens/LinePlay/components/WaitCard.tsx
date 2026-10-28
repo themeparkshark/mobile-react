@@ -37,6 +37,10 @@ const RING_C = 2 * Math.PI * RING_R;
 
 export interface WaitCardProps {
   readonly rideName: string;
+  /** The guest does not own this ride's coin yet: the one line says its Parts are saved for it. */
+  readonly coinMissing?: boolean;
+  /** queue_tickets is on for this player: only then is a line Ticket ever mentioned. */
+  readonly queueTicketsOn?: boolean;
   /** Keep the current game in focus while its reward status stays visible. */
   readonly compact?: boolean;
   readonly postedWaitMinutes: number;
@@ -123,11 +127,27 @@ function BonusGem({ charged, still }: { charged: boolean; still: boolean }) {
   </Animated.View>;
 }
 
+/**
+ * Minutes only: LinePlay never shows a ticking clock (core loop 4.3 rule 7). "12 min", "under 1 min".
+ */
 function fmt(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
+  const m = Math.floor(Math.max(0, seconds) / 60);
+  return m < 1 ? 'under 1 min' : `${m} min`;
 }
+
+/**
+ * The calm top's one line (core loop 5.5): minutes in line and Parts, never a countdown.
+ * "In line 3 min · first Part at 10 min", "In line 24 min · 2 Parts".
+ */
+export function calmPartsLine(input: { elapsedSeconds: number; earned: number; intervalSeconds: number }): string {
+  const minutes = Math.max(0, Math.floor(input.elapsedSeconds / 60));
+  const inLine = minutes < 1 ? 'Just joined the line' : `In line ${minutes} min`;
+  if (input.earned > 0) return `${inLine} · ${input.earned} Part${input.earned === 1 ? '' : 's'}`;
+  return `${inLine} · first Part at ${Math.max(1, Math.round(input.intervalSeconds / 60))} min`;
+}
+
+/** No coin yet: the line's Parts wait in its slot (core loop must-fix 8). */
+export const COIN_MISSING_LINE = 'Parts are saved for this coin. Win it on your way out.';
 
 /**
  * Details under the coin hero: at most three short lines (the sign's time, your
@@ -151,11 +171,11 @@ export function heroDetailLines(input: {
   return [input.signLine, input.inLineLine ?? null, partsLine].filter((line): line is string => line != null);
 }
 
-/** One short ticket line, in kid words. */
+/** One short ticket line, in kid words (shown only while queue_tickets is on). */
 export function ticketHint(available: boolean, verifiedSeconds: number, intervalSeconds: number): string {
   if (!available) return 'You got today’s ticket for this ride.';
   return verifiedSeconds >= intervalSeconds ? 'You get a ticket when this wait ends.'
-    : `Stay near the ride ${fmt(Math.max(0, intervalSeconds - verifiedSeconds))} more for a ticket.`;
+    : `A ticket comes after ${Math.max(1, Math.round(intervalSeconds / 60))} min near the ride.`;
 }
 
 /** What a wait mark means, in a few words beside it (a badge alone means nothing to a kid). */
@@ -220,6 +240,8 @@ export function compactCopyLabel({ hero, earned, headline, subline }: {
 
 export default function WaitCard({
   rideName,
+  coinMissing = false,
+  queueTicketsOn = false,
   compact = false,
   postedWaitMinutes,
   waitSource,
@@ -312,7 +334,6 @@ export default function WaitCard({
   const atDailyCap = partsRemainingToday === 0;
   const atCap = atSessionCap || atDailyCap;
   const earnedLabel = `${creditedParts ?? 0} earned Part${creditedParts === 1 ? '' : 's'}`;
-  const nextPartLabel = `about ${fmt(countdown.remainingSeconds)} near the ride`;
   const entranceAgeMinutes = entranceWaitObservedAt == null ? null :
     Math.max(0, Math.floor((Date.now() - entranceWaitObservedAt) / 60_000));
   const entranceFresh = entranceAgeMinutes != null && entranceAgeMinutes < 10;
@@ -330,7 +351,7 @@ export default function WaitCard({
   // Out of range is the only thing that changes the ring. Walking never does.
   const outOfRange = !completed && rewardConnectionIssue === 'nearby';
   const playLabel = bonusOn && (pill === 'BONUS OPEN' || toBonus != null || bonus?.saved) ? 'PLAY FOR BONUS'
-    : bonusOn ? 'PLAY' : rewardTrackingAvailable ? 'PLAY FOR BONUS' : 'QUEUE ARCADE';
+    : bonusOn ? 'PLAY' : rewardTrackingAvailable ? 'PLAY FOR BONUS' : 'GAMES';
   // Games still work everywhere; say plainly when this ride pays no Parts.
   const noPartsHere = !completed && !rewardTrackingAvailable && (lineRewardsReady === false || rewardUnavailable);
   // One plain status line; the fine print lives behind the details toggle.
@@ -342,7 +363,8 @@ export default function WaitCard({
       : atCap ? 'Max Parts reached'
         : countdown.needsCheck ? 'Checking you’re in line…'
           : countdown.checking ? 'Part on the way…'
-            : fmt(countdown.remainingSeconds);
+            : coinMissing ? COIN_MISSING_LINE
+              : calmPartsLine({ elapsedSeconds, earned, intervalSeconds: interval });
   const subline = completed ? 'Your game recap is ready below.' : paused
     ? pauseReason === 'manual' ? 'Time near the ride still counts. Tap play when you’re ready.' : 'Time near the ride still counts.'
     : !rewardTrackingAvailable
@@ -356,11 +378,15 @@ export default function WaitCard({
         ? atDailyCap ? 'You’ve earned today’s Parts for this ride.' : 'You got the most Parts for one wait. Great job!'
         : countdown.needsCheck ? 'Keep playing. Stay near the ride to keep earning.'
           : countdown.checking ? 'Keep playing. It shows up soon.'
-          : earned === 0 ? 'until your first Ride Part' : 'until your next Ride Part';
+          : coinMissing ? calmPartsLine({ elapsedSeconds, earned, intervalSeconds: interval })
+            : 'Stay near the ride to earn more Parts.';
 
-  // With the coin hero the status line reads "4:12 until your next Ride Part", so Details never repeats it.
-  const sublineInHeadline = Boolean(hero) && rewardTrackingAvailable && !atCap && !countdown.needsCheck
-    && !countdown.checking && !paused;
+  // With the coin hero the one line already says it ("In line 3 min · first Part at 10 min"), so Details
+  // never repeats it. A missing coin keeps its own sentence on the card and the minutes go to Details.
+  /** The card's one line is the calm line itself (minutes and Parts): nothing is added to it or read twice. */
+  const calmLine = rewardTrackingAvailable && !completed && !paused && !atCap && !countdown.needsCheck && !countdown.checking
+    && !coinMissing;
+  const sublineInHeadline = Boolean(hero) && calmLine;
 
   return (
     <View style={styles.wrap}>
@@ -394,11 +420,11 @@ export default function WaitCard({
         {compact && hero}
         {compact ? <View style={styles.compactMeter}>
           {/* The coin is the picture when Parts are on; otherwise the queue picture (never the Parts gem: no Parts here). */}
-          {hero && rewardTrackingAvailable ? null : !rewardTrackingAvailable ? <GameIcon name="queue" size={34} />
+          {hero && rewardTrackingAvailable ? null : !rewardTrackingAvailable ? <GameIcon name="shark" size={34} />
             : <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />}
-          <View style={styles.compactCopy} accessible accessibilityLabel={compactCopyLabel({ hero: hero != null, earned, headline, subline })}>
-            <KidText style={styles.compactHeadline} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{`${headline}${sublineInHeadline
-              ? ` ${subline}` : !hero && rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}`}</KidText>
+          <View style={styles.compactCopy} accessible accessibilityLabel={compactCopyLabel({ hero: hero != null, earned, headline, subline: calmLine ? '' : subline })}>
+            <KidText style={styles.compactHeadline} numberOfLines={coinMissing ? 2 : 1} adjustsFontSizeToFit minimumFontScale={0.85}>{`${headline}${
+              !hero && rewardTrackingAvailable && !coinMissing && !calmLine ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}`}</KidText>
             {/* One sentence: "No Parts here. Play anytime!" is the headline itself (no second note line). */}
             {bonusOn && <View style={styles.bonusRow}>
               {bonusDone ? <Text style={styles.bonusDone} numberOfLines={1}>Bonus Parts done at this ride today</Text>
@@ -425,7 +451,7 @@ export default function WaitCard({
         </View> : <View style={styles.meterRow}>
           {/* A ride with no Parts never shows an empty ring and a "0" gem: the queue picture says "games only". */}
           {!rewardTrackingAvailable ? <View style={styles.noPartsWell} accessible accessibilityLabel={`${headline} ${subline}`}>
-            <GameIcon name="queue" size={54} />
+            <GameIcon name="shark" size={54} />
           </View> : <View style={[{ width: RING, height: RING }, outOfRange && styles.ringOutOfRange]}
             accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}${pill ? ` ${pill}.` : ''}`}>
             <Svg width={RING} height={RING} style={StyleSheet.absoluteFill}>
@@ -484,7 +510,7 @@ export default function WaitCard({
             freshReadingMinutes: entranceFresh ? entranceWaitMinutes : null }),
           inLineLine: `You have been in line ${inLineLabel(elapsedSeconds)}.`,
           sublineInHeadline, subline, rewardTrackingAvailable, atCap, intervalSeconds: interval,
-        })} ticket={rewardTrackingAvailable && ticketAvailable !== null
+        })} ticket={queueTicketsOn && rewardTrackingAvailable && ticketAvailable !== null
           ? ticketHint(ticketAvailable, verifiedEligibleSeconds, ticketIntervalSeconds) : null} /></Reanimated.View>}
         {expanded && !hero && <>
           {compact && <>
@@ -519,7 +545,7 @@ export default function WaitCard({
             </Text>
           </View>}
           {rewardTrackingAvailable && masteryBonusAvailable && (
-            <HintLine icon="star">Coin mastery: your first Part here today earns +1 bonus Part.</HintLine>
+            <HintLine icon="star">Coin level bonus: your first Part here today brings 1 extra Part.</HintLine>
           )}
           {rewardTrackingAvailable && currentQuestBonusEnabled && !bonusOn && (
             <HintLine icon="shark">
@@ -528,14 +554,8 @@ export default function WaitCard({
                   : 'Finish Current Quest for a bonus Part.'}
             </HintLine>
           )}
-          {rewardTrackingAvailable && ticketAvailable !== null && (
-            <HintLine icon="ticket">
-              {ticketAvailable
-                ? verifiedEligibleSeconds >= ticketIntervalSeconds
-                  ? 'You get a ticket when this wait ends.'
-                  : `Stay near the ride ${fmt(ticketIntervalSeconds - verifiedEligibleSeconds)} more for a ticket.`
-                : 'You already got today’s ticket for this ride.'}
-            </HintLine>
+          {queueTicketsOn && rewardTrackingAvailable && ticketAvailable !== null && (
+            <HintLine icon="ticket">{ticketHint(ticketAvailable, verifiedEligibleSeconds, ticketIntervalSeconds)}</HintLine>
           )}
         </>}
       </View>

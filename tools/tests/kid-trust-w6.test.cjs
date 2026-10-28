@@ -161,7 +161,7 @@ test('iPhone SE pages: the clue choices sit side by side, kid words, and the fin
   const game = slot.slice(slot.indexOf('function MiniGameSlot('), slot.indexOf('// -- trivia'));
   assert.ok(game.indexOf('testID="lineplay-play"') < game.indexOf('styles.bestRow'), 'PLAY before the best-stars row');
   assert.ok(game.indexOf('testID="lineplay-play"') < game.indexOf('styles.gamePlaceholder'), 'PLAY before the game blurb');
-  assert.match(game, /\{newGame && bestStars == null && <View pointerEvents="none" style=\{\[styles\.newPill, styles\.newCorner\]\}>/);
+  assert.match(game, /\{newGame && bestStars == null && !completed && <View pointerEvents="none" style=\{\[styles\.newPill, styles\.newCorner\]\}>/, 'NEW leaves once the game was played');
   const chapters = read('src/services/lineplay/chapters.ts');
   assert.doesNotMatch(chapters, /inspires your clue/);
 });
@@ -207,5 +207,5 @@ test('the recap after a short wait never shows a row of zeros: zero tiles drop o
 
 test('a finished wait at a ride with no Parts never shows an empty ring and a "0" gem', () => {
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
-  assert.match(card, /\{!rewardTrackingAvailable \? <View style=\{styles\.noPartsWell\}[^>]*>\n\s*<GameIcon name="queue" size=\{54\} \/>/);
+  assert.match(card, /\{!rewardTrackingAvailable \? <View style=\{styles\.noPartsWell\}[^>]*>\n\s*<GameIcon name="shark" size=\{54\} \/>/);
 });

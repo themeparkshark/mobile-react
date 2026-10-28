@@ -31,6 +31,17 @@ export interface QueuedRideLog {
   readonly player_id: number;
   /** When it was kept on the phone (ms). */
   readonly queued_at: number;
+  /**
+   * The ride step's ride waits unsent until this time (ms) so the Ride Journal
+   * can add its stars, face and note to the same row (one ride, one row). The
+   * journal's Save replaces it; leaving LinePlay or the journal releases it early.
+   */
+  readonly hold_until?: number;
+}
+
+/** Is this kept ride still held for the Ride Journal? */
+export function rideLogHeld(item: Pick<QueuedRideLog, 'hold_until'>, now = Date.now()): boolean {
+  return typeof item.hold_until === 'number' && item.hold_until > now;
 }
 
 /** A phone-made id for a ride logged by hand (the server keeps 100 characters). */
@@ -89,6 +100,8 @@ function outbox(): RedeemRetryQueue<QueuedRideLog> {
     executor: async item => {
       const now = Date.now();
       if (sendingNow.has(item.payload.source_detection_id)) return false;
+      // The ride step's ride waits for the Ride Journal (one ride, one row).
+      if (rideLogHeld(item, now)) return false;
       // Someone else's ride (or nobody signed in): it waits for its own player.
       if (signedInPlayerId === null || item.player_id !== signedInPlayerId) {
         return tooOld(item, now) && letGo(item, 'expired', now);
@@ -271,6 +284,33 @@ export async function saveRideLogKeptFirst(item: QueuedRideLog): Promise<{ resul
 /** Did saveRideLogKeptFirst keep this failed save's draft on the phone? */
 export function rideLogWasKept(error: unknown): boolean {
   return !!(error && typeof error === 'object' && (error as { rideLogKept?: boolean }).rideLogKept);
+}
+
+/**
+ * The ride step: keep the ride on the phone, held for the Ride Journal, so the
+ * journal can still add its memory to the same row. Safe to call twice.
+ */
+export async function keepRideStepLog(item: QueuedRideLog): Promise<void> {
+  await outbox().enqueue(item, item.payload.source_detection_id, { replace: true });
+  await announce();
+}
+
+/**
+ * Let a held ride go now (the guest left LinePlay or the journal without saving)
+ * and send what is waiting. A ride already saved or gone is left alone.
+ */
+export async function releaseRideLogHold(id: string): Promise<void> {
+  try {
+    const items = await outbox().peek();
+    const kept = items.find(item => item.payload.payload.source_detection_id === id)?.payload;
+    if (kept && kept.hold_until != null) {
+      const { hold_until: _held, ...free } = kept;
+      await outbox().enqueue(free, id, { replace: true });
+    }
+  } catch {
+    // Storage hiccup: the hold runs out by itself.
+  }
+  await drainRideLogs().catch(() => undefined);
 }
 
 /** Take a kept ride back out (the server said no and the Ride Journal is handling it). */

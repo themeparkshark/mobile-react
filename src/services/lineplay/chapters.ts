@@ -205,11 +205,11 @@ function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefine
   const chapter: LinePlayChapter = {
     id, adaptive: true, episodeCount: stories.length, parkLabel: 'YOUR QUEUE',
     // Every ride shows where this adventure sits in its series, like Space Mountain's flights.
-    ...(episode == null ? {} : { episodeLabel: `ADVENTURE ${episode + 1} OF ${stories.length}` }),
+    ...(episode == null ? {} : { episodeLabel: `STORY ${episode + 1} OF ${stories.length}` }),
     title: story.title,
     story: `While you wait for ${safeName}, your shark crew needs to recover a ${story.artifact}. Solve a clue, notice something from your place in line, then rebuild it together.`,
     completedTitle: `${story.artifact[0].toUpperCase()}${story.artifact.slice(1)} recovered!`,
-    completedStory: 'Your crew finished this queue adventure. Try the relay or another game while your time near the ride keeps earning Ride Parts.',
+    completedStory: 'Your crew finished this line story. Try another game while your time near the ride keeps earning Ride Parts.',
     progressNoun: 'clues found',
     missionNames: ['Decode a clue', 'Notice a signal', finaleTitle],
     finale: {
@@ -228,7 +228,7 @@ function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefine
       perfectResult: 'Adventure complete!', otherResult: 'Your crew chose a route!',
       alphaResult: `Your shark follows the first ${story.clue} toward the ${story.artifact}.`,
       omegaResult: `Your shark explores another way to find the ${story.artifact}.`,
-      completionNote: 'Your path opened another extra game in this queue adventure. Your time near the ride earns Ride Parts and tickets.',
+      completionNote: 'Your path opened another extra game in this line story. Your time near the ride earns Ride Parts.',
       branchKicker: 'YOUR CREW CHANGED THE STORY',
       branchDone: 'Your crew finished its chosen route. It stays in your queue recap.',
       routeNames: [story.routeA, story.routeB],
@@ -437,7 +437,7 @@ const MK_SPACE_FLIGHTS: readonly SpaceFlight[] = [
     ],
   },
   {
-    title: 'The Comet Detour',
+    title: 'The Comet Swerve',
     story: 'A comet just crossed your flight path and scrambled the course. Reroute the course, read the comet’s tail, then rebuild the chart before it passes.',
     completedTitle: 'Course rerouted!',
     completedStory: 'Your shark crew slipped past the comet with the chart in one piece. Keep playing while your time near the ride earns Ride Parts.',
@@ -795,7 +795,7 @@ const MAGIC_KINGDOM_HAUNTED_MANSION: LinePlayChapter = {
     routeNames: ['Lantern path', 'Moon path'],
     epilogues: {
       alpha: { title: 'Follow the Lanterns', prompt: 'Tap the sharks that appear by the lanterns. Skip the decoys.' },
-      omega: { title: 'Swim Through Moonlight', prompt: 'Guide your shark through a moonlit detour to the missing page.' },
+      omega: { title: 'Swim Through Moonlight', prompt: 'Guide your shark through a moonlit shortcut to the missing page.' },
     },
   },
   trivia: [

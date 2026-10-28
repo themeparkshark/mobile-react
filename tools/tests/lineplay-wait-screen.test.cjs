@@ -117,7 +117,9 @@ test('level-up moment: queueHaptic, sfxLimiter, the v2 burst, and the Crowning o
 
 test('the wait screen body is its own component the screen mounts in the WaitCard slot', () => {
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.match(screen, /hero=\{snapshot\.state !== 'complete' \? <WaitCoinHero/);
+  // The wait card shows only while waiting (the recap is one screen), so its hero is always the coin.
+  assert.match(screen, /\{snapshot\.state !== 'complete' && <View style=\{styles\.waitWrap\}/);
+  assert.match(screen, /hero=\{<WaitCoinHero/);
   assert.match(read('src/screens/LinePlay/components/WaitCard.tsx'), /\{compact && hero\}/);
   const session = read('src/services/lineplay/LinePlaySession.ts');
   assert.match(session, /if \(result\.wait_screen !== undefined\) this\.waitScreen = result\.wait_screen;/);
@@ -224,7 +226,7 @@ test('Details under the coin hero: three short lines at most (sign, your time, o
       assert.ok(line.split(/\s+/).length <= 12, `short line: ${line}`);
     }
   }
-  assert.equal(card.ticketHint(true, 0, 600), 'Stay near the ride 10:00 more for a ticket.');
+  assert.equal(card.ticketHint(true, 0, 600), 'A ticket comes after 10 min near the ride.'); // no ticking clock
   assert.equal(card.ticketHint(true, 700, 600), 'You get a ticket when this wait ends.');
   const src = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(src, /\{expanded && hero && <Reanimated\.View [^>]*\n[^>]*><HeroDetails/);

@@ -61,9 +61,9 @@ test('the pip row draws only real slots and says when this ride is done for the 
 test('picker badges promise exactly what a win pays now, with no fractions', () => {
   assert.equal(bonus.pickerBadge(summary(), 252).text, 'BONUS');
   const waiting = summary({ slots: [{ index: 1, opens_at_eligible_seconds: 300, state: 'locked', source: null }] });
-  assert.equal(bonus.pickerBadge(waiting, 252).text, 'Win now. Part in 4:12');
+  assert.equal(bonus.pickerBadge(waiting, 252).text, 'Win now. Part in 5 min'); // minutes, never a ticking clock
   const saved = { ...waiting, saved: { source: 'current_quest', saved_at: null } };
-  assert.equal(bonus.pickerBadge(saved, 252).text, 'Win saved. Next bonus in 4:12');
+  assert.equal(bonus.pickerBadge(saved, 252).text, 'Win saved. Next bonus in 5 min');
   assert.equal(bonus.pickerBadge(saved, 252).reward, '+10 XP');
   const after = summary({ slots: [], next_opens_at_eligible_seconds: null });
   assert.equal(bonus.pickerBadge(after, null).text, 'ENCORE +10 XP');

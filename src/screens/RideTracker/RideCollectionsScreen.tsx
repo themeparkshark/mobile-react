@@ -104,17 +104,17 @@ export default function RideCollectionsScreen() {
   }, [fetchData]);
 
   return (
-    <RideTrackerFrame title="Collections" style={styles.container}>
+    <RideTrackerFrame title="Ride sets" style={styles.container}>
 
       {loading || (failed && !collections.length) ? (
-        <SharkLoader state={loading ? 'loading' : 'error'} title={loading ? undefined : "Collections didn't load"} onRetry={firstLoad} />
+        <SharkLoader state={loading ? 'loading' : 'error'} title={loading ? undefined : "Ride sets didn't load"} onRetry={firstLoad} />
       ) : (
         <ScrollView
           contentContainerStyle={styles.content}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
         >
           {collections.length === 0 ? (
-            <RideTrackerEmpty title="No collections yet!" body="Ride sets show up here. Log rides to start filling them."
+            <RideTrackerEmpty title="No ride sets yet!" body="Ride sets show up here. Log rides to start filling them."
               action={{ label: 'Log a ride', icon: 'ride', onPress: () => navigation.navigate('RideLog') }} />
           ) : (
             collections.map(c => (

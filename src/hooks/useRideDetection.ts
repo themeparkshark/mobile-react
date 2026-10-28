@@ -1,5 +1,5 @@
 /**
- * useRideDetection — Smart GPS Ride Detection Hook
+ * useRideDetection: Smart GPS Ride Detection Hook
  * 
  * TWO MODES:
  * 
@@ -30,6 +30,9 @@ import rideDetectionService, {
 import { PARK_WIKI_IDS } from '../constants/parkWaitTimes';
 import { navigationRef, navigate } from '../RootNavigation';
 import { rideDetectionEmitter } from '../services/RideDetectionEmitter';
+import { linePlayRideNow, rideLoggedUntil } from '../services/RideDetectionService';
+import { keepForBatch, lastRidePromptAt, noteRidePrompt, ridePromptVerdict, walkingToGuideTarget,
+  watchGuideForRidePrompts, type RidePromptVerdict } from '../services/lineplay/ridePromptGate';
 import { LocationContext } from '../context/LocationProvider';
 import useLivePoll from './useLivePoll';
 
@@ -55,8 +58,18 @@ async function checkAndShowPendingRides(): Promise<boolean> {
     const pending = await getPendingDetections();
     if (pending.length === 0) return false;
 
+    // One ride question (core loop 4.3): rides the ride step logged, shows, transport and walk-bys
+    // never come back as a question; the rest wait here while the guest walks to the next coin or
+    // another ride question was asked in the last 20 minutes.
+    const now = Date.now();
+    const verdicts = new Map<string, RidePromptVerdict>(pending.map(d => [d.id, detectionVerdict(d, now)]));
+    for (const d of pending) {
+      if (!keepForBatch(verdicts.get(d.id)!)) await rideDetectionService.removePendingDetection(d.id);
+    }
+    const askable = pending.filter(d => keepForBatch(verdicts.get(d.id)!));
+    if (askable.some(d => verdicts.get(d.id) !== 'ask')) return false;
     // Filter to medium/high confidence only
-    const meaningful = pending.filter(d => d.confidence !== 'low');
+    const meaningful = askable.filter(d => d.confidence !== 'low');
     if (meaningful.length === 0) {
       // Remove low confidence detections individually, not clearAll
       // to prevent race with new detections added between read and clear (ISSUE 10 fix)
@@ -71,6 +84,7 @@ async function checkAndShowPendingRides(): Promise<boolean> {
     if (currentRoute?.name === 'RideBatchConfirm' || currentRoute?.name === 'RideLog') return false;
 
     batchConfirmNavigating = true;
+    noteRidePrompt(now);
     navigate('RideBatchConfirm', { detections: meaningful } as any);
 
     // Reset flag after a short delay to allow re-navigation later
@@ -81,6 +95,20 @@ async function checkAndShowPendingRides(): Promise<boolean> {
     console.warn('Failed to check pending ride detections:', e);
     return false;
   }
+}
+
+/** The prompt gate's verdict for one detection, from what the phone knows right now. */
+export function detectionVerdict(detection: DetectedRide, now = Date.now()): RidePromptVerdict {
+  return ridePromptVerdict({
+    rideId: detection.rideId,
+    rideType: detection.rideType,
+    dwellMs: detection.dwellTimeMs,
+    now,
+    linePlayRideId: linePlayRideNow(),
+    loggedUntil: rideLoggedUntil(detection.rideId, now),
+    walking: walkingToGuideTarget(now),
+    lastPromptAt: lastRidePromptAt(),
+  });
 }
 
 export function useRideDetection(enabled: boolean, parkId?: number | null) {
@@ -104,20 +132,30 @@ export function useRideDetection(enabled: boolean, parkId?: number | null) {
   useEffect(() => {
     if (!enabled) return;
 
+    const stopWatchingGuide = watchGuideForRidePrompts();
     const handleForegroundDetection = (detection: DetectedRide) => {
-      if (AppState.currentState === 'active') {
+      if (AppState.currentState !== 'active') return;
+      const verdict = detectionVerdict(detection);
+      // LinePlay at this ride asks its own "I got to the ride" (the one question); the sheet stays quiet.
+      if (verdict === 'lineplay') { rideDetectionEmitter.emit('rideDetected', detection); return; }
+      if (verdict === 'ask') {
+        noteRidePrompt();
         rideDetectionEmitter.emit('rideDetected', detection);
+        return;
       }
+      // Logged by the ride step, or not a ride: forget it. Walking or too soon: it waits in the Ride Tracker.
+      if (!keepForBatch(verdict)) void rideDetectionService.removePendingDetection(detection.id).catch(() => undefined);
     };
 
     rideDetectionService.onForegroundDetection = handleForegroundDetection;
 
     return () => {
       rideDetectionService.onForegroundDetection = null;
+      stopWatchingGuide();
     };
   }, [enabled]);
 
-  // AppState listener — check pending rides when coming back to foreground
+  // AppState listener: check pending rides when coming back to foreground
   useEffect(() => {
     if (!enabled) return;
     // The ref only tracks while enabled; resync so a background stint while

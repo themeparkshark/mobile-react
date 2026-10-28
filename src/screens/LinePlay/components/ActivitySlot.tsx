@@ -206,8 +206,8 @@ function MiniGameSlot({
       <View testID="lineplay-play" style={styles.playFirst}>
         <GameButton label={playLabel} icon={completed ? 'retry' : 'play'} disabled={paused} fullWidth
           onPress={() => onPlayGame(item)}
-          accessibilityLabel={`${playLabel}: ${label}${newGame && bestStars == null ? '. New game' : ''}`} />
-        {newGame && bestStars == null && <View pointerEvents="none" style={[styles.newPill, styles.newCorner]}>
+          accessibilityLabel={`${playLabel}: ${label}${newGame && bestStars == null && !completed ? '. New game' : ''}`} />
+        {newGame && bestStars == null && !completed && <View pointerEvents="none" style={[styles.newPill, styles.newCorner]}>
           <Text style={styles.newPillText}>NEW</Text></View>}
       </View>
       {bestStars != null && <View style={styles.bestRow} accessible
