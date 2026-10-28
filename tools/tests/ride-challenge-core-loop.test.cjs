@@ -529,3 +529,14 @@ test('no UI string or accessibility label in src/games names Captain Fin or Admi
   assert.match(duel, /GILL'S FINAL/);
   assert.match(read('src/games/trivia-duel/ui/DuelResults.tsx'), /Rank up! Gill is now/);
 });
+
+/* ---------- Walk fixes on a 375 x 667 phone (round 1) ---------- */
+
+test('on an iPhone SE the team step keeps LATER on screen, and the win card chips shrink instead of cutting words', () => {
+  const team = read('src/screens/GymBattle/TeamSelectionScreen.tsx');
+  assert.match(team, /const compact = useWindowDimensions\(\)\.height < 720;/);
+  for (const style of ['titleCompact', 'cardsCompact', 'helpBtnCompact', 'laterCompact']) assert.ok(team.includes(`compact && s.${style}`), style);
+  assert.doesNotMatch(team, /Go all in/);
+  const win = read('src/components/PostWinRewardsModal.tsx');
+  assert.match(win, /styles\.chipLabelQuiet\]\} numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.7\}/);
+});

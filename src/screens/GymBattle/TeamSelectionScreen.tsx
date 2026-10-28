@@ -7,7 +7,7 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing, FadeIn, FadeInDown, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue,
   withRepeat, withSequence, withSpring, withTiming,
@@ -26,7 +26,7 @@ const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
 const VIBE: Record<TeamId, { tag: string; line: string }> = {
   mouse: { tag: 'THE PLANNERS', line: 'First in line, with a plan for every ride.' },
   globe: { tag: 'THE EXPLORERS', line: 'Every land, every snack, every hidden detail.' },
-  shark: { tag: 'THE THRILL CREW', line: 'Biggest drops first. Go all in, all day.' },
+  shark: { tag: 'THE THRILL CREW', line: 'Biggest drops first. Big rides all day.' },
 };
 const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
 /** Background height as a share of the screen; the extra sits off the top. */
@@ -45,6 +45,8 @@ function drawQuestions() {
 
 export default function TeamSelectionScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  // A 375 x 667 phone (iPhone SE) fits the three teams, Finn's quiz and LATER with tighter spacing.
+  const compact = useWindowDimensions().height < 720;
   const [stage, setStage] = useState<Stage>('pick');
   const [team, setTeam] = useState<TeamId | null>(null);
   const [suggested, setSuggested] = useState<TeamId | null>(null);
@@ -132,11 +134,11 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
 
         {stage === 'pick' && (
           <View style={s.page}>
-            <Animated.Text entering={FadeInDown.duration(400)} style={s.title}>PICK YOUR TEAM</Animated.Text>
+            <Animated.Text entering={FadeInDown.duration(400)} style={[s.title, compact && s.titleCompact]}>PICK YOUR TEAM</Animated.Text>
             <Animated.Text entering={FadeInDown.delay(80).duration(400)} style={s.sub}>
               Every ride coin you win takes that ride for your team.
             </Animated.Text>
-            <View style={s.cards}>
+            <View style={[s.cards, compact && s.cardsCompact]}>
               {ORDER.map((t, i) => (
                 <Animated.View key={t} entering={FadeInUp.delay(160 + i * 110).springify().damping(14)}>
                   <TeamCard team={t} held={held?.[t]} leader={leader === t} underdog={underdog === t && leader !== null}
@@ -145,7 +147,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
               ))}
             </View>
             <Animated.View entering={FadeIn.delay(600)}>
-              <Pressable style={s.helpBtn} accessibilityRole="button"
+              <Pressable style={[s.helpBtn, compact && s.helpBtnCompact]} accessibilityRole="button"
                 onPress={() => { setQuestions(drawQuestions()); setQIndex(0); setScores({ mouse: 0, globe: 0, shark: 0 }); setStage('quiz'); }}>
                 <Image source={FINN} style={s.helpFinn} contentFit="contain" />
                 <Text style={s.helpText}>Not sure? Let Finn help you choose</Text>
@@ -155,7 +157,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
             {/* The first-coin step is one tap away from the map: pick a team, or later (Profile keeps "Pick your team"). */}
             {firstCoin && (
               <Animated.View entering={FadeIn.delay(700)} style={{ width: '100%' }}>
-                <Pressable style={s.later} onPress={leave} accessibilityRole="button"
+                <Pressable style={[s.later, compact && s.laterCompact]} onPress={leave} accessibilityRole="button"
                   accessibilityLabel="Later. Pick a team any time from your Profile">
                   <Text style={s.laterText}>LATER</Text>
                 </Pressable>
@@ -312,6 +314,10 @@ const s = StyleSheet.create({
   answerPressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2, backgroundColor: '#fff7d6' },
   answerText: { fontFamily: 'Knockout', fontSize: 18, color: '#09268f', textAlign: 'center' },
   back: { fontFamily: 'Knockout', fontSize: 15, color: '#cdeaff', marginTop: 16 },
+  titleCompact: { fontSize: 32 },
+  cardsCompact: { gap: 8, marginTop: 12 },
+  helpBtnCompact: { marginTop: 10, paddingVertical: 2 },
+  laterCompact: { marginTop: 8, paddingVertical: 10 },
   later: { width: '100%', marginTop: 14, borderRadius: 20, paddingVertical: 13, alignItems: 'center',
     backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#bcd9f5' },
   laterText: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },

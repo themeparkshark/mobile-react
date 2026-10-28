@@ -137,7 +137,7 @@ function RewardChip({ chip, index, enter, reduced, started }: {
       <GameIcon name={chip.icon} size={22} />
       <View style={{ flexShrink: 1 }}>
         <CountUp value={chip.amount} start={started} reduced={reduced} style={styles.chipAmount} />
-        <Text style={[styles.chipLabel, chip.quiet && styles.chipLabelQuiet]} numberOfLines={2}>{chip.label}</Text>
+        <Text style={[styles.chipLabel, chip.quiet && styles.chipLabelQuiet]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{chip.label}</Text>
       </View>
     </Animated.View>
   );
