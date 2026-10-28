@@ -1,6 +1,7 @@
 import { useIsFocused, useNavigation, useRoute, type NavigationProp, type ParamListBase } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
@@ -148,6 +149,7 @@ import { currentAppOpen, useRung } from '../services/reveal/revealLadder';
 import { useTrail } from '../services/trail/TrailProvider';
 import { headlineBox, stepsToGo } from '../services/trail/trailModel';
 import useParkDayLadder from '../components/guide/useParkDayLadder';
+import { useFlyAnchor, useProfileTabAnchor } from '../components/guide/flyAnchors';
 import useWelcomeBack from '../components/guide/useWelcomeBack';
 import { homeShelfPark } from '../components/guide/HomeShelfButton';
 import type { HomeGuide } from './ExploreScreen/HomeExplore';
@@ -513,6 +515,9 @@ export function ExploreScreenBody() {
   // Collect moment: after a ride win, back on the map, the coin flies from its island onto the shelf button.
   const mapProjector = useRef<MapProjector | null>(null);
   const avatarRef = useRef<View>(null);
+  // Energy flies to the Shelf button, XP to the Profile tab (core loop 4.2 "Where rewards fly").
+  const shelfAnchor = useFlyAnchor('energy', avatarRef);
+  useProfileTabAnchor(0);
   // The map's loading cover waits for the player's shark on the HUD (never an empty circle after the lift).
   const avatarArtDrawn = useCoverArt(!!player);
   const flightLayerRef = useRef<View>(null);
@@ -1143,6 +1148,8 @@ export function ExploreScreenBody() {
     daysAway: welcome.daysAway, welcomeBackDone: welcome.done,
   });
   const guideShown = !!player && !!park;
+  // Until the first coin is won, the guide's "Tap PLAY!" picture shows every time PLAY! rises.
+  const hasWonACoin = (player?.completed_tasks_count ?? 0) > 0 || (player?.ride_coins_collected ?? 0) > 0 || parkWins > 0;
   // Raids reach the map only after coin levels unlock (they cost Energy) and while the park is open (core loop 5.2).
   const raidOnMap = raidActive && coinLevelsRung.open && parkOpenNow;
   const liveSlotShown = (coinLevelsRung.open && (raidOnMap || !!rushes.length)) || receiptNeedsCheck || !!bossMap.moment;
@@ -1336,7 +1343,8 @@ export function ExploreScreenBody() {
   // While Fin-ister Nights is on (or its exit / Marquee card is up) the generic park tip stays away.
   const parkTip = frightOwnsParkTips({ modeOn: frightNight.modeOn, recapUp: !!frightEngine.recapOffer || !!frightEngine.marquee })
     ? null : parkTipFor({ inPark: !!park, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
-      rideCoinInRange: openRedeemable?.type === 'task' || openRedeemable?.type === 'secret_task' });
+      // The guide card's "Tap PLAY!" picture replaces Finn's one-time coin card (one card at a time, core loop 4.1).
+      rideCoinInRange: false });
   const parkTipReady = !mapCovered && mapCalm && mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
     dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial,
@@ -1344,6 +1352,33 @@ export function ExploreScreenBody() {
     adventureOpen: adventureOccluded, coinFlying: !!pendingCollect || !!collectFlight,
   });
   useEffect(() => { setParkTipShowing(!!player && !!parkTip && parkTipReady); }, [player, parkTip, parkTipReady]);
+  // Park help page 1 ("Win ride coins") opens by itself once, on the first park arrival on this build,
+  // only for an account that never had Finn's park lesson here (core loop 4.3 and 5.11). New players see
+  // the same picture inside Finn's hand-off, so the guide card is the next thing on their screen.
+  const parkLessonRan = useRef(false);
+  useEffect(() => { if (isActive && park) parkLessonRan.current = true; }, [isActive, park]);
+  const [helpPageSeen, setHelpPageSeen] = useState<boolean | null>(null);
+  const helpPageKey = player ? `tps.help.parkPage1.v1@p${player.id}` : null;
+  useEffect(() => {
+    setHelpPageSeen(null);
+    if (!helpPageKey) return undefined;
+    let live = true;
+    AsyncStorage.getItem(helpPageKey).then(value => { if (live) setHelpPageSeen(value === '1'); })
+      .catch(() => { if (live) setHelpPageSeen(true); });
+    return () => { live = false; };
+  }, [helpPageKey]);
+  const helpPageDue = !!park && helpPageSeen === false && isReady && hasCompleted('onboarding') && hasCompleted('park_arrival')
+    && !parkLessonRan.current && !isActive && parkTipReady && !parkTipShowing && attentionFor('help_page');
+  useEffect(() => {
+    if (!helpPageDue || !helpPageKey) return undefined;
+    const timer = setTimeout(() => {
+      if (!attentionQueue.take(appOpenId, 'help_page')) return;
+      setHelpPageSeen(true);
+      void AsyncStorage.setItem(helpPageKey, '1').catch(() => undefined);
+      openHelpSheet('park_map');
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [helpPageDue, helpPageKey, appOpenId, openHelpSheet]);
   // Would present but for a find: home finds hold their auto-open until the intro is seen.
   const homeIntroEligible = homeIntroMayPresent({ ...homeIntroQueue, findOpen: false, findPending: false });
 
@@ -1543,7 +1578,7 @@ export function ExploreScreenBody() {
           <>
             {/* Park mode: Shark Coins, Keys, Tickets as matching pills. Retired
                 event currencies (and the unused legacy park coin) stay hidden. */}
-            {park && theme?.currency && (
+            {park && theme?.currency && currencyBalance(player, theme.currency.name) > 0 && (
               <TopbarColumn>
                 <Currency coverArt image={theme.currency.icon_url} count={currencyBalance(player, theme.currency.name)}
                   name={theme.currency.name} flyTarget="theme_currency" />
@@ -1551,7 +1586,8 @@ export function ExploreScreenBody() {
             )}
             {park && currencies
               .filter((currency) => currency.icon_url &&
-                (['Coins', 'Keys'].includes(currency.name) || currencyBalance(player, currency.name) > 0))
+                // Shark Coins always; Keys and event tokens only while held (core loop 4.2).
+                (currency.name === 'Coins' || currencyBalance(player, currency.name) > 0))
               .map((currency) => (
                 <TopbarColumn key={currency.id}>
                   <Currency coverArt image={currency.icon_url} count={currencyBalance(player, currency.name)}
@@ -1834,7 +1870,7 @@ export function ExploreScreenBody() {
             </View>}
             {/* Your shark, labeled "Shelf": it opens this park's coin shelf (Profile -> park -> shelf). */}
             {player && (
-              <Animated.View ref={avatarRef} collapsable={false} style={avatarPopStyle}>
+              <Animated.View ref={avatarRef} collapsable={false} style={avatarPopStyle} onLayout={shelfAnchor.onLayout}>
                 <Button accessibilityLabel="Shelf: your coins at this park"
                   onPress={() => {
                     RootNavigation.navigate('Park', { park: park.id, player: player.id });
@@ -1881,7 +1917,8 @@ export function ExploreScreenBody() {
           style={{ position: 'absolute', top: slotTop, left: 0, right: GUIDE_CARD_RIGHT, height: GUIDE_CARD_HEIGHT + 8, zIndex: 40 }} />}
         {/* The Next Coin guide (core loop 4.1): exactly one card in the top-left slot, on every park map. */}
         {guideShown && player && <NextCoinCard copy={nextCoin.copy} state={nextCoin.state} parkName={park.name ?? null}
-          coinUrl={nextCoin.targetTask?.coin_url || null} top={slotTop} onAction={onGuideAction} onCardPress={onGuideCardPress} />}
+          coinUrl={nextCoin.targetTask?.coin_url || null} top={slotTop} onAction={onGuideAction} onCardPress={onGuideCardPress}
+          teachPlay={!hasWonACoin} />}
         {/* Today's Adventure: its sheet stays for the stamps and the souvenir, opened from the guide card on its ride. */}
         {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`} sheetOnly
           openRequest={adventureSheetRequest}

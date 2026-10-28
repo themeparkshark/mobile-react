@@ -537,7 +537,7 @@ test('home: two doors to the shelf (Shelf button and PLAN), Practice games from 
   assert.match(home, /testID="home-guide-card"/);
   assert.match(home, /ticketHidden=\{guideShown\}/, 'the pips fold into the card\'s ticket meter');
   const shelf = loadTs('src/components/guide/HomeShelfButton.tsx', { react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} },
-    'react-native': { StyleSheet: { create: v => v } }, '../Avatar': {}, '../Button': {}, '../../context/AuthProvider': {}, '../../RootNavigation': {}, '../../ui': { BRAND: {} } });
+    'react-native': { StyleSheet: { create: v => v } }, '../Avatar': {}, '../Button': {}, '../../context/AuthProvider': {}, '../../RootNavigation': {}, '../../ui': { BRAND: {} }, './flyAnchors': {} });
   assert.equal(shelf.homeShelfPark(2), 2);
   assert.equal(shelf.homeShelfPark(null), 8);
   for (const file of ['src/screens/ExploreScreen/HomeTicketProgress.tsx', 'src/components/PrepItemRedeemModal.tsx']) {

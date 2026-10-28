@@ -34,11 +34,12 @@ export function FindFade({ gone, children }: { readonly gone: boolean; readonly 
 }
 
 /**
- * The timer chip's "m:ss", rounded up: the last second reads 0:01 and the find
- * fades at zero, so a chip never shows 0:00 (react-countdown floors).
+ * The timer chip in calm whole minutes, rounded up ("4 min", the last minute reads "1 min"), never a
+ * ticking m:ss where a kid plays (core loop 4.3 rule 7). The find fades at zero, so a chip never
+ * reads 0. An hour or more reads in hours.
  */
 export function findClock(totalMs: number): string {
   const seconds = Math.max(1, Math.ceil(totalMs / 1000));
   if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  return `${Math.max(1, Math.ceil(seconds / 60))} min`;
 }

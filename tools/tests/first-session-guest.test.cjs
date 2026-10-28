@@ -727,7 +727,9 @@ test('first hunt map: no Trail Box pill or badge, no chest buttons during the 30
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /trailHidden=\{firstHunt\}/);
   assert.match(home, /firstHunt && styles\.hudDim/);
-  assert.match(read('src/components/Map.tsx'), /<TrailBoxBadge trail=\{trailHidden \? null : liveTrail\} live=\{lifeOn\} \/>/);
+  // Core loop 4.2: no gift badge on the shark at all (Trail Boxes are a ring on the Rewards button).
+  assert.match(read('src/components/Map.tsx'), /<TrailBoxBadge trail=\{trailHidden \|\| !SHARK_TRAIL_BADGE \? null : liveTrail\} live=\{lifeOn\} \/>/);
+  assert.match(read('src/components/Map.tsx'), /const SHARK_TRAIL_BADGE = false;/);
 });
 
 test('first-win card: its pictures are mounted (invisible) during the warm-up, so frame one is whole', () => {

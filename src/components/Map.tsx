@@ -14,6 +14,12 @@ import FollowButton from './map/FollowButton';
 import MapSharkLook from './map/MapSharkLook';
 import { SharkSparkles } from './map/SharkSparkles';
 import { TrailBoxBadge, type MapTrail } from './map/TrailBoxBadge';
+
+/**
+ * The gift badge on the player's shark read as a button that did nothing (a false affordance, core
+ * loop must-fix 13). Trail Boxes now show as a ring on the Rewards button, so the shark wears no badge.
+ */
+const SHARK_TRAIL_BADGE = false;
 import { CHEER_REPEAT_MS, nextFidget, FIDGET_GAP_MS, tapTrick, type SharkMood } from './map/sharkLife';
 import { useFxClock, useFxKick } from '../fx/FxStage';
 import { useMapWalkSense } from './map/useMapWalkSense';
@@ -1138,7 +1144,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <View style={styles.centerShark} pointerEvents="box-none">
             {sharkArt(overlayStyles, overlayLive, focusedOnPlayer, true)}
             <SharkSparkles burst={sparkleBurst} />
-            <TrailBoxBadge trail={trailHidden ? null : liveTrail} live={lifeOn} />
+            <TrailBoxBadge trail={trailHidden || !SHARK_TRAIL_BADGE ? null : liveTrail} live={lifeOn} />
             {/* Tap your shark: it hops, twirls and shows off what it is wearing. */}
             <Pressable style={styles.sharkTap} onPress={onSharkTap} disabled={!focusedOnPlayer}
               accessibilityRole="button" accessibilityLabel="Your shark. Tap to say hi." />

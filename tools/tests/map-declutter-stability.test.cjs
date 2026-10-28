@@ -102,11 +102,12 @@ test('no find ever shows 0:00: at its time it fades out and asks for fresh map d
   const life = read('src/screens/ExploreScreen/FindLife.tsx');
   const { findClock } = loadTs('src/screens/ExploreScreen/FindLife.tsx', {
     react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} }, 'react-native-reanimated': {}, './parkMapLayout': {} });
-  assert.equal(findClock(400), '0:01', 'the last second never reads 0:00');
-  assert.equal(findClock(0), '0:01');
-  assert.equal(findClock(61_000), '1:01');
-  assert.equal(findClock(60_500), '1:01');
-  assert.equal(findClock(3_599_000), '59:59');
+  // Calm whole minutes (core loop 4.3 rule 7: no ticking countdown where a kid plays), never 0.
+  assert.equal(findClock(400), '1 min', 'the last minute never reads 0');
+  assert.equal(findClock(0), '1 min');
+  assert.equal(findClock(61_000), '2 min');
+  assert.equal(findClock(60_000), '1 min');
+  assert.equal(findClock(3_599_000), '60 min');
   assert.equal(findClock(3_600_000), '1h 0m', 'an hour reads in hours, never 60:00');
   assert.equal(findClock(3_752_000), '1h 2m', 'not 62:32');
   assert.equal(findClock(2 * 3_600_000 + 6 * 60_000 + 1), '2h 6m');

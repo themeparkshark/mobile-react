@@ -317,3 +317,31 @@ test('the Rewards button: one chest, one number; the flame after rung 4, the Tra
   assert.doesNotMatch(explore, /<MapResourcePill icon="energy"/, 'no Energy pill on the resting map');
   assert.match(explore, /style=\{styles\.trailHostHidden\}/, 'no Trail pill: the Rewards ring and its sheet');
 });
+
+test('teaching: park help page 1 opens itself once, only for an account that never had Finn\'s park lesson here, through the queue', () => {
+  const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /const helpPageKey = player \? `tps\.help\.parkPage1\.v1@p\$\{player\.id\}` : null;/, 'once per account');
+  assert.match(explore, /&& !parkLessonRan\.current && !isActive && parkTipReady && !parkTipShowing && attentionFor\('help_page'\);/,
+    'never after Finn\'s park lesson in this session, never over a tip, never in the park\'s quiet moments');
+  assert.match(explore, /if \(!attentionQueue\.take\(appOpenId, 'help_page'\)\) return;[\s\S]{0,200}openHelpSheet\('park_map'\);/);
+  // "Tap PLAY!": the guide card's picture every time PLAY! rises until the first win (no second Finn card).
+  assert.match(explore, /teachPlay=\{!hasWonACoin\} \/>/);
+  assert.match(explore, /rideCoinInRange: false \}\);/);
+  const card = fs.readFileSync(path.join(root, 'src/components/guide/NextCoinCard.tsx'), 'utf8');
+  assert.match(card, /\{copy\.pointsAtPlay && teachPlay && <View style=\{styles\.teach\}><CoinTipPicture \/><\/View>\}/);
+});
+
+test('rewards fly where they live: Energy to the Shelf button (park and home), XP to the Profile tab; no gift badge on the shark', () => {
+  const A = loadTs('src/components/guide/flyAnchors.ts', { react: { useCallback: f => f, useEffect() {}, useRef: v => ({ current: v }) },
+    'react-native': { Dimensions: { get: () => ({ width: 402, height: 874 }) } }, '../../context/CurrencyFlyProvider': { useCurrencyFly: () => ({}) } });
+  const at = A.profileTabCenter(402, 874, 34);
+  assert.ok(Math.abs(at.x - 344) < 6 && Math.abs(at.y - 818) < 6, `the Profile tab is at about (344, 818): ${at.x}, ${at.y}`);
+  const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /const shelfAnchor = useFlyAnchor\('energy', avatarRef\);/);
+  assert.match(explore, /useProfileTabAnchor\(0\);/);
+  assert.match(fs.readFileSync(path.join(root, 'src/components/guide/HomeShelfButton.tsx'), 'utf8'), /useFlyAnchor\('energy'\)/);
+  assert.match(fs.readFileSync(path.join(root, 'src/components/Map.tsx'), 'utf8'), /const SHARK_TRAIL_BADGE = false;/);
+  // Header: Shark Coins and Tickets; Keys and event tokens only while held.
+  assert.match(explore, /\(currency\.name === 'Coins' \|\| currencyBalance\(player, currency\.name\) > 0\)\)/);
+  assert.match(explore, /\{park && theme\?\.currency && currencyBalance\(player, theme\.currency\.name\) > 0 && \(/);
+});

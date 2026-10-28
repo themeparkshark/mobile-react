@@ -18,6 +18,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
 import type { GuideAction, GuideButton, GuideCardCopy } from '../../services/guide/guideCopy';
 import type { GuideState } from '../../services/guide/nextCoin';
+import CoinTipPicture from '../help/CoinTipPicture';
 
 const COIN_FALLBACK = require('../../../assets/images/coingold.png');
 const TICKET = require('../../../assets/images/ticket-icon.png');
@@ -43,7 +44,7 @@ function CardButton({ button, onPress, quiet = false }: { button: GuideButton; o
   </Pressable>;
 }
 
-export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAction, onCardPress, testID = 'next-coin-card' }: {
+export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAction, onCardPress, teachPlay = false, testID = 'next-coin-card' }: {
   readonly copy: GuideCardCopy;
   readonly state: GuideState;
   /** The target coin's art, or null (wallet and resting states draw the Ticket). */
@@ -54,6 +55,8 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   readonly onAction: (action: GuideAction) => void;
   /** A tap on the card itself (not its button): the Adventure sheet on its ride, else the path. */
   readonly onCardPress?: () => void;
+  /** Before the first win: the "Tap PLAY!" picture (ticket, arrow, coin) shows every time PLAY! rises (core loop 5.11). */
+  readonly teachPlay?: boolean;
   readonly testID?: string;
 }) {
   const reduced = useReducedGameMotion();
@@ -83,6 +86,7 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
         <Text style={styles.kicker} numberOfLines={1}>{copy.kicker}</Text>
         <Text style={styles.title} numberOfLines={2}>{copy.title}</Text>
         {copy.dots && <Dots dots={copy.dots} />}
+        {copy.pointsAtPlay && teachPlay && <View style={styles.teach}><CoinTipPicture /></View>}
         {!!copy.line && <Text style={styles.line} numberOfLines={2}>{copy.line}</Text>}
         {(copy.button || copy.secondary) && <View style={styles.actions}>
           {copy.button && <CardButton button={copy.button} onPress={onAction} />}
@@ -121,4 +125,5 @@ const styles = StyleSheet.create({
   quiet: { paddingVertical: 4, minHeight: 30, justifyContent: 'center' },
   quietText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 12, textDecorationLine: 'underline' },
   walkArrow: { alignSelf: 'center' },
+  teach: { marginTop: 4, alignSelf: 'flex-start' },
 });

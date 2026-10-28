@@ -11,6 +11,7 @@ import Button from '../Button';
 import { AuthContext } from '../../context/AuthProvider';
 import * as RootNavigation from '../../RootNavigation';
 import { BRAND } from '../../ui';
+import { useFlyAnchor } from './flyAnchors';
 
 /** The park the home Shelf opens: the player's last park, else Disneyland. */
 export const DEFAULT_SHELF_PARK = 8;
@@ -21,10 +22,12 @@ export function homeShelfPark(currentParkId: number | null | undefined): number 
 
 export default function HomeShelfButton() {
   const { player } = useContext(AuthContext);
+  // Energy flies here (it is saved for growing coins on your shelf).
+  const anchor = useFlyAnchor('energy');
   if (!player) return null;
   const park = homeShelfPark(player.current_park_id);
   return (
-    <View pointerEvents="box-none" style={styles.slot}>
+    <View ref={anchor.ref as React.RefObject<View>} onLayout={anchor.onLayout} collapsable={false} pointerEvents="box-none" style={styles.slot}>
       <Button accessibilityLabel="Shelf: your coins for your next park day"
         onPress={() => RootNavigation.navigate('Park', { park, player: player.id })}>
         <Avatar player={player} size="lg" />

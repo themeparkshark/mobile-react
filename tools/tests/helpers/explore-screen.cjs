@@ -79,6 +79,9 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '@react-navigation/native': { useIsFocused: () => true, useNavigation: () => nav,
       useRoute: () => ({ params: options.route ?? {} }), useFocusEffect: () => undefined },
     'expo-secure-store': { getItemAsync: async () => null, setItemAsync: async () => undefined, deleteItemAsync: async () => undefined },
+    // Phone storage: the park help page counts as seen unless a test says otherwise (options.storage).
+    '@react-native-async-storage/async-storage': { default: { getItem: async key => (options.storage ?? {})[key] ?? '1',
+      setItem: async (key, value) => { (options.storage ??= {})[key] = value; }, removeItem: async () => undefined } },
     dayjs: { default: Object.assign(() => ({ format: () => '2026-09-30' }), { extend: () => undefined }) },
     'dayjs/plugin/isBetween': {},
     '../context/AuthProvider': { AuthContext: { value: contexts.auth } },
