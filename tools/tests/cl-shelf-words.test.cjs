@@ -74,3 +74,65 @@ test('the coin card wires GET RIDE PARTS to guide.setTarget and the map path, an
   assert.match(park, /onShowOnMap=\{\(section === 'normal' \|\| section === 'limited'\) && canChooseGoal && inThisPark/);
   assert.doesNotMatch(read('src/components/CoinLevelingModal.tsx'), /name="queue"/);
 });
+
+/** A stand-in for any module: every property is another stand-in (module-level styles read deep keys). */
+function anything() {
+  const fn = function stub() { return anything(); };
+  return new Proxy(fn, { get: (target, key) => (key === Symbol.toPrimitive ? () => '' : key === '__esModule' ? false : anything()) });
+}
+
+function suppliesModule() {
+  return loadTs('src/screens/StoreScreen/SuppliesShop.tsx', new Proxy({
+    react: { useCallback() {}, useContext() {}, useEffect() {}, useMemo() {}, useRef() {}, useState() {} },
+    'react/jsx-runtime': { jsx() {}, jsxs() {}, Fragment: 'Fragment' },
+    'react-native': { StyleSheet: { create: v => v } },
+    'react-native-reanimated': { default: {}, FadeInUp: { delay: () => ({ springify: () => ({ damping: () => ({}) }) }), springify: () => ({ damping: () => ({}) }) } },
+  }, {
+    // Every other import is an empty stub: only the pure helpers run.
+    getOwnPropertyDescriptor: (target, key) => ({ configurable: true, enumerable: true, writable: true, value: key in target ? target[key] : anything() }),
+    get: (target, key) => (key in target ? target[key] : anything()),
+  }));
+}
+
+test('Supplies: the wallet is the header\'s live balances, never the catalog copy from the last shop load', () => {
+  const { freshWallet } = suppliesModule();
+  const wallet = freshWallet({ tickets: 7, coins: 1200, energy: 40, rescue_passes: 2 }, { tickets: 3, coins: 900, energy: 10, rescue_passes: 1 });
+  assert.equal(wallet.tickets, 7);
+  assert.equal(wallet.coins, 1200);
+  assert.equal(wallet.rescue_passes, 2);
+  assert.equal(freshWallet({ tickets: 5 }, { coins: 9 }).coins, 9, 'a balance the player row lacks falls back to the catalog');
+  assert.equal(freshWallet(null, null).tickets, 0);
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  assert.match(shop, /const wallet = freshWallet\(player, catalog\.wallet\);/);
+  assert.doesNotMatch(shop, /countText\(catalog\.wallet\[w\.key\]/, 'no stale wallet on screen');
+});
+
+test('Supplies: free Ticket ways come before any pack; the line Ticket only while Queue Tickets is on', () => {
+  const { freeTicketWays } = suppliesModule();
+  const off = freeTicketWays(false).map(way => way.text);
+  assert.ok(off.some(text => /3 treats/.test(text)));
+  assert.ok(!off.some(text => /wait at a ride/.test(text)), 'no line Ticket promise while queue_tickets is off');
+  assert.ok(freeTicketWays(true).some(way => /first wait at a ride earns a Ticket/.test(way.text)));
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  const render = shop.slice(shop.indexOf('<ScrollView ref={scroll}'));
+  assert.ok(render.indexOf('>FREE TICKETS<') > 0 && render.indexOf('>FREE TICKETS<') < render.indexOf("onSection('featured')"),
+    'the free ways sit above the packs');
+});
+
+test('Supplies: every purchase door is listed whenever its switch is on, regardless of rung (App Review path)', () => {
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  assert.match(shop, /const passOn = useMoneyFlag\('shark_pass'\);/);
+  assert.match(shop, /\{passOn && <SharkPassDoor \/>\}/);
+  assert.match(shop, /The Shark Pass and Shark Pass Plus/);
+  assert.match(shop, /\{!vip && <VipCard/);
+  assert.match(shop, /\{vip && giftPlansOn && <VipGiftDoor \/>\}/);
+  assert.doesNotMatch(shop, /useRung\(/, 'a purchase screen never waits for a rung');
+  // VIP's page lists the gift plans for anyone who is not a member yet.
+  assert.match(read('src/screens/MembershipScreen.tsx'), /\{!member && player && canBuy && plan && <GiftPlans \/>\}/);
+  // One word per thing: held passes are Extra tries; the Park Day Pack has its own heading; worth only at the gate.
+  assert.match(shop, /key === 'rescue' \? 'Extra tries'/);
+  assert.match(shop, /'EXTRA TRY' : 'EXTRA TRIES'/);
+  assert.match(shop, />Park day</);
+  assert.doesNotMatch(read('src/components/money/BundleCard.tsx'), /\bWorth \$|worth\.worth\}/, 'Worth $X lives only in the grown-up sheet');
+  assert.match(read('src/services/money/supplies.ts'), /rescue_passes: \['extra try', 'extra tries'\]/);
+});
