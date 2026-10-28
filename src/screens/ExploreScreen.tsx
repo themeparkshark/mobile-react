@@ -85,7 +85,7 @@ import BossMarker from '../components/boss/BossMarker';
 import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
 import useBossAttackRecovery from '../hooks/useBossAttackRecovery';
 import DailyGiftModal from '../components/DailyGiftModal';
-import RewardsButton, { rewardsButtonModel } from '../components/map/RewardsButton';
+import RewardsButton, { rewardsButtonModel, withRewardsSummary } from '../components/map/RewardsButton';
 import useRetention from '../components/retention/useRetention';
 import { chestDismissed, chestShouldShow, markChestDismissed } from './ExploreScreen/dailyChestPresence';
 import HomeHuntResultsHost from '../components/home/HomeHuntResultsHost';
@@ -1320,11 +1320,11 @@ export function ExploreScreenBody() {
   const trailBox = headlineBox(trail.state ? { ready: trail.state.ready, walking: trail.state.walking } : null);
   const dailyOpen = dailyRung.open && (guideFlags.daily_three === true || guideFlags.level_chests === true);
   const trailOpen = trailRung.open && trail.enabled && !!trail.state;
-  const rewardsModel = rewardsButtonModel({
+  const rewardsModel = withRewardsSummary(rewardsButtonModel({
     chestUnclaimed: chestUnclaimed && !chestShowing, trailReady: trail.state?.ready.length ?? 0,
     dailyOpen, flame: player?.daily3_streak ?? 0, trailOpen,
     trailProgress: trailBox ? (trailBox.status === 'ready' ? 1 : 1 - stepsToGo(trailBox) / Math.max(1, trailBox.goal_steps)) : null,
-  });
+  }), (retention as { rewards?: unknown }).rewards);
   const openRewards = useCallback(() => {
     rewardsTapped.current = true;
     // The Rewards sheet (rewards-unlocks) when this build has it; until then the one thing, or a short choice.

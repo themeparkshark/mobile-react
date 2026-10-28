@@ -262,10 +262,10 @@ function LimitedShimmer({ seed, moving }: { readonly seed: number; readonly movi
 }
 
 /**
- * The island's timer chip ("m:ss", or "1h 2m" past an hour). Ticks once a second
- * while the map is on screen and holds still otherwise. Counts up to the second
- * (never reads 0:00) and fades itself out at zero, before the ride's data catches
- * up. Always the same View and Text, so nothing inside the map marker swaps.
+ * The island's timer chip in calm whole minutes ("4 min", or "1h 2m" past an hour), never a
+ * ticking clock (core loop 4.3 rule 7). It wakes once a minute while the map is on screen and
+ * holds still otherwise, and fades itself out at zero, before the ride's data catches up.
+ * Always the same View and Text, so nothing inside the map marker swaps.
  */
 function MarkerTimer({ expiresAt, ticking, urgent, badgeStyle }: {
   readonly expiresAt: number; readonly ticking: boolean; readonly urgent: boolean; readonly badgeStyle: StyleProp<ViewStyle>;
@@ -275,13 +275,13 @@ function MarkerTimer({ expiresAt, ticking, urgent, badgeStyle }: {
   const done = left <= 0;
   useEffect(() => {
     if (!ticking || done) return;
-    // Battery: every second only in the last minute (the clock shows seconds); otherwise wake at each minute boundary.
+    // Battery: wake at each minute boundary (the chip shows whole minutes), and once more at zero to fade out.
     let id: ReturnType<typeof setTimeout>;
     const tick = () => {
       const t = Date.now(); setNow(t);
       const rest = expiresAt - t;
       if (rest <= 0) return;
-      id = setTimeout(tick, rest < 60_000 ? 1000 : (rest % 60_000) || 60_000);
+      id = setTimeout(tick, rest < 60_000 ? rest : (rest % 60_000) || 60_000);
     };
     tick();
     return () => clearTimeout(id);

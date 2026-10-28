@@ -339,6 +339,11 @@ test('the Rewards button: one chest, one number; the flame after rung 4, the Tra
   const later = R.rewardsButtonModel({ chestUnclaimed: false, trailReady: 1, dailyOpen: true, flame: 4, trailOpen: true, trailProgress: 1.4 });
   assert.deepEqual({ ...later }, { count: 1, flame: 4, trail: 1 });
   assert.equal(R.rewardsLabel(later), 'Rewards, 1 to claim, flame 4, Trail Box 100 percent walked');
+  // The Rewards sheet's summary (rewards-unlocks) wins when the build has it: it knows every row.
+  assert.deepEqual({ ...R.withRewardsSummary(later, { count: 3, flame: 5, trailRing: 0.25 }) }, { count: 3, flame: 5, trail: 0.25 });
+  assert.deepEqual({ ...R.withRewardsSummary(m, { count: 2, flame: null, trailRing: null }) }, { count: 2, flame: null, trail: null });
+  assert.equal(R.withRewardsSummary(later, undefined), later, 'no sheet in this build: the map count');
+  assert.equal(R.withRewardsSummary(later, { count: 'x' }), later, 'a bad summary is ignored');
   const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
   assert.doesNotMatch(explore, /<MapResourcePill icon="energy"/, 'no Energy pill on the resting map');
   assert.match(explore, /style=\{styles\.trailHostHidden\}/, 'no Trail pill: the Rewards ring and its sheet');

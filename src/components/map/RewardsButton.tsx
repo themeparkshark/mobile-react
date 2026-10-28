@@ -30,6 +30,21 @@ export interface RewardsButtonModel {
   readonly trail: number | null;
 }
 
+/**
+ * The Rewards sheet's own summary (rewards-unlocks: useRetention().rewards), when the build has it:
+ * it knows every row (Daily 3 chest, level chest, Weekly Box, stamps, event chests), so its number
+ * wins over the map's own count. Pure.
+ */
+export function withRewardsSummary(model: RewardsButtonModel, summary: unknown): RewardsButtonModel {
+  if (!summary || typeof summary !== 'object') return model;
+  const s = summary as { count?: unknown; flame?: unknown; trailRing?: unknown };
+  if (typeof s.count !== 'number' || !Number.isFinite(s.count)) return model;
+  const flame = typeof s.flame === 'number' && Number.isFinite(s.flame) ? Math.max(0, Math.floor(s.flame)) : s.flame === null ? null : model.flame;
+  const trail = typeof s.trailRing === 'number' && Number.isFinite(s.trailRing) ? Math.max(0, Math.min(1, s.trailRing))
+    : s.trailRing === null ? null : model.trail;
+  return { count: Math.max(0, Math.floor(s.count)), flame, trail };
+}
+
 /** Pure: the button's model from what the map knows. */
 export function rewardsButtonModel(input: {
   readonly chestUnclaimed: boolean;
