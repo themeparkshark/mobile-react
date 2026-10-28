@@ -1760,7 +1760,7 @@ export function ExploreScreenBody() {
               })) : undefined} />
             {/* Queue Times - moved from right side */}
             <View style={{ marginBottom: 8 }}>
-              <Button
+              <Button accessibilityLabel="Wait Times"
                 onPress={() => {
                   RootNavigation.navigate('QueueTimes', {
                     park: park.id,
