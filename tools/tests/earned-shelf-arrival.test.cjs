@@ -99,3 +99,13 @@ test('the landing clink and light haptic fire exactly once, with and without red
   view.unmount();
  }
 });
+test('wave 6: shelf layout settling while the slot is measured never restarts the measurement (no late flight)',()=>{
+ const h=measurement({offscreen:true});
+ assert.equal(h.view.tree.pending,true,'the coin waits off its slot');
+ assert.equal(h.view.timers.size,1);
+ for(let i=0;i<4;i++){h.view.tree.notifyLayout();h.view.render();}
+ assert.equal(h.view.timers.size,1,'one measurement in flight, not restarted by each layout bump');
+ assert.equal(h.scrolls.length,1);
+ h.tick();assert.equal(h.view.tree.target,null);assert.ok(h.scrolls.length>=2,'a miss scrolls to the slot again');
+ h.setY(270);h.tick();assert.equal(h.view.tree.target.y,170);assert.equal(h.view.tree.pending,false);
+});

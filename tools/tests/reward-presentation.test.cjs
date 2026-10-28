@@ -61,10 +61,11 @@ test('a first coin prefetches its park shelf and reads its collection milestones
   flow.game().props.onModalHide(); flow.view.render();
   assert.equal(flow.rewards().props.milestones.milestones[0].type, 'first_park_coin');
 });
-test('earned coin navigation waits for reward dismissal and keeps its confirmed asset identity', async () => {
+test('earned coin opens the shelf on the tap (under the fading card) and keeps its confirmed asset identity', async () => {
   const flow = recoveredWin(); await flow.view.settle(); flow.game().props.onModalHide(); flow.view.render();
   await flow.rewards().props.onViewCoin(); flow.view.render();
-  assert.equal(flow.rewards().props.visible, false); assert.equal(flow.navigation.length, 0);
+  // Wave 6: no wait for the card to fade and the map to hold still; the shelf is already loaded.
+  assert.equal(flow.rewards().props.visible, false); assert.equal(flow.navigation.length, 1);
   flow.rewards().props.onHidden();
   assert.equal(flow.navigation[0][0], 'Park');
   assert.equal(flow.navigation[0][1].park,1); assert.equal(flow.navigation[0][1].player,5);

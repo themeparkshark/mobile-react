@@ -9,7 +9,7 @@ import type { RefObject } from 'react';
 import { PixelRatio, Platform, Share, type View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import { FLEX_EXPORT } from './formats';
-import type { FlexFormat } from './types';
+import type { FlexFormat, FlexKind } from './types';
 
 /** iOS view-shot measures in points, Android in pixels. */
 export function flexCaptureSize(format: FlexFormat, platform: string, density: number) {
@@ -61,6 +61,28 @@ export function activityLabel(activity: string | null | undefined): string | nul
 
 /** The picture's name in the share sheet header and in Messages or AirDrop when a card has none of its own. */
 export const SHARE_FILE_NAME = 'Theme Park Shark';
+
+/**
+ * Share files are named by card type, never by a ride or prize title: "Theme-Park-Shark-Ride-Card.jpg"
+ * reads clean in the share sheet and never puts a park's ride name (a trademark) on a kid's file.
+ */
+export type ShareCardType = FlexKind | 'ride_card';
+
+export const SHARE_CARD_FILE_NAMES: Readonly<Record<ShareCardType, string>> = {
+  ride_card: 'Theme Park Shark Ride Card',
+  crowned: 'Theme Park Shark Crown Card', find: 'Theme Park Shark Find Card', ride_photo: 'Theme Park Shark Ride Photo',
+  set_complete: 'Theme Park Shark Set Card', boss_win: 'Theme Park Shark Boss Card', stamp: 'Theme Park Shark Stamp Card',
+  coin_level: 'Theme Park Shark Ride Coin Card', standings: 'Theme Park Shark Standings Card',
+  fright_night: 'Theme Park Shark Fright Card', fright_badge: 'Theme Park Shark Fright Card',
+  fright_lifetime: 'Theme Park Shark Fright Card', ride_coin: 'Theme Park Shark Ride Coin Card',
+  streak: 'Theme Park Shark Streak Card', level_up: 'Theme Park Shark Level Card', title: 'Theme Park Shark Title Card',
+  park_day: 'Theme Park Shark Park Day Card',
+};
+
+/** The file name for a card type ("Theme Park Shark Ride Card" becomes Theme-Park-Shark-Ride-Card.jpg). */
+export function shareCardFileName(card: ShareCardType): string {
+  return SHARE_CARD_FILE_NAMES[card] ?? SHARE_FILE_NAME;
+}
 
 /**
  * The OS share sheet for a card picture, after the grown-up gate. `afterYes` runs only once the

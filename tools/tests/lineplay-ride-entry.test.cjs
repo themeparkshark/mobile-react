@@ -19,6 +19,7 @@ function loadResolver(getRides, now = () => Date.now()) {
     Date: { now },
     require(name) {
       if (name === '../../api/endpoints/rides') return { getRides };
+      if (name === '../../constants/queueRideTypes') return { QUEUE_RIDE_TYPES: ['attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride'] };
       throw new Error(`Unexpected dependency: ${name}`);
     },
   }, { filename: file });
@@ -195,4 +196,36 @@ test('missing wait data never becomes a false zero-minute recommendation', () =>
     .map(entry => entry.name), ['A', 'B', 'C']);
   assert.deepEqual([knownZero, missing, knownLong].sort((a, b) => compareQueueWaits(a, b, 'wait-desc'))
     .map(entry => entry.name), ['B', 'A', 'C']);
+});
+
+test('an Adventure Ticket coin label that differs from the ride title still opens its story (Tiki Room)', async () => {
+  const resolver = loadResolver(async parkId => [
+    { id: 578, name: "Walt Disney's Enchanted Tiki Room", slug: '8-walt-disneys-enchanted-tiki-room', park_id: parkId,
+      task_id: 77, type: 'attraction', line_rewards_ready: true },
+    { id: 609, name: 'Tiki Juice Bar', park_id: parkId, task_id: 77, type: 'restaurant', line_rewards_ready: false },
+  ]);
+  // The old name-only lookup returned null here, and the ticket showed "Could not open this ride's adventure".
+  assert.equal(await resolver.resolveRideContext(8, 'Tiki Room', null), null);
+  const byId = await resolver.resolveQueueStoryContext(8, 578, 'Tiki Room', 77);
+  assert.equal(byId.rideId, 578);
+  assert.equal(byId.rideName, "Walt Disney's Enchanted Tiki Room");
+  assert.equal(byId.lineRewardsReady, true);
+  // The map's PLAY IN LINE chip finds the same ride by its coin task, never the snack bar.
+  const byTask = await resolver.resolveMapQueueContext(8, 'Tiki Room', 77);
+  assert.equal(byTask.rideId, 578);
+});
+
+test('a queue story never fails: no catalog match or no catalog at all plays the template story under the server ride id', async () => {
+  const empty = loadResolver(async () => []);
+  const missing = await empty.resolveQueueStoryContext(8, 593, 'Castle', 71);
+  assert.equal(missing.rideId, 593);
+  assert.equal(missing.rideName, 'Castle');
+  assert.equal(missing.parkId, 8);
+  assert.equal(missing.lineRewardsReady, undefined, 'the server, not the phone, decides Parts');
+  const down = loadResolver(async () => { throw new Error('offline'); });
+  const offline = await down.resolveQueueStoryContext(8, 622, 'Mr. Lincoln');
+  assert.equal(offline.rideId, 622);
+  assert.equal(offline.rideName, 'Mr. Lincoln');
+  const unnamed = await down.resolveQueueStoryContext(8, 0, 'Some Ride');
+  assert.equal(unnamed.rideId, 0);
 });

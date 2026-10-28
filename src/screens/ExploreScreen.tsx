@@ -38,7 +38,7 @@ import useTripGoal from '../hooks/useTripGoal';
 import AdventureTicketCard from './ExploreScreen/AdventureTicketCard';
 import { adventurePlayGate, adventureRideClosed, adventureShelfArrival, rankDetours } from './ExploreScreen/adventureTicketPresentation';
 import useAdventureStampMoment from './ExploreScreen/useAdventureStampMoment';
-import { resolveMapQueueContext, resolveRideContextById } from '../services/lineplay/resolveRide';
+import { resolveMapQueueContext, resolveQueueStoryContext } from '../services/lineplay/resolveRide';
 import type { RideContext } from '../services/lineplay/LinePlaySession';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import ParkMapRetryCard, { useParkMapRetry } from './ExploreScreen/ParkMapRetry';
@@ -400,7 +400,7 @@ export function ExploreScreenBody() {
     if (park && selectedTask) {
       const parkId = park.id;
       const taskId = selectedTask.id;
-      void resolveMapQueueContext(parkId, selectedTask.name).then(ride => {
+      void resolveMapQueueContext(parkId, selectedTask.name, taskId).then(ride => {
         if (active && ride) setSelectedQueueRide({ parkId, taskId, ride });
       });
     }
@@ -1705,9 +1705,8 @@ export function ExploreScreenBody() {
           rideName={queueDwell.rideName} top={slotTop}
           onDismiss={() => setDismissedDwell(queueDwell.rideId)}
           onPlay={async () => {
-            const ride = await resolveRideContextById(park.id, queueDwell.rideId)
-              ?? await resolveMapQueueContext(park.id, queueDwell.rideName);
-            if (!ride) throw new Error('This line could not load.');
+            // Never an error: a ride with no story of its own plays the template story.
+            const ride = await resolveQueueStoryContext(park.id, queueDwell.rideId, queueDwell.rideName);
             navigation.navigate('LinePlay', { ride });
           }} />}
         {adventure && suggestionSlots.left === 'adventure' && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
@@ -1719,9 +1718,11 @@ export function ExploreScreenBody() {
           onCelebrate={() => celebrateTicket(adventure.id)}
           onDiscover={focusAdventureRide} onFindLine={focusAdventureRide}
           onPlay={async () => {
-            const ride = await resolveMapQueueContext(adventure.park_id, adventure.ride.ride_name);
+            // The ticket names its catalog ride id, so a coin label like "Tiki Room" still finds
+            // "Walt Disney's Enchanted Tiki Room"; any ride without its own chapter gets the template story.
+            const ride = await resolveQueueStoryContext(adventure.park_id, adventure.ride.ride_id,
+              adventure.ride.ride_name, adventure.ride.task_id);
             if (adventureScope.current !== adventureOwner) return;
-            if (!ride) throw new Error('This queue adventure could not load.');
             navigation.navigate('LinePlay', { ride });
           }}
           onShelf={() => {

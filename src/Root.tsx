@@ -145,7 +145,10 @@ export default function App() {
           }}
         />
         <Stack.Screen name="Player" getComponent={() => require('./screens/PlayerScreen').default} />
-        <Stack.Screen name="Park" getComponent={() => require('./screens/ParkScreen').default} />
+        {/* "See It On Your Shelf": the shelf is already under the fading win card, so it shows in
+            place (no slide) and the coin flies straight to its slot. */}
+        <Stack.Screen name="Park" getComponent={() => require('./screens/ParkScreen').default}
+          options={({ route }) => ((route.params as { earnedCoin?: unknown } | undefined)?.earnedCoin ? { animation: 'none' } : {})} />
         <Stack.Screen
           name="Inventory"
           getComponent={() => require('./screens/InventoryScreen').default}
