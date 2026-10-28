@@ -378,7 +378,9 @@ export default function WaitCard({
         ? atDailyCap ? 'You’ve earned today’s Parts for this ride.' : 'You got the most Parts for one wait. Great job!'
         : countdown.needsCheck ? 'Keep playing. Stay near the ride to keep earning.'
           : countdown.checking ? 'Keep playing. It shows up soon.'
-          : coinMissing ? calmPartsLine({ elapsedSeconds, earned, intervalSeconds: interval })
+          // No coin yet: the card says the Parts are saved; Details adds the Parts count once (its time line says the minutes).
+          : coinMissing ? earned > 0 ? `${earned} Part${earned === 1 ? '' : 's'} saved for this coin so far.`
+            : `First Part at ${Math.max(1, Math.round(interval / 60))} min near the ride.`
             : 'Stay near the ride to earn more Parts.';
 
   // With the coin hero the one line already says it ("In line 3 min · first Part at 10 min"), so Details
