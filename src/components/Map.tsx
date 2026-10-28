@@ -140,7 +140,7 @@ export function railColumnHeight(buttons: number): number {
   return buttons <= 0 ? 0 : buttons * RAIL_BUTTON + (buttons - 1) * RAIL_GAP;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, sharkLook = 0, sharkHop = 0, trail = null, onZoomChange, guideTarget, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, railFloor = 0, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self', trailHidden = false }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, sharkLook = 0, sharkHop = 0, trail = null, onZoomChange, guideTarget, guideSticky = false, returnAfterMs = null, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, railFloor = 0, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self', trailHidden = false }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -150,6 +150,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly onZoomChange?: (zoom: number) => void;
   /** After "Find": a dashed path for 4 s, and an edge arrow while the target is off screen. */
   readonly guideTarget?: { latitude: number; longitude: number; requestId: number } | null;
+  /** The Next Coin guide: the dotted path stays while there is a target (not only a few seconds after Find). */
+  readonly guideSticky?: boolean;
+  /** Panned away: the camera follows the shark again this long after the last touch (core loop 5.1). Null: never. */
+  readonly returnAfterMs?: number | null;
   /** A full-screen flow covers the map: hold every ambient loop still (battery). */
   readonly ambientPaused?: boolean;
   /** Stop the ambient clock without re-rendering or unmounting anything (a short cover, like a catch). */
@@ -517,9 +521,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     void projectGuide();
     if (!guideTarget) { setPathShown(false); return; }
     setPathShown(true);
+    if (guideSticky) return;
     const timer = setTimeout(() => setPathShown(false), GUIDE_PATH_MS);
     return () => clearTimeout(timer);
-  }, [guideTarget?.requestId, projectGuide]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [guideTarget?.requestId, projectGuide, guideSticky]); // eslint-disable-line react-hooks/exhaustive-deps
   const arrow = guideTarget && guidePoint && viewSize ? edgeArrow(guidePoint, viewSize) : null;
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
   // The follow-view shark animates only while it is the one on screen.
@@ -542,6 +547,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       !Number.isFinite(focusCoordinate.longitude)) return;
     setFocusedOnPlayer(false);
     followRef.current = false;
+    lastTouchRef.current = Date.now();
     cameraRef.current?.setCamera({ centerCoordinate: [focusCoordinate.longitude, focusCoordinate.latitude],
       heading: 0, zoomLevel: focusCoordinate.zoom ?? 17.9, animationDuration: reducedMotion ? 0 : 450, animationMode: reducedMotion ? 'moveTo' : 'easeTo' });
   // `covered`: a request made before the map first drew (a mount-time focus) is dropped by the
@@ -573,6 +579,20 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     followRef.current = true;
     cam.recenter(followZoomRef.current);
   };
+  // Panned away (or focused on a ride): the camera follows the shark again `returnAfterMs` after the
+  // last touch, so a walker never has to find themselves (the walks: it stayed parked 200 m behind).
+  const lastTouchRef = useRef(0);
+  const recenterRef = useRef(recenterOnPlayer); recenterRef.current = recenterOnPlayer;
+  const hasLocation = !!location;
+  useEffect(() => {
+    if (focusedOnPlayer || returnAfterMs == null || !hasLocation) return undefined;
+    lastTouchRef.current = Math.max(lastTouchRef.current, Date.now());
+    const timer = setInterval(() => {
+      if (followRef.current || isCatchShown()) return;
+      if (Date.now() - lastTouchRef.current >= returnAfterMs) recenterRef.current();
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [focusedOnPlayer, returnAfterMs, hasLocation]);
   const shownMode: FollowMode = haveHeading ? followMode : 'north';
   const [noCompassFlash, setNoCompassFlash] = useState(0);
   const toggleFollowMode = () => {
@@ -904,6 +924,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         regionWillChangeDebounceTime={0}
         onRegionWillChange={(feature) => {
           if (!feature.properties?.isUserInteraction) return;
+          lastTouchRef.current = Date.now();
           onUserPan?.();
           if (compassHintRef.current) compassHintRef.current();
           if (followRef.current) {
@@ -935,6 +956,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           // HUD fades first), and the panned-away shark hides before iOS parks it in the corner.
           // Camera eases (following the walk, a tap-to-focus) get the same held passes, less often.
           noteCamera(Number(feature.properties?.zoomLevel), Number(feature.properties?.heading));
+          if (feature.properties?.isUserInteraction) lastTouchRef.current = Date.now();
           // A gesture that began while following: no zoom change yet and the map has slid = a pan.
           if (feature.properties?.isUserInteraction && Number.isFinite(gestureZoomRef.current) && followHoldRef.current) {
             const z = Number(feature.properties?.zoomLevel);

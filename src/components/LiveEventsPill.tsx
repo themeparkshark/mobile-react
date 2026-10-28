@@ -20,9 +20,15 @@ import countText from '../helpers/countText';
 
 export type { RushPick };
 
-function clock(endsAt: string, now: number): string {
-  const s = Math.max(0, Math.floor((new Date(endsAt).getTime() - now) / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+/**
+ * When it ends, in words ("until 2:45 PM"): calm timers, never a ticking countdown where a kid
+ * plays (core loop 4.3 rule 7).
+ */
+export function untilLabel(endsAt: string, now: number): string {
+  const end = new Date(endsAt);
+  if (!Number.isFinite(end.getTime()) || end.getTime() <= now) return 'ending now';
+  const hours = end.getHours(), minutes = end.getMinutes();
+  return `until ${hours % 12 === 0 ? 12 : hours % 12}:${String(minutes).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`;
 }
 
 /** The Rush bolt: his Rush icon with a live pulse (still under reduced motion). */
@@ -64,14 +70,14 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
   readonly inline?: boolean;
 }) {
   const [now, setNow] = useState(Date.now());
-  // The countdowns tick once a second only while one is on screen.
+  // Only to let an ended Rush or raid leave: once a minute while one is on screen (no seconds anywhere).
   const focused = useIsFocused();
   const appActive = useAppActive();
   const ticking = focused && appActive && (rushes.length > 0 || raid?.status === 'active');
   useEffect(() => {
     if (!ticking) return;
     setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
   }, [ticking]);
   const liveRushes = rushes.filter(r => new Date(r.rush.ends_at).getTime() > now);
@@ -118,14 +124,14 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
     const pct = Math.round((boss.hp_left / Math.max(1, boss.hp_max)) * 100);
     return (
       <Pressable accessibilityRole="button" onPress={onBoss} style={[styles.pillShadow, inline && styles.inline]}
-        accessibilityLabel={`Boss raid: ${BOSS_NAMES[boss.boss]} at ${boss.ride_name}. ${pct} percent health, ${boss.fighters} fighting, ${clock(boss.ends_at, now)} left. Open.`}>
+        accessibilityLabel={`Boss raid: ${BOSS_NAMES[boss.boss]} at ${boss.ride_name}. ${pct} percent health, ${boss.fighters} fighting, ${untilLabel(boss.ends_at, now)}. Open.`}>
         <LinearGradient colors={[BRAND.blueBright, BRAND.blue]} style={[styles.pill, styles.bossPill]}>
           <Image source={BOSS_ART[boss.boss]} style={styles.bossIcon} contentFit="contain" />
           <View style={{ flex: 1 }}>
             <Text style={[styles.title, styles.bossTitle]} numberOfLines={1}>{BOSS_NAMES[boss.boss].toUpperCase()}  ·  {boss.ride_name}</Text>
             <View style={styles.hpRow}>
               <View style={styles.hpTrack}><View style={[styles.hpFill, { width: `${Math.max(2, pct)}%` }]} /></View>
-              <Text style={[styles.sub, styles.bossSub]} numberOfLines={1}>{boss.fighters} fighting  ·  {clock(boss.ends_at, now)}</Text>
+              <Text style={[styles.sub, styles.bossSub]} numberOfLines={1}>{boss.fighters} fighting  ·  {untilLabel(boss.ends_at, now)}</Text>
             </View>
           </View>
           {liveRushes.length > 0 ? (
@@ -142,12 +148,12 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
   const { task, rush, wait } = liveRushes[0];
   return (
     <Pressable accessibilityRole="button" onPress={() => onRush(task)} style={[styles.pill, styles.rushPill, inline && styles.inline]}
-      accessibilityLabel={`Rush on ${task.name}: ${wait} minute wait, usually ${rush.typical}. ${clock(rush.ends_at, now)} left. Show on map.`}>
+      accessibilityLabel={`Rush on ${task.name}: ${wait} minute wait, usually ${rush.typical}. Extra Parts ${untilLabel(rush.ends_at, now)}. Show on map.`}>
       <RushBolt />
       <View style={{ flex: 1 }}>
         <Text style={[styles.title, styles.rushTitle]} numberOfLines={1}>RUSH  ·  {task.name}</Text>
         <Text style={[styles.sub, styles.rushSub]} numberOfLines={1}>
-          {wait} min wait (usually {rush.typical})  ·  2x Parts  ·  {clock(rush.ends_at, now)}
+          {wait} min wait (usually {rush.typical})  ·  extra Parts {untilLabel(rush.ends_at, now)}
           {liveRushes.length > 1 ? `  +${liveRushes.length - 1} more` : ''}
         </Text>
       </View>

@@ -185,6 +185,11 @@ function startTimers(): void {
   if ((!atPark || listeners.size === 0) && timer) { clearInterval(timer); timer = null; }
 }
 
+/** This app open's id (cold start, or back after APP_OPEN_GAP_MS away): the attention rules key on it. */
+export function currentAppOpen(): string {
+  return appOpenId;
+}
+
 /** A new app open (cold start, or back after APP_OPEN_GAP_MS away). */
 export function startAppOpen(at: number = now()): void {
   appOpenId = `open-${at}`;

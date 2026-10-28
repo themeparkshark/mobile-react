@@ -32,5 +32,7 @@ test('the map covers the left slot while the guard is up', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
   assert.match(src, /const leftSlotSwapGuard = useSwapTapGuard\(leftSlotKey\)/);
   assert.match(src, /\{leftSlotSwapGuard && <View testID="left-slot-swap-guard" onStartShouldSetResponder=\{\(\) => true\}/);
-  assert.ok(src.indexOf('left-slot-swap-guard') < src.indexOf('<DwellCard'), 'drawn before the chips, above them by zIndex');
+  // The guide card's words swap in place (Walk to In line): the guard sits over it, above it by zIndex.
+  assert.ok(src.indexOf('left-slot-swap-guard') < src.indexOf('<NextCoinCard'), 'drawn before the guide card, above it by zIndex');
+  assert.match(src, /const leftSlotKey = guideShown \? `\$\{nextCoin\.state\}:\$\{nextCoin\.target\?\.taskId \?\? 'none'\}` : null;/);
 });

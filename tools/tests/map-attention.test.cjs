@@ -270,3 +270,50 @@ test('a dialog answers only after UIKit dismisses it, so the next dialog or shee
   assert.match(source, /NATIVE_DISMISS_FALLBACK_MS/, 'a silent native dialog still answers');
 });
 
+test('attention rules: no chest ever opens by itself at a park; nothing in the first 30 s, while walking, during play or within 10 s of a win card', () => {
+  const Q = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts', { '../../components/map/statusStack': { HUD_BOTTOM: 76 } });
+  const t0 = Date.parse('2026-10-28T19:00:00Z');
+  const park = { atPark: true, now: t0 + 60_000, arrivedAt: t0, walkingToTarget: false, playing: false, winCardClosedAt: null, autoOpenUsed: false };
+  for (const kind of ['daily_chest', 'reward', 'monday_results']) assert.equal(Q.autoOpenAllowed(kind, park), false, `${kind} never by itself at a park`);
+  assert.equal(Q.autoOpenAllowed('event_recap', park), true, 'a calm park moment');
+  assert.equal(Q.autoOpenAllowed('event_recap', { ...park, now: t0 + Q.PARK_QUIET_MS - 1 }), false, 'first 30 s at a park');
+  assert.equal(Q.autoOpenAllowed('event_recap', { ...park, arrivedAt: null }), false, 'not yet arrived');
+  assert.equal(Q.autoOpenAllowed('event_recap', { ...park, walkingToTarget: true }), false, 'while walking to the guide target');
+  assert.equal(Q.autoOpenAllowed('event_recap', { ...park, playing: true }), false, 'during a game or LinePlay');
+  assert.equal(Q.autoOpenAllowed('event_recap', { ...park, winCardClosedAt: park.now - Q.WIN_CARD_QUIET_MS + 1 }), false, 'within 10 s of a win card');
+  assert.equal(Q.autoOpenAllowed('event_recap', { ...park, winCardClosedAt: park.now - Q.WIN_CARD_QUIET_MS }), true);
+  const home = { ...park, atPark: false, arrivedAt: null };
+  assert.equal(Q.autoOpenAllowed('daily_chest', home), true, 'at home the daily chest may open itself');
+  assert.equal(Q.autoOpenAllowed('daily_chest', { ...home, autoOpenUsed: true }), false, 'one automatic open per app open');
+  // The queue: one automatic open per app open, keyed by the ladder's app-open id.
+  Q.attentionQueue.reset();
+  assert.equal(Q.attentionQueue.take('open-1', 'daily_chest'), true);
+  assert.equal(Q.attentionQueue.used('open-1', 'daily_chest'), false, 'the chest that took it may keep showing');
+  assert.equal(Q.attentionQueue.used('open-1', 'event_recap'), true, 'everything else waits on its button');
+  assert.equal(Q.attentionQueue.take('open-1', 'event_recap'), false);
+  assert.equal(Q.attentionQueue.used('open-2', 'event_recap'), false, 'a new app open');
+  Q.attentionQueue.reset();
+});
+
+test('state B at the gate through the first coin: the map wiring keeps chests, reward sheets and offers from opening by themselves', () => {
+  const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /const chestReady = !firstVisitHold && attentionFor\('daily_chest'\) && chestMayPresent\(/);
+  assert.match(explore, /&& !\(chestUnclaimed && !!dailyGift && !chestDismissed\(dailyGift\.id\)\) && attentionFor\('reward'\),/, 'level chests and Daily 3 sheets');
+  assert.match(explore, /eventsRung\.open && attentionFor\('event_recap'\)/);
+  assert.doesNotMatch(explore, /<ParkDayOffer|<NextUpRail|<DwellCard|<MapSuggestionStub/, 'no offer, rail or extra card over the map');
+  assert.match(explore, /walkingToTarget: !!park && nextCoin\.state === 'walk', playing: redeemFlowOpen, winCardClosedAt: flowClosedAt,/);
+});
+
+test('the Rewards button: one chest, one number; the flame after rung 4, the Trail ring after rung 6', () => {
+  const R = loadTs('src/components/map/RewardsButton.tsx', {
+    react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} }, 'react-native': { StyleSheet: { create: v => v } }, 'expo-image': {},
+    'react-native-svg': {}, '../../gamekit/Haptics': {}, '../../ui': { BRAND: {}, SHADOW: { card: {} }, GameIcon: 'GameIcon' } });
+  const m = R.rewardsButtonModel({ chestUnclaimed: true, trailReady: 2, dailyOpen: false, flame: 4, trailOpen: false, trailProgress: 0.4 });
+  assert.deepEqual({ ...m }, { count: 1, flame: null, trail: null }, 'before rungs 4 and 6: just the chest');
+  const later = R.rewardsButtonModel({ chestUnclaimed: false, trailReady: 1, dailyOpen: true, flame: 4, trailOpen: true, trailProgress: 1.4 });
+  assert.deepEqual({ ...later }, { count: 1, flame: 4, trail: 1 });
+  assert.equal(R.rewardsLabel(later), 'Rewards, 1 to claim, flame 4, Trail Box 100 percent walked');
+  const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.doesNotMatch(explore, /<MapResourcePill icon="energy"/, 'no Energy pill on the resting map');
+  assert.match(explore, /style=\{styles\.trailHostHidden\}/, 'no Trail pill: the Rewards ring and its sheet');
+});

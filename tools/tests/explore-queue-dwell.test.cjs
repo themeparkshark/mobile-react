@@ -86,7 +86,8 @@ test('DwellCard Play that cannot load says so instead of failing silently', asyn
 
 test('the dwell and Adventure Ticket Play resolve by ride id, then name, then the template story, and never throw', () => {
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
-  const block = src.slice(src.indexOf('<DwellCard'), src.indexOf('<AdventureTicketCard'));
+  // The in-line card folded into the guide's in-line state (core loop 4.1): its LINEPLAY resolves the dwell ride.
+  const block = src.slice(src.indexOf('const openLinePlayFor = useCallback('), src.indexOf('const onGuideAction = useCallback('));
   assert.match(block, /resolveQueueStoryContext\(park\.id, queueDwell\.rideId, queueDwell\.rideName\)/);
   assert.doesNotMatch(block, /throw new Error/);
   const ticket = src.slice(src.indexOf('<AdventureTicketCard'), src.indexOf('onShelf={() => {', src.indexOf('<AdventureTicketCard')));

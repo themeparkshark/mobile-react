@@ -59,7 +59,8 @@ test('home map: only a slim one-line chip ever sits over the map (peeks, map sta
   // Ticket progress and the park story are small chips in the top HUD row; the park pill never shows at home.
   assert.match(home, /<HomeHudChips top=\{hudTop\} onWidth=\{setHudWidth\}/);
   assert.match(read('src/screens/ExploreScreen/HomeHudChips.tsx'), /height: 30,/);
-  assert.match(read('src/screens/ExploreScreen.tsx'), /pillHidden=\{!park \|\| suggestionSlots\.right !== 'project'\}/);
+  // The park pill never shows at home, and at a park the Park Story waits too (core loop 5.12).
+  assert.match(read('src/screens/ExploreScreen.tsx'), /\n\s*pillHidden\n/);
 });
 
 test('home map: peek and map-state lines', () => {
@@ -131,7 +132,7 @@ test('home map polish: peek timing, hold and pan; status lines stay; edge tokens
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /const onUserPan = useCallback\(\(\) => setChip\(null\), \[\]\);/);
   assert.match(home, /onUserPan=\{onUserPan\}/);
-  assert.match(read('src/components/Map.tsx'), /isUserInteraction\) return;\n\s*onUserPan\?\.\(\);/);
+  assert.match(read('src/components/Map.tsx'), /isUserInteraction\) return;\n\s*lastTouchRef\.current = Date\.now\(\);\n\s*onUserPan\?\.\(\);/);
   const chip = read('src/screens/ExploreScreen/HomeHuntChip.tsx');
   assert.match(chip, /onPressIn=\{stop\} onPressOut=\{\(\) => start\(message\.ttlMs\)\}/, 'held while pressed');
   assert.match(chip, /Gesture\.Pan\(\)\.enabled\(message\?\.ttlMs !== 0\)/, 'status lines cannot be swiped away');

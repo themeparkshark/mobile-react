@@ -43,6 +43,12 @@ interface Props {
   onCelebrate: () => Promise<unknown>;
   onRefresh: () => Promise<void>;
   onOcclusionChange?: (visible: boolean) => void;
+  /**
+   * The Next Coin guide card is the ticket's frame on the map (core loop 4.1): no chip of its own,
+   * only the sheet (stamps, souvenir), opened whenever openRequest changes.
+   */
+  sheetOnly?: boolean;
+  openRequest?: number;
   /** Dev preview only: start with the sheet (or the detour picker) open. */
   initialOpen?: boolean;
   initialPicker?: boolean;
@@ -142,7 +148,7 @@ function ChipEntrance({ reduced, children, style }: { reduced: boolean; children
 
 export default function AdventureTicketCard({ ticket, data, closed, stale, top, collapsed = false, gate, detours = [], slam = [], onSlamDone,
   onDiscover, onPlay, onFindLine, onShelf, onSelect, onDismiss, onCelebrate, onRefresh, onOcclusionChange,
-  initialOpen = false, initialPicker = false }: Props) {
+  sheetOnly = false, openRequest = 0, initialOpen = false, initialPicker = false }: Props) {
   const [open, setOpen] = useState(initialOpen), [picker, setPicker] = useState(initialPicker);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   const [unfold, setUnfold] = useState(false);
@@ -211,10 +217,16 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
     if (mounted.current) setOpen(false);
   });
   const openSheet = () => { setPicker(false); setError(null); setOpen(true); haptic('tapLight'); };
+  const lastRequest = useRef(openRequest);
+  useEffect(() => {
+    if (openRequest === lastRequest.current) return;
+    lastRequest.current = openRequest;
+    openSheet();
+  }, [openRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const a11y = `Open Adventure Ticket. ${ticket.ride.ride_name}. ${prompt.title}. ${earnedCount} of 3 chapters complete.`;
 
   return <>
-    {complete ? (
+    {sheetOnly ? null : complete ? (
       // Finished: the ticket tucks into a small souvenir stub in the same slot.
       <ChipEntrance reduced={reduced} style={[styles.stubSlot, { top }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={a11y} onPress={openSheet} style={styles.stub}>
@@ -261,7 +273,7 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
         </View>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {picker ? <>
-            <Text style={styles.title}>Choose your detour</Text>
+            <Text style={styles.title}>{ticket.discover || ticket.play ? 'Choose your detour' : 'Pick another ride'}</Text>
             <Text style={styles.support}>A different ride, the same adventure. Every stamp you earned stays.</Text>
             {detours.map(choice => <Pressable key={choice.ride.task_id} accessibilityRole="button"
               accessibilityLabel={`Continue adventure at ${choice.ride.ride_name}`} disabled={busy} onPress={() => pick(choice)}
@@ -299,8 +311,8 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
                 icon={prompt.intent === 'play' ? 'queue' : prompt.intent === 'find_line' || prompt.intent === 'discover' ? 'map' : undefined}
                 loading={busy} disabled={busy} onPress={next} />
             </View>
-            {ticket.phase !== 'complete' && ticket.phase !== 'celebrate' && <GameButton variant="ghost" label="Choose a different ride"
-              accessibilityLabel="Choose a different adventure ride" disabled={busy} onPress={() => setPicker(true)} />}
+            {ticket.phase !== 'complete' && ticket.phase !== 'celebrate' && prompt.intent !== 'detour' && <GameButton variant="ghost" label="Pick another ride"
+              accessibilityLabel="Pick another ride for the adventure" disabled={busy} onPress={() => setPicker(true)} />}
             {onDismiss && <GameButton variant="ghost" label="Hide for today" accessibilityLabel="Hide the Adventure Ticket for today"
               disabled={busy} onPress={tuckAway} />}
             {complete && <Text style={styles.private}>Saved for you. Sharing is always your choice.</Text>}

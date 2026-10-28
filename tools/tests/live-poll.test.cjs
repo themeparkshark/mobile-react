@@ -100,7 +100,7 @@ test('app-wide and map polls go through useLivePoll instead of a raw setInterval
   assert.match(raid, /useLivePoll\(refresh, idlePollInterval\(20000, idle && !raidRunning\), \{ enabled: !!parkId && !!player\?\.id, focused, key: scope \}\)/);
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /useLivePoll\(loadLivePark, idlePollInterval\(60000, mapIdle, 2\), \{ enabled: !!park\?\.id, focused: mapFocused/);
-  assert.match(explore, /useLivePoll\(fetchGymData, idlePollInterval\(30000, mapIdle\), \{ enabled: !!park\?\.id, focused: mapFocused/);
+  assert.match(explore, /useLivePoll\(fetchGymData, idlePollInterval\(30000, mapIdle\), \{ enabled: !!park\?\.id && mapFlags\.gymSwords, focused: mapFocused/);
   assert.match(explore, /useParkRaid\(park\?\.id, \{ focused: mapFocused, idle: mapIdle \}\)/);
   assert.doesNotMatch(read('src/components/GymBattle/GymMarker.tsx'), /getGym\(/, 'the gym marker reads the map\'s gym data instead of polling it again');
 });

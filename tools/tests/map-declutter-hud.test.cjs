@@ -26,12 +26,19 @@ const frightModules = (extra = {}) => ({
 });
 
 test('Fin-ister Nights at USF: Fin-ister leads the one row, Ride Control and the Lagoon show wait behind +2', async () => {
-  const app = exploreScreen({ redeemables, modules: frightModules() });
+  // Core loop 4.2: the team bar stays hidden until a team pick (no team: Fin-ister and the show only).
+  const noTeam = exploreScreen({ redeemables, modules: frightModules() });
+  await noTeam.settle(); await noTeam.settle();
+  assert.deepEqual(plain(noTeam.find(named('MapStatusStack')).props.entries.map(e => e.key)), ['fright', 'show'], 'no team bar before a team pick');
+  const gym = { getGym: () => new Promise(() => undefined), getSwords: () => new Promise(() => undefined),
+    getMyTeam: async () => ({ has_team: true, team: 'shark' }), getMySwords: async () => ({ swords: 0 }), claimSword: async () => undefined };
+  const app = exploreScreen({ redeemables, modules: frightModules({ '../api/endpoints/gym-battle': gym }) });
   await app.settle(); await app.settle();
   const stacks = app.findAll ? app.findAll(named('MapStatusStack')) : [app.find(named('MapStatusStack'))];
   assert.equal(stacks.filter(Boolean).length, 1, 'exactly one status row');
   const entries = stacks[0].props.entries;
   assert.deepEqual(plain(entries.map(e => e.key)), ['fright', 'show', 'control']);
+  assert.equal(entries[2].node.props.compact, true, 'after a team pick the bar is a small team chip');
   const lead = entries[0].node;
   assert.equal(lead.props.onHelp, undefined, 'the map\'s one "?" carries the Fin-ister tutorial');
   assert.equal(lead.props.inline, true);

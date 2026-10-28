@@ -296,3 +296,188 @@ test('free Tickets order: earned to claim (stamps first), free try, extra tries,
   assert.ok(F.needTicketLines(false).some(line => line === '3 treats at home = 1 Ticket.'));
   assert.ok([...F.needTicketLines(true)].every(line => !line.includes(String.fromCharCode(0x2014))), 'no em dashes in copy');
 });
+
+// ---------------------------------------------------------------------------
+// guide-map lane, round 1: the card's words, the map's coins, park day events.
+
+const C = loadTs('src/services/guide/guideCopy.ts');
+const GC = loadTs('src/components/guide/guideCoins.ts');
+const PD = loadTs('src/services/guide/parkDay.ts');
+const ctx = (extra = {}) => ({ parkName: 'Disneyland', ridesResting: false, allOwned: false, tickets: 6, freeStep: null,
+  queueTicketsOn: false, adventureDots: null, ...extra });
+const tgt = (extra = {}) => ({ taskId: 3, parkId: 8, name: 'Jungle Cruise', kind: 'ride', reason: 'nearest_open', source: 'guide',
+  meters: 42, inRange: false, checkRunning: false, leavesOn: null, ...extra });
+
+test('card words for every state: one title, one line, one button, in the 4.5 vocabulary', () => {
+  const arrive = C.guideCardCopy('arrive', tgt(), ctx());
+  assert.equal(arrive.kicker, 'WELCOME TO DISNEYLAND!');
+  assert.equal(arrive.title, 'First coin: Jungle Cruise');
+  assert.equal(arrive.line, '40 m');
+  assert.equal(arrive.button.action, 'go');
+  const walk = C.guideCardCopy('walk', tgt({ checkRunning: true }), ctx());
+  assert.equal(walk.button, null, 'walking: the path is the guide');
+  assert.equal(walk.line, '40 m · Check it\'s running');
+  const here = C.guideCardCopy('here', tgt({ inRange: true }), ctx());
+  assert.equal(here.title, 'You\'re here! Tap PLAY!');
+  assert.equal(here.pointsAtPlay, true);
+  const story = C.guideCardCopy('line_story', tgt({ reason: 'line_story' }), ctx({ adventureDots: [true, false, false] }));
+  assert.deepEqual(plain([story.button.label, story.secondary.label, story.secondary.action]), ['LINEPLAY', 'Pick another coin', 'skip']);
+  assert.deepEqual(plain(story.dots), [true, false, false], 'the Adventure Ticket is the card\'s 3-stamp frame');
+  const inLine = C.guideCardCopy('in_line', tgt({ reason: 'in_line' }), ctx());
+  assert.equal(inLine.title, 'In line for Jungle Cruise?');
+  assert.equal(inLine.line, 'Your wait powers its coin');
+  const claim = C.guideCardCopy('claim', tgt(), ctx({ tickets: 0, freeStep: { kind: 'claim', tickets: 5, sources: [] } }));
+  assert.equal(claim.title, '5 free Tickets are waiting');
+  assert.equal(claim.button.label, 'CLAIM');
+  assert.equal(C.guideCardCopy('free_try', tgt({ inRange: true }), ctx()).button.badge, 'gift');
+  assert.equal(C.guideCardCopy('extra_try', tgt({ inRange: true }), ctx()).title, 'Use an extra try');
+  assert.equal(C.guideCardCopy('level_up', tgt({ reason: 'level_up', name: 'Haunted Mansion' }), ctx()).title, 'Haunted Mansion is ready to level up');
+  const home = C.guideCardCopy('home', tgt({ reason: 'plan' }), ctx({ treatsToTicket: 2, planName: 'Jungle Cruise' }));
+  assert.equal(home.title, 'Disneyland: 6 Tickets ready');
+  assert.equal(home.line, 'Next coin: Jungle Cruise. 2 more treats = 1 Ticket');
+  assert.equal(home.button.action, 'plan');
+  const back = C.guideCardCopy('welcome_back', tgt(), ctx({ shelf: { owned: 9, total: 35 } }));
+  assert.equal(back.title, 'Your Disneyland shelf: 9 of 35');
+  // No banned word, no emoji, no em dash anywhere on the card.
+  const all = [arrive, walk, here, story, inLine, claim, home, back].flatMap(c => [c.kicker, c.title, c.line, c.a11y, c.button?.label, c.secondary?.label]).filter(Boolean).join(' | ');
+  assert.doesNotMatch(all, /PLAY RIDE|Rescue Pass|Park Tickets|home finds|snacks|Mastery|detour|Coin Challenge|\u2014|[\u{1F300}-\u{1FAFF}]/u);
+});
+
+test('state A: the line Ticket sentence shows only while queue_tickets is on', () => {
+  const off = C.guideCardCopy('need_ticket', tgt(), ctx({ tickets: 0, queueTicketsOn: false }));
+  assert.doesNotMatch(off.line, /wait at a ride/i, 'App Store switches: no line Ticket copy');
+  assert.equal(off.button.label, 'SEE WAYS');
+  assert.match(off.line, /3 treats at home = 1 Ticket\. Tomorrow brings a new free try\./);
+  const on = C.guideCardCopy('need_ticket', tgt(), ctx({ tickets: 0, queueTicketsOn: true }));
+  assert.match(on.line, /Your first wait at a ride earns a Ticket\./);
+  assert.equal(on.button.label, 'LINEPLAY');
+});
+
+test('resting: the closed message, or "Sights stay open" while rides rest; dates in words, never a countdown', () => {
+  const closed = C.guideCardCopy('resting', null, ctx({ ridesResting: true }));
+  assert.equal(closed.title, 'The park is closed');
+  assert.equal(closed.line, 'See you next park day');
+  assert.equal(closed.button.action, 'shelf');
+  const sight = tgt({ reason: 'nearest_sight', kind: 'sight', name: 'Walt Statue', meters: 60 });
+  const resting = C.restingSightCopy(C.guideCardCopy('walk', sight, ctx({ ridesResting: true })), sight, true);
+  assert.equal(resting.kicker, 'RIDES ARE RESTING');
+  assert.equal(resting.title, 'Sights stay open: Walt Statue');
+  assert.equal(resting.line, '60 m');
+  assert.equal(C.leavesLine('2026-10-31'), 'leaves Saturday, Oct 31');
+  assert.equal(C.leavesLine('soon'), null);
+  assert.equal(C.guideDistance(1234), '1.2 km');
+  assert.equal(C.guideDistance(2), '5 m');
+});
+
+test('map islands become guide coins: rides by live row or catalog, sights otherwise; only real queues can be "in line"', () => {
+  const tasks = [
+    { id: 1, name: 'Jungle Cruise', latitude: '33.8112', longitude: '-117.9201', times_completed: 0 },
+    { id: 2, name: 'Walt Statue', latitude: '33.8121', longitude: '-117.9190', times_completed: 2 },
+    { id: 3, name: 'Tiki Room', latitude: '33.8118', longitude: '-117.9196', times_completed: 0 },
+    { id: 4, name: 'Train', latitude: '33.8105', longitude: '-117.9190', times_completed: 0 },
+    { id: 5, name: 'Bad', latitude: 'x', longitude: '0', times_completed: 0 },
+    { id: 6, name: 'Snow Spot', latitude: '33.8131', longitude: '-117.9190', times_completed: 0, limited: { active: true, ends_at: null, ends_on: '2026-10-31', returns: false } },
+  ];
+  const rides = GC.ridesByTask([
+    { id: 80, task_id: 1, type: 'attraction', radius: 40 }, { id: 81, task_id: 3, type: 'show' }, { id: 82, task_id: 4, type: 'transport' },
+    { id: 83, task_id: 6, type: 'other' },
+  ]);
+  const coins = GC.guideCoinsFor(tasks, 8, { rides, liveTaskIds: new Set([1]) });
+  const by = Object.fromEntries(coins.map(c => [c.taskId, c]));
+  assert.equal(coins.length, 5, 'a coin with no real position is skipped');
+  assert.deepEqual(plain([by[1].kind, by[1].queue, by[1].radiusMeters]), ['ride', true, 40]);
+  assert.deepEqual(plain([by[2].kind, by[2].owned]), ['sight', true], 'a statue is a sight (always open)');
+  assert.deepEqual(plain([by[3].kind, by[3].queue]), ['ride', false], 'a show has no line to play in');
+  assert.equal(by[4].queue, false, 'transport has no line');
+  assert.equal(by[6].leavesOn, '2026-10-31');
+  assert.equal(GC.inLineTaskFor(80, rides, coins), 1, 'the dwell ride maps to its coin');
+  assert.equal(GC.inLineTaskFor(81, rides, coins), null, 'never a show');
+  assert.equal(GC.inLineTaskFor(99, rides, coins), null);
+  assert.equal(GC.guideCoinsFor(tasks, null).length, 0, 'no park, no coins');
+});
+
+test('wallet: earned stamp Tickets are claimable (stamps first), held passes are extra tries, the free try needs its switch', () => {
+  const stamps = { tour: [{ id: 1, is_earned: true, reward_claimed: false, rewards: { tickets: 2 } },
+    { id: 2, is_earned: true, reward_claimed: true, rewards: { tickets: 3 } }, { id: 3, is_earned: false, reward_claimed: false, rewards: { tickets: 1 } }],
+  rides: [{ id: 4, is_earned: true, reward_claimed: false, rewards: { tickets: 0, energy: 5 } }, { id: 5, is_earned: true, reward_claimed: false, rewards: { tickets: 3 } }] };
+  const sources = GC.stampTicketSources(stamps);
+  assert.deepEqual(plain(sources), [{ kind: 'stamp', id: 1, tickets: 2 }, { kind: 'stamp', id: 5, tickets: 3 }]);
+  const wallet = GC.guideWallet({ tickets: 0, heldPasses: 2, freeTryReady: true, queueTicketsOn: false, claimable: sources });
+  assert.deepEqual(plain(F.nextFreeTicket(wallet)), { kind: 'claim', tickets: 5, sources: plain(sources) }, 'claim comes before the free try');
+  const none = GC.guideWallet({ tickets: 0, heldPasses: 0, freeTryReady: false, queueTicketsOn: false, claimable: [] });
+  assert.equal(F.nextFreeTicket(none).kind, 'treats');
+  assert.equal(G.guideState(input({ wallet: none, coins: RIDES }), G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open' } }))), 'need_ticket');
+});
+
+test('park day events: started on the first in-park reading of a day, done on leaving with a coin (2 km or home), home_day once a day', () => {
+  const inPark = { latitude: 33.8121, longitude: -117.9190 };
+  let r = PD.EMPTY_PARK_DAY;
+  let step = PD.parkDayStep(r, { mode: 'park', parkId: 8, location: inPark, today: '2026-10-28' });
+  assert.deepEqual(plain(step.events), [{ kind: 'park_day_started', parkId: 8 }]);
+  r = step.next;
+  step = PD.parkDayStep(r, { mode: 'park', parkId: 8, location: inPark, today: '2026-10-28', coinsWon: 1 });
+  assert.deepEqual(plain(step.events), [], 'once a day');
+  r = step.next;
+  assert.equal(r.coins, 1);
+  // Just outside the gate (500 m): not a trusted exit yet.
+  step = PD.parkDayStep(r, { mode: 'unknown', parkId: null, location: { latitude: 33.8166, longitude: -117.9190 }, today: '2026-10-28' });
+  assert.deepEqual(plain(step.events), []);
+  r = step.next;
+  step = PD.parkDayStep(r, { mode: 'unknown', parkId: null, location: { latitude: 33.8350, longitude: -117.9190 }, today: '2026-10-28' });
+  assert.deepEqual(plain(step.events), [{ kind: 'park_day_done', parkId: 8, coins: 1, day: '2026-10-28' }], '2 km out with a coin');
+  r = step.next;
+  step = PD.parkDayStep(r, { mode: 'home', parkId: null, location: null, today: '2026-10-28' });
+  assert.deepEqual(plain(step.events), [{ kind: 'home_day' }], 'the day already counted as done; home day once');
+  // A day with no coin never counts as done; the next home-mode open closes a day that had one.
+  let s2 = PD.parkDayStep(PD.EMPTY_PARK_DAY, { mode: 'park', parkId: 2, location: inPark, today: '2026-11-01' }).next;
+  assert.deepEqual(plain(PD.parkDayStep(s2, { mode: 'home', parkId: null, location: null, today: '2026-11-01' }).events), [{ kind: 'home_day' }]);
+  s2 = PD.parkDayStep(s2, { mode: 'park', parkId: 2, location: inPark, today: '2026-11-01', coinsWon: 2 }).next;
+  assert.deepEqual(plain(PD.parkDayStep(s2, { mode: 'home', parkId: null, location: null, today: '2026-11-02' }).events),
+    [{ kind: 'home_day' }, { kind: 'park_day_done', parkId: 2, coins: 2, day: '2026-11-01' }]);
+  const seen = [];
+  const off = PD.parkDaySignal.subscribe(() => seen.push(PD.parkDaySignal.last().parkId));
+  PD.parkDaySignal.publish({ parkId: 8, day: '2026-10-28', coins: 1, at: NOW });
+  off();
+  assert.deepEqual(seen, [8], 'the shelf hears the park day story moment');
+  PD.parkDaySignal.reset();
+});
+
+test('a tapped coin says "Walk closer: N m" until PLAY! can rise; calm timers say when, never a countdown', () => {
+  assert.equal(C.calloutDistance(120, false), 'Walk closer: 120 m');
+  assert.equal(C.calloutDistance(30, false), 'You\'re here');
+  assert.equal(C.calloutDistance(120, true), '120 m', 'a coin on your shelf just says how far');
+  const marker = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/TaskMarker.tsx'), 'utf8');
+  assert.match(marker, /\{calloutDistance\(distanceMeters, \(task\.times_completed \?\? 0\) > 0\)\}/);
+  const pill = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/LiveEventsPill.tsx'), 'utf8');
+  assert.doesNotMatch(pill, /padStart\(2, '0'\)\}`;\n\}/, 'no m:ss clock');
+  assert.match(pill, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 60_000\)/, 'no per-second tick');
+  assert.match(pill, /extra Parts \{untilLabel\(rush\.ends_at, now\)\}/);
+});
+
+test('the Adventure Ticket: a first ticket never says "detour", and there is one "Pick another ride" button', () => {
+  const A = loadTs('src/screens/ExploreScreen/adventureTicketPresentation.ts');
+  const ride = { task_id: 1, asset_id: 13, ride_id: 8, ride_name: 'Space Ride', coin_url: '', park_id: 1 };
+  const first = { id: 7, park_id: 1, park_day: '2026-10-28', ride, ride_choices: [ride], phase: 'discover', discover: null, play: null };
+  const p = A.adventurePrompt(first, true);
+  assert.doesNotMatch(`${p.title} ${p.chip} ${p.action}`, /detour/i);
+  assert.equal(p.action, 'Pick another ride');
+  const later = A.adventurePrompt({ ...first, phase: 'play', discover: { ...ride, kind: 'coin_win' } }, true);
+  assert.equal(later.intent, 'detour', 'with a stamp kept, it is a detour');
+  const card = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/AdventureTicketCard.tsx'), 'utf8');
+  assert.match(card, /prompt\.intent !== 'detour' && <GameButton variant="ghost" label="Pick another ride"/, 'never two "pick another" buttons');
+  assert.match(card, /\{sheetOnly \? null : complete \?/, 'on the map the guide card is its frame; only the sheet remains');
+});
+
+test('guide flags: only true booleans count, per player', async () => {
+  const GF = loadTs('src/services/guide/guideFlags.ts', { react: { useEffect() {}, useState: v => [v, () => {}] },
+    '../../api/endpoints/platform/feature-flags': { default: async () => ({ flags: {} }) } });
+  assert.deepEqual(plain(GF.cleanFlags({ queue_tickets: 'yes', daily_three: true, x: 1 })), { queue_tickets: false, daily_three: true, x: false });
+  GF.resetGuideFlags();
+  const a = await GF.loadGuideFlags(4, async () => ({ flags: { reveal_all: true } }));
+  assert.equal(a.reveal_all, true);
+  const b = await GF.loadGuideFlags(46, async () => ({ flags: {} }));
+  assert.notEqual(b.reveal_all, true, 'another player never reads the cached switches');
+  const offline = await GF.loadGuideFlags(46, async () => { throw new Error('offline'); }, Date.now() + 10 * 60 * 1000);
+  assert.notEqual(offline.reveal_all, true);
+  GF.resetGuideFlags();
+});

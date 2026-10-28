@@ -60,14 +60,14 @@ test('celebration double taps submit once, network failure preserves the readabl
  const alert=p.app.find(n=>n.props?.accessibilityRole==='alert');assert.match(alert.props.children,/Check your internet/);assert.deepEqual(p.calls,['celebrate']);
 });
 test('a 422 shows the server reason instead of "Reconnect"',async()=>{
- const p=card('play',{closed:true});p.button('Choose another ride').props.onPress();p.app.render();
+ const p=card('play',{closed:true});p.button('Pick another ride').props.onPress();p.app.render();
  p.button('Continue adventure at Pirate Ride').props.onPress();
  p.work.reject({response:{status:422,data:{message:'The given data was invalid.',errors:{task_id:['Adventures run at rides with a queue. Pick an attraction instead.']}}}});
  await p.app.settle();
  assert.equal(p.app.find(n=>n.props?.accessibilityRole==='alert').props.children,'Adventures run at rides with a queue. Pick an attraction instead.');
 });
 test('ride substitution is explicit, adventure-only, and retains the same visible stamps during saving',async()=>{
- const p=card('play',{closed:true});p.button('Choose another ride').props.onPress();p.app.render();
+ const p=card('play',{closed:true});p.button('Pick another ride').props.onPress();p.app.render();
  p.button('Continue adventure at Pirate Ride').props.onPress();p.button('Continue adventure at Pirate Ride').props.onPress();p.app.render();
  assert.deepEqual(p.calls,[2]);p.work.resolve({...data('play'), adventure_ticket:{...ticket('play'),ride:{...ride,task_id:2}}});await p.app.settle();
  assert.equal(p.modal().props.isVisible,true);

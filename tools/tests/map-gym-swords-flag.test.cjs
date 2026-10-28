@@ -33,7 +33,10 @@ test('map_gym_swords off: Gym and Sword markers stay mounted but hidden, still a
   // The Community Center marker: always mounted too, parked with no center.
   assert.match(explore, /<CommunityCenterMarker center=\{communityCenter\}/);
   // The hidden swords pill frees its no-go space on the map.
-  assert.match(explore, /bottomRight: bottomRightColumnHeight\(mapFlags\.gymSwords, ENERGY_GAP\)/);
+  assert.match(explore, /bottomRight: mapFlags\.gymSwords \? bottomRightColumnHeight\(true, ENERGY_GAP\) : SHELF_COLUMN_HEIGHT/);
+  // Hidden gyms never poll (battery, core loop must-fix 29): the gym and sword reads run only while the flag is on.
+  assert.match(explore, /useLivePoll\(fetchGymData, idlePollInterval\(30000, mapIdle\), \{ enabled: !!park\?\.id && mapFlags\.gymSwords,/);
+  assert.match(explore, /if \(!gymSwordsOn\) return;\n\s*const swordsData = await getMySwords\(\);/);
   const marker = read('src/components/map/Marker.tsx');
   assert.match(marker, /pointerEvents=\{tappable \? 'auto' : 'none'\}/);
   assert.match(marker, /style=\{off \? HIDDEN : undefined\}/);

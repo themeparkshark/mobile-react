@@ -57,7 +57,10 @@ export interface AdventurePrompt {
 export function adventurePrompt(ticket: AdventureTicket, closed = false,
   gate: { state: 'near' | 'far' | 'unknown'; meters: number | null } = { state: 'unknown', meters: null }): AdventurePrompt {
   if (ticket.phase === 'complete') return { title: 'Your park-day souvenir', chip: 'Souvenir ready', action: 'Visit my coin', detail: 'A coin, a story, a day to remember.', intent: 'shelf' };
-  if (closed && ticket.phase !== 'celebrate') return { title: 'Adventure takes a detour', chip: 'Pick a detour', action: 'Choose another ride', detail: 'Keep every stamp you have earned.', intent: 'detour' };
+  // A first ticket (nothing stamped yet) never says "detour": it simply offers another ride.
+  if (closed && ticket.phase !== 'celebrate') return ticket.discover || ticket.play
+    ? { title: 'Adventure takes a detour', chip: 'Pick a detour', action: 'Pick another ride', detail: 'Keep every stamp you have earned.', intent: 'detour' }
+    : { title: 'This ride is resting', chip: 'Pick another ride', action: 'Pick another ride', detail: 'Today\'s Adventure can start at another ride.', intent: 'detour' };
   if (ticket.phase === 'discover') return { title: 'Your first chapter awaits', chip: 'Find your coin', action: 'Find this coin', detail: 'Win its coin challenge at the ride.', intent: 'discover' };
   if (ticket.phase === 'play') {
     if (ticket.play_hint === 'get_in_line') {

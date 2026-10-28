@@ -361,7 +361,9 @@ test('Finn is the only voice in minute one: event chips, park story, live parks 
   assert.match(explore, /parkStory=\{activeParkProject && !finnOwnsMap \?/);
   assert.match(explore, /eventChip=\{liveEvt\.event\?\.include_home && !finnOwnsMap \?/);
   assert.match(explore, /quiet=\{finnOwnsMap\}/);
-  assert.match(explore, /visible=\{recapDue && mapFocused && !eventOpen && !finnOwnsMap\}/);
+  // The recap also waits for its rung and the attention rules (core loop 4.3), and stays away while Finn talks.
+  assert.match(explore, /const recapShown = !!liveEvt\.event && recapDue && mapFocused && !eventOpen && !finnOwnsMap && eventsRung\.open && attentionFor\('event_recap'\);/);
+  assert.match(explore, /visible=\{recapShown\}/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /\{quiet \? null : <HomeLive /);
   assert.match(home, /useEffect\(\(\) => \{ if \(quiet\) setLiveBar\(null\); \}, \[quiet\]\);/, 'the controls move back up while the bar is away');
@@ -482,7 +484,7 @@ test('first visit: "Let\'s hunt!" leads to hunting; the daily chest waits for a 
   assert.equal(q.firstVisitChestWaits({ ...base, catchesThisVisit: 2 }), false, 'a second catch frees the chest');
   assert.equal(q.firstVisitChestWaits({ ...base, firstVisit: false }), false, 'returning players are unchanged');
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /const chestReady = !firstVisitHold && chestMayPresent\(/);
+  assert.match(explore, /const chestReady = !firstVisitHold && attentionFor\('daily_chest'\) && chestMayPresent\(/);
   assert.match(explore, /simple=\{!!firstVisit\.current\}/);
   const chest = read('src/components/DailyGiftModal.tsx');
   assert.match(chest, /\{simple \? null : <View style=\{(?:styles\.ladder|\[styles\.ladder, styles\.aboveGold\])\}>/, 'first visit: no 7-day strip');
@@ -717,8 +719,9 @@ test('warm-up sky: four outlined clouds and a two-card picture cue replace the s
 
 test('first hunt map: no Trail Box pill or badge, no chest buttons during the 30 s, ticket chip dimmed, level chests wait too', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /\{player && !park && permissionGranted && !firstHunt && !finnOwnsMap && \(\s*<View pointerEvents="box-none"[^>]*>\s*<TrailHost/);
-  assert.match(explore, /const mapControlsCount = firstVisitHold \? 0 :/);
+  // Trail Boxes draw no pill on the map at all (core loop 4.2): the Rewards button's ring, and it is hidden on the first hunt.
+  assert.match(explore, /\{player && permissionGranted && trailOpen && \(\s*<View pointerEvents="none" style=\{styles\.trailHostHidden\}/);
+  assert.match(explore, /const mapControlsCount = firstVisitHold \|\| !player \? 0 :/);
   assert.match(explore, /const mapControls = mapControlsCount > 0 \?/);
   assert.match(explore, /screenFree: chestScreenFree && !firstVisitHold && !chestShowing/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');

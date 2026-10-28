@@ -52,7 +52,8 @@ test('flag off / old server: no event sheet, toast, banner, recap, rail or star 
 
 test('an event on: one sheet, the toast and banner under the HUD row, and the Star Ride on its coin', async () => {
   const event = fx.goldenReefFixture({ now: Date.now() });
-  const app = exploreScreen({ redeemables, liveEvent: event, starRides: new Set([11]),
+  // Shark Events reach the map after their rung (core loop 4.4, rung 9).
+  const app = exploreScreen({ redeemables, liveEvent: event, starRides: new Set([11]), rungs: ['events'],
     modules: { '../services/liveEvents/model': loadTs('src/services/liveEvents/model.ts') } });
   await app.settle(); await app.settle();
   assert.ok(app.find(named('EventSheet')));
@@ -62,12 +63,12 @@ test('an event on: one sheet, the toast and banner under the HUD row, and the St
   assert.equal(marker.props.star, true);
 });
 
-test('Next Up rail shows in the park suggestion slot when it has an item and the slot is free', async () => {
+test('the Next Up rail folds into the Next Coin guide: never drawn on the map, even with an item (core loop 5.2)', async () => {
   const app = exploreScreen({ redeemables, nextUp: { kind: 'ride', icon: 'coin', title: 'Catch a ride coin', action: { type: 'ride' } } });
   await app.settle(); await app.settle();
-  const rail = app.find(named('NextUpRail'));
-  assert.ok(rail);
-  assert.equal(typeof rail.props.onAction, 'function');
+  assert.equal(app.find(named('NextUpRail')), undefined, 'no rail');
+  assert.ok(app.find(named('NextCoinCard')), 'the one guide card holds the slot');
+  assert.doesNotMatch(fs.readFileSync('src/screens/ExploreScreen.tsx', 'utf8'), /useNextUp\(/, 'and its poll stopped');
 });
 
 test('sign-out clears the live event next to the Secret Shop flag; the badge stays a small isolated TaskMarker edit', () => {
@@ -88,10 +89,10 @@ test('MemberFlex in Standings: only when the row payload carries flex fields; is
   assert.match(row, /\{flex \? <MemberFlex [^>]*still \/> : \(/);
 });
 
-test('money on the map and Profile: Park Day Pack in the free suggestion slot only, Shark Pass banner on Profile', () => {
+test('money on the map and Profile: no Park Day Pack on the map (it lives in Supplies), Shark Pass banner on Profile', () => {
   const explore = fs.readFileSync('src/screens/ExploreScreen.tsx', 'utf8');
-  assert.match(explore, /const parkOfferSlot = !!player && !!park && !railShowing && suggestionSlots\.left == null && suggestionSlots\.right == null\n\s*&& !parkTip && !isActive && !liveEvt\.event;/);
-  assert.equal((explore.match(/<ParkDayOffer \/>/g) ?? []).length, 1);
+  // Core loop 4.3 rule 4 and 5.2: money is never on the resting map; the Park Day Pack lives in Supplies.
+  assert.equal((explore.match(/<ParkDayOffer/g) ?? []).length, 0);
   const profile = fs.readFileSync('src/screens/ProfileScreen.tsx', 'utf8');
   assert.equal((profile.match(/<SharkPassBanner /g) ?? []).length, 1);
 });

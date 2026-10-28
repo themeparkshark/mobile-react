@@ -20,7 +20,8 @@ import { BEHIND, RideAmbience, WaterAmbience } from '../../components/map/RideAm
 import { ambienceNow, rideLook, WATER_AMBIENCE, type AmbienceId, type LandmarkId } from '../../services/rideLandmark';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, GameIcon } from '../../ui';
-import { formatDistance } from './adventureTicketPresentation';
+
+import { calloutDistance } from '../../services/guide/guideCopy';
 import { markerBadge, markerRingColor, restingLabel } from './mapMarkerPresentation';
 import { limitedLabel } from '../../services/collection/limitedCoins';
 import { FoldBadge, Placed, TagSlot, usePlacement } from '../../components/map/declutter/Placed';
@@ -537,7 +538,7 @@ function IslandArt({
                   <View style={styles.tooltipCopy}>
                     <Text style={styles.tooltipTitle} numberOfLines={1}>{task.name}</Text>
                     <View style={styles.tooltipMeta}>
-                      {distanceMeters !== null && <Text style={styles.tooltipDetail}>{formatDistance(distanceMeters)}</Text>}
+                      {distanceMeters !== null && <Text style={styles.tooltipDetail}>{calloutDistance(distanceMeters, (task.times_completed ?? 0) > 0)}</Text>}
                       {restingUntil ? <Text style={styles.tooltipDetail}>{restingLabel(restingUntil)}</Text> : <>
                         <GameIcon name="ticket" size={14} />
                         <Text style={styles.tooltipDetail}>{ticketCost} {ticketCost === 1 ? 'Ticket' : 'Tickets'}</Text>

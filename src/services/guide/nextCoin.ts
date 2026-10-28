@@ -479,6 +479,16 @@ export const guide = {
     }
     return held;
   },
+  /**
+   * "Pick another coin" on the Line story card: the guide moves on from today's Adventure ride
+   * (its line story stays playable from its sheet) and picks the next coin on the next resolve.
+   */
+  skipLineStory(): void {
+    if (held?.reason !== 'line_story') return;
+    declinedLineStory = held.taskId;
+    held = null;
+    emit();
+  },
   /** The player's planned coin (rule 4), if any. */
   plan(): number | null {
     return plan;
