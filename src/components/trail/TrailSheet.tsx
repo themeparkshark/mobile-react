@@ -237,7 +237,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
             <UpperText style={styles.section}>Get more boxes</UpperText>
             <View style={styles.card}>
               <EarnRow icon="map" text="Arrive at a park" sub="A box each park day" />
-              <EarnRow icon="ride" text="Win 2 ride challenges" sub={state.next_ride_box != null && inPark
+              <EarnRow icon="ride" text="Win 2 ride coins" sub={state.next_ride_box != null && inPark
                 ? `Next box in ${state.next_ride_box} ${state.next_ride_box === 1 ? 'win' : 'wins'}` : 'Up to 3 boxes a day'} />
               <EarnRow icon="star" text="Reach your weekly goal" sub="A Blue Box" last />
             </View>
