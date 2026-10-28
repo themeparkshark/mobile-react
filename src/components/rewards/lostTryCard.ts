@@ -20,6 +20,8 @@ export interface LostTryInput {
   readonly lostTicketCost: number;
   /** A paid "one more try" (ad or VIP) is on offer. */
   readonly retryOffered?: boolean;
+  /** The try reached 75% of its goal (rideTry.ts): only then may the card say SO CLOSE!. */
+  readonly near?: boolean;
 }
 
 export interface LostTryCopy {
@@ -31,17 +33,21 @@ export interface LostTryCopy {
 
 export const LOST_TRY_TITLE = 'Good Try!';
 export const RETRY_TRY_TITLE = 'One More Try!';
+/** Only when the try reached 75% of its goal (core loop 5.3: "so close" only when it was close). */
+export const NEAR_TRY_TITLE = 'So Close!';
+/** The one loss card's line when the first try's Ticket comes back (blueprint 5.3). */
+export const TICKET_BACK_LINE = 'Your Ticket came back. Same game, try again!';
 
 export function lostTryCopy(input: LostTryInput): LostTryCopy {
-  const title = lostTryHasFreeRetry(input) ? RETRY_TRY_TITLE : LOST_TRY_TITLE;
+  const title = input.near ? NEAR_TRY_TITLE : lostTryHasFreeRetry(input) ? RETRY_TRY_TITLE : LOST_TRY_TITLE;
   if (input.usedRescuePass) {
     return {
       title,
-      message: input.rescueRetryAvailable ? 'No Ticket spent. One more try today!' : 'No Ticket spent. Rescue tries are done for today.',
+      message: input.rescueRetryAvailable ? 'No Ticket used. One more free go!' : 'No Ticket used. Free try done today.',
       ticket: 0,
     };
   }
-  if (input.firstCoinTicketReturned) return { title, message: 'Your Ticket came back. Try again!', ticket: 1 };
+  if (input.firstCoinTicketReturned) return { title, message: TICKET_BACK_LINE, ticket: 1 };
   const n = Math.max(0, Math.round(input.lostTicketCost));
   if (n > 0) return { title, message: `${n} Ticket${n === 1 ? '' : 's'} used.`, ticket: -n };
   return { title, message: 'No Ticket spent.', ticket: 0 };
@@ -61,7 +67,8 @@ export function lostTryHasFreeRetry(input: Pick<LostTryInput, 'firstCoinTicketRe
 
 /** The paid retry button: pictures lead (play, then retry), a short label, the whole idea spoken. */
 export const AD_RETRY_ACTION = { label: 'Watch Ad', icons: ['play', 'retry'], a11yLabel: 'Watch an ad for one more try' } as const;
-export const VIP_RETRY_ACTION = { label: 'One More Try', icons: ['crown', 'retry'], a11yLabel: 'One more try for VIP members' } as const;
+/** A VIP member's retry lives inside TRY AGAIN, with a quiet "VIP try" tag (no upsell to anyone else). */
+export const VIP_RETRY_ACTION = { label: 'Try Again', icons: ['retry'], note: 'VIP try', a11yLabel: 'Try again. A VIP try.' } as const;
 
 export function lostTryHasRetry(input: Pick<LostTryInput, 'firstCoinTicketReturned' | 'rescueRetryAvailable' | 'retryOffered'>): boolean {
   return input.firstCoinTicketReturned || input.rescueRetryAvailable || !!input.retryOffered;

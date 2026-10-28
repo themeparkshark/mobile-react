@@ -1422,7 +1422,7 @@ export default function CurrentQuestGame({
     const title = context === 'daily' ? `Daily Tide #${dailyNo}` : context === 'chart' ? (node?.name ?? 'Chart') : trial ? 'Ride cleared!' : shells >= n * 3 ? 'Tide Master!' : `${shells} of ${n * 3} shells`;
     const deepBoard = run.boards[run.boards.length - 1];
     setShare(context === 'daily' || trial || context === 'quick' ? {
-      heading: context === 'daily' ? `Daily Tide #${dailyNo}` : trial ? 'Ride Challenge' : 'Quick Run',
+      heading: context === 'daily' ? `Daily Tide #${dailyNo}` : trial ? 'Win the coin' : 'Quick Run',
       title: deepBoard.title ?? themeSubtitle(themeId),
       grid, strokes, pars, place: parkName ?? themeSubtitle(themeId), date: today,
       streak: context === 'daily' ? (prog ? liveStreak({ lastDaily: today, dailyStreak: prog.lastDaily === today ? prog.dailyStreak : (prog.lastDaily && Math.abs(new Date(today).getTime() - new Date(prog.lastDaily).getTime()) <= 86400000 ? prog.dailyStreak + 1 : 1) }, today) : 1) : 0,

@@ -93,7 +93,7 @@ test('Sharky shows its unlock as a picture with a gold NEW tag inside the card, 
   assert.equal(name('Overdrive'), 'Overdrive');
 });
 
-test('a spent Ticket reads GOOD TRY!, and the ad retry leads with pictures (play, then retry) and says DONE to leave', () => {
+test('a spent Ticket reads GOOD TRY!; a member\'s retry is a quiet VIP try inside TRY AGAIN, and nobody sees an ad', () => {
   const lost = require(path.join(root, 'tools/tests/helpers/ts-module.cjs')).loadTs('src/components/rewards/lostTryCard.ts');
   const base = { usedRescuePass: false, rescueRetryAvailable: false, firstCoinTicketReturned: false, lostTicketCost: 1 };
   assert.equal(lost.lostTryCopy({ ...base, retryOffered: true }).title, 'Good Try!');
@@ -101,8 +101,13 @@ test('a spent Ticket reads GOOD TRY!, and the ad retry leads with pictures (play
   assert.equal(lost.lostTryHasRetry({ ...base, retryOffered: true }), true, 'the paid try is still offered');
   assert.deepEqual([...lost.AD_RETRY_ACTION.icons], ['play', 'retry']);
   assert.equal(lost.AD_RETRY_ACTION.label, 'Watch Ad');
+  // Core loop 5.13: the VIP retry folds into TRY AGAIN for members only; no ad or VIP line for anyone else.
+  assert.equal(lost.VIP_RETRY_ACTION.label, 'Try Again');
+  assert.equal(lost.VIP_RETRY_ACTION.note, 'VIP try');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /vip \? VIP_RETRY_ACTION : AD_RETRY_ACTION/);
+  assert.match(modal, /&& !firstCoinTicketReturned && !rescueRetryAvailable && vip;/);
+  assert.match(modal, /\{ \.\.\.VIP_RETRY_ACTION, icons: \[\.\.\.VIP_RETRY_ACTION\.icons\]/);
+  assert.doesNotMatch(modal, /AD_RETRY_ACTION/);
   assert.doesNotMatch(modal, /Watch Ad: One More Try|'No thanks'/);
   const capture = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
   assert.match(capture, /\{ \.\.\.AD_RETRY_ACTION, onPress/);

@@ -91,9 +91,12 @@ export function genericize(text: string): string {
     prevLabelEnd = last;
   }
   out += text.slice(last);
-  // "The original the ..." never survives, and sentence starts are capitalised.
+  // "The original the ..." never survives (a year between them included: "the original 1987 the ..."),
+  // a doubled word is said once ("simulator flight"), and sentence starts are capitalised (core loop 5.3:
+  // garbled IP-safe lines are rewritten). A park's name stays: two parks' rides must never read alike.
   return out
-    .replace(/\b([Tt]he)((?:\s+(?:original|early|first|same|new|old|classic|famous))?)\s+the\b/g, '$1$2')
+    .replace(/\b([Tt]he)((?:\s+(?:original|early|first|same|new|old|classic|famous))?(?:\s+\d{4})?)\s+the\b/g, '$1$2')
+    .replace(/\bspace flight simulator flight\b/g, 'space flight simulator')
     .replace(/\b([Tt]he) (two|three|four) ([^’,.?]+?)’s /g, '$1 $3’s $2 ')
     .replace(/(^|[.!?]\s+)([a-z])/g, (_m, p: string, c: string) => p + c.toUpperCase());
 }

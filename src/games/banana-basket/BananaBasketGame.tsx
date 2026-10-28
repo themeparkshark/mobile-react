@@ -1062,7 +1062,7 @@ function BananaRun({
       : `Three quick sets. Catch them all!${twistName ? ` Twist: ${twistName}.` : ''}`;
   const subtitle = mode === 'queue'
     ? (cfg.unlock >= 3 ? `Queue${twistName ? `: ${twistName}` : ''}` : cfg.unlock === 2 ? 'Queue: Gull Set run' : 'Queue run 1')
-    : mode === 'heat' ? 'Line Heat' : cfg.rules === R_INTRO ? 'Ride Challenge: first ride' : 'Ride Challenge';
+    : mode === 'heat' ? 'Line Heat' : cfg.rules === R_INTRO ? 'Win the coin: first try' : 'Win the coin';
 
   return (
     <GameShellV2

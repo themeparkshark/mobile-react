@@ -121,6 +121,22 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       // The unlock ladder (core loop step 0): every rung reads closed until the map feeds it, as on a new install.
       if (/(^|\/)services\/reveal\/revealLadder$/.test(name)) return { useRung: () => ({ open: false, isNew: false, markSeen() {} }),
         rungState: () => ({ open: false, isNew: false }), recordProgress() {} };
+      // Ride challenge core loop (cl-ride-challenge): picture games off, no try note, no story lookup,
+      // the team step already offered, the pure win-card model for real, and a fly layer with no targets.
+      if (/(^|\/)services\/playPrefs$/.test(name)) {
+        const off = { pictureGames: false, pushWorks: false, queueTickets: false };
+        return { pictureOnlyFor: async () => false, playFlagsNow: () => off, loadPlayFlags: async () => off,
+          usePlayPrefs: () => ({ flags: off, prefs: { pictureOnly: false }, available: false, setPictureOnly() {} }) };
+      }
+      if (/(^|\/)gamekit\/results\/rideTry$/.test(name)) return { takeRideTry: () => null, noteRideTry() {}, rideTrySummary: () => null };
+      if (/(^|\/)services\/lineplay\/resolveRide$/.test(name)) return { resolveQueueStoryContext: async () => ({ rideId: 0 }) };
+      if (/(^|\/)rewards\/teamOffer$/.test(name)) return { teamOffered: async () => true, markTeamOffered: async () => undefined,
+        wantsTeamStep: () => false, teamExit: () => ({ kind: 'back' }) };
+      if (/(^|\/)rewards\/postWinModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/postWinModel.ts');
+      if (/(^|\/)rewards\/challengeCopy$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/challengeCopy.ts');
+      // Nobody signed in unless a test says so (PLAY! reads the Ticket count for its free-try badge).
+      if (/(^|\/)context\/AuthProvider$/.test(name)) return { AuthContext: { value: { player: null } } };
+      if (/(^|\/)context\/CurrencyFlyProvider$/.test(name)) return { useCurrencyFly: () => ({ triggerFly() {}, getTarget: () => null, registerTarget() {} }) };
       // The Next Coin guide (core loop step 0): no target until the map resolves one.
       if (/(^|\/)services\/guide\/nextCoin$/.test(name)) return { guide: { current: () => null, subscribe: () => () => {}, setTarget() {}, plan: () => null } };
       // Money offers on reward sheets (money stream): no server multiplier, so the generic VIP line.

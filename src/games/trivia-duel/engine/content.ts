@@ -277,6 +277,11 @@ export function materializeQuestion(id: string, pool: readonly PoolQuestion[], s
   }
 }
 
+/** The kids deck (ids "kid-N"): fine in line, uneven next to fan facts in a paid ride round. */
+export function isKidsDeck(q: Pick<PoolQuestion, 'id'>): boolean {
+  return /^kid-/.test(q.id);
+}
+
 export interface DeckOptions {
   seed: number;
   parkId?: number;
@@ -298,7 +303,11 @@ const DIFF_ORDER: Record<Difficulty, Difficulty[]> = {
  */
 export function buildDeck(pool: readonly PoolQuestion[], rounds: readonly RoundSpec[], opts: DeckOptions): DuelQuestion[] {
   const r = createRng(mixSeed(opts.seed >>> 0, 0x71c1a));
-  const usable = usablePool(pool, opts.ride ? TEXT_LIMITS.ride : TEXT_LIMITS.queue);
+  const fits = usablePool(pool, opts.ride ? TEXT_LIMITS.ride : TEXT_LIMITS.queue);
+  // A paid ride round keeps one even tone: park and ride facts, not toddler questions ("the opposite
+  // of hot") mixed with fan facts (core loop 5.3). The kids deck stays in LinePlay and practice.
+  const even = opts.ride ? fits.filter((q) => !isKidsDeck(q)) : fits;
+  const usable = even.length >= 3 ? even : fits;
   const seen = new Set(opts.seen ?? []);
   // Seen order is oldest first: when everything is seen, the least recently played comes back first.
   const seenAge = new Map((opts.seen ?? []).map((id, i) => [id, i] as const));

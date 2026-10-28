@@ -106,18 +106,28 @@ test('park days read as calendar dates, never raw ISO strings', () => {
   assert.equal(parkDayLabel(null), '');
 });
 
-test('challenge copy: ride vs coin vs secret, and out-of-Tickets copy follows what really pays Tickets', () => {
+test('challenge copy: "Win the X coin", PLAY!, and the free ways in one order (core loop 4.1, 4.5)', () => {
   const copy = loadTs('src/components/rewards/challengeCopy.ts');
-  assert.equal(copy.challengeRibbon('task', 'ride').title, 'Ride Challenge');
-  assert.equal(copy.challengeRibbon('task', null).title, 'Coin Challenge');
-  assert.equal(copy.challengeRibbon('secret_task', 'ride').title, 'Secret Challenge');
-  for (const { title } of [copy.challengeRibbon('task', 'ride'), copy.challengeRibbon('task'), copy.challengeRibbon('secret_task')])
-    assert.ok(title.length <= 22, `${title} fits the ribbon`);
-  assert.match(copy.outOfTicketsCopy({ sources: { line: true, home: true }, rescuePassUsedToday: false }).body, /LinePlay while you wait/);
-  assert.equal(copy.outOfTicketsCopy({ sources: { line: true, line_remaining_today: 0, home: true }, rescuePassUsedToday: true }).body,
-    'Today’s Rescue Pass is used. You got all of today’s line Tickets. Home finds earn Tickets for your next park day.');
-  assert.doesNotMatch(copy.outOfTicketsCopy({ sources: { line: false, home: false }, rescuePassUsedToday: false }).body, /home|queue/i);
-  assert.match(copy.outOfTicketsCopy({ rescuePassUsedToday: false }).body, /LinePlay and home finds/);
+  assert.equal(copy.challengeTitle('task', 'Walt Statue'), 'Win the Walt Statue coin');
+  assert.equal(copy.challengeTitle('task', 'The Matterhorn'), 'Win the Matterhorn coin', 'never "the The"');
+  assert.equal(copy.punchLines('The Sword in the Stone').win, 'Win the Sword in the Stone coin!');
+  assert.equal(copy.punchLines('Walt Statue').kicker, "THIS RIDE'S GAME");
+  assert.equal(copy.challengeTitle('task', 'Indiana Jones Adventure Temple'), 'Win this coin', 'a long name keeps the short title');
+  assert.equal(copy.challengeTitle('secret_task', 'Anything'), 'Win the secret coin');
+  for (const name of ['Walt Statue', 'Main Street Station', 'X'.repeat(40)])
+    assert.ok(copy.challengeTitle('task', name).length <= copy.RIBBON_MAX_CHARS, `${name} fits the ribbon`);
+  const wallet = { tickets: 0, ticketCost: 1, claimable: [], rescueAvailable: true, rescueSource: 'daily', heldPasses: 0, queueTicketsOn: false };
+  assert.equal(copy.challengeNextStep({ ...wallet, claimable: [{ kind: 'stamp', id: 3, tickets: 5 }] }).kind, 'claim', 'claim before the free try');
+  assert.equal(copy.challengeNextStep(wallet).kind, 'free_try');
+  assert.equal(copy.challengeNextStep({ ...wallet, rescueSource: 'held', heldPasses: 2 }).kind, 'extra_try');
+  assert.equal(copy.challengeNextStep({ ...wallet, rescueAvailable: false }).kind, 'treats');
+  assert.equal(copy.challengeNextStep({ ...wallet, tickets: 2 }), null);
+  assert.equal(copy.challengeButtonLabel(null, 1), 'PLAY!');
+  assert.equal(copy.challengeButtonLabel({ kind: 'free_try' }, 1), 'PLAY! Free try');
+  assert.equal(copy.challengeButtonLabel({ kind: 'extra_try', count: 2 }, 1), 'PLAY! Extra try');
+  assert.equal(copy.challengeButtonLabel({ kind: 'claim', tickets: 5, sources: [] }, 1), 'Claim 5 free Tickets');
+  assert.doesNotMatch(copy.needTicketCopy(false, true).lines.join(' '), /wait at a ride/, 'no line Ticket promise while Queue Tickets is off');
+  assert.match(copy.needTicketCopy(true, true).lines.join(' '), /first wait at a ride earns a Ticket/);
 });
 
 test('unfound coin copy is type-aware and leads with the gameplay action', () => {

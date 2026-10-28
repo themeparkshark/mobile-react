@@ -152,6 +152,15 @@ export function isSoftTryTitle(title: string | undefined): boolean {
  * YOUR BEST YET!; with stars it becomes the plain star title (NICE!, GREAT!,
  * INCREDIBLE!). Real info titles (YOUR RIDE'S UP!, TIME!, NEW FINN) are kept.
  */
+/**
+ * NEW BEST only on a run that earned a star (core loop 5.3: "no NEW BEST on a
+ * loss"). The mini-game cards pass their best through this; a 0-star run keeps
+ * its kind try title and the best is still saved.
+ */
+export function bestOnWin(stars: number, isNewBest: boolean): boolean {
+  return isNewBest && stars > 0;
+}
+
 export function bestAwareTitle(title: string | undefined, stars: number, isNewBest: boolean): string | undefined {
   // Titles follow the stars: two or three lit stars never sit under a soft
   // "try again" word (SO CLOSE! over two gold stars read as a near-loss).

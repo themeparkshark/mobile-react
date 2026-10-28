@@ -40,6 +40,11 @@ function mapChallenge(initial = task) {
       if (name === '../gamekit/audio/playMoment') return { studioMoment: () => false };
       if (name === '../ui') return { BRAND: { white: '#fff', navy: '#05346e' }, GameIcon: 'GameIcon' };
       if (name === './map/mapCover') return { useCoverArt: () => () => undefined };
+      // Core loop (cl-ride-challenge): PLAY! reads the ladder, its free-try badge and press feedback.
+      if (name === '../services/reveal/revealLadder') return { useRung: () => ({ open: false, isNew: false, markSeen() {} }) };
+      if (name === './rewards/challengeCopy') return require('./helpers/ts-module.cjs').loadTs('src/components/rewards/challengeCopy.ts');
+      if (name === 'expo-haptics') return { impactAsync: async () => undefined, ImpactFeedbackStyle: { Medium: 2 } };
+      if (name === '../context/AuthProvider') return { AuthContext: {} };
       if (name.includes('assets/')) return 1;
       return { default: name };
     },

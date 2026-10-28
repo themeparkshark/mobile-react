@@ -202,7 +202,9 @@ export function ResultsCard({
     return thresholds ? nextStarGoal(score, thresholds) : null;
   }, [score, thresholds, saved, wrapUp, starGoal]);
   // A saved run is never written down as a best, so it never shows NEW BEST.
-  const best = useMemo(() => (saved ? compareBest(0, personalBest) : compareBest(score, personalBest)), [score, personalBest, saved]);
+  // A loss never says NEW BEST (core loop 5.3): only a run with a star can be a new best on the card.
+  const best = useMemo(() => (saved || stars <= 0 ? compareBest(0, personalBest) : compareBest(score, personalBest)),
+    [score, personalBest, saved, stars]);
   // A personal best is a win, even with 0 stars: never GOOD TRY! next to NEW BEST!.
   const title = bestAwareTitle(message, stars, best.isNewBest) ?? defaultMessage(stars, !!goal?.near, best.isNewBest);
   // The one line that sells "one more run" (beat a ghost, so close to a star).

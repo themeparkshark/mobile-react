@@ -30,6 +30,7 @@ export function unlockArt(card: string): number {
 
 export function SharkyUnlock({ card, atMs, reducedMotion }: { card: string; atMs: number; reducedMotion: boolean }) {
   return (
-    <UnlockTile source={unlockArt(card)} label={`New unlocked: ${unlockName(card).toLowerCase()}`} atMs={atMs} reducedMotion={reducedMotion} />
+    <UnlockTile source={unlockArt(card)} label={`New unlocked: ${unlockName(card).toLowerCase()}`} atMs={atMs} reducedMotion={reducedMotion}
+      caption={`${unlockName(card)} unlocked`} />
   );
 }

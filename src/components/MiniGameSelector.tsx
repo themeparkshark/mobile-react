@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Alert } from 'react-native';
+import { GameDialog } from '../ui/GameDialog';
+import { ModalLayerContext } from '../ui/modalLayers';
 import TapChallengeMiniGame from './TapChallengeMiniGame';
 import TimingMiniGame from './TimingMiniGame';
 import MemoryMatchMiniGame from './MemoryMatchMiniGame';
@@ -11,7 +12,6 @@ import SharkMiniGame from './SharkMiniGame';
 import { WhackAShark, type WhackFormat } from '../games/whack';
 import WhackRushLab from '../games/whack/party/WhackRushLab';
 import type { WhackTheme } from '../games/whack/assets';
-import { SnapTheRide } from '../games/snap/SnapTheRide';
 import { RhythmTapGame } from '../games/rhythm';
 import { MemoryGame } from '../games/memory';
 import { TriviaDuel } from '../games/trivia-duel';
@@ -88,6 +88,10 @@ export default function MiniGameSelector({
   }
   const showIntro = visible && !!selectedGame && introGame === selectedGame;
 
+  // The quit warning for a paid try (blueprint 5.13): the branded dialog, drawn inside the challenge
+  // card's own native sheet (a nested layer), never the system Alert and never a second sibling modal.
+  const [quitAsk, setQuitAsk] = useState(false);
+  const quitResume = useRef<(() => void) | null>(null);
   const handleQuit = useCallback((resume: () => void) => {
     if (isPractice || rewardMode !== 'task-attempt') {
       onClose();
@@ -95,22 +99,24 @@ export default function MiniGameSelector({
     }
     if (exitPromptOpen.current) return;
     exitPromptOpen.current = true;
-    Alert.alert(
-      'End ride challenge?',
-      'If you quit now, it counts as a loss. Your ticket is already used.',
-      [
-        { text: 'Keep playing', style: 'cancel', onPress: () => {
-          exitPromptOpen.current = false;
-          resume();
-        } },
-        { text: 'End challenge', style: 'destructive', onPress: () => {
-          exitPromptOpen.current = false;
-          onClose();
-        } },
-      ],
-      { cancelable: false },
-    );
+    quitResume.current = resume;
+    setQuitAsk(true);
   }, [isPractice, rewardMode, onClose]);
+  const answerQuit = useCallback((index: number | null) => {
+    setQuitAsk(false);
+    exitPromptOpen.current = false;
+    const resume = quitResume.current;
+    quitResume.current = null;
+    if (index === 1) onClose();
+    else resume?.();
+  }, [onClose]);
+  const quitDialog = (
+    <ModalLayerContext.Provider value>
+      <GameDialog visible={quitAsk} title="Leave?" message="This try will end." icon="info"
+        buttons={[{ text: 'Keep playing' }, { text: 'Leave', style: 'destructive' }]}
+        dismissible={false} onAnswer={answerQuit} runButtonHandlers={false} />
+    </ModalLayerContext.Provider>
+  );
 
   useEffect(() => {
     if (visible && selectedGame && !showIntro) gameMountedAt.current = Date.now();
@@ -198,37 +204,46 @@ export default function MiniGameSelector({
   if (!visible || !selectedGame) return null;
 
   if (showIntro) {
-    return <GameIntroCard kind={selectedGame} onStart={() => setIntroGame(null)} />;
+    // The paid trivia game is Beat the Buzzer everywhere: on the punch, this card and the game's own header.
+    const paidTrivia = selectedGame === 'trivia' && rewardMode === 'task-attempt';
+    return <GameIntroCard kind={selectedGame} onStart={() => setIntroGame(null)}
+      name={paidTrivia ? 'Beat the Buzzer' : undefined} win={paidTrivia ? '2 right answers win the coin.' : undefined} />;
   }
 
   // A Ticket was already spent when the server created this attempt.
   // The attempt resolve call is the only path that awards its coin.
   if (selectedGame === 'trivia' && rewardMode === 'task-attempt') {
     return (
-      <TriviaDuel
-        visible={visible}
-        mode="ride"
-        seed={seed}
-        title="Beat the Buzzer"
-        subtitle="Ride Challenge: 2 of 3 to win"
-        parkId={parkId}
-        coinImage={coinImageUrl ?? null}
-        chapterId={rideChapter?.id}
-        onClose={onClose}
-        onQuit={handleQuit}
-        onComplete={(mult, meta) => handleComplete(mult, meta)}
-      />
+      <>
+        <TriviaDuel
+          visible={visible}
+          mode="ride"
+          seed={seed}
+          title="Beat the Buzzer"
+          subtitle="2 right answers win the coin"
+          parkId={parkId}
+          coinImage={coinImageUrl ?? null}
+          chapterId={rideChapter?.id}
+          onClose={onClose}
+          onQuit={handleQuit}
+          onComplete={(mult, meta) => handleComplete(mult, meta)}
+        />
+        {quitDialog}
+      </>
     );
   }
 
-  if (selectedGame === 'photo') {
-    return (
-      <SnapTheRide visible={visible} seed={seed} taskName={taskName} onClose={onClose} onQuit={handleQuit}
-        onComplete={(mult, meta) => handleComplete(mult, meta)} />
-    );
+  // Snap the Ride stays retired (blueprint 5.3: the server dropped it, one tap was a sure win).
+  if (selectedGame === 'photo') return null;
+
+  if (USE_QUEUE_KIT_GAMES && rewardMode === 'task-attempt') {
+    const game = renderQueueKitGame();
+    return game ? <>{game}{quitDialog}</> : null;
   }
 
-  if (USE_QUEUE_KIT_GAMES) {
+  if (USE_QUEUE_KIT_GAMES) return renderQueueKitGame();
+
+  function renderQueueKitGame() {
     switch (selectedGame) {
       case 'tap':
         // Dev-only: EXPO_PUBLIC_WHACK_FORMAT=party opens a live Whack Rush Line Party against the house crew.
@@ -284,6 +299,8 @@ export default function MiniGameSelector({
           <BananaBasketGame visible={visible} seed={seed} onClose={onClose} rideName={taskName}
             onComplete={(mult, meta) => handleComplete(mult, meta)} />
         );
+      default:
+        return null;
     }
   }
 

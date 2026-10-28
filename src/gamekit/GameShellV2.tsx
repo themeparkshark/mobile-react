@@ -65,6 +65,7 @@ import { Haptic } from './Haptics';
 import { playSfx } from './SFX';
 import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovementContext';
 import { RideChallengeContext } from './RideChallengeContext';
+import { noteRideTry } from './results/rideTry';
 import { ShellFrameContext } from './ShellFrameContext';
 import { GrownUpGateSlot } from '../components/GrownUpGate';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -980,6 +981,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       return () => clearTimeout(t);
     }, [rideChallenge, phase, effectiveResult]);
 
+    // Ride challenge loss (core loop 5.3, one loss card): no game card. The run is handed to the
+    // challenge's own loss card (rideTry.ts: "8 of 13 bonks", "1 of 3 right") and play moves on.
+    const rideLoss = !!rideChallenge && phase === 'results' && !!effectiveResult && effectiveResult.stars <= 0 && !wrap;
+    useEffect(() => {
+      if (!rideLoss) return;
+      noteRideTry(effectiveResult);
+      handleClaimRef.current?.();
+    }, [rideLoss, effectiveResult]);
+
     // -- Hold / resume (interruptions only; never movement). ------------------
     const persist = useCallback((reason: HoldReason) => {
       if (!sessionKey || !getSnapshot) return;
@@ -1356,9 +1366,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       saved,
       reducedMotion,
     }) : null), [phase, renderResults, effectiveResult, stars, won, wrapReason, handleClaim, rematchOffered, rematchRun, challengeOffered, playAgainFirst, claimLabel, saved, reducedMotion]);
-    const gameResults = isEmptyResultsNode(ownSurface) ? null : ownSurface;
+    const gameResults = rideLoss || isEmptyResultsNode(ownSurface) ? null : ownSurface;
     // A wrap-up (ride's up) has no game surface to wait for: the shared card shows at once.
-    const showSharedCard = phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || resultsSafeRef.current || wrap != null)));
+    const showSharedCard = !rideLoss && phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || resultsSafeRef.current || wrap != null)));
     sharedCardShownRef.current = showSharedCard;
     surfaceShownRef.current = gameResults != null || showSharedCard;
 

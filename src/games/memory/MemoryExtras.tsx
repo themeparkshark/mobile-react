@@ -265,7 +265,7 @@ export function ShareStoryCard({ daily }: { daily: DailySummary }) {
       {daily.streak > 0 ? (
         <View style={styles.shareStreak}>
           <Image source={STREAK} style={{ width: 26, height: 26 }} resizeMode="contain" />
-          <Text style={styles.storyStat}>{`${daily.streak} DAY STREAK`}</Text>
+          <Text style={styles.storyStat}>{`${daily.streak} days in a row`}</Text>
         </View>
       ) : null}
     </View>

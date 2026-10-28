@@ -20,7 +20,7 @@
  * audio, haptics and FX, and owns the Burst / breather / result flow.
  */
 
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { LogBox, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { runOnJS, runOnUI, useAnimatedReaction, useDerivedValue, useSharedValue, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -28,6 +28,7 @@ import Animated, { runOnJS, runOnUI, useAnimatedReaction, useDerivedValue, useSh
 import AsyncStorage from '../../gamekit/core/playerStorage';
 import { deckIdForRideName } from '../../services/rideTheme';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
+import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
 import { StampLayer, type StampLayerHandle } from '../../gamekit/fx/StampLayer';
 import { useCamera } from '../../gamekit/fx/useCamera';
@@ -198,8 +199,21 @@ const GHOST_COLORS = ['#ff9f1c', '#1fc8b8', '#ff6b5c'];
 
 type Phase = 'play' | 'finish' | 'breather' | 'done';
 
-function formatName(f: WhackFormat): string {
-  return f === 'ride' ? 'Ride Challenge' : f === 'duel' ? 'Bonk Battle' : f === 'raid' ? 'Crew Raid' : f === 'daily' ? 'Daily Bonk'
+/** Home Defend (blueprint 5.3): the ride format played from home for a team ride, with its own words. */
+export const HOME_DEFEND = { title: 'Home Defend', win: 'DEFENDED!', near: 'SO CLOSE!', miss: 'GOOD TRY!',
+  objective: (n: number) => `Bonk ${n} sharks to defend it!` } as const;
+
+/**
+ * The sims keep their callout words (they are hashed into the Line Party bundle the server replays);
+ * what the player reads uses the one name for Whack's bad guy (core loop 4.5): the anglerfish, never "teeth".
+ */
+export function playerCallout(text: string): string {
+  return text.replace(/\bWATCH THE TEETH\b/, 'NOT THE ANGLERFISH');
+}
+
+function formatName(f: WhackFormat, defend = false): string {
+  if (defend) return HOME_DEFEND.title;
+  return f === 'ride' ? 'Win the coin' : f === 'duel' ? 'Bonk Battle' : f === 'raid' ? 'Crew Raid' : f === 'daily' ? 'Daily Bonk'
     : f === 'lineDay' || f === 'weekly' ? 'Line of the Day' : 'Bonk Rush';
 }
 
@@ -218,6 +232,11 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   } = props;
   const format: WhackFormat = props.format ?? 'queue';
   const ride = format === 'ride';
+  // The ride format outside a paid ride challenge is Home Defend (HomeLive): no coin, its own title and stamp.
+  const rideChallenge = useContext(RideChallengeContext);
+  const defend = ride && !rideChallenge;
+  const defendRef = useRef(defend);
+  defendRef.current = defend;
   const lineRun = format === 'lineDay' || format === 'weekly';
   const devAuto = (__DEV__ || WHACK_CAPTURE) && process.env.EXPO_PUBLIC_GAME_AUTOPLAY === '1';
   const autoplay = !!props.autoplay || devAuto;
@@ -528,7 +547,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       if (kind === E_WIN && G) {
         // Final Bonk cam (8.9) on the winning hit: freeze, 0.25x, push-in, rings, confetti, stinger.
         const t = tlRef.current;
-        const ms = finisher.run('rideWin', { x: G.w / 2, y: G.deckTop + (G.h - G.deckTop) * 0.45, text: 'COIN CAUGHT!', stampColor: GOLD });
+        const ms = finisher.run('rideWin', { x: G.w / 2, y: G.deckTop + (G.h - G.deckTop) * 0.45, text: defendRef.current ? HOME_DEFEND.win : 'COIN CAUGHT!', stampColor: GOLD });
         winRef.current = { at: now, ms: ms + 300 };
         void runtime.mirror().then((m) => {
           const secs = Math.min(6, Math.floor(((t ? t.lengthMs : 30000) - m.t) / 1000));
@@ -746,7 +765,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       } else if (t.callout) {
         // GO already says start (no BONK 'EM! word banner); only a first-encounter callout speaks, once,
         // after the shell's GO tail clears, and leaves inside CALLOUT_LIFE_MS (one callout at a time).
-        const callout = t.callout;
+        const callout = playerCallout(t.callout);
         setTimeout(() => flash(callout, null, '#ffffff', 900), bi === 0 ? COUNT_END_MS - GO_AT_MS + 20 : 0);
       }
       GameAudio.play(cues.start, { volume: 0.8 });
@@ -791,7 +810,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     if (ride) {
       stars = last?.result.stars ?? 0;
       // Words, not a percent: the coin bar on the board already shows how far.
-      message = last?.result.win ? 'COIN CAUGHT!' : (last?.result.coin ?? 0) >= 75 ? 'SO CLOSE!' : 'GOOD TRY!';
+      message = last?.result.win ? (defendRef.current ? HOME_DEFEND.win : 'COIN CAUGHT!') : (last?.result.coin ?? 0) >= 75 ? 'SO CLOSE!' : 'GOOD TRY!';
     } else if (format === 'raid') {
       const r = raidRef.current;
       const dmg = last?.result.bossDamage ?? 0;
@@ -840,6 +859,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       walkBoost: boostedRunRef.current,
       bursts: banked.length,
       proof: ride ? last?.proof : banked.map((b) => b.proof),
+      // Ride challenge: how full the coin meter got (the loss card says "8 of 13 bonks", rideTry.ts).
+      ...(ride ? { ridePercent: Math.max(0, Math.min(100, Math.round(last?.result.coin ?? 0))) } : {}),
       fps_p5: perf.summary().fpsP5,
       perf_tier: TIER_NAMES[perfTier.tierJs],
       thermal_max: THERMAL_NAMES[thermalMax.current],
@@ -1047,7 +1068,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         bonks: b.result.hits,
         bestStreak: b.result.maxStreak,
         stats: [
-          { label: 'QUICK', value: `${b.result.quick}` },
+          // Feelings over data: no QUICK count a kid cannot read (core loop 5.3).
           { label: 'STREAK', value: `${b.result.maxStreak}` },
           ...(b.result.crits ? [{ label: 'CRITS', value: `${b.result.crits}` }] : []),
           ...(b.result.freezes ? [{ label: 'LOOK-UPS', value: `${b.result.freezes}` }] : []),
@@ -1343,7 +1364,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     feverOn: !!tl?.fever,
     boss: !!tl?.boss,
     notches: RIDE_WIN_NOTCHES,
-  }), [ride, format, burstIdx, totalBursts, tl?.fever, tl?.boss]);
+    ...(defend ? { winWord: HOME_DEFEND.win } : {}),
+  }), [ride, format, burstIdx, totalBursts, tl?.fever, tl?.boss, defend]);
   useEffect(() => {
     runtime.rt.value.reducedMotion = reducedMotion;
   }, [reducedMotion, runtime.rt]);
@@ -1351,11 +1373,11 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const rivalName = props.lineDay?.rivals?.length ? props.lineDay.rivals[props.lineDay.rivals.length - 1].name.split(' ')[0].toUpperCase() : null;
   // Countdown pill copy: six words or fewer, one name per thing (audit G6).
   const objective = ride
-    ? `Bonk ${RIDE_WIN_NOTCHES} sharks. Skip the teeth!`
-    : format === 'duel' ? `Beat ${duel?.rival.name ?? 'Captain Fin'}! Skip the teeth!`
+    ? defend ? HOME_DEFEND.objective(RIDE_WIN_NOTCHES) : `Bonk ${RIDE_WIN_NOTCHES} sharks. Not the anglerfish!`
+    : format === 'duel' ? `Beat ${duel?.rival.name ?? 'Captain Fin'}! Not the anglerfish!`
       : format === 'raid' ? 'Bonk the tentacles together!'
         : lineRun ? 'Beat the sharks above you!'
-          : 'Bonk sharks. Skip the teeth!';
+          : 'Bonk sharks. Not the anglerfish!';
   const capacity = Math.min(Math.max(48, Math.round(140 * tierScale.particles)), thermalScale.particleCap);
 
   return (
@@ -1363,7 +1385,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       ref={shellRef}
       visible={visible}
       title="Whack-a-Shark"
-      subtitle={`${formatName(format)}${ride ? '' : ` · ${hud.burstLabel}`}`}
+      subtitle={`${formatName(format, defend)}${ride ? '' : ` · ${hud.burstLabel}`}`}
       objective={objective}
       countdownDemo={format === 'raid' ? undefined : <CoachDemo theme={theme} reduced={reducedMotion} />}
       countdownPillFieldY={L ? L.hudH + 8 : undefined}

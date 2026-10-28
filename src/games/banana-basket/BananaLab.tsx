@@ -93,9 +93,9 @@ export default function BananaLab({ command, onClose }: { command: string; onClo
         <Text style={styles.title}>BANANA LAB</Text>
         {last ? <Text style={styles.last}>{last}</Text> : null}
         <Item label="First Ride (ride_intro)" m={{ ...base, rules: 'ride_intro' }} />
-        <Item label="Ride Challenge, full rules (d2)" m={{ ...base, rules: 'ride' }} />
-        <Item label="Ride Challenge (d1)" m={{ ...base, difficulty: 1 }} />
-        <Item label="Ride Challenge (d3)" m={{ ...base, difficulty: 3 }} />
+        <Item label="Paid ride try, full rules (d2)" m={{ ...base, rules: 'ride' }} />
+        <Item label="Paid ride try (d1)" m={{ ...base, difficulty: 1 }} />
+        <Item label="Paid ride try (d3)" m={{ ...base, difficulty: 3 }} />
         <Item label="Queue run (next unlock)" m={{ ...base, mode: 'queue' }} />
         <Item label="Queue run 1" m={{ ...base, mode: 'queue', unlock: 1 }} />
         <Item label="Queue run 2: Gull Set" m={{ ...base, mode: 'queue', unlock: 2 }} />

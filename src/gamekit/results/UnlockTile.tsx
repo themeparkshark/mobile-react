@@ -17,7 +17,7 @@ import { Haptic } from '../Haptics';
 /** The tile's size (pt): compact, so a tall win still leaves room for the peeking shark on a 874 pt phone. */
 export const UNLOCK_TILE_PT = 72;
 
-export function UnlockTile({ source, label, atMs, reducedMotion, fit = 'contain' }: {
+export function UnlockTile({ source, label, atMs, reducedMotion, fit = 'contain', caption }: {
   source: ImageSourcePropType;
   /** Spoken only, e.g. "New Finn unlocked: pirate finn". */
   label: string;
@@ -26,6 +26,12 @@ export function UnlockTile({ source, label, atMs, reducedMotion, fit = 'contain'
   reducedMotion: boolean;
   /** 'bottom' stands a character on the tile's floor (a Finn); 'contain' centres an object. */
   fit?: 'contain' | 'bottom';
+  /**
+   * Plain words under the picture ("Prize Boxes"). It is information, never a
+   * button: no plate, no border, no press look (core loop 5.13, the Sharky
+   * "NEW: Prize Boxes" label that looked tappable).
+   */
+  caption?: string;
 }) {
   const pop = useSharedValue(reducedMotion ? 1 : 0);
   const tag = useSharedValue(reducedMotion ? 1 : 0);
@@ -43,9 +49,9 @@ export function UnlockTile({ source, label, atMs, reducedMotion, fit = 'contain'
   const popSt = useAnimatedStyle(() => ({ opacity: pop.value > 0.02 ? 1 : 0, transform: [{ scale: pop.value }, { rotateZ: '-3deg' }] }));
   const tagSt = useAnimatedStyle(() => ({ opacity: tag.value > 0.02 ? 1 : 0, transform: [{ scale: tag.value }, { rotateZ: '8deg' }] }));
   return (
-    <View style={styles.row} accessible accessibilityLabel={label}>
+    <View style={styles.row} accessible accessibilityRole="text" accessibilityLabel={label}>
       <View style={styles.slot}>
-        <Animated.View style={[styles.tile, fit === 'bottom' ? styles.tileFloor : null, popSt]}>
+        <Animated.View style={[styles.tile, caption ? styles.tileFlat : null, fit === 'bottom' ? styles.tileFloor : null, popSt]}>
           <Image source={source} style={styles.art} resizeMode="contain" />
         </Animated.View>
         {/* The gold NEW tag pinned to the tile's top corner. */}
@@ -53,6 +59,7 @@ export function UnlockTile({ source, label, atMs, reducedMotion, fit = 'contain'
           <View style={styles.tag}><Text style={styles.tagText}>NEW</Text></View>
         </Animated.View>
       </View>
+      {caption ? <Text style={styles.caption} numberOfLines={1}>{caption}</Text> : null}
     </View>
   );
 }
@@ -63,6 +70,9 @@ const styles = StyleSheet.create({
   tile: { width: UNLOCK_TILE_PT, height: UNLOCK_TILE_PT, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#05346e',
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   tileFloor: { justifyContent: 'flex-end' },
+  // An unlock you read, not a button: the picture stands on the card with no plate or border.
+  tileFlat: { backgroundColor: 'transparent', borderWidth: 0 },
+  caption: { fontFamily: 'Knockout', fontSize: 16, color: '#ffffff', marginTop: 4 },
   art: { width: UNLOCK_TILE_PT - 8, height: UNLOCK_TILE_PT - 8 },
   tagPos: { position: 'absolute', top: -10, right: -26 },
   tag: { backgroundColor: '#ffcf3b', borderRadius: 10, borderWidth: 2.5, borderColor: '#05346e', paddingHorizontal: 7, paddingVertical: 1 },

@@ -5,6 +5,18 @@ import {
 } from '../../api/endpoints/me/task-attempts';
 import { writeTaskAttemptCheckpoint, type TaskAttemptCheckpoint } from './checkpoint';
 
+/**
+ * The core-loop extras of a start (the same game on TRY AGAIN, picture games
+ * only), or nothing at all, so a plain start sends exactly the old request.
+ */
+export function startExtras(checkpoint: Pick<TaskAttemptCheckpoint, 'retryOf' | 'pictureOnly'>):
+  [] | [{ retry_of?: number; picture_only?: boolean }] {
+  const retryOf = Number.isInteger(checkpoint.retryOf) && (checkpoint.retryOf as number) > 0 ? checkpoint.retryOf as number : null;
+  const pictureOnly = checkpoint.pictureOnly === true;
+  if (!retryOf && !pictureOnly) return [];
+  return [{ ...(retryOf ? { retry_of: retryOf } : {}), ...(pictureOnly ? { picture_only: true } : {}) }];
+}
+
 /** Recover an existing paid challenge; never create a second request ID. */
 export async function recoverTaskAttempt(checkpoint: TaskAttemptCheckpoint): Promise<TaskAttemptResponse> {
   const result = checkpoint.attemptId
@@ -15,6 +27,7 @@ export async function recoverTaskAttempt(checkpoint: TaskAttemptCheckpoint): Pro
       checkpoint.taskId,
       checkpoint.latitude,
       checkpoint.longitude,
+      ...startExtras(checkpoint),
     );
 
   if (!checkpoint.attemptId) {

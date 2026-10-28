@@ -56,7 +56,9 @@ test('a storage failure can never leave a dead board with no result', () => {
 test('header says Memory Match and the ride name, matching the how-to', () => {
   assert.doesNotMatch(src, /'Ride Sprint'/);
   assert.match(src, /const title = mode === 'ride' \? 'Memory Match'/);
-  assert.match(src, /`Try \$\{r\.tryIndex \+ 1\} of \$\{RIDE_TRIES\} · ` : ''\}\$\{taskName \|\| deck\.label\}/, 'try count first, never cut off');
+  // Core loop 5.3: the tries are three shells on the try card, never words in the header.
+  assert.match(src, /\? `\$\{taskName \|\| deck\.label\}\$\{r\?\.signal \? ' · Low signal' : ''\}`/);
+  assert.doesNotMatch(src, /`Try \$\{r\.tryIndex \+ 1\} of/);
 });
 
 test('a low-signal turn limit says OUT OF FLIPS, not TIME\'S UP', () => {

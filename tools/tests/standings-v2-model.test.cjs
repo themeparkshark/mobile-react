@@ -194,8 +194,10 @@ test('round 4: the goal note waits for the end of the coin reveal', () => {
   cache.parkWinNote({ text: 'Weekly goal: 8 rides! +25 XP', big: true }, note => shown.push(note.text));
   assert.equal(cache.takeWinNote().text, 'Weekly goal: 8 rides! +25 XP');
   assert.equal(cache.takeWinNote(), null, 'shown once');
+  // Core loop 5.13: the Standings goal note moves to Standings; the win card takes it while it shows,
+  // so no toast lands inside the win card's moment.
   const modal = read('src/components/PostWinRewardsModal.tsx');
-  assert.match(modal, /if \(!caught \|\| !visible\) return;\s+const note = takeWinNote\(\);/);
+  assert.match(modal, /holdWinNotes\(visible\);\n\s+if \(visible\) takeWinNote\(\);/);
   assert.doesNotMatch(read('src/api/endpoints/me/task-attempts.ts'), /setTimeout\(\(\) => showToast/, 'no fixed timer');
 });
 
@@ -238,8 +240,7 @@ test('round 5: your row visibility from geometry, the goal note held while the w
   assert.match(stats, /hideBalances \|\| limited \? null : parks \?\? visibleCount\(player\.visited_parks_count\)/, 'a stranger profile hides Parks');
   assert.match(stats, /Number\.isFinite\(n\) \? n : null/, 'no number can crash toLocaleString (a hidden value drops its tile)');
   const modal = read('src/components/PostWinRewardsModal.tsx');
-  assert.ok(modal.indexOf('{(noteSlot || goalNote) && (') > modal.indexOf('<View style={styles.footer}>'), 'the goal note sits in the footer flow');
-  assert.match(modal, /setNoteSlot\(visible && hasWinNote\(\)\)/, 'its slot is reserved before it lands, so the list never shrinks');
+  assert.doesNotMatch(modal, /goalNote|noteSlot/, 'core loop 5.13: no Standings note on the win card');
   assert.match(read('src/components/OfflineBanner.tsx'), /ROUTE_EXTRA_TOP[^\n]*Leaderboard: 66/);
 });
 
@@ -251,9 +252,7 @@ test('r6 follow-up: the tab pill is one inner tab wide, the goal note settles di
   assert.match(screen, /tabPillGeometry\(width, tabs\.length\)/);
   assert.match(screen, /width: segment,/, 'the pill fills exactly one tab');
   const modal = read('src/components/PostWinRewardsModal.tsx');
-  assert.doesNotMatch(modal, /setTimeout\(\(\) => setGoalNote\(null\)/, 'the note never vanishes mid-screen');
-  assert.match(modal, /withTiming\(GOAL_NOTE_SETTLED_OPACITY/);
-  assert.match(modal, /accessibilityLiveRegion=\{noteSettled \? 'none' : 'polite'\}/, 'the settled copy is not announced twice');
+  assert.doesNotMatch(modal, /setGoalNote|GOAL_NOTE_SETTLED_OPACITY/, 'core loop 5.13: the goal note lives on Standings now');
 });
 
 test('r6 follow-up: a held podium week gets a "being checked" card, never a prize it might not get', () => {

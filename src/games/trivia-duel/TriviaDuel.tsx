@@ -1523,7 +1523,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
       saveGhost(m, makeGhost(p, t, myName, 'classic', Date.now()));
     });
     if (won) banners.unshift(ghost ? `${oppName.toUpperCase()} BEATEN` : 'FIN BEATEN');
-    if (t.me.score > prevBest && prevBest > 0) banners.push('NEW BEST');
+    // No NEW BEST on a loss (core loop 5.3).
+    if (won && t.me.score > prevBest && prevBest > 0) banners.push('NEW BEST');
 
     // Takeover: crown or good-sport loss on the stage, then the half-height card rises.
     takeoverOn(true);
@@ -1828,7 +1829,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       ref={shell}
       visible={visible}
       title={title ?? (isRide ? 'Beat the Buzzer' : 'Trivia Duel')}
-      subtitle={subtitle ?? (isRide ? 'Ride Challenge: 2 of 3 to win' : ghost ? `vs ${oppName}` : 'Queue Duel')}
+      subtitle={subtitle ?? (isRide ? '2 right answers win the coin' : ghost ? `vs ${oppName}` : 'Queue Duel')}
       score={scores.me}
       result={shellResult}
       thresholds={isRide ? { one: 200, two: 420, three: 600 } : undefined}

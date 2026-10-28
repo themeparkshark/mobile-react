@@ -60,6 +60,7 @@ import { memoryLossBanner, memoryLossCopy } from './lossCopy';
 import { TryCard } from './TryCard';
 import { comboCall } from './comboCallout';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
+import { noteRideTry } from '../../gamekit/results/rideTry';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { MemoryCard, makeCardValues, sharedReady, type CardValues, type MemoryCardHandle, type SharedSheets, type ShimmerState } from './MemoryCard';
 import { deckById, deckIdForRideName, type Deck } from './decks';
@@ -382,6 +383,9 @@ export default function MemoryGame({
   const insets = useSafeAreaInsets();
   const movement = useContext(LinePlayMovementContext);
   const rideChallenge = useContext(RideChallengeContext);
+  const rideChallengeRef = useRef(rideChallenge);
+  rideChallengeRef.current = rideChallenge;
+  const giveUpRef = useRef<(() => void) | null>(null);
   const deck: Deck = useMemo(() => deckById(daily?.deckId ?? (mode === 'warmup' ? 'park' : undefined) ?? deckId ?? deckIdForRideName(taskName)) ?? deckById('park')!, [daily?.deckId, deckId, taskName, mode]);
   const baseSeed = useMemo(
     () => (party ? party.seed >>> 0 : seed != null ? seed >>> 0 : (Math.random() * 0xffffffff) >>> 0),
@@ -1113,6 +1117,7 @@ export default function MemoryGame({
         deck: deck.id,
         turns: e.turns,
         pairs: e.pairs,
+        pairsTotal: e.pairsTotal,
         maxCombo: e.maxChain,
         showtimes: e.showtimes,
         stars,
@@ -1383,7 +1388,12 @@ export default function MemoryGame({
     later(k > 0 ? 1500 : 600, () => {
       // Ride challenge: every try ends on the same end card (TRY AGAIN while
       // the Ticket has tries, then Done), right over the board.
-      if (r.mode === 'ride') {
+      if (r.mode === 'ride' && left <= 0 && rideChallengeRef.current) {
+        // The Ticket's last try: one loss card (core loop 5.3), the ride's own, which carries
+        // "6 of 8 pairs." and TRY AGAIN when the Ticket came back. No Memory try card before it.
+        noteRideTry({ stars: 0, meta: { game: 'memory', pairs: r.eng.pairs, pairsTotal: r.eng.pairsTotal } });
+        giveUpRef.current?.();
+      } else if (r.mode === 'ride') {
         // Short phones: the card covers more board, so veil it a bit more under the ribbon.
         if ((geoRef.current?.H ?? 999) < 600) wash.value = withTiming(0.95, { duration: 220 });
         setTryScreen({ pairs: r.eng.pairs, total: r.eng.pairsTotal, left, out, flipped: r.eng.turns > 0 });
@@ -2420,6 +2430,8 @@ export default function MemoryGame({
     finishRun(false);
   }, [finishRun, rideChallenge, onClose, clearTimers, collectRewards]);
 
+  giveUpRef.current = giveUp;
+
   const onRematch = useCallback(() => {
     setRunIndex((k) => k + 1);
   }, []);
@@ -2494,7 +2506,7 @@ export default function MemoryGame({
   const g = geo;
   const title = mode === 'ride' ? 'Memory Match' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : mode === 'warmup' ? 'Finn’s Warm-up' : 'Memory Match';
   const subtitle = mode === 'ride'
-    ? `${r && r.tryIndex > 0 ? `Try ${r.tryIndex + 1} of ${RIDE_TRIES} · ` : ''}${taskName || deck.label}${r?.signal ? ' · Low signal' : ''}`
+    ? `${taskName || deck.label}${r?.signal ? ' · Low signal' : ''}`
     : mode === 'timeAttack' ? `${deck.label} · Board ${hud.board}`
     : mode === 'daily' ? `${deck.label} · ${daily?.ranked && runIndex === 0 ? 'Ranked' : 'Practice'}`
     : mode === 'race' ? `${deck.label} · Practice race`

@@ -179,10 +179,11 @@ test('the shell wires the countdown, the GO frame and the last 5 seconds', () =>
   assert.doesNotMatch(stage, /setState|useState/, 'no per-frame React state');
 });
 
-test('Whack: one Too fast! callout (no BUTTERFINGERS stacking), a gold clock (never coral) and tiered medallion', () => {
+test('Whack: no words for a fast tapper (core loop 5.3), a gold clock (never coral) and tiered medallion', () => {
   const juice = read('src/games/whack/useWhackJuice.ts');
   assert.doesNotMatch(juice, /BUTTERFINGERS/);
-  assert.match(juice, /calloutAdmit\(callouts\.current, 'Too fast!'/);
+  assert.doesNotMatch(juice, /text: 'Too fast!'/, 'a mash is a soft puff, never a scolding word');
+  assert.match(juice, /case E_BUTTER:\n[^\n]*\n\s+feel\('whiff', \{ \.\.\.holeXY\(a\) \}\);/);
   assert.match(juice, /key: 'callout'/);
   const board = read('src/games/whack/render/WhackBoard.tsx');
   assert.doesNotMatch(board, /left < 3000 && Math\.floor\(left \/ 500\) % 2 === 0 \? CORAL/);

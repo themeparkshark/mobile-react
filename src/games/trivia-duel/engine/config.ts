@@ -170,7 +170,8 @@ export const UNLOCKS = { chompFromMatch: 2, bellFromMatch: 2, shieldFromMatch: 2
 export const SUDDEN_DEATH: RoundSpec = { type: 'quick', formats: ['choice4'], difficulty: 'medium', windowMs: 10000, horizonMs: 5000 };
 
 /** 4.1 ride challenge: 3 questions at the gate, 8s window. */
-export const RIDE_ROUND: RoundSpec = { type: 'quick', formats: ['choice4', 'truetale'], difficulty: 'easy', windowMs: 8000, horizonMs: 8000 };
+/** Paid ride rounds give at least 10 s per question (core loop 5.3, the server's TRIVIA_QUESTION_MS); the speed bonus keeps its 8 s horizon, so the scoring vectors the PHP port shares are unchanged. */
+export const RIDE_ROUND: RoundSpec = { type: 'quick', formats: ['choice4', 'truetale'], difficulty: 'easy', windowMs: 10000, horizonMs: 8000 };
 export const RIDE_QUESTIONS = 3;
 export const RIDE_WIN_CORRECT = 2;
 export const RIDE_STARS = { two: 420, three: 600 } as const;

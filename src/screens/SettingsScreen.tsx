@@ -34,6 +34,7 @@ import {
 } from './Settings/accountDeletion';
 import { copyrightLine } from '../api/platform';
 import { setBatterySaver, useBatterySaver } from '../power';
+import { usePlayPrefs } from '../services/playPrefs';
 import { UpperText } from '../ui/upper';
 
 /** Settings-only art (GPT Image 2.5 from Alex's references, see tps-prime-time-audit/art-ws8). */
@@ -149,6 +150,9 @@ export default function SettingsScreen() {
   const { urls, labels } = useCrumbs();
   const { reset, devMode, setDevMode } = useContext(LocationStatusContext);
   const { replayAllTutorials, openHowToPlay } = useHelp();
+  // Picture games only (blueprint 5.1): shown while the server deals picture games; saved per player.
+  // Favorites Alerts hide while push does not work yet (5.13): a switch that cannot send must not show.
+  const play = usePlayPrefs(player?.id ?? null);
 
   useEffect(() => {
     setEnabledMusic(player?.enabled_music);
@@ -340,6 +344,7 @@ export default function SettingsScreen() {
           <SettingsRow
             art="sound"
             title="Sound Effects"
+            isLast={!play.flags.pushWorks}
             accessory={
               <BrandSwitch
                 label="Sound effects"
@@ -358,8 +363,9 @@ export default function SettingsScreen() {
               />
             }
           />
-          {/* Shark Shop wishlist: one note when a hearted item is back (promotional, so opt-in and off any time). */}
-          <SettingsRow
+          {/* Shark Shop wishlist: one note when a hearted item is back (promotional, so opt-in and off any time).
+              Only while push works: the heart still saves favorites either way. */}
+          {play.flags.pushWorks && <SettingsRow
             art="heart"
             title="Favorites Alerts"
             isLast
@@ -381,10 +387,21 @@ export default function SettingsScreen() {
                 }}
               />
             }
-          />
+          />}
         </Section>
 
         <Section title="Park Play" index={2}>
+          {/* A child who cannot read yet: every ride coin deals a picture game (Whack-a-Shark or Memory Match). */}
+          {play.available && <SettingsRow
+            art="shark"
+            title="Picture games only"
+            detail={play.prefs.pictureOnly ? 'On: ride coins deal picture games, never trivia' : 'Off: ride coins can deal trivia'}
+            onPress={() => play.setPictureOnly(!play.prefs.pictureOnly)}
+            accessory={
+              <BrandSwitch label="Picture games only" value={play.prefs.pictureOnly}
+                onValueChange={() => play.setPictureOnly(!play.prefs.pictureOnly)} />
+            }
+          />}
           <SettingsRow
             art="pin"
             title="Ride Finder"

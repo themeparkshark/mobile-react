@@ -13,6 +13,10 @@ export interface TaskAttemptCheckpoint {
   latitude: number;
   longitude: number;
   savedAt: number;
+  /** TRY AGAIN after a loss: the lost attempt, so the server deals the same game (core loop 5.3). */
+  retryOf?: number | null;
+  /** "Picture games only" was on when this try started: never trivia. */
+  pictureOnly?: boolean;
 }
 
 export function taskAttemptCheckpointKey(
@@ -40,7 +44,13 @@ export function parseTaskAttemptCheckpoint(
       !Number.isFinite(value.longitude) || value.longitude < -180 || value.longitude > 180 ||
       !Number.isFinite(value.savedAt) || value.savedAt > nowMs + 60_000 ||
       nowMs - value.savedAt > MAX_AGE_MS) return null;
-    return value;
+    // Optional extras: a broken one is dropped, never the paid request itself.
+    const { retryOf, pictureOnly, ...paid } = value;
+    return {
+      ...paid,
+      ...(Number.isInteger(retryOf) && (retryOf as number) > 0 ? { retryOf } : {}),
+      ...(pictureOnly === true ? { pictureOnly: true } : {}),
+    };
   } catch {
     return null;
   }
