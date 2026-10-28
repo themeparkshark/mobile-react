@@ -20,9 +20,10 @@ import TeamBadge from '../TeamBadge';
 
 const ORDER = TEAM_ORDER;
 
-function clock(endsAt: string, now: number) {
-  const s = Math.max(0, Math.floor((new Date(endsAt).getTime() - now) / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+/** How long a raid has left, in calm whole minutes ("4 min"), never a ticking m:ss (core loop 4.3 rule 7). */
+export function raidMinutes(endsAt: string, now: number): string {
+  const ms = Math.max(0, new Date(endsAt).getTime() - now);
+  return `${Math.max(1, Math.ceil(ms / 60_000))} min`;
 }
 
 /**
@@ -47,7 +48,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
 
   const load = useCallback(() => { getLiveParks().then(setLive).catch(() => undefined); }, []);
   // Live parks refresh every 30 s while the home map is on screen; the raid
-  // clocks tick each second only while a raid is showing.
+  // minutes refresh every 15 s only while a raid is showing (whole minutes, never a ticking clock).
   const focused = useIsFocused();
   const appActive = useAppActive();
   useLivePoll(load, 30000, { focused });
@@ -56,7 +57,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
   useEffect(() => {
     if (!ticking) return;
     setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(id);
   }, [ticking]);
   useEffect(() => {
@@ -113,7 +114,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
             <Image source={BOSS_ART[liveRaid.raid.boss]} style={styles.barBossArt} contentFit="contain" />
             <View style={{ flex: 1 }}>
               <View style={styles.liveRow}><View style={styles.liveDot} /><Text style={styles.barKicker} numberOfLines={1}>HELP FROM HOME  ·  {liveRaid.name}</Text></View>
-              <Text style={styles.barTitle} numberOfLines={1}>{BOSS_NAMES[liveRaid.raid.boss]} attack!  ·  {clock(liveRaid.raid.ends_at, now)}</Text>
+              <Text style={styles.barTitle} numberOfLines={1}>{BOSS_NAMES[liveRaid.raid.boss]} attack!  ·  {raidMinutes(liveRaid.raid.ends_at, now)}</Text>
             </View>
             <View style={styles.joinTag}><Text style={styles.joinTagText}>JOIN</Text></View>
           </>
@@ -209,7 +210,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
                       <View style={styles.hpTrack}>
                         <View style={[styles.hpFill, { width: `${Math.max(2, (park.raid.hp_left / Math.max(1, park.raid.hp_max)) * 100)}%` }]} />
                       </View>
-                      <Text style={styles.raidMeta}>{park.raid.fighters} fighting  ·  {clock(park.raid.ends_at, now)} left</Text>
+                      <Text style={styles.raidMeta}>{park.raid.fighters} fighting  ·  {raidMinutes(park.raid.ends_at, now)} left</Text>
                     </View>
                     <View style={styles.joinTag}><Text style={styles.joinTagText}>JOIN</Text></View>
                   </Pressable>

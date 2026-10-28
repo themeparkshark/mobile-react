@@ -413,3 +413,17 @@ test('attentionGate: other lanes ask the map\'s rules before opening by themselv
   const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
   assert.match(explore, /attentionGate\.publish\(\{ atPark: !!park, arrivedAt: nextCoin\.arrivedAt,/);
 });
+
+test('calm clocks on the map and the home map: whole minutes, never a ticking m:ss (core loop 4.3 rule 7)', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  for (const file of ['src/components/home/HomeLive.tsx', 'src/screens/ExploreScreen/TaskMarker.tsx', 'src/screens/ExploreScreen/FindLife.tsx',
+    'src/screens/ExploreScreen/Coin.tsx', 'src/components/LiveEventsPill.tsx']) {
+    assert.doesNotMatch(read(file), /% 60\)\.padStart\(2/, `${file} draws no seconds`);
+  }
+  const live = read('src/components/home/HomeLive.tsx');
+  assert.match(live, /export function raidMinutes\(endsAt: string, now: number\): string \{/);
+  assert.match(live, /return `\$\{Math\.max\(1, Math\.ceil\(ms \/ 60_000\)\)\} min`;/, 'a raid says "4 min", never 3:59');
+  assert.doesNotMatch(live, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\)/, 'no per-second ticking on the home map');
+  const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
+  assert.match(marker, /id = setTimeout\(tick, rest < 60_000 \? rest : \(rest % 60_000\) \|\| 60_000\);/, 'the island chip wakes once a minute');
+});
