@@ -1,5 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import playerStorage from '../gamekit/core/playerStorage';
 import { useContext, useEffect, useMemo, useState } from 'react';
+import { silenceForCapture } from '../gamekit/audio/captureSilence';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BOSS_NAMES, type BossId, type BossRaid } from '../api/endpoints/parks/raid';
 import type { RideControlClaim, RideControlPark } from '../api/endpoints/parks/rideControl';
@@ -60,6 +61,8 @@ function fixtureRaid(boss: BossId, over: Partial<BossRaid> = {}): BossRaid {
  * `themeparkshark://ws6?section=win&boss=robo_shark&held=1` (simulator capture).
  */
 export default function BossMapPreviewScreen() {
+  // A capture screen is silent and never touches the native audio stack.
+  useEffect(() => silenceForCapture(), []);
   const [section, setSection] = useState<Section>('map');
   const [boss, setBoss] = useState<BossId>('kraken'), [run, setRun] = useState(0), [selected, setSelected] = useState(false);
   const [held, setHeld] = useState(false);
@@ -90,7 +93,8 @@ export default function BossMapPreviewScreen() {
       setKnobs({ energy: num('energy', 120), tickets: num('tickets', 2), attacks: num('attacks', 0), joined: query.get('joined') === '1', autoplay: num('autoplay', 0), hp: num('hp', 3480), live: query.get('live') === '1' });
       if (query.get('play') === '1') setRun(value => value + 1);
       // First-time Boss Bash lesson again (capture only).
-      if (query.get('fresh') === '1') void AsyncStorage.multiRemove(['boss_bash_seen_v1', 'boss_bash_best_kraken']).catch(() => undefined);
+      // Game saves are per player (playerStorage), so clear this player's copies.
+      if (query.get('fresh') === '1') void Promise.all(['boss_bash_seen_v1', 'boss_bash_best_kraken'].map((k) => playerStorage.removeItem(k))).catch(() => undefined);
     };
     void Linking.getInitialURL().then(apply).catch(() => undefined);
     const sub = Linking.addEventListener('url', event => apply(event.url));

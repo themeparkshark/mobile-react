@@ -3,6 +3,8 @@
  * tallies. Pure and worklet-safe.
  */
 
+import countText from '../../helpers/countText';
+
 export interface StarThresholds {
   /** Scores for 1, 2 and 3 stars (ascending). */
   one: number;
@@ -84,18 +86,13 @@ export function countUpValue(from: number, to: number, elapsedMs: number, durMs:
   return Math.round(from + (to - from) * e);
 }
 
-/** 12345 -> "12,345" (no locale dependency, worklet-safe). */
+/**
+ * Every drawn score: the house countText rule (digits only under 100,000, then 125K;
+ * the Shark font's comma reads as a period, so 1,200 looked like 1.200). Worklet-safe.
+ */
 export function formatScore(value: number): string {
   'worklet';
-  const n = Math.round(value);
-  const neg = n < 0;
-  let s = String(neg ? -n : n);
-  let out = '';
-  while (s.length > 3) {
-    out = ',' + s.slice(-3) + out;
-    s = s.slice(0, -3);
-  }
-  return (neg ? '-' : '') + s + out;
+  return countText(value);
 }
 
 // =============================================================================

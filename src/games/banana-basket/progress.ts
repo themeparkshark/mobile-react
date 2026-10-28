@@ -7,7 +7,8 @@
  * rules and cards travel inside the proof and are replayed).
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../../gamekit/core/playerStorage';
 import { PROGRESS_KEY, R_INTRO, R_RIDE, TWIST_CROSSWIND, TWIST_PRIZES } from './constants';
 import { dayKey, hashDay } from './day';
 

@@ -70,7 +70,7 @@ test('Whack and Memory results share a story-size picture with the link and QR, 
   assert.match(memory, /campaign="memory"/);
   for (const code of [whack, memory]) assert.doesNotMatch(code, /shareFileExternal|captureRef/, 'one share path: gate, then the share sheet');
   // One share look everywhere: the gold-rimmed pill, and Memory previews the picture that ships.
-  assert.match(whack, /<ShareFace size="reveal" dim=\{busy\} \/>/);
+  assert.match(whack, /<ShareFace size=\{chip \? 'md' : 'reveal'\} dim=\{busy\} \/>/);
   assert.match(memory, /<ShareFace size="reveal" dim=\{busy\} \/>/);
   assert.doesNotMatch(memory, /SHARE NOW/);
   const back = memory.slice(memory.indexOf('export function ShareBack('), memory.indexOf('// Album'));

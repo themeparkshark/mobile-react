@@ -3,6 +3,7 @@ const test = require('node:test');
 const { runtime } = require('./helpers/reward-hook-runtime.cjs');
 const { loadTs } = require('./helpers/ts-module.cjs');
 const challengeCopy = loadTs('src/components/rewards/challengeCopy.ts');
+const lostTryCard = loadTs('src/components/rewards/lostTryCard.ts');
 const postWinModel = loadTs('src/components/rewards/postWinModel.ts');
 const coinTiers = loadTs('src/constants/coinTiers.ts');
 // Progression v2 (S2): the pure coin model and the app-wide limiters the sheet now uses.
@@ -34,6 +35,7 @@ function recoveredWin() {
     '../api/endpoints/me/ride-coins/milestones': { default: async id => { milestoneReads.push(id);
       return { milestones: [{ type: 'first_park_coin', park_id: 1 }], progress: { park_id: 1, park_name: 'Test Park', before: 0, collected: 1, available: 26 }, next: { percent: 25, coins_needed: 6 } }; } },
     './rewards/challengeCopy': challengeCopy,
+    './rewards/lostTryCard': lostTryCard,
     '../RootNavigation': { navigate: (...args) => navigation.push(args) },
     '../services/collection/earnedShelf': require('./helpers/earned-shelf.cjs'),
     '../constants/coinTiers': coinTiers,
@@ -303,7 +305,9 @@ test('ride challenge status cards sit on a brand navy scrim, and a free miss say
   const src = require('node:fs').readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
   assert.match(src, /backdropColor="#05346e"/);
   assert.ok(!/backdropOpacity=\{flowState === 'preview' \? 0\.5 : 0\.95\}/.test(src), 'status states must not use a near-black backdrop');
-  assert.match(src, /'This one got away\. No Ticket was spent\.'/);
+  assert.match(src, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost, retryOffered: canOfferRetry \}\)/);
+  assert.deepEqual({ ...lostTryCard.lostTryCopy({ usedRescuePass: false, rescueRetryAvailable: false, firstCoinTicketReturned: false, lostTicketCost: 0 }) },
+    { title: 'Good Try!', message: 'No Ticket spent.', ticket: 0 });
   // The dev-only status preview can never reach a release build or a live modal.
   assert.match(src, /__DEV__ && previewOnly \? process\.env\.EXPO_PUBLIC_CHALLENGE_FLOW_PREVIEW/);
 });

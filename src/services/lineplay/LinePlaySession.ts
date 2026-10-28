@@ -345,7 +345,48 @@ const ROUND_ROBIN: ReadonlyArray<'minigame' | 'trivia' | 'circuit'> = ['minigame
  * Minigames cycled through for 'minigame' slots. Rhythm Tap (silent and
  * mash-proof) and Shark Showdown (merging into Trivia) are out of rotation.
  */
-export const MINIGAME_CYCLE: ReadonlyArray<MiniGameId> = ['current', 'trivia', 'shark', 'tap', 'banana', 'memory'];
+export const MINIGAME_CYCLE: ReadonlyArray<MiniGameId> = ['tap', 'trivia', 'shark', 'current', 'banana', 'memory'];
+/**
+ * The first free game of a wait is always one of the two showpieces (Whack,
+ * Sharky Swim), alternating by visit. Current Quest v1 is the weakest game, so
+ * it never opens a wait and never comes second; v7.1 replaces it once its
+ * server rules check (CurrentQuestRules.php, gate G3) is live.
+ */
+export const QUEUE_LEAD_GAMES: ReadonlyArray<MiniGameId> = ['tap', 'shark'];
+
+/** This wait's free-game order: a showpiece first, then the cycle from this visit's rotation. */
+export function queueGameOrder(rotation: number): MiniGameId[] {
+  const n = MINIGAME_CYCLE.length;
+  const r = Math.abs(Math.trunc(Number.isFinite(rotation) ? rotation : 0));
+  const start = r % n;
+  const rotated = [...MINIGAME_CYCLE.slice(start), ...MINIGAME_CYCLE.slice(0, start)];
+  const lead = QUEUE_LEAD_GAMES[r % QUEUE_LEAD_GAMES.length];
+  const rest = rotated.filter(game => game !== lead);
+  const quest = rest.indexOf('current');
+  if (quest >= 0 && quest < 2) {
+    rest.splice(quest, 1);
+    rest.splice(Math.min(2, rest.length), 0, 'current');
+  }
+  return [lead, ...rest];
+}
+
+/**
+ * What an open mini-game hears when the wait ends under it: boarding, leaving
+ * the line, or a wait that ended by hand. Null while the wait is still going.
+ *
+ * The 'ending' state is the undoable 60 s wrap-up grace (often started by GPS
+ * drift indoors), and the session holds that countdown while a game is open,
+ * so it never ends a round. Only a finished wait, or a guest who said "I'm
+ * boarding", ends an open game.
+ */
+export function queueEndedReason(state: LinePlayState, endReason: EndReason | null, boardingConfirmed = false):
+  'boarding' | 'left-queue' | 'session-ended' | null {
+  if (state === 'ending') return boardingConfirmed ? 'boarding' : null;
+  if (state !== 'complete') return null;
+  if (endReason === 'boarded' || boardingConfirmed) return 'boarding';
+  if (endReason === 'left_queue') return 'left-queue';
+  return 'session-ended';
+}
 /** Queue games that must never be offered as a new round. Old checkpoints still render them. */
 export const RETIRED_QUEUE_GAMES: ReadonlySet<MiniGameId> = new Set<MiniGameId>(['timing', 'showdown']);
 /** A signal-repair circuit takes about a minute. */
@@ -459,7 +500,8 @@ export function generatePlaylist(waitMinutes: number, postedWaitMinutes: number,
   let predictionPlaced = false;
   let budget = waitSeconds;
   let slot = 0;
-  let minigameCycle = rotation % MINIGAME_CYCLE.length;
+  const gameOrder = queueGameOrder(rotation);
+  let minigameCycle = 0;
   // Inline trivia cards consume one question; the Trivia+ game consumes five.
   // Share one cursor so neither format immediately repeats the other.
   let triviaSeed = chapter ? openingTriviaSeed + 1 : rotation;
@@ -473,7 +515,7 @@ export function generatePlaylist(waitMinutes: number, postedWaitMinutes: number,
     slot += 1;
 
     if (kind === 'minigame') {
-      const gameId = MINIGAME_CYCLE[minigameCycle % MINIGAME_CYCLE.length];
+      const gameId = gameOrder[minigameCycle % gameOrder.length];
       minigameCycle += 1;
       const gameSeed = gameId === 'trivia' ? triviaSeed : slot + rotation;
       if (gameId === 'trivia') triviaSeed += LINEPLAY_ROUND_QUESTIONS;

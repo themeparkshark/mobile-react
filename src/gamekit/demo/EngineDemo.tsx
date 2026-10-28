@@ -568,6 +568,16 @@ export default function EngineDemo({ visible, onClose, autoplay = false }: Engin
       GameAudio.play(cues.rideUp);
       setMovement((m) => ({ ...m, queueEnded: 'boarding' }));
     },
+    // Ride detection only guesses: the held round asks "Did your ride start?".
+    rideGuess: () => {
+      setMovement((m) => ({
+        ...m,
+        rideUpLikely: true,
+        onBoardingAnswer: (boarded: boolean) => { if (!boarded) setMovement((x) => ({ ...x, rideUpLikely: false })); },
+        onRunDone: () => undefined,
+      }));
+      shell.current?.requestPause('Paused while away');
+    },
   }), [camera, cues, dissolve, handleCombo, sim, wave]);
 
   useEffect(() => {
@@ -694,7 +704,7 @@ export default function EngineDemo({ visible, onClose, autoplay = false }: Engin
               {([
                 ['Confetti', toolbar.confetti], ['Coins', toolbar.coins], ['Ink', toolbar.ink], ['Splash', toolbar.splash],
                 ['Shockwave', toolbar.shock], ['Dissolve', toolbar.dissolve], ['Fever', toolbar.fever], ['Golden', toolbar.golden],
-                ['Line moves', toolbar.lineMoves], ['Pocket it', toolbar.pocket], ["Ride's up", toolbar.rideUp],
+                ['Line moves', toolbar.lineMoves], ['Pocket it', toolbar.pocket], ['Ride guess', toolbar.rideGuess], ["Ride's up", toolbar.rideUp],
                 ['Bot', () => setBot(true)], ['Perf', () => setShowPerf((v) => !v)], ['End run', () => finish()],
               ] as [string, () => void][]).map(([label, fn]) => (
                 <TouchableOpacity key={label} style={styles.chip} onPress={fn} accessibilityRole="button">

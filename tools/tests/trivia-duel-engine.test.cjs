@@ -125,7 +125,7 @@ test('Closest Number: accuracy, 0.8 counts as correct, 0.97 is a bullseye', () =
   assert.equal(partial.points, 50);
 });
 
-test('wager (rev 7, S0-3): SAFE / HALF / ALL IN, always a share of what you hold, no fixed stakes, never above the score', () => {
+test('Big Final chips (rev 7, S0-3): SAFE / HALF / GO BIG, always a share of what you hold, no fixed stakes, never above the score', () => {
   assert.deepEqual(plain(sc.wagerStakes(800)), [0, 400, 800]);
   assert.deepEqual(plain(sc.wagerStakes(150)), [0, 75, 150], 'no fixed stakes under 200');
   assert.deepEqual(plain(sc.wagerStakes(0)), [0, 0, 0], 'ALL IN at 0 is worth nothing');
@@ -138,8 +138,14 @@ test('wager (rev 7, S0-3): SAFE / HALF / ALL IN, always a share of what you hold
   assert.equal(cfg.WAGER.fixed, undefined);
   assert.equal(cfg.WAGER.fixedBelow, undefined);
   assert.equal(sc.applyFinal(800, true, 250, 400), 1450);
-  assert.equal(sc.applyFinal(800, false, 0, 400), 400);
-  assert.equal(sc.applyFinal(150, false, 0, 150), 0, 'score floor 0');
+  assert.equal(sc.applyFinal(800, false, 0, 400), 600, 'a miss takes half the chip');
+  assert.equal(sc.applyFinal(150, false, 0, 150), 75, 'GO BIG never takes everything');
+  assert.equal(sc.applyFinal(0, false, 0, 0), 0, 'score floor 0');
+  for (let s = 0; s < 3000; s += 37) {
+    const go = sc.wagerStakes(s)[2];
+    assert.ok(sc.applyFinal(s, false, 0, go) >= Math.floor(s / 2) - 5, `GO BIG miss at ${s} keeps about half`);
+    assert.ok(sc.missLoss(go) <= go);
+  }
 });
 
 test('suggestWager: every branch of 5.5', () => {
@@ -147,9 +153,11 @@ test('suggestWager: every branch of 5.5', () => {
   let s = sc.suggestWager(1000, 300, 1);
   assert.equal(s.index, 0);
   assert.equal(s.reason, "Wins it if you're right.");
+  assert.equal(s.kind, 'win');
   s = sc.suggestWager(700, 400, 1); // 700+100+0 = 800 < 1150; +350 = 1150 no; +700 = 1500 > 1150
   assert.equal(s.index, 2);
   assert.equal(s.reason, "Wins it if you're right.");
+  assert.equal(s.kind, 'win');
   // 2) Trailing with no locking chip: ALL IN.
   s = sc.suggestWager(300, 600, 1);
   assert.equal(s.index, 2);
@@ -162,11 +170,13 @@ test('suggestWager: every branch of 5.5', () => {
   assert.equal(s.reason, 'Keeps the lead if they miss.');
   s = sc.suggestWager(520, 500, 1); // cover 1100: 620 / 880 / 1140 -> ALL IN covers
   assert.equal(s.index, 2);
-  assert.equal(s.reason, 'Covers their best bet.');
+  assert.equal(s.reason, 'Stays ahead if they get it.');
+  assert.equal(s.kind, 'stay');
   s = sc.suggestWager(900, 700, 1.5); // lock 1750: 1050/1500/1950 -> ALL IN locks
   assert.equal(s.index, 2);
   s = sc.suggestWager(800, 600, 1); // lock 1550: 900/1300/1700 -> ALL IN; check cover not reached first
   assert.equal(s.reason, "Wins it if you're right.");
+  assert.equal(s.kind, 'win');
 });
 test('ride points and stars', () => {
   assert.equal(sc.ridePoints(true, 0, 640), 250);
@@ -438,13 +448,13 @@ test('resolveRound: nobody buzzes -> open phase flat 50', () => {
   assert.equal(res.opp.points, 0);
 });
 
-test('resolveRound: final wager adds or removes the stake, floor 0', () => {
+test('resolveRound: the Big Final adds the chip when right, takes half when missed', () => {
   const t = match.createTally();
   t.me.score = 400; t.opp.score = 500;
   const r = quickRound('final');
   const res = match.resolveRound('queue', r, { choice: 2, lockMs: 0, stake: 400 }, { choice: 0, lockMs: 3000, stake: 500 }, t);
   assert.equal(t.me.score, 400 + 200 + 400);
-  assert.equal(t.opp.score, 0);
+  assert.equal(t.opp.score, 250, 'a missed GO BIG keeps half');
   assert.equal(res.decisive, true);
 });
 
@@ -491,7 +501,7 @@ test('near-miss finds the smallest single change', () => {
   const results = plan.rounds.map(() => ({ me: { correct: true, speed: 20, stake: 0, points: 120, streak: { streak: 1 } }, opp: {} }));
   const out = nm.nearMiss(plan, t, results);
   assert.equal(out.kind, 'speed');
-  assert.match(out.line, /^Lost by 35\. A GREAT answer on question 1 wins it\.$/);
+  assert.match(out.line, /^Just 35 away! A GREAT answer on question 1 wins it\.$/);
   t.opp.score = 499;
   assert.equal(nm.nearMiss(plan, t, results).kind, 'none');
 });

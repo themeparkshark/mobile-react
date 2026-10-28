@@ -27,7 +27,8 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 import Animated, {
   Easing, runOnJS, runOnUI, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming,
 } from 'react-native-reanimated';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../../gamekit/core/playerStorage';
 import type { BossId } from '../../api/endpoints/parks/raid';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';

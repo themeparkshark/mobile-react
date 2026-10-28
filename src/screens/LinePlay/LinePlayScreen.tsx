@@ -37,7 +37,7 @@ import { GameDialog, gameAlert } from '../../ui';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { useLinePlaySession } from '../../services/lineplay/useLinePlaySession';
-import { isRecentQueueSample, MAX_SESSION_ACTIVITY_SLOTS } from '../../services/lineplay/LinePlaySession';
+import { isRecentQueueSample, MAX_SESSION_ACTIVITY_SLOTS, queueEndedReason } from '../../services/lineplay/LinePlaySession';
 import { crewLivePrompt } from '../../services/lineplay/livePrompt';
 import LinePlayLiveRail from './components/LinePlayLiveRail';
 import getWikiTimes from '../../api/endpoints/parks/queue-times/getWikiTimes';
@@ -792,17 +792,41 @@ export default function LinePlayScreen() {
   }, []);
   const secondsToNextBonus = bonus ? nextBonusSeconds(bonus, snapshot.verifiedEligibleSeconds,
     snapshot.verifiedPresenceAt, Date.now()) : null;
+  // A real queue event ends an open round with its score saved ("YOUR RIDE'S UP!"),
+  // so boarding mid-run still counts the run. The undoable wrap-up grace (GPS
+  // says the guest left) never ends a round: the session holds it while a game is open.
+  const queueEnded = queueEndedReason(snapshot.state, snapshot.endReason, snapshot.boardingConfirmed);
+  const activeGameRef = useRef(activeGame);
+  activeGameRef.current = activeGame;
   const movementContext = useMemo(() => ({
     moving: snapshot.moving,
     onResume: () => undefined,
     lineMovePolicy: 'passive' as const,
+    queueEnded,
+    rideUpLikely: snapshot.boardingSuggested,
+    // A pass-and-play turn is one try per kid: its card shows only DONE.
+    turnOnly: activeGame?.groupTurn === true,
+    // The guest answered "Did your ride start?" inside a held game.
+    onBoardingAnswer: (boarded: boolean) => {
+      if (!boarded) { session.dismissBoardingSuggestion(); return; }
+      void session.endNow(true).catch(finishFailed);
+    },
+    // A run the shell did not hand to onComplete (no star, saved partial, or
+    // replayed) still counts as played this wait. A saved partial run is not
+    // a real star, so it never changes the best or the difficulty.
+    onRunDone: (stars: number, partial: boolean) => {
+      const game = activeGameRef.current;
+      if (!game || game.groupTurn === true) return;
+      if (!partial) session.recordGameResult(game.gameId, stars);
+      session.markActivityCompleted(game.id);
+    },
     // Client-scored games never pay Parts; their win card points to the bonus games.
     justForFunNote: bonus && activeGame && activeGame.gameId !== 'current' ? {
       text: 'Play Current Quest or Codebreaker for bonus Parts',
       actionLabel: 'PLAY FOR BONUS',
       onPress: () => { setActiveGame(null); setArcadeOpen(true); },
     } : null,
-  }), [snapshot.moving, bonus != null, activeGame?.gameId]);
+  }), [snapshot.moving, bonus != null, activeGame?.gameId, activeGame?.groupTurn, queueEnded, snapshot.boardingSuggested, finishFailed]);
   useEffect(() => {
     const id = pendingEncoreId.current;
     if (!id) return;

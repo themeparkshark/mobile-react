@@ -272,7 +272,7 @@ test('round 2: the last 5 stamp slams with a squash and rock, the ring closes ov
 test('round 2: kid-safe in-game copy: no red minus vs best, no BEHIND, a calm slip chip, the barker cheers in the last 5', () => {
   const board = read('src/games/whack/render/WhackBoard.tsx');
   assert.doesNotMatch(board, /#c2412f/, 'no red pace text');
-  assert.match(board, /d > 0 \? `\+\$\{d\} \$\{paceLabel\}` : paceLabel/, 'behind shows only the chase, no minus');
+  assert.match(board, /d > 0 \? `\+\$\{countText\(d\)\} \$\{paceLabel\}` : paceLabel/, 'behind shows only the chase, no minus');
   const whack = read('src/games/whack/WhackAShark.tsx');
   assert.doesNotMatch(whack, /BEHIND YOUR BEST/);
   assert.doesNotMatch(read('src/games/whack/ui/Overlays.tsx'), /#c2412f|#ffe4de/);
@@ -574,7 +574,7 @@ test('round 4: the breather and the count read with zero words (pictures, a UI-t
   assert.match(ov, /<NextPreview shape=\{p\.nextShape\}/);
   assert.match(ov, /<GameIcon name="streak" size=\{34\} \/>/, 'the fever pad is a flame');
   const shell = read('src/gamekit/GameShellV2.tsx');
-  assert.match(shell, /\{countdownDemo \? <React\.Fragment key=\{demoRun\}>\{countdownDemo\}<\/React\.Fragment> : \(objective \?/);
+  assert.match(shell, /\{countdownDemo \? <React\.Fragment key=\{demoRun\}>\{countdownDemo\}<\/React\.Fragment> : \(objective(?: && !playedOnceRef\.current)? \?/);
   const coach = read('src/games/whack/ui/CoachDemo.tsx');
   assert.doesNotMatch(coach, /<Text/, 'the demo has no words');
   assert.doesNotMatch(coach, /#ff6b5c|'red'|coral/i, 'the X is navy on white, never red');

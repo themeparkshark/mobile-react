@@ -39,6 +39,7 @@ import {
 import { E_HAT_BOUNCE } from './useWhackRuntime';
 import { G_CRIT, G_GOOD, G_QUICK, K_ANGLER, K_BRUISER, K_FINN, K_GOLDEN, K_HELMET, K_PUFFER, K_TENTACLE, K_TWIN, MULT_CAP, SIXTEENTH_MS, TIER_AT, TIER_MULT } from './waves';
 import type { BoardLayout } from './render/layout';
+import { allowWord, createWordGate, droppedPoints, type WordGate } from './wordGate';
 import type { WhackRuntime } from './useWhackRuntime';
 import { calloutAdmit, comboTierRank, comboTierStyle, createCalloutGate } from '../../gamekit/core/gameMoments';
 import { KICK } from '../../ui/motion';
@@ -46,6 +47,8 @@ import { budgetedParticles, type PowerBudget } from '../../power/powerPolicy';
 import { TINT } from '../../gamekit/core/particles';
 
 const GOLD = '#ffcf3b';
+/** Words that always float, even in a busy flurry. */
+const BIG_WORDS = new Set(['fever', 'feverReady', 'tierUp', 'bossDown']);
 const CORAL = '#ff6b5c';
 
 /** Board kick (pt) per combo tier rank (x1, x2, x3, x5): it grows with the combo, capped at KICK.maxPt. */
@@ -245,11 +248,26 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
   const feverOn = useRef(false);
   const syncLayers = () => layersRef.current?.setLevel(whackLayerLevel(TIER_MULT[tier.current] ?? 1, feverOn.current));
   const feelRaw = useFeel(table, { fx, camera, clock: null, width, calm: reducedMotion || walking, governor, stamps });
+  // At most two floating words at once (wordGate.ts); big moments always show.
+  // A dropped "+80" is not lost: its points fold into the flurry's total stamp.
+  const words = useRef<WordGate | null>(null);
+  const foldedPts = useRef(0);
   // Callout traffic control: while a big stamp owns the sky band, world words stay quiet (the mash gag keeps
   // its own soft word, at the hole, below the band).
   const feel = useCallback((name: Extract<keyof typeof table, string>, at: Parameters<typeof feelRaw>[1] = {}) => {
-    if (quiet?.current && (at.text || at.stamp) && name !== 'butter') feelRaw(name, { ...at, text: undefined, stamp: undefined });
-    else feelRaw(name, at);
+    if (quiet?.current && (at.text || at.stamp) && name !== 'butter') {
+      feelRaw(name, { ...at, text: undefined, stamp: undefined });
+      return;
+    }
+    if (typeof at.text === 'string' && at.text) {
+      words.current ??= createWordGate();
+      if (!allowWord(words.current, Date.now(), BIG_WORDS.has(name))) {
+        foldedPts.current += droppedPoints(at.text);
+        feelRaw(name, { ...at, text: undefined });
+        return;
+      }
+    }
+    feelRaw(name, at);
   }, [feelRaw, quiet]) as typeof feelRaw;
   const liveScore = useRef(0);
   const streak = useRef(0);
@@ -566,10 +584,19 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
           GameAudio.play(cues.tally, { volume: 0.7 });
           fx.current?.ring(width / 2, 34, { color: GOLD, from: 22, to: 48, ms: 220 });
           fx.current?.burst('sparkles', width / 2, 34, { count: 6 });
+          foldedPts.current = 0;
           return;
         }
-        // The bubble font has no decimal point (x1.5 read as x15): a half multiplier just says COMBO.
-        feel('combo', { x: at.x, y: at.y - 20, stamp: m % 1 === 0 && m > 1 ? `x${m.toFixed(0)} COMBO +${pts}` : `COMBO +${pts}` });
+        // The bubble font has no decimal point (x1.5 read as x15): a half multiplier just says COMBO,
+        // and a flurry with no multiplier yet reads as plain bonks, never "x1 COMBO".
+        const stamp = m > 1 ? (m % 1 === 0 ? `x${m.toFixed(0)} COMBO +${pts}` : `COMBO +${pts}`) : `${hits} BONKS! +${pts}`;
+        feel('combo', { x: at.x, y: at.y - 20, stamp });
+        foldedPts.current = 0;
+      } else if (foldedPts.current > 0 && !f.active && Date.now() - f.lastAt > f.windowMs) {
+        // A short flurry whose score words were dropped: one merged total instead.
+        const at = lastHit.current;
+        feel('combo', { x: at.x, y: at.y - 20, stamp: `+${foldedPts.current}` });
+        foldedPts.current = 0;
       }
     }, 100);
     return () => clearInterval(iv);
@@ -582,6 +609,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     feverOn.current = false;
     layersRef.current?.setLevel(whackLayerLevel(TIER_MULT[tier.current] ?? 1, false));
     flurry.current = createFlurry(900, 3);
+    foldedPts.current = 0;
     busy.current.clear();
   }, []);
 

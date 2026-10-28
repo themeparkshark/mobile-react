@@ -40,8 +40,8 @@ export function shareText(_rideName: string | null, score: number, stars: number
   return `I scored ${score.toLocaleString()} in Whack-a-Shark. ${stars} of 3 stars. Can you beat it?`;
 }
 
-/** `rideName` is kept for callers; it never goes on the picture. */
-export function ShareCardButton({ tiles, score, stars }: { tiles: number[]; rideName: string | null; score: number; stars: number }) {
+/** `rideName` is kept for callers; it never goes on the picture. `chip`: the small pill that sits inside a results card. */
+export function ShareCardButton({ tiles, score, stars, chip = false }: { tiles: number[]; rideName: string | null; score: number; stars: number; chip?: boolean }) {
   const ref = useRef<View>(null);
   const [busy, setBusy] = useState(false);
   const share = useCallback(async () => {
@@ -60,9 +60,9 @@ export function ShareCardButton({ tiles, score, stars }: { tiles: number[]; ride
   return (
     <View>
       {/* The one share pill every reveal uses (gold rim, glyph, "Share"). */}
-      <TouchableOpacity style={styles.button} onPress={share} disabled={busy} accessibilityRole="button" accessibilityLabel="Share your run"
+      <TouchableOpacity style={chip ? styles.chip : styles.button} onPress={share} disabled={busy} accessibilityRole="button" accessibilityLabel="Share your run"
         accessibilityState={{ busy, disabled: busy }}>
-        <ShareFace size="reveal" dim={busy} />
+        <ShareFace size={chip ? 'md' : 'reveal'} dim={busy} />
       </TouchableOpacity>
       {/* Off-screen card (captured on demand). */}
       <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -95,6 +95,7 @@ export function ShareCardButton({ tiles, score, stars }: { tiles: number[]; ride
 
 const styles = StyleSheet.create({
   button: { alignSelf: 'center', marginTop: 10 },
+  chip: { alignSelf: 'center' },
   card: {
     width: 320, padding: 20, borderRadius: 24, backgroundColor: CREAM, borderWidth: 4, borderColor: NAVY, alignItems: 'center',
   },

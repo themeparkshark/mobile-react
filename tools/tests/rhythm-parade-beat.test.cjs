@@ -677,7 +677,14 @@ test('score read-outs: steadiness, timing words, histogram, auto-tune offset', (
   assert.equal(sc.timingWords(31), "You're 31ms late");
   assert.equal(sc.steadinessLabel(90), 'Rock steady');
   assert.equal(sc.steadinessLabel(70), 'Steady');
-  assert.equal(sc.steadinessLabel(10), 'Wobbly');
+  assert.equal(sc.steadinessLabel(10), 'Warming up');
+  // Too few judged hits says nothing about the beat: no number, no label,
+  // so a kid who barely tapped is never told "Rock steady".
+  assert.equal(sc.steadinessOf([]), null);
+  assert.equal(sc.steadinessOf([4]), null);
+  assert.equal(sc.steadinessLabel(null), null);
+  assert.equal(typeof sc.steadinessOf([1, 2, 3]), 'number');
+  assert.equal(sc.STEADY_MIN_HITS, 8);
   assert.equal(sc.histogramOf([-200, 0, 5, 200]).length, 11);
   const ch = chartOf('waiting_room_a', 'queue', 2, 3);
   const late = sim.runScript(ch, sim.scriptHuman(ch, { sigmaMs: 15, biasMs: 40 }, 3), { forceMarch: 0 });

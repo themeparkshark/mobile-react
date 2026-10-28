@@ -44,6 +44,9 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
   const [stageClear, setStageClear] = useState(false);
   const [hint, setHint] = useState('Collect every pearl, then reach the treasure.');
   const [result, setResult] = useState<GameResult | null>(null);
+  // The line ended the run (ride's up): the shell shows its card, the board steps back.
+  const [wrapped, setWrapped] = useState(false);
+  const resting = !!result || wrapped;
   const progressRef = useRef(progress);
   const completedRef = useRef<CurrentProgress[]>([]);
   const playingRef = useRef(false);
@@ -63,6 +66,7 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
     setStageClear(false);
     setHint('Collect every pearl, then reach the treasure.');
     setResult(null);
+    setWrapped(false);
     completedRef.current = [];
     playingRef.current = false;
     lockedRef.current = false;
@@ -125,7 +129,7 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
     const durationSeconds = Math.max(1, Math.round(
       (Date.now() - startedAtRef.current - pausedTotalRef.current) / 1000));
     setResult({ score: nextScore, stars: currentStars(boards, completedRef.current),
-      message: 'Treasure found!', meta: { score: nextScore, duration: durationSeconds,
+      message: 'TREASURE FOUND!', meta: { score: nextScore, duration: durationSeconds,
         seed: roundSeed, tier, moves: completedRef.current.map(item => item.moves),
         paths: completedRef.current.map(item => item.history) } });
   }, [board, boards, result, roundSeed, score, stage, voyages, tier]);
@@ -152,11 +156,15 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
     score={score + (stageClear || result ? 0 : progress.collected.length * 35)}
     objective="Collect pearls and reach the treasure"
     result={result} onStart={handleStart} onPause={handlePause} onResume={handleResume}
-    onClose={onClose} onQuit={onQuit} onComplete={onComplete}>
+    onClose={onClose} onQuit={onQuit} onComplete={onComplete}
+    onWrapUp={() => { setWrapped(true); return null; }}>
     <View style={styles.field}>
       <LinearGradient colors={['#07548f', '#0c8bc9', '#9cdef4']} style={StyleSheet.absoluteFill} />
       <View pointerEvents="none" style={styles.bubbleOne} />
       <View pointerEvents="none" style={styles.bubbleTwo} />
+      {/* Once the results card is up the board steps back (no tiles or hint
+          text around the card), so the card reads on a calm backdrop. */}
+      <View style={[styles.play, resting ? styles.playResting : null]} pointerEvents={resting ? 'none' : 'auto'}>
       <View style={styles.hero}>
         <View style={styles.heroCopy}>
           <Text style={styles.eyebrow}>THE SHARK ARCADE · QUEUE QUEST</Text>
@@ -204,17 +212,20 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
           </Pressable>;
         })}
       </View>
-      <Text style={styles.hint} accessibilityLiveRegion="polite">{hint}</Text>
-      {stageClear ? <Pressable accessibilityRole="button" accessibilityLabel="Start next voyage"
+      {resting ? null : <Text style={styles.hint} accessibilityLiveRegion="polite">{hint}</Text>}
+      {resting ? null : stageClear ? <Pressable accessibilityRole="button" accessibilityLabel="Start next voyage"
         onPress={nextStage} style={styles.nextButton}>
         <Text style={styles.nextButtonText}>NEXT VOYAGE</Text>
       </Pressable> : <Text style={styles.instruction}>Tap a neighboring tile · tap back to change course</Text>}
+      </View>
     </View>
   </GameShellV2>;
 }
 
 const styles = StyleSheet.create({
   field: { flex: 1, alignItems: 'center', paddingHorizontal: 18, paddingTop: 20, overflow: 'hidden' },
+  play: { width: '100%', alignItems: 'center' },
+  playResting: { opacity: 0.12 },
   bubbleOne: { position: 'absolute', width: 190, height: 190, borderRadius: 95,
     borderWidth: 7, borderColor: '#ffffff22', top: 115, right: -90 },
   bubbleTwo: { position: 'absolute', width: 110, height: 110, borderRadius: 55,

@@ -253,7 +253,9 @@ test('Finn’s warm-up win is its own card: Finn cheering, a burst, what is next
   assert.ok(card.includes('source={FINN_CHEER}'));
   assert.match(card, /<SparkleBurst /);
   assert.match(card, /playLadder\('mm_sharp_twinkle'/, 'the twinkle ladder, not a lone hit');
-  assert.match(card, /FIRST_WIN_COPY\.next/);
+  // Wave 6: the next step is a picture (ride car and coin); the words are only spoken.
+  assert.doesNotMatch(card, /\{FIRST_WIN_COPY\.next\}/);
+  assert.match(card, /FIRST_WIN_COPY\.a11y/);
   assert.match(card, /colors=\{\['#0a5a9e', '#04305f'\]\}/, 'an opaque scrim: no empty board or booth shark behind');
   assert.match(read('src/games/memory/MemoryGame.tsx'), /mode === 'warmup' \? 'Finn’s Warm-up'/);
 });
@@ -417,7 +419,8 @@ test('the warm-up first win never waits: the card is built on the frame the run 
   const finish = source.slice(source.indexOf('const finishRun = useCallback'), source.indexOf('// Board clear (3 beats'));
   assert.match(finish, /if \(r\.mode === 'warmup'\) \{[\s\S]*?showEnd\(r, won\);[\s\S]*?return;/, 'warm-up result is synchronous');
   assert.match(source, /const armEndWatch = useCallback/, 'an end watchdog exists');
-  assert.match(source, /endWatch\.current = setTimeout\(/, 'the watchdog is its own timer, not one of later()');
+  // Wave 6: the watchdog is the shell's one end watch (its own timer, never one of later()); Memory hands it the rescue.
+  assert.match(source, /shellRef\.current\?\.endWatch\(ms, \(\) => \{/, 'the watchdog is the shell end watch, not one of later()');
   assert.doesNotMatch(source.slice(source.indexOf('const clearTimers'), source.indexOf('const clearTimers') + 200), /endWatch/, 'clearTimers can never cancel the watchdog');
   assert.match(source, /armEndWatch\(r, true, r\.mode === 'warmup' \? 1800 : 7000\)/, 'armed the moment the board is clear');
   assert.match(source, /if \(reducedMotion\) \{\s*\/\/ Still: the CLEARED sign lands the instant/, 'reduced motion shows CLEARED at once');
@@ -458,7 +461,10 @@ test('Reduce Motion: the results card never hangs at opacity 0, and the CLEARED 
   const shell = read('src/gamekit/GameShellV2.tsx');
   // Root cause of the first-win freeze: in Reduce Motion the results value jumps 0 -> 1 with no
   // animation, and a jump that lands before the animated style is hooked up is never drawn.
-  assert.equal((shell.match(/reducedMotion \? styles\.resultsStill : resultsStyle/g) || []).length, 2, 'both results cards');
+  // Both results cards: the scale wrapper is still and the fade wrapper is plainly shown.
+  assert.equal((shell.match(/reducedMotion \? styles\.resultsStill : resultsScaleStyle/g) || []).length, 2, 'both results cards, scale');
+  assert.equal((shell.match(/resultsSafe \|\| reducedMotion \? styles\.resultsShown : resultsFadeStyle/g) || []).length, 2, 'both results cards, fade');
+  assert.match(shell, /resultsShown: \{ opacity: 1 \}/);
   assert.match(shell, /resultsStill: \{ opacity: 1, transform: \[\{ scale: 1 \}\] \}/);
   const booth = read('src/games/memory/MemoryBooth.tsx');
   // Reanimated finishes timings at once under the system Reduce Motion, so a delayed fade-out hid the sign.
@@ -723,7 +729,7 @@ test('first hunt map: no Trail Box pill or badge, no chest buttons during the 30
 
 test('first-win card: its pictures are mounted (invisible) during the warm-up, so frame one is whole', () => {
   const results = read('src/games/memory/MemoryResults.tsx');
-  assert.match(results, /export const FIRST_WIN_ART = \[FINN_CHEER, FIRST_WIN_COIN, FIRST_WIN_RIDE, FIRST_WIN_BACKDROP, BANNER, SHOWER_BUBBLE, SHOWER_SPARKLE\] as const;/);
+  assert.match(results, /export const FIRST_WIN_ART = \[FINN_CHEER, FIRST_WIN_COIN, FIRST_WIN_RIDE, FIRST_WIN_BACKDROP, RESULTS_RIBBON_ART, SHOWER_BUBBLE, SHOWER_SPARKLE\] as const;/);
   const game = read('src/games/memory/MemoryGame.tsx');
   assert.match(game, /\{mode === 'warmup' \? \(\s*<View style=\{styles\.preload\}[^>]*>\s*\{FIRST_WIN_ART\.map/);
   assert.match(game, /preload: \{ position: 'absolute', left: 0, top: 0, width: 24, height: 24, opacity: 0/);

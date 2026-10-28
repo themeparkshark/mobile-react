@@ -12,12 +12,16 @@
 /** Where drawn counts switch to the short form. */
 export const SHORT_FROM = 100000;
 
-export default function countText(n: number, shortFrom: number = SHORT_FROM): string {
+export default function countText(n: number, shortFrom?: number): string {
   'worklet';
+  // The limit is written out here, not read from SHORT_FROM: a worklet (a UI-thread count-up through
+  // formatScore) does not capture a module constant used as a default value, and threw
+  // "Property 'SHORT_FROM' doesn't exist" on the UI thread (results lane, wave 6).
+  const limit = shortFrom ?? 100000;
   const v = Math.round(Number(n) || 0);
   const abs = Math.abs(v);
   const sign = v < 0 ? '-' : '';
-  if (abs < shortFrom) return `${sign}${abs}`;
+  if (abs < limit) return `${sign}${abs}`;
   let size = 1e3;
   let suffix = 'K';
   if (abs >= 1e12) { size = 1e12; suffix = 'T'; }

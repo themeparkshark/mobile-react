@@ -42,7 +42,11 @@ import {
 } from './sim/core';
 import { createPres, presFrame, presStep, type Pres } from './render/pres';
 
+/** Frames the stage keeps drawing after a run finishes (about half a second), then it rests. */
+const DONE_SETTLE_FRAMES = 30;
+
 /** Bridge-only kinds (outside the sim's event space). */
+
 export const BR_CAM = 90;
 export const BR_INPUT = 91;
 export const BR_RIVAL = 92;
@@ -231,6 +235,8 @@ export function useSharkyEngine(
   const pres = useSharedValue<Pres>(createPres());
   const running = useSharedValue(false);
   const tick = useSharedValue(0);
+  /** Frames drawn since the run finished (the stage rests after DONE_SETTLE_FRAMES). */
+  const doneFrames = useSharedValue(0);
   const alpha = useSharedValue(0);
   const log = useRef<InputEntry[]>([]);
 
@@ -338,8 +344,15 @@ export function useSharkyEngine(
     },
     onFrame: (a, fxDt, c) => {
       'worklet';
-      if (running.value) ambStep(ambient.value, sim.value, fxDt);
       const sv = sim.value;
+      // A finished run rests: after a short settle the stage stops redrawing,
+      // so the results card animates over a still picture (no full-scene
+      // Skia redraw every frame behind it). A new run starts it again.
+      if (!running.value && sv.phase === PH_DONE) {
+        if (doneFrames.value >= DONE_SETTLE_FRAMES) return;
+        doneFrames.value += 1;
+      } else if (doneFrames.value !== 0) doneFrames.value = 0;
+      if (running.value) ambStep(ambient.value, sv, fxDt);
       presFrame(pres.value, sv, fxDt, c.fxMs, (sv.py + (sv.y - sv.py) * a) / 256, reducedMotion);
       alpha.value = a;
       tick.value = tick.value + 1;

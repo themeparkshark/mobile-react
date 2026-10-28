@@ -24,7 +24,7 @@
 
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { MusicContext } from '../../context/MusicProvider';
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   runOnJS,
@@ -86,6 +86,7 @@ import {
 } from './core/judge';
 import { buildProof } from './core/proof';
 import { autoTuneOffset, summarize, type RoundSummary } from './core/score';
+import { rhythmStarGoal } from './core/starGoal';
 import { J_GOOD, J_GREAT, J_PERFECT, J_SHARP, K_BIG, K_CYMBAL, K_FREEZE, K_POPPER, K_RIM, K_ROLL, L_MARCH, STAR_ACCURACY, type Chart, type Difficulty, type RoundFormat } from './core/types';
 import { DEFAULT_GRIP, GRIP_ONE, GRIP_TWO, detectHand, gripFor, zoneOf, type GripPrefs } from './core/grip';
 import { createDrawList, layoutFrame, beatAt } from './field/layout';
@@ -109,6 +110,14 @@ import {
 } from './meta/progress';
 import { RIDE_STAGES, STAGES, type StageId } from './stages';
 import { crewForRound, dareBarsFor, drumOffPlace, type Rival } from './multiplayer/drumline';
+import { HudStepBack } from '../../gamekit/results/HudStepBack';
+import GameIcon from '../../ui/GameIcon';
+
+/** The Two Thumbs offer's picture: the same drum and rim notes the parade plays. */
+const TWO_DRUM = require('../../assets/games/rhythm/note_drum.png');
+const TWO_RIM = require('../../assets/games/rhythm/note_rim.png');
+// Alex's tap hand (already in the app): one over each half says "both thumbs".
+const TWO_HAND = require('../../../assets/images/ride-photo/tap-hand.webp');
 
 import countText from '../../helpers/countText';
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -125,6 +134,8 @@ const DEV_STAGE = (__DEV__ ? process.env.EXPO_PUBLIC_RHYTHM_STAGE : undefined) a
 const DEV_DIFF = __DEV__ ? Number(process.env.EXPO_PUBLIC_RHYTHM_DIFF || 0) : 0;
 // Dev only: start from empty progress (First Parade, callouts) without touching saved data.
 const DEV_FRESH = __DEV__ && process.env.EXPO_PUBLIC_RHYTHM_FRESH === '1';
+// Dev only: start the round with this personal best, so a capture can show NEW BEST on a rough (Easy Beat) card.
+const DEV_PB = __DEV__ ? Number(process.env.EXPO_PUBLIC_RHYTHM_PB || 0) : 0;
 // Dev only: the engine's frame-time overlay (UI fps, p5, p95).
 const DEV_PERF = __DEV__ && process.env.EXPO_PUBLIC_RHYTHM_PERF === '1';
 
@@ -152,6 +163,8 @@ export interface RhythmTapGameProps {
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
   onQuit?: (resume: () => void) => void;
+  /** Capture only (dev results check): always offer TRY TWO THUMBS? on the card, so its place in the card can be checked. */
+  captureOfferTwo?: boolean;
 }
 
 interface RoundPlan {
@@ -386,7 +399,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     let alive = true;
     roundId.current += 1;
     finished.current = false;
-    pbBefore.current = progressRef.current.pb[pbKey(plan.stage, plan.difficulty, plan.format === 'ride' ? 'ride' : 'stage')];
+    pbBefore.current = DEV_PB > 0 ? DEV_PB : progressRef.current.pb[pbKey(plan.stage, plan.difficulty, plan.format === 'ride' ? 'ride' : 'stage')];
     pauseSpans.current = [];
     pausedAt.current = null;
     setMarchLive(false);
@@ -906,7 +919,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     if (plan.format === 'queue' && plan.difficulty === 2 && !plan.easy && sum.cleared && sum.marchBars.length === 0) {
       next.d2CleanClears = (next.d2CleanClears ?? 0) + 1;
     }
-    setOfferTwo(!next.twoThumbsAsked && (next.d2CleanClears ?? 0) >= 3 && plan.chart.kind.includes(K_RIM));
+    setOfferTwo((__DEV__ && !!props.captureOfferTwo) || (!next.twoThumbsAsked && (next.d2CleanClears ?? 0) >= 3 && plan.chart.kind.includes(K_RIM)));
     const tuned = autoTuneOffset(offset.value, s);
     next.offsets = { ...next.offsets, speaker: tuned };
     if (newPb && !plan.ftue && sum.cleared) {
@@ -926,29 +939,33 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     } : null;
     const win = plan.format === 'ride' && !plan.ftue ? sum.rideWin : sum.stars > 0;
     const stars = plan.format === 'ride' && !plan.ftue ? (sum.rideWin ? Math.max(1, sum.stars) : 0) : sum.stars;
-    if (reason !== 'stall') {
-      if (win) GameAudio.play(stars >= 2 ? 'rh_win' : 'rh_clear');
-      if (newPb && sum.score > 0) setTimeout(() => GameAudio.play('fx.purchase', { volume: 0.8 }), 900);
-    }
+    // One finish cue: the drum roll here (the shell then skips its own win
+    // sound), and the NEW BEST ding comes from the shared card when its badge lands.
+    const ownFinishSfx = reason === 'stall' || win;
+    if (reason !== 'stall' && win) GameAudio.play(stars >= 2 ? 'rh_win' : 'rh_clear');
     const topRival = rivals.current.slice().sort((x, y) => y.finalScore - x.finalScore)[0];
-    const goal = nextGoal(sum, s.accN, plan.format === 'ride' && !plan.ftue);
     const res: GameResult = {
       score: sum.score,
       stars: win ? stars : 0,
       maxCombo: sum.maxCombo,
       message: resultMessage(sum, plan.ftue, reason),
       thresholds: undefined,
+      // The shared bar, filled by timing (stars are not points here). The
+      // "N more PERFECTS" goal is spoken only, never a line of text.
+      starGoal: plan.ftue ? undefined : rhythmStarGoal(sum.stageAccuracy, win ? stars : 0, s.accN,
+        plan.format === 'ride' ? { hitRate: sum.hitRate, win: sum.rideWin } : undefined),
       rival: topRival ? { name: topRival.name, score: topRival.finalScore } : null,
+      // Feelings, not data: a steady beat, the Drum-Off place, March stars.
+      // Accuracy, steadiness numbers and millisecond timing stay off the card,
+      // and a warming-up beat is no brag, so it is not a chip.
       stats: [
-        { label: 'Accuracy', value: `${Math.round(sum.stageAccuracy)}%` },
-        ...(plan.format === 'queue' && !plan.ftue ? [{ label: 'March stars', value: `${sum.marchStars} of 3` }] : []),
-        { label: sum.steadinessLabel, value: String(sum.steadiness) },
-        { label: 'Timing', value: sum.timingWords.replace("You're ", '') },
-        ...(sum.feverBars ? [{ label: 'Fever', value: `${Math.round(sum.feverBars / 4)} drop${sum.feverBars > 4 ? 's' : ''}` }] : []),
-        ...(sum.marchBars.length ? [{ label: 'Marching', value: `${sum.marchBars.length / 4 >= 1 ? Math.round(sum.marchBars.length / 4) : 1} sect.` }] : []),
-        ...(rivals.current.length ? [{ label: 'Drum-Off', value: placeText(sum.accuracy, rivals.current) }] : []),
-        ...(goal ? [{ label: 'Next goal', value: goal }] : []),
+        ...(sum.steadinessLabel && sum.steadinessLabel !== 'Warming up' ? [{ label: 'YOUR BEAT', value: sum.steadinessLabel.toUpperCase() }] : []),
+        // Only a Drum-Off win is a brag: no chip ever says the kid came 3rd or 4th.
+        ...(rivals.current.length && drumOffPlace(sum.accuracy, rivals.current) === 1 ? [{ label: 'DRUM-OFF', value: 'WON!' }] : []),
+        ...(plan.format === 'queue' && !plan.ftue && sum.marchStars > 0 ? [{ label: 'MARCH STARS', value: `${sum.marchStars} of 3`, pips: [sum.marchStars, 3] as const }] : []),
       ],
+      // The goal is in the bar's spoken label now (no text-only goals on a card).
+      note: undefined,
       meta: {
         // Legacy proof fields (TaskGameProofService today).
         game: 'timing',
@@ -965,6 +982,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         accuracy: sum.accuracy,
         rideWin: sum.rideWin,
         newPb,
+        ownFinishSfx,
         rhythmProof: proof,
       },
     };
@@ -1054,7 +1072,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     setProgress({ ...progressRef.current });
     setRunIndex((n) => n + 1);
   }, [easyNext]);
-  // "Try with Easy Beat" on a rough results card: switch it on and go again.
+  // EASY BEAT on a rough results card: switch it on and go again.
   const rematchEasy = useCallback(() => {
     progressRef.current = { ...progressRef.current, easyBeat: true };
     void saveProgress(progressRef.current);
@@ -1114,34 +1132,46 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
           ) : null}
         </View>
       ) : undefined}
-      resultExtras={plan && !plan.ftue && result && (offerTwo || (!plan.easy && result.stars < 2)) ? (
-        offerTwo ? (
-          <View style={styles.twoCard}>
-            <Text style={styles.twoTitle}>Try Two Thumbs?</Text>
-            <Text style={styles.twoBody}>Blue on the left thumb, coral on the right.</Text>
-            <View style={styles.twoRow}>
-              <Pressable accessibilityRole="button" style={styles.easyBtn} hitSlop={6} onPress={() => {
-                progressRef.current = { ...progressRef.current, twoThumbsAsked: true };
-                saveGrip({ ...gripPrefs, grip: GRIP_TWO, swap: 0 });
-                setOfferTwo(false);
-              }}>
-                <Text style={styles.easyBtnTxt}>Yes</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" style={styles.easyBtn} hitSlop={6} onPress={() => {
-                progressRef.current = { ...progressRef.current, twoThumbsAsked: true };
-                void saveProgress(progressRef.current);
-                setOfferTwo(false);
-              }}>
-                <Text style={styles.easyBtnTxt}>No thanks</Text>
-              </Pressable>
+      resultExtras={plan && !plan.ftue && result && offerTwo ? (
+        <View style={styles.twoCard}>
+          <Text style={styles.twoTitle}>TRY TWO THUMBS?</Text>
+          {/* A picture, not a sentence: the phone split in two, the blue drum
+              under the left thumb and the coral rim under the right. */}
+          <View style={styles.twoPic} accessible accessibilityLabel="Two hands: the left thumb taps the blue drum, the right thumb taps the coral rim">
+            <View style={styles.twoPhone}>
+              <View style={[styles.twoHalf, styles.twoHalfLeft]}>
+                <Image source={TWO_DRUM} style={styles.twoNote} resizeMode="contain" />
+              </View>
+              <View style={[styles.twoHalf, styles.twoHalfRight]}>
+                <Image source={TWO_RIM} style={styles.twoNote} resizeMode="contain" />
+              </View>
             </View>
+            {/* A hand tapping each half: the left one mirrored, so it reads as two hands. */}
+            <Image source={TWO_HAND} style={[styles.twoHand, styles.twoHandLeft]} resizeMode="contain" />
+            <Image source={TWO_HAND} style={[styles.twoHand, styles.twoHandRight]} resizeMode="contain" />
           </View>
-        ) : (
-          <Pressable accessibilityRole="button" onPress={rematchEasy} style={styles.easyBtn} hitSlop={6}>
-            <Text style={styles.easyBtnTxt}>Try with Easy Beat</Text>
-          </Pressable>
-        )
+          <View style={styles.twoRow}>
+            <Pressable accessibilityRole="button" style={styles.easyBtn} hitSlop={6} onPress={() => {
+              progressRef.current = { ...progressRef.current, twoThumbsAsked: true };
+              saveGrip({ ...gripPrefs, grip: GRIP_TWO, swap: 0 });
+              setOfferTwo(false);
+            }}>
+              <View style={styles.twoBtnIn}><GameIcon name="check" size={18} /><Text style={styles.easyBtnTxt}>YES</Text></View>
+            </Pressable>
+            <Pressable accessibilityRole="button" style={styles.easyBtn} hitSlop={6} onPress={() => {
+              progressRef.current = { ...progressRef.current, twoThumbsAsked: true };
+              void saveProgress(progressRef.current);
+              setOfferTwo(false);
+            }}>
+              <View style={styles.twoBtnIn}><GameIcon name="close" size={16} /><Text style={styles.easyBtnTxt}>NO THANKS</Text></View>
+            </Pressable>
+          </View>
+        </View>
       ) : undefined}
+      // A rough run offers Easy Beat as one more caps button in the card's stack.
+      resultAction={plan && !plan.ftue && result && !offerTwo && !plan.easy && result.stars < 2
+        ? { label: 'EASY BEAT', icon: 'play', onPress: rematchEasy, a11yLabel: 'Play again with Easy Beat: wider timing, slower notes' }
+        : undefined}
       onChallenge={props.onChallengeCrew && result && lastRun.current ? () => lastRun.current && props.onChallengeCrew?.(lastRun.current) : undefined}
       onComplete={onComplete}
       onClose={onClose}
@@ -1169,6 +1199,9 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
           <GestureDetector gesture={gesture}>
             <View style={[styles.touchZone, { top: geom.touchTop, height: fieldH - geom.touchTop }]} />
           </GestureDetector>
+          {/* The HUD steps all the way back under the results card: no rival
+              percent or -13,100 pace chip may sit readable behind the card. */}
+          <HudStepBack back={!!result} reducedMotion={reducedMotion}>
           {rivals.current.length ? (
             <View pointerEvents="none" style={styles.rivalStrip}>
               {rivals.current.map((r, i) => (
@@ -1200,6 +1233,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
               ) : null}
             </Pressable>
           ) : null}
+          </HudStepBack>
           {DEV_PERF ? <PerfOverlay probe={perfProbe} visible style={styles.perf} /> : null}
           {!ready ? (
             <View pointerEvents="none" style={styles.loading}>
@@ -1238,11 +1272,6 @@ function DeltaChip({ bar, myScore, ghost }: { bar: number; myScore: number; ghos
   );
 }
 
-function placeText(accuracy: number, rivals: Rival[]): string {
-  const place = drumOffPlace(accuracy, rivals);
-  return ['1ST', '2ND', '3RD', '4TH'][place - 1] ?? `${place}TH`;
-}
-
 function countInBeats(chart: Chart): number[] {
   // Pre-roll bar 2 (file bar 1): numerals 4-3-2-1 on its beats.
   const out: number[] = [];
@@ -1251,29 +1280,16 @@ function countInBeats(chart: Chart): number[] {
 }
 
 function resultMessage(sum: RoundSummary, ftue: boolean, reason: string): string {
-  if (reason === 'stall') return 'The parade needs you!';
-  if (ftue) return 'Parade cleared';
+  // Caps like every other results title (GOOD TRY!, NICE!, YOUR RIDE'S UP!).
+  if (reason === 'stall') return 'THE PARADE NEEDS YOU!';
+  if (ftue) return 'PARADE CLEARED!';
   if (sum.allPerfect) return 'ALL PERFECT!';
   if (sum.fullCombo) return 'FULL COMBO!';
   if (sum.stageAccuracy >= STAR_ACCURACY.three) return 'SHOWSTOPPER!';
-  if (sum.stageAccuracy >= STAR_ACCURACY.two) return 'What a parade!';
-  if (sum.stars > 0) return 'Parade cleared';
+  if (sum.stageAccuracy >= STAR_ACCURACY.two) return 'WHAT A PARADE!';
+  if (sum.stars > 0) return 'PARADE CLEARED!';
   // Never a 0-star failure title (design 6.8).
-  return 'Keep marching!';
-}
-
-/** The concrete next goal (design 6.8): never a fixed hit count, always reachable. */
-function nextGoal(sum: RoundSummary, judged: number, ride: boolean): string {
-  if (ride) {
-    if (sum.rideWin) return '';
-    const hr = Math.round(sum.hitRate * 100);
-    return hr < 75 ? `Hit 3 of every 4 (${hr}%)` : 'Fewer misstaps';
-  }
-  const acc = sum.stageAccuracy;
-  const next = acc < STAR_ACCURACY.one ? [STAR_ACCURACY.one, 1] : acc < STAR_ACCURACY.two ? [STAR_ACCURACY.two, 2] : acc < STAR_ACCURACY.three ? [STAR_ACCURACY.three, 3] : null;
-  if (!next) return !sum.fullCombo ? 'Go for FULL COMBO' : '';
-  const more = Math.max(1, Math.ceil(((next[0] - acc) * judged) / 60));
-  return `${more} more PERFECT${more > 1 ? 's' : ''} for ${next[1]} star${next[1] > 1 ? 's' : ''}`;
+  return 'KEEP MARCHING!';
 }
 
 function gripLabel(grip: number, g: GripPrefs): string {
@@ -1296,8 +1312,18 @@ const styles = StyleSheet.create({
   knobOn: { alignSelf: 'flex-end' },
   twoCard: { alignItems: 'center', marginTop: 6 },
   twoTitle: { fontFamily: 'Shark', fontSize: 16, color: '#0b3a6b' },
-  twoBody: { fontFamily: 'Knockout', fontSize: 13, color: '#1f6fc0', marginBottom: 2 },
+  twoPic: { width: 150, paddingTop: 16, marginTop: 2, marginBottom: 2 },
+  twoHand: { position: 'absolute', top: 0, width: 28, height: 36 },
+  twoHandLeft: { left: 24, transform: [{ scaleX: -1 }] },
+  twoHandRight: { left: 96 },
+  twoPhone: { flexDirection: 'row', width: 150, height: 58, borderRadius: 14, borderWidth: 3, borderColor: '#0b3a6b',
+    overflow: 'hidden', backgroundColor: '#ffffff' },
+  twoHalf: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  twoHalfLeft: { backgroundColor: '#d6ecff', borderRightWidth: 2, borderRightColor: '#0b3a6b' },
+  twoHalfRight: { backgroundColor: '#ffe1d9' },
+  twoNote: { width: 38, height: 38, marginTop: 10 },
   twoRow: { flexDirection: 'row', gap: 10 },
+  twoBtnIn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   easyBtn: { alignSelf: 'center', marginTop: 6, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 3, borderColor: '#0b3a6b', paddingHorizontal: 16, paddingVertical: 6 },
   easyBtnTxt: { fontFamily: 'Shark', fontSize: 15, color: '#1f6fc0' },
   marchPill: { position: 'absolute', left: 12, top: 94, minWidth: 104, height: 44, borderRadius: 22, borderWidth: 3, borderColor: '#0b3a6b', backgroundColor: '#ffffff', paddingHorizontal: 14, justifyContent: 'center', alignItems: 'flex-start' },

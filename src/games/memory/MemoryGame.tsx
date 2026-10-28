@@ -54,6 +54,7 @@ import {
   useWalkSense,
   type FxStageHandle,
   type GameResult,
+  type GameShellV2Handle,
 } from '../../gamekit';
 import { memoryLossBanner, memoryLossCopy } from './lossCopy';
 import { TryCard } from './TryCard';
@@ -261,6 +262,8 @@ export interface MemoryGameProps {
   party?: MemoryPartyBinding;
   /** Daily Deck setup from the booth menu (deck of the day, face seed, ghost, streak). */
   daily?: DailySetup;
+  /** The results capture screen's bot (ignored outside capture builds). */
+  captureAutoplay?: 'clean' | 'mixed' | 'novice' | 'timeout';
 }
 
 export interface DailySetup {
@@ -368,6 +371,7 @@ export default function MemoryGame({
   onComplete,
   party,
   daily,
+  captureAutoplay,
 }: MemoryGameProps) {
   const partyRef = useRef(party);
   partyRef.current = party;
@@ -1012,8 +1016,8 @@ export default function MemoryGame({
     }
   }, [deck.id, deck.label, deck.symbols.length, taskName]);
 
-  /** The run whose result card is set, and the end watchdog (see armEndWatch). */
-  const endWatch = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The run whose result card is set (see armEndWatch: the shell's end watch rescues it). */
+  const shellRef = useRef<GameShellV2Handle>(null);
   const resultFor = useRef<Run | null>(null);
   /**
    * The end of a run as a result card, built with no waiting: everything the
@@ -1036,7 +1040,8 @@ export default function MemoryGame({
     let chipText: string | null = null;
     let crownHint: string | null = null;
     if (r.mode === 'ride') {
-      numbers.push({ label: 'TURNS', value: `${e.turns}/${par}`, hot: e.turns <= par });
+      // A run with no turns shows no TURNS chip: a gold 0/13 would read like a score of zero.
+      if (e.turns > 0) numbers.push({ label: 'TURNS', value: `${e.turns}/${par}`, hot: e.turns <= par });
       if (!r.signal) numbers.push({ label: 'TIME', value: `${(chargedMs / 1000).toFixed(1)}s` });
       if (x.ridePb != null && !r.signal) numbers.push({ label: 'BEST', value: `${(x.ridePb / 1000).toFixed(1)}s`, hot: x.newRidePb });
       if (won) numbers.push({ label: 'SCORE', value: countText(finalScore) });
@@ -1067,13 +1072,15 @@ export default function MemoryGame({
       banner,
       won,
       recallPct: recallPct(e),
+      pairs: [e.pairs, e.pairsTotal],
       edition: x.edition,
       upgraded: x.upgraded,
       stars,
       numbers,
       tally,
       chip: chipText,
-      grades: r.mode === 'warmup' ? null : { memory: grades.memory, speed: grades.speed, chain: grades.chain },
+      // A run with no turns has nothing to grade: no stars for play that never happened.
+      grades: r.mode === 'warmup' || e.turns === 0 ? null : { memory: grades.memory, speed: grades.speed, chain: grades.chain },
       tip: r.mode === 'warmup' ? 'Remember where you saw each card. That is the whole game.' : grades.tip,
       newBest: r.mode === 'ride' && !won ? false : x.isNewBest || x.newRidePb,
       rewards: r.mode === 'warmup' ? null : x.rewards,
@@ -1123,10 +1130,10 @@ export default function MemoryGame({
    * timer lives outside `later`, so clearTimers can never cancel it.
    */
   const armEndWatch = useCallback((r: Run, won: boolean, ms: number) => {
-    if (endWatch.current) clearTimeout(endWatch.current);
-    endWatch.current = setTimeout(() => {
-      endWatch.current = null;
-      if (runRef.current !== r || resultFor.current === r) return;
+    // The shell's one end watch (core/endWatch.ts) owns the timer; this is Memory's rescue.
+    shellRef.current?.endWatch(ms, () => {
+      // A newer run, or this run's card already came: nothing to rescue.
+      if (runRef.current !== r || resultFor.current === r) return false;
       if (!r.ended) {
         r.ended = true;
         r.playing = false;
@@ -1135,9 +1142,9 @@ export default function MemoryGame({
       // A ride win still mints its coin edition, even on the watchdog's card.
       const edition = r.mode === 'ride' && won ? editionForStars(rideStars(r.eng)) : null;
       showEnd(r, won, { ...NO_END_EXTRAS, edition });
-    }, ms);
+      return null;
+    });
   }, [showEnd]);
-  useEffect(() => () => { if (endWatch.current) clearTimeout(endWatch.current); }, []);
 
   const finishRun = useCallback((won: boolean) => {
     const r = runRef.current;
@@ -2367,7 +2374,7 @@ export default function MemoryGame({
   // ---------------------------------------------------------------------------
   // Autoplay (dev capture only)
   // ---------------------------------------------------------------------------
-  useMemoryAutoplay({ runRef, tapSlot, enabled: visible && !result && !tryScreen });
+  useMemoryAutoplay({ runRef, tapSlot, enabled: visible && !result && !tryScreen, capture: captureAutoplay });
 
   // ---------------------------------------------------------------------------
   // Try again (Ride Sprint: 3 tries per Ticket), rematch, wrap-up
@@ -2507,6 +2514,7 @@ export default function MemoryGame({
 
   return (
     <GameShellV2
+      ref={shellRef}
       visible={visible}
       title={title}
       subtitle={subtitle}
@@ -2533,6 +2541,9 @@ export default function MemoryGame({
       // MemoryResults draws its own navy scrim; the shell's would flash first for a frame.
       resultsScrim={resultData ? 'none' : undefined}
       renderResults={resultData ? (args) => { shellClaim.current = args.claim; return renderResults(args); } : undefined}
+      // The try card is a results card drawn in the field: the HUD steps back
+      // (no live pause button, no title over it) and the X does what DONE does.
+      ownResultsDone={tryScreen ? giveUp : null}
     >
       <View style={styles.field} onLayout={onFieldLayout}>
         <LinearGradient colors={['#0b80c4', '#35a8e6', '#bfe5ff']} style={StyleSheet.absoluteFill} />
