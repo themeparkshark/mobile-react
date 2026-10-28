@@ -128,10 +128,16 @@ test('Story and Games: one word per tab, crew pages only for a crew, new rounds 
   assert.doesNotMatch(screen, /<NewRoundsBanner/);
   assert.match(screen, /const activityPages = crewInLine \? allPages : allPages\.filter\(page => !isCrewOnlyPage\(page, snapshot\.chapter\?\.id\)\);/);
   assert.match(screen, /tabs=\{\{\n\s+active: visibleTab,/);
+  // The chapter page's own crew tiles follow the same rule: a solo wait sees no Crew Relay tile or Crew Prompts link.
+  const chapterCard = read('src/screens/LinePlay/components/ChapterCard.tsx');
+  assert.match(chapterCard, /\{crew && <Pressable accessibilityRole="button" accessibilityLabel=\{`Open \$\{chapter\.relay\.title\}`\}/);
+  assert.match(chapterCard, /\{crew && <Pressable accessibilityRole="button" accessibilityLabel="Open Crew Prompts"/);
+  assert.match(screen, /crewRelay=\{snapshot\.crewRelay\} crew=\{crewInLine\}/);
   const rail = read('src/screens/LinePlay/components/ActivityPageRail.tsx');
   assert.match(rail, /<Tab label="Story"/);
   // Story's picture is the clue magnifier, never the compass (that is the MAP footer's picture).
   assert.match(rail, /<Tab label="Story" icon="search"/);
+  assert.equal(loadTs('src/services/lineplay/lineLayout.ts').railPageIcon('chapter_intro'), 'search', 'Next to the ride chapter wears the story picture');
   assert.match(rail, /const calm = quiet;/, 'Next and More games stay quiet beside a page\'s own PLAY');
   assert.match(screen, /const railQuiet = visibleItem != null;/);
   assert.match(rail, /<Tab label="Games"/);

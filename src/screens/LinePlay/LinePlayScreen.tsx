@@ -1645,7 +1645,7 @@ export default function LinePlayScreen() {
                   ) : item.kind === 'chapter_intro' && snapshot.chapter ? (
                     <ChapterCard chapter={snapshot.chapter} completedIds={completedActivityIds} compact={fit.short}
                       windowHeight={pageViewHeight}
-                      crewRelay={snapshot.crewRelay} paused={snapshot.state !== 'active'}
+                      crewRelay={snapshot.crewRelay} crew={crewInLine} paused={snapshot.state !== 'active'}
                       locked={(snapshot.state !== 'active' && snapshot.state !== 'paused') || previewLocked}
                       chapterClue={chapterClue}
                       signalAvailable={sharedPages.length > 0}

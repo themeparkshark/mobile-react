@@ -395,7 +395,8 @@ export function railNextText(nextLabel: string, screenWidth: number): { readonly
  */
 export function railPageIcon(kind: string | undefined): GameIconName | undefined {
   switch (kind) {
-    case 'chapter_intro': return 'map';
+    // The line story's start wears the Story tab's magnifier, never the MAP footer's compass.
+    case 'chapter_intro': return 'search';
     case 'crew_grid': return 'sparkle';
     case 'circuit': return 'wrench';
     case 'crew_relay': return 'shark';

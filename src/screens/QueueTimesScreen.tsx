@@ -142,7 +142,9 @@ const RideCard = ({
       <View style={styles.cardRow}>
         <View style={[styles.badge, { backgroundColor: badge.color }]}>
           {badge.icon ? <GameIcon name={badge.icon} size={30} /> : (
-            <Text style={styles.badgeText} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit numberOfLines={1}>{badge.text}</Text>
+            // Keyed by its text: a recycled list cell keeps iOS's shrunk font from an earlier, longer value
+            // ("50" drew tiny after a refresh), so a new value measures fresh.
+            <Text key={badge.text} style={styles.badgeText} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit numberOfLines={1}>{badge.text}</Text>
           )}
           {badge.minutes && <Text style={styles.badgeUnit}>MIN</Text>}
         </View>

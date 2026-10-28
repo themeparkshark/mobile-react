@@ -29,6 +29,8 @@ interface Props {
   readonly chapter: LinePlayChapter;
   readonly completedIds: ReadonlySet<string>;
   readonly crewRelay: CrewRelayProgress | null;
+  /** "Who's in line?" said 2 or more: only then the Crew Relay tile and the Crew Prompts link show (core loop 5.5). */
+  readonly crew?: boolean;
   readonly chapterClue?: ChapterClue | null;
   /** Paused by hand (or counting back in): the buttons rest in pale blue but still act (the 3 2 1, then the page). */
   readonly paused: boolean;
@@ -61,7 +63,7 @@ const riseFor = (reduced: boolean) => (index: number) => reduced ? undefined
 /** Why a locked chapter cannot start, in seven-year-old words. */
 export const LOCKED_LINE = 'Get in line to play';
 
-export default function ChapterCard({ chapter, completedIds, crewRelay, chapterClue = null, paused, locked = false, signalAvailable = false, onChooseMission, compact: shortScreen = false, windowHeight }: Props) {
+export default function ChapterCard({ chapter, completedIds, crewRelay, crew = false, chapterClue = null, paused, locked = false, signalAvailable = false, onChooseMission, compact: shortScreen = false, windowHeight }: Props) {
   const [storyOpen, setStoryOpen] = useState(false);
   // The page's real height decides what leads (it shrinks while Details is open), so PLAY NOW
   // is always whole: never a button cut by the frame's edge.
@@ -238,9 +240,10 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
         })}
       </Animated.View>
 
-      <Animated.View entering={rise(3)} style={[styles.crewRow, { marginTop: foldGap(viewHeight, trailBottom, crewHeight, CREW_ROW_GAP) }]}
+      {(crew || signalAvailable) && <Animated.View entering={rise(3)} style={[styles.crewRow, { marginTop: foldGap(viewHeight, trailBottom, crewHeight, CREW_ROW_GAP) }]}
         onLayout={event => setCrewHeight(Math.round(event.nativeEvent.layout.height))}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chapter.relay.title}`} {...off}
+        {/* A solo wait never meets a crew page (its tile would open a page that is not there). */}
+        {crew && <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chapter.relay.title}`} {...off}
           onPress={() => choose(relayId)}
           style={({ pressed }) => [styles.crewChip, paused && styles.missionPaused, locked && styles.locked, pressed && styles.pressed]}>
           <GameIcon name={relayDone ? 'check' : 'shark'} size={30} />
@@ -248,7 +251,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
             <Text style={styles.crewChipTitle}>CREW RELAY</Text>
             <Text style={styles.crewChipBody} numberOfLines={1}>{relayDone ? 'Your crew story is in the recap' : 'Four turns, one phone'}</Text>
           </View>
-        </Pressable>
+        </Pressable>}
         {signalAvailable && <Pressable accessibilityRole="button" accessibilityLabel="Open community Crew Route" {...off}
           onPress={() => choose('crew-signal')}
           style={({ pressed }) => [styles.crewChip, styles.crewChipBlue, paused && styles.missionPaused, locked && styles.locked, pressed && styles.pressed]}>
@@ -258,7 +261,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
             <Text style={[styles.crewChipBody, styles.onBlueSoft]} numberOfLines={1}>Fans here pick a bonus round</Text>
           </View>
         </Pressable>}
-      </Animated.View>
+      </Animated.View>}
 
       {/* Below the fold: the story, the clue that changed the finale, the crew ending. */}
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: storyOpen }}
@@ -283,11 +286,11 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
           ? chapter.relay.branchDone
           : `${epilogue.prompt} Swipe past the relay to play the new round.`}</Text>
       </View>}
-      <Pressable accessibilityRole="button" accessibilityLabel="Open Crew Prompts" {...off}
+      {crew && <Pressable accessibilityRole="button" accessibilityLabel="Open Crew Prompts" {...off}
         onPress={() => choose(crewGridId)} style={[styles.promptsLink, locked && styles.locked]}>
         <GameIcon name={completedIds.has(crewGridId) ? 'check' : 'sparkle'} size={22} />
         <Text style={styles.promptsText}>Crew Prompts: nine talk-and-notice prompts for the end of your wait</Text>
-      </Pressable>
+      </Pressable>}
       <Text style={styles.footer}>
         {chapter.adaptive
           ? 'Keep playing as the line moves. The shark story is made up. The trivia is about parks in general.'
