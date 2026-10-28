@@ -127,10 +127,10 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
     if (!enabled || parkId == null || !ready) return;
     guide.resolve({
       mode: 'park', parkId, location: input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null,
-      coins, live: answers, adventure, inLineTaskId,
+      coins, live: answers, adventure, inLineTaskId, playableTaskId: input.playableTaskId,
       starRushUnlocked: input.starRushUnlocked, coinLevelsUnlocked: input.coinLevelsUnlocked,
     });
-  }, [enabled, ready, parkId, lat, lng, coinsKey, answersKey, adventure?.taskId, adventure?.phase, inLineTaskId, // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, ready, parkId, lat, lng, coinsKey, answersKey, adventure?.taskId, adventure?.phase, inLineTaskId, input.playableTaskId, // eslint-disable-line react-hooks/exhaustive-deps
     input.starRushUnlocked, input.coinLevelsUnlocked]);
   // Any screen's guide.setTarget lands on the next resolve: re-run it when the store says so.
   const [pickTick, setPickTick] = useState(0);
@@ -142,7 +142,7 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
     if (!enabled || parkId == null || !ready) return;
     guide.resolve({
       mode: 'park', parkId, location: input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null,
-      coins, live: answers, adventure, inLineTaskId,
+      coins, live: answers, adventure, inLineTaskId, playableTaskId: input.playableTaskId,
       starRushUnlocked: input.starRushUnlocked, coinLevelsUnlocked: input.coinLevelsUnlocked,
     });
   }); // eslint-disable-line react-hooks/exhaustive-deps

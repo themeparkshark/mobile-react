@@ -117,6 +117,16 @@ export interface GuideInput {
   readonly adventure?: GuideAdventure | null;
   /** The ride whose line the player is standing in (90 s nearly still in a queue ride's zone). */
   readonly inLineTaskId?: number | null;
+  /**
+   * The coin PLAY! is up for right now (the map's server range check), or null when PLAY! is down.
+   * Omitted: in range is judged from the coin's radius.
+   */
+  readonly playableTaskId?: number | null;
+  /**
+   * The target held before a coin in range took over for a moment. Once the player walks out of
+   * that coin's range (without winning it), the guide goes back to this one.
+   */
+  readonly resumeTarget?: GuideTarget | null;
   /** Rung gates from the unlock ladder (src/services/reveal/revealLadder.ts). */
   readonly starRushUnlocked?: boolean;
   readonly coinLevelsUnlocked?: boolean;
@@ -237,11 +247,20 @@ function nearest(input: GuideInput, coins: readonly GuideCoin[]): GuideCoin | nu
 }
 
 /** Whether the held target still stands (blueprint 4.1: it does not flip-flop). */
+/** Whether PLAY! is up for this coin: the map's own check when it is given, else the coin's radius. */
+function coinInPlayRange(input: GuideInput, coin: GuideCoin): boolean {
+  if (input.playableTaskId !== undefined) return input.playableTaskId != null && input.playableTaskId === coin.taskId;
+  return inRange(coin, metersTo(coin, input.location));
+}
+
 function heldStillValid(input: GuideInput, coins: readonly GuideCoin[], held: GuideTarget): GuideCoin | null {
   const coin = coins.find(c => c.taskId === held.taskId);
   if (!coin) return null;                                   // another park, or gone
   if (liveOf(input, coin) === 'closed') return null;        // it closed
   if (!withinReach(input, coin)) return null;               // walked far away
+  // A coin that took over only because PLAY! rose for it lasts while PLAY! is up for it.
+  if (held.reason === 'in_range' && held.source === 'guide' && input.resumeTarget
+    && input.resumeTarget.taskId !== held.taskId && !coinInPlayRange(input, coin)) return null;
   if (!coin.owned) return coin;                             // still to win
   if (held.reason === 'level_up') return input.coinLevelsUnlocked && coin.levelUpReady ? coin : null;
   if (held.reason === 'line_story') {
@@ -283,11 +302,22 @@ export function pickNextCoin(input: GuideInput): GuideTarget | null {
     now - input.currentPickedAt >= 0 && now - input.currentPickedAt < PICK_HOLD_MS && !!heldStillValid(input, coins, input.current);
   if (line && input.current?.taskId !== line.taskId && !freshPick) return targetFor(input, line, 'in_line');
 
-  // The held target stays until won, done, closed, too far, or replaced.
-  if (input.current) {
-    const held = heldStillValid(input, coins, input.current);
-    if (held) return targetFor(input, held, input.current.reason, input.current.source);
+  // The held target stays until won, done, closed, too far, or replaced. A coin that only rose for a
+  // moment (PLAY! came up for it) gives way to the target from before once the player walks on.
+  const heldCoin = input.current ? heldStillValid(input, coins, input.current) : null;
+  const back = !heldCoin && input.resumeTarget && input.resumeTarget.taskId !== input.current?.taskId
+    ? heldStillValid(input, coins, input.resumeTarget) : null;
+  const base = heldCoin ? input.current! : back ? input.resumeTarget! : null;
+  const baseCoin = heldCoin ?? back;
+
+  // PLAY! rose for another coin you do not own: the card says "You're here" for that coin while you
+  // stand there (one pointer, never a card that disagrees with PLAY!), then goes back to the held
+  // target once you walk on. A fresh pick of the player's still holds.
+  if (base && baseCoin && !freshPick && !coinInPlayRange(input, baseCoin)) {
+    const playable = coins.find(c => c.taskId !== base.taskId && winnable(input, c) && coinInPlayRange(input, c));
+    if (playable) return targetFor(input, playable, 'in_range');
   }
+  if (base && baseCoin) return targetFor(input, baseCoin, base.reason, base.source);
 
   // 1. Right after winning today's Adventure coin: that ride, for its line story.
   if (adventureLineStory(input)) {
@@ -296,7 +326,7 @@ export function pickNextCoin(input: GuideInput): GuideTarget | null {
   }
 
   // 2. An open coin you do not own, in range right now.
-  const here = coins.filter(c => winnable(input, c) && inRange(c, metersTo(c, input.location)));
+  const here = coins.filter(c => winnable(input, c) && coinInPlayRange(input, c));
   const hereCoin = nearest(input, here);
   if (hereCoin) return targetFor(input, hereCoin, 'in_range');
 
@@ -435,6 +465,8 @@ let heldPickedAt: number | null = null;
 let pick: { taskId: number; source: string; at: number } | null = null;
 let plan: number | null = null;
 let declinedLineStory: number | null = null;
+/** The target a coin in PLAY! range took over from, to go back to once the player walks on. */
+let resume: GuideTarget | null = null;
 const listeners = new Set<Listener>();
 const emit = () => listeners.forEach(listener => {
   try { listener(); } catch { /* one bad listener never stops the rest */ }
@@ -471,7 +503,7 @@ export const guide = {
    * declined line story, store the result and notify on change. The map calls
    * this; other lanes only call setTarget, current and subscribe.
    */
-  resolve(input: Omit<GuideInput, 'current' | 'pickedTaskId' | 'pickedSource'>): GuideTarget | null {
+  resolve(input: Omit<GuideInput, 'current' | 'pickedTaskId' | 'pickedSource' | 'resumeTarget'>): GuideTarget | null {
     const adventure = input.adventure && declinedLineStory === input.adventure.taskId
       ? { ...input.adventure, lineStoryDeclined: true } : input.adventure;
     const fresh = pick;
@@ -483,8 +515,14 @@ export const guide = {
       pickedTaskId: fresh?.taskId ?? null,
       pickedSource: fresh?.source,
       chosenTaskId: input.chosenTaskId ?? plan,
+      resumeTarget: resume,
     });
     pick = null;
+    // A coin in PLAY! range took over from a held target: remember that target to go back to it.
+    if (next?.reason === 'in_range' && next.source === 'guide' && held && held.taskId !== next.taskId) {
+      if (!resume) resume = held;   // keep the first target from before, through any number of coins in passing
+    } else if (!next || next.reason !== 'in_range') resume = null;
+    if (fresh) resume = null;
     // Remember when the player picked the held coin (a fresh pick holds against a line dwell).
     if (!next || next.source === 'guide') heldPickedAt = null;
     else if (fresh && next.taskId === fresh.taskId) heldPickedAt = fresh.at;
@@ -517,7 +555,7 @@ export const guide = {
   },
   /** Sign-out and tests: forget everything. */
   reset(): void {
-    held = null; heldPickedAt = null; pick = null; plan = null; declinedLineStory = null;
+    held = null; heldPickedAt = null; pick = null; plan = null; declinedLineStory = null; resume = null;
     emit();
   },
 };

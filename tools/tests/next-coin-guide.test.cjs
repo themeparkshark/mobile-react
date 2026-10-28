@@ -106,9 +106,14 @@ test('Adventure Line story: after winning its coin, the ride stays the target un
   assert.equal(first.taskId, 2, 'rule 1 beats the nearest open ride');
   assert.equal(first.reason, 'line_story');
   assert.equal(G.guideState(input({ adventure }), first), 'line_story');
-  // Held across moves, and an in-range other coin does not steal it.
-  const held = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure, current: first, location: north(120) }));
+  // Held across moves. PLAY! rising for another coin shows "You're here" for it only while the
+  // player stands there; walking on, the Line story comes back.
+  const passing = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure, current: first, location: north(120) }));
+  assert.equal(passing.taskId, 3);
+  assert.equal(passing.reason, 'in_range');
+  const held = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure, current: passing, resumeTarget: first, location: north(60) }));
   assert.equal(held.taskId, 2);
+  assert.equal(held.reason, 'line_story');
   // Story played: phase moves to celebrate, the owned coin is no longer a target.
   const played = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure: { ...adventure, phase: 'celebrate' }, current: held }));
   assert.equal(played.taskId, 1);
@@ -128,11 +133,24 @@ test('the target holds: it changes only for a win, a closure or the player\'s pi
   const t = G.pickNextCoin(input({ coins: RIDES, live }));
   assert.equal(t.taskId, 3);
   // Walk toward Jungle Cruise's side: Haunted Mansion becomes nearer, the target stays.
-  const moved = G.pickNextCoin(input({ coins: RIDES, live, current: t, location: north(260) }));
+  const moved = G.pickNextCoin(input({ coins: RIDES, live, current: t, location: north(260), playableTaskId: null }));
   assert.equal(moved.taskId, 3);
-  // In range of another coin: PLAY! rises for it, the target still stays.
+  // In range of another coin: PLAY! rises for it and the card says "You're here" for it while the
+  // player stands there (one pointer, never a card that disagrees with PLAY!) ...
   const passing = G.pickNextCoin(input({ coins: RIDES, live, current: t, location: north(200) }));
-  assert.equal(passing.taskId, 3);
+  assert.equal(passing.taskId, 2);
+  assert.equal(passing.reason, 'in_range');
+  assert.equal(passing.inRange, true);
+  // ... and walking on without playing, the target from before comes back (it never changed).
+  const walkedOn = G.pickNextCoin(input({ coins: RIDES, live, current: passing, resumeTarget: t, location: north(140) }));
+  assert.equal(walkedOn.taskId, 3);
+  assert.equal(walkedOn.reason, t.reason);
+  // With the map's own PLAY! check, only the coin PLAY! is up for counts.
+  const mapSaysNo = G.pickNextCoin(input({ coins: RIDES, live, current: t, location: north(200), playableTaskId: null }));
+  assert.equal(mapSaysNo.taskId, 3, 'PLAY! is down: no "You\'re here" for a coin the geometry calls near');
+  // Won the passing coin: back to the target from before.
+  const wonPassing = G.pickNextCoin(input({ coins: RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c)), live, current: passing, resumeTarget: t, location: north(200) }));
+  assert.equal(wonPassing.taskId, 3);
   // Won.
   const won = G.pickNextCoin(input({ coins: RIDES.map(c => (c.taskId === 3 ? { ...c, owned: true } : c)), live, current: t }));
   assert.notEqual(won.taskId, 3);
@@ -144,6 +162,20 @@ test('the target holds: it changes only for a win, a closure or the player\'s pi
   // A closed pick is ignored and the target holds.
   const closedPick = G.pickNextCoin(input({ coins: RIDES, live: { ...live, 1: 'closed' }, current: t, pickedTaskId: 1 }));
   assert.equal(closedPick.taskId, 3);
+});
+
+test('the guide store remembers the target from before a coin in passing, and drops it after a pick', () => {
+  G.guide.reset();
+  const live = { 1: 'open', 2: 'open', 3: 'open' };
+  const base = { mode: 'park', parkId: 8, coins: RIDES, live, now: NOW };
+  assert.equal(G.guide.resolve({ ...base, location: BASE }).taskId, 3);
+  assert.equal(G.guide.resolve({ ...base, location: north(200), playableTaskId: 2 }).taskId, 2, 'PLAY! up for Haunted Mansion');
+  assert.equal(G.guide.resolve({ ...base, location: north(200), playableTaskId: 2 }).taskId, 2, 'standing there it holds');
+  assert.equal(G.guide.resolve({ ...base, location: north(170), playableTaskId: null }).taskId, 3, 'walked on: back to Space Ride');
+  // A player's pick replaces everything, and a later coin in passing returns to the pick.
+  G.guide.setTarget(1, 'callout');
+  assert.equal(G.guide.resolve({ ...base, location: north(170), playableTaskId: null }).taskId, 1);
+  G.guide.reset();
 });
 
 test('rule 2: with no target, an open unowned coin in range right now', () => {

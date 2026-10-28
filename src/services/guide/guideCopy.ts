@@ -116,8 +116,10 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         : target?.reason === 'leaves_soon' ? 'LIMITED COIN' : 'NEXT COIN';
   const card = (copy: Omit<GuideCardCopy, 'secondary' | 'dots' | 'pointsAtPlay' | 'a11y'> & Partial<GuideCardCopy>): GuideCardCopy => {
     const out = { ...base, ...copy } as GuideCardCopy;
+    // Joined into sentences without doubling a stop ("PARK!. " or "U.S.A.. ").
     const a11y = copy.a11y ?? [out.kicker, out.title, out.line, out.button ? `Button: ${out.button.label}` : null]
-      .filter(Boolean).join('. ');
+      .filter(Boolean).map(String).reduce((all, part) =>
+        (all ? `${all}${/[.!?]$/.test(all) ? '' : '.'} ${part}` : part), '');
     return { ...out, a11y };
   };
 
