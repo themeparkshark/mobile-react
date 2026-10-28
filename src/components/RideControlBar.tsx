@@ -134,7 +134,7 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
       </Pressable>
 
       <Modal isVisible={layer.present} onBackdropPress={() => setOpen(false)} onSwipeComplete={() => setOpen(false)}
-        onDismiss={layer.onDismissed}
+        onDismiss={layer.onDismissed} onModalHide={layer.onHidden}
         swipeDirection="down" style={styles.sheetModal} backdropColor={BRAND.navy} backdropOpacity={0.35}>
         <View style={styles.sheet}>
           <View style={styles.grabber} />

@@ -1010,10 +1010,10 @@ export function ExploreScreenBody() {
 
   // Check player team and sword count on mount
   const gymSwordsOn = mapFlags.gymSwords;
+  // A different player never keeps the last one's team.
+  useEffect(() => { setPlayerTeam(null); setPlayerSwordCount(0); }, [player?.id]);
   useEffect(() => {
     let current = true;
-    setPlayerTeam(null);
-    setPlayerSwordCount(0);
     const checkTeamAndSwords = async () => {
       try {
         const team = await getMyTeam();
@@ -1027,11 +1027,12 @@ export function ExploreScreenBody() {
         console.log('Team/swords check error:', error);
       }
     };
-    if (player) {
+    // Re-read on every return to the map: a team picked on the team screen shows its chip at once.
+    if (player && mapFocused) {
       void checkTeamAndSwords();
     }
     return () => { current = false; };
-  }, [player?.id, gymSwordsOn]);
+  }, [player?.id, gymSwordsOn, mapFocused]);
 
   // Fetch gym data when park changes and refresh periodically (even without team - to show marker)
   useEffect(() => {

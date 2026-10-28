@@ -9,7 +9,7 @@ import { playSfx } from '../../gamekit/SFX';
 import { haptic } from '../../gamekit/Haptics';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameButton, GameIcon, SHADOW } from '../../ui';
-import { useNativeModalLayer } from '../../ui/modalLayers';
+import { NATIVE_SETTLE_MS, useNativeModalLayer } from '../../ui/modalLayers';
 import {
   adventureErrorMessage, adventurePrompt, adventureStamps, detourDetail, type DetourPick,
 } from './adventureTicketPresentation';
@@ -158,6 +158,8 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
   // The sheet holds its modal layer until UIKit says it is gone; what a button asked for (a walk
   // to the ride, LinePlay, the shelf) runs only then, never into a leaving sheet (core loop 4.3 rule 10).
   const layer = useNativeModalLayer(open, 'show');
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
   const runPending = () => {
     const action = pending.current; pending.current = null;
     if (mounted.current) action?.();
@@ -261,8 +263,11 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
       backdropTransitionInTiming={reduced ? 0 : 180} backdropTransitionOutTiming={reduced ? 0 : 180}
       onModalWillShow={() => occlusion.current?.(true)} onModalHide={() => {
         occlusion.current?.(false);
-        // Android reports no native dismissal: run the pending action here.
-        if (Platform.OS !== 'ios') runPending();
+        // The native sheet is gone one transaction after its JS hide: the hand-off runs then, never into it.
+        layer.onHidden();
+        if (Platform.OS !== 'ios') { runPending(); return; }
+        if (settleTimer.current) clearTimeout(settleTimer.current);
+        settleTimer.current = setTimeout(() => { settleTimer.current = null; runPending(); }, NATIVE_SETTLE_MS);
       }} onDismiss={() => { layer.onDismissed(); runPending(); }} style={styles.modal}>
       <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.sheetHeader}>

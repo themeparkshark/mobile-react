@@ -42,7 +42,7 @@ export default function TooFarDialog({ visible, distanceMeters, requiredMeters, 
   }, [visible, target, reduced, fill]);
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
   const title = unknown ? 'Finding you' : 'Almost there!';
-  return <Modal isVisible={layer.present} onDismiss={layer.onDismissed} onBackdropPress={onClose} onBackButtonPress={onClose}
+  return <Modal isVisible={layer.present} onDismiss={layer.onDismissed} onModalHide={layer.onHidden} onBackdropPress={onClose} onBackButtonPress={onClose}
     animationIn={reduced ? 'fadeIn' : 'zoomIn'} animationOut={reduced ? 'fadeOut' : 'zoomOut'}
     animationInTiming={reduced ? 120 : 260} animationOutTiming={reduced ? 120 : 180}
     backdropColor={BRAND.navy} backdropOpacity={0.3}>

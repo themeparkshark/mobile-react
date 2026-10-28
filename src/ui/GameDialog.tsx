@@ -22,7 +22,7 @@
  * dialog that mounts already open still springs.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { modalLayers, NATIVE_DISMISS_FALLBACK_MS, useNativeModalLayer } from './modalLayers';
+import { modalLayers, NATIVE_SETTLE_MS, useNativeModalLayer } from './modalLayers';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, {
@@ -191,11 +191,12 @@ export function GameDialog({
     if (!gate.fadeDone(token)) return;
     setMounted(false);
   };
-  // Hidden: wait for UIKit's dismissal (iOS onDismiss); Android and a silent sheet answer after a short fallback.
+  // Hidden: UIKit takes the dialog down one mount transaction later (onDismiss does not arrive on this
+  // React Native), so the answer goes out NATIVE_SETTLE_MS after the hide, or at once on onDismiss.
   useEffect(() => {
     if (mounted || !nativeUp) return;
     if (Platform.OS !== 'ios') { deliverRef.current(); return; }
-    const timer = setTimeout(() => deliverRef.current(), NATIVE_DISMISS_FALLBACK_MS);
+    const timer = setTimeout(() => deliverRef.current(), NATIVE_SETTLE_MS);
     return () => clearTimeout(timer);
   }, [mounted, nativeUp]);
 

@@ -35,7 +35,7 @@ function card(phase='discover', options={}) {
  '../../gamekit/SFX':{playSfx:()=>calls.push('sound')},'../../gamekit/Haptics':{haptic:()=>calls.push('haptic')},
  'react-native-modal':{default:'TicketModal'},'../../ui':ui,
  // The sheet holds its native modal layer until UIKit reports it gone (core loop 4.3 rule 10).
- '../../ui/modalLayers':{useNativeModalLayer:wanted=>({present:wanted,onDismissed(){}})},
+ '../../ui/modalLayers':{useNativeModalLayer:wanted=>({present:wanted,onDismissed(){},onHidden(){}}),NATIVE_SETTLE_MS:150},
  },props);
  const button=label=>app.find(n=>n.props?.accessibilityLabel===label);
  const modal=()=>app.find(n=>n.type==='TicketModal');
@@ -45,9 +45,12 @@ function card(phase='discover', options={}) {
 test('ticket hands off only after UIKit reports its native sheet gone, and reduced motion stays still',async()=>{
  const p=card();assert.equal(p.modal().props.animationInTiming,0);
  p.button('Find this coin').props.onPress();p.app.render();assert.equal(p.modal().props.isVisible,false);assert.deepEqual(p.calls,[]);
- // The JS hide is not enough on iOS: the walk to the ride starts only on the native dismissal (never into a leaving sheet).
+ // The JS hide is not enough on iOS: the walk to the ride starts once the native sheet is gone (the settle
+ // after the hide, or onDismiss), never into a leaving sheet.
  p.modal().props.onModalHide();assert.deepEqual(p.calls,[]);
- p.modal().props.onDismiss();p.modal().props.onDismiss();assert.deepEqual(p.calls,['discover']);
+ const [[settle,ms]]=[...p.app.timers.entries()].map(([id,fn])=>[fn,p.app.delays.get(id)]).filter(([,d])=>d===150);
+ assert.equal(ms,150);settle();assert.deepEqual(p.calls,['discover']);
+ p.modal().props.onDismiss();assert.deepEqual(p.calls,['discover'],'once');
  const q=card('complete');q.button('Visit my coin').props.onPress();q.app.unmount();q.modal().props.onDismiss();assert.deepEqual(q.calls,[]);
 });
 test('full motion: the sheet slides in and out with real timings',()=>{

@@ -25,12 +25,14 @@ export const modalLayers = {
   add(): number {
     const id = nextId++;
     layers = [...layers, id];
+    note('add', id);
     emit();
     return id;
   },
   remove(id: number): void {
     if (!layers.includes(id)) return;
     layers = layers.filter(l => l !== id);
+    note('remove', id);
     emit();
   },
   /** True when no layer registered before this one is still up. */
@@ -46,7 +48,9 @@ export const modalLayers = {
   reset(): void { layers = []; emit(); },
 };
 // Dev builds: the lane tools read the layer list over the debugger (never in a store or OTA bundle).
-if (typeof __DEV__ !== 'undefined' && __DEV__) (globalThis as { __tpsModalLayers?: unknown }).__tpsModalLayers = { count: () => layers.length, ids: () => [...layers] };
+const devLog: { t: number; op: string; id: number }[] = [];
+if (typeof __DEV__ !== 'undefined' && __DEV__) (globalThis as { __tpsModalLayers?: unknown }).__tpsModalLayers = { count: () => layers.length, ids: () => [...layers], log: () => devLog.splice(0) };
+const note = (op: string, id: number) => { if (typeof __DEV__ !== 'undefined' && __DEV__) { devLog.push({ t: Date.now(), op, id }); if (devLog.length > 200) devLog.shift(); } };
 
 /** True while any sheet, dialog or the grown-up gate is up: ambient stage loops behind it rest. */
 export function useAnyModalLayer(): boolean {
@@ -83,6 +87,12 @@ export function useModalLayer(active: boolean, mode: 'show' | 'wait'): boolean {
 
 /** If a native sheet never reports its dismissal (never presented, or Android), its layer frees itself after this. */
 export const NATIVE_DISMISS_FALLBACK_MS = 1200;
+/**
+ * Measured on the simulator (RN 0.76, Fabric): a native Modal's onDismiss never arrives, so every
+ * layer waited the full fallback. A sheet that reports its JS hide (react-native-modal onModalHide,
+ * or a dialog's own fade) is gone natively one mount transaction later: this much margin covers it.
+ */
+export const NATIVE_SETTLE_MS = 150;
 
 /**
  * A layer that stays registered until UIKit says the sheet is really gone
@@ -105,7 +115,7 @@ export const NATIVE_DISMISS_FALLBACK_MS = 1200;
  * Shared contract: owned by the guide-map lane; other lanes import it.
  */
 export function useNativeModalLayer(wanted: boolean, mode: 'show' | 'wait' = 'wait'):
-  { present: boolean; onDismissed: () => void } {
+  { present: boolean; onDismissed: () => void; onHidden: () => void } {
   const nested = useContext(ModalLayerContext);
   const [id, setId] = useState<number | null>(null);
   const idRef = useRef<number | null>(null);
@@ -141,6 +151,7 @@ export function useNativeModalLayer(wanted: boolean, mode: 'show' | 'wait' = 'wa
     if (idRef.current == null) return;
     // Never presented, or UIKit already said it is gone: free the layer now.
     if (!presentedRef.current || dismissedRef.current) { release(); return; }
+    note('hidden', idRef.current);
     if (!fallback.current) fallback.current = setTimeout(release, NATIVE_DISMISS_FALLBACK_MS);
   }, [wanted, nested, release]);
 
@@ -159,10 +170,19 @@ export function useNativeModalLayer(wanted: boolean, mode: 'show' | 'wait' = 'wa
   }, [present]);
 
   const onDismissed = useCallback(() => {
+    if (idRef.current != null) note('dismissed', idRef.current);
     if (nested || idRef.current == null) return;
     dismissedRef.current = true;
     if (!wantedRef.current) release();
   }, [nested, release]);
 
-  return { present, onDismissed };
+  // The JS side finished hiding (react-native-modal onModalHide): UIKit is done one transaction later.
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onHidden = useCallback(() => {
+    if (settle.current) clearTimeout(settle.current);
+    settle.current = setTimeout(() => { settle.current = null; onDismissed(); }, NATIVE_SETTLE_MS);
+  }, [onDismissed]);
+  useEffect(() => () => { if (settle.current) clearTimeout(settle.current); }, []);
+
+  return { present, onDismissed, onHidden };
 }

@@ -110,7 +110,7 @@ export default function SharkDropHandler() {
   ].filter(Boolean) as string[] : [];
 
   return (
-    <Modal isVisible={layer.present} onDismiss={layer.onDismissed} backdropOpacity={0.75} animationIn="zoomIn" animationOut="zoomOut"
+    <Modal isVisible={layer.present} onDismiss={layer.onDismissed} onModalHide={layer.onHidden} backdropOpacity={0.75} animationIn="zoomIn" animationOut="zoomOut"
       onBackdropPress={state?.result || state?.error ? () => setState(null) : undefined}>
       <View style={styles.wrap}>
         <Ribbon text="Shark Drop!" />

@@ -236,6 +236,7 @@ test('every map-path sheet registers with the native modal layer list and frees 
     assert.match(source, /useNativeModalLayer\(/, `${file} adopts useNativeModalLayer`);
     assert.match(source, /isVisible=\{layer\.present\}/, `${file} presents only through its layer`);
     assert.match(source, /onDismiss=\{[^}]*layer\.onDismissed/, `${file} frees the layer on UIKit's dismissal`);
+    assert.match(source, /layer\.onHidden/, `${file} settles the layer one transaction after its JS hide (onDismiss never arrives here)`);
   }
   assert.match(read('src/components/SharkDropHandler.tsx'), /useNativeModalLayer\(!!state, 'wait'\)/, 'a Shark Drop waits its turn');
   const explore = read('src/screens/ExploreScreen.tsx');
@@ -267,7 +268,8 @@ test('a dialog answers only after UIKit dismisses it, so the next dialog or shee
   assert.match(source, /useNativeModalLayer\(visible \|\| mounted, 'wait'\)/);
   assert.match(source, /<Modal transparent visible=\{mounted\}[^>]*\n\s*onDismiss=\{\(\) => deliverRef\.current\(\)\}/);
   assert.match(source, /runOnJS\(fadeDone\)\(token\)/, 'each close carries its token');
-  assert.match(source, /NATIVE_DISMISS_FALLBACK_MS/, 'a silent native dialog still answers');
+  // onDismiss does not arrive on this React Native (measured): the answer goes out NATIVE_SETTLE_MS after the hide.
+  assert.match(source, /const timer = setTimeout\(\(\) => deliverRef\.current\(\), NATIVE_SETTLE_MS\);/, 'a silent native dialog still answers, quickly');
 });
 
 test('attention rules: no chest ever opens by itself at a park; nothing in the first 30 s, while walking, during play or within 10 s of a win card', () => {
@@ -344,4 +346,18 @@ test('rewards fly where they live: Energy to the Shelf button (park and home), X
   // Header: Shark Coins and Tickets; Keys and event tokens only while held.
   assert.match(explore, /\(currency\.name === 'Coins' \|\| currencyBalance\(player, currency\.name\) > 0\)\)/);
   assert.match(explore, /\{park && theme\?\.currency && currencyBalance\(player, theme\.currency\.name\) > 0 && \(/);
+});
+
+test('a layer settles NATIVE_SETTLE_MS after the sheet reports its JS hide (react-native-modal onModalHide), not the 1.2 s fallback', () => {
+  const h = harness();
+  h.M.modalLayers.reset();
+  let wanted = true;
+  const sheet = h.mount(() => h.M.useNativeModalLayer(wanted, 'show'));
+  wanted = false; sheet.render();
+  assert.equal(h.M.modalLayers.count(), 1, 'still leaving');
+  sheet.value.onHidden();
+  h.flushTimers();
+  sheet.render();
+  assert.equal(h.M.modalLayers.count(), 0, 'freed after the short settle');
+  assert.ok(h.M.NATIVE_SETTLE_MS <= 200 && h.M.NATIVE_SETTLE_MS < h.M.NATIVE_DISMISS_FALLBACK_MS);
 });
