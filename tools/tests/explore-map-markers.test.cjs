@@ -3,10 +3,10 @@ const { loadTs } = require('./helpers/ts-module.cjs');
 const { plain } = require('./helpers/plain.cjs');
 const m = loadTs('src/screens/ExploreScreen/mapMarkerPresentation.ts');
 
-test('ring colours: no neon green; red only in the last five minutes', () => {
+test('ring colours: no neon green; deep gold (never red) in the last five minutes', () => {
   assert.equal(m.markerRingColor({ rush: false, team: null, urgent: false, near: false }), '#0879ca');
   assert.equal(m.markerRingColor({ rush: false, team: null, urgent: false, near: true }), '#ffcf3b');
-  assert.equal(m.markerRingColor({ rush: false, team: null, urgent: true, near: true }), '#ef4a3c');
+  assert.equal(m.markerRingColor({ rush: false, team: null, urgent: true, near: true }), '#f2a900');
   assert.equal(m.markerRingColor({ rush: false, team: '#123456', urgent: true, near: false }), '#123456');
   assert.equal(m.markerRingColor({ rush: true, team: '#123456', urgent: true, near: false }), '#ffcf3b');
   for (const args of [[false, null, false, false], [false, null, false, true], [false, null, true, false]]) {

@@ -77,7 +77,7 @@ test('Gym has no soft glow anywhere', () => {
 
 test('Gym score badges carry the team crest so non-readers can tell towers apart', () => {
   const src = read('src/screens/GymBattle/GymBattleScreen.tsx');
-  assert.match(src, /<Image source=\{TEAMS\[team\]\.badge\} style=\{styles\.scoreCrest\}/);
+  assert.match(src, /<TeamBadge team=\{team\} style=\{styles\.scoreCrest\} \/>/);
   assert.match(src, /const sideRatio = SCREEN_H < 750 \? 0\.9 : 0\.75;/);
 });
 

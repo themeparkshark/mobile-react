@@ -1,7 +1,7 @@
 /**
  * Trivia Duel overlays: tier stamps (line-boiled, 11.0), Fin's bark bubble
  * with typed babble (7.3), the VS intro (11.3), the round ribbon, the FIN'S
- * FINAL card, wager chips (5.5), the Buzz Bell (11.6) and the Closest Number
+ * FINAL card, the Final's topic pick (5.5), the Buzz Bell (11.6) and the Closest Number
  * slider. All copy is plain text, no emoji; fonts are Shark and Knockout.
  */
 import React, { useEffect, useRef, useState } from 'react';
@@ -15,7 +15,6 @@ import Animated, {
 import { ART, C, FIN_POSES, SHARKS, type SharkLook } from '../art';
 import { babble, type BabbleVoice } from '../audio';
 import GameIcon from '../../../ui/GameIcon';
-import { missLoss } from '../engine/scoring';
 
 const OUTLINE = { textShadowColor: C.ink, textShadowRadius: 0.01 };
 Animated.addWhitelistedNativeProps({ text: true });
@@ -215,103 +214,6 @@ export function Ribbon({ text, holdMs, ribbonKey, reducedMotion }: { text: strin
   );
 }
 
-// -- Big Final chips (5.5, rev 7) --------------------------------------------------
-
-/**
- * Three chips in the tile grid: SAFE / HALF / GO BIG. Each chip shows one big
- * number: your score if you're right with base points, and under it the
- * points a miss takes away (a red arrow down, never a betting word: this is
- * a kids' quiz, not a bet). The suggested chip glows gold; doing nothing
- * takes it. The topic is in the white question card above (never drawn over
- * the marquee bulbs). The hint is a picture badge pinned on the glowing chip
- * itself (a check mark, a fin, or lightning), so a kid who cannot read
- * connects the hint to one chip; no word in it can read as "you won". Under
- * the chips there is only the clock. The full reason is spoken.
- */
-export function WagerChips({ stakes, labels, picked, suggested, reason, kind, ifRight, onPick, secondsLeft, category, height }: {
-  stakes: number[]; labels: readonly string[]; picked: number; suggested: number; reason: string; kind: WagerHintKind; ifRight: number[];
-  onPick: (i: number) => void; secondsLeft: number; category: string; height: number;
-}) {
-  return (
-    <View style={[styles.wager, { height }]} accessibilityLabel={`Big Final: ${category}`}>
-      {/* Keeps the chips clear of the marquee bulb rail (no words on the bulbs). */}
-      <View style={styles.wagerRail} />
-      <View style={styles.chipRow}>
-        {stakes.map((s, i) => (
-          <Chip key={i} i={i} label={labels[i]} stake={s} ifRight={ifRight[i]} picked={picked === i} suggested={suggested === i} hint={suggested === i ? kind : null} onPick={onPick} />
-        ))}
-      </View>
-      <WagerHint reason={reason} secondsLeft={secondsLeft} />
-    </View>
-  );
-}
-
-export type WagerHintKind = 'win' | 'stay' | 'keep' | 'go';
-
-/**
- * The hint picture pinned on the suggested chip: a check (that chip wins it),
- * a fin (stay ahead of Fin), lightning (go big to catch up). Pictures only.
- */
-export const WAGER_HINT: Record<WagerHintKind, 'check' | 'fin' | 'rush'> = {
-  win: 'check',
-  stay: 'fin',
-  keep: 'fin',
-  go: 'rush',
-};
-
-/** Under the chips: only the clock (the reason is spoken). */
-function WagerHint({ reason, secondsLeft }: { reason: string; secondsLeft: number }) {
-  return (
-    <View style={styles.hint} accessible accessibilityLabel={`${reason} ${secondsLeft} seconds`}>
-      <View style={styles.hintPill}>
-        <GameIcon name="timer" size={18} />
-        <Text style={styles.hintWord}>{secondsLeft}</Text>
-      </View>
-    </View>
-  );
-}
-
-function Chip({ i, label, stake, ifRight, picked, suggested, hint, onPick }: { i: number; label: string; stake: number; ifRight: number; picked: boolean; suggested: boolean; hint: WagerHintKind | null; onPick: (i: number) => void }) {
-  const s = useSharedValue(0);
-  const glow = useSharedValue(0);
-  useEffect(() => {
-    s.value = withDelay(40 * i, withSequence(withTiming(1.12, { duration: 120 }), withSpring(1, { damping: 8, stiffness: 300 })));
-  }, [s, i]);
-  useEffect(() => {
-    glow.value = suggested ? withRepeat(withSequence(withTiming(1, { duration: 420 }), withTiming(0.45, { duration: 420 })), -1, true) : withTiming(0, { duration: 120 });
-  }, [suggested, glow]);
-  useEffect(() => {
-    if (picked) s.value = withSequence(withTiming(0.9, { duration: 60 }), withSpring(1.04, { damping: 7, stiffness: 400 }));
-  }, [picked, s]);
-  const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
-  const glowSt = useAnimatedStyle(() => ({ opacity: glow.value }));
-  // A miss takes half the chip (missLoss), never the whole score.
-  const miss = missLoss(stake);
-  const colors = [C.cream, '#bfe8ff', '#ffe58a'];
-  return (
-    <Animated.View style={[styles.chipCell, st]}>
-      <Animated.View pointerEvents="none" style={[styles.chipGlow, glowSt]} />
-      <Pressable onPress={() => onPick(i)} style={[styles.chip, { backgroundColor: colors[i] ?? C.cream }, picked && styles.chipPicked]} accessibilityRole="button" accessibilityLabel={miss === 0 ? `${label}. ${ifRight} if right, nothing taken away if wrong` : `${label}. ${ifRight} if right, ${miss} points taken away if wrong`}>
-        <Text style={styles.chipLabel}>{label}</Text>
-        <Text style={[styles.chipIfRight, suggested && styles.chipIfRightBig]}>{ifRight}</Text>
-        {/* SAFE takes nothing on a miss: a lock picture (the words are spoken). */}
-        {miss === 0 ? <View style={styles.chipSafe}><GameIcon name="lock" size={18} /></View> : (
-          <View style={styles.chipMiss}>
-            <GameIcon name="arrow" size={14} style={styles.chipMissArrow} />
-            <Text style={styles.chipMissText}>{miss}</Text>
-          </View>
-        )}
-      </Pressable>
-      {/* The hint rides the glowing chip (a picture badge on its corner). */}
-      {hint ? (
-        <View style={styles.chipHint} pointerEvents="none" importantForAccessibility="no-hide-descendants">
-          <GameIcon name={WAGER_HINT[hint] ?? 'fin'} size={22} />
-        </View>
-      ) : null}
-    </Animated.View>
-  );
-}
-
 // -- Final category pick (5.5, rev 7) ---------------------------------------------------
 
 /** Two category cards in the tile grid (2.5s, default left). The trailing player picks; the leader watches. */
@@ -319,15 +221,15 @@ export function CategoryPick({ cats, mine, picked, left, oppName, onPick, height
   cats: readonly [string, string]; mine: boolean; picked: number; left: number; oppName: string; onPick: (i: number) => void; height: number;
 }) {
   return (
-    <View style={[styles.wager, { height }]}>
+    <View style={[styles.pickPanel, { height }]}>
       {/* Who picks is in the white question card above; nothing is drawn on the bulb rail. */}
-      <View style={styles.wagerRail} accessibilityLabel={mine ? 'You pick the final topic' : `${oppName} is picking the final topic`} />
+      <View style={styles.pickRail} accessibilityLabel={mine ? 'You pick the final topic' : `${oppName} is picking the final topic`} />
       <View style={[styles.chipRow, { flex: 1 }]}>
         {cats.map((c, i) => <CategoryCard key={i} i={i} label={c} picked={picked === i} out={picked >= 0 && picked !== i} disabled={!mine || picked >= 0} onPick={onPick} />)}
       </View>
       {/* The clock, as a picture (the white card above already says who picks). */}
       <View style={styles.hint} accessible accessibilityLabel={mine ? `${left} seconds to pick` : 'Behind picks the topic'}>
-        {mine ? <View style={styles.hintPill}><GameIcon name="timer" size={18} /><Text style={styles.hintWord}>{left}</Text></View> : <View style={styles.wagerRail} />}
+        {mine ? <View style={styles.hintPill}><GameIcon name="timer" size={18} /><Text style={styles.hintWord}>{left}</Text></View> : <View style={styles.pickRail} />}
       </View>
     </View>
   );
@@ -478,31 +380,18 @@ const styles = StyleSheet.create({
   ribbon: { position: 'absolute', top: 0, alignSelf: 'center', width: 300, height: 64, alignItems: 'center', justifyContent: 'center', zIndex: 30 },
   ribbonImg: { position: 'absolute', width: 300, height: 64 },
   ribbonText: { marginTop: -6 },
-  wager: { alignItems: 'center', justifyContent: 'space-between', paddingTop: 2, paddingBottom: 4 },
-  // The marquee bulb rail's height: the chips start under it, with nothing drawn on the bulbs.
-  wagerRail: { height: 26 },
+  pickPanel: { alignItems: 'center', justifyContent: 'space-between', paddingTop: 2, paddingBottom: 4 },
+  // The marquee bulb rail's height: the topic cards start under it, with nothing drawn on the bulbs.
+  pickRail: { height: 26 },
   hint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   hintPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2.5, borderColor: C.ink, paddingHorizontal: 8, paddingVertical: 1 },
-  chipHint: { position: 'absolute', top: -10, right: -6, width: 34, height: 34, borderRadius: 17, backgroundColor: '#ffffff', borderWidth: 2.5, borderColor: C.ink,
-    alignItems: 'center', justifyContent: 'center' },
   hintWord: { fontFamily: 'Shark', fontSize: 16, color: C.navy },
   chipRow: { flexDirection: 'row', alignSelf: 'stretch', justifyContent: 'space-between' },
-  chipCell: { flex: 1, marginHorizontal: 4 },
-  chipGlow: { position: 'absolute', left: -6, right: -6, top: -6, bottom: -6, borderRadius: 24, backgroundColor: 'rgba(254,201,14,0.55)' },
-  chip: { height: 118, borderRadius: 18, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 7, alignItems: 'center', justifyContent: 'center' },
-  chipIfRight: { fontFamily: 'Knockout', fontSize: 24, color: C.navy, opacity: 0.6, marginTop: 2 },
-  chipIfRightBig: { fontSize: 30, opacity: 1 },
   catCell: { flex: 1, paddingHorizontal: 6 },
   catCard: { flex: 1, borderRadius: 20, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
   catLabel: { fontFamily: 'Shark', fontSize: 28, color: C.navy, textAlign: 'center' },
   chipPicked: { borderColor: C.goldDeep, borderWidth: 5, borderBottomWidth: 8 },
-  chipLabel: { fontFamily: 'Shark', fontSize: 24, color: C.navy },
-  chipSafe: { height: 20, alignItems: 'center', justifyContent: 'center' },
   chipStake: { fontFamily: 'Knockout', fontSize: 14, color: C.navy, opacity: 0.6 },
-  // What a miss takes away: the same red arrow-down chip as the results card's BIG FINAL row.
-  chipMiss: { flexDirection: 'row', alignItems: 'center', gap: 1, backgroundColor: C.coral, borderRadius: 8, borderWidth: 1.5, borderColor: C.ink, paddingLeft: 1, paddingRight: 5, marginTop: 1 },
-  chipMissArrow: { transform: [{ rotate: '90deg' }] },
-  chipMissText: { fontFamily: 'Shark', fontSize: 13, color: '#ffffff' },
   bellWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 20 },
   bell: { width: 150, height: 150, alignItems: 'center', justifyContent: 'center' },
   bellImg: { width: 120, height: 120 },

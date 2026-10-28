@@ -142,7 +142,7 @@ test('real money is bought in exactly two gated places', () => {
   // and a grown-up answers (price and contents restated) before StoreKit is called.
   // Funnel tracking may sit around the gate; the gate must come before the one StoreKit call.
   const code = strip(supplies);
-  assert.match(code, /if \(buying\) return \{ status: 'busy' \};[\s\S]{0,320}buying = true;\s*try \{[\s\S]{0,200}if \(!\(await askGrownUp\(gateReasonFor\(product, state\.prices\[product\.product_id\]\)\)\)\) \{[\s\S]{0,120}return \{ status: 'declined' \};/);
+  assert.match(code, /if \(buying\) return \{ status: 'busy' \};[\s\S]{0,320}buying = true;\s*try \{[\s\S]{0,200}if \(!\(await askGrownUp\(gateReasonFor\(product, state\.prices\[product\.product_id\], grownUpWorth\(product, catalog, state\.prices\)\)\)\)\) \{[\s\S]{0,120}return \{ status: 'declined' \};/);
   assert.ok(code.indexOf('await askGrownUp(') < code.indexOf('await purchaseNow('), 'the gate comes before the buy');
   assert.ok(code.indexOf('async function purchaseNow') > code.indexOf('await askGrownUp('), 'StoreKit is reached only from purchaseNow, after the gate');
   assert.equal((strip(supplies).match(/buyShopProduct\(/g) || []).length, 1, 'StoreKit is reached from one line, after the gate');

@@ -7,6 +7,7 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, wi
 import { BOSS_NAMES, type BossRaid } from '../api/endpoints/parks/raid';
 import type { RideControlClaim } from '../api/endpoints/parks/rideControl';
 import { TEAMS, teamName } from '../constants/teams';
+import TeamBadge from './TeamBadge';
 import type { BossMapMoment } from '../hooks/useBossMapMoment';
 import { useAppActive } from '../hooks/appActive';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -83,7 +84,8 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
       <Pressable accessibilityRole="button" onPress={onMapMoment} style={styles.victoryAction}
         accessibilityLabel={`Boss cleared at ${mapMoment.impact.rideName}. Your ${mapMoment.impact.yourDamage} damage helped.${shown
           ? ` ${teamName(mapFlag!.team)} ${held ? 'held the ride' : 'raised its flag'}.` : ''} Show ride.`}>
-        <Image source={shown ? TEAMS[mapFlag!.team].badge : BOSS_ART[mapMoment.impact.boss]} style={styles.bossIcon} contentFit="contain" />
+        {shown ? <TeamBadge team={mapFlag!.team} style={styles.bossIcon} size={38} />
+          : <Image source={BOSS_ART[mapMoment.impact.boss]} style={styles.bossIcon} contentFit="contain" />}
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, styles.victoryTitle]} numberOfLines={1}>{title}</Text>
           <Text style={[styles.sub, styles.victorySub]} numberOfLines={1}>{shown ? `${teamName(mapFlag!.team)}  ·  ${mapMoment.impact.rideName}`

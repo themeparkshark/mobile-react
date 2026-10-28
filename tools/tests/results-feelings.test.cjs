@@ -637,25 +637,22 @@ test('Sharky ribbon reads like every game for the same stars; TIME! only names a
   assert.equal(feelings.feelingTitle(1, false), 'NICE!');
 });
 
-test('duel numbers agree: a missed Final bet is named, no idioms, and the Fin rank bar has hats', () => {
-  const nm = load('src/games/trivia-duel/engine/nearMiss.ts', { './config': { POINTS: { base: 100 } }, './scoring': { streakMult: () => 1, missLoss: (s) => Math.round(s / 2 / 5) * 5 } });
-  const plan = { rounds: [{ spec: { type: 'quick' } }, { spec: { type: 'quick' } }, { spec: { type: 'final' } }] };
-  assert.equal(nm.finalPointsLost(plan, [{ me: { correct: true } }, { me: { correct: true } }, { me: { correct: false, stake: 420 } }]), 210, 'a miss takes half the chip');
-  assert.equal(nm.finalPointsLost(plan, [{ me: { correct: true } }, { me: { correct: true } }, { me: { correct: true, stake: 420 } }]), 0);
-  assert.equal(nm.finalPointsLost(plan, [{ me: { correct: false } }, { me: { correct: false } }, { me: { correct: false, stake: 0 } }]), 0);
+test('duel numbers agree: the no-risk Final never takes points, no idioms, and the Fin rank bar has hats', () => {
+  const nm = load('src/games/trivia-duel/engine/nearMiss.ts', { './config': { POINTS: { base: 100 } }, './scoring': { streakMult: () => 1 } });
+  // The Final is a no-risk bonus (honesty-kids rev 8), so there is never a lost Final to name.
+  assert.equal(nm.finalPointsLost, undefined);
   const src = read('src/games/trivia-duel/engine/nearMiss.ts');
   assert.doesNotMatch(src, /A game|You have got this/);
   const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
-  // The missed Final is a picture: lightning, BIG FINAL, a red arrow down to the points. No dice, no BET.
-  assert.match(duel, /<BigFinalLost points=\{finalLost\}/);
-  assert.match(duel, /<GameIcon name="rush" size=\{22\} \/>\s*<Text style=\{styles\.finalLostText\}>BIG FINAL<\/Text>/);
+  // A Final can never take points, so the card has no lost-Final row. No dice, no BET.
+  assert.doesNotMatch(duel, /BigFinalLost|finalLost/);
   assert.doesNotMatch(duel, /name="dice"|\bBET\b|FINAL BET/, 'no betting picture or words on a results card');
   assert.match(duel, /<CoinGoal right=\{rideGoal\.right\} need=\{rideGoal\.need\}/, 'two coin dots, not a sentence');
   assert.match(duel, /<RankHat stripes=/);
   assert.doesNotMatch(duel, /numberOfLines=\{2\}>\{card\.fact\}/, 'a fact is never cut mid-word');
   assert.doesNotMatch(duel, /fill=\{on \? C\.gold : '#ffffff'\}/, 'the shared star art, not white outlined stars');
   const game = read('src/games/trivia-duel/TriviaDuel.tsx');
-  assert.match(game, /finalLost: finalPointsLost\(p, resultsLog\.current\)/);
+  assert.doesNotMatch(game, /finalPointsLost|finalLost/);
   assert.match(game, /ride: \{ won, right: t\.me\.correct, need: 2 \}/);
 });
 
@@ -785,12 +782,13 @@ test('a kids quiz never uses betting words: the Big Final picks points, it is no
   }
   const game = read('src/games/trivia-duel/TriviaDuel.tsx');
   assert.doesNotMatch(game, /Place your bet/);
-  // The topic sits crisp in the white question card, never on the marquee bulbs.
-  assert.match(game, /phase === 'wager' \? `Big Final: \$\{finalTopic\}`/);
+  // The topic sits crisp in the white question card, never on the marquee bulbs, and the Final is a no-risk bonus.
+  assert.match(game, /phase === 'bonus' \? `Bonus question: \$\{finalTopic\}\. Double points!`/);
+  assert.doesNotMatch(game, /phase === 'wager'|WagerChips/);
   const ov = read('src/games/trivia-duel/ui/Overlays.tsx');
-  assert.doesNotMatch(ov, /wagerTitle/, 'no title drawn over the bulb rail');
-  assert.match(ov, /<View style=\{styles\.wagerRail\} \/>/);
-  assert.match(ov, /<GameIcon name="arrow" size=\{14\} style=\{styles\.chipMissArrow\} \/>/, 'a miss is a red arrow down, not "bet 250"');
+  assert.doesNotMatch(ov, /wagerTitle|pickTitle/, 'no title drawn over the bulb rail');
+  assert.match(ov, /<View style=\{styles\.pickRail\} \/>/);
+  assert.doesNotMatch(ov, /chipMissArrow|WagerChips/, 'no chips and nothing a miss takes away');
 });
 
 
@@ -864,11 +862,10 @@ test('Sharky TIME! holds a short beat in a moving line; the capture log names ev
   assert.match(capture, /note\(`End: \$\{finishCueLine\(finishCues\(cues\.current, finishAt\.current\)\)\}`\);/);
 });
 
-test('duel banners and the Big Final chip keep their fill: the pop rides a wrapper, the colour a plain view', () => {
+test('duel banners keep their fill: the pop rides a wrapper, the colour a plain view', () => {
   const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
   assert.match(duel, /<Animated\.View style=\{\[styles\.bannerPop, st\]\}>\s*<View style=\{styles\.banner\}>/);
-  assert.match(duel, /<Animated\.View style=\{st\}>\s*<View style=\{styles\.finalDrop\}>/);
-  assert.doesNotMatch(duel, /\[styles\.banner, st\]|\[styles\.finalDrop, st\]/);
+  assert.doesNotMatch(duel, /\[styles\.banner, st\]/);
   assert.doesNotMatch(duel, /scaleY: 2 - Math\.max/, 'no squash and stretch on a filled pill');
   // The Best Moment polaroid leaves the tree after it pops away (never parked at scale 0 over the banners).
   assert.match(duel, /const \[polGone, setPolGone\] = useState\(!model\.best \|\| reducedMotion\);/);
@@ -932,14 +929,10 @@ test('the Duel card hugs its content, a loss bar is never solid red, and RANK UP
   assert.match(duel, /<GameIcon name="sparkle" size=\{24\} \/>/);
 });
 
-test('the Big Final board reads without words: picture hints, a clock, nothing on the bulbs', () => {
+test('the Final topic pick reads without words: a clock, nothing on the bulbs, no chips', () => {
   const ov = read('src/games/trivia-duel/ui/Overlays.tsx');
-  // The hint is a picture badge on the glowing chip itself: no words, nothing to read as "you won".
-  assert.match(ov, /win: 'check',/);
-  assert.match(ov, /go: 'rush',/);
   assert.doesNotMatch(ov, /word: '/);
-  assert.match(ov, /hint=\{suggested === i \? kind : null\}/);
-  assert.match(ov, /<GameIcon name=\{WAGER_HINT\[hint\] \?\? 'fin'\} size=\{22\} \/>/);
+  assert.doesNotMatch(ov, /WAGER_HINT|hint=\{suggested/);
   assert.match(ov, /<GameIcon name="timer" size=\{18\} \/>/);
   assert.doesNotMatch(ov, /Behind picks the topic\.  \$\{left\}s/);
 });

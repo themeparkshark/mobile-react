@@ -232,7 +232,8 @@ const styles = StyleSheet.create({
   lockBadge: { position: 'absolute', top: -14, backgroundColor: C.gold, borderWidth: 2.5, borderColor: C.ink, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1 },
   lockText: { fontFamily: 'Shark', fontSize: 13, color: C.navy },
   stake: { position: 'absolute', bottom: -16, backgroundColor: '#ffffff', borderWidth: 2.5, borderColor: C.ink, borderRadius: 8, paddingHorizontal: 6 },
-  stakeText: { fontFamily: 'Shark', fontSize: 13, color: C.coral },
+  // The Final's bonus badge (x2): calm ink on white, the same for both sides.
+  stakeText: { fontFamily: 'Shark', fontSize: 13, color: C.ink },
   mastery: { position: 'absolute', bottom: -14, backgroundColor: C.blue, borderRadius: 8, borderWidth: 2, borderColor: C.ink, paddingHorizontal: 5 },
   masteryText: { fontFamily: 'Knockout', fontSize: 10, color: '#fff' },
 });

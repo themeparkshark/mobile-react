@@ -59,6 +59,28 @@ export function bonusPercent(product: ShopProduct, prices: PriceMap, rates: Part
   return percent >= 5 ? percent : null;
 }
 
+/**
+ * "BEST VALUE" only when it is true for the whole page a grown-up reads, not
+ * just its own row. The badge stays only if nothing else you can buy right now
+ * gives that currency for less per unit. A bundle is judged by that currency
+ * alone (its extras are a bonus), so a Park Trip Pack with 60 tickets for
+ * $5.99 beats 25 tickets for $3.99 and the badge comes off.
+ */
+export function bestValueHolds(product: ShopProduct, products: readonly ShopProduct[], prices: PriceMap): boolean {
+  const kind = singleCurrency(product.grants);
+  const price = prices[product.product_id];
+  const units = kind ? product.grants[kind] ?? 0 : 0;
+  if (!kind || !price || price.amount <= 0 || units <= 0) return false;
+  const perUnit = price.amount / units;
+  return !products.some(other => {
+    if (other.product_id === product.product_id || !other.available) return false;
+    const otherPrice = prices[other.product_id];
+    const otherUnits = other.grants[kind] ?? 0;
+    if (!otherPrice || otherPrice.amount <= 0 || otherUnits <= 0) return false;
+    return otherPrice.amount / otherUnits < perUnit - 1e-9;
+  });
+}
+
 /** What a bundle's priced contents cost at regular pack prices (energy left out). Null if any priced part has no rate. */
 export function regularValue(grants: ShopGrants, rates: Partial<Record<ShopCurrency, number>>): number | null {
   let total = 0;
@@ -144,16 +166,15 @@ export function vipRideMultiplier(perks: readonly { key?: string; title: string 
 }
 
 /**
- * "VIP would have made it 60 coins and 40 XP": what this exact win pays a
- * member, from the server's multiplier. Null without a multiplier or a win.
+ * "VIP members get 2x coins and XP": what membership gives, from the server's
+ * multiplier. Never "you would have had more" (no loss framing after a win).
+ * Null without a multiplier or a win.
  */
 export function vipWinLine(coins: number, xp: number, multiplier: number | null): string | null {
   if (!multiplier || multiplier < 2 || (coins <= 0 && xp <= 0)) return null;
-  const parts = [
-    coins > 0 ? `${countText(coins * multiplier)} coins` : null,
-    xp > 0 ? `${countText(xp * multiplier)} XP` : null,
-  ].filter(Boolean);
-  return `VIP would make this ${parts.join(' and ')}`;
+  const what = coins > 0 && xp > 0 ? 'coins and XP' : coins > 0 ? 'coins' : 'XP';
+  const times = Math.floor(multiplier);
+  return `VIP members get ${times}x ${what}`;
 }
 
 /** "4h 12m" until the shop day rolls over (the real midnight in the parks' time zone). */

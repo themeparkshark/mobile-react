@@ -85,16 +85,14 @@ export const BUZZ = {
 export const FIN_BUZZ_SHARE: Record<FinRank, number> = { deckhand: 0.5, firstmate: 0.6, captain: 0.7, admiral: 0.8 };
 
 /**
- * 5.5 wager (rev 7): three chips, always a share of what you hold. A stake
- * never exceeds your score, so no stake is ever free.
+ * 5.5 Fin's Final, rev 8 (kid-trust, Oct 26): a no-risk BONUS question. Right = the question's
+ * points times `multiplier`; wrong or no answer = nothing lost. Points only ever go up in the
+ * Final: no stake and no chips (Dustin, Oct 26: a kids game never risks points).
  */
-export const WAGER = {
-  percents: [0, 0.5, 1] as const,
-  labels: ['SAFE', 'HALF', 'GO BIG'] as const,
-  pickMs: 4000,
-  /** suggestWager thresholds: "unbeatable when right" and "stays ahead if they get it". */
-  lockMargin: 350,
-  coverMargin: 100,
+export const FINAL_BONUS = {
+  multiplier: 2,
+  /** The DOUBLE POINTS banner holds this long before the question comes in. */
+  bannerMs: 1100,
 } as const;
 
 /** 5.5 Final answers: press and hold this long to lock (Millionaire). */

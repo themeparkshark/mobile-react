@@ -16,6 +16,9 @@ import { battleHUDEvents } from './battleHUDEvents';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import { GameIcon, GameRichText } from '../../ui';
 import { useBudgetedPoll } from '../../power';
+import TeamCrest from '../TeamBadge';
+
+const TeamBadge = ({ team, size = 18 }: { team: TeamId; size?: number }) => <TeamCrest team={team} size={size} />;
 import countText from '../../helpers/countText';
 
 // Format seconds into H:MM:SS or MM:SS
@@ -33,8 +36,6 @@ function formatCountdown(totalSeconds: number): string {
 // Team colours and names come from the one team table (constants/teams).
 const TEAM_COLORS: Record<TeamId, string> = { mouse: TEAMS.mouse.color, globe: TEAMS.globe.color, shark: TEAMS.shark.color };
 const TEAM_NAMES = { get mouse() { return teamName('mouse'); }, get globe() { return teamName('globe'); }, get shark() { return teamName('shark'); } };
-const TeamBadge = ({ team, size = 18 }: { team: TeamId; size?: number }) =>
-  <Image source={TEAMS[team].badge} style={{ width: size, height: size }} contentFit="contain" />;
 
 interface Props {
   parkId: number;

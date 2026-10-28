@@ -21,7 +21,7 @@ export const ORIGINAL_ICON_NAMES = [
 /** Icons with no original, drawn with the GPT Image 2.5 pipeline from Alex's references. */
 export const GENERATED_ICON_NAMES = [
   'crown', 'streak', 'timer',
-  'rush', 'wrench', 'pin', 'medal1', 'medal2', 'medal3', 'dice', 'sparkle', 'ride', 'camera',
+  'rush', 'wrench', 'pin', 'medal1', 'medal2', 'medal3', 'sparkle', 'ride', 'camera',
   'pause', 'play', 'retry', 'arrow', 'swap', 'moon', 'pumpkin',
   // Battery Saver (Settings). Codex GPT Image from Alex refs; gate sheet in dustin-feedback-oct8/battery/art.
   'battery',
@@ -41,6 +41,8 @@ export const ICON_ALIASES: Readonly<Record<string, GameIconName>> = {
   vip: 'member',
   sword: 'swords',
   ridePart: 'parts',
+  // Kid-safe rule: no dice anywhere. An old 'dice' name (server text, saved data) draws the sparkle.
+  dice: 'sparkle',
 };
 
 const KNOWN = new Set<string>(GAME_ICON_NAMES);

@@ -3,8 +3,12 @@
  * and the how-to card for each mini-game. Pure data, no art (the screen maps
  * `art` keys to images), no em dashes.
  */
+import { AD_AUDIENCE_13_PLUS_KNOWN } from '../adConfig';
 import type { GlossaryKey, HelpTopicId } from './glossary';
 import type { TipId } from './seenTips';
+
+/** Ads are talked about only when some player can see one. Today nobody can. */
+export const ADS_IN_HELP = AD_AUDIENCE_13_PLUS_KNOWN;
 
 export interface HelpTopic {
   readonly id: HelpTopicId;
@@ -72,12 +76,19 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       'Friends compares you and your friends. All-Time shows who has the most ride coins.',
     ],
     terms: ['standings'] },
-  { id: 'shop', title: 'Shark Shop, Supplies and ads', art: 'shop',
+  // No help text talks about ads while no player can see one (AD_AUDIENCE_13_PLUS_KNOWN, adConfig.ts).
+  ADS_IN_HELP ? { id: 'shop', title: 'Shark Shop, Supplies and ads', art: 'shop',
     lines: [
       'Use coins to buy gear for your shark. Supplies are packs a grown-up buys with real money.',
       'Bonus ads are always optional. Watch one for a free Ticket or a small boost, and VIP members skip the ad.',
     ],
-    terms: ['supplies', 'bonus_ads', 'vip', 'coins'] },
+    terms: ['supplies', 'bonus_ads', 'vip', 'coins'] }
+    : { id: 'shop', title: 'Shark Shop and Supplies', art: 'shop',
+    lines: [
+      'Use coins to buy gear for your shark. Supplies are packs a grown-up buys with real money.',
+      'You never need real money to win a ride coin.',
+    ],
+    terms: ['supplies', 'vip', 'coins'] },
   { id: 'extras', title: 'More to explore', art: 'extras',
     lines: [
       'Open mystery boxes, find park pins, trade extras.',
@@ -92,6 +103,20 @@ export function helpTopic(id: HelpTopicId | string | null | undefined): HelpTopi
 
 export interface TipCopy { readonly title: string; readonly body: string }
 
+/**
+ * The LinePlay Welcome tip's line, told from what the wait card really shows, so the tip never
+ * promises Ride Parts beside "No Parts at this ride" (honesty, wave 6):
+ * - 'on': this wait earns Parts (the card shows the Parts ring): the full line.
+ * - 'none': this ride pays no Parts (the card says so): games only, no Parts promise.
+ * - 'unknown': still checking (location, server): a line that is true either way.
+ */
+export type LinePartsState = 'on' | 'none' | 'unknown';
+export const LINEPLAY_INTRO_BODY: Readonly<Record<LinePartsState, string>> = {
+  on: 'Stay near the ride and your time in line earns Ride Parts. Games are bonus fun. Look up when the line moves.',
+  none: 'Play games while you wait. This ride has no Parts yet. Look up when the line moves.',
+  unknown: 'Play games while you wait. Look up when the line moves.',
+};
+
 /** One line each. Finn says these once, at the moment they happen. */
 export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy>> = {
   // The map's shark finder button (FollowButton draws its own bubble from FOLLOW_COPY; this is the record).
@@ -103,6 +128,7 @@ export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy
   coin_in_range: { title: 'Tap PLAY RIDE!', body: 'One Ticket gets one try. Win the ride coin!' },
   ride_challenge: { title: 'How a ride challenge works',
     body: 'Spend a Ticket to start. The game picks itself. Win to get this coin and the prizes shown here.' },
+  // LinePlay passes the line that matches its wait card (LINEPLAY_INTRO_BODY); this is the Parts-on default.
   lineplay_intro: { title: 'Welcome to LinePlay',
     body: 'Stay near the ride and your time in line earns Ride Parts. Games are bonus fun. Look up when the line moves.' },
   first_ride_part: { title: 'Your first Ride Part!',

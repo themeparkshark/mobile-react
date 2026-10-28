@@ -23,6 +23,7 @@ import PlaceCoinModal from '../../components/GymBattle/PlaceCoinModal';
 import DefendMiniGameModal from '../../components/GymBattle/DefendMiniGameModal';
 import { battleHUDEvents } from '../../components/GymBattle/battleHUDEvents';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
+import TeamBadge from '../../components/TeamBadge';
 import { GameButton, GameIcon } from '../../ui';
 import useMatchLink from '../../hooks/useMatchLink';
 import MatchLinkBanner from '../../components/match/MatchLinkBanner';
@@ -53,12 +54,6 @@ const READY_H = Math.min(...Object.values(READY_ART).map(a => ACTION_CELL_W * a.
 const WAIT_H = Math.max(34, Math.round(READY_H * 0.78));
 const WAIT_W = Math.round(ACTION_CELL_W * 0.84);
 
-// Pillar images
-const PILLAR_IMAGES = {
-  mouse: require('../../../assets/images/pillar-mouse.png'),
-  globe: require('../../../assets/images/pillar-globe.png'),
-  shark: require('../../../assets/images/pillar-shark.png'),
-};
 
 // Team colours and names come from the one team table (constants/teams).
 const TEAM_COLORS: Record<TeamId, string> = { mouse: TEAMS.mouse.color, globe: TEAMS.globe.color, shark: TEAMS.shark.color };
@@ -281,11 +276,7 @@ const AnimatedPillar = ({
         )}
         
         {/* Pillar image */}
-        <Image
-          source={PILLAR_IMAGES[team]}
-          style={styles.pillarImage}
-          contentFit="contain"
-        />
+        <TeamBadge team={team} kind="pillar" style={styles.pillarImage} />
 
         {/* Winner crown/sparkles */}
         {isWinner && (
@@ -298,7 +289,7 @@ const AnimatedPillar = ({
         <View style={[styles.scoreBadge, { backgroundColor: teamColor }]}>
           {/* The team crest rides on the score, so a non-reader can tell the
               three towers apart on any phone size. */}
-          <Image source={TEAMS[team].badge} style={styles.scoreCrest} contentFit="contain" />
+          <TeamBadge team={team} style={styles.scoreCrest} />
           <Text style={styles.scoreText}>{countText(score ?? 0)}</Text>
         </View>
       </Animated.View>
@@ -1011,7 +1002,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
               <Text style={styles.statLabel}>YOUR TEAM</Text>
               <View style={styles.statTeamRow}>
                 {player?.team && TEAMS[player.team as TeamId] ? (
-                  <Image source={TEAMS[player.team as TeamId].badge} style={styles.statCrest} contentFit="contain" />
+                  <TeamBadge team={player.team as TeamId} style={styles.statCrest} />
                 ) : null}
                 <Text style={[styles.statValue, { color: TEAM_COLORS[player?.team as keyof typeof TEAM_COLORS] || '#123A6B' }]}>
                   {player?.team ? TEAM_NAMES[player.team as keyof typeof TEAM_NAMES]?.replace('Team ', '') : 'None'}
@@ -1032,7 +1023,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
               <Text style={styles.statLabel}>LEADING</Text>
               <View style={styles.statTeamRow}>
                 {hasWinner ? (
-                  <Image source={TEAMS[winningTeam].badge} style={styles.statCrest} contentFit="contain" />
+                  <TeamBadge team={winningTeam} style={styles.statCrest} />
                 ) : null}
                 <Text style={[styles.statValue, { color: hasWinner ? TEAM_COLORS[winningTeam] : '#123A6B' }]}>
                   {hasWinner ? TEAM_NAMES[winningTeam]?.replace('Team ', '') : 'TIE'}

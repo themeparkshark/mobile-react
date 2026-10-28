@@ -38,6 +38,16 @@ test('marking twice is a no-op and never loses earlier tips', async () => {
   assert.deepEqual([...state].sort(), ['coin_card', 'park_hud']);
 });
 
+test('a tip the app already holds in memory is still saved, so it never comes back next launch', async () => {
+  const kv = memoryKv();
+  const store = seen.createSeenTipStore(kv, 24);
+  // HelpProvider.markTipSeen adds the id to its in-memory set first, then asks the store to save that set.
+  await store.mark('lineplay_intro', new Set(['lineplay_intro']));
+  assert.equal(kv.data.get('tps_tips_seen_v1:24'), '["lineplay_intro"]');
+  const relaunch = seen.createSeenTipStore(kv, 24);
+  assert.equal(seen.shouldShowTip('lineplay_intro', { loaded: true, seen: await relaunch.load(), busy: false }), false);
+});
+
 test('broken storage never traps a player', async () => {
   assert.equal(seen.parseSeen('not json').size, 0);
   assert.equal(seen.parseSeen('{"a":1}').size, 0);

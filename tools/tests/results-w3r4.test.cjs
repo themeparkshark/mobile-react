@@ -67,10 +67,10 @@ test('short Duel cards zoom the dropped scene a little (capped), tall cards neve
   assert.match(duel, /zoomSv\.value = reducedMotion \? z : withTiming\(z,/);
 });
 
-test('SAFE on the Big Final board is a lock picture, never KEEP ALL', () => {
+test('the Final board has no chips at all: no SAFE, no KEEP ALL, nothing to stake', () => {
   const ov = read('src/games/trivia-duel/ui/Overlays.tsx');
   assert.doesNotMatch(ov, /KEEP ALL/);
-  assert.match(ov, /miss === 0 \? <View style=\{styles\.chipSafe\}><GameIcon name="lock" size=\{18\} \/><\/View>/);
+  assert.doesNotMatch(ov, /WagerChips|chipSafe|chipMiss/);
 });
 
 test('the shared card speaks the family language: buttons inside, gold score with no SCORE word, the shark on its podium', () => {
@@ -114,24 +114,12 @@ test('the Boss team win is a KO crown pill and the receipt is one short word', (
   assert.match(bash, /accessibilityLabel=\{receipt === 'saved' \? 'Saved for the team' : undefined\}/);
 });
 
-test('the suggested Big Final chip follows the half-chip miss rule', () => {
+test('the Final is a no-risk bonus: no chips to pick, a miss never takes points (merged with honesty-kids rev 8)', () => {
   const sc = loadTs('src/games/trivia-duel/engine/scoring.ts');
-  // Already won either way: the biggest chip a miss cannot lose (a sure win scores big).
-  let s = sc.suggestWager(2000, 300, 1); // GO BIG miss leaves 1000 > 950
-  assert.equal(s.index, 2);
-  assert.equal(s.kind, 'win');
-  assert.equal(s.reason, 'Wins it either way.');
-  s = sc.suggestWager(1600, 300, 1); // GO BIG miss 800 < 950; HALF miss 1600 - 400 = 1200 > 950
-  assert.equal(s.index, 1);
-  // A right answer wins it but a miss could lose: still the smallest locking chip.
-  s = sc.suggestWager(1000, 300, 1);
-  assert.equal(s.index, 0);
-  assert.equal(s.reason, "Wins it if you're right.");
-  // Trailing: GO BIG.
-  assert.equal(sc.suggestWager(300, 600, 1).index, 2);
-  // Every suggestion is a real chip.
-  for (const [me, opp] of [[0, 0], [5, 900], [900, 5], [450, 450], [1234, 777]]) {
-    const k = sc.suggestWager(me, opp, 1).index;
-    assert.ok(k >= 0 && k < sc.wagerStakes(me).length);
+  assert.equal(sc.suggestWager, undefined);
+  assert.equal(sc.wagerStakes, undefined);
+  for (const [me, q] of [[0, 0], [5, 100], [900, 250], [1234, 175]]) {
+    assert.equal(sc.applyFinal(me, false, q), me, 'a miss keeps every point');
+    assert.ok(sc.applyFinal(me, true, q) >= me, 'a right answer only adds');
   }
 });

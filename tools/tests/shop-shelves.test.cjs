@@ -750,7 +750,7 @@ test('pre-launch 2: shelf jump bar highlights the shelf under the bar', () => {
     assert.match(code, new RegExp(`icon: '${icon}' as const`));
     assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
   }
-  for (const icon of ['streak', 'gift', 'sparkle', 'heart', 'ride', 'medal1', 'star', 'dice']) assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
+  for (const icon of ['streak', 'gift', 'sparkle', 'heart', 'ride', 'medal1', 'star', 'crown']) assert.match(names, new RegExp(`'${icon}'`), `${icon} is a UI kit icon`);
   // (The Secret Shop is one showroom with no jump bar; the Shark Shop always has one.)
   assert.match(code, /\{secret \? \(\s*<FxPauseContext\.Provider value=\{!!open\}>\s*<SecretShowroom /);
   assert.match(code, /\) : \(<>\s*<JumpBar chips=\{chips\} tops=\{tops\} scrollY=\{shelfY\} maxY=\{maxY\} onJump=\{jump\} \/>\s*<View style=\{\{ flex: 1 \}\}>\s*<Animated\.ScrollView ref=\{scrollRef\}/);

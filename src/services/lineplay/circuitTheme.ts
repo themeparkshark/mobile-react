@@ -22,7 +22,7 @@ export interface CircuitTheme {
 }
 
 const THEMES: Record<RideDeckId, CircuitTheme> = {
-  space: { id: 'space', place: 'STARPORT', repairTitle: 'Repair the signal', solvedTitle: 'Navigation online!',
+  space: { id: 'space', place: 'STARPORT', repairTitle: 'Fix the signal', solvedTitle: 'Navigation online!',
     relayNoun: 'stars', flow: '#ffcf3b', litTile: '#fff3c4' },
   pirates: { id: 'pirates', place: 'HARBOR', repairTitle: 'Relight the lantern line', solvedTitle: 'Harbor lights on!',
     relayNoun: 'lanterns', flow: '#ff9a2e', litTile: '#ffe6c7' },

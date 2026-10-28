@@ -16,6 +16,8 @@ import {
   entriesFromServer,
   entryFromWordPress,
   filterByKey,
+  isGrownUpStory,
+  kidSafe,
   mergeEntries,
   type NewsEntry,
   type NewsFilterKey,
@@ -46,6 +48,8 @@ export type NewsPage = {
   readonly entries: NewsEntry[];
   readonly hasMore: boolean;
   readonly source: 'server' | 'wordpress';
+  /** Stories the page held before the kid filter, so a page of only grown-up stories still pages on. */
+  readonly fetched?: number;
 };
 
 /** Dev only: EXPO_PUBLIC_NEWS_OFFLINE=1 makes every news request fail, to record the offline states. */
@@ -68,7 +72,7 @@ export async function loadSaved(): Promise<NewsEntry[]> {
   try {
     const raw = await AsyncStorage.getItem(FEED_KEY);
     const list = raw ? JSON.parse(raw) : null;
-    return Array.isArray(list) ? mergeEntries(list) : [];
+    return Array.isArray(list) ? kidSafe(mergeEntries(list)) : [];
   } catch {
     return [];
   }
@@ -158,6 +162,12 @@ async function fromServer(query: NewsQuery): Promise<NewsPage> {
  * WordPress otherwise (or when the server fails).
  */
 export async function fetchNewsPage(query: NewsQuery): Promise<NewsPage> {
+  const page = await fetchAnyPage(query);
+  // Every player sees News: grown-up stories (horror nights, bars) never reach the app's lists.
+  return { ...page, entries: kidSafe(page.entries), fetched: page.entries.length };
+}
+
+async function fetchAnyPage(query: NewsQuery): Promise<NewsPage> {
   if (DEV_SLOW && query.page === 1) await new Promise(resolve => setTimeout(resolve, 90000));
   const plain = query.filter === 'all' && !query.search && query.page === 1;
   if (plain || serverV2) {
@@ -200,7 +210,9 @@ export async function fetchBySlug(slug: string): Promise<NewsEntry | null> {
     params: { slug, _embed: 'wp:featuredmedia', _fields: WP_FIELDS },
   });
   const post = Array.isArray(response.data) ? response.data[0] : null;
-  return entryFromWordPress(post);
+  const entry = entryFromWordPress(post);
+  // A grown-up story never comes back for the kids reader.
+  return entry && !isGrownUpStory(entry) ? entry : null;
 }
 
 /* --------------------------------------------------- reader hand-off */
@@ -213,6 +225,7 @@ export async function fetchBySlug(slug: string): Promise<NewsEntry | null> {
 const entryCache = new Map<number, NewsEntry>();
 export function rememberEntries(list: readonly NewsEntry[]): void {
   for (const entry of list) {
+    if (isGrownUpStory(entry)) continue;
     const prev = entryCache.get(entry.id);
     entryCache.set(entry.id, prev ? mergeEntries([prev], [entry])[0] : entry);
   }
@@ -222,7 +235,7 @@ export function getEntry(id: number): NewsEntry | undefined {
 }
 export function findBySlug(slug: string): NewsEntry | undefined {
   for (const entry of entryCache.values()) {
-    if (entry.url && entry.url.toLowerCase().includes(`/${slug}/`)) return entry;
+    if (entry.url && entry.url.toLowerCase().includes(`/${slug}/`)) return isGrownUpStory(entry) ? undefined : entry;
   }
   return undefined;
 }

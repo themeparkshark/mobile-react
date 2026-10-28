@@ -1,5 +1,6 @@
 import { resolveIconName, type GameIconName } from '../../../ui/iconNames';
 import client from '../../client';
+import { AD_AUDIENCE_13_PLUS_KNOWN } from '../../../services/adConfig';
 
 export type VipPerk = { icon: GameIconName; title: string; body: string };
 
@@ -8,12 +9,23 @@ export type VipPerk = { icon: GameIconName; title: string; body: string };
  * from config economy.vip). Anything malformed is dropped; an empty or failed
  * answer returns null so the screen keeps its built-in list.
  */
+/**
+ * Nobody sees ads while no player has a known 13+ age (adConfig), so "No ad to
+ * watch" is an empty promise. Drop any sentence about ads until ads can show.
+ */
+export function withoutAdTalk(text: string, adsCanShow: boolean = AD_AUDIENCE_13_PLUS_KNOWN): string {
+  if (adsCanShow) return text;
+  return text.split(/(?<=[.!?])\s+/)
+    .filter(sentence => !/\b(no ads?|an ad|ad to watch|watching (?:an? )?ads?|without (?:an? )?ads?)\b/i.test(sentence))
+    .join(' ').trim();
+}
+
 export function parseVipPerks(value: unknown): VipPerk[] | null {
   if (!Array.isArray(value)) return null;
   const perks = value.flatMap((perk): VipPerk[] => {
     const icon = resolveIconName((perk as { icon?: unknown })?.icon);
     const { title, body } = (perk ?? {}) as { title?: unknown; body?: unknown };
-    return icon && typeof title === 'string' && title && typeof body === 'string' ? [{ icon, title, body }] : [];
+    return icon && typeof title === 'string' && title && typeof body === 'string' ? [{ icon, title: withoutAdTalk(title) || title, body: withoutAdTalk(body) }] : [];
   });
   return perks.length ? perks : null;
 }

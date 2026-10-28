@@ -167,8 +167,6 @@ export interface ResultsModel {
   practice: boolean;
   /** Fin rank bar: label and progress toward the next rank (0..1), or null vs a ghost. */
   rank?: { label: string; progress: number; next: string | null; stripes?: number; nextStripes?: number | null; wins?: number; need?: number } | null;
-  /** Points a missed Big Final took away (shown so right answers and a low score agree). */
-  finalLost?: number;
   /** Best Moment: the fastest correct lock. */
   best?: { label: string } | null;
   /** Ride challenge: the coin line instead of the duel title. */
@@ -247,7 +245,6 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   // A lost ride challenge shows its right answers on the coin goal row instead.
   const rideGoal = model.ride && !model.ride.won && model.ride.need ? { right: Math.min(model.ride.right ?? 0, model.ride.need), need: model.ride.need } : null;
   const chips = duelChips(model.rows).filter((c) => !(rideGoal && c.label === 'RIGHT ANSWERS'));
-  const finalLost = model.finalLost && model.finalLost > 0 ? model.finalLost : 0;
   const rankUp = model.banners.includes('RANK UP');
 
   const total = Math.max(1, model.myScore + model.oppScore);
@@ -277,10 +274,6 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             <Text style={styles.scoreOpp}>{countText(model.oppScore)}</Text>
           </View>
         </View>
-        {/* Right answers and a low score agree: the Big Final that missed is
-            right there, as a picture (lightning, then a red arrow down to the
-            points it took). No dice and no betting words on a kids' card. */}
-        {finalLost ? <BigFinalLost points={finalLost} reducedMotion={reducedMotion} /> : null}
         {/* Every Duel card (Line Trivia, a duel, a ride challenge) stamps the same
             star row the other games do, so a win and a miss read as one family. */}
         <View style={styles.starRow} accessible accessibilityLabel={`${stars} of 3 stars`}>
@@ -516,34 +509,6 @@ function RankUpRow({ from, to, label, reducedMotion }: { from: number; to: numbe
   );
 }
 
-/**
- * The Big Final that missed: lightning, BIG FINAL, then a red pill with an
- * arrow pointing down at the points it took (no minus sign to work out, no
- * dice, no betting words). The full sentence is spoken.
- */
-function BigFinalLost({ points, reducedMotion }: { points: number; reducedMotion: boolean }) {
-  const drop = useSharedValue(reducedMotion ? 0 : -10);
-  const o = useSharedValue(reducedMotion ? 1 : 0);
-  useEffect(() => {
-    if (reducedMotion) return;
-    o.value = withDelay(500, withTiming(1, { duration: 160 }));
-    drop.value = withDelay(500, withSpring(0, { damping: 9, stiffness: 260 }));
-  }, [o, drop, reducedMotion]);
-  const st = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ translateY: drop.value }] }));
-  return (
-    <View style={styles.finalLostPill} accessible accessibilityLabel={`The Big Final missed, so ${countText(points)} points went away`}>
-      <GameIcon name="rush" size={22} />
-      <Text style={styles.finalLostText}>BIG FINAL</Text>
-      <Animated.View style={st}>
-        <View style={styles.finalDrop}>
-          <GameIcon name="arrow" size={20} style={styles.arrowDown} />
-          <Text style={styles.finalDropText}>{countText(points)}</Text>
-        </View>
-      </Animated.View>
-    </View>
-  );
-}
-
 function Banner({ text, i, reducedMotion }: { text: string; i: number; reducedMotion: boolean }) {
   const sx = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
@@ -637,12 +602,6 @@ const styles = StyleSheet.create({
   factText: { flex: 1, fontSize: 15, fontWeight: '700', color: C.navy },
   factLong: { fontSize: 14 },
   starPip: { marginHorizontal: 3, justifyContent: 'flex-end' },
-  finalLostPill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, marginTop: 4, backgroundColor: '#ffffff', borderRadius: 12,
-    borderWidth: 2.5, borderColor: C.ink, paddingHorizontal: 10, paddingVertical: 2 },
-  finalLostText: { fontFamily: 'Shark', fontSize: 16, color: C.navy },
-  finalDrop: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: C.coral, borderRadius: 10, borderWidth: 2, borderColor: C.ink, paddingLeft: 2, paddingRight: 8, marginVertical: 2 },
-  finalDropText: { fontFamily: 'Shark', fontSize: 16, color: '#ffffff' },
-  arrowDown: { transform: [{ rotate: '90deg' }] },
   goal: { alignItems: 'center', marginTop: 6 },
   goalRow: { flexDirection: 'row', alignItems: 'center' },
   goalDot: { width: 26, height: 26, borderRadius: 13, borderWidth: 3, borderColor: '#05346e', marginHorizontal: 4 },

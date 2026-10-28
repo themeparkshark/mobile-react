@@ -40,3 +40,19 @@ export function parkTipFor(input: { readonly inPark: boolean; readonly rideCoinI
   if (!input.inPark || !input.arrivalLessonDone) return null;
   return input.rideCoinInRange ? 'coin_in_range' : 'park_hud';
 }
+
+export interface LineNudgeState {
+  /** Something already asks the kid: a sheet, the arcade, a dialog, the 3 2 1 or its hand-off. */
+  readonly busy: boolean;
+  /** A one-time tip is on screen (the Welcome tip stays until tapped). */
+  readonly tipUp: boolean;
+  readonly appActive: boolean;
+  readonly alreadyNudged: boolean;
+  readonly quietMs: number;
+}
+
+/** The 25 s idle nudge in line ("Next adventure is ready!"): one voice at a time, never on top of a tip. */
+export const LINE_NUDGE_QUIET_MS = 25_000;
+export function lineNudgeReady(state: LineNudgeState): boolean {
+  return !state.busy && !state.tipUp && state.appActive && !state.alreadyNudged && state.quietMs >= LINE_NUDGE_QUIET_MS;
+}

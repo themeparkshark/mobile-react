@@ -2,8 +2,8 @@
 /**
  * Standings (WS8, P0-9): every load ends in ready, empty or error (never an
  * endless spinner), 1-2 players still get a podium, the Rides tab opens on the
- * nearest park and shows a real date, and VIP-neutral XP stays behind a flag
- * that defaults to today's behaviour.
+ * nearest park and shows a real date, and the XP board shows the number it is
+ * ranked by.
  */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -59,15 +59,17 @@ test('park days read as a real date, never a raw ISO string', () => {
   assert.match(model.rideMetricCopy('today', '2026-09-29', 0).caption, /Tuesday, September 29/);
 });
 
-test('VIP-neutral XP is off by default and only switches on with the flag and a base value', () => {
-  assert.equal(model.VIP_NEUTRAL_STANDINGS_DEFAULT, false);
-  assert.equal(model.vipNeutralStandingsEnabled({}), false);
-  assert.equal(model.vipNeutralStandingsEnabled({ EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS: '1' }), true);
-  assert.equal(model.vipNeutralStandingsEnabled({ EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS: 'false' }), false);
-  const player = { total_experience: 900, base_total_experience: 600 };
-  assert.equal(model.experienceScore(player, false), 900);
-  assert.equal(model.experienceScore(player, true), 600);
-  assert.equal(model.experienceScore({ total_experience: 900 }, true), 900, 'no base value keeps the total');
+test('the XP board shows the number it is ranked by, never a VIP-free number the server did not rank by', () => {
+  // The server sends its ranking column as total_experience (base XP once ECONOMY_VIP_NEUTRAL_STANDINGS is on).
+  assert.equal(model.experienceScore({ total_experience: 900, base_total_experience: 600 }), 900);
+  assert.equal(model.experienceScore({ total_experience: null }), 0);
+  assert.equal(model.VIP_NEUTRAL_STANDINGS_DEFAULT, undefined, 'no client switch that could disagree with the server order');
+  const board = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/LeaderboardsScreen/Experience.tsx'), 'utf8');
+  assert.doesNotMatch(board, /base_total_experience|VIP_NEUTRAL/);
+  // Shown in rank order: a list in server order stays in non-increasing score order.
+  const list = [{ total_experience: 700 }, { total_experience: 700 }, { total_experience: 600 }];
+  const shown = list.map(p => model.experienceScore(p));
+  assert.deepEqual(shown, [...shown].sort((a, b) => b - a));
 });
 
 test('empty boards invite the player onto the podium in plain copy', () => {
@@ -91,4 +93,30 @@ test('Standings screens never wait on a bare spinner and use the brand icons', (
   // The tab list moved into standingsTabs() so the Home Hunt flag can add a fourth tab.
   const tabs = fs.readFileSync(path.join(root, 'src/screens/LeaderboardsScreen/homeHuntModel.ts'), 'utf8');
   assert.match(tabs, /icon: 'ride'/, 'Rides tab has its icon');
+});
+
+test('the XP board says plainly when VIP bonus XP counts in the ranking', () => {
+  assert.equal(model.xpIncludesVipBonus(undefined), true, 'a server that sends nothing ranks by total XP (VIP bonus in)');
+  assert.equal(model.xpIncludesVipBonus({ current_page: 1 }), true);
+  assert.equal(model.xpIncludesVipBonus({ xp_includes_vip_bonus: false }), false);
+  assert.equal(model.xpIncludesVipBonus({ xp_includes_vip_bonus: true }), true);
+  const vip = [{ is_subscribed: false }, { is_subscribed: true }];
+  assert.equal(model.xpVipNote(vip, true), model.XP_VIP_NOTE);
+  assert.equal(model.xpVipNote([{ is_subscribed: false }, { flex: { vip: true } }], true), model.XP_VIP_NOTE);
+  assert.equal(model.xpVipNote([{ is_subscribed: false }], true), null, 'no VIP on the board, no line');
+  assert.equal(model.xpVipNote(vip, false), null, 'a board ranked without the bonus needs no line');
+  assert.ok(model.XP_VIP_NOTE.split(' ').length <= 9, 'one short kid line');
+  assert.doesNotMatch(model.XP_VIP_NOTE, /\u2014|bet|odds|hurry|now!/i);
+  const board = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/LeaderboardsScreen/Experience.tsx'), 'utf8');
+  assert.match(board, /cache\.vipBonus = xpIncludesVipBonus\(meta\);/);
+  assert.match(board, /const vipNote = cache\.vipNote \?\? xpVipNote\(players, cache\.vipBonus\);/);
+  // A VIP player first seen on a later page still turns the line on: it is worked out from every loaded page.
+  assert.match(board, /cache\.players = \[\.\.\.cache\.players, \.\.\.\(next \?\? \[\]\)\.filter\(p => !seen\.has\(p\.id\)\)\];\n\s*cache\.vipNote = xpVipNote\(cache\.players, cache\.vipBonus\);/);
+  assert.match(board, /const \{ players: next, meta \} = await allWithMeta\(cache\.page \+ 1\);\n\s*cache\.vipBonus = xpIncludesVipBonus\(meta\);/);
+  assert.equal(model.xpVipNote([{ is_subscribed: false }, { is_subscribed: false }, { is_subscribed: true }], true), model.XP_VIP_NOTE, 'page 1 plus page 2');
+});
+
+test('the XP VIP line sits on a soft navy pill, readable over the podium light rays', () => {
+  const board = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/LeaderboardsScreen/Experience.tsx'), 'utf8');
+  require('node:assert/strict').match(board, /backgroundColor: 'rgba\(7, 61, 119, 0\.72\)'/);
 });

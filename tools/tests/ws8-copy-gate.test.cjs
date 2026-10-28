@@ -96,7 +96,8 @@ test('Welcome drops the third-party name word and shows the fan-app disclaimer',
   const source = fs.readFileSync(path.join(root, 'src/screens/WelcomeScreen.tsx'), 'utf8');
   assert.doesNotMatch(source, /'Jaws'/);
   assert.match(source, /independent fan app/);
-  assert.match(source, /GameIcon name="dice"/);
+  assert.match(source, /GameIcon name="sparkle"/);
+  assert.doesNotMatch(source, /GameIcon name="dice"|[Rr]oll a random/);
   assert.doesNotMatch(source, /ActivityIndicator/);
 });
 

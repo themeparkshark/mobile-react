@@ -11,7 +11,7 @@ import {
   type DuelMode, type FinRank, type QueueRoundKey, type RoundSpec, type SpeedTier,
 } from './config';
 import { buildDeck, factKeysOf, materializeQuestion, usablePool, type DuelQuestion, type PoolQuestion } from './content';
-import { finAnswer, finClosestGuess, finStake, type FinAnswer } from './finAI';
+import { finAnswer, finClosestGuess, type FinAnswer } from './finAI';
 import {
   applyFinal, applyStreak, buzzFirst, buzzPoints, closestPoints, createStreak, creditedSpeed, graceMs, quickPoints,
   readLockMs, relaxedTiming, ridePoints, speedTier, stealPoints, streakMult, type SpeedMods, type StreakEvent, type StreakState,
@@ -237,7 +237,7 @@ export interface SideInput {
    */
   stealChoice?: number;
   stealMs?: number;
-  /** Final: chosen stake (absolute points). */
+  /** Legacy (rev 7 ghosts): a Final stake. Ignored since rev 8; the Final is a no-risk bonus. */
   stake?: number;
   chomp?: boolean;
   holdForfeit?: boolean;
@@ -253,7 +253,6 @@ export interface SideResult {
   speed: number;
   tier: SpeedTier;
   lockMs: number;
-  stake: number;
   accuracy?: number;
   bullseye?: boolean;
   buzzedFirst?: boolean;
@@ -296,7 +295,7 @@ export function createTally(carryStreak = 0, carryShield = false, shieldOn = tru
 const TIER_RANK: Record<SpeedTier, number> = { none: 0, nice: 1, great: 2, lightning: 3 };
 
 function blankResult(): SideResult {
-  return { correct: false, streakCorrect: false, points: 0, speed: 0, tier: 'none', lockMs: -1, stake: 0, streak: null };
+  return { correct: false, streakCorrect: false, points: 0, speed: 0, tier: 'none', lockMs: -1, streak: null };
 }
 
 function scoreQuickSide(mode: DuelMode, r: PlannedRound, input: SideInput, tally: SideTally): SideResult {
@@ -355,12 +354,11 @@ export function resolveRound(mode: DuelMode, r: PlannedRound, me: SideInput, opp
   }
 
   if (r.spec.type === 'final') {
-    meRes.stake = me.stake ?? 0;
-    const meAfter = applyFinal(tally.me.score, meRes.correct, meRes.points, meRes.stake);
+    // The no-risk bonus (rev 8): right doubles the question's points, wrong costs nothing.
+    const meAfter = applyFinal(tally.me.score, meRes.correct, meRes.points);
     meRes.points = meAfter - tally.me.score;
     if (opp) {
-      oppRes.stake = opp.stake ?? 0;
-      const oppAfter = applyFinal(tally.opp.score, oppRes.correct, oppRes.points, oppRes.stake);
+      const oppAfter = applyFinal(tally.opp.score, oppRes.correct, oppRes.points);
       oppRes.points = oppAfter - tally.opp.score;
     }
   }
@@ -480,10 +478,6 @@ export function finInput(plan: MatchPlan, r: PlannedRound, tally: MatchTally): {
     if (input.buzzMs < 0) input.lockMs = Math.round(Math.min(BUZZ.openPhaseMs - 400, 700 + rngFloat(rr) * 1800));
     else input.lockMs = input.buzzMs;
   }
-  if (r.spec.type === 'final') {
-    const m = streakMult(tally.opp.streak.streak + 1);
-    input.stake = finStake(plan.seed, plan.rank, tally.opp.score, tally.me.score, m);
-  }
   return { input, answer: ans };
 }
 
@@ -531,7 +525,7 @@ export function makeGhost(plan: MatchPlan, tally: MatchTally, name: string, look
 
 /** Compact wire form: `g2.` + JSON with short keys (g1 records still decode). */
 export function encodeGhost(g: GhostRecord): string {
-  const rows = g.rows.map((r) => [r.choice, r.lockMs, r.guess ?? null, r.buzzMs ?? null, r.stealChoice ?? null, r.stealMs ?? null, r.stake ?? null, r.chomp ? 1 : 0, r.holdForfeit ? 1 : 0]);
+  const rows = g.rows.map((r) => [r.choice, r.lockMs, r.guess ?? null, r.buzzMs ?? null, r.stealChoice ?? null, r.stealMs ?? null, null, r.chomp ? 1 : 0, r.holdForfeit ? 1 : 0]);
   return `g2.${JSON.stringify([g.seed, g.mode, g.name, g.look, g.score, g.correct, g.at, g.qids, rows, g.keys ?? null])}`;
 }
 
@@ -548,7 +542,7 @@ export function decodeGhost(s: string): GhostRecord | null {
         if (r[3] != null) row.buzzMs = r[3] as number;
         if (r[4] != null) row.stealChoice = r[4] as number;
         if (r[5] != null) row.stealMs = r[5] as number;
-        if (r[6] != null) row.stake = r[6] as number;
+        // r[6] was a rev 7 Final stake: ignored (the Final is a no-risk bonus now).
         if (r[7]) row.chomp = true;
         if (r[8]) row.holdForfeit = true;
         return row;
@@ -566,13 +560,10 @@ export function gradeRun(plan: MatchPlan, rows: readonly SideInput[]): MatchTall
   return t;
 }
 
-/**
- * Ghost input for a round; its recorded wager applies as the same absolute
- * stake, capped at what the ghost holds in this replay (never a free stake).
- */
-export function ghostInput(g: GhostRecord, round: number, ghostScoreNow?: number): SideInput {
+/** Ghost input for a round. A rev 7 ghost's Final stake is dropped: every Final is a no-risk bonus now. */
+export function ghostInput(g: GhostRecord, round: number, _ghostScoreNow?: number): SideInput {
   const row = g.rows[round] ? { ...g.rows[round] } : { ...NO_INPUT };
-  if (row.stake != null && ghostScoreNow != null) row.stake = Math.max(0, Math.min(row.stake, ghostScoreNow));
+  delete row.stake;
   return row;
 }
 

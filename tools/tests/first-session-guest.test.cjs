@@ -404,11 +404,11 @@ test('save card: the dots sit centred above the title and a returning family see
   assert.doesNotMatch(GUEST_TASTE_COPY.save.have, /saved|stays yours|your coin/i);
 });
 
-test('the name step starts with a rolled kid-safe name, so a kid can just tap the button', () => {
+test('the name step starts with a picked kid-safe name, so a kid can just tap the button', () => {
   const src = read('src/screens/WelcomeScreen.tsx');
-  assert.match(src, /useState\(rollName\)/);
-  assert.doesNotMatch(src, /'Dole'/, 'no brand names in rolled names');
-  assert.match(src, /selectTextOnFocus/, 'typing your own name replaces the rolled one');
+  assert.match(src, /useState\(pickName\)/);
+  assert.doesNotMatch(src, /'Dole'/, 'no brand names in picked names');
+  assert.match(src, /selectTextOnFocus/, 'typing your own name replaces the picked one');
 });
 
 // Wave 2 round 1 (Oct 23): a guaranteed first-win end, no empty or skippable first frames,

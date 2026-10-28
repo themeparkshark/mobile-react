@@ -7,10 +7,11 @@ export const RING = {
   rush: '#ffcf3b',
   gold: '#ffcf3b',
   blue: '#0879ca',
-  urgent: '#ef4a3c',
+  /** The last 5 minutes: a warmer, deeper gold. Calm, never red (no ticking-alarm pressure on a kid map). */
+  urgent: '#f2a900',
 } as const;
 
-/** Rush gold, a held ride its team colour, red only in the last 5 minutes, gold in reach, else blue. */
+/** Rush gold, a held ride its team colour, deep gold in the last 5 minutes, gold in reach, else blue. Never red. */
 export function markerRingColor({ rush, team, urgent, near }: {
   rush: boolean; team: string | null; urgent: boolean; near: boolean;
 }): string {

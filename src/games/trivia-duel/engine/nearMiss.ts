@@ -2,18 +2,18 @@
  * Near-miss line for a loss (design 11.9): find the smallest single change
  * that flips the result and say it in one friendly line.
  *   speed: "Just 35 away! A GREAT answer on question 2 wins it."
- *   wager: "Just 120 away! GO BIG on the Final wins it."
+ *   final: "Just 120 away! A right answer on the bonus question wins it."
  *   miss:  "Just 60 away! One more right answer wins it."
  * Never "lost", never a betting word. A big gap gets no sentence at all: the
  * card shows Fin and the REMATCH button pulses.
  */
 import { POINTS } from './config';
 import type { MatchPlan, MatchTally, RoundResult } from './match';
-import { missLoss, streakMult } from './scoring';
+import { streakMult } from './scoring';
 
 export interface NearMiss {
   gap: number;
-  kind: 'speed' | 'bigFinal' | 'miss' | 'tie' | 'none';
+  kind: 'speed' | 'final' | 'miss' | 'tie' | 'none';
   line: string;
 }
 
@@ -42,13 +42,11 @@ export function nearMiss(plan: MatchPlan, tally: MatchTally, results: readonly R
     return { gap, kind: 'speed', line: `Just ${gap} away! A ${word} answer on question ${b.round + 1} wins it.` };
   }
 
-  // 2) Big Final: going bigger on a Final you got right.
+  // 2) Final: a right answer on the double-points bonus question.
   const fi = plan.rounds.findIndex((r) => r.spec.type === 'final');
   const fr = fi >= 0 ? results[fi] : undefined;
-  if (fr && fr.me.correct) {
-    const scoreBefore = tally.me.score - fr.me.points;
-    const allIn = Math.max(0, scoreBefore) - fr.me.stake;
-    if (allIn >= need) return { gap, kind: 'bigFinal', line: `Just ${gap} away! GO BIG on the Final wins it.` };
+  if (fr && !fr.me.correct && POINTS.base * 2 >= need) {
+    return { gap, kind: 'final', line: `Just ${gap} away! A right answer on the bonus question wins it.` };
   }
 
   // 3) Miss: one more right answer.
@@ -72,12 +70,3 @@ export function rideNearMiss(results: readonly { me: { correct: boolean } }[], n
   return 'Two right answers win the coin.';
 }
 
-/**
- * Points a wrong Big Final took away, or 0. A duel can end with right
- * answers and a low score only this way, so the card names it.
- */
-export function finalPointsLost(plan: { rounds: readonly { spec: { type: string } }[] }, results: readonly { me: { correct: boolean; stake?: number } }[]): number {
-  const fi = plan.rounds.findIndex((r) => r.spec.type === 'final');
-  const fr = fi >= 0 ? results[fi] : undefined;
-  return fr && !fr.me.correct && (fr.me.stake ?? 0) > 0 ? missLoss(fr.me.stake ?? 0) : 0;
-}

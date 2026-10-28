@@ -17,6 +17,9 @@ function card(initial = {}) {
     '../../../gamekit/Particles': { ParticleField: 'ParticleField' },
     '../../../ui': { BRAND: tokens.BRAND, GameButton: 'GameButton', GameIcon: 'GameIcon' },
     'react-native-svg': { default: 'Svg', Circle: 'Circle', Path: 'Path' },
+    '../../../services/lineplay/lineLayout': loadTs('src/services/lineplay/lineLayout.ts'),
+    // KidText is a Text whose numbers use the number font; here it renders as a plain Text.
+    './KidText': { default: 'Text' },
   }, { seed: 0, paused: false, completed: false,
     onTurn: index => turns.push(index), onNewRound() {}, onNext() {}, ...initial });
   app.native.AccessibilityInfo.announceForAccessibility = value => { announcements.push(value); return Promise.resolve(); };
@@ -30,7 +33,7 @@ test('a manual pause keeps a visible board but blocks tile edits and shows saved
   assert.deepEqual(c.turns, [0]); c.app.change({ paused: true });
   const paused = c.tile(1, 1); assert.equal(paused.props.disabled, true);
   paused.props.onPress(); assert.deepEqual(c.turns, [0]);
-  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Paused. Your circuit is saved right where you left it.'));
+  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Paused. Your circuit is saved.'));
 });
 test('every tile of a 4x4 replay board is a big labelled target and the relays are drawn art, not glyphs', () => {
   const c = card({ progress: logic.createNavigationPanelProgress(0, 1) });
@@ -52,7 +55,7 @@ test('one solved repair celebrates once, keeps next action ready and respects a 
   c.app.change({ progress: logic.createNavigationPanelProgress(0, 0, true), completed: true });
   assert.equal(c.sounds.filter(name => name === 'win').length, 1);
   assert.equal(c.announcements.length, 1);
-  const next = c.app.find(node => node.props?.accessibilityLabel === 'Next mission: Find the missing signal');
+  const next = c.app.find(node => node.props?.accessibilityLabel === 'Next mission: Spot the clue');
   assert.ok(next); assert.equal(next.props.disabled, false);
   // With motion on, the payoff springs in after the flow reaches the exit.
   assert.ok(c.app.motions.includes('spring'));
@@ -65,7 +68,7 @@ test('restored completion is quiet, and replay is an uncompleted new puzzle with
   assert.equal(c.tile(1, 1).props.disabled, true);
   c.app.change({ progress: logic.createNavigationPanelProgress(0, 1) });
   assert.equal(c.tile(1, 1).props.disabled, false);
-  assert.equal(c.app.find(node => node.props?.accessibilityLabel === 'Next mission: Find the missing signal'), undefined);
+  assert.equal(c.app.find(node => node.props?.accessibilityLabel === 'Next mission: Spot the clue'), undefined);
   assert.equal(c.sounds.includes('win'), false);
 });
 

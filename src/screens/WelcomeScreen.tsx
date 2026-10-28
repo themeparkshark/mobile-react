@@ -25,7 +25,7 @@ const FIRST = ['Churro', 'Fin', 'Coaster', 'Splash', 'Chomp', 'Snack', 'Turkey',
   'Popcorn', 'Loop', 'Drop', 'Wave', 'Tiki', 'Parade'];
 const SECOND = ['Fan', 'Fin', 'Rider', 'Chomp', 'King', 'Boss', 'Shark', 'Queen', 'Hero', 'Pal', 'Buddy', 'Legend'];
 
-function rollName(): string {
+function pickName(): string {
   for (let i = 0; i < 20; i++) {
     const a = FIRST[Math.floor(Math.random() * FIRST.length)];
     const b = SECOND[Math.floor(Math.random() * SECOND.length)];
@@ -48,8 +48,8 @@ function check(name: string): Check {
 }
 
 export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any>) {
-  // A kid-safe name is ready from the start, so a 7-year-old can just tap the button (or roll, or type).
-  const [username, setUsername] = useState(rollName);
+  // A kid-safe name is ready from the start, so a 7-year-old can just tap the button (or tap the sparkle for a new one, or type).
+  const [username, setUsername] = useState(pickName);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -63,7 +63,8 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
   const bob = useSharedValue(0);
   const spin = useSharedValue(0);
   const cheer = useSharedValue(0);
-  const dice = useSharedValue(0);
+  // The new-name button's sparkle swirls (a turn and a pop) each time it picks a name. No dice anywhere.
+  const swirl = useSharedValue(0);
   const shake = useSharedValue(0);
   // The idle bob and starburst run only while this screen is on top (it stays
   // mounted under the map after onboarding) and rest under Reduce Motion.
@@ -82,19 +83,23 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
     ],
   }));
   const burstStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value * 360}deg` }] }));
-  const diceStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${dice.value * 360}deg` }] }));
+  const swirlStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${swirl.value * 360}deg` }, { scale: 1 + Math.sin(swirl.value * Math.PI) * 0.22 }],
+  }));
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.value }] }));
 
   const status = check(username);
   const hint = serverError ?? status.hint;
   const hintOk = !serverError && status.ok;
 
-  const roll = () => {
+  const newName = () => {
     Haptics.selectionAsync();
-    dice.value = 0;
-    dice.value = withTiming(1, { duration: 380, easing: Easing.out(Easing.back(2)) });
+    if (!reduced) {
+      swirl.value = 0;
+      swirl.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) });
+    }
     setServerError(null);
-    setUsername(rollName());
+    setUsername(pickName());
   };
 
   const submit = async () => {
@@ -121,7 +126,7 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
     } catch (error: any) {
       const message = error?.response?.data?.errors?.username?.[0]
         ?? error?.response?.data?.message ?? 'Your name didn’t save. Check your internet and tap Let’s Go again.';
-      setServerError(/taken/i.test(message) ? 'That name is taken. Try another or roll one!' : message);
+      setServerError(/taken/i.test(message) ? 'That name is taken. Try another, or tap the sparkle for a new one!' : message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       shake.value = withSequence(withTiming(-10, { duration: 50 }), withTiming(10, { duration: 50 }),
         withTiming(-6, { duration: 50 }), withTiming(0, { duration: 50 }));
@@ -172,8 +177,8 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
                       accessibilityLabel="Shark name"
                     />
                   </Pressable>
-                  <Pressable onPress={roll} style={styles.dice} accessibilityRole="button" accessibilityLabel="Roll a random name">
-                    <Animated.View style={diceStyle}><GameIcon name="dice" size={36} /></Animated.View>
+                  <Pressable onPress={newName} style={styles.newName} accessibilityRole="button" accessibilityLabel="Get a new name">
+                    <Animated.View style={swirlStyle}><GameIcon name="sparkle" size={36} /></Animated.View>
                   </Pressable>
                 </View>
                 <View style={styles.hintRow}>
@@ -224,7 +229,7 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   inputWrap: { flex: 1, backgroundColor: '#eef6ff', borderRadius: 16, borderWidth: 3, borderColor: '#bcd9f5' },
   input: { fontFamily: 'Shark', fontSize: 26, color: '#09268f', textAlign: 'center', paddingVertical: 10 },
-  dice: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#ffcf3b', alignItems: 'center', justifyContent: 'center',
+  newName: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#ffcf3b', alignItems: 'center', justifyContent: 'center',
     borderBottomWidth: 4, borderBottomColor: '#d99a00' },
   hintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8 },
   hint: { fontFamily: 'Knockout', fontSize: 15, color: '#5b7a9c', textAlign: 'center' },

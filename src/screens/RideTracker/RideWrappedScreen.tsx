@@ -226,9 +226,9 @@ export default function RideWrappedScreen() {
 
     // Card 4: Streak & Achievements
     <WrappedCard key="streak" gradient={CARD_GRADIENTS[4]}>
-      <Text style={styles.cardLabel}>STREAKS & ACHIEVEMENTS</Text>
+      <Text style={styles.cardLabel}>PARK DAYS & ACHIEVEMENTS</Text>
       <AnimNum value={data.longest_streak} style={styles.bigNumber} />
-      <Text style={styles.cardSubLabel}>longest day streak</Text>
+      <Text style={styles.cardSubLabel}>most park days in a row</Text>
       {data.achievements_earned > 0 && (
         <View style={styles.achievRow}>
           <Text style={styles.achievNum}>{data.achievements_earned}</Text>

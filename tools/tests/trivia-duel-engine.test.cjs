@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Trivia Duel engine: scoring (5.x), Fin AI (7.2), deck building (9),
- * match resolution (buzz, steal, wager), ghosts (10.5), near-miss (11.9).
+ * match resolution (buzz, steal, the no-risk Final bonus), ghosts (10.5), near-miss (11.9).
  */
 const assert = require('node:assert/strict');
 const test = require('node:test');
@@ -125,59 +125,19 @@ test('Closest Number: accuracy, 0.8 counts as correct, 0.97 is a bullseye', () =
   assert.equal(partial.points, 50);
 });
 
-test('Big Final chips (rev 7, S0-3): SAFE / HALF / GO BIG, always a share of what you hold, no fixed stakes, never above the score', () => {
-  assert.deepEqual(plain(sc.wagerStakes(800)), [0, 400, 800]);
-  assert.deepEqual(plain(sc.wagerStakes(150)), [0, 75, 150], 'no fixed stakes under 200');
-  assert.deepEqual(plain(sc.wagerStakes(0)), [0, 0, 0], 'ALL IN at 0 is worth nothing');
-  for (let s = 0; s <= 3000; s += 7) {
-    const st = sc.wagerStakes(s);
-    assert.equal(st.length, 3);
-    for (const x of st) { assert.ok(x <= s, `stake ${x} above score ${s}`); assert.ok(x >= 0); }
-    assert.equal(st[2], s);
-  }
-  assert.equal(cfg.WAGER.fixed, undefined);
-  assert.equal(cfg.WAGER.fixedBelow, undefined);
-  assert.equal(sc.applyFinal(800, true, 250, 400), 1450);
-  assert.equal(sc.applyFinal(800, false, 0, 400), 600, 'a miss takes half the chip');
-  assert.equal(sc.applyFinal(150, false, 0, 150), 75, 'GO BIG never takes everything');
-  assert.equal(sc.applyFinal(0, false, 0, 0), 0, 'score floor 0');
-  for (let s = 0; s < 3000; s += 37) {
-    const go = sc.wagerStakes(s)[2];
-    assert.ok(sc.applyFinal(s, false, 0, go) >= Math.floor(s / 2) - 5, `GO BIG miss at ${s} keeps about half`);
-    assert.ok(sc.missLoss(go) <= go);
+test('Final (rev 8, kid-trust): a no-risk bonus, right doubles the question points, a miss costs nothing', () => {
+  assert.equal(cfg.WAGER, undefined, 'no wager config');
+  assert.equal(sc.wagerStakes, undefined);
+  assert.equal(sc.suggestWager, undefined);
+  assert.equal(cfg.FINAL_BONUS.multiplier, 2);
+  assert.equal(sc.applyFinal(800, true, 250), 1300);
+  assert.equal(sc.applyFinal(800, false, 0), 800, 'a miss keeps every point');
+  assert.equal(sc.applyFinal(150, false, 0), 150);
+  for (let s = 0; s <= 3000; s += 7) for (const q of [0, 100, 250]) {
+    assert.ok(sc.applyFinal(s, false, q) === s && sc.applyFinal(s, true, q) >= s, 'points only go up');
   }
 });
 
-test('suggestWager: every branch of 5.5', () => {
-  // 1) A chip that makes you unbeatable when right: the smallest one.
-  let s = sc.suggestWager(1000, 300, 1);
-  assert.equal(s.index, 0);
-  assert.equal(s.reason, "Wins it if you're right.");
-  assert.equal(s.kind, 'win');
-  s = sc.suggestWager(700, 400, 1); // 700+100+0 = 800 < 1150; +350 = 1150 no; +700 = 1500 > 1150
-  assert.equal(s.index, 2);
-  assert.equal(s.reason, "Wins it if you're right.");
-  assert.equal(s.kind, 'win');
-  // 2) Trailing with no locking chip: ALL IN.
-  s = sc.suggestWager(300, 600, 1);
-  assert.equal(s.index, 2);
-  assert.equal(s.reason, 'You need it all.');
-  // 3) Leading or tied: smallest chip covering their best bet, else SAFE.
-  s = sc.suggestWager(600, 400, 1); // lock: 2*400+350=1150; 700/1000/1300 -> ALL IN locks
-  assert.equal(s.index, 2);
-  s = sc.suggestWager(500, 500, 1); // lock 1350: 600/850/1100 no; cover 1100: 1100 > 1100 no -> SAFE
-  assert.equal(s.index, 0);
-  assert.equal(s.reason, 'Keeps the lead if they miss.');
-  s = sc.suggestWager(520, 500, 1); // cover 1100: 620 / 880 / 1140 -> ALL IN covers
-  assert.equal(s.index, 2);
-  assert.equal(s.reason, 'Stays ahead if they get it.');
-  assert.equal(s.kind, 'stay');
-  s = sc.suggestWager(900, 700, 1.5); // lock 1750: 1050/1500/1950 -> ALL IN locks
-  assert.equal(s.index, 2);
-  s = sc.suggestWager(800, 600, 1); // lock 1550: 900/1300/1700 -> ALL IN; check cover not reached first
-  assert.equal(s.reason, "Wins it if you're right.");
-  assert.equal(s.kind, 'win');
-});
 test('ride points and stars', () => {
   assert.equal(sc.ridePoints(true, 0, 640), 250);
   assert.equal(sc.ridePoints(true, 8000, 640), 100);
@@ -270,20 +230,11 @@ test('Fin AI is seeded: same seed and round give the same answer; he buzzes on a
     assert.ok(Math.abs(buzzes / N - share) < 0.03, `${rank} buzz share ${buzzes / N}`);
   }
 });
-test('Fin wager policy: suggestWager for his own state; Deckhand and First Mate go one chip off 25% of the time', () => {
-  for (let s = 0; s < 50; s++) {
-    assert.equal(fin.finWagerIndex(s, 'captain', 900, 600), sc.suggestWager(900, 600, 1).index);
-    assert.equal(fin.finWagerIndex(s, 'admiral', 300, 600), 2);
-  }
-  let off = 0;
-  const N = 2000;
-  for (let s = 0; s < N; s++) {
-    const i = fin.finWagerIndex(s, 'deckhand', 520, 500);
-    assert.ok(i >= 0 && i <= 2);
-    if (i !== sc.suggestWager(520, 500, 1).index) off++;
-  }
-  assert.ok(Math.abs(off / N - 0.25) < 0.04, `deckhand off-chip rate ${off / N}`);
-  for (let s = 0; s < 200; s++) assert.ok(fin.finStake(s, 'deckhand', 330, 600) <= 330, 'never a stake above his score');
+test('Fin has no wager: his Final input carries no stake', () => {
+  assert.equal(fin.finWagerIndex, undefined);
+  assert.equal(fin.finStake, undefined);
+  assert.equal(fin.BARKS.allIn, undefined);
+  for (const k of Object.keys(fin.BARKS)) for (const b of fin.BARKS[k]) assert.doesNotMatch(b, /\b(bet|wager|all in|all or nothing)\b/i, b);
 });
 test('Fin rank ladder: promote after N wins, demote after 3 straight losses', () => {
   const st = fin.createRankState('deckhand');
@@ -448,13 +399,14 @@ test('resolveRound: nobody buzzes -> open phase flat 50', () => {
   assert.equal(res.opp.points, 0);
 });
 
-test('resolveRound: the Big Final adds the chip when right, takes half when missed', () => {
+test('resolveRound: the Final doubles a right answer and never takes points away (legacy stakes ignored)', () => {
   const t = match.createTally();
   t.me.score = 400; t.opp.score = 500;
   const r = quickRound('final');
   const res = match.resolveRound('queue', r, { choice: 2, lockMs: 0, stake: 400 }, { choice: 0, lockMs: 3000, stake: 500 }, t);
-  assert.equal(t.me.score, 400 + 200 + 400);
-  assert.equal(t.opp.score, 250, 'a missed GO BIG keeps half');
+  assert.equal(t.me.score, 400 + 200 * 2);
+  assert.equal(t.opp.score, 500, 'a wrong Final keeps every point');
+  assert.equal(res.me.stake, undefined);
   assert.equal(res.decisive, true);
 });
 
@@ -464,7 +416,7 @@ test('ghost: encode/decode round-trips under 1KB and regrades identically', () =
   plan.rounds.forEach((r, i) => {
     const input = r.question.format === 'closest'
       ? { choice: -1, lockMs: 1500, guess: r.question.slider.truth }
-      : { choice: r.question.correctIndex, lockMs: 1200 + i * 100, buzzMs: r.spec.type === 'buzz' ? 1200 : undefined, stake: r.spec.type === 'final' ? 100 : undefined };
+      : { choice: r.question.correctIndex, lockMs: 1200 + i * 100, buzzMs: r.spec.type === 'buzz' ? 1200 : undefined };
     match.resolveRound('queue', r, input, null, t);
   });
   const g = match.makeGhost(plan, t, 'Shark', 'blue', 1);
@@ -498,7 +450,7 @@ test('near-miss finds the smallest single change', () => {
   const plan = match.planMatch('queue', 3, POOL, {});
   const t = match.createTally();
   t.me.score = 500; t.opp.score = 535;
-  const results = plan.rounds.map(() => ({ me: { correct: true, speed: 20, stake: 0, points: 120, streak: { streak: 1 } }, opp: {} }));
+  const results = plan.rounds.map(() => ({ me: { correct: true, speed: 20, points: 120, streak: { streak: 1 } }, opp: {} }));
   const out = nm.nearMiss(plan, t, results);
   assert.equal(out.kind, 'speed');
   assert.match(out.line, /^Just 35 away! A GREAT answer on question 1 wins it\.$/);
@@ -521,7 +473,7 @@ test('balance sim: a typical player beats Deckhand far more often than Admiral',
         });
         const me = r.question.format === 'closest'
           ? { choice: -1, lockMs: human.lockMs, guess: r.question.slider.truth + (human.correct ? 1 : 6) }
-          : { choice: human.choice, lockMs: human.lockMs, buzzMs: r.spec.type === 'buzz' ? human.buzzMs : undefined, stake: r.spec.type === 'final' ? sc.wagerStakes(t.me.score)[1] : undefined };
+          : { choice: human.choice, lockMs: human.lockMs, buzzMs: r.spec.type === 'buzz' ? human.buzzMs : undefined };
         const { input } = match.finInput(plan, r, t);
         match.resolveRound('queue', r, me, input, t, 0.5);
       });
@@ -547,7 +499,7 @@ test('rev 7 windows: R1 10s, bell 6s to buzz + 3.5s, R4 12s, Final 10s with H 7s
   assert.equal(cfg.QUEUE_ROUNDS.final.windowMs, 10000);
   assert.equal(cfg.QUEUE_ROUNDS.final.horizonMs, 7000);
   assert.equal(cfg.CATEGORY_PICK.pickMs, 2500);
-  assert.equal(cfg.WAGER.pickMs, 4000);
+  assert.equal(cfg.FINAL_BONUS.bannerMs, 1100);
   assert.equal(cfg.FINAL_HOLD_MS, 300);
   for (const k of Object.keys(cfg.QUEUE_ROUNDS)) assert.ok(cfg.QUEUE_ROUNDS[k].horizonMs < cfg.QUEUE_ROUNDS[k].windowMs, k);
 });
@@ -670,8 +622,8 @@ test('ghost v2 carries its template keys (matches 1-2 replay their short templat
   const g1 = match.decodeGhost(`g1.${JSON.stringify([1, 'queue', 'Old', 'blue', 0, 0, 1, ['a'], [[0, 1000, null, null, null, null, null, 0, 0, 640]]])}`);
   assert.equal(g1.v, 1);
   assert.equal(g1.rows[0].lockMs, 1000);
-  // A ghost's recorded stake never exceeds what it holds in the replay.
-  assert.equal(match.ghostInput({ ...g, rows: [{ choice: 0, lockMs: 1, stake: 900 }] }, 0, 300).stake, 300);
+  // A rev 7 ghost's recorded Final stake is dropped: the Final is a no-risk bonus now.
+  assert.equal(match.ghostInput({ ...g, rows: [{ choice: 0, lockMs: 1, stake: 900 }] }, 0, 300).stake, undefined);
 });
 test('decisive marks a lead flip or a Final tie-break, never the first points of a match', () => {
   let t = match.createTally();
@@ -683,6 +635,6 @@ test('decisive marks a lead flip or a Final tie-break, never the first points of
   assert.equal(res.decisive, true, 'a flip from behind is decisive');
   t = match.createTally();
   t.me.score = 300; t.opp.score = 300;
-  res = match.resolveRound('queue', quickRound('final'), { choice: 2, lockMs: 500, stake: 0 }, { choice: 0, lockMs: 900, stake: 0 }, t);
+  res = match.resolveRound('queue', quickRound('final'), { choice: 2, lockMs: 500 }, { choice: 0, lockMs: 900 }, t);
   assert.equal(res.decisive, true, 'breaking a tie in the Final is decisive');
 });

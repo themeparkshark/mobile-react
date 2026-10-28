@@ -15,6 +15,7 @@ import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 import { CLASSIC_NO_EYE, sharkBaseLayers, slotAtPoint } from '../helpers/wardrobe';
 import { TEAMS, teamName, type TeamId } from '../constants/teams';
+import TeamBadge from './TeamBadge';
 
 /**
  * Where each worn layer lands, normalized on the 1353x1530 paper art
@@ -347,12 +348,12 @@ export default function Playercard({
           />
         )}
         {!!team && (
-          <Image
-            source={TEAMS[team].badge}
+          <TeamBadge
+            team={team}
+            size={44}
             accessible
             accessibilityLabel={teamName(team)}
-            style={{ width: 44, height: 44, position: 'absolute', left: 18, top: teamTop, zIndex: 19 }}
-            contentFit="contain"
+            style={{ position: 'absolute', left: 18, top: teamTop, zIndex: 19 }}
           />
         )}
         {inventory?.pin_item && pinAnchor === 'card' && (

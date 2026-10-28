@@ -31,7 +31,7 @@ import type { ArticleBodyHandlers } from './NewsScreen/ArticleBody';
 import ArticlePage from './NewsScreen/ArticlePage';
 import { RIM } from './NewsScreen/NewsCards';
 import { fetchBySlug, findBySlug, getEntry, markRead, rememberEntries, setLastViewed } from './NewsScreen/newsFeed';
-import { plainText, relatedFor, tpsArticleSlug, type NewsEntry } from './NewsScreen/newsModel';
+import { grownUpSlug, isGrownUpStory, kidReaderList, plainText, relatedFor, storyLinkTarget, tpsArticleSlug, type NewsEntry } from './NewsScreen/newsModel';
 import useTapSound from './NewsScreen/useTapSound';
 
 const BOTTOM_BAR = 66;
@@ -64,12 +64,11 @@ export default function ArticleScreen({ route, navigation }: any) {
   const { width } = useWindowDimensions();
 
   // The list this reader swipes through: ids from News, entries from the cache.
-  const [list] = useState<NewsEntry[]>(() => {
-    if (params.entry) rememberEntries([params.entry]);
-    const ids = params.ids?.length ? params.ids : [params.id ?? params.entry?.id].filter((n): n is number => typeof n === 'number');
-    const found = ids.map(id => getEntry(id)).filter((e): e is NewsEntry => !!e);
-    return found.length ? found : params.entry ? [params.entry] : [];
-  });
+  // A grown-up story never renders in the kids reader, however it arrives (ids, the cache or params.entry).
+  const [list] = useState<NewsEntry[]>(() => kidReaderList(params, getEntry, rememberEntries));
+  // A grown-up story handed in directly leaves an empty list: the reader closes first, and only once
+  // the slide back to News is done does the grown-up gate open, on top of News (see the effect below).
+  const sentOut = useRef(false);
   const startIndex = Math.max(0, list.findIndex(e => e.id === (params.id ?? params.entry?.id)));
   const [index, setIndex] = useState(startIndex);
   const pager = useRef<FlatList<NewsEntry>>(null);
@@ -180,6 +179,8 @@ export default function ArticleScreen({ route, navigation }: any) {
 
   /** A story that is not in this list opens as its own reader on top. */
   const openStory = useCallback((target: NewsEntry) => {
+    // A grown-up story never opens in the kids reader: it goes out through the grown-up gate.
+    if (isGrownUpStory(target)) { tap(); void openExternal(target.url); return; }
     const at = list.findIndex(e => e.id === target.id);
     if (at >= 0) { goTo(at); return; }
     tap();
@@ -190,14 +191,15 @@ export default function ArticleScreen({ route, navigation }: any) {
   const handlers: ArticleBodyHandlers = useMemo(() => ({
     onLink: (href: string) => {
       const slug = tpsArticleSlug(href);
-      if (!slug) { tap(); void openExternal(href); return; }
-      const known = findBySlug(slug);
-      if (known) { openStory(known); return; }
-      setOpening(true);
-      fetchBySlug(slug)
-        .then(found => { if (found) openStory(found); else void openExternal(href); })
-        .catch(() => { void openExternal(href); })
-        .finally(() => setOpening(false));
+      // Only a fetch shows the spinner; outside links and saved stories answer at once.
+      const slow = !!slug && !grownUpSlug(slug) && !findBySlug(slug);
+      if (slow) setOpening(true);
+      storyLinkTarget(href, findBySlug, fetchBySlug)
+        .then(target => {
+          if (target.kind === 'story') openStory(target.entry);
+          else { tap(); void openExternal(href); }
+        })
+        .finally(() => { if (slow) setOpening(false); });
     },
     onImage: (uri: string, aspect: number) => { tap(); setZoom({ uri, aspect }); },
     onVideo: (id: string, title: string, short: boolean) => {
@@ -213,8 +215,16 @@ export default function ArticleScreen({ route, navigation }: any) {
       onWebsite={openSite} handlers={handlers} />
   ), [width, index, settled, list, relatedAt, openStory, goTo, openSite, handlers]);
 
-  // Nothing to show (a stale link): straight back to News.
-  useEffect(() => { if (!entry) navigation.goBack(); }, [entry, navigation]);
+  // Nothing to show (a stale link or a grown-up story): straight back to News. A grown-up story then goes
+  // out through the grown-up gate after the transition, so the gate is never lost behind a closing screen
+  // and "No" leaves the kid on News.
+  useEffect(() => {
+    if (entry || sentOut.current) return;
+    sentOut.current = true;
+    const grownUpUrl = params.entry && isGrownUpStory(params.entry) ? params.entry.url : null;
+    navigation.goBack();
+    if (grownUpUrl) InteractionManager.runAfterInteractions(() => { void openExternal(grownUpUrl); });
+  }, [entry, navigation, params.entry]);
   if (!entry) return <View style={{ flex: 1, backgroundColor: BRAND.white }} />;
 
   const next = list[index + 1] ?? null;
@@ -261,7 +271,7 @@ export default function ArticleScreen({ route, navigation }: any) {
         <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 18 }} />
       </Animated.View>
 
-      {/* Bottom bar: round Previous, and a Next card with the next story's photo and headline. */}
+      {/* Bottom bar: round Previous, and a Next card with the next story's headline. */}
       <View style={{ minHeight: BOTTOM_BAR + insets.bottom, paddingBottom: Math.max(insets.bottom, 8), paddingTop: 8, backgroundColor: BRAND.cream,
         borderTopWidth: 3, borderTopColor: 'rgba(5,52,110,0.14)', flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 }}>
         {/* First story: no Previous at all (a greyed button looks broken). */}
@@ -275,8 +285,11 @@ export default function ArticleScreen({ route, navigation }: any) {
             lip={5} grow
         style={{ height: 50, borderRadius: 25, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 5, paddingRight: 8,
               backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.gold }}>
-            <Image source={next.featured_image_small || next.featured_image ? { uri: (next.featured_image_small || next.featured_image) as string } : undefined} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: BRAND.sky }}
-              contentFit="cover" transition={120} />
+            {/* Our own shark, never a round crop of the next story's photo: a park photo cut into a circle
+                reads like an app character (a famous mouse face once sat here). */}
+            <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: BRAND.sky, alignItems: 'center', justifyContent: 'center' }}>
+              <GameIcon name="shark" size={30} />
+            </View>
             <View style={{ flex: 1 }}>
               <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Shark', fontSize: 13, color: BRAND.goldLip }}>NEXT</Text>
               <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ fontFamily: 'Knockout', fontSize: 16, color: BRAND.navy }}>{plainText(next.title)}</Text>
