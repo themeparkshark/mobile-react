@@ -117,7 +117,7 @@ const CHOICES: { label: string; run: Omit<Run, 'key'> }[] = [
   { label: 'TRIVIA DUEL, BEAT THE BUZZER', run: { game: 'duel', groupTurn: false, rideUpAfterMs: null } },
   // The real duel on its real stage, every answer right and fast: the won card in release JS.
   { label: 'LINE TRIVIA, AUTOPLAY WIN', run: { game: 'duelWin', groupTurn: false, rideUpAfterMs: null } },
-  // Two right answers, then misses and a missed GO BIG: the partial-score loss card (navy gap bar, half-chip arrow).
+  // Two right answers, then misses and a missed bonus Final: the partial-score loss card (navy gap bar; a missed Final costs nothing).
   { label: 'LINE TRIVIA, PARTIAL LOSS', run: { game: 'duelPart', groupTurn: false, rideUpAfterMs: null } },
   // The map's ride challenge, played and missed (no taps): 1 Ticket spent and no retry,
   // so the game's own card is the only card and DONE goes back to the map.
