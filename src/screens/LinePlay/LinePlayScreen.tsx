@@ -862,7 +862,11 @@ export default function LinePlayScreen() {
     recapEnergy >= recapCoin.energy_to_next_level;
   const guideNext = guide.current();
   const recapPartsEarned = snapshot.rewards?.rideParts.reduce((n, p) => n + p.quantity, 0) ?? 0;
-  const go: RecapGo | null = ride && snapshot.state === 'complete' && snapshot.rewards != null ? recapGo({
+  // The GO waits for the coin check when there is a coin to check (no flash from "shelf" to "win its coin");
+  // rewards still on their way (no signal) still get a GO: the guide's next coin or the park shelf.
+  const goReady = snapshot.rewards == null ? true
+    : recapCoinState !== 'loading' && !(recapCoinState === 'idle' && snapshot.rewards.coinAssetId);
+  const go: RecapGo | null = ride && snapshot.state === 'complete' && goReady ? recapGo({
     rideName: ride.rideName,
     coinState: recapCoinState,
     partsEarned: recapPartsEarned,
