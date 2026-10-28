@@ -39,9 +39,12 @@ import { BOX_ART, boxTone, PIN_ART, PinTile, type BoxTone } from './PinArt';
 import { ParkSetCard } from './ParkSetCard';
 import { lanyardCountLabel, lanyardEmptyHint } from '../../components/profile/profileCounts';
 import {
-  coinsShort, goldenShort, deviceRegion, freeFromLabel, initialTab, myPins, mysteryShelf, newRequestId, PINS_COPY, toggleLanyard,
+  coinsShort, goldenShort, deviceRegion, freeFromLabel, initialTab, myPins, mysteryShelf, mysteryShown, newRequestId, PINS_COPY, toggleLanyard,
   type MysterySeries, type ParkSet, type PinHome, type PinRow, type Pull,
 } from './pinsModel';
+import useRetentionFlags from '../../services/retention/useRetentionFlags';
+import { flagOn } from '../../services/retention/flags';
+import { useRung } from '../../services/reveal/revealLadder';
 
 /** Coins you spend wear the coin stack everywhere in the app (the single fin coin is a ride coin). */
 const COINS_ICON = require('../../../assets/icons/game/coins.png');
@@ -106,7 +109,18 @@ export default function PinsScreen() {
   useEffect(() => () => { timers.current.forEach(clearTimeout); if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
   const shine = useSharedValue(0);
   const coins = player?.coins ?? 0;
+  // Kid-safe (core loop): mystery boxes, the Golden Box, the chaser meter and the daily pips only where
+  // pin_mystery_boxes is on for this player. Unknown switches (offline) read as off.
+  const flags = useRetentionFlags();
+  const mysteryOn = mysteryShown({ mysteryBoxes: flagOn(flags, 'pin_mystery_boxes') });
+  // Opening Pins clears the door's level 3 NEW tag.
+  const pinsRung = useRung('pins');
+  useEffect(() => { if (focused && pinsRung.isNew) pinsRung.markSeen(); }, [focused, pinsRung.isNew]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const mysteryOnRef = useRef(mysteryOn);
+  mysteryOnRef.current = mysteryOn;
+  // The switches answered after the page loaded with the Mystery tab picked: move to Park sets.
+  useEffect(() => { if (!mysteryOn && tab === 'mystery') setTab('sets'); }, [mysteryOn, tab]);
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setState(s => (s === 'ready' ? s : 'loading'));
     try {
@@ -118,7 +132,7 @@ export default function PinsScreen() {
       setLanyardIds(h.lanyard.map(p => p.item_id));
       // Dev capture only: EXPO_PUBLIC_PINS_TAB opens a shelf, EXPO_PUBLIC_PINS_HUNT opens today's hunt.
       const devTab = __DEV__ ? (process.env.EXPO_PUBLIC_PINS_TAB as Tab | undefined) : undefined;
-      setTab(t => t ?? devTab ?? initialTab(h));
+      setTab(t => t ?? devTab ?? initialTab(h, mysteryOnRef.current));
       if (__DEV__ && process.env.EXPO_PUBLIC_PINS_HUNT === '1' && !devHuntOpened) {
         devHuntOpened = true;
         const here = h.pin_days?.find(d => d.here && d.status === 'hunt');
@@ -351,7 +365,7 @@ export default function PinsScreen() {
 
   if (state === 'legacy') return <LegacyPinPacks />;
 
-  const freeWaiting = !!(home?.mystery ?? []).some(s => s.free_now);
+  const freeWaiting = mysteryOn && !!(home?.mystery ?? []).some(s => s.free_now);
   const claimWaiting = !!home?.park_sets.some(s => s.complete && !s.claimed);
   const huntToday = !!home?.pin_days?.some(d => d.status === 'hunt' && d.here);
 
@@ -408,10 +422,12 @@ export default function PinsScreen() {
                   <Image source={PIN_ART.seal} style={{ width: 22, height: 22 }} contentFit="contain" />
                   <Text maxFontSizeMultiplier={1.1} style={styles.countText}>{home.counts.sets_done}/{home.counts.sets}</Text>
                 </View>
-                <View style={styles.countChip} accessible accessibilityLabel={`${home.counts.chasers} chasers`}>
-                  <Image source={PIN_ART.chaser} style={{ width: 22, height: 22 }} contentFit="contain" />
-                  <Text maxFontSizeMultiplier={1.1} style={styles.countText}>{home.counts.chasers}</Text>
-                </View>
+                {mysteryOn && (
+                  <View style={styles.countChip} accessible accessibilityLabel={`${home.counts.chasers} chasers`}>
+                    <Image source={PIN_ART.chaser} style={{ width: 22, height: 22 }} contentFit="contain" />
+                    <Text maxFontSizeMultiplier={1.1} style={styles.countText}>{home.counts.chasers}</Text>
+                  </View>
+                )}
                 <View style={styles.countChip} accessible accessibilityLabel={`${home.counts.traders} traders to trade`}>
                   <Image source={PIN_ART.trade} style={{ width: 22, height: 22 }} contentFit="contain" />
                   <Text maxFontSizeMultiplier={1.1} style={styles.countText}>{home.counts.traders}</Text>
@@ -419,7 +435,7 @@ export default function PinsScreen() {
               </View>
             </Animated.View>
 
-            {home.pips && (
+            {mysteryOn && home.pips && (
               <View style={styles.pips} accessible accessibilityLabel={`Daily visits: ${home.pips.filled} of ${home.pips.of}. Seven fills a free box`}>
                 <Text maxFontSizeMultiplier={1.3} style={styles.pipsLabel}>Daily</Text>
                 {Array.from({ length: home.pips.of }, (_, i) => (
@@ -431,13 +447,13 @@ export default function PinsScreen() {
             )}
 
             <View style={styles.tabs} accessibilityRole="tablist">
-              <TabButton label={PINS_COPY.tabMystery} icon={require('../../../assets/images/pins/box-blue-closed.webp')} active={tab === 'mystery'} badge={freeWaiting} onPress={() => setTab('mystery')} />
+              {mysteryOn && <TabButton label={PINS_COPY.tabMystery} icon={require('../../../assets/images/pins/box-blue-closed.webp')} active={tab === 'mystery'} badge={freeWaiting} onPress={() => setTab('mystery')} />}
               <TabButton label={PINS_COPY.tabSets} icon={PIN_ART.seal} active={tab === 'sets'} badge={!freeWaiting && (claimWaiting || huntToday)} onPress={() => setTab('sets')} />
               <TabButton label={PINS_COPY.tabMine} icon={require('../../../assets/images/pins/box-blue-lid.webp')} active={tab === 'mine'} onPress={() => setTab('mine')} />
             </View>
 
             {/* Tabs stay mounted once visited (no rebuild on every switch). */}
-            {visited.has('mystery') && (
+            {mysteryOn && visited.has('mystery') && (
               <View style={[styles.list, tab !== 'mystery' && styles.hidden]} onLayout={e => { listY.current = e.nativeEvent.layout.y; }}>
                 {(home.meter_carried ?? []).map(c => (
                   <View key={`carry${c.to}`} style={styles.carried}>
@@ -548,7 +564,7 @@ export default function PinsScreen() {
       {picking && (
         <PickSheet series={picking} busy={busy === `pick:${picking.id}`} onClose={() => setPicking(null)} onPick={p => void pick(picking, p)} />
       )}
-      {help && <PinsHelp golden={!!home?.mystery.some(s => s.golden)} onClose={() => setHelp(false)} />}
+      {help && <PinsHelp mystery={mysteryOn} golden={mysteryOn && !!home?.mystery.some(s => s.golden)} onClose={() => setHelp(false)} />}
     </>
   );
 }

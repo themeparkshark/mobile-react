@@ -387,7 +387,9 @@ test('Set Complete and the box reveal offer Share only after the wear choice, an
   const box = src('src/screens/pins/BoxReveal.tsx');
   assert.match(box, /brag\(pull\) && \(!wearable \|\| kept\.has\(pull\.item_id\) \|\| wearFailed\) && !wearing \? pull : null;/, 'a wearable pin waits for Wear it or Not now');
   assert.match(box, /setChoosing\(false\); setKept\(k => new Set\(k\)\.add\(pull\.item_id\)\);/);
-  assert.match(box, /<Modal transparent visible=\{!hidden\} animationType="fade" statusBarTranslucent onDismiss=\{modal\.onDismiss\}/);
+  // Core loop: the reveal registers with the native modal layer list; hiding it still resolves the handoff on onDismiss.
+  assert.match(box, /const layer = useNativeModalLayer\(!hidden, 'show'\);/);
+  assert.match(box, /<Modal transparent visible=\{layer\.present\} animationType="fade" statusBarTranslucent\s+onDismiss=\{\(\) => \{ modal\.onDismiss\?\.\(\); layer\.onDismissed\(\); \}\}/);
   assert.match(box, /const shareHandoff = async \(\) => \{ leaving\.current = true; await modal\.handoff\(\); onDone\(pulls\); \};/);
   // One placement: directly under the main button.
   assert.match(box, /icon=\{index < pulls\.length - 1 \? 'gift' : 'check'\} onPress=\{next\} \/>\s*\)\}\s*\{sharePull && !choosing && \(\s*<FlexShareButton kind="find"[^>]*size="reveal"/);

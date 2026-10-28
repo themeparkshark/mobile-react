@@ -91,7 +91,11 @@ export interface LevelChest {
 
 export type LevelChestsPayload = { readonly enabled: true; readonly level: number; readonly chests: readonly LevelChest[] } | { readonly enabled: false };
 
-const tz = () => { const t = deviceTimezone(); return t ? { timezone: t } : {}; };
+/** Core loop: where the map is (home or park), sent so the server picks home goals at home and park goals at a park. */
+let retentionMode: 'home' | 'park' | null = null;
+export function setRetentionMode(mode: 'home' | 'park' | null): void { retentionMode = mode; }
+const modeParams = () => (retentionMode ? { mode: retentionMode } : {});
+const tz = () => { const t = deviceTimezone(); return { ...(t ? { timezone: t } : {}), ...modeParams() }; };
 
 export async function getDailyThree(timeout = 10000): Promise<DailyThreePayload> {
   const { data } = await client.get<{ data: DailyThreePayload }>('/me/daily-three', { params: tz(), timeout });
@@ -103,27 +107,27 @@ export async function getDailyThree(timeout = 10000): Promise<DailyThreePayload>
 const CLAIM_TIMEOUT_MS = 6000;
 
 export async function claimDailyThree(): Promise<{ rewards: PaidRewards; state: DailyThreeState }> {
-  const { data } = await client.post<{ data: { rewards: PaidRewards; state: DailyThreeState } }>('/me/daily-three/claim', tz(), { timeout: CLAIM_TIMEOUT_MS });
+  const { data } = await client.post<{ data: { rewards: PaidRewards; state: DailyThreeState } }>('/me/daily-three/claim', tz(), { timeout: CLAIM_TIMEOUT_MS, params: modeParams() });
   return data.data;
 }
 
 export async function claimWeeklyBox(): Promise<{ rewards: PaidRewards; state: DailyThreeState }> {
-  const { data } = await client.post<{ data: { rewards: PaidRewards; state: DailyThreeState } }>('/me/daily-three/weekly/claim', tz(), { timeout: CLAIM_TIMEOUT_MS });
+  const { data } = await client.post<{ data: { rewards: PaidRewards; state: DailyThreeState } }>('/me/daily-three/weekly/claim', tz(), { timeout: CLAIM_TIMEOUT_MS, params: modeParams() });
   return data.data;
 }
 
 export async function buyStreakFreeze(): Promise<{ state: DailyThreeState }> {
-  const { data } = await client.post<{ data: { state: DailyThreeState } }>('/me/daily-three/freeze', tz());
+  const { data } = await client.post<{ data: { state: DailyThreeState } }>('/me/daily-three/freeze', tz(), { params: modeParams() });
   return data.data;
 }
 
 export async function setReminders(enabled: boolean): Promise<{ state: DailyThreeState }> {
-  const { data } = await client.put<{ data: { state: DailyThreeState } }>('/me/daily-three/reminders', { enabled, ...tz() });
+  const { data } = await client.put<{ data: { state: DailyThreeState } }>('/me/daily-three/reminders', { enabled, ...tz() }, { params: modeParams() });
   return data.data;
 }
 
 export async function markFreezeSeen(): Promise<{ state: DailyThreeState }> {
-  const { data } = await client.post<{ data: { state: DailyThreeState } }>('/me/daily-three/freeze-seen', tz());
+  const { data } = await client.post<{ data: { state: DailyThreeState } }>('/me/daily-three/freeze-seen', tz(), { params: modeParams() });
   return data.data;
 }
 

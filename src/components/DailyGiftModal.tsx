@@ -21,7 +21,7 @@ import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../ui';
 import { ws7Preview } from '../dev/ws7Preview';
 import { LocationStatusContext } from '../context/LocationProvider';
 import { useRung } from '../services/reveal/revealLadder';
-import { dailyChestAsked, dailyChestMayShow } from '../services/retention/rewardPresence';
+import { dailyChestAsked, dailyChestMayShow, noteAutoOpen } from '../services/retention/rewardPresence';
 import Ribbon from './Ribbon';
 import RewardBurst from './RewardBurst';
 import { GoldBurst } from '../ui/GoldBurst';
@@ -174,8 +174,12 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   useCaptureMark(pop, 'daily-chest-lid-peak', 1.245);
 
   useEffect(() => {
-    if (!dailyGift.redeemed_at && player?.username && mayShow) setVisible(true);
-  }, [dailyGift.id, dailyGift.redeemed_at, player?.username, mayShow]);
+    if (!dailyGift.redeemed_at && player?.username && mayShow) {
+      // Not asked for: this is the app open's one automatic open (nothing else opens by itself after it).
+      if (requested !== true && !dailyChestAsked()) noteAutoOpen();
+      setVisible(true);
+    }
+  }, [dailyGift.id, dailyGift.redeemed_at, player?.username, mayShow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     bob.value = 0;

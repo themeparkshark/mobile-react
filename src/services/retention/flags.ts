@@ -8,6 +8,13 @@ import getFeatureFlags from '../../api/endpoints/platform/feature-flags';
 export interface RetentionFlags {
   readonly dailyThree: boolean;
   readonly levelChests: boolean;
+  /** Every switch the server sent this player (the reward rungs read theirs from here). */
+  readonly all?: Readonly<Record<string, boolean>>;
+}
+
+/** One switch by its server name; absent reads as off. */
+export function flagOn(flags: RetentionFlags | null | undefined, name: string): boolean {
+  return flags?.all?.[name] === true;
 }
 
 let cached: RetentionFlags | null = null;
@@ -17,7 +24,9 @@ let pending: Promise<RetentionFlags | null> | null = null;
 export function loadRetentionFlags(read: typeof getFeatureFlags = getFeatureFlags): Promise<RetentionFlags | null> {
   if (cached) return Promise.resolve(cached);
   pending ??= read().then((payload): RetentionFlags | null => {
-    cached = { dailyThree: payload.flags.daily_three === true, levelChests: payload.flags.level_chests === true };
+    const all: Record<string, boolean> = {};
+    for (const [k, v] of Object.entries(payload.flags ?? {})) if (typeof v === 'boolean') all[k] = v;
+    cached = { dailyThree: payload.flags.daily_three === true, levelChests: payload.flags.level_chests === true, all };
     return cached;
   }).catch(() => { pending = null; return null; });
   return pending;

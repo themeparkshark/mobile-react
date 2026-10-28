@@ -402,7 +402,9 @@ export function mysteryShelf(home: { mystery?: readonly unknown[] | null; upcomi
   return 'soon';
 }
 
-export function initialTab(home: Pick<PinHome, 'mystery' | 'park_sets'>): 'mystery' | 'sets' {
+export function initialTab(home: Pick<PinHome, 'mystery' | 'park_sets'>, mysteryOn = true): 'mystery' | 'sets' {
+  // Kid-safe (core loop 5.12): the Mystery tab exists only where pin_mystery_boxes is on for the player.
+  if (!mysteryOn) return 'sets';
   if ((home.mystery ?? []).some(s => s.free_now)) return 'mystery';
   if (home.park_sets.some(s => s.complete && !s.claimed)) return 'sets';
   return 'mystery';
@@ -436,4 +438,16 @@ export function showGolden(series: Pick<MysterySeries, 'golden' | 'open' | 'paid
 /** Coins short for one Golden Box (0 when you have enough). */
 export function goldenShort(series: Pick<MysterySeries, 'golden'>, balance: number): number {
   return Math.max(0, (series.golden?.price ?? 0) - Math.max(0, balance));
+}
+
+/**
+ * Pins door rules (core loop 5.9, FEEDS_CORE): the door shows while Pin of the Day is on or the
+ * player owns a pin (pins you own never hide); mystery boxes, the Golden Box, the chaser meter and
+ * the daily pips show only where pin_mystery_boxes is on for that player (preview only today).
+ */
+export function pinsDoorShown(flags: { readonly pinOfTheDay: boolean; readonly ownsPin: boolean }): boolean {
+  return flags.pinOfTheDay || flags.ownsPin;
+}
+export function mysteryShown(flags: { readonly mysteryBoxes: boolean }): boolean {
+  return flags.mysteryBoxes;
 }

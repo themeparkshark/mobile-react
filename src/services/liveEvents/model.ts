@@ -143,8 +143,8 @@ export function nextStepHint(event: LiveEvent, atPark: boolean): string | null {
   const perFind = Math.max(1, event.points.home_find);
   const finds = Math.ceil(need / perFind);
   const cap = Math.floor((event.daily_caps.home_find ?? 0) / perFind);
-  if (cap > 0 && finds > cap) return `Find ${cap} snacks today`;
-  return finds === 1 ? 'Find 1 snack' : `Find ${finds} snacks`;
+  if (cap > 0 && finds > cap) return `Find ${cap} treats today`;
+  return finds === 1 ? 'Find 1 treat' : `Find ${finds} treats`;
 }
 
 /** Points gained since the last look (for the "+8 to the reef" toast). */

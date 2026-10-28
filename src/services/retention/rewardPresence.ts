@@ -64,3 +64,37 @@ export function dailyChestMayShow(input: { readonly atPark: boolean; readonly re
   if (!input.atPark) return true;
   return input.requested === true || input.asked;
 }
+
+/**
+ * One automatic open per app open (BLUEPRINT 4.3 rule 1). A return after
+ * APP_OPEN_GAP_MS (10 min, the same as the unlock ladder) is a new app open.
+ */
+const APP_OPEN_GAP = 10 * 60 * 1000;
+let appOpenAt = Date.now();
+let backgroundAt: number | null = null;
+let autoOpenAt = 0;
+
+/** Feed AppState changes ('active', 'background'). */
+export function noteAppState(state: string, now: number = Date.now()): void {
+  if (state === 'active') {
+    if (backgroundAt !== null && now - backgroundAt >= APP_OPEN_GAP) appOpenAt = now;
+    backgroundAt = null;
+  } else if (state === 'background') {
+    backgroundAt = now;
+  }
+}
+
+/** Something opened by itself (the daily chest, a level chest, a freeze card, the reminders ask). */
+export function noteAutoOpen(now: number = Date.now()): void {
+  autoOpenAt = Math.max(now, appOpenAt);
+}
+
+/** This app open already had its one automatic open. */
+export function autoOpenUsed(): boolean {
+  return autoOpenAt >= appOpenAt;
+}
+
+/** Tests only. */
+export function resetAutoOpen(now: number = Date.now()): void {
+  appOpenAt = now; backgroundAt = null; autoOpenAt = 0;
+}

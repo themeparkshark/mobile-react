@@ -30,7 +30,7 @@ const STALL_MS = 6000;
  * Shows only what the server paid.
  */
 export default function RewardReveal({ subtitle, closedArt, openArt, rewards, opening, onOpen, onDone, onWear, onPins,
-  reducedMotion, doneLabel, footer, dropIn = false, wearBusy = false }: {
+  reducedMotion, doneLabel, footer, dropIn = false, wearBusy = false, energySaved = false, pinBoxes = true }: {
   readonly subtitle: string;
   readonly closedArt: ImageSource | number;
   readonly openArt: ImageSource | number;
@@ -43,6 +43,10 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   readonly onPins?: () => void;
   /** WEAR IT is putting the piece on (the closet opens next). */
   readonly wearBusy?: boolean;
+  /** Before coin levels unlock (rung 3): Energy says it is saved for growing coins (core loop 5.13). */
+  readonly energySaved?: boolean;
+  /** Mystery pin boxes are on for this player (preview only, kid-safe): else a pin box line never shows. */
+  readonly pinBoxes?: boolean;
   readonly reducedMotion: boolean;
   readonly doneLabel?: string;
   /** The closing beat (what comes next), shown with the button. */
@@ -78,7 +82,9 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const [replay, setReplay] = useState(0);
   const openedAt = useRef(0);
   const [stage, setStage] = useState<{ x: number; y: number } | null>(null);
-  const rows = rewards ? rewardRows(rewards) : [];
+  const rows = (rewards ? rewardRows(rewards) : [])
+    .filter(r => pinBoxes || r.kind !== 'mystery_boxes')
+    .map(r => (energySaved && r.kind === 'energy' ? { ...r, label: 'Energy for growing coins' } : r));
   const revealed = !!rewards;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scroll = useRef<ScrollView>(null);

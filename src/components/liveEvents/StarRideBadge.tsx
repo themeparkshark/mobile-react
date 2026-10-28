@@ -4,6 +4,7 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, wi
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
 import { useEventAmbient } from '../../services/liveEvents/ambient';
+import { useEventsOpen } from './eventsRung';
 
 /**
  * A Star Ride: a star with "x2" that sits on the ride coin marker itself
@@ -11,7 +12,7 @@ import { useEventAmbient } from '../../services/liveEvents/ambient';
  * The twinkle is a UI-thread scale that stops when `paused` (marker parked,
  * off-screen) and under reduced motion.
  */
-function StarRideBadge({ size = 30, paused = false, times = 2 }: { readonly size?: number; readonly paused?: boolean; readonly times?: number }) {
+function StarRideBadgeInner({ size = 30, paused = false, times = 2 }: { readonly size?: number; readonly paused?: boolean; readonly times?: number }) {
   const reduced = useReducedGameMotion();
   const t = useSharedValue(0);
   const ambient = useEventAmbient().ambient; // always called: hooks never sit behind ||
@@ -31,6 +32,11 @@ function StarRideBadge({ size = 30, paused = false, times = 2 }: { readonly size
       </Animated.View>
     </View>
   );
+}
+
+/** Hidden until the events rung opens (rung 9). */
+function StarRideBadge(props: Parameters<typeof StarRideBadgeInner>[0]) {
+  return useEventsOpen() ? <StarRideBadgeInner {...props} /> : null;
 }
 
 export default memo(StarRideBadge);

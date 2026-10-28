@@ -16,6 +16,7 @@ import { Lanyard } from './Lanyard';
 import { PIN_ART } from './PinArt';
 import type { LanyardPin } from './pinsModel';
 import { lanyardCountLabel, lanyardEmptyHint } from '../../components/profile/profileCounts';
+import { useRung } from '../../services/reveal/revealLadder';
 
 export default function ProfileLanyardCard({ playerId, own }: { playerId: number; own: boolean }) {
   const [data, setData] = useState<{
@@ -26,6 +27,9 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
   const { width } = useWindowDimensions();
   const still = useUiReducedMotion();
   const focused = useIsFocused();
+  // The Pins door's one NEW tag at level 3 (core loop rung 8): it shows here on your own lanyard card and
+  // clears when Pins opens.
+  const newTag = useRung('pins').isNew && own;
   useEffect(() => {
     // Fetch when the profile comes into view, not when it leaves.
     if (!focused) return;
@@ -40,6 +44,7 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
     <View style={styles.card} accessible accessibilityLabel={`${own ? 'Your' : 'Their'} lanyard: ${data.lanyard.map(p => p.name).join(', ') || 'empty'}. ${data.pins} pins, ${data.sets_done} park sets done`}>
       <View style={styles.head}>
         <Text maxFontSizeMultiplier={1.3} style={styles.title}>Lanyard</Text>
+        {newTag && <View style={styles.newTag} accessible accessibilityLabel="New"><Text maxFontSizeMultiplier={1.1} style={styles.newText}>NEW</Text></View>}
         <View style={styles.chip}><Image source={PIN_ART.seal} style={styles.icon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>{data.sets_done}</Text></View>
         {chasers > 0 && <View style={styles.chip}><Image source={PIN_ART.chaser} style={styles.icon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>{chasers}</Text></View>}
         {!!data.best_serial && <View style={[styles.chip, styles.serialChip]}><Text maxFontSizeMultiplier={1.1} style={[styles.chipText, { color: BRAND.gold }]}>#{data.best_serial}</Text></View>}
@@ -91,6 +96,8 @@ const styles = StyleSheet.create({
   chip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.cream, borderRadius: 999, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 7, paddingVertical: 1 },
   chipText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, paddingTop: 2 },
   icon: { width: 18, height: 18 },
+  newTag: { backgroundColor: BRAND.gold, borderRadius: 999, borderWidth: 2, borderColor: BRAND.white, paddingHorizontal: 7, paddingVertical: 1 },
+  newText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.navy, paddingTop: 2 },
   serialChip: { backgroundColor: '#3b2a05', borderColor: BRAND.gold },
   count: { marginLeft: 'auto', fontFamily: FONT.body, fontSize: 16, color: '#e2f6ff' },
   flexRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginTop: 6 },

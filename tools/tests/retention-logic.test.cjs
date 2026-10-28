@@ -99,11 +99,15 @@ test('each goal opens the right place', () => {
 
 test('retention flags: absent reads as off, a failed read is retried; only a true turns a feature on', async () => {
   const F = load('src/services/retention/flags.ts');
-  assert.deepEqual(plain(await F.loadRetentionFlags(async () => ({ flags: {} }))), { dailyThree: false, levelChests: false });
+  assert.deepEqual(plain(await F.loadRetentionFlags(async () => ({ flags: {} }))), { dailyThree: false, levelChests: false, all: {} });
   F.resetRetentionFlagsForTests();
   assert.equal(await F.loadRetentionFlags(async () => { throw new Error('offline'); }), null, 'a failed read is retried later, never cached as off');
   F.resetRetentionFlagsForTests();
-  assert.deepEqual(plain(await F.loadRetentionFlags(async () => ({ flags: { daily_three: true, level_chests: 'yes' } }))), { dailyThree: true, levelChests: false });
+  assert.deepEqual(plain(await F.loadRetentionFlags(async () => ({ flags: { daily_three: true, level_chests: 'yes' } }))), { dailyThree: true, levelChests: false, all: { daily_three: true } });
+  // Core loop: every boolean switch is kept for the reward rungs; only a true turns one on.
+  assert.equal(F.flagOn({ dailyThree: false, levelChests: false, all: { shark_pass: true } }, 'shark_pass'), true);
+  assert.equal(F.flagOn({ dailyThree: false, levelChests: false, all: {} }, 'shark_pass'), false);
+  assert.equal(F.flagOn(null, 'shark_pass'), false);
 });
 
 test('weekly line is honest about what is still reachable this week', () => {

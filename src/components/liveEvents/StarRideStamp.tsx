@@ -5,6 +5,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
+import { useEventsOpen } from './eventsRung';
 
 /**
  * Star Ride win: a big gold star with "x2" slams onto the win card like a
@@ -12,7 +13,7 @@ import { BRAND, GameIcon } from '../../ui';
  * Mount it on the win/reward card when the won ride was a Star Ride; `at`
  * changes each win so it replays. Calls onDone after it lands.
  */
-function StarRideStamp({ at, times = 2, onDone }: { readonly at: number; readonly times?: number; readonly onDone?: () => void }) {
+function StarRideStampInner({ at, times = 2, onDone }: { readonly at: number; readonly times?: number; readonly onDone?: () => void }) {
   const reduced = useReducedGameMotion();
   const s = useSharedValue(reduced ? 1 : 2.4);
   const o = useSharedValue(reduced ? 1 : 0);
@@ -38,6 +39,11 @@ function StarRideStamp({ at, times = 2, onDone }: { readonly at: number; readonl
       <View style={styles.ribbon}><Text style={styles.ribbonText}>STAR RIDE!</Text></View>
     </Animated.View>
   );
+}
+
+/** Hidden until the events rung opens (rung 9). */
+function StarRideStamp(props: Parameters<typeof StarRideStampInner>[0]) {
+  return useEventsOpen() ? <StarRideStampInner {...props} /> : null;
 }
 
 export default memo(StarRideStamp);

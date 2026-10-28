@@ -5,13 +5,14 @@ import type { LiveEvent } from '../../api/endpoints/live-events';
 import { chipState } from '../../services/liveEvents/model';
 import { BRAND } from '../../ui';
 import { eventArt } from './eventArt';
+import { useEventsOpen } from './eventsRung';
 
 /**
  * The event on the home map's small chip row (beside the free-Ticket pips and
  * the park story): the emblem and a tiny bar, or a red dot when a chest is ready.
  * Same 10 pt spacing and hit slop as the other home chips.
  */
-function EventHomeChip({ event, onPress, now = Date.now() }: { readonly event: LiveEvent; readonly onPress: () => void; readonly now?: number }) {
+function EventHomeChipInner({ event, onPress, now = Date.now() }: { readonly event: LiveEvent; readonly onPress: () => void; readonly now?: number }) {
   const art = eventArt(event.art_key);
   const s = chipState(event, now);
   return (
@@ -23,6 +24,11 @@ function EventHomeChip({ event, onPress, now = Date.now() }: { readonly event: L
       {s.kind === 'open' && <View style={styles.dot} />}
     </Pressable>
   );
+}
+
+/** Hidden until the events rung opens (rung 9). */
+function EventHomeChip(props: Parameters<typeof EventHomeChipInner>[0]) {
+  return useEventsOpen() ? <EventHomeChipInner {...props} /> : null;
 }
 
 export default memo(EventHomeChip);

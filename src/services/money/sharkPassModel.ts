@@ -9,7 +9,7 @@ import countText from '../../helpers/countText';
 export const EVENT_COPY: Record<string, { label: string; icon: GameIconName }> = {
   ride_coin_win: { label: 'Win a ride coin', icon: 'coin' },
   mini_game_win: { label: 'Win a mini-game', icon: 'trophy' },
-  home_find: { label: 'Grab a home find', icon: 'search' },
+  home_find: { label: 'Find a treat', icon: 'search' },
   coin_level_up: { label: 'Level up a ride coin', icon: 'parts' },
   daily3_complete: { label: 'Finish your Daily 3', icon: 'check' },
   level_up: { label: 'Level up your shark', icon: 'xp' },
@@ -41,7 +41,7 @@ export function rewardWords(reward: SharkPassReward): string {
   switch (reward.type) {
     case 'item': case 'frame': return reward.name;
     case 'mystery_box': return reward.boxes === 1 ? '1 Mystery Pin Box' : `${reward.boxes} Mystery Pin Boxes`;
-    case 'rescue_passes': return reward.amount === 1 ? '1 Rescue Pass' : `${reward.amount} Rescue Passes`;
+    case 'rescue_passes': return reward.amount === 1 ? '1 Extra try' : `${reward.amount} Extra tries`;
     case 'tickets': return `${reward.amount} ${reward.amount === 1 ? 'ticket' : 'tickets'}`;
     case 'energy': return `${reward.amount} energy`;
     default: return `${countText(reward.amount)} coins`;
@@ -66,16 +66,44 @@ export function passSummary(tiers: readonly SharkPassTier[]): string {
 }
 
 
-/** The next item reward on either row the player hasn't reached yet, and how far it is. */
-export function nextBigPrize(tiers: readonly SharkPassTier[], points: number, perStep: number):
+/**
+ * The next wearable prize, one rule everywhere (the banner and the pass screen, the server's
+ * progress.next_prize): a free player's next free prize; a Shark Pass owner's next prize on the
+ * Shark Pass row first, then the free row. Never the paid row as a tease for a free player.
+ */
+export function nextBigPrize(tiers: readonly SharkPassTier[], points: number, perStep: number, premium = false):
   { tier: number; reward: SharkPassReward; pass: boolean; pointsAway: number } | null {
   for (const t of tiers) {
     if (t.unlocked) continue;
-    const reward = isWearable(t.free) ? t.free : isWearable(t.paid) ? t.paid : null;
+    const reward = premium ? (isWearable(t.paid) ? t.paid : isWearable(t.free) ? t.free : null) : isWearable(t.free) ? t.free : null;
     if (!reward) continue;
-    return { tier: t.tier, reward, pass: reward === t.paid, pointsAway: Math.max(0, t.tier * perStep - points) };
+    return { tier: t.tier, reward, pass: reward === t.paid, pointsAway: Math.max(0, t.tier * Math.max(1, perStep) - points) };
   }
   return null;
+}
+
+/** The one next prize for a pass state: the server's answer when it sends one, else the same rule here. */
+export function nextPassPrize(state: SharkPassState | null | undefined):
+  { tier: number; reward: SharkPassReward; pass: boolean; pointsAway: number } | null {
+  if (!state || !state.enabled || !state.season || !state.progress) return null;
+  const server = (state.progress as { next_prize?: { tier: number; track: 'free' | 'paid'; reward: SharkPassReward; points_away: number } | null }).next_prize;
+  if (server && server.reward && Number.isFinite(server.tier)) {
+    return { tier: server.tier, reward: server.reward, pass: server.track === 'paid', pointsAway: Math.max(0, Number(server.points_away) || 0) };
+  }
+  return nextBigPrize(state.tiers ?? [], state.progress.points, state.season.points_per_tier, !!state.progress.premium);
+}
+
+/** "Step 4 of 50": the pass's progress words (never "pts"). */
+export function stepWords(step: number, of: number): string {
+  return `Step ${Math.max(0, step)} of ${Math.max(1, of)}`;
+}
+
+/**
+ * Daily 3 is the only daily list (core loop 5.8): when the server sends no daily pass quests,
+ * the quests area points to Daily 3 instead (finishing it pays pass points). The weekly quest stays.
+ */
+export function questsLinkDaily3(quests: { readonly daily: readonly unknown[] } | null | undefined): boolean {
+  return !!quests && quests.daily.length === 0;
 }
 
 /** "You'd get 7 rewards right now: Frosty Scarf Pin, 450 coins and more" for the unlock panel. */

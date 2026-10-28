@@ -65,10 +65,10 @@ test('time words are clock times or days, never a ticking countdown', () => {
 test('next step hint counts actions, not points', () => {
   const e = ev({ mine: 9, claimed: 2, total: 20 }); // next chest at 12: 3 points
   assert.equal(m.nextStepHint(e, true), 'Win 1 ride');
-  assert.equal(m.nextStepHint(e, false), 'Find 3 snacks');
+  assert.equal(m.nextStepHint(e, false), 'Find 3 treats');
   assert.equal(m.nextStepHint(ev({ mine: 60, claimed: 4 }), true), null);
   // Never more snacks than a day can count; a park-only event says so.
-  assert.equal(m.nextStepHint(ev({ mine: 31, claimed: 3 }), false), 'Find 8 snacks today');
+  assert.equal(m.nextStepHint(ev({ mine: 31, claimed: 3 }), false), 'Find 8 treats today');
   assert.equal(m.nextStepHint({ ...e, include_home: false }, false), 'Win rides at a park');
 });
 
@@ -109,6 +109,8 @@ function loadStore(reads) {
     react,
     '../../hooks/useLivePoll': { default: () => undefined },
     '../../api/endpoints/live-events': { getLiveEvents: async parkId => { calls.push(parkId); return reads.shift()(); }, openEventChest: async () => ({}) },
+    // Core loop: Star Rides follow the events rung (open here).
+    '../reveal/revealLadder': { useRung: () => ({ open: true, isNew: false, markSeen() {} }) },
   });
   return { store, calls };
 }

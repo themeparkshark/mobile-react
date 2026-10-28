@@ -8,6 +8,7 @@ import { useEventAmbient } from '../../services/liveEvents/ambient';
 import { chipState, shortEnd, timeLine } from '../../services/liveEvents/model';
 import { BRAND, GameIcon } from '../../ui';
 import { eventArt } from './eventArt';
+import { useEventsOpen } from './eventsRung';
 
 /**
  * The event's pill for the park map's status row (and anywhere a one-line
@@ -17,7 +18,7 @@ import { eventArt } from './eventArt';
  *   otherwise        -> your chest bar
  * The emblem hops only while a chest is ready (UI thread; still under reduced motion).
  */
-function EventStatusChip({ event, onPress, inline = false, paused = false, now = Date.now() }: {
+function EventStatusChipInner({ event, onPress, inline = false, paused = false, now = Date.now() }: {
   readonly event: LiveEvent;
   /** The map is covered or blurred: the hop rests. */
   readonly paused?: boolean;
@@ -69,6 +70,11 @@ function EventStatusChip({ event, onPress, inline = false, paused = false, now =
       {s.kind !== 'open' && <GameIcon name="arrow" size={18} />}
     </Pressable>
   );
+}
+
+/** Hidden until the events rung opens (rung 9). */
+function EventStatusChip(props: Parameters<typeof EventStatusChipInner>[0]) {
+  return useEventsOpen() ? <EventStatusChipInner {...props} /> : null;
 }
 
 export default memo(EventStatusChip);

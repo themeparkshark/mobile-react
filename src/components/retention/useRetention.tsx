@@ -7,9 +7,14 @@ import Modal from 'react-native-modal';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import {
   buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
-  type DailyThreeState, type LevelChest, type PaidRewards,
+  setRetentionMode, type DailyThreeState, type LevelChest, type PaidRewards,
 } from '../../api/endpoints/retention';
+import { claimStampReward, getStamps } from '../../api/endpoints/me/stamps';
+import { getSharkPass, type SharkPassEvent } from '../../api/endpoints/me/shark-pass';
 import { AuthContext } from '../../context/AuthProvider';
+import { DailyGiftContext } from '../../context/DailyGiftProvider';
+import { LocationStatusContext } from '../../context/LocationProvider';
+import { readStampDotCache, writeStampDotCache } from '../profile/stampDot';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
@@ -18,16 +23,28 @@ import { flameDay, playDaily3, preloadLoopMoments } from '../../gamekit/audio/lo
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import * as RootNavigation from '../../RootNavigation';
 import { enablePush } from '../../services/push';
-import { loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
-import { buttonState, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
-import { mayAskForPush, notePushAsked } from '../../services/retention/pushAsk';
+import { useRung } from '../../services/reveal/revealLadder';
+import { flagOn, loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
+import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
+import { mayAskForPush, noteParkDaySeen, notePushAsked, parkDaySeen } from '../../services/retention/pushAsk';
+import { devLadderFeed } from '../../services/retention/devLadderFeed';
+import {
+  askForDailyChest, autoOpenUsed, noteAppState, noteAutoOpen, rewardMayAutoOpen,
+} from '../../services/retention/rewardPresence';
+import { emptyLine, rewardsRows, rewardsSummary, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
+import { openRewardsDoor } from '../../services/retention/rewardsSignals';
+import { boxFraction, headlineBox } from '../../services/trail/trailModel';
+import { useTrail } from '../../services/trail/TrailProvider';
+import useLiveEvent from '../../services/liveEvents/useLiveEvent';
+import { openableKeys } from '../../services/liveEvents/model';
 import { wearAndOpenCloset } from '../../services/retention/wearRewardLive';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../../ui';
-import { useModalLayer } from '../../ui/modalLayers';
+import { useNativeModalLayer } from '../../ui/modalLayers';
 import Ribbon from '../Ribbon';
 import Daily3MapButton from './Daily3MapButton';
 import Daily3Sheet, { type GoalTap } from './Daily3Sheet';
 import RewardReveal from './RewardReveal';
+import RewardsSheet from './RewardsSheet';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
@@ -42,6 +59,7 @@ const MIN_REFRESH_MS = 15000;
 const COACH_KEY = 'tps.retention.coach.v1';
 
 type View_ =
+  | { k: 'rewards' }
   | { k: 'sheet' }
   | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; claimDate?: string | null; rewards: PaidRewards | null; opening: boolean }
   | { k: 'freeze' }
@@ -65,16 +83,51 @@ export interface RetentionOptions {
   readonly onOpenChest: () => void;
   /** GO on a snack or ride goal: point the map at the nearest one. */
   readonly onFind: (what: 'snack' | 'ride') => void;
+  /** The map knows it is at a park (else read from the location status). */
+  readonly atPark?: boolean;
+  /** Open Trail Boxes (the map's TrailHost); else the sheet asks TrailHost itself. */
+  readonly onOpenTrail?: () => void;
+  /** Open the event sheet; else the sheet asks EventSheet itself. */
+  readonly onOpenEvents?: () => void;
+}
+
+export interface RetentionResult {
+  readonly button: ReactNode | null;
+  readonly overlay: ReactNode;
+  readonly occluding: boolean;
+  /** Open the Rewards sheet (guide-map's Rewards button). */
+  readonly openRewards: () => void;
+  /** What the Rewards button draws: one number, the flame after rung 4, the Trail ring after rung 6. */
+  readonly rewards: RewardsSummary;
 }
 
 /**
- * Daily 3, the Weekly Box and level-up chests on the map: returns the map
- * button (for the controls column) and the one overlay that hosts every
- * retention moment in a single modal (sheet, reveal, freeze, reminders ask),
- * so they never stack on each other or on another sheet.
+ * The Rewards sheet, Daily 3, the Weekly Box and level-up chests on the map:
+ * returns the Rewards summary and opener (for guide-map's one Rewards button)
+ * and the one overlay that hosts every retention moment in a single modal
+ * (Rewards sheet, Daily 3, reveals, freeze, reminders ask), so they never stack
+ * on each other or on another sheet (core loop blueprint 4.2 and 4.3).
+ *
+ * Calm by rule: at a park nothing here opens by itself; at home a level chest
+ * or the freeze card may open only as the app open's one automatic open, and
+ * only after Daily 3 unlocks (rung 4). Daily 3, level chests, Trail Boxes and
+ * event chests show only once their rung is open.
  */
-export default function useRetention(o: RetentionOptions): { button: ReactNode | null; overlay: ReactNode; occluding: boolean } {
+export default function useRetention(o: RetentionOptions): RetentionResult {
   const { player, refreshPlayer } = useContext(AuthContext);
+  const { dailyGift } = useContext(DailyGiftContext);
+  const parkNow = useContext(LocationStatusContext)?.park ?? null;
+  const atPark = o.atPark ?? !!parkNow;
+  const parkId = parkNow?.id ?? null;
+  // Daily 3 sends where the map is, so home gets home goals and the park gets park goals.
+  setRetentionMode(atPark ? 'park' : 'home');
+  const dailyOpen = useRung('daily').open;
+  const passOpen = useRung('shark_pass').open;
+  const trailOpen = useRung('trail').open;
+  const eventsOpen = useRung('events').open;
+  const coinLevelsOpen = useRung('coin_levels').open;
+  const trail = useTrail();
+  const liveEvt = useLiveEvent(parkId);
   const { triggerFly } = useCurrencyFly();
   const reducedMotion = useReducedGameMotion();
   const { width, height } = useWindowDimensions();
@@ -86,6 +139,14 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   const [pop, setPop] = useState<{ index: number | null; key: number }>({ index: null, key: 0 });
   const [celebrate, setCelebrate] = useState<string[]>([]);
   const [coach, setCoach] = useState(false);
+  const [stamps, setStamps] = useState(0);
+  const [rewardsBusy, setRewardsBusy] = useState<RewardsRowKey | null>(null);
+  const [rewardsNote, setRewardsNote] = useState<string | null>(null);
+  const [passToday, setPassToday] = useState<readonly SharkPassEvent[] | null>(null);
+  /** A reveal opened from the Rewards sheet goes back to it when done. */
+  const backToRewards = useRef(false);
+  /** Runs once the overlay is really gone (UIKit dismissed it), so the next native sheet can present. */
+  const afterHide = useRef<(() => void) | null>(null);
   const lastRead = useRef(0);
   const lastChestRead = useRef(-1);
   const prevGoals = useRef<DailyThreeState['goals'] | null>(null);
@@ -126,16 +187,18 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   }, []);
 
   const level = player?.experience_level?.level ?? 0;
+  const wantDaily = !!flags?.dailyThree && dailyOpen;
+  const wantChestsOn = !!flags?.levelChests && dailyOpen;
   const refresh = useCallback(async (force = false) => {
-    if (!flags || (!flags.dailyThree && !flags.levelChests)) return;
+    if (!flags || (!wantDaily && !wantChestsOn)) return;
     const now = Date.now();
     if (!force && now - lastRead.current < MIN_REFRESH_MS) return;
     lastRead.current = now;
     // Level chests only change with the level: read them once, then on each level-up.
-    const wantChests = flags.levelChests && lastChestRead.current !== level;
+    const wantChests = wantChestsOn && lastChestRead.current !== level;
     try {
       const [d, c] = await Promise.all([
-        flags.dailyThree ? getDailyThree() : Promise.resolve(null),
+        wantDaily ? getDailyThree() : Promise.resolve(null),
         wantChests ? getLevelChests() : Promise.resolve(null),
       ]);
       if (!mounted.current) return;
@@ -148,44 +211,102 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     } catch {
       // Offline or a server without these routes: keep what we had, try again on the next focus.
     }
-  }, [flags, applyDaily, level]);
+  }, [flags, applyDaily, level, wantDaily, wantChestsOn]);
 
   useEffect(() => { if (o.enabled && o.mapFocused) void refresh(lastRead.current === 0); }, [o.enabled, o.mapFocused, flags, refresh]);
+  // Home and park goals differ: a move between them reads the right ones.
+  useEffect(() => { if (o.enabled && lastRead.current > 0) void refresh(true); }, [atPark]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (o.enabled) void refresh(true); }, [o.refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (o.enabled && level > 0 && lastChestRead.current !== -1) void refresh(true); }, [level]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const sub = AppState.addEventListener('change', s => {
+      noteAppState(s);
       if (s === 'active' && o.enabled) void refresh(false);
     });
     return () => sub.remove();
   }, [o.enabled, refresh]);
 
+  // Lane testing only (a no-op in store and OTA bundles): feed the unlock ladder until the map's own feed lands.
+  useEffect(() => {
+    devLadderFeed({ flags: flags?.all, level, atPark, hasTeam: false,
+      coinsWon: Number(player?.ride_coins_collected ?? player?.completed_tasks_count ?? 0) || 0 });
+  }, [flags, level, atPark, player?.ride_coins_collected, player?.completed_tasks_count]);
+
+  // The first park day, for the reminders ask on the next home open.
+  const [sawParkDay, setSawParkDay] = useState(false);
+  useEffect(() => {
+    if (!player?.id) return;
+    if (atPark) { setSawParkDay(true); void noteParkDaySeen(player.id); return; }
+    void parkDaySeen(player.id).then(v => { if (mounted.current && v) setSawParkDay(true); });
+  }, [atPark, player?.id]);
+
+  // Stamps with prizes to claim (the Profile dot's 5 minute cache, so the map adds no new polling).
+  const playerId = player?.id ?? null;
+  const refreshStamps = useCallback(async (force = false) => {
+    if (playerId == null) return;
+    const cached = force ? null : readStampDotCache(playerId);
+    if (cached != null) { setStamps(cached); return; }
+    try {
+      const r = await getStamps();
+      const n = stampsToClaim(r).length;
+      writeStampDotCache(playerId, n);
+      if (mounted.current) setStamps(n);
+    } catch { /* no dot this time */ }
+  }, [playerId]);
+  useEffect(() => { if (o.enabled && o.mapFocused) void refreshStamps(); }, [o.enabled, o.mapFocused, refreshStamps]);
+
   // A push asked for Daily 3 or the chest.
   useEffect(() => {
     if (!o.openRequest || !o.enabled) return;
-    if (o.openRequest === 'chest') o.onOpenChest();
-    else if (daily) openSheet();
+    if (o.openRequest === 'chest') { askForDailyChest(); o.onOpenChest(); }
+    else if (daily && dailyOpen) openSheet();
+    else if (!wantDaily) { /* Daily 3 is not open for this player yet: nothing to show */ }
     else return; // wait for the first read
     o.onOpenRequestHandled();
   }, [o.openRequest, o.enabled, daily]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A level-up chest presents itself as soon as the map is free; then a freeze that saved the streak says so once.
-  const pendingChest = flags?.levelChests ? nextLevelChest(chests) : null;
+  // At home only, as the app open's one automatic open: a level-up chest presents itself once the map is free, then a
+  // freeze that saved the flame says so once. At a park they wait in the Rewards sheet (BLUEPRINT 4.3).
+  const pendingChest = wantChestsOn ? nextLevelChest(chests) : null;
   const freezeSaved = daily?.streak.freeze_saved ?? 0;
+  const may = (kind: 'level_chest' | 'freeze_saved') => rewardMayAutoOpen({ kind, atPark, firstCatchDone: true,
+    autoOpenUsed: autoOpenUsed(), dailyRungOpen: dailyOpen });
   useEffect(() => {
     if (view || !o.screenFree || !o.mapFocused || !o.enabled) return;
-    if (pendingChest) {
+    if (pendingChest && may('level_chest')) {
       const timer = setTimeout(() => {
+        if (!may('level_chest')) return;
+        noteAutoOpen();
         setView(v => v ?? { k: 'reveal', src: 'level', level: pendingChest.level, rewards: null, opening: false });
         playSfx('fx.reveal');
       }, 700);
       return () => clearTimeout(timer);
     }
-    if (freezeSaved > 0 && daily) {
-      const timer = setTimeout(() => setView(v => v ?? { k: 'freezeSaved', days: freezeSaved, streak: daily.streak.days }), 700);
+    if (freezeSaved > 0 && daily && may('freeze_saved')) {
+      const timer = setTimeout(() => {
+        if (!may('freeze_saved')) return;
+        noteAutoOpen();
+        setView(v => v ?? { k: 'freezeSaved', days: freezeSaved, streak: daily.streak.days });
+      }, 700);
       return () => clearTimeout(timer);
     }
-  }, [pendingChest?.level, freezeSaved, view, o.screenFree, o.mapFocused, o.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pendingChest?.level, freezeSaved, view, o.screenFree, o.mapFocused, o.enabled, atPark, dailyOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The reminders ask: the first home open after the first park day, only while reminder pushes really work
+  // (the server's retention_push switch: off until the push key is set), and only as the one automatic open.
+  useEffect(() => {
+    if (view || atPark || !sawParkDay || !o.screenFree || !o.mapFocused || !o.enabled) return;
+    if (!flagOn(flags, 'retention_push') || autoOpenUsed()) return;
+    let live = true;
+    const timer = setTimeout(() => {
+      void mayAskForPush().then(ok => {
+        if (!live || !ok || autoOpenUsed()) return;
+        noteAutoOpen();
+        setView(v => v ?? { k: 'push' });
+      });
+    }, 900);
+    return () => { live = false; clearTimeout(timer); };
+  }, [view, atPark, sawParkDay, o.screenFree, o.mapFocused, o.enabled, flags]);
 
   const openSheet = () => {
     setView({ k: 'sheet' });
@@ -225,8 +346,9 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     if (paid) fly(paid);
     void refreshPlayer?.();
     void refresh(true);
-    // Right after a win is the one good moment to ask about reminders.
-    if (await mayAskForPush()) { setView({ k: 'push' }); return; }
+    // Opened from the Rewards sheet: back to it, so the next reward is one tap away. (The reminders ask no longer
+    // follows a chest: it waits for the first home open after the first park day.)
+    if (backToRewards.current) { backToRewards.current = false; setView({ k: 'rewards' }); return; }
     setView(null);
   };
 
@@ -287,11 +409,109 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   };
 
   const onGoal = (tap: GoalTap) => {
+    if (tap === 'chest') { askForDailyChest(); closeThen(() => o.onOpenChest()); return; }
     setView(null);
-    if (tap === 'chest') o.onOpenChest();
-    else if (tap === 'closet') RootNavigation.navigate('Inventory');
+    if (tap === 'closet') RootNavigation.navigate('Inventory');
     else if (tap === 'friends') RootNavigation.navigate('Friends');
-    else o.onFind(tap);
+    else if (tap === 'shelf') RootNavigation.navigate('CoinShelf');
+    // At home GO always means a treat (a park goal shows its home side; GO never flies to a park).
+    else o.onFind(tap === 'ride' && !atPark ? 'snack' : tap);
+  };
+
+  /** Close the overlay, then run `next` once UIKit has really dismissed it (no two native sheets at once). */
+  const closeThen = (next: () => void) => {
+    afterHide.current = next;
+    backToRewards.current = false;
+    setView(null);
+  };
+
+  // ------------------------------------------------------------------ the Rewards sheet
+  const passOn = flagOn(flags, 'shark_pass') && passOpen;
+  const loadPassToday = useCallback(() => {
+    if (!passOn) { setPassToday(null); return; }
+    void getSharkPass().then(p => {
+      if (!mounted.current) return;
+      setPassToday(p && p.enabled && p.progress ? p.progress.today : null);
+    }).catch(() => undefined);
+  }, [passOn]);
+
+  const giftLadder = dailyGift?.ladder?.length ? dailyGift.ladder.length : 7;
+  const trailState = trailOpen && trail.enabled ? trail.state : null;
+  const nearest = trailState ? headlineBox({ ready: [], walking: trailState.walking }) : null;
+  const rewardsInput: RewardsInput = {
+    dailyChest: dailyGift && player?.username
+      ? { unclaimed: dailyGift.redeemed_at === null, day: Math.min(giftLadder, Math.max(1, dailyGift.day ?? 1)), of: giftLadder } : null,
+    daily3: wantDaily && daily ? {
+      done: doneCount(daily.goals), total: Math.max(3, daily.goals.length), claimable: daily.claimable,
+      claimed: daily.claimed && !daily.claimable, flame: daily.streak.days,
+    } : null,
+    weekly: wantDaily && daily ? { claimable: daily.week.claimable } : null,
+    levelChest: pendingChest ? { level: pendingChest.level, waiting: chests.filter(c => !c.opened).length } : null,
+    trail: trailState ? { ready: trailState.ready.length, walking: trailState.walking.length + trailState.waiting.length,
+      nearest: nearest ? boxFraction(nearest) : null, atPark } : null,
+    stamps: { claimable: stamps },
+    events: eventsOpen && flagOn(flags, 'live_events') && liveEvt.event ? { chests: openableKeys(liveEvt.event).length } : null,
+  };
+  const rows = rewardsRows(rewardsInput);
+  const summary = rewardsSummary(rewardsInput);
+
+  const openRewards = useCallback(() => {
+    playSfx('ui.tap');
+    setRewardsNote(null);
+    setView({ k: 'rewards' });
+    void refreshStamps();
+    loadPassToday();
+    void refresh(false);
+  }, [refreshStamps, loadPassToday, refresh]);
+
+  // Dev JS only: lane checks open the sheet and read its numbers before the map's Rewards button lands.
+  useEffect(() => {
+    if (!__DEV__) return undefined;
+    const g = globalThis as { __tpsRewards?: unknown };
+    g.__tpsRewards = { open: openRewards, summary: () => summary, rows: () => rows };
+    return () => { if (g.__tpsRewards) delete g.__tpsRewards; };
+  });
+
+  const claimStamps = async () => {
+    if (rewardsBusy) return;
+    setRewardsBusy('stamps');
+    let tickets = 0; let coins = 0; let energy = 0; let xp = 0; let failed = 0;
+    try {
+      const r = await getStamps();
+      for (const st of stampsToClaim(r)) {
+        try {
+          const got = await claimStampReward(st.id);
+          tickets += got.rewards?.tickets ?? 0; coins += got.rewards?.coins ?? 0; energy += got.rewards?.energy ?? 0; xp += got.rewards?.xp ?? 0;
+        } catch { failed += 1; }
+      }
+    } catch { failed += 1; }
+    if (!mounted.current) return;
+    if (playerId != null) writeStampDotCache(playerId, failed);
+    setStamps(failed);
+    setRewardsBusy(null);
+    const paid = { coins, tickets, energy, xp } as PaidRewards;
+    if (coins + tickets + energy + xp > 0) { fly(paid); haptic('success'); playSfx('fx.reward'); void refreshPlayer?.(); }
+    setRewardsNote(failed && !(coins + tickets) ? 'Those stamps did not go through. Try again.'
+      : [tickets ? `+${tickets} ${tickets === 1 ? 'Ticket' : 'Tickets'}` : null, coins ? `+${coins} coins` : null]
+        .filter(Boolean).join(', ') || 'Claimed!');
+  };
+
+  const onRewardsRow = (key: RewardsRowKey) => {
+    playSfx('ui.tap');
+    switch (key) {
+      case 'daily_chest': askForDailyChest(); closeThen(() => o.onOpenChest()); return;
+      case 'daily3':
+        if (daily?.claimable) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
+        else openSheet();
+        return;
+      case 'level_chest':
+        if (pendingChest) { backToRewards.current = true; setView({ k: 'reveal', src: 'level', level: pendingChest.level, rewards: null, opening: false }); }
+        return;
+      case 'weekly_box': backToRewards.current = true; setView({ k: 'reveal', src: 'weekly', rewards: null, opening: false }); return;
+      case 'trail': closeThen(() => { if (o.onOpenTrail) o.onOpenTrail(); else openRewardsDoor('trail'); }); return;
+      case 'events': closeThen(() => { if (o.onOpenEvents) o.onOpenEvents(); else openRewardsDoor('events'); }); return;
+      case 'stamps': void claimStamps(); return;
+    }
   };
 
   const buyFreeze = async () => {
@@ -322,6 +542,7 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   };
 
   const close = () => {
+    backToRewards.current = false;
     if (view?.k === 'sheet') setCelebrate([]);
     if (view?.k === 'push') void notePushAsked();
     if (view?.k === 'freezeSaved') void markFreezeSeen().then(r => applyDaily(r.state)).catch(() => undefined);
@@ -329,10 +550,11 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
   };
 
   const visible = !!view;
-  const front = useModalLayer(visible, 'wait');
+  // A sheet the player opened shows at once; one that opened by itself waits its turn (BLUEPRINT 4.3 rule 10).
+  const layer = useNativeModalLayer(visible, view?.k === 'rewards' || view?.k === 'sheet' ? 'show' : 'wait');
 
   let button: ReactNode | null = null;
-  if (flags?.dailyThree && daily) {
+  if (wantDaily && daily) {
     const b = buttonState(daily, new Date().getHours());
     button = (
       <Daily3MapButton pips={b.pips} streak={b.streak} attention={b.attention} popIndex={pop.index} popKey={pop.key}
@@ -359,9 +581,16 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
 
   let title = 'Daily 3';
   let content: ReactNode = null;
-  if (view?.k === 'sheet' && daily) {
+  if (view?.k === 'rewards') {
+    title = 'Rewards';
+    content = (
+      <RewardsSheet rows={rows} flame={summary.flame} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
+        reducedMotion={reducedMotion} onRow={onRewardsRow} onClose={close} />
+    );
+  } else if (view?.k === 'sheet' && daily) {
     content = (
       <Daily3Sheet state={daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
+        atPark={atPark} passToday={passOn ? passToday : null} remindersReady={flagOn(flags, 'retention_push')}
         reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone}
         onReminders={on => { void toggleReminders(on); }}
         onClaim={() => setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false })}
@@ -387,13 +616,14 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
       ) : null;
     content = (
       <RewardReveal reducedMotion={reducedMotion} rewards={r.rewards} opening={r.opening} footer={footer} dropIn={r.src === 'level'}
+        energySaved={!coinLevelsOpen} pinBoxes={flagOn(flags, 'pin_mystery_boxes')}
         subtitle={r.src === 'level' ? `You reached Level ${r.level}! Tap your chest.`
           : r.src === 'weekly' ? 'A whole week of flames. Tap the box!' : 'All three goals done. Tap your chest!'}
         closedArt={r.src === 'level' ? LEVEL_CHEST : r.src === 'weekly' ? WEEKLY : ICON_SOURCES.chest}
         openArt={r.src === 'level' ? LEVEL_CHEST_OPEN : r.src === 'weekly' ? WEEKLY_OPEN : ICON_SOURCES.chestOpen}
         wearBusy={wearing}
         onWear={() => { void wearItem(r.rewards); }}
-        onPins={() => { void finishReveal(r.rewards).then(() => RootNavigation.navigate('PinCollections')); }}
+        onPins={flagOn(flags, 'pin_mystery_boxes') ? () => { void finishReveal(r.rewards).then(() => RootNavigation.navigate('PinCollections')); } : undefined}
         onOpen={() => { void openReveal(); }} onDone={() => { void finishReveal(r.rewards); }} />
     );
   } else if (view?.k === 'freeze' && daily) {
@@ -446,7 +676,13 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
 
   const revealing = view?.k === 'reveal';
   const overlay = (
-    <Modal isVisible={visible && front && !!content} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
+    <Modal isVisible={layer.present && !!content} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
+      onModalHide={() => {
+        layer.onDismissed();
+        const next = afterHide.current;
+        afterHide.current = null;
+        next?.();
+      }}
       animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'} animationInTiming={reducedMotion ? 120 : 240}
       animationOutTiming={reducedMotion ? 120 : 180} backdropColor={BRAND.navy} backdropOpacity={0.55}
       onBackdropPress={revealing ? undefined : close} onBackButtonPress={revealing ? undefined : close}
@@ -458,7 +694,20 @@ export default function useRetention(o: RetentionOptions): { button: ReactNode |
     </Modal>
   );
 
-  return { button, overlay, occluding: visible };
+  return { button, overlay, occluding: visible, openRewards, rewards: summary };
+}
+
+/** Earned stamps whose prizes are still to claim (the Stamp Book's own rule). */
+function stampsToClaim(r: { stamps: Record<string, readonly { id: number; is_earned: boolean; reward_claimed: boolean;
+  rewards: { energy: number; tickets: number; xp: number; coins: number; title: string | null } }[]> }) {
+  const out: { id: number }[] = [];
+  for (const list of Object.values(r.stamps ?? {})) {
+    for (const st of list ?? []) {
+      const p = st.rewards;
+      if (st.is_earned && !st.reward_claimed && !!p && (p.energy > 0 || p.tickets > 0 || p.xp > 0 || p.coins > 0 || !!p.title)) out.push({ id: st.id });
+    }
+  }
+  return out;
 }
 
 function lvOf(p: { experience_level?: { level: number } } | null | undefined): number {

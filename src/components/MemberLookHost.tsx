@@ -1,5 +1,8 @@
 import { useContext, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
+import { LocationStatusContext } from '../context/LocationProvider';
+import { autoOpenUsed, noteAutoOpen, rewardMayAutoOpen } from '../services/retention/rewardPresence';
+import { modalLayers } from '../ui/modalLayers';
 import { dismissMemberLook, memberLookNoteSeen, restoreMemberLook } from '../api/endpoints/me/member-look';
 import { AuthContext } from '../context/AuthProvider';
 import { MEMBER_WEAR_COPY, refreshMemberLook } from '../services/memberLook';
@@ -7,6 +10,16 @@ import { confirmGame, showGameDialog } from '../ui';
 import { openMembership } from './GrownUpGate';
 
 const FOCUS_THROTTLE_MS = 60_000;
+
+/** Resolves once no sheet or dialog is up (one door for every sheet: never over another modal). */
+function whenNoLayer(): Promise<void> {
+  if (modalLayers.count() === 0) return Promise.resolve();
+  return new Promise(resolve => {
+    const off = modalLayers.subscribe(() => {
+      if (modalLayers.count() === 0) { off(); resolve(); }
+    });
+  });
+}
 
 /**
  * Explains a member piece the player owns but can't wear right now, with the
@@ -30,6 +43,12 @@ export async function explainMemberLock(): Promise<void> {
  */
 export default function MemberLookHost() {
   const { player, refreshPlayer } = useContext(AuthContext);
+  // Core loop attention rules (4.3): home first. At a park these wait (never in the first 30 s, while walking or
+  // during play); they ask when the player is home, through the modal layer list, as the app open's one automatic open.
+  const atPark = !!useContext(LocationStatusContext)?.park;
+  const atParkRef = useRef(atPark);
+  atParkRef.current = atPark;
+  const deferred = useRef(false);
   const busy = useRef(false);
   const lastCheck = useRef(0);
   const playerId = player?.id;
@@ -37,11 +56,22 @@ export default function MemberLookHost() {
 
   const check = async () => {
     if (busy.current || playerId == null) return;
+    if (!rewardMayAutoOpen({ kind: 'member_look', atPark: atParkRef.current, firstCatchDone: true, autoOpenUsed: autoOpenUsed(), dailyRungOpen: true })) {
+      deferred.current = true;
+      return;
+    }
     busy.current = true;
     lastCheck.current = Date.now();
     try {
       const state = await refreshMemberLook();
       if (!state?.wear_lock) return;
+      const asks = (state.note && !state.member) || (state.restore && state.member && Object.keys(state.restore).length > 0);
+      if (!asks) return;
+      await whenNoLayer();
+      // Walked into a park, or something else opened by itself meanwhile: ask on the next calm home open.
+      if (atParkRef.current || autoOpenUsed()) { deferred.current = true; return; }
+      deferred.current = false;
+      noteAutoOpen();
       if (state.note && !state.member) {
         await memberLookNoteSeen().catch(() => undefined);
         const choice = await showGameDialog({
@@ -78,6 +108,8 @@ export default function MemberLookHost() {
   };
 
   useEffect(() => { void check(); }, [playerId, member]);
+  // Back home: a deferred ask gets its turn.
+  useEffect(() => { if (!atPark && deferred.current) void check(); }, [atPark]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
