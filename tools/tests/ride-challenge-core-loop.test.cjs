@@ -353,7 +353,9 @@ test('the quit warning is the branded dialog, nested in the challenge card\'s ow
   const selector = read('src/components/MiniGameSelector.tsx');
   assert.doesNotMatch(selector, /Alert\.alert/);
   assert.match(selector, /<ModalLayerContext\.Provider value>\n\s+<GameDialog visible=\{quitAsk\} title="Leave\?" message="This try will end\."/);
-  assert.match(selector, /if \(index === 1\) onClose\(\);\n\s+else resume\?\.\(\);/);
+  // Keep playing is the big gold button (the last button is the dialog's primary); Leave sits under it.
+  assert.match(selector, /buttons=\{\[\{ text: 'Leave', style: 'destructive' \}, \{ text: 'Keep playing' \}\]\}/);
+  assert.match(selector, /if \(index === 0\) onClose\(\);\n\s+else resume\?\.\(\);/);
 });
 
 test('results stay kind and true: no NEW BEST on a loss, no Too fast!, no QUICK count, Memory tries as shells', () => {

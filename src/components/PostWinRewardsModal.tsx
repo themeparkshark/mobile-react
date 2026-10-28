@@ -133,7 +133,7 @@ function RewardChip({ chip, index, enter, reduced, started }: {
   });
   return (
     <Animated.View style={[styles.chip, chip.quiet && styles.chipQuiet, style]} accessible accessibilityLabel={`${chip.amount} ${chip.label}`}>
-      <GameIcon name={chip.icon} size={24} />
+      <GameIcon name={chip.icon} size={22} />
       <View style={{ flexShrink: 1 }}>
         <CountUp value={chip.amount} start={started} reduced={reduced} style={styles.chipAmount} />
         <Text style={[styles.chipLabel, chip.quiet && styles.chipLabelQuiet]} numberOfLines={2}>{chip.label}</Text>
@@ -475,10 +475,11 @@ const styles = StyleSheet.create({
   shelfLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: '#fff4cc', borderRadius: 14,
     borderWidth: 2, borderColor: '#ffcf3b', paddingVertical: 4, paddingHorizontal: 10, maxWidth: '100%' },
   shelfText: { fontFamily: 'Shark', fontSize: 16, color: '#05346e', flexShrink: 1 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 10 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fff8e4', borderRadius: 14,
+  // One reward row: the chips share the width (a fifth chip after rung 4 wraps rather than shrinking past reading).
+  chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 10, alignSelf: 'stretch' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff8e4', borderRadius: 14,
     borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9ccbe9',
-    paddingVertical: 5, paddingLeft: 7, paddingRight: 10, maxWidth: '48%' },
+    paddingVertical: 5, paddingLeft: 5, paddingRight: 6, flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 74, maxWidth: '50%' },
   chipQuiet: { backgroundColor: '#e8f6ff' },
   chipAmount: { fontFamily: 'Shark', fontSize: 18, lineHeight: 20, color: '#05346e', fontVariant: ['tabular-nums'] },
   chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#3d5f8c' },

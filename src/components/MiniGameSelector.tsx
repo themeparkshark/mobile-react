@@ -107,13 +107,13 @@ export default function MiniGameSelector({
     exitPromptOpen.current = false;
     const resume = quitResume.current;
     quitResume.current = null;
-    if (index === 1) onClose();
+    if (index === 0) onClose();
     else resume?.();
   }, [onClose]);
   const quitDialog = (
     <ModalLayerContext.Provider value>
       <GameDialog visible={quitAsk} title="Leave?" message="This try will end." icon="info"
-        buttons={[{ text: 'Keep playing' }, { text: 'Leave', style: 'destructive' }]}
+        buttons={[{ text: 'Leave', style: 'destructive' }, { text: 'Keep playing' }]}
         dismissible={false} onAnswer={answerQuit} runButtonHandlers={false} />
     </ModalLayerContext.Provider>
   );
