@@ -197,15 +197,17 @@ function MiniGameSlot({
   // A story clue (its mission name came in) says STORY; every free round says GAMES (the two LinePlay tabs).
   const kicker = title != null || isStarChart ? 'STORY' : 'GAMES';
   const playLabel = completed && item.gameId === 'showdown' ? 'Rematch' : completed ? 'Play again' : 'Play';
+  // A short window (iPhone SE): the slim banner and a compact PLAY, so the whole button sits above the fade.
+  const short = heroSlim(useContext(PageHeightContext));
   return (
     <PageScroll fill={CARD_FILL}>
       {/* PLAY comes right under the banner on every phone, so the one thing to press is on the first screen
           of the page (never below the fold or behind the rail on a 375 or 402 pt phone). What the game is
           and the best stars follow it. */}
       <ActivityHero kicker={kicker} title={label} navigator={navigator} />
-      <View testID="lineplay-play" style={styles.playFirst}>
-        <GameButton label={playLabel} icon={completed ? 'retry' : 'play'} disabled={paused} fullWidth
-          onPress={() => onPlayGame(item)}
+      <View testID="lineplay-play" style={[styles.playFirst, short && styles.playFirstShort]}>
+        <GameButton label={playLabel} icon={completed ? 'retry' : 'play'} disabled={paused} fullWidth={!short}
+          size={short ? 'compact' : 'regular'} onPress={() => onPlayGame(item)}
           accessibilityLabel={`${playLabel}: ${label}${newGame && bestStars == null && !completed ? '. New game' : ''}`} />
         {newGame && bestStars == null && !completed && <View pointerEvents="none" style={[styles.newPill, styles.newCorner]}>
           <Text style={styles.newPillText}>NEW</Text></View>}
@@ -553,6 +555,7 @@ const styles = StyleSheet.create({
   heroSlim: { height: 46, marginBottom: spacing.sm },
   actionFirst: { marginBottom: spacing.md },
   playFirst: { marginBottom: spacing.sm },
+  playFirstShort: { alignItems: 'center', marginTop: -2 },
   heroTitleSlim: { fontSize: 19, lineHeight: 23, marginTop: 2 },
   sharkSlim: { width: 52, height: 52, marginRight: -2 },
   heroKicker: { color: '#c8efff', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1 },
