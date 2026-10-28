@@ -422,7 +422,7 @@ export default function WaitCard({
         {compact && hero}
         {compact ? <View style={styles.compactMeter}>
           {/* The coin is the picture when Parts are on; otherwise the queue picture (never the Parts gem: no Parts here). */}
-          {hero && rewardTrackingAvailable ? null : !rewardTrackingAvailable ? <GameIcon name="shark" size={34} />
+          {hero && rewardTrackingAvailable ? null : !rewardTrackingAvailable ? <GameIcon name="line" size={34} />
             : <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />}
           <View style={styles.compactCopy} accessible accessibilityLabel={compactCopyLabel({ hero: hero != null, earned, headline, subline: calmLine ? '' : subline })}>
             <KidText style={styles.compactHeadline} numberOfLines={coinMissing ? 2 : 1} adjustsFontSizeToFit minimumFontScale={0.85}>{`${headline}${
@@ -453,7 +453,7 @@ export default function WaitCard({
         </View> : <View style={styles.meterRow}>
           {/* A ride with no Parts never shows an empty ring and a "0" gem: the queue picture says "games only". */}
           {!rewardTrackingAvailable ? <View style={styles.noPartsWell} accessible accessibilityLabel={`${headline} ${subline}`}>
-            <GameIcon name="shark" size={54} />
+            <GameIcon name="line" size={54} />
           </View> : <View style={[{ width: RING, height: RING }, outOfRange && styles.ringOutOfRange]}
             accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}${pill ? ` ${pill}.` : ''}`}>
             <Svg width={RING} height={RING} style={StyleSheet.absoluteFill}>

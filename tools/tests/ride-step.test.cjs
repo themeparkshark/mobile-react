@@ -318,12 +318,12 @@ test('the screens wire the one ride question', () => {
 test('Ride Tracker words: Ride sets, Ride days, no reward it never pays', () => {
   const tracker = read('src/screens/RideTracker/RideTrackerScreen.tsx');
   assert.match(tracker, /title="Ride sets"/);
-  assert.match(tracker, />Ride days in a row</);
+  assert.match(tracker, />Ride days</);
   assert.doesNotMatch(tracker, /title="Collections"|Day streak|Park days in a row/);
   const sets = read('src/screens/RideTracker/RideCollectionsScreen.tsx');
   assert.match(sets, /<RideTrackerFrame title="Ride sets"/);
   assert.doesNotMatch(sets, /xp_reward|coin_reward/, 'the server never pays set rewards, so the card never promises them');
-  assert.match(read('src/screens/RideTracker/RideStatsScreen.tsx'), /label="Ride days in a row"/);
+  assert.match(read('src/screens/RideTracker/RideStatsScreen.tsx'), /label="Ride days"/);
 });
 
 test('Wait Times plans the next coin through the guide', () => {

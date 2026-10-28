@@ -138,7 +138,7 @@ const DUEL_WIN: ResultsModel = {
   facts: [{ id: 'sample', fact: 'Earth is shaped almost like a ball.', gold: false, at: 0, isNew: false }],
   // duelStars(1576, 988, 4 right of 5): a 588-point win is 2 stars.
   stars: 2, practice: false,
-  rank: { label: 'Captain Fin', progress: 0, next: 'Admiral Fin', stripes: 2, nextStripes: 3, wins: 0, need: 3 },
+  rank: { label: 'Captain Gill', progress: 0, next: 'Admiral Gill', stripes: 2, nextStripes: 3, wins: 0, need: 3 },
   best: { label: '0.9s on Q1' },
 };
 

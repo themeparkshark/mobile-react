@@ -132,10 +132,48 @@ test('Story and Games: one word per tab, crew pages only for a crew, new rounds 
   assert.equal(loadTs('src/services/lineplay/labels.ts').chapterPageKicker({ parkLabel: '' }), 'LINE STORY');
 });
 
-test('the pocket watch is Wait Times only: LinePlay never draws it', () => {
+test('"Adventure" means only Today\'s Adventure: LinePlay and Ride Tracker strings say story, ride or line', () => {
+  // Real names that hold the word (lands, a park, film series, trivia answers) are facts, not our word.
+  const allowed = /Today[’']s Adventure|Adventureland|California Adventure|True-Life Adventure/g;
+  const files = walk('src/screens/LinePlay').concat(walk('src/services/lineplay'), walk('src/components/RideTracker'),
+    walk('src/screens/RideTracker'), ['src/screens/QueueTimesScreen.tsx']);
+  for (const file of files) {
+    if (/Preview|devTour/.test(file)) continue;
+    const src = read(file).replace(/\/\/.*$|\/\*[\s\S]*?\*\//gm, '');
+    // Every string literal and JSX text run.
+    const strings = src.match(/'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`|"(?:[^"\\\n]|\\.)*"|>[^<>{}\n]+</g) ?? [];
+    for (const text of strings) {
+      if (/^['"`]\.{0,2}\/|^['"`][\w./-]+['"`]$/.test(text) && !/\s/.test(text)) continue; // import paths and keys
+      const shown = text.replace(/\$\{[^}]*\}/g, '').replace(allowed, '');
+      assert.doesNotMatch(shown, /\badventure/i, `${file}: ${text.slice(0, 80)}`);
+    }
+  }
+  const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
+  assert.doesNotMatch(recap, /YOUR LINEPLAY ADVENTURE/);
+});
+
+test('the pocket watch is Wait Times only: LinePlay never draws it, and has its own line picture', () => {
   for (const file of walk('src/screens/LinePlay')) {
     assert.doesNotMatch(read(file), /name="queue"|icon="queue"|icon: 'queue'/, `${file} uses the Wait Times pocket watch`);
   }
+  // LinePlay's own icon (Dustin's decision, ledger 37): 'line', the How to Play gold posts and rope.
+  const names = loadTs('src/ui/iconNames.ts');
+  assert.ok(names.isGameIconName('line'));
+  assert.match(read('src/ui/GameIcon.tsx'), /line: require\('\.\.\/\.\.\/assets\/icons\/game\/line\.png'\)/);
+  assert.match(read('src/screens/LinePlay/components/WaitCard.tsx'), /<GameIcon name="line" size=\{54\} \/>/);
+  assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /icon: 'line', title: 'Eyes up in line\.'/);
+  assert.match(read('src/screens/LinePlay/components/SessionRecap.tsx'), /<GameIcon name="line" size=\{34\} \/>\s*<View style=\{styles\.stillInLineCopy\}>/);
+  // Wait Times: the pocket watch is its own picture; its PLAY IN LINE button shows LinePlay's line.
+  const waits = read('src/screens/QueueTimesScreen.tsx');
+  assert.match(waits, /<GameIcon name="line" size=\{20\} \/>\s*<Text style=\{styles\.sessionBtnText\}>/);
+});
+
+test('the bot rival is Captain Gill in LinePlay (rank ladder Admiral Gill)', () => {
+  for (const file of walk('src/screens/LinePlay').concat(walk('src/services/lineplay'), ['src/gamekit/party/LineParty.tsx'])) {
+    assert.doesNotMatch(read(file), /Captain Fin|Admiral Fin/, `${file} still names Captain Fin`);
+  }
+  assert.match(read('src/screens/LinePlay/components/BonusPicker.tsx'), /'Crack it with Captain Gill'/);
+  assert.match(read('src/gamekit/party/LineParty.tsx'), /Captain Gill is checking every board/);
 });
 
 test('a game played counts as played, won, lost or quit', () => {

@@ -353,7 +353,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         {phase === 'countdown' && local ? <CountIn boardT={boardT} late={local.lateStart} /> : null}
         {phase === 'ghosting' ? <Banner title="YOUR GHOST IS ON IT" sub="It finishes this round from your score. You keep the result, and you are back for the next round." /> : null}
         {phase === 'spectating' ? <Banner title="NEXT ROUND IS YOURS" sub="This race started before you joined. Cheer them on." /> : null}
-        {phase === 'submitting' || phase === 'waiting' ? <Banner title="FINISH!" sub="Captain Fin is checking every board..." big /> : null}
+        {phase === 'submitting' || phase === 'waiting' ? <Banner title="FINISH!" sub="Captain Gill is checking every board..." big /> : null}
       </View>
       <View style={styles.stickers}>
         <MiniStickers onEmote={onEmote} />

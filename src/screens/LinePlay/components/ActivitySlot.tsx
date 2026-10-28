@@ -91,7 +91,7 @@ const GAME_PREVIEWS: Record<string, string> = {
   shark: 'Guide your shark through a fast swim challenge.',
   banana: 'Catch the good snacks and dodge the bad ones.',
   current: 'Guide your shark through three changing routes. Collect pearls and find the treasure.',
-  showdown: 'Challenge Captain Fin to a three-question ride trivia duel. Play solo or take turns with your crew.',
+  showdown: 'Challenge Captain Gill to a three-question ride trivia duel. Play solo or take turns with your crew.',
 };
 
 function ActivityHero({ kicker, title, teacher = false, navigator = false }: { kicker: string; title: string; teacher?: boolean; navigator?: boolean }) {

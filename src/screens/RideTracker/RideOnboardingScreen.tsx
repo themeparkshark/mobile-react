@@ -88,7 +88,7 @@ const SLIDES: SlideData[] = [
       { x: 50, y: -50, rotate: '15deg' },
     ],
     title: "Let's Start!",
-    subtitle: 'Your theme park adventure begins now. Ready to track your first ride?',
+    subtitle: 'Your park day starts now. Ready to track your first ride?',
     gradient: ['#0879ca', '#05468f'],
     accentIcon: 'crown',
   },

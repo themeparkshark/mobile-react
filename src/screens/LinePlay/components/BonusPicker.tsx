@@ -35,10 +35,10 @@ export interface BonusPickerProps {
   readonly onShowing?: () => void;
 }
 
-/** "2 sharks cracking", or Captain Fin when nobody else is here. Echo seats never count. */
+/** "2 sharks cracking", or Captain Gill when nobody else is here. Echo seats never count. */
 export function crewTileLine(crew: CrewPuzzleSummary): string {
   const live = Math.max(0, crew.live_players ?? crew.participants ?? 0);
-  return live > 0 ? `${live} shark${live === 1 ? '' : 's'} cracking` : 'Crack it with Captain Fin';
+  return live > 0 ? `${live} shark${live === 1 ? '' : 's'} cracking` : 'Crack it with Captain Gill';
 }
 
 export function crewStageLine(crew: CrewPuzzleSummary, now = Date.now()): string {

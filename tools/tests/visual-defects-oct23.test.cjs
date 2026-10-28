@@ -62,7 +62,7 @@ test('Wait Times draws its icons: no wrench emoji, no play glyph the font cannot
   assert.doesNotMatch(src, /\\u\{1F527\}|\u{1F527}/u);
   assert.doesNotMatch(src, /▶/);
   assert.match(src, /icon: 'wrench'/);
-  assert.match(src, /<GameIcon name="play"/);
+  assert.match(src, /<GameIcon name="line"/, "PLAY IN LINE shows LinePlay's own line picture");
 });
 
 test('one footer clearance keeps the MAP compass off the last row of every list', () => {

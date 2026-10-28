@@ -155,7 +155,7 @@ test('client-scored wins never fly a Part: only server bonus events feed the fli
 test('Echo seats are synthetic, at most two, and never named like a real player', () => {
   const card = read('src/screens/LinePlay/components/CrewPuzzleCard.tsx');
   assert.match(card, /const ECHO_WORDS = \['Reef', 'Tide'/);
-  assert.match(card, /'Crack it with Captain Fin'/);
+  assert.match(card, /'Crack it with Captain Gill'/);
   assert.doesNotMatch(card, /waiting for players/i);
 });
 

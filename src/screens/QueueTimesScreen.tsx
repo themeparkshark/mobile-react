@@ -156,7 +156,7 @@ const RideCard = ({
               hitSlop={6}
             >
               {/* A drawn play icon: the game font has no play-arrow glyph (it drew a box). */}
-              <GameIcon name="play" size={16} />
+              <GameIcon name="line" size={20} />
               <Text style={styles.sessionBtnText}>{entry.status === 'DOWN'
                 ? 'PLAY WHILE YOU WAIT' : 'PLAY IN LINE'}</Text>
             </Pressable>

@@ -350,7 +350,7 @@ export default function RideTrackerScreen() {
                   style={s.logBtnIcon} contentFit="contain" />
                 <View style={{ flex: 1 }}>
                   <Text style={s.logBtnTitle}>Log a Ride</Text>
-                  <Text style={s.logBtnSub}>Track your theme park adventures</Text>
+                  <Text style={s.logBtnSub}>Every ride you ride, in one place</Text>
                 </View>
                 <GameIcon name="arrow" size={30} />
               </LinearGradient>
@@ -371,7 +371,7 @@ export default function RideTrackerScreen() {
                 </View>
                 <View style={s.statPill}>
                   <Text style={s.statVal}>{stats.current_streak}</Text>
-                  <Text style={s.statLabel}>Ride days in a row</Text>
+                  <Text style={s.statLabel}>Ride days</Text>
                 </View>
               </View>
             </FadeIn>

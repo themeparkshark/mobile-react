@@ -673,7 +673,7 @@ export default function LinePlayScreen() {
         alreadyNudged: nudged.current, quietMs: Date.now() - lastTouch.current })) return;
       nudged.current = true;
       haptic('tapLight');
-      showToastRef.current?.({ icon: 'play', title: 'Next adventure is ready!', body: 'Tap Play!' });
+      showToastRef.current?.({ icon: 'play', title: 'Next story is ready!', body: 'Tap Play!' });
     }, 1_000);
     return () => clearInterval(id);
   }, [snapshot.state, activeGame]);
@@ -722,7 +722,7 @@ export default function LinePlayScreen() {
       if (seen) return;
       eyesUpShown.current = true;
       void AsyncStorage.setItem(EYES_UP_KEY, '1');
-      showToastRef.current?.({ icon: 'shark', title: 'Eyes up in line.', body: 'Games never pause for walking.' });
+      showToastRef.current?.({ icon: 'line', title: 'Eyes up in line.', body: 'Games never pause for walking.' });
     }).catch(() => undefined);
     // Bonus rounds: Current Quest plays the server's own seed and tier.
     if (item.gameId === 'current' && session.snapshot().bonus?.enabled) {
@@ -1869,7 +1869,7 @@ export default function LinePlayScreen() {
           // The wait guess is named only when the guest made one.
           : prediction ? 'You keep what you earned either way. Your wait guess counts if you got to the ride.'
             : 'You keep what you earned either way.'}
-        icon="shark"
+        icon="line"
         buttons={[
           { text: 'I left the line' },
           { text: 'I got to the ride' },

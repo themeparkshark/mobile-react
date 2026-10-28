@@ -121,7 +121,7 @@ test('arcade NEW means something: only games never played on this account, two t
 
 test('the nudge says one short thing a non-reader can follow: "Tap Play!" with the play picture', () => {
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.match(screen, /\{ icon: 'play', title: 'Next adventure is ready!', body: 'Tap Play!' \}/);
+  assert.match(screen, /\{ icon: 'play', title: 'Next story is ready!', body: 'Tap Play!' \}/);
   assert.doesNotMatch(screen, /Swipe or tap Play/);
 });
 
@@ -203,7 +203,7 @@ test('the recap after a short wait never shows a row of zeros: zero tiles drop o
   const some = recapStats({ ...zero, activityCount: 2, experience: 15 });
   assert.deepEqual(some.map(t => t.key), ['activities', 'xp']);
   for (const t of recapStats({ ...zero, activityCount: 1, earnedEnergy: 5, partsCount: 1, ticketsEarned: 1 })) assert.ok(t.value > 0);
-  assert.match(src, /\{shownStats\.length \? <View style=\{styles\.recapStats\}>/);
+  assert.match(src, /\{shownStats\.length \? <View style=\{\[styles\.recapStats, /);
   assert.match(src, /<Text style=\{styles\.keepsakeTitle\}>Wait saved!<\/Text>/);
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.doesNotMatch(card, /'game plan' : 'posted wait'\} \$\{postedWaitMinutes\}m · details/, 'no "Session 1:21 · game plan 20m · details" jargon');
@@ -211,5 +211,5 @@ test('the recap after a short wait never shows a row of zeros: zero tiles drop o
 
 test('a finished wait at a ride with no Parts never shows an empty ring and a "0" gem', () => {
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
-  assert.match(card, /\{!rewardTrackingAvailable \? <View style=\{styles\.noPartsWell\}[^>]*>\n\s*<GameIcon name="shark" size=\{54\} \/>/);
+  assert.match(card, /\{!rewardTrackingAvailable \? <View style=\{styles\.noPartsWell\}[^>]*>\n\s*<GameIcon name="line" size=\{54\} \/>/);
 });

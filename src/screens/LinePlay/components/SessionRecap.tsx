@@ -206,10 +206,11 @@ export default function SessionRecap({
   const parkDay = bonusMode ? parkDayLine(bonusRecap) : null;
   const reducedMotion = useReducedGameMotion();
   const minutes = useCountUp(Math.floor(elapsedSeconds / 60), 120, reducedMotion);
-  const secs = elapsedSeconds % 60;
   const wholeMinutes = Math.floor(elapsedSeconds / 60);
   const rideUp = endReason === 'boarded';
   const leftQueue = endReason === 'left_queue';
+  // "I left the line" (manual) is a wrapped-up wait too, never "time played".
+  const wrappedUp = leftQueue || endReason === 'manual';
   const enter = (index: number) => reducedMotion ? undefined : FadeInDown.delay(420 + index * 90).springify().damping(14);
   const upgradeReady = coin != null && coin.current_level < coin.max_level &&
     (coin.available_parts ?? 0) >= coin.parts_to_next_level && playerEnergy != null &&
@@ -223,11 +224,18 @@ export default function SessionRecap({
     <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.recapCard, { paddingBottom: FOOTER_CLEARANCE }]}>
       <LinearGradient colors={['#13a8e9', '#0879ca', '#0768b9']} style={styles.recapHero}>
         <View style={styles.recapHeroCopy}>
-          <Text style={styles.recapKicker}>{rideUp ? 'YOUR RIDE’S UP!' : leftQueue ? 'WAIT WRAPPED UP' : 'LINEPLAY COMPLETE'}</Text>
+          <Text style={styles.recapKicker}>{rideUp ? 'YOUR RIDE’S UP!' : wrappedUp ? 'WAIT WRAPPED UP' : 'LINEPLAY COMPLETE'}</Text>
           <Text style={styles.recapRide} numberOfLines={2}>{rideName}</Text>
-          <Text style={styles.recapTime} accessibilityLabel={`${wholeMinutes} minutes`}>
-            {minutes} min</Text>
-          <Text style={styles.recapSub}>{signLine ?? (rideUp || leftQueue ? 'in line, all saved' : 'time played')}</Text>
+          {/* The wait is said once: the timed wait against the sign when there is one, else the minutes. */}
+          {signLine ? (
+            <Text style={styles.recapSignLine} numberOfLines={2}>{signLine}</Text>
+          ) : (
+            <>
+              <Text style={styles.recapTime} accessibilityLabel={`${wholeMinutes} minutes`}>
+                {minutes} min</Text>
+              <Text style={styles.recapSub}>{rideUp || wrappedUp ? 'in line, all saved' : 'time played'}</Text>
+            </>
+          )}
         </View>
         {heroInventory && onOpenInventory ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Your shark. Open your closet"
@@ -245,7 +253,7 @@ export default function SessionRecap({
       {leftQueue && onStillInLine && (
         <Animated.View entering={enter(0)} style={styles.stillInLineCard}>
           <View style={styles.stillInLineRow}>
-            <GameIcon name="shark" size={34} />
+            <GameIcon name="line" size={34} />
             <View style={styles.stillInLineCopy}>
               <Text style={styles.stillInLineTitle}>Still in line?</Text>
               <Text style={styles.stillInLineBody}>Pick up where you left off. You keep what you earned.</Text>
@@ -264,8 +272,7 @@ export default function SessionRecap({
             <GameIcon name="ride" size={30} />
             <View style={styles.rideLoggedCopy}>
               <Text style={styles.rideLoggedTitle}>Ride logged!</Text>
-              <Text style={styles.rideLoggedBody}>{adventureStamped ? 'Today’s Adventure: all 3 stamps!'
-                : rideLogged.waited != null ? `${rideLogged.waited} min in line, saved to your Ride Tracker` : 'Saved to your Ride Tracker'}</Text>
+              <Text style={styles.rideLoggedBody}>{adventureStamped ? 'Today’s Adventure: all 3 stamps!' : 'Saved to your Ride Tracker'}</Text>
             </View>
             {onAddMemory && <Text style={styles.rideLoggedLink}>Add stars</Text>}
           </Pressable>
@@ -274,18 +281,19 @@ export default function SessionRecap({
 
       {crew ? groupSlot : null}
 
-      <Text style={styles.recapSectionTitle}>{shownStats.some(t => t.key !== 'activities') ? 'WHAT YOU EARNED' : 'YOUR LINEPLAY ADVENTURE'}</Text>
-      {shownStats.length ? <View style={styles.recapStats}>
+      {shownStats.some(t => t.key !== 'activities') && <Text style={styles.recapSectionTitle}>WHAT YOU EARNED</Text>}
+      {shownStats.length ? <View style={[styles.recapStats, !shownStats.some(t => t.key !== 'activities') && styles.recapStatsLoose]}>
         {shownStats.map(t => <RecapStat key={t.key} icon={t.icon} value={t.value} prefix={t.prefix} label={t.label}
           index={stat++} reducedMotion={reducedMotion} />)}
-      </View> : (
-        // Nothing played or earned yet (a short wait): a keepsake of the wait itself, never a row of zeros.
+      </View> : signLine || rideLogged ? null : (
+        // Nothing played or earned yet (a short wait): a keepsake of the wait itself, never a row of zeros,
+        // and only when nothing above already says the wait.
         <Animated.View entering={enter(0)} style={styles.keepsake} accessible
-          accessibilityLabel={`Wait saved. ${Math.floor(elapsedSeconds / 60)} minutes ${secs} seconds in line at ${rideName}. Next time, play a clue while you wait.`}>
+          accessibilityLabel={`Wait saved at ${rideName}. Next time, play a clue while you wait.`}>
           <View style={styles.keepsakeBadge}><GameIcon name="ride" size={34} /></View>
           <View style={styles.keepsakeCopy}>
             <Text style={styles.keepsakeTitle}>Wait saved!</Text>
-            <Text style={styles.keepsakeBody} numberOfLines={2}>{`${Math.floor(elapsedSeconds / 60)}m ${secs}s at ${rideName}`}</Text>
+            <Text style={styles.keepsakeBody} numberOfLines={2}>{rideName}</Text>
             <Text style={styles.keepsakeHint}>Next time, play a clue while you wait!</Text>
           </View>
         </Animated.View>
@@ -474,6 +482,8 @@ const styles = StyleSheet.create({
   recapTime: { color: '#ffffff', fontFamily: 'Shark', fontSize: 36, marginTop: spacing.xs,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   recapSub: { color: '#d6f4ff', fontFamily: 'Knockout', fontSize: 14 },
+  recapSignLine: { color: '#ffffff', fontFamily: 'Shark', fontSize: 22, lineHeight: 27, marginTop: spacing.xs,
+    textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   keepsake: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, padding: spacing.md,
     borderRadius: borderRadius.lg, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.cream },
   keepsakeBadge: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center',
@@ -487,6 +497,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm, paddingVertical: spacing.md,
     borderRadius: borderRadius.lg, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: '#ffffff',
   },
+  recapStatsLoose: { marginTop: spacing.lg },
   recapStat: { alignItems: 'center', flex: 1 },
   recapStatValue: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 20, marginTop: 2 },
   recapStatLabel: { color: '#3b6884', fontFamily: 'Knockout', fontSize: 12, marginTop: 1, textTransform: 'uppercase' },

@@ -49,6 +49,7 @@ export const ICON_SOURCES: Record<GameIconName, number> = {
   new: require('../../assets/icons/game/new.png'),
   member: require('../../assets/images/screens/profile/subscribed.png'),
   queue: require('../../assets/images/screens/explore/queuetimes.png'),
+  line: require('../../assets/icons/game/line.png'),
   // Drawn with GPT Image 2.5 from Alex's references (no original existed)
   crown: require('../../assets/icons/game/crown.png'),
   streak: require('../../assets/icons/game/streak.png'),
