@@ -40,6 +40,7 @@ import { watchForReward } from '../services/ads';
 import { holdWinNotes, takeWinNote } from '../screens/LeaderboardsScreen/standingsCache';
 import countText from '../helpers/countText';
 import { useNativeModalLayer } from '../ui/modalLayers';
+import { usePresentWatchdog } from './rewards/usePresentWatchdog';
 import { useRung } from '../services/reveal/revealLadder';
 import type { PerkChipData } from './coin/progressionModel';
 import PerkChipRow from './coin/PerkChip';
@@ -314,6 +315,7 @@ export default function PostWinRewardsModal({
   // The win card waits its turn among the native modal layers (blueprint 4.3 rule 10): it presents
   // only once the challenge card is really gone, and holds its layer until UIKit says it is dismissed.
   const layer = useNativeModalLayer(visible, 'wait');
+  const watch = usePresentWatchdog(layer.present);
 
   const coinSource = taskCoinUrl && !coinArtFailed ? taskCoinUrl : null;
   const primary = hasCoin ? next : { kind: 'map' as const, label: 'Back to the Park', detail: null };
@@ -325,6 +327,8 @@ export default function PostWinRewardsModal({
 
   return (
     <Modal
+      key={`win-${watch.key}`}
+      onShow={watch.onShow}
       animationIn="fadeIn"
       animationOut="fadeOut"
       isVisible={layer.present}

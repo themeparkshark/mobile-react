@@ -71,6 +71,7 @@ import CoinTopUpOffer from './money/CoinTopUpOffer';
 import { storeAvailable } from '../services/purchases';
 import { watchForReward } from '../services/ads';
 import { useNativeModalLayer } from '../ui/modalLayers';
+import { usePresentWatchdog } from './rewards/usePresentWatchdog';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WHEEL_SIZE = Math.min(SCREEN_WIDTH * 0.7, 260);
@@ -734,6 +735,8 @@ export default function RedeemRedeemableModal({
   // Control sheet still sliding away) is really gone, and holds its own layer
   // until UIKit reports it dismissed, so the win card never presents into it.
   const challengeLayer = useNativeModalLayer(open === true && flowState !== 'postwin' && !!redeemable, 'wait');
+  // A sheet not on the layer list (or still dismissing) can make UIKit refuse the card: present it again.
+  const challengeWatch = usePresentWatchdog(challengeLayer.present);
 
   if (!redeemable) return null;
 
@@ -753,6 +756,8 @@ export default function RedeemRedeemableModal({
   return (
     <>
       <Modal
+        key={`challenge-${challengeWatch.key}`}
+        onShow={challengeWatch.onShow}
         animationIn="zoomIn"
         animationOut="zoomOut"
         swipeDirection={flowState === 'preview' ? 'down' : undefined}

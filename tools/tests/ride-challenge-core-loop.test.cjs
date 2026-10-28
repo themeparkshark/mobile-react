@@ -486,3 +486,16 @@ test('Parade Beat is the rhythm game\'s one name; Home Defend has its own title 
   assert.match(unlock, /accessibilityRole="text"/);
   assert.match(read('src/games/sharky/hud/SharkyUnlock.tsx'), /caption=\{`\$\{unlockName\(card\)\} unlocked`\}/);
 });
+
+test('a card that UIKit refused to present comes back: the watchdog presents it again, a few times at most', () => {
+  const w = loadTs('src/components/rewards/usePresentWatchdog.ts', { react: { useCallback: f => f, useEffect() {}, useRef: v => ({ current: v }), useState: v => [v, () => {}] } });
+  assert.equal(w.presentWatchdogNext({ shown: false, tries: 0 }, true), 'retry');
+  assert.equal(w.presentWatchdogNext({ shown: true, tries: 0 }, true), 'wait', 'on screen: nothing to do');
+  assert.equal(w.presentWatchdogNext({ shown: false, tries: 0 }, false), 'wait', 'not wanted: nothing to do');
+  assert.equal(w.presentWatchdogNext({ shown: false, tries: w.PRESENT_WATCHDOG_TRIES }, true), 'give_up');
+  assert.ok(w.PRESENT_WATCHDOG_MS >= 1000 && w.PRESENT_WATCHDOG_MS <= 2000, 'longer than the zoom-in, short enough to feel instant');
+  for (const file of ['src/components/RedeemRedeemableModal.tsx', 'src/components/PostWinRewardsModal.tsx']) {
+    const src = read(file);
+    assert.match(src, /key=\{`(challenge|win)-\$\{(challengeWatch|watch)\.key\}`\}\n\s+onShow=\{(challengeWatch|watch)\.onShow\}/, file);
+  }
+});
