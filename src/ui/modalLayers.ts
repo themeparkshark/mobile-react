@@ -14,7 +14,7 @@
  * A dialog drawn inside a sheet's own <Modal> is nested (ModalLayerContext): UIKit
  * presents it from that sheet, so it neither waits nor blocks.
  */
-import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 let nextId = 1;
 let layers: number[] = [];
@@ -77,4 +77,90 @@ export function useModalLayer(active: boolean, mode: 'show' | 'wait'): boolean {
   if (!active) return false;
   if (nested || mode === 'show') return true;
   return front;
+}
+
+/** If a native sheet never reports its dismissal (never presented, or Android), its layer frees itself after this. */
+export const NATIVE_DISMISS_FALLBACK_MS = 1200;
+
+/**
+ * A layer that stays registered until UIKit says the sheet is really gone
+ * (core loop blueprint 4.3 rule 10, the PLAY RIDE freeze, October 2026).
+ *
+ * The freeze: the Ride Control sheet was swiped closed, React flipped its
+ * `visible` to false and dropped the layer at once, but UIKit was still
+ * dismissing it, so the challenge card that presented next was refused and its
+ * orphan swallowed every tap. Here the layer is held from the moment the sheet
+ * wants to show until `onDismissed` runs (wire it to <Modal onDismiss> on iOS
+ * or react-native-modal's onModalHide), with a short fallback for a sheet that
+ * never reports back.
+ *
+ *   const layer = useNativeModalLayer(open, 'wait');
+ *   <Modal visible={layer.present} onDismiss={layer.onDismissed} ...>
+ *
+ * 'wait' (the default) presents only once every layer registered before it is
+ * gone; 'show' presents at once (a sheet the player opened on purpose). Nested
+ * layers (inside another sheet's <Modal>) never register and always present.
+ * Shared contract: owned by the guide-map lane; other lanes import it.
+ */
+export function useNativeModalLayer(wanted: boolean, mode: 'show' | 'wait' = 'wait'):
+  { present: boolean; onDismissed: () => void } {
+  const nested = useContext(ModalLayerContext);
+  const [id, setId] = useState<number | null>(null);
+  const idRef = useRef<number | null>(null);
+  const presentedRef = useRef(false);
+  const dismissedRef = useRef(false);
+  const wantedRef = useRef(wanted);
+  wantedRef.current = wanted;
+  const fallback = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const release = useCallback(() => {
+    if (fallback.current) { clearTimeout(fallback.current); fallback.current = null; }
+    const mine = idRef.current;
+    idRef.current = null;
+    presentedRef.current = false;
+    dismissedRef.current = false;
+    setId(null);
+    if (mine != null) modalLayers.remove(mine);
+  }, []);
+
+  // Register when the sheet wants to show; hold the layer while UIKit dismisses it.
+  useEffect(() => {
+    if (nested) return;
+    if (wanted) {
+      dismissedRef.current = false;
+      if (fallback.current) { clearTimeout(fallback.current); fallback.current = null; }
+      if (idRef.current == null) {
+        const mine = modalLayers.add();
+        idRef.current = mine;
+        setId(mine);
+      }
+      return;
+    }
+    if (idRef.current == null) return;
+    // Never presented, or UIKit already said it is gone: free the layer now.
+    if (!presentedRef.current || dismissedRef.current) { release(); return; }
+    if (!fallback.current) fallback.current = setTimeout(release, NATIVE_DISMISS_FALLBACK_MS);
+  }, [wanted, nested, release]);
+
+  // Unmount: never leave a layer behind.
+  useEffect(() => () => {
+    if (fallback.current) clearTimeout(fallback.current);
+    if (idRef.current != null) modalLayers.remove(idRef.current);
+    idRef.current = null;
+  }, []);
+
+  const front = useSyncExternalStore(modalLayers.subscribe,
+    () => (id != null ? modalLayers.isFront(id) : modalLayers.count() === 0));
+  const present = wanted && (nested || mode === 'show' || (id != null && front));
+  useEffect(() => {
+    if (present) presentedRef.current = true;
+  }, [present]);
+
+  const onDismissed = useCallback(() => {
+    if (nested || idRef.current == null) return;
+    dismissedRef.current = true;
+    if (!wantedRef.current) release();
+  }, [nested, release]);
+
+  return { present, onDismissed };
 }

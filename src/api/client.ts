@@ -22,6 +22,7 @@ client.defaults.headers.common['Is-Device'] = Device.isDevice ?? false;
 client.defaults.headers.common['Manufacturer'] = Device.manufacturer ?? 'unknown';
 client.defaults.headers.common['Model-Name'] = Device.modelName ?? 'unknown';
 client.defaults.headers.common['OS-Version'] = Device.osVersion ?? 'unknown';
+client.defaults.headers.common['X-Core-Loop'] = '1'; // core loop bundle: the server stages unlock-ladder features only for it (blueprint section 9)
 
 /**
  * Core-loop telemetry: a breadcrumb for every core-loop call, and one error
