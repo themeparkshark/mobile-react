@@ -55,6 +55,7 @@ import { useModalHandoff } from '../share/handoff';
 import { useDevAutoPress } from '../share/devDrive';
 import { UpperText } from '../ui/upper';
 import { useNativeModalLayer } from '../ui/modalLayers';
+import { useMapFlags } from '../services/mapFlags';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 /** The success CTA's width: the card is 95% of (screen - 48), with 14 pt padding each side. */
@@ -167,6 +168,9 @@ export default function CoinLevelingModal({
   const [showPartsHelp, setShowPartsHelp] = useState(false);
   // One door for every sheet (4.3 rule 10): the coin card presents only in front, and holds its layer until UIKit says it is gone.
   const layer = useNativeModalLayer(visible && !!rideCoin, 'wait');
+  // The park gym line ("Place this coin in a park gym...") hides while gyms are off for this player.
+  const { gymSwords } = useMapFlags();
+  const shownPerk = (perk: { type?: string }) => gymSwords || perk.type !== 'gym_points';
 
   // The level-up show, on the UI thread: the charge bar, the gold gathering behind the coin,
   // the burst bloom, sparkles and one shine across the new coin (ui/motion.ts language).
@@ -929,10 +933,10 @@ export default function CoinLevelingModal({
                         <Text style={{ flex: 1, fontFamily: 'Knockout', fontSize: 14,
                           color: '#19496B' }}>{nextVisualReward}</Text>
                       </View>
-                      {rideCoin.next_level_perks.length > 0 && (
+                      {rideCoin.next_level_perks.filter(shownPerk).length > 0 && (
                         <View style={{ marginTop: 7, borderTopWidth: 1, borderTopColor: '#EBC970',
                           paddingTop: 7 }}>
-                        {rideCoin.next_level_perks.map(perk => (
+                        {rideCoin.next_level_perks.filter(shownPerk).map(perk => (
                           <View key={perk.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <GameIcon name="star" size={16} />
                             <Text style={{ flex: 1, fontFamily: 'Knockout', fontSize: 14, color: '#19496B' }}>{perk.description}</Text>
@@ -1114,9 +1118,9 @@ export default function CoinLevelingModal({
 
                       {/* New bonuses (legacy curve): a picture and a big number each ("+500" with a trophy),
                           the full sentence is read out by VoiceOver. */}
-                      {!reveal && rideCoin.next_level_perks.length > 0 && (
+                      {!reveal && rideCoin.next_level_perks.filter(shownPerk).length > 0 && (
                         <View style={{ marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-                          {rideCoin.next_level_perks.map((perk) => {
+                          {rideCoin.next_level_perks.filter(shownPerk).map((perk) => {
                             const chip = perkChip(perk);
                             return (
                               <View key={perk.id} accessible accessibilityLabel={`New bonus: ${perk.description}`}
@@ -1182,9 +1186,9 @@ export default function CoinLevelingModal({
                       )}
 
                       {/* All perks */}
-                      {rideCoin.current_perks.length > 0 && (
+                      {rideCoin.current_perks.filter(shownPerk).length > 0 && (
                         <View style={{ width: '100%' }}>
-                          {rideCoin.current_perks.map((perk) => (
+                          {rideCoin.current_perks.filter(shownPerk).map((perk) => (
                             <View key={perk.id} style={{
                               flexDirection: 'row', alignItems: 'center', marginBottom: 4,
                             }}>

@@ -130,6 +130,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
         useModalLayer: active => !!active, useAnyModalLayer: () => false, ModalLayerContext: react.createContext(false) };
       if (/(^|\/)reveal\/revealLadder$/.test(name)) return { useRung: () => ({ open: true, isNew: false, markSeen() {} }),
         rungState: () => ({ open: true, isNew: false }), recordProgress() {} };
+      if (/(^|\/)services\/mapFlags$/.test(name)) return { useMapFlags: () => ({ gymSwords: false }), loadMapFlags: async () => ({ gymSwords: false }) };
       if (/(^|\/)guide\/nextCoin$/.test(name)) return { guide: { current: () => null, subscribe: () => () => {}, setTarget() {}, plan: () => null } };
       if (name.includes('assets/')) return name;
       return { default: name };

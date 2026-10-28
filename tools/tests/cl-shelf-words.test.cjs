@@ -253,3 +253,15 @@ test('one word per thing in the shelf-words files: no Mastery, no RIDE COINS, no
   const mine = v.scanVocabulary().filter(f => f.owner === 'shelf-words');
   assert.deepEqual(mine.map(f => `${f.file}: ${f.hits.map(h => h.rule).join(', ')}`), []);
 });
+
+test('the coin card hides the park gym line while gyms are off; Energy shows on the shelf header once coin levels open', () => {
+  const perks = [{ id: 1, type: 'gym_points', name: 'Park Gym Power', description: 'Place this coin in a park gym for 40 team points.' },
+    { id: 2, type: 'cosmetic', name: 'Gold rim', description: 'A gold rim.' }];
+  const sheet = levelSheet({ rideCoin: { id: 13, ride_name: 'Jungle Cruise', current_level: 1, max_level: 5, is_unlocked: true,
+    parts_to_next_level: 3, energy_to_next_level: 10, next_level_perks: perks, current_perks: perks } });
+  const text = JSON.stringify(sheet.view.tree);
+  assert.doesNotMatch(text, /park gym/i, 'gyms are off: no gym promise');
+  assert.match(text, /A gold rim/);
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /energy=\{canChooseGoal && coinLevels\.open \? viewer\?\.energy \?\? 0 : null\}/);
+});

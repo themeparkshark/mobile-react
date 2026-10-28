@@ -526,6 +526,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     onGo={onGoNext}
                     goLabel={inThisPark ? 'GO' : 'PLAN'}
                     planned={!!nextCoinTask && guidePlan === nextCoinTask.id}
+                    energy={canChooseGoal && coinLevels.open ? viewer?.energy ?? 0 : null}
                   />
                 </View>
                 <View

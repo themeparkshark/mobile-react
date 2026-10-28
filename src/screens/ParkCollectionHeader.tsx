@@ -65,6 +65,8 @@ interface Props {
   readonly goLabel?: 'GO' | 'PLAN';
   /** The coin is the guide's plan already. */
   readonly planned?: boolean;
+  /** Energy for growing coins, shown once coin levels open (rung 3). */
+  readonly energy?: number | null;
 }
 
 /** The slim park header: one shelf count ("9 of 35 coins"), the next trophy, the Rides, Sights and Limited tabs, and the next coin with GO. */
@@ -75,7 +77,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
   rescuePassAvailable = false, goalStale = false,
   goalReportedDown = false, alternateRideName, nearbyReportedOpen = false,
   secretMilestones, holdCount = false, tickKey, nextCoinKind, tab, onTab, tabs, trophyWins, onGo, goLabel = 'GO',
-  planned = false }: Props) {
+  planned = false, energy = null }: Props) {
   const reduced = useReducedGameMotion();
   const shownCollected = holdCount ? Math.max(0, collected - 1) : collected;
   const rate = available > 0 ? Math.max(0, Math.min(100, shownCollected / available * 100))
@@ -190,6 +192,11 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
           <GameIcon name="timer" size={18} />
           <Text style={styles.chipText}>{limitedAvailable > 0 ? `LIMITED ${limitedCollected}/${limitedAvailable}` : 'LIMITED'}</Text>
         </Pressable>}
+        {typeof energy === 'number' && <View style={[styles.chip, styles.chipEnergy]} accessible
+          accessibilityLabel={`${energy} Energy for leveling up coins`}>
+          <GameIcon name="energy" size={18} />
+          <Text style={styles.chipText}>{energy}</Text>
+        </View>}
         {!onTab && !!onBrowseSecrets && <Pressable style={styles.chip} onPress={onBrowseSecrets} hitSlop={6}
           accessibilityRole="button" accessibilityLabel={`${secretMilestones} secret coins found. View secret shelf.`}>
           <GameIcon name="lock" size={18} />
@@ -256,6 +263,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff8e4', borderWidth: 2, borderColor: '#ffcf3b', borderRadius: 12 },
   chipText: { fontFamily: 'Shark', color: '#05346e', fontSize: 14 },
   chipOn: { backgroundColor: '#ffcf3b', borderColor: '#ffffff' },
+  chipEnergy: { marginLeft: 'auto', borderColor: '#7fd3ff' },
   trophyLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 5, marginRight: 70 },
   trophyText: { fontFamily: 'Knockout', color: '#e9f7ff', fontSize: 14 },
   go: { minWidth: 58, minHeight: 40, paddingHorizontal: 10, borderRadius: 12, backgroundColor: '#ffcf3b',
