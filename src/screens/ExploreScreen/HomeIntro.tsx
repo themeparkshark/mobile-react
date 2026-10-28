@@ -32,10 +32,11 @@ export const HOME_INTRO_STEPS: readonly HomeIntroStep[] = [
     badge: 'TAP!',
   },
   {
-    title: 'Fill sets for rewards',
-    body: 'Each treat fills a set. Sets earn Energy and Tickets.',
-    art: require('../../../assets/images/screens/profile/pin_collections.png'),
-    badge: 'Snack Stand 3/12',
+    // What treats are for (core loop 5.7): the home bridge to the next park day.
+    title: 'Treats fill your Tickets',
+    body: 'Every 3 treats = 1 Ticket for your park day.',
+    art: require('../../../assets/images/ticket-icon.png'),
+    badge: '3 = 1 Ticket',
   },
 ];
 
@@ -91,7 +92,7 @@ export default function HomeIntro({ onDone }: { readonly onDone: () => void }) {
             onPress={onDone} style={styles.skip}>
             <Text style={styles.skipText}>SKIP</Text>
           </Pressable>
-          <Text style={styles.kicker}>HOW HOME FINDS WORK · {index + 1} OF {HOME_INTRO_STEPS.length}</Text>
+          <Text style={styles.kicker}>HOW TREATS WORK · {index + 1} OF {HOME_INTRO_STEPS.length}</Text>
           <Animated.View key={index} style={styles.artWell}
             entering={reducedMotion ? undefined : FadeIn.duration(160)}>
             <Image source={step.art} style={styles.art} contentFit="contain" />

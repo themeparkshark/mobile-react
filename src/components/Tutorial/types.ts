@@ -57,7 +57,7 @@ export interface TutorialStep {
   /** Finn is sniffing out the first find: no button and no tap-to-skip; the line changes on its own. */
   waitsForFind?: boolean;
   /** A small picture under Finn's line so a kid who cannot read yet still gets it. */
-  picture?: 'walk';
+  picture?: 'walk' | 'win_coins';
   /** A free hands-on round; never grants collection or currency rewards. */
   activity?: 'memory_warmup';
   /** Teacher shark's speech text */

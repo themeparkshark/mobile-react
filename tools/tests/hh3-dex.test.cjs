@@ -604,7 +604,7 @@ test('ship: "Report this spot" is reachable from a tapped find\'s peek, and the 
   assert.match(chip, /accessibilityLabel=\{message\.action\.hint \?\? message\.action\.label\}/);
   const glossary = read('src/services/help/glossary.ts');
   assert.doesNotMatch(glossary, /Next Park Trip/);
-  assert.match(glossary, /shelf and tap Set Goal/);
+  assert.match(glossary, /Tap a coin on your shelf, then Make this my next coin/);
 });
 
 test('round 7b: a full-set claim on an authored set shows WEAR IT for its wearable (the server pays it as Master)', () => {

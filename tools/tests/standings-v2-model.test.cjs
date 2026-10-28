@@ -94,7 +94,7 @@ test('list items: podium rows stay out, your neighbourhood and resting friends g
   assert.deepEqual(plain(model.itemLayouts(fItems)), [{ length: 40, offset: 0 }, { length: 64, offset: 40 }, { length: 64, offset: 104 }]);
 });
 
-test('day dots replace "2d 6h": today glows, the last day turns gold, the last hours turn red', () => {
+test('day dots replace "2d 6h": today glows, the last day turns gold, the last hours say "Ends tonight" (never red, never ticking)', () => {
   const end = '2026-10-05T07:00:00Z';
   const thursday = model.weekDots(end, Date.parse('2026-10-01T19:00:00Z'));
   assert.deepEqual(plain(thursday.dots.map(d => d.state)), ['past', 'past', 'past', 'today', 'future', 'future', 'future']);
@@ -105,7 +105,7 @@ test('day dots replace "2d 6h": today glows, the last day turns gold, the last h
   assert.equal(sunday.dots[6].state, 'today');
   assert.deepEqual(plain([sunday.urgency, sunday.label]), ['last_day', 'Ends today']);
   const late = model.weekDots(end, Date.parse('2026-10-05T04:20:00Z'));
-  assert.deepEqual(plain([late.urgency, late.label]), ['last_hours', 'Ends in 2h 40m']);
+  assert.deepEqual(plain([late.urgency, late.label]), ['last_hours', 'Ends tonight'], 'calm timers: words, no ticking hours and minutes');
   assert.equal(model.weekDots(null, 0).label, '');
 });
 

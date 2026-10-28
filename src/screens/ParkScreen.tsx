@@ -543,7 +543,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                         {coinLevels.open && secretTasks.length > 0 && <View
                           onLayout={event => { secretShelfOffset.current = event.nativeEvent.layout.y; }}>
                           <Text style={{ fontFamily: 'Shark', color: '#fff', fontSize: 16, textAlign: 'center', marginBottom: 6 }}>
-                            {labels.secret_tasks || 'Secret Coins'}
+                            Secret coins
                           </Text>
                           {shelfRows('secret', secretTasks)}
                         </View>}

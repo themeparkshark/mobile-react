@@ -136,3 +136,120 @@ test('Supplies: every purchase door is listed whenever its switch is on, regardl
   assert.doesNotMatch(read('src/components/money/BundleCard.tsx'), /\bWorth \$|worth\.worth\}/, 'Worth $X lives only in the grown-up sheet');
   assert.match(read('src/services/money/supplies.ts'), /rescue_passes: \['extra try', 'extra tries'\]/);
 });
+
+function tutorialApp(store, auth) {
+  const stepsModule = loadTs('src/components/Tutorial/steps.ts');
+  return runtime('src/components/Tutorial/TutorialProvider.tsx', {
+    './steps': stepsModule,
+    './tutorialLayout': loadTs('src/components/Tutorial/tutorialLayout.ts'),
+    './tutorialStore': loadTs('src/components/Tutorial/tutorialStore.ts'),
+    './TeacherShark': { default: 'Finn' }, './SpotlightOverlay': { default: 'Spotlight' },
+    '../../games/memory/MemoryGame': { default: 'Memory' },
+    '../../context/AuthProvider': { AuthContext: auth },
+    '../../services/guestTaste': { claimGuestWarmup: async () => false },
+    '@react-native-async-storage/async-storage': { default: {
+      getItem: async key => (store.has(key) ? store.get(key) : null),
+      setItem: async (key, value) => { store.set(key, value); },
+      removeItem: async key => { store.delete(key); },
+    } },
+  }, { children: 'map' }, { requestAnimationFrame: fn => { fn(); return 1; } });
+}
+
+test('Finn per account: a second shark on the same phone meets the park lesson (must-fix 32)', async () => {
+  const store = new Map();
+  const auth = { value: { player: { id: 5, total_experience: 0 } } };
+  const app = tutorialApp(store, auth);
+  await app.settle(); await app.settle();
+  const state = () => app.tree.props.value;
+  state().startTutorial('park_arrival'); app.render();
+  assert.equal(state().isActive, true, 'the first kid meets Finn');
+  state().skipTutorial(); app.render(); await app.settle();
+  assert.equal(state().hasCompleted('park_arrival'), true);
+  assert.ok(store.has('@tps_tutorial_completed@p5'), 'saved under the first kid\'s id');
+  // The sibling signs in on the same phone.
+  auth.value = { player: { id: 6, total_experience: 0 } }; app.render(); await app.settle(); await app.settle();
+  assert.equal(state().hasCompleted('park_arrival'), false, 'the second account has its own record');
+  state().startTutorial('park_arrival'); app.render();
+  assert.equal(state().isActive, true, 'the second kid meets Finn too');
+});
+
+test('Finn per account: the phone\'s old record goes to the first account only; veterans still skip every lesson', async () => {
+  const { loadCompleted, tutorialKey } = loadTs('src/components/Tutorial/tutorialStore.ts');
+  const store = new Map([['@tps_tutorial_completed', JSON.stringify(['onboarding', 'park'])]]);
+  const storage = { getItem: async key => (store.has(key) ? store.get(key) : null), setItem: async (key, value) => { store.set(key, value); } };
+  const first = await loadCompleted(storage, 5);
+  assert.equal(first.completed.has('park_arrival'), true, 'saw the park guide: no second arrival lesson');
+  assert.equal(store.get('@tps_tutorial_completed_owner'), '5');
+  const second = await loadCompleted(storage, 6);
+  assert.equal(second.completed.size, 0);
+  assert.equal(second.fresh, true, 'a sibling starts fresh (the provider still applies the veteran rule)');
+  assert.equal((await loadCompleted(storage, 5)).completed.has('onboarding'), true, 'the first account keeps it');
+  assert.equal(tutorialKey(null), null, 'signed out: nothing is read or written');
+  const provider = read('src/components/Tutorial/TutorialProvider.tsx');
+  assert.match(provider, /\(player\.completed_tasks_count \?\? 0\) > 0 \|\|/, 'the veteran auto-complete rule stays');
+  assert.match(provider, /if \(!loadedFor\.fresh \|\| completedSequences\.size > 0\) return;/);
+});
+
+test('Finn hands off to the guide with park help page 1\'s picture, and the shop coach never talks about ads', () => {
+  const steps = loadTs('src/components/Tutorial/steps.ts');
+  const park = steps.getStepsForSequence('park_arrival');
+  const handoff = park[park.length - 1];
+  assert.equal(handoff.title, 'Start your collection');
+  assert.equal(handoff.picture, 'win_coins');
+  assert.match(handoff.text, /Every ride has a coin/);
+  assert.match(read('src/components/Tutorial/TeacherShark.tsx'), /picture === 'win_coins' && [\s\S]*?<HowToDemo art="park"/);
+  const store = steps.getStepsForSequence('store')[0];
+  assert.doesNotMatch(`${store.text} ${store.subtitle}`, /\bads?\b/i);
+});
+
+test('glossary lines follow the player\'s switches: line Tickets only with Queue Tickets, no boss promise while bosses are off', () => {
+  const g = loadTs('src/services/help/glossary.ts');
+  const off = g.glossaryForSwitches(g.LOCAL_GLOSSARY, { queueTickets: false, rideBoss: false });
+  assert.doesNotMatch(off.tickets.earn, /wait|line/i);
+  assert.match(off.tickets.earn, /3 treats at home = 1 Ticket/);
+  const on = g.glossaryForSwitches(g.LOCAL_GLOSSARY, { queueTickets: true, rideBoss: false });
+  assert.equal(on.tickets.earn, g.TICKETS_EARN_WITH_LINE);
+  // An older server's energy line promises bosses: while bosses are off the local line wins.
+  const server = g.mergeServerGlossary(g.LOCAL_GLOSSARY, { currencies: [{ key: 'energy', what: 'Powers boss raids and ride coin level-ups.', earn: 'Get it from home finds.' }] });
+  assert.equal(g.glossaryForSwitches(server, { rideBoss: false }).energy.what, 'Levels up your ride coins.');
+  assert.equal(g.glossaryForSwitches(server, { rideBoss: true }).energy.what, 'Powers boss raids and ride coin level-ups.');
+  assert.equal(g.LOCAL_GLOSSARY.energy.what, 'Levels up your ride coins.', 'Energy says level-ups first');
+  assert.match(read('src/components/help/HelpProvider.tsx'), /glossaryForSwitches\(serverGlossary, \{ queueTickets, rideBoss \}\)/);
+});
+
+test('first words teach the loop: the welcome line, the third home card, the splash tips', () => {
+  assert.match(read('src/screens/WelcomeScreen.tsx'), /'Every ride has a coin\.\\nWin it and fill your park shelf\.'/);
+  assert.doesNotMatch(read('src/screens/WelcomeScreen.tsx'), /Beat bosses/);
+  const intro = read('src/screens/ExploreScreen/HomeIntro.tsx');
+  assert.match(intro, /body: 'Every 3 treats = 1 Ticket for your park day\.'/);
+  const crumbs = JSON.parse(read('src/api/defaults/crumbs.json'));
+  const facts = crumbs.labels.splash_screen_facts;
+  assert.equal(facts[0], 'Every ride has a coin. Win it and fill your park shelf!');
+  for (const fact of facts) assert.doesNotMatch(fact, /boss|Rush|double|points|Shark Shop|Secret tasks/i, fact);
+  assert.ok(!crumbs.labels.membership_benefits.some(line => /finds/.test(line)));
+});
+
+test('Standings counts "Wins this week" with the coin-and-check picture, and its clock never ticks or turns red', () => {
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(board, />Wins this week</);
+  assert.doesNotMatch(board, /BRAND\.red\b/);
+  assert.match(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /<GameIcon name="check"/);
+  const model = loadTs('src/screens/LeaderboardsScreen/standingsV2Model.ts');
+  const end = '2026-10-05T07:00:00Z';
+  assert.equal(model.weekDots(end, Date.parse('2026-10-05T05:59:00Z')).label, 'Ends tonight');
+  assert.doesNotMatch(model.weekDots(end, Date.parse('2026-10-05T05:59:00Z')).spoken, /\d+ minutes/);
+});
+
+test('the Community Center Finn tip runs once on the first visit, waiting its turn; the Shark Shop has a back button where the footer was', () => {
+  const center = read('src/screens/CommunityCenterScreen.tsx');
+  assert.match(center, /useTutorialWhenReady\('community_center', !loading && !!center && !sheetUp\)/);
+  const shop = read('src/screens/StoreScreen.tsx');
+  assert.match(shop, /testID="shop-bottom-back"/);
+  assert.match(shop, /bottom: insets\.bottom \+ 10/);
+});
+
+test('one word per thing in the shelf-words files: no Mastery, no RIDE COINS, no Rescue Pass, no home finds', () => {
+  const v = require('./vocabulary.test.cjs');
+  const mine = v.scanVocabulary().filter(f => f.owner === 'shelf-words');
+  assert.deepEqual(mine.map(f => `${f.file}: ${f.hits.map(h => h.rule).join(', ')}`), []);
+});

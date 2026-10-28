@@ -16,8 +16,9 @@ import { AuthContext } from '../../context/AuthProvider';
 import * as RootNavigation from '../../RootNavigation';
 import { replayHomeIntro } from '../../screens/ExploreScreen/HomeIntro';
 import {
-  LOCAL_GLOSSARY, mergeServerGlossary, type GlossaryKey, type GlossaryTerm, type HelpTopicId,
+  LOCAL_GLOSSARY, glossaryForSwitches, mergeServerGlossary, type GlossaryKey, type GlossaryTerm, type HelpTopicId,
 } from '../../services/help/glossary';
+import { useMoneyFlag } from '../../services/money/flags';
 import {
   createSeenTipStore, initialSeenFor, isExistingPlayer, shouldShowTip, type TipId,
 } from '../../services/help/seenTips';
@@ -84,7 +85,11 @@ export default function HelpProvider({ children }: { readonly children: React.Re
   const veteran = isExistingPlayer(player);
   const { isActive: finnActive, resetAll: resetFinn } = useTutorial();
 
-  const [glossary, setGlossary] = useState<Record<GlossaryKey, GlossaryTerm>>(glossaryCache ?? { ...LOCAL_GLOSSARY });
+  const [serverGlossary, setGlossary] = useState<Record<GlossaryKey, GlossaryTerm>>(glossaryCache ?? { ...LOCAL_GLOSSARY });
+  // Every line true for this player's switches: line Tickets only with Queue Tickets, no boss promise while bosses are off.
+  const queueTickets = useMoneyFlag('queue_tickets');
+  const rideBoss = useMoneyFlag('ride_boss');
+  const glossary = useMemo(() => glossaryForSwitches(serverGlossary, { queueTickets, rideBoss }), [serverGlossary, queueTickets, rideBoss]);
   const [sheet, setSheet] = useState<{ key: GlossaryKey; count: number | null } | null>(null);
   const [helpId, setHelpId] = useState<HelpSheetId | null>(null);
   const [lastHelpId, setLastHelpId] = useState<HelpSheetId | null>(null);

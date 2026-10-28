@@ -36,7 +36,7 @@ test('one name per thing: the glossary never uses a retired name', () => {
     const term = glossary.LOCAL_GLOSSARY[key];
     return `${term.label} ${term.what} ${term.earn}`;
   }).join(' ');
-  for (const retired of [/Park Coins/, /\bstamina\b/i, /\btokens?\b/i, /Shark Store/, /queue adventure/i, /\bLine Play\b/, /\bprep items?\b/i, /\btreats?\b/i, /Power Up/i]) {
+  for (const retired of [/Park Coins/, /\bstamina\b/i, /\btokens?\b/i, /Shark Store/, /queue adventure/i, /\bLine Play\b/, /\bprep items?\b/i, /\bhome finds?\b/i, /\bsnacks?\b/i, /Power Up/i, /\bboss/i, /Day streak/]) {
     assert.doesNotMatch(all, retired, String(retired));
   }
 });

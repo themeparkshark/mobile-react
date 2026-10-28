@@ -16,6 +16,7 @@ function guide(preview = false, xp, frames = null) {
     './steps': steps,
     './tutorialLayout': require('./helpers/ts-module.cjs').loadTs('src/components/Tutorial/tutorialLayout.ts'),
     './TeacherShark': { default: 'Finn' }, './SpotlightOverlay': { default: 'Spotlight' },
+    './tutorialStore': require('./helpers/ts-module.cjs').loadTs('src/components/Tutorial/tutorialStore.ts'),
     '../../games/memory/MemoryGame': { default: 'Memory' },
     '../../context/AuthProvider': { AuthContext: auth },
     '@react-native-async-storage/async-storage': { default: {
@@ -37,7 +38,7 @@ test('park guide opens a four-pair warm-up once, then hands off to the original 
   assert.equal(c.game().props.difficulty, 0); assert.equal(c.game().props.deckId, 'park'); assert.equal(c.finn(), undefined);
   const complete = c.game().props.onComplete; complete(2); complete(2); c.app.render();
   assert.equal(c.state().currentIndex, 1); assert.equal(c.game(), undefined);
-  assert.match(c.finn().props.subtitle, /tap your shark/i); assert.equal(c.writes.length, 0);
+  assert.match(c.finn().props.subtitle, /park shelf/i); assert.equal(c.finn().props.picture, 'win_coins'); assert.equal(c.writes.length, 0);
   c.finn().props.onNext(); c.app.render();
   assert.equal(c.state().isActive, false); assert.equal(c.state().hasCompleted('park_arrival'), true);
   assert.equal(c.writes.length, 1);

@@ -9,7 +9,7 @@
   },
   "labels": {
     "add_a_comment": "Add a comment",
-    "archived_tasks": "Past Tasks",
+    "archived_tasks": "Past events",
     "checking_again": "Checking again in %s %s...",
     "choose_daily_gift": "Pick one reward below!",
     "clearance": "Clearance",
@@ -30,7 +30,7 @@
     "membership": "VIP",
     "membership_benefits": [
       "• 2x XP and coins",
-      "• 2 extra finds on every home hunt",
+      "• 2 extra treats on every home hunt",
       "• VIP badge on your profile"
     ],
     "membership_terms": "VIP costs %s %s a month. Payment is charged to your Apple ID when you confirm the purchase, or when a free trial ends. The subscription renews by itself. To stop it, turn it off at least 24 hours before the current period ends. Manage or cancel it in your Apple ID account settings. You can play Theme Park Shark for free without a subscription. See our Terms of Service and Privacy Policy.",
@@ -56,7 +56,7 @@
       "unrelated": "Not about theme parks"
     },
     "search_for_a_user": "Search for a player",
-    "secret_tasks": "Secret Tasks",
+    "secret_tasks": "Secret coins",
     "select_a_pin": "Pick a pin to trade for the %s",
     "select_a_report_reason": "Pick why you are reporting this.",
     "skip_for_now": "Skip for now",
@@ -64,16 +64,14 @@
     "sort_comments": "Sort comments by",
     "sort_threads": "Sort threads by",
     "splash_screen_facts": [
-      "Treats you find at home give you Energy and Tickets for your next park day!",
-      "Bosses show up at every park five times a day. Beat them together!",
-      "A ride on Rush has a short wait right now: its coin pays double Ride Parts!",
-      "Every ride coin you catch wins power for your team at that ride!",
-      "The team with the fewest rides gets extra points!",
-      "Waiting in line? Play games to earn that ride’s Parts!",
+      "Every ride has a coin. Win it and fill your park shelf!",
+      "Follow the glowing coin on the park map to your next ride!",
+      "Every 3 treats you grab at home = 1 Ticket for your park day!",
+      "Waiting in line? LinePlay turns your wait into Ride Parts!",
       "Level up a ride coin with its Ride Parts and Energy!",
+      "Your park shelf names the next coin to win. Tap GO!",
       "Finish a collection set to unlock new style for your shark!",
-      "The Shark Shop gets new items every day!",
-      "Secret tasks are hidden around parks!",
+      "Secret coins hide around parks!",
       "Sharks can’t swim backwards!",
       "Some shark species can walk on their fins!",
       "Sharks are older than trees!"

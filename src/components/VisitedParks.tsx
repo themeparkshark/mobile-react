@@ -102,7 +102,7 @@ export default function VisitedParks({
                     }}
                   >
                     {(rideCoinProgress
-                      ? `${park.ride_coins_collected ?? 0}/${park.ride_coins_available} RIDE COINS`
+                      ? `${park.ride_coins_collected ?? 0} of ${park.ride_coins_available} ${park.ride_coins_available === 1 ? 'coin' : 'coins'}`
                       : vsprintf(labels.park_completion_rate || '%s%% complete', [park.completion_rate])).toUpperCase()}
                   </Text>
                 </View>

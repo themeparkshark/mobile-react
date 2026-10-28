@@ -20,7 +20,9 @@ export interface HowToCard {
 }
 
 export const HOW_TO_CARDS: readonly HowToCard[] = [
-  { id: 'find', art: 'find', title: 'Find snacks', topic: 'home',
+  // The title says treats (one home word, 4.5). The line stays as recorded (vo-find.mp3 says
+  // "Snacks pop up near you."); a new recording, "Treats pop up near you.", is on Dustin's list.
+  { id: 'find', art: 'find', title: 'Find treats', topic: 'home',
     line: 'Snacks pop up near you.', colors: ['#2fa9f5', '#0768b9'] },
   { id: 'catch', art: 'catch', title: 'Catch them', topic: 'home',
     line: 'Walk close, then catch it!', colors: ['#ffb43b', '#f07f1a'] },

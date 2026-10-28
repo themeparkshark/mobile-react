@@ -94,10 +94,17 @@ function ConfettiBurst({ fireKey, width, y }: { readonly fireKey: number; readon
 }
 
 /** The board's unit icon: the ride cart for rides won this week, Alex's ride coin for All-Time. */
+/** All-Time counts ride coins (the coin); This Week counts wins (a coin with a check, one per ride per park day). */
 export function ScoreIcon({ metric, size }: { readonly metric: StandingsMetric; readonly size: number }) {
-  return metric === 'ride_coins'
-    ? <Image source={RIDE_COIN} style={{ width: size, height: size }} contentFit="contain" />
-    : <GameIcon name="ride" size={size} />;
+  if (metric === 'ride_coins') return <Image source={RIDE_COIN} style={{ width: size, height: size }} contentFit="contain" />;
+  return (
+    <View style={{ width: size, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Image source={RIDE_COIN} style={{ width: size, height: size }} contentFit="contain" />
+      <View style={{ position: 'absolute', right: -size * 0.12, bottom: -size * 0.12 }}>
+        <GameIcon name="check" size={Math.round(size * 0.55)} />
+      </View>
+    </View>
+  );
 }
 
 /** Each spot's score chip rests on its barrel rim (flipped art: center, then left, then right). */

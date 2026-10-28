@@ -262,7 +262,7 @@ export default function BattleHUD({ parkId }: Props) {
                 {/* How it works */}
                 <View style={styles.infoSection}>
                   <Text style={styles.sectionTitle}>HOW IT WORKS</Text>
-                  <GameRichText tone="onBlue" style={styles.infoText}>{'[icon:pin] Check in every 30 min: +20 points.\n[icon:coin] Place a coin: bonus points.\n[icon:swords] Find swords: attack other teams.\n[icon:trophy] Be winning when the timer hits 0 to get rewards!'}</GameRichText>
+                  <GameRichText tone="onBlue" style={styles.infoText}>{'[icon:pin] Check in every 30 min to help your team.\n[icon:coin] Place a coin to help more.\n[icon:swords] Find swords: attack other teams.\n[icon:trophy] The team ahead at the end gets rewards!'}</GameRichText>
                 </View>
 
                 {/* Rewards + Status side by side */}

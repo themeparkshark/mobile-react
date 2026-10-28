@@ -59,7 +59,7 @@ test('arrival actions remain usable immediately; land feedback happens once and 
   '../hooks/useReducedGameMotion':{default:()=>false},'../gamekit/SFX':{playSfx(){}}
  },{target:{x:120,y:170,width:60,height:60,frameWidth:390,frameHeight:650},coinUrl:'coin',rideName:'Snowball',firstCollection:true,
  onLand(){lands++;},onInspect(){inspections++;},onClose(){}});
- const primary=view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='View coin mastery');
+ const primary=view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='Level up this coin');
  primary.props.onPress();view.render();assert.equal(lands,1);assert.equal(inspections,1);
  view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='Keep exploring this shelf').props.onPress();
  assert.equal(lands,1);view.unmount();assert.ok(view.cancelled.length>0);assert.equal(view.timers.size,0);

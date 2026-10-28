@@ -50,14 +50,17 @@ const parkOnboardingSteps: TutorialStep[] = [
   },
   {
     id: 'park_ride', sequence: 'onboarding', title: 'Start your collection',
-    // Copy stands on its own: it must read right whether or not the card is spotlit.
-    text: 'Choose a ride coin you are missing on the map. Win its ride challenge to earn it.',
-    subtitle: 'Tap your shark in the corner to see your ride coins.',
+    // Copy stands on its own: it must read right whether or not the card is spotlit. The picture is
+    // park help page 1 ("Win ride coins"), so a new player never needs the "?" to learn the loop, and
+    // the guide card is the next thing on screen (blueprint 6.2).
+    text: 'Every ride has a coin. Follow the glowing coin, tap PLAY! and win it.',
+    subtitle: 'It lands on your park shelf.',
+    picture: 'win_coins',
     // Spotlights the "YOUR NEXT PARK COIN" card once ParkCollectionHeader calls
     // registerRef('next_park_coin') (change request filed with its owner). Until then
     // there is no spotlight and Finn keeps his default spot.
     spotlightRef: 'next_park_coin', placement: 'above-spotlight',
-    sharkPosition: 'bottom-center', sharkMood: 'pointing', nextText: 'Let’s go!',
+    sharkPosition: 'bottom-center', sharkMood: 'pointing', nextText: 'Follow the coin!',
   },
 ];
 
@@ -73,8 +76,8 @@ const parkSteps: TutorialStep[] = [
   {
     id: 'park_intro',
     sequence: 'park',
-    text: 'This is your park shelf. Every ride coin you win helps you finish this park.',
-    subtitle: 'Open a ride you don’t have yet to see its challenge. Win it, then come back to level up your coin.',
+    text: 'This is your park shelf. Every coin you win lands here.',
+    subtitle: 'The next coin is on top. Tap GO and follow the path.',
     sharkPosition: 'bottom-center',
     sharkMood: 'excited',
     nextText: 'Got it!',
@@ -89,7 +92,7 @@ const storeSteps: TutorialStep[] = [
     id: 'store_intro',
     sequence: 'store',
     text: 'Welcome to the Shark Shop! Use coins to buy gear for your shark.',
-    subtitle: 'Supplies cost real money, so a grown-up buys them. Ads are always optional.',
+    subtitle: 'Supplies cost real money, so a grown-up buys them.',
     sharkPosition: 'bottom-center',
     sharkMood: 'happy',
     nextText: 'Cool!',
@@ -103,8 +106,8 @@ const gymSteps: TutorialStep[] = [
   {
     id: 'gym_intro',
     sequence: 'gym',
-    text: "This is the Arena! Your team battles here for control. Check in, attack with swords, and defend your turf!",
-    subtitle: 'Find swords on the map to power your attacks.',
+    text: 'This is the Arena! Your team checks in here to hold it.',
+    subtitle: 'Find swords on the map to help your team.',
     sharkPosition: 'bottom-center',
     sharkMood: 'excited',
     nextText: 'Ready to battle!',
@@ -119,7 +122,7 @@ const communityCenterSteps: TutorialStep[] = [
     id: 'community_center_intro',
     sequence: 'community_center',
     text: 'This is the Community Center! Leave a gift for another shark, or claim one someone left for you.',
-    subtitle: 'A gift costs 350 coins and gets you 2 Tickets. Claiming a gift gets you 1 Ticket.',
+    subtitle: 'Leaving a gift costs 350 coins and gives you 2 Tickets. Claiming one gives you 1 Ticket.',
     sharkPosition: 'bottom-center',
     sharkMood: 'happy',
     nextText: 'Nice!',
@@ -148,7 +151,7 @@ const pinSteps: TutorialStep[] = [
   {
     id: 'pin_collections_intro',
     sequence: 'pins',
-    text: 'Pins! Open Pin Packs to collect them, and swap with other sharks in Pin Trading.',
+    text: 'Pins! Collect them, and swap with other sharks in Pin Trading.',
     sharkPosition: 'bottom-center',
     sharkMood: 'excited',
     nextText: 'Sweet!',

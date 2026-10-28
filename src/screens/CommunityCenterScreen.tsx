@@ -34,6 +34,8 @@ import { GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { kioskLayout, KIOSK_COLORS } from './CommunityCenter/leaveGiftLayout';
 import { ticketLabel, ticketsEarnedFrom } from './CommunityCenter/communityCenterRewards';
+import { useTutorialWhenReady } from '../components/Tutorial';
+import { useAnyModalLayer } from '../ui/modalLayers';
 
 /** A small busy mark for buttons and slots: his fin bobbing, still under reduced motion. */
 function SharkLoaderDot({ style }: { readonly style?: object }) {
@@ -146,6 +148,10 @@ export default function CommunityCenterScreen() {
   
   const [loading, setLoading] = useState(true);
   const [center, setCenter] = useState<CenterData | null>(null);
+  // Finn's Community Center tip runs once, on the first visit, after the screen has loaded and
+  // only while no other sheet or dialog is up (it waits its turn; core loop 5.2).
+  const sheetUp = useAnyModalLayer();
+  useTutorialWhenReady('community_center', !loading && !!center && !sheetUp);
   const [claiming, setClaiming] = useState<number | null>(null); // which slot is being claimed
   const [giving, setGiving] = useState(false);
   const [revealedSlots, setRevealedSlots] = useState<Set<number>>(new Set());

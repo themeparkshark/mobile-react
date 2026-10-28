@@ -14,6 +14,7 @@
  *
  * Uses the existing approved teacher-shark artwork and his yellow button.
  */
+import HowToDemo from '../../screens/HowToPlay/HowToDemos';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Dimensions, Image } from 'react-native';
 import * as Haptics from 'expo-haptics';
@@ -78,8 +79,8 @@ interface TeacherSharkProps {
   bottomOffset?: number;
   /** A pointing hand on the button after a short wait (first-session steps a kid cannot read yet). */
   pointAtNext?: boolean;
-  /** A small picture under the line: 'walk' shows two stepping feet. */
-  picture?: 'walk';
+  /** A small picture under the line: 'walk' shows two stepping feet; 'win_coins' is park help page 1's "Win ride coins" picture. */
+  picture?: 'walk' | 'win_coins';
   /**
    * Finn stands beside his bubble instead of under it (bottom-center only).
    * For steps where a find is waiting at the middle of the map: the bubble
@@ -274,6 +275,9 @@ export default function TeacherShark({
             <Text style={[styles.subtitleText, talking && styles.hiddenWord]}>{subtitle}</Text>
           )}
           {picture === 'walk' && <WalkPicture reducedMotion={reducedMotion} />}
+          {picture === 'win_coins' && <View style={styles.winCoinsPicture}>
+            <HowToDemo art="park" size={96} active={!reducedMotion} reduced={reducedMotion} />
+          </View>}
         </Pressable>
 
         {/* Buttons */}
@@ -307,6 +311,7 @@ export default function TeacherShark({
 
 const styles = StyleSheet.create({
   walkPicture: { alignSelf: 'center', marginTop: 6 },
+  winCoinsPicture: { alignSelf: 'center', marginTop: 4 },
   walkFeet: { width: 54, height: 54 },
   title: { fontFamily: 'Shark', fontSize: 23, lineHeight: 28, textAlign: 'center', color: BRAND.navy, marginBottom: 8 },
   container: {

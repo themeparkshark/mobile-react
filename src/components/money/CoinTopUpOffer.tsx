@@ -37,8 +37,8 @@ export type { TopUpCurrency, TopUpReason };
 
 const FREE_PATH: Record<TopUpCurrency, string> = {
   coins: 'Or win ride coins at the park and open your daily chest. Free.',
-  tickets: 'Or grab home finds near you for free tickets.',
-  energy: 'Or grab home finds near you for free energy.',
+  tickets: 'Or grab treats near you: every 3 treats = 1 Ticket. Free.',
+  energy: 'Or grab treats near you for free Energy.',
 };
 
 export { topUpHeadline };

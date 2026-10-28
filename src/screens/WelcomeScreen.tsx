@@ -145,7 +145,7 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
               <Image source={require('../../assets/images/screens/login/logo.png')} style={styles.logo} contentFit="contain" />
             </Animated.View>
             <Animated.Text entering={FadeInDown.delay(300).duration(500)} style={styles.hook}>
-              {done ? `You're in, ${username}!` : 'Catch every ride coin.\nBeat bosses. Win rides for your team.'}
+              {done ? `You're in, ${username}!` : 'Every ride has a coin.\nWin it and fill your park shelf.'}
             </Animated.Text>
 
             <View style={styles.stage}>

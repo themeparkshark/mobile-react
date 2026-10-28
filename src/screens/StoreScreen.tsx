@@ -699,6 +699,12 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
         </ImageBackground>
       )}
       </Reanimated.View>
+      {/* The footer is hidden in the Shark Shop, so a kid's tap where the footer was finds a way
+          back: the same back button, bottom left (core loop 5.1, walk lc-kid 144). */}
+      {!shopHandoff && <View pointerEvents="box-none" style={{ position: 'absolute', left: 14, bottom: insets.bottom + 10, zIndex: 40 }}
+        accessibilityLabel="Back" testID="shop-bottom-back">
+        <BackButton />
+      </View>}
       {/* Buy hand-off into the Set Complete reveal: navy over everything, header included. */}
       {shopHandoff && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY, zIndex: 50 }]} />}
       </View>

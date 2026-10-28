@@ -83,27 +83,29 @@ const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
 
 /**
  * The board's one pill: what the number is and how long the week has left.
- * Gold on the last day, red (with a slow pulse) in the last three hours.
+ * Gold on the last day ("Ends tonight"), never red and never a ticking count (kid-safe calm timers).
  */
 function WeekPill({ endsAt, now }: { readonly endsAt: string | null; readonly now: number }) {
   const reduced = useUiReducedMotion();
   const week = weekLeft(endsAt, now);
   const pulse = useSharedValue(1);
   useEffect(() => {
-    if (reduced || week.urgency !== 'last_hours') { pulse.value = 1; return; }
-    pulse.value = withRepeat(withSequence(withTiming(1.05, { duration: 700 }), withTiming(1, { duration: 700 })), -1);
+    // No pulse: nothing hurries a kid (no fake urgency). The pill stays still on the last day too.
+    pulse.value = 1;
+    void reduced;
   }, [week.urgency, reduced, pulse]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
-  const tone = week.urgency === 'last_hours' ? BRAND.red : week.urgency === 'last_day' ? BRAND.gold : BRAND.white;
-  const ink = week.urgency === 'last_hours' ? BRAND.white : BRAND.navy;
+  // Calm timers (4.3 rule 7): the last day is gold, never red.
+  const tone = week.urgency === 'last_hours' || week.urgency === 'last_day' ? BRAND.gold : BRAND.white;
+  const ink = BRAND.navy;
   return (
-    <Animated.View accessible accessibilityRole="text" accessibilityLabel={`Ranked by rides won this week. ${week.spoken}`} style={[{
+    <Animated.View accessible accessibilityRole="text" accessibilityLabel={`Ranked by wins this week. ${week.spoken}`} style={[{
       flexDirection: 'row', alignItems: 'center', gap: 8, height: 40, paddingHorizontal: 14, borderRadius: RADIUS.pill, alignSelf: 'center',
-      backgroundColor: tone, borderWidth: 2, borderColor: week.urgency === 'last_hours' ? BRAND.redLip : week.urgency === 'last_day' ? BRAND.goldLip : 'rgba(5,52,110,0.18)',
+      backgroundColor: tone, borderWidth: 2, borderColor: week.urgency === 'calm' ? 'rgba(5,52,110,0.18)' : BRAND.goldLip,
     }, style]}>
       <ScoreIcon metric="ride_wins" size={24} />
-      <Text maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 15, color: ink }}>Rides won</Text>
-      {!!week.label && <View style={{ width: 2, height: 18, borderRadius: 1, backgroundColor: week.urgency === 'last_hours' ? 'rgba(255,255,255,0.5)' : 'rgba(5,52,110,0.2)' }} />}
+      <Text maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 15, color: ink }}>Wins this week</Text>
+      {!!week.label && <View style={{ width: 2, height: 18, borderRadius: 1, backgroundColor: 'rgba(5,52,110,0.2)' }} />}
       {!!week.label && <Text maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 15, color: ink }}>{week.label}</Text>}
     </Animated.View>
   );

@@ -14,6 +14,7 @@ type Stop = { readonly sheet: HelpSheetId | 'term' | 'odds'; readonly route?: st
 const STOPS: readonly Stop[] = [
   { sheet: 'standings', route: 'Leaderboard' },
   { sheet: 'pins', route: 'PinSwaps' },
+  // vocab-allow: a route name, never shown
   { sheet: 'shop', route: 'Store', params: { store: 'shark-shop' } },
   { sheet: 'park', route: 'Park', params: { park: Number(process.env.EXPO_PUBLIC_HELP_TOUR_PARK ?? 1) } },
   { sheet: 'park_map', route: 'Explore' },

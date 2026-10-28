@@ -88,9 +88,9 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
         </Text>
         <Text style={styles.title} numberOfLines={1}>{rideName}</Text>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="View coin mastery" style={styles.primary}
+      <Pressable accessibilityRole="button" accessibilityLabel="Level up this coin" style={styles.primary}
         onPress={() => { finish(); callbacks.current.onInspect(); }}>
-        <Text style={styles.primaryText}>Mastery</Text>
+        <Text style={styles.primaryText}>Level up</Text>
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Keep exploring this shelf" hitSlop={8}
         style={styles.close} onPress={() => { finish(); callbacks.current.onClose(); }}>

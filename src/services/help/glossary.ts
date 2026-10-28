@@ -42,22 +42,23 @@ export const SERVER_CURRENCY_KEYS: readonly GlossaryKey[] = [
 const TERMS: readonly GlossaryTerm[] = [
   { key: 'coins', label: 'Coins', icon: 'coins', topic: 'basics',
     what: 'Spend them in the Shark Shop and Community Center.',
-    earn: 'Open daily chests and win raids.' },
+    earn: 'Win ride coins and open your daily chest.' },
   { key: 'tickets', label: 'Tickets', icon: 'ticket', topic: 'basics',
-    what: 'Each ride challenge costs one Ticket.',
-    earn: 'Grab home finds and open your day 7 daily chest.' },
+    what: 'Each PLAY! at a ride costs one Ticket.',
+    earn: '3 treats at home = 1 Ticket. Stamps and chests give more.' },
+  // Level-ups first; no boss promise (bosses are off for most players).
   { key: 'energy', label: 'Energy', icon: 'energy', topic: 'basics',
-    what: 'Powers boss raids and ride coin level-ups.',
-    earn: 'Get it from home finds, rides and your daily chest.' },
+    what: 'Levels up your ride coins.',
+    earn: 'Get it from treats, sets and your daily chest.' },
   { key: 'ride_parts', label: 'Ride Parts', icon: 'parts', topic: 'coins_levels',
     what: 'Belong to one ride. Use them to level that ride coin up.',
     earn: 'Win at that ride, or play LinePlay in its line.' },
   { key: 'ride_coins', label: 'Ride Coins', icon: 'coin', topic: 'park',
     what: 'One for each ride, show and famous sight. They fill your shelf.',
-    earn: 'Win a ride challenge at the ride.' },
-  { key: 'rescue_pass', label: 'Rescue Pass', icon: 'retry', topic: 'ride_challenge',
-    what: 'One more try at a new ride coin, free each park day.',
-    earn: 'You get one when your Tickets run out. Supplies sells more.' },
+    earn: 'Walk up to the ride and tap PLAY!' },
+  { key: 'rescue_pass', label: 'Extra tries', icon: 'retry', topic: 'ride_challenge',
+    what: 'One more try at a ride coin you don\'t have yet.',
+    earn: 'Today\'s free try comes first. Supplies sells extra tries.' },
   { key: 'keys', label: 'Keys', icon: 'lock', topic: 'park',
     what: 'Open treasure vaults on the park map.',
     earn: 'Grab one whenever you spot it.' },
@@ -66,70 +67,72 @@ const TERMS: readonly GlossaryTerm[] = [
     earn: 'Pick up swords you spot on the park map.' },
   { key: 'xp', label: 'XP', icon: 'xp', topic: 'basics',
     what: 'Points that raise your shark level.',
-    earn: 'You get it for home finds, ride wins, LinePlay and chests.' },
-  { key: 'coin_levels', label: 'Coin levels', icon: 'star', topic: 'coins_levels',
-    what: 'Ride coins level up from 1 to 10. Each level looks new.',
+    earn: 'You get it for treats, ride coin wins, LinePlay and chests.' },
+  { key: 'coin_levels', label: 'Level up', icon: 'star', topic: 'coins_levels',
+    what: 'Ride coins level up. Each level looks new.',
     earn: 'Tap a coin on your shelf. Spend Energy and its Ride Parts.' },
   { key: 'limited_coins', label: 'Limited coins', icon: 'timer', topic: 'park',
     what: 'Special ride coins that are only out for a while.',
-    earn: 'Win the ride challenge before the date on the coin.' },
-  { key: 'ride_challenge', label: 'Ride challenge', icon: 'ride', topic: 'ride_challenge',
-    what: 'A quick mini-game at a ride. Win it to get the coin.',
-    earn: 'Walk up to a ride coin and tap Play Ride. One Ticket.' },
-  { key: 'lineplay', label: 'LinePlay', icon: 'queue', topic: 'lineplay',
-    what: 'Games and stories for while you wait in a ride\'s line.',
-    earn: 'Start it from Wait Times when you get in line.' },
+    earn: 'Win the coin before the day it leaves.' },
+  { key: 'ride_challenge', label: 'PLAY!', icon: 'ride', topic: 'ride_challenge',
+    what: 'A quick game at a ride. Win it to get the coin.',
+    earn: 'Walk up to a ride coin and tap PLAY! One Ticket.' },
+  // The pocket watch means Wait Times only.
+  { key: 'lineplay', label: 'LinePlay', icon: 'ride', topic: 'lineplay',
+    what: 'Stories and games for while you wait in a ride\'s line.',
+    earn: 'Stand in a ride\'s line. The guide card offers it.' },
   { key: 'ride_passport', label: 'Ride Passport', icon: 'coin', topic: 'park',
     what: 'The rides part of a park\'s shelf. Catch all for a stamp.',
-    earn: 'Tap your shark on the park map to see this park\'s shelf.' },
+    earn: 'Open a park\'s shelf. It is the Rides tab.' },
   { key: 'coin_guide', label: 'Coin Guide', icon: 'search', topic: 'park',
     what: 'The list of every ride and coin at this park.',
-    earn: 'Open a park\'s shelf and scroll down to Coin Guide.' },
-  { key: 'adventure_ticket', label: 'Adventure Ticket', icon: 'map', topic: 'park',
-    what: 'A 3-step quest at one ride: win, play its story, celebrate.',
-    earn: 'Tap the Adventure card at the top of the park map.' },
-  { key: 'park_goal', label: 'Park goal', icon: 'map', topic: 'home',
-    what: 'The ride coin you want next. It waits on your map.',
-    earn: 'Open a park\'s shelf and tap Set Goal on a ride.' },
+    earn: 'Open a park\'s shelf and tap Find a coin.' },
+  { key: 'adventure_ticket', label: 'Today\'s Adventure', icon: 'map', topic: 'park',
+    what: 'A 3-step quest at one ride: win, play its line story, celebrate.',
+    earn: 'The guide card shows it at the park.' },
+  { key: 'park_goal', label: 'Next coin', icon: 'map', topic: 'home',
+    what: 'The coin you want next. The guide card points to it.',
+    earn: 'Tap a coin on your shelf, then Make this my next coin.' },
   { key: 'stamps', label: 'Stamps', icon: 'medal1', topic: 'collections',
     what: 'Badges for big moments, like your first ride coin.',
     earn: 'See them all in your Stamp Book, from the menu.' },
   { key: 'sets', label: 'Sets', icon: 'gift', topic: 'collections',
-    what: 'Every home find belongs to a set, like the Churro Collection.',
+    what: 'Every treat belongs to a set, like the Churro Collection.',
     earn: 'Finish a set for Energy, Tickets, XP and a title.' },
   { key: 'pins', label: 'Pins', icon: 'pin', topic: 'extras',
     what: 'Pins you wear on your lanyard. Park pins never trade.',
-    earn: 'Open mystery boxes, find the Pin of the Day, or trade extras.' },
-  { key: 'home_finds', label: 'Home finds', icon: 'gift', topic: 'home',
-    what: 'Snacks and treasures near you, even at home. They don\'t stay long.',
-    earn: 'Walk close to a find, then tap it to catch it.' },
+    earn: 'Find the Pin of the Day, or trade extras.' },
+  { key: 'home_finds', label: 'Treats', icon: 'gift', topic: 'home',
+    what: 'Treats pop up near you, even at home. They don\'t stay long.',
+    earn: 'Walk close, then tap one. Every 3 treats = 1 Ticket.' },
   { key: 'crew', label: 'Crew', icon: 'heart', topic: 'lineplay',
     what: 'The people in line with you. Play together on one phone.',
     earn: 'In LinePlay, tap Add your crew and pass the phone.' },
   { key: 'standings', label: 'Standings', icon: 'trophy', topic: 'standings',
-    what: 'Rank by rides won this week, with friends, or all-time ride coins.',
+    what: 'Rank by wins this week, with friends, or all-time ride coins.',
     earn: 'Tap Standings in the bottom bar.' },
   { key: 'daily_chest', label: 'Daily chest', icon: 'chest', topic: 'basics',
     what: 'A free chest every day. Day 7 has a Ticket inside.',
     earn: 'It opens on the home map once a day.' },
-  { key: 'day_streak', label: 'Day streak', icon: 'streak', topic: 'basics',
+  // One flame, one number (4.5): the flame is the streak; the chest ladder says "Day 3 of 7".
+  { key: 'day_streak', label: 'The flame', icon: 'streak', topic: 'basics',
     what: 'How many days in a row you opened your Daily Chest.',
     earn: 'Open your Daily Chest every day to keep it growing.' },
   // While Daily 3 is on, the flame counts Daily 3 days instead (one flame number in the game).
-  { key: 'daily3_streak', label: 'Day streak', icon: 'streak', topic: 'basics',
+  { key: 'daily3_streak', label: 'The flame', icon: 'streak', topic: 'basics',
     what: 'How many days in a row you finished your Daily 3.',
     earn: 'Finish your Daily 3 every day to keep it growing.' },
   { key: 'travel_mode', label: 'Home Hunt', icon: 'map', topic: 'home',
-    what: 'You are away from a park. Snacks and souvenirs pop up nearby.',
-    earn: 'Hunt home finds to stock up Tickets and Energy for park day.' },
+    what: 'You are away from a park. Treats pop up nearby.',
+    earn: 'Grab treats to fill your Tickets for the next park day.' },
   { key: 'ride_control', label: 'Teams and Ride Control', icon: 'crown', topic: 'teams',
     what: 'Three teams race to control the rides at each park.',
-    earn: 'Pick a team. Your ride wins claim rides for it.' },
+    earn: 'Pick a team. Your ride coin wins claim rides for it.' },
   { key: 'vip', label: 'VIP', icon: 'member', topic: 'shop',
     what: 'A plan a grown-up buys. Bigger rewards at home and the park.',
     earn: 'Tap Member on the Social screen to see what VIP gives you.' },
   { key: 'supplies', label: 'Supplies', icon: 'gift', topic: 'shop',
-    what: 'Packs of Tickets, Coins and Energy. A grown-up pays real money.',
+    what: 'Packs of Tickets, coins and Energy. A grown-up pays real money.',
     earn: 'In the Shark Shop. Ride Parts and ride coins are never sold.' },
   { key: 'bonus_ads', label: 'Bonus ads', icon: 'play', topic: 'shop',
     what: 'Short ads you can skip. Watch one for a small bonus.',
@@ -201,6 +204,41 @@ export function mergeServerGlossary(
   return merged;
 }
 
+/** Tickets' earn line while Queue Tickets is on (12 words at most, like every glossary line). */
+export const TICKETS_EARN_WITH_LINE = '3 treats = 1 Ticket. Your first wait at a ride earns one.';
+
+/** The player's switches the glossary lines depend on (GET /api/feature-flags). */
+export interface GlossarySwitches {
+  /** queue_tickets: your first wait at a ride earns a Ticket. */
+  readonly queueTickets?: boolean;
+  /** ride_boss: boss raids are on for this player. */
+  readonly rideBoss?: boolean;
+}
+
+/**
+ * Every line true for the player's switches (core loop 5.11): Tickets lists the line Ticket only
+ * while Queue Tickets is on, and no line promises bosses while they are off, even when an older
+ * server's wording does. Never throws; unknown switches read off.
+ */
+export function glossaryForSwitches(glossary: Readonly<Record<GlossaryKey, GlossaryTerm>>, switches: GlossarySwitches):
+  Record<GlossaryKey, GlossaryTerm> {
+  const out = { ...glossary } as Record<GlossaryKey, GlossaryTerm>;
+  for (const key of Object.keys(out) as GlossaryKey[]) {
+    const term = out[key];
+    const local = LOCAL_GLOSSARY[key];
+    const bossy = (line: string) => /\bboss(es)?\b|\braids?\b/i.test(line);
+    const lineTicket = (line: string) => /\b(wait|line)\b[^.]*\bTickets?\b|\bTickets?\b[^.]*\b(wait|line)\b/i.test(line);
+    let what = term.what;
+    let earn = term.earn;
+    if (!switches.rideBoss && bossy(what)) what = local.what;
+    if (!switches.rideBoss && bossy(earn)) earn = local.earn;
+    if (key === 'tickets' && !switches.queueTickets && lineTicket(earn)) earn = local.earn;
+    if (key === 'tickets' && switches.queueTickets && !lineTicket(earn)) earn = TICKETS_EARN_WITH_LINE;
+    if (what !== term.what || earn !== term.earn) out[key] = { ...term, what, earn };
+  }
+  return out;
+}
+
 /** Every spelling a pill, badge or server currency uses, mapped to one term. */
 const NAME_ALIASES: Readonly<Record<string, GlossaryKey>> = {
   'coins': 'coins', 'coin': 'coins', 'shark coins': 'coins', 'shark coin': 'coins',
@@ -209,7 +247,8 @@ const NAME_ALIASES: Readonly<Record<string, GlossaryKey>> = {
   'ride parts': 'ride_parts', 'ride part': 'ride_parts', 'parts': 'ride_parts', 'part': 'ride_parts',
   'lineplay parts': 'ride_parts',
   'ride coins': 'ride_coins', 'ride coin': 'ride_coins',
-  'rescue pass': 'rescue_pass', 'shark rescue pass': 'rescue_pass',
+  'rescue pass': 'rescue_pass', 'shark rescue pass': 'rescue_pass', 'extra tries': 'rescue_pass', 'extra try': 'rescue_pass',
+  'treats': 'home_finds', 'treat': 'home_finds',
   'keys': 'keys', 'key': 'keys',
   'swords': 'swords', 'sword': 'swords',
   'xp': 'xp', 'experience': 'xp',
