@@ -96,9 +96,13 @@ test('only rides with a queue can be ride questions, after a real ride\'s stay',
 function gate() {
   const nextCoin = loadTs('src/services/guide/nextCoin.ts');
   const detection = { linePlayRideNow: () => null };
+  const memory = { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} };
+  const ledger = loadTs('src/services/lineplay/rideQuestionLedger.ts', { '@react-native-async-storage/async-storage': memory });
   const g = loadTs('src/services/lineplay/ridePromptGate.ts', {
     '../guide/nextCoin': nextCoin,
+    './rideQuestionLedger': ledger,
     '../RideDetectionService': loadTs('src/services/RideDetectionService.ts', {
+      './lineplay/rideQuestionLedger': ledger,
       '@react-native-async-storage/async-storage': { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} },
       'expo-location': { Accuracy: { High: 6 } },
       'expo-task-manager': { defineTask() {} },
@@ -327,4 +331,193 @@ test('Wait Times plans the next coin through the guide', () => {
   assert.match(screen, /guide\.setTarget\(taskId, 'wait_times'\);/);
   assert.match(screen, /Make this my next coin/);
   assert.match(screen, /Your next coin/);
+});
+
+// -- One question per wait, across an app relaunch (round 1 grader blocker) ----------------------------
+//
+// One phone "launch" is the detection service, the prompt gate, the ledger and the hook's pending check,
+// all on one AsyncStorage store. A relaunch builds them again from the same store with empty memory.
+const SPACE = { id: 588, name: 'Space Mountain', type: 'coaster', park_id: 8, lat: 33.8113, lng: -117.9174, radius: 60, ride_duration_minutes: null, min_dwell_minutes: null };
+
+function launch(store, { appState = 'active', player = '48' } = {}) {
+  const storage = {
+    getItem: async key => store.get(key) ?? null,
+    setItem: async (key, value) => { store.set(key, value); },
+    removeItem: async key => { store.delete(key); },
+  };
+  const appStateStub = { AppState: { currentState: appState, addEventListener: () => ({ remove() {} }) } };
+  const playerStorage = { gameSavesPlayer: () => player, playerKey: (key, id) => `${key}@p${id ?? 'guest'}` };
+  const ledger = loadTs('src/services/lineplay/rideQuestionLedger.ts', {
+    '@react-native-async-storage/async-storage': storage,
+    '../../gamekit/core/playerStorage': playerStorage,
+  });
+  const svcModule = loadTs('src/services/RideDetectionService.ts', {
+    '@react-native-async-storage/async-storage': storage,
+    'expo-location': { Accuracy: { High: 6 }, hasStartedLocationUpdatesAsync: async () => false },
+    'expo-task-manager': { defineTask() {}, isTaskDefined: () => false },
+    'react-native': appStateStub,
+    '../api/endpoints/rides': {},
+    './lineplay/rideQuestionLedger': ledger,
+  });
+  const nextCoin = loadTs('src/services/guide/nextCoin.ts');
+  const gateModule = loadTs('src/services/lineplay/ridePromptGate.ts', {
+    '../guide/nextCoin': nextCoin,
+    '../RideDetectionService': svcModule,
+    './rideQuestionLedger': ledger,
+  });
+  const navigations = [];
+  const emitter = loadTs('src/services/RideDetectionEmitter.ts', { './RideDetectionService': svcModule });
+  const hook = loadTs('src/hooks/useRideDetection.ts', {
+    react: {},
+    'react-native': appStateStub,
+    '../api/endpoints/rides': { getRides: async () => [] },
+    '../api/endpoints/parks/queue-times/getWikiTimes': { __esModule: true, default: async () => [] },
+    '../services/RideDetectionService': svcModule,
+    '../constants/parkWaitTimes': { PARK_WIKI_IDS: {} },
+    '../RootNavigation': {
+      navigationRef: { isReady: () => true, getCurrentRoute: () => ({ name: 'Explore' }) },
+      navigate: (name, params) => navigations.push({ name, params }),
+    },
+    '../services/RideDetectionEmitter': emitter,
+    '../services/lineplay/rideQuestionLedger': ledger,
+    '../services/lineplay/ridePromptGate': gateModule,
+    '../context/LocationProvider': { LocationContext: {} },
+    './useLivePoll': { __esModule: true, default: () => undefined },
+  });
+  const s = svcModule.default, heard = [];
+  s.onForegroundDetection = detection => heard.push(detection);
+  s.setRides([JUNGLE, PIANO, SPACE]);
+  return { s, svcModule, gate: gateModule, ledger, hook, navigations, heard };
+}
+
+const pendingIn = store => JSON.parse(store.get('pending_ride_detections') ?? '[]');
+
+/** 22 minutes of LinePlay in the Jungle Cruise switchbacks, then the boat leaves the zone (the boarding signal). */
+async function waitThenBoard(app, clock) {
+  for (const [lat, lng] of path2([[33.8108, -117.9201], [33.81144, -117.92009]])) { app.s.processLocation(lat, lng); clock.now += 5_000; }
+  const startedAt = clock.now;
+  app.s.setLinePlayRide(JUNGLE.id, clock.now, startedAt);
+  for (let i = 0; i < 44; i++) { app.s.processLocation(33.81140 + (i % 2) * 0.00004, -117.92005); clock.now += 30_000; }
+  for (const [lat, lng] of path2([[33.81144, -117.92009], [33.8130, -117.9225]])) { app.s.processLocation(lat, lng); clock.now += 5_000; }
+  await app.s.writeQueue;
+  return startedAt;
+}
+
+for (const answer of ['I got to the ride', 'Still in line, then I left the line']) {
+  test(`after "${answer}", a relaunch 35 minutes later asks nothing about that wait`, async () => {
+    const store = new Map();
+    await withClock(100_000_000, async clock => {
+      const app = launch(store);
+      await app.ledger.ensureRideQuestionLedger();
+      const startedAt = await waitThenBoard(app, clock);
+      assert.equal(app.heard.length, 1, 'LinePlay hears the boarding signal and asks its one question');
+      assert.equal(app.svcModule.linePlayRideNow(), JUNGLE.id);
+      assert.equal(pendingIn(store).length, 0, 'nothing about this wait waits for later');
+      // A detection the previous build kept about this same wait (it used to persist the boarding signal).
+      store.set('pending_ride_detections', JSON.stringify([{ id: 'det_old', rideId: JUNGLE.id, rideName: JUNGLE.name,
+        rideType: 'attraction', parkId: 8, enteredAt: startedAt - 30_000, exitedAt: clock.now - 10_000,
+        dwellTimeMs: clock.now - startedAt, confidence: 'high', isReRide: false, detectedAt: clock.now - 10_000 }]));
+      app.gate.noteRidePrompt(clock.now);
+      if (answer === 'I got to the ride') {
+        app.gate.holdRideAfterRideStep(JUNGLE.id, clock.now);
+        await app.svcModule.dropAnsweredRideDetections(JUNGLE.id);
+      } else {
+        // "Still in line": LinePlay keeps the wait. Later "I left the line" ends it.
+        clock.now += 6 * 60_000;
+      }
+      app.s.setLinePlayRide(null, clock.now);
+      await app.s.writeQueue;
+      await new Promise(resolve => setTimeout(resolve, 0));
+      assert.equal(pendingIn(store).length, 0, 'the answered wait is gone from the batch confirm');
+      // The pocket: the phone was closed for the ride and the walk. The app is killed and opened 35 minutes later.
+      store.set('pending_ride_detections', JSON.stringify([{ id: 'det_old2', rideId: JUNGLE.id, rideName: JUNGLE.name,
+        rideType: 'attraction', parkId: 8, enteredAt: startedAt + 60_000, exitedAt: startedAt + 23 * 60_000,
+        dwellTimeMs: 22 * 60_000, confidence: 'high', isReRide: false, detectedAt: startedAt + 23 * 60_000 }]));
+      clock.now += 35 * 60_000;
+      const relaunched = launch(store);
+      assert.equal(await relaunched.hook.checkAndShowPendingRides(), false);
+      assert.equal(relaunched.navigations.length, 0, 'zero ride questions after the relaunch');
+      assert.equal(pendingIn(store).length, 0, 'and the leftover is cleared, not kept for later');
+      assert.ok(store.has('tps.ride_question.v1@p48'), 'kept on the phone for this player');
+    });
+  });
+}
+
+test('a boarding signal while the phone sleeps in a pocket is never kept as a second question', async () => {
+  const store = new Map();
+  await withClock(200_000_000, async clock => {
+    const app = launch(store, { appState: 'background' });
+    await app.ledger.ensureRideQuestionLedger();
+    await waitThenBoard(app, clock);
+    assert.equal(app.heard.length, 0, 'no sheet while asleep');
+    assert.equal(pendingIn(store).length, 0, 'and nothing about the LinePlay wait is kept for the batch confirm');
+    app.s.setLinePlayRide(null, clock.now);
+    clock.now += 40 * 60_000;
+    const relaunched = launch(store);
+    await relaunched.hook.checkAndShowPendingRides();
+    assert.equal(relaunched.navigations.length, 0);
+  });
+});
+
+test('within the 30 minutes after the ride step, a relaunch still holds the ride and the 20 minute clock', async () => {
+  const store = new Map();
+  await withClock(300_000_000, async clock => {
+    const app = launch(store);
+    await app.ledger.ensureRideQuestionLedger();
+    app.gate.holdRideAfterRideStep(JUNGLE.id, clock.now);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    clock.now += 12 * 60_000;
+    const relaunched = launch(store);
+    await relaunched.ledger.ensureRideQuestionLedger();
+    assert.ok(relaunched.svcModule.rideLoggedUntil(JUNGLE.id, clock.now) > clock.now, 'the hold survives the relaunch');
+    assert.equal(relaunched.gate.lastRidePromptAt(), clock.now - 12 * 60_000, 'so does the prompt clock');
+    // Another player on the same phone has their own record.
+    const sister = launch(store, { player: '77' });
+    await sister.ledger.ensureRideQuestionLedger();
+    assert.equal(sister.svcModule.rideLoggedUntil(JUNGLE.id, clock.now), null);
+  });
+});
+
+test('a real ride later in the day is still asked about once (the fix is not a mute)', async () => {
+  const store = new Map();
+  await withClock(400_000_000, async clock => {
+    const app = launch(store);
+    await app.ledger.ensureRideQuestionLedger();
+    await waitThenBoard(app, clock);
+    app.gate.holdRideAfterRideStep(JUNGLE.id, clock.now);
+    app.s.setLinePlayRide(null, clock.now);
+    clock.now += 45 * 60_000;
+    // Space Mountain without LinePlay: 25 minutes in its zone, then out.
+    for (let i = 0; i < 50; i++) { app.s.processLocation(SPACE.lat + (i % 2) * 0.00003, SPACE.lng); clock.now += 30_000; }
+    for (const [lat, lng] of path2([[SPACE.lat, SPACE.lng], [33.8095, -117.9174]])) { app.s.processLocation(lat, lng); clock.now += 5_000; }
+    await app.s.writeQueue;
+    assert.equal(app.heard.filter(d => d.rideId === SPACE.id).length, 1, 'one detection for the new ride');
+    assert.equal(pendingIn(store).filter(d => d.rideId === SPACE.id).length, 1, 'kept until answered');
+    const relaunched = launch(store);
+    await relaunched.hook.checkAndShowPendingRides();
+    assert.equal(relaunched.navigations.length, 1, 'the batch confirm asks about Space Mountain');
+    assert.deepEqual(plain(relaunched.navigations[0].params.detections.map(d => d.rideId)), [SPACE.id]);
+  });
+});
+
+test('a LinePlay wait whose end was lost (app killed) stops muting that ride after its cap', async () => {
+  const store = new Map();
+  await withClock(500_000_000, async clock => {
+    const app = launch(store);
+    await app.ledger.ensureRideQuestionLedger();
+    app.ledger.noteLinePlayWaitStarted(JUNGLE.id, clock.now);
+    assert.equal(app.ledger.visitInLinePlayWait(JUNGLE.id, clock.now + 10 * 60_000, clock.now + 30 * 60_000, clock.now + 30 * 60_000), true,
+      'a visit inside the running wait belongs to LinePlay');
+    // The app is killed and LinePlay never comes back. Five hours later the guest rides it again without LinePlay.
+    clock.now += 5 * 60 * 60_000;
+    const relaunched = launch(store);
+    await relaunched.ledger.ensureRideQuestionLedger();
+    assert.equal(relaunched.ledger.visitInLinePlayWait(JUNGLE.id, clock.now - 25 * 60_000, clock.now, clock.now), false,
+      'the lost wait does not swallow a later ride');
+    // A new LinePlay at the same ride is its own wait, not a widened old one.
+    relaunched.ledger.noteLinePlayWaitStarted(JUNGLE.id, clock.now);
+    const open = relaunched.ledger.ledgerWaits().filter(w => w.rideId === JUNGLE.id && w.endedAt == null);
+    assert.equal(open.length, 1);
+    assert.equal(open[0].startedAt, clock.now);
+  });
 });

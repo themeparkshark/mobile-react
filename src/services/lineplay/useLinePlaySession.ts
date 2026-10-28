@@ -12,6 +12,7 @@ import * as Location from 'expo-location';
 import { AppState } from 'react-native';
 import { LocationContext } from '../../context/LocationProvider';
 import { setLinePlayDetectionRide } from '../RideDetectionService';
+import { noteLinePlayWaitStarted } from './rideQuestionLedger';
 import {
   LinePlaySession,
   SessionSnapshot,
@@ -98,9 +99,14 @@ export function useLinePlaySession(): UseLinePlaySession {
   const linePlayRideId = queueTracking ? snapshot.ride?.rideId ?? null : null;
   useEffect(() => {
     if (linePlayRideId == null) return;
-    setLinePlayDetectionRide(linePlayRideId);
+    setLinePlayDetectionRide(linePlayRideId, session.snapshot().startedAt);
     return () => setLinePlayDetectionRide(null);
-  }, [linePlayRideId]);
+  }, [linePlayRideId, session]);
+  // The wait's real start (known once the session starts): detection never asks about a visit inside it.
+  const linePlayStartedAt = queueTracking ? snapshot.startedAt ?? null : null;
+  useEffect(() => {
+    if (linePlayRideId != null && linePlayStartedAt != null) noteLinePlayWaitStarted(linePlayRideId, linePlayStartedAt);
+  }, [linePlayRideId, linePlayStartedAt]);
 
   // Do not make a stationary guest wait for the 30-second heartbeat before
   // attempting a verified session when the launch sample is stale or missing.

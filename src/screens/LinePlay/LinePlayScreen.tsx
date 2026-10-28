@@ -37,6 +37,7 @@ import { colors, spacing, borderRadius } from '../../design-system';
 import { BRAND, GameButton, GameDialog, gameAlert } from '../../ui';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { holdRideAfterRideStep, noteRidePrompt } from '../../services/lineplay/ridePromptGate';
+import { dropAnsweredRideDetections } from '../../services/RideDetectionService';
 import { adventureRideStampDue, recapGo, rideStepJournalParams, rideStepLog, rideStepLogId, signSaidLine,
   timedWaitMinutes, type RecapGo } from '../../services/lineplay/rideStep';
 import { keepRideStepLog, releaseRideLogHold } from '../../services/rideLogOutbox';
@@ -460,6 +461,7 @@ export default function LinePlayScreen() {
     rideStepDone.current = id;
     // That ride is logged and asked about: detection stays quiet about it for 30 minutes.
     holdRideAfterRideStep(ride.rideId);
+    void dropAnsweredRideDetections(ride.rideId).catch(() => undefined);
     setRideLogged({ id, waited: timedWaitMinutes(snapshot.startedAt, snapshot.boardingAt) });
     if (player?.id == null || !(ride.rideId > 0)) return;
     // One ride, one row: kept on the phone with the timed wait, held so the journal can add its memory.

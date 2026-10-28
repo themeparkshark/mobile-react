@@ -21,6 +21,8 @@ import * as TaskManager from 'expo-task-manager';
 import { AppState } from 'react-native';
 import { RideType } from '../api/endpoints/rides';
 import { QUEUE_RIDE_TYPES } from '../constants/queueRideTypes';
+import { ensureRideQuestionLedger, noteLinePlayWaitEnded, noteLinePlayWaitStarted, rideHoldUntil, setRideHold,
+  visitInLinePlayWait } from './lineplay/rideQuestionLedger';
 
 const STORAGE_KEY = 'pending_ride_detections';
 const RIDES_CACHE_KEY = 'ride_detection_rides_cache';
@@ -98,21 +100,19 @@ export function minRideDwellMs(type: string | null | undefined, rideMinDwellMinu
   return Math.max(base, own);
 }
 
-/** Rides the ride step logged, with when their hold ends. */
-const loggedRides = new Map<number, number>();
-
-/** "I got to the ride": that ride is logged, so nothing asks about it (or offers its line) for 30 minutes. */
+/**
+ * "I got to the ride": that ride is logged, so nothing asks about it (or offers its line) for 30 minutes.
+ * The hold is kept on the phone per player (rideQuestionLedger), so an app relaunch or a phone that sat
+ * in a pocket for the whole ride never brings the question back.
+ */
 export function holdRideAfterRideStep(rideId: number, now = Date.now()): void {
   if (!Number.isInteger(rideId) || rideId <= 0) return;
-  loggedRides.set(rideId, now + RIDE_STEP_HOLD_MS);
+  setRideHold(rideId, now + RIDE_STEP_HOLD_MS);
 }
 
 /** When the ride step's hold on this ride ends (null: no hold). */
 export function rideLoggedUntil(rideId: number, now = Date.now()): number | null {
-  const until = loggedRides.get(rideId);
-  if (until == null) return null;
-  if (until <= now) { loggedRides.delete(rideId); return null; }
-  return until;
+  return rideHoldUntil(rideId, now);
 }
 
 interface QueueCandidate { ride: RideType; since: number; score: number }
@@ -322,6 +322,8 @@ class RideDetectionService {
   async startDetection(): Promise<boolean> {
     if (this.running) return true;
     const lifecycleToken = ++this.lifecycleToken;
+    // Ride step holds, the prompt clock and LinePlay waits survive a relaunch: load them before any fix.
+    await ensureRideQuestionLedger().catch(() => undefined);
     // LocationProvider already owns the foreground watcher used by the map.
     // Ride detection consumes that stream instead of starting a second GPS watch.
     this.running = true;
@@ -393,17 +395,40 @@ class RideDetectionService {
    * session ends). A ride ridden right after LinePlay is logged as that ride,
    * so the session stays in effect for the visit it overlapped.
    */
-  setLinePlayRide(rideId: number | null, now = Date.now()): void {
+  setLinePlayRide(rideId: number | null, now = Date.now(), startedAt: number | null = null): void {
     if (rideId != null && Number.isInteger(rideId) && rideId > 0) {
       this.linePlay = { rideId, endedAt: null };
+      // LinePlay owns this wait's ride question: detection never asks about a visit inside it.
+      noteLinePlayWaitStarted(rideId, startedAt != null && Number.isFinite(startedAt) && startedAt <= now ? startedAt : now);
     } else if (this.linePlay && this.linePlay.endedAt == null) {
-      this.lastLinePlayEnd = { rideId: this.linePlay.rideId, at: now };
+      const endedRide = this.linePlay.rideId;
+      this.lastLinePlayEnd = { rideId: endedRide, at: now };
       this.linePlay = { ...this.linePlay, endedAt: now };
       if (!this.linePlayInVisit()) this.linePlay = null;
+      noteLinePlayWaitEnded(endedRide, now);
+      // Whatever detection already waits about this wait (a boarding signal kept while the app slept)
+      // was LinePlay's question: it never comes back as a second one.
+      void this.dropAnsweredDetections(endedRide);
     } else {
       return;
     }
     void this.persistLinePlay();
+  }
+
+  /**
+   * Remove every waiting detection of this ride that LinePlay or the ride step already answered: its
+   * visit overlaps a LinePlay wait at that ride, or the ride step holds it.
+   */
+  dropAnsweredDetections(rideId: number, now = Date.now()): Promise<void> {
+    return this.enqueueWrite(async () => {
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const detections = JSON.parse(raw) as DetectedRide[];
+      if (!Array.isArray(detections)) return;
+      const kept = detections.filter(d => d.rideId !== rideId ||
+        (!visitInLinePlayWait(d.rideId, d.enteredAt, d.exitedAt, now) && rideLoggedUntil(d.rideId, now) == null));
+      if (kept.length !== detections.length) await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(kept));
+    });
   }
 
   private linePlayInVisit(): boolean {
@@ -531,6 +556,25 @@ class RideDetectionService {
     if (minDwellMs == null || dwellMs < minDwellMs) return;
     // "I got to the ride" already logged it: nothing asks again for 30 minutes.
     if (rideLoggedUntil(ride.id, now) != null) return;
+    // A visit inside a LinePlay wait at this ride is LinePlay's question. While that LinePlay runs, it
+    // hears the boarding signal (on screen only) and asks "Did you get to the ride?" itself; nothing
+    // is kept for later, so it can never come back as a second question after a relaunch.
+    if (visitInLinePlayWait(ride.id, zone.enteredAt, now, now)) {
+      if (this.linePlayRideNow() === ride.id && this.lastKnownAppState === 'active' && this.onForegroundDetection) {
+        const history = this.rideHistory.get(ride.id);
+        this.rideHistory.set(ride.id, { lastDetectionTime: now, detectionCount: (history?.detectionCount ?? 0) + 1 });
+        try {
+          this.onForegroundDetection({
+            id: generateId(), rideId: ride.id, rideName: ride.name, rideType: ride.type, parkId: ride.park_id,
+            enteredAt: zone.enteredAt, exitedAt: now, dwellTimeMs: dwellMs, isReRide: false, detectedAt: Date.now(),
+            confidence: calculateConfidence(dwellMs, ride.ride_duration_minutes, this.currentWaitTimes.get(ride.id) ?? null),
+          });
+        } catch (e) {
+          console.warn('Foreground detection callback error:', e);
+        }
+      }
+      return;
+    }
     const state: ZoneState = {
       rideId: ride.id,
       rideName: ride.name,
@@ -719,6 +763,7 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
   // BUG 3 fix: load rides from cache if not already loaded
   await rideDetectionService.loadRidesFromCache();
   await rideDetectionService.loadLinePlayFromCache();
+  await ensureRideQuestionLedger().catch(() => undefined);
 
   const { locations } = data as { locations: Location.LocationObject[] };
   if (locations?.length) {
@@ -734,7 +779,11 @@ export function getPendingDetections() { return rideDetectionService.getPendingD
 export function clearPendingDetections() { return rideDetectionService.clearPendingDetections(); }
 export function removePendingDetection(id: string) { return rideDetectionService.removePendingDetection(id); }
 export function setDetectionRides(rides: RideType[]) { rideDetectionService.setRides(rides); }
-export function setLinePlayDetectionRide(rideId: number | null) { rideDetectionService.setLinePlayRide(rideId); }
+export function setLinePlayDetectionRide(rideId: number | null, startedAt?: number | null) {
+  rideDetectionService.setLinePlayRide(rideId, Date.now(), startedAt ?? null);
+}
+/** Drop waiting detections of this ride that LinePlay or the ride step already answered. */
+export function dropAnsweredRideDetections(rideId: number) { return rideDetectionService.dropAnsweredDetections(rideId); }
 /** The ride LinePlay is running at right now, or null. */
 export function linePlayRideNow() { return rideDetectionService.linePlayRideNow(); }
 

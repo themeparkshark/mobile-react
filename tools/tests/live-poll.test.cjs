@@ -114,7 +114,7 @@ test('ride detection polls posted waits for the current park only, slower in the
     react: {}, 'react-native': { AppState: {} },
     '../api/endpoints/rides': {}, '../api/endpoints/parks/queue-times/getWikiTimes': { default: () => [] },
     '../services/RideDetectionService': { default: {} }, '../RootNavigation': {}, '../services/RideDetectionEmitter': {},
-    '../services/lineplay/ridePromptGate': {},
+    '../services/lineplay/ridePromptGate': {}, '../services/lineplay/rideQuestionLedger': {},
     '../context/LocationProvider': {}, './useLivePoll': { default: () => undefined },
   }).waitTimeParkIds;
   const rides = [{ park_id: 8 }, { park_id: 13 }, { park_id: 2 }, { park_id: 99 }];

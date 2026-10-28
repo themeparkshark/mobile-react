@@ -46,25 +46,38 @@ function walk(s, clock, points, stepMs) {
 }
 
 test('LinePlay for Space Mountain logs Space Mountain, not Pixar next door', async () => {
-  const { s, detections } = service();
-  s.setRides([SPACE, PIXAR]);
-  await withClock(10_000_000, async clock => {
-    walk(s, clock, WALK_IN, 5_000);
-    s.setLinePlayRide(SPACE.id);
-    // Twenty minutes in the switchbacks, half of them on Pixar's side of the queue.
-    for (let i = 0; i < 80; i++) {
-      s.processLocation(33.81158, i % 2 ? -117.91718 : -117.91708);
-      clock.now += 15_000;
-    }
-    s.setLinePlayRide(null); // "I reached boarding"
-    clock.now += 8 * 60_000; // on the ride, no fixes indoors
-    walk(s, clock, WALK_OUT, 10_000);
-    await s.writeQueue;
-  });
-  assert.equal(detections.length, 1, 'one prompt for one ride');
-  assert.equal(detections[0].rideId, SPACE.id);
-  assert.equal(detections[0].rideName, 'Space Mountain');
-  assert.ok(detections[0].dwellTimeMs > 25 * 60_000);
+  // The boarding signal arrives while LinePlay still runs: LinePlay hears it as Space Mountain and asks its
+  // one question. If the guest already said "I got to the ride", the visit was answered and nothing asks.
+  const run = async endFirst => {
+    const { s, detections, store } = service();
+    s.setRides([SPACE, PIXAR]);
+    await withClock(10_000_000, async clock => {
+      walk(s, clock, WALK_IN, 5_000);
+      s.setLinePlayRide(SPACE.id);
+      // Twenty minutes in the switchbacks, half of them on Pixar's side of the queue.
+      for (let i = 0; i < 80; i++) {
+        s.processLocation(33.81158, i % 2 ? -117.91718 : -117.91708);
+        clock.now += 15_000;
+      }
+      if (endFirst) s.setLinePlayRide(null); // "I got to the ride"
+      clock.now += 8 * 60_000; // on the ride, no fixes indoors
+      walk(s, clock, WALK_OUT, 10_000);
+      // Out past LinePlay's wider reach too (the boat has left the queue for good).
+      walk(s, clock, [[33.81185, -117.91900], [33.8125, -117.9190]], 10_000);
+      if (!endFirst) s.setLinePlayRide(null);
+      await s.writeQueue;
+    });
+    return { detections, pending: JSON.parse(store.get('pending_ride_detections') ?? '[]') };
+  };
+  const live = await run(false);
+  assert.equal(live.detections.length, 1, 'one prompt for one ride');
+  assert.equal(live.detections[0].rideId, SPACE.id);
+  assert.equal(live.detections[0].rideName, 'Space Mountain');
+  assert.ok(live.detections[0].dwellTimeMs > 25 * 60_000);
+  assert.equal(live.pending.length, 0, 'LinePlay asks it on screen; nothing waits for a second question');
+  const answered = await run(true);
+  assert.equal(answered.detections.length, 0, 'the wait was answered: no second question, and never Pixar');
+  assert.equal(answered.pending.length, 0);
 });
 
 test('without LinePlay the longest dwell wins, not the first zone entered', async () => {
@@ -106,8 +119,8 @@ test('a LinePlay queue that spills past the ride zone still logs the LinePlay ri
       if (linePlay) s.setLinePlayRide(SPACE.id);
       // 100 m north of the ride point, 50 m from the neighbor: the far end of the queue.
       for (let i = 0; i < 40; i++) { s.processLocation(33.81245, -117.917056); clock.now += 30_000; }
-      if (linePlay) s.setLinePlayRide(null);
       walk(s, clock, [[33.8140, -117.917056], [33.8145, -117.917056]], 10_000);
+      if (linePlay) s.setLinePlayRide(null);
       await s.writeQueue;
     });
     return detections.map(d => d.rideId);
@@ -142,7 +155,9 @@ test('an ended LinePlay ride stops counting once its visit is logged', async () 
     s.processLocation(33.8125, -117.9190);
     await s.writeQueue;
   });
-  assert.deepEqual(detections.map(d => d.rideName), ['Space Mountain', 'Pixar Short Film Spotlight']);
+  // The Space Mountain visit was inside the LinePlay wait (LinePlay's own question), so only the later
+  // Pixar stay is a ride question.
+  assert.deepEqual(detections.map(d => d.rideName), ['Pixar Short Film Spotlight']);
   assert.equal(store.has('ride_detection_lineplay_ride'), false, 'nothing left for the background task');
 });
 
@@ -165,7 +180,7 @@ test('the queue card names the ride the guest stands at, not the walk-in neighbo
 
 test('the LinePlay screen tells ride detection which ride is in play', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../src/services/lineplay/useLinePlaySession.ts'), 'utf8');
-  assert.match(src, /setLinePlayDetectionRide\(linePlayRideId\)/);
+  assert.match(src, /setLinePlayDetectionRide\(linePlayRideId, session\.snapshot\(\)\.startedAt\)/);
   assert.match(src, /return \(\) => setLinePlayDetectionRide\(null\)/);
   const bg = fs.readFileSync(path.join(__dirname, '../../src/services/RideDetectionService.ts'), 'utf8');
   assert.match(bg, /await rideDetectionService\.loadLinePlayFromCache\(\)/);

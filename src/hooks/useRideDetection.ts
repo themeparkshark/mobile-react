@@ -31,6 +31,7 @@ import { PARK_WIKI_IDS } from '../constants/parkWaitTimes';
 import { navigationRef, navigate } from '../RootNavigation';
 import { rideDetectionEmitter } from '../services/RideDetectionEmitter';
 import { linePlayRideNow, rideLoggedUntil } from '../services/RideDetectionService';
+import { ensureRideQuestionLedger, visitInLinePlayWait } from '../services/lineplay/rideQuestionLedger';
 import { keepForBatch, lastRidePromptAt, noteRidePrompt, ridePromptVerdict, walkingToGuideTarget,
   watchGuideForRidePrompts, type RidePromptVerdict } from '../services/lineplay/ridePromptGate';
 import { LocationContext } from '../context/LocationProvider';
@@ -47,7 +48,7 @@ let batchConfirmNavigating = false;
  * Check pending queue and navigate to batch confirm if there are rides.
  * Guards against double navigation and nav-not-ready.
  */
-async function checkAndShowPendingRides(): Promise<boolean> {
+export async function checkAndShowPendingRides(): Promise<boolean> {
   // Prevent double navigation (BUG 8 fix)
   if (batchConfirmNavigating) return false;
 
@@ -57,6 +58,9 @@ async function checkAndShowPendingRides(): Promise<boolean> {
   try {
     const pending = await getPendingDetections();
     if (pending.length === 0) return false;
+    // The ride step holds, the prompt clock and the LinePlay waits come back from the phone first, so a
+    // relaunch never asks about a ride LinePlay already asked about.
+    await ensureRideQuestionLedger().catch(() => undefined);
 
     // One ride question (core loop 4.3): rides the ride step logged, shows, transport and walk-bys
     // never come back as a question; the rest wait here while the guest walks to the next coin or
@@ -105,6 +109,7 @@ export function detectionVerdict(detection: DetectedRide, now = Date.now()): Rid
     dwellMs: detection.dwellTimeMs,
     now,
     linePlayRideId: linePlayRideNow(),
+    inLinePlayWait: visitInLinePlayWait(detection.rideId, detection.enteredAt, detection.exitedAt, now),
     loggedUntil: rideLoggedUntil(detection.rideId, now),
     walking: walkingToGuideTarget(now),
     lastPromptAt: lastRidePromptAt(),

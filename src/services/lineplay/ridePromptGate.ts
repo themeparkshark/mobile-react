@@ -13,10 +13,13 @@
  *  - no other ride question was asked in the last 20 minutes.
  * Anything held back waits quietly in the Ride Tracker's batch confirm.
  *
- * Pure rules plus one tiny in-memory store (prompt clock, ride step holds and
- * the guide distance trail). No React or native imports.
+ * Pure rules plus one tiny store. The prompt clock, the ride step holds and
+ * the LinePlay waits are kept on the phone per player (rideQuestionLedger), so
+ * an app relaunch never asks twice; the guide distance trail lives in memory.
+ * No React or native imports.
  */
 import { guide } from '../guide/nextCoin';
+import { ledgerLastPromptAt, setLastRidePromptAt } from './rideQuestionLedger';
 import { holdRideAfterRideStep as holdRide, isQueueRideType, minRideDwellMs, MIN_RIDE_DWELL_MS, RIDE_STEP_HOLD_MS,
   rideLoggedUntil } from '../RideDetectionService';
 
@@ -51,6 +54,7 @@ export function walkingTowardTarget(trail: readonly DistanceSample[], now: numbe
 export type RidePromptVerdict =
   | 'ask'          // show the one ride question
   | 'lineplay'     // LinePlay is running at this ride: its own "I got to the ride" asks
+  | 'lineplay_asked' // the visit was inside a LinePlay wait that already ended: LinePlay asked (or was told)
   | 'logged'       // the ride step logged this ride in the last 30 minutes: never ask again
   | 'not_a_ride'   // a show, transport, street or walk-through: never asked
   | 'too_short'    // a walk past, not a ride
@@ -66,6 +70,8 @@ export interface RidePromptInput {
   readonly rideDurationMinutes?: number | null;
   /** The ride LinePlay is running at (null when none). */
   readonly linePlayRideId?: number | null;
+  /** The visit happened inside a LinePlay wait at this ride (rideQuestionLedger.visitInLinePlayWait). */
+  readonly inLinePlayWait?: boolean;
   /** When the ride step's hold for this ride ends (0 or missing: none). */
   readonly loggedUntil?: number | null;
   readonly walking?: boolean;
@@ -76,6 +82,7 @@ export interface RidePromptInput {
 /** One verdict, first match wins. Only 'ask' and 'lineplay' put a question on screen. */
 export function ridePromptVerdict(input: RidePromptInput): RidePromptVerdict {
   if (input.linePlayRideId != null && input.linePlayRideId === input.rideId) return 'lineplay';
+  if (input.inLinePlayWait) return 'lineplay_asked';
   if (input.loggedUntil != null && input.loggedUntil > input.now) return 'logged';
   const min = minRideDwellMs(input.rideType, input.rideMinDwellMinutes, input.rideDurationMinutes);
   if (min == null) return 'not_a_ride';
@@ -92,24 +99,23 @@ export function keepForBatch(verdict: RidePromptVerdict): boolean {
 
 // -- the store ----------------------------------------------------------------
 
-let lastPromptAt: number | null = null;
 let trail: DistanceSample[] = [];
 let trailInRange = false;
 let unsubscribeGuide: (() => void) | null = null;
 
 /** A ride question was put on screen (the detection sheet, LinePlay's boarding ask or the batch confirm). */
 export function noteRidePrompt(now = Date.now()): void {
-  lastPromptAt = now;
+  setLastRidePromptAt(now);
 }
 
 export function lastRidePromptAt(): number | null {
-  return lastPromptAt;
+  return ledgerLastPromptAt();
 }
 
 /** "I got to the ride": that ride is logged and this was its one question, so nothing asks again for 30 minutes. */
 export function holdRideAfterRideStep(rideId: number, now = Date.now()): void {
   holdRide(rideId, now);
-  lastPromptAt = now;
+  setLastRidePromptAt(now);
 }
 
 /** Record where the guide's target is, so "walking to it" can be told apart from standing in a line. */
@@ -141,7 +147,6 @@ export function watchGuideForRidePrompts(): () => void {
 
 /** Tests only. */
 export function resetRidePromptGateForTests(): void {
-  lastPromptAt = null;
   trail = [];
   trailInRange = false;
   unsubscribeGuide?.();
