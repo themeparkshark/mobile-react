@@ -413,7 +413,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   };
 
   const onGoal = (tap: GoalTap) => {
-    if (tap === 'chest') { askForDailyChest(); closeThen(() => o.onOpenChest()); return; }
+    if (tap === 'chest') { closeThen(() => { askForDailyChest(); o.onOpenChest(); }); return; }
     setView(null);
     if (tap === 'closet') RootNavigation.navigate('Inventory');
     else if (tap === 'friends') RootNavigation.navigate('Friends');
@@ -503,7 +503,9 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const onRewardsRow = (key: RewardsRowKey) => {
     playSfx('ui.tap');
     switch (key) {
-      case 'daily_chest': askForDailyChest(); closeThen(() => o.onOpenChest()); return;
+      // The ask is made only once the overlay is really gone: the chest card (already mounted, waiting at a park)
+      // would otherwise present while UIKit is still dismissing this sheet and never show.
+      case 'daily_chest': closeThen(() => { askForDailyChest(); o.onOpenChest(); }); return;
       case 'daily3':
         if (daily?.claimable) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
         else openSheet();

@@ -325,5 +325,6 @@ test('one door: the next native sheet waits for the overlay native dismiss, and 
   assert.match(hook, /onDismiss=\{nativeGone\}/, 'after-hide work runs on the real native dismiss');
   assert.match(hook, /dismissFallback\.current = setTimeout\(nativeGone, NATIVE_GONE_FALLBACK_MS\);/);
   assert.match(hook, /onModalShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
-  assert.match(hook, /case 'daily_chest': askForDailyChest\(\); closeThen\(\(\) => o\.onOpenChest\(\)\); return;/);
+  assert.match(hook, /case 'daily_chest': closeThen\(\(\) => \{ askForDailyChest\(\); o\.onOpenChest\(\); \}\); return;/,
+    'the chest is asked for only after the overlay is gone');
 });
