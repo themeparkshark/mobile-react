@@ -39,7 +39,7 @@ import { BOX_ART, boxTone, PIN_ART, PinTile, type BoxTone } from './PinArt';
 import { ParkSetCard } from './ParkSetCard';
 import { lanyardCountLabel, lanyardEmptyHint } from '../../components/profile/profileCounts';
 import {
-  coinsShort, goldenShort, deviceRegion, freeFromLabel, initialTab, myPins, mysteryShelf, mysteryShown, newRequestId, PINS_COPY, toggleLanyard,
+  coinsShort, goldenShort, deviceRegion, freeFromLabel, initialTab, lanyardHint, myPins, mysteryShelf, mysteryShown, newRequestId, PINS_COPY, toggleLanyard,
   type MysterySeries, type ParkSet, type PinHome, type PinRow, type Pull,
 } from './pinsModel';
 import useRetentionFlags from '../../services/retention/useRetentionFlags';
@@ -415,7 +415,7 @@ export default function PinsScreen() {
                   void saveLanyard(ids).then(l => setHome(h => h && ({ ...h, lanyard: l }))).catch(() => undefined);
                 }} />
               {lanyardPins.length === 0 && (
-                <Text maxFontSizeMultiplier={1.3} style={styles.emptyHint}>{lanyardEmptyHint(home.counts.pins)}</Text>
+                <Text maxFontSizeMultiplier={1.3} style={styles.emptyHint}>{lanyardHint(home.counts.pins, mysteryOn, lanyardEmptyHint)}</Text>
               )}
               <View style={styles.counts}>
                 <View style={styles.countChip} accessible accessibilityLabel={`${home.counts.sets_done} of ${home.counts.sets} park sets done`}>

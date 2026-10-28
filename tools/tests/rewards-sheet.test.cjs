@@ -355,3 +355,13 @@ test("the map's attention gate: asked when guide-map publishes it, quiet fallbac
   assert.match(hook, /if \(!may\('level_chest'\) \|\| !mapTake\('reward'\)\) return;/);
   assert.match(hook, /mapAllows\('reward'\) === false \|\| !mapTake\('reward'\)/, 'the reminders ask too');
 });
+
+test('the empty lanyard never promises boxes while mystery boxes are off (state A)', () => {
+  const pins = loadTs('src/screens/pins/pinsModel.ts');
+  const shared = n => (n > 0 ? 'Tap + to hang a pin' : 'Win pins from boxes and park sets');
+  assert.equal(pins.lanyardHint(0, false, shared), 'Win pins from park sets');
+  assert.equal(pins.lanyardHint(0, true, shared), 'Win pins from boxes and park sets');
+  assert.equal(pins.lanyardHint(2, false, shared), 'Tap + to hang a pin');
+  assert.match(read('src/screens/pins/PinsScreen.tsx'), /lanyardHint\(home\.counts\.pins, mysteryOn, lanyardEmptyHint\)/);
+  assert.match(read('src/screens/pins/ProfileLanyardCard.tsx'), /lanyardHint\(data\.pins, mysteryOn, lanyardEmptyHint\)/);
+});

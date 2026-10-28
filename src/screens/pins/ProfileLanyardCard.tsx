@@ -14,7 +14,9 @@ import { BRAND, FONT, OUTLINE, RADIUS, SPACE } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { Lanyard } from './Lanyard';
 import { PIN_ART } from './PinArt';
-import type { LanyardPin } from './pinsModel';
+import { lanyardHint, mysteryShown, type LanyardPin } from './pinsModel';
+import useRetentionFlags from '../../services/retention/useRetentionFlags';
+import { flagOn } from '../../services/retention/flags';
 import { lanyardCountLabel, lanyardEmptyHint } from '../../components/profile/profileCounts';
 import { useRung } from '../../services/reveal/revealLadder';
 
@@ -30,6 +32,7 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
   // The Pins door's one NEW tag at level 3 (core loop rung 8): it shows here on your own lanyard card and
   // clears when Pins opens.
   const newTag = useRung('pins').isNew && own;
+  const mysteryOn = mysteryShown({ mysteryBoxes: flagOn(useRetentionFlags(), 'pin_mystery_boxes') });
   useEffect(() => {
     // Fetch when the profile comes into view, not when it leaves.
     if (!focused) return;
@@ -77,7 +80,7 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
       {data.lanyard.length > 0 ? (
         <Lanyard pins={data.lanyard} width={width - 32 - SPACE.md * 2} height={140} still={still} active={focused} />
       ) : (
-        <Text maxFontSizeMultiplier={1.35} style={styles.empty}>{own ? lanyardEmptyHint(data.pins) : 'Wear your best pins here'}</Text>
+        <Text maxFontSizeMultiplier={1.35} style={styles.empty}>{own ? lanyardHint(data.pins, mysteryOn, lanyardEmptyHint) : 'Wear your best pins here'}</Text>
       )}
     </View>
   );

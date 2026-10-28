@@ -451,3 +451,12 @@ export function pinsDoorShown(flags: { readonly pinOfTheDay: boolean; readonly o
 export function mysteryShown(flags: { readonly mysteryBoxes: boolean }): boolean {
   return flags.mysteryBoxes;
 }
+
+/**
+ * The empty lanyard's hint. It never promises boxes to a player who has none (mystery boxes are
+ * preview only): then pins come from park sets.
+ */
+export function lanyardHint(owned: number, mysteryOn: boolean, sharedHint: (owned: number) => string): string {
+  if (owned > 0 || mysteryOn) return sharedHint(owned);
+  return 'Win pins from park sets';
+}
