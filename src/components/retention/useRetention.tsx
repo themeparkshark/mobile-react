@@ -551,7 +551,24 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
 
   const visible = !!view;
   // A sheet the player opened shows at once; one that opened by itself waits its turn (BLUEPRINT 4.3 rule 10).
-  const layer = useNativeModalLayer(visible, view?.k === 'rewards' || view?.k === 'sheet' ? 'show' : 'wait');
+  // One door for every sheet (BLUEPRINT 4.3 rule 10): the overlay waits until no other registered layer is up.
+  const layer = useNativeModalLayer(visible, 'wait');
+  // Self-heal: if UIKit refused to present (another native sheet that does not register was mid-present), the
+  // overlay would sit "open" in React and invisible on screen, and every later tap on its doors would do nothing.
+  // No show within 2 s: let it go, and give a sheet the player asked for one more try.
+  const shownRef = useRef(false);
+  const presentNow = layer.present && visible;
+  useEffect(() => {
+    if (!presentNow) { shownRef.current = false; return undefined; }
+    if (shownRef.current) return undefined;
+    const asked = view;
+    const timer = setTimeout(() => {
+      if (shownRef.current || !mounted.current) return;
+      setView(null);
+      if (asked && (asked.k === 'rewards' || asked.k === 'sheet')) setTimeout(() => { if (mounted.current) setView(v => v ?? asked); }, 700);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [presentNow, view?.k]); // eslint-disable-line react-hooks/exhaustive-deps
 
   let button: ReactNode | null = null;
   if (wantDaily && daily) {
@@ -677,6 +694,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const revealing = view?.k === 'reveal';
   const overlay = (
     <Modal isVisible={layer.present && !!content} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
+      onModalShow={() => { shownRef.current = true; }}
       onModalHide={() => {
         layer.onDismissed();
         const next = afterHide.current;

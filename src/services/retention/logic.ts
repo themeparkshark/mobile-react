@@ -151,9 +151,9 @@ export function nextLevelChest(chests: readonly LevelChest[]): LevelChest | null
 /** Streak copy: never shames, always says what to do. */
 export function streakLine(s: DailyThreeState): string {
   const d = s.streak.days;
-  if (s.done) return d > 1 ? `${d} days in a row!` : 'Streak started!';
+  if (s.done) return d > 1 ? `${d} days in a row!` : 'Flame started!';
   if (d > 0) return `Finish today to make it ${d + 1}!`;
-  return 'Finish all 3 to start a streak';
+  return 'Finish all 3 to start a flame';
 }
 
 export interface PushAskRecord {

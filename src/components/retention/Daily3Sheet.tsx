@@ -95,7 +95,7 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
           const go = goalGo(shown, atPark);
           return (
             <GoalRow key={g.key} goal={shown} index={i} pop={celebrate.includes(g.key)} reducedMotion={reducedMotion}
-              go={go} passLine={passToday ? goalPassLine(g, passToday) : null}
+              go={go} passLine={passToday && !shown.parkOnly ? goalPassLine(shown, passToday) : null}
               onPress={() => { if (go) onGoal(go); }} />
           );
         })}
@@ -224,7 +224,7 @@ function GoalRow({ goal, index, pop, onPress, reducedMotion, go, passLine }: {
         <Text style={[styles.goalTitle, goal.done && styles.goalTitleDone]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
           {goal.title}
         </Text>
-        {goal.done ? <Text style={styles.goalHintDone} numberOfLines={1}>Done!</Text> : showsBar(goal) ? (
+        {goal.done ? <Text style={styles.goalHintDone} numberOfLines={1}>Done!</Text> : showsBar(goal) && go !== null ? (
           <View style={styles.bar}><View style={[styles.barFill, { width: `${pct * 100}%` }]} />
             <Text style={styles.barText}>{`${goal.progress}/${goal.target}`}</Text></View>
         ) : <Text style={styles.goalHint} numberOfLines={1}>{goal.hint}</Text>}

@@ -177,6 +177,7 @@ test('Daily 3: pass points per goal after rung 5, freezes after a 3-day flame, t
   const today = [{ event: 'home_find', points: 35 }, { event: 'ride_coin_win', points: 120 }];
   assert.equal(model.goalPassLine({ kind: 'catch', park: false, target: 3 }, today), '+35 pass points each');
   assert.equal(model.goalPassLine({ kind: 'catch', park: true, target: 1 }, today), '+120 pass points');
+  assert.equal(model.goalPassLine({ kind: 'catch', park: true, target: 2 }, today), '+120 pass points', 'one ride coin wins it: no "each"');
   assert.equal(model.goalPassLine({ kind: 'chest', park: false, target: 1 }, today), null);
   assert.equal(model.goalPassLine({ kind: 'catch', park: false, target: 3 }, null), null);
   assert.equal(model.freezesShown({ days: 2, best: 2, freezes: 0 }), false);
@@ -185,7 +186,7 @@ test('Daily 3: pass points per goal after rung 5, freezes after a 3-day flame, t
   assert.match(model.weekStartsLine({ claimed: false, claimable: false, done: 1, needed: 5 }), /Your week starts Monday/);
   assert.match(model.weekStartsLine({ claimed: true, claimable: false, done: 5, needed: 5 }), /Your week starts Monday/);
   const sheet = read('src/components/retention/Daily3Sheet.tsx');
-  assert.match(sheet, /passToday \? goalPassLine\(g, passToday\) : null/);
+  assert.match(sheet, /passToday && !shown\.parkOnly \? goalPassLine\(shown, passToday\) : null/, 'the home side earns home points');
   assert.match(read('src/components/retention/useRetention.tsx'), /passToday=\{passOn \? passToday : null\}/);
   assert.match(sheet, /New goals tomorrow/, 'a day in words, never a ticking clock');
   assert.doesNotMatch(sheet, /resetLabel/);

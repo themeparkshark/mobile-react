@@ -158,7 +158,9 @@ export function goalPassLine(goal: { readonly kind: string; readonly park: boole
   const event = goalPassEvent(goal);
   const points = event ? today?.find(e => e.event === event)?.points ?? 0 : 0;
   if (!points) return null;
-  return goal.target > 1 ? `+${points} pass points each` : `+${points} pass points`;
+  // "each" only where the goal counts several of the same thing (treats, ride games), never on a one-coin goal.
+  const counts = goal.target > 1 && (goal.kind === 'play' || (goal.kind === 'catch' && !goal.park));
+  return counts ? `+${points} pass points each` : `+${points} pass points`;
 }
 
 /** The Weekly Box line: the week always starts Monday, said plainly. */
