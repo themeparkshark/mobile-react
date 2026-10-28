@@ -557,3 +557,19 @@ test('welcome back after 14 days: whole days away, per player', () => {
   assert.equal(G.guideState(input({ daysAway: 14, coins: RIDES }), G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open' } }))), 'welcome_back');
   assert.equal(G.guideState(input({ daysAway: 14, welcomeBackDone: true, coins: RIDES }), G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open' } }))), 'walk');
 });
+
+test('dev-only live stub (state D walks): never outside a development bundle; off means no answers, open means all open', () => {
+  const L = loadTs('src/components/guide/liveStub.ts');
+  assert.equal(L.liveStubMode(false, 'off'), null, 'a store or OTA bundle always uses the real feed');
+  assert.equal(L.liveStubMode(true, undefined), null);
+  assert.equal(L.liveStubMode(true, 'off'), 'off');
+  const feed = { rides: [{ task_id: 1, status: 'CLOSED', wait: null, typical: null, rush: null }], fetched_at: '2026-10-28T08:00:00Z' };
+  assert.equal(L.applyLiveStub(feed, null, NOW), feed);
+  const off = L.applyLiveStub(feed, 'off', NOW);
+  assert.equal(off.rides.length, 0);
+  assert.equal(G.liveAnswers({}, off, NOW).answers[1], undefined, 'no live answer: the ride stays eligible after known-open rides');
+  const open = L.applyLiveStub(feed, 'open', NOW);
+  assert.equal(G.liveAnswers({}, open, NOW).answers[1], 'open');
+  const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /const LIVE_STUB = liveStubMode\(__DEV__, process\.env\.EXPO_PUBLIC_GUIDE_LIVE_STUB\);/);
+});

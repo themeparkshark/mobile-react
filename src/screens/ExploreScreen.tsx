@@ -149,6 +149,7 @@ import { currentAppOpen, useRung } from '../services/reveal/revealLadder';
 import { useTrail } from '../services/trail/TrailProvider';
 import { headlineBox, stepsToGo } from '../services/trail/trailModel';
 import useParkDayLadder from '../components/guide/useParkDayLadder';
+import { applyLiveStub, liveStubMode } from '../components/guide/liveStub';
 import { useFlyAnchor, useProfileTabAnchor } from '../components/guide/flyAnchors';
 import useWelcomeBack from '../components/guide/useWelcomeBack';
 import { homeShelfPark } from '../components/guide/HomeShelfButton';
@@ -159,6 +160,10 @@ import type { HomeGuide } from './ExploreScreen/HomeExplore';
  * buttons leave only once that row is in the integrated build (core loop 5.1, integration check 1).
  */
 const SHOPS_ROW_SHIPPED = false;
+/** Dev-only live feed stub for lane walks (state D: feed off; or a daytime park at night). Never in a store or OTA bundle. */
+const LIVE_STUB = liveStubMode(__DEV__, process.env.EXPO_PUBLIC_GUIDE_LIVE_STUB);
+/** The guide waits at most this long for the live feed and today's Adventure before its first pick. */
+const GUIDE_DATA_WAIT_MS = 4000;
 /** The camera follows the shark again this long after the player pans away (core loop 5.1, must-fix 28). */
 const CAMERA_RETURN_MS = 10_000;
 /** The bottom-right column once Energy and Trail leave the map: 32 pt margin, the Shelf button and its label. */
@@ -685,7 +690,8 @@ export function ExploreScreenBody() {
   const loadLivePark = useCallback(() => {
     const parkId = park?.id;
     if (!parkId) return;
-    return getParkLive(parkId).then(result => { if (liveParkId.current === parkId) setLivePark(result); }).catch(() => undefined);
+    return getParkLive(parkId).then(result => { if (liveParkId.current === parkId) setLivePark(applyLiveStub(result, LIVE_STUB, Date.now())); })
+      .catch(() => { if (LIVE_STUB && liveParkId.current === parkId) setLivePark(applyLiveStub(null, LIVE_STUB, Date.now())); });
   }, [park?.id]);
   // Posted waits refresh each minute while the map is on screen; paused under
   // another screen or in the background, caught up on return.
@@ -1136,10 +1142,22 @@ export function ExploreScreenBody() {
     queueTicketsOn: guideFlags.queue_tickets === true, claimable: claimable.sources,
   }) : null, [player, guideFlags, tripGoalData?.wallet?.rescue_pass_available, claimable.sources]);
   const rushTaskIds = useMemo(() => new Set(rushes.map(pick => pick.task.id)), [rushes]);
+  // The guide picks its first coin once the islands, the live feed and today's Adventure are in (or
+  // GUIDE_DATA_WAIT_MS ran out: a missing feed never stalls it), so a half-loaded map never sets a
+  // target that would then hold.
+  const [guideWaitOver, setGuideWaitOver] = useState(false);
+  const islandsIn = !!redeemables;
+  useEffect(() => {
+    setGuideWaitOver(false);
+    if (!park || !islandsIn) return undefined;
+    const timer = setTimeout(() => setGuideWaitOver(true), GUIDE_DATA_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [park?.id, islandsIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  const guideReady = islandsIn && (guideWaitOver || (!!tripGoalData && !!livePark));
   // Welcome back after 14+ days away: the guide's welcome back state comes first (core loop 4.1).
   const welcome = useWelcomeBack(player?.id ?? null);
   const nextCoin = useNextCoinGuide({
-    enabled: !!player && !!park, parkId: park?.id ?? null, parkName: park?.name ?? null, location,
+    enabled: !!player && !!park, ready: guideReady, parkId: park?.id ?? null, parkName: park?.name ?? null, location,
     tasks: visibleTasks, live: livePark, adventure, dwellRideId: queueDwell?.rideId ?? null,
     starTaskIds: starRides, rushTaskIds,
     starRushUnlocked: coinLevelsRung.open, coinLevelsUnlocked: coinLevelsRung.open,
@@ -1150,6 +1168,17 @@ export function ExploreScreenBody() {
   });
   const guideShown = !!player && !!park;
   const guideTargetId = nextCoin.target?.taskId ?? null;
+  // The target's own coin art: the map list has none, so the trip goal's ride list (or PLAY!'s coin) supplies it.
+  const guideCoinUrl = useMemo(() => {
+    if (guideTargetId == null) return null;
+    const fromMap = nextCoin.targetTask?.coin_url;
+    if (fromMap) return fromMap;
+    const fromTrip = tripGoalData?.rides?.find(ride => ride.task_id === guideTargetId)?.coin_url;
+    if (fromTrip) return fromTrip;
+    const here = activeRedeemable?.type === 'task' && (activeRedeemable.model as TaskType).id === guideTargetId
+      ? (activeRedeemable.model as TaskType).coin_url : null;
+    return here || null;
+  }, [guideTargetId, nextCoin.targetTask, tripGoalData?.rides, activeRedeemable]);
   // Until the first coin is won, the guide's "Tap PLAY!" picture shows every time PLAY! rises.
   const hasWonACoin = (player?.completed_tasks_count ?? 0) > 0 || (player?.ride_coins_collected ?? 0) > 0 || parkWins > 0;
   // Raids reach the map only after coin levels unlock (they cost Energy) and while the park is open (core loop 5.2).
@@ -1921,7 +1950,7 @@ export function ExploreScreenBody() {
           style={{ position: 'absolute', top: slotTop, left: 0, right: GUIDE_CARD_RIGHT, height: GUIDE_CARD_HEIGHT + 8, zIndex: 40 }} />}
         {/* The Next Coin guide (core loop 4.1): exactly one card in the top-left slot, on every park map. */}
         {guideShown && player && <NextCoinCard copy={nextCoin.copy} state={nextCoin.state} parkName={park.name ?? null}
-          coinUrl={nextCoin.targetTask?.coin_url || null} top={slotTop} onAction={onGuideAction} onCardPress={onGuideCardPress}
+          coinUrl={guideCoinUrl} top={slotTop} onAction={onGuideAction} onCardPress={onGuideCardPress}
           teachPlay={!hasWonACoin} />}
         {/* Today's Adventure: its sheet stays for the stamps and the souvenir, opened from the guide card on its ride. */}
         {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`} sheetOnly

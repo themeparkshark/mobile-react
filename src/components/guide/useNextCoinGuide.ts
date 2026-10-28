@@ -22,6 +22,12 @@ import { guideCoinsFor, inLineTaskFor, ridesByTask, withPlayRange } from './guid
 
 export interface NextCoinGuideInput {
   readonly enabled: boolean;
+  /**
+   * The map's data has arrived (the islands, and the live feed and today's Adventure, or a short wait
+   * for them ran out). Until then the guide picks nothing: a first pick made on half the data would
+   * hold (the target does not flip-flop), so Today's Adventure could lose to the nearest ride.
+   */
+  readonly ready?: boolean;
   readonly parkId: number | null;
   readonly parkName: string | null;
   readonly location: { readonly latitude: number; readonly longitude: number } | null | undefined;
@@ -116,14 +122,15 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
   const lng = input.location ? Math.round(input.location.longitude * 20000) / 20000 : null;
   const coinsKey = coins.map(c => `${c.taskId}:${+c.owned}${c.kind[0]}${+!!c.queue}${+!!c.star}${+!!c.rush}`).join('|');
   const answersKey = Object.entries(answers).map(([k, v]) => `${k}${v[0]}`).join(',');
+  const ready = input.ready !== false;
   useEffect(() => {
-    if (!enabled || parkId == null) return;
+    if (!enabled || parkId == null || !ready) return;
     guide.resolve({
       mode: 'park', parkId, location: input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null,
       coins, live: answers, adventure, inLineTaskId,
       starRushUnlocked: input.starRushUnlocked, coinLevelsUnlocked: input.coinLevelsUnlocked,
     });
-  }, [enabled, parkId, lat, lng, coinsKey, answersKey, adventure?.taskId, adventure?.phase, inLineTaskId, // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, ready, parkId, lat, lng, coinsKey, answersKey, adventure?.taskId, adventure?.phase, inLineTaskId, // eslint-disable-line react-hooks/exhaustive-deps
     input.starRushUnlocked, input.coinLevelsUnlocked]);
   // Any screen's guide.setTarget lands on the next resolve: re-run it when the store says so.
   const [pickTick, setPickTick] = useState(0);
@@ -132,7 +139,7 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
   useEffect(() => {
     if (pickTick === lastPick.current) return;
     lastPick.current = pickTick;
-    if (!enabled || parkId == null) return;
+    if (!enabled || parkId == null || !ready) return;
     guide.resolve({
       mode: 'park', parkId, location: input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null,
       coins, live: answers, adventure, inLineTaskId,
@@ -141,10 +148,10 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
   const target = useSyncExternalStore(guide.subscribe, guide.current, guide.current);
-  const held = enabled && target && target.parkId === parkId ? target : null;
+  const held = enabled && ready && target && target.parkId === parkId ? target : null;
   // "You're here" only while PLAY! is really up for this coin (the server's range check wins over geometry).
   const shown = withPlayRange(held, input.playableTaskId);
-  const state = guideState({
+  const state = !ready && enabled ? 'arrive' : guideState({
     mode: 'park', parkId, location: input.location ?? null, coins, live: answers, adventure, inLineTaskId,
     now: Date.now(), arrivedAt, daysAway: input.daysAway ?? null, welcomeBackDone: input.welcomeBackDone,
     wallet: input.wallet,
