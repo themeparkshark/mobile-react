@@ -83,6 +83,26 @@ test('a walk past Main Street Vehicles, the Piano Player and the train station a
   assert.equal(JSON.parse(store.get('pending_ride_detections') ?? '[]').length, 0, 'nothing waits in the batch confirm either');
 });
 
+test('a visit with hours and no location fix is forgotten, never a 320 minute ride question', async () => {
+  const { m, s, detections, store } = service();
+  s.setRides([VEHICLES, PIANO, RAILROAD, JUNGLE]);
+  await withClock(20_000_000, async clock => {
+    // The app sits in Jungle Cruise's zone with no new fix for 5 hours, then the guest is elsewhere.
+    for (let i = 0; i < 3; i++) { s.processLocation(JUNGLE.lat, JUNGLE.lng); clock.now += 5_000; }
+    clock.now += 5 * 60 * 60_000;
+    s.processLocation(33.8135, -117.9180);
+    // A real 25 minute wait with fixes every 30 s is still a ride.
+    for (let i = 0; i < 50; i++) { s.processLocation(JUNGLE.lat, JUNGLE.lng); clock.now += 30_000; }
+    s.processLocation(33.8135, -117.9180);
+    await s.writeQueue;
+  });
+  assert.equal(m.VISIT_FIX_GAP_MAX_MS, 90 * 60_000);
+  const kept = [...detections, ...JSON.parse(store.get('pending_ride_detections') ?? '[]')];
+  const unique = new Map(kept.map(d => [d.id, d]));
+  assert.equal(unique.size, 1, 'only the real wait');
+  assert.ok([...unique.values()][0].dwellTimeMs < 30 * 60_000);
+});
+
 test('only rides with a queue can be ride questions, after a real ride\'s stay', () => {
   const { m } = service();
   assert.equal(m.minRideDwellMs('show'), null);

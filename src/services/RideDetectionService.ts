@@ -28,6 +28,12 @@ const STORAGE_KEY = 'pending_ride_detections';
 const RIDES_CACHE_KEY = 'ride_detection_rides_cache';
 const DEFAULT_RIDE_RADIUS = 50; // fallback meters
 const MAX_WALKTHROUGH_MS = 60_000; // anything under 1 min = walk-through
+/**
+ * A visit with no location fix for this long is forgotten, never offered as a ride: where the guest was in the
+ * gap is unknown (the app slept for hours in one spot, the phone was off). A queue moves and keeps sending fixes
+ * long before this; LinePlay's own "I got to the ride" on its wrap-up still covers a wait that went this quiet.
+ */
+export const VISIT_FIX_GAP_MAX_MS = 90 * 60_000;
 const RE_RIDE_GAP_MS = 180_000; // 3 min gap before counting as re-ride
 const DETECTION_COOLDOWN_MS = 120_000; // 2 min cooldown per ride
 const BACKGROUND_LOCATION_TASK = 'ride-detection-background';
@@ -508,6 +514,11 @@ class RideDetectionService {
     this.trackQueueArea(lat, lng, nearbyRides, now);
 
     let visit = this.visit;
+    if (visit && now - visit.lastFixAt > VISIT_FIX_GAP_MAX_MS) {
+      // Hours with no fix: not a ride anyone can vouch for (a 320 minute "ride" is not one).
+      this.visit = null;
+      visit = null;
+    }
     if (visit) {
       // The time since the last fix belongs to the ride the guest was closest to.
       const nearest = visit.nearestId != null ? visit.zones.get(visit.nearestId) : undefined;
