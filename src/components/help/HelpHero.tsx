@@ -338,7 +338,7 @@ function PodiumScene({ t, w, h }: SceneProps) {
   const bw = Math.min(w - 36, 300);
   const sw = (bw - gap * 2) / 3;
   const bx = (w - bw) / 2;
-  const heights = { 1: h * 0.3, 2: h * 0.21, 3: h * 0.15 } as const;
+  const heights = { 1: h * 0.36, 2: h * 0.28, 3: h * 0.22 } as const;
   const steps: readonly PodiumStep[] = [
     { rank: 2, width: sw, height: heights[2] },
     { rank: 1, width: sw, height: heights[1] },
@@ -347,9 +347,9 @@ function PodiumScene({ t, w, h }: SceneProps) {
   const stand = (rank: 1 | 2 | 3, size: number) => h - heights[rank] - size * 0.86;
   // Each shark stands on its step (left 2nd, middle 1st, right 3rd), as the board's podium.
   const spots = [
-    { cx: bx + sw * 0.5, top: stand(2, h * 0.34), size: h * 0.34, face: 3, crown: ART.crownSilver, at: 0.1 },
-    { cx: bx + sw * 1.5 + gap, top: stand(1, h * 0.44), size: h * 0.44, face: 0, crown: ART.crownGold, at: 0.3, crownSit: 0.5 },
-    { cx: bx + sw * 2.5 + gap * 2, top: stand(3, h * 0.31), size: h * 0.31, face: 6, crown: ART.crownBronze, at: 0.2 },
+    { cx: bx + sw * 0.5, top: stand(2, h * 0.32), size: h * 0.32, face: 3, crown: ART.crownSilver, at: 0.1 },
+    { cx: bx + sw * 1.5 + gap, top: stand(1, h * 0.4), size: h * 0.4, face: 0, crown: ART.crownGold, at: 0.3, crownSit: 0.5 },
+    { cx: bx + sw * 2.5 + gap * 2, top: stand(3, h * 0.3), size: h * 0.3, face: 6, crown: ART.crownBronze, at: 0.2 },
   ];
   return (
     <>

@@ -40,8 +40,8 @@ function PodiumSteps({ steps, gap = 6, style, paddingHorizontal = 0 }: {
           borderColor: BRAND.white, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end' }}>
           {/* The step's top edge in its place color, like a medal ribbon. */}
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 7, backgroundColor: STEP_EDGE[step.rank] }} />
-          {step.height >= 30 && <Text allowFontScaling={false} style={{ fontFamily: 'Shark', color: 'rgba(5,52,110,0.28)',
-            fontSize: Math.min(40, Math.max(16, Math.round(step.height * 0.32))), marginBottom: 2 }}>{step.rank}</Text>}
+          {step.height >= 24 && <Text allowFontScaling={false} style={{ fontFamily: 'Shark', color: 'rgba(5,52,110,0.28)',
+            fontSize: Math.min(40, Math.max(14, Math.round(step.height * 0.32))), marginBottom: 1 }}>{step.rank}</Text>}
         </View>
       ))}
     </View>
