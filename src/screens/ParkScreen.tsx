@@ -531,7 +531,10 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
               </Text>
             </Pressable>}
             {currentPark && tasks && secretTasks && (
-              <ScrollView ref={scrollRef} scrollEnabled={!arrival.target} onContentSizeChange={arrival.notifyLayout}>
+              <ScrollView ref={scrollRef}
+                /* The shelf holds still only while the coin flies in; once it lands the player can scroll up to the tabs. */
+                scrollEnabled={!arrival.target || landedKey === requestKey}
+                onContentSizeChange={arrival.notifyLayout}>
                 <View ref={contentRef} collapsable={false}>
                 <View style={{ paddingTop: 16, paddingHorizontal: 16, paddingBottom: 14 }}>
                   {/* After a park day (and on 25/50/75/100% days) the day's story waits on top, with Share. */}

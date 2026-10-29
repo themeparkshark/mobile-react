@@ -148,6 +148,7 @@ test('round 3: once the coin lands every tab chip works again, even with the ON 
   assert.equal(shelf.shownShelfTab('sights', ['rides'], null), 'rides');
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /onTab=\{next => \{ setTab\(next\); setRideOnly\(false\); \}\}/, 'the chips set the pick the shelf shows');
+  assert.match(park, /scrollEnabled=\{!arrival\.target \|\| landedKey === requestKey\}/, 'after the landing the shelf scrolls, so the tabs above are reachable');
 });
 
 test('round 2: secret coins you won never vanish; only the unfound "?" slots wait for rung 3', () => {
