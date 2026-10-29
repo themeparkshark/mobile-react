@@ -505,6 +505,8 @@ export function ExploreScreenBody() {
   // the map shows only Finn's shark, the treats and the footer (no distances, no 'Saved map').
   const firstHunt = !!firstVisit.current && catchesThisVisit < 2;
   const [homeIntroOpen, setHomeIntroOpen] = useState(false);
+  // Finn's home intro is still owed: it goes first, and the daily chest waits for it (core loop 4.3 rule 1).
+  const [homeIntroOwed, setHomeIntroOwed] = useState(false);
   // The generic park tip is on screen: the Fin-ister intro waits for it (never two first-run cards at once).
   const [parkTipShowing, setParkTipShowing] = useState(false);
   // The right column's widest pill (Energy, or Trail Boxes above it) and the column's height: Finn's
@@ -1245,7 +1247,7 @@ export function ExploreScreenBody() {
     attentionGate.publish({ atPark: !!park, arrivedAt: nextCoin.arrivedAt, walkingToTarget: !!park && nextCoin.state === 'walk',
       playing: redeemFlowOpen, winCardClosedAt: flowClosedAt }, appOpenId);
   }, [park, nextCoin.arrivedAt, nextCoin.state, redeemFlowOpen, flowClosedAt, appOpenId]);
-  const chestReady = !firstVisitHold && attentionFor('daily_chest') && chestMayPresent({
+  const chestReady = !firstVisitHold && !(homeIntroOwed && !park) && attentionFor('daily_chest') && chestMayPresent({
     // In the half second between the first catch and Finn's "Nice catch!" line, the chest waits too (no flash).
     tutorialActive: isActive || firstLineGap, findOpen: showPrepItemModal, findPending: !!pendingFind,
     firstCatchDone: hasFirstCatch(player, hasCompleted('home_first_find'), caughtThisSession),
@@ -1723,7 +1725,7 @@ export function ExploreScreenBody() {
           onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
           introAllowed={mapOnScreen && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
-          onIntroOpenChange={setHomeIntroOpen} chestButton={mapControls} chestButtonCount={mapControlsCount} compassHintReady={parkTipReady} highlightNearestFind={highlightNearestFind}
+          onIntroOpenChange={setHomeIntroOpen} onIntroOwedChange={setHomeIntroOwed} chestButton={mapControls} chestButtonCount={mapControlsCount} compassHintReady={parkTipReady} highlightNearestFind={highlightNearestFind}
           parkStory={activeParkProject && !finnOwnsMap ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null}
           eventChip={liveEvt.event?.include_home && !finnOwnsMap ? <EventHomeChip event={liveEvt.event} onPress={() => setEventOpen(true)} /> : null}

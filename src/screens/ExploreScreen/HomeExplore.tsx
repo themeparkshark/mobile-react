@@ -121,6 +121,11 @@ interface Props {
    */
   introEligible?: boolean;
   onIntroOpenChange?: (open: boolean) => void;
+  /**
+   * The first-time intro is still owed (unseen, or not read from storage yet, and eligible): Finn's
+   * lessons go first, so the daily chest waits for it (core loop 4.3 rule 1).
+   */
+  onIntroOwedChange?: (owed: boolean) => void;
   /** The daily chest button, under the recenter button while today's chest is unclaimed. */
   chestButton?: ReactNode;
   /** Buttons stacked in chestButton (chest and Daily 3), for the map's declutter inset. */
@@ -166,7 +171,7 @@ export interface HomeGuide {
  */
 export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching = null, onCatchCollected, onCatchUnavailable,
   onCatchDone, refreshVersion, homeLocationConfirmed,
-  introAllowed = false, introEligible = false, onIntroOpenChange, chestButton, chestButtonCount, highlightNearestFind = null, parkStory = null, eventChip = null,
+  introAllowed = false, introEligible = false, onIntroOpenChange, onIntroOwedChange, chestButton, chestButtonCount, highlightNearestFind = null, parkStory = null, eventChip = null,
   compassHintReady = false, quiet = false, firstHunt = false, homeGuide = null }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -259,6 +264,8 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const pingedPivots = useRef(new Set<number>());
   const introOpen = introSeen === false && introAllowed && homeLocationConfirmed;
   useEffect(() => { onIntroOpenChange?.(introOpen); }, [introOpen, onIntroOpenChange]);
+  const introOwed = introSeen !== true && introEligible && homeLocationConfirmed;
+  useEffect(() => { onIntroOwedChange?.(introOwed); }, [introOwed, onIntroOwedChange]);
 
   // Home Hunt rank line: only when the server flag is on and sends a line.
   useEffect(() => subscribeHomeHuntRankLine(setRankLine), []);

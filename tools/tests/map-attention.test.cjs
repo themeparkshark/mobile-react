@@ -323,7 +323,7 @@ test('attention rules: no chest ever opens by itself at a park; nothing in the f
 
 test('state B at the gate through the first coin: the map wiring keeps chests, reward sheets and offers from opening by themselves', () => {
   const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
-  assert.match(explore, /const chestReady = !firstVisitHold && attentionFor\('daily_chest'\) && chestMayPresent\(/);
+  assert.match(explore, /const chestReady = !firstVisitHold && !\(homeIntroOwed && !park\) && attentionFor\('daily_chest'\) && chestMayPresent\(/);
   assert.match(explore, /&& !\(chestUnclaimed && !!dailyGift && !chestDismissed\(dailyGift\.id\)\) && attentionFor\('reward'\),/, 'level chests and Daily 3 sheets');
   assert.match(explore, /eventsRung\.open && attentionFor\('event_recap'\)/);
   assert.doesNotMatch(explore, /<ParkDayOffer|<NextUpRail|<DwellCard|<MapSuggestionStub/, 'no offer, rail or extra card over the map');
@@ -426,4 +426,14 @@ test('calm clocks on the map and the home map: whole minutes, never a ticking m:
   assert.doesNotMatch(live, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\)/, 'no per-second ticking on the home map');
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
   assert.match(marker, /id = setTimeout\(tick, rest < 60_000 \? rest : \(rest % 60_000\) \|\| 60_000\);/, 'the island chip wakes once a minute');
+});
+
+test('at home Finn\'s first-time intro goes first: the daily chest waits while the intro is owed (4.3 rule 1)', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(home, /const introOwed = introSeen !== true && introEligible && homeLocationConfirmed;/);
+  assert.match(home, /onIntroOwedChange\?\.\(introOwed\)/);
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /const chestReady = !firstVisitHold && !\(homeIntroOwed && !park\) && attentionFor\('daily_chest'\)/);
+  assert.match(explore, /onIntroOwedChange=\{setHomeIntroOwed\}/);
 });

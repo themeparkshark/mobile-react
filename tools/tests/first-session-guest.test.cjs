@@ -484,7 +484,7 @@ test('first visit: "Let\'s hunt!" leads to hunting; the daily chest waits for a 
   assert.equal(q.firstVisitChestWaits({ ...base, catchesThisVisit: 2 }), false, 'a second catch frees the chest');
   assert.equal(q.firstVisitChestWaits({ ...base, firstVisit: false }), false, 'returning players are unchanged');
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /const chestReady = !firstVisitHold && attentionFor\('daily_chest'\) && chestMayPresent\(/);
+  assert.match(explore, /const chestReady = !firstVisitHold && !\(homeIntroOwed && !park\) && attentionFor\('daily_chest'\) && chestMayPresent\(/);
   assert.match(explore, /simple=\{!!firstVisit\.current\}/);
   const chest = read('src/components/DailyGiftModal.tsx');
   assert.match(chest, /\{simple \? null : <View style=\{(?:styles\.ladder|\[styles\.ladder, styles\.aboveGold\])\}>/, 'first visit: no 7-day strip');
