@@ -47,7 +47,7 @@ import Daily3Sheet, { type GoalTap } from './Daily3Sheet';
 import RewardReveal from './RewardReveal';
 import RewardsSheet from './RewardsSheet';
 import CalmModal, { calmFace } from './CalmModal';
-import DailyGiftModal from '../DailyGiftModal';
+import DailyGiftModal, { CHEST_ART, chestArtSize } from '../DailyGiftModal';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
@@ -699,11 +699,16 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   } else if (view?.k === 'rewards') {
     title = 'Rewards';
     content = (
-      <RewardsSheet rows={rows} flame={summary.flame} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
-        reducedMotion={reducedMotion} onRow={onRewardsRow} onClose={close} />
+      <>
+        <RewardsSheet rows={rows} flame={summary.flame} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
+          reducedMotion={reducedMotion} onRow={onRewardsRow} onClose={close} />
+        {dailyChestWaiting && <ChestWarmUp size={chestArtSize(width)} />}
+      </>
     );
   } else if (view?.k === 'sheet' && daily) {
     content = (
+      <>
+      {dailyChestWaiting && <ChestWarmUp size={chestArtSize(width)} />}
       <Daily3Sheet state={daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
         atPark={atPark} passToday={passOn ? passToday : null} remindersReady={flagOn(flags, 'retention_push')}
         closeLabel={sheetFromRewards ? 'BACK' : 'BACK TO MAP'}
@@ -712,6 +717,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         onClaim={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }}
         onClaimWeekly={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'weekly', rewards: null, opening: false }); }}
         onBuyFreeze={() => setView({ k: 'freeze' })} />
+      </>
     );
   } else if (view?.k === 'reveal') {
     const r = view;
@@ -821,6 +827,20 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   return { button, overlay, occluding: visible, openRewards, rewards: summary };
 }
 
+/**
+ * Today's chest art, drawn invisibly while a sheet that can open the chest is up (Rewards, Daily 3), so it sits
+ * decoded in memory and the chest card shows it on its very first frame (it was 3 frames of a card with no chest).
+ */
+function ChestWarmUp({ size }: { readonly size: number }) {
+  return (
+    <View pointerEvents="none" style={styles.warmUp} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {CHEST_ART.map((src, i) => (
+        <Image key={i} source={src} style={{ width: size, height: size }} contentFit="contain" cachePolicy="memory-disk" />
+      ))}
+    </View>
+  );
+}
+
 /** Earned stamps whose prizes are still to claim (the Stamp Book's own rule). */
 function stampsToClaim(r: { stamps: Record<string, readonly { id: number; is_earned: boolean; reward_claimed: boolean;
   rewards: { energy: number; tickets: number; xp: number; coins: number; title: string | null } }[]> }) {
@@ -855,6 +875,7 @@ function XpBar({ pct, reducedMotion }: { readonly pct: number; readonly reducedM
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center' },
+  warmUp: { position: 'absolute', left: 0, top: 0, opacity: 0, flexDirection: 'row' },
   nextBlock: { gap: 6 },
   pips: { flexDirection: 'row', gap: 3 },
   pip: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: BRAND.gold },
