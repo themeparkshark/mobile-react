@@ -528,6 +528,13 @@ export const guide = {
     else if (fresh && next.taskId === fresh.taskId) heldPickedAt = fresh.at;
     else if (held?.taskId !== next.taskId) heldPickedAt = null;
     if (!sameTarget(held, next)) {
+      // Dev builds only: why the pointer moved (lane walks read it in the Metro log; never in a store bundle).
+      if (typeof __DEV__ !== 'undefined' && __DEV__ && held?.taskId !== next?.taskId) {
+        const was = held ? input.coins.find(c => c.taskId === held!.taskId) : undefined;
+        console.log(`[guide] ${held ? `${held.name}(${held.reason})` : 'none'} -> ${next ? `${next.name}(${next.reason}/${next.source})` : 'none'}`
+          + ` pick=${fresh?.taskId ?? '-'} heldOnMap=${held ? !!was : '-'} heldLive=${was ? input.live?.[was.taskId] ?? 'unknown' : '-'}`
+          + ` heldOwned=${was ? was.owned : '-'} coins=${input.coins.length}`);
+      }
       held = next;
       emit();
     }
