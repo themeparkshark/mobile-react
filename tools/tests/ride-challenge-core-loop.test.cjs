@@ -192,8 +192,12 @@ test('the challenge card: "Win the X coin", the how-it-works picture strip in it
   assert.match(modal, /howStrip: \{[^}]*height: 40/, 'a fixed height: the button never moves');
   assert.doesNotMatch(modal, /OneTimeTip id="ride_challenge"/, 'no tip that pushes the button down');
   assert.match(modal, /show: rideRewardTask\.coins > 0 \}/);
-  assert.match(modal, /'RIDE PARTS'[^\n]*show: coinLevelsOpen \}/);
-  assert.match(modal, /'ENERGY'[^\n]*show: coinLevelsOpen \}/);
+  // From rung 3 a coin on the shelf shows its Parts ring; one not won yet shows the Parts its first win brings.
+  assert.match(modal, /'RIDE PARTS'[^\n]*\n\s+show: coinLevelsOpen && !cardParts \}/);
+  assert.doesNotMatch(modal, /label: 'ENERGY'/, 'Energy is spent on the coin card, never promised on the challenge card');
+  assert.match(modal, /const cardParts = cardCoin && coinLevelsOpen \? partsProgress\(cardCoin, player\?\.energy \?\? null, 0\) : null;/);
+  assert.match(modal, /\{!needTicket && cardParts && !cardParts\.maxed && <View style=\{styles\.partsLine\}/);
+  assert.match(modal, /times_completed \?\? 0\) > 0 \? \(redeemable\.model as TaskType\)\.asset_id/, 'the ring only for a coin already won');
   assert.match(modal, /'XP'[^\n]*show: dailyOpen \}/);
   assert.doesNotMatch(modal, /Rescue Pass|RESCUE PASS|Spend \$\{ticketCost\} Ticket/);
 });
@@ -416,11 +420,11 @@ test('one reward row on the ladder; a member\'s double coins as one +N VIP chip;
   const base = { coins: 10, tickets: 1, parts: 1, energy: 10, xp: 25, coinLevelsOpen: false, dailyOpen: false };
   assert.deepEqual(row(base), ['Shark Coins:10:coins', 'Ticket:1:tickets', 'saved for growing coins:10:energy']);
   assert.deepEqual(row({ ...base, vipCoins: 10, coinLevelsOpen: true, dailyOpen: true }),
-    ['Shark Coins:10:coins', 'VIP:10:coins', 'Ticket:1:tickets', 'Ride Part:1:energy', 'Energy:10:energy', 'XP:25:profile']);
+    ['Shark Coins:10:coins', 'VIP:10:coins', 'Ticket:1:tickets', 'Ride Part:1:energy', 'Energy:10:energy', 'XP:25:xp']);
   assert.deepEqual(row({ ...base, coins: 0, tickets: 0, energy: 0 }), [], 'never a +0');
   const card = read('src/components/PostWinRewardsModal.tsx');
-  assert.match(card, /triggerFly\(\{ imageSource: FLY_ART\.xp, amount: 2, startX: x, startY: y, targetPosition: 'profile' \}\)/, 'XP flies to the Profile tab before rung 4');
-  assert.match(card, /targetPosition: 'rewards' \}\)/, 'the stamp flies to the Rewards button');
+  assert.match(card, /if \(!daily && xpEarned > 0\) fly\(FLY_ART\.xp, 2, WIN_FLY_ROUTES\.xp\);/, 'XP flies to the Profile tab before rung 4');
+  assert.match(card, /if \(earnedStamp\) fly\(FLY_ART\.stamp, 1, WIN_FLY_ROUTES\.stamp\);/, 'the stamp flies to the Rewards button');
   assert.doesNotMatch(card, /NEW STAMP|TAP TO COLLECT|StarterOfferCard|SharkPassBanner|vipWinLine|openMembership|DoubleCoinsOffer|bonus_ads/);
   assert.match(card, /watchForReward\('double_coins', attemptId, true\)/);
 });
@@ -520,7 +524,7 @@ test('a tap anywhere off the challenge card closes it: the wide card row lets sc
   const src = read('src/components/RedeemRedeemableModal.tsx');
   // Without box-none the row beside the card swallowed the tap (react-native-modal's swipe handler took it).
   assert.match(src, /<View pointerEvents="box-none"\n\s+style=\{\{ width: Dimensions\.get\('window'\)\.width - 40/);
-  assert.match(src, /onBackdropPress=\{safeClose\}/);
+  assert.match(src, /onBackdropPress=\{closeFromScrim\}/);
 });
 
 /* ---------- Ledger 36: the bot rival is Captain Gill ---------- */
@@ -554,4 +558,127 @@ test('on an iPhone SE the team step keeps LATER on screen, and the win card chip
   assert.doesNotMatch(team, /Go all in/);
   const win = read('src/components/PostWinRewardsModal.tsx');
   assert.match(win, /styles\.chipLabelQuiet\]\} numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.7\}/);
+});
+
+/* ---------- Round 2: the grader's blockers and fixes ---------- */
+
+test('every place a win card reward flies is a name the map registers (blueprint 4.2), and a stamp always lands', () => {
+  const routes = win.WIN_FLY_ROUTES;
+  // The map's names: the header pills (Topbar Currency flyTarget), the Shelf button ('energy') and the
+  // Profile tab ('xp') from guide-map's flyAnchors, the Rewards button ('rewards').
+  const mapNames = new Set(['coins', 'tickets', 'energy', 'xp', 'rewards']);
+  for (const [kind, route] of Object.entries(routes)) {
+    assert.ok(route.length > 0, `${kind} has a place to fly`);
+    for (const name of route) assert.ok(mapNames.has(name), `${kind} flies to '${name}', a name the map registers`);
+  }
+  assert.deepEqual([...routes.xp], ['xp'], 'XP flies to the Profile tab by the name guide-map registers (not "profile")');
+  assert.deepEqual([...routes.stamp], ['rewards', 'xp'], 'the stamp lands on the Rewards button, or the Profile tab (the Stamp Book) before one is drawn');
+  const registered = names => name => names.includes(name);
+  assert.equal(win.flyTargetFor(routes.stamp, registered(['coins', 'tickets', 'xp'])), 'xp', 'no Rewards button yet: the Profile tab');
+  assert.equal(win.flyTargetFor(routes.stamp, registered(['coins', 'xp', 'rewards'])), 'rewards');
+  assert.equal(win.flyTargetFor(routes.xp, registered([])), null, 'nothing drawn: skipped, never a crash');
+  for (const chip of win.winRewardChips({ coins: 5, tickets: 1, parts: 2, energy: 10, xp: 9, vipCoins: 5, coinLevelsOpen: true, dailyOpen: true })) {
+    assert.ok(mapNames.has(chip.flyTo), `${chip.label} flies to a registered name`);
+  }
+  // Where the names are registered, on any build that has them (guide-map's flyAnchors and the header pills).
+  const anchors = path.join(root, 'src/components/guide/flyAnchors.ts');
+  if (fs.existsSync(anchors)) {
+    const src = fs.readFileSync(anchors, 'utf8');
+    assert.match(src, /registerTarget\('xp'/, 'the Profile tab registers as xp');
+  }
+  assert.match(read('src/components/Topbar/Currency.tsx'), /registerTarget\(flyTarget/);
+  const card = read('src/components/PostWinRewardsModal.tsx');
+  assert.doesNotMatch(card, /targetPosition: '(profile|rewards)'/, 'no fixed target name that the map may not register');
+  assert.match(card, /const target = flyTargetFor\(route, getTarget\);/);
+  // The stamp gets its moment on the card itself too: a small picture in the reward row, no button.
+  assert.match(card, /\{!!earnedStamp && <View style=\{\[styles\.badge, styles\.stampBadge\]\} accessible/);
+  assert.match(card, /accessibilityLabel=\{`New stamp: \$\{earnedStamp\.name\}\. It waits in Rewards\.`\}/);
+});
+
+test('the challenge card reads the guide only while its win card is up, so walking never re-renders it', () => {
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(modal, /const watchGuide = open === true && flowState === 'postwin';/);
+  assert.match(modal, /if \(!watchGuide\) return undefined;\n\s+setGuideTarget\(guide\.current\(\)\);\n\s+return guide\.subscribe\(\(\) => setGuideTarget\(guide\.current\(\)\)\);\n\s+\}, \[watchGuide\]\);/);
+  assert.equal((modal.match(/guide\.subscribe\(/g) || []).length, 1, 'one subscription, and only inside that effect');
+  assert.doesNotMatch(modal, /useState<GuideTarget \| null>\(\(\) => guide\.current\(\)\)/);
+  assert.doesNotMatch(modal, /void showModal|const GAMES = /, 'leftovers removed');
+});
+
+test('PLAY! taps queued behind a leaving sheet open the card and never close it: the scrim waits a moment', () => {
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(modal, /export const SCRIM_GRACE_MS = 900;/);
+  assert.match(modal, /onModalWillShow=\{\(\) => \{ cardShownAt\.current = Date\.now\(\); setChallengeModalHidden\(false\); \}\}/);
+  assert.match(modal, /const closeFromScrim = useCallback\(\(\) => \{\n\s+if \(Date\.now\(\) - cardShownAt\.current < SCRIM_GRACE_MS\) return;\n\s+safeClose\(\);/);
+  // The wide scrim Pressable under the card follows the same rule.
+  assert.match(modal, /onPress=\{\(\) => \{\n\s+if \(Date\.now\(\) - cardShownAt\.current < SCRIM_GRACE_MS\) return;\n\s+playSound\(require\('\.\.\/\.\.\/assets\/sounds\/redeem_modal_close\.mp3'\)\);\n\s+safeClose\(\);/);
+  assert.doesNotMatch(modal, /onBackdropPress=\{safeClose\}/);
+});
+
+test('after a trivia loss with Picture games on, TRY AGAIN sends retry_of and picture_only=1 together', async () => {
+  const sent = [];
+  const api = loadTs('src/api/endpoints/me/task-attempts.ts', {
+    '../../client': { __esModule: true, default: { post: async (url, body) => { sent.push({ url, body }); return { data: { data: { attempt: { id: 902, game: 'memory', status: 'started' } } } }; } } },
+    '../../../screens/LeaderboardsScreen/standingsCache': { markStandingsStale() {}, parkWinNote() {} },
+    '../../../screens/LeaderboardsScreen/standingsV2Model': { winNote: () => null },
+    '../../../utils/toast': { showToast() {} },
+  });
+  const writes = [];
+  const recovery = loadTs('src/services/task-attempt/recovery.ts', {
+    '../../api/endpoints/me/task-attempts': api,
+    './checkpoint': { writeTaskAttemptCheckpoint: async cp => { writes.push(cp); } },
+  });
+  // The checkpoint the challenge card writes for TRY AGAIN after trivia attempt 901 was lost, Picture games on.
+  const lostTrivia = { id: 901, game: 'trivia', status: 'lost' };
+  const checkpoint = { version: 1, playerId: 7, taskType: 'task', taskId: 91, requestId: 'tps-retry-req-0000000001', attemptId: null,
+    latitude: 33.81, longitude: -117.91, savedAt: Date.now(), retryOf: lostTrivia.id, pictureOnly: true };
+  const result = await recovery.recoverTaskAttempt(checkpoint);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].body.retry_of, 901, 'names the lost trivia attempt');
+  assert.equal(sent[0].body.picture_only, 1, 'and still asks for picture games (the server lets picture games win over the same game)');
+  assert.equal(result.attempt.id, 902);
+  assert.equal(writes[0].attemptId, 902, 'the new attempt id is saved for a relaunch');
+  // The card builds exactly that checkpoint: the lost attempt id on TRY AGAIN, the player's picture setting on every paid try.
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(modal, /retryOfRef\.current = attemptRef\.current\?\.id \?\? retryOfRef\.current;\n\s+try \{\n\s+await clearAttemptCheckpoint\(\);/);
+  assert.match(modal, /\.\.\.\(\(saved\?\.retryOf \?\? retryOfRef\.current\) \? \{ retryOf: saved\?\.retryOf \?\? retryOfRef\.current \} : \{\}\),\n\s+\.\.\.\(pictureOnly \? \{ pictureOnly: true \} : \{\}\),/);
+});
+
+test('one card per Memory miss in a ride challenge: the mid card has TRY AGAIN only (no DONE into a second card)', () => {
+  const game = read('src/games/memory/MemoryGame.tsx');
+  assert.match(game, /onDone=\{rideChallenge && tryScreen\.left > 0 \? undefined : giveUp\} \/>/);
+  const card = read('src/games/memory/TryCard.tsx');
+  assert.match(card, /onDone\?: \(\) => void;/);
+  assert.match(card, /\{onDone \|\| !canRetry \? \(/, 'DONE shows only when it has somewhere to go, or the tries are used up');
+});
+
+test('kid test: the Trivia toggle shows a question with a cross, the ball a check, the treats line the churro', () => {
+  const intro = read('src/components/help/GameIntroCard.tsx');
+  assert.match(intro, /<Picture pic=\{\{ art: ART\.question, mark: 'close' \}\} \/>/);
+  assert.doesNotMatch(intro, /art: ART\.fin, mark: 'close'/, 'never the rival with a cross ("wrong shark")');
+  assert.match(intro, /question: require\('\.\.\/\.\.\/\.\.\/assets\/images\/screens\/community-center-question\.png'\)/, 'existing art only');
+  assert.match(intro, /banana: \[\[\{ art: ART\.basket \}, \{ art: ART\.banana, mark: 'check' \}\], \[\{ art: ART\.ball, mark: 'check' \}\]\]/);
+  assert.ok(fs.existsSync(path.join(root, 'assets/images/screens/community-center-question.png')));
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(modal, /const TREAT_ART = require\('\.\.\/\.\.\/assets\/images\/prep-items\/churros\/churro_18\.png'\);/);
+  assert.match(modal, /: <Image source=\{TREAT_ART\} style=\{styles\.treatArt\} contentFit="contain" \/>/);
+  assert.doesNotMatch(modal, /name=\{step\.kind === 'line_ticket' \? 'ride' : 'map'\}/, 'the treats line never wears the compass');
+  assert.match(modal, /export const NEED_TICKET_BUTTON = 'Back to Map';/);
+  assert.doesNotMatch(modal, /needTicket \? 'OK'/, 'never a bare OK');
+  assert.ok(fs.existsSync(path.join(root, 'assets/images/prep-items/churros/churro_18.png')));
+});
+
+test('short lines draw their digits in the number face, so "1" never reads "I"', () => {
+  assert.match(read('src/components/PostWinRewardsModal.tsx'), /<Text style=\{styles\.weekText\}>\{withNumberFont\(weekLine\)\}<\/Text>/);
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(modal, /withNumberFont\(step\.kind === 'line_ticket'/);
+  assert.match(modal, /<Text style=\{styles\.stepLine\}>\{withNumberFont\(challengeStepLine\(freeStep\) \?\? ''\)\}<\/Text>/);
+  // The loss card's try line ("1 of 3 right.") is already drawn in the number face (ChallengeStatusCard line style).
+  assert.match(read('src/components/rewards/ChallengeStatusCard.tsx'), /line: \{ fontFamily: 'Shark'/);
+});
+
+test('Settings switch rows speak as switches with On or Off, even when the row does the toggling', () => {
+  const src = read('src/screens/SettingsScreen.tsx');
+  assert.match(src, /accessibilityRole=\{checked === undefined \? 'button' : 'switch'\}\n\s+accessibilityState=\{checked === undefined \? undefined : \{ checked \}\}/);
+  assert.match(src, /checked=\{play\.prefs\.pictureOnly\}/);
+  assert.match(src, /checked=\{batterySaver\}/);
 });

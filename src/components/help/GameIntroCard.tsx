@@ -23,6 +23,8 @@ const ART = {
   chest: require('../../assets/games/current-quest/chest_closed.png'),
   drum: require('../../assets/games/rhythm/parade_drum.png'),
   note: require('../../assets/games/rhythm/note_drum.png'),
+  /** A question bubble (the Community Center's "?"): "questions to read", for the Trivia toggle. */
+  question: require('../../../assets/images/screens/community-center-question.png'),
 } as const;
 
 /** One picture on the how-to strip: art (or an icon), with a check, a cross or nothing on its corner. */
@@ -39,7 +41,8 @@ export const INTRO_PICTURES: Readonly<Record<MiniGameKind, readonly Step[]>> = {
   tap: [[{ art: ART.shark, mark: 'check' }], [{ art: ART.angler, mark: 'close' }]],
   memory: [[{ art: ART.cardBack }, { art: ART.cardBack }], [{ art: ART.cardShark }, { art: ART.cardShark, mark: 'check' }]],
   trivia: [[{ art: ART.fin }], [{ art: ART.bell, mark: 'check' }]],
-  banana: [[{ art: ART.basket }, { art: ART.banana, mark: 'check' }], [{ art: ART.ball, icon: undefined }]],
+  // The ball is bounced, not dodged: it wears a check too, so a kid never steers away from it.
+  banana: [[{ art: ART.basket }, { art: ART.banana, mark: 'check' }], [{ art: ART.ball, mark: 'check' }]],
   shark: [[{ icon: 'play' }], [{ art: ART.swimmer, mark: 'check' }]],
   current: [[{ art: ART.quester }], [{ art: ART.chest, mark: 'check' }]],
   timing: [[{ art: ART.note }], [{ art: ART.drum, mark: 'check' }]],
@@ -84,7 +87,7 @@ export function IntroPictures({ kind }: { readonly kind: MiniGameKind }) {
  * Pictures first (shark with a check, anglerfish with a cross), then one short
  * line. The game has not started yet, so nothing is interrupted; the timer
  * only begins after Play. The Trivia card offers "Can't read yet? Picture
- * games" (a trivia card with a cross, then the shark) whenever the server deals
+ * games" (a question bubble with a cross, then the shark) whenever the server deals
  * picture games: it turns on Picture games only for this player.
  */
 export default function GameIntroCard({ kind, onStart, name, win }: {
@@ -114,7 +117,7 @@ export default function GameIntroCard({ kind, onStart, name, win }: {
             accessibilityLabel="Can't read yet? Picture games only. Your next tries deal picture games, never trivia."
             style={({ pressed }) => [styles.pictureToggle, play.prefs.pictureOnly && styles.pictureOn, pressed && styles.pressed]}>
             <View style={styles.toggleArt}>
-              <Picture pic={{ art: ART.fin, mark: 'close' }} />
+              <Picture pic={{ art: ART.question, mark: 'close' }} />
               <GameIcon name="arrow" size={18} />
               <Picture pic={{ art: ART.shark, mark: 'check' }} />
             </View>

@@ -129,9 +129,36 @@ export interface WinRowInput {
   readonly dailyOpen: boolean;
 }
 
+/**
+ * Where the win card's rewards fly (blueprint 4.2), by the names the map registers with
+ * CurrencyFlyProvider: the header pills register 'coins' and 'tickets' (Topbar Currency
+ * flyTarget), the Shelf button 'energy' and the Profile tab 'xp' (guide-map's flyAnchors), and
+ * the Rewards button 'rewards' (guide-map's RewardsButton).
+ */
+export type WinFlyTarget = 'coins' | 'tickets' | 'energy' | 'xp' | 'rewards';
+
+/**
+ * Each reward's targets in order: the first one the map has registered wins. A stamp lands on the
+ * Rewards button; on a map that has not drawn one yet it lands on the Profile tab, where the Stamp
+ * Book lives, so a won stamp always has a place to fly (never silently dropped).
+ */
+export const WIN_FLY_ROUTES: Readonly<Record<'coins' | 'tickets' | 'energy' | 'parts' | 'xp' | 'stamp', readonly WinFlyTarget[]>> = {
+  coins: ['coins'],
+  tickets: ['tickets'],
+  energy: ['energy'],
+  parts: ['energy'],
+  xp: ['xp'],
+  stamp: ['rewards', 'xp'],
+};
+
+/** The first registered target of a route, or null when the map has drawn none of them. */
+export function flyTargetFor(route: readonly WinFlyTarget[], registered: (name: string) => unknown): WinFlyTarget | null {
+  return route.find(name => !!registered(name)) ?? null;
+}
+
 export interface WinChip extends RewardChipModel {
-  /** Where it flies when the card closes (CurrencyFly targets). */
-  readonly flyTo: 'coins' | 'tickets' | 'energy' | 'profile';
+  /** Where it flies when the card closes (CurrencyFly targets, blueprint 4.2). */
+  readonly flyTo: WinFlyTarget;
   /** A shorter, kinder chip (Energy before rung 3: "saved for growing coins"). */
   readonly quiet?: boolean;
 }
@@ -156,7 +183,7 @@ export function winRewardChips(input: WinRowInput): WinChip[] {
       ? { icon: 'energy', amount: n(input.energy), label: 'Energy', flyTo: 'energy' }
       : { icon: 'energy', amount: n(input.energy), label: 'saved for growing coins', flyTo: 'energy', quiet: true });
   }
-  if (input.dailyOpen && n(input.xp)) chips.push({ icon: 'xp', amount: n(input.xp), label: 'XP', flyTo: 'profile' });
+  if (input.dailyOpen && n(input.xp)) chips.push({ icon: 'xp', amount: n(input.xp), label: 'XP', flyTo: 'xp' });
   return chips;
 }
 

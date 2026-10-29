@@ -2710,7 +2710,10 @@ export default function MemoryGame({
             {tryScreen ? (
               <TryCard copy={memoryLossCopy(tryScreen.pairs, tryScreen.total, tryScreen.out, tryScreen.flipped)} pairs={tryScreen.pairs}
                 total={tryScreen.total} left={tryScreen.left} bottom={Math.max(8, g.H - (g.felt.y + g.felt.h) + 6)} compact={g.H < 600}
-                enter={tryCardIn} reducedMotion={reducedMotion} onTryAgain={tryAgain} onDone={giveUp} />
+                enter={tryCardIn} reducedMotion={reducedMotion} onTryAgain={tryAgain}
+                // A ride challenge whose Ticket still has tries: TRY AGAIN only. DONE here led straight into the
+                // ride's own loss card with a second TRY AGAIN (two cards for one miss); the X still leaves.
+                onDone={rideChallenge && tryScreen.left > 0 ? undefined : giveUp} />
             ) : null}
           </>
         ) : null}

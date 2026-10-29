@@ -33,8 +33,8 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { playSfx } from '../gamekit/SFX';
 import GameIcon from '../ui/GameIcon';
 import {
-  milestoneHeadline, nextCoinButton, partsProgress, shelfLine, teamSentence, winRewardChips,
-  type NextCoinButton, type WinChip,
+  flyTargetFor, milestoneHeadline, nextCoinButton, partsProgress, shelfLine, teamSentence, winRewardChips, WIN_FLY_ROUTES,
+  type NextCoinButton, type WinChip, type WinFlyTarget,
 } from './rewards/postWinModel';
 import { watchForReward } from '../services/ads';
 import { holdWinNotes, takeWinNote } from '../screens/LeaderboardsScreen/standingsCache';
@@ -42,6 +42,7 @@ import countText from '../helpers/countText';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import { usePresentWatchdog } from './rewards/usePresentWatchdog';
 import { useRung } from '../services/reveal/revealLadder';
+import { withNumberFont } from '../ui/numberText';
 import type { PerkChipData } from './coin/progressionModel';
 import PerkChipRow from './coin/PerkChip';
 
@@ -181,7 +182,7 @@ export default function PostWinRewardsModal({
   starRide = false,
 }: Props) {
   const { player, refreshPlayer } = useContext(AuthContext);
-  const { triggerFly } = useCurrencyFly();
+  const { triggerFly, getTarget } = useCurrencyFly();
   const isVip = !!player?.is_subscribed;
   const coinLevels = useRung('coin_levels').open;
   const daily = useRung('daily').open;
@@ -299,17 +300,24 @@ export default function PostWinRewardsModal({
 
   // Every reward flies to where it lives as the card closes (blueprint 4.2): Shark Coins and
   // Tickets to their header pills, Energy and Parts to the Shelf button, XP to the Profile tab,
-  // the stamp to the Rewards button. A target the map has not drawn is simply skipped.
+  // the stamp to the Rewards button (or the Profile tab, home of the Stamp Book, on a map that has
+  // not drawn a Rewards button). A reward whose places are all missing is skipped.
   const flyRewards = () => {
     const x = SW / 2;
     const y = SH * 0.42;
-    const art: Record<string, number> = { coins: FLY_ART.coins, ticket: FLY_ART.ticket, energy: FLY_ART.energy, parts: FLY_ART.parts, xp: FLY_ART.xp };
+    const fly = (art: number, amount: number, route: readonly WinFlyTarget[]) => {
+      const target = flyTargetFor(route, getTarget);
+      if (target) triggerFly({ imageSource: art, amount, startX: x, startY: y, targetPosition: target });
+    };
     for (const chip of chips) {
-      triggerFly({ imageSource: art[chip.icon === 'member' ? 'coins' : chip.icon] ?? FLY_ART.coins,
-        amount: Math.min(chip.amount, chip.flyTo === 'coins' ? 10 : 3), startX: x, startY: y, targetPosition: chip.flyTo });
+      const kind = chip.icon === 'member' || chip.icon === 'coins' ? 'coins' : chip.icon === 'ticket' ? 'tickets'
+        : chip.icon === 'parts' ? 'parts' : chip.icon === 'xp' ? 'xp' : 'energy';
+      const art = kind === 'coins' ? FLY_ART.coins : kind === 'tickets' ? FLY_ART.ticket : kind === 'parts' ? FLY_ART.parts
+        : kind === 'xp' ? FLY_ART.xp : FLY_ART.energy;
+      fly(art, Math.min(chip.amount, kind === 'coins' ? 10 : 3), WIN_FLY_ROUTES[kind]);
     }
-    if (!daily && xpEarned > 0) triggerFly({ imageSource: FLY_ART.xp, amount: 2, startX: x, startY: y, targetPosition: 'profile' });
-    if (earnedStamp) triggerFly({ imageSource: FLY_ART.stamp, amount: 1, startX: x, startY: y, targetPosition: 'rewards' });
+    if (!daily && xpEarned > 0) fly(FLY_ART.xp, 2, WIN_FLY_ROUTES.xp);
+    if (earnedStamp) fly(FLY_ART.stamp, 1, WIN_FLY_ROUTES.stamp);
   };
 
   // The win card waits its turn among the native modal layers (blueprint 4.3 rule 10): it presents
@@ -396,7 +404,7 @@ export default function PostWinRewardsModal({
             </Animated.View>
 
             {/* ── The one reward row, counting up ── */}
-            {(chips.length > 0 || (rush && coinLevels) || starRide) && <View style={styles.chips}>
+            {(chips.length > 0 || (rush && coinLevels) || starRide || !!earnedStamp) && <View style={styles.chips}>
               {chips.map((chip, index) => <RewardChip key={chip.label} chip={chip} index={index} enter={enter}
                 reduced={reducedMotion} started={caught} />)}
               {rush && coinLevels && <View style={styles.badge} accessible
@@ -407,6 +415,12 @@ export default function PostWinRewardsModal({
               {starRide && <View style={styles.badge} accessible accessibilityLabel="Star Ride: double">
                 <GameIcon name="star" size={20} />
                 <Text style={styles.badgeText}>x2</Text>
+              </View>}
+              {/* A new stamp: its own small picture in the row (no button); it flies to the Rewards button as the card closes. */}
+              {!!earnedStamp && <View style={[styles.badge, styles.stampBadge]} accessible
+                accessibilityLabel={`New stamp: ${earnedStamp.name}. It waits in Rewards.`}>
+                <Image source={FLY_ART.stamp} style={styles.stampArt} contentFit="contain" />
+                <GameIcon name="new" size={20} />
               </View>}
             </View>}
 
@@ -443,7 +457,7 @@ export default function PostWinRewardsModal({
           {weekLine && <View style={styles.week} accessible accessibilityLabel={weekLine}>
             <GameIcon name="coin" size={16} />
             <GameIcon name="check" size={14} />
-            <Text style={styles.weekText}>{weekLine}</Text>
+            <Text style={styles.weekText}>{withNumberFont(weekLine)}</Text>
           </View>}
         </View>
       </Animated.View>
@@ -491,6 +505,8 @@ const styles = StyleSheet.create({
   badge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#ffcf3b', borderRadius: 12,
     borderWidth: 2, borderColor: '#ffffff', paddingVertical: 4, paddingHorizontal: 7, alignSelf: 'center' },
   badgeText: { fontFamily: 'Shark', fontSize: 15, color: '#05346e' },
+  stampBadge: { backgroundColor: '#fff8e4', paddingVertical: 2, paddingHorizontal: 5 },
+  stampArt: { width: 30, height: 30 },
   partsLine: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, backgroundColor: '#fff8e4', borderRadius: 14,
     borderWidth: 2, borderColor: '#ffffff', paddingVertical: 5, paddingHorizontal: 10 },
   partsTrack: { flex: 1, height: 12, borderRadius: 7, backgroundColor: '#bfe5ff', borderWidth: 2, borderColor: '#ffffff', overflow: 'hidden' },

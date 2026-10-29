@@ -38,7 +38,8 @@ import {
   challengeButtonLabel, challengeFreeSteps, challengeNextStep, challengeStepLine, challengeTitle,
   needTicketCopy, punchLines, stampClaimSources,
 } from './rewards/challengeCopy';
-import { weekLine } from './rewards/postWinModel';
+import { partsProgress, weekLine } from './rewards/postWinModel';
+import { withNumberFont } from '../ui/numberText';
 import TicketGift from './rewards/TicketGift';
 import { markTeamOffered, teamOffered, wantsTeamStep } from './rewards/teamOffer';
 import type { ClaimSource } from '../services/guide/freeTickets';
@@ -94,7 +95,6 @@ export const CHALLENGE_GAMES = [
   { id: 'memory' as const, name: 'Memory Match', color: CHALLENGE_GAME_COLORS.memory },
   { id: 'trivia' as const, name: 'Beat the Buzzer', color: CHALLENGE_GAME_COLORS.trivia },
 ];
-const GAMES = CHALLENGE_GAMES;
 
 type FlowState = 'recovering' | 'auth-required' | 'preview' | 'retrying' | 'wheel' | 'spinning' | 'minigame' | 'postwin' | 'lost' | 'claim-error' | 'spend-error' | 'save-error' | 'expired';
 type GameType = 'tap' | 'memory' | 'trivia';
@@ -102,6 +102,12 @@ type GameType = 'tap' | 'memory' | 'trivia';
 
 /** After "See It On Your Shelf", the map behind refreshes once the coin has landed (the flight takes about 1 s). */
 export const SHELF_MAP_REFRESH_DELAY_MS = 1800;
+/** Out of Tickets with no free way left: the big button takes the player back to the map (never a bare OK). */
+export const NEED_TICKET_BUTTON = 'Back to Map';
+/** "3 treats at home": the treat art from How to Play (the churro), never the compass. */
+const TREAT_ART = require('../../assets/images/prep-items/churros/churro_18.png');
+/** Taps beside the challenge card in its first moment on screen are queued PLAY! taps, not a close. */
+export const SCRIM_GRACE_MS = 900;
 
 export default function RedeemRedeemableModal({
   open,
@@ -135,9 +141,6 @@ export default function RedeemRedeemableModal({
   // Parts and Energy with coin levels (rung 3), XP with Daily 3 (rung 4).
   const coinLevelsOpen = useRung('coin_levels').open;
   const dailyOpen = useRung('daily').open;
-  // The guide's pick after this win (NEXT COIN on the win card); guide-map resolves it on the map.
-  const [guideTarget, setGuideTarget] = useState<GuideTarget | null>(() => guide.current());
-  useEffect(() => guide.subscribe(() => setGuideTarget(guide.current())), []);
 
   // Flow state
   // Dev preview only: open a sample-only modal straight on a status card.
@@ -148,13 +151,34 @@ export default function RedeemRedeemableModal({
   // iOS must finish dismissing the game presentation before showing rewards.
   const [challengeModalHidden, setChallengeModalHidden] = useState(true);
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
-  const [selectedGameData, setSelectedGameData] = useState<typeof GAMES[0] | null>(null);
+  const [selectedGameData, setSelectedGameData] = useState<typeof CHALLENGE_GAMES[0] | null>(null);
   const selectedIndexRef = useRef<number | null>(null);
   const collectingRef = useRef(false);
   const flowStateRef = useRef<FlowState>('preview');
 
   // Keep ref in sync so callbacks always have current flowState
   useEffect(() => { flowStateRef.current = flowState; }, [flowState]);
+  // From rung 3, a coin already on the shelf shows its Parts ring on the card (blueprint 5.3, scope 3).
+  const ownedAssetId = open === true && coinLevelsOpen && redeemable?.type === 'task'
+    && ((redeemable.model as TaskType).times_completed ?? 0) > 0 ? (redeemable.model as TaskType).asset_id ?? null : null;
+  const [cardCoin, setCardCoin] = useState<RideCoinLevelType | null>(null);
+  useEffect(() => {
+    setCardCoin(null);
+    if (ownedAssetId == null || !player?.id) return undefined;
+    let alive = true;
+    void loadCoin(player.id, ownedAssetId).then(coin => { if (alive) setCardCoin(coin); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [ownedAssetId, player?.id]);
+  // The guide's pick after this win (NEXT COIN on the win card); guide-map resolves it on the map.
+  // Read only while the win card is up: the map re-resolves on every GPS step while the player
+  // walks, and this card (and its hidden win card) must not re-render with each one.
+  const [guideTarget, setGuideTarget] = useState<GuideTarget | null>(null);
+  const watchGuide = open === true && flowState === 'postwin';
+  useEffect(() => {
+    if (!watchGuide) return undefined;
+    setGuideTarget(guide.current());
+    return guide.subscribe(() => setGuideTarget(guide.current()));
+  }, [watchGuide]);
 
   // Safe close: only allows closing during preview state
   const safeClose = useCallback(() => {
@@ -238,12 +262,15 @@ export default function RedeemRedeemableModal({
   const needTicket = outOfTickets && stepReady && (freeStep?.kind === 'line_ticket' || freeStep?.kind === 'treats');
   const needCopy = needTicketCopy(queueTicketsOn, !!redeemable?.rescue_pass_used_today);
   const rideRewardTask = isTaskType ? redeemable.model as TaskType | SecretTaskType : null;
-  // Before coin levels open the card promises Shark Coins only; Parts and Energy join at rung 3, XP at rung 4.
+  // Before coin levels open the card promises Shark Coins only. From rung 3 a coin already on the shelf
+  // shows its Parts ring (how close it is to its next level); a coin not won yet shows the Parts its
+  // first win brings. Energy is spent on the coin card, so it never sits here. XP joins at rung 4.
+  const cardParts = cardCoin && coinLevelsOpen ? partsProgress(cardCoin, player?.energy ?? null, 0) : null;
   const previewRideRewards = rideRewardTask ? [
     // The ride's own Shark Coins; a member's double coins show on the win card as their own "+N VIP" chip.
     { label: 'SHARK COINS', amount: rideRewardTask.coins, icon: 'coins' as const, show: rideRewardTask.coins > 0 },
-    { label: 'RIDE PARTS', amount: rideRewardTask.ride_parts_reward ?? (taskType === 'secret_task' ? 2 : 1), icon: 'parts' as const, show: coinLevelsOpen },
-    { label: 'ENERGY', amount: rideRewardTask.energy_reward ?? (taskType === 'secret_task' ? 15 : 10), icon: 'energy' as const, show: coinLevelsOpen },
+    { label: 'RIDE PARTS', amount: rideRewardTask.ride_parts_reward ?? (taskType === 'secret_task' ? 2 : 1), icon: 'parts' as const,
+      show: coinLevelsOpen && !cardParts },
     { label: 'XP', amount: doubleXP ? rideRewardTask.experience * 2 : rideRewardTask.experience, icon: 'xp' as const, show: dailyOpen },
   ].filter(reward => reward.show && reward.amount > 0) : [];
 
@@ -523,9 +550,9 @@ export default function RedeemRedeemableModal({
   // The server chooses the game when the Ticket is spent. The punch is a reveal,
   // not an extra gate for a guest whose group or line is ready to move.
   const selectAssignedGame = useCallback(() => {
-    const gameIndex = GAMES.findIndex((game) => game.id === attemptRef.current?.game);
+    const gameIndex = CHALLENGE_GAMES.findIndex((game) => game.id === attemptRef.current?.game);
     if (gameIndex < 0) return false;
-    const game = GAMES[gameIndex];
+    const game = CHALLENGE_GAMES[gameIndex];
     selectedIndexRef.current = gameIndex;
     setSelectedGame(game.id);
     setSelectedGameData(game);
@@ -736,14 +763,20 @@ export default function RedeemRedeemableModal({
   const challengeLayer = useNativeModalLayer(open === true && flowState !== 'postwin' && !!redeemable, 'wait');
   // A sheet not on the layer list (or still dismissing) can make UIKit refuse the card: present it again.
   const challengeWatch = usePresentWatchdog(challengeLayer.present);
+  // A kid mashing PLAY! while a sheet slides away: the card waits its turn, then zooms in under the
+  // next taps. Those taps land beside the card, and must not close the card they just opened, so the
+  // scrim only closes it once the card has been up for a moment.
+  const cardShownAt = useRef(0);
+  const closeFromScrim = useCallback(() => {
+    if (Date.now() - cardShownAt.current < SCRIM_GRACE_MS) return;
+    safeClose();
+  }, [safeClose]);
 
   if (!redeemable) return null;
 
-  const showModal = open && flowState !== 'postwin';
-  void showModal;
   const ticketTarget = flowState === 'lost' && firstCoinTicketReturned ? getTarget?.('tickets') ?? null : null;
   const freeBadge = freeStep?.kind === 'free_try' ? 'free' : freeStep?.kind === 'extra_try' ? 'extra' : null;
-  const buttonLabel = !stepReady ? 'One moment' : claiming ? 'Claiming...' : needTicket ? 'OK' : challengeButtonLabel(freeStep, ticketCost);
+  const buttonLabel = !stepReady ? 'One moment' : claiming ? 'Claiming...' : needTicket ? NEED_TICKET_BUTTON : challengeButtonLabel(freeStep, ticketCost);
   const pressChallenge = () => {
     if (previewOnly || !stepReady || claiming) return;
     if (freeStep?.kind === 'claim') { void handleClaimTickets(); return; }
@@ -761,10 +794,10 @@ export default function RedeemRedeemableModal({
         animationOut="zoomOut"
         swipeDirection={flowState === 'preview' ? 'down' : undefined}
         isVisible={challengeLayer.present}
-        onModalWillShow={() => setChallengeModalHidden(false)}
+        onModalWillShow={() => { cardShownAt.current = Date.now(); setChallengeModalHidden(false); }}
         onModalHide={() => { setChallengeModalHidden(true); challengeLayer.onDismissed(); }}
         onSwipeComplete={safeClose}
-        onBackdropPress={safeClose}
+        onBackdropPress={closeFromScrim}
         onBackButtonPress={safeClose}
         backdropColor="#05346e"
         backdropOpacity={flowState === 'preview' ? 0.5 : 0.88}
@@ -785,6 +818,7 @@ export default function RedeemRedeemableModal({
               <Pressable
                 style={{ width: '100%', height: '100%', position: 'absolute' }}
                 onPress={() => {
+                  if (Date.now() - cardShownAt.current < SCRIM_GRACE_MS) return;
                   playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
                   safeClose();
                 }}
@@ -877,13 +911,21 @@ export default function RedeemRedeemableModal({
                         </View>
                       </>}
                     </View>}
+                    {/* The coin's Parts ring after rung 3: one line, the same as on the win card. */}
+                    {!needTicket && cardParts && !cardParts.maxed && <View style={styles.partsLine} accessible
+                      accessibilityLabel={cardParts.ready ? 'This coin is ready to level up'
+                        : `${cardParts.have} of ${cardParts.need} Ride Parts for level ${cardParts.nextLevel}`}>
+                      <GameIcon name="parts" size={22} />
+                      <View style={styles.partsTrack}><View style={[styles.partsFill, { width: `${Math.round(cardParts.after * 100)}%` }]} /></View>
+                      <Text style={styles.partsText}>{cardParts.ready ? 'Level up!' : `${cardParts.have}/${cardParts.need}`}</Text>
+                    </View>}
                   </View>
                   <View style={{ marginTop: 8 }}>
                     {isTaskType ? (
                       <>
                         {/* Out of Tickets: the free way that plays now, in one short line above the same button. */}
-                        {playsNow && outOfTickets && challengeStepLine(freeStep) && <Text style={styles.stepLine}>{challengeStepLine(freeStep)}</Text>}
-                        {freeStep?.kind === 'claim' && <Text style={styles.stepLine}>{challengeStepLine(freeStep)}</Text>}
+                        {playsNow && outOfTickets && challengeStepLine(freeStep) && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
+                        {freeStep?.kind === 'claim' && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
                         <YellowButton
                           text={buttonLabel}
                           disabled={!stepReady || claiming || (playsNow && !needTicket && freeStep?.kind !== 'claim' && !location)}
@@ -897,9 +939,10 @@ export default function RedeemRedeemableModal({
                           {freeSteps.filter(step => step.kind === 'line_ticket' || step.kind === 'treats').map(step => (
                             <View key={step.kind} style={styles.wayRow}>
                               {/* The pocket watch means Wait Times only (ledger 37): the line Ticket wears the ride picture. */}
-                              <GameIcon name={step.kind === 'line_ticket' ? 'ride' : 'map'} size={22} />
-                              <Text style={styles.ticketHelpCopy}>{step.kind === 'line_ticket'
-                                ? 'Your first wait at a ride earns a Ticket.' : '3 treats at home = 1 Ticket.'}</Text>
+                              {step.kind === 'line_ticket' ? <GameIcon name="ride" size={22} />
+                                : <Image source={TREAT_ART} style={styles.treatArt} contentFit="contain" />}
+                              <Text style={styles.ticketHelpCopy}>{withNumberFont(step.kind === 'line_ticket'
+                                ? 'Your first wait at a ride earns a Ticket.' : '3 treats at home = 1 Ticket.')}</Text>
                             </View>
                           ))}
                           {!!redeemable.rescue_pass_used_today && <View style={styles.wayRow}>
@@ -1093,6 +1136,12 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center' },
   rewardAmount: { color: '#fff', fontFamily: 'Shark', fontSize: 18, textAlign: 'center', marginTop: 2,
     textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  partsLine: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, backgroundColor: '#fff8e4', borderRadius: 14,
+    borderWidth: 2, borderColor: '#ffffff', paddingVertical: 5, paddingHorizontal: 10 },
+  partsTrack: { flex: 1, height: 12, borderRadius: 7, backgroundColor: '#bfe5ff', borderWidth: 2, borderColor: '#ffffff', overflow: 'hidden' },
+  partsFill: { height: '100%', borderRadius: 7, backgroundColor: '#ffcf3b' },
+  partsText: { fontFamily: 'Shark', fontSize: 14, color: '#05346e' },
+  treatArt: { width: 24, height: 24 },
   stepLine: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 15, lineHeight: 19, textAlign: 'center', marginBottom: 6 },
   wayRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 5 },
   rideRewardLabel: { color: '#fff', fontFamily: 'Knockout', fontSize: 13,

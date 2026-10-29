@@ -74,6 +74,7 @@ function SettingsRow({
   accessory,
   isLast = false,
   destructive = false,
+  checked,
 }: {
   art: RowArt;
   title: string;
@@ -82,6 +83,8 @@ function SettingsRow({
   accessory?: React.ReactNode;
   isLast?: boolean;
   destructive?: boolean;
+  /** The row is an on/off switch (its BrandSwitch only shows the state): VoiceOver hears a switch and On or Off. */
+  checked?: boolean;
 }) {
   const content = (pressed = false) => (
     <View style={[styles.row, !isLast && styles.rowBorder, pressed && styles.rowPressed]}>
@@ -97,7 +100,8 @@ function SettingsRow({
   if (onPress) {
     return (
       <Pressable
-        accessibilityRole="button"
+        accessibilityRole={checked === undefined ? 'button' : 'switch'}
+        accessibilityState={checked === undefined ? undefined : { checked }}
         accessibilityLabel={detail ? `${title}, ${detail}` : title}
         onPress={() => { void Haptics.selectionAsync().catch(() => undefined); onPress(); }}
       >
@@ -412,6 +416,7 @@ export default function SettingsScreen() {
             title="Picture games only"
             detail={play.prefs.pictureOnly ? 'On: ride coins deal picture games, never trivia' : 'Off: ride coins can deal trivia'}
             onPress={() => play.setPictureOnly(!play.prefs.pictureOnly)}
+            checked={play.prefs.pictureOnly}
             accessory={
               <BrandSwitch label="Picture games only" value={play.prefs.pictureOnly} rowToggles
                 onValueChange={() => play.setPictureOnly(!play.prefs.pictureOnly)} />
@@ -433,6 +438,7 @@ export default function SettingsScreen() {
             detail={batterySaver ? 'On: lasts longer. Screen goes dark face down, flip it up to play' : 'Off: tap to make your battery last longer'}
             isLast
             onPress={() => setBatterySaver(!batterySaver)}
+            checked={batterySaver}
             accessory={
               <BrandSwitch label="Battery saver" value={batterySaver} rowToggles onValueChange={() => setBatterySaver(!batterySaver)} />
             }

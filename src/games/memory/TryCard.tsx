@@ -74,7 +74,8 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
   enter: SharedValue<number>;
   reducedMotion: boolean;
   onTryAgain: () => void;
-  onDone: () => void;
+  /** Absent in a ride challenge while the Ticket still has tries: one card per miss, TRY AGAIN only (the X still leaves). */
+  onDone?: () => void;
 }) {
   const canRetry = left > 0;
   const sched = tryCardSchedule(pairs);
@@ -144,10 +145,12 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
               <Text style={styles.btnText}>TRY AGAIN</Text>
             </Pressable>
           ) : null}
-          <Pressable onPress={onDone} hitSlop={8} style={({ pressed }) => [canRetry ? [styles.done, compact && styles.doneCompact] : styles.btn, pressed && styles.down]}
-            accessibilityRole="button" accessibilityLabel="Done">
-            <Text style={canRetry ? styles.doneText : styles.btnText}>DONE</Text>
-          </Pressable>
+          {onDone || !canRetry ? (
+            <Pressable onPress={onDone} hitSlop={8} style={({ pressed }) => [canRetry ? [styles.done, compact && styles.doneCompact] : styles.btn, pressed && styles.down]}
+              accessibilityRole="button" accessibilityLabel="Done">
+              <Text style={canRetry ? styles.doneText : styles.btnText}>DONE</Text>
+            </Pressable>
+          ) : null}
         </Animated.View>
       </Pressable>
     </Animated.View>
