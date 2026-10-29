@@ -497,7 +497,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   useEffect(() => {
     if (!__DEV__) return undefined;
     const g = globalThis as { __tpsRewards?: unknown };
-    g.__tpsRewards = { open: openRewards, summary: () => summary, rows: () => rows };
+    g.__tpsRewards = { open: openRewards, summary: () => summary, rows: () => rows, dims: () => ({ width, height }) };
     return () => { if (g.__tpsRewards) delete g.__tpsRewards; };
   });
 

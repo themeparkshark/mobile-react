@@ -536,8 +536,9 @@ test('Rewards sheet fits five rows whole on a 667 pt phone', () => {
   assert.match(sheet, /const compact = height < 720;/);
   assert.match(sheet, /const listMax = Math\.max\(240, Math\.min\(height \* 0\.62, height - 300\)\);/);
   const listMax = h => Math.max(240, Math.min(h * 0.62, h - 300));
-  const fiveRows = 5 * 62 + 4 * 8 + 4;
+  const fiveRows = 5 * 66 + 4 * 6 + 4;
   assert.ok(listMax(667) >= fiveRows, `SE list ${listMax(667)} holds five compact rows (${fiveRows})`);
   assert.ok(listMax(956) >= 5 * 70 + 4 * 8 + 4, 'Pro Max holds five full rows');
-  assert.match(sheet, /rowCompact: \{ minHeight: 62/);
+  assert.match(sheet, /rowCompact: \{ minHeight: 60/);
+  assert.match(sheet, /numberOfLines=\{compact \? 1 : 2\}/, 'one line per row on a small phone');
 });

@@ -68,14 +68,14 @@ export default function RewardsSheet({ rows, flame, empty, busy, note, reducedMo
   const eventsNew = useShownNewTag('events', has('events'));
   const newKey = newRowKey(rows, dailyNew.isNew ? 'daily' : trailNew.isNew ? 'trail' : eventsNew.isNew ? 'events' : null);
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, compact && styles.cardCompact]}>
       {flame != null && (
         <View style={styles.flameRow} accessible accessibilityLabel={`${flame} day flame`}>
           <GameIcon name="streak" size={30} />
           <Text style={styles.flameText}>{flame > 0 ? `${flame} day flame` : 'Start a flame with Daily 3'}</Text>
         </View>
       )}
-      <ScrollView style={{ maxHeight: listMax }} contentContainerStyle={styles.rows} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ maxHeight: listMax }} contentContainerStyle={[styles.rows, compact && styles.rowsCompact]} showsVerticalScrollIndicator={false}>
         {rows.map((row, i) => (
           <Animated.View key={row.key} entering={reducedMotion ? undefined : FadeInDown.delay(40 * i).duration(180)}>
             <Pressable onPress={row.action ? () => onRow(row.key) : undefined} disabled={!row.action || busy === row.key}
@@ -84,10 +84,11 @@ export default function RewardsSheet({ rows, flame, empty, busy, note, reducedMo
               <View style={[styles.artBox, compact && styles.artBoxCompact]}>{rowArt(row.key)}</View>
               <View style={styles.text}>
                 <View style={styles.titleRow}>
-                  <Text style={[styles.title, row.ready > 0 && styles.titleReady, styles.titleText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{row.title}</Text>
+                  <Text style={[styles.title, compact && styles.titleCompact, row.ready > 0 && styles.titleReady, styles.titleText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{row.title}</Text>
                   {newKey === row.key && <NewPill />}
                 </View>
-                <Text style={[styles.line, row.ready > 0 && styles.lineReady]} numberOfLines={2}>{row.line}</Text>
+                <Text style={[styles.line, compact && styles.lineCompact, row.ready > 0 && styles.lineReady]} numberOfLines={compact ? 1 : 2}
+                  adjustsFontSizeToFit={compact} minimumFontScale={0.8}>{row.line}</Text>
               </View>
               {row.action && (
                 <View style={[styles.btn, row.ready > 0 ? styles.btnGold : styles.btnPlain]}>
@@ -123,7 +124,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6 },
   rowReady: { backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.gold },
   pressed: { transform: [{ translateY: 2 }] },
-  rowCompact: { minHeight: 62, paddingVertical: 4 },
+  rowCompact: { minHeight: 60, paddingVertical: 3 },
+  rowsCompact: { gap: 6 },
+  cardCompact: { paddingTop: 18, paddingBottom: 10, gap: 6 },
+  titleCompact: { fontSize: 17, lineHeight: 21 },
+  lineCompact: { fontSize: 15, lineHeight: 18 },
   artBox: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
   artBoxCompact: { width: 48, height: 48, transform: [{ scale: 0.88 }] },
   art: { width: 54, height: 54 },
