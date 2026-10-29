@@ -91,7 +91,7 @@ const storeSteps: TutorialStep[] = [
   {
     id: 'store_intro',
     sequence: 'store',
-    text: 'Welcome to the Shark Shop! Use coins to buy gear for your shark.',
+    text: 'Welcome to the Shark Shop! Use Shark Coins to buy gear for your shark.',
     subtitle: 'Supplies cost real money, so a grown-up buys them.',
     sharkPosition: 'bottom-center',
     sharkMood: 'happy',

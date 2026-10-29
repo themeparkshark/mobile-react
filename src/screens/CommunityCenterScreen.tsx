@@ -1171,7 +1171,7 @@ export default function CommunityCenterScreen() {
           <View style={styles.confirmModalContent}>
             <Text style={styles.confirmModalTitle}>Leave a Gift, Get Tickets!</Text>
             <Text style={styles.confirmModalMessage}>
-              Spend coins to leave a gift for another shark. You get tickets right away as a thank you!
+              Spend Shark Coins to leave a gift for another shark. You get tickets right away as a thank you!
             </Text>
             <View style={styles.exchangeContainer}>
               <View style={styles.exchangeItem}>
