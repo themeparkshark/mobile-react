@@ -40,8 +40,8 @@ export interface WaitCardProps {
   /** The guest does not own this ride's coin yet: the one line says its Parts are saved for it. */
   readonly coinMissing?: boolean;
   /**
-   * The ride question is up (or closing): the presence check stays quiet under it, so the card never says
-   * "Checking you're in line" to a guest who just rode.
+   * The ride question is up (or closing), or the wait is wrapping up as "left the line": the presence check
+   * stays quiet, so the card never says "Checking you're in line" beside a line that says otherwise.
    */
   readonly rideQuestionUp?: boolean;
   /** First wait only: what LinePlay is, as one picture line under the card's line (no floating card). */

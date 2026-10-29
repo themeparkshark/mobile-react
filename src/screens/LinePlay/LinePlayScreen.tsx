@@ -1530,7 +1530,7 @@ export default function LinePlayScreen() {
                 onOwnership={setCoinOwned}
               />}
               coinMissing={coinOwned === false}
-              rideQuestionUp={snapshot.boardingSuggested}
+              rideQuestionUp={snapshot.boardingSuggested || leftLineWrapUp}
               queueTicketsOn={queueTicketsOn}
             />
           )}
