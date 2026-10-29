@@ -22,6 +22,11 @@ export interface LostTryInput {
   readonly retryOffered?: boolean;
   /** The try reached 75% of its goal (rideTry.ts): only then may the card say SO CLOSE!. */
   readonly near?: boolean;
+  /**
+   * The server deals the same game on TRY AGAIN (it honors retry_of). False while it does not, so the
+   * returned-Ticket line never promises "same game". Callers that do not say keep the promise.
+   */
+  readonly sameGame?: boolean;
 }
 
 export interface LostTryCopy {
@@ -37,6 +42,8 @@ export const RETRY_TRY_TITLE = 'One More Try!';
 export const NEAR_TRY_TITLE = 'So Close!';
 /** The one loss card's line when the first try's Ticket comes back (blueprint 5.3). */
 export const TICKET_BACK_LINE = 'Your Ticket came back. Same game, try again!';
+/** The same line while the server may deal a different game on TRY AGAIN. */
+export const TICKET_BACK_LINE_ANY_GAME = 'Your Ticket came back. Try again!';
 
 export function lostTryCopy(input: LostTryInput): LostTryCopy {
   const title = input.near ? NEAR_TRY_TITLE : lostTryHasFreeRetry(input) ? RETRY_TRY_TITLE : LOST_TRY_TITLE;
@@ -47,7 +54,9 @@ export function lostTryCopy(input: LostTryInput): LostTryCopy {
       ticket: 0,
     };
   }
-  if (input.firstCoinTicketReturned) return { title, message: TICKET_BACK_LINE, ticket: 1 };
+  if (input.firstCoinTicketReturned) {
+    return { title, message: input.sameGame === false ? TICKET_BACK_LINE_ANY_GAME : TICKET_BACK_LINE, ticket: 1 };
+  }
   const n = Math.max(0, Math.round(input.lostTicketCost));
   if (n > 0) return { title, message: `${n} Ticket${n === 1 ? '' : 's'} used.`, ticket: -n };
   return { title, message: 'No Ticket spent.', ticket: 0 };

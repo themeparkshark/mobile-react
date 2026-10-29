@@ -834,3 +834,13 @@ test('first coin: the win card waits on top until the team step has slid in, the
   const screen = read('src/screens/GymBattle/TeamSelectionScreen.tsx');
   assert.match(screen, /navigation\?\.addListener\?\.\('transitionEnd', \(event: \{ data\?: \{ closing\?: boolean \} \}\) => \{\n\s+if \(!event\?\.data\?\.closing\) teamStepShown\(\);/);
 });
+
+test('the returned-Ticket line promises "same game" only on a server that deals it (prod-mirror dealt Trivia after a Whack loss)', () => {
+  const lost = loadTs('src/components/rewards/lostTryCard.ts');
+  const base = { usedRescuePass: false, rescueRetryAvailable: false, firstCoinTicketReturned: true, lostTicketCost: 1 };
+  assert.equal(lost.lostTryCopy({ ...base, sameGame: false }).message, 'Your Ticket came back. Try again!');
+  assert.equal(lost.lostTryCopy({ ...base, sameGame: true }).message, 'Your Ticket came back. Same game, try again!');
+  assert.equal(lost.lostTryCopy(base).message, 'Your Ticket came back. Same game, try again!', 'callers that do not say keep the line');
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(modal, /retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.pictureGames \}\);/);
+});

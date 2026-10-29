@@ -706,7 +706,7 @@ test('round 3: one card per ride miss, one surface, one exit word, honest ticks 
   assert.match(modal, /const handleGameLose = useCallback\(async \(\) => \{\n\s+await resolveAttempt\('loss'\);/);
   assert.match(modal, /\{flowState === 'lost' && <ChallengeStatusCard/);
   assert.doesNotMatch(modal, /skipLostCard|lostFromGameRef/);
-  assert.match(modal, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,\n\s+retryOffered: canOfferRetry, near: rideTry\?\.near === true \}\)/);
+  assert.match(modal, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,\n\s+retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.pictureGames \}\)/);
   const shellSrc = read('src/gamekit/GameShellV2.tsx');
   assert.match(shellSrc, /const rideLoss = !!rideChallenge && phase === 'results' && !!effectiveResult && effectiveResult\.stars <= 0 && !wrap;/);
   assert.match(shellSrc, /noteRideTry\(effectiveResult\);\n\s+handleClaimRef\.current\?\.\(\);/);

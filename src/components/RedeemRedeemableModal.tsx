@@ -690,8 +690,10 @@ export default function RedeemRedeemableModal({
   const canOfferRetry = retryOffered && vipRetryCase && !vipOutToday;
   // One loss card per miss (the game's own card is skipped in a ride challenge, GameShellV2): its title,
   // one honest line from the game, the Ticket picture and the one way on.
+  // "Same game" only once the server deals it (retry_of ships with picture games in be-core-loop): on a
+  // server without it, TRY AGAIN may deal another game, so the line just says try again.
   const lostCopy = lostTryCopy({ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,
-    retryOffered: canOfferRetry, near: rideTry?.near === true });
+    retryOffered: canOfferRetry, near: rideTry?.near === true, sameGame: playFlagsNow().pictureGames });
   const handleVipRetry = useCallback(async () => {
     const attemptId = attemptRef.current?.id;
     if (adBusy || !attemptId) return;
