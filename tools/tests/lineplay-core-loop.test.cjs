@@ -357,3 +357,23 @@ test('a journal opened from the LinePlay recap goes back to that recap (its one 
   assert.match(log, /if \(navigation\.canGoBack\(\)\) navigation\.goBack\(\);\n\s+else returnToRideTracker\(\);/);
   assert.match(read('src/components/RideTracker/RideLogSuccess.tsx'), /accessibilityLabel=\{doneLabel\}/);
 });
+
+test('a new PLAY IN LINE at a ride never reopens a settled recap from a wait that ended over 10 minutes ago', () => {
+  const session = read('src/services/lineplay/LinePlaySession.ts');
+  const start = session.indexOf('export const FINISHED_RECAP_KEEP_MS');
+  const end = session.indexOf('\n}\n', session.indexOf('export function finishedRecapIsStale(')) + 3;
+  const ts = require(path.join(root, 'node_modules/typescript'));
+  const js = ts.transpileModule(session.slice(start, end), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const cp = { exports: {} };
+  new Function('module', 'exports', js)(cp, cp.exports);
+  Object.assign(cp, cp.exports);
+  const now = 1_000_000_000;
+  assert.equal(cp.finishedRecapIsStale({ state: 'complete', rewardsPending: false, endedAt: now - 11 * 60_000 }, now), true);
+  assert.equal(cp.finishedRecapIsStale({ state: 'complete', rewardsPending: false, endedAt: now - 2 * 60_000 }, now), false,
+    'a relaunch right after the recap still shows it');
+  assert.equal(cp.finishedRecapIsStale({ state: 'complete', rewardsPending: true, endedAt: now - 60 * 60_000 }, now), false,
+    'rewards still on their way: the recap comes back');
+  assert.equal(cp.finishedRecapIsStale({ state: 'active', rewardsPending: false, endedAt: null }, now), false, 'a running wait resumes');
+  assert.equal(cp.finishedRecapIsStale(null, now), false);
+  assert.match(session, /if \(playerId && finishedRecapIsStale\(saved\)\) \{\n\s+await removeCheckpoint\(playerId, ride\.rideId\)/);
+});

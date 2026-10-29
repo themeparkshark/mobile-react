@@ -583,6 +583,21 @@ export function playlistRotation(requestId: string): number {
 // Session controller
 // ---------------------------------------------------------------------------
 
+
+/** A finished wait's recap reopens after a relaunch only this long; after that a tap starts a new wait. */
+export const FINISHED_RECAP_KEEP_MS = 10 * 60_000;
+
+/**
+ * A finished wait whose rewards are settled and that ended over 10 minutes ago is over: the next PLAY IN
+ * LINE at that ride starts a new wait instead of reopening the old recap (its ride is logged and its
+ * rewards are paid). A recap still waiting for rewards always comes back, so nothing is lost.
+ */
+export function finishedRecapIsStale(saved: Pick<LinePlayCheckpoint, 'state' | 'rewardsPending' | 'endedAt'> | null,
+  nowMs = Date.now()): boolean {
+  if (!saved || saved.state !== 'complete' || saved.rewardsPending) return false;
+  return saved.endedAt == null || nowMs - saved.endedAt > FINISHED_RECAP_KEEP_MS;
+}
+
 export class LinePlaySession {
   private disposed = false;
   private state: LinePlayState = 'idle';
@@ -1389,8 +1404,14 @@ export class LinePlaySession {
     this.guest = options.guest === true && !playerId;
 
     const locationDuringLoad = this.lastSample;
-    const saved = playerId ? await readCheckpoint(playerId, ride.rideId) : null;
+    let saved = playerId ? await readCheckpoint(playerId, ride.rideId) : null;
     if (this.disposed) return;
+    // A settled recap from a wait that ended long ago never reopens: this is a new wait.
+    if (playerId && finishedRecapIsStale(saved)) {
+      await removeCheckpoint(playerId, ride.rideId).catch(() => undefined);
+      if (this.disposed) return;
+      saved = null;
+    }
 
     this.ride = ride;
     // Fact-checked server trivia for this ride; the bundled deck covers offline.
