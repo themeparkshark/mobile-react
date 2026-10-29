@@ -823,7 +823,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   // A reveal or the chest card has its own buttons (a stray tap outside never drops a half-opened chest).
   const holding = view?.k === 'reveal' || view?.k === 'chest';
   const overlay = (
-    <CalmModal visible={layer.present && !!content} reducedMotion={reducedMotion} swapKey={shownFace?.key}
+    <CalmModal visible={layer.present && !!content} reducedMotion={reducedMotion}
       onShow={() => { shownRef.current = true; }}
       // onHide fires when the zoom out ends, which is when UIKit only STARTS dismissing. The next native sheet
       // (Trail Boxes, the event sheet) waits for onDismiss, the real "gone" (a fallback covers a platform that never

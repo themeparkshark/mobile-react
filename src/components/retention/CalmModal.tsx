@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import Animated, {
-  Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withSequence, withTiming,
+  Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withTiming,
 } from 'react-native-reanimated';
 
 /**
@@ -14,8 +14,9 @@ import Animated, {
  * - The card starts at 0 (invisible, small) on its very first frame and grows from there, so no full-size frame
  *   ever shows before the zoom.
  * - Closing shrinks the card and fades the dim in the same animation, then the native sheet goes away.
- * - `swapKey`: a new card inside the same open sheet (Rewards to a chest and back) gets a small settle instead
- *   of a native dismiss and present, so there is never a bare map between two cards.
+ * - A new card inside the same open sheet (Rewards to a chest and back) just takes the old one's place: no native
+ *   dismiss and present, so there is never a bare map between two cards. (A whole-sheet pop on a swap was tried:
+ *   the UI thread scaled the old card for a few frames before the new one mounted, so a new card brings its own.)
  * Callbacks match what the hosts used before: onShow after the zoom in, onHide when the zoom out ends (the native
  * dismiss starts then), onDismiss when UIKit says it is really gone (iOS; Android hosts keep their fallback).
  */
@@ -27,11 +28,11 @@ export const CALM_OUT_MS = 180;
  * The dim and the card both come from `p`, so the dim can never blink while the card is up, and at p = 0 the card
  * is invisible (the first frame before the zoom is never a full-size card).
  */
-export function calmFrame(p: number, reduced: boolean, swap = 1, backdropOpacity = 0.55): { backdrop: number; opacity: number; scale: number } {
+export function calmFrame(p: number, reduced: boolean, backdropOpacity = 0.55): { backdrop: number; opacity: number; scale: number } {
   'worklet';
   const c = Math.min(1, Math.max(0, p));
   if (reduced) return { backdrop: c * backdropOpacity, opacity: c, scale: 1 };
-  return { backdrop: c * backdropOpacity, opacity: Math.min(1, Math.max(0, p / 0.45)), scale: (0.55 + 0.45 * p) * swap };
+  return { backdrop: c * backdropOpacity, opacity: Math.min(1, Math.max(0, p / 0.45)), scale: 0.55 + 0.45 * p };
 }
 
 /** What the sheet shows: the live card, or (while it shrinks away with nothing live) the last card it showed. */
@@ -40,7 +41,7 @@ export function calmFace<F>(live: F | null, last: F | null): F | null {
 }
 
 export default function CalmModal({ visible, children, reducedMotion, onWillShow, onShow, onHide, onDismiss,
-  onBackdropPress, onBackButtonPress, inMs = CALM_IN_MS, outMs = CALM_OUT_MS, backdropColor, backdropOpacity = 0.55, swapKey }: {
+  onBackdropPress, onBackButtonPress, inMs = CALM_IN_MS, outMs = CALM_OUT_MS, backdropColor, backdropOpacity = 0.55 }: {
   readonly visible: boolean;
   readonly children: ReactNode;
   readonly reducedMotion: boolean;
@@ -54,13 +55,10 @@ export default function CalmModal({ visible, children, reducedMotion, onWillShow
   readonly outMs?: number;
   readonly backdropColor: string;
   readonly backdropOpacity?: number;
-  /** A different card in the same open sheet: settle it in place (no native dismiss and present). */
-  readonly swapKey?: string;
 }) {
   const { width } = useWindowDimensions();
   const [native, setNative] = useState(visible);
   const p = useSharedValue(0);
-  const swap = useSharedValue(1);
   const cb = useRef({ onWillShow, onShow, onHide, onDismiss });
   cb.current = { onWillShow, onShow, onHide, onDismiss };
   const visibleRef = useRef(visible);
@@ -70,8 +68,8 @@ export default function CalmModal({ visible, children, reducedMotion, onWillShow
   const mounted = useRef(true);
   useEffect(() => () => {
     mounted.current = false;
-    cancelAnimation(p); cancelAnimation(swap);
-  }, [p, swap]);
+    cancelAnimation(p);
+  }, [p]);
 
   const shown = () => { if (mounted.current && visibleRef.current) cb.current.onShow?.(); };
   const hidden = () => {
@@ -121,18 +119,10 @@ export default function CalmModal({ visible, children, reducedMotion, onWillShow
     cb.current.onHide?.();
   }, [native]);
 
-  // A new card inside the open sheet settles in place.
-  const lastSwap = useRef(swapKey);
-  useEffect(() => {
-    if (swapKey === lastSwap.current) return;
-    lastSwap.current = swapKey;
-    if (!native || reducedMotion) return;
-    swap.value = withSequence(withTiming(0.9, { duration: 0 }), withTiming(1, { duration: 200, easing: Easing.out(Easing.back(1.4)) }));
-  }, [swapKey, native, reducedMotion, swap]);
 
-  const backdropStyle = useAnimatedStyle(() => ({ opacity: calmFrame(p.value, reducedMotion, 1, backdropOpacity).backdrop }));
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: calmFrame(p.value, reducedMotion, backdropOpacity).backdrop }));
   const cardStyle = useAnimatedStyle(() => {
-    const f = calmFrame(p.value, reducedMotion, swap.value, backdropOpacity);
+    const f = calmFrame(p.value, reducedMotion, backdropOpacity);
     return { opacity: f.opacity, transform: [{ scale: f.scale }] };
   });
 

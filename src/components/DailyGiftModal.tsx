@@ -134,7 +134,12 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const done = useRef(onDone); done.current = onDone;
   const artReady = useRef(onArtReady); artReady.current = onArtReady;
   const artShown = useRef(false);
-  const showedArt = () => { if (artShown.current) return; artShown.current = true; artReady.current?.(); };
+  const showedArt = () => {
+    if (artShown.current) return;
+    artShown.current = true;
+    artReady.current?.();
+    if (inline && enter.value !== 1) enter.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.back(1.6)) });
+  };
   // The chest registers as a native layer until UIKit really dismissed it, so the Rewards sheet coming back waits
   // for it. 'wait': asked from a Rewards row, it mounts while that sheet is still closing and presents the moment
   // UIKit says the sheet is gone (no bare map in between, never refused over a closing sheet). Opening by itself at
@@ -150,6 +155,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const [shown, setShown] = useState(0);
   const { setDailyGift } = useContext(DailyGiftContext);
   const reducedMotion = useReducedGameMotion();
+  // Inline, the card takes the Rewards card's place with its own small settle once its chest is drawn.
+  const enter = useSharedValue(inline && !reducedMotion ? 0.94 : 1);
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
   const claiming = useRef(false);
@@ -446,7 +453,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const prizeStyle = useAnimatedStyle(() => ({
     opacity: prize.value, transform: [{ translateY: (1 - prize.value) * -36 }, { scale: 0.5 + prize.value * 0.5 }],
   }));
-  const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: cardShake.value }] }));
+  const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: cardShake.value }, { scale: enter.value }] }));
   // Light pours out of the open chest with the lid pop (bright over the pile on a non-coin day).
   const mouthStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, prize.value * 1.4) * (kind === 'coins' ? 0.55 : 0.9),
