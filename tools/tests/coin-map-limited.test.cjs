@@ -99,7 +99,7 @@ test('the guide plays a coinless ride in line, badges limited coins and searches
 test('the park header counts the limited rotation apart from the permanent X/Y', () => {
   const header = fs.readFileSync('src/screens/ParkCollectionHeader.tsx', 'utf8');
   assert.match(header, /`LIMITED \$\{limitedCollected\}\/\$\{limitedAvailable\}`/);
-  assert.match(header, /\(limitedAvailable > 0 \|\| tabs\?\.includes\('limited'\)\) && /);
+  assert.match(header, /\(onTab \? !!tabs\?\.includes\('limited'\) : limitedAvailable > 0\) && /, 'as a tab it needs Limited rows (never a dead tap)');
   const park = fs.readFileSync('src/screens/ParkScreen.tsx', 'utf8');
   assert.match(park, /limitedAvailable=\{currentPark\.limited_coins_available\}/);
 });
