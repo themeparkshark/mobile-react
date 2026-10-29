@@ -728,3 +728,12 @@ test('the daily chest opened from Rewards: BACK says BACK and the sheet comes ba
   assert.doesNotMatch(back2, /NATIVE_GONE_FALLBACK_MS/);
   assert.match(hook, /useNativeModalLayer\(visible, 'wait'\)/);
 });
+
+test('Shark Pass grown-up notes stay short enough to never clip on a phone (seen: "Every reward is shown al")', () => {
+  const src = read('src/screens/SharkPassScreen.tsx');
+  const block = src.slice(src.indexOf('const PASS_GROWN_UP_NOTES = ['), src.indexOf('];', src.indexOf('const PASS_GROWN_UP_NOTES = [')));
+  const notes = [...block.matchAll(/^\s+'([^']+)',$/gm)].map(m => m[1]);
+  assert.equal(notes.length, 4);
+  assert.ok(notes.includes('No random rewards: every Shark Pass reward is shown above.'));
+  assert.ok(!notes.some(n => /Every reward is shown above/.test(n)));
+});

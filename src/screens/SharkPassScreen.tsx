@@ -169,7 +169,8 @@ function pickTrio(rewards: readonly SharkPassReward[]): SharkPassReward[] {
 const PASS_GROWN_UP_NOTES = [
   'One buy for this season. It never renews and is never charged again.',
   'Steps come only from playing. Points are never sold. VIP members earn 25% more points.',
-  'Nothing in the Shark Pass row is random. Every reward is shown above.',
+  // Short on purpose: at its old length the last word wrapped onto a third line that iOS clipped ("shown al").
+  'No random rewards: every Shark Pass reward is shown above.',
   'Every real-money buy asks a grown-up first. Ask to Buy works too.',
 ];
 
