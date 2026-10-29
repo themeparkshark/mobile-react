@@ -378,9 +378,12 @@ test('round 3: the shelf NEXT COIN names the coin the map guide holds, so the sh
   assert.equal(copy.guideShelfHint('in_line'), 'You are in its line. Play while you wait!');
   assert.equal(copy.guideShelfHint('level_up'), 'Ready to level up!');
   assert.equal(copy.guideShelfHint('nearest_open'), 'The map shows the way.');
+  assert.equal(copy.guideShelfHint('plan'), 'Your plan. The map shows the way.');
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /const guideTarget = useSyncExternalStore\(guide\.subscribe, guide\.current, guide\.current\);/);
-  assert.match(park, /const guideTask = canChooseGoal \? guideShelfPick\(guideTarget, Number\(park\), inThisPark, \[\.\.\.tasks, \.\.\.limitedTasks\]\) : null;/);
+  assert.match(park, /const guidePick = guideTarget \?\? \(guidePlan != null \? \{ taskId: guidePlan, parkId: Number\(park\), reason: 'plan' \} : null\);/,
+    'before the map resolves (or while it rests) the plan GET RIDE PARTS or GO set stands in');
+  assert.match(park, /const guideTask = canChooseGoal \? guideShelfPick\(guidePick, Number\(park\), inThisPark, \[\.\.\.tasks, \.\.\.limitedTasks\]\) : null;/);
   assert.match(park, /const nextCoinTask = guideTask \?\? \(/, 'GO goes where the card says');
   assert.match(park, /nearbyRideName=\{guideOverGoal \? guideTarget\?\.name \?\? guideTask\?\.name : nearbySuggestion\?\.task\.name\}/);
   assert.match(park, /nextRideName=\{guideOverGoal \? null : parkTripGoal\?\.ride_name\}/);

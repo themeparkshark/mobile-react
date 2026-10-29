@@ -250,7 +250,9 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
       task => reportedRideStatus(freshWaitEntries, Number(park), task.name) === 'OPERATING') : null;
   // GO on the shelf's next coin, and "Make this my next coin" on a coin card: one pointer for the
   // whole app (guide.setTarget). At this park the map opens with the path; away it is the plan.
-  const guideTask = canChooseGoal ? guideShelfPick(guideTarget, Number(park), inThisPark, [...tasks, ...limitedTasks]) : null;
+  // Until the map resolves a target (or while it rests), the guide's plan (GO, GET RIDE PARTS, a coin pick) stands in.
+  const guidePick = guideTarget ?? (guidePlan != null ? { taskId: guidePlan, parkId: Number(park), reason: 'plan' } : null);
+  const guideTask = canChooseGoal ? guideShelfPick(guidePick, Number(park), inThisPark, [...tasks, ...limitedTasks]) : null;
   // The guide's pick shows in place of the shelf's own (the goal card stays when the guide holds the goal).
   const guideOverGoal = !!guideTask && guideTask.id !== parkTripGoal?.task_id;
   const nextCoinTask = guideTask ?? (parkTripGoal && !parkTripGoal.coin_owned
@@ -559,7 +561,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     ownedGoalHint={ownedGoalHint}
                     nearbyRideName={guideOverGoal ? guideTarget?.name ?? guideTask?.name : nearbySuggestion?.task.name}
                     nearbyReportedOpen={!guideOverGoal && !!nearbyReportedOpenRide}
-                    nearbyHint={guideOverGoal ? guideShelfHint(guideTarget?.reason) : null}
+                    nearbyHint={guideOverGoal ? guideShelfHint(guidePick?.reason) : null}
                     ticketsNeeded={parkTripGoal && !parkTripGoal.coin_owned
                       ? tripGoalData?.wallet.tickets_needed ?? 0 : 0}
                     rescuePassAvailable={inThisPark && !!tripGoalData?.wallet.rescue_pass_available}
