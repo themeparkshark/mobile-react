@@ -10,7 +10,7 @@ import type { MotionAccess } from '../../services/trail/TrailProvider';
 import { getSeen, setSeen } from '../../services/trail/trailSeen';
 import {
   BOX_NAME, arriveLine, boxName, bonusLabel, boxFraction, formatDistance, formatSteps, knownContents, missNote, oddsTiers, stepsToGo, usesMiles,
-  withoutPinBoxes,
+  exclusivesLine, withoutPinBoxes,
   type TrailBox, type TrailOddsTier, type TrailState, type TrailTier,
 } from '../../services/trail/trailModel';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, confirmGame, type GameIconName } from '../../ui';
@@ -250,7 +250,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
               <EarnRow icon="star" text="Reach your weekly goal" sub="A Blue Box" last />
             </View>
 
-            {!!state.exclusives?.length && <Exclusives items={state.exclusives} />}
+            {!!state.exclusives?.length && <Exclusives items={state.exclusives} line={exclusivesLine(state)} />}
 
             <Pressable onPress={() => void toggleWheels()} accessibilityRole="switch"
               accessibilityState={{ checked: state.wheels }} accessibilityLabel="Rolling: count my path on the map. Asks a grown-up first"
@@ -367,7 +367,7 @@ function EarnRow({ icon, text, sub, last }: { readonly icon: GameIconName; reado
   );
 }
 
-function Exclusives({ items }: { readonly items: NonNullable<TrailState['exclusives']> }) {
+function Exclusives({ items, line }: { readonly items: NonNullable<TrailState['exclusives']>; readonly line: string }) {
   const have = items.filter(i => i.owned).length;
   return (
     <>
@@ -383,7 +383,7 @@ function Exclusives({ items }: { readonly items: NonNullable<TrailState['exclusi
           </View>
         ))}
       </View>
-      <Text style={styles.footnote}>Only in Trail Boxes, most often in Gold. Older ones stay in the boxes too, just rarer. Wear them to show you walk the parks.</Text>
+      <Text style={styles.footnote}>{line}</Text>
     </>
   );
 }

@@ -438,6 +438,8 @@ test('Trail Boxes: no Mystery Pin Box where its switch is off, and an honest fir
   assert.equal(m.arriveLine({ first_box: 'second_park_day' }), 'From your second park day');
   assert.equal(m.arriveLine({ first_box: null }), 'A box each park day');
   assert.equal(m.arriveLine({}), 'A box each park day');
+  assert.equal(m.exclusivesLine({ mode: 'fixed' }), 'Every Gold Box brings the next one. Wear them to show you walk the parks.');
+  assert.doesNotMatch(m.exclusivesLine({ mode: 'fixed' }), /often|rarer|chance/, 'known contents: no chance words');
   const sheet = read('src/components/trail/TrailSheet.tsx');
   assert.match(sheet, /withoutPinBoxes\(t\.rewards, pinBoxes\)/, 'known contents');
   assert.match(sheet, /const bonus = withoutPinBoxes\(t\.bonus, pinBoxes\);/, 'random mode');
