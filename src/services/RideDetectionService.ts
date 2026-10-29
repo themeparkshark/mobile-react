@@ -21,7 +21,7 @@ import * as TaskManager from 'expo-task-manager';
 import { AppState } from 'react-native';
 import { RideType } from '../api/endpoints/rides';
 import { QUEUE_RIDE_TYPES } from '../constants/queueRideTypes';
-import { ensureRideQuestionLedger, noteLinePlayWaitEnded, noteLinePlayWaitStarted, rideHoldUntil, rideQuestionOwner,
+import { ensureRideQuestionLedger, noteLinePlayBoardingSeen, noteLinePlayWaitEnded, noteLinePlayWaitStarted, rideHoldUntil, rideQuestionOwner,
   setRideHold, visitInLinePlayWait } from './lineplay/rideQuestionLedger';
 
 const STORAGE_KEY = 'pending_ride_detections';
@@ -274,6 +274,11 @@ class RideDetectionService {
     AppState.addEventListener('change', (state) => {
       this.lastKnownAppState = state;
     });
+  }
+
+  /** A ride from the catalog detection runs on, or null when it is not loaded yet. */
+  rideById(rideId: number): RideType | null {
+    return this.rides.find(ride => ride.id === rideId) ?? null;
   }
 
   setRides(rides: RideType[]) {
@@ -563,10 +568,12 @@ class RideDetectionService {
     if (minDwellMs == null || dwellMs < minDwellMs) return;
     // "I got to the ride" already logged it: nothing asks again for 30 minutes.
     if (rideLoggedUntil(ride.id, now) != null) return;
-    // A visit inside a LinePlay wait at this ride is LinePlay's question. While that LinePlay runs, it
-    // hears the boarding signal (on screen only) and asks "Did you get to the ride?" itself; nothing
-    // is kept for later, so it can never come back as a second question after a relaunch.
+    // A visit inside a LinePlay wait at this ride is LinePlay's question, never the batch confirm's. The
+    // boarding signal is kept on that wait (the ride question ledger), so a phone pocketed to board still
+    // gets LinePlay's one "Did you get to the ride?" when it is back in front, even after a relaunch. On
+    // screen, LinePlay hears it now. Either way it is one question per wait.
     if (visitInLinePlayWait(ride.id, zone.enteredAt, now, now)) {
+      noteLinePlayBoardingSeen(ride.id, now, now);
       if (this.linePlayRideNow() === ride.id && this.lastKnownAppState === 'active' && this.onForegroundDetection) {
         const history = this.rideHistory.get(ride.id);
         this.rideHistory.set(ride.id, { lastDetectionTime: now, detectionCount: (history?.detectionCount ?? 0) + 1 });

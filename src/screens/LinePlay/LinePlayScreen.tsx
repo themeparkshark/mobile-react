@@ -38,6 +38,8 @@ import { BRAND, GameButton, GameDialog, gameAlert } from '../../ui';
 import GameIcon from '../../ui/GameIcon';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { holdRideAfterRideStep, noteRidePrompt } from '../../services/lineplay/ridePromptGate';
+import { ensureRideQuestionLedger, linePlayBoardingAsked, linePlayBoardingPending, markLinePlayBoardingAsked,
+  takeLinePlayBoarding } from '../../services/lineplay/rideQuestionLedger';
 import { dropAnsweredRideDetections } from '../../services/RideDetectionService';
 import { adventureRideStampDue, recapGo, rideStepJournalParams, rideStepLog, rideStepLogId, signSaidLine,
   timedWaitMinutes, type RecapGo } from '../../services/lineplay/rideStep';
@@ -532,7 +534,8 @@ export default function LinePlayScreen() {
     startedRef.current = { session, playerId: sessionPlayer, rideId: ride.rideId };
     const freshSample = latestLocationSampleRef.current;
     void session.start(ride, isRecentQueueSample(freshSample) ? freshSample : undefined, playerId,
-      { guest: playerId == null });
+      // A finished wait whose ride question is still to be put (a phone pocketed to board) reopens to ask it.
+      { guest: playerId == null, rideQuestionPending: linePlayBoardingPending });
   }, [ride, session, player?.id, authReady]);
 
   // The existing queue feed supplies an entrance-board signal. Poll only
@@ -602,18 +605,61 @@ export default function LinePlayScreen() {
   // Boarding detection: the ride tracker thinks this guest rode. One fix
   // outside the ride radius can fake that in an indoor queue, so it only asks.
   // It asks once per wait: "Still in line" is an answer, and a second ask would be a repeat ride question.
+  // The phone keeps that it asked (the ride question ledger), so a relaunch never asks again.
   const boardingAsked = useRef<number | null>(null);
   useEffect(() => {
     if (!ride) return;
     return rideDetectionEmitter.on('rideDetected', detection => {
       if (detection.rideId !== ride.rideId) return;
-      const waitKey = session.snapshot().startedAt ?? 0;
+      const startedAt = session.snapshot().startedAt;
+      const waitKey = startedAt ?? 0;
       if (boardingAsked.current === waitKey) return;
+      if (startedAt != null && linePlayBoardingAsked(ride.rideId, startedAt)) return;
       boardingAsked.current = waitKey;
+      if (startedAt != null) markLinePlayBoardingAsked(ride.rideId, startedAt);
       noteRidePrompt();
-      session.suggestBoarded();
+      session.suggestBoarded(Number.isFinite(detection.exitedAt) ? detection.exitedAt : null);
     });
   }, [ride?.rideId, session]);
+  const finishFailed = useCallback(() =>
+    gameAlert('Could not end your wait', 'Check your internet, then try again.'), []);
+
+  // A phone pocketed to board: detection kept the boarding signal on this wait while the app slept (or
+  // was closed). When LinePlay is back in front, it asks its one "Did you get to the ride?", even if GPS
+  // already wrapped the wait up as "left the line". The timed wait ends when the guest left the zone.
+  const askKeptBoarding = useCallback(() => {
+    if (!ride || AppState.currentState !== 'active') return;
+    const snap = session.snapshot();
+    if (snap.startedAt == null || snap.ride?.rideId !== ride.rideId || !session.canAskBoarding()) return;
+    if (boardingAsked.current === snap.startedAt) return;
+    const seenAt = takeLinePlayBoarding(ride.rideId, snap.startedAt);
+    if (seenAt == null) return;
+    boardingAsked.current = snap.startedAt;
+    noteRidePrompt();
+    session.suggestBoarded(seenAt);
+  }, [ride?.rideId, session]);
+  useEffect(() => {
+    let live = true;
+    void ensureRideQuestionLedger().then(() => { if (live) askKeptBoarding(); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [askKeptBoarding, snapshot.state, snapshot.startedAt]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') askKeptBoarding(); });
+    return () => subscription.remove();
+  }, [askKeptBoarding]);
+  /** The wait's one ride question is answered (any way): it is never put again, even after a relaunch. */
+  const noteRideQuestionAnswered = useCallback(() => {
+    const startedAt = session.snapshot().startedAt;
+    if (!ride || startedAt == null) return;
+    boardingAsked.current = startedAt;
+    markLinePlayBoardingAsked(ride.rideId, startedAt);
+  }, [ride?.rideId, session]);
+  /** "I got to the ride" on the left-the-line wrap-up or its recap (a phone pocketed to board reads as leaving). */
+  const rodeAfterWrapUp = useCallback(() => {
+    noteRideQuestionAnswered();
+    if (session.getState() === 'complete') session.confirmRodeAfterWrapUp();
+    else void session.endNow(true).catch(finishFailed);
+  }, [session, noteRideQuestionAnswered, finishFailed]);
 
   useEffect(() => {
     if (!snapshot.parkProject) {
@@ -686,7 +732,9 @@ export default function LinePlayScreen() {
   // (no timer, no dialog). If the guest does not come back, the wait ends by itself and the recap offers Undo.
   const leftLineWrapUp = snapshot.state === 'ending' && snapshot.endReason === 'left_queue' && activeGame == null;
   const boardingAsk = snapshot.boardingSuggested && activeGame == null &&
-    (snapshot.state === 'active' || snapshot.state === 'paused');
+    (snapshot.state === 'active' || snapshot.state === 'paused' ||
+      (snapshot.endReason === 'left_queue' && !snapshot.boardingConfirmed &&
+        (snapshot.state === 'ending' || snapshot.state === 'complete')));
   useEffect(() => {
     if (boardingAsk) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
   }, [boardingAsk]);
@@ -797,9 +845,6 @@ export default function LinePlayScreen() {
     }
   };
 
-  const finishFailed = useCallback(() =>
-    gameAlert('Could not end your wait', 'Check your internet, then try again.'), []);
-
   /** One branded sheet for every way a guest can end a wait by hand. */
   const handleEndSession = useCallback(() => setWaitEndPrompt({ tab: null }), []);
 
@@ -807,19 +852,22 @@ export default function LinePlayScreen() {
     const tab = waitEndPrompt?.tab ?? null;
     setWaitEndPrompt(null);
     if (boarded == null) return;
+    noteRideQuestionAnswered();
     if (tab) tabAfterRecap.current = tab;
     void session.endNow(boarded).catch(finishFailed);
-  }, [session, waitEndPrompt, finishFailed]);
+  }, [session, waitEndPrompt, finishFailed, noteRideQuestionAnswered]);
 
   const handleExit = useCallback(async () => {
     try {
+      // Closing the wait (Done) answers its ride question: nothing reopens it later to ask.
+      noteRideQuestionAnswered();
       await session.complete();
       if (!session.snapshot().rewardsPending) await session.forgetCheckpoint();
       navigation.goBack();
     } catch {
       finishFailed();
     }
-  }, [navigation, session, finishFailed]);
+  }, [navigation, session, finishFailed, noteRideQuestionAnswered]);
 
   const handleNavigateTab = useCallback((screen: string) => {
     const state = session.getState();
@@ -1473,6 +1521,13 @@ export default function LinePlayScreen() {
         {((snapshot.leftLine && snapshot.state === 'active') || leftLineWrapUp) && (
           <View style={styles.leftLineCard} accessibilityLiveRegion="polite">
             <Text style={styles.leftLineText}>Looks like you left the line</Text>
+            {/* A phone pocketed to board reads as leaving: the ride is one tap, never a second question. */}
+            {leftLineWrapUp && (
+              <Pressable accessibilityRole="button" accessibilityLabel="I got to the ride"
+                onPress={rodeAfterWrapUp} hitSlop={8} style={styles.leftLineRideButton}>
+                <Text style={styles.leftLineRideButtonText}>I GOT TO THE RIDE</Text>
+              </Pressable>
+            )}
             <Pressable accessibilityRole="button" accessibilityLabel="Resume, I am back in line"
               onPress={() => leftLineWrapUp ? session.undoEnd() : session.resumeAfterLeftLine()} hitSlop={8} style={styles.leftLineButton}>
               <Text style={styles.leftLineButtonText}>RESUME</Text>
@@ -1556,7 +1611,8 @@ export default function LinePlayScreen() {
               rideName={ride.rideName}
               endReason={snapshot.endReason}
               onStillInLine={snapshot.endReason === 'left_queue'
-                ? () => { void session.continueInLine(); } : undefined}
+                ? () => { noteRideQuestionAnswered(); void session.continueInLine(); } : undefined}
+              onGotToRide={snapshot.endReason === 'left_queue' && !snapshot.boardingConfirmed ? rodeAfterWrapUp : undefined}
               onOpenCoin={() => void handleOpenCoin()}
               onOpenPark={() => void handleOpenPark()}
               parkAvailable={ride.parkId != null && player?.id != null}
@@ -1913,8 +1969,17 @@ export default function LinePlayScreen() {
           { text: 'I got to the ride' },
         ]}
         onAnswer={index => {
-          if (index !== 1) { session.dismissBoardingSuggestion(); return; }
-          void session.endNow(true).catch(finishFailed);
+          noteRideQuestionAnswered();
+          const state = session.getState();
+          if (index === 1) {
+            if (state === 'complete') session.confirmRodeAfterWrapUp();
+            else void session.endNow(true).catch(finishFailed);
+            return;
+          }
+          // "Still in line": back to the wait (a wrapped-up one picks up where it left off).
+          session.dismissBoardingSuggestion();
+          if (state === 'ending') session.undoEnd();
+          else if (state === 'complete') void session.continueInLine();
         }}
       />
     </View>
@@ -1995,6 +2060,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff8dc', borderRadius: 14, borderWidth: 2, borderColor: '#fec90e', paddingHorizontal: 12, paddingVertical: 8 },
   leftLineText: { flex: 1, fontFamily: 'Knockout', fontSize: 15, color: '#083f7c' },
   leftLineButton: { minHeight: 44, paddingHorizontal: 14, borderRadius: 12, backgroundColor: '#fec90e', justifyContent: 'center' },
+  leftLineRideButton: { minHeight: 44, paddingHorizontal: 10, marginRight: 8, borderRadius: 12, backgroundColor: '#ffffff',
+    borderWidth: 2, borderColor: '#9fd2f2', justifyContent: 'center' },
+  leftLineRideButtonText: { fontFamily: 'Shark', fontSize: 13, color: '#075083' },
   leftLineButtonText: { fontFamily: 'Shark', fontSize: 15, color: '#075083' },
   queueTrackingHint: { backgroundColor: '#0a548f', borderBottomWidth: 1,
     borderBottomColor: '#55baf5', flexDirection: 'row', alignItems: 'center',

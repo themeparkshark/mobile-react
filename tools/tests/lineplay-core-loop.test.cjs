@@ -375,7 +375,9 @@ test('a new PLAY IN LINE at a ride never reopens a settled recap from a wait tha
     'rewards still on their way: the recap comes back');
   assert.equal(cp.finishedRecapIsStale({ state: 'active', rewardsPending: false, endedAt: null }, now), false, 'a running wait resumes');
   assert.equal(cp.finishedRecapIsStale(null, now), false);
-  assert.match(session, /if \(playerId && finishedRecapIsStale\(saved\)\) \{\n\s+await removeCheckpoint\(playerId, ride\.rideId\)/);
+  assert.equal(cp.finishedRecapIsStale({ state: 'complete', rewardsPending: false, endedAt: now - 40 * 60_000 }, now, true), false,
+    'a wait whose ride question is still to be put (a phone pocketed to board) comes back to ask it');
+  assert.match(session, /if \(playerId && finishedRecapIsStale\(saved, Date\.now\(\),[^)]*rideQuestionPending\?\.\(ride\.rideId, saved\.startedAt\) === true\)\) \{\n\s+await removeCheckpoint\(playerId, ride\.rideId\)/);
 });
 
 test('the first-wait picture line is readable white on the wait card\'s blue', () => {

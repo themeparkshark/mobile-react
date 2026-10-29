@@ -294,7 +294,7 @@ test('the screens wire the one ride question', () => {
   assert.match(screen, /title="Did you get to the ride\?"/);
   assert.match(screen, /\{ text: 'I got to the ride' \}/);
   assert.match(screen, /if \(boardingAsked\.current === waitKey\) return;/);
-  assert.match(screen, /noteRidePrompt\(\);\n\s+session\.suggestBoarded\(\);/);
+  assert.match(screen, /noteRidePrompt\(\);\n\s+session\.suggestBoarded\(Number\.isFinite\(detection\.exitedAt\) \? detection\.exitedAt : null\);/);
   // "Line done?" with its seconds countdown is gone: leaving ends quietly, the card keeps RESUME, the recap offers Undo.
   assert.doesNotMatch(screen, /title="Line done\?"/);
   assert.doesNotMatch(screen, /This wait ends in/);
@@ -349,7 +349,7 @@ test('Wait Times plans the next coin through the guide', () => {
 // all on one AsyncStorage store. A relaunch builds them again from the same store with empty memory.
 const SPACE = { id: 588, name: 'Space Mountain', type: 'coaster', park_id: 8, lat: 33.8113, lng: -117.9174, radius: 60, ride_duration_minutes: null, min_dwell_minutes: null };
 
-function launch(store, { appState = 'active', player = '48' } = {}) {
+function launch(store, { appState = 'active', player = '48', route = 'Explore', checkpoints = new Map() } = {}) {
   const storage = {
     getItem: async key => store.get(key) ?? null,
     setItem: async (key, value) => { store.set(key, value); },
@@ -385,7 +385,7 @@ function launch(store, { appState = 'active', player = '48' } = {}) {
     '../services/RideDetectionService': svcModule,
     '../constants/parkWaitTimes': { PARK_WIKI_IDS: {} },
     '../RootNavigation': {
-      navigationRef: { isReady: () => true, getCurrentRoute: () => ({ name: 'Explore' }) },
+      navigationRef: { isReady: () => true, getCurrentRoute: () => ({ name: route }) },
       navigate: (name, params) => navigations.push({ name, params }),
     },
     '../services/RideDetectionEmitter': emitter,
@@ -393,9 +393,14 @@ function launch(store, { appState = 'active', player = '48' } = {}) {
     '../services/lineplay/ridePromptGate': gateModule,
     '../context/LocationProvider': { LocationContext: {} },
     './useLivePoll': { __esModule: true, default: () => undefined },
+    '../services/lineplay/checkpoint': { readCheckpoint: async (playerId, rideId) => checkpoints.get(`${playerId}_${rideId}`) ?? null },
   });
   const s = svcModule.default, heard = [];
-  s.onForegroundDetection = detection => heard.push(detection);
+  s.onForegroundDetection = detection => {
+    heard.push(detection);
+    // LinePlay on screen hears it and puts its one question (LinePlayScreen marks the wait asked).
+    if (svcModule.linePlayRideNow() === detection.rideId) ledger.markLinePlayBoardingAsked(detection.rideId, detection.exitedAt);
+  };
   s.setRides([JUNGLE, PIANO, SPACE]);
   return { s, svcModule, gate: gateModule, ledger, hook, navigations, heard };
 }
@@ -453,20 +458,132 @@ for (const answer of ['I got to the ride', 'Still in line, then I left the line'
   });
 }
 
-test('a boarding signal while the phone sleeps in a pocket is never kept as a second question', async () => {
+test('a pocketed ride: no batch confirm, and LinePlay asks its one question when the phone is back in front, with the timed wait', async () => {
   const store = new Map();
   await withClock(200_000_000, async clock => {
     const app = launch(store, { appState: 'background' });
     await app.ledger.ensureRideQuestionLedger();
-    await waitThenBoard(app, clock);
-    assert.equal(app.heard.length, 0, 'no sheet while asleep');
-    assert.equal(pendingIn(store).length, 0, 'and nothing about the LinePlay wait is kept for the batch confirm');
-    app.s.setLinePlayRide(null, clock.now);
+    const startedAt = await waitThenBoard(app, clock);
+    assert.equal(app.heard.length, 0, 'no sheet while the phone sleeps');
+    assert.equal(pendingIn(store).length, 0, 'nothing about the LinePlay wait goes to the batch confirm');
+    const kept = app.ledger.unaskedLinePlayBoardings(clock.now);
+    assert.equal(kept.length, 1, 'the boarding signal is kept on the LinePlay wait');
+    const seenAt = kept[0].boardingSeenAt;
+    const rideStep = loadTs('src/services/lineplay/rideStep.ts');
+    const timed = rideStep.timedWaitMinutes(startedAt, seenAt);
+    assert.ok(timed >= 22 && timed <= 23, `the timed wait ends when the boat left the zone (${timed})`);
+    // The phone is back in front 9 minutes later (after the ride): LinePlay asks once.
+    clock.now += 9 * 60_000;
+    assert.equal(app.ledger.takeLinePlayBoarding(JUNGLE.id, startedAt, clock.now), seenAt);
+    assert.equal(app.ledger.takeLinePlayBoarding(JUNGLE.id, startedAt, clock.now), null, 'never a second time');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    // A relaunch later asks nothing more: not LinePlay, not the batch confirm.
     clock.now += 40 * 60_000;
-    const relaunched = launch(store);
-    await relaunched.hook.checkAndShowPendingRides();
+    const relaunched = launch(store, { checkpoints: new Map([[`48_${JUNGLE.id}`, { startedAt, boardingConfirmed: false }]]) });
+    assert.equal(await relaunched.hook.checkAndShowPendingRides(), false);
     assert.equal(relaunched.navigations.length, 0);
+    assert.equal(relaunched.ledger.takeLinePlayBoarding(JUNGLE.id, startedAt, clock.now), null);
   });
+});
+
+test('a pocketed ride and then the app is closed: LinePlay opens on the saved wait to ask, never the batch confirm', async () => {
+  const store = new Map();
+  await withClock(210_000_000, async clock => {
+    const app = launch(store, { appState: 'background' });
+    await app.ledger.ensureRideQuestionLedger();
+    const startedAt = await waitThenBoard(app, clock);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    clock.now += 12 * 60_000;
+    const checkpoints = new Map([[`48_${JUNGLE.id}`, { startedAt, boardingConfirmed: false }]]);
+    // On LinePlay already: it asks itself, so the hook does nothing.
+    const onLinePlay = launch(store, { route: 'LinePlay', checkpoints });
+    assert.equal(await onLinePlay.hook.checkAndShowPendingRides(), false);
+    assert.equal(onLinePlay.navigations.length, 0);
+    // Opened on the map: LinePlay comes back on that wait (its checkpoint), once.
+    const relaunched = launch(store, { checkpoints });
+    assert.equal(await relaunched.hook.checkAndShowPendingRides(), true);
+    assert.deepEqual(plain(relaunched.navigations), [{ name: 'LinePlay', params: { ride: { rideId: JUNGLE.id, rideName: JUNGLE.name, parkId: 8 } } }]);
+    assert.equal(pendingIn(store).length, 0, 'zero batch confirms');
+    // LinePlay restores the wait and puts its one question.
+    assert.notEqual(relaunched.ledger.takeLinePlayBoarding(JUNGLE.id, startedAt, clock.now), null);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const again = launch(store, { checkpoints });
+    assert.equal(await again.hook.checkAndShowPendingRides(), false);
+    assert.equal(again.navigations.length, 0, 'never asked twice');
+    // The recap was closed with Done (its checkpoint is gone): that answers it, so nothing reopens a new
+    // wait and nothing becomes a batch confirm.
+    const store2 = new Map();
+    const other = launch(store2, { appState: 'background' });
+    await other.ledger.ensureRideQuestionLedger();
+    const otherStart = await waitThenBoard(other, clock);
+    other.ledger.markLinePlayBoardingAsked(JUNGLE.id, otherStart, clock.now);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const noCheckpoint = launch(store2);
+    assert.equal(await noCheckpoint.hook.checkAndShowPendingRides(), false);
+    assert.equal(noCheckpoint.navigations.length, 0);
+    assert.equal(pendingIn(store2).length, 0);
+  });
+});
+
+test('the session asks after a left-the-line wrap-up, and "I got to the ride" there logs the ride with the timed wait', () => {
+  const realSetTimeout = global.setTimeout;
+  const deps = {
+    './rewardRecovery': { subscribeLinePlayRewardRecovery: () => () => {}, linePlayRewardQueue: { enqueue: async () => {}, drain: async () => {} } },
+    '../../games/trivia/config': { LINEPLAY_ROUND_QUESTIONS: 5 },
+    './bonusRounds': require('./helpers/lineplay-bonus-rounds.cjs'),
+  };
+  const ts = require(path.join(root, 'node_modules/typescript'));
+  const vm = require('node:vm');
+  const out = ts.transpileModule(read('src/services/lineplay/LinePlaySession.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const mod = { exports: {} };
+  vm.runInNewContext(out, { module: mod, exports: mod.exports, require: name => deps[name] ?? {}, console, Date, Math,
+    setTimeout: () => 1, clearTimeout: () => {}, setInterval: () => 1, clearInterval: () => {} });
+  const t0 = 1_000_000_000;
+  const make = fields => Object.assign(new mod.exports.LinePlaySession(), { emit() {} }, fields);
+  // On screen, in line: the boarding ask's yes ends the wait at the boarding signal, not at the tap.
+  const live = make({ state: 'active', startedAt: t0 });
+  live.suggestBoarded(t0 + 22 * 60_000);
+  assert.equal(live.boardingSuggested, true);
+  live.beginEnding(true, 'boarded');
+  assert.equal(live.boardingAt, t0 + 22 * 60_000);
+  // GPS wraps the wait up as "left the line" while the question is up: it stays up.
+  const asking = make({ state: 'active', startedAt: t0 });
+  asking.suggestBoarded(t0 + 20 * 60_000);
+  asking.beginEnding(false, 'left_queue');
+  assert.equal(asking.boardingSuggested, true);
+  assert.equal(asking.canAskBoarding(), true);
+  // The wrap-up already settled (phone in a pocket): the recap can still take the one answer.
+  const wrapped = make({ state: 'complete', startedAt: t0, endReason: 'left_queue', endedAt: t0 + 30 * 60_000, firstAwayAt: t0 + 23 * 60_000 });
+  assert.equal(wrapped.canAskBoarding(), true);
+  wrapped.suggestBoarded(t0 + 21 * 60_000);
+  wrapped.confirmRodeAfterWrapUp();
+  assert.equal(wrapped.boardingConfirmed, true);
+  assert.equal(wrapped.endReason, 'boarded');
+  assert.equal(wrapped.boardingAt, t0 + 21 * 60_000, 'the timed wait ends at the boarding signal');
+  assert.equal(wrapped.canAskBoarding(), false, 'answered: never asked again');
+  // With no signal (the guest taps "I got to the ride" on the recap), the first fix away from the line ends it.
+  const tapped = make({ state: 'complete', startedAt: t0, endReason: 'left_queue', endedAt: t0 + 30 * 60_000, firstAwayAt: t0 + 23 * 60_000 });
+  tapped.confirmRodeAfterWrapUp();
+  assert.equal(tapped.boardingAt, t0 + 23 * 60_000);
+  // "I left the line" (manual) and a ride already logged are answers: no ask.
+  assert.equal(make({ state: 'complete', startedAt: t0, endReason: 'manual' }).canAskBoarding(), false);
+  assert.equal(make({ state: 'complete', startedAt: t0, endReason: 'boarded', boardingConfirmed: true }).canAskBoarding(), false);
+  global.setTimeout = realSetTimeout;
+});
+
+test('the screens give a wrapped-up wait its one "I got to the ride" and keep the ask on the phone', () => {
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(screen, /const seenAt = takeLinePlayBoarding\(ride\.rideId, snap\.startedAt\);/);
+  assert.match(screen, /AppState\.addEventListener\('change', state => \{ if \(state === 'active'\) askKeptBoarding\(\); \}\)/);
+  assert.match(screen, /if \(startedAt != null && linePlayBoardingAsked\(ride\.rideId, startedAt\)\) return;/);
+  assert.match(screen, /accessibilityLabel="I got to the ride"\n\s+onPress=\{rodeAfterWrapUp\}/);
+  assert.match(screen, /onGotToRide=\{snapshot\.endReason === 'left_queue' && !snapshot\.boardingConfirmed \? rodeAfterWrapUp : undefined\}/);
+  assert.match(screen, /rideQuestionPending: linePlayBoardingPending/);
+  assert.match(screen, /\/\/ Closing the wait \(Done\) answers its ride question: nothing reopens it later to ask\.\n\s+noteRideQuestionAnswered\(\);/);
+  const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
+  assert.match(recap, /<GameButton label="I got to the ride" variant="ghost" onPress=\{onGotToRide\}/);
+  const service = read('src/services/RideDetectionService.ts');
+  assert.match(service, /if \(visitInLinePlayWait\(ride\.id, zone\.enteredAt, now, now\)\) \{\n\s+noteLinePlayBoardingSeen\(ride\.id, now, now\);/);
 });
 
 test('within the 30 minutes after the ride step, a relaunch still holds the ride and the 20 minute clock', async () => {

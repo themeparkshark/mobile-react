@@ -155,6 +155,11 @@ export interface SessionRecapProps {
   endReason?: EndReason | null;
   /** Left the queue area by mistake: start a fresh wait that keeps the playlist. */
   onStillInLine?: () => void;
+  /**
+   * The wait was wrapped up as "left the line", but the guest rode (a phone pocketed to board reads as
+   * leaving): logs the ride with the timed wait. One choice beside "Still in line?", never a second question.
+   */
+  onGotToRide?: () => void;
   doneLabel?: string;
   onDone: () => void;
   /** Queue Bonus Rounds recap rows (null on older servers). */
@@ -198,7 +203,7 @@ export default function SessionRecap({
   rewardTrackingAvailable, queueStamp = null, onOpenStampBook, resolution, predictionUnscored, crewPuzzle,
   crewRelay, crewRouteNames, crewScoreNoun, coin, coinState, playerEnergy, energyUnavailable = false, rideName,
   onOpenCoin, onOpenPark, parkAvailable, feedbackEnabled = false, feedback = null, feedbackLoading = false,
-  feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine,
+  feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine, onGotToRide,
   doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null, snackSlot = null, nextAdventure = null, adventuresFound = null,
   signLine = null, rideLogged = null, onAddMemory, adventureStamped = false, go = null, goPending = false, onGo, showEnergy = true, showXp = true,
   showTickets = false, crew = false,
@@ -264,6 +269,10 @@ export default function SessionRecap({
           </View>
           <GameButton label="Keep playing" icon="arrow" onPress={onStillInLine} fullWidth
             accessibilityLabel="Still in line. Keep playing this wait." />
+          {onGotToRide && (
+            <GameButton label="I got to the ride" variant="ghost" onPress={onGotToRide} fullWidth
+              style={styles.gotToRide} accessibilityLabel="I got to the ride. Log my ride." />
+          )}
         </Animated.View>
       )}
 
@@ -488,6 +497,7 @@ const styles = StyleSheet.create({
   recapSub: { color: '#d6f4ff', fontFamily: 'Knockout', fontSize: 14 },
   recapSignLine: { color: '#ffffff', fontFamily: 'Shark', fontSize: 22, lineHeight: 27, marginTop: spacing.xs,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  gotToRide: { marginTop: spacing.xs },
   keepsake: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, padding: spacing.md,
     borderRadius: borderRadius.lg, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.cream },
   keepsakeBadge: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center',

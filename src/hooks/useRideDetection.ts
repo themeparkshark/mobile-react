@@ -31,7 +31,8 @@ import { PARK_WIKI_IDS } from '../constants/parkWaitTimes';
 import { navigationRef, navigate } from '../RootNavigation';
 import { rideDetectionEmitter } from '../services/RideDetectionEmitter';
 import { linePlayRideNow, rideLoggedUntil } from '../services/RideDetectionService';
-import { ensureRideQuestionLedger, visitInLinePlayWait } from '../services/lineplay/rideQuestionLedger';
+import { ensureRideQuestionLedger, rideQuestionOwner, unaskedLinePlayBoardings,
+  visitInLinePlayWait } from '../services/lineplay/rideQuestionLedger';
 import { keepForBatch, lastRidePromptAt, noteRidePrompt, ridePromptVerdict, walkingToGuideTarget,
   watchGuideForRidePrompts, type RidePromptVerdict } from '../services/lineplay/ridePromptGate';
 import { LocationContext } from '../context/LocationProvider';
@@ -56,11 +57,14 @@ export async function checkAndShowPendingRides(): Promise<boolean> {
   if (!navigationRef.isReady()) return false;
 
   try {
-    const pending = await getPendingDetections();
-    if (pending.length === 0) return false;
     // The ride step holds, the prompt clock and the LinePlay waits come back from the phone first, so a
     // relaunch never asks about a ride LinePlay already asked about.
     await ensureRideQuestionLedger().catch(() => undefined);
+    // A phone pocketed to board, then the app closed: LinePlay comes back on that wait and asks its own
+    // one question. That ride is never a batch confirm.
+    if (await reopenLinePlayForRideQuestion()) return true;
+    const pending = await getPendingDetections();
+    if (pending.length === 0) return false;
 
     // One ride question (core loop 4.3): rides the ride step logged, shows, transport and walk-bys
     // never come back as a question; the rest wait here while the guest walks to the next coin or
@@ -99,6 +103,27 @@ export async function checkAndShowPendingRides(): Promise<boolean> {
     console.warn('Failed to check pending ride detections:', e);
     return false;
   }
+}
+
+/**
+ * Ride detection kept a boarding signal on a LinePlay wait while the phone slept in a pocket, and the
+ * LinePlay that should ask about it is not running (the app was closed, or LinePlay was left). Open
+ * LinePlay on that ride: it restores the wait (its checkpoint) and asks "Did you get to the ride?" once,
+ * then logs the ride with the timed wait. A wait whose recap was closed with Done is marked answered by
+ * LinePlay, so this never opens a new wait. True when it opened LinePlay.
+ */
+export async function reopenLinePlayForRideQuestion(now = Date.now()): Promise<boolean> {
+  if (navigationRef.getCurrentRoute()?.name === 'LinePlay') return false;
+  const player = Number(rideQuestionOwner());
+  if (!Number.isInteger(player) || player <= 0) return false;
+  for (const wait of unaskedLinePlayBoardings(now)) {
+    if (wait.rideId === linePlayRideNow() || rideLoggedUntil(wait.rideId, now) != null) continue;
+    const ride = rideDetectionService.rideById(wait.rideId);
+    if (!ride) continue;
+    navigate('LinePlay', { ride: { rideId: ride.id, rideName: ride.name, parkId: ride.park_id } } as any);
+    return true;
+  }
+  return false;
 }
 
 /** The prompt gate's verdict for one detection, from what the phone knows right now. */
