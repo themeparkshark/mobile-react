@@ -47,7 +47,7 @@ import countText from '../helpers/countText';
 // (vip_perks, built from the server's economy.vip flags), so flipping a VIP
 // multiplier on the server changes this copy too.
 export const VIP_BENEFITS: { icon: GameIconName; title: string; body: string }[] = [
-  { icon: 'xp', title: '2x XP and coins', body: 'Every time you win a ride coin at the park.' },
+  { icon: 'xp', title: '2x XP and Shark Coins', body: 'Every time you win a ride coin at the park.' },
   { icon: 'search', title: '2 extra treats on every home hunt', body: '2x Energy, Tickets and XP from every treat.' },
   { icon: 'member', title: 'VIP badge on your profile', body: 'Everyone can see you’re VIP.' },
 ];

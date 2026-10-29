@@ -40,6 +40,8 @@ function loadTs(file, mocks = {}, globals = {}) {
       }
       // The one drawn-count rule is pure and import-free, so it loads for real.
       if (/(^|\/)helpers\/countText$/.test(name)) return loadTs('src/helpers/countText.ts');
+      // The icon name list is pure data with no imports, so it loads for real too.
+      if (/(^|\/)ui\/iconNames$/.test(name)) return loadTs('src/ui/iconNames.ts');
       throw new Error(`Unexpected dependency: ${name}`);
     },
   }, { filename: file });

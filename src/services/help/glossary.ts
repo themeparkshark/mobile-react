@@ -6,9 +6,16 @@
  * list is the offline fallback and covers every other term. Pure data and
  * functions: safe for tests, no React, no network.
  */
-import type { GameIconName } from '../../ui/iconNames';
+import { resolveIconName, type GameIconName } from '../../ui/iconNames';
 
 import countText from '../../helpers/countText';
+/**
+ * LinePlay's own icon on help pages (Dustin, Oct 28, ledger 37): the gold posts and rope
+ * ('line', added to the icon set by the lineplay-ride lane). Until that icon is in the build,
+ * help pages keep the ride cart, never the pocket watch (Wait Times only).
+ */
+export const LINEPLAY_ICON: GameIconName = resolveIconName('line') ?? 'ride';
+
 export type GlossaryKey =
   | 'coins' | 'tickets' | 'energy' | 'ride_parts' | 'ride_coins' | 'rescue_pass'
   | 'keys' | 'swords' | 'xp' | 'coin_levels' | 'limited_coins' | 'ride_challenge'
@@ -40,7 +47,8 @@ export const SERVER_CURRENCY_KEYS: readonly GlossaryKey[] = [
 ];
 
 const TERMS: readonly GlossaryTerm[] = [
-  { key: 'coins', label: 'Coins', icon: 'coins', topic: 'basics',
+  // The money is Shark Coins (4.5), so it never shares a word with the ride coins on the shelf.
+  { key: 'coins', label: 'Shark Coins', icon: 'coins', topic: 'basics',
     what: 'Spend them in the Shark Shop and Community Center.',
     earn: 'Win ride coins and open your daily chest.' },
   { key: 'tickets', label: 'Tickets', icon: 'ticket', topic: 'basics',
@@ -77,8 +85,8 @@ const TERMS: readonly GlossaryTerm[] = [
   { key: 'ride_challenge', label: 'PLAY!', icon: 'ride', topic: 'ride_challenge',
     what: 'A quick game at a ride. Win it to get the coin.',
     earn: 'Walk up to a ride coin and tap PLAY! One Ticket.' },
-  // The pocket watch means Wait Times only.
-  { key: 'lineplay', label: 'LinePlay', icon: 'ride', topic: 'lineplay',
+  // The pocket watch means Wait Times only; LinePlay shows its own line icon (ledger 37).
+  { key: 'lineplay', label: 'LinePlay', icon: LINEPLAY_ICON, topic: 'lineplay',
     what: 'Stories and games for while you wait in a ride\'s line.',
     earn: 'Stand in a ride\'s line. The guide card offers it.' },
   { key: 'ride_passport', label: 'Ride Passport', icon: 'coin', topic: 'park',
@@ -162,7 +170,7 @@ function cleanLine(value: unknown, max = 220): string | null {
 
 /** Old names an older server may still send. The app says the one glossary name. */
 const RETIRED_LABELS: Readonly<Record<string, string>> = {
-  'shark coins': 'Coins', 'shark coin': 'Coins', 'park tickets': 'Tickets', 'park ticket': 'Tickets',
+  'coins': 'Shark Coins', 'coin': 'Shark Coins', 'park tickets': 'Tickets', 'park ticket': 'Tickets',
   'park coins': 'Ride Coins', 'park coin': 'Ride Coins',
 };
 
@@ -268,7 +276,7 @@ export function glossaryKeyForName(name: string | null | undefined): GlossaryKey
   return NAME_ALIASES[normal] ?? null;
 }
 
-/** "You have 377 Coins" style line for a sheet opened from a balance. */
+/** "You have 377 Shark Coins" style line for a sheet opened from a balance. */
 export function balanceLine(term: Pick<GlossaryTerm, 'label'>, count: number | null | undefined): string | null {
   if (typeof count !== 'number' || !Number.isFinite(count)) return null;
   return `You have ${countText(Math.max(0, Math.floor(count)))} ${term.label}.`;

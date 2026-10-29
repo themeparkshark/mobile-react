@@ -64,7 +64,7 @@ export type SuppliesFocus = 'tickets' | 'coins' | 'rescue' | 'featured';
 
 const WALLET: { key: keyof ShopGrants; icon: GameIconName; term: GlossaryKey; many: string }[] = [
   { key: 'tickets', icon: 'ticket', term: 'tickets', many: 'tickets' },
-  { key: 'coins', icon: 'coins', term: 'coins', many: 'coins' },
+  { key: 'coins', icon: 'coins', term: 'coins', many: 'Shark Coins' },
   { key: 'energy', icon: 'energy', term: 'energy', many: 'energy' },
   { key: 'rescue_passes', icon: 'retry', term: 'rescue_pass', many: 'extra tries' },
 ];
@@ -101,9 +101,18 @@ export function freeTicketWays(queueTicketsOn: boolean): { icon: GameIconName; t
 /** What a section's coins or tickets are for, said once under its title. */
 const SECTION_NOTE: Partial<Record<ShopProduct['section'], string>> = {
   tickets: 'One Ticket plays one ride coin game.',
-  coins: 'Coins buy gear for your shark in the Shark Shop.',
+  coins: 'Shark Coins buy gear for your shark in the Shark Shop.',
   rescue: 'An extra try at a ride coin you don’t have yet.',
 };
+
+/**
+ * The money word in a server line: "2x XP and coins" reads "2x XP and Shark Coins", while
+ * "ride coins" stays (4.5: one word per thing). Exported for tests.
+ */
+export function sharkCoinsWord(line: string): string {
+  return line.replace(/(^|[^A-Za-z])(ride |Shark )?coins\b/gi, (match, pre: string, word: string | undefined) =>
+    word ? match : `${pre}Shark Coins`);
+}
 
 function unavailableText(product: ShopProduct, holdCap: number | null): string | null {
   switch (product.unavailable_reason) {
@@ -322,7 +331,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
       )}
 
       {/* The Shark Pass door (Pass and Pass Plus), whenever its switch is on for this player. */}
-      <SharkPassDoor switchOn={passOn} />
+      <SharkPassDoor switchOn={passOn} playerId={player?.id ?? null} />
 
       {!vip && <VipCard perks={perks && boxesLive ? [...perks, VIP_WEEKLY_BOX_PERK as VipPerk] : perks} />}
       {/* Members: the VIP page, with the gift plans when their switch is on. */}
@@ -353,7 +362,9 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
         const packs = (sections.get(key) ?? []).filter(priced);
         if (!packs.length) return null;
         // One word per thing (4.5): held passes are "Extra tries", whatever the server calls the shelf.
-        const title = key === 'rescue' ? 'Extra tries' : catalog.sections.find(s => s.key === key)?.title ?? key;
+        // The money is Shark Coins, never bare "Coins" next to ride coins.
+        const title = key === 'rescue' ? 'Extra tries' : key === 'coins' ? 'Shark Coins'
+          : catalog.sections.find(s => s.key === key)?.title ?? key;
         return (
           <View key={key} onLayout={onSection(key)} style={st.section}>
             <View style={st.sectionHead}>
@@ -362,7 +373,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
             </View>
             {SECTION_NOTE[key] && <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionNote}>{SECTION_NOTE[key]}</Text>}
             {key === 'coins' && boxesLive && (
-              <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionNote}>Coins can open Mystery Pin Boxes. Odds are shown on each box.</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionNote}>Shark Coins can open Mystery Pin Boxes. Odds are shown on each box.</Text>
             )}
             <View style={st.grid}>
               {packs.map((p, i) => (
@@ -455,18 +466,29 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
   );
 }
 
+/** The player's own pass read once per player for 5 minutes, so opening Supplies again never refetches it. */
+const PASS_SEASON_TTL = 5 * 60_000;
+let passSeasonCache: { playerId: number; season: boolean; at: number } | null = null;
+
 /**
  * The Shark Pass door: the pass page lists the Shark Pass and Shark Pass Plus (grown-up gated there).
  * Shown when the switch says on, or when the player's own pass reads enabled with a season, so a
  * switch read before sign-in can never hide the App Review path.
  */
-function SharkPassDoor({ switchOn }: { readonly switchOn: boolean }) {
-  const [season, setSeason] = useState<boolean | null>(null);
+function SharkPassDoor({ switchOn, playerId }: { readonly switchOn: boolean; readonly playerId: number | null }) {
+  const known = playerId != null && passSeasonCache?.playerId === playerId && Date.now() - passSeasonCache.at < PASS_SEASON_TTL
+    ? passSeasonCache.season : null;
+  const [season, setSeason] = useState<boolean | null>(known);
   useEffect(() => {
+    if (playerId == null || known !== null) return undefined;
     let live = true;
-    void getSharkPass().then(state => { if (live) setSeason(!!state?.enabled && !!state.season); }).catch(() => { if (live) setSeason(null); });
+    void getSharkPass().then(state => {
+      const value = !!state?.enabled && !!state.season;
+      passSeasonCache = { playerId, season: value, at: Date.now() };
+      if (live) setSeason(value);
+    }).catch(() => { if (live) setSeason(null); });
     return () => { live = false; };
-  }, []);
+  }, [playerId, known]);
   if (season === false || (!switchOn && season !== true)) return null;
   return (
     <Pressable onPress={() => RootNavigation.navigate('SharkPass')} accessibilityRole="button"
@@ -502,7 +524,7 @@ function VipGiftDoor() {
 function VipCard({ perks }: { perks: VipPerk[] | null }) {
   // One home word (4.5): an older server's perk lines say "finds"; the kid reads "treats".
   const lines = (perks ?? []).filter(p => p.icon !== 'member').slice(0, 4)
-    .map(p => ({ ...p, title: p.title.replace(/\bfinds\b/g, 'treats').replace(/\bfind\b/g, 'treat') }));
+    .map(p => ({ ...p, title: sharkCoinsWord(p.title.replace(/\bfinds\b/g, 'treats').replace(/\bfind\b/g, 'treat')) }));
   return (
     <Animated.View entering={FadeInUp.delay(180).springify().damping(15)} style={st.vipLip}>
       <View style={st.vip}>

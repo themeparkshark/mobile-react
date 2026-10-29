@@ -5,7 +5,7 @@ import type { ShopCurrency, ShopGrants } from '../../api/endpoints/me/shop';
 import countText from '../../helpers/countText';
 
 const CURRENCY_WORD: Record<keyof ShopGrants, [string, string]> = {
-  tickets: ['ticket', 'tickets'], coins: ['coin', 'coins'], energy: ['energy', 'energy'], rescue_passes: ['pass', 'passes'],
+  tickets: ['ticket', 'tickets'], coins: ['Shark Coin', 'Shark Coins'], energy: ['energy', 'energy'], rescue_passes: ['pass', 'passes'],
 };
 
 export function unitWord(kind: keyof ShopGrants, n: number): string {

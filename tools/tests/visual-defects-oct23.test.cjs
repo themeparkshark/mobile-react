@@ -606,7 +606,7 @@ test('one coin rule: the coin stack is the coin you spend, the gold fin coin mea
   assert.match(read('src/screens/pins/BoxReveal.tsx'), /<GameIcon name="coins" size=\{30\} \/>/);
   assert.match(read('src/screens/StoreScreen/shopUi.tsx'), /styles\.arcCoin, coin\]\}><GameIcon name="coins"/);
   assert.match(read('src/components/liveEvents/ChestReveal.tsx'), /styles\.coin, style\]\}><GameIcon name="coins"/);
-  assert.match(read('src/services/help/helpSheets.ts'), /\{ icon: 'coins', text: 'Spend Coins on gear\.' \}/);
+  assert.match(read('src/services/help/helpSheets.ts'), /\{ icon: 'coins', text: 'Spend Shark Coins on gear\.' \}/);
   const hero = read('src/components/help/HelpHero.tsx');
   assert.match(hero, /styles\.price[^\n]*\n\s*<GameIcon name="coins"/);
   assert.match(read('src/screens/CommunityCenterScreen.tsx'), /icons\/game\/coins\.png'\)\} style=\{styles\.kioskCoin\}/);

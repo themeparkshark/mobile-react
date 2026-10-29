@@ -87,7 +87,9 @@ export default function HelpProvider({ children }: { readonly children: React.Re
 
   const [serverGlossary, setGlossary] = useState<Record<GlossaryKey, GlossaryTerm>>(glossaryCache ?? { ...LOCAL_GLOSSARY });
   // Every line true for this player's switches: line Tickets only with Queue Tickets, no boss promise while bosses are off.
-  // Read for the signed-in player only (preview switches are per player), never cached across accounts.
+  // Read for the signed-in player only (preview switches are per player), never cached across accounts:
+  // the shared 5-minute money flag cache can hold an answer read before sign-in, which would
+  // hide a preview switch, so this one root provider reads once per signed-in player instead.
   const [switches, setSwitches] = useState<{ queueTickets: boolean; rideBoss: boolean }>({ queueTickets: false, rideBoss: false });
   useEffect(() => {
     setSwitches({ queueTickets: false, rideBoss: false });

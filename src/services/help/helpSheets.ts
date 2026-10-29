@@ -11,6 +11,7 @@
  * odds) is described without a number unless the number comes from the server.
  */
 import type { GameIconName } from '../../ui/iconNames';
+import { LINEPLAY_ICON } from './glossary';
 import { AD_AUDIENCE_13_PLUS_KNOWN } from '../adConfig';
 
 export type HelpHeroKey =
@@ -103,7 +104,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
     pages: [
       { key: 'gear', hero: 'shop_gear', headline: 'Dress up your shark',
         points: [
-          { icon: 'coins', text: 'Spend Coins on gear.' },
+          { icon: 'coins', text: 'Spend Shark Coins on gear.' },
           { icon: 'shark', text: 'Try it on before you buy.' },
           { icon: 'heart', text: 'Tap the heart to save it for later.' },
         ] },
@@ -136,7 +137,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         points: [
           { icon: 'coin', text: 'Tap a coin to level it up.' },
           { icon: 'parts', text: 'Spend Energy and that ride\'s Ride Parts.' },
-          { icon: 'ride', text: 'Win the ride or play LinePlay in its line.' },
+          { icon: LINEPLAY_ICON, text: 'Win the ride or play LinePlay in its line.' },
         ] },
     ],
   },
@@ -151,7 +152,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         ] },
       { key: 'line', hero: 'basics_line', headline: 'Line time pays',
         points: [
-          { icon: 'ride', text: 'Start LinePlay when you join a ride\'s line.' },
+          { icon: LINEPLAY_ICON, text: 'Start LinePlay when you join a ride\'s line.' },
           { icon: 'parts', text: 'Time near the ride earns its Ride Parts.' },
           { icon: 'star', text: 'Mini-games are bonus fun while you wait.' },
         ] },
@@ -163,7 +164,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
       { key: 'code', hero: 'redeem_chest', headline: 'Redeem a code',
         points: [
           { icon: 'edit', text: 'Type the code and tap Open the chest.' },
-          { icon: 'gift', text: 'Get Coins, Tickets, Energy or a prize.' },
+          { icon: 'gift', text: 'Get Shark Coins, Tickets, Energy or a prize.' },
           { icon: 'timer', text: 'One use per player. Codes can expire.' },
         ] },
     ],

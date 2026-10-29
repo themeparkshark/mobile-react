@@ -86,10 +86,10 @@ export function useSupplies(enabled = true): SuppliesState {
 
 const ORDER: (keyof ShopGrants)[] = ['tickets', 'coins', 'energy', 'rescue_passes'];
 const WORDS: Record<keyof ShopGrants, [string, string]> = {
-  tickets: ['ticket', 'tickets'], coins: ['coin', 'coins'], energy: ['energy', 'energy'], rescue_passes: ['extra try', 'extra tries'],
+  tickets: ['ticket', 'tickets'], coins: ['Shark Coin', 'Shark Coins'], energy: ['energy', 'energy'], rescue_passes: ['extra try', 'extra tries'],
 };
 
-/** "15 tickets, 1,500 coins and 2 extra tries". */
+/** "15 tickets, 1,500 Shark Coins and 2 extra tries". */
 export function grantsText(grants: ShopGrants): string {
   const parts = ORDER.filter(k => (grants[k] ?? 0) > 0)
     .map(k => `${countText(grants[k] ?? 0)} ${grants[k] === 1 ? WORDS[k][0] : WORDS[k][1]}`);
