@@ -571,7 +571,7 @@ function HeadsUp({ enabled }: { enabled: boolean }) {
   return (
     <Animated.View entering={FadeIn.duration(180)} style={styles.headsUp} pointerEvents="none">
       {/* LinePlay's own picture; the pocket watch means Wait Times only. */}
-      <GameIcon name="line" size={18} />
+      <GameIcon name="line" size={26} />
       <Text style={styles.headsUpText}>Line's moving. Heads up!</Text>
     </Animated.View>
   );

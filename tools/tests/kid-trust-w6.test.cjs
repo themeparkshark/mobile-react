@@ -204,7 +204,7 @@ test('the recap after a short wait never shows a row of zeros: zero tiles drop o
   const some = recapStats({ ...zero, activityCount: 2, experience: 15 });
   assert.deepEqual(some.map(t => t.key), ['activities', 'xp']);
   for (const t of recapStats({ ...zero, activityCount: 1, earnedEnergy: 5, partsCount: 1, ticketsEarned: 1 })) assert.ok(t.value > 0);
-  assert.match(src, /\{shownStats\.length \? <View style=\{\[styles\.recapStats, /);
+  assert.match(src, /\{earnedAny \? <View style=\{styles\.recapStats\}>/);
   assert.match(src, /<Text style=\{styles\.keepsakeTitle\}>Wait saved!<\/Text>/);
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.doesNotMatch(card, /'game plan' : 'posted wait'\} \$\{postedWaitMinutes\}m · details/, 'no "Session 1:21 · game plan 20m · details" jargon');

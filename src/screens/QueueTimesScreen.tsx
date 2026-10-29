@@ -163,7 +163,7 @@ const RideCard = ({
               hitSlop={6}
             >
               {/* LinePlay's own picture (the line's posts and rope); the pocket watch is Wait Times. */}
-              <GameIcon name="line" size={20} />
+              <GameIcon name="line" size={28} />
               <Text style={styles.sessionBtnText}>{entry.status === 'DOWN'
                 ? 'PLAY WHILE YOU WAIT' : 'PLAY IN LINE'}</Text>
             </Pressable>

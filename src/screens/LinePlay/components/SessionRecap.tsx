@@ -218,6 +218,7 @@ export default function SessionRecap({
   let stat = 0;
   const shownStats = recapStats({ activityCount, earnedEnergy, experience, partsCount, ticketsEarned, rewardsConfirmed,
     showEnergy, showXp, showTickets });
+  const earnedAny = shownStats.some(t => t.key !== 'activities');
 
   return (
     // The bottom clearance keeps the last row above the footer's rising MAP compass (a tap there is never the map).
@@ -281,11 +282,12 @@ export default function SessionRecap({
 
       {crew ? groupSlot : null}
 
-      {shownStats.some(t => t.key !== 'activities') && <Text style={styles.recapSectionTitle}>WHAT YOU EARNED</Text>}
-      {shownStats.length ? <View style={[styles.recapStats, !shownStats.some(t => t.key !== 'activities') && styles.recapStatsLoose]}>
+      {earnedAny && <Text style={styles.recapSectionTitle}>WHAT YOU EARNED</Text>}
+      {/* Games alone are said once, by the "Played:" line below; the tiles show only when something was earned. */}
+      {earnedAny ? <View style={styles.recapStats}>
         {shownStats.map(t => <RecapStat key={t.key} icon={t.icon} value={t.value} prefix={t.prefix} label={t.label}
           index={stat++} reducedMotion={reducedMotion} />)}
-      </View> : signLine || rideLogged ? null : (
+      </View> : signLine || rideLogged || activityNames.length > 0 ? null : (
         // Nothing played or earned yet (a short wait): a keepsake of the wait itself, never a row of zeros,
         // and only when nothing above already says the wait.
         <Animated.View entering={enter(0)} style={styles.keepsake} accessible
@@ -311,7 +313,7 @@ export default function SessionRecap({
           {coinState === 'unowned' && partsCount > 0 && (
             <Text style={styles.coinNextBody}>Parts are saved for this coin. Win it on your way out.</Text>
           )}
-          <GameButton label={go.button} icon={go.kind === 'level_up' ? 'coin' : go.kind === 'shelf' ? 'map' : 'arrow'}
+          <GameButton label={go.button} icon={go.kind === 'level_up' ? 'coin' : go.kind === 'shelf' ? 'coins' : 'arrow'}
             fullWidth onPress={onGo} style={styles.goButton} accessibilityLabel={go.label} />
         </Animated.View>
       )}
@@ -497,7 +499,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm, paddingVertical: spacing.md,
     borderRadius: borderRadius.lg, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: '#ffffff',
   },
-  recapStatsLoose: { marginTop: spacing.lg },
   recapStat: { alignItems: 'center', flex: 1 },
   recapStatValue: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 20, marginTop: 2 },
   recapStatLabel: { color: '#3b6884', fontFamily: 'Knockout', fontSize: 12, marginTop: 1, textTransform: 'uppercase' },

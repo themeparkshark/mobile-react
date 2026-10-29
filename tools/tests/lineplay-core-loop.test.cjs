@@ -180,14 +180,14 @@ test('the pocket watch is Wait Times only: LinePlay never draws it, and has its 
   assert.ok(names.isGameIconName('line'));
   // Honest provenance: How to Play's stanchions were drawn from Alex refs (not one of his originals).
   assert.ok(names.GENERATED_ICON_NAMES.includes('line') && !names.ORIGINAL_ICON_NAMES.includes('line'));
-  assert.match(read('src/gamekit/party/LineParty.tsx'), /<GameIcon name="line" size=\{18\} \/>\s*<Text style=\{styles\.headsUpText\}>/);
+  assert.match(read('src/gamekit/party/LineParty.tsx'), /<GameIcon name="line" size=\{26\} \/>\s*<Text style=\{styles\.headsUpText\}>/);
   assert.match(read('src/ui/GameIcon.tsx'), /line: require\('\.\.\/\.\.\/assets\/icons\/game\/line\.png'\)/);
   assert.match(read('src/screens/LinePlay/components/WaitCard.tsx'), /<GameIcon name="line" size=\{54\} \/>/);
   assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /icon: 'line', title: 'Eyes up in line\.'/);
   assert.match(read('src/screens/LinePlay/components/SessionRecap.tsx'), /<GameIcon name="line" size=\{34\} \/>\s*<View style=\{styles\.stillInLineCopy\}>/);
   // Wait Times: the pocket watch is its own picture; its PLAY IN LINE button shows LinePlay's line.
   const waits = read('src/screens/QueueTimesScreen.tsx');
-  assert.match(waits, /<GameIcon name="line" size=\{20\} \/>\s*<Text style=\{styles\.sessionBtnText\}>/);
+  assert.match(waits, /<GameIcon name="line" size=\{28\} \/>\s*<Text style=\{styles\.sessionBtnText\}>/);
 });
 
 test('the bot rival is Captain Gill in LinePlay (rank ladder Admiral Gill)', () => {
@@ -239,6 +239,11 @@ test('the recap: only what you got, "Sign said 20, you waited 11", one GO, the l
   assert.match(screen, /if \(go\.taskId != null\) guide\.setTarget\(go\.taskId, 'lineplay_recap'\);/);
   assert.match(recap, /variant=\{go && onGo \? 'ghost' : undefined\}/, 'Done is the quiet second button');
   assert.match(screen, /signLine=\{snapshot\.boardingConfirmed \? signSaidLine\(/);
+  // Games alone are said once (the Played line), never also as a lone "1 GAME" tile; the shelf GO wears the coins.
+  assert.match(recap, /const earnedAny = shownStats\.some\(t => t\.key !== 'activities'\);/);
+  assert.match(recap, /\{earnedAny \? <View style=\{styles\.recapStats\}>/);
+  assert.match(recap, /signLine \|\| rideLogged \|\| activityNames\.length > 0 \? null : \(/);
+  assert.match(recap, /go\.kind === 'shelf' \? 'coins' : 'arrow'/);
   // Crew lines only for a crew.
   assert.match(recap, /\{crew \? groupSlot : null\}/);
   assert.match(recap, /\{crew && crewRelay\?\.step === 'complete' && \(/);
