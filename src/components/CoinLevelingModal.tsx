@@ -163,6 +163,9 @@ export default function CoinLevelingModal({
   const pendingLinePlayRef = useRef(false);
   const pendingExploreRef = useRef(false);
   const pendingGetPartsRef = useRef(false);
+  // GET RIDE PARTS leaves for the map at once: no card fade first and a quick sheet exit, so the
+  // shelf never sits between the tap and the path (grader r1: about 1.25 s of shelf showed).
+  const [fastExit, setFastExit] = useState(false);
   // Short on Tickets or Energy: the Supplies tab, opened after the sheet hides.
   const pendingSuppliesRef = useRef<null | 'tickets' | 'featured'>(null);
   const [showPartsHelp, setShowPartsHelp] = useState(false);
@@ -475,9 +478,11 @@ export default function CoinLevelingModal({
       animationOut="fadeOut"
       isVisible={layer.present}
       animationInTiming={reducedMotion ? 120 : 250}
-      animationOutTiming={reducedMotion ? 120 : 200}
+      animationOutTiming={fastExit ? 90 : reducedMotion ? 120 : 200}
+      backdropTransitionOutTiming={fastExit ? 90 : undefined}
       onBackButtonPress={state !== 'leveling' ? handleClose : undefined}
       onModalHide={() => {
+        setFastExit(false);
         layer.onDismissed();
         shareHandoff.onDismiss();
         if (pendingLinePlayRef.current) {
@@ -972,7 +977,8 @@ export default function CoinLevelingModal({
                         // at this park the guide walks you to the ride's line; away, the
                         // sheet opens the picture card that says where Parts come from.
                         if (missingAction.kind === 'parts' && onGetParts) {
-                          pendingGetPartsRef.current = true; handleClose();
+                          if (upgradeBusy.current) return;
+                          pendingGetPartsRef.current = true; setFastExit(true); stopUpgradeEffects(); onClose();
                         } else if (missingAction.kind === 'parts' && onPlayInLine) {
                           pendingLinePlayRef.current = true; handleClose();
                         } else if (missingAction.kind === 'energy') {

@@ -59,6 +59,11 @@ const RULES = [
   ['boss-energy', /\bpowers boss raids\b/i, 'Energy, for growing coins'],
   ['rhythm-tap', /\bRhythm Tap\b/i, 'Parade Beat'],
   ['shop-name', /^(Store|STORE|Shop|SHOP)$|\bShark Store\b/, 'Shark Shop'],
+  // Dustin, Oct 28 (ledger 36): the bot rival is Captain Gill (rank ladder Admiral Gill). Coach Finn and
+  // Fin-ister Nights stay; the internal icon name 'fin' is code, not copy.
+  ['captain-fin', /\b(Captain|Admiral|CAPTAIN|ADMIRAL) (Fin|FIN)\b/, 'Captain Gill (rank ladder: Captain Gill, Admiral Gill)'],
+  // Dustin, Oct 28 (ledger 39): the Green Train Toy left the shop; the app never names it (owners keep it as server data).
+  ['green-train', /\bGreen Train\b/i, 'nothing: the shop list comes from the server'],
 ];
 
 /** PLAN.json vocabulary_ownership (October 28, 2026). A trailing /** owns a folder. */
@@ -77,7 +82,9 @@ const OWNERS = {
   'ride-challenge': ['src/components/TimingMiniGame.tsx', 'src/components/rewards/challengeCopy.ts', 'src/components/RedeemRedeemableModal.tsx',
     'src/components/PostWinRewardsModal.tsx', 'src/games/**', 'src/screens/GymBattle/TeamSelectionScreen.tsx'],
   'lineplay-ride': ['src/screens/LinePlay/**', 'src/services/lineplay/**', 'src/components/RideTracker/RideLogSuccess.tsx',
-    'src/screens/RideTracker/RideBatchConfirmScreen.tsx'],
+    'src/screens/RideTracker/RideBatchConfirmScreen.tsx',
+    // Ledger 36 (Captain Gill): LinePlay's party seat names the bot rival.
+    'src/gamekit/party/LineParty.tsx'],
   'rewards-unlocks': ['src/services/money/sharkPassModel.ts', 'src/screens/pins/**'],
 };
 /** Every OTA lane's owns_files (PLAN.json lanes[].owns_files, src/ entries). A hit here that is not listed above is a new hit for that lane. */
@@ -255,6 +262,12 @@ if (require.main === module || process.env.NODE_TEST_CONTEXT) {
     assert.equal(scanSource("const a = 'Do sharks lose their teeth?';", 'src/services/lineplay/content.ts').length, 0);
     assert.equal(scanSource("const a = 'Skip the teeth!';", 'src/games/whack/WhackAShark.tsx')[0].rule, 'teeth');
     assert.equal(scanSource("const a = 'Snack Stand';", 'x.ts').length, 0, 'food snacks are fine');
+    // Ledger 36: the rival is Captain Gill; coach Finn, Fin-ister Nights and the 'fin' icon stay.
+    assert.equal(scanSource("const a = 'Captain Fin';", 'x.ts')[0].rule, 'captain-fin');
+    assert.equal(scanSource("const a = `Beat ADMIRAL FIN!`;", 'x.ts')[0].rule, 'captain-fin');
+    assert.equal(scanSource("const a = 'Captain Gill'; const b = 'Coach Finn says hi'; const c = 'Fin-ister Nights'; const d = 'fin';", 'x.ts').length, 0);
+    // Ledger 39: the Green Train Toy is server data only.
+    assert.equal(scanSource("const a = 'Green Train Toy';", 'x.ts')[0].rule, 'green-train');
   });
 
   test(`vocabulary (${STRICT ? `strict, pending lanes: ${[...PENDING_LANES].join(', ') || 'none'}` : 'report only'}): banned UI words by owner lane`, t => {

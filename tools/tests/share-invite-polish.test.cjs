@@ -139,7 +139,11 @@ test('a Share Studio sheet fades out before the grown-up gate, and is a layer wh
   assert.match(host, /useNativeModalLayer\(stage !== 'gone', 'wait'\)/, 'Root dialogs and the gate wait for the sheet, and it waits its turn');
   assert.match(host, /visible: stage === 'shown' && layer\.present/, 'the Studio presents only when it is in front');
   assert.equal((host.match(/visible=\{visible\} onShow=\{onShow\} onDismiss=\{onDismiss\}/g) || []).length, 2, 'sheet and moment both hand off');
-  assert.match(host, /finally \{[\s\S]{0,400}else finishFlex\(request\.id\);/, 'done or failed, the sheet closes so the retry note can show');
+  assert.match(host, /finally \{[\s\S]{0,400}else close\(\);/, 'done or failed, the sheet closes so the retry note can show');
+  // Closing hides the sheet and keeps it (and its layer) until UIKit's dismiss, then the request ends.
+  assert.match(host, /visible: stage === 'shown' && layer\.present && !closing/);
+  assert.match(host, /if \(closingRef\.current\) \{ finish\(\); return; \}/, 'the request ends on the native dismiss');
+  assert.match(host, /setClosing\(true\);\s*setTimeout\(finish, HANDOFF_MS\);/, 'a dismiss that never comes still ends it');
   // A grown-up "Not now" (the share sheet never opened) brings the Studio back instead of closing it.
   assert.match(host, /if \(!outcome\.opened\) \{ reopen = true; event\('dismissed'\); \}/);
   assert.match(host, /if \(reopen\) setTimeout\(\(\) => setStage\('shown'\), REOPEN_MS\);/);

@@ -122,8 +122,8 @@ test('Supplies: free Ticket ways come before any pack; the line Ticket only whil
 test('Supplies: every purchase door is listed whenever its switch is on, regardless of rung (App Review path)', () => {
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
   assert.match(shop, /const passOn = useMoneyFlag\('shark_pass'\);/);
-  assert.match(shop, /<SharkPassDoor switchOn=\{passOn\} \/>/);
-  assert.match(shop, /getSharkPass\(\)\.then\(state => \{ if \(live\) setSeason\(!!state\?\.enabled && !!state\.season\); \}\)/,
+  assert.match(shop, /<SharkPassDoor switchOn=\{passOn\} playerId=\{player\?\.id \?\? null\} \/>/);
+  assert.match(shop, /const value = !!state\?\.enabled && !!state\.season;[\s\S]{0,120}if \(live\) setSeason\(value\);/,
     'the door also trusts the player\'s own pass, so a switch read before sign-in never hides it');
   // Flags are read per signed-in player in the help glossary (no anonymous cache that could hide a preview switch).
   assert.doesNotMatch(read('src/components/help/HelpProvider.tsx'), /useMoneyFlag/);
@@ -249,7 +249,11 @@ test('the Community Center Finn tip runs once on the first visit, waiting its tu
   assert.match(center, /useTutorialWhenReady\('community_center', !loading && !!center && !sheetUp\)/);
   const shop = read('src/screens/StoreScreen.tsx');
   assert.match(shop, /testID="shop-bottom-back"/);
-  assert.match(shop, /bottom: insets\.bottom \+ 10/);
+  // Its own solid strip where the footer was, in the layout: it never covers a pack, a VIP tile or a gear card.
+  assert.match(shop, /testID="shop-bottom-back" style=\{\{ marginTop: 'auto'/);
+  assert.match(shop, /height: SHOP_BACK_STRIP \+ insets\.bottom, paddingBottom: insets\.bottom/);
+  assert.doesNotMatch(shop, /position: 'absolute', left: 14, bottom: insets\.bottom/, 'no floating button over the shop');
+  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /paddingBottom: insets\.bottom \+ 48/, 'the gear shelf pads its last row clear of the strip');
 });
 
 test('one word per thing in the shelf-words files: no Mastery, no RIDE COINS, no Rescue Pass, no home finds', () => {
@@ -276,4 +280,66 @@ test('the vocabulary test is strict: shelf-words and every unowned file fail the
   assert.equal(v.PENDING_LANES.has('shelf-words'), false);
   assert.equal(v.ownerOf('src/screens/SomeNewScreen.tsx').owner, 'shelf-words', 'a new unowned file is strict at once');
   assert.equal(v.scanSource("const a = <Text>Rescue Pass</Text>;", 'x.tsx')[0].rule, 'rescue-pass');
+});
+
+test('round 2 (ledger 38): no coin piles on the Starter Pack or Standings, existing Alex art only', () => {
+  const ui = read('src/components/money/moneyUi.tsx');
+  assert.match(ui, /chest: require\('\.\.\/\.\.\/\.\.\/assets\/images\/screens\/redeem\/chest_closed\.png'\)/, "the Starter Pack shows Alex's closed chest");
+  assert.doesNotMatch(ui, /supplies\/chest\.webp/, 'not the overflowing gold chest');
+  assert.ok(fs.existsSync(path.join(ROOT, 'assets/images/screens/redeem/chest_closed.png')), 'an existing file');
+  for (const file of ['MiniPodium.tsx', 'StandingsPodium.tsx', 'StandingsBoardV2.tsx']) {
+    const src = read(`src/screens/LeaderboardsScreen/${file}`);
+    assert.doesNotMatch(src, /barrel(-flipped)?\.png/, `${file}: no gold barrels`);
+    assert.match(src, /<PodiumSteps /, `${file}: plain podium steps`);
+  }
+  const steps = read('src/screens/LeaderboardsScreen/PodiumSteps.tsx');
+  assert.doesNotMatch(steps, /require\(/, 'the steps are drawn from the board UI, no new art');
+});
+
+test('round 2 (ledger 37, 39): help pages show LinePlay\'s own icon; the app never names the Green Train Toy', () => {
+  const glossary = read('src/services/help/glossary.ts');
+  assert.match(glossary, /export const LINEPLAY_ICON: GameIconName = resolveIconName\('line'\) \?\? 'ride';/);
+  assert.match(glossary, /\{ key: 'lineplay', label: 'LinePlay', icon: LINEPLAY_ICON,/);
+  const sheets = read('src/services/help/helpSheets.ts');
+  assert.equal((sheets.match(/\{ icon: LINEPLAY_ICON, text: '[^']*LinePlay/g) || []).length, 2);
+  assert.doesNotMatch(glossary + sheets, /icon: 'timer'[^}]*LinePlay|LinePlay[^}]*icon: 'queue'/, 'the pocket watch is Wait Times only');
+  const v = require('./vocabulary.test.cjs');
+  assert.equal(v.scanSource("const a = 'Green Train Toy';", 'x.ts')[0].rule, 'green-train');
+});
+
+test('round 2: one word for money: Shark Coins, never bare coins beside ride coins', () => {
+  const g = read('src/services/help/glossary.ts');
+  assert.match(g, /\{ key: 'coins', label: 'Shark Coins', icon: 'coins'/);
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  assert.match(shop, /coins: 'Shark Coins buy gear for your shark in the Shark Shop\.'/);
+  assert.match(shop, /key === 'coins' \? 'Shark Coins'/);
+  assert.match(read('src/services/money/copy.ts'), /coins: \['Shark Coin', 'Shark Coins'\]/);
+  assert.match(read('tools/clarity/rules.cjs'), /key: 'coins', use: 'Shark Coins'/);
+  // The pure helper, read straight from the file: "2x XP and coins" reads Shark Coins, ride coins stay.
+  const fnSrc = shop.match(/export function sharkCoinsWord[\s\S]*?\n\}/)[0];
+  const ts = require(path.join(ROOT, 'node_modules/typescript'));
+  const js = ts.transpileModule(fnSrc.replace('export ', ''), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+  const sharkCoinsWord = new Function(`${js}; return sharkCoinsWord;`)();
+  assert.equal(sharkCoinsWord('2x XP and coins'), '2x XP and Shark Coins');
+  assert.equal(sharkCoinsWord('Win ride coins'), 'Win ride coins');
+  assert.equal(sharkCoinsWord('Shark Coins'), 'Shark Coins');
+});
+
+test('round 2: GET RIDE PARTS leaves for the map at once (no card fade, quick sheet exit)', () => {
+  const sheet = read('src/components/CoinLevelingModal.tsx');
+  assert.match(sheet, /pendingGetPartsRef\.current = true; setFastExit\(true\); stopUpgradeEffects\(\); onClose\(\);/);
+  assert.match(sheet, /animationOutTiming=\{fastExit \? 90 :/);
+  assert.match(sheet, /backdropTransitionOutTiming=\{fastExit \? 90 : undefined\}/);
+});
+
+test('round 2: Standings says wins (BLUEPRINT 5.9); help reads flags once per signed-in player', () => {
+  const m = read('src/screens/LeaderboardsScreen/standingsV2Model.ts');
+  assert.match(m, /\(one \? 'win' : 'wins'\)/);
+  assert.doesNotMatch(m, /void hours|void minutes/);
+  assert.doesNotMatch(read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx'), /const pulse = useSharedValue/);
+  // Help keeps its one per-player read (the shared cache may hold a signed-out answer); it is one root provider.
+  const help = read('src/components/help/HelpProvider.tsx');
+  assert.equal((help.match(/getFeatureFlags\(\)/g) || []).length, 1);
+  assert.match(help, /\}, \[playerId\]\);/);
+  assert.match(read('src/screens/StoreScreen/SuppliesShop.tsx'), /passSeasonCache\?\.playerId === playerId/, 'the pass read is cached per player');
 });
