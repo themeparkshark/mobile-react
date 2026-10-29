@@ -172,12 +172,15 @@ test('"Adventure" means only Today\'s Adventure: LinePlay and Ride Tracker strin
 });
 
 test('the pocket watch is Wait Times only: LinePlay never draws it, and has its own line picture', () => {
-  for (const file of walk('src/screens/LinePlay')) {
+  for (const file of walk('src/screens/LinePlay').concat(walk('src/services/lineplay'), ['src/gamekit/party/LineParty.tsx'])) {
     assert.doesNotMatch(read(file), /name="queue"|icon="queue"|icon: 'queue'/, `${file} uses the Wait Times pocket watch`);
   }
   // LinePlay's own icon (Dustin's decision, ledger 37): 'line', the How to Play gold posts and rope.
   const names = loadTs('src/ui/iconNames.ts');
   assert.ok(names.isGameIconName('line'));
+  // Honest provenance: How to Play's stanchions were drawn from Alex refs (not one of his originals).
+  assert.ok(names.GENERATED_ICON_NAMES.includes('line') && !names.ORIGINAL_ICON_NAMES.includes('line'));
+  assert.match(read('src/gamekit/party/LineParty.tsx'), /<GameIcon name="line" size=\{18\} \/>\s*<Text style=\{styles\.headsUpText\}>/);
   assert.match(read('src/ui/GameIcon.tsx'), /line: require\('\.\.\/\.\.\/assets\/icons\/game\/line\.png'\)/);
   assert.match(read('src/screens/LinePlay/components/WaitCard.tsx'), /<GameIcon name="line" size=\{54\} \/>/);
   assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /icon: 'line', title: 'Eyes up in line\.'/);
