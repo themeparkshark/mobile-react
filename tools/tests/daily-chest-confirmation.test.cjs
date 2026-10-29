@@ -78,6 +78,9 @@ function chest({ reconciled = null, reduced = false } = {}) {
       if (name === '../context/LocationProvider') return { LocationStatusContext: {} };
       if (name === '../services/reveal/revealLadder') return { useRung: () => ({ open: false, isNew: false, markSeen() {} }) };
       if (name === '../services/retention/rewardPresence') return require('./helpers/ts-module.cjs').loadTs('src/services/retention/rewardPresence.ts');
+      // Core loop: a chest opened from the Rewards sheet returns to it; the chest registers its native layer ('show').
+      if (name === '../services/retention/rewardsSignals') return require('./helpers/ts-module.cjs').loadTs('src/services/retention/rewardsSignals.ts');
+      if (name === '../ui/modalLayers') return { useNativeModalLayer: wanted => ({ present: wanted, onDismissed() {} }) };
       throw new Error(`Unexpected import ${name}`);
     },
   }, { filename: file });

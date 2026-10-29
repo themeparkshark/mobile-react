@@ -21,7 +21,9 @@ import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../ui';
 import { ws7Preview } from '../dev/ws7Preview';
 import { LocationStatusContext } from '../context/LocationProvider';
 import { useRung } from '../services/reveal/revealLadder';
-import { dailyChestAsked, dailyChestMayShow, noteAutoOpen } from '../services/retention/rewardPresence';
+import { dailyChestAsked, dailyChestFromRewards, dailyChestMayShow, noteAutoOpen } from '../services/retention/rewardPresence';
+import { returnToRewards } from '../services/retention/rewardsSignals';
+import { useNativeModalLayer } from '../ui/modalLayers';
 import Ribbon from './Ribbon';
 import RewardBurst from './RewardBurst';
 import { GoldBurst } from '../ui/GoldBurst';
@@ -117,6 +119,11 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const width = dims.width;
   const height = dims.height ?? 800;
   const [visible, setVisible] = useState(false);
+  /** Opened from a Rewards sheet row: BACK (and AWESOME) return to the sheet, as a level chest does. */
+  const fromRewards = useRef(false);
+  // The chest registers as a native layer until UIKit really dismissed it ('show': it presents at once, as before),
+  // so the Rewards sheet coming back waits for it instead of presenting over a closing sheet.
+  const layer = useNativeModalLayer(visible, 'show');
   // At a park the chest never opens by itself: it waits in the Rewards button until the player asks.
   const atPark = !!useContext(LocationStatusContext)?.park;
   const mayShow = dailyChestMayShow({ atPark, requested, asked: dailyChestAsked() });
@@ -177,6 +184,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     if (!dailyGift.redeemed_at && player?.username && mayShow) {
       // Not asked for: this is the app open's one automatic open (nothing else opens by itself after it).
       if (requested !== true && !dailyChestAsked()) noteAutoOpen();
+      fromRewards.current = dailyChestFromRewards();
       setVisible(true);
     }
   }, [dailyGift.id, dailyGift.redeemed_at, player?.username, mayShow]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -425,11 +433,13 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const coinDay = kind === 'coins';
 
   return (
-    <Modal isVisible={visible} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
+    <Modal isVisible={layer.present} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
       onModalWillShow={() => occlusion.current?.(true)} onModalHide={() => {
         occlusion.current?.(false);
         closed.current?.(!!acknowledgedGift.current);
+        if (fromRewards.current) { fromRewards.current = false; returnToRewards(); }
       }}
+      onDismiss={layer.onDismissed}
       animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'}
       animationInTiming={reducedMotion ? 120 : 260} animationOutTiming={reducedMotion ? 120 : 180}
       backdropColor={BRAND.navy}
@@ -519,8 +529,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
             </Pressable>
           )}
           {phase === 'closed' && <Pressable onPress={dismiss} accessibilityRole="button"
-            accessibilityLabel="Back to map without opening this chest" style={styles.laterButton}>
-            <Text style={styles.laterText}>BACK TO MAP</Text>
+            accessibilityLabel={fromRewards.current ? 'Back to your Rewards without opening this chest' : 'Back to map without opening this chest'}
+            style={styles.laterButton}>
+            <Text style={styles.laterText}>{fromRewards.current ? 'BACK' : 'BACK TO MAP'}</Text>
           </Pressable>}
         </View>
         <RewardBurst progress={burst} x={width * 0.47} y={height * 0.36} />

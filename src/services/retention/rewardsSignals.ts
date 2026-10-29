@@ -25,3 +25,17 @@ export function listenRewardsDoor(door: RewardsDoor, fn: () => void): () => void
   listeners[door].add(fn);
   return () => { listeners[door].delete(fn); };
 }
+
+/**
+ * Back to the Rewards sheet: a card opened from a Rewards row (the daily chest) closed, so the sheet comes back,
+ * as it does after a level chest. useRetention listens while the map is mounted.
+ */
+const backListeners = new Set<() => void>();
+export function returnToRewards(): boolean {
+  backListeners.forEach(fn => { try { fn(); } catch { /* one listener never stops the rest */ } });
+  return backListeners.size > 0;
+}
+export function listenReturnToRewards(fn: () => void): () => void {
+  backListeners.add(fn);
+  return () => { backListeners.delete(fn); };
+}

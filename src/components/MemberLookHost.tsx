@@ -2,7 +2,7 @@ import { useContext, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { LocationStatusContext } from '../context/LocationProvider';
 import { autoOpenUsed, noteAutoOpen, rewardMayAutoOpen } from '../services/retention/rewardPresence';
-import { mapAllows, mapTake } from '../services/retention/mapAttention';
+import { calmForAutoOpen, mapAllows, takeAutoOpen } from '../services/retention/mapAttention';
 import { modalLayers } from '../ui/modalLayers';
 import { dismissMemberLook, memberLookNoteSeen, restoreMemberLook } from '../api/endpoints/me/member-look';
 import { AuthContext } from '../context/AuthProvider';
@@ -82,8 +82,10 @@ export default function MemberLookHost() {
     if (busy.current || playerId == null) return;
     // The map's attention rules (guide-map's gate) say when a park moment is calm; without the gate a park always waits.
     const mapSays = mapAllows('membership');
-    const calm = () => rewardMayAutoOpen({ kind: 'member_look', atPark: atParkRef.current, firstCatchDone: true,
-      autoOpenUsed: mapSays === null ? autoOpenUsed() : false, dailyRungOpen: true, parkBusy: mapSays === null ? undefined : !mapSays }) && mapSays !== false;
+    // This lane's own one-per-app-open counter is always ANDed with the gate (the gate exempts a kind that already took it).
+    const own = () => rewardMayAutoOpen({ kind: 'member_look', atPark: atParkRef.current, firstCatchDone: true,
+      autoOpenUsed: autoOpenUsed(), dailyRungOpen: true, parkBusy: mapSays === null ? undefined : !mapSays });
+    const calm = () => calmForAutoOpen('membership', own());
     if (!calm()) {
       deferred.current = true;
       return;
@@ -99,10 +101,11 @@ export default function MemberLookHost() {
       const free = await whenNoLayer(LAYER_WAIT_MS, alive.current);
       if (!free) { deferred.current = true; return; }
       // Walked into a busy park moment, or something else opened by itself meanwhile: ask on the next calm open.
-      // One counter for the one automatic open: the map's queue when this build has its gate, else this lane's.
+      // Both counters must agree: this lane's own (always) AND the map's queue (when this build has its gate).
       const nowSays = mapAllows('membership');
-      const used = nowSays === null ? autoOpenUsed() : false;
-      if (used || nowSays === false || (atParkRef.current && nowSays === null) || !mapTake('membership')) {
+      const ownNow = rewardMayAutoOpen({ kind: 'member_look', atPark: atParkRef.current, firstCatchDone: true,
+        autoOpenUsed: autoOpenUsed(), dailyRungOpen: true, parkBusy: nowSays === null ? undefined : !nowSays });
+      if (!takeAutoOpen('membership', ownNow)) {
         deferred.current = true; return;
       }
       deferred.current = false;

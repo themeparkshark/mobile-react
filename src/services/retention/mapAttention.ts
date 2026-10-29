@@ -38,3 +38,22 @@ export function mapTake(kind: AttentionKind): boolean {
   if (!g) return true;
   try { return g.request(kind); } catch { return true; }
 }
+
+/**
+ * Both counters must agree before anything opens by itself (BLUEPRINT 4.3 rule 1). The map's gate exempts a kind
+ * that already took the app open's one automatic open (a second 'reward' would pass it), so this lane's own rule,
+ * with its own one-per-app-open counter, is always ANDed with the gate and never swapped for it.
+ * `own` is this lane's answer (rewardMayAutoOpen with the real autoOpenUsed()).
+ */
+export function calmForAutoOpen(kind: AttentionKind, own: boolean): boolean {
+  return own && mapAllows(kind) !== false;
+}
+
+/**
+ * Take the one automatic open: true only when this lane's rule still agrees and the map's queue grants it.
+ * The caller then calls noteAutoOpen(), so the next ask in the same app open is refused here even when the
+ * map's queue would let the same kind through again.
+ */
+export function takeAutoOpen(kind: AttentionKind, own: boolean): boolean {
+  return own && mapTake(kind);
+}

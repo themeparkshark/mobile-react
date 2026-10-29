@@ -5,10 +5,12 @@
  *
  * - The daily chest: at home, once a day after the first catch. At a park, never
  *   by itself: it waits in the Rewards button.
- * - Level chests and the "a freeze saved your flame" card: never at a park; at
- *   home only as the app open's one automatic open and only once Daily 3 has
- *   unlocked (rung 4). Everything else (Daily 3 chest, Weekly Box, event chests,
- *   Trail Boxes, stamps) never opens by itself: it waits in the Rewards button.
+ * - The "a freeze saved your flame" card: never at a park; at home only as the
+ *   app open's one automatic open, once Daily 3 has unlocked (rung 4) and only
+ *   when the daily chest is not waiting (the daily chest is the home's one
+ *   automatic open, section 2). Everything else (level chests, Daily 3 chest,
+ *   Weekly Box, event chests, Trail Boxes, stamps) never opens by itself: it
+ *   waits in the Rewards button (the 4.3 table).
  * - Nothing opens by itself in a park's first 30 s, while walking to the guide
  *   target, during a game or LinePlay, or within 10 s of a win card (the map's
  *   queue knows those; it passes them as `parkBusy`).
@@ -26,6 +28,8 @@ export interface AutoOpenInput {
   readonly autoOpenUsed: boolean;
   /** Rung 4 (Daily 3 and level chests) is open for this player. */
   readonly dailyRungOpen: boolean;
+  /** Today's daily chest is still waiting to be opened (it keeps the home's one automatic open). */
+  readonly dailyChestWaiting?: boolean;
   /** The map's park moments that hold every automatic open (first 30 s, walking to the target, play, a fresh win card). */
   readonly parkBusy?: boolean;
 }
@@ -35,8 +39,7 @@ export function rewardMayAutoOpen(i: AutoOpenInput): boolean {
   if (i.autoOpenUsed) return false;
   switch (i.kind) {
     case 'daily_chest': return !i.atPark && i.firstCatchDone;
-    case 'level_chest':
-    case 'freeze_saved': return !i.atPark && i.dailyRungOpen;
+    case 'freeze_saved': return !i.atPark && i.dailyRungOpen && i.dailyChestWaiting !== true;
     // Membership look dialogs: home first; at a park only when nothing else may wait.
     case 'member_look': return !i.atPark || i.parkBusy === false;
     default: return false;
@@ -48,9 +51,16 @@ export function rewardMayAutoOpen(i: AutoOpenInput): boolean {
  * park for the next few seconds (the map mounts it right after the tap).
  */
 let chestAskedAt = 0;
+let chestAskedFromRewards = false;
 export const CHEST_ASK_MS = 5000;
-export function askForDailyChest(now: number = Date.now()): void {
+/** `fromRewards`: the Rewards sheet's row asked, so the chest card's BACK (and AWESOME) return to the sheet. */
+export function askForDailyChest(now: number = Date.now(), fromRewards = false): void {
   chestAskedAt = now;
+  chestAskedFromRewards = fromRewards;
+}
+/** The chest card about to show was asked for from the Rewards sheet. */
+export function dailyChestFromRewards(now: number = Date.now()): boolean {
+  return chestAskedFromRewards && dailyChestAsked(now);
 }
 export function dailyChestAsked(now: number = Date.now()): boolean {
   return chestAskedAt > 0 && now - chestAskedAt < CHEST_ASK_MS;

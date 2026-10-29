@@ -33,8 +33,8 @@ import {
   askForDailyChest, autoOpenUsed, noteAppState, noteAutoOpen, rewardMayAutoOpen,
 } from '../../services/retention/rewardPresence';
 import { emptyLine, rewardsRows, rewardsSummary, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
-import { openRewardsDoor, rewardsDoorOpen } from '../../services/retention/rewardsSignals';
-import { mapAllows, mapTake } from '../../services/retention/mapAttention';
+import { listenReturnToRewards, openRewardsDoor, rewardsDoorOpen } from '../../services/retention/rewardsSignals';
+import { calmForAutoOpen, takeAutoOpen } from '../../services/retention/mapAttention';
 import { boxFraction, headlineBox } from '../../services/trail/trailModel';
 import { useTrail } from '../../services/trail/TrailProvider';
 import useLiveEvent from '../../services/liveEvents/useLiveEvent';
@@ -112,9 +112,10 @@ export interface RetentionResult {
  * (Rewards sheet, Daily 3, reveals, freeze, reminders ask), so they never stack
  * on each other or on another sheet (core loop blueprint 4.2 and 4.3).
  *
- * Calm by rule: at a park nothing here opens by itself; at home a level chest
- * or the freeze card may open only as the app open's one automatic open, and
- * only after Daily 3 unlocks (rung 4). Daily 3, level chests, Trail Boxes and
+ * Calm by rule: at a park nothing here opens by itself; level chests never do
+ * (they wait in the Rewards sheet); at home the freeze card may open only as
+ * the app open's one automatic open, after Daily 3 unlocks (rung 4) and once
+ * the daily chest is not waiting. Daily 3, level chests, Trail Boxes and
  * event chests show only once their rung is open.
  */
 export default function useRetention(o: RetentionOptions): RetentionResult {
@@ -281,55 +282,46 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     o.onOpenRequestHandled();
   }, [o.openRequest, o.enabled, daily]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // At home only, as the app open's one automatic open: a level-up chest presents itself once the map is free, then a
-  // freeze that saved the flame says so once. At a park they wait in the Rewards sheet (BLUEPRINT 4.3).
+  // Level chests wait in the Rewards sheet, at home and at a park (BLUEPRINT 4.3). At home only, as the app open's one
+  // automatic open, a freeze that saved the flame says so once.
   const pendingChest = wantChestsOn ? nextLevelChest(chests) : null;
   const freezeSaved = daily?.streak.freeze_saved ?? 0;
-  // The map's own attention rules (guide-map's gate) must agree too, when this build has them.
-  // One counter for "one automatic open per app open": the map's queue when this build has it (its gate counts every
-  // automatic open on the map's app-open clock); this lane's own counter only in a build without the gate.
-  const may = (kind: 'level_chest' | 'freeze_saved') => {
-    const mapSays = mapAllows('reward');
-    return rewardMayAutoOpen({ kind, atPark, firstCatchDone: true, autoOpenUsed: mapSays === null ? autoOpenUsed() : false,
-      dailyRungOpen: dailyOpen }) && mapSays !== false;
-  };
+  // Two counters, both must agree (BLUEPRINT 4.3 rule 1): this lane's own one-per-app-open counter AND the map's gate
+  // (guide-map), when this build has it. The gate exempts a kind that already took the open, so it never replaces ours.
+  // Level chests never open by themselves (4.3 table): they wait in the Rewards sheet. Only the freeze card may, at
+  // home, once the daily chest is not waiting (the daily chest is the home's one automatic open, section 2).
+  const dailyChestWaiting = !!dailyGift && dailyGift.redeemed_at === null;
+  const ownFreeze = () => rewardMayAutoOpen({ kind: 'freeze_saved', atPark, firstCatchDone: true,
+    autoOpenUsed: autoOpenUsed(), dailyRungOpen: dailyOpen, dailyChestWaiting });
   useEffect(() => {
     if (view || !o.screenFree || !o.mapFocused || !o.enabled) return;
-    if (pendingChest && may('level_chest')) {
+    if (freezeSaved > 0 && daily && calmForAutoOpen('reward', ownFreeze())) {
       const timer = setTimeout(() => {
-        if (!may('level_chest') || !mapTake('reward')) return;
-        noteAutoOpen();
-        setView(v => v ?? { k: 'reveal', src: 'level', level: pendingChest.level, rewards: null, opening: false });
-        playSfx('fx.reveal');
-      }, 700);
-      return () => clearTimeout(timer);
-    }
-    if (freezeSaved > 0 && daily && may('freeze_saved')) {
-      const timer = setTimeout(() => {
-        if (!may('freeze_saved') || !mapTake('reward')) return;
+        if (!takeAutoOpen('reward', ownFreeze())) return;
         noteAutoOpen();
         setView(v => v ?? { k: 'freezeSaved', days: freezeSaved, streak: daily.streak.days });
       }, 700);
       return () => clearTimeout(timer);
     }
-  }, [pendingChest?.level, freezeSaved, view, o.screenFree, o.mapFocused, o.enabled, atPark, dailyOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [freezeSaved, view, o.screenFree, o.mapFocused, o.enabled, atPark, dailyOpen, dailyChestWaiting]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The reminders ask: the first home open after the first park day, only while reminder pushes really work
   // (the server's retention_push switch: off until the push key is set), and only as the one automatic open.
   useEffect(() => {
     if (view || atPark || !sawParkDay || !o.screenFree || !o.mapFocused || !o.enabled) return;
-    const used = () => (mapAllows('reward') === null ? autoOpenUsed() : mapAllows('reward') === false);
-    if (!flagOn(flags, 'retention_push') || used()) return;
+    // The daily chest is the home's one automatic open (section 2): the ask waits for a later open while it waits.
+    const own = () => !autoOpenUsed() && !dailyChestWaiting;
+    if (!flagOn(flags, 'retention_push') || !calmForAutoOpen('reward', own())) return;
     let live = true;
     const timer = setTimeout(() => {
       void mayAskForPush().then(ok => {
-        if (!live || !ok || used() || !mapTake('reward')) return;
+        if (!live || !ok || !takeAutoOpen('reward', own())) return;
         noteAutoOpen();
         setView(v => v ?? { k: 'push' });
       });
     }, 900);
     return () => { live = false; clearTimeout(timer); };
-  }, [view, atPark, sawParkDay, o.screenFree, o.mapFocused, o.enabled, flags]);
+  }, [view, atPark, sawParkDay, o.screenFree, o.mapFocused, o.enabled, flags, dailyChestWaiting]);
 
   const [sheetFromRewards, setSheetFromRewards] = useState(false);
   const openSheet = (fromRewards = false) => {
@@ -493,6 +485,18 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     void refresh(false);
   }, [refreshStamps, loadPassToday, refresh]);
 
+  // A card opened from a Rewards row (the daily chest) closed: the sheet comes back, as after a level chest. The map
+  // unmounts the chest as it hides, so its native dismiss may never reach us: the sheet waits out the same fallback
+  // as the overlay's own handoff, then presents through its layer ('wait').
+  useEffect(() => listenReturnToRewards(() => {
+    setTimeout(() => {
+      if (!mounted.current) return;
+      setRewardsNote(null);
+      setView(v => v ?? { k: 'rewards' });
+      void refreshStamps(true);
+    }, NATIVE_GONE_FALLBACK_MS);
+  }), [refreshStamps]);
+
   // Dev JS only: lane checks open the sheet and read its numbers before the map's Rewards button lands.
   useEffect(() => {
     if (!__DEV__) return undefined;
@@ -541,7 +545,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     switch (key) {
       // The ask is made only once the overlay is really gone: the chest card (already mounted, waiting at a park)
       // would otherwise present while UIKit is still dismissing this sheet and never show.
-      case 'daily_chest': closeThen(() => { askForDailyChest(); o.onOpenChest(); }); return;
+      case 'daily_chest': closeThen(() => { askForDailyChest(Date.now(), true); o.onOpenChest(); }); return;
       case 'daily3':
         if (daily?.claimable) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
         else openSheet(true);
