@@ -666,3 +666,15 @@ test('after winning today\'s Adventure coin the guide stays on that ride for its
   const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
   assert.match(explore, /taskId === tripGoal\?\.task_id \|\| taskId === adventure\?\.ride\.task_id/);
 });
+
+test('line story words: a name ending in an apostrophe reads "Soarin\'s", and the arrival card never calls a won coin "First coin"', () => {
+  assert.equal(C.possessive("Soarin'"), "Soarin's");
+  assert.equal(C.possessive('Soarin\u2019'), 'Soarin\u2019s');
+  assert.equal(C.possessive('Jungle Cruise'), "Jungle Cruise's");
+  const story = tgt({ taskId: 137, name: "Soarin'", reason: 'line_story' });
+  assert.equal(C.guideCardCopy('line_story', story, ctx()).title, "Play Soarin's line story");
+  const arrive = C.guideCardCopy('arrive', story, ctx());
+  assert.equal(arrive.title, "Next: Soarin's line story");
+  assert.doesNotMatch(arrive.title, /First coin/);
+  assert.equal(C.guideCardCopy('arrive', tgt(), ctx()).title, 'First coin: Jungle Cruise');
+});

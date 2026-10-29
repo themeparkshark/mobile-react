@@ -75,6 +75,12 @@ export function guideDistance(meters: number | null): string | null {
   return `${Math.max(5, Math.round(meters / 5) * 5)} m`;
 }
 
+/** "Jungle Cruise's", and "Soarin's" for a name that already ends in an apostrophe (never "Soarin''s"). */
+export function possessive(name: string): string {
+  const trimmed = name.trim();
+  return /['\u2019]$/.test(trimmed) ? `${trimmed}s` : `${trimmed}'s`;
+}
+
 /** The PLAY! range a tapped coin's callout counts down to (the server's redeem radius, 16 m). */
 export const CALLOUT_RANGE_METERS = 16;
 
@@ -150,7 +156,8 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
     case 'arrive':
       return card({
         kicker: `WELCOME TO ${park.toUpperCase()}!`,
-        title: target ? `First coin: ${name}` : 'Every ride has a coin',
+        // A coin you already won (today's Adventure ride, for its line story) is never "First coin".
+        title: target ? (target.reason === 'line_story' ? `Next: ${possessive(name)} line story` : `First coin: ${name}`) : 'Every ride has a coin',
         line: [far, running].filter(Boolean).join(' · ') || null,
         button: target ? { label: 'GO', action: 'go' } : null,
       });
@@ -172,7 +179,7 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
     case 'line_story':
       return card({
         kicker: 'TODAY\'S ADVENTURE',
-        title: `Play ${name}'s line story`,
+        title: `Play ${possessive(name)} line story`,
         line: far && target && !target.inRange ? far : null,
         button: { label: 'LINEPLAY', action: 'lineplay' },
         secondary: { label: 'Pick another coin', action: 'skip' },
