@@ -672,6 +672,7 @@ test('short lines draw their digits in the number face, so "1" never reads "I"',
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /withNumberFont\(step\.kind === 'line_ticket'/);
   assert.match(modal, /<Text style=\{styles\.stepLine\}>\{withNumberFont\(challengeStepLine\(freeStep\) \?\? ''\)\}<\/Text>/);
+  assert.match(read('src/games/trivia-duel/ui/Card.tsx'), /\{withNumberFont\(roundLabel\)\}/, '"QUESTION 1 OF 3" never reads "I OF 3"');
   // The loss card's try line ("1 of 3 right.") is already in the number face; its message ("1 Ticket used.") now too.
   const status = read('src/components/rewards/ChallengeStatusCard.tsx');
   assert.match(status, /line: \{ fontFamily: 'Shark'/);
