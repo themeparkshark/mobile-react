@@ -543,9 +543,10 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     const rung = rowRung(key);
     if (rung) markRungSeen(rung);
     switch (key) {
-      // The ask is made only once the overlay is really gone: the chest card (already mounted, waiting at a park)
-      // would otherwise present while UIKit is still dismissing this sheet and never show.
-      case 'daily_chest': closeThen(() => { askForDailyChest(Date.now(), true); o.onOpenChest(); }); return;
+      // The chest is asked at once, so the map mounts it while this sheet is still closing; the chest card waits on
+      // its native layer ('wait') and presents the moment UIKit says this sheet is gone (it is never refused over a
+      // closing sheet, and there is no bare map between the two).
+      case 'daily_chest': closeThen(() => undefined); askForDailyChest(Date.now(), true); o.onOpenChest(); return;
       case 'daily3':
         if (daily?.claimable) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
         else openSheet(true);

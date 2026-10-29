@@ -358,8 +358,19 @@ test('one door: the next native sheet waits for the overlay native dismiss, and 
   assert.match(hook, /onDismiss=\{nativeGone\}/, 'after-hide work runs on the real native dismiss');
   assert.match(hook, /dismissFallback\.current = setTimeout\(nativeGone, NATIVE_GONE_FALLBACK_MS\);/);
   assert.match(hook, /onModalShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
-  assert.match(hook, /case 'daily_chest': closeThen\(\(\) => \{ askForDailyChest\(Date\.now\(\), true\); o\.onOpenChest\(\); \}\); return;/,
-    'the chest is asked for only after the overlay is gone');
+  // The chest is asked at once, but it presents only once the overlay is gone: its own layer waits ('wait').
+  assert.match(hook, /case 'daily_chest': closeThen\(\(\) => undefined\); askForDailyChest\(Date\.now\(\), true\); o\.onOpenChest\(\); return;/);
+  assert.match(read('src/components/DailyGiftModal.tsx'), /useNativeModalLayer\(visible, 'wait'\)/,
+    'the chest card presents only once the closing Rewards sheet is gone');
+  // The layer list itself: the closing sheet's layer stays first until UIKit says it is gone, so the chest waits.
+  const { modalLayers } = loadTs('src/ui/modalLayers.ts', { react: require('react') });
+  modalLayers.reset();
+  const sheet = modalLayers.add();
+  const chest = modalLayers.add();
+  assert.equal(modalLayers.isFront(chest), false, 'the chest waits while the sheet is still dismissing');
+  modalLayers.remove(sheet);
+  assert.equal(modalLayers.isFront(chest), true, 'the chest presents the moment the sheet is gone');
+  modalLayers.reset();
 });
 
 test("the map's attention gate: asked when guide-map publishes it, quiet fallback when this build has none", () => {
@@ -703,11 +714,13 @@ test('the daily chest opened from Rewards: BACK says BACK and the sheet comes ba
   assert.match(chest, /fromRewards\.current = dailyChestFromRewards\(\);/);
   assert.match(chest, /if \(fromRewards\.current\) \{ fromRewards\.current = false; returnToRewards\(\); \}/);
   assert.match(chest, /\{fromRewards\.current \? 'BACK' : 'BACK TO MAP'\}/);
-  assert.match(chest, /useNativeModalLayer\(visible, 'show'\)/);
+  assert.match(chest, /useNativeModalLayer\(visible, 'wait'\)/);
   assert.match(chest, /isVisible=\{layer\.present\}/);
   assert.match(chest, /onDismiss=\{layer\.onDismissed\}/);
   const hook = read('src/components/retention/useRetention.tsx');
-  assert.match(hook, /case 'daily_chest': closeThen\(\(\) => \{ askForDailyChest\(Date\.now\(\), true\); o\.onOpenChest\(\); \}\); return;/);
+  // Asked at once (the map mounts the chest while the sheet closes); the chest's 'wait' layer holds it until UIKit
+  // says the sheet is gone.
+  assert.match(hook, /case 'daily_chest': closeThen\(\(\) => undefined\); askForDailyChest\(Date\.now\(\), true\); o\.onOpenChest\(\); return;/);
   assert.match(hook, /useEffect\(\(\) => listenReturnToRewards\(/);
   // No fixed wait between the chest and the sheet: the overlay's 'wait' layer holds it until the chest's layer is gone.
   const back2 = hook.slice(hook.indexOf('listenReturnToRewards(() =>'), hook.indexOf('listenReturnToRewards(() =>') + 400);

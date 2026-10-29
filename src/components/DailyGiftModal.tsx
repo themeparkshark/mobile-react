@@ -121,9 +121,11 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const [visible, setVisible] = useState(false);
   /** Opened from a Rewards sheet row: BACK (and AWESOME) return to the sheet, as a level chest does. */
   const fromRewards = useRef(false);
-  // The chest registers as a native layer until UIKit really dismissed it ('show': it presents at once, as before),
-  // so the Rewards sheet coming back waits for it instead of presenting over a closing sheet.
-  const layer = useNativeModalLayer(visible, 'show');
+  // The chest registers as a native layer until UIKit really dismissed it, so the Rewards sheet coming back waits
+  // for it. 'wait': asked from a Rewards row, it mounts while that sheet is still closing and presents the moment
+  // UIKit says the sheet is gone (no bare map in between, never refused over a closing sheet). Opening by itself at
+  // home, nothing else is up, so it presents at once as before.
+  const layer = useNativeModalLayer(visible, 'wait');
   // At a park the chest never opens by itself: it waits in the Rewards button until the player asks.
   const atPark = !!useContext(LocationStatusContext)?.park;
   const mayShow = dailyChestMayShow({ atPark, requested, asked: dailyChestAsked() });
