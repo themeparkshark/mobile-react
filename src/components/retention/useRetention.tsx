@@ -264,6 +264,12 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     } catch { /* no dot this time */ }
   }, [playerId]);
   useEffect(() => { if (o.enabled && o.mapFocused) void refreshStamps(); }, [o.enabled, o.mapFocused, refreshStamps]);
+  // A win, find or chest can earn a stamp: read again so the Rewards number rises right away (one read per event).
+  const firstKey = useRef(o.refreshKey);
+  useEffect(() => {
+    if (!o.enabled || o.refreshKey === firstKey.current) return;
+    void refreshStamps(true);
+  }, [o.refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A push asked for Daily 3 or the chest.
   useEffect(() => {

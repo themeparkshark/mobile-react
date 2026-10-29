@@ -422,6 +422,8 @@ test('stamps row is honest: a fresh read on open, the server count, and no "Clai
   const hook = read('src/components/retention/useRetention.tsx');
   assert.match(hook, /setView\(\{ k: 'rewards' \}\);\n    \/\/ A fresh stamp read[^\n]*\n    void refreshStamps\(true\);/);
   assert.match(hook, /const n = stampClaimableCount\(r\);/, 'the row and the Profile dot read the same count (summary.claimable first)');
+  assert.match(hook, /if \(!o\.enabled \|\| o\.refreshKey === firstKey\.current\) return;\n    void refreshStamps\(true\);/, 'a win that earns a stamp raises the number at once');
+  assert.match(read('src/screens/TrailPreviewScreen.tsx'), /mode: 'fixed', first_box: 'second_park_day'/, 'the known-contents preview scene');
   assert.match(hook, /if \(claimed === 0 && failed === 0\) \{ setRewardsNote\(null\); return; \}/);
   assert.match(hook, /coins \? `\+\$\{coins\} Shark Coins` : null/);
   const dot = loadTs('src/components/profile/stampDot.ts', {});
