@@ -89,11 +89,16 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, crew = f
   const trailBottom = leadBottom > 0 && trailHeight > 0 ? leadBottom + trailGap + trailHeight : trailBottomSeen;
   // Blocks rise in once, when the page first opens. A later layout switch (Details opening
   // or closing changes what leads) just shows the blocks, never replays the entrance.
+  // The blocks mount only once the window is measured: before that the page cannot know its layout (a 17 Pro
+  // reads 'full' at 0, then 'compact' a frame later), and switching the order mid-entrance could leave PLAY
+  // stuck under the header (round 3 device walk). The entrance clock starts when the blocks really mount.
+  const measured = viewHeight > 0;
   const entered = useRef(false);
   useEffect(() => {
+    if (!measured) return undefined;
     const timer = setTimeout(() => { entered.current = true; }, 900);
     return () => clearTimeout(timer);
-  }, []);
+  }, [measured]);
   const reducedUi = useUiReducedMotion();
   const rise = riseFor(reducedUi || entered.current);
   const epilogue = crewRelay ? crewRelayEpilogue(crewRelay, chapter.relay.epilogues) : null;
@@ -213,10 +218,10 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, crew = f
       {/* A short phone (iPhone SE) puts the clue to play first, fully on screen; the mission header follows.
           Keyed, so when the first layout switches the order mid-entrance each block MOVES with its own
           animation; it is never morphed into the other block and left half faded. */}
-      {compact ? <>{playNow}{header}</> : <>{header}{playNow}</>}
+      {measured && (compact ? <>{playNow}{header}</> : <>{header}{playNow}</>)}
       {/* Compact: just the numbered bubbles (names stay in the spoken label), so the row ends whole
           above the fade instead of small labels dissolving into it. */}
-      <Animated.View entering={rise(2)} style={[styles.trail, compact && styles.trailCompact,
+      {measured && <Animated.View entering={rise(2)} style={[styles.trail, compact && styles.trailCompact,
         { marginTop: trailGap }]}
         onLayout={event => {
           setTrailBottom(layoutBottom(event));
@@ -238,9 +243,9 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, crew = f
             {!compact && <Text style={styles.stepName} numberOfLines={3}>{name}</Text>}
           </Pressable>;
         })}
-      </Animated.View>
+      </Animated.View>}
 
-      {(crew || signalAvailable) && <Animated.View entering={rise(3)} style={[styles.crewRow, { marginTop: foldGap(viewHeight, trailBottom, crewHeight, CREW_ROW_GAP) }]}
+      {measured && (crew || signalAvailable) && <Animated.View entering={rise(3)} style={[styles.crewRow, { marginTop: foldGap(viewHeight, trailBottom, crewHeight, CREW_ROW_GAP) }]}
         onLayout={event => setCrewHeight(Math.round(event.nativeEvent.layout.height))}>
         {/* A solo wait never meets a crew page (its tile would open a page that is not there). */}
         {crew && <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chapter.relay.title}`} {...off}

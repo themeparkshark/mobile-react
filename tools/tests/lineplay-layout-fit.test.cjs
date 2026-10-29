@@ -80,7 +80,7 @@ test('on a short phone the chapter page puts PLAY NOW on screen: one-line header
   assert.match(card, /headerCompact: \{ minHeight: 0, height: 58 \}/);
   assert.match(card, /compact && styles\.playNowCompact/);
   assert.match(card, /: !compact && <Text style=\{styles\.playNowHint\}>/);
-  assert.match(card, /\{compact \? <>\{playNow\}\{header\}<\/> : <>\{header\}\{playNow\}<\/>\}/, 'SE: the clue to play comes first');
+  assert.match(card, /\{measured && \(compact \? <>\{playNow\}\{header\}<\/> : <>\{header\}\{playNow\}<\/>\)\}/, 'SE: the clue to play comes first');
 });
 
 test('PLAY NOW is always whole: the page leads with it, shrinks it to one row, or the window steps aside', () => {
@@ -289,7 +289,12 @@ test('the chapter page blocks are keyed, so the order switch after the first lay
   const card = read('src/screens/LinePlay/components/ChapterCard.tsx');
   assert.match(card, /<Animated\.View key="header" entering=\{rise\(compact \? 1 : 0\)\}/);
   assert.match(card, /<Animated\.View key="play-now" entering=\{rise\(compact \? 0 : 1\)\}/);
-  assert.match(card, /\{compact \? <>\{playNow\}\{header\}<\/> : <>\{header\}\{playNow\}<\/>\}/);
+  assert.match(card, /\{measured && \(compact \? <>\{playNow\}\{header\}<\/> : <>\{header\}\{playNow\}<\/>\)\}/);
+  // Round 3 device walk: the order switch mid-entrance still left PLAY stuck under the header now and then.
+  // The blocks now mount only once the window is measured, so the order never switches during the entrance.
+  assert.match(card, /const measured = viewHeight > 0;/);
+  assert.match(card, /if \(!measured\) return undefined;\n\s+const timer = setTimeout\(\(\) => \{ entered\.current = true; \}, 900\);/);
+  assert.match(card, /\{measured && <Animated\.View entering=\{rise\(2\)\}/);
 });
 
 test('an iPhone SE navigation page: the whole board fits BESIDE its header, no scrolling', () => {
