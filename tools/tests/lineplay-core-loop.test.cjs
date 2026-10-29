@@ -377,3 +377,8 @@ test('a new PLAY IN LINE at a ride never reopens a settled recap from a wait tha
   assert.equal(cp.finishedRecapIsStale(null, now), false);
   assert.match(session, /if \(playerId && finishedRecapIsStale\(saved\)\) \{\n\s+await removeCheckpoint\(playerId, ride\.rideId\)/);
 });
+
+test('the first-wait picture line is readable white on the wait card\'s blue', () => {
+  const card = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.match(card, /introLineText: \{ flex: 1, color: '#ffffff'/);
+});

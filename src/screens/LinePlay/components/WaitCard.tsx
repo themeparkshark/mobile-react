@@ -674,7 +674,8 @@ const styles = StyleSheet.create({
   detailsButtonText: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 14 },
   pauseButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
   introLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  introLineText: { flex: 1, color: '#315d77', fontFamily: 'Knockout', fontSize: 14, lineHeight: 17 },
+  // White on the card's blue (slate read as nearly invisible there).
+  introLineText: { flex: 1, color: '#ffffff', fontFamily: 'Knockout', fontSize: 14, lineHeight: 17 },
   hintLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
   hintLineText: { marginTop: 0, flexShrink: 1 },
   waitSourceHint: { color: '#d4edff', fontFamily: 'Knockout', fontSize: 11, marginTop: spacing.sm },
