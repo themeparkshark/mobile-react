@@ -77,6 +77,8 @@ interface Props {
    * Without it (away from this park) the sheet shows where Parts come from instead.
    */
   onGetParts?: () => void;
+  /** A sight has no line: its Ride Parts come from winning its coin again, and the copy says so. */
+  sight?: boolean;
 }
 
 type ModalState = 'preview' | 'confirm' | 'leveling' | 'success' | 'maxed';
@@ -104,6 +106,7 @@ export default function CoinLevelingModal({
   onFeature,
   onPlayInLine,
   onGetParts,
+  sight = false,
 }: Props) {
   const [state, setState] = useState<ModalState>('preview');
   const [featured, setFeatured] = useState(false);
@@ -992,15 +995,18 @@ export default function CoinLevelingModal({
                     {/* Away from this park, GET RIDE PARTS opens this picture card: where Parts come from. */}
                     {!canLevelUp && !hasParts && showPartsHelp && (
                       <View accessible accessibilityLiveRegion="polite"
-                        accessibilityLabel={`Ride Parts for ${rideCoin.ride_name}: stand in its line on your park day. Time in line earns Parts, and winning its coin again earns one too.`}
+                        accessibilityLabel={sight
+                          ? `Ride Parts for ${rideCoin.ride_name}: win its coin again on your park day. Each new win earns a Part.`
+                          : `Ride Parts for ${rideCoin.ride_name}: stand in its line on your park day. Time in line earns Parts, and winning its coin again earns one too.`}
                         style={{ alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10,
                           backgroundColor: '#E8F6FF', borderColor: '#7CC3EA', borderWidth: 2, borderRadius: 14, padding: 10 }}>
                         <GameIcon name="ride" size={30} />
                         <Image source={require('../../assets/images/ride-parts.png')} style={{ width: 30, height: 30 }} contentFit="contain" />
                         <View style={{ flex: 1 }}>
-                          <Text style={{ fontFamily: 'Shark', fontSize: 14, color: '#05346E' }}>Stand in its line</Text>
+                          <Text style={{ fontFamily: 'Shark', fontSize: 14, color: '#05346E' }}>{sight ? 'Win it again' : 'Stand in its line'}</Text>
                           <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: '#17476B' }}>
-                            On your park day, time in this ride's line earns Ride Parts. Winning its coin again earns one too.
+                            {sight ? 'On your park day, each new win of this coin earns a Ride Part.'
+                              : 'On your park day, time in this ride\'s line earns Ride Parts. Winning its coin again earns one too.'}
                           </Text>
                         </View>
                       </View>
@@ -1013,7 +1019,11 @@ export default function CoinLevelingModal({
                         textAlign: 'center', marginTop: 8,
                       }}>
                         {!hasParts
-                          ? onGetParts
+                          ? sight
+                            ? onGetParts
+                              ? 'Each new win of this coin earns a Ride Part. Tap to see the way there.'
+                              : 'Each new win of this coin earns a Ride Part on your park day.'
+                            : onGetParts
                             ? 'Time in this ride\'s line earns Ride Parts. Tap to see the way there.'
                             : 'Win this ride again or play LinePlay in its line to earn Ride Parts.'
                           : 'Energy comes from treats on your home map and your daily chest.'}

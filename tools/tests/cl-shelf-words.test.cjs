@@ -343,3 +343,11 @@ test('round 2: Standings says wins (BLUEPRINT 5.9); help reads flags once per si
   assert.match(help, /\}, \[playerId\]\);/);
   assert.match(read('src/screens/StoreScreen/SuppliesShop.tsx'), /passSeasonCache\?\.playerId === playerId/, 'the pass read is cached per player');
 });
+
+test('round 2: a sight coin card never sends you to a line it does not have', () => {
+  const sheet = read('src/components/CoinLevelingModal.tsx');
+  assert.match(sheet, /'Each new win of this coin earns a Ride Part\. Tap to see the way there\.'/);
+  assert.match(sheet, /\{sight \? 'Win it again' : 'Stand in its line'\}/);
+  assert.match(read('src/components/TaskCoinModal.tsx'), /sight=\{sight\}/);
+  assert.match(read('src/screens/ParkScreen.tsx'), /sight=\{section === 'normal' && rideKind\(task\.id\) === 'coin'\}/);
+});

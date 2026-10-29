@@ -32,6 +32,7 @@ export default function TaskCoinModal({
   phase = 0,
   openRequestKey,
   igniteKey,
+  sight = false,
 }: {
   readonly isSecretTask?: boolean;
   readonly task: TaskType | SecretTaskType;
@@ -50,6 +51,8 @@ export default function TaskCoinModal({
   readonly openRequestKey?: number;
   /** Plays the slot ignite (a coin just landed here). */
   readonly igniteKey?: number | string;
+  /** A sight (statue, castle): no line, so its Parts come from winning it again. */
+  readonly sight?: boolean;
 }) {
   const [visible, setVisible] = useState(false);
   const [rideCoin, setRideCoin] = useState<RideCoinLevelType | null>(null);
@@ -194,6 +197,7 @@ export default function TaskCoinModal({
         </View>
       </Modal> : <CoinLevelingModal
         visible={visible}
+        sight={sight}
         rideCoin={rideCoin}
         playerEnergy={player?.energy ?? 0}
         playerParts={rideCoin?.available_parts ?? 0}

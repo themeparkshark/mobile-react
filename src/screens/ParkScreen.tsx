@@ -418,6 +418,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     phase={rowIndex * 5 + index}
                     task={task}
                     isSecretTask={section === 'secret'}
+                    sight={section === 'normal' && rideKind(task.id) === 'coin'}
                     level={owned.coin_level ?? null}
                     igniteKey={arriving && landedKey === requestKey ? requestKey ?? undefined : undefined}
                     onPlayInLine={section === 'normal' && canChooseGoal && inThisPark &&
