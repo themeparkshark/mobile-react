@@ -70,6 +70,19 @@ export const AD_RETRY_ACTION = { label: 'Watch Ad', icons: ['play', 'retry'], a1
 /** A VIP member's retry lives inside TRY AGAIN, with a quiet "VIP try" tag (no upsell to anyone else). */
 export const VIP_RETRY_ACTION = { label: 'Try Again', icons: ['retry'], note: 'VIP try', a11yLabel: 'Try again. A VIP try.' } as const;
 
+/** A member's loss card once today's VIP tries are used: said kindly, in place of a try that is not there. */
+export const VIP_TRY_TOMORROW = 'Your VIP try comes back tomorrow.';
+
+/**
+ * A member's VIP tries left today, from the server's ad summary (the retry placement's remaining
+ * count; the server caps it per shop day). Null when the summary has no answer, so the loss card
+ * still offers the try and the server decides.
+ */
+export function vipTriesLeft(summary: { readonly placements?: Partial<Record<string, { readonly remaining?: number }>> } | null | undefined): number | null {
+  const remaining = summary?.placements?.retry?.remaining;
+  return typeof remaining === 'number' && Number.isFinite(remaining) ? Math.max(0, Math.floor(remaining)) : null;
+}
+
 export function lostTryHasRetry(input: Pick<LostTryInput, 'firstCoinTicketReturned' | 'rescueRetryAvailable' | 'retryOffered'>): boolean {
   return input.firstCoinTicketReturned || input.rescueRetryAvailable || !!input.retryOffered;
 }

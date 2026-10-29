@@ -7,7 +7,7 @@
  * challenge's loss card (the one with TRY AGAIN and the Ticket that came back)
  * says how the try went in one honest line:
  *   Whack-a-Shark  "8 of 13 bonks."
- *   Memory Match   "6 of 8 pairs."
+ *   Memory Match   "6 of 8 pairs." (or "Best try: 5 of 8 pairs." when an earlier shell found more)
  *   Beat the Buzzer "1 of 3 right. 2 wins the coin."  (right answers lead, never points)
  * "So close" is said only when the try really was close (75% of the goal, or
  * one right answer away). Pure apart from the one-slot store. No em dashes.
@@ -53,6 +53,9 @@ export function rideTrySummary(run: RunLike | null | undefined): RideTrySummary 
     const pairs = int(meta.pairs);
     const total = int(meta.pairsTotal);
     if (pairs === null || !total) return { game: 'memory', near: false, line: null };
+    // A ride Ticket has three tries: the line tells the best one, never only a last try that found nothing.
+    const best = Math.min(Math.max(pairs, int(meta.bestPairs) ?? 0), total);
+    if (best > pairs) return { game: 'memory', near: best / total >= NEAR_SHARE, line: `Best try: ${best} of ${total} pairs.` };
     const got = Math.min(pairs, total);
     return { game: 'memory', near: got / total >= NEAR_SHARE, line: `${got} of ${total} pairs.` };
   }

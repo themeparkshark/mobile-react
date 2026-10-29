@@ -520,6 +520,8 @@ export default function MemoryGame({
   const moving = !!movement?.moving;
   const walking = walk.walking || moving;
   const walkingRef = useRef(walking);
+  /** A ride Ticket's best try (pairs found), so the loss card tells the best of its three shells, not only the last. */
+  const rideBestPairsRef = useRef(0);
   walkingRef.current = walking;
   const calm = walking || reducedMotion;
 
@@ -1118,6 +1120,8 @@ export default function MemoryGame({
         turns: e.turns,
         pairs: e.pairs,
         pairsTotal: e.pairsTotal,
+        // The best of this Ticket's tries (ride only): the loss card's honest line.
+        ...(r.mode === 'ride' ? { bestPairs: Math.max(rideBestPairsRef.current, e.pairs) } : {}),
         maxCombo: e.maxChain,
         showtimes: e.showtimes,
         stars,
@@ -1156,6 +1160,9 @@ export default function MemoryGame({
     if (!r || r.ended) return;
     r.ended = true;
     r.playing = false;
+    if (r.mode === 'ride') {
+      rideBestPairsRef.current = r.tryIndex === 0 ? r.eng.pairs : Math.max(rideBestPairsRef.current, r.eng.pairs);
+    }
     const e = r.eng;
     const stars = r.mode === 'ride' ? rideStars(e) : r.mode === 'daily' ? dailyStars(e) : r.mode === 'warmup' ? (won ? 3 : 0) : timeAttackStars(r.cleared);
     const finalScore = e.score;

@@ -32,7 +32,8 @@ import * as RootNavigation from '../RootNavigation';
 import TicketPunch from './TicketPunch';
 import { serverPerkChips, type PerkChipData } from './coin/progressionModel';
 import ChallengeStatusCard from './rewards/ChallengeStatusCard';
-import { VIP_RETRY_ACTION, lostTryCopy } from './rewards/lostTryCard';
+import { VIP_RETRY_ACTION, VIP_TRY_TOMORROW, lostTryCopy, vipTriesLeft } from './rewards/lostTryCard';
+import { getAdSummary } from '../api/endpoints/me/ad-rewards';
 import { markStandingsStale } from '../screens/LeaderboardsScreen/standingsCache';
 import {
   challengeButtonLabel, challengeFreeSteps, challengeNextStep, challengeStepLine, challengeTitle,
@@ -215,6 +216,9 @@ export default function RedeemRedeemableModal({
   // The "one more try" ad offer, shown once per lost challenge.
   const [adBusy, setAdBusy] = useState(false);
   const [retryOffered, setRetryOffered] = useState(true);
+  // A member's VIP tries left today (read while the game plays); null until the server answers.
+  const [vipLeft, setVipLeft] = useState<number | null>(null);
+  const [vipNote, setVipNote] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [rescueUnavailable, setRescueUnavailable] = useState(false);
   const [proofRejected, setProofRejected] = useState(false);
@@ -320,6 +324,8 @@ export default function RedeemRedeemableModal({
       setFirstCoinTicketReturned(false);
       setLostTicketCost(0);
       setRetryOffered(true);
+      setVipLeft(null);
+      setVipNote(null);
       setUsedRescuePass(false);
       setRescueRetryAvailable(false);
       setStartError(null);
@@ -669,13 +675,23 @@ export default function RedeemRedeemableModal({
 
   // A VIP member's retry (blueprint 5.13): once the free refund is used, TRY AGAIN carries a quiet
   // "VIP try" through the existing One More Try grant. Non-members see no VIP line and no ad.
-  const canOfferRetry = retryOffered && taskType !== null && lostTicketCost > 0 && !usedRescuePass
+  const vipRetryCase = taskType !== null && lostTicketCost > 0 && !usedRescuePass
     && !firstCoinTicketReturned && !rescueRetryAvailable && vip;
+  // Today's VIP tries are read while the game plays, so the loss card never offers a try that is not
+  // there and never swaps its big button under a finger. With none left it says so kindly instead.
+  useEffect(() => {
+    if (!vip || flowState !== 'minigame') return undefined;
+    let alive = true;
+    void getAdSummary().then(summary => { if (alive) setVipLeft(vipTriesLeft(summary)); })
+      .catch(() => { if (alive) setVipLeft(null); });
+    return () => { alive = false; };
+  }, [vip, flowState]);
+  const vipOutToday = vipRetryCase && vipLeft === 0;
+  const canOfferRetry = retryOffered && vipRetryCase && !vipOutToday;
   // One loss card per miss (the game's own card is skipped in a ride challenge, GameShellV2): its title,
   // one honest line from the game, the Ticket picture and the one way on.
   const lostCopy = lostTryCopy({ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,
     retryOffered: canOfferRetry, near: rideTry?.near === true });
-  const [vipNote, setVipNote] = useState<string | null>(null);
   const handleVipRetry = useCallback(async () => {
     const attemptId = attemptRef.current?.id;
     if (adBusy || !attemptId) return;
@@ -690,7 +706,7 @@ export default function RedeemRedeemableModal({
     }
     setRetryOffered(false);
     setVipNote(outcome.status === 'checking' ? 'Your Ticket comes back in a moment. Tap PLAY! again.'
-      : outcome.status === 'capped' ? 'Your VIP try comes back tomorrow.' : 'No VIP try for this coin right now.');
+      : outcome.status === 'capped' ? VIP_TRY_TOMORROW : 'No VIP try for this coin right now.');
   }, [adBusy, refreshPlayer, handleProtectedRetry]);
 
   // Claim earned Tickets in place, then PLAY! spends one (blueprint 4.1: claim before the free try).
@@ -1108,7 +1124,7 @@ export default function RedeemRedeemableModal({
           {/* The one loss card: a kind title, one honest line from the game, the Ticket (it flies home when it
               came back) and one way on. A member's VIP try lives inside TRY AGAIN; nobody else sees a VIP line. */}
           {flowState === 'lost' && <ChallengeStatusCard title={lostCopy.title} art="soClose"
-            message={vipNote ?? lostCopy.message} ticket={lostCopy.ticket} line={rideTry?.line ?? null} ticketFlyTo={ticketTarget}
+            message={vipNote ?? (vipOutToday ? VIP_TRY_TOMORROW : lostCopy.message)} ticket={lostCopy.ticket} line={rideTry?.line ?? null} ticketFlyTo={ticketTarget}
             primary={firstCoinTicketReturned || rescueRetryAvailable
               ? { label: location ? 'Try Again' : 'Finding You', icons: ['retry'], onPress: handleProtectedRetry, disabled: !location }
               : canOfferRetry

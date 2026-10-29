@@ -608,7 +608,7 @@ test('the ride try card never claims SO CLOSE!: GOOD TRY! (ONE MORE TRY! with a 
   assert.equal(lost.lostTryCopy({ ...base, lostTicketCost: 1, near: false }).title, 'Good Try!');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.doesNotMatch(modal, /title="So Close!"/);
-  assert.match(modal, /<ChallengeStatusCard title=\{lostCopy\.title\} art="soClose"\n\s+message=\{vipNote \?\? lostCopy\.message\} ticket=\{lostCopy\.ticket\}/);
+  assert.match(modal, /<ChallengeStatusCard title=\{lostCopy\.title\} art="soClose"\n\s+message=\{vipNote \?\? \(vipOutToday \? VIP_TRY_TOMORROW : lostCopy\.message\)\} ticket=\{lostCopy\.ticket\}/);
   const capture = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
   assert.match(capture, /\{\.\.\.lostTryCopy\(/, 'the capture shows the exact words the modal shows');
   const card = read('src/components/rewards/ChallengeStatusCard.tsx');

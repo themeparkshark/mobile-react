@@ -363,7 +363,8 @@ test('a VIP member\'s retry lives inside TRY AGAIN; nobody else sees a VIP or ad
   assert.equal(lost.VIP_RETRY_ACTION.label, 'Try Again');
   assert.equal(lost.VIP_RETRY_ACTION.note, 'VIP try');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /const canOfferRetry = retryOffered && taskType !== null && lostTicketCost > 0 && !usedRescuePass\n\s+&& !firstCoinTicketReturned && !rescueRetryAvailable && vip;/);
+  assert.match(modal, /const vipRetryCase = taskType !== null && lostTicketCost > 0 && !usedRescuePass\n\s+&& !firstCoinTicketReturned && !rescueRetryAvailable && vip;/);
+  assert.match(modal, /const canOfferRetry = retryOffered && vipRetryCase && !vipOutToday;/);
   assert.doesNotMatch(modal, /AD_RETRY_ACTION|adsAvailable|gameAlert/);
   const buttons = read('src/gamekit/results/ResultButtons.tsx');
   assert.match(buttons, /\{note \? <View style=\{styles\.note\}><Text style=\{styles\.noteText\} numberOfLines=\{1\}>\{note\}<\/Text><\/View> : null\}/);
@@ -782,4 +783,34 @@ test('a win card that hands off to the team step lets its rewards land quietly (
   assert.match(modal, /if \(postWinOpen\) \{ leavingWinRef\.current = false; flyAfterHideRef\.current = true; \}/, 'every new win flies again');
   assert.match(modal, /shouldFly=\{\(\) => flyAfterHideRef\.current\}/);
   assert.match(read('src/components/PostWinRewardsModal.tsx'), /if \(shouldFly\?\.\(\) !== false\) flyRewards\(\);/);
+});
+
+test('a member whose VIP tries are used today sees "comes back tomorrow", never a VIP try that is not there', () => {
+  const lost = loadTs('src/components/rewards/lostTryCard.ts');
+  assert.equal(lost.VIP_TRY_TOMORROW, 'Your VIP try comes back tomorrow.');
+  assert.equal(lost.vipTriesLeft({ placements: { retry: { daily_cap: 3, used: 3, remaining: 0 } } }), 0);
+  assert.equal(lost.vipTriesLeft({ placements: { retry: { daily_cap: 3, used: 1, remaining: 2 } } }), 2);
+  assert.equal(lost.vipTriesLeft({ placements: { retry: { remaining: -1 } } }), 0);
+  assert.equal(lost.vipTriesLeft(null), null, 'no answer: the try is offered and the server decides');
+  assert.equal(lost.vipTriesLeft({ placements: {} }), null);
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  // Read while the game plays (members only), so the loss card's big button never swaps under a finger.
+  assert.match(modal, /if \(!vip \|\| flowState !== 'minigame'\) return undefined;\n\s+let alive = true;\n\s+void getAdSummary\(\)\.then\(summary => \{ if \(alive\) setVipLeft\(vipTriesLeft\(summary\)\); \}\)/);
+  assert.match(modal, /const vipOutToday = vipRetryCase && vipLeft === 0;\n\s+const canOfferRetry = retryOffered && vipRetryCase && !vipOutToday;/);
+  assert.match(modal, /message=\{vipNote \?\? \(vipOutToday \? VIP_TRY_TOMORROW : lostCopy\.message\)\}/);
+  assert.match(modal, /setRetryOffered\(true\);\n\s+setVipLeft\(null\);\n\s+setVipNote\(null\);/, 'a new card starts with no old note');
+  assert.match(modal, /const vipRetryCase = taskType !== null && lostTicketCost > 0 && !usedRescuePass\n\s+&& !firstCoinTicketReturned && !rescueRetryAvailable && vip;/, 'members only');
+});
+
+test('Memory\'s loss line tells the best of the Ticket\'s three tries, never only a last try that found nothing', () => {
+  const rt = loadTs('src/gamekit/results/rideTry.ts');
+  const best = rt.rideTrySummary({ stars: 0, meta: { game: 'memory', pairs: 0, pairsTotal: 8, bestPairs: 5 } });
+  assert.equal(best.line, 'Best try: 5 of 8 pairs.');
+  assert.equal(best.near, false, '5 of 8 is not 75%');
+  assert.equal(rt.rideTrySummary({ stars: 0, meta: { game: 'memory', pairs: 6, pairsTotal: 8, bestPairs: 6 } }).line, '6 of 8 pairs.');
+  assert.equal(rt.rideTrySummary({ stars: 0, meta: { game: 'memory', pairs: 3, pairsTotal: 8 } }).line, '3 of 8 pairs.', 'no best: the last try');
+  assert.equal(rt.rideTrySummary({ stars: 0, meta: { game: 'memory', pairs: 1, pairsTotal: 8, bestPairs: 6 } }).near, true);
+  const game = read('src/games/memory/MemoryGame.tsx');
+  assert.match(game, /rideBestPairsRef\.current = r\.tryIndex === 0 \? r\.eng\.pairs : Math\.max\(rideBestPairsRef\.current, r\.eng\.pairs\);/);
+  assert.match(game, /\.\.\.\(r\.mode === 'ride' \? \{ bestPairs: Math\.max\(rideBestPairsRef\.current, e\.pairs\) \} : \{\}\),/);
 });
