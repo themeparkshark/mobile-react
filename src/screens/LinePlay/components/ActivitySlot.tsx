@@ -319,10 +319,10 @@ function TriviaSlot({
 
   return (
     <PageScroll fill={CARD_FILL}>
-      <ActivityHero kicker={title != null ? 'STORY' : 'GAMES'} title={title ?? 'Shark Trivia'} teacher />
-      {/* A short window (iPhone SE): the answers sit two by two under a smaller question, so every choice
-          shows under the slim banner without scrolling. */}
+      {/* A short window (iPhone SE): no banner (the Story tab and the question say what this is), and the
+          answers sit two by two under a smaller question, so every choice shows without scrolling. */}
       <WhenShort>{short => <>
+      {!short && <ActivityHero kicker={title != null ? 'STORY' : 'GAMES'} title={title ?? 'Shark Trivia'} teacher />}
       <Text style={[styles.question, short && styles.questionShort]}>{q.question}</Text>
       {picked != null && <Animated.Text style={[styles.answerFeedback,
         picked === q.correctIndex ? styles.feedbackCorrect : styles.feedbackWrong, {

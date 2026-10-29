@@ -123,6 +123,10 @@ test('Story and Games: one word per tab, crew pages only for a crew, new rounds 
   assert.equal(tabs.gamesDot(9, 2, 'story'), true);
   assert.equal(tabs.gamesDot(9, 9, 'games'), false, 'seen');
   assert.equal(tabs.gamesDot(-1, 2, 'story'), false);
+  // An SE story clue shows its answers: no banner, a smaller question, answers two by two (round 2 grader fix 7).
+  const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
+  assert.match(slot, /\{!short && <ActivityHero kicker=\{title != null \? 'STORY' : 'GAMES'\}/);
+  assert.match(slot, /<View style=\{\[styles\.choices, short && styles\.choicesGrid\]\}>/);
   // Red dots are for something to claim now; new rounds wear a gold dot (round 2 grader fix 8).
   assert.match(read('src/screens/LinePlay/components/ActivityPageRail.tsx'), /tabDot: \{[^}]*backgroundColor: '#fec90e'/);
   // The screen: tabs on the rail, the banner gone, crew pages filtered for solo.
