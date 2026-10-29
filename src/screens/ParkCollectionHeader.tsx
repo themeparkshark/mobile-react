@@ -182,7 +182,8 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
           <GameIcon name="star" size={18} />
           <Text style={styles.chipText}>SIGHTS {parts.sights.collected}/{parts.sights.available}</Text>
         </Pressable>}
-        {(limitedAvailable > 0 || tabs?.includes('limited')) && <Pressable style={[styles.chip, tab === 'limited' && styles.chipOn]}
+        {/* As a tab, LIMITED shows only when the Limited tab has rows to open (never a dead tap). */}
+        {(onTab ? !!tabs?.includes('limited') : limitedAvailable > 0) && <Pressable style={[styles.chip, tab === 'limited' && styles.chipOn]}
           onPress={onTab ? () => onTab('limited') : onBrowseLimited} disabled={!onTab && !onBrowseLimited}
           hitSlop={6} accessibilityRole={onTab ? 'tab' : onBrowseLimited ? 'button' : undefined}
           accessibilityState={onTab ? { selected: tab === 'limited' } : undefined}

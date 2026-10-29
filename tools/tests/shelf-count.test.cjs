@@ -141,3 +141,8 @@ test('round 2: the park story is read with the shelf, so its card never jumps ov
   const card = read('src/screens/ParkDayRecapCard.tsx');
   assert.match(card, /useState<ParkDayRecap \| null>\(initialRecap\)/);
 });
+
+test('round 2: the LIMITED chip is never a dead tap (as a tab it needs Limited rows)', () => {
+  const header = read('src/screens/ParkCollectionHeader.tsx');
+  assert.match(header, /\{\(onTab \? !!tabs\?\.includes\('limited'\) : limitedAvailable > 0\) && <Pressable/);
+});
