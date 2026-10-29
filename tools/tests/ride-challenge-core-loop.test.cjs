@@ -212,7 +212,11 @@ test('out of Tickets the card offers the free ways in one order, and the grown-u
   assert.match(modal, /if \(freeStep\?\.kind === 'claim'\) \{ void handleClaimTickets\(\); return; \}/);
   assert.match(modal, /await claimStampReward\(source\.id\)/, 'claimed right here, in place');
   const card = modal.slice(modal.indexOf('{needTicket && <View style={styles.ticketHelpCard}>'), modal.indexOf('{startError && <Text style={styles.ticketError}>'));
-  assert.ok(card.indexOf('treats at home = 1 Ticket') < card.indexOf('<CoinTopUpOffer'), 'the shop sits under every free way');
+  const shop = card.indexOf('onPress={openSupplies}');
+  assert.ok(shop > 0 && card.indexOf('treats at home = 1 Ticket') < shop, 'the shop sits under every free way');
+  assert.doesNotMatch(card, /<CoinTopUpOffer|\$\d/, 'no price inside the card: one small row to Supplies, where the grown-up gate is');
+  assert.doesNotMatch(card, /name=\{step\.kind === 'line_ticket' \? 'queue'/, 'the pocket watch means Wait Times only');
+  assert.match(modal, /\{!needTicket && <View style=\{\{ marginLeft: -4/, 'the help card takes the reward tiles\' room so the card fits an SE');
   assert.match(card, /step\.kind === 'line_ticket'/, 'the line Ticket only when Queue Tickets is on (freeTickets contract)');
   assert.doesNotMatch(card, /LinePlay while you wait|home finds/i);
 });

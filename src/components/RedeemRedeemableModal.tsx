@@ -67,7 +67,6 @@ import {
 } from '../services/task-attempt/checkpoint';
 import { recoverTaskAttempt } from '../services/task-attempt/recovery';
 import { CHALLENGE_GAME_COLORS } from '../constants/coinTiers';
-import CoinTopUpOffer from './money/CoinTopUpOffer';
 import { storeAvailable } from '../services/purchases';
 import { watchForReward } from '../services/ads';
 import { useNativeModalLayer } from '../ui/modalLayers';
@@ -846,7 +845,9 @@ export default function RedeemRedeemableModal({
                       type={redeemable.type}
                       pulse
                     />
-                    <View style={{ marginLeft: -4, marginRight: -4, marginTop: 8, flexDirection: 'row', justifyContent: 'center' }}>
+                    {/* Out of Tickets with no free way left, the help card takes the reward tiles' room, so the
+                        card stays inside the screen on an iPhone SE (the title says what this coin is). */}
+                    {!needTicket && <View style={{ marginLeft: -4, marginRight: -4, marginTop: 8, flexDirection: 'row', justifyContent: 'center' }}>
                       {isTaskType ? previewRideRewards.map(reward => (
                         <View key={reward.label} accessible accessibilityLabel={`${reward.amount} ${reward.label.toLowerCase()}`}
                           style={styles.rewardTile}>
@@ -875,7 +876,7 @@ export default function RedeemRedeemableModal({
                           <Box backgroundColor="#4cdcff" image={{ uri: park.coin_url }} text={1} small type={redeemable.type} />
                         </View>
                       </>}
-                    </View>
+                    </View>}
                   </View>
                   <View style={{ marginTop: 8 }}>
                     {isTaskType ? (
@@ -895,7 +896,8 @@ export default function RedeemRedeemableModal({
                           </View>
                           {freeSteps.filter(step => step.kind === 'line_ticket' || step.kind === 'treats').map(step => (
                             <View key={step.kind} style={styles.wayRow}>
-                              <GameIcon name={step.kind === 'line_ticket' ? 'queue' : 'map'} size={22} />
+                              {/* The pocket watch means Wait Times only (ledger 37): the line Ticket wears the ride picture. */}
+                              <GameIcon name={step.kind === 'line_ticket' ? 'ride' : 'map'} size={22} />
                               <Text style={styles.ticketHelpCopy}>{step.kind === 'line_ticket'
                                 ? 'Your first wait at a ride earns a Ticket.' : '3 treats at home = 1 Ticket.'}</Text>
                             </View>
@@ -904,10 +906,16 @@ export default function RedeemRedeemableModal({
                             <GameIcon name="gift" size={22} />
                             <Text style={styles.ticketHelpCopy}>Tomorrow brings a new free try.</Text>
                           </View>}
-                          {/* The grown-up shop comes last, under every free way (behind the grown-up gate). */}
+                          {/* The grown-up shop comes last, under every free way: one small row that opens Supplies on
+                              Tickets, where every purchase sits behind the grown-up gate. No price inside the card. */}
                           {storeAvailable() && !previewOnly && (
-                            <CoinTopUpOffer currency="tickets" reason="ride" need={Math.max(1, ticketCost - playerTickets)}
-                              onDone={() => { void refreshPlayer?.(); }} style={{ marginTop: 8 }} />
+                            <Pressable onPress={openSupplies} accessibilityRole="button"
+                              accessibilityLabel="Ask a grown-up. Opens the Shark Shop on Tickets."
+                              style={({ pressed }) => [styles.shopRow, pressed && { opacity: 0.7 }]}>
+                              <GameIcon name="ticket" size={20} />
+                              <Text style={styles.shopRowText} numberOfLines={1} adjustsFontSizeToFit>Ask a grown-up: Shark Shop</Text>
+                              <GameIcon name="arrow" size={14} />
+                            </Pressable>
                           )}
                         </View>}
                         {startError && <Text style={styles.ticketError}>{startError}</Text>}
@@ -1105,6 +1113,9 @@ const styles = StyleSheet.create({
   ticketCount: { color: '#ffffff', fontFamily: 'Shark', fontSize: 18, textShadowColor: '#05346e',
     textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   rescueHead: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  shopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 9,
+    paddingTop: 7, borderTopWidth: 1, borderTopColor: 'rgba(7, 91, 155, 0.2)' },
+  shopRowText: { color: '#075b9b', fontFamily: 'Knockout', fontSize: 15, flexShrink: 1 },
   getTickets: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8,
     backgroundColor: '#ffcf3b', borderRadius: 12, paddingVertical: 7, borderBottomWidth: 3, borderBottomColor: '#d99a00' },
   getTicketsText: { color: '#6a3b00', fontFamily: 'Shark', fontSize: 15 },
