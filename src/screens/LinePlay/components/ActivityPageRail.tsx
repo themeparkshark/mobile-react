@@ -185,6 +185,7 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: '#0875c9' },
   tabText: { color: '#075d9f', fontFamily: 'Knockout', fontSize: 13, marginTop: -1 },
   tabTextActive: { color: '#ffffff' },
-  tabDot: { position: 'absolute', top: 4, right: 4, width: 11, height: 11, borderRadius: 6,
-    backgroundColor: '#e4462e', borderWidth: 2, borderColor: '#ffffff' },
+  // Gold, not red: red dots mean "something to claim now" (core loop 4.3 rule 5); new rounds are just news.
+  tabDot: { position: 'absolute', top: 3, right: 3, width: 12, height: 12, borderRadius: 6,
+    backgroundColor: '#fec90e', borderWidth: 2, borderColor: '#075083' },
 });

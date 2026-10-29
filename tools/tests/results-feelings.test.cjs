@@ -158,9 +158,9 @@ test('a ride-detection guess never ends a run: a held round asks inside the game
   assert.doesNotMatch(shell, /rideUpLikely && phase === 'paused' && startedRef\.current\) wrapUp/, 'no auto wrap-up on the hint');
   assert.doesNotMatch(shell, /wrapUpRef\.current\('boarding'\)/, 'coming back from the pocket never wraps up');
   assert.match(shell, /if \(rideUpLikelyRef\.current && startedRef\.current && askBoardingRef\.current\) return;\n\s+doResumeRef\.current\(\);/);
-  assert.match(shell, /Did your ride start\?/);
-  assert.match(shell, /SAVE MY RUN/);
-  assert.match(shell, /KEEP PLAYING/);
+  assert.match(shell, /Did you get to the ride\?/);
+  assert.match(shell, /I GOT TO THE RIDE/);
+  assert.match(shell, /STILL IN LINE/);
   assert.match(shell, /linePlayMovement\?\.onBoardingAnswer\?\.\(false\);\n\s+doResume\(\);/);
   // Boarding is recorded only after the saved run is counted.
   assert.match(shell, /linePlayMovement\?\.onRunDone\?\.\(0, effectiveResult\?\.meta\?\.partial === true\);\n\s+onClose\(\);\n\s+\}\n[\s\S]{0,120}if \(boardingAnsweredRef\.current\)/);

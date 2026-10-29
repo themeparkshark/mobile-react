@@ -143,7 +143,7 @@ export default function RideTrackerScreen() {
 
   const load = useCallback(async () => {
     if (preview) {
-      setStats({ total_rides: 24, unique_rides: 14, per_park: [], top_rated: [],
+      setStats({ total_rides: 24, unique_rides: 14, per_park: [{ park_id: 8, park_name: 'Disneyland', count: 24 }], top_rated: [],
         most_ridden: [{ id: 1, name: 'Space Mountain', type: 'coaster', park_id: 2, ride_count: 4 }],
         current_streak: 2 });
       setProfile(null);
@@ -370,8 +370,9 @@ export default function RideTrackerScreen() {
                   <Text style={s.statLabel}>Unique</Text>
                 </View>
                 <View style={s.statPill}>
-                  <Text style={s.statVal}>{stats.current_streak}</Text>
-                  <Text style={s.statLabel}>Ride days</Text>
+                  {/* Parks ridden at: a true count, never the server's days-in-a-row streak. */}
+                  <Text style={s.statVal}>{stats.per_park.length}</Text>
+                  <Text style={s.statLabel}>Parks</Text>
                 </View>
               </View>
             </FadeIn>

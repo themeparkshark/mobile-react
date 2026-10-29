@@ -129,9 +129,8 @@ export function signMinutes(input: Pick<WaitEstimateInput, 'postedMinutes' | 'wa
 export function waitSourceHint(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'>): string {
   const posted = signMinutes(input);
   if (posted == null) return 'No sign time when you started. Games still work.';
-  // Names the number exactly as SIGN SAYS writes it on the card ("35m", "1h 30m"), so one
-  // screen never shows the sign time two ways. The ride-car picture ties the two together.
-  const shown = inLineLabel(posted * 60);
+  // Minutes in words ("35 min", "1 hr 30 min"): a bare "m" is the guide's meters.
+  const shown = minutesWords(posted);
   return input.waitSource === 'last_known'
     ? `The ride sign said ${shown} a while ago.`
     : `The ride sign said ${shown}.`;
@@ -149,7 +148,7 @@ export function heroSignDetail(input: Pick<WaitEstimateInput, 'postedMinutes' | 
   const posted = signMinutes(input);
   const fresh = input.freshReadingMinutes;
   if (fresh != null && Number.isFinite(fresh) && fresh > 0 && fresh !== posted) {
-    return `The ride sign now says ${inLineLabel(Math.round(fresh) * 60)}.`;
+    return `The ride sign now says ${minutesWords(fresh)}.`;
   }
   if (posted == null) return 'No sign time when you started. Games still work.';
   return input.waitSource === 'last_known' ? 'That sign time is from a while ago.' : null;
@@ -183,7 +182,7 @@ export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
     : tracking != null ? `Tracking ~${tracking} today`
       : 'Posted wait';
   return {
-    posted, tracking, title, detail, kidValue: inLineLabel(posted * 60),
+    posted, tracking, title, detail, kidValue: minutesWords(posted),
     accessibilityLabel: tracking != null
       ? `Posted wait ${posted} minutes. Recent waits here suggest about ${tracking} minutes.`
       : `Posted wait ${posted} minutes.`,
@@ -211,7 +210,19 @@ export function sharksInLine(count: number | null | undefined): SharksInLine | n
   return { value, label: 'SHARKS HERE', accessibilityLabel: `${value} sharks in this line now.`, sharks: n >= 10 ? 3 : 2 };
 }
 
-/** "23m", "1h 05m". */
+/**
+ * Minutes in words for sentences: "35 min", "1 hr", "1 hr 30 min". Never a bare "m", which the guide uses
+ * for meters ("Walk closer: 40 m").
+ */
+export function minutesWords(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  if (hours === 0) return `${rest} min`;
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
+}
+
+/** "23m", "1h 05m" (the compact badge number only; sentences use minutesWords). */
 export function inLineLabel(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds / 60));
   const hours = Math.floor(total / 60);

@@ -298,9 +298,10 @@ export default function SessionRecap({
       {earnedAny ? <View style={styles.recapStats}>
         {shownStats.map(t => <RecapStat key={t.key} icon={t.icon} value={t.value} prefix={t.prefix} label={t.label}
           index={stat++} reducedMotion={reducedMotion} />)}
-      </View> : signLine || rideLogged || activityNames.length > 0 ? null : (
+      </View> : signLine || rideLogged || activityNames.length > 0 || rideUp || wrappedUp ? null : (
         // Nothing played or earned yet (a short wait): a keepsake of the wait itself, never a row of zeros,
-        // and only when nothing above already says the wait.
+        // and only when nothing above already says the wait (the hero's "in line, all saved" does for a
+        // wrapped-up or ridden wait).
         <Animated.View entering={enter(0)} style={styles.keepsake} accessible
           accessibilityLabel={`Wait saved at ${rideName}. Next time, play a clue while you wait.`}>
           <View style={styles.keepsakeBadge}><GameIcon name="ride" size={34} /></View>
@@ -378,8 +379,8 @@ export default function SessionRecap({
             <Text style={styles.recapPredictionText}>
               {resolution.correct ? 'Your wait guess was right! ' : 'Your wait guess missed. '}
               {resolution.beat
-                ? `You beat the posted wait by ${Math.max(0, Math.round(resolution.postedWaitMinutes - resolution.actualWaitMinutes))}m.`
-                : `The wait was about the posted ${resolution.postedWaitMinutes}m.`}
+                ? `You beat the posted wait by ${Math.max(0, Math.round(resolution.postedWaitMinutes - resolution.actualWaitMinutes))} min.`
+                : `The wait was about the posted ${resolution.postedWaitMinutes} min.`}
             </Text>
           </View>
         </Animated.View>

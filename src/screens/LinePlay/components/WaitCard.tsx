@@ -19,7 +19,7 @@ import { GameIcon, type GameIconName } from '../../../ui';
 import type { LineBonusSummary } from '../../../api/endpoints/me/inline-timer/types';
 import { bonusDoneToday, nextBonusSeconds, ringInfoCopy, ringPill, visiblePips,
   type PipState } from '../../../services/lineplay/bonusRounds';
-import { detailsSignLine, inLineLabel, waitSourceHint, waitStamps, type WaitStamp } from '../../../services/lineplay/waitScreen';
+import { detailsSignLine, minutesWords, waitSourceHint, waitStamps, type WaitStamp } from '../../../services/lineplay/waitScreen';
 import WaitStampBadge from './waitscreen/WaitStampBadge';
 
 /** A detail line with its art, never an emoji. */
@@ -162,9 +162,9 @@ export const COIN_MISSING_LINE = 'Parts are saved for this coin. Win it on your 
  * listed ahead of time; the status line says so once a kid reaches it.
  */
 export function heroDetailLines(input: {
-  /** Where the wait number came from ("The ride sign said 35m."). */
+  /** Where the wait number came from ("The ride sign said 35 min."). */
   readonly signLine: string | null;
-  /** Your own time in line ("You have been in line 20m."). */
+  /** Your own time in line, when the Details button does not already say it (LinePlay's does). */
   readonly inLineLine?: string | null;
   readonly sublineInHeadline: boolean;
   readonly subline: string;
@@ -521,7 +521,7 @@ export default function WaitCard({
           // the sign's time (a fresh, different reading at the line wins) and your own time in line.
           signLine: detailsSignLine({ postedMinutes: postedWaitMinutes, waitSource,
             freshReadingMinutes: entranceFresh ? entranceWaitMinutes : null }),
-          inLineLine: `You have been in line ${inLineLabel(elapsedSeconds)}.`,
+          // Your own time in line is on the Details button ("In line 12 min"), so it is not said twice here.
           sublineInHeadline, subline, rewardTrackingAvailable, atCap, intervalSeconds: interval,
         })} ticket={queueTicketsOn && rewardTrackingAvailable && ticketAvailable !== null
           ? ticketHint(ticketAvailable, verifiedEligibleSeconds, ticketIntervalSeconds) : null} /></Reanimated.View>}
@@ -529,7 +529,7 @@ export default function WaitCard({
           {compact && <>
             <Text style={styles.meterSub}>{subline}</Text>
             {/* With the coin hero, IN LINE and SIGN SAYS are already on the card: no second copy here. */}
-            {!hero && <Text style={styles.waitSourceHint}>{`${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m`}</Text>}
+            {!hero && <Text style={styles.waitSourceHint}>{`${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${minutesWords(postedWaitMinutes)}`}</Text>}
           </>}
           {/* One wait source of truth: the same rule (signMinutes) decides SIGN SAYS and this line. */}
           <Text style={styles.waitSourceHint}>{waitSourceHint({ postedMinutes: postedWaitMinutes, waitSource })}</Text>
@@ -541,10 +541,10 @@ export default function WaitCard({
           </View>)}
           {entranceWaitMinutes != null && entranceWaitObservedAt != null && (
             <Text style={styles.entranceHint}>
-              {entranceFresh ? `The sign at the line says ${entranceWaitMinutes}m` :
-                `The sign at the line said ${entranceWaitMinutes}m, ${entranceAgeMinutes}m ago`}
+              {entranceFresh ? `The sign at the line says ${minutesWords(entranceWaitMinutes)}` :
+                `The sign at the line said ${minutesWords(entranceWaitMinutes)}, ${minutesWords(entranceAgeMinutes ?? 0)} ago`}
               {entranceFresh && Math.abs(entranceWaitChangeMinutes) >= 5
-                ? ` · ${entranceWaitChangeMinutes > 0 ? 'up' : 'down'} ${Math.abs(entranceWaitChangeMinutes)}m` : ''}
+                ? ` · ${entranceWaitChangeMinutes > 0 ? 'up' : 'down'} ${minutesWords(Math.abs(entranceWaitChangeMinutes))}` : ''}
               . This is not how long you have left.
             </Text>
           )}

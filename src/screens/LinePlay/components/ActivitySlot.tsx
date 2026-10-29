@@ -320,7 +320,10 @@ function TriviaSlot({
   return (
     <PageScroll fill={CARD_FILL}>
       <ActivityHero kicker={title != null ? 'STORY' : 'GAMES'} title={title ?? 'Shark Trivia'} teacher />
-      <Text style={styles.question}>{q.question}</Text>
+      {/* A short window (iPhone SE): the answers sit two by two under a smaller question, so every choice
+          shows under the slim banner without scrolling. */}
+      <WhenShort>{short => <>
+      <Text style={[styles.question, short && styles.questionShort]}>{q.question}</Text>
       {picked != null && <Animated.Text style={[styles.answerFeedback,
         picked === q.correctIndex ? styles.feedbackCorrect : styles.feedbackWrong, {
           opacity: answerReveal,
@@ -328,7 +331,7 @@ function TriviaSlot({
         }]}>{picked === q.correctIndex
           ? 'Correct! Your crew found the answer.'
           : `The answer is ${q.choices[q.correctIndex]}. Pick your next clue.`}</Animated.Text>}
-      <View style={styles.choices}>
+      <View style={[styles.choices, short && styles.choicesGrid]}>
         {q.choices.map((choice, i) => {
           const isPicked = picked === i;
           const isCorrect = i === q.correctIndex;
@@ -347,17 +350,20 @@ function TriviaSlot({
               onPress={() => answer(i)}
               style={({ pressed }) => [
                 styles.choice,
+                short && styles.choiceShort,
                 paused && styles.disabled,
                 state === 'correct' && styles.choiceCorrect,
                 state === 'wrong' && styles.choiceWrong,
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={styles.choiceText}>{choice}</Text>
+              <Text style={[styles.choiceText, short && styles.choiceTextShort]}
+                numberOfLines={short ? 2 : undefined} adjustsFontSizeToFit={short} minimumFontScale={0.8}>{choice}</Text>
             </Pressable>
           );
         })}
       </View>
+      </>}</WhenShort>
       {revealed && q.fact && (
         <View style={styles.factBox}>
           <Text style={styles.factKicker}>{picked == null ? 'THE ANSWER' : picked === q.correctIndex ? 'CORRECT · FAN FACT' : 'FAN FACT'}</Text>
@@ -378,6 +384,10 @@ function TriviaSlot({
  * keep the story first.
  */
 type Slot = ReactNode | ((short: boolean) => ReactNode);
+/** Reads the page window inside PageScroll: is this a short window (iPhone SE)? */
+function WhenShort({ children }: { children: (short: boolean) => ReactNode }) {
+  return <>{children(heroSlim(useContext(PageHeightContext)))}</>;
+}
 function ActionFirstWhenShort({ hero, story, action }: { hero: ReactNode; story: Slot; action: Slot }) {
   const short = heroSlim(useContext(PageHeightContext));
   const s = typeof story === 'function' ? story(short) : story;
@@ -602,6 +612,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     gap: spacing.sm,
   },
+  questionShort: { fontSize: 17, lineHeight: 22, marginTop: 0 },
+  choicesGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.sm, gap: 6 },
+  choiceShort: { width: '48.5%', minHeight: 44, paddingVertical: 4, paddingHorizontal: 6 },
+  choiceTextShort: { fontSize: 15 },
   choice: {
     backgroundColor: '#ffca30',
     borderRadius: borderRadius.lg,

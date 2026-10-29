@@ -123,6 +123,8 @@ test('Story and Games: one word per tab, crew pages only for a crew, new rounds 
   assert.equal(tabs.gamesDot(9, 2, 'story'), true);
   assert.equal(tabs.gamesDot(9, 9, 'games'), false, 'seen');
   assert.equal(tabs.gamesDot(-1, 2, 'story'), false);
+  // Red dots are for something to claim now; new rounds wear a gold dot (round 2 grader fix 8).
+  assert.match(read('src/screens/LinePlay/components/ActivityPageRail.tsx'), /tabDot: \{[^}]*backgroundColor: '#fec90e'/);
   // The screen: tabs on the rail, the banner gone, crew pages filtered for solo.
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
   assert.doesNotMatch(screen, /<NewRoundsBanner/);
@@ -240,13 +242,18 @@ test('the recap: only what you got, "Sign said 20, you waited 11", one GO, the l
   assert.match(recap, /variant=\{\(go && onGo\) \|\| goPending \? 'ghost' : undefined\}/, 'Done is the quiet second button, also while the GO is worked out');
   assert.match(screen, /goPending=\{go == null && !goReady\}/);
   // Between the ride step and the recap: one calm card, never the locked in-line pages.
-  assert.match(screen, /snapshot\.state === 'ending' && !leftLineWrapUp \? \(/);
+  // It stays until the recap's rewards and GO are known (capped), so the recap arrives whole and nothing jumps.
+  assert.match(screen, /\(snapshot\.state === 'ending' && !leftLineWrapUp\) \|\| holdRecap \? \(/);
+  assert.match(screen, /\{snapshot\.state === 'complete' && !holdRecap \? \(\n\s+<SessionRecap/);
+  assert.match(screen, /const recapSettling = snapshot\.state === 'complete' && \(!goReady \|\|/);
+  assert.match(screen, /setTimeout\(\(\) => setSettleTimedOut\(true\), RECAP_SETTLE_MAX_MS\)/);
+  // A wrapped-up or ridden wait is said once by the hero: no "Wait saved!" keepsake under it.
+  assert.match(recap, /signLine \|\| rideLogged \|\| activityNames\.length > 0 \|\| rideUp \|\| wrappedUp \? null : \(/);
   assert.match(screen, /<WaitWrapUpCard rideUp=\{snapshot\.endReason === 'boarded'\} \/>/);
   assert.match(screen, /signLine=\{snapshot\.boardingConfirmed \? signSaidLine\(/);
   // Games alone are said once (the Played line), never also as a lone "1 GAME" tile; the shelf GO wears the coins.
   assert.match(recap, /const earnedAny = shownStats\.some\(t => t\.key !== 'activities'\);/);
   assert.match(recap, /\{earnedAny \? <View style=\{styles\.recapStats\}>/);
-  assert.match(recap, /signLine \|\| rideLogged \|\| activityNames\.length > 0 \? null : \(/);
   assert.match(recap, /go\.kind === 'shelf' \? 'coins' : 'arrow'/);
   // Crew lines only for a crew.
   assert.match(recap, /\{crew \? groupSlot : null\}/);

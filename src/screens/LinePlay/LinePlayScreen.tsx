@@ -130,6 +130,8 @@ const DAY_BACKDROP = ['#0a7dd1', '#07569e', '#073e87'] as const;
 const NIGHT_BACKDROP = ['#3B2A6B', '#2B2350', '#1E1838'] as const;
 /** Returning after this long away gets a quick "welcome back" heads up. */
 const WELCOME_BACK_AFTER_MS = 20_000;
+/** The longest the "Saving your wait" card waits for the recap's rewards and GO before the recap opens anyway. */
+const RECAP_SETTLE_MAX_MS = 6000;
 /** The longest the resume countdown waits on the 1 for the arcade or the page it is handing over to. */
 const RESUME_HANDOFF_MAX_MS = 1500;
 /**
@@ -935,6 +937,18 @@ export default function LinePlayScreen() {
     upgradeReady: coinLevelsRung.open && recapUpgradeReady,
     nextCoin: guideNext && guideNext.taskId !== rideCatalog?.taskId ? { taskId: guideNext.taskId, name: guideNext.name } : null,
   }) : null;
+  // The recap arrives whole: while the server settles the wait (rewards, the coin check, so the GO), the calm
+  // "Your ride's up! Saving your wait" card stays, so nothing below the GO jumps down a moment later.
+  // Never longer than RECAP_SETTLE_MAX_MS: a slow answer still opens the recap.
+  const recapSettling = snapshot.state === 'complete' && (!goReady ||
+    (snapshot.serverSessionId != null && snapshot.rewards == null && !snapshot.rewardsPending));
+  const [settleTimedOut, setSettleTimedOut] = useState(false);
+  useEffect(() => {
+    if (!recapSettling) { setSettleTimedOut(false); return undefined; }
+    const id = setTimeout(() => setSettleTimedOut(true), RECAP_SETTLE_MAX_MS);
+    return () => clearTimeout(id);
+  }, [recapSettling]);
+  const holdRecap = recapSettling && !settleTimedOut;
   const handleRecapGo = useCallback(async () => {
     if (!go) return;
     releaseRideStep();
@@ -1358,7 +1372,9 @@ export default function LinePlayScreen() {
   // A short phone lends the crew row to a board page (as it does to Details), so the whole puzzle fits.
   // It goes in the same render as the page change, while the page slides in: the row fades out
   // and the board page lays out once, at its final size (no dimmed in-between frame).
-  const crewLent = crewRowLent(fit.short, detailsOpen, boardPage);
+  // A story clue's question page too: on a short phone its answers need the crew row's room (core loop r3).
+  const quizPage = visibleItem?.kind === 'trivia';
+  const crewLent = crewRowLent(fit.short, detailsOpen, boardPage || quizPage);
   lentAtCommit.current = crewLent;
   // An iPhone SE board page's height once the crew row has lent its room: known before the row leaves,
   // so the board slides in already at its final size (the window grows around it, nothing pops).
@@ -1451,7 +1467,10 @@ export default function LinePlayScreen() {
 
         {/* Wait card (top). One sign time and one clock feed both the card and its hero, so SIGN SAYS, IN LINE and the details agree. */}
         {/* The recap is one screen: the wait card steps away once the wait is over (the recap's hero says it all). */}
-        {snapshot.state !== 'complete' && <View style={styles.waitWrap} ref={waitCardRef} onLayout={measureWaitCard} collapsable={false}>
+        {/* After "I got to the ride" (or End) the wait card steps away too: one calm card says the ride is up, never
+            "Checking you're in line" above it. */}
+        {snapshot.state !== 'complete' && !(snapshot.state === 'ending' && !leftLineWrapUp) &&
+          <View style={styles.waitWrap} ref={waitCardRef} onLayout={measureWaitCard} collapsable={false}>
           {snapshot.startedAt == null ? (
             <WaitCardSkeleton rideName={ride.rideName} />
           ) : (
@@ -1554,7 +1573,7 @@ export default function LinePlayScreen() {
 
         {/* Activity area (bottom) */}
         <View style={[styles.activityArea, { marginTop: fit.activityGap }, !pagesShown && styles.activityAreaAside]}>
-          {snapshot.state === 'complete' ? (
+          {snapshot.state === 'complete' && !holdRecap ? (
             <SessionRecap
               nextAdventure={ride ? nextAdaptiveStoryTitle(snapshot.chapter, ride.rideName) : null}
               adventuresFound={adventuresFound && adventuresFound.count > 0 ? [adventuresFound.count, ADAPTIVE_STORY_TOTAL, adventuresFound.isNew] : null}
@@ -1646,7 +1665,7 @@ export default function LinePlayScreen() {
                 else void handleExit();
               }}
             />
-          ) : snapshot.state === 'ending' && !leftLineWrapUp ? (
+          ) : (snapshot.state === 'ending' && !leftLineWrapUp) || holdRecap ? (
             // Between "I got to the ride" (or End) and the recap the wait is being saved: one calm card, never
             // the in-line pages with their "Get in line to play" locks.
             <WaitWrapUpCard rideUp={snapshot.endReason === 'boarded'} />

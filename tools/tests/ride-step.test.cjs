@@ -317,15 +317,19 @@ test('the screens wire the one ride question', () => {
   assert.match(success, /Next time, just ride\. Your shark asks once when you are done\./);
 });
 
-test('Ride Tracker words: Ride sets, Ride days, no reward it never pays', () => {
+test('Ride Tracker words: Ride sets, true counts only (no days-in-a-row streak under another name), no reward it never pays', () => {
   const tracker = read('src/screens/RideTracker/RideTrackerScreen.tsx');
   assert.match(tracker, /title="Ride sets"/);
-  assert.match(tracker, />Ride days</);
+  assert.match(tracker, /\{stats\.per_park\.length\}<\/Text>\n\s+<Text style=\{s\.statLabel\}>Parks</);
+  for (const f of ['src/screens/RideTracker/RideTrackerScreen.tsx', 'src/screens/RideTracker/RideStatsScreen.tsx', 'src/screens/RideTracker/RideWrappedScreen.tsx']) {
+    assert.doesNotMatch(read(f), /\{stats\.current_streak\}|value=\{stats\.current_streak\}|longest_streak|in a row/, `${f}: no streak wears a ride-days label`);
+  }
+  assert.match(read('src/screens/RideTracker/RideWrappedScreen.tsx'), /<AnimNum value=\{data\.ride_days\}/);
   assert.doesNotMatch(tracker, /title="Collections"|Day streak|Park days in a row/);
   const sets = read('src/screens/RideTracker/RideCollectionsScreen.tsx');
   assert.match(sets, /<RideTrackerFrame title="Ride sets"/);
   assert.doesNotMatch(sets, /xp_reward|coin_reward/, 'the server never pays set rewards, so the card never promises them');
-  assert.match(read('src/screens/RideTracker/RideStatsScreen.tsx'), /label="Ride days"/);
+  assert.match(read('src/screens/RideTracker/RideStatsScreen.tsx'), /<StatCard label="Parks" value=\{stats\.per_park\.length\} icon="pin" \/>/);
 });
 
 test('Wait Times plans the next coin through the guide', () => {

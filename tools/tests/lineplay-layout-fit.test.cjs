@@ -70,7 +70,7 @@ test('every LinePlay page is a framed window that stays put above the rail', () 
   assert.match(screen, /coinSize=\{fit\.coinSize\}/);
   assert.match(screen, /marginTop: fit\.activityGap/);
   assert.match(screen, /compact=\{fit\.short\}/, 'a short phone gets the one-line mission header');
-  assert.match(screen, /const crewLent = crewRowLent\(fit\.short, detailsOpen, boardPage\);/);
+  assert.match(screen, /const crewLent = crewRowLent\(fit\.short, detailsOpen, boardPage \|\| quizPage\);/, 'a story clue page lends the row too');
   assert.match(screen, /\{!crewLent && <Reanimated\.View/, 'a short phone reading Details (or on the board page) lends the crew row to the page');
 });
 

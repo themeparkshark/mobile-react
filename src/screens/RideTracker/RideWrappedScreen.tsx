@@ -227,8 +227,9 @@ export default function RideWrappedScreen() {
     // Card 4: Streak & Achievements
     <WrappedCard key="streak" gradient={CARD_GRADIENTS[4]}>
       <Text style={styles.cardLabel}>PARK DAYS & ACHIEVEMENTS</Text>
-      <AnimNum value={data.longest_streak} style={styles.bigNumber} />
-      <Text style={styles.cardSubLabel}>most ride days in a row</Text>
+      {/* Days with a ride (the server's distinct days): one streak lives in the app, the flame, never here. */}
+      <AnimNum value={data.ride_days} style={styles.bigNumber} />
+      <Text style={styles.cardSubLabel}>{data.ride_days === 1 ? 'day with a ride' : 'days with a ride'}</Text>
       {data.achievements_earned > 0 && (
         <View style={styles.achievRow}>
           <Text style={styles.achievNum}>{data.achievements_earned}</Text>
