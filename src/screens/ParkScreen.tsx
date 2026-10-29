@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { goalCoinKind } from '../services/collection/nextCoinCopy';
+import { goalCoinKind, guideShelfHint, guideShelfPick } from '../services/collection/nextCoinCopy';
 import { chunk } from 'lodash';
 import { useContext, useState, useEffect, useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useFocusEffect, useIsFocused, useNavigation, type NavigationProp } from '@react-navigation/native';
@@ -43,14 +43,13 @@ import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day
 import { guide } from '../services/guide/nextCoin';
 import { useRung } from '../services/reveal/revealLadder';
 import GameIcon from '../ui/GameIcon';
-import { milestoneToday, nextTrophy, nextTrophyLine, partsWaiting, shelfCountLabel, shelfTabs, shelfTotals, storyOnTop,
-  tabForSlot, visibleSecretSlots, visibleTabs, type ShelfTab } from '../services/collection/shelfModel';
+import { milestoneToday, nextTrophy, nextTrophyLine, partsWaiting, TROPHY_HELP, shelfCountLabel, shelfTabs, shelfTotals, storyOnTop,
+  landingTab, recapWaitMs, shownShelfTab, tabForSlot, visibleSecretSlots, visibleTabs, type ShelfTab } from '../services/collection/shelfModel';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 
 /** How long the first shelf paint waits for today's park story (the shelf never waits longer). */
-const RECAP_WAIT_MS = 1200;
 
 export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBase, 'Park'>) {
   const { width, height } = useWindowDimensions();
@@ -104,10 +103,13 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const coinLevels = useRung('coin_levels');
   // The guide's plan: GO and "Make this my next coin" both point the one guide (guide.setTarget).
   const guidePlan = useSyncExternalStore(guide.subscribe, guide.plan, guide.plan);
+  // The coin the map guide holds now: the shelf's NEXT COIN names it too, so the two never disagree.
+  const guideTarget = useSyncExternalStore(guide.subscribe, guide.current, guide.current);
   // Today's park day story, read once here so the card can sit on top after a park day.
   const recapCache = useRef<{ at: number; parkId: number; recap: ParkDayRecap } | null>(null);
   const [todayRecap, setTodayRecap] = useState<ParkDayRecap | null>(null);
-  useEffect(() => { setTodayRecap(null); recapCache.current = null; }, [park]);
+  const [placedRecap, setPlacedRecap] = useState<ParkDayRecap | null>(null);
+  useEffect(() => { setTodayRecap(null); setPlacedRecap(null); recapCache.current = null; }, [park]);
   const loadRecap = useCallback(async (parkId: number, date?: string) => {
     const cached = recapCache.current;
     if (!date && cached && cached.parkId === parkId && Date.now() - cached.at < 5_000) return cached.recap;
@@ -248,9 +250,12 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
       task => reportedRideStatus(freshWaitEntries, Number(park), task.name) === 'OPERATING') : null;
   // GO on the shelf's next coin, and "Make this my next coin" on a coin card: one pointer for the
   // whole app (guide.setTarget). At this park the map opens with the path; away it is the plan.
-  const nextCoinTask = parkTripGoal && !parkTripGoal.coin_owned
+  const guideTask = canChooseGoal ? guideShelfPick(guideTarget, Number(park), inThisPark, [...tasks, ...limitedTasks]) : null;
+  // The guide's pick shows in place of the shelf's own (the goal card stays when the guide holds the goal).
+  const guideOverGoal = !!guideTask && guideTask.id !== parkTripGoal?.task_id;
+  const nextCoinTask = guideTask ?? (parkTripGoal && !parkTripGoal.coin_owned
     ? [...tasks, ...limitedTasks].find(task => task.id === parkTripGoal.task_id) ?? null
-    : nearbySuggestion?.task ?? null;
+    : nearbySuggestion?.task ?? null);
   const goToCoin = useCallback((task: TaskType, source: string) => {
     guide.setTarget(task.id, source);
     if (inThisPark) RootNavigation.navigate('Explore', { focusRide: { parkId: Number(park), task } });
@@ -302,35 +307,47 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const tabs = visibleTabs(split.split, split.sights.length, limitedShelf.length, archivedTasks.length);
   // A coin landing opens the tab that holds its slot from the first frame (a sight on Sights, a limited
   // or past event coin on Limited, a secret coin on Rides), so the slot is mounted when it is measured.
-  const arrivalTab: ShelfTab | null = arrivalSlot && closedKey !== requestKey
-    ? tabForSlot(arrivalSlot.section, arrivalSlot.task.id, currentPark?.ride_passport_task_ids) : null;
-  const shownTab: ShelfTab = arrivalTab && tabs.includes(arrivalTab) ? arrivalTab
-    : tabs.includes(tab) ? tab : 'rides';
+  // Once the coin lands the tab is free again (the effect below already moved the shelf there), so every
+  // tab chip works while the "ON YOUR SHELF" chip is still up.
+  const arrivalTab: ShelfTab | null = landingTab({ slot: arrivalSlot
+    ? { section: arrivalSlot.section, taskId: arrivalSlot.task.id } : null,
+    requestKey, landedKey, closedKey, rideTaskIds: currentPark?.ride_passport_task_ids });
+  const shownTab: ShelfTab = shownShelfTab(tab, tabs, arrivalTab);
   const shownSecret = visibleSecretSlots(secretTasks, completedSecretTasks, coinLevels.open);
   // Keep the landing's tab after the coin lands, so the shelf never jumps back to Rides under it.
   useEffect(() => { if (arrivalTab) setTab(arrivalTab); }, [arrivalTab]);
-  const storyTop = canChooseGoal && !!todayRecap && storyOnTop({ atPark: inThisPark,
-    ridesWonToday: todayRecap.distinct_rides_won, milestone: milestoneToday(totals, todayRecap.new_coins) });
+  // The story's place is decided when the shelf paints (placedRecap), never after: a story that comes in
+  // later sits below the shelf until the next visit, so nothing jumps over the shelf under the thumb.
+  const storyTop = canChooseGoal && !!placedRecap && storyOnTop({ atPark: inThisPark,
+    ridesWonToday: placedRecap.distinct_rides_won, milestone: milestoneToday(totals, placedRecap.new_coins) });
   const parkStores = inThisPark ? locationPark?.stores ?? [] : [];
   const trophyNext = currentPark ? nextTrophy(currentPark.park_coins_count) : null;
 
-  // Today's park story is read with the shelf on first paint (capped at RECAP_WAIT_MS), so the story card
-  // is already in its place, on top or below, and never jumps over the shelf under the thumb.
+  // Today's park story is read with the shelf on first paint, capped short (recapWaitMs) and never while a
+  // won coin is landing, so the shelf and the landing paint as fast as the shelf read itself.
   const shelfPainted = useRef(false);
+  const landingRef = useRef(false);
+  landingRef.current = !!requestKey;
   useEffect(() => { shelfPainted.current = false; }, [park, player]);
   useFocusEffect(useCallback(() => {
     let active = true;
+    let recapTimer: ReturnType<typeof setTimeout> | undefined;
     void (async () => {
       try {
-        const story = !shelfPainted.current && canChooseGoal
+        const waitMs = recapWaitMs({ firstPaint: !shelfPainted.current, ownShelf: canChooseGoal, landing: landingRef.current });
+        const story = waitMs > 0
           ? Promise.race([loadRecap(Number(park)).catch(() => null),
-            new Promise<null>(resolve => setTimeout(() => resolve(null), RECAP_WAIT_MS))])
+            new Promise<null>(resolve => { recapTimer = setTimeout(() => resolve(null), waitMs); })])
           : null;
         const { visitedPark, available, secret, completed, completedSecret, archived, completedArchived, limited } =
           await loadParkShelf(Number(park), Number(player));
         await story;
+        if (recapTimer) clearTimeout(recapTimer);
         if (!active) return;
         shelfPainted.current = true;
+        // The story's place for this visit: whatever story is in hand as the shelf paints.
+        const inHand = recapCache.current;
+        setPlacedRecap(canChooseGoal && inHand && inHand.parkId === Number(park) ? inHand.recap : null);
         setCurrentPark(visitedPark);
         setTasks(available);
         setLimitedTasks(limited);
@@ -347,7 +364,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
         if (active) setLoading(false);
       }
     })();
-    return () => { active = false; };
+    return () => { active = false; if (recapTimer) clearTimeout(recapTimer); };
   }, [park, player, locationPark?.coin_url, refreshVersion, canChooseGoal, loadRecap]));
 
   // This is guidance, never a gate on coin collection. Unknown or stale feed
@@ -536,17 +553,18 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     onTab={next => { setTab(next); setRideOnly(false); }}
                     trophyWins={currentPark.park_coins_count}
                     onOpenStampBook={canChooseGoal ? () => RootNavigation.navigate('StampBook') : undefined}
-                    nextRideName={parkTripGoal?.ride_name}
-                    nextRideOwned={parkTripGoal?.coin_owned}
+                    nextRideName={guideOverGoal ? null : parkTripGoal?.ride_name}
+                    nextRideOwned={!guideOverGoal && parkTripGoal?.coin_owned}
                     nextCoinKind={goalCoinKind(parkTripGoal?.task_id, tasks, completedTasks, archivedTasks)}
                     ownedGoalHint={ownedGoalHint}
-                    nearbyRideName={nearbySuggestion?.task.name}
-                    nearbyReportedOpen={!!nearbyReportedOpenRide}
+                    nearbyRideName={guideOverGoal ? guideTarget?.name ?? guideTask?.name : nearbySuggestion?.task.name}
+                    nearbyReportedOpen={!guideOverGoal && !!nearbyReportedOpenRide}
+                    nearbyHint={guideOverGoal ? guideShelfHint(guideTarget?.reason) : null}
                     ticketsNeeded={parkTripGoal && !parkTripGoal.coin_owned
                       ? tripGoalData?.wallet.tickets_needed ?? 0 : 0}
                     rescuePassAvailable={inThisPark && !!tripGoalData?.wallet.rescue_pass_available}
                     goalStale={tripGoalStale}
-                    goalReportedDown={goalReportedDown}
+                    goalReportedDown={!guideOverGoal && goalReportedDown}
                     alternateRideName={alternateRide?.task.name}
                     secretMilestones={currentPark.completed_secret_tasks_count}
                     onGo={onGoNext}
@@ -662,6 +680,9 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     <Text style={{ fontFamily: 'Shark', color: '#fff', fontSize: 18, textAlign: 'center' }}>Trophies</Text>
                     <Text style={{ fontFamily: 'Knockout', color: '#d8f1ff', fontSize: 15, textAlign: 'center', marginBottom: 4 }}>
                       {nextTrophyLine(currentPark.park_coins_count)}
+                    </Text>
+                    <Text style={{ fontFamily: 'Knockout', color: '#ffe07a', fontSize: 14, textAlign: 'center', marginBottom: 4 }}>
+                      {TROPHY_HELP}
                     </Text>
                     <View
                       style={{

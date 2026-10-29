@@ -56,10 +56,19 @@ test('tabs: Rides and Sights split the permanent coins; a park without a ride li
 
 test('the trophy shelf names the next trophy in wins (every coin win here counts)', () => {
   // Its own unit, so '8 of 35 coins' above it never reads like wrong math.
-  assert.equal(shelf.nextTrophyLine(9), 'Bronze: 9 of 12 wins (repeats count)');
-  assert.equal(shelf.nextTrophyLine(11), 'Bronze: 11 of 12 wins (repeats count)');
-  assert.equal(shelf.nextTrophyLine(12), 'Silver: 12 of 50 wins (repeats count)');
+  assert.equal(shelf.nextTrophyLine(9), 'Bronze trophy: 9 of 12 wins');
+  assert.equal(shelf.nextTrophyLine(11), 'Bronze trophy: 11 of 12 wins');
+  assert.equal(shelf.nextTrophyLine(12), 'Silver trophy: 12 of 50 wins');
   assert.doesNotMatch(shelf.nextTrophyLine(3), /coins?/);
+  assert.doesNotMatch(shelf.nextTrophyLine(3), /repeats count/, 'no grown-up jargon on the line');
+  assert.equal(shelf.TROPHY_HELP, 'Every win counts, repeats too!');
+  assert.equal(shelf.trophyIcon(9), 'trophyBronze', 'the picture is the trophy you are working toward');
+  assert.equal(shelf.trophyIcon(12), 'trophySilver');
+  assert.equal(shelf.trophyIcon(60), 'trophy');
+  assert.equal(shelf.trophyIcon(120), 'trophy');
+  const header = read('src/screens/ParkCollectionHeader.tsx');
+  assert.match(header, /<GameIcon name=\{trophyIcon\(trophyWins\)\} size=\{18\} \/>/);
+  assert.match(read('src/screens/ParkScreen.tsx'), /\{TROPHY_HELP\}/, 'the trophy shelf says repeats count, in kid words');
   assert.equal(shelf.nextTrophyLine(100), 'All three trophies are yours!');
   assert.deepEqual(plain(shelf.nextTrophy(0)), { name: 'Bronze', at: 12, left: 12 });
   const modal = loadTs('src/components/ParkTrophyModal.tsx', {
@@ -108,10 +117,37 @@ test('round 2: a coin landing or a coin link opens the tab that holds its slot',
   assert.equal(shelf.tabForSlot('archived', 41, [1]), 'limited', 'past events sit at the bottom of Limited');
   assert.equal(shelf.tabForSlot('secret', 50, [1]), 'rides', 'secret coins live under the Rides shelf');
   const park = read('src/screens/ParkScreen.tsx');
-  assert.match(park, /const arrivalTab: ShelfTab \| null = arrivalSlot && closedKey !== requestKey\s*\?\s*tabForSlot\(arrivalSlot\.section, arrivalSlot\.task\.id, currentPark\?\.ride_passport_task_ids\)/);
-  assert.match(park, /const shownTab: ShelfTab = arrivalTab && tabs\.includes\(arrivalTab\) \? arrivalTab/, 'the landing tab shows from the first frame');
+  assert.match(park, /const arrivalTab: ShelfTab \| null = landingTab\(\{ slot: arrivalSlot/);
+  assert.match(park, /requestKey, landedKey, closedKey, rideTaskIds: currentPark\?\.ride_passport_task_ids \}\);/);
+  assert.match(park, /const shownTab: ShelfTab = shownShelfTab\(tab, tabs, arrivalTab\);/, 'the landing tab shows from the first frame');
   assert.match(park, /useEffect\(\(\) => \{ if \(arrivalTab\) setTab\(arrivalTab\); \}, \[arrivalTab\]\);/, 'and stays after the coin lands');
   assert.match(park, /if \(focusTab\) setTab\(focusTab\);\s*const timer = setTimeout/, 'a coin link opens its tab before it measures the slot');
+});
+
+test('round 3: once the coin lands every tab chip works again, even with the ON YOUR SHELF chip up', () => {
+  const tabs = ['rides', 'sights', 'limited'];
+  const slot = { section: 'normal', taskId: 7 };
+  const base = { slot, requestKey: 'win-1', landedKey: null, closedKey: null, rideTaskIds: [1, 2, 3] };
+  // Flying in: the Walt Statue's tab holds, whatever the player tapped.
+  const flying = shelf.landingTab(base);
+  assert.equal(flying, 'sights');
+  assert.equal(shelf.shownShelfTab('rides', tabs, flying), 'sights', 'the slot is on screen while it is measured');
+  // Landed (the chip is still up: closedKey is not set): the landing lets go of the tab.
+  const landed = shelf.landingTab({ ...base, landedKey: 'win-1' });
+  assert.equal(landed, null);
+  // The effect already moved the pick to Sights, so the shelf stays there...
+  assert.equal(shelf.shownShelfTab('sights', tabs, landed), 'sights');
+  // ...and tapping RIDES (onTab -> setTab('rides')) switches at once. No dead tap.
+  assert.equal(shelf.shownShelfTab('rides', tabs, landed), 'rides');
+  assert.equal(shelf.shownShelfTab('limited', tabs, landed), 'limited');
+  // Closed, or an older landing key: nothing holds the tab.
+  assert.equal(shelf.landingTab({ ...base, closedKey: 'win-1' }), null);
+  assert.equal(shelf.landingTab({ ...base, slot: null }), null);
+  assert.equal(shelf.landingTab({ ...base, landedKey: 'win-0' }), 'sights', 'a new win holds again');
+  // A tab this park does not show falls back to Rides.
+  assert.equal(shelf.shownShelfTab('sights', ['rides'], null), 'rides');
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /onTab=\{next => \{ setTab\(next\); setRideOnly\(false\); \}\}/, 'the chips set the pick the shelf shows');
 });
 
 test('round 2: secret coins you won never vanish; only the unfound "?" slots wait for rung 3', () => {
@@ -132,11 +168,21 @@ test('round 2: the next coin card names the coin in full under a short eyebrow, 
   assert.match(header, /go: \{ minWidth: 58, minHeight: 44,/);
 });
 
-test('round 2: the park story is read with the shelf, so its card never jumps over the shelf', () => {
+test('round 3: the park story never slows the shelf or a landing, and its card never jumps over the shelf', () => {
+  assert.equal(shelf.RECAP_WAIT_MS, 350, 'a short cap on park cellular');
+  assert.equal(shelf.recapWaitMs({ firstPaint: true, ownShelf: true, landing: false }), 350);
+  assert.equal(shelf.recapWaitMs({ firstPaint: true, ownShelf: true, landing: true }), 0, 'a landing never waits on the recap');
+  assert.equal(shelf.recapWaitMs({ firstPaint: false, ownShelf: true, landing: false }), 0, 'only the first paint waits');
+  assert.equal(shelf.recapWaitMs({ firstPaint: true, ownShelf: false, landing: false }), 0, 'a friend\'s shelf has no story');
   const park = read('src/screens/ParkScreen.tsx');
-  assert.match(park, /const RECAP_WAIT_MS = 1200;/);
-  assert.match(park, /Promise\.race\(\[loadRecap\(Number\(park\)\)\.catch\(\(\) => null\),/);
-  assert.match(park, /await loadParkShelf\(Number\(park\), Number\(player\)\);\s*await story;/, 'the first paint waits (capped) for the story');
+  assert.doesNotMatch(park, /RECAP_WAIT_MS = 1200/);
+  assert.match(park, /const waitMs = recapWaitMs\(\{ firstPaint: !shelfPainted\.current, ownShelf: canChooseGoal, landing: landingRef\.current \}\);/);
+  assert.match(park, /recapTimer = setTimeout\(\(\) => resolve\(null\), waitMs\);/);
+  assert.match(park, /await story;\s*if \(recapTimer\) clearTimeout\(recapTimer\);/, 'the race timer is cleared');
+  assert.match(park, /return \(\) => \{ active = false; if \(recapTimer\) clearTimeout\(recapTimer\); \};/);
+  // The story's place is set as the shelf paints; a later story sits below until the next visit.
+  assert.match(park, /setPlacedRecap\(canChooseGoal && inHand && inHand\.parkId === Number\(park\) \? inHand\.recap : null\);/);
+  assert.match(park, /const storyTop = canChooseGoal && !!placedRecap && storyOnTop\(/);
   assert.equal((park.match(/initialRecap=\{todayRecap\}/g) || []).length, 2, 'both slots paint with the story already read');
   const card = read('src/screens/ParkDayRecapCard.tsx');
   assert.match(card, /useState<ParkDayRecap \| null>\(initialRecap\)/);

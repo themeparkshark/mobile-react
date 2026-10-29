@@ -28,3 +28,21 @@ export function goalCoinKind(taskId: number | null | undefined,
   }
   return null;
 }
+
+/**
+ * The map guide's target, when it points at a coin in this park: the shelf's
+ * NEXT COIN card then names the same coin the map card does (one next thing).
+ */
+export function guideShelfPick<T extends { readonly id: number }>(
+  target: { readonly taskId: number; readonly parkId: number } | null | undefined,
+  parkId: number, atPark: boolean, rows: readonly T[]): T | null {
+  if (!target || !atPark || target.parkId !== parkId) return null;
+  return rows.find(row => row.id === target.taskId) ?? null;
+}
+
+/** The NEXT COIN card's line under the guide's target, in a 7-year-old's words. */
+export function guideShelfHint(reason: string | null | undefined): string {
+  if (reason === 'in_line') return 'You are in its line. Play while you wait!';
+  if (reason === 'level_up') return 'Ready to level up!';
+  return 'The map shows the way.';
+}

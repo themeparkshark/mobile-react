@@ -72,6 +72,41 @@ export function tabForSlot(section: 'normal' | 'limited' | 'secret' | 'archived'
 }
 
 /**
+ * The tab a coin landing holds while the coin is still flying in. It holds only
+ * until the coin lands (or the landing is closed): the shelf has already moved
+ * to that tab, so after the landing every tab chip works again, even while the
+ * "ON YOUR SHELF" chip is still up.
+ */
+export function landingTab(input: {
+  readonly slot: { readonly section: 'normal' | 'limited' | 'secret' | 'archived'; readonly taskId: number } | null;
+  readonly requestKey: string | null;
+  readonly landedKey: string | null;
+  readonly closedKey: string | null;
+  readonly rideTaskIds: readonly number[] | null | undefined;
+}): ShelfTab | null {
+  if (!input.slot || !input.requestKey) return null;
+  if (input.landedKey === input.requestKey || input.closedKey === input.requestKey) return null;
+  return tabForSlot(input.slot.section, input.slot.taskId, input.rideTaskIds);
+}
+
+/** The tab on screen: the landing's tab while a coin flies in, otherwise the player's pick. */
+export function shownShelfTab(picked: ShelfTab, tabs: readonly ShelfTab[], landing: ShelfTab | null): ShelfTab {
+  if (landing && tabs.includes(landing)) return landing;
+  return tabs.includes(picked) ? picked : 'rides';
+}
+
+/**
+ * How long the shelf's first paint waits for today's park story. Never while a
+ * won coin is landing (the landing never waits on a second request); otherwise
+ * a short cap. A story that comes later sits below the shelf until the next
+ * visit, so nothing ever jumps over the shelf under the thumb.
+ */
+export const RECAP_WAIT_MS = 350;
+export function recapWaitMs(input: { readonly firstPaint: boolean; readonly ownShelf: boolean; readonly landing: boolean }): number {
+  return input.firstPaint && input.ownShelf && !input.landing ? RECAP_WAIT_MS : 0;
+}
+
+/**
  * The secret coins the Rides tab shows. Coins you already won always stay on
  * the shelf; the unfound "?" outlines wait for coin levels (rung 3).
  */
@@ -99,14 +134,27 @@ export function nextTrophy(wins: number): { name: string; at: number; left: numb
 }
 
 /**
- * "Bronze: 9 of 12 wins (repeats count)". Trophies count wins, not coins, so the
- * line names its own unit and never reads like a second shelf count.
+ * "Bronze trophy: 9 of 12 wins". Trophies count wins, not coins, so the line
+ * names its own unit and never reads like a second shelf count. The picture
+ * beside it is the trophy itself (trophyIcon); the "repeats count too" idea
+ * lives in TROPHY_HELP under the trophy shelf, in kid words.
  */
 export function nextTrophyLine(wins: number): string {
   const count = Math.max(0, Number(wins) || 0);
   const next = nextTrophy(count);
   if (!next) return 'All three trophies are yours!';
-  return `${next.name}: ${count} of ${next.at} wins (repeats count)`;
+  return `${next.name} trophy: ${count} of ${next.at} wins`;
+}
+
+/** The trophy shelf's help line. */
+export const TROPHY_HELP = 'Every win counts, repeats too!';
+
+/** The picture of the trophy you are working toward (gold once all three are yours). */
+export function trophyIcon(wins: number): 'trophyBronze' | 'trophySilver' | 'trophy' {
+  const next = nextTrophy(wins);
+  if (next?.name === 'Bronze') return 'trophyBronze';
+  if (next?.name === 'Silver') return 'trophySilver';
+  return 'trophy';
 }
 
 /** The shelf quarter (0 to 4) a count reaches: 25, 50, 75 and 100 percent. */

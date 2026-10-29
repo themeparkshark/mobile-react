@@ -10,7 +10,7 @@ import { limitedDayLabel } from '../services/collection/limitedCoins';
 import { parkCoinParts } from './parkCoinParts';
 import { playSfx } from '../gamekit/SFX';
 import { haptic } from '../gamekit/Haptics';
-import { nextTrophyLine, type ShelfTab } from '../services/collection/shelfModel';
+import { nextTrophyLine, TROPHY_HELP, trophyIcon, type ShelfTab } from '../services/collection/shelfModel';
 
 interface Props {
   readonly parkName: string;
@@ -34,6 +34,8 @@ interface Props {
   readonly ownedGoalHint?: string | null;
   readonly nearbyRideName?: string | null;
   readonly nearbyReportedOpen?: boolean;
+  /** The line under the next coin when the map guide picked it (the map and the shelf agree). */
+  readonly nearbyHint?: string | null;
   readonly ticketsNeeded?: number;
   readonly rescuePassAvailable?: boolean;
   readonly goalStale?: boolean;
@@ -75,7 +77,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
   limitedEndsOn, onBrowseLimited, onBrowseSecrets, onOpenStampBook,
   nextRideName, nextRideOwned, ownedGoalHint, nearbyRideName, ticketsNeeded = 0,
   rescuePassAvailable = false, goalStale = false,
-  goalReportedDown = false, alternateRideName, nearbyReportedOpen = false,
+  goalReportedDown = false, alternateRideName, nearbyReportedOpen = false, nearbyHint = null,
   secretMilestones, holdCount = false, tickKey, nextCoinKind, tab, onTab, tabs, trophyWins, onGo, goLabel = 'GO',
   planned = false, energy = null }: Props) {
   const reduced = useReducedGameMotion();
@@ -129,7 +131,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
   } : nearbyRideName ? {
     eyebrow: 'NEXT COIN',
     name: nearbyRideName,
-    hint: nearbyReportedOpen ? 'Nearest coin, reported open.' : 'The nearest coin you can win next.',
+    hint: nearbyHint ?? (nearbyReportedOpen ? 'Nearest coin, reported open.' : 'The nearest coin you can win next.'),
   } : isOwnPark ? {
     eyebrow: 'NEXT COIN', name: 'Pick a missing coin', hint: 'Tap an empty slot on the shelf.',
   } : null;
@@ -159,8 +161,8 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
         </Animated.View>
       </View>
       {typeof trophyWins === 'number' && isOwnPark && <View style={styles.trophyLine} accessible
-        accessibilityLabel={nextTrophyLine(trophyWins)}>
-        <GameIcon name="trophyBronze" size={16} />
+        accessibilityLabel={`${nextTrophyLine(trophyWins)}. ${TROPHY_HELP}`}>
+        <GameIcon name={trophyIcon(trophyWins)} size={18} />
         <Text style={styles.trophyText} numberOfLines={1}>{nextTrophyLine(trophyWins)}</Text>
       </View>}
       <View style={styles.chips} accessibilityRole={onTab ? 'tablist' : undefined}>
