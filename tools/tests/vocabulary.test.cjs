@@ -70,6 +70,21 @@ const RULES = [
     'Shark Coins (the money)'],
 ];
 
+/**
+ * Round 5: a count labeled "Ride Coins" counts sights too (Profile's stat tile counted every shelf coin).
+ * BLUEPRINT 4.5 retires "RIDE COINS counting sights" in any case: a stat label is the shelf's word.
+ * "ride coin" as the name of the collectible (a title, the glossary) stays.
+ */
+const COUNT_LABEL_RULE = ['ride-coins-count', /^ride coins$/i, 'Shelf Coins (the shelf counts rides and sights)'];
+/** A string that is the `label` of an object that also carries a `value` (a stat tile or count row). */
+function isCountLabel(node) {
+  const prop = node.parent;
+  if (!prop || !ts.isPropertyAssignment(prop) || prop.initializer !== node) return false;
+  if (!ts.isIdentifier(prop.name) || prop.name.text !== 'label') return false;
+  const obj = prop.parent;
+  return !!obj && ts.isObjectLiteralExpression(obj) && obj.properties.some(p => p.name && ts.isIdentifier(p.name) && p.name.text === 'value');
+}
+
 /** Rules also checked against a whole template literal (they span a ${...} value). */
 const WHOLE_TEMPLATE_RULES = ['money-coins'];
 
@@ -216,7 +231,15 @@ function scanSource(source, file) {
   };
   const reportWhole = (node, text) => report(node, text, WHOLE_TEMPLATE_RULES);
   const visit = node => {
-    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && !isSkipped(node)) report(node, node.text);
+    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && !isSkipped(node)) {
+      report(node, node.text);
+      if (COUNT_LABEL_RULE[1].test(node.text.trim()) && isCountLabel(node)) {
+        const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line;
+        if (!/vocab-allow:/.test(lines[line] ?? '') && !/vocab-allow:/.test(lines[line - 1] ?? '')) {
+          hits.push({ line: line + 1, rule: COUNT_LABEL_RULE[0], say: COUNT_LABEL_RULE[2], text: node.text });
+        }
+      }
+    }
     else if (ts.isTemplateExpression(node) && !isSkipped(node)) {
       // The whole template, each ${...} read as N, for the rules that span a value ("costs ${GIFT_COST} coins").
       const whole = node.head.text + node.templateSpans.map(span => `N${span.literal.text}`).join('');
@@ -285,6 +308,11 @@ if (require.main === module || process.env.NODE_TEST_CONTEXT) {
     assert.equal(scanSource("const a = 'earn 25 free coins!';", 'x.ts')[0].rule, 'money-coins');
     assert.equal(scanSource("const a = '2x XP and coins';", 'x.ts')[0].rule, 'money-coins');
     assert.equal(scanSource('const a = `A gift costs ${GIFT_COST} Shark Coins`; const b = `${n} of ${m} coins`; const c = \'9 of 35 coins\';', 'x.ts').length, 0);
+    // Round 5: a count labeled Ride Coins counts sights too; the collectible's name in a title stays.
+    assert.equal(scanSource("const s = [{ label: 'Ride Coins', value: 9 }];", 'x.ts')[0].rule, 'ride-coins-count');
+    assert.ok(scanSource("const s = { label: 'RIDE COINS', value: n };", 'x.ts').some(h => h.rule === 'ride-coins-count'));
+    assert.equal(scanSource("const t = { label: 'Ride Coins', icon: 'coin' }; const el = <Text>Ride Coins</Text>;", 'x.tsx').length, 0);
+    assert.equal(scanSource("const s = [{ label: 'Shelf Coins', value: 9 }];", 'x.ts').length, 0);
     // Ledger 39: the Green Train Toy is server data only.
     assert.equal(scanSource("const a = 'Green Train Toy';", 'x.ts')[0].rule, 'green-train');
   });

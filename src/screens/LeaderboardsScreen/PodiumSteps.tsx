@@ -47,7 +47,9 @@ function PodiumSteps({ steps, gap = 6, style, paddingHorizontal = 0, numberAt = 
           {/* The step's top edge in its place color, like a medal ribbon. */}
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 7, backgroundColor: STEP_EDGE[step.rank] }} />
           {(numberAt === 'top' || step.height >= 24) && <Text allowFontScaling={false} style={{ fontFamily: 'Shark',
-            color: 'rgba(5,52,110,0.32)', marginBottom: 1,
+            // The small top number on the help podium reads at a glance on SE (a 7-year-old reads 2, 1, 3);
+            // the big step number on Standings stays a soft watermark.
+            color: numberAt === 'top' ? 'rgba(5,52,110,0.55)' : 'rgba(5,52,110,0.32)', marginBottom: 1,
             fontSize: numberAt === 'top' ? 18 : Math.min(40, Math.max(14, Math.round(step.height * 0.32))),
             lineHeight: numberAt === 'top' ? 20 : undefined }}>{step.rank}</Text>}
         </View>

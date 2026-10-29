@@ -411,9 +411,9 @@ test('round 4: a coin you own is never the shelf NEXT COIN (GO on X, win X, the 
   // Win Tiki Room: the plan on an owned coin never shows, and it is the plan to forget.
   const won = new Set([1]);
   assert.equal(copy.shelfGuidePick({ ...base, plan: 1, owned: won }), null, 'the shelf falls back to its own next coin');
-  assert.equal(copy.stalePlan(1, won, null), 1, 'guide.clearPlan() runs for it');
-  assert.equal(copy.stalePlan(3, won, null), null, 'an unowned plan stays');
-  assert.equal(copy.stalePlan(null, won, null), null);
+  assert.equal(copy.stalePlan(1, won, null, 1), 1, 'guide.clearPlan() runs for it (the shelf watched it unowned)');
+  assert.equal(copy.stalePlan(3, won, null, 3), null, 'an unowned plan stays');
+  assert.equal(copy.stalePlan(null, won, null, null), null);
   // The map's target on an owned coin (not a level up) never shows either.
   assert.equal(copy.shelfGuidePick({ ...base, owned: won, target: { taskId: 1, parkId: 8, reason: 'chosen' } }), null);
   assert.equal(copy.shelfGuidePick({ ...base, owned: won, target: { taskId: 3, parkId: 8, reason: 'nearest_open' } }).row.name, 'Jungle Cruise');
@@ -434,7 +434,7 @@ test('round 4: GET RIDE PARTS on an owned coin shows LEVEL UP GOAL with the part
   assert.equal(copy.levelUpGoalHint(pick.reason, false), 'Its line earns Ride Parts.');
   assert.equal(copy.levelUpGoalHint(pick.reason, true), 'Win it again for Ride Parts.');
   assert.equal(copy.levelUpGoalHint('level_up', false), 'Ready to level up!');
-  assert.equal(copy.stalePlan(2, owned, 2), null, 'a level-up goal is not a finished plan');
+  assert.equal(copy.stalePlan(2, owned, 2, 2), null, 'a level-up goal is not a finished plan');
   // After guide-map merges, the map may resolve elsewhere; the shelf keeps its own LEVEL UP GOAL card.
   assert.equal(copy.shelfGuidePick({ ...base, target: { taskId: 1, parkId: 8, reason: 'nearest_open' } }).row.name, 'Haunted Mansion');
   // ...unless the guide holds a coin right here right now (in range, in its line, the line story).
@@ -456,7 +456,7 @@ test('round 4: GET RIDE PARTS on an owned coin shows LEVEL UP GOAL with the part
   off();
 
   const card = read('src/components/TaskCoinModal.tsx');
-  assert.match(card, /levelUpGoal\.set\(task\.id\);\n\s*guide\.setTarget\(task\.id, 'coin_parts'\);/);
+  assert.match(card, /levelUpGoal\.set\(task\.id, player\?\.id\);\n\s*guide\.setTarget\(task\.id, 'coin_parts'\);/);
   assert.match(card, /levelUpGoal\.clear\(task\.id\);/, 'a level-up ends the goal');
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /shelfGuidePick\(\{ target: guideTarget, plan: guidePlan, levelUpGoal: levelUpId,/);
@@ -476,4 +476,105 @@ test('round 4: the unfound sight card says Sight Coin (the tab word) and its pri
   assert.match(card, /\+\$\{task\.coins\} Shark Coins/);
   assert.doesNotMatch(card, /\+\$\{task\.coins\} coins/);
   assert.match(card, /`Costs \$\{task\.ticket_cost\} Ticket\$\{/, 'Tickets are a named thing: capital T');
+});
+
+test('round 5: the shelf NEXT COIN never names a closed, down or refurbishing ride; at night the sights stay open', () => {
+  const copy = loadTs('src/services/collection/nextCoinCopy.ts');
+  // Nearest first: Tiki Room, then Jungle Cruise, then Walt Statue (a sight).
+  const rows = [{ id: 1, name: 'Tiki Room' }, { id: 2, name: 'Jungle Cruise' }, { id: 3, name: 'Walt Statue', sight: true }];
+  const nearest = eligible => rows.find(eligible) ?? null;
+  const pick = (status, extra = {}) => copy.shelfNearbyPick({ feedFresh: true, isSight: row => !!row.sight, nearest,
+    status: row => status[row.name] ?? null, anyRideOpen: Object.values(status).includes('OPERATING'), ...extra });
+  // Daytime: Tiki Room is CLOSED, Jungle Cruise is open. The shelf names Jungle Cruise, reported open.
+  let next = pick({ 'Tiki Room': 'CLOSED', 'Jungle Cruise': 'OPERATING' });
+  assert.equal(next.row.name, 'Jungle Cruise'); assert.equal(next.reportedOpen, true);
+  assert.equal(next.hint, 'Nearest coin, reported open.');
+  for (const shut of ['CLOSED', 'DOWN', 'REFURBISHMENT']) {
+    next = pick({ 'Tiki Room': shut, 'Jungle Cruise': 'OPERATING' });
+    assert.notEqual(next.row.name, 'Tiki Room', `${shut} is never the nearest coin you can win next`);
+  }
+  // A ride with no live answer comes after every open ride, with a check-it line.
+  next = pick({ 'Tiki Room': null, 'Jungle Cruise': 'OPERATING' });
+  assert.equal(next.row.name, 'Jungle Cruise');
+  next = pick({ 'Tiki Room': 'CLOSED', 'Jungle Cruise': 'DOWN', 'Space Mountain': 'OPERATING' });
+  assert.equal(next.row.name, 'Walt Statue', 'no open coin ride left: the sight, always open');
+  assert.equal(next.hint, 'Sights are always open.');
+  // Night capture: every ride CLOSED. Rides rest, the sight stays open with GO.
+  next = pick({ 'Tiki Room': 'CLOSED', 'Jungle Cruise': 'CLOSED' });
+  assert.equal(next.kind, 'coin'); assert.equal(next.row.name, 'Walt Statue');
+  assert.equal(next.hint, 'Rides are resting. Sights stay open.');
+  // Night with the sight already won: the park is closed (no GO).
+  const noSight = copy.shelfNearbyPick({ feedFresh: true, anyRideOpen: false, isSight: row => !!row.sight,
+    status: () => 'CLOSED', nearest: eligible => rows.filter(r => !r.sight).find(eligible) ?? null });
+  assert.deepEqual({ ...noSight }, { kind: 'closed', title: 'The park is closed', hint: 'See you next park day.' });
+  // No live feed yet: the nearest coin, as before.
+  next = copy.shelfNearbyPick({ feedFresh: false, anyRideOpen: false, isSight: () => false, status: () => null, nearest });
+  assert.equal(next.row.name, 'Tiki Room'); assert.equal(next.hint, 'The nearest coin you can win next.');
+
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /shelfNearbyPick<TaskType>\(\{/);
+  assert.match(park, /anyRideOpen: !!freshWaitEntries\?\.some\(entry => entry\.status === 'OPERATING'\)/);
+  assert.match(park, /parkResting=\{/);
+  const header = read('src/screens/ParkCollectionHeader.tsx');
+  assert.match(header, /\} : parkResting \? \{\n\s*eyebrow: 'NEXT COIN', name: parkResting\.title, hint: parkResting\.hint,/);
+});
+
+test('round 5: GET RIDE PARTS lets the shelf header name the coin before the map pops in', () => {
+  const card = read('src/components/TaskCoinModal.tsx');
+  assert.match(card, /levelUpGoal\.set\(task\.id, player\?\.id\);\n\s*guide\.setTarget\(task\.id, 'coin_parts'\);[\s\S]{0,400}requestAnimationFrame\(\(\) => requestAnimationFrame\(\(\) => onShowOnMap\(\)\)\)/);
+});
+
+test('round 5: the shelf forgets only a plan it watched you win; the level-up goal belongs to one player', () => {
+  const copy = loadTs('src/services/collection/nextCoinCopy.ts');
+  const owned = new Set([1, 2]);
+  assert.equal(copy.stalePlan(1, owned, null, 1), 1, 'watched unowned, now won: forget it');
+  assert.equal(copy.stalePlan(2, owned, null, 1), null, 'another surface pointed at an owned coin: not ours to clear');
+  assert.equal(copy.stalePlan(2, owned, null, null), null);
+  assert.equal(copy.stalePlan(1, owned, 1, 1), null, 'a level-up goal stays');
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /stalePlan\(guidePlan, ownedIds, levelUpId, watchedPlan\.current\)/);
+  assert.match(park, /watchedPlan\.current = guidePlan != null && !ownedIds\.has\(guidePlan\) \? guidePlan : null;/);
+  assert.match(park, /levelUpGoal\.getFor\(viewerId\)/);
+  assert.match(park, /levelUpGoal\.forPlayer\(viewerId\)/);
+
+  const goal = loadTs('src/services/collection/levelUpGoal.ts').levelUpGoal;
+  goal.set(5, 101);
+  assert.equal(goal.getFor(101), 5);
+  assert.equal(goal.getFor(202), null, 'a second account on the phone never sees it');
+  assert.equal(goal.getFor(null), null, 'signed out: none');
+  goal.forPlayer(101); assert.equal(goal.getFor(101), 5, 'same player keeps it');
+  goal.forPlayer(202); assert.equal(goal.get(), null, 'a different player forgets it');
+  goal.set(5, 101); goal.forPlayer(null); assert.equal(goal.get(), null, 'sign-out forgets it');
+});
+
+test('round 5: Profile counts shelf coins in the shelf word with the coin picture', () => {
+  const stats = read('src/components/Stats.tsx');
+  assert.match(stats, /label: 'Shelf Coins',\n\s*value: rideCoins \?\? visibleCount\(player\.park_coins_count\),\n\s*iconIndex: 1,\n\s*gameIcon: 'coin'/);
+  assert.doesNotMatch(stats, /label: 'Ride Coins'/);
+  assert.match(read('src/components/Tutorial/steps.ts'), /Then follow the glowing coin on the map\./);
+  assert.match(read('src/screens/LeaderboardsScreen/PodiumSteps.tsx'), /numberAt === 'top' \? 'rgba\(5,52,110,0\.55\)'/);
+});
+
+test('round 5: the park day story waits on top after park_day_done', () => {
+  const model = loadTs('src/services/collection/shelfModel.ts');
+  assert.equal(model.storyOnTop({ atPark: true, ridesWonToday: 0, milestone: false, justLeft: true }), true,
+    'guide-map says the day is done: on top even before the place check moves');
+  assert.equal(model.storyOnTop({ atPark: false, ridesWonToday: 2, milestone: false }), true, 'left the park with wins');
+  assert.equal(model.storyOnTop({ atPark: true, ridesWonToday: 2, milestone: false }), false, 'still at the park: lower');
+});
+
+test('integration (fails until wired): after guide-map merges, the shelf listens to park_day_done', t => {
+  // Integration step (BACKEND_NEEDS, lane shelf-words): in src/screens/ParkScreen.tsx
+  //   import { parkDaySignal } from '../services/guide/parkDay';
+  //   const dayDone = useSyncExternalStore(parkDaySignal.subscribe, parkDaySignal.last, parkDaySignal.last);
+  //   const justLeft = !!dayDone && dayDone.parkId === Number(park) && dayDone.day === <today, park-local>;
+  //   pass justLeft to storyOnTop, and re-read the recap (loadRecap(Number(park))) when dayDone changes.
+  // Nothing opens full screen: the card only moves to the top of the shelf.
+  if (!fs.existsSync(path.join(ROOT, 'src/services/guide/parkDay.ts'))) {
+    t.skip('guide-map has not merged parkDay.ts into this branch yet');
+    return;
+  }
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /parkDaySignal\.subscribe/, 'ParkScreen subscribes to park_day_done');
+  assert.match(park, /justLeft/, 'storyOnTop gets justLeft from the signal');
 });

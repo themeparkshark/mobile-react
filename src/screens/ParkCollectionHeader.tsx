@@ -38,6 +38,8 @@ interface Props {
   readonly nearbyReportedOpen?: boolean;
   /** The line under the next coin when the map guide picked it (the map and the shelf agree). */
   readonly nearbyHint?: string | null;
+  /** No ride open and no sight left to win: the closed message, with no GO (blueprint 4.1 rule 11). */
+  readonly parkResting?: { readonly title: string; readonly hint: string } | null;
   readonly ticketsNeeded?: number;
   readonly rescuePassAvailable?: boolean;
   readonly goalStale?: boolean;
@@ -79,7 +81,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
   limitedEndsOn, onBrowseLimited, onBrowseSecrets, onOpenStampBook,
   nextRideName, nextRideOwned, ownedGoalHint, ownedGo = false, nearbyRideName, ticketsNeeded = 0,
   rescuePassAvailable = false, goalStale = false,
-  goalReportedDown = false, alternateRideName, nearbyReportedOpen = false, nearbyHint = null,
+  goalReportedDown = false, alternateRideName, nearbyReportedOpen = false, nearbyHint = null, parkResting = null,
   secretMilestones, holdCount = false, tickKey, nextCoinKind, tab, onTab, tabs, trophyWins, onGo, goLabel = 'GO',
   planned = false, energy = null }: Props) {
   const reduced = useReducedGameMotion();
@@ -134,6 +136,8 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
     eyebrow: 'NEXT COIN',
     name: nearbyRideName,
     hint: nearbyHint ?? (nearbyReportedOpen ? 'Nearest coin, reported open.' : 'The nearest coin you can win next.'),
+  } : parkResting ? {
+    eyebrow: 'NEXT COIN', name: parkResting.title, hint: parkResting.hint,
   } : isOwnPark ? {
     eyebrow: 'NEXT COIN', name: 'Pick a missing coin', hint: 'Tap an empty slot on the shelf.',
   } : null;

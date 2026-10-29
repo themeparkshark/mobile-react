@@ -255,9 +255,12 @@ export default function TaskCoinModal({
         onGetParts={onShowOnMap ? () => {
           // GET RIDE PARTS (must-fix 4): the one pointer goes to this ride, then the map draws the path.
           // The shelf remembers it as a level-up goal, so it says LEVEL UP GOAL, never NEXT COIN, for a coin you own.
-          levelUpGoal.set(task.id);
+          levelUpGoal.set(task.id, player?.id);
           guide.setTarget(task.id, 'coin_parts');
-          onShowOnMap();
+          // Two frames first, so the shelf header says LEVEL UP GOAL for this coin before the map pops in:
+          // the outgoing shelf keeps its last drawn frame during the pop, and that frame must name this coin.
+          // The sheet's 90 ms exit covers the wait, so the map still starts under it.
+          requestAnimationFrame(() => requestAnimationFrame(() => onShowOnMap()));
         } : undefined}
       />}
     </>

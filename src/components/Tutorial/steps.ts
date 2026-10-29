@@ -44,7 +44,7 @@ const parkOnboardingSteps: TutorialStep[] = [
   {
     id: 'welcome', sequence: 'onboarding', title: 'Your first adventure',
     text: "I'm Finn. Let's match four pairs together!",
-    subtitle: 'A free warm-up. Then choose your first ride coin on the map.',
+    subtitle: 'A free warm-up. Then follow the glowing coin on the map.',
     activity: 'memory_warmup', sharkPosition: 'bottom-center', sharkMood: 'waving',
     showSkip: true, nextText: 'Play a quick round', delay: 200,
   },

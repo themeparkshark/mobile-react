@@ -174,7 +174,10 @@ export function milestoneToday(totals: ShelfTotals, newCoinsToday: number): bool
  * The park day story card waits on top of the shelf after a park day (you left
  * the park with a win today) and on milestone days. Otherwise it sits lower.
  */
-export function storyOnTop(input: { atPark: boolean; ridesWonToday: number; milestone: boolean }): boolean {
+export function storyOnTop(input: { atPark: boolean; ridesWonToday: number; milestone: boolean;
+  /** guide-map's park_day_done for this park today (parkDaySignal): the day is over even if the place check lags. */
+  justLeft?: boolean }): boolean {
+  if (input.justLeft) return true;
   if (input.ridesWonToday <= 0) return false;
   return !input.atPark || input.milestone;
 }

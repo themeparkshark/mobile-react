@@ -96,12 +96,15 @@ export function shelfGuidePick<T extends { readonly id: number }>(input: ShelfGu
 }
 
 /**
- * The plan to forget: a coin you now own that is not a level-up goal (GO on Tiki Room, then win
- * Tiki Room). guide.clearPlan() then lets the shelf and the map pick the next coin.
+ * The plan to forget: a coin this screen watched as your unowned plan that you now own
+ * (GO on Tiki Room, then win Tiki Room), and not a level-up goal. guide.clearPlan() then lets
+ * the shelf and the map pick the next coin. `watched` is the plan id this screen last saw
+ * while you did not own it: a plan another surface set on a coin you already own (Wait Times
+ * PLAY IN LINE on an owned ride, the map's level-up pick) is never this screen's to clear.
  */
 export function stalePlan(plan: number | null | undefined, owned: ReadonlySet<number>,
-  levelUpGoal: number | null | undefined): number | null {
-  return plan != null && owned.has(plan) && plan !== levelUpGoal ? plan : null;
+  levelUpGoal: number | null | undefined, watched: number | null | undefined): number | null {
+  return plan != null && owned.has(plan) && plan !== levelUpGoal && watched === plan ? plan : null;
 }
 
 /** The LEVEL UP GOAL card's line: ready now, or where the Parts come from. */
@@ -116,4 +119,49 @@ export function guideShelfHint(reason: string | null | undefined): string {
   if (reason === 'level_up') return 'Ready to level up!';
   if (reason === 'plan') return 'Your plan. The map shows the way.';
   return 'The map shows the way.';
+}
+
+/** One ride's live status from the park feed, or null when the feed has no answer for it. */
+export type ShelfLiveStatus = 'OPERATING' | 'DOWN' | 'REFURBISHMENT' | 'CLOSED' | null;
+
+export interface ShelfNearbyInput<T> {
+  /** True while a fresh live answer (under 2 minutes old) for this park is in hand. */
+  readonly feedFresh: boolean;
+  /** True when the fresh feed says at least one ride in this park is running. */
+  readonly anyRideOpen: boolean;
+  /** A sight (statue, shop, street) is always open; only rides wait on the live feed. */
+  readonly isSight: (row: T) => boolean;
+  readonly status: (row: T) => ShelfLiveStatus;
+  /** The nearest coin you do not own that passes `eligible` (parkRideSuggestion.nearbyUncollectedRide). */
+  readonly nearest: (eligible: (row: T) => boolean) => T | null;
+}
+
+export type ShelfNearby<T> =
+  | { readonly kind: 'coin'; readonly row: T; readonly hint: string; readonly reportedOpen: boolean }
+  | { readonly kind: 'closed'; readonly title: string; readonly hint: string };
+
+/**
+ * The shelf's own NEXT COIN when the guide holds nothing here (blueprint 4.1, rules 7 to 9 and 11):
+ * the nearest open ride, then a ride with no live answer, then a sight. A ride the feed calls
+ * closed, down or in refurbishment is never "the nearest coin you can win next".
+ * At night (no ride open) the sights stay open; with no sight left, the park is closed.
+ */
+export function shelfNearbyPick<T>(input: ShelfNearbyInput<T>): ShelfNearby<T> | null {
+  const { feedFresh, anyRideOpen, isSight, status, nearest } = input;
+  if (!feedFresh) {
+    const row = nearest(() => true);
+    return row ? { kind: 'coin', row, hint: 'The nearest coin you can win next.', reportedOpen: false } : null;
+  }
+  const open = nearest(row => !isSight(row) && status(row) === 'OPERATING');
+  if (open) return { kind: 'coin', row: open, hint: 'Nearest coin, reported open.', reportedOpen: true };
+  if (anyRideOpen) {
+    const unknown = nearest(row => !isSight(row) && status(row) == null);
+    if (unknown) return { kind: 'coin', row: unknown, hint: 'Check it is running when you get there.', reportedOpen: false };
+  }
+  const sight = nearest(isSight);
+  if (sight) {
+    return { kind: 'coin', row: sight, reportedOpen: false,
+      hint: anyRideOpen ? 'Sights are always open.' : 'Rides are resting. Sights stay open.' };
+  }
+  return anyRideOpen ? null : { kind: 'closed', title: 'The park is closed', hint: 'See you next park day.' };
 }
