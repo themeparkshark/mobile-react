@@ -11,7 +11,7 @@ const code = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), 
 }).outputText;
 const pending = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const gift = { id: 9, coins: 25, redeemed_at: null };
-function chest({ reconciled = null, reduced = false } = {}) {
+function chest({ reconciled = null, reduced = false, props = {} } = {}) {
   const slots = [], updates = [], acknowledged = [], sounds = [], timers = new Map(), flights = [], alerts = [];
   let index = 0, dirty = true, effects = [], timerId = 0, tree, refreshes = 0, springs = 0;
   const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => v === b[i]);
@@ -73,7 +73,9 @@ function chest({ reconciled = null, reduced = false } = {}) {
       if (name === '../api/endpoints/daily-gifts/update') return { default: () => { const request = pending(); updates.push(request); return request.promise; } };
       if (name === '../api/endpoints/daily-gifts/create') return { default: async () => { if (reconciled) return reconciled; throw new Error('Offline'); } };
       if (name.includes('assets/')) return name;
-      if (name === 'react-native-modal' || name === './Ribbon') return { default: name };
+      if (name === './Ribbon') return { default: name };
+      // The reward cards' one modal host (UI-thread dim and card); the test reads its props.
+      if (name === './retention/CalmModal') return { default: 'CalmModal' };
       // Core loop: the chest never shows a streak (the flame is Daily 3's); at home it shows when the map mounts it.
       if (name === '../context/LocationProvider') return { LocationStatusContext: {} };
       if (name === '../services/reveal/revealLadder') return { useRung: () => ({ open: false, isNew: false, markSeen() {} }) };
@@ -86,7 +88,7 @@ function chest({ reconciled = null, reduced = false } = {}) {
   }, { filename: file });
   function render() {
     let count = 0;
-    do { assert.ok(count++ < 12); dirty = false; index = 0; effects = []; tree = module.exports.default({ dailyGift: gift }); effects.forEach(fn => fn()); } while (dirty);
+    do { assert.ok(count++ < 12); dirty = false; index = 0; effects = []; tree = module.exports.default({ dailyGift: gift, ...props }); effects.forEach(fn => fn()); } while (dirty);
   }
   function find(node, predicate) {
     if (!node || typeof node !== 'object') return undefined;
@@ -103,7 +105,7 @@ function chest({ reconciled = null, reduced = false } = {}) {
     get refreshes() { return refreshes; }, get springs() { return springs; },
     open() { find(tree, node => node.type === 'Pressable' && node.props.accessibilityLabel?.startsWith('Open today')).props.onPress(); render(); },
     get disabled() { return find(tree, node => node.type === 'Pressable' && node.props.accessibilityLabel)?.props.disabled; },
-    get visible() { return tree.props.isVisible; },
+    get visible() { return tree.props.visible; },
     get celebrated() { return !!find(tree, node => node.type === 'Text' && typeof node.props.children === 'string' && node.props.children.includes('collected!')); },
     async settle() { await new Promise(resolve => setImmediate(resolve)); render(); },
     reveal() { for (let i = 0; i < 60 && timers.size; i++) { const due = [...timers.values()]; timers.clear(); due.forEach(fn => fn()); render(); } },
@@ -233,4 +235,28 @@ test('flights carry the GameIcon art of each prize', async () => {
   await daily.settle(); daily.reveal(); daily.dismiss();
   const byTarget = Object.fromEntries(daily.flights.map(f => [f.targetPosition, f.imageSource]));
   assert.deepEqual(byTarget, { coins: 'icon:coins', tickets: 'icon:ticket' });
+});
+
+test('inline inside the Rewards sheet: a card, never a native sheet of its own; BACK and AWESOME report back', async () => {
+  const done = [];
+  const back = chest({ props: { inline: true, onDone: (claimed, mapFly) => done.push([claimed, mapFly]) } });
+  assert.notEqual(back.modal.type, 'CalmModal', 'no second native sheet: no dismiss and present between the two cards');
+  assert.ok(back.find(node => node.type === 'Text' && node.props.children === 'BACK'), 'BACK, not BACK TO MAP');
+  back.find(node => node.type === 'Pressable' && node.props.accessibilityLabel === 'Back to your Rewards without opening this chest').props.onPress();
+  assert.deepEqual(done, [[false, false]]);
+  assert.equal(back.updates.length, 0); assert.equal(back.acknowledged.length, 0);
+  // Opened inline: the claim, the celebration, then AWESOME hands back with the prize on its way to the header.
+  done.length = 0;
+  const open = chest({ props: { inline: true, onDone: (claimed, mapFly) => done.push([claimed, mapFly]) } });
+  open.open();
+  const confirmed = { ...gift, redeemed_at: '2026-10-29T17:00:00Z' };
+  open.updates[0].resolve(confirmed); await open.settle(); open.reveal();
+  assert.equal(open.celebrated, true);
+  open.dismiss();
+  assert.equal(open.acknowledged[0], confirmed);
+  assert.equal(done.length, 1);
+  assert.equal(done[0][0], true, 'claimed');
+  // This test has no header chip to land on, so the coins fly on the map (the sheet steps aside for them).
+  assert.equal(done[0][1], true);
+  assert.equal(open.flights.length > 0, true);
 });

@@ -271,6 +271,22 @@ test('Shark Pass: one next prize, Step N of 50, no upsell in free claims, Daily 
   assert.equal(pass.dailyQuestsSlot({ daily: [{}] }, false), 'list');
   assert.equal(pass.dailyQuestsSlot(null, true), 'list');
   assert.doesNotMatch(pass.DAILY_GOALS_LATER, /Daily 3|\btap\b|\bGO\b/);
+  // The server's daily quest words: the home hunt is "treats" on the pass too (never "home finds" or "snacks").
+  assert.equal(pass.passQuestLabel('Grab 8 home finds'), 'Grab 8 treats');
+  assert.equal(pass.passQuestLabel('Home finds: grab 1 home find'), 'Treats: grab 1 treat');
+  assert.equal(pass.passQuestLabel('Find 3 snacks'), 'Find 3 treats');
+  assert.equal(pass.passQuestLabel('Win 2 ride games'), 'Win 2 ride games');
+  // The lane fixture (no daily pass quests, as be-core-loop sends) is inert without both lane-only variables.
+  const sent = { enabled: true, quests: { daily: [{ key: 'a' }], weekly: { key: 'w' } } };
+  assert.equal(pass.lanePassFixture(sent, {}), sent, 'store and OTA bundles: untouched');
+  assert.equal(pass.lanePassFixture(sent, { fixture: 'empty-daily' }), sent, 'the fixture alone (no lane mute) does nothing');
+  assert.equal(JSON.stringify(pass.lanePassFixture(sent, { mute: '1', fixture: 'empty-daily' }).quests), JSON.stringify({ daily: [], weekly: { key: 'w' } }));
+  assert.equal(pass.dailyQuestsSlot(pass.lanePassFixture(sent, { mute: '1', fixture: 'empty-daily' }).quests, true), 'daily3');
+  assert.match(read('src/screens/SharkPassScreen.tsx'), /passQuestLabel\(q\.label\)/);
+  assert.doesNotMatch(read('src/screens/SharkPassScreen.tsx'), /\{q\.label\}/, 'no raw server quest words on the pass');
+  for (const label of ['Grab 8 home finds', 'Snack time: 1 snack', 'Find a home find']) {
+    assert.doesNotMatch(pass.passQuestLabel(label), /home finds?|snacks?/i, label);
+  }
   const passSrc = read('src/screens/SharkPassScreen.tsx');
   assert.match(passSrc, /const daily3Ready = flagOn\(retentionFlags, 'daily_three'\) && dailyRungOpen;/);
   assert.match(passSrc, /dailyQuestsSlot\(state\.quests, daily3Ready\) === 'later' && \(\n\s*<View style=\{s\.questRow\}/, 'the later line is a View, never a Pressable');
@@ -357,11 +373,9 @@ test('one door: the next native sheet waits for the overlay native dismiss, and 
   assert.match(hook, /const layer = useNativeModalLayer\(visible, 'wait'\);/);
   assert.match(hook, /onDismiss=\{nativeGone\}/, 'after-hide work runs on the real native dismiss');
   assert.match(hook, /dismissFallback\.current = setTimeout\(nativeGone, NATIVE_GONE_FALLBACK_MS\);/);
-  assert.match(hook, /onModalShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
-  // The chest is asked at once, but it presents only once the overlay is gone: its own layer waits ('wait').
-  assert.match(hook, /case 'daily_chest': closeThen\(\(\) => undefined\); askForDailyChest\(Date\.now\(\), true\); o\.onOpenChest\(\); return;/);
-  assert.match(read('src/components/DailyGiftModal.tsx'), /useNativeModalLayer\(visible, 'wait'\)/,
-    'the chest card presents only once the closing Rewards sheet is gone');
+  assert.match(hook, /onShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
+  // The map's own daily chest (it opened by itself at home, or a push asked) still presents only once nothing is up.
+  assert.match(read('src/components/DailyGiftModal.tsx'), /useNativeModalLayer\(visible && !inline, 'wait'\)/);
   // The layer list itself: the closing sheet's layer stays first until UIKit says it is gone, so the chest waits.
   const { modalLayers } = loadTs('src/ui/modalLayers.ts', { react: require('react') });
   modalLayers.reset();
@@ -695,13 +709,7 @@ test('a shown NEW retires when its surface hides, unmounts or the app goes to th
   assert.equal(ladder.pickNewTag(opened, { pins: true }, { rung: 'pins', appOpenId: 'open-1' }, 'open-2'), 'daily');
 });
 
-test('the daily chest opened from Rewards: BACK says BACK and the sheet comes back after it closes', () => {
-  const p = loadTs('src/services/retention/rewardPresence.ts');
-  p.askForDailyChest(1000, true);
-  assert.equal(p.dailyChestFromRewards(1000 + 100), true);
-  assert.equal(p.dailyChestFromRewards(1000 + p.CHEST_ASK_MS + 1), false, 'a stale ask is not from Rewards');
-  p.askForDailyChest(2000);
-  assert.equal(p.dailyChestFromRewards(2100), false, 'a push or Daily 3 ask goes back to the map');
+test('the daily chest opened from Rewards is a card inside the same sheet: no native dismiss and present, BACK returns', () => {
   const sig = loadTs('src/services/retention/rewardsSignals.ts');
   assert.equal(sig.returnToRewards(), false, 'nobody listening: nothing happens');
   let back = 0;
@@ -710,25 +718,91 @@ test('the daily chest opened from Rewards: BACK says BACK and the sheet comes ba
   assert.equal(back, 1);
   off();
   assert.equal(sig.returnToRewards(), false);
-  const chest = read('src/components/DailyGiftModal.tsx');
-  assert.match(chest, /fromRewards\.current = dailyChestFromRewards\(\);/);
-  assert.match(chest, /if \(fromRewards\.current\) \{ fromRewards\.current = false; returnToRewards\(\); \}/);
-  assert.match(chest, /\{fromRewards\.current \? 'BACK' : 'BACK TO MAP'\}/);
-  assert.match(chest, /useNativeModalLayer\(visible, 'wait'\)/);
-  assert.match(chest, /isVisible=\{layer\.present\}/);
-  assert.match(chest, /onDismiss=\{layer\.onDismissed\}/);
-  // The chest closes on the UI thread (a JS-driven close blinked under load: card, bare map, card, gone).
-  assert.match(chest, /useNativeDriver useNativeDriverForBackdrop hideModalContentWhileAnimating=\{false\}/);
   const hook = read('src/components/retention/useRetention.tsx');
-  // Asked at once (the map mounts the chest while the sheet closes); the chest's 'wait' layer holds it until UIKit
-  // says the sheet is gone.
-  assert.match(hook, /case 'daily_chest': closeThen\(\(\) => undefined\); askForDailyChest\(Date\.now\(\), true\); o\.onOpenChest\(\); return;/);
-  assert.match(hook, /useEffect\(\(\) => listenReturnToRewards\(/);
-  // No fixed wait between the chest and the sheet: the overlay's 'wait' layer holds it until the chest's layer is gone.
-  const back2 = hook.slice(hook.indexOf('listenReturnToRewards(() =>'), hook.indexOf('listenReturnToRewards(() =>') + 400);
-  assert.match(back2, /\}, 0\);/);
-  assert.doesNotMatch(back2, /NATIVE_GONE_FALLBACK_MS/);
-  assert.match(hook, /useNativeModalLayer\(visible, 'wait'\)/);
+  // The Rewards row and the Daily 3 chest goal swap the card in place (as the level chest reveal does).
+  const row = hook.slice(hook.indexOf("case 'daily_chest':"), hook.indexOf("case 'daily3':"));
+  assert.match(row, /setView\(\{ k: 'chest', back: 'rewards' \}\)/);
+  assert.doesNotMatch(row, /closeThen|onOpenChest/, 'no native dismiss, no map chest');
+  assert.match(hook, /setView\(\{ k: 'chest', back: 'sheet' \}\)/);
+  assert.match(hook, /<DailyGiftModal inline dailyGift=\{dailyGift\}/);
+  const chest = read('src/components/DailyGiftModal.tsx');
+  assert.match(chest, /if \(inline\) return card;/, 'inline: a card, never its own native sheet');
+  assert.match(chest, /\{fromRewards\.current \? 'BACK' : 'BACK TO MAP'\}/);
+  assert.match(chest, /const fromRewards = useRef\(inline\);/);
+});
+
+const calmMods = () => loadTs('src/components/retention/CalmModal.tsx', {
+  react: require('react'), 'react/jsx-runtime': require('react/jsx-runtime'),
+  'react-native': { Modal: 'Modal', Pressable: 'Pressable', StyleSheet: { create: x => x, absoluteFill: {} }, useWindowDimensions: () => ({ width: 400 }) },
+  'react-native-reanimated': { __esModule: true, default: { View: 'View' }, Easing: {}, cancelAnimation() {}, runOnJS: f => f,
+    useAnimatedStyle: f => f, useSharedValue: v => ({ value: v }), withSequence() {}, withTiming() {} },
+});
+
+test('reward sheets: the dim and the card come from one value, so the dim never blinks and no full-size card shows before the zoom', () => {
+  const { calmFrame } = calmMods();
+  // First frame (before UIKit says the sheet is up): nothing shows, not a full-size empty card.
+  const first = calmFrame(0, false);
+  assert.equal(first.opacity, 0);
+  assert.equal(first.backdrop, 0);
+  assert.ok(first.scale < 0.6);
+  // Up: the card at full size over the 0.55 dim.
+  assert.deepEqual({ ...calmFrame(1, false) }, { backdrop: 0.55, opacity: 1, scale: 1 });
+  // The close, frame by frame: the dim and the card fall together and never come back up (no blink).
+  let prev = calmFrame(1, false);
+  for (let i = 1; i <= 60; i++) {
+    const f = calmFrame(1 - i / 60, false);
+    assert.ok(f.backdrop <= prev.backdrop + 1e-9, `dim never rises while closing (frame ${i})`);
+    assert.ok(f.opacity <= prev.opacity + 1e-9, `card never reappears while closing (frame ${i})`);
+    assert.ok(!(f.backdrop === 0 && f.opacity > 0), 'no frame of a card with no dim');
+    prev = f;
+  }
+  // The zoom in may overshoot past 1: the dim stays put, the card pops.
+  assert.equal(calmFrame(1.08, false).backdrop, 0.55);
+  assert.ok(calmFrame(1.08, false).scale > 1);
+  // Reduce Motion: a fade only.
+  assert.equal(calmFrame(0.5, true).scale, 1);
+});
+
+test('reward sheets: closing keeps the card that was up (never a default "Daily 3" ribbon over nothing)', () => {
+  const { calmFace } = calmMods();
+  const rewards = { title: 'Rewards', key: 'rewards' };
+  let face = calmFace(rewards, null);
+  assert.equal(face, rewards);
+  // BACK TO MAP: the view is gone while the sheet shrinks away; the face is still the Rewards card.
+  face = calmFace(null, face);
+  assert.equal(face.title, 'Rewards');
+  // A new card replaces it.
+  const chest = { title: null, key: 'chest' };
+  assert.equal(calmFace(chest, face), chest);
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /face\.current = calmFace\(content && view \?/);
+  assert.match(hook, /<CalmModal visible=\{layer\.present && !!content\}/);
+  assert.doesNotMatch(hook, /react-native-modal/);
+  assert.doesNotMatch(read('src/components/DailyGiftModal.tsx'), /react-native-modal/);
+});
+
+test('every Rewards row comes back to the sheet: Trail Boxes and the event sheet return when opened through its door', () => {
+  const host = read('src/components/trail/TrailHost.tsx');
+  assert.match(host, /listenRewardsDoor\('trail', \(\) => \{ fromRewards\.current = true; showRef\.current\(\); \}\)/);
+  assert.match(host, /returnToRewards\(\);/);
+  // WEAR IT goes to the closet: nothing comes back over it.
+  assert.match(host, /onWorn=\{\(\) => \{ fromRewards\.current = false;/);
+  // Their sheets hold a native layer until UIKit says they are gone, so the Rewards sheet never presents over them.
+  assert.match(read('src/components/trail/TrailSheet.tsx'), /<Modal visible=\{layer\.present\} onDismiss=\{layer\.onDismissed\}/);
+  assert.match(read('src/components/trail/TrailReveal.tsx'), /<Modal visible=\{layer\.present\} onDismiss=\{\(\) => \{ layer\.onDismissed\(\); sendGone\(\); \}\}/);
+  const ev = read('src/components/liveEvents/EventSheet.tsx');
+  assert.match(ev, /listenRewardsDoor\('events', \(\) => \{ fromRewards\.current = true; setAsked\(true\); \}\)/);
+  assert.match(ev, /if \(fromRewards\.current\) \{ fromRewards\.current = false; returnToRewards\(\); \}/);
+  assert.match(ev, /<Modal visible=\{layer\.present\} onDismiss=\{layer\.onDismissed\}/);
+  // The real layer list: the Rewards sheet asked back while Trail is still dismissing waits for it.
+  const { modalLayers } = loadTs('src/ui/modalLayers.ts', { react: require('react') });
+  modalLayers.reset();
+  const trail = modalLayers.add();
+  const rewards = modalLayers.add();
+  assert.equal(modalLayers.isFront(rewards), false);
+  modalLayers.remove(trail);
+  assert.equal(modalLayers.isFront(rewards), true);
+  modalLayers.reset();
 });
 
 test('Shark Pass grown-up notes stay short enough to never clip on a phone (seen: "Every reward is shown al")', () => {

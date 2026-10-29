@@ -19,6 +19,7 @@ import { BOX_ART, BOX_OPEN_ART } from './TrailBoxArt';
 import { UpperText } from '../../ui/upper';
 import { AuthContext } from '../../context/AuthProvider';
 import { wearAndOpenCloset } from '../../services/retention/wearRewardLive';
+import { NATIVE_DISMISS_FALLBACK_MS, useNativeModalLayer } from '../../ui/modalLayers';
 
 const ICON: Record<TrailReward['kind'], GameIconName> = {
   coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'gift', exclusive: 'star',
@@ -58,7 +59,12 @@ function haptic(level: number) {
  * of the box one by one with their own sound. Coins count up. A Trail Exclusive
  * comes out last, alone, with a ring and a firework. Reduce Motion: a soft fade.
  */
-export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }: {
+export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn, visible = true, onGone, onWorn }: {
+  /** WEAR IT went to the closet (nothing comes back over it); defaults to onClose. */
+  readonly onWorn?: () => void;
+  /** False once closed: the opening stays mounted until UIKit says it is gone (then `onGone`). */
+  readonly visible?: boolean;
+  readonly onGone?: () => void;
   /** Boxes until the Gold guarantee, after this open (a progress tick even on a small box). */
   readonly goldIn?: number | null;
   readonly boxes: readonly TrailBox[];
@@ -70,6 +76,22 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
   const reduced = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  // Its own native layer, held until UIKit says it is gone, so whatever comes next (the Trail sheet again, the
+  // Rewards sheet) presents right after it and never over it.
+  const layer = useNativeModalLayer(visible, 'wait');
+  const gone = useRef(onGone); gone.current = onGone;
+  const goneSent = useRef(false);
+  const sendGone = useCallback(() => {
+    if (goneSent.current) return;
+    goneSent.current = true;
+    gone.current?.();
+  }, []);
+  useEffect(() => {
+    if (visible) { goneSent.current = false; return undefined; }
+    // Android, or a sheet that never presented, sends no dismissal: the layer's own fallback time.
+    const t = setTimeout(sendGone, NATIVE_DISMISS_FALLBACK_MS);
+    return () => clearTimeout(t);
+  }, [visible, sendGone]);
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>('ready');
   const [opened, setOpened] = useState(false);
@@ -94,7 +116,7 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
   const wear = async () => {
     if (!wearable?.item_id || wearing) return;
     setWearing(true);
-    try { await wearAndOpenCloset(wearable.item_id, refreshPlayer); } finally { setWearing(false); onClose(); }
+    try { await wearAndOpenCloset(wearable.item_id, refreshPlayer); } finally { setWearing(false); (onWorn ?? onClose)(); }
   };
   const stageTop = insets.top + 20 + 26 + 44;
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -209,7 +231,8 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
   const showRewards = phase === 'rewards';
 
   return (
-    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={showRewards ? next : onClose}>
+    <Modal visible={layer.present} onDismiss={() => { layer.onDismissed(); sendGone(); }}
+      transparent animationType="fade" statusBarTranslucent onRequestClose={showRewards ? next : onClose}>
       <Pressable style={[styles.scrim, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
         onPress={phase === 'ready' ? start : skipAhead} accessibilityRole="button"
         accessibilityLabel={phase === 'ready' ? `Open your ${boxName(box)}` : BOX_NAME[box.tier]}>

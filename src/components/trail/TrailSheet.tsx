@@ -8,6 +8,7 @@ import { playSfx } from '../../gamekit/SFX';
 import { openAppSettings } from '../../services/external';
 import type { MotionAccess } from '../../services/trail/TrailProvider';
 import { getSeen, setSeen } from '../../services/trail/trailSeen';
+import { useNativeModalLayer } from '../../ui/modalLayers';
 import {
   BOX_NAME, arriveLine, boxName, bonusLabel, boxFraction, formatDistance, formatSteps, knownContents, missNote, oddsTiers, stepsToGo, usesMiles,
   exclusivesLine, withoutPinBoxes,
@@ -53,6 +54,9 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
   readonly initialView?: 'boxes' | 'inside';
 }) {
   const insets = useSafeAreaInsets();
+  // Held until UIKit says the sheet is gone, so the next sheet (the box opening, the Rewards sheet) never presents
+  // over a sheet still sliding away.
+  const layer = useNativeModalLayer(visible, 'wait');
   const [view, setView] = useState<'boxes' | 'inside'>(initialView);
   const [picked, setPicked] = useState<number | null>(null);
   const miles = usesMiles(LOCALE);
@@ -86,7 +90,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={layer.present} onDismiss={layer.onDismissed} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable accessibilityLabel="Close" onPress={onClose} style={{ flex: 1, backgroundColor: BRAND.scrim }} />
       <View accessibilityViewIsModal style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
         <View style={styles.header}>

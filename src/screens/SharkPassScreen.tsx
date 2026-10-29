@@ -51,7 +51,7 @@ import * as RootNavigation from '../RootNavigation';
 import { buySharkPass, loadSharkPassPrice, onSharkPassDelivered, restoreSharkPass, storeAvailable, type ShopPrice } from '../services/purchases';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import { EVENT_COPY, isWearable, claimedLine, passGain, passGrants, lastDayText, nextPassPrize, passSummary, pieceSource, dailyQuestsSlot, DAILY_GOALS_LATER, readyNowLine, rewardWords, seasonSet, setMixText, winsAwayText, type SetPiece } from '../services/money/sharkPassModel';
+import { EVENT_COPY, isWearable, claimedLine, passGain, passGrants, lastDayText, nextPassPrize, passSummary, pieceSource, dailyQuestsSlot, DAILY_GOALS_LATER, passQuestLabel, lanePassFixture, readyNowLine, rewardWords, seasonSet, setMixText, winsAwayText, type SetPiece } from '../services/money/sharkPassModel';
 import { markRungSeen, useRung } from '../services/reveal/revealLadder';
 import { flagOn } from '../services/retention/flags';
 import useRetentionFlags from '../services/retention/useRetentionFlags';
@@ -214,7 +214,7 @@ export default function SharkPassScreen() {
   const doneSeen = useRef<Set<string> | null>(null);
   const load = useCallback(async () => {
     try {
-      const next = await getSharkPass();
+      const next = lanePassFixture(await getSharkPass());
       // What this visit brought: points since the last look, and quests that just turned done.
       const gain = passGain(lastSharkPassSeen(), next);
       if (gain) setSinceLast(gain.gained);
@@ -717,7 +717,7 @@ export default function SharkPassScreen() {
                   <View key={`${q.scope}:${q.key}`} style={[s.questRow, q.done && s.questDone]}>
                     <GameIcon name={q.done ? 'check' : q.scope === 'week' ? 'ride' : 'star'} size={24} />
                     <View style={{ flex: 1 }}>
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={s.questLabel}>{q.label}</Text>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={s.questLabel}>{passQuestLabel(q.label)}</Text>
                       <View style={s.questBar}><View style={[s.questFill, { width: `${(q.progress / Math.max(1, q.count)) * 100}%` }]} /></View>
                     </View>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.questCount}>{`${Math.min(q.progress, q.count)}/${q.count}`}</Text>

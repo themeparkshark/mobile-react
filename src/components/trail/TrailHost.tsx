@@ -2,7 +2,7 @@ import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } f
 import { LocationStatusContext } from '../../context/LocationProvider';
 import { playSfx } from '../../gamekit/SFX';
 import { useRung } from '../../services/reveal/revealLadder';
-import { listenRewardsDoor } from '../../services/retention/rewardsSignals';
+import { listenRewardsDoor, returnToRewards } from '../../services/retention/rewardsSignals';
 import { useTrail } from '../../services/trail/TrailProvider';
 import { boxName, formatSteps, goldIn, headlineBox, stepsToGo, type TrailBox, type TrailReward } from '../../services/trail/trailModel';
 import { gameAlert } from '../../ui';
@@ -36,25 +36,37 @@ function TrailHost({ active, inPark: inParkProp, preview, openRequest = 0, pill:
   const rungOpen = useRung('trail').open || !!preview;
   const [open, setOpen] = useState(preview === 'sheet' || preview === 'inside');
   const [opening, setOpening] = useState<readonly TrailBox[] | null>(preview === 'reveal' ? trail.state?.ready ?? null : null);
+  /** The opening is up (false while it fades away; it unmounts once UIKit says it is gone). */
+  const [revealUp, setRevealUp] = useState(opening !== null);
+  /** Opened through the Rewards sheet's Trail row: the last close goes back to that sheet, like every other row. */
+  const fromRewards = useRef(false);
+  const startOpening = useCallback((boxes: readonly TrailBox[]) => { setOpening(boxes); setRevealUp(true); }, []);
+  /** Everything Trail is closed: back to Rewards if that is where it came from (its sheet waits for ours to go). */
+  const allClosed = useCallback(() => {
+    if (!fromRewards.current) return;
+    fromRewards.current = false;
+    returnToRewards();
+  }, []);
 
   const show = useCallback(() => {
     // Ready boxes: the pill goes straight to the opening (one tap, not three).
-    if (trail.state?.ready.length) { setOpening(trail.state.ready); return; }
+    if (trail.state?.ready.length) { startOpening(trail.state.ready); return; }
     playSfx('ui.modalOpen');
     setOpen(true);
     void trail.flush();
-  }, [trail]);
+  }, [trail, startOpening]);
   const lastRequest = useRef(openRequest);
   useEffect(() => {
     if (openRequest === lastRequest.current) return;
     lastRequest.current = openRequest;
+    fromRewards.current = false;
     if (trail.enabled && trail.state && rungOpen) show();
   }, [openRequest, show, trail.enabled, trail.state, rungOpen]);
   // The Rewards sheet's Trail row.
   const showRef = useRef(show);
   showRef.current = show;
   const ready = trail.enabled && !!trail.state && rungOpen;
-  useEffect(() => (ready ? listenRewardsDoor('trail', () => showRef.current()) : undefined), [ready]);
+  useEffect(() => (ready ? listenRewardsDoor('trail', () => { fromRewards.current = true; showRef.current(); }) : undefined), [ready]);
   const nextHint = useMemo(() => {
     const b = trail.state ? headlineBox({ ready: [], walking: trail.state.walking }) : null;
     return b ? `Next up: ${boxName(b)}, ${formatSteps(stepsToGo(b))} steps to go` : null;
@@ -77,14 +89,16 @@ function TrailHost({ active, inPark: inParkProp, preview, openRequest = 0, pill:
     <>
       {showPill && <TrailPill state={trail.state} active={active && !open && !opening} onPress={show} inPark={inPark} />}
       <TrailSheet visible={open && !opening} state={trail.state} motion={trail.motion} inPark={inPark} parkName={trail.state.today.park_name ?? null}
-        onClose={() => { playSfx('ui.modalClose'); setOpen(false); }}
-        onOpen={boxes => setOpening(boxes)}
+        onClose={() => { playSfx('ui.modalClose'); setOpen(false); allClosed(); }}
+        onOpen={startOpening}
         onFront={id => act(() => trail.front(id))}
         onGoal={g => act(() => trail.setGoal(g))}
         onWheels={on => act(() => trail.setWheels(on))}
         onAskMotion={() => void trail.askMotion()} initialView={preview === 'inside' ? 'inside' : 'boxes'} />
-      {opening && <TrailReveal boxes={opening} onOpen={openBox} nextHint={nextHint} goldIn={trail.state && ![...trail.state.walking, ...trail.state.waiting].some(b => b.tier === 'gold') ? goldIn(trail.state) : null}
-        onClose={() => { setOpening(null); void trail.refresh(); }} />}
+      {opening && <TrailReveal boxes={opening} visible={revealUp} onOpen={openBox} nextHint={nextHint} goldIn={trail.state && ![...trail.state.walking, ...trail.state.waiting].some(b => b.tier === 'gold') ? goldIn(trail.state) : null}
+        onClose={() => { setRevealUp(false); void trail.refresh(); if (!open) allClosed(); }}
+        onWorn={() => { fromRewards.current = false; setOpen(false); setRevealUp(false); void trail.refresh(); }}
+        onGone={() => setOpening(null)} />}
     </>
   );
 }

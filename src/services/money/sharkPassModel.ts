@@ -112,6 +112,35 @@ export function dailyQuestsSlot(quests: { readonly daily: readonly unknown[] } |
 export function questsLinkDaily3(quests: { readonly daily: readonly unknown[] } | null | undefined, daily3Ready = true): boolean {
   return dailyQuestsSlot(quests, daily3Ready) === 'daily3';
 }
+/**
+ * A pass quest's words as a kid reads them. The server still names the home hunt "home finds" or "snacks"
+ * ("Grab 8 home finds"); the app calls them treats everywhere, so the pass does too (until be-core-loop
+ * removes daily pass quests). Only those words change; numbers and the rest of the line stay as sent.
+ */
+export function passQuestLabel(label: string): string {
+  const cap = (m: string, word: string) => (m[0] === m[0].toUpperCase() ? word[0].toUpperCase() + word.slice(1) : word);
+  return label
+    .replace(/\bhome finds\b/gi, m => cap(m, 'treats'))
+    .replace(/\bhome find\b/gi, m => cap(m, 'treat'))
+    .replace(/\bsnacks\b/gi, m => cap(m, 'treats'))
+    .replace(/\bsnack\b/gi, m => cap(m, 'treat'));
+}
+
+/**
+ * Lane checks only: the pass as be-core-loop will send it (no daily pass quests), so the Daily 3 link and the
+ * "later" line can be seen on device before that server ships. Inert unless BOTH lane-only bundle variables are set:
+ * EXPO_PUBLIC_STUDIO_MUTE=1 (only lane.sh sets it) and EXPO_PUBLIC_CL_PASS_FIXTURE=empty-daily. Store and OTA
+ * bundles set neither, so there it returns the server's answer untouched.
+ */
+export function lanePassFixture<T>(state: T, env: Readonly<Record<string, string | undefined>> = {
+  mute: process.env.EXPO_PUBLIC_STUDIO_MUTE, fixture: process.env.EXPO_PUBLIC_CL_PASS_FIXTURE,
+}): T {
+  if (env.mute !== '1' || env.fixture !== 'empty-daily') return state;
+  const s = state as unknown as { enabled?: boolean; quests?: { daily: readonly unknown[] } | null };
+  if (!s || !s.enabled || !s.quests) return state;
+  return { ...s, quests: { ...s.quests, daily: [] } } as unknown as T;
+}
+
 /** The plain line before Daily 3 unlocks (no arrow, nothing to tap). */
 // Rung 4 opens after the first park day or the third home day, so the line names neither.
 export const DAILY_GOALS_LATER = 'Daily goals open up as you play';

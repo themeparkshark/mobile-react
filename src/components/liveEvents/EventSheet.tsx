@@ -18,7 +18,8 @@ import ChestTrack from './ChestTrack';
 import PrizeIcon from './PrizeIcon';
 import { eventArt, type EventArt } from './eventArt';
 import TeamBadge from '../TeamBadge';
-import { listenRewardsDoor } from '../../services/retention/rewardsSignals';
+import { listenRewardsDoor, returnToRewards } from '../../services/retention/rewardsSignals';
+import { useNativeModalLayer } from '../../ui/modalLayers';
 
 type Opened = { key: string; rewards: EventReward | null; already?: boolean; failed?: 'not_ready' | 'network' | false };
 
@@ -183,11 +184,18 @@ function EventSheet({ event, visible: visibleProp, onClose, atPark, onShowRide, 
   }, [event.together.total, event.me.points]);
   // The Rewards sheet's event chest row opens this sheet too (core loop: event chests wait in Rewards).
   const [asked, setAsked] = useState(false);
-  useEffect(() => listenRewardsDoor('events', () => setAsked(true)), []);
+  // Opened through the Rewards door: closing goes back to the Rewards sheet, as every other row does. The sheet
+  // holds its native layer until UIKit says it is gone, so the Rewards sheet presents right after, never over it.
+  const fromRewards = useRef(false);
+  useEffect(() => listenRewardsDoor('events', () => { fromRewards.current = true; setAsked(true); }), []);
   const visible = visibleProp || asked;
+  const layer = useNativeModalLayer(visible, 'wait');
   // Opening the event is seeing it: its NEW tag (rung 9) clears.
   useEffect(() => { if (visible) markRungSeen('events'); }, [visible]);
-  const close = useCallback(() => { setOpened(null); setPeek(null); setAsked(false); onClose(); }, [onClose]);
+  const close = useCallback(() => {
+    setOpened(null); setPeek(null); setAsked(false); onClose();
+    if (fromRewards.current) { fromRewards.current = false; returnToRewards(); }
+  }, [onClose]);
   const onOpen = useCallback(async (key: string) => {
     if (opening) return; // one open at a time (a double tap on Try again never sends two)
     haptic('tapLight');
@@ -227,12 +235,12 @@ function EventSheet({ event, visible: visibleProp, onClose, atPark, onShowRide, 
   const doNow: { icon: 'chest' | 'star' | 'ride' | 'coin'; text: string; go?: () => void } | null = readyCount > 0
     ? { icon: 'chest', text: readyCount === 1 ? 'Open your chest below' : `Open ${readyCount} chests below` }
     : !live ? null
-      : firstStar ? { icon: 'star', text: `Win a Star Ride: x${starTimes(event)}`, go: onShowRide ? () => { close(); onShowRide(firstStar.task_id); } : undefined }
+      : firstStar ? { icon: 'star', text: `Win a Star Ride: x${starTimes(event)}`, go: onShowRide ? () => { fromRewards.current = false; close(); onShowRide(firstStar.task_id); } : undefined }
         : hint ? { icon: atPark && event.here ? 'ride' : 'coin', text: hint } : null;
   const nextFrenzy = live && atPark && event.here && !frenzy && event.frenzy.next_starts_at ? `Next Frenzy ${clockTime(event.frenzy.next_starts_at)}` : null;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
+    <Modal visible={layer.present} onDismiss={layer.onDismissed} transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
       <View style={styles.scrim}>
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close event" accessibilityRole="button" />
         <View style={[styles.sheet, { marginTop: insets.top + 24, paddingBottom: insets.bottom + 12 }]}>

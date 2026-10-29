@@ -3,7 +3,6 @@ import { Asset } from 'expo-asset';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Modal from 'react-native-modal';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import {
   buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
@@ -47,6 +46,8 @@ import Daily3MapButton from './Daily3MapButton';
 import Daily3Sheet, { type GoalTap } from './Daily3Sheet';
 import RewardReveal from './RewardReveal';
 import RewardsSheet from './RewardsSheet';
+import CalmModal, { calmFace } from './CalmModal';
+import DailyGiftModal from '../DailyGiftModal';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
@@ -60,6 +61,8 @@ const ART = [LEVEL_CHEST, LEVEL_CHEST_OPEN, WEEKLY, WEEKLY_OPEN, FREEZE, BOX];
 const MIN_REFRESH_MS = 15000;
 /** No native onDismiss after the hide animation (Android, or a sheet UIKit never showed): carry on after this. */
 const NATIVE_GONE_FALLBACK_MS = 700;
+/** A Ticket or Energy prize flying from the chest to the header (CurrencyFly: 500 ms plus a short stagger). */
+const CHEST_FLY_LAND_MS = 700;
 const COACH_KEY = 'tps.retention.coach.v1';
 
 type View_ =
@@ -68,7 +71,9 @@ type View_ =
   | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; claimDate?: string | null; rewards: PaidRewards | null; opening: boolean }
   | { k: 'freeze' }
   | { k: 'freezeSaved'; days: number; streak: number }
-  | { k: 'push' };
+  | { k: 'push' }
+  /** Today's daily chest, drawn inside this sheet (from a Rewards row or the Daily 3 chest goal); back goes to `back`. */
+  | { k: 'chest'; back: 'rewards' | 'sheet' };
 
 export interface RetentionOptions {
   /** Signed in, on the map, onboarding done. */
@@ -428,13 +433,33 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   };
 
   const onGoal = (tap: GoalTap) => {
-    if (tap === 'chest') { closeThen(() => { askForDailyChest(); o.onOpenChest(); }); return; }
+    // The chest goal's GO: today's chest opens right here in this sheet, and BACK comes back to Daily 3.
+    if (tap === 'chest') {
+      if (dailyGift && dailyGift.redeemed_at === null) setView({ k: 'chest', back: 'sheet' });
+      else closeThen(() => { askForDailyChest(); o.onOpenChest(); });
+      return;
+    }
     setView(null);
     if (tap === 'closet') RootNavigation.navigate('Inventory');
     else if (tap === 'friends') RootNavigation.navigate('Friends');
     else if (tap === 'shelf') RootNavigation.navigate('CoinShelf');
     // At home GO always means a treat (a park goal shows its home side; GO never flies to a park).
     else o.onFind(tap === 'ride' && !atPark ? 'snack' : tap);
+  };
+
+  /**
+   * The chest card drawn in this sheet is done. Back to where it was opened (Rewards or Daily 3), in place. When a
+   * prize flies to the header on the map (Tickets, Energy), the sheet steps aside so the player sees it land, then
+   * comes back once it has.
+   */
+  const chestDone = (back: 'rewards' | 'sheet', mapFly: boolean) => {
+    void refresh(true);
+    const to: View_ = back === 'sheet' && daily ? { k: 'sheet' } : { k: 'rewards' };
+    if (to.k === 'rewards') { setRewardsNote(null); void refreshStamps(true); }
+    if (!mapFly) { setView(to); return; }
+    closeThen(() => {
+      setTimeout(() => { if (mounted.current) setView(v => v ?? to); }, CHEST_FLY_LAND_MS);
+    });
   };
 
   /** Close the overlay, then run `next` once UIKit has really dismissed it (no two native sheets at once). */
@@ -488,9 +513,12 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   // A card opened from a Rewards row (the daily chest) closed: the sheet comes back, as after a level chest. No fixed
   // wait (that left a bare map between the two): the chest holds its native layer until UIKit says it is gone (or it
   // unmounts), and the overlay presents through its own layer ('wait'), so it comes up the moment the chest is gone.
+  const mapFocusedRef = useRef(o.mapFocused);
+  mapFocusedRef.current = o.mapFocused;
   useEffect(() => listenReturnToRewards(() => {
     setTimeout(() => {
-      if (!mounted.current) return;
+      // WEAR IT went to the closet: the sheet never comes back over another screen.
+      if (!mounted.current || !mapFocusedRef.current) return;
       setRewardsNote(null);
       setView(v => v ?? { k: 'rewards' });
       void refreshStamps(true);
@@ -546,7 +574,11 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       // The chest is asked at once, so the map mounts it while this sheet is still closing; the chest card waits on
       // its native layer ('wait') and presents the moment UIKit says this sheet is gone (it is never refused over a
       // closing sheet, and there is no bare map between the two).
-      case 'daily_chest': closeThen(() => undefined); askForDailyChest(Date.now(), true); o.onOpenChest(); return;
+      // The chest card is drawn inside this same open sheet (as the level chest's reveal is), so no native dismiss
+      // and present sits between the two cards: never a bare map. Its BACK and AWESOME come back here.
+      case 'daily_chest':
+        if (dailyGift && dailyGift.redeemed_at === null) setView({ k: 'chest', back: 'rewards' });
+        return;
       case 'daily3':
         if (daily?.claimable) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
         else openSheet(true);
@@ -655,9 +687,16 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     </View>
   );
 
-  let title = 'Daily 3';
+  let title: string | null = 'Daily 3';
   let content: ReactNode = null;
-  if (view?.k === 'rewards') {
+  if (view?.k === 'chest' && dailyGift) {
+    // The chest draws its own "Daily Chest" ribbon and card.
+    title = null;
+    const back = view.back;
+    content = (
+      <DailyGiftModal inline dailyGift={dailyGift} onDone={(_claimed, mapFly) => { chestDone(back, mapFly); }} />
+    );
+  } else if (view?.k === 'rewards') {
     title = 'Rewards';
     content = (
       <RewardsSheet rows={rows} flame={summary.flame} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
@@ -751,27 +790,32 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     );
   }
 
-  const revealing = view?.k === 'reveal';
+  // While the sheet shrinks away (view already null), it keeps showing the card that was up, never a default
+  // ribbon over nothing (the lone "DAILY 3" ribbon that floated over the map as Rewards closed).
+  const face = useRef<{ title: string | null; content: ReactNode; key: string } | null>(null);
+  face.current = calmFace(content && view ? { title, content, key: view.k === 'reveal' ? `reveal-${view.src}` : view.k } : null, face.current);
+  const shownFace = face.current;
+  // A reveal or the chest card has its own buttons (a stray tap outside never drops a half-opened chest).
+  const holding = view?.k === 'reveal' || view?.k === 'chest';
   const overlay = (
-    <Modal isVisible={layer.present && !!content} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
-      onModalShow={() => { shownRef.current = true; }}
-      // onModalHide fires when the hide animation ends, which is when UIKit only STARTS dismissing. The next native
-      // sheet (the daily chest, Trail Boxes, the event sheet) waits for onDismiss, the real "gone" (a fallback covers
-      // a platform that never sends it), so two native modals never present at once (the PLAY RIDE freeze).
-      onModalHide={() => {
+    <CalmModal visible={layer.present && !!content} reducedMotion={reducedMotion} swapKey={shownFace?.key}
+      onShow={() => { shownRef.current = true; }}
+      // onHide fires when the zoom out ends, which is when UIKit only STARTS dismissing. The next native sheet
+      // (Trail Boxes, the event sheet) waits for onDismiss, the real "gone" (a fallback covers a platform that never
+      // sends it), so two native modals never present at once (the PLAY RIDE freeze).
+      onHide={() => {
         if (dismissFallback.current) clearTimeout(dismissFallback.current);
         dismissFallback.current = setTimeout(nativeGone, NATIVE_GONE_FALLBACK_MS);
       }}
-      onDismiss={nativeGone}
-      animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'} animationInTiming={reducedMotion ? 120 : 240}
-      animationOutTiming={reducedMotion ? 120 : 180} backdropColor={BRAND.navy} backdropOpacity={0.55}
-      onBackdropPress={revealing ? undefined : close} onBackButtonPress={revealing ? undefined : close}
-      useNativeDriver useNativeDriverForBackdrop hideModalContentWhileAnimating={false}>
-      <View style={styles.wrap}>
-        <Ribbon text={title} />
-        {content}
-      </View>
-    </Modal>
+      onDismiss={nativeGone} backdropColor={BRAND.navy}
+      onBackdropPress={holding ? undefined : close} onBackButtonPress={holding ? undefined : close}>
+      {shownFace && (shownFace.title === null ? shownFace.content : (
+        <View style={styles.wrap}>
+          <Ribbon text={shownFace.title} />
+          {shownFace.content}
+        </View>
+      ))}
+    </CalmModal>
   );
 
   return { button, overlay, occluding: visible, openRewards, rewards: summary };
