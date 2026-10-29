@@ -605,3 +605,12 @@ test('dev-only live stub (state D walks): never outside a development bundle; of
   const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
   assert.match(explore, /const LIVE_STUB = liveStubMode\(__DEV__, process\.env\.EXPO_PUBLIC_GUIDE_LIVE_STUB\);/);
 });
+
+test('LinePlay has its own icon on the guide card; the pocket watch means Wait Times only (ledger 37)', () => {
+  const fs = require('node:fs');
+  const card = fs.readFileSync(require('node:path').join(__dirname, '../../src/components/guide/NextCoinCard.tsx'), 'utf8');
+  assert.match(card, /LINEPLAY_ICON = require\('\.\.\/\.\.\/\.\.\/assets\/images\/howto\/queue\.webp'\)/);
+  assert.match(card, /button\.action === 'lineplay' && <Image source=\{LINEPLAY_ICON\}/);
+  assert.doesNotMatch(card, /GameIcon name="queue"/, 'no pocket watch on the guide card');
+  assert.doesNotMatch(card, /queuetimes\.png/);
+});

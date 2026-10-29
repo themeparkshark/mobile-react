@@ -22,6 +22,12 @@ import CoinTipPicture from '../help/CoinTipPicture';
 
 const COIN_FALLBACK = require('../../../assets/images/coingold.png');
 const TICKET = require('../../../assets/images/ticket-icon.png');
+/**
+ * LinePlay's own picture: the gold posts and rope from How to Play (Dustin, Oct 28, ledger 37). It is
+ * the same art lineplay-ride trims into GameIcon 'line'; once that lane merges this can read
+ * <GameIcon name="line" />. The pocket watch ('queue') means Wait Times only.
+ */
+export const LINEPLAY_ICON = require('../../../assets/images/howto/queue.webp');
 
 /** Room the card leaves on the right for the compass and the Rewards button column. */
 export const GUIDE_CARD_RIGHT = 78;
@@ -41,7 +47,7 @@ function CardButton({ button, onPress, quiet = false }: { button: GuideButton; o
     {button.badge === 'gift' && <GameIcon name="gift" size={18} />}
     {button.badge === 'ticket' && <GameIcon name="ticket" size={18} />}
     {/* LinePlay's own icon (Dustin, Oct 28, ledger 37); the pocket watch means Wait Times only. */}
-    {button.action === 'lineplay' && <GameIcon name="queue" size={18} />}
+    {button.action === 'lineplay' && <Image source={LINEPLAY_ICON} style={styles.lineIcon} contentFit="contain" />}
     <Text style={quiet ? styles.quietText : styles.buttonText} numberOfLines={1}>{button.label}</Text>
   </Pressable>;
 }
@@ -122,6 +128,7 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 5 },
   button: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.gold, borderRadius: 12,
     borderBottomWidth: 3, borderBottomColor: BRAND.goldLip, paddingHorizontal: 12, paddingVertical: 4, minHeight: 30 },
+  lineIcon: { width: 30, height: 16 },
   buttonText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 14 },
   pressed: { transform: [{ scale: 0.95 }], opacity: 0.9 },
   quiet: { paddingVertical: 4, minHeight: 30, justifyContent: 'center' },

@@ -102,8 +102,13 @@ export function useModalLayer(active: boolean, mode: 'show' | 'wait'): boolean {
   return front;
 }
 
-/** If a native sheet never reports its dismissal (never presented, or Android), its layer frees itself after this. */
-export const NATIVE_DISMISS_FALLBACK_MS = 1200;
+/**
+ * If a native sheet never reports its dismissal (never presented, or Android), its layer frees itself
+ * after this. Long enough to outlast a react-native-modal exit animation on a busy JS thread (seen on
+ * the simulator: a 300 ms zoom-out reported onModalHide after 1.4 s, so a 1.2 s fallback freed the
+ * layer while the sheet was still up). A sheet that reports onHidden frees its layer long before this.
+ */
+export const NATIVE_DISMISS_FALLBACK_MS = 2500;
 /**
  * Measured on the simulator (RN 0.76, Fabric): a native Modal's onDismiss never arrives, so every
  * layer waited the full fallback. A sheet that reports its JS hide (react-native-modal onModalHide,

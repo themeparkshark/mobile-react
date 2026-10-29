@@ -20,9 +20,16 @@ import { modalLayers } from '../../ui/modalLayers';
 
 /** Longest a press waits on a leaving sheet. UIKit takes a sheet down in well under this. */
 export const HOLD_MAX_MS = 1500;
+/**
+ * Merge note: once the challenge card itself waits for its turn on the layer list and re-presents
+ * when UIKit refuses it (ride-challenge lane, RedeemRedeemableModal), set this to false: a press in a
+ * sheet's last 150 ms then queues the card instead of being held.
+ */
+export const HOLD_PLAY_FOR_LEAVING_SHEETS = true;
 
 /** Pure: whether PLAY! should hold presses right now. `layers` counts only leaving layers. */
 export function holdPlayTaps(input: { readonly layers: number; readonly sinceChangeMs: number; readonly flowOpen: boolean }): boolean {
+  if (!HOLD_PLAY_FOR_LEAVING_SHEETS) return false;
   if (input.flowOpen) return false;          // the challenge flow itself is up: its own sheet owns the screen
   if (!(input.layers > 0)) return false;
   return input.sinceChangeMs < HOLD_MAX_MS;

@@ -111,6 +111,8 @@ export default function SharkDropHandler() {
 
   return (
     <Modal isVisible={layer.present} onDismiss={layer.onDismissed} onModalHide={layer.onHidden} backdropOpacity={0.75} animationIn="zoomIn" animationOut="zoomOut"
+      // The zoom runs on the UI thread, so the sheet is gone (and its layer free) on time even while JS is busy.
+      useNativeDriver
       onBackdropPress={state?.result || state?.error ? () => setState(null) : undefined}>
       <View style={styles.wrap}>
         <Ribbon text="Shark Drop!" />
