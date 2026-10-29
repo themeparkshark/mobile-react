@@ -116,12 +116,17 @@ export interface GoalLike {
   readonly hint: string;
 }
 
+/** The chest goal's line (the server still says "Tap the chest on the map"). */
+export const CHEST_GOAL_HINT = 'In your Rewards';
+
 /**
  * At home a park goal shows its home side: a ride-coin catch becomes "Find N
  * treats" (the server counts either), and a park-only goal waits for the next
  * park day with no GO. At a park every goal is as sent.
  */
 export function homeSideGoal<T extends GoalLike>(goal: T, atPark: boolean): T & { readonly parkOnly: boolean } {
+  // The daily chest lives in the Rewards sheet now (not on the map), so its goal says where it really is.
+  if (goal.kind === 'chest') return { ...goal, hint: CHEST_GOAL_HINT, parkOnly: false };
   if (atPark || !goal.park) return { ...goal, parkOnly: false };
   if (goal.kind === 'catch') {
     const t = Math.max(1, goal.target);

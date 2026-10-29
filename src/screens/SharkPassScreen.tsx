@@ -51,8 +51,10 @@ import * as RootNavigation from '../RootNavigation';
 import { buySharkPass, loadSharkPassPrice, onSharkPassDelivered, restoreSharkPass, storeAvailable, type ShopPrice } from '../services/purchases';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import { EVENT_COPY, isWearable, claimedLine, passGain, passGrants, lastDayText, nextPassPrize, passSummary, pieceSource, questsLinkDaily3, readyNowLine, rewardWords, seasonSet, setMixText, winsAwayText, type SetPiece } from '../services/money/sharkPassModel';
+import { EVENT_COPY, isWearable, claimedLine, passGain, passGrants, lastDayText, nextPassPrize, passSummary, pieceSource, dailyQuestsSlot, DAILY_GOALS_LATER, readyNowLine, rewardWords, seasonSet, setMixText, winsAwayText, type SetPiece } from '../services/money/sharkPassModel';
 import { markRungSeen, useRung } from '../services/reveal/revealLadder';
+import { flagOn } from '../services/retention/flags';
+import useRetentionFlags from '../services/retention/useRetentionFlags';
 import { wearItem } from './StoreScreen/inventoryQueue';
 import { trackImpression, trackMoney } from '../services/money/track';
 import { baseRates, formatLike, regularValue } from '../services/money/offers';
@@ -174,6 +176,11 @@ const PASS_GROWN_UP_NOTES = [
 export default function SharkPassScreen() {
   // "+N pass points" ticks only once the pass has unlocked (rung 5); Supplies reaches this screen before that.
   const passRung = useRung('shark_pass').open;
+  // Daily 3 is the daily list only once it is really there: its switch on and rung 4 open (Supplies reaches this
+  // screen earlier).
+  const retentionFlags = useRetentionFlags();
+  const dailyRungOpen = useRung('daily').open;
+  const daily3Ready = flagOn(retentionFlags, 'daily_three') && dailyRungOpen;
   // Opening the pass is seeing it: its NEW tag (rung 5) clears.
   useEffect(() => { if (passRung) markRungSeen('shark_pass'); }, [passRung]);
   const { player, refreshPlayer } = useContext(AuthContext);
@@ -685,9 +692,15 @@ export default function SharkPassScreen() {
             {/* Today's Pass quests: 3 a day (the first always doable at home) and one for the week. */}
             {state.enabled && state.quests && !season.ended && (
               <View style={s.quests}>
-                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questsTitle}>{questsLinkDaily3(state.quests) ? 'PASS QUESTS' : 'TODAY’S PASS QUESTS'}</Text>
-                {/* Daily 3 is the only daily list: with no daily pass quests, this row sends you to it. */}
-                {questsLinkDaily3(state.quests) && (
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questsTitle}>{dailyQuestsSlot(state.quests, daily3Ready) === 'list' ? 'TODAY’S PASS QUESTS' : 'PASS QUESTS'}</Text>
+                {/* Daily 3 is the only daily list: with no daily pass quests, this row sends you to it (once it is there). */}
+                {dailyQuestsSlot(state.quests, daily3Ready) === 'later' && (
+                  <View style={s.questRow} accessible accessibilityLabel={DAILY_GOALS_LATER}>
+                    <GameIcon name="streak" size={24} />
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={[s.questLabel, { flex: 1 }]}>{DAILY_GOALS_LATER}</Text>
+                  </View>
+                )}
+                {dailyQuestsSlot(state.quests, daily3Ready) === 'daily3' && (
                   <Pressable onPress={() => RootNavigation.navigate('Explore', { open: 'daily3' })} accessibilityRole="button"
                     accessibilityLabel="Your daily goals are your Daily 3. Opens Daily 3"
                     style={({ pressed }) => [s.questRow, pressed && { opacity: 0.8 }]}>
@@ -707,10 +720,10 @@ export default function SharkPassScreen() {
                       <View style={s.questBar}><View style={[s.questFill, { width: `${(q.progress / Math.max(1, q.count)) * 100}%` }]} /></View>
                     </View>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.questCount}>{`${Math.min(q.progress, q.count)}/${q.count}`}</Text>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.questBonus}>{q.done ? (justDone.has(`${q.scope}:${q.key}`) ? `+${q.bonus} points!` : 'Done!') : `+${q.bonus} points`}</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.questBonus}>{q.done ? (justDone.has(`${q.scope}:${q.key}`) ? `+${q.bonus} pass points!` : 'Done!') : `+${q.bonus} pass points`}</Text>
                   </View>
                 ))}
-                {!questsLinkDaily3(state.quests) && <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>New quests every day. Skipping a day is fine.</Text>}
+                {dailyQuestsSlot(state.quests, daily3Ready) === 'list' && <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>New quests every day. Skipping a day is fine.</Text>}
               </View>
             )}
 

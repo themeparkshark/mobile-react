@@ -442,8 +442,12 @@ function Inside({ state, pinBoxes }: { readonly state: TrailState; readonly pinB
   );
 }
 
+/**
+ * An older random-mode server's box: only what every box always holds (Shark Coins and the always items). The
+ * random bonus is not listed, so nothing here reads as a chance (Dustin, Oct 28: no odds anywhere); the reveal
+ * shows what came out.
+ */
 function TierCard({ tier, t, pinBoxes }: { readonly tier: TrailTier; readonly t: TrailOddsTier; readonly pinBoxes: boolean }) {
-  const bonus = withoutPinBoxes(t.bonus, pinBoxes);
   return (
     <View style={[styles.card, { marginTop: 10 }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -455,8 +459,6 @@ function TierCard({ tier, t, pinBoxes }: { readonly tier: TrailTier; readonly t:
       </View>
       <OddsRow icon="coins" label={`${formatSteps(t.coins)} Shark Coins`} />
       {withoutPinBoxes(t.always, pinBoxes).map((a, i) => <OddsRow key={`a${i}`} icon={KIND_ICON[a.kind]} label={bonusLabel(a.kind, a.amount)} />)}
-      {bonus.length > 0 && <Text style={[styles.earnSub, { marginTop: 6 }]}>Plus one of these:</Text>}
-      {bonus.map((b, i) => <OddsRow key={i} icon={KIND_ICON[b.kind]} label={b.note === 'owns_all_exclusives' ? `${formatSteps(b.amount)} Shark Coins (you have every Trail Exclusive!)` : bonusLabel(b.kind, b.amount)} />)}
     </View>
   );
 }

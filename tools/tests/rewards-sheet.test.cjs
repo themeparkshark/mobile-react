@@ -94,11 +94,12 @@ test('rewards open by themselves only at calm moments at home (BLUEPRINT 4.3)', 
   assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'daily_chest', firstCatchDone: false }), false);
   assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'daily_chest', atPark: true }), false, 'never at a park');
   assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'daily_chest', autoOpenUsed: true }), false, 'one automatic open per app open');
-  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'level_chest' }), true);
-  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'level_chest', atPark: true }), false);
-  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'level_chest', dailyRungOpen: false }), false, 'level chests wait for rung 4');
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'freeze_saved' }), true);
   assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'freeze_saved', atPark: true }), false);
-  for (const kind of ['daily3_chest', 'weekly_box', 'event_chest', 'trail_box', 'stamps']) {
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'freeze_saved', dailyRungOpen: false }), false, 'the freeze card waits for rung 4');
+  assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'freeze_saved', dailyChestWaiting: true }), false,
+    'the daily chest keeps the home open');
+  for (const kind of ['level_chest', 'daily3_chest', 'weekly_box', 'event_chest', 'trail_box', 'stamps']) {
     assert.equal(p.rewardMayAutoOpen({ ...base, kind }), false, `${kind} waits in the Rewards button`);
   }
   assert.equal(p.rewardMayAutoOpen({ ...base, kind: 'member_look', atPark: true }), false, 'member dialogs: home first');
@@ -150,6 +151,16 @@ test('Rewards sheet: one list of what is ready, ready first, one number', () => 
     'They walk open on your next park day');
 });
 
+test('Daily 3: the chest goal says it waits in Rewards, not on the map', () => {
+  const m = loadTs('src/services/retention/rewardsModel.ts');
+  const chest = { kind: 'chest', park: false, target: 1, title: 'Open your daily chest', hint: 'Tap the chest on the map' };
+  for (const atPark of [false, true]) {
+    const g = m.homeSideGoal(chest, atPark);
+    assert.equal(g.hint, 'In your Rewards');
+    assert.equal(g.parkOnly, false);
+  }
+});
+
 test('Daily 3 at home never sends GO to a park', () => {
   const catchPark = { kind: 'catch', park: true, target: 2, title: 'Win a ride coin', hint: 'or find 2 treats', done: false };
   const home = plain(model.homeSideGoal(catchPark, false));
@@ -197,7 +208,7 @@ test('rungs: Daily 3, level chests, Trail Boxes, events and the pass banner wait
   const hook = read('src/components/retention/useRetention.tsx');
   assert.match(hook, /const wantDaily = !!flags\?\.dailyThree && dailyOpen;/);
   assert.match(hook, /const wantChestsOn = !!flags\?\.levelChests && dailyOpen;/);
-  assert.match(hook, /rewardMayAutoOpen\(\{ kind, atPark/);
+  assert.match(hook, /rewardMayAutoOpen\(\{ kind: 'freeze_saved', atPark/);
   assert.doesNotMatch(hook, /if \(await mayAskForPush\(\)\) \{ setView\(\{ k: 'push' \}\); return; \}/, 'no reminders ask after a chest');
   assert.match(hook, /flagOn\(flags, 'retention_push'\)/, 'the ask stays off until reminder pushes work');
   const host = read('src/components/trail/TrailHost.tsx');
@@ -254,6 +265,20 @@ test('Shark Pass: one next prize, Step N of 50, no upsell in free claims, Daily 
   assert.equal(pass.stepWords(4, 50), 'Step 4 of 50');
   assert.equal(pass.questsLinkDaily3({ daily: [] }), true);
   assert.equal(pass.questsLinkDaily3({ daily: [{}] }), false);
+  // The Daily 3 link only once Daily 3 is really there (switch on, rung 4 open); before that a plain line, no tap.
+  assert.equal(pass.dailyQuestsSlot({ daily: [] }, true), 'daily3');
+  assert.equal(pass.dailyQuestsSlot({ daily: [] }, false), 'later');
+  assert.equal(pass.dailyQuestsSlot({ daily: [{}] }, false), 'list');
+  assert.equal(pass.dailyQuestsSlot(null, true), 'list');
+  assert.doesNotMatch(pass.DAILY_GOALS_LATER, /Daily 3|\btap\b|\bGO\b/);
+  const passSrc = read('src/screens/SharkPassScreen.tsx');
+  assert.match(passSrc, /const daily3Ready = flagOn\(retentionFlags, 'daily_three'\) && dailyRungOpen;/);
+  assert.match(passSrc, /dailyQuestsSlot\(state\.quests, daily3Ready\) === 'later' && \(\n\s*<View style=\{s\.questRow\}/, 'the later line is a View, never a Pressable');
+  assert.match(passSrc, /dailyQuestsSlot\(state\.quests, daily3Ready\) === 'daily3' && \(\n\s*<Pressable/);
+  // Quest bonuses say pass points, like the banner and the Daily 3 rows.
+  assert.match(passSrc, /`\+\$\{q\.bonus\} pass points!`/);
+  assert.match(passSrc, /: `\+\$\{q\.bonus\} pass points`\}/);
+  assert.doesNotMatch(passSrc, /\} points!?`/);
   const banner = loadTs('src/components/money/SharkPassBanner.tsx', {
     '@react-navigation/native': {}, 'expo-image': {}, react: {}, 'react-native-reanimated': {}, 'react-native': { StyleSheet: { create: s => s } },
     'react/jsx-runtime': {}, '../../ui/useUiReducedMotion': {}, '../../api/endpoints/me/shark-pass': {}, '../../RootNavigation': {},
@@ -291,7 +316,10 @@ test('Pins: the door stays; mystery boxes, chaser meter and pips only where pin_
   assert.match(screen, /\{mysteryOn && visited\.has\('mystery'\) && \(/);
   assert.match(screen, /<BackButton \/>/, 'a visible back button (the footer is hidden here)');
   assert.match(screen, /pinsRung\.markSeen\(\)/, 'opening Pins clears the NEW tag');
-  assert.match(read('src/screens/pins/ProfileLanyardCard.tsx'), /useRung\('pins'\)\.isNew && own/);
+  const lanyard = read('src/screens/pins/ProfileLanyardCard.tsx');
+  assert.match(lanyard, /useShownNewTag\('pins', own && !!data && focused\)/, 'the lanyard NEW retires once shown');
+  assert.match(lanyard, /\{newTag && <NewPill \/>\}/, 'the shared pill, no copied styles');
+  assert.doesNotMatch(lanyard, /newText|useRung\('pins'\)/);
   assert.match(read('src/screens/pins/BoxReveal.tsx'), /useNativeModalLayer\(!hidden, 'show'\)/);
   assert.match(read('src/screens/pins/PinsSheets.tsx'), /HELP\.filter\(h => mystery \|\| !h\.mystery\)/);
 });
@@ -330,7 +358,7 @@ test('one door: the next native sheet waits for the overlay native dismiss, and 
   assert.match(hook, /onDismiss=\{nativeGone\}/, 'after-hide work runs on the real native dismiss');
   assert.match(hook, /dismissFallback\.current = setTimeout\(nativeGone, NATIVE_GONE_FALLBACK_MS\);/);
   assert.match(hook, /onModalShow=\{\(\) => \{ shownRef\.current = true; \}\}/);
-  assert.match(hook, /case 'daily_chest': closeThen\(\(\) => \{ askForDailyChest\(\); o\.onOpenChest\(\); \}\); return;/,
+  assert.match(hook, /case 'daily_chest': closeThen\(\(\) => \{ askForDailyChest\(Date\.now\(\), true\); o\.onOpenChest\(\); \}\); return;/,
     'the chest is asked for only after the overlay is gone');
 });
 
@@ -351,16 +379,18 @@ test("the map's attention gate: asked when guide-map publishes it, quiet fallbac
   assert.equal(withGate.mapAllows('membership'), true);
   assert.equal(withGate.mapTake('membership'), true, 'takes the one automatic open');
   assert.deepEqual(asked, ['allowed membership', 'request reward', 'allowed membership', 'request membership']);
-  // The member look host and the retention auto opens both ask it.
+  // The member look host and the retention auto opens both ask it, ANDed with this lane's own counter.
   const host = read('src/components/MemberLookHost.tsx');
   assert.match(host, /parkBusy: mapSays === null \? undefined : !mapSays/);
-  assert.match(host, /!mapTake\('membership'\)/);
+  assert.match(host, /takeAutoOpen\('membership', ownNow\)/);
+  assert.match(host, /autoOpenUsed: autoOpenUsed\(\)/);
+  assert.doesNotMatch(host, /autoOpenUsed\(\) : false/, 'never swaps our counter for the gate');
   const hook = read('src/components/retention/useRetention.tsx');
-  assert.match(hook, /if \(!may\('level_chest'\) \|\| !mapTake\('reward'\)\) return;/);
-  assert.match(hook, /if \(!live \|\| !ok \|\| used\(\) \|\| !mapTake\('reward'\)\) return;/, 'the reminders ask too');
-  // One counter: with the map's gate in the build, its queue alone counts the one automatic open.
-  assert.match(hook, /autoOpenUsed: mapSays === null \? autoOpenUsed\(\) : false/);
-  assert.match(host, /const used = nowSays === null \? autoOpenUsed\(\) : false;/);
+  assert.match(hook, /if \(!takeAutoOpen\('reward', ownFreeze\(\)\)\) return;/);
+  assert.match(hook, /if \(!live \|\| !ok \|\| !takeAutoOpen\('reward', own\(\)\)\) return;/, 'the reminders ask too');
+  assert.doesNotMatch(hook, /autoOpenUsed\(\) : false/);
+  // Level chests never open by themselves: no auto-open path names them.
+  assert.doesNotMatch(hook, /may\('level_chest'\)/);
 });
 
 test('the empty lanyard never promises boxes while mystery boxes are off (state A)', () => {
@@ -442,7 +472,11 @@ test('Trail Boxes: no Mystery Pin Box where its switch is off, and an honest fir
   assert.doesNotMatch(m.exclusivesLine({ mode: 'fixed' }), /often|rarer|chance/, 'known contents: no chance words');
   const sheet = read('src/components/trail/TrailSheet.tsx');
   assert.match(sheet, /withoutPinBoxes\(t\.rewards, pinBoxes\)/, 'known contents');
-  assert.match(sheet, /const bonus = withoutPinBoxes\(t\.bonus, pinBoxes\);/, 'random mode');
+  // Random mode (production until be-core-loop deploys): no chance words either, and the random bonus is not listed.
+  for (const mode of [undefined, 'random']) {
+    assert.doesNotMatch(m.exclusivesLine({ mode }), /often|rarer|chance|maybe|might/, `${mode}: no chance words`);
+  }
+  assert.doesNotMatch(sheet, /Plus one of these|t\.bonus/, 'random mode lists only what every box holds');
   assert.match(sheet, /withoutPinBoxes\(t\.always, pinBoxes\)/);
   assert.match(sheet, /sub=\{arriveLine\(state\)\}/);
   assert.doesNotMatch(sheet, /\d+ Coins`|`\$\{[^}]+\} Coins/, 'Shark Coins, never bare Coins');
@@ -543,4 +577,136 @@ test('Rewards sheet fits five rows whole on a 667 pt phone', () => {
   assert.ok(listMax(956) >= 5 * 70 + 4 * 8 + 4, 'Pro Max holds five full rows');
   assert.match(sheet, /rowCompact: \{ minHeight: 60/);
   assert.match(sheet, /numberOfLines=\{compact \? 1 : 2\}/, 'one line per row on a small phone');
+});
+
+test('one automatic open per app open in the integrated build: the gate exempts a repeated kind, our counter refuses it', () => {
+  // The real gate when this tree has it (after guide-map merges); otherwise a mirror of its shape: attentionQueue.used()
+  // exempts the kind that already took the open, so a second 'reward' passes the gate by itself.
+  let gate = null;
+  try {
+    const q = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
+    if (q.attentionGate && q.attentionQueue) {
+      q.attentionQueue.reset(); q.attentionGate.reset();
+      q.attentionGate.publish({ atPark: false, arrivedAt: null, walkingToTarget: false, playing: false, winCardClosedAt: null }, 'open-1');
+      gate = q.attentionGate;
+    }
+  } catch { gate = null; }
+  if (!gate) {
+    let usedBy = null;
+    gate = {
+      allowed: kind => usedBy === null || usedBy === kind,
+      request: kind => { if (usedBy !== null && usedBy !== kind) return false; usedBy = kind; return true; },
+    };
+  }
+  assert.equal(gate.request('reward'), true);
+  assert.equal(gate.allowed('reward'), true, 'the gate alone lets the same kind through again');
+  const presence = loadTs('src/services/retention/rewardPresence.ts');
+  const att = loadTs('src/services/retention/mapAttention.ts', {
+    '../../screens/ExploreScreen/mapPresentationQueue': { attentionGate: gate },
+  });
+  presence.resetAutoOpen(1000);
+  const own = () => presence.rewardMayAutoOpen({ kind: 'freeze_saved', atPark: false, firstCatchDone: true,
+    autoOpenUsed: presence.autoOpenUsed(), dailyRungOpen: true, dailyChestWaiting: false });
+  // First ask in this app open: both agree.
+  assert.equal(att.calmForAutoOpen('reward', own()), true);
+  assert.equal(att.takeAutoOpen('reward', own()), true);
+  presence.noteAutoOpen(2000);
+  // Same kind asked again (a second card, the reminders ask): the gate would allow it, our counter refuses it.
+  assert.equal(att.calmForAutoOpen('reward', own()), false);
+  assert.equal(att.takeAutoOpen('reward', own()), false);
+  assert.equal(att.takeAutoOpen('membership', presence.rewardMayAutoOpen({ kind: 'member_look', atPark: false,
+    firstCatchDone: true, autoOpenUsed: presence.autoOpenUsed(), dailyRungOpen: true })), false, 'and so does every other kind');
+  // A gate that says no always wins too.
+  const no = loadTs('src/services/retention/mapAttention.ts', {
+    '../../screens/ExploreScreen/mapPresentationQueue': { attentionGate: { allowed: () => false, request: () => false } },
+  });
+  presence.resetAutoOpen(5000);
+  assert.equal(no.calmForAutoOpen('reward', true), false);
+  assert.equal(no.takeAutoOpen('reward', true), false);
+});
+
+test('a shown NEW retires when its surface hides, unmounts or the app goes to the background (Pins lanyard)', () => {
+  // A tiny hook harness: effects run after each render when their deps change; cleanups run on unmount.
+  const seen = [];
+  let ladderNew = true;
+  let appListener = null;
+  const effects = [];
+  let slot = 0;
+  const react = {
+    useRef: init => { const i = slot++; effects[i] = effects[i] || { ref: { current: init } }; return effects[i].ref; },
+    useEffect: (fn, deps) => {
+      const i = slot++;
+      const prev = effects[i];
+      const changed = !prev || !prev.deps || deps.some((d, k) => d !== prev.deps[k]);
+      if (changed) {
+        if (prev && prev.cleanup) prev.cleanup();
+        const cleanup = fn();
+        effects[i] = { deps, cleanup };
+      }
+    },
+  };
+  const tag = loadTs('src/services/retention/newTag.ts', {
+    react,
+    'react-native': { AppState: { addEventListener: (_e, cb) => { appListener = cb; return { remove: () => { appListener = null; } }; } } },
+    '../reveal/revealLadder': {
+      useRung: () => ({ open: true, isNew: ladderNew, markSeen: () => { seen.push('tap'); ladderNew = false; } }),
+      markRungSeen: r => { seen.push(r); ladderNew = false; },
+    },
+  });
+  const render = shown => { slot = 0; return tag.useShownNewTag('pins', shown); };
+  const unmount = () => { for (const e of effects) if (e && e.cleanup) e.cleanup(); effects.length = 0; };
+  // Not on screen yet (no data, not focused): nothing is retired.
+  assert.equal(render(false).isNew, false);
+  assert.deepEqual(seen, []);
+  // Shown on Profile, then the tab loses focus: it retires.
+  assert.equal(render(true).isNew, true);
+  render(false);
+  assert.deepEqual(seen, ['pins']);
+  // Shown, then the app goes to the background: it retires.
+  unmount(); seen.length = 0; ladderNew = true;
+  render(true);
+  appListener('background');
+  assert.deepEqual(seen, ['pins']);
+  // Shown, then the card unmounts: it retires.
+  unmount(); seen.length = 0; ladderNew = true;
+  render(true);
+  unmount();
+  assert.deepEqual(seen, ['pins']);
+  // A tap clears it at once.
+  seen.length = 0; ladderNew = true;
+  render(true).seen();
+  assert.deepEqual(seen, ['tap']);
+  unmount();
+  // Then the next app open's NEW slot goes to the next rung (Daily 3, the pass or Trail), never stuck on Pins.
+  const ladder = loadTs('src/services/reveal/ladderRules.ts', {});
+  const opened = { pins: 100, daily: 200 };
+  assert.equal(ladder.pickNewTag(opened, {}, null, 'open-1'), 'pins');
+  assert.equal(ladder.pickNewTag(opened, { pins: true }, { rung: 'pins', appOpenId: 'open-1' }, 'open-2'), 'daily');
+});
+
+test('the daily chest opened from Rewards: BACK says BACK and the sheet comes back after it closes', () => {
+  const p = loadTs('src/services/retention/rewardPresence.ts');
+  p.askForDailyChest(1000, true);
+  assert.equal(p.dailyChestFromRewards(1000 + 100), true);
+  assert.equal(p.dailyChestFromRewards(1000 + p.CHEST_ASK_MS + 1), false, 'a stale ask is not from Rewards');
+  p.askForDailyChest(2000);
+  assert.equal(p.dailyChestFromRewards(2100), false, 'a push or Daily 3 ask goes back to the map');
+  const sig = loadTs('src/services/retention/rewardsSignals.ts');
+  assert.equal(sig.returnToRewards(), false, 'nobody listening: nothing happens');
+  let back = 0;
+  const off = sig.listenReturnToRewards(() => { back += 1; });
+  assert.equal(sig.returnToRewards(), true);
+  assert.equal(back, 1);
+  off();
+  assert.equal(sig.returnToRewards(), false);
+  const chest = read('src/components/DailyGiftModal.tsx');
+  assert.match(chest, /fromRewards\.current = dailyChestFromRewards\(\);/);
+  assert.match(chest, /if \(fromRewards\.current\) \{ fromRewards\.current = false; returnToRewards\(\); \}/);
+  assert.match(chest, /\{fromRewards\.current \? 'BACK' : 'BACK TO MAP'\}/);
+  assert.match(chest, /useNativeModalLayer\(visible, 'show'\)/);
+  assert.match(chest, /isVisible=\{layer\.present\}/);
+  assert.match(chest, /onDismiss=\{layer\.onDismissed\}/);
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /case 'daily_chest': closeThen\(\(\) => \{ askForDailyChest\(Date\.now\(\), true\); o\.onOpenChest\(\); \}\); return;/);
+  assert.match(hook, /useEffect\(\(\) => listenReturnToRewards\(/);
 });

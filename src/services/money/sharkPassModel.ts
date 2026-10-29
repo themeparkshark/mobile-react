@@ -101,10 +101,20 @@ export function stepWords(step: number, of: number): string {
 /**
  * Daily 3 is the only daily list (core loop 5.8): when the server sends no daily pass quests,
  * the quests area points to Daily 3 instead (finishing it pays pass points). The weekly quest stays.
+ * The link shows only when Daily 3 is really there for this player (its switch on and rung 4 open);
+ * before that the area says plainly when daily goals come, with no arrow and no dead tap.
  */
-export function questsLinkDaily3(quests: { readonly daily: readonly unknown[] } | null | undefined): boolean {
-  return !!quests && quests.daily.length === 0;
+export type DailyQuestsSlot = 'list' | 'daily3' | 'later';
+export function dailyQuestsSlot(quests: { readonly daily: readonly unknown[] } | null | undefined, daily3Ready: boolean): DailyQuestsSlot {
+  if (!quests || quests.daily.length > 0) return 'list';
+  return daily3Ready ? 'daily3' : 'later';
 }
+export function questsLinkDaily3(quests: { readonly daily: readonly unknown[] } | null | undefined, daily3Ready = true): boolean {
+  return dailyQuestsSlot(quests, daily3Ready) === 'daily3';
+}
+/** The plain line before Daily 3 unlocks (no arrow, nothing to tap). */
+// Rung 4 opens after the first park day or the third home day, so the line names neither.
+export const DAILY_GOALS_LATER = 'Daily goals open up as you play';
 
 /** "You'd get 7 rewards right now: Frosty Scarf Pin, 450 coins and more" for the unlock panel. */
 export function readyNowLine(tiers: readonly SharkPassTier[]): string | null {

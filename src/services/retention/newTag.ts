@@ -5,7 +5,7 @@
  * hook only draws it and retires it.
  *
  * A NEW that was on screen is marked seen when the surface goes away (the sheet
- * closes, the screen unmounts) or the app goes to the background, so a shown tag
+ * closes, the screen loses focus or unmounts) or the app goes to the background, so a shown tag
  * never holds the ladder's one NEW slot into the next app open. A tap clears it
  * at once through `seen()`.
  */
@@ -17,7 +17,11 @@ export function useShownNewTag(rung: Rung, shown = true): { readonly isNew: bool
   const r = useRung(rung);
   const isNew = r.open && r.isNew && shown;
   const wasShown = useRef(false);
-  useEffect(() => { if (isNew) wasShown.current = true; }, [isNew]);
+  // Shown, then hidden (the screen lost focus, the sheet closed while still mounted): it was seen, so it retires.
+  useEffect(() => {
+    if (isNew) { wasShown.current = true; return; }
+    if (wasShown.current) { wasShown.current = false; markRungSeen(rung); }
+  }, [isNew, rung]);
   useEffect(() => {
     const sub = AppState.addEventListener('change', s => {
       if (s === 'background' && wasShown.current) { wasShown.current = false; markRungSeen(rung); }

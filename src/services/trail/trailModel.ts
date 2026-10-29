@@ -218,13 +218,14 @@ export function withoutPinBoxes<T extends { readonly kind: string }>(list: reado
 }
 
 /**
- * The Trail Exclusives line, true to the mode: known contents give the next one in every Gold Box (no chance
- * words at all); an older random-mode server keeps its own description.
+ * The Trail Exclusives line, true to the mode and never a chance word (Dustin, Oct 28: no odds anywhere): known
+ * contents give the next one in every Gold Box; an older random-mode server (production until be-core-loop
+ * deploys) only says where they come from.
  */
 export function exclusivesLine(state: { readonly mode?: string }): string {
   return state.mode === 'fixed'
     ? 'Every Gold Box brings the next one. Wear them to show you walk the parks.'
-    : 'Only in Trail Boxes, most often in Gold. Older ones stay in the boxes too, just rarer. Wear them to show you walk the parks.';
+    : 'Only in Trail Boxes. Wear them to show you walk the parks.';
 }
 
 /** The "Arrive at a park" earn row's line: honest about the first park day (no box on it in known-contents mode). */
