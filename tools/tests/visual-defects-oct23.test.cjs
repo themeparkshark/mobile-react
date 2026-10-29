@@ -226,7 +226,7 @@ test('one coin for coins you spend: the coin stack on pills, prices and the prof
   assert.doesNotMatch(read('src/screens/pins/MysteryCard.tsx'), /<GameIcon name="coin" /);
   assert.doesNotMatch(read('src/components/Notification.tsx'), /<GameIcon name="coin" /);
   assert.match(read('src/services/liveEvents/model.ts'), /if \(r\.coins\) out\.push\(\{ icon: 'coins'/);
-  assert.match(read('src/components/Stats.tsx'), /label: 'Coins',[\s\S]{0,120}gameIcon: 'coins'/);
+  assert.match(read('src/components/Stats.tsx'), /label: 'Shark Coins',[\s\S]{0,120}gameIcon: 'coins'/);
 });
 
 test('full-screen routes keep clear of the Dynamic Island with one inset (SafeScreen, the JS hook)', () => {

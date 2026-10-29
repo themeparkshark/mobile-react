@@ -200,7 +200,8 @@ export default function Stats({ player, hideBalances = false, rideCoins = null, 
       iconIndex: 2,
     },
     {
-      label: 'Coins',
+      // The money says Shark Coins, so it never reads like the ride coins on the park rows below.
+      label: 'Shark Coins',
       value: hideBalances ? null : visibleCount(player.coins),
       iconIndex: 3,
       gameIcon: 'coins' as GameIconName,
