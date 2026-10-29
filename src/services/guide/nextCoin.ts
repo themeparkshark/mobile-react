@@ -468,6 +468,19 @@ export function liveAnswers(previous: Readonly<Record<number, LiveMemo>> | null 
   return { answers, memo };
 }
 
+/**
+ * Where the dotted path and the edge arrow lead, or null for none. The souvenir step (today's Adventure
+ * on 'celebrate') unfolds anywhere, so the map never pulls the player back to the ride for it: the card
+ * and the calm island stay, the path and arrow do not.
+ */
+export function guidePathPoint(
+  point: { readonly latitude: number; readonly longitude: number } | null,
+  adventureStep: 'play' | 'celebrate' | null,
+): { readonly latitude: number; readonly longitude: number } | null {
+  if (!point || adventureStep === 'celebrate') return null;
+  return point;
+}
+
 // ---------------------------------------------------------------------------
 // The guide store: the one owner of the pointer.
 
@@ -489,6 +502,9 @@ let resume: GuideTarget | null = null;
 const listeners = new Set<Listener>();
 /** Bumped by every change the next resolve must see (a pick, a skipped step, a cleared plan, a reset), never by resolve itself. */
 let inputVersion = 0;
+/** The last input the map resolved with (a release picks again with it when the map passes none). */
+let lastInput: ResolveInput | null = null;
+type ResolveInput = Omit<GuideInput, 'current' | 'pickedTaskId' | 'pickedSource' | 'resumeTarget'>;
 const emit = () => listeners.forEach(listener => {
   try { listener(); } catch { /* one bad listener never stops the rest */ }
 });
@@ -525,43 +541,10 @@ export const guide = {
    * declined line story, store the result and notify on change. The map calls
    * this; other lanes only call setTarget, current and subscribe.
    */
-  resolve(input: Omit<GuideInput, 'current' | 'pickedTaskId' | 'pickedSource' | 'resumeTarget'>): GuideTarget | null {
-    lastAdventurePhase = input.adventure?.phase ?? null;
-    const adventure = input.adventure && declinedLineStory && declinedLineStory.taskId === input.adventure.taskId
-      && (declinedLineStory.phase === null || declinedLineStory.phase === input.adventure.phase)
-      ? { ...input.adventure, lineStoryDeclined: true } : input.adventure;
-    const fresh = pick;
-    const next = pickNextCoin({
-      ...input,
-      adventure,
-      current: held,
-      currentPickedAt: heldPickedAt,
-      pickedTaskId: fresh?.taskId ?? null,
-      pickedSource: fresh?.source,
-      chosenTaskId: input.chosenTaskId ?? plan,
-      resumeTarget: resume,
-    });
-    pick = null;
-    // A coin in PLAY! range took over from a held target: remember that target to go back to it.
-    if (next?.reason === 'in_range' && next.source === 'guide' && held && held.taskId !== next.taskId) {
-      if (!resume) resume = held;   // keep the first target from before, through any number of coins in passing
-    } else if (!next || next.reason !== 'in_range') resume = null;
-    if (fresh) resume = null;
-    // Remember when the player picked the held coin (a fresh pick holds against a line dwell).
-    if (!next || next.source === 'guide') heldPickedAt = null;
-    else if (fresh && next.taskId === fresh.taskId) heldPickedAt = fresh.at;
-    else if (held?.taskId !== next.taskId) heldPickedAt = null;
-    if (!sameTarget(held, next)) {
-      // Dev builds only: why the pointer moved (lane walks read it in the Metro log; never in a store bundle).
-      if (typeof __DEV__ !== 'undefined' && __DEV__ && held?.taskId !== next?.taskId) {
-        const was = held ? input.coins.find(c => c.taskId === held!.taskId) : undefined;
-        console.log(`[guide] ${held ? `${held.name}(${held.reason})` : 'none'} -> ${next ? `${next.name}(${next.reason}/${next.source})` : 'none'}`
-          + ` pick=${fresh?.taskId ?? '-'} heldOnMap=${held ? !!was : '-'} heldLive=${was ? input.live?.[was.taskId] ?? 'unknown' : '-'}`
-          + ` heldOwned=${was ? was.owned : '-'} coins=${input.coins.length}`);
-      }
-      held = next;
-      emit();
-    }
+  resolve(input: ResolveInput): GuideTarget | null {
+    const before = held;
+    run(input);
+    if (!sameTarget(before, held)) emit();
     return held;
   },
   /**
@@ -579,15 +562,18 @@ export const guide = {
   },
   /**
    * The map's data was partial when the guide chose its coin (the trip goal or the ride catalog had not
-   * answered): drop that choice so the next resolve picks with everything in. A player's pick is kept.
+   * answered): drop that choice and pick again at once with the latest input (the map's, or the last
+   * resolve's), so the store never shows a null target in between (no resting frame, no vanishing path).
+   * A player's pick is kept.
    */
-  releaseGuidePick(): void {
+  releaseGuidePick(input?: ResolveInput): void {
     if (!held || held.source !== 'guide') return;
-    held = null;
-    heldPickedAt = null;
+    const before = held;
     resume = null;
-    inputVersion++;
-    emit();
+    const latest = input ?? lastInput;
+    if (latest) run(latest, true);
+    else { held = null; heldPickedAt = null; inputVersion++; }
+    if (!sameTarget(before, held)) emit();
   },
   /**
    * Changes when something the next resolve must see changed (a pick, a skipped step, a cleared plan,
@@ -621,7 +607,51 @@ export const guide = {
   /** Sign-out and tests: forget everything. */
   reset(): void {
     held = null; heldPickedAt = null; pick = null; plan = null; declinedLineStory = null; lastAdventurePhase = null; resume = null;
+    lastInput = null;
     inputVersion++;
     emit();
   },
 };
+
+/**
+ * One pass of the picker over the store's state; the caller decides whether to notify. freshStart picks
+ * as if nothing were held (a released guess), while the held target stays readable until the new one lands.
+ */
+function run(input: ResolveInput, freshStart = false): void {
+  lastInput = input;
+  lastAdventurePhase = input.adventure?.phase ?? null;
+  const adventure = input.adventure && declinedLineStory && declinedLineStory.taskId === input.adventure.taskId
+    && (declinedLineStory.phase === null || declinedLineStory.phase === input.adventure.phase)
+    ? { ...input.adventure, lineStoryDeclined: true } : input.adventure;
+  const fresh = pick;
+  const next = pickNextCoin({
+    ...input,
+    adventure,
+    current: freshStart ? null : held,
+    currentPickedAt: freshStart ? null : heldPickedAt,
+    pickedTaskId: fresh?.taskId ?? null,
+    pickedSource: fresh?.source,
+    chosenTaskId: input.chosenTaskId ?? plan,
+    resumeTarget: resume,
+  });
+  pick = null;
+  // A coin in PLAY! range took over from a held target: remember that target to go back to it.
+  if (next?.reason === 'in_range' && next.source === 'guide' && held && !freshStart && held.taskId !== next.taskId) {
+    if (!resume) resume = held;   // keep the first target from before, through any number of coins in passing
+  } else if (!next || next.reason !== 'in_range') resume = null;
+  if (fresh) resume = null;
+  // Remember when the player picked the held coin (a fresh pick holds against a line dwell).
+  if (!next || next.source === 'guide') heldPickedAt = null;
+  else if (fresh && next.taskId === fresh.taskId) heldPickedAt = fresh.at;
+  else if (held?.taskId !== next.taskId) heldPickedAt = null;
+  if (!sameTarget(held, next)) {
+    // Dev builds only: why the pointer moved (lane walks read it in the Metro log; never in a store bundle).
+    if (typeof __DEV__ !== 'undefined' && __DEV__ && held?.taskId !== next?.taskId) {
+      const was = held ? input.coins.find(c => c.taskId === held!.taskId) : undefined;
+      console.log(`[guide] ${held ? `${held.name}(${held.reason})` : 'none'} -> ${next ? `${next.name}(${next.reason}/${next.source})` : 'none'}`
+        + ` pick=${fresh?.taskId ?? '-'} heldOnMap=${held ? !!was : '-'} heldLive=${was ? input.live?.[was.taskId] ?? 'unknown' : '-'}`
+        + ` heldOwned=${was ? was.owned : '-'} coins=${input.coins.length}`);
+    }
+    held = next;
+  }
+}

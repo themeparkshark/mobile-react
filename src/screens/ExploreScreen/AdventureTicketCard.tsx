@@ -54,6 +54,10 @@ interface Props {
   celebrateRequest?: number;
   /** Line Tickets exist (queue_tickets on): only then may the sheet say a wait earns a Ticket. */
   queueTicketsOn?: boolean;
+  /** Earned Tickets waiting to be claimed (the guide card's CLAIM count): the sheet leads with them. */
+  claimableTickets?: number;
+  /** Claim them right here (the guide card's own claim). */
+  onClaim?: () => Promise<unknown>;
   /** Dev preview only: start with the sheet (or the detour picker) open. */
   initialOpen?: boolean;
   initialPicker?: boolean;
@@ -153,7 +157,7 @@ function ChipEntrance({ reduced, children, style }: { reduced: boolean; children
 
 export default function AdventureTicketCard({ ticket, data, closed, stale, top, collapsed = false, gate, detours = [], slam = [], onSlamDone,
   onDiscover, onPlay, onFindLine, onShelf, onSelect, onDismiss, onCelebrate, onRefresh, onOcclusionChange,
-  sheetOnly = false, openRequest = 0, celebrateRequest = 0, queueTicketsOn = false, initialOpen = false, initialPicker = false }: Props) {
+  sheetOnly = false, openRequest = 0, celebrateRequest = 0, queueTicketsOn = false, claimableTickets = 0, onClaim, initialOpen = false, initialPicker = false }: Props) {
   const [open, setOpen] = useState(initialOpen), [picker, setPicker] = useState(initialPicker);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   const [unfold, setUnfold] = useState(false);
@@ -244,7 +248,14 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
     unfoldOnShow.current = false;
     if (!stale && prompt.intent === 'celebrate') next();
   };
-  const ticketsLine = adventureTicketsLine(data.wallet.tickets_needed, !!data.wallet.rescue_pass_available, queueTicketsOn);
+  const ticketsLine = adventureTicketsLine(data.wallet.tickets_needed, !!data.wallet.rescue_pass_available, queueTicketsOn,
+    claimableTickets);
+  const [claiming, setClaiming] = useState(false);
+  const claimHere = () => {
+    if (!onClaim || claiming) return;
+    setClaiming(true);
+    void onClaim().catch(() => undefined).finally(() => { if (mounted.current) setClaiming(false); });
+  };
   const a11y = `Open Adventure Ticket. ${ticket.ride.ride_name}. ${prompt.title}. ${earnedCount} of 3 chapters complete.`;
 
   return <>
@@ -330,6 +341,9 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
               <GameIcon name="ticket" size={34} />
               <Text style={styles.resourceText}>{ticketsLine}</Text>
             </View>}
+            {ticket.phase === 'discover' && data.wallet.tickets_needed > 0 && claimableTickets > 0 && !!onClaim &&
+              <GameButton variant="secondary" size="compact" label="CLAIM" icon="ticket" accessibilityLabel={`Claim ${claimableTickets} free Tickets`}
+                loading={claiming} disabled={claiming} onPress={claimHere} style={{ alignSelf: 'center', marginTop: 10 }} />}
             <View style={styles.primaryRow}>
               <GameButton label={stale ? 'Refresh my ticket' : prompt.action} accessibilityLabel={stale ? 'Refresh Adventure Ticket' : prompt.action}
                 // Its line story wears LinePlay's own picture (ledger 37): the pocket watch means Wait Times only.

@@ -97,6 +97,7 @@ test('Find this coin selects the ride, makes it the guide target, and the dotted
   const target = { taskId: 11, parkId: 1, name: 'Space Ride', kind: 'ride', reason: 'chosen', source: 'find', meters: 120, inRange: false, checkRunning: false, leavesOn: null };
   const { guideCopy } = require('./helpers/explore-screen.cjs');
   const guided = exploreScreen({ trip: null, redeemables, guide: { target, state: 'walk', inLineTaskId: null, rides: new Map(), targetTask: task, arrivedAt: null,
+    targetPoint: { latitude: Number(task.latitude), longitude: Number(task.longitude) }, pathPoint: { latitude: Number(task.latitude), longitude: Number(task.longitude) },
     copy: guideCopy.guideCardCopy('walk', target, { parkName: 'Test Park', ridesResting: false, allOwned: false, tickets: 3, freeStep: null, queueTicketsOn: false, adventureDots: null }) } });
   await guided.settle();
   const path = guided.find(named('Map')).props;

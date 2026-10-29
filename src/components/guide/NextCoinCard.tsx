@@ -67,15 +67,16 @@ function CardButton({ button, onPress, quiet = false }: { button: GuideButton; o
 /**
  * Today's Adventure ticket tab: a small ticket on the card's top edge while the guide points at
  * another coin, so the Adventure's sheet (its line story, its souvenir, another ride, hide for
- * today) is never stranded. The ticket picture and its three stamp dots; a 44 pt tap target.
+ * today) is never stranded. A gold ticket button (the card button's look, so it never reads like the
+ * white park name chip beside it) with the ticket picture and its three stamp dots; a 46 pt tap target.
  */
 function AdventureTab({ stamps, onPress }: { stamps: readonly [boolean, boolean, boolean]; onPress: () => void }) {
   const done = stamps.filter(Boolean).length;
-  return <Pressable testID="adventure-tab" accessibilityRole="button" hitSlop={{ top: 12, bottom: 10, left: 6, right: 6 }}
+  return <Pressable testID="adventure-tab" accessibilityRole="button" hitSlop={{ top: 10, bottom: 8, left: 6, right: 6 }}
     accessibilityLabel={`Today's Adventure. ${done} of 3 stamps. Open your ticket`}
     onPress={() => { haptic('tapLight'); onPress(); }}
     style={({ pressed }) => [styles.tab, pressed && styles.pressed]}>
-    <GameIcon name="ticket" size={18} />
+    <GameIcon name="ticket" size={20} />
     <View style={styles.tabDots}>
       {stamps.map((on, index) => <View key={index} style={[styles.tabDot, on && styles.tabDotOn]} />)}
     </View>
@@ -148,6 +149,9 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   </Animated.View>;
 }
 
+/** The ticket tab's stamp dots (pt): big enough to read as three stamps at a glance. */
+export const TAB_DOT = 9;
+
 const styles = StyleSheet.create({
   slot: { position: 'absolute', left: 12, right: GUIDE_CARD_RIGHT, zIndex: 21 },
   card: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BRAND.blueBright, borderColor: BRAND.white,
@@ -160,11 +164,13 @@ const styles = StyleSheet.create({
   edgeRow: { position: 'absolute', top: -9, right: 14, zIndex: 2, flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
   parkChip: { backgroundColor: BRAND.white, borderRadius: 8,
     borderWidth: 2, borderColor: BRAND.blueBright, paddingHorizontal: 6, paddingVertical: 0, maxWidth: 170 },
-  tab: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.white, borderRadius: 9, borderWidth: 2,
-    borderColor: BRAND.gold, paddingHorizontal: 5, height: 24, marginTop: -6 },
-  tabDots: { flexDirection: 'row', gap: 2 },
-  tabDot: { width: 6, height: 6, borderRadius: 3, borderWidth: 1.2, borderColor: BRAND.navy, backgroundColor: 'transparent' },
-  tabDotOn: { backgroundColor: BRAND.gold, borderColor: BRAND.goldLip },
+  // A gold button (the card's own button look, lip and all), never a white label like the park chip beside it.
+  tab: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.gold, borderRadius: 10, borderWidth: 2,
+    borderColor: BRAND.white, borderBottomWidth: 4, borderBottomColor: BRAND.goldLip, paddingHorizontal: 6, height: 28, marginTop: -8,
+    ...SHADOW.card },
+  tabDots: { flexDirection: 'row', gap: 3 },
+  tabDot: { width: TAB_DOT, height: TAB_DOT, borderRadius: TAB_DOT / 2, borderWidth: 1.5, borderColor: BRAND.navy, backgroundColor: BRAND.white },
+  tabDotOn: { backgroundColor: BRAND.navy },
   parkChipText: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 10 },
   title: { color: BRAND.white, fontFamily: 'Shark', fontSize: 15, marginTop: 1 },
   line: { color: '#dff4ff', fontFamily: 'Knockout', fontSize: 12, marginTop: 1 },

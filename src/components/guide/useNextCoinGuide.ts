@@ -13,7 +13,7 @@ import type { LivePark } from '../../api/endpoints/parks/live';
 import type { AdventureTicket } from '../../api/endpoints/me/trip-goal';
 import { loadParkRides } from '../../services/lineplay/resolveRide';
 import {
-  ARRIVE_MS, guide, guideMeters, guideState, liveAnswers, MAX_TARGET_METERS,
+  ARRIVE_MS, guide, guideMeters, guidePathPoint, guideState, liveAnswers, MAX_TARGET_METERS,
   type GuideAdventure, type GuideState, type GuideTarget, type LiveMemo,
 } from '../../services/guide/nextCoin';
 import { nextFreeTicket, type FreeTicketsInput } from '../../services/guide/freeTickets';
@@ -82,6 +82,11 @@ export interface NextCoinGuide {
    * path and the edge arrow always agree (one owner of the pointer).
    */
   readonly targetPoint: { readonly latitude: number; readonly longitude: number } | null;
+  /**
+   * Where the dotted path and the edge arrow lead: the target's point, or null on the souvenir step
+   * (it unfolds anywhere, so the map never pulls the player back to the ride for it).
+   */
+  readonly pathPoint: { readonly latitude: number; readonly longitude: number } | null;
   /**
    * Today's Adventure is active in this park but the card points elsewhere: the card shows the
    * Adventure's ticket tab (its door to the sheet), so steps 2 and 3 and the detour picker stay reachable.
@@ -163,13 +168,16 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   const coinsKey = coins.map(c => `${c.taskId}:${+c.owned}${c.kind[0]}${+!!c.queue}${+!!c.star}${+!!c.rush}${+!!c.levelUpReady}`).join('|');
   const answersKey = Object.entries(answers).map(([k, v]) => `${k}${v[0]}`).join(',');
   const ready = input.ready !== false;
+  // What the guide picks from, built fresh each render (resolve, the pick re-run and a release share it).
+  const resolveInput = () => parkId == null ? null : ({
+    mode: 'park' as const, parkId, location: input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null,
+    coins, live: answers, adventure, inLineTaskId, playableTaskId: input.playableTaskId,
+    starRushUnlocked: input.starRushUnlocked, coinLevelsUnlocked: input.coinLevelsUnlocked,
+  });
   useEffect(() => {
-    if (!enabled || parkId == null || !ready) return;
-    guide.resolve({
-      mode: 'park', parkId, location: input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null,
-      coins, live: answers, adventure, inLineTaskId, playableTaskId: input.playableTaskId,
-      starRushUnlocked: input.starRushUnlocked, coinLevelsUnlocked: input.coinLevelsUnlocked,
-    });
+    const next = resolveInput();
+    if (!enabled || !next || !ready) return;
+    guide.resolve(next);
   }, [enabled, ready, parkId, lat, lng, coinsKey, answersKey, adventure?.taskId, adventure?.phase, inLineTaskId, input.playableTaskId, // eslint-disable-line react-hooks/exhaustive-deps
     input.starRushUnlocked, input.coinLevelsUnlocked]);
   // Any screen's guide.setTarget lands on the next resolve: re-run it when the store's input version
@@ -180,12 +188,9 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   useEffect(() => {
     if (pickTick === lastPick.current) return;
     lastPick.current = pickTick;
-    if (!enabled || parkId == null || !ready) return;
-    guide.resolve({
-      mode: 'park', parkId, location: input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null,
-      coins, live: answers, adventure, inLineTaskId, playableTaskId: input.playableTaskId,
-      starRushUnlocked: input.starRushUnlocked, coinLevelsUnlocked: input.coinLevelsUnlocked,
-    });
+    const next = resolveInput();
+    if (!enabled || !next || !ready) return;
+    guide.resolve(next);
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A coin the guide chose on partial data (no trip goal or no ride catalog yet) gives way once when both
@@ -201,7 +206,10 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
     }
     const partial = partialPick.current;
     partialPick.current = null;
-    if (partial && partial.parkId === parkId && held?.taskId === partial.taskId) guide.releaseGuidePick();
+    if (partial && partial.parkId === parkId && held?.taskId === partial.taskId) {
+      // Pick again with this render's full data in one step: the card never shows a resting frame between.
+      guide.releaseGuidePick(resolveInput() ?? undefined);
+    }
     return undefined;
   });
   const target = useSyncExternalStore(guide.subscribe, guide.current, guide.current);
@@ -224,11 +232,11 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   const adventureDots: [boolean, boolean, boolean] | null = input.adventure && shown &&
     input.adventure.ride.task_id === shown.taskId && input.adventure.park_id === parkId
     ? [!!input.adventure.discover, !!input.adventure.play, input.adventure.phase === 'complete'] : null;
+  const adventureStep = adventureDots && input.adventure?.phase === 'celebrate' ? 'celebrate' : 'play';
   const copy = restingSightCopy(guideCardCopy(state, shown, {
     parkName: input.parkName, ridesResting, allOwned, outOfReach,
     tickets: input.wallet?.tickets ?? 0, freeStep: input.wallet ? nextFreeTicket(input.wallet) : null,
-    queueTicketsOn: input.queueTicketsOn, adventureDots, lineStoryNear: input.lineStoryNear,
-    adventureStep: adventureDots && input.adventure?.phase === 'celebrate' ? 'celebrate' : 'play',
+    queueTicketsOn: input.queueTicketsOn, adventureDots, lineStoryNear: input.lineStoryNear, adventureStep,
   }), shown, ridesResting);
   const targetTask = shown ? input.tasks.find(task => task.id === shown.taskId) ?? null : null;
   const targetCoin = shown ? coins.find(coin => coin.taskId === shown.taskId) ?? null : null;
@@ -239,6 +247,7 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   // coin", a tapped island, a pick from the shelf, or its ride closing): the card wears its ticket tab.
   const adventureTab = !!input.adventure && input.adventure.park_id === parkId && input.adventure.phase !== 'complete'
     && !adventureDots && state !== 'arrive' && state !== 'welcome_back';
-  return { target: shown, state, copy, inLineTaskId, rides, targetTask, targetPoint, targetOffMap: !!shown && !targetTask && !!targetCoin,
+  const pathPoint = guidePathPoint(targetPoint, adventureStep);
+  return { target: shown, state, copy, inLineTaskId, rides, targetTask, targetPoint, pathPoint, targetOffMap: !!shown && !targetTask && !!targetCoin,
     arrivedAt, adventureTab };
 }

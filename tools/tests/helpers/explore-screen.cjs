@@ -24,6 +24,12 @@ const guideCopy = loadTs('src/services/guide/guideCopy.ts');
 const freeTickets = loadTs('src/services/guide/freeTickets.ts');
 // The guide's pure map helpers (LINEPLAY's route, the wallet, owned and level-up coins) run for real too.
 const guideCoins = loadTs('src/components/guide/guideCoins.ts');
+const rewardsNew = loadTs('src/components/map/RewardsButton.tsx', {
+  'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' }, 'expo-image': { Image: 'Image' },
+  'react-native': { Pressable: 'Pressable', Text: 'Text', View: 'View', StyleSheet: { create: x => x } },
+  'react-native-svg': { __esModule: true, default: 'Svg', Circle: 'Circle' }, '../../gamekit/Haptics': { haptic() {} },
+  '../../ui': { BRAND: {}, GameIcon: 'GameIcon', SHADOW: { card: {} } },
+});
 
 /** What the guide hook returns when a test does not pass its own (no target: the resting card). */
 function restingGuide() {
@@ -141,6 +147,8 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '../services/guide/nextCoin': { guide: { setTarget: (taskId, source) => guidePicks.push([taskId, source]),
       skipLineStory: () => guidePicks.push(['skip']), forPlayer: () => undefined, current: () => null, subscribe: () => () => undefined } },
     '../services/guide/freeTickets': freeTickets,
+    // The Rewards button stays a stub component; its pure NEW rule is real (it decides what a tap marks seen).
+    '../components/map/RewardsButton': stubModule('../components/map/RewardsButton', { rewardsNewRungs: rewardsNew.rewardsNewRungs }),
     '../components/guide/guideCoins': guideCoins,
     '../services/guide/guideFlags': { useGuideFlags: () => options.flags ?? {} },
     '../services/reveal/revealLadder': { useRung: rung => ({ open: (options.rungs ?? []).includes(rung), isNew: false, markSeen: () => undefined }),

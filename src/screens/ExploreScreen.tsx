@@ -85,7 +85,7 @@ import BossMarker from '../components/boss/BossMarker';
 import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
 import useBossAttackRecovery from '../hooks/useBossAttackRecovery';
 import DailyGiftModal from '../components/DailyGiftModal';
-import RewardsButton, { rewardsButtonModel, withRewardsSummary } from '../components/map/RewardsButton';
+import RewardsButton, { rewardsNewRungs, rewardsButtonModel, withRewardsSummary } from '../components/map/RewardsButton';
 import useRetention from '../components/retention/useRetention';
 import { chestDismissed, chestShouldShow, markChestDismissed } from './ExploreScreen/dailyChestPresence';
 import HomeHuntResultsHost from '../components/home/HomeHuntResultsHost';
@@ -1148,6 +1148,10 @@ export function ExploreScreenBody() {
   const trailRung = useRung('trail');
   const eventsRung = useRung('events');
   const claimable = useClaimableTickets(!!player && !!park && mapFocused, player?.tickets ?? 0, player?.id ?? null);
+  // Earned Tickets waiting: the guide card and the Adventure sheet both lead with them (one answer).
+  const claimableTicketCount = (claimable.sources ?? []).reduce((sum, source) => sum + (source.tickets > 0 ? source.tickets : 0), 0);
+  const claimTickets = useCallback(() => claimable.claim().then(() => refreshPlayer()).catch(() => undefined),
+    [claimable.claim]); // eslint-disable-line react-hooks/exhaustive-deps
   const wallet = useMemo(() => player ? guideWallet({
     tickets: player.tickets, heldPasses: player.rescue_passes,
     freeTryReady: guideFlags.ride_rescue_pass === true && tripGoalData?.wallet?.rescue_pass_available === true,
@@ -1221,10 +1225,12 @@ export function ExploreScreenBody() {
   // Line story) still has its path and edge arrow.
   const guidePoint = nextCoin.targetPoint ?? (nextCoin.targetTask
     ? { latitude: Number(nextCoin.targetTask.latitude), longitude: Number(nextCoin.targetTask.longitude) } : null);
-  const guideMapTarget = useMemo(() => guidePoint && nextCoin.target
-    ? { latitude: guidePoint.latitude, longitude: guidePoint.longitude,
+  // The souvenir step unfolds anywhere: no dotted path and no edge arrow back to the ride (pathPoint null).
+  const pathPoint = nextCoin.pathPoint;
+  const guideMapTarget = useMemo(() => pathPoint && nextCoin.target
+    ? { latitude: pathPoint.latitude, longitude: pathPoint.longitude,
       requestId: nextCoin.target.taskId * 1000 + guidePathRequest } : null,
-  [guidePoint?.latitude, guidePoint?.longitude, nextCoin.target?.taskId, guidePathRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+  [pathPoint?.latitude, pathPoint?.longitude, nextCoin.target?.taskId, guidePathRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   // That off-map target's island: the coin it is (owned, calm), at its ride, so the card, the dotted
   // path and the edge arrow all point at something on the map (core loop 4.1, one owner).
   const lineStoryIsland = useMemo<TaskType | null>(() => {
@@ -1391,6 +1397,7 @@ export function ExploreScreenBody() {
     mode: park ? 'park' : homeLocationConfirmed ? 'home' : 'unknown',
     parkId: park?.id ?? null,
     location: location ? { latitude: location.latitude, longitude: location.longitude } : null,
+    accuracy: latestLocationSampleRef?.current?.accuracyMeters ?? null,
     winCount: parkWins,
     progress: player ? {
       coinsWon: player.ride_coins_collected ?? player.completed_tasks_count ?? 0,
@@ -1411,12 +1418,15 @@ export function ExploreScreenBody() {
   // A brand new player's first 30 s of hunting: no Rewards button yet, just the treats (the chest comes after).
   const mapControlsCount = firstVisitHold || !player ? 0 : 1;
   // The flame (rung 4) or the Trail ring (rung 6) just unlocked: one NEW tag (the ladder allows one per app open).
-  const rewardsNew = (dailyOpen && dailyRung.isNew) || (trailOpen && trailRung.isNew);
+  const rewardsNewFor = rewardsNewRungs({ dailyOpen, dailyNew: dailyRung.isNew, trailOpen, trailNew: trailRung.isNew });
+  const rewardsNew = rewardsNewFor.length > 0;
+  const rewardsNewKey = rewardsNewFor.join(',');
   const onRewardsPress = useCallback(() => {
-    if (dailyRung.isNew) dailyRung.markSeen();
-    if (trailRung.isNew) trailRung.markSeen();
+    // The tap clears exactly the NEW the button wore.
+    if (rewardsNewKey.includes('daily')) dailyRung.markSeen();
+    if (rewardsNewKey.includes('trail')) trailRung.markSeen();
     openRewards();
-  }, [dailyRung, trailRung, openRewards]);
+  }, [rewardsNewKey, dailyRung, trailRung, openRewards]);
   const mapControls = mapControlsCount > 0 ? <RewardsButton model={rewardsModel} onPress={onRewardsPress} isNew={rewardsNew} /> : null;
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
@@ -1603,7 +1613,7 @@ export function ExploreScreenBody() {
         return;
       case 'lineplay': void openLinePlayFor(nextCoin.target?.taskId ?? null, nextCoin.target?.name ?? task?.name ?? null)
         .catch(() => gameAlert('LinePlay', 'Could not open this line. Try again in a moment.')); return;
-      case 'claim': void claimable.claim().then(() => refreshPlayer()).catch(() => undefined); return;
+      case 'claim': void claimTickets(); return;
       case 'see_ways':
         gameAlert('Ways to get Tickets', needTicketLines(guideFlags.queue_tickets === true).join(' '), [{ text: 'OK' }], { icon: 'ticket' });
         return;
@@ -1618,7 +1628,7 @@ export function ExploreScreenBody() {
       default:
         if (park && player) RootNavigation.navigate('Park', { park: park.id, player: player.id });
     }
-  }, [nextCoin.targetTask, nextCoin.target?.taskId, nextCoin.target?.name, openLinePlayFor, claimable, refreshPlayer, guideFlags.queue_tickets, park, player, welcome]);
+  }, [nextCoin.targetTask, nextCoin.target?.taskId, nextCoin.target?.name, openLinePlayFor, claimTickets, guideFlags.queue_tickets, park, player, welcome]);
   // The home guide card (core loop 4.1 "Home"): next park day, Tickets ready, the ticket meter, PLAN = your shelf.
   const homePlan = tripGoal && !tripGoal.coin_owned ? tripGoal : null;
   const homeGuide = useMemo<HomeGuide | null>(() => player && !park ? {
@@ -2041,6 +2051,7 @@ export function ExploreScreenBody() {
         {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`} sheetOnly
           openRequest={adventureSheetRequest} celebrateRequest={adventureCelebrateRequest}
           queueTicketsOn={guideFlags.queue_tickets === true}
+          claimableTickets={claimableTicketCount} onClaim={claimTickets}
           ticket={adventure} data={tripGoalData} stale={tripGoalStale} gate={adventureGate} detours={adventureDetours}
           closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={slotTop}
           onOcclusionChange={setAdventureOccluded} onRefresh={refreshTripGoal}

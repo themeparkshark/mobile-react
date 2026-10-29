@@ -29,6 +29,8 @@ export default function useParkDayLadder(input: {
   readonly mode: 'park' | 'home' | 'unknown';
   readonly parkId: number | null;
   readonly location: GuidePoint | null;
+  /** The reading's horizontal accuracy in meters, or null (a far reading then needs a second one in a row). */
+  readonly accuracy?: number | null;
   /** Bumped by one for each coin won on this map. */
   readonly winCount: number;
   readonly progress: LadderFeed | null;
@@ -63,7 +65,7 @@ export default function useParkDayLadder(input: {
     const won = Math.max(0, winCount - counted.current);
     counted.current = winCount;
     const { next, events } = parkDayStep(prev, {
-      mode, parkId, location: input.location ?? null, today: localDay(Date.now()), coinsWon: won,
+      mode, parkId, location: input.location ?? null, today: localDay(Date.now()), coinsWon: won, accuracy: input.accuracy ?? null,
     });
     record.current = { player: playerId, value: next };
     if (next !== prev) void AsyncStorage.setItem(`${KEY}@p${playerId}`, JSON.stringify(next)).catch(() => undefined);

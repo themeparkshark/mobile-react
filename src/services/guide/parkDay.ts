@@ -15,6 +15,11 @@ import { guideMeters, type GuidePoint } from './nextCoin';
 
 /** A reading this far from the last in-park reading counts as having left the park. */
 export const LEFT_PARK_METERS = 2000;
+/**
+ * A far reading is trusted when its accuracy is this good (m) or better. A reading with worse or
+ * unknown accuracy needs a second far reading in a row, so one GPS jump never ends a park day.
+ */
+export const TRUSTED_ACCURACY_METERS = 100;
 
 export interface ParkDayRecord {
   /** The park-local day (YYYY-MM-DD) of the open park day, or null. */
@@ -28,9 +33,11 @@ export interface ParkDayRecord {
   readonly done: boolean;
   /** The last local day a home-mode open was counted. */
   readonly homeDay: string | null;
+  /** Far readings in a row that were not yet trusted (one GPS jump never ends the day). */
+  readonly farStreak?: number;
 }
 
-export const EMPTY_PARK_DAY: ParkDayRecord = Object.freeze({ day: null, parkId: null, coins: 0, lastInPark: null, done: false, homeDay: null });
+export const EMPTY_PARK_DAY: ParkDayRecord = Object.freeze({ day: null, parkId: null, coins: 0, lastInPark: null, done: false, homeDay: null, farStreak: 0 });
 
 export type ParkDayEvent =
   | { readonly kind: 'park_day_started'; readonly parkId: number }
@@ -45,6 +52,14 @@ export interface ParkDayInput {
   readonly today: string;
   /** Coins won since the last step (a win on this map). */
   readonly coinsWon?: number;
+  /** The reading's horizontal accuracy in meters, or null when unknown. */
+  readonly accuracy?: number | null;
+}
+
+/** A far reading counts: good accuracy, or the second far reading in a row. Pure. */
+export function farReadingTrusted(accuracy: number | null | undefined, farStreak: number | undefined): boolean {
+  const good = typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy > 0 && accuracy <= TRUSTED_ACCURACY_METERS;
+  return good || (farStreak ?? 0) >= 1;
 }
 
 /** One step: what to record and the record to keep. Pure. */
@@ -63,10 +78,16 @@ export function parkDayStep(prev: ParkDayRecord, input: ParkDayInput): { next: P
   if (input.mode === 'park' && input.parkId != null && input.location) {
     // Park mode can linger after the player left (the place check keeps the last park): a reading 2 km
     // from today's last real in-park reading is a trusted "left the park", never a new in-park reading.
-    const left = next.day === input.today && next.parkId === input.parkId && !!next.lastInPark &&
+    const far = next.day === input.today && next.parkId === input.parkId && !!next.lastInPark &&
       guideMeters(input.location, next.lastInPark) >= LEFT_PARK_METERS;
-    if (left) {
+    if (far) {
       next = { ...next, coins: next.coins + won };
+      // One far reading with poor accuracy may be a GPS jump: wait for a second one (it is never in-park either).
+      if (!farReadingTrusted(input.accuracy, prev.farStreak)) {
+        next = { ...next, farStreak: (prev.farStreak ?? 0) + 1 };
+        return { next, events };
+      }
+      next = { ...next, farStreak: 0 };
       if (!next.done && next.coins > 0) {
         events.push({ kind: 'park_day_done', parkId: input.parkId, coins: next.coins, day: input.today });
         next = { ...next, done: true };
@@ -78,7 +99,7 @@ export function parkDayStep(prev: ParkDayRecord, input: ParkDayInput): { next: P
       if (next.day !== input.today) events.push({ kind: 'park_day_started', parkId: input.parkId });
       next = { ...next, day: input.today, parkId: input.parkId, coins: next.day === input.today ? next.coins : 0, done: false };
     }
-    next = { ...next, lastInPark: input.location, coins: next.coins + won };
+    next = { ...next, lastInPark: input.location, coins: next.coins + won, farStreak: 0 };
     return { next, events };
   }
 
@@ -100,9 +121,10 @@ export function parkDayStep(prev: ParkDayRecord, input: ParkDayInput): { next: P
   // Outside any park, not yet confirmed home: a trusted reading 2 km from the last in-park reading.
   if (input.location && next.lastInPark && next.day && next.parkId != null && !next.done && next.coins > 0 &&
     guideMeters(input.location, next.lastInPark) >= LEFT_PARK_METERS) {
+    if (!farReadingTrusted(input.accuracy, prev.farStreak)) return { next: { ...next, farStreak: (prev.farStreak ?? 0) + 1 }, events };
     events.push({ kind: 'park_day_done', parkId: next.parkId, coins: next.coins, day: next.day });
-    next = { ...next, done: true };
-  }
+    next = { ...next, done: true, farStreak: 0 };
+  } else if ((next.farStreak ?? 0) > 0) next = { ...next, farStreak: 0 };
   return { next, events };
 }
 

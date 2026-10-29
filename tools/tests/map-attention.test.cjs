@@ -463,3 +463,16 @@ test('Shark Drop: OK lets the dialog go in a quick fade, so a PLAY! press right 
   assert.match(drop, /export const DROP_EXIT_MS = 140;/);
   assert.match(drop, /animationOut="fadeOut" animationOutTiming=\{DROP_EXIT_MS\} backdropTransitionOutTiming=\{DROP_EXIT_MS\}/);
 });
+
+test('reward broadcast banners stop: coins and Tickets fly to their pill with +N; server news still shows (BLUEPRINT row 329)', () => {
+  const fs = require('node:fs'); const path = require('node:path');
+  const filter = loadTs('src/api/broadcastFilter.ts');
+  const setup = fs.readFileSync(path.join(__dirname, '../../src/hooks/useAxiosSetup.ts'), 'utf8');
+  assert.match(setup, /export const REWARD_BANNERS_FOLDED = true;/);
+  assert.match(setup, /visibleBroadcasts<string>\(response\.data\.broadcasts, REWARD_BANNERS_FOLDED \|\| Boolean\(cfg\?\.\[QUIET_COIN_BROADCAST\]\)\)/);
+  const server = ['You earned 25 coins!', 'You earned 1 Ticket!', 'A new limited coin is here!', 'Maintenance tonight at 2 AM.'];
+  assert.deepEqual([...filter.visibleBroadcasts(server, true)], ['A new limited coin is here!', 'Maintenance tonight at 2 AM.']);
+  // The header pill is what shows the gain: it celebrates any plain gain with +N.
+  const pill = fs.readFileSync(path.join(__dirname, '../../src/components/Topbar/Currency.tsx'), 'utf8');
+  assert.match(pill, /setPlusText\(`\+\$\{countText\(gain\)\}`\)/);
+});

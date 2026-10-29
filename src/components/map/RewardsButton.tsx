@@ -64,6 +64,22 @@ export function rewardsButtonModel(input: {
   return { count, flame, trail: input.trailOpen ? p : null };
 }
 
+/**
+ * The rungs the Rewards button wears NEW for: the flame (daily, rung 4) or the Trail ring (trail, rung 6),
+ * each only while its part of the button shows. A tap marks exactly these seen. Pure.
+ */
+export function rewardsNewRungs(input: {
+  readonly dailyOpen: boolean; readonly dailyNew: boolean; readonly trailOpen: boolean; readonly trailNew: boolean;
+}): ('daily' | 'trail')[] {
+  const rungs: ('daily' | 'trail')[] = [];
+  if (input.dailyOpen && input.dailyNew) rungs.push('daily');
+  if (input.trailOpen && input.trailNew) rungs.push('trail');
+  return rungs;
+}
+
+/** Tests only: the NEW tag component the button draws (so a render test can find it). */
+export const __NewTagForTest = NewTag;
+
 export function rewardsLabel(model: RewardsButtonModel): string {
   const parts = ['Rewards'];
   parts.push(model.count > 0 ? `${model.count} to claim` : 'nothing to claim right now');

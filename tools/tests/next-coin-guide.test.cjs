@@ -468,8 +468,8 @@ test('park day events: started on the first in-park reading of a day, done on le
   step = PD.parkDayStep(r, { mode: 'unknown', parkId: null, location: { latitude: 33.8166, longitude: -117.9190 }, today: '2026-10-28' });
   assert.deepEqual(plain(step.events), []);
   r = step.next;
-  step = PD.parkDayStep(r, { mode: 'unknown', parkId: null, location: { latitude: 33.8350, longitude: -117.9190 }, today: '2026-10-28' });
-  assert.deepEqual(plain(step.events), [{ kind: 'park_day_done', parkId: 8, coins: 1, day: '2026-10-28' }], '2 km out with a coin');
+  step = PD.parkDayStep(r, { mode: 'unknown', parkId: null, location: { latitude: 33.8350, longitude: -117.9190 }, today: '2026-10-28', accuracy: 20 });
+  assert.deepEqual(plain(step.events), [{ kind: 'park_day_done', parkId: 8, coins: 1, day: '2026-10-28' }], '2 km out with a coin (a 20 m fix is trusted)');
   r = step.next;
   step = PD.parkDayStep(r, { mode: 'home', parkId: null, location: null, today: '2026-10-28' });
   assert.deepEqual(plain(step.events), [{ kind: 'home_day' }], 'the day already counted as done; home day once');
@@ -834,6 +834,14 @@ test('Adventure ticket tab: the card wears it whenever the Adventure is active h
   assert.match(src, /const adventureTab = !!input\.adventure && input\.adventure\.park_id === parkId && input\.adventure\.phase !== 'complete'\s*&& !adventureDots/);
   const card = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/guide/NextCoinCard.tsx'), 'utf8');
   assert.match(card, /testID="adventure-tab"/);
+  // Round 3 fix 9: a gold button (never a white label like the park chip beside it), 8 pt or bigger dots, 46 pt to tap.
+  assert.match(card, /tab: \{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND\.gold,/);
+  assert.match(card, /parkChip: \{ backgroundColor: BRAND\.white/);
+  const dot = Number(card.match(/export const TAB_DOT = (\d+);/)[1]);
+  assert.ok(dot >= 8, `stamp dots ${dot} pt`);
+  const height = Number(card.match(/paddingHorizontal: 6, height: (\d+), marginTop: -8/)[1]);
+  const slop = card.match(/hitSlop=\{\{ top: (\d+), bottom: (\d+), left: 6, right: 6 \}\}/);
+  assert.ok(height + Number(slop[1]) + Number(slop[2]) >= 46, 'a 46 pt tap target');
   const screen = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
   assert.match(screen, /adventureTab=\{nextCoin\.adventureTab && adventure && tripGoalData \? adventureTabProps : null\}/);
   assert.match(screen, /case 'unfold': setAdventureCelebrateRequest/);
@@ -854,6 +862,29 @@ test('Adventure sheet Ticket line: no LinePlay or wait Ticket promise while queu
   assert.equal(A.adventureTicketsLine(0, false, false), null);
   const sheet = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/AdventureTicketCard.tsx'), 'utf8');
   assert.doesNotMatch(sheet, /LinePlay and treats at home can earn more/);
+});
+
+test('Adventure sheet and guide card give one answer when earned Tickets wait: claim first (round 3 fix 4)', () => {
+  const A = loadTs('src/screens/ExploreScreen/adventureTicketPresentation.ts');
+  const C = loadTs('src/services/guide/guideCopy.ts');
+  // StateA: 28 earned stamp Tickets wait, 1 Ticket needed, free try off (production switches).
+  const sheet = A.adventureTicketsLine(1, false, false, 28);
+  assert.equal(sheet, '28 free Tickets are waiting. Claim, then play.');
+  const wallet = { tickets: 0, claimable: [{ kind: 'stamp', id: 1, tickets: 28 }], freeTryReady: true, extraTries: 0, queueTicketsOn: false };
+  const step = F.nextFreeTicket(wallet);
+  assert.equal(step.kind, 'claim', 'the card claims before the free try');
+  const card = C.guideCardCopy('claim', { taskId: 5, name: 'Soarin\'', parkId: 8, reason: 'adventure', source: 'guide' },
+    { freeStep: step, tickets: 0, queueTicketsOn: false });
+  assert.equal(card.title, '28 free Tickets are waiting');
+  assert.ok(sheet.startsWith(card.title), 'the sheet leads with the same words as the card');
+  // Claim beats the free try on the sheet too, and one Ticket reads as one.
+  assert.equal(A.adventureTicketsLine(2, true, false, 1), '1 free Ticket is waiting. Claim, then play.');
+  assert.equal(A.adventureTicketsLine(2, true, false, 0), 'Today\'s free try is ready for this coin.');
+  assert.equal(A.adventureTicketsLine(2, false, false, Number.NaN), '2 more Tickets needed. 3 treats at home = 1 Ticket. Tomorrow brings a new free try.');
+  // The sheet's CLAIM is the map's own claim (one claim path for both surfaces).
+  const fs = require('node:fs'); const path = require('node:path');
+  const screen = fs.readFileSync(path.join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(screen, /claimableTickets=\{claimableTicketCount\} onClaim=\{claimTickets\}/);
 });
 
 test('SE: the edge arrow never sits on top of a target island just past the inset edge (round 2 fix 6)', () => {
@@ -877,7 +908,7 @@ test('park day done: a park-mode reading 10 km away (the place check kept the pa
   assert.deepEqual(plain(step.events.map(e => e.kind)), ['park_day_started']);
   step = P.parkDayStep(step.next, { mode: 'park', parkId: 8, location: gate, today: '2026-10-29', coinsWon: 1 });
   const before = step.next.lastInPark;
-  step = P.parkDayStep(step.next, { mode: 'park', parkId: 8, location: away, today: '2026-10-29' });
+  step = P.parkDayStep(step.next, { mode: 'park', parkId: 8, location: away, today: '2026-10-29', accuracy: 10 });
   assert.deepEqual(plain(step.events.map(e => e.kind)), ['park_day_done']);
   assert.equal(step.events[0].coins, 1);
   assert.deepEqual(plain(step.next.lastInPark), plain(before), 'the far reading is not an in-park reading');
@@ -886,8 +917,47 @@ test('park day done: a park-mode reading 10 km away (the place check kept the pa
   assert.equal(again.events.length, 0);
   // A far reading with no coin today ends nothing.
   let none = P.parkDayStep(P.EMPTY_PARK_DAY, { mode: 'park', parkId: 8, location: gate, today: '2026-10-29' });
-  none = P.parkDayStep(none.next, { mode: 'park', parkId: 8, location: away, today: '2026-10-29' });
+  none = P.parkDayStep(none.next, { mode: 'park', parkId: 8, location: away, today: '2026-10-29', accuracy: 5 });
   assert.equal(none.events.length, 0);
+});
+
+test('park day done needs a trusted far reading: good accuracy, or two far readings in a row (round 3 fix 7)', () => {
+  const P = loadTs('src/services/guide/parkDay.ts');
+  const gate = { latitude: 33.8121, longitude: -117.9190 };
+  const away = { latitude: 33.9020, longitude: -117.9190 };   // about 10 km north
+  const day = '2026-10-29';
+  const atPark = () => {
+    let s = P.parkDayStep(P.EMPTY_PARK_DAY, { mode: 'park', parkId: 8, location: gate, today: day, accuracy: 8 });
+    return P.parkDayStep(s.next, { mode: 'park', parkId: 8, location: gate, today: day, coinsWon: 1, accuracy: 8 }).next;
+  };
+  // One GPS jump with poor accuracy, then back at the gate: the day goes on (rung 4 stays shut mid-visit).
+  let s = P.parkDayStep(atPark(), { mode: 'park', parkId: 8, location: away, today: day, accuracy: 1500 });
+  assert.equal(s.events.length, 0, 'a 1500 m reading 10 km away is not trusted on its own');
+  assert.equal(s.next.farStreak, 1);
+  s = P.parkDayStep(s.next, { mode: 'park', parkId: 8, location: gate, today: day, accuracy: 8 });
+  assert.equal(s.next.farStreak, 0, 'back in the park: the streak resets');
+  s = P.parkDayStep(s.next, { mode: 'park', parkId: 8, location: away, today: day, accuracy: 1500 });
+  assert.equal(s.events.length, 0, 'a lone jump again: still not done');
+  // A second far reading in a row is trusted, whatever its accuracy.
+  s = P.parkDayStep(s.next, { mode: 'park', parkId: 8, location: { ...away, latitude: away.latitude + 0.001 }, today: day, accuracy: null });
+  assert.deepEqual(plain(s.events.map(e => e.kind)), ['park_day_done']);
+  // Unknown accuracy behaves like poor accuracy.
+  s = P.parkDayStep(atPark(), { mode: 'park', parkId: 8, location: away, today: day });
+  assert.equal(s.events.length, 0);
+  // Exactly 100 m is trusted, 101 m is not.
+  assert.equal(P.farReadingTrusted(100, 0), true);
+  assert.equal(P.farReadingTrusted(101, 0), false);
+  assert.equal(P.farReadingTrusted(Number.NaN, 0), false);
+  assert.equal(P.farReadingTrusted(null, 1), true);
+  // Outside any park (unknown mode): the same trust rule.
+  s = P.parkDayStep(atPark(), { mode: 'unknown', parkId: null, location: away, today: day, accuracy: 900 });
+  assert.equal(s.events.length, 0);
+  s = P.parkDayStep(s.next, { mode: 'unknown', parkId: null, location: away, today: day, accuracy: 900 });
+  assert.deepEqual(plain(s.events.map(e => e.kind)), ['park_day_done']);
+  // The map passes the reading's accuracy.
+  const screen = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8')
+    + (() => { const f = require('node:path').join(__dirname, '../../src/components/guide/useMapGuide.ts'); return require('node:fs').existsSync(f) ? require('node:fs').readFileSync(f, 'utf8') : ''; })();
+  assert.match(screen, /accuracy: latestLocationSampleRef\?\.current\?\.accuracyMeters \?\? null/);
 });
 
 test('guide.version moves only for a pick, a skipped step, a cleared plan or a reset; resolve never bumps it (no self re-resolve)', () => {
@@ -903,18 +973,54 @@ test('guide.version moves only for a pick, a skipped step, a cleared plan or a r
   G.guide.reset();
 });
 
-test('NEW tags: the Rewards button (flame, Trail ring) and the HUD pills (raid and Rush, events) wear NEW from their rung, cleared on tap', () => {
-  const fs = require('node:fs'), path = require('node:path');
-  const screen = fs.readFileSync(path.join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
-  assert.match(screen, /const rewardsNew = \(dailyOpen && dailyRung\.isNew\) \|\| \(trailOpen && trailRung\.isNew\)/);
-  assert.match(screen, /isNew=\{rewardsNew\}/);
-  assert.match(screen, /withNewTag\(eventsRung,/);
-  assert.match(screen, /raidOnMap \|\| rushes\.length > 0 \? coinLevelsRung : null/);
-  assert.match(screen, /onTouchStart=\{rung\.markSeen\}/);
-  assert.doesNotMatch(screen, /teamRung/, 'the unused team rung read is gone');
-  const button = fs.readFileSync(path.join(__dirname, '../../src/components/map/RewardsButton.tsx'), 'utf8');
-  assert.match(button, /\{isNew && <NewTag/);
+test('NEW tags behave: one rung per app open, a tap clears it, the Rewards button draws NEW only when isNew (round 3 fix 5)', () => {
+  const L = loadTs('src/services/reveal/ladderRules.ts');
+  // The flame (daily, rung 4) opened before the Trail ring (trail, rung 6).
+  const opened = { daily: 1000, trail: 2000 };
+  assert.equal(L.pickNewTag(opened, {}, null, 'open-1'), 'daily', 'the earliest unseen rung first');
+  assert.equal(L.pickNewTag(opened, {}, { rung: 'daily', appOpenId: 'open-1' }, 'open-1'), 'daily', 'stable within the open');
+  assert.equal(L.pickNewTag(opened, { daily: true }, { rung: 'daily', appOpenId: 'open-1' }, 'open-1'), null,
+    'tapped (seen): no second NEW in the same open, though the Trail ring is still unseen');
+  assert.equal(L.pickNewTag(opened, { daily: true }, { rung: 'daily', appOpenId: 'open-1' }, 'open-2'), 'trail', 'the next open');
+  assert.equal(L.pickNewTag(opened, { daily: true, trail: true }, { rung: 'trail', appOpenId: 'open-2' }, 'open-3'), null);
+  // Which rungs the Rewards button wears NEW for (and so marks seen on a tap): only parts that show.
+  const R = loadTs('src/components/map/RewardsButton.tsx', rewardsStubs());
+  assert.deepEqual(plain(R.rewardsNewRungs({ dailyOpen: true, dailyNew: true, trailOpen: true, trailNew: false })), ['daily']);
+  assert.deepEqual(plain(R.rewardsNewRungs({ dailyOpen: false, dailyNew: true, trailOpen: true, trailNew: false })), [],
+    'the flame does not show (switch off): no NEW on the button');
+  assert.deepEqual(plain(R.rewardsNewRungs({ dailyOpen: true, dailyNew: false, trailOpen: true, trailNew: true })), ['trail']);
+  // Rendering: NEW only when isNew, and the label says it first.
+  const model = { count: 1, flame: 4, trail: null };
+  const withTag = R.default({ model, onPress() {}, isNew: true });
+  const without = R.default({ model, onPress() {}, isNew: false });
+  assert.equal(findAll(withTag, el => el.type === R.__NewTagForTest).length, 1);
+  assert.equal(findAll(without, el => el.type === R.__NewTagForTest).length, 0);
+  assert.match(withTag.props.accessibilityLabel, /^New\. Rewards, 1 to claim, flame 4/);
+  assert.doesNotMatch(without.props.accessibilityLabel, /New/);
+  // The map marks exactly the NEW the button wore, then opens Rewards.
+  const screen = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8')
+    + (() => { const f = require('node:path').join(__dirname, '../../src/components/guide/useMapGuide.ts'); return require('node:fs').existsSync(f) ? require('node:fs').readFileSync(f, 'utf8') : ''; })();
+  assert.match(screen, /rewardsNewRungs\(\{ dailyOpen, dailyNew: dailyRung\.isNew, trailOpen, trailNew: trailRung\.isNew \}\)/);
 });
+
+function rewardsStubs() {
+  const el = (type, props, key) => ({ type, props: props ?? {}, key });
+  return {
+    'react/jsx-runtime': { jsx: el, jsxs: el, Fragment: 'Fragment' },
+    'expo-image': { Image: 'Image' },
+    'react-native': { Pressable: 'Pressable', Text: 'Text', View: 'View', StyleSheet: { create: x => x } },
+    'react-native-svg': { __esModule: true, default: 'Svg', Circle: 'Circle' },
+    '../../gamekit/Haptics': { haptic() {} },
+    '../../ui': { BRAND: {}, GameIcon: 'GameIcon', SHADOW: { card: {} } },
+  };
+}
+function findAll(node, match, out = []) {
+  if (!node || typeof node !== 'object') return out;
+  if (Array.isArray(node)) { node.forEach(child => findAll(child, match, out)); return out; }
+  if (match(node)) out.push(node);
+  findAll(node.props?.children, match, out);
+  return out;
+}
 
 test('round 2 small fixes: 46 pt card buttons, a bare your-team chip at 0 rides, and the in-line kicker never repeats the title', () => {
   const fs = require('node:fs'), path = require('node:path');
@@ -973,11 +1079,18 @@ test('a coin the guide chose before the trip goal answered gives way once the Ad
   // The trip goal lands with the Adventure on its souvenir step: the held guess would hold...
   const celebrate = { taskId: 2, parkId: 8, phase: 'celebrate' };
   assert.equal(G.guide.resolve(input({ coins: won, live: { 1: 'open' }, adventure: celebrate })).taskId, 1);
-  // ...so the map releases the guess made on partial data, and rule 1 leads.
+  // ...so the map releases the guess made on partial data, and rule 1 leads at once (the release
+  // picks again with the latest input; nobody ever reads a null target in between).
+  const seen = [];
+  const off = G.guide.subscribe(() => seen.push(G.guide.current()));
   G.guide.releaseGuidePick();
-  const full = G.guide.resolve(input({ coins: won, live: { 1: 'open' }, adventure: celebrate }));
+  off();
+  assert.equal(seen.length, 1, 'one notice: the guess straight to the Line story');
+  assert.notEqual(seen[0], null);
+  const full = G.guide.current();
   assert.equal(full.taskId, 2);
   assert.equal(full.reason, 'line_story');
+  assert.equal(G.guide.resolve(input({ coins: won, live: { 1: 'open' }, adventure: celebrate })).taskId, 2, 'the next resolve agrees');
   // A player's pick is never released.
   G.guide.setTarget(3, 'shelf');
   G.guide.resolve(input({ coins: won, live: { 1: 'open', 3: 'open' }, adventure: celebrate }));
@@ -986,4 +1099,45 @@ test('a coin the guide chose before the trip goal answered gives way once the Ad
   const hook = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/guide/useNextCoinGuide.ts'), 'utf8');
   assert.match(hook, /const complete = input\.tripGoalLoaded !== false && catalog\?\.parkId === parkId;/);
   G.guide.reset();
+});
+
+test('releaseGuidePick never leaves the store on null while a coin exists (no resting frame on a slow first open)', () => {
+  G.guide.reset();
+  const coins = RIDES;
+  // The map passes its own latest input; with or without it, current() is never null across the release.
+  for (const pass of [true, false]) {
+    G.guide.reset();
+    const guess = G.guide.resolve(input({ coins, live: { 1: 'open' } }));
+    assert.equal(guess.taskId, 1);
+    const latest = input({ coins, live: { 1: 'open', 3: 'open' } });
+    if (!pass) G.guide.resolve(latest);
+    const readings = [];
+    const off = G.guide.subscribe(() => readings.push(G.guide.current()));
+    G.guide.releaseGuidePick(pass ? latest : undefined);
+    off();
+    assert.ok(G.guide.current(), `pass=${pass}: a target right after the release`);
+    assert.ok(readings.every(t => t !== null), `pass=${pass}: no null notice`);
+    assert.equal(G.guide.current().taskId, 3, 'the full data picks the nearer open ride');
+  }
+  // With nothing to resolve from yet, the release still clears the guess and asks for a resolve.
+  G.guide.reset();
+  const v = G.guide.version();
+  G.guide.releaseGuidePick();
+  assert.equal(G.guide.version(), v, 'nothing held: no change');
+  G.guide.reset();
+});
+
+test('souvenir step: no dotted path and no edge arrow back to the ride; the card and island stay (round 3 fix 2)', () => {
+  const ride = north(200);
+  assert.equal(G.guidePathPoint(ride, 'celebrate'), null, 'the souvenir unfolds anywhere: no path point');
+  assert.deepEqual(plain(G.guidePathPoint(ride, 'play')), plain(ride), 'the line story and every other step keep the path');
+  assert.deepEqual(plain(G.guidePathPoint(ride, null)), plain(ride));
+  assert.equal(G.guidePathPoint(null, 'play'), null);
+  // The map's path and arrow come from pathPoint (Map draws both from guideTarget), the island from targetPoint.
+  const fs = require('node:fs'); const path = require('node:path');
+  const hook = fs.readFileSync(path.join(__dirname, '../../src/components/guide/useNextCoinGuide.ts'), 'utf8');
+  assert.match(hook, /const pathPoint = guidePathPoint\(targetPoint, adventureStep\);/);
+  const read = rel => { const f = path.join(__dirname, '../..', rel); return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : ''; };
+  const screen = read('src/screens/ExploreScreen.tsx') + read('src/components/guide/useMapGuide.ts');
+  assert.match(screen, /const guideMapTarget = useMemo\(\(\) => pathPoint && nextCoin\.target/);
 });
