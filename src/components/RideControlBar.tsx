@@ -116,18 +116,23 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
   }, [headline, reduced, titleIn]);
   const titleStyle = useAnimatedStyle(() => ({ opacity: titleIn.value }));
 
+  // On the map's status row (compact) it is one "your team" chip once the player has a team (core loop
+  // 4.2): the three-team scoreboard waits in the sheet a tap away.
+  const chipTeams = compact && yours ? [yours] : TEAM_ORDER;
   return (
     <>
       <Pressable accessibilityRole="button"
-        accessibilityLabel={known
-          ? `${headline}. ${TEAM_ORDER.map(team => `${teamShortName(team, names)} ${held[team]}`).join(', ')} rides. Show rides to take.`
-          : `${headline}. Show rides to take.`}
+        accessibilityLabel={compact && yours
+          ? `Your team, ${teamName(yours, names)}${known ? `: ${held[yours]} ${held[yours] === 1 ? 'ride' : 'rides'}` : ''}. Show rides to take.`
+          : known
+            ? `${headline}. ${TEAM_ORDER.map(team => `${teamShortName(team, names)} ${held[team]}`).join(', ')} rides. Show rides to take.`
+            : `${headline}. Show rides to take.`}
         onPress={() => setOpen(true)} style={[styles.barWrap, compact && styles.barWrapCompact, inline && styles.inline]}>
         <LinearGradient colors={[BRAND.blueBright, BRAND.blue, BRAND.blueLip]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
           style={[styles.bar, compact && styles.barCompact]}>
           {!compact && <Animated.Text style={[styles.kicker, titleStyle]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{headline}</Animated.Text>}
           <View style={styles.chips}>
-            {TEAM_ORDER.map(team => <TeamChip key={team} team={team} count={held[team]} yours={yours === team}
+            {chipTeams.map(team => <TeamChip key={team} team={team} count={held[team]} yours={yours === team}
               leading={leader === team} known={known} />)}
           </View>
         </LinearGradient>

@@ -1134,7 +1134,12 @@ export function ExploreScreenBody() {
   const guideFlags = useGuideFlags(player?.id ?? null);
   // A family phone's second shark never inherits the first one's target, plan or declined Line story.
   // Declared before the guide hook, so this effect runs before its first resolve for the new player.
-  useEffect(() => { if (player?.id != null) guide.forPlayer(player.id); }, [player?.id]);
+  // Signing out (a player, then none) forgets them too.
+  const guidePlayerSeen = useRef<number | null>(null);
+  useEffect(() => {
+    if (player?.id != null) { guidePlayerSeen.current = player.id; guide.forPlayer(player.id); }
+    else if (guidePlayerSeen.current != null) { guidePlayerSeen.current = null; guide.forPlayer(null); }
+  }, [player?.id]);
   const teamRung = useRung('team');
   const coinLevelsRung = useRung('coin_levels');
   const dailyRung = useRung('daily');

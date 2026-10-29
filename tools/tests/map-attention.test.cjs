@@ -444,3 +444,16 @@ test('at home Finn\'s first-time intro goes first: the daily chest waits while t
   assert.match(explore, /const chestReady = !firstVisitHold && !\(homeIntroOwed && !park\) && attentionFor\('daily_chest'\)/);
   assert.match(explore, /onIntroOwedChange=\{setHomeIntroOwed\}/);
 });
+
+test('the map\'s team chip is one "your team" chip once the player has a team; the three-team scoreboard waits in the sheet', () => {
+  const bar = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/RideControlBar.tsx'), 'utf8');
+  assert.match(bar, /const chipTeams = compact && yours \? \[yours\] : TEAM_ORDER;/);
+  assert.match(bar, /\{chipTeams\.map\(team => <TeamChip/);
+  assert.match(bar, /`Your team, \$\{teamName\(yours, names\)\}/);
+});
+
+test('signing out or a second player on the phone resets the guide (one shark never inherits another\'s target)', () => {
+  const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /guide\.forPlayer\(player\.id\)/);
+  assert.match(explore, /guide\.forPlayer\(null\)/);
+});
