@@ -475,4 +475,5 @@ test('round 4: the unfound sight card says Sight Coin (the tab word) and its pri
   assert.match(card, /ribbon: kind === 'coin' \? 'Sight Coin' : 'Spot Coin'/);
   assert.match(card, /\+\$\{task\.coins\} Shark Coins/);
   assert.doesNotMatch(card, /\+\$\{task\.coins\} coins/);
+  assert.match(card, /`Costs \$\{task\.ticket_cost\} Ticket\$\{/, 'Tickets are a named thing: capital T');
 });

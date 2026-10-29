@@ -210,7 +210,7 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                     {task.ticket_cost === 0
                       ? 'Free challenge. '
                       : typeof task.ticket_cost === 'number'
-                      ? `Costs ${task.ticket_cost} ticket${task.ticket_cost === 1 ? '' : 's'} to play. `
+                      ? `Costs ${task.ticket_cost} Ticket${task.ticket_cost === 1 ? '' : 's'} to play. `
                       : 'Each try costs tickets. '}
                     {task.ticket_cost !== 0 && `Out of Tickets? Today's free try works ${kind === 'ride' ? 'at the ride' : 'at this spot'} too.`}
                   </Text>
