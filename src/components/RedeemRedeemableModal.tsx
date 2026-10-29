@@ -739,10 +739,12 @@ export default function RedeemRedeemableModal({
     const target = guide.current();
     if (button.kind === 'next' && target) guide.setTarget(target.taskId, 'win_card');
     const wonTaskId = attemptRef.current?.task_id ?? taskId ?? 0;
+    // The first coin ever still goes through the team step first (blueprint 4.3 rule 3), then on to the line story.
     afterRewardsHidden.current = button.kind === 'line_story'
       ? () => {
-        void resolveQueueStoryContext(park.id, 0, taskName, wonTaskId)
-          .then(ride => RootNavigation.navigate('LinePlay', { ride }));
+        void resolveQueueStoryContext(park.id, 0, taskName, wonTaskId).then(ride => withTeamStep(
+          { name: 'LinePlay', params: { ride } },
+          () => RootNavigation.navigate('LinePlay', { ride })));
       }
       : () => { void withTeamStep(null, () => undefined); };
     onPress();

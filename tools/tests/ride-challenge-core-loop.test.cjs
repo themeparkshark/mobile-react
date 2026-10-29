@@ -453,7 +453,7 @@ test('exactly one primary and one secondary: NEXT COIN (or the Adventure\'s line
   assert.equal((card.match(/<TouchableOpacity /g) ?? []).length, 1, 'one quiet button');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /if \(button\.kind === 'next' && target\) guide\.setTarget\(target\.taskId, 'win_card'\);/, 'the guide is the one pointer');
-  assert.match(modal, /resolveQueueStoryContext\(park\.id, 0, taskName, wonTaskId\)\n\s+\.then\(ride => RootNavigation\.navigate\('LinePlay', \{ ride \}\)\)/);
+  assert.match(modal, /resolveQueueStoryContext\(park\.id, 0, taskName, wonTaskId\)\.then\(ride => withTeamStep\(/);
 });
 
 test('the first coin has one fixed order: the win card, the team step (once ever), then the map', async () => {
@@ -701,4 +701,6 @@ test('today\'s Adventure coin won: the big button plays its line story, even bef
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /setLineStoryNext\(adventureLineStoryNext\(goal\.adventure_ticket, attempt\.task_id, park\.id\)\);/);
   assert.match(modal, /adventureLineStory=\{lineStoryNext\}/);
+  // A first coin that was also today's Adventure coin: the team step first, then the line story.
+  assert.match(modal, /resolveQueueStoryContext\(park\.id, 0, taskName, wonTaskId\)\.then\(ride => withTeamStep\(\n\s+\{ name: 'LinePlay', params: \{ ride \} \},\n\s+\(\) => RootNavigation\.navigate\('LinePlay', \{ ride \}\)\)\);/);
 });
