@@ -47,7 +47,7 @@ import Daily3Sheet, { type GoalTap } from './Daily3Sheet';
 import RewardReveal from './RewardReveal';
 import RewardsSheet from './RewardsSheet';
 import CalmModal, { calmFace } from './CalmModal';
-import DailyGiftModal, { CHEST_ART, chestArtSize } from '../DailyGiftModal';
+import DailyGiftModal from '../DailyGiftModal';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
@@ -63,6 +63,8 @@ const MIN_REFRESH_MS = 15000;
 const NATIVE_GONE_FALLBACK_MS = 700;
 /** A Ticket or Energy prize flying from the chest to the header (CurrencyFly: 500 ms plus a short stagger). */
 const CHEST_FLY_LAND_MS = 700;
+/** Longest the Rewards card waits for the chest card's art before swapping anyway. */
+const CHEST_ART_WAIT_MS = 350;
 const COACH_KEY = 'tps.retention.coach.v1';
 
 type View_ =
@@ -155,6 +157,9 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const [rewardsBusy, setRewardsBusy] = useState<RewardsRowKey | null>(null);
   const [rewardsNote, setRewardsNote] = useState<string | null>(null);
   const [passToday, setPassToday] = useState<readonly SharkPassEvent[] | null>(null);
+  /** The chest card's art is drawn (until then the sheet keeps showing the card it came from). */
+  const [chestArt, setChestArt] = useState(false);
+  const openChestCard = (back: 'rewards' | 'sheet') => { setChestArt(false); setView({ k: 'chest', back }); };
   /** A reveal opened from the Rewards sheet goes back to it when done. */
   const backToRewards = useRef(false);
   /** Runs once the overlay is really gone (UIKit dismissed it), so the next native sheet can present. */
@@ -435,7 +440,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const onGoal = (tap: GoalTap) => {
     // The chest goal's GO: today's chest opens right here in this sheet, and BACK comes back to Daily 3.
     if (tap === 'chest') {
-      if (dailyGift && dailyGift.redeemed_at === null) setView({ k: 'chest', back: 'sheet' });
+      if (dailyGift && dailyGift.redeemed_at === null) openChestCard('sheet');
       else closeThen(() => { askForDailyChest(); o.onOpenChest(); });
       return;
     }
@@ -577,7 +582,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       // The chest card is drawn inside this same open sheet (as the level chest's reveal is), so no native dismiss
       // and present sits between the two cards: never a bare map. Its BACK and AWESOME come back here.
       case 'daily_chest':
-        if (dailyGift && dailyGift.redeemed_at === null) setView({ k: 'chest', back: 'rewards' });
+        if (dailyGift && dailyGift.redeemed_at === null) openChestCard('rewards');
         return;
       case 'daily3':
         if (daily?.claimable) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
@@ -661,6 +666,13 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     return () => clearTimeout(timer);
   }, [presentNow, view?.k]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The chest art never holds the swap for long (an image that never reports it is drawn).
+  useEffect(() => {
+    if (view?.k !== 'chest' || chestArt) return undefined;
+    const t = setTimeout(() => { if (mounted.current) setChestArt(true); }, CHEST_ART_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [view?.k, chestArt]);
+
   let button: ReactNode | null = null;
   if (wantDaily && daily) {
     const b = buttonState(daily, new Date().getHours());
@@ -694,21 +706,17 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     title = null;
     const back = view.back;
     content = (
-      <DailyGiftModal inline dailyGift={dailyGift} onDone={(_claimed, mapFly) => { chestDone(back, mapFly); }} />
+      <DailyGiftModal inline dailyGift={dailyGift} onDone={(_claimed, mapFly) => { chestDone(back, mapFly); }}
+        onArtReady={() => setChestArt(true)} />
     );
   } else if (view?.k === 'rewards') {
     title = 'Rewards';
     content = (
-      <>
-        <RewardsSheet rows={rows} flame={summary.flame} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
-          reducedMotion={reducedMotion} onRow={onRewardsRow} onClose={close} />
-        {dailyChestWaiting && <ChestWarmUp size={chestArtSize(width)} />}
-      </>
+      <RewardsSheet rows={rows} flame={summary.flame} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
+        reducedMotion={reducedMotion} onRow={onRewardsRow} onClose={close} />
     );
   } else if (view?.k === 'sheet' && daily) {
     content = (
-      <>
-      {dailyChestWaiting && <ChestWarmUp size={chestArtSize(width)} />}
       <Daily3Sheet state={daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
         atPark={atPark} passToday={passOn ? passToday : null} remindersReady={flagOn(flags, 'retention_push')}
         closeLabel={sheetFromRewards ? 'BACK' : 'BACK TO MAP'}
@@ -717,7 +725,6 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         onClaim={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }}
         onClaimWeekly={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'weekly', rewards: null, opening: false }); }}
         onBuyFreeze={() => setView({ k: 'freeze' })} />
-      </>
     );
   } else if (view?.k === 'reveal') {
     const r = view;
@@ -799,8 +806,20 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   // While the sheet shrinks away (view already null), it keeps showing the card that was up, never a default
   // ribbon over nothing (the lone "DAILY 3" ribbon that floated over the map as Rewards closed).
   const face = useRef<{ title: string | null; content: ReactNode; key: string } | null>(null);
-  face.current = calmFace(content && view ? { title, content, key: view.k === 'reveal' ? `reveal-${view.src}` : view.k } : null, face.current);
+  const live = content && view ? { title, content, key: view.k === 'reveal' ? `reveal-${view.src}` : view.k } : null;
+  // Rewards (or Daily 3) to the chest card: the card it came from stays up while the chest card mounts unseen under
+  // it, and they swap once the chest art is drawn (it was about 100 ms of a chest card with no chest). Same key
+  // before and after, so the chest card is never mounted twice.
+  const holdOld = !!live && live.key === 'chest' && !chestArt && !!face.current && face.current.key !== 'chest';
+  const old = holdOld ? face.current : null;
+  if (!holdOld) face.current = calmFace(live, face.current);
   const shownFace = face.current;
+  const faceView = (f: { title: string | null; content: ReactNode }) => (f.title === null ? f.content : (
+    <View style={styles.wrap}>
+      <Ribbon text={f.title} />
+      {f.content}
+    </View>
+  ));
   // A reveal or the chest card has its own buttons (a stray tap outside never drops a half-opened chest).
   const holding = view?.k === 'reveal' || view?.k === 'chest';
   const overlay = (
@@ -815,30 +834,14 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       }}
       onDismiss={nativeGone} backdropColor={BRAND.navy}
       onBackdropPress={holding ? undefined : close} onBackButtonPress={holding ? undefined : close}>
-      {shownFace && (shownFace.title === null ? shownFace.content : (
-        <View style={styles.wrap}>
-          <Ribbon text={shownFace.title} />
-          {shownFace.content}
-        </View>
-      ))}
+      {old && live ? [
+        <View key={`face-${old.key}`}>{faceView(old)}</View>,
+        <View key={`face-${live.key}`} style={styles.pendingFace} pointerEvents="none">{faceView(live)}</View>,
+      ] : shownFace ? [<View key={`face-${shownFace.key}`}>{faceView(shownFace)}</View>] : null}
     </CalmModal>
   );
 
   return { button, overlay, occluding: visible, openRewards, rewards: summary };
-}
-
-/**
- * Today's chest art, drawn invisibly while a sheet that can open the chest is up (Rewards, Daily 3), so it sits
- * decoded in memory and the chest card shows it on its very first frame (it was 3 frames of a card with no chest).
- */
-function ChestWarmUp({ size }: { readonly size: number }) {
-  return (
-    <View pointerEvents="none" style={styles.warmUp} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {CHEST_ART.map((src, i) => (
-        <Image key={i} source={src} style={{ width: size, height: size }} contentFit="contain" cachePolicy="memory-disk" />
-      ))}
-    </View>
-  );
 }
 
 /** Earned stamps whose prizes are still to claim (the Stamp Book's own rule). */
@@ -875,7 +878,8 @@ function XpBar({ pct, reducedMotion }: { readonly pct: number; readonly reducedM
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center' },
-  warmUp: { position: 'absolute', left: 0, top: 0, opacity: 0, flexDirection: 'row' },
+  // A new card mounting under the one still shown, until its art is drawn.
+  pendingFace: { position: 'absolute', left: 0, right: 0, top: 0, opacity: 0 },
   nextBlock: { gap: 6 },
   pips: { flexDirection: 'row', gap: 3 },
   pip: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: BRAND.gold },

@@ -33,12 +33,6 @@ import CalmModal from './retention/CalmModal';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
-/** The chest art, for a sheet that shows the chest next (it decodes it into memory first, so the card never shows without it). */
-export const CHEST_ART = [CHEST_CLOSED, CHEST_OPEN] as const;
-/** The chest's size on a phone this wide (the warm-up decodes it at this size). */
-export function chestArtSize(width: number, simple = false): number {
-  return simple ? Math.min(width * 0.62, 260) : Math.min(width * 0.52, 230);
-}
 const WALLET_GLOW = require('../../assets/images/reveal/soft-spot.webp');
 
 type PrizeKind = 'coins' | 'energy' | 'tickets';
@@ -92,7 +86,7 @@ export function prizeBlockHeight(extraLines: number, hasMilestone: boolean, tick
   return (ticketDay ? 0 : 60) + 38 + extraLines * 24 + (hasMilestone ? 24 : 0);
 }
 export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', claim = update, simple = false,
-  requested, inline = false, onDone }: {
+  requested, inline = false, onDone, onArtReady }: {
   readonly dailyGift: DailyGiftType;
   /**
    * The player tapped to open it (the Rewards button or sheet). At a park the card shows only then:
@@ -119,6 +113,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   readonly inline?: boolean;
   /** Inline only: the card is done. `claimed`: today's chest was opened. `mapFly`: a prize is flying to the header on the map. */
   readonly onDone?: (claimed: boolean, mapFly: boolean) => void;
+  /** Inline only: the chest art is on screen (the sheet holds the card it came from until then). */
+  readonly onArtReady?: () => void;
 }) {
   const occlusion = useRef(onMapOcclusionChange); occlusion.current = onMapOcclusionChange;
   const closed = useRef(onClosed); closed.current = onClosed;
@@ -136,6 +132,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   /** Opened from a Rewards sheet row: BACK (and AWESOME) return to the sheet, as a level chest does. */
   const fromRewards = useRef(inline);
   const done = useRef(onDone); done.current = onDone;
+  const artReady = useRef(onArtReady); artReady.current = onArtReady;
+  const artShown = useRef(false);
+  const showedArt = () => { if (artShown.current) return; artShown.current = true; artReady.current?.(); };
   // The chest registers as a native layer until UIKit really dismissed it, so the Rewards sheet coming back waits
   // for it. 'wait': asked from a Rewards row, it mounts while that sheet is still closing and presents the moment
   // UIKit says the sheet is gone (no bare map in between, never refused over a closing sheet). Opening by itself at
@@ -475,7 +474,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     transform: [{ scale: 0.6 + spark.value * 0.7 }, { rotate: `${spark.value * 25}deg` }],
   }));
 
-  const chestSize = chestArtSize(width, simple);
+  const chestSize = simple ? Math.min(width * 0.62, 260) : Math.min(width * 0.52, 230);
   // A coin day opens onto the pile of coins. Any other day never shows coins it did not pay: the lid pops,
   // light bursts out from under it and the prize itself climbs out and stays above the chest.
   const coinDay = kind === 'coins';
@@ -511,9 +510,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                   <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff3b0" />
                 </Animated.View>
               )}
-              {/* Kept in memory (like GameIcon): a chest shown inside the Rewards sheet draws on its first frame. */}
+              {/* Kept in memory like GameIcon. Inline, the sheet keeps showing the card it came from until this is drawn. */}
               <Image source={phase === 'open' && coinDay ? CHEST_OPEN : CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain"
-                cachePolicy="memory-disk" />
+                cachePolicy="memory-disk" onDisplay={showedArt} onLoadEnd={showedArt} />
               {phase === 'open' && coinDay && (
                 <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 0.8, height: chestSize * 0.42,
                   left: chestSize * 0.12, top: chestSize * 0.1 }, mouthStyle]}>

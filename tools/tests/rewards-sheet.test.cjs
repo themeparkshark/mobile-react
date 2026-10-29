@@ -721,9 +721,10 @@ test('the daily chest opened from Rewards is a card inside the same sheet: no na
   const hook = read('src/components/retention/useRetention.tsx');
   // The Rewards row and the Daily 3 chest goal swap the card in place (as the level chest reveal does).
   const row = hook.slice(hook.indexOf("case 'daily_chest':"), hook.indexOf("case 'daily3':"));
-  assert.match(row, /setView\(\{ k: 'chest', back: 'rewards' \}\)/);
+  assert.match(row, /openChestCard\('rewards'\)/);
   assert.doesNotMatch(row, /closeThen|onOpenChest/, 'no native dismiss, no map chest');
-  assert.match(hook, /setView\(\{ k: 'chest', back: 'sheet' \}\)/);
+  assert.match(hook, /openChestCard\('sheet'\)/);
+  assert.match(hook, /const openChestCard = \(back: 'rewards' \| 'sheet'\) => \{ setChestArt\(false\); setView\(\{ k: 'chest', back \}\); \};/);
   assert.match(hook, /<DailyGiftModal inline dailyGift=\{dailyGift\}/);
   const chest = read('src/components/DailyGiftModal.tsx');
   assert.match(chest, /if \(inline\) return card;/, 'inline: a card, never its own native sheet');
@@ -775,7 +776,12 @@ test('reward sheets: closing keeps the card that was up (never a default "Daily 
   const chest = { title: null, key: 'chest' };
   assert.equal(calmFace(chest, face), chest);
   const hook = read('src/components/retention/useRetention.tsx');
-  assert.match(hook, /face\.current = calmFace\(content && view \?/);
+  assert.match(hook, /if \(!holdOld\) face\.current = calmFace\(live, face\.current\);/);
+  // Rewards to the chest card: the Rewards card stays until the chest art is drawn (never a chest card with no chest),
+  // and the chest card keeps one key before and after, so it mounts once.
+  assert.match(hook, /const holdOld = !!live && live\.key === 'chest' && !chestArt/);
+  assert.match(hook, /<View key=\{`face-\$\{live\.key\}`\} style=\{styles\.pendingFace\} pointerEvents="none">/);
+  assert.match(read('src/components/DailyGiftModal.tsx'), /onDisplay=\{showedArt\} onLoadEnd=\{showedArt\}/);
   assert.match(hook, /<CalmModal visible=\{layer\.present && !!content\}/);
   assert.doesNotMatch(hook, /react-native-modal/);
   assert.doesNotMatch(read('src/components/DailyGiftModal.tsx'), /react-native-modal/);
