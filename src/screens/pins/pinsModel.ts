@@ -210,6 +210,11 @@ export const PINS_COPY = {
   networkTitle: 'Pins didn’t load',
   networkMessage: 'Check your internet and try again.',
   closedSeries: 'All done',
+  // An empty tab never shows a blank page (state A on the prod mirror: no park set live, no pins yet).
+  setsEmptyTitle: 'Park sets are on the way',
+  setsEmptyLine: 'A park set is a board of pins you win at the park.',
+  mineEmptyTitle: 'No pins yet',
+  mineEmptyLine: 'Pins you win show up here.',
 } as const;
 
 export type BadgeKind = 'seal' | 'trade' | 'trophy' | 'none';

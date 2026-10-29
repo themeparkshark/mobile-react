@@ -503,6 +503,9 @@ export default function PinsScreen() {
 
             {visited.has('sets') && (
               <View style={[styles.list, tab !== 'sets' && styles.hidden]}>
+                {home.park_sets.length === 0 && (
+                  <EmptyTab art={PIN_ART.seal} title={PINS_COPY.setsEmptyTitle} line={PINS_COPY.setsEmptyLine} />
+                )}
                 {home.park_sets.map(s => (
                   <ParkSetCard key={s.id} set={s} today={dayFor(s)} busy={busy === `set:${s.id}`} still={still || !visible || tab !== 'sets'} shine={tab === 'sets' ? shine : undefined}
                     onClaim={claim} onPin={onPin} onHunt={setHunt} />
@@ -512,12 +515,13 @@ export default function PinsScreen() {
 
             {visited.has('mine') && (
               <View style={[styles.mine, tab !== 'mine' && styles.hidden]}>
-                <Text maxFontSizeMultiplier={1.3} style={styles.wearHint}>Tap a pin to wear it</Text>
-                <View style={styles.legend}>
+                {owned.length === 0 && <EmptyTab art={PIN_ART.trade} title={PINS_COPY.mineEmptyTitle} line={PINS_COPY.mineEmptyLine} />}
+                {owned.length > 0 && <Text maxFontSizeMultiplier={1.3} style={styles.wearHint}>Tap a pin to wear it</Text>}
+                {owned.length > 0 && <View style={styles.legend}>
                   <View style={styles.legendItem}><Image source={PIN_ART.trade} style={styles.legendIcon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.legendText}>Can trade</Text></View>
                   <View style={styles.legendItem}><Image source={PIN_ART.seal} style={styles.legendIcon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.legendText}>Park only</Text></View>
                   <Text maxFontSizeMultiplier={1.1} style={styles.legendWear}>Wearing {lanyardIds.length}/{home.lanyard_max}</Text>
-                </View>
+                </View>}
                 <View style={styles.grid}>
                   {owned.map((p, i) => {
                     const on = lanyardIds.includes(p.item_id);
@@ -569,6 +573,17 @@ export default function PinsScreen() {
   );
 }
 
+/** An empty tab says what goes there, with a picture (never a blank page). */
+function EmptyTab({ art, title, line }: { readonly art: number; readonly title: string; readonly line: string }) {
+  return (
+    <View style={styles.emptyTab} accessible accessibilityLabel={`${title}. ${line}`}>
+      <Image source={art} style={styles.emptyArt} contentFit="contain" />
+      <Text maxFontSizeMultiplier={1.3} style={styles.emptyTitle}>{title}</Text>
+      <Text maxFontSizeMultiplier={1.3} style={styles.emptyLine}>{line}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   hidden: { display: 'none' },
@@ -610,6 +625,10 @@ const styles = StyleSheet.create({
   tabTextOn: { color: BRAND.navy },
   tabDot: { position: 'absolute', top: -5, right: -3, width: 16, height: 16, borderRadius: 8, backgroundColor: BRAND.red, borderWidth: 2, borderColor: BRAND.white },
   list: { gap: SPACE.lg },
+  emptyTab: { alignItems: 'center', gap: 4, backgroundColor: BRAND.cream, borderRadius: RADIUS.lg, borderWidth: OUTLINE.thick, borderColor: BRAND.navy, padding: SPACE.lg },
+  emptyArt: { width: 56, height: 56 },
+  emptyTitle: { fontFamily: FONT.display, fontSize: 19, color: BRAND.navy, textAlign: 'center', paddingTop: 2 },
+  emptyLine: { fontFamily: FONT.body, fontSize: 15, color: BRAND.navy, textAlign: 'center' },
   mine: { backgroundColor: BRAND.cream, borderRadius: RADIUS.lg, borderWidth: OUTLINE.thick, borderColor: BRAND.navy, padding: SPACE.md, gap: SPACE.md },
   legend: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, flexWrap: 'wrap' },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },

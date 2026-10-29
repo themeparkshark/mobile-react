@@ -737,3 +737,13 @@ test('Shark Pass grown-up notes stay short enough to never clip on a phone (seen
   assert.ok(notes.includes('No random rewards: every Shark Pass reward is shown above.'));
   assert.ok(!notes.some(n => /Every reward is shown above/.test(n)));
 });
+
+test('Pins: an empty Park Sets or My Pins tab says what goes there, with a picture (never a blank page, state A)', () => {
+  const src = read('src/screens/pins/PinsScreen.tsx');
+  assert.match(src, /home\.park_sets\.length === 0 && \(\s*<EmptyTab art=\{PIN_ART\.seal\} title=\{PINS_COPY\.setsEmptyTitle\} line=\{PINS_COPY\.setsEmptyLine\} \/>/);
+  assert.match(src, /owned\.length === 0 && <EmptyTab art=\{PIN_ART\.trade\} title=\{PINS_COPY\.mineEmptyTitle\} line=\{PINS_COPY\.mineEmptyLine\} \/>/);
+  assert.match(src, /owned\.length > 0 && <Text[^>]*>Tap a pin to wear it<\/Text>/);
+  const model = read('src/screens/pins/pinsModel.ts');
+  for (const k of ['setsEmptyTitle', 'setsEmptyLine', 'mineEmptyTitle', 'mineEmptyLine']) assert.match(model, new RegExp(`${k}: '[^']+'`));
+  assert.doesNotMatch(model, /setsEmpty\w+: '[^']*(box|Mystery|soon)/i, 'no promise of a switched-off feature or a date');
+});
