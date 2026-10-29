@@ -18,7 +18,7 @@ import GameIcon from '../ui/GameIcon';
 import Ribbon from './Ribbon';
 import { guide } from '../services/guide/nextCoin';
 import { levelUpGoal } from '../services/collection/levelUpGoal';
-import { shelfLeaving } from '../services/collection/shelfLeaving';
+import { LEAVE_FADE_MS, shelfLeaving } from '../services/collection/shelfLeaving';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import YellowButton from './YellowButton';
 
@@ -257,16 +257,17 @@ export default function TaskCoinModal({
           // GET RIDE PARTS (must-fix 4): the one pointer goes to this ride, then the map draws the path.
           // 1. The shelf's next-coin card fades on the UI thread now (no React render), so the shelf
           //    that stays on screen while the map pops in never names the old coin (shelfLeaving.ts).
-          // 2. Two frames later (the fade is drawn, the sheet is leaving), the map starts and the pointer
-          //    moves. Pointing first would re-render the whole shelf before the map (about 1 s under load).
+          // 2. 34 ms later (two frames: the fade is drawn while the sheet leaves), the map starts and the
+          //    pointer moves. A timer, not requestAnimationFrame: frame callbacks stall while a native sheet
+          //    dismisses under load. Pointing first would re-render the whole shelf before the map.
           // The shelf remembers it as a level-up goal, so back on the shelf it says LEVEL UP GOAL, never NEXT COIN.
           shelfLeaving.value = 1;
           setTimeout(() => { shelfLeaving.value = 0; }, 1500);
-          requestAnimationFrame(() => requestAnimationFrame(() => {
+          setTimeout(() => {
             onShowOnMap();
             levelUpGoal.set(task.id, player?.id);
             guide.setTarget(task.id, 'coin_parts');
-          }));
+          }, LEAVE_FADE_MS);
         } : undefined}
       />}
     </>

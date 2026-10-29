@@ -9,3 +9,6 @@
 import { makeMutable } from 'react-native-reanimated';
 
 export const shelfLeaving = makeMutable(0);
+
+/** How long the press waits before the map starts: two frames, so the fade is on screen first. */
+export const LEAVE_FADE_MS = 34;
