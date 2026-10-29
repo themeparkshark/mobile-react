@@ -492,3 +492,20 @@ test('words: Shark Coins, Tickets and Energy in every reward line this lane owns
   assert.equal(L.rewardRows({ coins: 250 })[0].label, 'Shark Coins');
   assert.equal(loadTs('src/services/trail/trailModel.ts').rewardLabel({ kind: 'coins', amount: 75 }), '75 Shark Coins');
 });
+
+test('the lane-only ladder feed is inert in store and OTA bundles', () => {
+  const fed = [];
+  const stubs = { '@react-native-async-storage/async-storage': {}, '../reveal/revealLadder': { feedLadder: x => fed.push(x) } };
+  const store = loadTs('src/services/retention/devLadderFeed.ts', stubs);
+  assert.equal(store.devLadderFeedOn(), false);
+  store.devLadderFeed({ flags: { daily_three: true }, level: 3, coinsWon: 9, hasTeam: true, atPark: false });
+  assert.equal(fed.length, 0, 'no lane variables: never feeds');
+  const g = {};
+  const lane = loadTs('src/services/retention/devLadderFeed.ts', stubs,
+    { process: { env: { EXPO_PUBLIC_STUDIO_MUTE: '1', EXPO_PUBLIC_CL_LADDER_FEED: 'manual' } }, globalThis: g });
+  assert.equal(lane.devLadderFeedOn(), true);
+  lane.devLadderFeed({ flags: { daily_three: true }, level: 3, coinsWon: 9, hasTeam: true, atPark: false });
+  assert.equal(fed.length, 1);
+  assert.equal(fed[0].progress.revealAll, false, 'manual mode climbs the ladder like a real player');
+  assert.equal(fed[0].progress.coinsWon, 0, 'manual progress, not the profile');
+});
