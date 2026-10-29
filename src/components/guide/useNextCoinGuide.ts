@@ -18,7 +18,7 @@ import {
 } from '../../services/guide/nextCoin';
 import { nextFreeTicket, type FreeTicketsInput } from '../../services/guide/freeTickets';
 import { guideCardCopy, restingSightCopy, type GuideCardCopy } from '../../services/guide/guideCopy';
-import { guideCoinsFor, inLineTaskFor, ridesByTask, withPlayRange } from './guideCoins';
+import { guideCoinsFor, inLineTaskFor, ridesByTask, withAdventureCoin, withPlayRange } from './guideCoins';
 
 export interface NextCoinGuideInput {
   readonly enabled: boolean;
@@ -100,9 +100,9 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
   }, [input.live, parkId, minute]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const liveTaskIds = useMemo(() => new Set((input.live?.rides ?? []).map(ride => ride.task_id)), [input.live]);
-  const coins = useMemo(() => guideCoinsFor(input.tasks, parkId, {
+  const coins = useMemo(() => withAdventureCoin(guideCoinsFor(input.tasks, parkId, {
     rides, liveTaskIds, starTaskIds: input.starTaskIds, rushTaskIds: input.rushTaskIds, ownedTaskIds: input.ownedTaskIds,
-  }), [input.tasks, parkId, rides, liveTaskIds, input.starTaskIds, input.rushTaskIds, input.ownedTaskIds]);
+  }), input.adventure, parkId), [input.tasks, parkId, rides, liveTaskIds, input.starTaskIds, input.rushTaskIds, input.ownedTaskIds, input.adventure]);
   const inLineTaskId = useMemo(() => inLineTaskFor(input.dwellRideId, rides, coins), [input.dwellRideId, rides, coins]);
 
   // Arrival: the first in-park reading of this visit starts the 30 s welcome.

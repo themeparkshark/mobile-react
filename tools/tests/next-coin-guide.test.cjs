@@ -639,3 +639,30 @@ test('a coin already on the shelf is never the target, though today\'s map lists
   assert.match(explore, /const ownedTaskIds = useMemo\(\(\) => ownedTaskIdsFor\(tripGoalData\?\.rides, park\?\.id \?\? null\)/);
   assert.match(explore, /starTaskIds: starRides, rushTaskIds, ownedTaskIds,/);
 });
+
+test('after winning today\'s Adventure coin the guide stays on that ride for its line story, though the won coin left today\'s map', () => {
+  const soarin = { id: 137, name: "Soarin'", latitude: north(5).latitude, longitude: BASE.longitude };
+  const grizzly = { id: 140, name: 'Grizzly River Run', latitude: north(120).latitude, longitude: BASE.longitude };
+  const ticket = phase => ({ park_id: 8, phase, ride: { task_id: 137, ride_name: "Soarin'", lat: soarin.latitude, lng: soarin.longitude } });
+  // Before the win the map lists it; nothing is added.
+  const before = GC.withAdventureCoin(GC.guideCoinsFor([soarin, grizzly], 8, {}), ticket('discover'), 8);
+  assert.equal(before.length, 2);
+  // After the win the map drops Soarin'; the ticket brings it back as an owned ride.
+  const after = GC.withAdventureCoin(GC.guideCoinsFor([grizzly], 8, {}), ticket('play'), 8);
+  assert.equal(after.length, 2);
+  const back = after.find(c => c.taskId === 137);
+  assert.equal(back.owned, true); assert.equal(back.kind, 'ride');
+  assert.equal(GC.withAdventureCoin(GC.guideCoinsFor([grizzly], 8, {}), ticket('play'), 9).length, 1, 'another park: never');
+  assert.equal(GC.withAdventureCoin([], { ...ticket('play'), ride: { task_id: 137, ride_name: 'x' } }, 8).length, 0, 'no position: nothing');
+  G.guide.reset();
+  const adventure = { taskId: 137, parkId: 8, phase: 'play' };
+  const t = G.guide.resolve({ mode: 'park', parkId: 8, location: BASE, coins: after, live: { 140: 'open' }, adventure });
+  assert.equal(t.taskId, 137);
+  assert.equal(t.reason, 'line_story');
+  // "Pick another coin" moves on.
+  G.guide.skipLineStory();
+  assert.equal(G.guide.resolve({ mode: 'park', parkId: 8, location: BASE, coins: after, live: { 140: 'open' }, adventure }).taskId, 140);
+  G.guide.reset();
+  const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /taskId === tripGoal\?\.task_id \|\| taskId === adventure\?\.ride\.task_id/);
+});

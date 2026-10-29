@@ -101,6 +101,25 @@ export function guideCoinsFor(tasks: readonly TaskType[], parkId: number | null,
   return out;
 }
 
+/**
+ * Today's Adventure ride stays a guide coin after its coin is won (core loop 4.1 rule 1, the Line
+ * story state): the map's list drops a coin the moment it is won, so the ticket's own ride (with
+ * its queue position) is added back as an owned ride when it is missing. Pure.
+ */
+export function withAdventureCoin(coins: readonly GuideCoin[], ticket: {
+  readonly park_id: number;
+  readonly phase: string;
+  readonly ride: { readonly task_id: number; readonly ride_name: string; readonly lat?: number; readonly lng?: number };
+} | null | undefined, parkId: number | null): readonly GuideCoin[] {
+  if (!ticket || parkId == null || ticket.park_id !== parkId || ticket.phase === 'discover') return coins;
+  const taskId = Number(ticket.ride?.task_id);
+  if (!Number.isFinite(taskId) || coins.some(c => c.taskId === taskId)) return coins;
+  const latitude = finite(ticket.ride.lat), longitude = finite(ticket.ride.lng);
+  if (latitude === null || longitude === null) return coins;
+  return [...coins, { taskId, parkId, name: ticket.ride.ride_name, kind: 'ride', latitude, longitude,
+    radiusMeters: PLAY_RANGE_METERS, owned: true, queue: true }];
+}
+
 /** Coins the player owns in this park, from the trip goal's ride list (every park's rides, with coin_owned). */
 export function ownedTaskIdsFor(rides: readonly { readonly task_id: number; readonly park_id: number; readonly coin_owned: boolean }[] | null | undefined,
   parkId: number | null): Set<number> {

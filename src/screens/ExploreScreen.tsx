@@ -1885,7 +1885,9 @@ export function ExploreScreenBody() {
                   };
                 });
                 setActiveRedeemable(undefined);
-                if (!isSecretTask && taskId === tripGoal?.task_id) {
+                // The trip goal or today's Adventure ride was won: re-read it, so the guide turns to the
+                // Adventure's Line story state at once (core loop 4.1 rule 1).
+                if (!isSecretTask && (taskId === tripGoal?.task_id || taskId === adventure?.ride.task_id)) {
                   setTripGoalVersion(version => version + 1);
                 }
               }}
