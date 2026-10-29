@@ -102,6 +102,12 @@ interface Props {
   /** Kept for older callers; the stamp is claimed from the Rewards button now. */
   onViewStampBook?: () => void;
   onHidden?: () => void;
+  /**
+   * False when the card has handed off to the team step: the rewards
+   * would fly toward map pills that screen does not draw, so they land quietly (the counts are already
+   * right when the player is back on the map).
+   */
+  shouldFly?: () => boolean;
   onClose: () => void;
   /** The won attempt (a VIP member's double coins are granted on it). */
   attemptId?: number | null;
@@ -185,6 +191,7 @@ export default function PostWinRewardsModal({
   onNextCoin,
   onViewCoin,
   onHidden,
+  shouldFly,
   onClose,
   attemptId = null,
   starRide = false,
@@ -355,7 +362,7 @@ export default function PostWinRewardsModal({
       onBackButtonPress={caught ? onClose : undefined}
       onModalHide={() => {
         layer.onDismissed();
-        flyRewards();
+        if (shouldFly?.() !== false) flyRewards();
         const nextStep = afterHide.current; afterHide.current = null;
         onHidden?.(); nextStep?.();
       }}

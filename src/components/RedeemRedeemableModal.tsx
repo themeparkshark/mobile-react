@@ -735,7 +735,9 @@ export default function RedeemRedeemableModal({
   }, [postWinOpen, needsTeamNow, player?.id, coinTimesCollected, firstCoinEver]);
   // One way out of the win card per win: a second tap while it fades does nothing.
   const leavingWinRef = useRef(false);
-  useEffect(() => { if (postWinOpen) leavingWinRef.current = false; }, [postWinOpen]);
+  // The win card's rewards fly to the map's pills, unless the card handed off to another screen.
+  const flyAfterHideRef = useRef(true);
+  useEffect(() => { if (postWinOpen) { leavingWinRef.current = false; flyAfterHideRef.current = true; } }, [postWinOpen]);
 
   /**
    * The first coin's team step, opened right now under the win card (it fades over it), then on to
@@ -745,6 +747,7 @@ export default function RedeemRedeemableModal({
     const wanted = await teamStepReady.current;
     if (!wanted) return false;
     teamStepReady.current = Promise.resolve(false);
+    flyAfterHideRef.current = false;
     void markTeamOffered(player?.id);
     RootNavigation.navigate('TeamSelection', { firstCoin: true, ...(then ? { next: then } : {}) });
     return true;
@@ -1174,6 +1177,7 @@ export default function RedeemRedeemableModal({
           afterRewardsHidden.current = null;
           next?.();
         }}
+        shouldFly={() => flyAfterHideRef.current}
         onClose={handlePostWinClose}
         starRide={redeemable?.type === 'task' && starRides.has((redeemable.model as TaskType)?.id)}
         attemptId={attemptRef.current?.status === 'won' ? attemptRef.current.id : null}

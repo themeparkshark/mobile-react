@@ -771,3 +771,12 @@ test('how-to pictures teach the action: Parade Beat taps on the line, Sharky hol
   }
   assert.equal(topics.GAME_INTROS.timing.how, 'Tap the drum when a note hits the line.');
 });
+
+test('a win card that hands off to the team step lets its rewards land quietly (no coins over that screen)', () => {
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  const open = modal.slice(modal.indexOf('const openTeamStep = useCallback('), modal.indexOf('const handlePostWinClose'));
+  assert.match(open, /flyAfterHideRef\.current = false;/);
+  assert.match(modal, /if \(postWinOpen\) \{ leavingWinRef\.current = false; flyAfterHideRef\.current = true; \}/, 'every new win flies again');
+  assert.match(modal, /shouldFly=\{\(\) => flyAfterHideRef\.current\}/);
+  assert.match(read('src/components/PostWinRewardsModal.tsx'), /if \(shouldFly\?\.\(\) !== false\) flyRewards\(\);/);
+});
