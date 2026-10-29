@@ -127,6 +127,14 @@ test('Story and Games: one word per tab, crew pages only for a crew, new rounds 
   const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
   assert.match(slot, /\{!short && <ActivityHero kicker=\{title != null \? 'STORY' : 'GAMES'\}/);
   assert.match(slot, /<View style=\{\[styles\.choices, short && styles\.choicesGrid\]\}>/);
+  // Every phone in a wait: the 17 Pro's page window (about 250 pt) is too short for banner + question + four
+  // stacked answers too, so the clue goes compact below QUIZ_FULL_PAGE, not only on an SE.
+  assert.match(slot, /<WhenQuizCompact>\{short => <>/);
+  const layout = loadTs('src/services/lineplay/lineLayout.ts');
+  assert.equal(layout.quizCompact(200), true, 'SE');
+  assert.equal(layout.quizCompact(252), true, '17 Pro');
+  assert.equal(layout.quizCompact(520), false, 'a roomy window keeps the banner');
+  assert.equal(layout.quizCompact(0), false, 'not measured yet');
   // Red dots are for something to claim now; new rounds wear a gold dot (round 2 grader fix 8).
   assert.match(read('src/screens/LinePlay/components/ActivityPageRail.tsx'), /tabDot: \{[^}]*backgroundColor: '#fec90e'/);
   // The screen: tabs on the rail, the banner gone, crew pages filtered for solo.

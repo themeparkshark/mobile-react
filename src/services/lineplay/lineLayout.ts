@@ -436,3 +436,14 @@ export const HERO_SLIM_PAGE = 240;
 export function heroSlim(viewHeight: number): boolean {
   return viewHeight > 0 && viewHeight < HERO_SLIM_PAGE;
 }
+
+/**
+ * A story clue's question page needs about this much window to show its banner, the question and four answers
+ * stacked (110 + about 100 + 4 x 60). Under it (an iPhone 17 Pro's page window is about 250 pt; an SE's about
+ * 200), the clue drops the banner, shrinks the question and sets the answers two by two, so every choice shows
+ * without scrolling. 0 (not measured yet) keeps the full page.
+ */
+export const QUIZ_FULL_PAGE = 440;
+export function quizCompact(viewHeight: number): boolean {
+  return viewHeight > 0 && viewHeight < QUIZ_FULL_PAGE;
+}

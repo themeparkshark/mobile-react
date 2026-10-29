@@ -26,7 +26,7 @@ import { studioMoment } from '../../../gamekit/audio/playMoment';
 import HapticPatterns from '../../../helpers/hapticPatterns';
 import NavigationPanelCard from './NavigationPanelCard';
 import PageScroll, { PageHeightContext } from './PageScroll';
-import { heroSlim } from '../../../services/lineplay/lineLayout';
+import { heroSlim, quizCompact } from '../../../services/lineplay/lineLayout';
 import type { NavigationPanelProgress } from '../../../services/lineplay/navigationPanel';
 import type { CircuitTheme } from '../../../services/lineplay/circuitTheme';
 import { factSourceLine } from '../../../services/lineplay/labels';
@@ -319,9 +319,10 @@ function TriviaSlot({
 
   return (
     <PageScroll fill={CARD_FILL}>
-      {/* A short window (iPhone SE): no banner (the Story tab and the question say what this is), and the
-          answers sit two by two under a smaller question, so every choice shows without scrolling. */}
-      <WhenShort>{short => <>
+      {/* A page window too short for the banner, the question and four stacked answers (every phone in a wait,
+          SE and 17 Pro alike): no banner (the Story tab and the PLAY the guest just pressed say what this is),
+          and the answers sit two by two under a smaller question, so every choice shows without scrolling. */}
+      <WhenQuizCompact>{short => <>
       {!short && <ActivityHero kicker={title != null ? 'STORY' : 'GAMES'} title={title ?? 'Shark Trivia'} teacher />}
       <Text style={[styles.question, short && styles.questionShort]}>{q.question}</Text>
       {picked != null && <Animated.Text style={[styles.answerFeedback,
@@ -363,7 +364,7 @@ function TriviaSlot({
           );
         })}
       </View>
-      </>}</WhenShort>
+      </>}</WhenQuizCompact>
       {revealed && q.fact && (
         <View style={styles.factBox}>
           <Text style={styles.factKicker}>{picked == null ? 'THE ANSWER' : picked === q.correctIndex ? 'CORRECT · FAN FACT' : 'FAN FACT'}</Text>
@@ -384,6 +385,10 @@ function TriviaSlot({
  * keep the story first.
  */
 type Slot = ReactNode | ((short: boolean) => ReactNode);
+/** Reads the page window inside PageScroll: is it too short for a full clue page (quizCompact)? */
+function WhenQuizCompact({ children }: { children: (compact: boolean) => ReactNode }) {
+  return <>{children(quizCompact(useContext(PageHeightContext)))}</>;
+}
 /** Reads the page window inside PageScroll: is this a short window (iPhone SE)? */
 function WhenShort({ children }: { children: (short: boolean) => ReactNode }) {
   return <>{children(heroSlim(useContext(PageHeightContext)))}</>;
