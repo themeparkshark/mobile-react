@@ -117,7 +117,8 @@ export async function reopenLinePlayForRideQuestion(now = Date.now()): Promise<b
   const player = Number(rideQuestionOwner());
   if (!Number.isInteger(player) || player <= 0) return false;
   for (const wait of unaskedLinePlayBoardings(now)) {
-    if (wait.rideId === linePlayRideNow() || rideLoggedUntil(wait.rideId, now) != null) continue;
+    // A LinePlay screen open in this run asks itself; after a relaunch none is, even if detection kept its ride.
+    if (wait.rideId === rideDetectionService.linePlayOpenHere() || rideLoggedUntil(wait.rideId, now) != null) continue;
     const ride = rideDetectionService.rideById(wait.rideId);
     if (!ride) continue;
     navigate('LinePlay', { ride: { rideId: ride.id, rideName: ride.name, parkId: ride.park_id } } as any);

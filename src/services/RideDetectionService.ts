@@ -227,6 +227,8 @@ function calculateConfidence(
 
 class RideDetectionService {
   private visit: ZoneVisit | null = null;
+  /** The ride LinePlay set in this run of the app (null after a relaunch until a LinePlay screen opens). */
+  private linePlayHere: number | null = null;
   /** The ride of the current (or just finished) LinePlay session. */
   private linePlay: LinePlayRide | null = null;
   /** The last LinePlay that ended: its ride is not offered as a new line for 30 minutes. */
@@ -408,6 +410,8 @@ class RideDetectionService {
    * so the session stays in effect for the visit it overlapped.
    */
   setLinePlayRide(rideId: number | null, now = Date.now(), startedAt: number | null = null): void {
+    // What LinePlay on this run of the app says (never the copy kept for a background wake after a kill).
+    this.linePlayHere = rideId != null && Number.isInteger(rideId) && rideId > 0 ? rideId : null;
     if (rideId != null && Number.isInteger(rideId) && rideId > 0) {
       this.linePlay = { rideId, endedAt: null };
       // LinePlay owns this wait's ride question: detection never asks about a visit inside it.
@@ -446,6 +450,14 @@ class RideDetectionService {
   private linePlayInVisit(): boolean {
     const zone = this.linePlay && this.visit?.zones.get(this.linePlay.rideId);
     return !!zone && (this.linePlay!.endedAt == null || zone.enteredAt <= this.linePlay!.endedAt);
+  }
+
+  /**
+   * The ride a LinePlay screen opened in this run of the app is running at, or null. After the app was
+   * closed mid-wait, the kept LinePlay ride still steers detection, but no screen is there to ask.
+   */
+  linePlayOpenHere(): number | null {
+    return this.linePlayHere;
   }
 
   /** The ride LinePlay is running at right now (its own "I got to the ride" asks about it), or null. */

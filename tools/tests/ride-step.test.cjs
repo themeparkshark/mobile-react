@@ -503,8 +503,12 @@ test('a pocketed ride and then the app is closed: LinePlay opens on the saved wa
     const onLinePlay = launch(store, { route: 'LinePlay', checkpoints });
     assert.equal(await onLinePlay.hook.checkAndShowPendingRides(), false);
     assert.equal(onLinePlay.navigations.length, 0);
-    // Opened on the map: LinePlay comes back on that wait (its checkpoint), once.
+    // Opened on the map: LinePlay comes back on that wait (its checkpoint), once. Detection already took its
+    // kept LinePlay ride back (the app was closed mid-wait), but no LinePlay screen is open to ask.
     const relaunched = launch(store, { checkpoints });
+    await relaunched.s.loadLinePlayFromCache();
+    assert.equal(relaunched.svcModule.linePlayRideNow(), JUNGLE.id);
+    assert.equal(relaunched.s.linePlayOpenHere(), null);
     assert.equal(await relaunched.hook.checkAndShowPendingRides(), true);
     assert.deepEqual(plain(relaunched.navigations), [{ name: 'LinePlay', params: { ride: { rideId: JUNGLE.id, rideName: JUNGLE.name, parkId: 8 } } }]);
     assert.equal(pendingIn(store).length, 0, 'zero batch confirms');
@@ -583,6 +587,7 @@ test('the screens give a wrapped-up wait its one "I got to the ride" and keep th
   assert.match(screen, /accessibilityLabel="I got to the ride"\n\s+onPress=\{rodeAfterWrapUp\}/);
   assert.match(screen, /onGotToRide=\{snapshot\.endReason === 'left_queue' && !snapshot\.boardingConfirmed \? rodeAfterWrapUp : undefined\}/);
   assert.match(screen, /rideQuestionPending: linePlayBoardingPending/);
+  assert.match(read('src/hooks/useRideDetection.ts'), /if \(wait\.rideId === rideDetectionService\.linePlayOpenHere\(\) \|\| rideLoggedUntil/);
   assert.match(screen, /\/\/ Closing the wait \(Done\) answers its ride question: nothing reopens it later to ask\.\n\s+noteRideQuestionAnswered\(\);/);
   const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
   assert.match(recap, /<GameButton label="I got to the ride" variant="ghost" onPress=\{onGotToRide\}/);
