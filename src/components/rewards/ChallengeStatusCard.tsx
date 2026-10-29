@@ -54,7 +54,7 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
   readonly art?: ChallengeStatusArt;
   readonly primary?: ChallengeStatusAction;
   readonly secondary?: ChallengeStatusAction;
-  /** The safe way out ("Return to map", DONE): a white button under the big one. */
+  /** The safe way out (Back to Map): a white button under the big one. */
   readonly quiet?: ChallengeStatusAction;
   /**
    * The primary spends a Ticket or a retry: it ignores taps for

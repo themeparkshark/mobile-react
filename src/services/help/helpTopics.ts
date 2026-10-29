@@ -150,11 +150,11 @@ interface GameIntro { readonly name: string; readonly how: string; readonly win:
 
 export const GAME_INTROS: Readonly<Record<MiniGameKind, GameIntro>> = {
   tap: { name: 'Whack-a-Shark', how: 'Bonk the sharks. Never bonk the anglerfish.', win: 'Fill the meter before time runs out.' },
-  timing: { name: 'Parade Beat', how: 'Tap the drum as each note reaches the line. Blue is the middle, coral is the side.', win: 'Hit 3 of every 4 beats.' },
+  timing: { name: 'Parade Beat', how: 'Tap the drum when a note hits the line.', win: 'Hit 3 of every 4 beats.' },
   memory: { name: 'Memory Match', how: 'Flip two cards. Find the pairs.', win: 'Match every pair to win.' },
   trivia: { name: 'Trivia', how: 'Tap the right answer.', win: 'Right answers earn the stars.' },
   shark: { name: 'Sharky Swim', how: 'Hold to swim up. Let go to sink.', win: 'Reach the finish with hearts left.' },
-  banana: { name: 'Banana Basket', how: 'Slide the basket. Catch the bananas, bounce the ball.', win: 'Catch as many as you can.' },
+  banana: { name: 'Banana Basket', how: 'Slide to catch bananas. Bounce the ball.', win: 'Catch as many as you can.' },
   photo: { name: 'Snap the Ride', how: 'Line up the shot and snap it before time runs out.', win: 'A good snap wins.' },
   current: { name: 'Current Quest', how: 'Swipe to swim. Currents carry you.', win: 'Reach the chest.' },
 };

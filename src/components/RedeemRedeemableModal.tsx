@@ -1,7 +1,7 @@
 import Lottie from 'lottie-react-native';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Pressable, View, Text, StyleSheet, TouchableOpacity, Easing } from 'react-native';
+import { Dimensions, Pressable, View, Text, StyleSheet } from 'react-native';
 import Modal from 'react-native-modal';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
@@ -74,8 +74,6 @@ import { watchForReward } from '../services/ads';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import { usePresentWatchdog } from './rewards/usePresentWatchdog';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const WHEEL_SIZE = Math.min(SCREEN_WIDTH * 0.7, 260);
 
 // Ticket cost by ride importance tier
 function getTicketCost(redeemable: CurrentRedeemableType): number {
@@ -103,12 +101,22 @@ type GameType = 'tap' | 'memory' | 'trivia';
 
 /** After "See It On Your Shelf", the map behind refreshes once the coin has landed (the flight takes about 1 s). */
 export const SHELF_MAP_REFRESH_DELAY_MS = 1800;
-/** Out of Tickets with no free way left: the big button takes the player back to the map (never a bare OK). */
-export const NEED_TICKET_BUTTON = 'Back to Map';
+/** Every card that leads back to the map says it the same way, never a bare OK. */
+export const BACK_TO_MAP = 'Back to Map';
+/** Out of Tickets with no free way left: the big button takes the player back to the map. */
+export const NEED_TICKET_BUTTON = BACK_TO_MAP;
 /** "3 treats at home": the treat art from How to Play (the churro), never the compass. */
 const TREAT_ART = require('../../assets/images/prep-items/churros/churro_18.png');
 /** Taps beside the challenge card in its first moment on screen are queued PLAY! taps, not a close. */
 export const SCRIM_GRACE_MS = 900;
+/** The line story lookup gets this long while the win card waits; after it the template story opens. */
+export const STORY_LOOKUP_MS = 2500;
+function storyWithin<T>(lookup: Promise<T>, fallback: T): Promise<T> {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(fallback), STORY_LOOKUP_MS);
+    lookup.then(value => { clearTimeout(timer); resolve(value); }, () => { clearTimeout(timer); resolve(fallback); });
+  });
+}
 
 export default function RedeemRedeemableModal({
   open,
@@ -133,7 +141,6 @@ export default function RedeemRedeemableModal({
   const { location } = useContext(LocationContext);
   // Shark Events: today's Star Rides at this park (empty while the event flag is off).
   const starRides = useStarRides(park?.id ?? null);
-  const progress = useRef(new Animated.Value(0)).current;
   const doubleXP = !!player?.is_subscribed;
   const doubleCoins = !!player?.is_subscribed;
   const { currencies } = useContext(CurrencyContext);
@@ -267,13 +274,17 @@ export default function RedeemRedeemableModal({
   const rideRewardTask = isTaskType ? redeemable.model as TaskType | SecretTaskType : null;
   // Before coin levels open the card promises Shark Coins only. From rung 3 a coin already on the shelf
   // shows its Parts ring (how close it is to its next level); a coin not won yet shows the Parts its
-  // first win brings. Energy is spent on the coin card, so it never sits here. XP joins at rung 4.
+  // first win brings. A ride's Energy is spent on the coin card, so it never sits here; a secret coin's
+  // first win is the one Energy promise on this card (5.13). XP joins at rung 4.
   const cardParts = cardCoin && coinLevelsOpen ? partsProgress(cardCoin, player?.energy ?? null, 0) : null;
   const previewRideRewards = rideRewardTask ? [
     // The ride's own Shark Coins; a member's double coins show on the win card as their own "+N VIP" chip.
     { label: 'SHARK COINS', amount: rideRewardTask.coins, icon: 'coins' as const, show: rideRewardTask.coins > 0 },
     { label: 'RIDE PARTS', amount: rideRewardTask.ride_parts_reward ?? (taskType === 'secret_task' ? 2 : 1), icon: 'parts' as const,
       show: coinLevelsOpen && !cardParts },
+    // A secret coin's first win also brings Energy (blueprint 5.13: +2 Parts and +15 Energy after rung 3).
+    { label: 'ENERGY', amount: rideRewardTask.energy_reward ?? 15, icon: 'energy' as const,
+      show: coinLevelsOpen && !cardParts && taskType === 'secret_task' },
     { label: 'XP', amount: doubleXP ? rideRewardTask.experience * 2 : rideRewardTask.experience, icon: 'xp' as const, show: dailyOpen },
   ].filter(reward => reward.show && reward.amount > 0) : [];
 
@@ -333,9 +344,6 @@ export default function RedeemRedeemableModal({
   useEffect(() => {
     if (open && flowState === 'preview') {
       playSound(require('../../assets/sounds/redeem_modal_open.mp3'));
-      Animated.loop(
-        Animated.timing(progress, { toValue: 1, duration: 2250, useNativeDriver: true })
-      ).start();
     }
   }, [open, flowState]);
 
@@ -712,46 +720,77 @@ export default function RedeemRedeemableModal({
   // The first coin has one fixed order (blueprint 4.3 rule 3): the win card, then (first coin ever,
   // no team yet) the team offer as its own one-tap step, then the map with nothing else.
   const firstCoinEver = coinTimesCollected === 1 && (rideCoinsBeforeRef.current === 0 || earnedFirstCoinStamp != null);
-  const withTeamStep = useCallback(async (then: { name: string; params?: object } | null, fallback: () => void) => {
-    const needsTeam = !!(rideControl as { needs_team?: boolean } | null)?.needs_team;
-    const offeredBefore = needsTeam ? await teamOffered(player?.id) : true;
-    if (!wantsTeamStep({ needsTeam, isNewCoin: coinTimesCollected === 1, firstCoinEver, offeredBefore })) {
-      fallback();
-      return;
-    }
+  // Whether this win opens the team step is read when the win card opens, not after it fades, so the
+  // step slides in under the fading card: win card, team step, map, with no map frames in between
+  // (the map's own cards never get a moment to show first).
+  const teamStepReady = useRef<Promise<boolean>>(Promise.resolve(false));
+  const postWinOpen = open === true && flowState === 'postwin';
+  const needsTeamNow = !!(rideControl as { needs_team?: boolean } | null)?.needs_team;
+  useEffect(() => {
+    if (!postWinOpen) { teamStepReady.current = Promise.resolve(false); return; }
+    const isNewCoin = coinTimesCollected === 1;
+    teamStepReady.current = (needsTeamNow ? teamOffered(player?.id) : Promise.resolve(true))
+      .then(offeredBefore => wantsTeamStep({ needsTeam: needsTeamNow, isNewCoin, firstCoinEver, offeredBefore }))
+      .catch(() => false);
+  }, [postWinOpen, needsTeamNow, player?.id, coinTimesCollected, firstCoinEver]);
+  // One way out of the win card per win: a second tap while it fades does nothing.
+  const leavingWinRef = useRef(false);
+  useEffect(() => { if (postWinOpen) leavingWinRef.current = false; }, [postWinOpen]);
+
+  /**
+   * The first coin's team step, opened right now under the win card (it fades over it), then on to
+   * `then` (the shelf, or the line story). Returns false when this win has no team step.
+   */
+  const openTeamStep = useCallback(async (then: { name: string; params?: object } | null): Promise<boolean> => {
+    const wanted = await teamStepReady.current;
+    if (!wanted) return false;
+    teamStepReady.current = Promise.resolve(false);
     void markTeamOffered(player?.id);
     RootNavigation.navigate('TeamSelection', { firstCoin: true, ...(then ? { next: then } : {}) });
-  }, [rideControl, player?.id, coinTimesCollected, firstCoinEver]);
+    return true;
+  }, [player?.id]);
 
   const handlePostWinClose = useCallback(async () => {
+    if (leavingWinRef.current) return;
+    leavingWinRef.current = true;
     await clearAttemptCheckpoint().catch(error =>
       console.warn('Could not clear confirmed ride win:', error));
-    afterRewardsHidden.current = () => { void withTeamStep(null, () => undefined); };
+    afterRewardsHidden.current = null;
+    await openTeamStep(null);
     onPress();
     close();
-  }, [onPress, close, clearAttemptCheckpoint, withTeamStep]);
+  }, [onPress, close, clearAttemptCheckpoint, openTeamStep]);
 
   // NEXT COIN: point the guide (the one owner, guide.setTarget), close, and the map draws the path.
   // On today's Adventure ride the big button plays its line story instead.
   const handleNextCoin = useCallback(async (button: { kind: 'next' | 'line_story' | 'map' }) => {
+    if (leavingWinRef.current) return;
+    leavingWinRef.current = true;
     await clearAttemptCheckpoint().catch(error =>
       console.warn('Could not clear confirmed ride win:', error));
     const target = guide.current();
     if (button.kind === 'next' && target) guide.setTarget(target.taskId, 'win_card');
-    const wonTaskId = attemptRef.current?.task_id ?? taskId ?? 0;
-    // The first coin ever still goes through the team step first (blueprint 4.3 rule 3), then on to the line story.
-    afterRewardsHidden.current = button.kind === 'line_story'
-      ? () => {
-        void resolveQueueStoryContext(park.id, 0, taskName, wonTaskId).then(ride => withTeamStep(
-          { name: 'LinePlay', params: { ride } },
-          () => RootNavigation.navigate('LinePlay', { ride })));
+    afterRewardsHidden.current = null;
+    if (button.kind === 'line_story') {
+      // The story is found while the card is still up (a short wait, never a blank map), then the first
+      // coin ever still goes through the team step first (blueprint 4.3 rule 3), then on to the story.
+      const wonTaskId = attemptRef.current?.task_id ?? taskId ?? 0;
+      const ride = await storyWithin(resolveQueueStoryContext(park.id, 0, taskName, wonTaskId),
+        { rideId: 0, rideName: taskName, parkId: park.id, postedWaitMinutes: null, imageUrl: null });
+      // LinePlay opens its own sheets, so without a team step it waits until the card is gone.
+      if (!(await openTeamStep({ name: 'LinePlay', params: { ride } }))) {
+        afterRewardsHidden.current = () => RootNavigation.navigate('LinePlay', { ride });
       }
-      : () => { void withTeamStep(null, () => undefined); };
+    } else {
+      await openTeamStep(null);
+    }
     onPress();
     close();
-  }, [clearAttemptCheckpoint, onPress, close, park.id, taskName, taskId, withTeamStep]);
+  }, [clearAttemptCheckpoint, onPress, close, park.id, taskName, taskId, openTeamStep]);
 
   const handleViewCoin = useCallback(async (openMastery = false) => {
+    if (leavingWinRef.current) return;
+    leavingWinRef.current = true;
     const focusCoinAssetId = attemptRef.current?.rewards?.coin_asset_id;
     const earnedCoin = createEarnedShelfArrival(attemptRef.current);
     const ownerId = player?.id;
@@ -764,10 +803,10 @@ export default function RedeemRedeemableModal({
     const shelf = earnedCoin && ownerId
       ? { name: 'Park', params: { park: park.id, player: ownerId, earnedCoin, ...(openMastery ? { openMastery: true } : {}) } }
       : { name: 'CoinShelf', params: { focusCoin: focusCoinAssetId ? { assetId: focusCoinAssetId } : undefined } };
-    await withTeamStep(shelf, () => RootNavigation.navigate(shelf.name as never, shelf.params as never));
+    if (!(await openTeamStep(shelf))) RootNavigation.navigate(shelf.name as never, shelf.params as never);
     close();
     setTimeout(onPress, SHELF_MAP_REFRESH_DELAY_MS);
-  }, [onPress, close, clearAttemptCheckpoint, player?.id, park.id, withTeamStep]);
+  }, [onPress, close, clearAttemptCheckpoint, player?.id, park.id, openTeamStep]);
 
   // One door for every sheet (blueprint 4.3 rule 10, the PLAY RIDE freeze): the
   // challenge card waits until every sheet before it (a swipe-closed Ride
@@ -823,7 +862,7 @@ export default function RedeemRedeemableModal({
             message="Getting back your ticket and any game you started." />}
           {flowState === 'auth-required' && <ChallengeStatusCard title="Sign In to Play"
             message="Sign in to play for ride coins. Go back to the map to sign in."
-            primary={{ label: 'Return to Map', onPress: handleLostClose }} />}
+            primary={{ label: BACK_TO_MAP, onPress: handleLostClose }} />}
 
           {/* PREVIEW STATE */}
           {flowState === 'preview' && (
@@ -1031,12 +1070,12 @@ export default function RedeemRedeemableModal({
           {flowState === 'spend-error' && <ChallengeStatusCard title="Reconnect" art="loading"
             message="We could not tell if this game started. Check your internet and tap Reconnect. You will not pay another Ticket."
             primary={{ label: 'Reconnect', onPress: handleStartWheel }}
-            quiet={{ label: 'Return to map', onPress: handleLostClose }} />}
+            quiet={{ label: BACK_TO_MAP, onPress: handleLostClose }} />}
           {flowState === 'save-error' && <ChallengeStatusCard title="Not Started"
             message="This game did not start. No Ticket was used. Tap Try Again."
             primary={{ label: 'Try Again', onPress: (firstCoinTicketReturned || rescueRetryAvailable) &&
               ['lost', 'expired'].includes(attemptRef.current?.status ?? '') ? handleProtectedRetry : handleStartWheel }}
-            quiet={{ label: 'Return to map', onPress: handleLostClose }} />}
+            quiet={{ label: BACK_TO_MAP, onPress: handleLostClose }} />}
           {flowState === 'retrying' && <ChallengeStatusCard title="Setting Up" art="loading"
             message="Checking your Ticket and starting the same game again." />}
           {flowState === 'expired' && <ChallengeStatusCard title="Time Ran Out"
@@ -1045,8 +1084,8 @@ export default function RedeemRedeemableModal({
                 ? 'This free try timed out. No Ticket was used, and you have one more go here today.'
                 : 'This free try timed out. No Ticket was used.'
               : 'This game was not finished, so your Ticket came back to you.'}
-            primary={rescueRetryAvailable ? { label: 'Try Again', onPress: handleProtectedRetry } : { label: 'Return to Map', onPress: handleLostClose }}
-            quiet={rescueRetryAvailable ? { label: 'DONE', onPress: handleLostClose } : undefined}
+            primary={rescueRetryAvailable ? { label: 'Try Again', onPress: handleProtectedRetry } : { label: BACK_TO_MAP, onPress: handleLostClose }}
+            quiet={rescueRetryAvailable ? { label: BACK_TO_MAP, onPress: handleLostClose } : undefined}
             guardRetry={rescueRetryAvailable} />}
           {flowState === 'claim-error' && <ChallengeStatusCard title={proofRejected ? 'Replay This Game' : 'Checking Your Score'}
             art={proofRejected ? 'none' : 'loading'}
@@ -1062,7 +1101,7 @@ export default function RedeemRedeemableModal({
                 setFlowState('wheel');
               } else if (outcomeRef.current) resolveAttempt(outcomeRef.current);
             } }}
-            quiet={{ label: 'Return to map', onPress: handleLostClose }} />}
+            quiet={{ label: BACK_TO_MAP, onPress: handleLostClose }} />}
           {/* The one loss card: a kind title, one honest line from the game, the Ticket (it flies home when it
               came back) and one way on. A member's VIP try lives inside TRY AGAIN; nobody else sees a VIP line. */}
           {flowState === 'lost' && <ChallengeStatusCard title={lostCopy.title} art="soClose"
@@ -1072,8 +1111,8 @@ export default function RedeemRedeemableModal({
               : canOfferRetry
               ? { ...VIP_RETRY_ACTION, icons: [...VIP_RETRY_ACTION.icons], label: adBusy ? 'One Moment' : VIP_RETRY_ACTION.label,
                 onPress: () => { void handleVipRetry(); }, disabled: adBusy || !location }
-              : { label: 'Continue', onPress: handleLostClose }}
-            quiet={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry ? { label: 'DONE', onPress: handleLostClose } : undefined}
+              : { label: BACK_TO_MAP, onPress: handleLostClose }}
+            quiet={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry ? { label: BACK_TO_MAP, onPress: handleLostClose } : undefined}
             guardRetry={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry} />}
 
           {/* MINIGAME STATE - rendered inside the same modal */}
@@ -1101,6 +1140,7 @@ export default function RedeemRedeemableModal({
       <PostWinRewardsModal
         visible={open === true && flowState === 'postwin' && challengeModalHidden}
         rideName={taskName}
+        limited={redeemable?.type === 'task' ? (redeemable.model as TaskType)?.limited ?? null : null}
         taskCoinUrl={
           redeemable?.type === 'task'
             ? (redeemable.model as TaskType)?.coin_url
@@ -1160,11 +1200,6 @@ const styles = StyleSheet.create({
   wayRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 5 },
   rideRewardLabel: { color: '#fff', fontFamily: 'Knockout', fontSize: 13,
     textAlign: 'center', marginTop: 1 },
-  rescueCard: { backgroundColor: '#dff5ff', borderColor: '#ffd443', borderWidth: 3,
-    borderRadius: 14, paddingHorizontal: 13, paddingVertical: 10, marginBottom: 9 },
-  rescueEyebrow: { color: '#075b9b', fontFamily: 'Shark', fontSize: 15 },
-  rescueCopy: { color: '#17446c', fontFamily: 'Knockout', fontSize: 15,
-    lineHeight: 20, marginTop: 3 },
   ticketError: { color: '#ffe07a', fontFamily: 'Knockout', fontSize: 15,
     textAlign: 'center', marginTop: 8 },
   ticketHelpCard: { backgroundColor: '#e4f7ff', borderColor: '#ffd443', borderWidth: 2,
@@ -1179,8 +1214,5 @@ const styles = StyleSheet.create({
   shopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 9,
     paddingTop: 7, borderTopWidth: 1, borderTopColor: 'rgba(7, 91, 155, 0.2)' },
   shopRowText: { color: '#075b9b', fontFamily: 'Knockout', fontSize: 15, flexShrink: 1 },
-  getTickets: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8,
-    backgroundColor: '#ffcf3b', borderRadius: 12, paddingVertical: 7, borderBottomWidth: 3, borderBottomColor: '#d99a00' },
-  getTicketsText: { color: '#6a3b00', fontFamily: 'Shark', fontSize: 15 },
   minigameContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
 });

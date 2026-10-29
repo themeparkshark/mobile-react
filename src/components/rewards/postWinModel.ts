@@ -222,6 +222,18 @@ export function adventureLineStoryNext(ticket: {
   return ticket.ride?.task_id === wonTaskId && ticket.park_id === parkId && ticket.phase === 'play' && !ticket.play;
 }
 
+/** Every card that leads back to the map says it the same way. */
+export const BACK_TO_MAP_LABEL = 'Back to Map';
+
+/**
+ * A limited coin's win line when the park shelf has no count for it (the server's shelf progress
+ * counts permanent coins only): it is the player's to keep, even after it leaves the map. No date
+ * math and no countdown. Null for a permanent coin.
+ */
+export function limitedWinLine(limited: { readonly active: boolean } | null | undefined): string | null {
+  return limited ? 'Limited coin. Yours to keep!' : null;
+}
+
 /** The win card's big button: the next coin by name and distance, or today's Adventure line story. */
 export interface NextCoinButton {
   readonly kind: 'next' | 'line_story' | 'map';
@@ -243,5 +255,6 @@ export function nextCoinButton(target: {
     const where = meters === null ? null : meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`;
     return { kind: 'next', label: 'NEXT COIN', detail: [target.name, where].filter(Boolean).join(', ') || null };
   }
-  return { kind: 'map', label: 'NEXT COIN', detail: null };
+  // No coin to point at (night, a resting park, every coin owned): the button never promises one.
+  return { kind: 'map', label: BACK_TO_MAP_LABEL, detail: null };
 }

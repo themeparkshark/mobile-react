@@ -33,7 +33,8 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { playSfx } from '../gamekit/SFX';
 import GameIcon from '../ui/GameIcon';
 import {
-  flyTargetFor, milestoneHeadline, nextCoinButton, partsProgress, shelfLine, teamSentence, winRewardChips, WIN_FLY_ROUTES,
+  BACK_TO_MAP_LABEL, flyTargetFor, limitedWinLine, milestoneHeadline, nextCoinButton, partsProgress, shelfLine, teamSentence,
+  winRewardChips, WIN_FLY_ROUTES,
   type NextCoinButton, type WinChip, type WinFlyTarget,
 } from './rewards/postWinModel';
 import { watchForReward } from '../services/ads';
@@ -44,6 +45,7 @@ import { usePresentWatchdog } from './rewards/usePresentWatchdog';
 import { useRung } from '../services/reveal/revealLadder';
 import { withNumberFont } from '../ui/numberText';
 import type { PerkChipData } from './coin/progressionModel';
+import type { LimitedWindow } from '../models/task-type';
 import PerkChipRow from './coin/PerkChip';
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -63,6 +65,8 @@ const FLY_ART = {
 interface Props {
   visible: boolean;
   rideName: string;
+  /** A limited coin's rotation: its win says where it lives when the shelf has no count for it. */
+  limited?: LimitedWindow | null;
   taskCoinUrl?: string;
   coinsEarned: number;
   xpEarned: number;
@@ -151,13 +155,14 @@ function RewardChip({ chip, index, enter, reduced, started }: {
  * first coin. The coin and its shelf line ("1 of 35 coins. Bronze at 12")
  * lead, then one reward row, then one team sentence after a team pick. One
  * big button, NEXT COIN (or "Play its line story" on today's Adventure ride),
- * and one quiet See my shelf. No offers, no stamp button (the stamp flies to
- * the Rewards button), no pass banner, no Standings note. A VIP member's
+ * and one quiet See my shelf. No offers, no stamp button (a new stamp is a small
+ * sticker on the hero coin and flies to the Rewards button), no pass banner, no Standings note. A VIP member's
  * double coins are granted for them and shown as one "+N VIP" chip.
  */
 export default function PostWinRewardsModal({
   visible,
   rideName,
+  limited = null,
   taskCoinUrl,
   coinsEarned,
   xpEarned,
@@ -243,7 +248,8 @@ export default function PostWinRewardsModal({
     vipCoins, coinLevelsOpen: coinLevels, dailyOpen: daily,
   }), [coinsEarned, nextRideTicketEarned, ridePartsEarned, energyEarned, xpEarned, vipCoins, coinLevels, daily]);
   const headline = milestoneHeadline(milestones ?? null);
-  const shelf = shelfLine(milestones ?? null);
+  // The shelf line, or for a limited coin (no park shelf count) its own home: "Limited coin. Yours to keep!"
+  const shelf = shelfLine(milestones ?? null) ?? (isNewCoin ? limitedWinLine(limited) : null);
   const team = teamSentence(rideControl as Parameters<typeof teamSentence>[0], name => (isTeam(name) ? teamName(name) : name));
   const next = nextCoinButton(nextTarget, wonTaskId, adventureLineStory);
 
@@ -329,7 +335,7 @@ export default function PostWinRewardsModal({
   const watch = usePresentWatchdog(layer.present);
 
   const coinSource = taskCoinUrl && !coinArtFailed ? taskCoinUrl : null;
-  const primary = hasCoin ? next : { kind: 'map' as const, label: 'Back to the Park', detail: null };
+  const primary = hasCoin ? next : { kind: 'map' as const, label: BACK_TO_MAP_LABEL, detail: null };
   const pressPrimary = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     if (hasCoin && onNextCoin) onNextCoin(primary);
@@ -387,6 +393,13 @@ export default function PostWinRewardsModal({
                     : <View style={styles.heroCheck}><GameIcon name="check" size={80} /></View>}
                 </View>
               </Animated.View>
+              {/* A new stamp rides on the hero coin as a small sticker (no button, no extra row, so the card
+                  still fits a 375 pt screen); it flies to the Rewards button as the card closes. */}
+              {!!earnedStamp && <Animated.View style={[styles.stampSticker, textStyle]} accessible
+                accessibilityLabel={`New stamp: ${earnedStamp.name}. It waits in Rewards.`}>
+                <Image source={FLY_ART.stamp} style={styles.stampArt} contentFit="contain" />
+                <View style={styles.stampNew}><GameIcon name="new" size={18} /></View>
+              </Animated.View>}
               {coinSource && <Image source={coinSource} style={{ width: 1, height: 1, opacity: 0 }} onError={() => setCoinArtFailed(true)} />}
             </View>
 
@@ -401,13 +414,13 @@ export default function PostWinRewardsModal({
               </View>}
               {/* The shelf % and the next trophy in one line: "1 of 35 coins. Bronze at 12". */}
               {shelf && <View style={styles.shelfLine} accessibilityRole="text">
-                <GameIcon name="trophyBronze" size={22} />
+                <GameIcon name={shelf.startsWith('Limited') ? 'sparkle' : 'trophyBronze'} size={22} />
                 <Text style={styles.shelfText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{shelf}</Text>
               </View>}
             </Animated.View>
 
             {/* ── The one reward row, counting up ── */}
-            {(chips.length > 0 || (rush && coinLevels) || starRide || !!earnedStamp) && <View style={styles.chips}>
+            {(chips.length > 0 || (rush && coinLevels) || starRide) && <View style={styles.chips}>
               {chips.map((chip, index) => <RewardChip key={chip.label} chip={chip} index={index} enter={enter}
                 reduced={reducedMotion} started={caught} />)}
               {rush && coinLevels && <View style={styles.badge} accessible
@@ -418,12 +431,6 @@ export default function PostWinRewardsModal({
               {starRide && <View style={styles.badge} accessible accessibilityLabel="Star Ride: double">
                 <GameIcon name="star" size={20} />
                 <Text style={styles.badgeText}>x2</Text>
-              </View>}
-              {/* A new stamp: its own small picture in the row (no button); it flies to the Rewards button as the card closes. */}
-              {!!earnedStamp && <View style={[styles.badge, styles.stampBadge]} accessible
-                accessibilityLabel={`New stamp: ${earnedStamp.name}. It waits in Rewards.`}>
-                <Image source={FLY_ART.stamp} style={styles.stampArt} contentFit="contain" />
-                <GameIcon name="new" size={20} />
               </View>}
             </View>}
 
@@ -508,8 +515,13 @@ const styles = StyleSheet.create({
   badge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#ffcf3b', borderRadius: 12,
     borderWidth: 2, borderColor: '#ffffff', paddingVertical: 4, paddingHorizontal: 7, alignSelf: 'center' },
   badgeText: { fontFamily: 'Shark', fontSize: 15, color: '#05346e' },
-  stampBadge: { backgroundColor: '#fff8e4', paddingVertical: 2, paddingHorizontal: 5 },
-  stampArt: { width: 30, height: 30 },
+  // The stamp sticker sits on the hero coin's lower right, inside the hero stage (no height of its own).
+  stampSticker: { position: 'absolute', bottom: 0, left: '50%', marginLeft: HERO / 2 - 14, width: 50, height: 50,
+    borderRadius: 25, backgroundColor: '#fff8e4', borderWidth: 3, borderColor: '#ffffff', alignItems: 'center',
+    justifyContent: 'center', transform: [{ rotate: '-8deg' }],
+    shadowColor: '#05346e', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 4 },
+  stampArt: { width: 38, height: 38 },
+  stampNew: { position: 'absolute', top: -8, right: -10 },
   partsLine: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, backgroundColor: '#fff8e4', borderRadius: 14,
     borderWidth: 2, borderColor: '#ffffff', paddingVertical: 5, paddingHorizontal: 10 },
   partsTrack: { flex: 1, height: 12, borderRadius: 7, backgroundColor: '#bfe5ff', borderWidth: 2, borderColor: '#ffffff', overflow: 'hidden' },

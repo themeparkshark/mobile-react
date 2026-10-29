@@ -104,8 +104,8 @@ function rewardView(reducedMotion) {
 test('reduced-motion reward summary settles immediately and leaves its primary action visible', () => {
   const rewards = rewardView(true); rewards.find(node => node.type === './CoinCatchReveal').props.onDone(); rewards.render();
   assert.equal(rewards.motions.length, 0);
-  // Core loop 5.3: the one big button points at the next coin.
-  assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'NEXT COIN');
+  // Core loop 5.3: the one big button points at the next coin; with no coin picked yet it never promises one.
+  assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'Back to Map');
   assert.equal(rewards.find(node => node.type === './CoinCatchReveal'), undefined);
 });
 test('the win footer sits on a solid plate so the tab bar compass never reads over Continue Park', () => {
@@ -242,7 +242,7 @@ test('a first coin shows one reward row on the ladder: Shark Coins, and Energy s
   // Parts wait for coin levels (rung 3) and XP for Daily 3 (rung 4); nothing is lost, it all still flies home.
   assert.deepEqual(rowChips(rewards), [['Shark Coins', 10], ['saved for growing coins', 40]]);
   assert.equal(rewards.find(node => node.props?.accessibilityLabel?.startsWith('Reward receipt')), undefined);
-  assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'NEXT COIN');
+  assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'Back to Map', 'no guide target: never a nameless NEXT COIN');
   rewards.find(node => node.props?.accessibilityLabel === 'See my shelf').props.onPress(); assert.equal(opened, false);
 });
 test('a repeat coin uses a short once-only deposit and cancels pending feedback on skip', async () => {
@@ -258,7 +258,7 @@ test('a challenge with no confirmed ride coin skips the coin catch and exposes i
   const view=rewardView(true); view.change({coinTimesCollected:null});
   assert.equal(view.find(node=>node.type==='./CoinCatchReveal'),undefined);
   assert.ok(view.find(node=>node.props?.chip?.label==='Shark Coins'&&node.props.chip.amount===10));
-  assert.equal(view.find(node=>node.type==='./YellowButton').props.text,'Back to the Park');
+  assert.equal(view.find(node=>node.type==='./YellowButton').props.text,'Back to Map');
 });
 
 
@@ -280,7 +280,7 @@ test('no money on the win card: a non-member sees no VIP line, and NEXT COIN han
   assert.deepEqual(presses,['map'],'no guide target yet: NEXT COIN goes back to the map');
   view.tree.props.onModalHide();assert.equal(hidden,1);assert.deepEqual(navigated,[]);
 });
-test('after rung 3 a repeat win shows its Parts as one line, ready to level up; NEXT COIN stays the big button', () => {
+test('after rung 3 a repeat win shows its Parts as one line, ready to level up; the next coin stays the big button', () => {
   let opened=null;
   const view=runtime('src/components/PostWinRewardsModal.tsx', {
     '../context/AuthProvider': { AuthContext: { value: { player: null } } },
@@ -288,7 +288,8 @@ test('after rung 3 a repeat win shows its Parts as one line, ready to level up; 
     '../services/reveal/revealLadder': { useRung: rung => ({ open: rung === 'coin_levels', isNew: false, markSeen() {} }) },
     './rewards/postWinModel': postWinModel, '../screens/LeaderboardsScreen/standingsCache': { takeWinNote: () => null, holdWinNotes: () => undefined, hasWinNote: () => false },
   }, { visible: true, rideName: 'Forbidden Journey', coinTimesCollected: 9, coinsEarned: 10, xpEarned: 25, ridePartsEarned: 2, energyEarned: 40,
-    onViewCoin(open){opened=open;}, onClose() {}, playerEnergy:40,
+    onViewCoin(open){opened=open;}, onClose() {}, playerEnergy:40, wonTaskId: 7,
+    nextTarget: { taskId: 8, name: 'Tiki Room', meters: 154, reason: 'nearest_open' },
     coinProgress:{current_level:1,max_level:5,is_unlocked:true,available_parts:4,parts_to_next_level:2,energy_to_next_level:10} });
   view.find(n=>n.type==='./CoinCatchReveal').props.onDone();view.render();
   assert.equal(view.motions.length,0);

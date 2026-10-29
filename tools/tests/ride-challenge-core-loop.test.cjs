@@ -194,7 +194,10 @@ test('the challenge card: "Win the X coin", the how-it-works picture strip in it
   assert.match(modal, /show: rideRewardTask\.coins > 0 \}/);
   // From rung 3 a coin on the shelf shows its Parts ring; one not won yet shows the Parts its first win brings.
   assert.match(modal, /'RIDE PARTS'[^\n]*\n\s+show: coinLevelsOpen && !cardParts \}/);
-  assert.doesNotMatch(modal, /label: 'ENERGY'/, 'Energy is spent on the coin card, never promised on the challenge card');
+  // A ride's Energy is spent on the coin card and never promised here; a secret coin's first win after rung 3 brings
+  // +2 Parts and +15 Energy (blueprint 5.13), so only a secret coin shows the Energy tile.
+  assert.match(modal, /\{ label: 'ENERGY', amount: rideRewardTask\.energy_reward \?\? 15, icon: 'energy' as const,\n\s+show: coinLevelsOpen && !cardParts && taskType === 'secret_task' \}/);
+  assert.equal((modal.match(/label: 'ENERGY'/g) ?? []).length, 1);
   assert.match(modal, /const cardParts = cardCoin && coinLevelsOpen \? partsProgress\(cardCoin, player\?\.energy \?\? null, 0\) : null;/);
   assert.match(modal, /\{!needTicket && cardParts && !cardParts\.maxed && <View style=\{styles\.partsLine\}/);
   assert.match(modal, /times_completed \?\? 0\) > 0 \? \(redeemable\.model as TaskType\)\.asset_id/, 'the ring only for a coin already won');
@@ -447,13 +450,15 @@ test('exactly one primary and one secondary: NEXT COIN (or the Adventure\'s line
   assert.deepEqual({ ...win.nextCoinButton({ taskId: 4, name: 'Tiki Room', meters: 0, reason: 'line_story' }, 4) },
     { kind: 'line_story', label: 'Play its line story', detail: null });
   assert.equal(win.nextCoinButton(null, 4).kind, 'map');
+  // No coin to point at (night, a resting park, every coin owned): the big button never promises one.
+  assert.deepEqual({ ...win.nextCoinButton(null, 4) }, { kind: 'map', label: 'Back to Map', detail: null });
   assert.equal(win.nextCoinButton({ taskId: 4, name: 'Walt Statue', meters: 0, reason: 'in_range' }, 4).kind, 'map', 'never the coin just won');
   const card = read('src/components/PostWinRewardsModal.tsx');
   assert.equal((card.match(/<YellowButton /g) ?? []).length, 1, 'one big button');
   assert.equal((card.match(/<TouchableOpacity /g) ?? []).length, 1, 'one quiet button');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /if \(button\.kind === 'next' && target\) guide\.setTarget\(target\.taskId, 'win_card'\);/, 'the guide is the one pointer');
-  assert.match(modal, /resolveQueueStoryContext\(park\.id, 0, taskName, wonTaskId\)\.then\(ride => withTeamStep\(/);
+  assert.match(modal, /const ride = await storyWithin\(resolveQueueStoryContext\(park\.id, 0, taskName, wonTaskId\),/);
 });
 
 test('the first coin has one fixed order: the win card, the team step (once ever), then the map', async () => {
@@ -470,7 +475,16 @@ test('the first coin has one fixed order: the win card, the team step (once ever
   assert.equal(await team.teamOffered(8), false, 'per player');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /RootNavigation\.navigate\('TeamSelection', \{ firstCoin: true, \.\.\.\(then \? \{ next: then \} : \{\}\) \}\);/);
-  assert.match(modal, /afterRewardsHidden\.current = \(\) => \{ void withTeamStep\(null, \(\) => undefined\); \};/, 'after the card is gone, never on top of it');
+  // Read when the win card opens, so the team step slides in under the fading card (no map frames between).
+  assert.match(modal, /const postWinOpen = open === true && flowState === 'postwin';/);
+  assert.match(modal, /teamStepReady\.current = \(needsTeamNow \? teamOffered\(player\?\.id\) : Promise\.resolve\(true\)\)/);
+  const handler = name => modal.slice(modal.indexOf(`const ${name} = useCallback(`), modal.indexOf('}, [', modal.indexOf(`const ${name} = useCallback(`)));
+  for (const name of ['handlePostWinClose', 'handleNextCoin', 'handleViewCoin']) {
+    const body = handler(name);
+    assert.ok(body.indexOf('openTeamStep(') > 0 && body.indexOf('openTeamStep(') < body.lastIndexOf('close();'), `${name}: the team step opens before the card closes`);
+    assert.match(body, /if \(leavingWinRef\.current\) return;\n\s+leavingWinRef\.current = true;/, `${name}: one way out per win`);
+  }
+  assert.doesNotMatch(modal, /withTeamStep/, 'never after the card has faded');
 });
 
 /* ---------- Teaching, names and small fixes (blueprint 5.3, 5.13) ---------- */
@@ -590,8 +604,11 @@ test('every place a win card reward flies is a name the map registers (blueprint
   const card = read('src/components/PostWinRewardsModal.tsx');
   assert.doesNotMatch(card, /targetPosition: '(profile|rewards)'/, 'no fixed target name that the map may not register');
   assert.match(card, /const target = flyTargetFor\(route, getTarget\);/);
-  // The stamp gets its moment on the card itself too: a small picture in the reward row, no button.
-  assert.match(card, /\{!!earnedStamp && <View style=\{\[styles\.badge, styles\.stampBadge\]\} accessible/);
+  // The stamp gets its moment on the card itself too: a sticker on the hero coin (no button, no extra row).
+  assert.match(card, /\{!!earnedStamp && <Animated\.View style=\{\[styles\.stampSticker, textStyle\]\} accessible/);
+  assert.match(card, /stampSticker: \{ position: 'absolute'/, 'it takes no height of its own');
+  assert.doesNotMatch(card, /stampBadge/, 'never in the reward row, where it wrapped to a second row on a 375 pt screen');
+  assert.match(card, /\{\(chips\.length > 0 \|\| \(rush && coinLevels\) \|\| starRide\) && <View style=\{styles\.chips\}>/);
   assert.match(card, /accessibilityLabel=\{`New stamp: \$\{earnedStamp\.name\}\. It waits in Rewards\.`\}/);
 });
 
@@ -662,7 +679,8 @@ test('kid test: the Trivia toggle shows a question with a cross, the ball a chec
   assert.match(modal, /const TREAT_ART = require\('\.\.\/\.\.\/assets\/images\/prep-items\/churros\/churro_18\.png'\);/);
   assert.match(modal, /: <Image source=\{TREAT_ART\} style=\{styles\.treatArt\} contentFit="contain" \/>/);
   assert.doesNotMatch(modal, /name=\{step\.kind === 'line_ticket' \? 'ride' : 'map'\}/, 'the treats line never wears the compass');
-  assert.match(modal, /export const NEED_TICKET_BUTTON = 'Back to Map';/);
+  assert.match(modal, /export const BACK_TO_MAP = 'Back to Map';/);
+  assert.match(modal, /export const NEED_TICKET_BUTTON = BACK_TO_MAP;/);
   assert.doesNotMatch(modal, /needTicket \? 'OK'/, 'never a bare OK');
   assert.ok(fs.existsSync(path.join(root, 'assets/images/prep-items/churros/churro_18.png')));
 });
@@ -703,5 +721,53 @@ test('today\'s Adventure coin won: the big button plays its line story, even bef
   assert.match(modal, /setLineStoryNext\(adventureLineStoryNext\(goal\.adventure_ticket, attempt\.task_id, park\.id\)\);/);
   assert.match(modal, /adventureLineStory=\{lineStoryNext\}/);
   // A first coin that was also today's Adventure coin: the team step first, then the line story.
-  assert.match(modal, /resolveQueueStoryContext\(park\.id, 0, taskName, wonTaskId\)\.then\(ride => withTeamStep\(\n\s+\{ name: 'LinePlay', params: \{ ride \} \},\n\s+\(\) => RootNavigation\.navigate\('LinePlay', \{ ride \}\)\)\);/);
+  assert.match(modal, /if \(!\(await openTeamStep\(\{ name: 'LinePlay', params: \{ ride \} \}\)\)\) \{\n\s+afterRewardsHidden\.current = \(\) => RootNavigation\.navigate\('LinePlay', \{ ride \}\);/);
+});
+
+/* ---------- Round 3 (grader fixes 1 to 10) ---------- */
+
+test('one phrase back to the map: every card that leads to the map says Back to Map', () => {
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.doesNotMatch(modal, /Return to [Mm]ap|label: 'Continue'|label: 'DONE'/);
+  assert.ok((modal.match(/label: BACK_TO_MAP/g) ?? []).length >= 8);
+  const card = read('src/components/PostWinRewardsModal.tsx');
+  assert.doesNotMatch(card, /Back to the Park/);
+  assert.match(card, /label: BACK_TO_MAP_LABEL/);
+  assert.equal(win.BACK_TO_MAP_LABEL, 'Back to Map');
+});
+
+test('a limited coin won as a first coin gets its own one-line home, with no date math or countdown', () => {
+  assert.equal(win.limitedWinLine({ active: true, ends_at: null, ends_on: '2026-10-31', returns: false }), 'Limited coin. Yours to keep!');
+  assert.equal(win.limitedWinLine({ active: false, ends_at: null, returns: true }), 'Limited coin. Yours to keep!');
+  assert.equal(win.limitedWinLine(null), null, 'a permanent coin keeps the shelf line');
+  assert.equal(win.limitedWinLine(undefined), null);
+  const card = read('src/components/PostWinRewardsModal.tsx');
+  // The server's shelf count leaves limited coins out (progress null), so the limited line fills that gap only.
+  assert.match(card, /const shelf = shelfLine\(milestones \?\? null\) \?\? \(isNewCoin \? limitedWinLine\(limited\) : null\);/);
+  assert.match(read('src/components/RedeemRedeemableModal.tsx'),
+    /limited=\{redeemable\?\.type === 'task' \? \(redeemable\.model as TaskType\)\?\.limited \?\? null : null\}/);
+  assert.doesNotMatch(card, /days left|hours left|left!/i);
+});
+
+test('battery: the challenge card runs no endless animation while it sits mounted, and keeps no dead styles', () => {
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.doesNotMatch(modal, /Animated\.loop|new Animated\.Value/);
+  for (const name of ['rescueCard', 'rescueEyebrow', 'rescueCopy', 'getTickets', 'getTicketsText', 'WHEEL_SIZE']) {
+    assert.doesNotMatch(modal, new RegExp(`\\b${name}\\b`), name);
+  }
+});
+
+test('how-to pictures teach the action: Parade Beat taps on the line, Sharky holds to swim up, one line each', () => {
+  const intro = read('src/components/help/GameIntroCard.tsx');
+  assert.match(intro, /timing: \[\[\{ art: ART\.note, line: true \}\], \[\{ art: ART\.drum, tap: true, mark: 'check' \}\]\]/);
+  assert.match(intro, /shark: \[\[\{ art: ART\.hand, hold: true \}\], \[\{ art: ART\.swimmer, up: true, mark: 'check' \}\]\]/);
+  assert.doesNotMatch(intro, /shark: \[\[\{ icon: 'play' \}\]/, 'never a play icon where hold is meant');
+  assert.match(intro, /hand: require\('\.\.\/\.\.\/\.\.\/assets\/images\/ride-photo\/tap-hand\.webp'\)/, 'existing app art only');
+  assert.ok(fs.existsSync(path.join(root, 'assets/images/ride-photo/tap-hand.webp')));
+  const topics = loadTs('src/services/help/helpTopics.ts', { '../adConfig': { AD_AUDIENCE_13_PLUS_KNOWN: false } });
+  for (const [kind, intro] of Object.entries(topics.GAME_INTROS).filter(([kind]) => kind !== 'photo')) { // Snap the Ride is retired
+    assert.ok(intro.how.length <= 44, `${kind} how-to is one short line: "${intro.how}"`);
+    assert.ok(intro.win.length <= 44, `${kind} win line is one short line: "${intro.win}"`);
+  }
+  assert.equal(topics.GAME_INTROS.timing.how, 'Tap the drum when a note hits the line.');
 });
