@@ -72,7 +72,8 @@ export function unfoundCoinCopy({ isSecret, isArchived, isResting, kind, limited
   }
   return kind === 'ride'
     ? { ribbon: 'Ride Coin', hint: 'Walk up to the ride and tap PLAY! to win its coin for your shelf.', challenge: 'PLAY! at the ride' }
-    : { ribbon: 'Spot Coin', hint: 'Walk up to this spot and tap PLAY! to win its coin for your shelf.', challenge: 'PLAY! at this spot' };
+    // A sight on the Sights tab says Sight Coin, the tab's own word (an older server with no ride list keeps Spot Coin).
+    : { ribbon: kind === 'coin' ? 'Sight Coin' : 'Spot Coin', hint: 'Walk up to this spot and tap PLAY! to win its coin for your shelf.', challenge: 'PLAY! at this spot' };
 }
 
 export default function UnfoundCoinModal({ task, isSecret = false, isArchived = false, onChooseGoal, onShowOnMap, onPlayInLine, trigger, size = 62, kind, isGoal = false, limited }: Props) {
@@ -217,7 +218,7 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                     typeof task.coins === 'number' && typeof task.experience === 'number' &&
                     typeof task.energy_reward === 'number' && typeof task.ride_parts_reward === 'number' && (
                       <GameRichText style={{ color: '#327395', fontFamily: 'Knockout', fontSize: 13, lineHeight: 18, marginTop: 8 }} iconSize={15}>
-                        {`You win: [icon:coins] +${task.coins} coins${xpOpen ? ` · [icon:xp] +${task.experience} XP` : ''}${levelsOpen ? ` · [icon:energy] +${task.energy_reward} Energy · [icon:parts] +${task.ride_parts_reward} Ride Part${task.ride_parts_reward === 1 ? '' : 's'}` : ''}`}
+                        {`You win: [icon:coins] +${task.coins} Shark Coins${xpOpen ? ` · [icon:xp] +${task.experience} XP` : ''}${levelsOpen ? ` · [icon:energy] +${task.energy_reward} Energy · [icon:parts] +${task.ride_parts_reward} Ride Part${task.ride_parts_reward === 1 ? '' : 's'}` : ''}`}
                       </GameRichText>
                     )}
                 </View>

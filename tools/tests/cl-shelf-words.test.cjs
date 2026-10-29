@@ -469,3 +469,10 @@ test('round 4: GET RIDE PARTS on an owned coin shows LEVEL UP GOAL with the part
   assert.match(header, /name=\{nextRideOwned \? 'parts' : 'coin'\}/);
   assert.match(header, /\(!nextRideOwned \|\| ownedGo\)/, 'GO stays for a level-up goal');
 });
+
+test('round 4: the unfound sight card says Sight Coin (the tab word) and its prize says Shark Coins', () => {
+  const card = read('src/components/UnfoundCoinModal.tsx');
+  assert.match(card, /ribbon: kind === 'coin' \? 'Sight Coin' : 'Spot Coin'/);
+  assert.match(card, /\+\$\{task\.coins\} Shark Coins/);
+  assert.doesNotMatch(card, /\+\$\{task\.coins\} coins/);
+});
