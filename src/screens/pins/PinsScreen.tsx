@@ -46,6 +46,8 @@ import useRetentionFlags from '../../services/retention/useRetentionFlags';
 import { flagOn } from '../../services/retention/flags';
 import { useRung } from '../../services/reveal/revealLadder';
 
+/** The Profile Pins door's own picture: an empty My Pins tab wears it. */
+const PINS_DOOR_ART = require('../../../assets/images/screens/profile/pin_collections.png');
 /** Coins you spend wear the coin stack everywhere in the app (the single fin coin is a ride coin). */
 const COINS_ICON = require('../../../assets/icons/game/coins.png');
 
@@ -514,8 +516,8 @@ export default function PinsScreen() {
             )}
 
             {visited.has('mine') && (
-              <View style={[styles.mine, tab !== 'mine' && styles.hidden]}>
-                {owned.length === 0 && <EmptyTab art={PIN_ART.trade} title={PINS_COPY.mineEmptyTitle} line={PINS_COPY.mineEmptyLine} />}
+              <View style={[owned.length > 0 && styles.mine, tab !== 'mine' && styles.hidden]}>
+                {owned.length === 0 && <EmptyTab art={PINS_DOOR_ART} title={PINS_COPY.mineEmptyTitle} line={PINS_COPY.mineEmptyLine} />}
                 {owned.length > 0 && <Text maxFontSizeMultiplier={1.3} style={styles.wearHint}>Tap a pin to wear it</Text>}
                 {owned.length > 0 && <View style={styles.legend}>
                   <View style={styles.legendItem}><Image source={PIN_ART.trade} style={styles.legendIcon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.legendText}>Can trade</Text></View>
