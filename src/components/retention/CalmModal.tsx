@@ -11,8 +11,8 @@ import Animated, {
  * faded in, no dim) before the zoom started.
  *
  * Here one shared value drives the dim and the card together on the UI thread, so they can never disagree:
- * - The card starts at 0 (invisible, small) on its very first frame and only grows once UIKit says the sheet
- *   is up (RN Modal onShow), so no full-size frame ever shows before the zoom.
+ * - The card starts at 0 (invisible, small) on its very first frame and grows from there, so no full-size frame
+ *   ever shows before the zoom.
  * - Closing shrinks the card and fades the dim in the same animation, then the native sheet goes away.
  * - `swapKey`: a new card inside the same open sheet (Rewards to a chest and back) gets a small settle instead
  *   of a native dismiss and present, so there is never a bare map between two cards.
@@ -65,13 +65,11 @@ export default function CalmModal({ visible, children, reducedMotion, onWillShow
   cb.current = { onWillShow, onShow, onHide, onDismiss };
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
-  const presented = useRef(false);
   const hidPending = useRef(false);
-  const showFallback = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstRun = useRef(true);
   const mounted = useRef(true);
   useEffect(() => () => {
     mounted.current = false;
-    if (showFallback.current) clearTimeout(showFallback.current);
     cancelAnimation(p); cancelAnimation(swap);
   }, [p, swap]);
 
@@ -82,34 +80,39 @@ export default function CalmModal({ visible, children, reducedMotion, onWillShow
     setNative(false);
   };
   const grow = () => {
-    if (showFallback.current) { clearTimeout(showFallback.current); showFallback.current = null; }
     if (!visibleRef.current) return;
     p.value = withTiming(1, { duration: reducedMotion ? 120 : inMs, easing: reducedMotion ? Easing.linear : Easing.out(Easing.back(1.2)) },
       done => { if (done) runOnJS(shown)(); });
   };
 
   useEffect(() => {
+    const first = firstRun.current;
+    firstRun.current = false;
     if (visible) {
       if (!native) {
-        presented.current = false;
         cancelAnimation(p); p.value = 0;
         setNative(true);
         cb.current.onWillShow?.();
-      } else if (presented.current) {
+      } else if (first) {
+        // Mounted already visible: the mount effect below starts the zoom.
+        cb.current.onWillShow?.();
+      } else {
         // Asked again while closing: grow back from where it is.
         grow();
-      } else if (!showFallback.current) {
-        // First mount with visible: onShow normally starts the zoom; this covers a platform that never sends it.
-        cb.current.onWillShow?.();
-        showFallback.current = setTimeout(grow, 400);
       }
       return;
     }
     if (!native) return;
-    if (showFallback.current) { clearTimeout(showFallback.current); showFallback.current = null; }
     p.value = withTiming(0, { duration: reducedMotion ? 120 : outMs, easing: Easing.in(Easing.quad) },
       done => { if (done) runOnJS(hidden)(); });
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The native sheet was just mounted: start the zoom now, not after onShow's round trip (native to JS and back cost
+  // a few hundred ms under load). Frames drawn before UIKit shows the sheet are never seen, and p starts at 0, so the
+  // first frame that shows is the small, faint start of the zoom, never a full-size card.
+  useEffect(() => {
+    if (native && visibleRef.current) grow();
+  }, [native]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The native sheet is asked to go: tell the host the animation ended (react-native-modal's onModalHide moment).
   useEffect(() => {
@@ -135,7 +138,6 @@ export default function CalmModal({ visible, children, reducedMotion, onWillShow
 
   return (
     <Modal visible={native} transparent animationType="none" statusBarTranslucent
-      onShow={() => { presented.current = true; grow(); }}
       onDismiss={() => cb.current.onDismiss?.()}
       onRequestClose={() => onBackButtonPress?.()}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onBackdropPress} disabled={!onBackdropPress}
