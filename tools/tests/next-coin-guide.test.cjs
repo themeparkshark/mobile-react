@@ -945,3 +945,21 @@ test('winning today\'s Adventure coin turns the guide to its Line story at once,
   // Standing in its line: the card is the Line story (where its story plays), not "In line for X?".
   assert.equal(G.guideState(input({ inLineTaskId: 2, adventure: { taskId: 2, parkId: 8, phase: 'play' } }), after), 'line_story');
 });
+
+test('Pick another coin while standing in the Adventure ride\'s line: its line never pulls the guide straight back (walk r3)', () => {
+  const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true, queue: true } : c));
+  G.guide.reset();
+  const adventure = { taskId: 2, parkId: 8, phase: 'play' };
+  const first = G.guide.resolve(input({ coins: won, live: { 1: 'open', 2: 'open' }, adventure, inLineTaskId: 2, location: north(200) }));
+  assert.equal(first.taskId, 2);
+  assert.equal(first.reason, 'line_story');
+  G.guide.skipLineStory();
+  const next = G.guide.resolve(input({ coins: won, live: { 1: 'open', 2: 'open' }, adventure, inLineTaskId: 2, location: north(200) }));
+  assert.notEqual(next.taskId, 2, 'the declined Adventure ride is not the in-line target');
+  // Another ride's line still turns the guide (the decline is only about today's Adventure ride).
+  const other = G.pickNextCoin(input({ coins: won.map(c => ({ ...c, queue: true })), live: { 1: 'open', 2: 'open' },
+    adventure: { ...adventure, lineStoryDeclined: true }, inLineTaskId: 1 }));
+  assert.equal(other.taskId, 1);
+  assert.equal(other.reason, 'in_line');
+  G.guide.reset();
+});

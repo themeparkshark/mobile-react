@@ -233,6 +233,10 @@ function adventureLineStory(input: GuideInput): boolean {
 /** The in-line ride, when it is a real queue ride in this park that is not known closed. Owned is fine: the wait powers it. */
 function inLineCoin(input: GuideInput, coins: readonly GuideCoin[]): GuideCoin | null {
   if (input.inLineTaskId == null) return null;
+  // "Pick another coin" on today's Adventure ride while standing in its line: its line never pulls the
+  // guide straight back (the card would not change), the Adventure's ticket tab keeps it one tap away.
+  const adventure = input.adventure;
+  if (adventure?.lineStoryDeclined && adventure.taskId === input.inLineTaskId && adventure.parkId === input.parkId) return null;
   const coin = coins.find(c => c.taskId === input.inLineTaskId);
   if (!coin || coin.kind !== 'ride' || coin.queue === false) return null;
   return liveOf(input, coin) === 'closed' ? null : coin;
@@ -306,7 +310,9 @@ export function pickNextCoin(input: GuideInput): GuideTarget | null {
   const now = finite(input.now) ? input.now : Date.now();
   const freshPick = !!input.current && input.current.source !== 'guide' && finite(input.currentPickedAt) &&
     now - input.currentPickedAt >= 0 && now - input.currentPickedAt < PICK_HOLD_MS && !!heldStillValid(input, coins, input.current);
-  if (line && input.current?.taskId !== line.taskId && !freshPick) return targetFor(input, line, 'in_line');
+  // Today's Adventure ride's own line, after its coin: that is its Line story (where the story plays).
+  const lineReason = (coin: GuideCoin) => adventureLineStory(input) && input.adventure?.taskId === coin.taskId ? 'line_story' : 'in_line';
+  if (line && input.current?.taskId !== line.taskId && !freshPick) return targetFor(input, line, lineReason(line));
 
   // The held target stays until won, done, closed, too far, or replaced. A coin that only rose for a
   // moment (PLAY! came up for it) gives way to the target from before once the player walks on.
@@ -337,7 +343,7 @@ export function pickNextCoin(input: GuideInput): GuideTarget | null {
   if (hereCoin) return targetFor(input, hereCoin, 'in_range');
 
   // 3. The ride whose line you are standing in.
-  if (line) return targetFor(input, line, 'in_line');
+  if (line) return targetFor(input, line, lineReason(line));
 
   // 4. The coin you chose, if it is open and in this park.
   if (input.chosenTaskId != null) {
