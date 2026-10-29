@@ -442,6 +442,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         if (fromRewards.current) { fromRewards.current = false; returnToRewards(); }
       }}
       onDismiss={layer.onDismissed}
+      // On the UI thread, like the Rewards overlay: driven from JS, a busy JS thread let the backdrop finish while
+      // the card hung on, so closing blinked (card, bare map, card again, gone).
+      useNativeDriver useNativeDriverForBackdrop hideModalContentWhileAnimating={false}
       animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'}
       animationInTiming={reducedMotion ? 120 : 260} animationOutTiming={reducedMotion ? 120 : 180}
       backdropColor={BRAND.navy}

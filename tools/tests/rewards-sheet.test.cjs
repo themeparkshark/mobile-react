@@ -717,6 +717,8 @@ test('the daily chest opened from Rewards: BACK says BACK and the sheet comes ba
   assert.match(chest, /useNativeModalLayer\(visible, 'wait'\)/);
   assert.match(chest, /isVisible=\{layer\.present\}/);
   assert.match(chest, /onDismiss=\{layer\.onDismissed\}/);
+  // The chest closes on the UI thread (a JS-driven close blinked under load: card, bare map, card, gone).
+  assert.match(chest, /useNativeDriver useNativeDriverForBackdrop hideModalContentWhileAnimating=\{false\}/);
   const hook = read('src/components/retention/useRetention.tsx');
   // Asked at once (the map mounts the chest while the sheet closes); the chest's 'wait' layer holds it until UIKit
   // says the sheet is gone.
