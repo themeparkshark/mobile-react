@@ -578,6 +578,18 @@ export const guide = {
     emit();
   },
   /**
+   * The map's data was partial when the guide chose its coin (the trip goal or the ride catalog had not
+   * answered): drop that choice so the next resolve picks with everything in. A player's pick is kept.
+   */
+  releaseGuidePick(): void {
+    if (!held || held.source !== 'guide') return;
+    held = null;
+    heldPickedAt = null;
+    resume = null;
+    inputVersion++;
+    emit();
+  },
+  /**
    * Changes when something the next resolve must see changed (a pick, a skipped step, a cleared plan,
    * a reset). The map re-resolves on this, never on resolve's own notice (no render loop).
    */

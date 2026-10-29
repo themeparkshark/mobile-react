@@ -1182,7 +1182,7 @@ export function ExploreScreenBody() {
     return () => clearTimeout(timer);
   }, [adventureWonTaskId]);
   const nextCoin = useNextCoinGuide({
-    enabled: !!player && !!park, ready: guideReady, parkId: park?.id ?? null, parkName: park?.name ?? null, location,
+    enabled: !!player && !!park, ready: guideReady, tripGoalLoaded: !!tripGoalData, parkId: park?.id ?? null, parkName: park?.name ?? null, location,
     tasks: visibleTasks, live: livePark, adventure, adventureWonTaskId, dwellRideId: queueDwell?.rideId ?? null,
     starTaskIds: starRides, rushTaskIds, ownedTaskIds, levelUpTaskIds,
     starRushUnlocked: coinLevelsRung.open, coinLevelsUnlocked: coinLevelsRung.open,

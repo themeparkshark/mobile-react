@@ -963,3 +963,27 @@ test('Pick another coin while standing in the Adventure ride\'s line: its line n
   assert.equal(other.reason, 'in_line');
   G.guide.reset();
 });
+
+test('a coin the guide chose before the trip goal answered gives way once the Adventure lands (a slow server, walk r3); a player pick never does', () => {
+  G.guide.reset();
+  const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c));
+  // Partial data: no Adventure yet. The guide takes the nearest open ride.
+  const early = G.guide.resolve(input({ coins: won, live: { 1: 'open' } }));
+  assert.equal(early.taskId, 1);
+  // The trip goal lands with the Adventure on its souvenir step: the held guess would hold...
+  const celebrate = { taskId: 2, parkId: 8, phase: 'celebrate' };
+  assert.equal(G.guide.resolve(input({ coins: won, live: { 1: 'open' }, adventure: celebrate })).taskId, 1);
+  // ...so the map releases the guess made on partial data, and rule 1 leads.
+  G.guide.releaseGuidePick();
+  const full = G.guide.resolve(input({ coins: won, live: { 1: 'open' }, adventure: celebrate }));
+  assert.equal(full.taskId, 2);
+  assert.equal(full.reason, 'line_story');
+  // A player's pick is never released.
+  G.guide.setTarget(3, 'shelf');
+  G.guide.resolve(input({ coins: won, live: { 1: 'open', 3: 'open' }, adventure: celebrate }));
+  G.guide.releaseGuidePick();
+  assert.equal(G.guide.current().taskId, 3);
+  const hook = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/guide/useNextCoinGuide.ts'), 'utf8');
+  assert.match(hook, /const complete = input\.tripGoalLoaded !== false && catalog\?\.parkId === parkId;/);
+  G.guide.reset();
+});

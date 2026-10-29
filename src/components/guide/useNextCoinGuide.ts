@@ -28,6 +28,11 @@ export interface NextCoinGuideInput {
    * hold (the target does not flip-flop), so Today's Adventure could lose to the nearest ride.
    */
   readonly ready?: boolean;
+  /**
+   * Today's trip goal (and its Adventure) has answered. A coin the guide chose before it and the ride
+   * catalog answered (a slow server) gives way once, when both are in, so a late Adventure is never lost.
+   */
+  readonly tripGoalLoaded?: boolean;
   readonly parkId: number | null;
   readonly parkName: string | null;
   readonly location: { readonly latitude: number; readonly longitude: number } | null | undefined;
@@ -183,6 +188,22 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
     });
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A coin the guide chose on partial data (no trip goal or no ride catalog yet) gives way once when both
+  // land: the player never picked it, and the full data may hold today's Adventure (rule 1 or 5).
+  const complete = input.tripGoalLoaded !== false && catalog?.parkId === parkId;
+  const partialPick = useRef<{ parkId: number | null; taskId: number } | null>(null);
+  useEffect(() => {
+    if (!enabled || parkId == null || !ready) return undefined;
+    const held = guide.current();
+    if (!complete) {
+      if (held && held.source === 'guide' && held.parkId === parkId) partialPick.current = { parkId, taskId: held.taskId };
+      return undefined;
+    }
+    const partial = partialPick.current;
+    partialPick.current = null;
+    if (partial && partial.parkId === parkId && held?.taskId === partial.taskId) guide.releaseGuidePick();
+    return undefined;
+  });
   const target = useSyncExternalStore(guide.subscribe, guide.current, guide.current);
   const held = enabled && ready && target && target.parkId === parkId ? target : null;
   // "You're here" only while PLAY! is really up for this coin (the server's range check wins over geometry).
