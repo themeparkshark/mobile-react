@@ -319,3 +319,24 @@ test('the recap GO and NEXT COIN follow the guide store, and a coin you do not o
   assert.equal(go({ rideName: 'Jungle Cruise', coinState: 'unowned', partsEarned: slot.slotPartsShown(1, 3), rideTaskId: 583,
     upgradeReady: false, nextCoin: null }).label, 'Win Jungle Cruise’s coin: 3 Parts are waiting');
 });
+
+test('the lane walks can stub the posted-wait feed, but a store or OTA bundle always reads the real feed', () => {
+  const stub = loadTs('src/services/lineplay/liveStub.ts');
+  assert.equal(stub.waitFeedStubMode(false, 'open'), null, 'never outside a development bundle');
+  assert.equal(stub.waitFeedStubMode(false, 'off'), null);
+  assert.equal(stub.waitFeedStubMode(true, undefined), null, 'only when a lane Metro sets it');
+  assert.equal(stub.waitFeedStubMode(true, 'open'), 'open');
+  assert.equal(stub.waitFeedStubMode(true, 'off'), 'off');
+  const closed = [{ id: 'jc', name: 'Jungle Cruise', entityType: 'ATTRACTION', status: 'CLOSED', queue: { STANDBY: { waitTime: null } } }];
+  const open = stub.applyWaitFeedStub(closed, 'open');
+  assert.equal(open[0].status, 'OPERATING');
+  assert.ok(open[0].queue.STANDBY.waitTime >= 5 && open[0].queue.STANDBY.waitTime <= 45);
+  assert.equal(stub.stubPostedWait('jc'), stub.stubPostedWait('jc'), 'the same posted wait every call');
+  assert.deepEqual(plain(stub.applyWaitFeedStub(closed, 'off')), []);
+  assert.deepEqual(plain(stub.applyWaitFeedStub(closed, null)), closed);
+  const source = read('src/services/lineplay/liveStub.ts');
+  assert.match(source, /waitFeedStubMode\(typeof __DEV__ !== 'undefined' && __DEV__, process\.env\.EXPO_PUBLIC_GUIDE_LIVE_STUB\)/);
+  for (const file of ['src/screens/QueueTimesScreen.tsx', 'src/screens/LinePlay/LinePlayScreen.tsx', 'src/hooks/useRideDetection.ts']) {
+    assert.match(read(file), /import waitFeed from '\.\.\/(\.\.\/)?services\/lineplay\/liveStub';/, `${file} reads the feed through the stub`);
+  }
+});

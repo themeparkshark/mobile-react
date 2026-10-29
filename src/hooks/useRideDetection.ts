@@ -19,7 +19,7 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { getRides, RideType } from '../api/endpoints/rides';
-import getWikiTimes from '../api/endpoints/parks/queue-times/getWikiTimes';
+import waitFeed from '../services/lineplay/liveStub';
 import rideDetectionService, {
   setDetectionRides,
   startDetection,
@@ -254,7 +254,7 @@ async function fetchAndSetWaitTimes(rides: RideType[], parkId: number | null) {
     const allEntries: { name: string; queue?: { STANDBY?: { waitTime: number | null } } }[] = [];
 
     // Fetch all parks in parallel (ISSUE 11 fix)
-    const results = await Promise.allSettled(parkIds.map(pid => getWikiTimes(pid)));
+    const results = await Promise.allSettled(parkIds.map(pid => waitFeed(pid)));
 
     for (const result of results) {
       if (result.status === 'fulfilled') {

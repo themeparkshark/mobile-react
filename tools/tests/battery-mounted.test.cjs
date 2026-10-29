@@ -78,7 +78,8 @@ test('QueueTimesScreen: the minute refresh only runs on screen in the foreground
   const view = runtime('src/screens/QueueTimesScreen.tsx', {
     '@react-navigation/native': { useIsFocused: () => focused, useNavigation: () => ({ navigate() {}, goBack() {} }) },
     '../hooks/appActive': { useAppActive: () => active },
-    '../api/endpoints/parks/queue-times/getWikiTimes': { default: async park => { loads.push([park, now]); return []; }, __esModule: true },
+    // Wait Times reads the feed through LinePlay's wait feed (the lane walks' dev-only stub, never in a store bundle).
+    '../services/lineplay/liveStub': { default: async park => { loads.push([park, now]); return []; }, __esModule: true },
     '../context/LocationProvider': { LocationContext: { value: { location: null } } },
     '@shopify/flash-list': { FlashList: 'FlashList' },
     '../constants/parkWaitTimes': loadTs('src/constants/parkWaitTimes.ts'),

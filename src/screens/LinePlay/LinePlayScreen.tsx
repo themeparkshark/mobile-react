@@ -53,7 +53,7 @@ import { useLinePlaySession } from '../../services/lineplay/useLinePlaySession';
 import { isRecentQueueSample, MAX_SESSION_ACTIVITY_SLOTS, queueEndedReason } from '../../services/lineplay/LinePlaySession';
 import { crewLivePrompt } from '../../services/lineplay/livePrompt';
 import LinePlayLiveRail from './components/LinePlayLiveRail';
-import getWikiTimes from '../../api/endpoints/parks/queue-times/getWikiTimes';
+import waitFeed from '../../services/lineplay/liveStub';
 import { LocationContext, LocationStatusContext } from '../../context/LocationProvider';
 import { AuthContext } from '../../context/AuthProvider';
 import getRideCoins from '../../api/endpoints/me/ride-coins';
@@ -548,7 +548,7 @@ export default function LinePlayScreen() {
       controller = new AbortController();
       const timeout = setTimeout(() => controller?.abort(), 10_000);
       try {
-        const entries = await getWikiTimes(ride.parkId!, controller.signal);
+        const entries = await waitFeed(ride.parkId!, controller.signal);
         if (!alive) return;
         const entry = entries.find(item => item.id === ride.waitFeedRideId);
         const minutes = entry?.status === 'OPERATING' ? entry.queue?.STANDBY?.waitTime : null;

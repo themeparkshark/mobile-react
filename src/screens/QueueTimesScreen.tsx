@@ -18,7 +18,8 @@ import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper, { FOOTER_CLEARANCE } from '../components/Wrapper';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
-import getWikiTimes, { WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
+import type { WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
+import waitFeed from '../services/lineplay/liveStub';
 import {
   CLOSED_COLOR,
   DOWN_COLOR,
@@ -272,7 +273,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
     if (showLoading) setLoading(true);
     setFeedError(false);
     try {
-      const data = previewEntries ?? await getWikiTimes(selectedPark);
+      const data = previewEntries ?? await waitFeed(selectedPark);
       if (generation !== fetchGeneration.current) return;
       setAttractions(data);
       setLastUpdated(Date.now());
