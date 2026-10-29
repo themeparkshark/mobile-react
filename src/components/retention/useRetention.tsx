@@ -701,6 +701,15 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     </View>
   );
 
+  // The Rewards card. While a card opened from it is up (a chest, a reveal, Daily 3), it stays mounted out of sight,
+  // so BACK shows this same card again at once: a fresh mount drew its row pictures a few frames late.
+  const rewardsCard = (
+    <RewardsSheet rows={rows} flame={summary.flame} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
+      reducedMotion={reducedMotion} enterRows={!(presentNow && shownRef.current && !!face.current && face.current.key !== 'rewards')}
+      onRow={onRewardsRow} onClose={close} />
+  );
+  const rewardsParked = (view?.k === 'chest' && view.back === 'rewards') || (view?.k === 'reveal' && backToRewards.current)
+    || (view?.k === 'sheet' && sheetFromRewards);
   let title: string | null = 'Daily 3';
   let content: ReactNode = null;
   if (view?.k === 'chest' && dailyGift) {
@@ -713,11 +722,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     );
   } else if (view?.k === 'rewards') {
     title = 'Rewards';
-    content = (
-      <RewardsSheet rows={rows} flame={summary.flame} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
-        reducedMotion={reducedMotion} enterRows={!(presentNow && shownRef.current && !!face.current && face.current.key !== 'rewards')}
-        onRow={onRewardsRow} onClose={close} />
-    );
+    content = rewardsCard;
   } else if (view?.k === 'sheet' && daily) {
     content = (
       <Daily3Sheet state={daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
@@ -816,6 +821,16 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const old = holdOld ? face.current : null;
   if (!holdOld) face.current = calmFace(live, face.current);
   const shownFace = face.current;
+  // What is mounted in the sheet, one shown: the card on screen, the Rewards card parked behind a card opened from it,
+  // and a new chest card mounting unseen until its art is drawn. Keys never change, so nothing mounts twice.
+  type Face = { title: string | null; content: ReactNode; key: string };
+  const onScreen: Face | null = holdOld ? old : shownFace;
+  const faceSlots: { face: Face; shown: boolean }[] = [];
+  const rewardsFace: Face = { title: 'Rewards', content: rewardsCard, key: 'rewards' };
+  if (onScreen?.key === 'rewards') faceSlots.push({ face: rewardsFace, shown: true });
+  else if (rewardsParked) faceSlots.push({ face: rewardsFace, shown: false });
+  if (onScreen && onScreen.key !== 'rewards') faceSlots.push({ face: onScreen, shown: true });
+  if (holdOld && live && live.key !== 'rewards') faceSlots.push({ face: live, shown: false });
   const faceView = (f: { title: string | null; content: ReactNode }) => (f.title === null ? f.content : (
     <View style={styles.wrap}>
       <Ribbon text={f.title} />
@@ -836,10 +851,12 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       }}
       onDismiss={nativeGone} backdropColor={BRAND.navy}
       onBackdropPress={holding ? undefined : close} onBackButtonPress={holding ? undefined : close}>
-      {old && live ? [
-        <View key={`face-${old.key}`}>{faceView(old)}</View>,
-        <View key={`face-${live.key}`} style={styles.pendingFace} pointerEvents="none">{faceView(live)}</View>,
-      ] : shownFace ? [<View key={`face-${shownFace.key}`}>{faceView(shownFace)}</View>] : null}
+      {faceSlots.map(slot => (
+        <View key={`face-${slot.face.key}`} style={slot.shown ? undefined : styles.pendingFace} pointerEvents={slot.shown ? 'auto' : 'none'}
+          accessibilityElementsHidden={!slot.shown} importantForAccessibility={slot.shown ? 'auto' : 'no-hide-descendants'}>
+          {faceView(slot.face)}
+        </View>
+      ))}
     </CalmModal>
   );
 

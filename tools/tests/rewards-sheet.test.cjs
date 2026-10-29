@@ -780,7 +780,10 @@ test('reward sheets: closing keeps the card that was up (never a default "Daily 
   // Rewards to the chest card: the Rewards card stays until the chest art is drawn (never a chest card with no chest),
   // and the chest card keeps one key before and after, so it mounts once.
   assert.match(hook, /const holdOld = !!live && live\.key === 'chest' && !chestArt/);
-  assert.match(hook, /<View key=\{`face-\$\{live\.key\}`\} style=\{styles\.pendingFace\} pointerEvents="none">/);
+  assert.match(hook, /if \(holdOld && live && live\.key !== 'rewards'\) faceSlots\.push\(\{ face: live, shown: false \}\);/);
+  // The Rewards card stays mounted (out of sight) behind a card opened from it, so BACK shows the same card again.
+  assert.match(hook, /else if \(rewardsParked\) faceSlots\.push\(\{ face: rewardsFace, shown: false \}\);/);
+  assert.match(hook, /<View key=\{`face-\$\{slot\.face\.key\}`\} style=\{slot\.shown \? undefined : styles\.pendingFace\}/);
   assert.match(read('src/components/DailyGiftModal.tsx'), /onDisplay=\{showedArt\} onLoadEnd=\{showedArt\}/);
   // Back from the chest card the Rewards rows are simply there (rows still fading in read as an empty card).
   assert.match(hook, /enterRows=\{!\(presentNow && shownRef\.current && !!face\.current && face\.current\.key !== 'rewards'\)\}/);
