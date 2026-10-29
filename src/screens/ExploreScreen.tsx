@@ -1245,10 +1245,13 @@ export function ExploreScreenBody() {
     autoOpenUsed: attentionQueue.used(appOpenId, kind),
   });
   // Other lanes ask the same rules through attentionGate (the ride question, the membership look).
+  // Published only once the map knows the place (a park, or home confirmed); until then nothing opens by itself.
+  const placeKnown = parkLoaded && (!!park || homeLocationConfirmed);
   useEffect(() => {
+    if (!placeKnown) { attentionGate.hold(); return; }
     attentionGate.publish({ atPark: !!park, arrivedAt: nextCoin.arrivedAt, walkingToTarget: !!park && nextCoin.state === 'walk',
       playing: redeemFlowOpen, winCardClosedAt: flowClosedAt }, appOpenId);
-  }, [park, nextCoin.arrivedAt, nextCoin.state, redeemFlowOpen, flowClosedAt, appOpenId]);
+  }, [placeKnown, park, nextCoin.arrivedAt, nextCoin.state, redeemFlowOpen, flowClosedAt, appOpenId]);
   const chestReady = !firstVisitHold && !(homeIntroOwed && !park) && attentionFor('daily_chest') && chestMayPresent({
     // In the half second between the first catch and Finn's "Nice catch!" line, the chest waits too (no flash).
     tutorialActive: isActive || firstLineGap, findOpen: showPrepItemModal, findPending: !!pendingFind,

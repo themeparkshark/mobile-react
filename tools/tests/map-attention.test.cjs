@@ -409,8 +409,15 @@ test('attentionGate: other lanes ask the map\'s rules before opening by themselv
   assert.equal(Q.attentionGate.request('membership', t0 + 61_000), false, 'one automatic open per app open');
   Q.attentionGate.publish({ atPark: true, arrivedAt: t0, walkingToTarget: true, playing: false, winCardClosedAt: null }, 'open-2');
   assert.equal(Q.attentionGate.allowed('ride_question', t0 + 60_000), false, 'never while walking to the target');
+  // Before the map knows the place (launch), only a Shark Drop link the player tapped may open.
+  Q.attentionGate.hold();
+  assert.equal(Q.attentionGate.allowed('ride_question', t0 + 60_000), false, 'the Ride Journal never opens before the map knows the place');
+  assert.equal(Q.attentionGate.allowed('membership', t0 + 60_000), false);
+  assert.equal(Q.attentionGate.allowed('share_drop', t0 + 60_000), true, 'a link the player tapped');
   Q.attentionQueue.reset(); Q.attentionGate.reset();
   const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /const placeKnown = parkLoaded && \(!!park \|\| homeLocationConfirmed\);/);
+  assert.match(explore, /if \(!placeKnown\) \{ attentionGate\.hold\(\); return; \}/);
   assert.match(explore, /attentionGate\.publish\(\{ atPark: !!park, arrivedAt: nextCoin\.arrivedAt,/);
 });
 

@@ -205,9 +205,18 @@ export const attentionGate = {
   publish(state: Omit<AttentionState, 'now' | 'autoOpenUsed'>, appOpenId: string): void {
     published = { state, appOpenId };
   },
+  /**
+   * The map does not know yet where the player is (launch, a park check-in on its way): nothing may
+   * open by itself until it publishes again (seen: the Ride Journal opened 3 s after launch, before the
+   * map knew it was at a park).
+   */
+  hold(): void {
+    published = null;
+  },
   /** Whether `kind` may open by itself right now (does not take the one automatic open). */
   allowed(kind: AutoOpenKind, now: number = Date.now()): boolean {
-    if (!published) return kind !== 'daily_chest' && kind !== 'reward';
+    // Before the map knows the place, only what the player asked for themselves (a Shark Drop link) opens.
+    if (!published) return kind === 'share_drop';
     return autoOpenAllowed(kind, { ...published.state, now, autoOpenUsed: attentionQueue.used(published.appOpenId, kind) });
   },
   /** Ask to open by itself: true takes this app open's one automatic open; false means wait on your button. */
