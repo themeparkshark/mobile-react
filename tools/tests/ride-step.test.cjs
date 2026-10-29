@@ -574,3 +574,11 @@ test('one account\'s ride is never another account\'s ride question on a shared 
     assert.equal(svc.detectionBelongsTo({ playerId: '48' }, null), true, 'signed out: nothing is hidden');
   });
 });
+
+test('the batch confirm: its arrow says Go back, and "Back to Ride Tracker" really lands on the Ride Tracker', () => {
+  const batch = fs.readFileSync(path.join(__dirname, '../../src/screens/RideTracker/RideBatchConfirmScreen.tsx'), 'utf8');
+  assert.match(batch, /accessibilityLabel="Go back"/);
+  assert.doesNotMatch(batch, /accessibilityLabel="Return to Ride Tracker"/);
+  assert.match(batch, /onPress=\{backToRideTracker\}/);
+  assert.match(batch, /else navigation\.dispatch\(StackActions\.replace\('RideTracker'\)\);/);
+});
