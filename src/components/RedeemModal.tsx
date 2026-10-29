@@ -4,7 +4,8 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { AuthContext } from '../context/AuthProvider';
 import { useRung } from '../services/reveal/revealLadder';
-import { playBadge, type PlayBadge } from './rewards/challengeCopy';
+import { playBadge, stampClaimSources, type PlayBadge } from './rewards/challengeCopy';
+import { getStamps } from '../api/endpoints/me/stamps';
 import TicketGift from './rewards/TicketGift';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { nearbyOpportunityOpen, nearbyRideClosedReason, type NearbyClosedReason } from '../screens/ExploreScreen/mapOpportunityTiming';
@@ -89,9 +90,25 @@ export default function RedeemModal({
   const coin = redeemable && (redeemable.type === 'task' || redeemable.type === 'secret_task')
     ? redeemable.model as TaskType : null;
   // Out of Tickets, PLAY! never vanishes: the daily free try wears a gift, a held extra try a ticket-gift.
+  // Earned Tickets waiting in the Stamp Book come first (the card claims them in place), so while any wait
+  // PLAY! wears no gift: the button and the card always agree. Looked up once per Ticket count, only at 0.
+  const short = !!coin && (player?.tickets ?? 0) < Math.max(1, coin.ticket_cost ?? 1) && redeemable?.rescue_pass_available === true;
+  const [claimWaiting, setClaimWaiting] = useState<{ tickets: number; count: number } | null>(null);
+  const ticketsNow = player?.tickets ?? 0;
+  useEffect(() => {
+    if (!short || claimWaiting?.tickets === ticketsNow) return;
+    let alive = true;
+    void getStamps().then(response => {
+      const count = stampClaimSources(Object.values(response.stamps).flat()).reduce((sum, source) => sum + source.tickets, 0);
+      if (alive) setClaimWaiting({ tickets: ticketsNow, count });
+    }).catch(() => { if (alive) setClaimWaiting({ tickets: ticketsNow, count: 0 }); });
+    return () => { alive = false; };
+  }, [short, ticketsNow, claimWaiting?.tickets]);
   const badge: PlayBadge = coin ? playBadge({
-    tickets: player?.tickets ?? 0, ticketCost: coin.ticket_cost ?? 1,
+    tickets: ticketsNow, ticketCost: coin.ticket_cost ?? 1,
     rescueAvailable: redeemable?.rescue_pass_available, rescueSource: redeemable?.rescue_pass_source,
+    // Until the lookup answers, no gift: a gift that vanishes a moment later would be a false promise.
+    claimable: short && claimWaiting?.tickets !== ticketsNow ? 1 : claimWaiting?.count ?? 0,
   }) : null;
   // Selecting a different ride on the map means the player is looking elsewhere.
   const otherSelected = !!task && selectedTaskId !== null && selectedTaskId !== task.id;

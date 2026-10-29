@@ -174,6 +174,10 @@ test('out of Tickets PLAY! never vanishes: today\'s free try wears a gift, a hel
   assert.equal(copy.playBadge({ ...base, rescueSource: 'held_retry' }), 'extra_try');
   assert.equal(copy.playBadge({ ...base, tickets: 1 }), null, 'a Ticket in hand: no badge');
   assert.equal(copy.playBadge({ ...base, rescueAvailable: false }), null);
+  assert.equal(copy.playBadge({ ...base, claimable: 5 }), null, 'earned Tickets wait: the card claims them first, so no gift yet');
+  const play = read('src/components/RedeemModal.tsx');
+  assert.match(play, /claimable: short && claimWaiting\?\.tickets !== ticketsNow \? 1 : claimWaiting\?\.count \?\? 0/,
+    'no gift until the Stamp Book lookup answers, so PLAY! and the card always agree');
   const redeem = read('src/components/RedeemModal.tsx');
   // The pill shows for an open ride whatever the Ticket count (no ticket check hides it).
   assert.match(redeem, /const available = !otherSelected && !secretLocked && nearbyOpportunityOpen\(redeemable, liveStatus\);/);
@@ -475,6 +479,9 @@ test('every game\'s how-to leads with pictures: shark with a check, anglerfish w
   assert.equal(topics.TIP_COPY.coin_in_range.title, 'Tap PLAY!');
   const selector = read('src/components/MiniGameSelector.tsx');
   assert.match(selector, /win=\{paidTrivia \? '2 right answers win the coin\.' : undefined\}/);
+  const introSrc = read('src/components/help/GameIntroCard.tsx');
+  assert.match(introSrc, /SIDE_BY_SIDE: ReadonlySet<MiniGameKind> = new Set<MiniGameKind>\(\['tap'\]\)/,
+    'Whack shows its do and never-do pictures side by side, never an arrow from the shark to the anglerfish');
 });
 
 test('Parade Beat is the rhythm game\'s one name; Home Defend has its own title and stamp; Prize Boxes is plain text', () => {

@@ -43,9 +43,12 @@ export type PlayBadge = 'free_try' | 'extra_try' | null;
 export function playBadge(input: {
   tickets: number; ticketCost: number;
   rescueAvailable: boolean | undefined; rescueSource: string | null | undefined;
+  /** Earned Tickets waiting to be claimed. They come first (blueprint 4.1), so no free-try gift while any wait. */
+  claimable?: number | null;
 }): PlayBadge {
   if ((Number(input.tickets) || 0) >= Math.max(1, Number(input.ticketCost) || 1)) return null;
   if (input.rescueAvailable !== true) return null;
+  if ((Number(input.claimable) || 0) > 0) return null;
   return input.rescueSource === 'daily' ? 'free_try' : 'extra_try';
 }
 

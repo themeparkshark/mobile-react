@@ -58,13 +58,20 @@ function Picture({ pic }: { readonly pic: Pic }) {
   );
 }
 
+/**
+ * Games whose pictures are a "do this, never that" pair, not steps in order: they sit side by side
+ * with a gap, because an arrow from the shark to the anglerfish reads as "the shark turns into it".
+ */
+export const SIDE_BY_SIDE: ReadonlySet<MiniGameKind> = new Set<MiniGameKind>(['tap']);
+
 export function IntroPictures({ kind }: { readonly kind: MiniGameKind }) {
   const steps = INTRO_PICTURES[kind] ?? [];
+  const pair = SIDE_BY_SIDE.has(kind);
   return (
     <View style={styles.strip} accessible={false} importantForAccessibility="no-hide-descendants">
       {steps.map((step, i) => (
         <View key={i} style={styles.step}>
-          {i > 0 && <View style={styles.arrow}><GameIcon name="arrow" size={22} /></View>}
+          {i > 0 && (pair ? <View style={styles.pairGap} /> : <View style={styles.arrow}><GameIcon name="arrow" size={22} /></View>)}
           {step.map((pic, j) => <Picture key={j} pic={pic} />)}
         </View>
       ))}
@@ -137,6 +144,7 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.white, borderRadius: RADIUS.lg, paddingVertical: 8, paddingHorizontal: 10, alignSelf: 'stretch' },
   step: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   arrow: { marginHorizontal: 4 },
+  pairGap: { width: 28 },
   pic: { width: PIC, height: PIC, alignItems: 'center', justifyContent: 'center' },
   picArt: { width: PIC, height: PIC },
   mark: { position: 'absolute', right: -4, bottom: -4, width: 28, height: 28, borderRadius: 14, backgroundColor: BRAND.white,
