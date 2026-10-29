@@ -126,10 +126,12 @@ test('Story and Games: one word per tab, crew pages only for a crew, new rounds 
   // An SE story clue shows its answers: no banner, a smaller question, answers two by two (round 2 grader fix 7).
   const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
   assert.match(slot, /\{!short && <ActivityHero kicker=\{title != null \? 'STORY' : 'GAMES'\}/);
-  assert.match(slot, /<View style=\{\[styles\.choices, short && styles\.choicesGrid\]\}>/);
+  assert.match(slot, /<View style=\{\[styles\.choices, short && styles\.choicesGrid, tiny && styles\.choicesGridTiny\]\}>/);
   // Every phone in a wait: the 17 Pro's page window (about 250 pt) is too short for banner + question + four
   // stacked answers too, so the clue goes compact below QUIZ_FULL_PAGE, not only on an SE.
-  assert.match(slot, /<WhenQuizCompact>\{short => <>/);
+  assert.match(slot, /<WhenQuizCompact>\{\(short, tiny\) => <>/);
+  // An SE window (about 180 pt): a smaller question and slimmer answers, so the second row clears the fade.
+  assert.match(slot, /questionTiny: \{ fontSize: 15, lineHeight: 19 \}/);
   const layout = loadTs('src/services/lineplay/lineLayout.ts');
   assert.equal(layout.quizCompact(200), true, 'SE');
   assert.equal(layout.quizCompact(252), true, '17 Pro');

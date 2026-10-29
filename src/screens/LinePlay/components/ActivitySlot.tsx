@@ -322,9 +322,9 @@ function TriviaSlot({
       {/* A page window too short for the banner, the question and four stacked answers (every phone in a wait,
           SE and 17 Pro alike): no banner (the Story tab and the PLAY the guest just pressed say what this is),
           and the answers sit two by two under a smaller question, so every choice shows without scrolling. */}
-      <WhenQuizCompact>{short => <>
+      <WhenQuizCompact>{(short, tiny) => <>
       {!short && <ActivityHero kicker={title != null ? 'STORY' : 'GAMES'} title={title ?? 'Shark Trivia'} teacher />}
-      <Text style={[styles.question, short && styles.questionShort]}>{q.question}</Text>
+      <Text style={[styles.question, short && styles.questionShort, tiny && styles.questionTiny]}>{q.question}</Text>
       {picked != null && <Animated.Text style={[styles.answerFeedback,
         picked === q.correctIndex ? styles.feedbackCorrect : styles.feedbackWrong, {
           opacity: answerReveal,
@@ -332,7 +332,7 @@ function TriviaSlot({
         }]}>{picked === q.correctIndex
           ? 'Correct! Your crew found the answer.'
           : `The answer is ${q.choices[q.correctIndex]}. Pick your next clue.`}</Animated.Text>}
-      <View style={[styles.choices, short && styles.choicesGrid]}>
+      <View style={[styles.choices, short && styles.choicesGrid, tiny && styles.choicesGridTiny]}>
         {q.choices.map((choice, i) => {
           const isPicked = picked === i;
           const isCorrect = i === q.correctIndex;
@@ -352,6 +352,7 @@ function TriviaSlot({
               style={({ pressed }) => [
                 styles.choice,
                 short && styles.choiceShort,
+                tiny && styles.choiceTiny,
                 paused && styles.disabled,
                 state === 'correct' && styles.choiceCorrect,
                 state === 'wrong' && styles.choiceWrong,
@@ -386,8 +387,10 @@ function TriviaSlot({
  */
 type Slot = ReactNode | ((short: boolean) => ReactNode);
 /** Reads the page window inside PageScroll: is it too short for a full clue page (quizCompact)? */
-function WhenQuizCompact({ children }: { children: (compact: boolean) => ReactNode }) {
-  return <>{children(quizCompact(useContext(PageHeightContext)))}</>;
+function WhenQuizCompact({ children }: { children: (compact: boolean, tiny: boolean) => ReactNode }) {
+  const height = useContext(PageHeightContext);
+  // tiny: an iPhone SE window (about 180 pt with a three-line question), so the second row of answers clears the fade too.
+  return <>{children(quizCompact(height), heroSlim(height))}</>;
 }
 /** Reads the page window inside PageScroll: is this a short window (iPhone SE)? */
 function WhenShort({ children }: { children: (short: boolean) => ReactNode }) {
@@ -620,6 +623,9 @@ const styles = StyleSheet.create({
   questionShort: { fontSize: 17, lineHeight: 22, marginTop: 0 },
   choicesGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.sm, gap: 6 },
   choiceShort: { width: '48.5%', minHeight: 44, paddingVertical: 4, paddingHorizontal: 6 },
+  questionTiny: { fontSize: 15, lineHeight: 19 },
+  choicesGridTiny: { marginTop: 6, gap: 5 },
+  choiceTiny: { minHeight: 40, paddingVertical: 2 },
   choiceTextShort: { fontSize: 15 },
   choice: {
     backgroundColor: '#ffca30',
