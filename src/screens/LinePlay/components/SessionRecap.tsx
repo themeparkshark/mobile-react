@@ -181,6 +181,8 @@ export interface SessionRecapProps {
   adventureStamped?: boolean;
   /** The recap's one GO, and what it does. */
   go?: RecapGo | null;
+  /** The GO is still being worked out (the coin check): Done stays quiet so the gold button never swaps. */
+  goPending?: boolean;
   onGo?: () => void;
   /** Reward chips follow the unlock ladder and the switches (Energy: coin levels, XP: Daily 3, Ticket: queue_tickets). */
   showEnergy?: boolean;
@@ -198,7 +200,7 @@ export default function SessionRecap({
   onOpenCoin, onOpenPark, parkAvailable, feedbackEnabled = false, feedback = null, feedbackLoading = false,
   feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine,
   doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null, snackSlot = null, nextAdventure = null, adventuresFound = null,
-  signLine = null, rideLogged = null, onAddMemory, adventureStamped = false, go = null, onGo, showEnergy = true, showXp = true,
+  signLine = null, rideLogged = null, onAddMemory, adventureStamped = false, go = null, goPending = false, onGo, showEnergy = true, showXp = true,
   showTickets = false, crew = false,
 }: SessionRecapProps) {
   const bonusMode = rewardsConfirmed && bonusRecap != null;
@@ -451,7 +453,7 @@ export default function SessionRecap({
         </Text>
       </View>}
       {/* With a GO above, Done is the quiet second button (one gold button per screen). */}
-      <GameButton label={doneLabel} onPress={onDone} fullWidth variant={go && onGo ? 'ghost' : undefined} style={styles.recapBtn} />
+      <GameButton label={doneLabel} onPress={onDone} fullWidth variant={(go && onGo) || goPending ? 'ghost' : undefined} style={styles.recapBtn} />
     </ScrollView>
   );
 }

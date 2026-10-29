@@ -237,7 +237,11 @@ test('the recap: only what you got, "Sign said 20, you waited 11", one GO, the l
   assert.deepEqual(plain(step.recapGo({ rideName: 'Jungle Cruise', coinState: 'owned', partsEarned: 0, rideTaskId: 41, upgradeReady: false,
     nextCoin: { taskId: 9, name: 'Haunted Mansion' } })), { kind: 'next_coin', label: 'Next coin: Haunted Mansion', button: 'GO', taskId: 9 });
   assert.match(screen, /if \(go\.taskId != null\) guide\.setTarget\(go\.taskId, 'lineplay_recap'\);/);
-  assert.match(recap, /variant=\{go && onGo \? 'ghost' : undefined\}/, 'Done is the quiet second button');
+  assert.match(recap, /variant=\{\(go && onGo\) \|\| goPending \? 'ghost' : undefined\}/, 'Done is the quiet second button, also while the GO is worked out');
+  assert.match(screen, /goPending=\{go == null && !goReady\}/);
+  // Between the ride step and the recap: one calm card, never the locked in-line pages.
+  assert.match(screen, /snapshot\.state === 'ending' && !leftLineWrapUp \? \(/);
+  assert.match(screen, /<WaitWrapUpCard rideUp=\{snapshot\.endReason === 'boarded'\} \/>/);
   assert.match(screen, /signLine=\{snapshot\.boardingConfirmed \? signSaidLine\(/);
   // Games alone are said once (the Played line), never also as a lone "1 GAME" tile; the shelf GO wears the coins.
   assert.match(recap, /const earnedAny = shownStats\.some\(t => t\.key !== 'activities'\);/);

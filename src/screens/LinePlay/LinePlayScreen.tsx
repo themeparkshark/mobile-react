@@ -35,6 +35,7 @@ import * as Haptics from 'expo-haptics';
 import { StackActions, useNavigation, useRoute } from '@react-navigation/native';
 import { colors, spacing, borderRadius } from '../../design-system';
 import { BRAND, GameButton, GameDialog, gameAlert } from '../../ui';
+import GameIcon from '../../ui/GameIcon';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { holdRideAfterRideStep, noteRidePrompt } from '../../services/lineplay/ridePromptGate';
 import { dropAnsweredRideDetections } from '../../services/RideDetectionService';
@@ -1574,6 +1575,7 @@ export default function LinePlayScreen() {
               onAddMemory={rideLogged && player?.id != null ? openRideJournal : undefined}
               adventureStamped={adventureStamped}
               go={go}
+              goPending={go == null && !goReady}
               onGo={() => void handleRecapGo()}
               showEnergy={coinLevelsRung.open}
               showXp={dailyRung.open}
@@ -1588,6 +1590,10 @@ export default function LinePlayScreen() {
                 else void handleExit();
               }}
             />
+          ) : snapshot.state === 'ending' && !leftLineWrapUp ? (
+            // Between "I got to the ride" (or End) and the recap the wait is being saved: one calm card, never
+            // the in-line pages with their "Get in line to play" locks.
+            <WaitWrapUpCard rideUp={snapshot.endReason === 'boarded'} />
           ) : snapshot.playlist.length === 0 ? (
             <ActivitySkeleton />
           ) : (
@@ -1929,6 +1935,20 @@ function WaitCardSkeleton({ rideName }: { rideName: string }) {
   </LinearGradient>;
 }
 
+/** The wait is being saved: one picture line while the recap gets ready (no lock, no countdown). */
+export function WaitWrapUpCard({ rideUp }: { rideUp: boolean }) {
+  return (
+    <View style={styles.page}>
+      <View style={[styles.activitySkeleton, styles.wrapUpCard]} accessible accessibilityLiveRegion="polite"
+        accessibilityLabel={rideUp ? 'Your ride is up. Saving your wait.' : 'Saving your wait.'}>
+        <GameIcon name={rideUp ? 'ride' : 'line'} size={54} />
+        <Text style={styles.activitySkeletonTitle}>{rideUp ? 'Your ride’s up!' : 'Wait wrapped up'}</Text>
+        <Text style={styles.activitySkeletonHint}>Saving your wait…</Text>
+      </View>
+    </View>
+  );
+}
+
 function ActivitySkeleton() {
   return (
     <View style={styles.page}>
@@ -2017,6 +2037,7 @@ const styles = StyleSheet.create({
     shadowRadius: 7, elevation: 4,
   },
   activitySkeletonKicker: { color: '#0873bd', fontFamily: 'Knockout', fontSize: 13, letterSpacing: 0.5 },
+  wrapUpCard: { alignItems: 'center' },
   activitySkeletonTitle: { color: '#093d77', fontFamily: 'Shark', fontSize: 21, marginTop: 8 },
   activitySkeletonHint: { color: '#245879', fontFamily: 'Knockout', fontSize: 16, marginTop: 8 },
   activitySkeletonRule: { width: 72, height: 5, borderRadius: 3, backgroundColor: '#ffcb31', marginTop: 17 },
