@@ -36,6 +36,37 @@ export async function markTeamOffered(playerId: number | null | undefined): Prom
   try { await AsyncStorage.setItem(teamOfferKey(playerId), '1'); } catch { /* best effort */ }
 }
 
+/**
+ * The win card stays up until the team step has finished sliding in under it, then fades into it:
+ * win card, team step, map, with no frame of map in between. TeamSelection reports its native
+ * transitionEnd here; the win card never waits longer than TEAM_STEP_SHOWN_MAX_MS.
+ */
+export const TEAM_STEP_SHOWN_MAX_MS = 900;
+let shownWaiters: Array<() => void> = [];
+
+/** TeamSelection calls this once its slide-in has finished. */
+export function teamStepShown(): void {
+  const waiters = shownWaiters;
+  shownWaiters = [];
+  waiters.forEach(finish => finish());
+}
+
+/** Resolves when the team step reports it is on screen, or after `ms` at most. */
+export function whenTeamStepShown(ms: number = TEAM_STEP_SHOWN_MAX_MS): Promise<void> {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      shownWaiters = shownWaiters.filter(waiter => waiter !== finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    shownWaiters.push(finish);
+  });
+}
+
 /** Where the screen goes after LET'S GO, Later or the close X. */
 export interface TeamSelectionParams {
   readonly onTeamSelected?: () => void;

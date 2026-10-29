@@ -20,7 +20,7 @@ import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import TeamBadge from '../../components/TeamBadge';
 import { GameIcon } from '../../ui';
 import { QUESTION_BANK } from './teamQuiz';
-import { teamExit, type TeamSelectionParams } from '../../components/rewards/teamOffer';
+import { teamExit, teamStepShown, type TeamSelectionParams } from '../../components/rewards/teamOffer';
 
 const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
 const VIBE: Record<TeamId, { tag: string; line: string }> = {
@@ -56,6 +56,10 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
   const [scores, setScores] = useState<Record<TeamId, number>>({ mouse: 0, globe: 0, shark: 0 });
 
   useEffect(() => { getLiveParks().then(l => setHeld(l.totals)).catch(() => undefined); }, []);
+  // After a first coin the win card waits on top until this screen has slid in, then fades into it.
+  useEffect(() => navigation?.addListener?.('transitionEnd', (event: { data?: { closing?: boolean } }) => {
+    if (!event?.data?.closing) teamStepShown();
+  }), [navigation]);
 
   const leader = useMemo(() => {
     if (!held) return null;

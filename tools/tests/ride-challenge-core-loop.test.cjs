@@ -814,3 +814,23 @@ test('Memory\'s loss line tells the best of the Ticket\'s three tries, never onl
   assert.match(game, /rideBestPairsRef\.current = r\.tryIndex === 0 \? r\.eng\.pairs : Math\.max\(rideBestPairsRef\.current, r\.eng\.pairs\);/);
   assert.match(game, /\.\.\.\(r\.mode === 'ride' \? \{ bestPairs: Math\.max\(rideBestPairsRef\.current, e\.pairs\) \} : \{\}\),/);
 });
+
+test('first coin: the win card waits on top until the team step has slid in, then fades into it (no map frame between)', async () => {
+  const team = loadTs('src/components/rewards/teamOffer.ts', { '@react-native-async-storage/async-storage': { getItem: async () => null, setItem: async () => undefined } });
+  let shown = false;
+  const waiting = team.whenTeamStepShown(5000).then(() => { shown = true; });
+  await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(shown, false, 'still waiting for the step');
+  team.teamStepShown();
+  await waiting;
+  assert.equal(shown, true, 'the step reported it is on screen');
+  const t0 = Date.now();
+  await team.whenTeamStepShown(30);
+  assert.ok(Date.now() - t0 >= 25, 'never waits forever: a capped wait');
+  assert.equal(team.TEAM_STEP_SHOWN_MAX_MS, 900);
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(modal, /const shown = whenTeamStepShown\(\);\n\s+RootNavigation\.navigate\('TeamSelection', \{ firstCoin: true, \.\.\.\(then \? \{ next: then \} : \{\}\) \}\);\n\s+await shown;\n\s+return true;/,
+    'listens before it navigates, so a fast slide is never missed');
+  const screen = read('src/screens/GymBattle/TeamSelectionScreen.tsx');
+  assert.match(screen, /navigation\?\.addListener\?\.\('transitionEnd', \(event: \{ data\?: \{ closing\?: boolean \} \}\) => \{\n\s+if \(!event\?\.data\?\.closing\) teamStepShown\(\);/);
+});

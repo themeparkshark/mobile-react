@@ -43,7 +43,7 @@ import { adventureLineStoryNext, partsProgress, weekLine } from './rewards/postW
 import { getTripGoal } from '../api/endpoints/me/trip-goal';
 import { withNumberFont } from '../ui/numberText';
 import TicketGift from './rewards/TicketGift';
-import { markTeamOffered, teamOffered, wantsTeamStep } from './rewards/teamOffer';
+import { markTeamOffered, teamOffered, wantsTeamStep, whenTeamStepShown } from './rewards/teamOffer';
 import type { ClaimSource } from '../services/guide/freeTickets';
 import { guide, type GuideTarget } from '../services/guide/nextCoin';
 import { useRung } from '../services/reveal/revealLadder';
@@ -756,8 +756,9 @@ export default function RedeemRedeemableModal({
   useEffect(() => { if (postWinOpen) { leavingWinRef.current = false; flyAfterHideRef.current = true; } }, [postWinOpen]);
 
   /**
-   * The first coin's team step, opened right now under the win card (it fades over it), then on to
-   * `then` (the shelf, or the line story). Returns false when this win has no team step.
+   * The first coin's team step, opened right now under the win card, then on to `then` (the shelf, or
+   * the line story). Resolves once the step is on screen (the card then fades into it); false when this
+   * win has no team step.
    */
   const openTeamStep = useCallback(async (then: { name: string; params?: object } | null): Promise<boolean> => {
     const wanted = await teamStepReady.current;
@@ -765,7 +766,10 @@ export default function RedeemRedeemableModal({
     teamStepReady.current = Promise.resolve(false);
     flyAfterHideRef.current = false;
     void markTeamOffered(player?.id);
+    // The card stays on top until the team step has slid in under it, then fades into it (no map between).
+    const shown = whenTeamStepShown();
     RootNavigation.navigate('TeamSelection', { firstCoin: true, ...(then ? { next: then } : {}) });
+    await shown;
     return true;
   }, [player?.id]);
 
