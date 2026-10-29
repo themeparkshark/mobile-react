@@ -302,6 +302,10 @@ test('Settings shows Picture games only while the server deals them, and hides F
   assert.match(settings, /const play = usePlayPrefs\(player\?\.id \?\? null\);/);
   assert.match(settings, /\{play\.available && <SettingsRow\n\s+art="shark"\n\s+title="Picture games only"/);
   assert.match(settings, /\{play\.flags\.pushWorks && <SettingsRow/);
+  // A row that toggles by itself shows its switch as a picture: a tap on the switch reached both and flipped twice.
+  assert.match(settings, /<BrandSwitch label="Picture games only" value=\{play\.prefs\.pictureOnly\} rowToggles/);
+  assert.match(settings, /<BrandSwitch label="Battery saver" value=\{batterySaver\} rowToggles/);
+  assert.match(settings, /if \(rowToggles\) \{\n\s+return \(\n\s+<View pointerEvents="none"/);
   const intro = read('src/components/help/GameIntroCard.tsx');
   assert.match(intro, /const offerPictures = kind === 'trivia' && play\.available;/);
   assert.match(intro, /Can't read yet\?/);

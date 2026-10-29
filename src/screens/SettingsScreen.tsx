@@ -109,7 +109,22 @@ function SettingsRow({
   return content();
 }
 
-function BrandSwitch({ value, onValueChange, label }: { readonly value?: boolean; readonly onValueChange: () => void; readonly label: string }) {
+function BrandSwitch({ value, onValueChange, label, rowToggles = false }: {
+  readonly value?: boolean; readonly onValueChange: () => void; readonly label: string;
+  /**
+   * The whole row already toggles (it has its own onPress). The switch then only shows the state:
+   * a tap on the switch reached both the switch and the row, so it flipped twice and seemed dead.
+   */
+  readonly rowToggles?: boolean;
+}) {
+  if (rowToggles) {
+    return (
+      <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants">
+        <Switch trackColor={{ false: BRAND.sky, true: BRAND.blueBright }} ios_backgroundColor={BRAND.sky}
+          thumbColor={BRAND.white} value={value} />
+      </View>
+    );
+  }
   return (
     <Switch
       accessibilityLabel={label}
@@ -398,7 +413,7 @@ export default function SettingsScreen() {
             detail={play.prefs.pictureOnly ? 'On: ride coins deal picture games, never trivia' : 'Off: ride coins can deal trivia'}
             onPress={() => play.setPictureOnly(!play.prefs.pictureOnly)}
             accessory={
-              <BrandSwitch label="Picture games only" value={play.prefs.pictureOnly}
+              <BrandSwitch label="Picture games only" value={play.prefs.pictureOnly} rowToggles
                 onValueChange={() => play.setPictureOnly(!play.prefs.pictureOnly)} />
             }
           />}
@@ -419,7 +434,7 @@ export default function SettingsScreen() {
             isLast
             onPress={() => setBatterySaver(!batterySaver)}
             accessory={
-              <BrandSwitch label="Battery saver" value={batterySaver} onValueChange={() => setBatterySaver(!batterySaver)} />
+              <BrandSwitch label="Battery saver" value={batterySaver} rowToggles onValueChange={() => setBatterySaver(!batterySaver)} />
             }
           />
         </Section>
