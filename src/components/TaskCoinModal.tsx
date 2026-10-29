@@ -18,6 +18,7 @@ import GameIcon from '../ui/GameIcon';
 import Ribbon from './Ribbon';
 import { guide } from '../services/guide/nextCoin';
 import { levelUpGoal } from '../services/collection/levelUpGoal';
+import { shelfLeaving } from '../services/collection/shelfLeaving';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import YellowButton from './YellowButton';
 
@@ -257,10 +258,12 @@ export default function TaskCoinModal({
           // The shelf remembers it as a level-up goal, so it says LEVEL UP GOAL, never NEXT COIN, for a coin you own.
           levelUpGoal.set(task.id, player?.id);
           guide.setTarget(task.id, 'coin_parts');
-          // Two frames first, so the shelf header says LEVEL UP GOAL for this coin before the map pops in:
-          // the outgoing shelf keeps its last drawn frame during the pop, and that frame must name this coin.
-          // The sheet's 90 ms exit covers the wait, so the map still starts under it.
-          requestAnimationFrame(() => requestAnimationFrame(() => onShowOnMap()));
+          // The map starts at once (under the 90 ms sheet exit). The shelf's last frame stays on screen
+          // during the pop and no React update reaches it, so its next-coin card fades out on the UI
+          // thread now: it never names the old coin (shelfLeaving.ts). Back on the shelf it says LEVEL UP GOAL.
+          shelfLeaving.value = 1;
+          setTimeout(() => { shelfLeaving.value = 0; }, 1500);
+          onShowOnMap();
         } : undefined}
       />}
     </>

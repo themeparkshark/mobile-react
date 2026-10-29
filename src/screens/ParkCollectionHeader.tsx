@@ -8,6 +8,7 @@ import GameIcon from '../ui/GameIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { limitedDayLabel } from '../services/collection/limitedCoins';
 import { parkCoinParts } from './parkCoinParts';
+import { shelfLeaving } from '../services/collection/shelfLeaving';
 import { playSfx } from '../gamekit/SFX';
 import { haptic } from '../gamekit/Haptics';
 import { nextTrophyLine, TROPHY_HELP, trophyIcon, type ShelfTab } from '../services/collection/shelfModel';
@@ -120,6 +121,9 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
     fill.value = reduced ? rate : withTiming(rate, { duration: 520, easing: Easing.out(Easing.cubic) });
   }, [rate, reduced, fill]);
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value}%` }));
+  // GET RIDE PARTS fades the next-coin card on the UI thread while the shelf leaves for the map.
+  useEffect(() => { shelfLeaving.value = 0; }, []);
+  const leavingStyle = useAnimatedStyle(() => ({ opacity: 1 - shelfLeaving.value }));
 
   const goal = nextRideName ? {
     eyebrow: goalStale ? 'YOUR LAST SAVED GOAL' : goalReportedDown ? 'YOUR GOAL RIDE IS DOWN'
@@ -225,7 +229,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
           <Text style={styles.goalName}>Claim it in your Stamp Book</Text>
         </View>
         {onOpenStampBook && <GameIcon name="arrow" size={26} />}
-      </Pressable> : goal && <View style={styles.goal}>
+      </Pressable> : goal && <Animated.View style={[styles.goal, leavingStyle]}>
         <View style={styles.goalIcon}><GameIcon name={nextRideOwned ? 'parts' : 'coin'} size={24} /></View>
         <View style={{ flex: 1 }}>
           {/* A short eyebrow on its own line and the full coin name under it, so GO never squeezes the name. */}
@@ -238,7 +242,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
           style={({ pressed }) => [styles.go, pressed && styles.goPressed, planned && goLabel === 'PLAN' && styles.goDone]}>
           {planned && goLabel === 'PLAN' ? <GameIcon name="check" size={20} /> : <Text style={styles.goText}>{goLabel}</Text>}
         </Pressable>}
-      </View>}
+      </Animated.View>}
     </View>}
   </View>;
 }

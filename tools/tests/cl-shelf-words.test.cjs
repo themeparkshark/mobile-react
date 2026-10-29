@@ -519,9 +519,15 @@ test('round 5: the shelf NEXT COIN never names a closed, down or refurbishing ri
   assert.match(header, /\} : parkResting \? \{\n\s*eyebrow: 'NEXT COIN', name: parkResting\.title, hint: parkResting\.hint,/);
 });
 
-test('round 5: GET RIDE PARTS lets the shelf header name the coin before the map pops in', () => {
+test('round 5: GET RIDE PARTS never leaves the old coin on the outgoing shelf, and the map still starts at once', () => {
   const card = read('src/components/TaskCoinModal.tsx');
-  assert.match(card, /levelUpGoal\.set\(task\.id, player\?\.id\);\n\s*guide\.setTarget\(task\.id, 'coin_parts'\);[\s\S]{0,400}requestAnimationFrame\(\(\) => requestAnimationFrame\(\(\) => onShowOnMap\(\)\)\)/);
+  assert.match(card, /levelUpGoal\.set\(task\.id, player\?\.id\);\n\s*guide\.setTarget\(task\.id, 'coin_parts'\);[\s\S]{0,500}shelfLeaving\.value = 1;\n\s*setTimeout\(\(\) => \{ shelfLeaving\.value = 0; \}, 1500\);\n\s*onShowOnMap\(\);/);
+  assert.doesNotMatch(card, /requestAnimationFrame\(\(\) => requestAnimationFrame/, 'no wait before the map (A/B r5-34 vs r5-36)');
+  const header = read('src/screens/ParkCollectionHeader.tsx');
+  assert.match(header, /useAnimatedStyle\(\(\) => \(\{ opacity: 1 - shelfLeaving\.value \}\)\)/, 'a UI-thread fade, no React render');
+  assert.match(header, /goal && <Animated\.View style=\{\[styles\.goal, leavingStyle\]\}>/);
+  assert.match(header, /useEffect\(\(\) => \{ shelfLeaving\.value = 0; \}, \[\]\);/, 'a new shelf shows its card');
+  assert.match(read('src/services/collection/shelfLeaving.ts'), /export const shelfLeaving = makeMutable\(0\);/);
 });
 
 test('round 5: the shelf forgets only a plan it watched you win; the level-up goal belongs to one player', () => {
