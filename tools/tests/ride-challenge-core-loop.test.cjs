@@ -762,6 +762,9 @@ test('how-to pictures teach the action: Parade Beat taps on the line, Sharky hol
   assert.match(intro, /timing: \[\[\{ art: ART\.note, line: true \}\], \[\{ art: ART\.drum, tap: true, mark: 'check' \}\]\]/);
   assert.match(intro, /shark: \[\[\{ art: ART\.hand, hold: true \}\], \[\{ art: ART\.swimmer, up: true, mark: 'check' \}\]\]/);
   assert.doesNotMatch(intro, /shark: \[\[\{ icon: 'play' \}\]/, 'never a play icon where hold is meant');
+  // Beat the Buzzer: a question, then the hand on the bell (the rival's thinking face taught nothing to a non-reader).
+  assert.match(intro, /trivia: \[\[\{ art: ART\.question \}\], \[\{ art: ART\.bell, tap: true, mark: 'check' \}\]\]/);
+  assert.doesNotMatch(intro, /ART\.fin\b/);
   assert.match(intro, /hand: require\('\.\.\/\.\.\/\.\.\/assets\/images\/ride-photo\/tap-hand\.webp'\)/, 'existing app art only');
   assert.ok(fs.existsSync(path.join(root, 'assets/images/ride-photo/tap-hand.webp')));
   const topics = loadTs('src/services/help/helpTopics.ts', { '../adConfig': { AD_AUDIENCE_13_PLUS_KNOWN: false } });

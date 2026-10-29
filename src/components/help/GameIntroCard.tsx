@@ -13,7 +13,6 @@ const ART = {
   angler: require('../../assets/games/whack/v2/angler.png'),
   cardBack: require('../../assets/games/memory/card-back.png'),
   cardShark: require('../../assets/games/memory/deck-ocean-shark.png'),
-  fin: require('../../assets/games/trivia-duel/fin_think.png'),
   bell: require('../../assets/games/trivia-duel/desk_bell.png'),
   basket: require('../../assets/games/banana-basket/v2/basket.png'),
   banana: require('../../assets/games/banana-basket/v2/banana.png'),
@@ -25,7 +24,7 @@ const ART = {
   note: require('../../assets/games/rhythm/note_drum.png'),
   /** The tap hand players already see on the map's prep items and in Parade Beat itself. */
   hand: require('../../../assets/images/ride-photo/tap-hand.webp'),
-  /** A question bubble (the Community Center's "?"): "questions to read", for the Trivia toggle. */
+  /** A question bubble (the Community Center's "?"): "questions to read", on the Trivia strip and its toggle. */
   question: require('../../../assets/images/screens/community-center-question.png'),
 } as const;
 
@@ -49,7 +48,8 @@ type Step = readonly Pic[];
 export const INTRO_PICTURES: Readonly<Record<MiniGameKind, readonly Step[]>> = {
   tap: [[{ art: ART.shark, mark: 'check' }], [{ art: ART.angler, mark: 'close' }]],
   memory: [[{ art: ART.cardBack }, { art: ART.cardBack }], [{ art: ART.cardShark }, { art: ART.cardShark, mark: 'check' }]],
-  trivia: [[{ art: ART.fin }], [{ art: ART.bell, mark: 'check' }]],
+  // Beat the Buzzer: a question, then the hand tapping the desk bell (read, then buzz in with the answer).
+  trivia: [[{ art: ART.question }], [{ art: ART.bell, tap: true, mark: 'check' }]],
   // The ball is bounced, not dodged: it wears a check too, so a kid never steers away from it.
   banana: [[{ art: ART.basket }, { art: ART.banana, mark: 'check' }], [{ art: ART.ball, mark: 'check' }]],
   // Sharky Swim: the hand held down, then the shark rising (hold to swim up).
