@@ -146,7 +146,7 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
     assert.ok(k.button.height + 16 >= 44, `${phone}: still a 44 pt tap target with its hit slop`);
   }
   // The price on the kiosk is the coin stack (the coin you spend everywhere), never the painted ride coin.
-  assert.match(cc, /accessibilityLabel=\{`A gift costs \$\{GIFT_COST\} coins`\}/);
+  assert.match(cc, /accessibilityLabel=\{`A gift costs \$\{GIFT_COST\} Shark Coins`\}/);
   assert.match(cc, /icons\/game\/coins\.png'\)\} style=\{styles\.kioskCoin\}/);
   // It pulses with a white shine, never a scale, and the press squish never passes full size.
   assert.doesNotMatch(cc, /LEAVE_GIFT_PULSE|Animated\.multiply\(pulseAnim/);

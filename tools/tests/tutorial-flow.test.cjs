@@ -56,7 +56,7 @@ test('tutorial copy: no third-party phrases, no em dashes, accurate Community Ce
     assert.doesNotMatch(copy, /gotta catch|premium|—/i, step.id);
   }
   const cc = getStepsForSequence('community_center')[0];
-  assert.match(cc.subtitle, /350 coins/);
+  assert.match(cc.subtitle, /350 Shark Coins/);
   assert.match(cc.subtitle, /2 Tickets/);
   assert.match(cc.subtitle, /1 Ticket/);
 });

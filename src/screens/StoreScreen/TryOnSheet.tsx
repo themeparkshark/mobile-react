@@ -608,7 +608,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                     The result is the one big number; the subtraction is small (kids UX r8). */}
                 {showMath && (
                   <Animated.View entering={still ? undefined : FadeIn.duration(140)} style={styles.equation} accessible
-                    accessibilityLabel={`It costs ${formatCoins(item.cost)} coins. You have ${formatCoins(balance)}. After, you’ll have ${formatCoins(balance - item.cost)} left.`}>
+                    accessibilityLabel={`It costs ${formatCoins(item.cost)} Shark Coins. You have ${formatCoins(balance)}. After, you’ll have ${formatCoins(balance - item.cost)} left.`}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={styles.mathSmall}>{`${formatCoins(balance)} - ${formatCoins(item.cost)} =`}</Text>
                     <CoinAmount n={balance - item.cost} label="left" big />
                   </Animated.View>

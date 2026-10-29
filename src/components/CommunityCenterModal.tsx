@@ -61,7 +61,7 @@ export default function CommunityCenterModal({
     const coinsLeft = Math.max(0, (player?.coins ?? 0) - cost);
     const ok = await confirmGame({
       title: 'Leave a gift?',
-      message: `It costs ${cost} coins. You get ${gets} tickets. You’ll have ${coinsLeft} coins left.`,
+      message: `It costs ${cost} Shark Coins. You get ${gets} Tickets. You’ll have ${coinsLeft} Shark Coins left.`,
       icon: 'gift', confirmLabel: 'Leave Gift', cancelLabel: 'Not now',
     });
     if (!ok) return;

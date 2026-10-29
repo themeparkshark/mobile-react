@@ -13,7 +13,7 @@
     "checking_again": "Checking again in %s %s...",
     "choose_daily_gift": "Pick one reward below!",
     "clearance": "Clearance",
-    "coins": "You have %s coins.",
+    "coins": "You have %s Shark Coins.",
     "comments": "Comments",
     "continue_as_guest": "Continue as Guest",
     "copyright": "© Theme Park Shark 2026 v1.4.0",
@@ -29,7 +29,7 @@
     "load_more_replies": "Load more replies",
     "membership": "VIP",
     "membership_benefits": [
-      "• 2x XP and coins",
+      "• 2x XP and Shark Coins",
       "• 2 extra treats on every home hunt",
       "• VIP badge on your profile"
     ],
@@ -88,7 +88,7 @@
     "vault_cost": "%s Keys to Unlock Vault",
     "verified_player": "This is a well-known player. It's really them!",
     "view_all_friends": "View all friends",
-    "watch_social_posts": "Watch a video below to earn 25 free coins!",
+    "watch_social_posts": "Watch a video below to earn 25 free Shark Coins!",
     "welcome": "Welcome!",
     "your_friends": "Your friends",
     "your_parks": "Your parks",
@@ -106,7 +106,7 @@
   },
   "prompts": {
     "accept_friend_request": "%s wants to be your friend. Say yes?",
-    "compliment": "Tell %s you like their outfit? It's free, and they get 5 coins.",
+    "compliment": "Tell %s you like their outfit? It's free, and they get 5 Shark Coins.",
     "delete_thread": "Delete this thread? You can't get it back.",
     "pin_swap": "Trade these pins?",
     "purchase_item": "Buy the %s for %s %s? You have %s %s.",

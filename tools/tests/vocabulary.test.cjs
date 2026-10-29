@@ -64,7 +64,14 @@ const RULES = [
   ['captain-fin', /\b(Captain|Admiral|CAPTAIN|ADMIRAL) (Fin|FIN)\b/, 'Captain Gill (rank ladder: Captain Gill, Admiral Gill)'],
   // Dustin, Oct 28 (ledger 39): the Green Train Toy left the shop; the app never names it (owners keep it as server data).
   ['green-train', /\bGreen Train\b/i, 'nothing: the shop list comes from the server'],
+  // Round 3: the money is Shark Coins next to any price or cost ("a gift costs 350 coins" reads like ride coins).
+  // Ride coin counts ("9 of 35 coins") stay. Template text is checked whole, with each ${...} read as N.
+  ['money-coins', /\b(costs?|for|need|needs|spend|earn|get|gets|have|has) (\d+|%s|N) (free |more )?coins\b|\bNot Enough Coins\b|\bXP and coins\b/i,
+    'Shark Coins (the money)'],
 ];
+
+/** Rules also checked against a whole template literal (they span a ${...} value). */
+const WHOLE_TEMPLATE_RULES = ['money-coins'];
 
 /** PLAN.json vocabulary_ownership (October 28, 2026). A trailing /** owns a folder. */
 const OWNERS = {
@@ -197,18 +204,24 @@ function scanSource(source, file) {
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
   const lines = source.split('\n');
   const hits = [];
-  const report = (node, text) => {
+  const report = (node, text, only) => {
     if (!text || identifierLike(text.trim())) return;
     const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line;
     if (/vocab-allow:/.test(lines[line] ?? '') || /vocab-allow:/.test(lines[line - 1] ?? '')) return;
     for (const [id, re, say, skip] of RULES) {
+      if (only && !only.includes(id)) continue;
       if (skip && skip.test(file)) continue;
       if (re.test(text)) hits.push({ line: line + 1, rule: id, say, text: text.replace(/\s+/g, ' ').trim().slice(0, 70) });
     }
   };
+  const reportWhole = (node, text) => report(node, text, WHOLE_TEMPLATE_RULES);
   const visit = node => {
     if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && !isSkipped(node)) report(node, node.text);
-    else if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) report(node, node.text);
+    else if (ts.isTemplateExpression(node) && !isSkipped(node)) {
+      // The whole template, each ${...} read as N, for the rules that span a value ("costs ${GIFT_COST} coins").
+      const whole = node.head.text + node.templateSpans.map(span => `N${span.literal.text}`).join('');
+      reportWhole(node, whole);
+    } else if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) report(node, node.text);
     else if (ts.isJsxText(node)) report(node, node.text);
     ts.forEachChild(node, visit);
   };
@@ -266,6 +279,12 @@ if (require.main === module || process.env.NODE_TEST_CONTEXT) {
     assert.equal(scanSource("const a = 'Captain Fin';", 'x.ts')[0].rule, 'captain-fin');
     assert.equal(scanSource("const a = `Beat ADMIRAL FIN!`;", 'x.ts')[0].rule, 'captain-fin');
     assert.equal(scanSource("const a = 'Captain Gill'; const b = 'Coach Finn says hi'; const c = 'Fin-ister Nights'; const d = 'fin';", 'x.ts').length, 0);
+    // Round 3: money next to a price says Shark Coins; ride coin counts stay.
+    assert.equal(scanSource('const a = `A gift costs ${GIFT_COST} coins`;', 'x.ts')[0].rule, 'money-coins');
+    assert.equal(scanSource("const a = 'Not Enough Coins!';", 'x.ts')[0].rule, 'money-coins');
+    assert.equal(scanSource("const a = 'earn 25 free coins!';", 'x.ts')[0].rule, 'money-coins');
+    assert.equal(scanSource("const a = '2x XP and coins';", 'x.ts')[0].rule, 'money-coins');
+    assert.equal(scanSource('const a = `A gift costs ${GIFT_COST} Shark Coins`; const b = `${n} of ${m} coins`; const c = \'9 of 35 coins\';', 'x.ts').length, 0);
     // Ledger 39: the Green Train Toy is server data only.
     assert.equal(scanSource("const a = 'Green Train Toy';", 'x.ts')[0].rule, 'green-train');
   });

@@ -122,7 +122,7 @@ const communityCenterSteps: TutorialStep[] = [
     id: 'community_center_intro',
     sequence: 'community_center',
     text: 'This is the Community Center! Leave a gift for another shark, or claim one someone left for you.',
-    subtitle: 'Leaving a gift costs 350 coins and gives you 2 Tickets. Claiming one gives you 1 Ticket.',
+    subtitle: 'Leaving a gift costs 350 Shark Coins and gives you 2 Tickets. Claiming one gives you 1 Ticket.',
     sharkPosition: 'bottom-center',
     sharkMood: 'happy',
     nextText: 'Nice!',

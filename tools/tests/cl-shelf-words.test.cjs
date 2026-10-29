@@ -351,3 +351,52 @@ test('round 2: a sight coin card never sends you to a line it does not have', ()
   assert.match(read('src/components/TaskCoinModal.tsx'), /sight=\{sight\}/);
   assert.match(read('src/screens/ParkScreen.tsx'), /sight=\{section === 'normal' && rideKind\(task\.id\) === 'coin'\}/);
 });
+
+test('round 3, ledger 38: the Standings help page stands on the plain podium steps too (no barrels, no coin pile)', () => {
+  const hero = read('src/components/help/HelpHero.tsx');
+  assert.doesNotMatch(hero, /podium-barrels/, 'the barrels-on-coins picture is gone from the help hero');
+  assert.doesNotMatch(hero, /ART\.barrel/);
+  assert.match(hero, /import PodiumSteps, \{ type PodiumStep \} from '\.\.\/\.\.\/screens\/LeaderboardsScreen\/PodiumSteps';/);
+  assert.match(hero, /<PodiumSteps steps=\{steps\} gap=\{gap\} \/>/);
+  // The sheet page that draws it is still the Standings "Top 3 win each week" page.
+  assert.match(read('src/services/help/helpSheets.ts'), /key: 'podium', hero: 'standings_podium', headline: 'Top 3 win each week'/);
+  // No Standings surface (screens or help) points at a barrel file.
+  for (const file of ['src/screens/LeaderboardScreen.tsx', 'src/components/help/HelpHero.tsx']) {
+    assert.doesNotMatch(read(file), /barrel(-flipped)?\.(png|webp)|podium-barrels/, file);
+  }
+});
+
+test('round 3: the shelf NEXT COIN names the coin the map guide holds, so the shelf and the map card agree', () => {
+  const copy = loadTs('src/services/collection/nextCoinCopy.ts');
+  const rows = [{ id: 1, name: 'Tiki Room' }, { id: 2, name: 'Haunted Mansion' }];
+  const target = { taskId: 2, parkId: 8, name: 'Haunted Mansion', reason: 'chosen' };
+  assert.equal(copy.guideShelfPick(target, 8, true, rows).name, 'Haunted Mansion', 'GET RIDE PARTS on Haunted Mansion: both name it');
+  assert.equal(copy.guideShelfPick(target, 2, true, rows), null, 'another park keeps the shelf pick');
+  assert.equal(copy.guideShelfPick(target, 8, false, rows), null, 'away from the park the shelf plans on its own');
+  assert.equal(copy.guideShelfPick(null, 8, true, rows), null, 'no guide target yet: the shelf pick');
+  assert.equal(copy.guideShelfPick({ ...target, taskId: 9 }, 8, true, rows), null, 'a coin this shelf does not list');
+  assert.equal(copy.guideShelfHint('in_line'), 'You are in its line. Play while you wait!');
+  assert.equal(copy.guideShelfHint('level_up'), 'Ready to level up!');
+  assert.equal(copy.guideShelfHint('nearest_open'), 'The map shows the way.');
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /const guideTarget = useSyncExternalStore\(guide\.subscribe, guide\.current, guide\.current\);/);
+  assert.match(park, /const guideTask = canChooseGoal \? guideShelfPick\(guideTarget, Number\(park\), inThisPark, \[\.\.\.tasks, \.\.\.limitedTasks\]\) : null;/);
+  assert.match(park, /const nextCoinTask = guideTask \?\? \(/, 'GO goes where the card says');
+  assert.match(park, /nearbyRideName=\{guideOverGoal \? guideTarget\?\.name \?\? guideTask\?\.name : nearbySuggestion\?\.task\.name\}/);
+  assert.match(park, /nextRideName=\{guideOverGoal \? null : parkTripGoal\?\.ride_name\}/);
+});
+
+test('round 3: money next to a price says Shark Coins in the Community Center, Finn and the bundled crumbs', () => {
+  const center = read('src/screens/CommunityCenterScreen.tsx');
+  assert.match(center, /Not Enough Shark Coins!/);
+  assert.match(center, /<Text style=\{styles\.exchangeLabel\}>Shark Coins<\/Text>/);
+  assert.match(center, /A gift costs \$\{GIFT_COST\} Shark Coins/);
+  assert.match(center, /Leave a gift for \$\{GIFT_COST\} Shark Coins/);
+  assert.match(center, /includes\('Not enough coins'\)/, 'the server error match stays');
+  assert.match(read('src/components/Tutorial/steps.ts'), /Leaving a gift costs 350 Shark Coins and gives you 2 Tickets\./);
+  const crumbs = JSON.parse(read('src/api/defaults/crumbs.json'));
+  const all = JSON.stringify(crumbs);
+  assert.doesNotMatch(all, /XP and coins|free coins|\d+ coins\./);
+  assert.match(all, /2x XP and Shark Coins/);
+  assert.match(all, /earn 25 free Shark Coins/);
+});
