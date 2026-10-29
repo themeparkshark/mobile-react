@@ -31,11 +31,12 @@ const ART = {
 /**
  * One picture on the how-to strip: art (or an icon), with a check, a cross or nothing on its corner.
  * `line` draws Parade Beat's gold hit line across it, `tap` puts the tap hand on it, `hold` shows the
- * hand pressed down (a gold ring under the fingertip) and `up` an arrow pointing up beside the art.
+ * hand pressed down (a gold ring under the fingertip), `up` an arrow pointing up over the art and
+ * `swipe` the hand with a sideways arrow over it (a swipe, not a tap).
  */
 interface Pic {
   readonly art?: ImageSourcePropType; readonly icon?: GameIconName; readonly mark?: 'check' | 'close'; readonly wide?: boolean;
-  readonly line?: boolean; readonly tap?: boolean; readonly hold?: boolean; readonly up?: boolean;
+  readonly line?: boolean; readonly tap?: boolean; readonly hold?: boolean; readonly up?: boolean; readonly swipe?: boolean;
 }
 /** A step is one or two pictures; steps are joined by arrows. */
 type Step = readonly Pic[];
@@ -54,7 +55,8 @@ export const INTRO_PICTURES: Readonly<Record<MiniGameKind, readonly Step[]>> = {
   banana: [[{ art: ART.basket }, { art: ART.banana, mark: 'check' }], [{ art: ART.ball, mark: 'check' }]],
   // Sharky Swim: the hand held down, then the shark rising (hold to swim up).
   shark: [[{ art: ART.hand, hold: true }], [{ art: ART.swimmer, up: true, mark: 'check' }]],
-  current: [[{ art: ART.quester }], [{ art: ART.chest, mark: 'check' }]],
+  // Current Quest: the hand swiping beside the shark, then the chest (swipe to swim, reach the chest).
+  current: [[{ art: ART.hand, swipe: true }, { art: ART.quester }], [{ art: ART.chest, mark: 'check' }]],
   // Parade Beat: a note on the gold line, then the hand tapping the drum (tap when the note hits the line).
   timing: [[{ art: ART.note, line: true }], [{ art: ART.drum, tap: true, mark: 'check' }]],
   photo: [[{ icon: 'camera', mark: 'check' }]],
@@ -69,6 +71,7 @@ function Picture({ pic }: { readonly pic: Pic }) {
         : pic.icon ? <GameIcon name={pic.icon} size={46} /> : null}
       {pic.tap && <Image source={ART.hand} style={styles.tapHand} contentFit="contain" />}
       {pic.up && <View style={styles.upArrow}><GameIcon name="arrow" size={24} /></View>}
+      {pic.swipe && <View style={styles.swipeArrow}><GameIcon name="arrow" size={24} /></View>}
       {pic.mark && <View style={[styles.mark, pic.mark === 'close' && styles.markNo]}>
         <GameIcon name={pic.mark} size={22} />
       </View>}
@@ -176,6 +179,7 @@ const styles = StyleSheet.create({
   tapHand: { position: 'absolute', width: 34, height: 34, top: -10, left: -6 },
   // Above the shark, never beside the step arrow (side by side the two read as two arrows in a row).
   upArrow: { position: 'absolute', top: -16, transform: [{ rotate: '-90deg' }] },
+  swipeArrow: { position: 'absolute', top: -16 },
   body: { fontFamily: 'Knockout', fontSize: 18, lineHeight: 23, color: BRAND.navy, textAlign: 'center' },
   win: { fontFamily: 'Knockout', fontSize: 16, lineHeight: 21, color: BRAND.blue, textAlign: 'center', marginTop: 4, marginBottom: 12 },
   pictureToggle: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'stretch', marginBottom: 12,

@@ -872,6 +872,8 @@ test('a paid ride try\'s X asks Leave? at once (one step, no "saved" card), and 
   assert.doesNotMatch(sharky, /TAP TO SWIM/);
   assert.match(sharky, />HOLD TO SWIM</);
   assert.doesNotMatch(read('src/components/help/GameIntroCard.tsx'), /upArrow: \{[^}]*left: -12/);
+  // Current Quest is a swipe game: its strip shows the hand swiping beside the shark before the chest.
+  assert.match(read('src/components/help/GameIntroCard.tsx'), /current: \[\[\{ art: ART\.hand, swipe: true \}, \{ art: ART\.quester \}\], \[\{ art: ART\.chest, mark: 'check' \}\]\]/);
 });
 
 test('a member whose VIP tries are used today sees "comes back tomorrow", never a VIP try that is not there', () => {
