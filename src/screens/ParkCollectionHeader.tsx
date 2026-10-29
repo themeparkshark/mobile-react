@@ -32,6 +32,8 @@ interface Props {
   readonly nextRideName?: string | null;
   readonly nextRideOwned?: boolean;
   readonly ownedGoalHint?: string | null;
+  /** An owned coin you are leveling up (GET RIDE PARTS): GO still walks you to its line. */
+  readonly ownedGo?: boolean;
   readonly nearbyRideName?: string | null;
   readonly nearbyReportedOpen?: boolean;
   /** The line under the next coin when the map guide picked it (the map and the shelf agree). */
@@ -75,7 +77,7 @@ interface Props {
 export default function ParkCollectionHeader({ parkName, isOwnPark = true, collected, available, completionRate,
   ridePassportCollected, ridePassportAvailable, onOpenRidePassport, limitedCollected = 0, limitedAvailable = 0,
   limitedEndsOn, onBrowseLimited, onBrowseSecrets, onOpenStampBook,
-  nextRideName, nextRideOwned, ownedGoalHint, nearbyRideName, ticketsNeeded = 0,
+  nextRideName, nextRideOwned, ownedGoalHint, ownedGo = false, nearbyRideName, ticketsNeeded = 0,
   rescuePassAvailable = false, goalStale = false,
   goalReportedDown = false, alternateRideName, nearbyReportedOpen = false, nearbyHint = null,
   secretMilestones, holdCount = false, tickKey, nextCoinKind, tab, onTab, tabs, trophyWins, onGo, goLabel = 'GO',
@@ -135,7 +137,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
   } : isOwnPark ? {
     eyebrow: 'NEXT COIN', name: 'Pick a missing coin', hint: 'Tap an empty slot on the shelf.',
   } : null;
-  const canGo = !!onGo && !!goal && (!!nextRideName || !!nearbyRideName) && !goalReportedDown && !nextRideOwned;
+  const canGo = !!onGo && !!goal && (!!nextRideName || !!nearbyRideName) && !goalReportedDown && (!nextRideOwned || ownedGo);
 
   return <View style={styles.frame}>
     <LinearGradient colors={['#0a8fe3', '#0768b9']} style={styles.hero}>

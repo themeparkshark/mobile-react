@@ -338,7 +338,8 @@ function PodiumScene({ t, w, h }: SceneProps) {
   const bw = Math.min(w - 36, 300);
   const sw = (bw - gap * 2) / 3;
   const bx = (w - bw) / 2;
-  const heights = { 1: h * 0.36, 2: h * 0.28, 3: h * 0.22 } as const;
+  // Tall enough that each step shows its place number under the top edge, above the rounded stage frame (SE too).
+  const heights = { 1: h * 0.4, 2: h * 0.33, 3: h * 0.28 } as const;
   const steps: readonly PodiumStep[] = [
     { rank: 2, width: sw, height: heights[2] },
     { rank: 1, width: sw, height: heights[1] },
@@ -353,7 +354,7 @@ function PodiumScene({ t, w, h }: SceneProps) {
   ];
   return (
     <>
-      <Abs x={bx} y={0} w={bw} h={h}><PodiumSteps steps={steps} gap={gap} /></Abs>
+      <Abs x={bx} y={0} w={bw} h={h}><PodiumSteps steps={steps} gap={gap} numberAt="top" /></Abs>
       {spots.map(spot => <PodiumShark key={spot.face} t={t} {...spot} />)}
       {[-1, 0, 1].map(i => <TicketPop key={i} t={t} cx={spots[1].cx} cy={spots[1].top + spots[1].size * 0.2} dir={i} />)}
     </>

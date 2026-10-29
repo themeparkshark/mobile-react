@@ -165,7 +165,6 @@ export default function CoinLevelingModal({
   const shareHandoff = useModalHandoff(useCallback(() => shareClose.current(), []));
   const pendingLinePlayRef = useRef(false);
   const pendingExploreRef = useRef(false);
-  const pendingGetPartsRef = useRef(false);
   // GET RIDE PARTS leaves for the map at once: no card fade first and a quick sheet exit, so the
   // shelf never sits between the tap and the path (grader r1: about 1.25 s of shelf showed).
   const [fastExit, setFastExit] = useState(false);
@@ -491,10 +490,6 @@ export default function CoinLevelingModal({
         if (pendingLinePlayRef.current) {
           pendingLinePlayRef.current = false;
           onPlayInLine?.();
-        }
-        if (pendingGetPartsRef.current) {
-          pendingGetPartsRef.current = false;
-          onGetParts?.();
         }
         if (pendingExploreRef.current) {
           pendingExploreRef.current = false;
@@ -981,7 +976,8 @@ export default function CoinLevelingModal({
                         // sheet opens the picture card that says where Parts come from.
                         if (missingAction.kind === 'parts' && onGetParts) {
                           if (upgradeBusy.current) return;
-                          pendingGetPartsRef.current = true; setFastExit(true); stopUpgradeEffects(); onClose();
+                          // The map starts sliding in under the 90 ms sheet exit, so the shelf never shows in between.
+                          setFastExit(true); stopUpgradeEffects(); onGetParts(); onClose();
                         } else if (missingAction.kind === 'parts' && onPlayInLine) {
                           pendingLinePlayRef.current = true; handleClose();
                         } else if (missingAction.kind === 'energy') {

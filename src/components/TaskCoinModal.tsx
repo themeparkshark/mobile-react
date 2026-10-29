@@ -17,6 +17,7 @@ import { gameAlert } from '../ui/GameDialog';
 import GameIcon from '../ui/GameIcon';
 import Ribbon from './Ribbon';
 import { guide } from '../services/guide/nextCoin';
+import { levelUpGoal } from '../services/collection/levelUpGoal';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import YellowButton from './YellowButton';
 
@@ -220,6 +221,8 @@ export default function TaskCoinModal({
             if (ok) {
               upgradedDuringVisit.current = true;
               if (player?.id) upsertCoin(player.id, result.ride_coin);
+              // Leveled up: the shelf's LEVEL UP GOAL for this coin is done, and the next coin shows.
+              levelUpGoal.clear(task.id);
             }
             // The reply carries the v2 reveal (unlocks, level-up XP) for the sheet.
             return ok ? result : false;
@@ -251,6 +254,8 @@ export default function TaskCoinModal({
         onPlayInLine={onPlayInLine}
         onGetParts={onShowOnMap ? () => {
           // GET RIDE PARTS (must-fix 4): the one pointer goes to this ride, then the map draws the path.
+          // The shelf remembers it as a level-up goal, so it says LEVEL UP GOAL, never NEXT COIN, for a coin you own.
+          levelUpGoal.set(task.id);
           guide.setTarget(task.id, 'coin_parts');
           onShowOnMap();
         } : undefined}

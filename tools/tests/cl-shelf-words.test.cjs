@@ -41,17 +41,15 @@ function levelSheet(props) {
   return { view, partsButton, modal, closes };
 }
 
-test('GET RIDE PARTS at the park points the guide at the ride and opens the map after the sheet hides (must-fix 4)', () => {
+test('GET RIDE PARTS at the park points the guide at the ride and starts the map on the press (must-fix 4, round 4)', () => {
   let sent = 0;
   const sheet = levelSheet({ onGetParts() { sent++; } });
   assert.equal(sheet.partsButton().props.text, 'Get 2 Ride Parts');
   sheet.partsButton().props.onPress();
   assert.equal(sheet.closes.length, 1, 'the sheet closes');
-  assert.equal(sent, 0, 'nothing navigates under a closing sheet');
+  assert.equal(sent, 1, 'the map starts sliding in under the 90 ms sheet exit, so the shelf never shows in between');
   sheet.modal().props.onModalHide();
-  assert.equal(sent, 1, 'the guide and map step runs once the sheet is gone');
-  sheet.modal().props.onModalHide();
-  assert.equal(sent, 1, 'only once');
+  assert.equal(sent, 1, 'only once: the sheet hiding never runs it again');
 });
 
 test('GET RIDE PARTS away from the park opens a picture card in place (never a dead tap)', () => {
@@ -327,7 +325,8 @@ test('round 2: one word for money: Shark Coins, never bare coins beside ride coi
 
 test('round 2: GET RIDE PARTS leaves for the map at once (no card fade, quick sheet exit)', () => {
   const sheet = read('src/components/CoinLevelingModal.tsx');
-  assert.match(sheet, /pendingGetPartsRef\.current = true; setFastExit\(true\); stopUpgradeEffects\(\); onClose\(\);/);
+  assert.match(sheet, /setFastExit\(true\); stopUpgradeEffects\(\); onGetParts\(\); onClose\(\);/);
+  assert.doesNotMatch(sheet, /pendingGetPartsRef/, 'round 4: nothing waits for onModalHide');
   assert.match(sheet, /animationOutTiming=\{fastExit \? 90 :/);
   assert.match(sheet, /backdropTransitionOutTiming=\{fastExit \? 90 : undefined\}/);
 });
@@ -357,7 +356,7 @@ test('round 3, ledger 38: the Standings help page stands on the plain podium ste
   assert.doesNotMatch(hero, /podium-barrels/, 'the barrels-on-coins picture is gone from the help hero');
   assert.doesNotMatch(hero, /ART\.barrel/);
   assert.match(hero, /import PodiumSteps, \{ type PodiumStep \} from '\.\.\/\.\.\/screens\/LeaderboardsScreen\/PodiumSteps';/);
-  assert.match(hero, /<PodiumSteps steps=\{steps\} gap=\{gap\} \/>/);
+  assert.match(hero, /<PodiumSteps steps=\{steps\} gap=\{gap\} numberAt="top" \/>/, 'round 4: 2, 1, 3 sit under the top edges, above the stage frame');
   // The sheet page that draws it is still the Standings "Top 3 win each week" page.
   assert.match(read('src/services/help/helpSheets.ts'), /key: 'podium', hero: 'standings_podium', headline: 'Top 3 win each week'/);
   // No Standings surface (screens or help) points at a barrel file.
@@ -381,12 +380,9 @@ test('round 3: the shelf NEXT COIN names the coin the map guide holds, so the sh
   assert.equal(copy.guideShelfHint('plan'), 'Your plan. The map shows the way.');
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /const guideTarget = useSyncExternalStore\(guide\.subscribe, guide\.current, guide\.current\);/);
-  assert.match(park, /const guidePick = guideTarget \?\? \(guidePlan != null \? \{ taskId: guidePlan, parkId: Number\(park\), reason: 'plan' \} : null\);/,
-    'before the map resolves (or while it rests) the plan GET RIDE PARTS or GO set stands in');
-  assert.match(park, /const guideTask = canChooseGoal \? guideShelfPick\(guidePick, Number\(park\), inThisPark, \[\.\.\.tasks, \.\.\.limitedTasks\]\) : null;/);
-  assert.match(park, /const nextCoinTask = guideTask \?\? \(/, 'GO goes where the card says');
-  assert.match(park, /nearbyRideName=\{guideOverGoal \? guideTarget\?\.name \?\? guideTask\?\.name : nearbySuggestion\?\.task\.name\}/);
-  assert.match(park, /nextRideName=\{guideOverGoal \? null : parkTripGoal\?\.ride_name\}/);
+  assert.match(park, /const nextCoinTask = levelUpTask \?\? guideTask \?\? \(/, 'GO goes where the card says');
+  assert.match(park, /nearbyRideName=\{guideTask \? guideTask\.name : guideOverGoal \? null : nearbySuggestion\?\.task\.name\}/);
+  assert.match(park, /nextRideName=\{levelUpTask \? levelUpTask\.name : guideOverGoal \? null : parkTripGoal\?\.ride_name\}/);
 });
 
 test('round 3: money next to a price says Shark Coins in the Community Center, Finn and the bundled crumbs', () => {
@@ -402,4 +398,74 @@ test('round 3: money next to a price says Shark Coins in the Community Center, F
   assert.doesNotMatch(all, /XP and coins|free coins|\d+ coins\./);
   assert.match(all, /2x XP and Shark Coins/);
   assert.match(all, /earn 25 free Shark Coins/);
+});
+
+test('round 4: a coin you own is never the shelf NEXT COIN (GO on X, win X, the shelf names a new coin)', () => {
+  const copy = loadTs('src/services/collection/nextCoinCopy.ts');
+  const rows = [{ id: 1, name: 'Tiki Room' }, { id: 2, name: 'Haunted Mansion' }, { id: 3, name: 'Jungle Cruise' }];
+  const base = { target: null, plan: null, levelUpGoal: null, parkId: 8, atPark: true, rows, owned: new Set() };
+  // GO on Tiki Room: the plan names it while you do not own it.
+  assert.equal(copy.shelfGuidePick({ ...base, plan: 1 }).row.name, 'Tiki Room');
+  assert.equal(copy.shelfGuidePick({ ...base, plan: 1 }).levelUp, false);
+  assert.equal(copy.shelfGuidePick({ ...base, plan: 1 }).reason, 'plan');
+  // Win Tiki Room: the plan on an owned coin never shows, and it is the plan to forget.
+  const won = new Set([1]);
+  assert.equal(copy.shelfGuidePick({ ...base, plan: 1, owned: won }), null, 'the shelf falls back to its own next coin');
+  assert.equal(copy.stalePlan(1, won, null), 1, 'guide.clearPlan() runs for it');
+  assert.equal(copy.stalePlan(3, won, null), null, 'an unowned plan stays');
+  assert.equal(copy.stalePlan(null, won, null), null);
+  // The map's target on an owned coin (not a level up) never shows either.
+  assert.equal(copy.shelfGuidePick({ ...base, owned: won, target: { taskId: 1, parkId: 8, reason: 'chosen' } }), null);
+  assert.equal(copy.shelfGuidePick({ ...base, owned: won, target: { taskId: 3, parkId: 8, reason: 'nearest_open' } }).row.name, 'Jungle Cruise');
+  // The old helper skips owned rows too.
+  assert.equal(copy.guideShelfPick({ taskId: 1, parkId: 8 }, 8, true, rows, won), null);
+  assert.equal(copy.guideShelfPick({ taskId: 2, parkId: 8 }, 8, true, rows, won).name, 'Haunted Mansion');
+});
+
+test('round 4: GET RIDE PARTS on an owned coin shows LEVEL UP GOAL with the parts picture and GO to its line', () => {
+  const copy = loadTs('src/services/collection/nextCoinCopy.ts');
+  const rows = [{ id: 1, name: 'Tiki Room' }, { id: 2, name: 'Haunted Mansion' }];
+  const owned = new Set([2]);
+  const base = { target: null, plan: 2, levelUpGoal: 2, parkId: 8, atPark: true, rows, owned };
+  const pick = copy.shelfGuidePick(base);
+  assert.equal(pick.row.name, 'Haunted Mansion');
+  assert.equal(pick.levelUp, true, 'LEVEL UP GOAL, never NEXT COIN');
+  assert.equal(pick.reason, 'coin_parts');
+  assert.equal(copy.levelUpGoalHint(pick.reason, false), 'Its line earns Ride Parts.');
+  assert.equal(copy.levelUpGoalHint(pick.reason, true), 'Win it again for Ride Parts.');
+  assert.equal(copy.levelUpGoalHint('level_up', false), 'Ready to level up!');
+  assert.equal(copy.stalePlan(2, owned, 2), null, 'a level-up goal is not a finished plan');
+  // After guide-map merges, the map may resolve elsewhere; the shelf keeps its own LEVEL UP GOAL card.
+  assert.equal(copy.shelfGuidePick({ ...base, target: { taskId: 1, parkId: 8, reason: 'nearest_open' } }).row.name, 'Haunted Mansion');
+  // ...unless the guide holds a coin right here right now (in range, in its line, the line story).
+  assert.equal(copy.shelfGuidePick({ ...base, target: { taskId: 1, parkId: 8, reason: 'in_range' } }).row.name, 'Tiki Room');
+  // The map's own level-up target on that coin says ready.
+  assert.equal(copy.shelfGuidePick({ ...base, target: { taskId: 2, parkId: 8, reason: 'level_up' } }).reason, 'level_up');
+  // Any other GO moves the plan: the level-up goal ends.
+  assert.equal(copy.shelfGuidePick({ ...base, plan: 1 }).row.name, 'Tiki Room');
+  assert.equal(copy.shelfGuidePick({ ...base, plan: 1 }).levelUp, false);
+  assert.equal(copy.shelfGuidePick({ ...base, atPark: false }), null, 'away from the park the shelf plans on its own');
+
+  const goal = loadTs('src/services/collection/levelUpGoal.ts').levelUpGoal;
+  let heard = 0;
+  const off = goal.subscribe(() => { heard++; });
+  goal.set(2); goal.set(2);
+  assert.equal(goal.get(), 2); assert.equal(heard, 1, 'one change, one emit');
+  goal.clear(1); assert.equal(goal.get(), 2, 'clearing another coin keeps it');
+  goal.clear(2); assert.equal(goal.get(), null);
+  off();
+
+  const card = read('src/components/TaskCoinModal.tsx');
+  assert.match(card, /levelUpGoal\.set\(task\.id\);\n\s*guide\.setTarget\(task\.id, 'coin_parts'\);/);
+  assert.match(card, /levelUpGoal\.clear\(task\.id\);/, 'a level-up ends the goal');
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /shelfGuidePick\(\{ target: guideTarget, plan: guidePlan, levelUpGoal: levelUpId,/);
+  assert.match(park, /owned: ownedIds \}\)/);
+  assert.match(park, /guide\.clearPlan\(\)/, 'a won plan is forgotten (contract API, import only)');
+  assert.match(park, /nextRideOwned=\{levelUpTask \? true :/);
+  assert.match(park, /ownedGo=\{!!levelUpTask\}/);
+  const header = read('src/screens/ParkCollectionHeader.tsx');
+  assert.match(header, /nextRideOwned \? 'LEVEL UP GOAL'/);
+  assert.match(header, /name=\{nextRideOwned \? 'parts' : 'coin'\}/);
+  assert.match(header, /\(!nextRideOwned \|\| ownedGo\)/, 'GO stays for a level-up goal');
 });

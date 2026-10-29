@@ -147,7 +147,9 @@ test('round 3: once the coin lands every tab chip works again, even with the ON 
   // A tab this park does not show falls back to Rides.
   assert.equal(shelf.shownShelfTab('sights', ['rides'], null), 'rides');
   const park = read('src/screens/ParkScreen.tsx');
-  assert.match(park, /onTab=\{next => \{ setTab\(next\); setRideOnly\(false\); \}\}/, 'the chips set the pick the shelf shows');
+  assert.match(park, /onTab=\{next => \{\n\s*setTab\(next\); setRideOnly\(false\);/, 'the chips set the pick the shelf shows');
+  // Round 4: the ON YOUR SHELF chip leaves on the first tab switch after the landing (never over another tab).
+  assert.match(park, /if \(requestKey && landedKey === requestKey && closedKey !== requestKey && next !== shownTab\) closeArrival\(\);/);
   assert.match(park, /scrollEnabled=\{!arrival\.target \|\| landedKey === requestKey\}/, 'after the landing the shelf scrolls, so the tabs above are reachable');
 });
 

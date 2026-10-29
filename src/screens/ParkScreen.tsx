@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
-import { goalCoinKind, guideShelfHint, guideShelfPick } from '../services/collection/nextCoinCopy';
+import { goalCoinKind, guideShelfHint, levelUpGoalHint, shelfGuidePick, stalePlan } from '../services/collection/nextCoinCopy';
+import { levelUpGoal } from '../services/collection/levelUpGoal';
 import { chunk } from 'lodash';
 import { useContext, useState, useEffect, useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useFocusEffect, useIsFocused, useNavigation, type NavigationProp } from '@react-navigation/native';
@@ -105,6 +106,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const guidePlan = useSyncExternalStore(guide.subscribe, guide.plan, guide.plan);
   // The coin the map guide holds now: the shelf's NEXT COIN names it too, so the two never disagree.
   const guideTarget = useSyncExternalStore(guide.subscribe, guide.current, guide.current);
+  // The owned coin GET RIDE PARTS pointed at: the shelf shows it as LEVEL UP GOAL while it is still the plan.
+  const levelUpId = useSyncExternalStore(levelUpGoal.subscribe, levelUpGoal.get, levelUpGoal.get);
   // Today's park day story, read once here so the card can sit on top after a park day.
   const recapCache = useRef<{ at: number; parkId: number; recap: ParkDayRecap } | null>(null);
   const [todayRecap, setTodayRecap] = useState<ParkDayRecap | null>(null);
@@ -251,11 +254,24 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   // GO on the shelf's next coin, and "Make this my next coin" on a coin card: one pointer for the
   // whole app (guide.setTarget). At this park the map opens with the path; away it is the plan.
   // Until the map resolves a target (or while it rests), the guide's plan (GO, GET RIDE PARTS, a coin pick) stands in.
-  const guidePick = guideTarget ?? (guidePlan != null ? { taskId: guidePlan, parkId: Number(park), reason: 'plan' } : null);
-  const guideTask = canChooseGoal ? guideShelfPick(guidePick, Number(park), inThisPark, [...tasks, ...limitedTasks]) : null;
+  // A coin you already own is never the NEXT COIN: GO on Tiki Room, win it, and the shelf moves on.
+  // GET RIDE PARTS on an owned coin is the one exception: LEVEL UP GOAL, the parts picture, GO to its line.
+  const ownedIds = useMemo(() => new Set(completedTasks.map(task => task.id)), [completedTasks]);
+  const shelfGuide = canChooseGoal ? shelfGuidePick({ target: guideTarget, plan: guidePlan, levelUpGoal: levelUpId,
+    parkId: Number(park), atPark: inThisPark, rows: [...tasks, ...limitedTasks], owned: ownedIds }) : null;
+  const guideTask = shelfGuide && !shelfGuide.levelUp ? shelfGuide.row : null;
+  const levelUpTask = shelfGuide?.levelUp ? shelfGuide.row : null;
+  // A plan whose coin you now own is done: forget it so the shelf and the map pick the next coin.
+  const planDone = loading ? null : stalePlan(guidePlan, ownedIds, levelUpId);
+  useEffect(() => { if (planDone != null && guide.plan() === planDone) guide.clearPlan(); }, [planDone]);
   // The guide's pick shows in place of the shelf's own (the goal card stays when the guide holds the goal).
-  const guideOverGoal = !!guideTask && guideTask.id !== parkTripGoal?.task_id;
-  const nextCoinTask = guideTask ?? (parkTripGoal && !parkTripGoal.coin_owned
+  const guideOverGoal = !!shelfGuide && shelfGuide.row.id !== parkTripGoal?.task_id;
+  const levelUpHint = levelUpTask
+    ? parkTripGoal?.task_id === levelUpTask.id && ownedGoalHint ? ownedGoalHint
+      : levelUpGoalHint(shelfGuide?.reason ?? '', !!currentPark?.ride_passport_task_ids?.length &&
+        !currentPark.ride_passport_task_ids.includes(levelUpTask.id))
+    : null;
+  const nextCoinTask = levelUpTask ?? guideTask ?? (parkTripGoal && !parkTripGoal.coin_owned
     ? [...tasks, ...limitedTasks].find(task => task.id === parkTripGoal.task_id) ?? null
     : nearbySuggestion?.task ?? null);
   const goToCoin = useCallback((task: TaskType, source: string) => {
@@ -267,7 +283,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     await chooseTripGoal(task.id);
   }, [chooseTripGoal]);
   const onGoNext = canChooseGoal && nextCoinTask ? () => {
-    if (inThisPark) goToCoin(nextCoinTask, 'shelf_next');
+    if (inThisPark) goToCoin(nextCoinTask, levelUpTask ? 'coin_parts' : 'shelf_next');
     else void chooseNextCoin(nextCoinTask).catch(() => undefined);
   } : undefined;
   const { startTutorial, hasCompleted, isReady: tutorialReady, isActive: tutorialActive } = useTutorial();
@@ -555,21 +571,27 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     limitedEndsOn={currentPark.limited_ends_on}
                     tab={shownTab}
                     tabs={tabs}
-                    onTab={next => { setTab(next); setRideOnly(false); }}
+                    onTab={next => {
+                      setTab(next); setRideOnly(false);
+                      // The ON YOUR SHELF chip leaves on the first tab switch after the coin lands,
+                      // so it never sits over another tab's coins or trophies.
+                      if (requestKey && landedKey === requestKey && closedKey !== requestKey && next !== shownTab) closeArrival();
+                    }}
                     trophyWins={currentPark.park_coins_count}
                     onOpenStampBook={canChooseGoal ? () => RootNavigation.navigate('StampBook') : undefined}
-                    nextRideName={guideOverGoal ? null : parkTripGoal?.ride_name}
-                    nextRideOwned={!guideOverGoal && parkTripGoal?.coin_owned}
+                    nextRideName={levelUpTask ? levelUpTask.name : guideOverGoal ? null : parkTripGoal?.ride_name}
+                    nextRideOwned={levelUpTask ? true : !guideOverGoal && parkTripGoal?.coin_owned}
+                    ownedGo={!!levelUpTask}
                     nextCoinKind={goalCoinKind(parkTripGoal?.task_id, tasks, completedTasks, archivedTasks)}
-                    ownedGoalHint={ownedGoalHint}
-                    nearbyRideName={guideOverGoal ? guideTarget?.name ?? guideTask?.name : nearbySuggestion?.task.name}
+                    ownedGoalHint={levelUpHint ?? ownedGoalHint}
+                    nearbyRideName={guideTask ? guideTask.name : guideOverGoal ? null : nearbySuggestion?.task.name}
                     nearbyReportedOpen={!guideOverGoal && !!nearbyReportedOpenRide}
-                    nearbyHint={guideOverGoal ? guideShelfHint(guidePick?.reason) : null}
+                    nearbyHint={guideTask ? guideShelfHint(shelfGuide?.reason) : null}
                     ticketsNeeded={parkTripGoal && !parkTripGoal.coin_owned
                       ? tripGoalData?.wallet.tickets_needed ?? 0 : 0}
                     rescuePassAvailable={inThisPark && !!tripGoalData?.wallet.rescue_pass_available}
                     goalStale={tripGoalStale}
-                    goalReportedDown={!guideOverGoal && goalReportedDown}
+                    goalReportedDown={!guideOverGoal && !levelUpTask && goalReportedDown}
                     alternateRideName={alternateRide?.task.name}
                     secretMilestones={currentPark.completed_secret_tasks_count}
                     onGo={onGoNext}

@@ -23,9 +23,14 @@ export interface PodiumStep {
   readonly flex?: number;
 }
 
-function PodiumSteps({ steps, gap = 6, style, paddingHorizontal = 0 }: {
+function PodiumSteps({ steps, gap = 6, style, paddingHorizontal = 0, numberAt = 'bottom' }: {
   /** Left to right, as they stand. */
   readonly steps: readonly PodiumStep[];
+  /**
+   * Where the place number sits: at the step's foot (the board), or right under its colored top
+   * edge (a framed stage whose rounded bottom can hide the foot, like the help page picture).
+   */
+  readonly numberAt?: 'top' | 'bottom';
   readonly gap?: number;
   readonly paddingHorizontal?: number;
   readonly style?: ViewStyle;
@@ -37,11 +42,14 @@ function PodiumSteps({ steps, gap = 6, style, paddingHorizontal = 0 }: {
       {steps.map(step => (
         <View key={step.rank} style={{ width: step.width, flex: step.width ? undefined : step.flex ?? 1, height: step.height,
           backgroundColor: BRAND.cream, borderTopLeftRadius: 16, borderTopRightRadius: 16, borderWidth: 3, borderBottomWidth: 0,
-          borderColor: BRAND.white, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end' }}>
+          borderColor: BRAND.white, overflow: 'hidden', alignItems: 'center',
+          justifyContent: numberAt === 'top' ? 'flex-start' : 'flex-end', paddingTop: numberAt === 'top' ? 8 : 0 }}>
           {/* The step's top edge in its place color, like a medal ribbon. */}
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 7, backgroundColor: STEP_EDGE[step.rank] }} />
-          {step.height >= 24 && <Text allowFontScaling={false} style={{ fontFamily: 'Shark', color: 'rgba(5,52,110,0.28)',
-            fontSize: Math.min(40, Math.max(14, Math.round(step.height * 0.32))), marginBottom: 1 }}>{step.rank}</Text>}
+          {(numberAt === 'top' || step.height >= 24) && <Text allowFontScaling={false} style={{ fontFamily: 'Shark',
+            color: 'rgba(5,52,110,0.32)', marginBottom: 1,
+            fontSize: numberAt === 'top' ? 18 : Math.min(40, Math.max(14, Math.round(step.height * 0.32))),
+            lineHeight: numberAt === 'top' ? 20 : undefined }}>{step.rank}</Text>}
         </View>
       ))}
     </View>
