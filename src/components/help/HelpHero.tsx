@@ -348,7 +348,7 @@ function PodiumScene({ t, w, h }: SceneProps) {
   // Each shark stands on its step (left 2nd, middle 1st, right 3rd), as the board's podium.
   const spots = [
     { cx: bx + sw * 0.5, top: stand(2, h * 0.34), size: h * 0.34, face: 3, crown: ART.crownSilver, at: 0.1 },
-    { cx: bx + sw * 1.5 + gap, top: stand(1, h * 0.4), size: h * 0.4, face: 0, crown: ART.crownGold, at: 0.3 },
+    { cx: bx + sw * 1.5 + gap, top: stand(1, h * 0.44), size: h * 0.44, face: 0, crown: ART.crownGold, at: 0.3, crownSit: 0.5 },
     { cx: bx + sw * 2.5 + gap * 2, top: stand(3, h * 0.31), size: h * 0.31, face: 6, crown: ART.crownBronze, at: 0.2 },
   ];
   return (
@@ -360,9 +360,11 @@ function PodiumScene({ t, w, h }: SceneProps) {
   );
 }
 
-function PodiumShark({ t, cx, top, size, face, crown, at }: {
+function PodiumShark({ t, cx, top, size, face, crown, at, crownSit = 0.72 }: {
   readonly t: SharedValue<number>; readonly cx: number; readonly top: number; readonly size: number;
   readonly face: number; readonly crown: number; readonly at: number;
+  /** How far above the picture's top the crown sits, in crown heights (a shark drawn lower in its frame wants less). */
+  readonly crownSit?: number;
 }) {
   const cw = size * 0.62;
   const ch = cw * (357 / 502);
@@ -374,7 +376,7 @@ function PodiumShark({ t, cx, top, size, face, crown, at }: {
   return (
     <>
       <Abs x={cx - size / 2} y={top} w={size} h={size} style={bob}><Art source={ART.sharks[face]} w={size} h={size} /></Abs>
-      <Abs x={cx - cw / 2} y={top - ch * 0.72} w={cw} h={ch} style={crownStyle}><Art source={crown} w={cw} h={ch} /></Abs>
+      <Abs x={cx - cw / 2} y={top - ch * crownSit} w={cw} h={ch} style={crownStyle}><Art source={crown} w={cw} h={ch} /></Abs>
     </>
   );
 }
