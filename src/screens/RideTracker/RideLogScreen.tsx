@@ -397,6 +397,12 @@ export default function RideLogScreen() {
     if (below === 'RideTracker') navigation.goBack();
     else navigation.dispatch(StackActions.replace('RideTracker'));
   }, [navigation]);
+  // A journal opened from the LinePlay recap ("Ride logged · Add stars") goes back to that recap, where
+  // the wait's one GO is; it never drops the guest into the Ride Tracker mid park day.
+  const backToRecap = useCallback(() => {
+    if (navigation.canGoBack()) navigation.goBack();
+    else returnToRideTracker();
+  }, [navigation, returnToRideTracker]);
   // Follows the guide store, so NEXT COIN appears (or changes) when the map's resolver moves the pointer.
   const nextCoin = useGuideTarget();
 
@@ -410,7 +416,8 @@ export default function RideLogScreen() {
         newAchievements={successData.newAchievements}
         queued={successData.queued}
         queuedReason={successData.queuedReason}
-        onDone={returnToRideTracker}
+        onDone={fromRideStep ? backToRecap : returnToRideTracker}
+        doneLabel={fromRideStep ? 'Back to your wait recap' : 'Return to Ride Tracker'}
         nextCoinName={nextCoin?.name ?? null}
         onNextCoin={nextCoin ? () => navigation.navigate('Explore') : undefined}
         onLogAnother={() => {

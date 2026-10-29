@@ -349,3 +349,11 @@ test('the lane walks can stub the posted-wait feed, but a store or OTA bundle al
     assert.match(read(file), /import waitFeed from '\.\.\/(\.\.\/)?services\/lineplay\/liveStub';/, `${file} reads the feed through the stub`);
   }
 });
+
+test('a journal opened from the LinePlay recap goes back to that recap (its one GO), the Ride Tracker journal back to the Ride Tracker', () => {
+  const log = read('src/screens/RideTracker/RideLogScreen.tsx');
+  assert.match(log, /onDone=\{fromRideStep \? backToRecap : returnToRideTracker\}/);
+  assert.match(log, /doneLabel=\{fromRideStep \? 'Back to your wait recap' : 'Return to Ride Tracker'\}/);
+  assert.match(log, /if \(navigation\.canGoBack\(\)\) navigation\.goBack\(\);\n\s+else returnToRideTracker\(\);/);
+  assert.match(read('src/components/RideTracker/RideLogSuccess.tsx'), /accessibilityLabel=\{doneLabel\}/);
+});

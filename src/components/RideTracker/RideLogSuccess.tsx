@@ -34,6 +34,8 @@ interface RideLogSuccessProps {
   xpEarned: number;
   newAchievements: Array<{ id: number; name: string; icon: string }>;
   onDone: () => void;
+  /** What the back arrow says it does (a ride-step journal goes back to the LinePlay recap). */
+  doneLabel?: string;
   onLogAnother?: () => void;
   /** No signal: the ride is kept on the phone and sent later. */
   queued?: boolean;
@@ -46,7 +48,7 @@ interface RideLogSuccessProps {
 }
 
 const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
-  ride, rideCount, totalRideCount, xpEarned, newAchievements, onDone, onLogAnother, queued = false, queuedReason = 'signal',
+  ride, rideCount, totalRideCount, xpEarned, newAchievements, onDone, doneLabel = 'Return to Ride Tracker', onLogAnother, queued = false, queuedReason = 'signal',
   nextCoinName = null, onNextCoin,
 }) => {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
@@ -109,7 +111,7 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <Pressable onPress={onDone} accessibilityRole="button" accessibilityLabel="Return to Ride Tracker">
+          <Pressable onPress={onDone} accessibilityRole="button" accessibilityLabel={doneLabel}>
             <Image source={require('../../../assets/images/screens/explore/back.png')}
               style={{ width: 35, height: 35 }} contentFit="contain" />
           </Pressable>
