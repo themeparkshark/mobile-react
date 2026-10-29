@@ -56,6 +56,9 @@ export default function RewardsSheet({ rows, flame, empty, busy, note, reducedMo
   readonly onClose: () => void;
 }) {
   const { height } = useWindowDimensions();
+  // Small phones (SE, 667 pt): slimmer rows and a taller list, so five rows show whole with no scroll.
+  const compact = height < 720;
+  const listMax = Math.max(240, Math.min(height * 0.62, height - 300));
   const ready = rows.some(r => r.ready > 0);
   // A reward rung's first appearance (Daily 3, Trail Boxes, event chests): one NEW pill on its first row. It is
   // marked seen when this sheet closes (or the app goes to the background), so it shows once and clears.
@@ -72,13 +75,13 @@ export default function RewardsSheet({ rows, flame, empty, busy, note, reducedMo
           <Text style={styles.flameText}>{flame > 0 ? `${flame} day flame` : 'Start a flame with Daily 3'}</Text>
         </View>
       )}
-      <ScrollView style={{ maxHeight: Math.max(240, height * 0.5) }} contentContainerStyle={styles.rows} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ maxHeight: listMax }} contentContainerStyle={styles.rows} showsVerticalScrollIndicator={false}>
         {rows.map((row, i) => (
           <Animated.View key={row.key} entering={reducedMotion ? undefined : FadeInDown.delay(40 * i).duration(180)}>
             <Pressable onPress={row.action ? () => onRow(row.key) : undefined} disabled={!row.action || busy === row.key}
               accessibilityRole="button" accessibilityLabel={`${row.title}. ${row.line}`}
-              style={({ pressed }) => [styles.row, row.ready > 0 && styles.rowReady, pressed && styles.pressed]}>
-              <View style={styles.artBox}>{rowArt(row.key)}</View>
+              style={({ pressed }) => [styles.row, compact && styles.rowCompact, row.ready > 0 && styles.rowReady, pressed && styles.pressed]}>
+              <View style={[styles.artBox, compact && styles.artBoxCompact]}>{rowArt(row.key)}</View>
               <View style={styles.text}>
                 <View style={styles.titleRow}>
                   <Text style={[styles.title, row.ready > 0 && styles.titleReady, styles.titleText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{row.title}</Text>
@@ -120,7 +123,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6 },
   rowReady: { backgroundColor: BRAND.white, borderWidth: 3, borderColor: BRAND.gold },
   pressed: { transform: [{ translateY: 2 }] },
+  rowCompact: { minHeight: 62, paddingVertical: 4 },
   artBox: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
+  artBoxCompact: { width: 48, height: 48, transform: [{ scale: 0.88 }] },
   art: { width: 54, height: 54 },
   text: { flex: 1, gap: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

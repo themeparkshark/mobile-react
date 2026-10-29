@@ -530,3 +530,14 @@ test('a Trail or event row with no host on screen shows its line with no button 
   const hook = read('src/components/retention/useRetention.tsx');
   assert.match(hook, /else if \(!openRewardsDoor\('trail'\)\) setView\(\{ k: 'rewards' \}\);/);
 });
+
+test('Rewards sheet fits five rows whole on a 667 pt phone', () => {
+  const sheet = read('src/components/retention/RewardsSheet.tsx');
+  assert.match(sheet, /const compact = height < 720;/);
+  assert.match(sheet, /const listMax = Math\.max\(240, Math\.min\(height \* 0\.62, height - 300\)\);/);
+  const listMax = h => Math.max(240, Math.min(h * 0.62, h - 300));
+  const fiveRows = 5 * 62 + 4 * 8 + 4;
+  assert.ok(listMax(667) >= fiveRows, `SE list ${listMax(667)} holds five compact rows (${fiveRows})`);
+  assert.ok(listMax(956) >= 5 * 70 + 4 * 8 + 4, 'Pro Max holds five full rows');
+  assert.match(sheet, /rowCompact: \{ minHeight: 62/);
+});
