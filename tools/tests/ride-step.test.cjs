@@ -531,3 +531,11 @@ test('a LinePlay wait whose end was lost (app killed) stops muting that ride aft
     assert.equal(open[0].startedAt, clock.now);
   });
 });
+
+test('the recap GO says a name that ends in s the kid-readable way', () => {
+  const rideStep = loadTs('src/services/lineplay/rideStep.ts');
+  assert.equal(rideStep.possessive('Jungle Cruise'), 'Jungle Cruise’s');
+  assert.equal(rideStep.possessive('Matterhorn Bobsleds'), 'Matterhorn Bobsleds’');
+  assert.equal(rideStep.recapGo({ rideName: 'Matterhorn Bobsleds', coinState: 'unowned', partsEarned: 0, rideTaskId: 68,
+    upgradeReady: false, nextCoin: null }).label, 'Win Matterhorn Bobsleds’ coin');
+});

@@ -125,6 +125,12 @@ export type RecapGo =
   | { readonly kind: 'next_coin'; readonly label: string; readonly button: string; readonly taskId: number | null }
   | { readonly kind: 'shelf'; readonly label: string; readonly button: string };
 
+/** "Jungle Cruise’s", "Matterhorn Bobsleds’" (a name ending in s takes the apostrophe alone). */
+export function possessive(name: string): string {
+  const trimmed = name.trim();
+  return /s$/i.test(trimmed) ? `${trimmed}’` : `${trimmed}’s`;
+}
+
 /**
  * The recap's one GO. A coin you do not own yet: win it (its Parts wait in its
  * slot). A coin ready to level up: level it up. Otherwise the guide's next coin,
@@ -142,12 +148,12 @@ export function recapGo(input: {
     return {
       kind: 'win_coin', taskId: input.rideTaskId, button: 'GO',
       label: input.partsEarned > 0
-        ? `Win ${input.rideName}’s coin: ${partsWaitingWords(input.partsEarned)}`
-        : `Win ${input.rideName}’s coin`,
+        ? `Win ${possessive(input.rideName)} coin: ${partsWaitingWords(input.partsEarned)}`
+        : `Win ${possessive(input.rideName)} coin`,
     };
   }
   if (input.coinState === 'owned' && input.upgradeReady) {
-    return { kind: 'level_up', label: `Level up ${input.rideName}’s coin`, button: 'LEVEL UP' };
+    return { kind: 'level_up', label: `Level up ${possessive(input.rideName)} coin`, button: 'LEVEL UP' };
   }
   if (input.nextCoin) return { kind: 'next_coin', label: `Next coin: ${input.nextCoin.name}`, button: 'GO', taskId: input.nextCoin.taskId };
   return { kind: 'shelf', label: 'See your park shelf', button: 'SHELF' };
