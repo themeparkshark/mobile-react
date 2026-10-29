@@ -19,7 +19,8 @@ export type GuideAction =
   | 'level_up'      // open the coin card to level it up
   | 'shelf'         // the park shelf
   | 'plan'          // home: open the shelf to plan the next park day
-  | 'skip';         // Line story: pick another coin (the guide moves on to the next one)
+  | 'unfold'        // Today's Adventure souvenir: open its sheet and unfold the souvenir
+  | 'skip';         // Line story or souvenir: pick another coin (the guide moves on to the next one)
 
 export interface GuideButton {
   readonly label: string;
@@ -72,6 +73,11 @@ export interface GuideCopyContext {
    * (the Adventure sheet's own play gate). False: the card walks them there first (GO). Default true.
    */
   readonly lineStoryNear?: boolean;
+  /**
+   * Today's Adventure step the Line story state is on: 'play' (its line story) or 'celebrate'
+   * (its souvenir, after the line story is played). Default 'play'.
+   */
+  readonly adventureStep?: 'play' | 'celebrate' | null;
 }
 
 /**
@@ -196,6 +202,16 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         pointsAtPlay: true,
       });
     case 'line_story': {
+      // Step 3: the line story is played, so the souvenir waits. It unfolds anywhere (no walk).
+      if (ctx.adventureStep === 'celebrate') {
+        return card({
+          kicker: 'TODAY\'S ADVENTURE',
+          title: `Unfold your ${name} souvenir`,
+          line: null,
+          button: { label: 'UNFOLD', action: 'unfold' },
+          secondary: { label: 'Pick another coin', action: 'skip' },
+        });
+      }
       // Its story opens in its line (the Adventure sheet's play gate); farther away, GO walks there first.
       const near = ctx.lineStoryNear !== false;
       return card({

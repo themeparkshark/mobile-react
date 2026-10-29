@@ -114,9 +114,13 @@ test('Adventure Line story: after winning its coin, the ride stays the target un
   const held = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure, current: passing, resumeTarget: first, location: north(60) }));
   assert.equal(held.taskId, 2);
   assert.equal(held.reason, 'line_story');
-  // Story played: phase moves to celebrate, the owned coin is no longer a target.
+  // Story played: phase moves to celebrate, and the ride stays the target for its souvenir (step 3).
   const played = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure: { ...adventure, phase: 'celebrate' }, current: held }));
-  assert.equal(played.taskId, 1);
+  assert.equal(played.taskId, 2, 'step 3: the souvenir keeps the ride');
+  assert.equal(played.reason, 'line_story');
+  // Souvenir unfolded: the Adventure is complete and the guide moves on.
+  const complete = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure: { ...adventure, phase: 'complete' }, current: played }));
+  assert.equal(complete.taskId, 1);
   // Declined: the player picked another coin.
   const declined = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure: { ...adventure, lineStoryDeclined: true } }));
   assert.equal(declined.taskId, 1);
@@ -498,6 +502,7 @@ test('a tapped coin says "Walk closer: N m" until PLAY! can rise; calm timers sa
 
 test('the Adventure Ticket: a first ticket never says "detour", and there is one "Pick another ride" button', () => {
   const A = loadTs('src/screens/ExploreScreen/adventureTicketPresentation.ts');
+  assert.equal(A.SHEET_TREATS_PER_TICKET, F.TREATS_PER_TICKET, 'the sheet and the guide say the same treats per Ticket');
   const ride = { task_id: 1, asset_id: 13, ride_id: 8, ride_name: 'Space Ride', coin_url: '', park_id: 1 };
   const first = { id: 7, park_id: 1, park_day: '2026-10-28', ride, ride_choices: [ride], phase: 'discover', discover: null, play: null };
   const p = A.adventurePrompt(first, true);
@@ -780,4 +785,73 @@ test('level up ready comes from the trip goal\'s paid-for next level, and feeds 
   assert.equal(GC.guideCoinsFor(tasks, 8, { levelUpTaskIds: new Set([63]) })[0].levelUpReady, true);
   const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
   assert.match(explore, /levelUpReady: levelUpTaskId != null,/, 'the ladder hears it too');
+});
+
+test('Adventure step 3: the souvenir state is its own card (UNFOLD), and declining one step never declines the next', () => {
+  const C = loadTs('src/services/guide/guideCopy.ts');
+  const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c));
+  G.guide.reset();
+  const live = { 1: 'open', 3: 'open' };
+  const play = { taskId: 2, parkId: 8, phase: 'play' };
+  const first = G.guide.resolve(input({ coins: won, live, adventure: play }));
+  assert.equal(first.reason, 'line_story');
+  // Pick another coin on the Line story card: the guide moves on.
+  G.guide.skipLineStory();
+  const next = G.guide.resolve(input({ coins: won, live, adventure: play }));
+  assert.notEqual(next.taskId, 2, 'declined: the guide points at another coin');
+  // The line story is played from the Adventure sheet (opened by its ticket tab): phase celebrate.
+  // The held coin still holds (no flip-flop), and once it is won the souvenir leads again.
+  const celebrate = { ...play, phase: 'celebrate' };
+  const stillHeld = G.guide.resolve(input({ coins: won, live, adventure: celebrate }));
+  assert.equal(stillHeld.taskId, next.taskId, 'the held coin holds');
+  const wonNext = won.map(c => (c.taskId === next.taskId ? { ...c, owned: true } : c));
+  const souvenir = G.guide.resolve(input({ coins: wonNext, live, adventure: celebrate }));
+  assert.equal(souvenir.taskId, 2, 'declining the line story never declines the souvenir');
+  assert.equal(souvenir.reason, 'line_story');
+  assert.equal(G.guideState(input({ adventure: celebrate }), souvenir), 'line_story');
+  const copy = C.guideCardCopy('line_story', souvenir, { parkName: 'Disneyland', ridesResting: false, allOwned: false, tickets: 0,
+    freeStep: null, queueTicketsOn: false, adventureDots: [true, true, false], adventureStep: 'celebrate' });
+  assert.equal(copy.title, 'Unfold your Haunted Mansion souvenir');
+  assert.equal(copy.button.action, 'unfold');
+  assert.equal(copy.button.label, 'UNFOLD');
+  assert.equal(copy.secondary.action, 'skip');
+  assert.deepEqual(plain(copy.dots), [true, true, false]);
+  // Declining the souvenir step too: the guide moves on (the ticket tab keeps the sheet one tap away).
+  G.guide.skipLineStory();
+  const after = G.guide.resolve(input({ coins: wonNext, live, adventure: celebrate }));
+  assert.notEqual(after?.taskId, 2);
+  // A tapped island (another coin's pick) while the souvenir waits declines that step only.
+  G.guide.reset();
+  G.guide.resolve(input({ coins: wonNext, live, adventure: celebrate }));
+  G.guide.setTarget(1, 'callout');
+  const picked = G.guide.resolve(input({ coins: wonNext, live, adventure: celebrate }));
+  assert.equal(picked.taskId, 1);
+  G.guide.reset();
+});
+
+test('Adventure ticket tab: the card wears it whenever the Adventure is active here but the guide points elsewhere', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/guide/useNextCoinGuide.ts'), 'utf8');
+  assert.match(src, /const adventureTab = !!input\.adventure && input\.adventure\.park_id === parkId && input\.adventure\.phase !== 'complete'\s*&& !adventureDots/);
+  const card = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/guide/NextCoinCard.tsx'), 'utf8');
+  assert.match(card, /testID="adventure-tab"/);
+  const screen = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(screen, /adventureTab=\{nextCoin\.adventureTab && adventure && tripGoalData \? adventureTabProps : null\}/);
+  assert.match(screen, /case 'unfold': setAdventureCelebrateRequest/);
+  // The closed Adventure ride in its discover phase: the guide never targets it, so the tab is the door to the detour picker.
+  const closed = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'closed' }, adventure: { taskId: 2, parkId: 8, phase: 'discover' } }));
+  assert.notEqual(closed.taskId, 2);
+});
+
+test('Adventure sheet Ticket line: no LinePlay or wait Ticket promise while queue_tickets is off (state A)', () => {
+  const A = loadTs('src/screens/ExploreScreen/adventureTicketPresentation.ts');
+  assert.equal(A.SHEET_TREATS_PER_TICKET, F.TREATS_PER_TICKET, 'the sheet and the guide say the same treats per Ticket');
+  const off = A.adventureTicketsLine(2, false, false);
+  assert.equal(off, '2 more Tickets needed. 3 treats at home = 1 Ticket. Tomorrow brings a new free try.');
+  assert.doesNotMatch(off, /LinePlay|wait|line/i);
+  const on = A.adventureTicketsLine(1, false, true);
+  assert.match(on, /first wait at a ride earns one/);
+  assert.equal(A.adventureTicketsLine(2, true, false), 'Today\'s free try is ready for this coin.');
+  assert.equal(A.adventureTicketsLine(0, false, false), null);
+  const sheet = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/AdventureTicketCard.tsx'), 'utf8');
+  assert.doesNotMatch(sheet, /LinePlay and treats at home can earn more/);
 });

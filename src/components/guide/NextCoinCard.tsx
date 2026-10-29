@@ -61,8 +61,26 @@ function CardButton({ button, onPress, quiet = false }: { button: GuideButton; o
   </Pressable>;
 }
 
+/**
+ * Today's Adventure ticket tab: a small ticket on the card's top edge while the guide points at
+ * another coin, so the Adventure's sheet (its line story, its souvenir, another ride, hide for
+ * today) is never stranded. The ticket picture and its three stamp dots; a 44 pt tap target.
+ */
+function AdventureTab({ stamps, onPress }: { stamps: readonly [boolean, boolean, boolean]; onPress: () => void }) {
+  const done = stamps.filter(Boolean).length;
+  return <Pressable testID="adventure-tab" accessibilityRole="button" hitSlop={{ top: 12, bottom: 10, left: 6, right: 6 }}
+    accessibilityLabel={`Today's Adventure. ${done} of 3 stamps. Open your ticket`}
+    onPress={() => { haptic('tapLight'); onPress(); }}
+    style={({ pressed }) => [styles.tab, pressed && styles.pressed]}>
+    <GameIcon name="ticket" size={18} />
+    <View style={styles.tabDots}>
+      {stamps.map((on, index) => <View key={index} style={[styles.tabDot, on && styles.tabDotOn]} />)}
+    </View>
+  </Pressable>;
+}
+
 export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAction, onCardPress, teachPlay = false,
-  slam = NO_SLAM, onSlamDone, testID = 'next-coin-card' }: {
+  slam = NO_SLAM, onSlamDone, adventureTab = null, testID = 'next-coin-card' }: {
   readonly copy: GuideCardCopy;
   readonly state: GuideState;
   /** The target coin's art, or null (wallet and resting states draw the Ticket). */
@@ -78,6 +96,8 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   /** Adventure stamps earned since the player last looked (their index), for the stamp slam. */
   readonly slam?: readonly number[];
   readonly onSlamDone?: () => void;
+  /** Today's Adventure is active here but the card points elsewhere: its ticket tab opens the Adventure sheet. */
+  readonly adventureTab?: { readonly stamps: readonly [boolean, boolean, boolean]; readonly onPress: () => void } | null;
   readonly testID?: string;
 }) {
   const reduced = useReducedGameMotion();
@@ -90,9 +110,12 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   const wallet = state === 'claim' || state === 'free_try' || state === 'extra_try' || state === 'need_ticket';
   const art = wallet || !coinUrl ? (wallet ? TICKET : COIN_FALLBACK) : { uri: coinUrl };
   return <Animated.View testID={testID} style={[styles.slot, { top }, animated]}>
-    {/* The park name chip: a small tab on the card's top edge, so the kicker never shortens. */}
-    {parkName && state !== 'arrive' && copy.kicker !== parkName.toUpperCase() && <View pointerEvents="none" style={styles.parkChip}>
-      <Text style={styles.parkChipText} numberOfLines={1}>{parkName}</Text>
+    {/* The park name chip and today's Adventure ticket tab sit on the card's top edge, so the kicker never shortens. */}
+    {(adventureTab || (parkName && state !== 'arrive' && copy.kicker !== parkName.toUpperCase())) && <View pointerEvents="box-none" style={styles.edgeRow}>
+      {adventureTab && <AdventureTab stamps={adventureTab.stamps} onPress={adventureTab.onPress} />}
+      {parkName && state !== 'arrive' && copy.kicker !== parkName.toUpperCase() && <View pointerEvents="none" style={styles.parkChip}>
+        <Text style={styles.parkChipText} numberOfLines={1}>{parkName}</Text>
+      </View>}
     </View>}
     <Pressable accessible accessibilityRole="button" accessibilityLabel={copy.a11y} onPress={onCardPress}
       disabled={!onCardPress} style={styles.card}>
@@ -131,8 +154,14 @@ const styles = StyleSheet.create({
   pointer: { flexDirection: 'row', alignItems: 'center', transform: [{ rotate: '90deg' }] },
   copy: { flex: 1, minWidth: 0 },
   kicker: { color: '#ffdc61', fontFamily: 'Knockout', fontSize: 11, letterSpacing: 0.6 },
-  parkChip: { position: 'absolute', top: -9, right: 14, zIndex: 2, backgroundColor: BRAND.white, borderRadius: 8,
+  edgeRow: { position: 'absolute', top: -9, right: 14, zIndex: 2, flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  parkChip: { backgroundColor: BRAND.white, borderRadius: 8,
     borderWidth: 2, borderColor: BRAND.blueBright, paddingHorizontal: 6, paddingVertical: 0, maxWidth: 170 },
+  tab: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.white, borderRadius: 9, borderWidth: 2,
+    borderColor: BRAND.gold, paddingHorizontal: 5, height: 24, marginTop: -6 },
+  tabDots: { flexDirection: 'row', gap: 2 },
+  tabDot: { width: 6, height: 6, borderRadius: 3, borderWidth: 1.2, borderColor: BRAND.navy, backgroundColor: 'transparent' },
+  tabDotOn: { backgroundColor: BRAND.gold, borderColor: BRAND.goldLip },
   parkChipText: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 10 },
   title: { color: BRAND.white, fontFamily: 'Shark', fontSize: 15, marginTop: 1 },
   line: { color: '#dff4ff', fontFamily: 'Knockout', fontSize: 12, marginTop: 1 },

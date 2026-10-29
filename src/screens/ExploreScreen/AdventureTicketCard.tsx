@@ -11,7 +11,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameButton, GameIcon, SHADOW } from '../../ui';
 import { NATIVE_SETTLE_MS, useNativeModalLayer } from '../../ui/modalLayers';
 import {
-  adventureErrorMessage, adventurePrompt, adventureStamps, detourDetail, type DetourPick,
+  adventureErrorMessage, adventurePrompt, adventureStamps, adventureTicketsLine, detourDetail, type DetourPick,
 } from './adventureTicketPresentation';
 import MapSuggestionStub from './MapSuggestionStub';
 import { LINEPLAY_ICON } from '../../components/guide/linePlayIcon';
@@ -50,6 +50,10 @@ interface Props {
    */
   sheetOnly?: boolean;
   openRequest?: number;
+  /** The guide card's UNFOLD: open the sheet and unfold the souvenir once it is up (whenever this changes). */
+  celebrateRequest?: number;
+  /** Line Tickets exist (queue_tickets on): only then may the sheet say a wait earns a Ticket. */
+  queueTicketsOn?: boolean;
   /** Dev preview only: start with the sheet (or the detour picker) open. */
   initialOpen?: boolean;
   initialPicker?: boolean;
@@ -149,11 +153,12 @@ function ChipEntrance({ reduced, children, style }: { reduced: boolean; children
 
 export default function AdventureTicketCard({ ticket, data, closed, stale, top, collapsed = false, gate, detours = [], slam = [], onSlamDone,
   onDiscover, onPlay, onFindLine, onShelf, onSelect, onDismiss, onCelebrate, onRefresh, onOcclusionChange,
-  sheetOnly = false, openRequest = 0, initialOpen = false, initialPicker = false }: Props) {
+  sheetOnly = false, openRequest = 0, celebrateRequest = 0, queueTicketsOn = false, initialOpen = false, initialPicker = false }: Props) {
   const [open, setOpen] = useState(initialOpen), [picker, setPicker] = useState(initialPicker);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   const [unfold, setUnfold] = useState(false);
   const mounted = useRef(true), locked = useRef(false), pending = useRef<(() => void) | null>(null);
+  const unfoldOnShow = useRef(false);
   const occlusion = useRef(onOcclusionChange); occlusion.current = onOcclusionChange;
   const reduced = useReducedGameMotion(), insets = useSafeAreaInsets();
   // The sheet holds its modal layer until UIKit says it is gone; what a button asked for (a walk
@@ -175,7 +180,7 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
   const coinUrl = ticket.discover?.coin_url || ticket.ride.coin_url;
   const coinSource = coinUrl ? { uri: coinUrl } : COIN_FALLBACK;
   const complete = ticket.phase === 'complete';
-  const close = () => { pending.current = null; setOpen(false); };
+  const close = () => { pending.current = null; unfoldOnShow.current = false; setOpen(false); };
   const transact = async (operation: () => Promise<unknown>) => {
     if (locked.current) return false;
     locked.current = true; setBusy(true); setError(null);
@@ -226,6 +231,20 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
     lastRequest.current = openRequest;
     openSheet();
   }, [openRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+  // UNFOLD on the guide card: the sheet opens on the souvenir and unfolds it once the sheet is up.
+  const lastCelebrate = useRef(celebrateRequest);
+  useEffect(() => {
+    if (celebrateRequest === lastCelebrate.current) return;
+    lastCelebrate.current = celebrateRequest;
+    unfoldOnShow.current = true;
+    openSheet();
+  }, [celebrateRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onShown = () => {
+    if (!unfoldOnShow.current) return;
+    unfoldOnShow.current = false;
+    if (!stale && prompt.intent === 'celebrate') next();
+  };
+  const ticketsLine = adventureTicketsLine(data.wallet.tickets_needed, !!data.wallet.rescue_pass_available, queueTicketsOn);
   const a11y = `Open Adventure Ticket. ${ticket.ride.ride_name}. ${prompt.title}. ${earnedCount} of 3 chapters complete.`;
 
   return <>
@@ -262,7 +281,7 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
       animationIn="slideInUp" animationOut="slideOutDown" animationInTiming={reduced ? 0 : 280} animationOutTiming={reduced ? 0 : 200}
       backdropColor={BRAND.navy} backdropOpacity={0.3}
       backdropTransitionInTiming={reduced ? 0 : 180} backdropTransitionOutTiming={reduced ? 0 : 180}
-      onModalWillShow={() => occlusion.current?.(true)} onModalHide={() => {
+      onModalWillShow={() => occlusion.current?.(true)} onModalShow={onShown} onModalHide={() => {
         occlusion.current?.(false);
         // The native sheet is gone one transaction after its JS hide: the hand-off runs then, never into it.
         layer.onHidden();
@@ -307,10 +326,9 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
                   <View style={{ flex: 1 }}><Text style={styles.chapterTitle}>{chapter.label}</Text><Text style={styles.chapterDetail}>{chapter.detail}</Text></View>
                 </View>)}
             </View>
-            {ticket.phase === 'discover' && data.wallet.tickets_needed > 0 && <View style={styles.resource}>
+            {ticket.phase === 'discover' && data.wallet.tickets_needed > 0 && !!ticketsLine && <View style={styles.resource}>
               <GameIcon name="ticket" size={34} />
-              <Text style={styles.resourceText}>{data.wallet.rescue_pass_available ? 'Today\'s free try is ready for this coin.'
-                : `${data.wallet.tickets_needed} more ${data.wallet.tickets_needed === 1 ? 'Ticket' : 'Tickets'} needed. LinePlay and treats at home can earn more.`}</Text>
+              <Text style={styles.resourceText}>{ticketsLine}</Text>
             </View>}
             <View style={styles.primaryRow}>
               <GameButton label={stale ? 'Refresh my ticket' : prompt.action} accessibilityLabel={stale ? 'Refresh Adventure Ticket' : prompt.action}

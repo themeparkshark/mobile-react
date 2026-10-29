@@ -1224,6 +1224,7 @@ export function ExploreScreenBody() {
       coin_url: guideCoinUrl ?? '', times_completed: 1, asset_id: -1 } as TaskType;
   }, [nextCoin.targetOffMap, nextCoin.target?.taskId, nextCoin.target?.name, guidePoint?.latitude, guidePoint?.longitude, guideCoinUrl]); // eslint-disable-line react-hooks/exhaustive-deps
   const [adventureSheetRequest, setAdventureSheetRequest] = useState(0);
+  const [adventureCelebrateRequest, setAdventureCelebrateRequest] = useState(0);
   // The Daily 3 / level chest overlay is up: other map moments wait their turn.
   const [retentionOccluding, setRetentionOccluding] = useState(false);
   // PLAY RIDE (or a closed ride's sign) is on screen: the declutter keeps ride art out from under it.
@@ -1594,6 +1595,7 @@ export function ExploreScreenBody() {
         else if (park && player) RootNavigation.navigate('Park', { park: park.id, player: player.id });
         return;
       case 'skip': guide.skipLineStory(); return;
+      case 'unfold': setAdventureCelebrateRequest(n => n + 1); return;
       case 'shelf':
       case 'plan':
       default:
@@ -1610,6 +1612,12 @@ export function ExploreScreenBody() {
       RootNavigation.navigate('Park', { park: tripGoal?.park_id ?? homeShelfPark(player.current_park_id), player: player.id });
     },
   } : null, [player, park, tripGoal, homePlan, welcome]);
+  // Today's Adventure ticket tab on the guide card while the guide points elsewhere: opens its sheet.
+  const adventureStampsKey = adventure ? `${+!!adventure.discover}${+!!adventure.play}${+(adventure.phase === 'complete')}` : '';
+  const adventureTabProps = useMemo(() => ({
+    stamps: [adventureStampsKey[0] === '1', adventureStampsKey[1] === '1', adventureStampsKey[2] === '1'] as [boolean, boolean, boolean],
+    onPress: () => setAdventureSheetRequest(n => n + 1),
+  }), [adventureStampsKey]);
   const onGuideCardPress = useCallback(() => {
     // On today's Adventure ride the card is the ticket's frame: it opens the ticket's sheet (stamps, souvenir).
     if (nextCoin.copy.dots) { setAdventureSheetRequest(n => n + 1); return; }
@@ -2002,10 +2010,12 @@ export function ExploreScreenBody() {
         {/* The Next Coin guide (core loop 4.1): exactly one card in the top-left slot, on every park map. */}
         {guideShown && player && <NextCoinCard copy={nextCoin.copy} state={nextCoin.state} parkName={park.name ?? null}
           coinUrl={guideCoinUrl} top={slotTop} onAction={onGuideAction} onCardPress={onGuideCardPress}
-          teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen} />}
+          teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
+          adventureTab={nextCoin.adventureTab && adventure && tripGoalData ? adventureTabProps : null} />}
         {/* Today's Adventure: its sheet stays for the stamps and the souvenir, opened from the guide card on its ride. */}
         {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`} sheetOnly
-          openRequest={adventureSheetRequest}
+          openRequest={adventureSheetRequest} celebrateRequest={adventureCelebrateRequest}
+          queueTicketsOn={guideFlags.queue_tickets === true}
           ticket={adventure} data={tripGoalData} stale={tripGoalStale} gate={adventureGate} detours={adventureDetours}
           closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={slotTop}
           onOcclusionChange={setAdventureOccluded} onRefresh={refreshTripGoal}

@@ -144,3 +144,20 @@ export function adventureShelfArrival(ticket: AdventureTicket) {
   return { attemptId: discover.attempt_id, assetId: discover.asset_id, taskId: discover.task_id,
     taskType: 'task' as const, firstCollection: false };
 }
+
+/** Treats per Ticket (TREATS_PER_TICKET in src/services/guide/freeTickets.ts; a test keeps them equal). This file stays import-free. */
+export const SHEET_TREATS_PER_TICKET = 3;
+
+/**
+ * The Adventure sheet's Ticket line while its coin waits (discover phase). LinePlay earns line
+ * Tickets only while queue_tickets is on (state A, production today, has none), so with the
+ * switch off it promises treats and tomorrow's free try only.
+ */
+export function adventureTicketsLine(ticketsNeeded: number, freeTryReady: boolean, queueTicketsOn: boolean): string | null {
+  if (freeTryReady) return 'Today\'s free try is ready for this coin.';
+  if (!(ticketsNeeded > 0)) return null;
+  const need = `${ticketsNeeded} more ${ticketsNeeded === 1 ? 'Ticket' : 'Tickets'} needed.`;
+  return queueTicketsOn === true
+    ? `${need} Your first wait at a ride earns one, and ${SHEET_TREATS_PER_TICKET} treats at home make one more.`
+    : `${need} ${SHEET_TREATS_PER_TICKET} treats at home = 1 Ticket. Tomorrow brings a new free try.`;
+}

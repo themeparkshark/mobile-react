@@ -71,6 +71,11 @@ export interface NextCoinGuide {
    * path and the edge arrow always agree (one owner of the pointer).
    */
   readonly targetPoint: { readonly latitude: number; readonly longitude: number } | null;
+  /**
+   * Today's Adventure is active in this park but the card points elsewhere: the card shows the
+   * Adventure's ticket tab (its door to the sheet), so steps 2 and 3 and the detour picker stay reachable.
+   */
+  readonly adventureTab: boolean;
   /** The target is not one of today's map islands (a won Adventure coin waiting on its Line story). */
   readonly targetOffMap: boolean;
   /** The first in-park reading of this visit (epoch ms), or null: the attention rules' 30 s quiet. */
@@ -192,11 +197,17 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
     parkName: input.parkName, ridesResting, allOwned, outOfReach,
     tickets: input.wallet?.tickets ?? 0, freeStep: input.wallet ? nextFreeTicket(input.wallet) : null,
     queueTicketsOn: input.queueTicketsOn, adventureDots, lineStoryNear: input.lineStoryNear,
+    adventureStep: adventureDots && input.adventure?.phase === 'celebrate' ? 'celebrate' : 'play',
   }), shown, ridesResting);
   const targetTask = shown ? input.tasks.find(task => task.id === shown.taskId) ?? null : null;
   const targetCoin = shown ? coins.find(coin => coin.taskId === shown.taskId) ?? null : null;
   const targetPoint = targetTask
     ? { latitude: Number(targetTask.latitude), longitude: Number(targetTask.longitude) }
     : targetCoin ? { latitude: targetCoin.latitude, longitude: targetCoin.longitude } : null;
-  return { target: shown, state, copy, inLineTaskId, rides, targetTask, targetPoint, targetOffMap: !!shown && !targetTask && !!targetCoin, arrivedAt };
+  // Today's Adventure stays one tap away while the card points at another coin (after "Pick another
+  // coin", a tapped island, a pick from the shelf, or its ride closing): the card wears its ticket tab.
+  const adventureTab = !!input.adventure && input.adventure.park_id === parkId && input.adventure.phase !== 'complete'
+    && !adventureDots && state !== 'arrive' && state !== 'welcome_back';
+  return { target: shown, state, copy, inLineTaskId, rides, targetTask, targetPoint, targetOffMap: !!shown && !targetTask && !!targetCoin,
+    arrivedAt, adventureTab };
 }

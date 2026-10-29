@@ -92,7 +92,7 @@ export interface GuideAdventure {
   readonly parkId: number;
   /** discover = win its coin; play = its line story; celebrate = celebrate the ride; complete = done. */
   readonly phase: 'discover' | 'play' | 'celebrate' | 'complete';
-  /** The player picked another coin while the line story waited. */
+  /** The player picked another coin while this step (line story or souvenir) waited. */
   readonly lineStoryDeclined?: boolean;
 }
 
@@ -219,9 +219,15 @@ function winnable(input: GuideInput, coin: GuideCoin): boolean {
   return !coin.owned && liveOf(input, coin) !== 'closed' && withinReach(input, coin);
 }
 
+/**
+ * Rule 1 (Adventure steps 2 and 3): right after today's Adventure coin is won, its ride stays the
+ * target for its line story (phase 'play'), then for its souvenir (phase 'celebrate'), until the
+ * Adventure is done or the player picks another coin for that step.
+ */
 function adventureLineStory(input: GuideInput): boolean {
   const adventure = input.adventure;
-  return !!adventure && adventure.parkId === input.parkId && adventure.phase === 'play' && !adventure.lineStoryDeclined;
+  return !!adventure && adventure.parkId === input.parkId && (adventure.phase === 'play' || adventure.phase === 'celebrate')
+    && !adventure.lineStoryDeclined;
 }
 
 /** The in-line ride, when it is a real queue ride in this park that is not known closed. Owned is fine: the wait powers it. */
@@ -319,7 +325,7 @@ export function pickNextCoin(input: GuideInput): GuideTarget | null {
   }
   if (base && baseCoin) return targetFor(input, baseCoin, base.reason, base.source);
 
-  // 1. Right after winning today's Adventure coin: that ride, for its line story.
+  // 1. Right after winning today's Adventure coin: that ride, for its line story, then its souvenir.
   if (adventureLineStory(input)) {
     const ride = coins.find(c => c.taskId === input.adventure!.taskId);
     if (ride && liveOf(input, ride) !== 'closed' && withinReach(input, ride)) return targetFor(input, ride, 'line_story');
@@ -466,7 +472,11 @@ let held: GuideTarget | null = null;
 let heldPickedAt: number | null = null;
 let pick: { taskId: number; source: string; at: number } | null = null;
 let plan: number | null = null;
-let declinedLineStory: number | null = null;
+/** The Adventure step the player passed on ("Pick another coin" or another coin's pick): its ride and phase.
+ * Only that step: once its line story is played, the souvenir step leads again. */
+let declinedLineStory: { taskId: number; phase: GuideAdventure['phase'] | null } | null = null;
+/** The Adventure phase the guide last resolved with (to remember which step was declined). */
+let lastAdventurePhase: GuideAdventure['phase'] | null = null;
 /** The target a coin in PLAY! range took over from, to go back to once the player walks on. */
 let resume: GuideTarget | null = null;
 const listeners = new Set<Listener>();
@@ -487,7 +497,7 @@ export const guide = {
    */
   setTarget(taskId: number, source: string): void {
     if (!finite(taskId)) return;
-    if (held?.reason === 'line_story' && held.taskId !== taskId) declinedLineStory = held.taskId;
+    if (held?.reason === 'line_story' && held.taskId !== taskId) declinedLineStory = { taskId: held.taskId, phase: lastAdventurePhase };
     pick = { taskId, source: source || 'pick', at: Date.now() };
     plan = taskId;
     emit();
@@ -506,7 +516,9 @@ export const guide = {
    * this; other lanes only call setTarget, current and subscribe.
    */
   resolve(input: Omit<GuideInput, 'current' | 'pickedTaskId' | 'pickedSource' | 'resumeTarget'>): GuideTarget | null {
-    const adventure = input.adventure && declinedLineStory === input.adventure.taskId
+    lastAdventurePhase = input.adventure?.phase ?? null;
+    const adventure = input.adventure && declinedLineStory && declinedLineStory.taskId === input.adventure.taskId
+      && (declinedLineStory.phase === null || declinedLineStory.phase === input.adventure.phase)
       ? { ...input.adventure, lineStoryDeclined: true } : input.adventure;
     const fresh = pick;
     const next = pickNextCoin({
@@ -543,12 +555,14 @@ export const guide = {
     return held;
   },
   /**
-   * "Pick another coin" on the Line story card: the guide moves on from today's Adventure ride
-   * (its line story stays playable from its sheet) and picks the next coin on the next resolve.
+   * "Pick another coin" on the Line story (or souvenir) card: the guide moves on from today's
+   * Adventure ride and picks the next coin on the next resolve. The Adventure itself stays one tap
+   * away: while it is active and the guide points elsewhere, the card wears its ticket tab, which
+   * opens the Adventure sheet (Play its line story, Unfold my souvenir, Pick another ride, Hide for today).
    */
   skipLineStory(): void {
     if (held?.reason !== 'line_story') return;
-    declinedLineStory = held.taskId;
+    declinedLineStory = { taskId: held.taskId, phase: lastAdventurePhase };
     held = null;
     emit();
   },
@@ -575,7 +589,7 @@ export const guide = {
   },
   /** Sign-out and tests: forget everything. */
   reset(): void {
-    held = null; heldPickedAt = null; pick = null; plan = null; declinedLineStory = null; resume = null;
+    held = null; heldPickedAt = null; pick = null; plan = null; declinedLineStory = null; lastAdventurePhase = null; resume = null;
     emit();
   },
 };
