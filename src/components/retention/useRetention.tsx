@@ -485,16 +485,16 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     void refresh(false);
   }, [refreshStamps, loadPassToday, refresh]);
 
-  // A card opened from a Rewards row (the daily chest) closed: the sheet comes back, as after a level chest. The map
-  // unmounts the chest as it hides, so its native dismiss may never reach us: the sheet waits out the same fallback
-  // as the overlay's own handoff, then presents through its layer ('wait').
+  // A card opened from a Rewards row (the daily chest) closed: the sheet comes back, as after a level chest. No fixed
+  // wait (that left a bare map between the two): the chest holds its native layer until UIKit says it is gone (or it
+  // unmounts), and the overlay presents through its own layer ('wait'), so it comes up the moment the chest is gone.
   useEffect(() => listenReturnToRewards(() => {
     setTimeout(() => {
       if (!mounted.current) return;
       setRewardsNote(null);
       setView(v => v ?? { k: 'rewards' });
       void refreshStamps(true);
-    }, NATIVE_GONE_FALLBACK_MS);
+    }, 0);
   }), [refreshStamps]);
 
   // Dev JS only: lane checks open the sheet and read its numbers before the map's Rewards button lands.

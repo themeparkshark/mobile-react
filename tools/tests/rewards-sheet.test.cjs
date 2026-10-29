@@ -709,4 +709,9 @@ test('the daily chest opened from Rewards: BACK says BACK and the sheet comes ba
   const hook = read('src/components/retention/useRetention.tsx');
   assert.match(hook, /case 'daily_chest': closeThen\(\(\) => \{ askForDailyChest\(Date\.now\(\), true\); o\.onOpenChest\(\); \}\); return;/);
   assert.match(hook, /useEffect\(\(\) => listenReturnToRewards\(/);
+  // No fixed wait between the chest and the sheet: the overlay's 'wait' layer holds it until the chest's layer is gone.
+  const back2 = hook.slice(hook.indexOf('listenReturnToRewards(() =>'), hook.indexOf('listenReturnToRewards(() =>') + 400);
+  assert.match(back2, /\}, 0\);/);
+  assert.doesNotMatch(back2, /NATIVE_GONE_FALLBACK_MS/);
+  assert.match(hook, /useNativeModalLayer\(visible, 'wait'\)/);
 });
