@@ -38,7 +38,8 @@ import {
   challengeButtonLabel, challengeFreeSteps, challengeNextStep, challengeStepLine, challengeTitle,
   needTicketCopy, punchLines, stampClaimSources,
 } from './rewards/challengeCopy';
-import { partsProgress, weekLine } from './rewards/postWinModel';
+import { adventureLineStoryNext, partsProgress, weekLine } from './rewards/postWinModel';
+import { getTripGoal } from '../api/endpoints/me/trip-goal';
 import { withNumberFont } from '../ui/numberText';
 import TicketGift from './rewards/TicketGift';
 import { markTeamOffered, teamOffered, wantsTeamStep } from './rewards/teamOffer';
@@ -217,6 +218,8 @@ export default function RedeemRedeemableModal({
   const [rideTry, setRideTry] = useState<RideTrySummary | null>(null);
   // "1 coin this week" (Standings count) for the win card.
   const [weekWins, setWeekWins] = useState<string | null>(null);
+  // This win was today's Adventure coin, with its line story next (the win card's big button plays it).
+  const [lineStoryNext, setLineStoryNext] = useState(false);
   // TRY AGAIN names the lost attempt, so the server deals the same game.
   const retryOfRef = useRef<number | null>(null);
   // First coin ever (team step after the win card): the player's coin count when the card opened.
@@ -361,6 +364,14 @@ export default function RedeemRedeemableModal({
       setPerkChips(serverPerkChips(attempt.rewards.perks));
       setNextRideTicketEarned(attempt.rewards.next_ride_ticket_earned ?? 0);
       setEarnedFirstCoinStamp(null);
+      setLineStoryNext(false);
+      if (attempt.task_type !== 'secret_task') {
+        // Best effort: whatever this lookup does, the win itself is already shown.
+        void Promise.resolve().then(() => getTripGoal()).then(goal => {
+          if (savedAttemptIdRef.current === attempt.id)
+            setLineStoryNext(adventureLineStoryNext(goal.adventure_ticket, attempt.task_id, park.id));
+        }).catch(() => undefined);
+      }
       if (attempt.rewards.coin_times_collected === 1) {
         void getStamps().then(response => {
           if (savedAttemptIdRef.current !== attempt.id) return;
@@ -1113,6 +1124,7 @@ export default function RedeemRedeemableModal({
         weekLine={weekWins}
         nextTarget={guideTarget}
         wonTaskId={attemptRef.current?.task_id ?? taskId}
+        adventureLineStory={lineStoryNext}
         onNextCoin={button => { void handleNextCoin(button); }}
         onViewCoin={handleViewCoin}
         onHidden={() => {

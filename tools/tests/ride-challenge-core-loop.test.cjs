@@ -672,8 +672,11 @@ test('short lines draw their digits in the number face, so "1" never reads "I"',
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /withNumberFont\(step\.kind === 'line_ticket'/);
   assert.match(modal, /<Text style=\{styles\.stepLine\}>\{withNumberFont\(challengeStepLine\(freeStep\) \?\? ''\)\}<\/Text>/);
-  // The loss card's try line ("1 of 3 right.") is already drawn in the number face (ChallengeStatusCard line style).
-  assert.match(read('src/components/rewards/ChallengeStatusCard.tsx'), /line: \{ fontFamily: 'Shark'/);
+  // The loss card's try line ("1 of 3 right.") is already in the number face; its message ("1 Ticket used.") now too.
+  const status = read('src/components/rewards/ChallengeStatusCard.tsx');
+  assert.match(status, /line: \{ fontFamily: 'Shark'/);
+  assert.match(status, /<Text style=\{styles\.messageSmall\}>\{withNumberFont\(message\)\}<\/Text>/);
+  assert.match(status, /<Text style=\{styles\.message\}>\{withNumberFont\(message\)\}<\/Text>/);
 });
 
 test('Settings switch rows speak as switches with On or Off, even when the row does the toggling', () => {
@@ -681,4 +684,21 @@ test('Settings switch rows speak as switches with On or Off, even when the row d
   assert.match(src, /accessibilityRole=\{checked === undefined \? 'button' : 'switch'\}\n\s+accessibilityState=\{checked === undefined \? undefined : \{ checked \}\}/);
   assert.match(src, /checked=\{play\.prefs\.pictureOnly\}/);
   assert.match(src, /checked=\{batterySaver\}/);
+});
+
+test('today\'s Adventure coin won: the big button plays its line story, even before the map\'s guide catches up', () => {
+  const ticket = { park_id: 8, phase: 'play', play: null, ride: { task_id: 77 } };
+  assert.equal(win.adventureLineStoryNext(ticket, 77, 8), true);
+  assert.equal(win.adventureLineStoryNext({ ...ticket, play: { kind: 'queue_story' } }, 77, 8), false, 'line story already played');
+  assert.equal(win.adventureLineStoryNext({ ...ticket, phase: 'discover' }, 77, 8), false);
+  assert.equal(win.adventureLineStoryNext(ticket, 59, 8), false, 'another coin');
+  assert.equal(win.adventureLineStoryNext(ticket, 77, 2), false, 'another park');
+  assert.equal(win.adventureLineStoryNext(null, 77, 8), false);
+  const story = win.nextCoinButton({ taskId: 60, name: 'Frontierland', meters: 52, reason: 'nearest_open' }, 77, true);
+  assert.deepEqual({ ...story }, { kind: 'line_story', label: 'Play its line story', detail: null });
+  const next = win.nextCoinButton({ taskId: 60, name: 'Frontierland', meters: 52, reason: 'nearest_open' }, 77, false);
+  assert.deepEqual({ ...next }, { kind: 'next', label: 'NEXT COIN', detail: 'Frontierland, 52 m' });
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(modal, /setLineStoryNext\(adventureLineStoryNext\(goal\.adventure_ticket, attempt\.task_id, park\.id\)\);/);
+  assert.match(modal, /adventureLineStory=\{lineStoryNext\}/);
 });

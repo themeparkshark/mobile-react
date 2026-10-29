@@ -89,6 +89,8 @@ interface Props {
   nextTarget?: { taskId: number; name: string; meters: number | null; reason: string } | null;
   /** The won ride's task id (the next target is never the coin just won, except its line story). */
   wonTaskId?: number | null;
+  /** This win was today's Adventure coin and its line story is next: the big button plays it. */
+  adventureLineStory?: boolean;
   /** NEXT COIN (or "Play its line story"): the parent points the guide and closes. */
   onNextCoin?: (button: NextCoinButton) => void;
   /** See my shelf: the coin flies onto its shelf. */
@@ -174,6 +176,7 @@ export default function PostWinRewardsModal({
   weekLine = null,
   nextTarget = null,
   wonTaskId = null,
+  adventureLineStory = false,
   onNextCoin,
   onViewCoin,
   onHidden,
@@ -242,7 +245,7 @@ export default function PostWinRewardsModal({
   const headline = milestoneHeadline(milestones ?? null);
   const shelf = shelfLine(milestones ?? null);
   const team = teamSentence(rideControl as Parameters<typeof teamSentence>[0], name => (isTeam(name) ? teamName(name) : name));
-  const next = nextCoinButton(nextTarget, wonTaskId);
+  const next = nextCoinButton(nextTarget, wonTaskId, adventureLineStory);
 
   // One entrance clock for the whole summary (UI thread): card settle, hero
   // squash, chips. Reduced motion jumps to the end.

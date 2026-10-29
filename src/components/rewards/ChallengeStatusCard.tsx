@@ -17,6 +17,8 @@ import GameIcon, { type GameIconName } from '../../ui/GameIcon';
 import { ResultPrimaryButton, ResultSecondaryButton } from '../../gamekit/results/ResultButtons';
 import SharkLoader from '../../ui/SharkLoader';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+// Knockout draws 1 like a capital I: "1 Ticket used." read "I Ticket used." on the loss card.
+import { withNumberFont } from '../../ui/numberText';
 
 export type ChallengeStatusArt = 'soClose' | 'loading' | 'none';
 
@@ -102,8 +104,8 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
             <Text style={[styles.ticketText, ticket > 0 && styles.ticketBack]}>{ticket > 0 ? `+${ticket}` : `${ticket}`}</Text>
           </View>
           {ticket > 0 && <TicketFlyBack to={ticketFlyTo ?? null} reduced={reduced} />}
-          <Text style={styles.messageSmall}>{message}</Text>
-        </View> : <Text style={styles.message}>{message}</Text>}
+          <Text style={styles.messageSmall}>{withNumberFont(message)}</Text>
+        </View> : <Text style={styles.message}>{withNumberFont(message)}</Text>}
         {primary && <ResultPrimaryButton label={primary.label} icons={primary.icons} a11yLabel={primary.a11yLabel} note={primary.note} onPress={primary.onPress}
           disabled={primary.disabled || !armed} style={[styles.primary, primary.disabled && styles.dim]} />}
         {secondary && <ResultSecondaryButton label={secondary.label} onPress={secondary.disabled ? undefined : secondary.onPress}

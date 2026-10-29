@@ -211,6 +211,17 @@ export function weekLine(standings: unknown): string | null {
   return `${week} ${week === 1 ? 'coin' : 'coins'} this week`;
 }
 
+/**
+ * True when this win was today's Adventure coin and its line story is next (Adventure step 2):
+ * the ticket is for this ride and park, its phase moved on to play, and no line story is stamped yet.
+ */
+export function adventureLineStoryNext(ticket: {
+  readonly park_id: number; readonly phase: string; readonly play: unknown; readonly ride: { readonly task_id: number };
+} | null | undefined, wonTaskId: number | null | undefined, parkId: number | null | undefined): boolean {
+  if (!ticket || wonTaskId == null || parkId == null) return false;
+  return ticket.ride?.task_id === wonTaskId && ticket.park_id === parkId && ticket.phase === 'play' && !ticket.play;
+}
+
 /** The win card's big button: the next coin by name and distance, or today's Adventure line story. */
 export interface NextCoinButton {
   readonly kind: 'next' | 'line_story' | 'map';
@@ -220,7 +231,10 @@ export interface NextCoinButton {
 
 export function nextCoinButton(target: {
   taskId: number; name: string; meters: number | null; reason: string;
-} | null | undefined, wonTaskId: number | null | undefined): NextCoinButton {
+} | null | undefined, wonTaskId: number | null | undefined, adventureLineStory = false): NextCoinButton {
+  // Today's Adventure coin was just won and its line story is still to play (the server's Adventure
+  // Ticket says so, even before the map's guide has caught up): the big button plays it.
+  if (adventureLineStory && wonTaskId != null) return { kind: 'line_story', label: 'Play its line story', detail: null };
   if (target && wonTaskId != null && target.taskId === wonTaskId && target.reason === 'line_story') {
     return { kind: 'line_story', label: 'Play its line story', detail: null };
   }

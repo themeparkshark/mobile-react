@@ -113,6 +113,8 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       }
       // iOS Dim Flashing Lights reads off unless a test stubs it.
       if (/(^|\/)modules\/flash-safety$/.test(name)) return { isDimFlashingLightsEnabled: () => false };
+      // The number face helper (src/ui/numberText): the line as one child, so card text reads as written.
+      if (/(^|\/)ui\/numberText$/.test(name)) return { withNumberFont: line => line, NUMBER_FONT: 'Shark', NUMBER_GAP: ' ' };
       if (/(^|\/)ui\/GoldBurst$/.test(name)) return { GoldBurst: 'GoldBurst', SparkleBurst: 'SparkleBurst', ShineSweep: 'ShineSweep' };
       // Native modal layers (core loop step 0): nothing else is up, so a wanted sheet presents at once.
       if (/(^|\/)ui\/modalLayers$/.test(name)) return { useNativeModalLayer: wanted => ({ present: !!wanted, onDismissed() {} }),

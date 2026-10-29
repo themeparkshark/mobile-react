@@ -75,8 +75,8 @@ test('the ride try card wears the shared ribbon, and the ticket picture carries 
   assert.doesNotMatch(c, /from '\.\.\/Ribbon'/);
   assert.match(c, /<View style=\{styles\.ticket\} accessible accessibilityLabel=\{message\}>/);
   // Core loop 5.3: the loss card says its kind line in words too ("Your Ticket came back. Same game, try again!").
-  assert.match(c, /<Text style=\{styles\.messageSmall\}>\{message\}<\/Text>/);
-  assert.match(c, /<\/View> : <Text style=\{styles\.message\}>\{message\}<\/Text>\}/);
+  assert.match(c, /<Text style=\{styles\.messageSmall\}>\{(withNumberFont\()?message\)?\}<\/Text>/);
+  assert.match(c, /<\/View> : <Text style=\{styles\.message\}>\{(withNumberFont\()?message\)?\}<\/Text>\}/);
 });
 
 test('Memory pair dots look the same on the try card and the end card: bare on blue', () => {
