@@ -15,6 +15,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
+import NewTag from './NewTag';
 
 const CHEST = require('../../../assets/images/daily/chest-closed.png');
 const SIZE = 54;
@@ -71,12 +72,16 @@ export function rewardsLabel(model: RewardsButtonModel): string {
   return parts.join(', ');
 }
 
-export default function RewardsButton({ model, onPress }: { readonly model: RewardsButtonModel; readonly onPress: () => void }) {
+export default function RewardsButton({ model, onPress, isNew = false }: {
+  readonly model: RewardsButtonModel; readonly onPress: () => void;
+  /** The flame (rung 4) or the Trail ring (rung 6) just unlocked: the button wears NEW until tapped. */
+  readonly isNew?: boolean;
+}) {
   const r = (SIZE + RING) / 2 - RING / 2;
   const circumference = 2 * Math.PI * r;
   return (
     <Pressable onPress={() => { haptic('tapLight'); onPress(); }} accessibilityRole="button"
-      accessibilityLabel={rewardsLabel(model)} hitSlop={6} testID="map-rewards-button"
+      accessibilityLabel={`${isNew ? 'New. ' : ''}${rewardsLabel(model)}`} hitSlop={6} testID="map-rewards-button"
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
       {model.trail !== null && <View style={styles.ring} pointerEvents="none">
         <Svg width={SIZE + RING} height={SIZE + RING}>
@@ -86,6 +91,7 @@ export default function RewardsButton({ model, onPress }: { readonly model: Rewa
         </Svg>
       </View>}
       <Image source={CHEST} style={styles.chest} contentFit="contain" transition={0} />
+      {isNew && <NewTag style={styles.newTag} />}
       {model.count > 0 && <View style={styles.count} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Text style={styles.countText}>{model.count > 9 ? '9+' : model.count}</Text>
       </View>}
@@ -108,5 +114,6 @@ const styles = StyleSheet.create({
   countText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 12 },
   flame: { position: 'absolute', bottom: -8, left: -8, flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND.white,
     borderRadius: 10, paddingRight: 5, paddingLeft: 1, borderWidth: 2, borderColor: BRAND.blueBright },
+  newTag: { top: -8, left: -10 },
   flameText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 11 },
 });

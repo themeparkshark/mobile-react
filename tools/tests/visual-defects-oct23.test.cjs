@@ -999,8 +999,9 @@ test('team bar: before standings answer it says RIDE CONTROL with plain shields,
   const bar = read('src/components/RideControlBar.tsx');
   assert.match(bar, /const known = control !== null;/);
   assert.match(bar, /: leader \? `\$\{teamName\(leader, names\)\.toUpperCase\(\)\} LEADS` : !known \? 'RIDE CONTROL' : NO_LEADER_HEADLINE;/);
-  assert.match(bar, /<Animated\.Text style=\{\[styles\.chipCount, countStyle\]\}>\{known \? count : 0\}<\/Animated\.Text>/);
-  assert.match(bar, /leading=\{leader === team\} known=\{known\} \/>/);
+  assert.match(bar, /\{!bare && <Animated\.Text style=\{\[styles\.chipCount, countStyle\]\}>\{known \? count : 0\}<\/Animated\.Text>\}/);
+  // The map's one your-team chip is just its badge until the team holds a ride (never a lone "0").
+  assert.match(bar, /leading=\{leader === team\} known=\{known\} bare=\{compact && !!yours && !\(held\[team\] > 0\)\} \/>/);
   assert.match(bar, /\{known \? held\[team\] : ' '\}/);
 });
 
@@ -1152,7 +1153,7 @@ test('launch never starts the login music while sign-in is still loading (no aud
 test('map rail: Daily 3 first and the late chest joins at the end, popping in on the UI thread (no button ever moves)', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
   // Core loop 4.2: the chest and Daily 3 buttons fold into one Rewards button (one chest, one number), so no button moves.
-  assert.match(explore, /const mapControls = mapControlsCount > 0 \? <RewardsButton model=\{rewardsModel\} onPress=\{openRewards\} \/> : null;/);
+  assert.match(explore, /const mapControls = mapControlsCount > 0 \? <RewardsButton model=\{rewardsModel\} onPress=\{onRewardsPress\} isNew=\{rewardsNew\} \/> : null;/);
   assert.doesNotMatch(explore, /retention\.button/);
   const chest = read('src/components/map/ChestMapButton.tsx');
   assert.match(chest, /Animated\.spring\(shown, \{ toValue: 1, stiffness: 320, damping: 18, mass: 0\.8, useNativeDriver: true \}\)/);

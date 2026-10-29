@@ -855,3 +855,77 @@ test('Adventure sheet Ticket line: no LinePlay or wait Ticket promise while queu
   const sheet = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/AdventureTicketCard.tsx'), 'utf8');
   assert.doesNotMatch(sheet, /LinePlay and treats at home can earn more/);
 });
+
+test('SE: the edge arrow never sits on top of a target island just past the inset edge (round 2 fix 6)', () => {
+  const g = loadTs('src/components/map/guide.ts');
+  const se = { width: 375, height: 667 };
+  // A target 25 m north on SE: on screen at y 220, just above the inset top (250). No arrow on the island.
+  assert.equal(g.edgeArrow({ x: 190, y: 220 }, se), null);
+  // Under the guide card (y 120) the island is hidden: the arrow still shows, clear of it.
+  const hidden = g.edgeArrow({ x: 190, y: 120 }, se);
+  assert.ok(hidden && Math.hypot(hidden.x - 190, hidden.y - 120) >= g.ARROW_CLEAR_OF_ISLAND);
+  // Off screen: always an arrow.
+  assert.ok(g.edgeArrow({ x: 190, y: -400 }, se));
+});
+
+test('park day done: a park-mode reading 10 km away (the place check kept the park) ends the day; it never moves lastInPark (round 2 fix 11)', () => {
+  const P = loadTs('src/services/guide/parkDay.ts');
+  const gate = { latitude: 33.8121, longitude: -117.9190 };
+  const away = { latitude: 33.9020, longitude: -117.9190 };   // about 10 km north
+  let rec = P.EMPTY_PARK_DAY;
+  let step = P.parkDayStep(rec, { mode: 'park', parkId: 8, location: gate, today: '2026-10-29' });
+  assert.deepEqual(plain(step.events.map(e => e.kind)), ['park_day_started']);
+  step = P.parkDayStep(step.next, { mode: 'park', parkId: 8, location: gate, today: '2026-10-29', coinsWon: 1 });
+  const before = step.next.lastInPark;
+  step = P.parkDayStep(step.next, { mode: 'park', parkId: 8, location: away, today: '2026-10-29' });
+  assert.deepEqual(plain(step.events.map(e => e.kind)), ['park_day_done']);
+  assert.equal(step.events[0].coins, 1);
+  assert.deepEqual(plain(step.next.lastInPark), plain(before), 'the far reading is not an in-park reading');
+  // Once only.
+  const again = P.parkDayStep(step.next, { mode: 'park', parkId: 8, location: away, today: '2026-10-29' });
+  assert.equal(again.events.length, 0);
+  // A far reading with no coin today ends nothing.
+  let none = P.parkDayStep(P.EMPTY_PARK_DAY, { mode: 'park', parkId: 8, location: gate, today: '2026-10-29' });
+  none = P.parkDayStep(none.next, { mode: 'park', parkId: 8, location: away, today: '2026-10-29' });
+  assert.equal(none.events.length, 0);
+});
+
+test('guide.version moves only for a pick, a skipped step, a cleared plan or a reset; resolve never bumps it (no self re-resolve)', () => {
+  G.guide.reset();
+  const v0 = G.guide.version();
+  G.guide.resolve(input({ coins: RIDES, live: { 1: 'open' } }));
+  G.guide.resolve(input({ coins: RIDES, live: { 1: 'open' }, location: north(10) }));
+  assert.equal(G.guide.version(), v0, 'a resolve that moves the target notifies, but the input version holds');
+  G.guide.setTarget(2, 'shelf');
+  assert.equal(G.guide.version(), v0 + 1);
+  G.guide.clearPlan();
+  assert.equal(G.guide.version(), v0 + 2);
+  G.guide.reset();
+});
+
+test('NEW tags: the Rewards button (flame, Trail ring) and the HUD pills (raid and Rush, events) wear NEW from their rung, cleared on tap', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const screen = fs.readFileSync(path.join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(screen, /const rewardsNew = \(dailyOpen && dailyRung\.isNew\) \|\| \(trailOpen && trailRung\.isNew\)/);
+  assert.match(screen, /isNew=\{rewardsNew\}/);
+  assert.match(screen, /withNewTag\(eventsRung,/);
+  assert.match(screen, /raidOnMap \|\| rushes\.length > 0 \? coinLevelsRung : null/);
+  assert.match(screen, /onTouchStart=\{rung\.markSeen\}/);
+  assert.doesNotMatch(screen, /teamRung/, 'the unused team rung read is gone');
+  const button = fs.readFileSync(path.join(__dirname, '../../src/components/map/RewardsButton.tsx'), 'utf8');
+  assert.match(button, /\{isNew && <NewTag/);
+});
+
+test('round 2 small fixes: 46 pt card buttons, a bare your-team chip at 0 rides, and the in-line kicker never repeats the title', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const card = fs.readFileSync(path.join(__dirname, '../../src/components/guide/NextCoinCard.tsx'), 'utf8');
+  assert.match(card, /BUTTON_SLOP = \{ top: 8, bottom: 8, left: 4, right: 4 \}/);
+  assert.match(card, /minHeight: 30/);
+  const bar = fs.readFileSync(path.join(__dirname, '../../src/components/RideControlBar.tsx'), 'utf8');
+  assert.match(bar, /bare=\{compact && !!yours && !\(held\[team\] > 0\)\}/);
+  const C = loadTs('src/services/guide/guideCopy.ts');
+  const copy = C.guideCardCopy('in_line', { taskId: 1, name: 'Jungle Cruise', reason: 'in_line', meters: 10 },
+    { parkName: 'Disneyland', ridesResting: false, allOwned: false, tickets: 1, freeStep: null, queueTicketsOn: false, adventureDots: null });
+  assert.equal(copy.kicker, 'YOUR WAIT');
+  assert.equal(copy.title, 'In line for Jungle Cruise?');
+});

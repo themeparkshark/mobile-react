@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
+import { useCallback, useContext, useMemo, useRef, useState, useEffect, type ReactNode } from 'react';
 import { Dimensions, Text, View, Pressable, StyleSheet } from 'react-native';
 import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
 import useLivePoll from '../hooks/useLivePoll';
@@ -138,6 +138,7 @@ import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, energ
 import { UpperText } from '../ui/upper';
 import { usePlayTapHold } from '../components/guide/playTapHold';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
+import NewTag from '../components/map/NewTag';
 import useNextCoinGuide from '../components/guide/useNextCoinGuide';
 import { goalLevelUpTaskId, guideWallet, linePlayRoute, ownedTaskIdsFor } from '../components/guide/guideCoins';
 import useClaimableTickets from '../components/guide/useClaimableTickets';
@@ -233,6 +234,8 @@ const TICKET_ICON = require('../../assets/images/ticket-icon.png');
 const PARKED_TASK = { id: -1, name: '', latitude: '0', longitude: '0', coin_url: '', coins: 0, completion_goal: 0, experience: 0,
   times_completed: 0, asset_id: -1, ticket_cost: 1 } as unknown as TaskType;
 const PARKED_BOX = { width: 1, height: 1 } as const;
+/** Where a HUD pill's NEW tag sits: on its top-right corner. */
+const NEW_TAG_ON_PILL = { top: -8, right: -6 } as const;
 const PARKED_TIME = '2000-01-01T00:00:00Z';
 // Friends drawn as ghost sharks at most (the closest).
 const GHOST_CAP = 5;
@@ -1140,7 +1143,6 @@ export function ExploreScreenBody() {
     if (player?.id != null) { guidePlayerSeen.current = player.id; guide.forPlayer(player.id); }
     else if (guidePlayerSeen.current != null) { guidePlayerSeen.current = null; guide.forPlayer(null); }
   }, [player?.id]);
-  const teamRung = useRung('team');
   const coinLevelsRung = useRung('coin_levels');
   const dailyRung = useRung('daily');
   const trailRung = useRung('trail');
@@ -1400,7 +1402,14 @@ export function ExploreScreenBody() {
   useEffect(() => { if (recapShown) attentionQueue.take(appOpenId, 'event_recap'); }, [recapShown, appOpenId]);
   // A brand new player's first 30 s of hunting: no Rewards button yet, just the treats (the chest comes after).
   const mapControlsCount = firstVisitHold || !player ? 0 : 1;
-  const mapControls = mapControlsCount > 0 ? <RewardsButton model={rewardsModel} onPress={openRewards} /> : null;
+  // The flame (rung 4) or the Trail ring (rung 6) just unlocked: one NEW tag (the ladder allows one per app open).
+  const rewardsNew = (dailyOpen && dailyRung.isNew) || (trailOpen && trailRung.isNew);
+  const onRewardsPress = useCallback(() => {
+    if (dailyRung.isNew) dailyRung.markSeen();
+    if (trailRung.isNew) trailRung.markSeen();
+    openRewards();
+  }, [dailyRung, trailRung, openRewards]);
+  const mapControls = mapControlsCount > 0 ? <RewardsButton model={rewardsModel} onPress={onRewardsPress} isNew={rewardsNew} /> : null;
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
@@ -1632,20 +1641,26 @@ export function ExploreScreenBody() {
   // The one HUD row: the most urgent status leads, the rest wait behind "+N".
   // The HUD row shows only what is live now, after its unlock (core loop 4.2): a raid or Rush after coin
   // levels and while the park is open, events after their rung, the team chip only after a team pick.
+  // A HUD pill whose rung just unlocked (raids and Rush at rung 3, events at rung 9) wears NEW until its
+  // first tap; the ladder gives at most one NEW per app open.
+  const withNewTag = (rung: { isNew: boolean; markSeen(): void } | null, node: ReactNode) => rung?.isNew
+    ? <View onTouchStart={rung.markSeen}>{node}<NewTag style={NEW_TAG_ON_PILL} /></View> : node;
   const statusEntries: StatusEntry[] = player && park ? statusOrder({
     live: liveSlotShown, show: nightPill ? (nightShow.phase === 'live' ? 'live' : 'teaser') : null,
     nightMode: frightNight.modeOn, control: hasTeam,
     event: liveEvt.event && eventsRung.open ? (openableKeys(liveEvt.event).length ? 'ready' : 'on') : null,
   }).map(key => {
-    if (key === 'event' && liveEvt.event) return { key, label: liveEvt.event.title, tone: TONES.park, node: <EventStatusChip inline event={liveEvt.event} onPress={() => setEventOpen(true)} /> };
-    if (key === 'live') return { key, label: 'Live in the park', tone: rushes.length && !raidActive && !bossMap.moment ? TONES.rush : TONES.park, node: <LiveEventsPill inline raid={raidOnMap ? raid : null} rushes={coinLevelsRung.open ? rushes : []} onBoss={() => setBossOpen(true)}
+    if (key === 'event' && liveEvt.event) return { key, label: liveEvt.event.title, tone: TONES.park, node: withNewTag(eventsRung,
+      <EventStatusChip inline event={liveEvt.event} onPress={() => setEventOpen(true)} />) };
+    if (key === 'live') return { key, label: 'Live in the park', tone: rushes.length && !raidActive && !bossMap.moment ? TONES.rush : TONES.park, node: withNewTag(
+      raidOnMap || rushes.length > 0 ? coinLevelsRung : null, <LiveEventsPill inline raid={raidOnMap ? raid : null} rushes={coinLevelsRung.open ? rushes : []} onBoss={() => setBossOpen(true)}
       mapMoment={bossMap.moment} mapFlag={bossMap.flag} onDismissMoment={bossMap.dismiss}
       onMapMoment={() => {
         const task = visibleTasks.find(task => task.id === bossMap.moment?.impact.taskId);
         if (task) setSelectedTask(task);
       }}
       pendingAttack={bossRecovery?.pending} receiptNeedsCheck={receiptNeedsCheck}
-      onRush={(task) => setSelectedTask(task)} /> };
+      onRush={(task) => setSelectedTask(task)} />) };
     if (key === 'show') return { key, label: nightShow.show?.label ?? 'Tonight\'s show', tone: TONES.show, node: nightShow.show ? <NightShowPill inline show={nightShow.show} phase={nightShow.phase}
       onSee={() => {
         const anchor = nightShow.show?.anchor;

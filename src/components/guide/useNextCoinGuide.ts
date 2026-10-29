@@ -158,10 +158,11 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
     });
   }, [enabled, ready, parkId, lat, lng, coinsKey, answersKey, adventure?.taskId, adventure?.phase, inLineTaskId, input.playableTaskId, // eslint-disable-line react-hooks/exhaustive-deps
     input.starRushUnlocked, input.coinLevelsUnlocked]);
-  // Any screen's guide.setTarget lands on the next resolve: re-run it when the store says so.
-  const [pickTick, setPickTick] = useState(0);
-  useEffect(() => guide.subscribe(() => setPickTick(t => t + 1)), []);
-  const lastPick = useRef(0);
+  // Any screen's guide.setTarget lands on the next resolve: re-run it when the store's input version
+  // moves (a pick, a skipped step, a reset), never on resolve's own target notice.
+  const [pickTick, setPickTick] = useState(() => guide.version());
+  useEffect(() => guide.subscribe(() => setPickTick(guide.version())), []);
+  const lastPick = useRef(pickTick);
   useEffect(() => {
     if (pickTick === lastPick.current) return;
     lastPick.current = pickTick;

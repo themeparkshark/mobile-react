@@ -14,8 +14,16 @@ export function edgeArrow(point: { x: number; y: number }, size: { width: number
   const tx = dx === 0 ? Infinity : (dx > 0 ? maxX - cx : minX - cx) / dx;
   const ty = dy === 0 ? Infinity : (dy > 0 ? maxY - cy : minY - cy) / dy;
   const t = Math.min(tx, ty);
-  return { x: cx + dx * t, y: cy + dy * t, angle: Math.atan2(dy, dx) * 180 / Math.PI };
+  const x = cx + dx * t, y = cy + dy * t;
+  // The target is on screen just past the inset edge (a short screen, a target 25 m away): the arrow
+  // would sit on top of its island. The island itself is the guide then, so no arrow.
+  const onScreen = point.x >= 0 && point.x <= width && point.y >= 0 && point.y <= height;
+  if (onScreen && Math.hypot(point.x - x, point.y - y) < ARROW_CLEAR_OF_ISLAND) return null;
+  return { x, y, angle: Math.atan2(dy, dx) * 180 / Math.PI };
 }
+
+/** How far (points) the edge arrow must sit from an on-screen target to show: an island and its arrow never overlap. */
+export const ARROW_CLEAR_OF_ISLAND = 84;
 
 /** A two-point dashed guide line from the player to the target. */
 export function guideLine(from: { latitude: number; longitude: number }, to: { latitude: number; longitude: number }): GeoJSON.FeatureCollection {

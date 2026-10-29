@@ -22,9 +22,11 @@ export const NO_LEADER_HEADLINE = 'NO TEAM HAS A RIDE YET';
  * standings answer (or offline), the chip is just the team's shield: no number it cannot know.
  * The number fades in when the standings arrive, in a slot that keeps its width (no jump).
  */
-export function TeamChip({ team, count, yours, leading, known = true }: {
+export function TeamChip({ team, count, yours, leading, known = true, bare = false }: {
   readonly team: TeamId; readonly count: number; readonly yours: boolean; readonly leading: boolean;
   readonly known?: boolean;
+  /** Just the team's badge, no number slot (the map's your-team chip while the team holds no rides). */
+  readonly bare?: boolean;
 }) {
   const reduced = useReducedGameMotion();
   const pop = useSharedValue(1);
@@ -51,9 +53,9 @@ export function TeamChip({ team, count, yours, leading, known = true }: {
   const chipStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const crownStyle = useAnimatedStyle(() => ({ opacity: crown.value, transform: [{ translateY: (1 - crown.value) * 6 }, { rotate: '-14deg' }, { scale: 0.6 + crown.value * 0.4 }] }));
   return (
-    <Animated.View style={[styles.chip, { backgroundColor: teamChipColor(team) }, yours && styles.chipYours, chipStyle]}>
+    <Animated.View style={[styles.chip, { backgroundColor: teamChipColor(team) }, yours && styles.chipYours, bare && styles.chipBare, chipStyle]}>
       <TeamBadge team={team} style={styles.chipBadge} />
-      <Animated.Text style={[styles.chipCount, countStyle]}>{known ? count : 0}</Animated.Text>
+      {!bare && <Animated.Text style={[styles.chipCount, countStyle]}>{known ? count : 0}</Animated.Text>}
       <Animated.View style={[styles.crown, crownStyle]} pointerEvents="none">
         <GameIcon name="crown" size={18} />
       </Animated.View>
@@ -123,7 +125,7 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
     <>
       <Pressable accessibilityRole="button"
         accessibilityLabel={compact && yours
-          ? `Your team, ${teamName(yours, names)}${known ? `: ${held[yours]} ${held[yours] === 1 ? 'ride' : 'rides'}` : ''}. Show rides to take.`
+          ? `Your team, ${teamName(yours, names)}${known && held[yours] > 0 ? `: ${held[yours]} ${held[yours] === 1 ? 'ride' : 'rides'}` : ''}. Show rides to take.`
           : known
             ? `${headline}. ${TEAM_ORDER.map(team => `${teamShortName(team, names)} ${held[team]}`).join(', ')} rides. Show rides to take.`
             : `${headline}. Show rides to take.`}
@@ -132,8 +134,9 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
           style={[styles.bar, compact && styles.barCompact]}>
           {!compact && <Animated.Text style={[styles.kicker, titleStyle]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{headline}</Animated.Text>}
           <View style={styles.chips}>
+            {/* The map's one your-team chip shows its badge alone until the team holds a ride (never a lone "0"). */}
             {chipTeams.map(team => <TeamChip key={team} team={team} count={held[team]} yours={yours === team}
-              leading={leader === team} known={known} />)}
+              leading={leader === team} known={known} bare={compact && !!yours && !(held[team] > 0)} />)}
           </View>
         </LinearGradient>
       </Pressable>
@@ -216,6 +219,7 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: 'transparent' },
   chipYours: { borderColor: BRAND.white },
   chipBadge: { width: 22, height: 22 },
+  chipBare: { paddingRight: 3 },
   chipCount: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, marginLeft: 2, textShadowColor: 'rgba(5,52,110,0.6)',
     textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
   crown: { position: 'absolute', top: -12, right: -6 },

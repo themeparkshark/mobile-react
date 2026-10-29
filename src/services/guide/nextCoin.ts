@@ -480,6 +480,8 @@ let lastAdventurePhase: GuideAdventure['phase'] | null = null;
 /** The target a coin in PLAY! range took over from, to go back to once the player walks on. */
 let resume: GuideTarget | null = null;
 const listeners = new Set<Listener>();
+/** Bumped by every change the next resolve must see (a pick, a skipped step, a cleared plan, a reset), never by resolve itself. */
+let inputVersion = 0;
 const emit = () => listeners.forEach(listener => {
   try { listener(); } catch { /* one bad listener never stops the rest */ }
 });
@@ -500,6 +502,7 @@ export const guide = {
     if (held?.reason === 'line_story' && held.taskId !== taskId) declinedLineStory = { taskId: held.taskId, phase: lastAdventurePhase };
     pick = { taskId, source: source || 'pick', at: Date.now() };
     plan = taskId;
+    inputVersion++;
     emit();
   },
   /** The target the guide holds now, or null (resting, closed, or not resolved yet). */
@@ -564,7 +567,15 @@ export const guide = {
     if (held?.reason !== 'line_story') return;
     declinedLineStory = { taskId: held.taskId, phase: lastAdventurePhase };
     held = null;
+    inputVersion++;
     emit();
+  },
+  /**
+   * Changes when something the next resolve must see changed (a pick, a skipped step, a cleared plan,
+   * a reset). The map re-resolves on this, never on resolve's own notice (no render loop).
+   */
+  version(): number {
+    return inputVersion;
   },
   /** The player's planned coin (rule 4), if any. */
   plan(): number | null {
@@ -574,6 +585,7 @@ export const guide = {
   clearPlan(): void {
     if (plan === null) return;
     plan = null;
+    inputVersion++;
     emit();
   },
   /**
@@ -590,6 +602,7 @@ export const guide = {
   /** Sign-out and tests: forget everything. */
   reset(): void {
     held = null; heldPickedAt = null; pick = null; plan = null; declinedLineStory = null; lastAdventurePhase = null; resume = null;
+    inputVersion++;
     emit();
   },
 };

@@ -61,6 +61,18 @@ export function parkDayStep(prev: ParkDayRecord, input: ParkDayInput): { next: P
   };
 
   if (input.mode === 'park' && input.parkId != null && input.location) {
+    // Park mode can linger after the player left (the place check keeps the last park): a reading 2 km
+    // from today's last real in-park reading is a trusted "left the park", never a new in-park reading.
+    const left = next.day === input.today && next.parkId === input.parkId && !!next.lastInPark &&
+      guideMeters(input.location, next.lastInPark) >= LEFT_PARK_METERS;
+    if (left) {
+      next = { ...next, coins: next.coins + won };
+      if (!next.done && next.coins > 0) {
+        events.push({ kind: 'park_day_done', parkId: input.parkId, coins: next.coins, day: input.today });
+        next = { ...next, done: true };
+      }
+      return { next, events };
+    }
     if (next.day !== input.today || next.parkId !== input.parkId) {
       if (next.day !== input.today) closeOpenDay();
       if (next.day !== input.today) events.push({ kind: 'park_day_started', parkId: input.parkId });

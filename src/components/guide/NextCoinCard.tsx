@@ -32,6 +32,8 @@ export const GUIDE_CARD_RIGHT = 78;
 /** The card's resting height (two lines of copy and a button), for the map's declutter inset. */
 export const GUIDE_CARD_HEIGHT = 92;
 const NO_SLAM: readonly number[] = [];
+/** The card buttons' extra touch area: 8 pt above and below, 4 pt to the sides (the two buttons sit 10 pt apart). */
+export const BUTTON_SLOP = { top: 8, bottom: 8, left: 4, right: 4 } as const;
 
 /**
  * Today's Adventure stamps on the card. A stamp earned since the player last looked plays the
@@ -50,7 +52,8 @@ function Dots({ dots, slam, coin, reduced, onSlamDone }: {
 }
 
 function CardButton({ button, onPress, quiet = false }: { button: GuideButton; onPress: (action: GuideAction) => void; quiet?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={button.label} hitSlop={6}
+  // 30 pt tall plus 8 pt above and below: a 46 pt tap target (the 44 pt floor), without growing the card.
+  return <Pressable accessibilityRole="button" accessibilityLabel={button.label} hitSlop={BUTTON_SLOP}
     onPress={() => { haptic('tapLight'); onPress(button.action); }}
     style={({ pressed }) => [quiet ? styles.quiet : styles.button, pressed && styles.pressed]}>
     {button.badge === 'gift' && <GameIcon name="gift" size={18} />}

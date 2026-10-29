@@ -224,7 +224,7 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
     }
     case 'in_line':
       return card({
-        kicker: 'IN LINE?',
+        kicker: 'YOUR WAIT',
         title: `In line for ${name}?`,
         line: 'Your wait powers its coin',
         button: { label: 'LINEPLAY', action: 'lineplay' },
