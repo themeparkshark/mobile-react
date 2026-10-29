@@ -13,6 +13,8 @@ import { useNativeModalLayer } from '../ui/modalLayers';
 import Ribbon from './Ribbon';
 
 const PENDING_KEY = 'tps.pendingSharkDrop';
+/** How long the drop dialog takes to leave after OK (a quick fade, so PLAY! answers almost at once). */
+export const DROP_EXIT_MS = 140;
 
 /** themeparkshark://drop/CHURRO, .../drop?code=CHURRO, or any link with ?drop=CHURRO. */
 export function parseDropCode(url: string | null): string | null {
@@ -110,7 +112,10 @@ export default function SharkDropHandler() {
   ].filter(Boolean) as string[] : [];
 
   return (
-    <Modal isVisible={layer.present} onDismiss={layer.onDismissed} onModalHide={layer.onHidden} backdropOpacity={0.75} animationIn="zoomIn" animationOut="zoomOut"
+    <Modal isVisible={layer.present} onDismiss={layer.onDismissed} onModalHide={layer.onHidden} backdropOpacity={0.75} animationIn="zoomIn"
+      // The prize zooms in; OK lets it go in a quick fade. While a native modal is still leaving, iOS hands
+      // every touch to it, so a kid's PLAY! right after OK was lost; a 140 ms exit leaves almost no such window.
+      animationOut="fadeOut" animationOutTiming={DROP_EXIT_MS} backdropTransitionOutTiming={DROP_EXIT_MS}
       // The zoom runs on the UI thread, so the sheet is gone (and its layer free) on time even while JS is busy.
       useNativeDriver
       onBackdropPress={state?.result || state?.error ? () => setState(null) : undefined}>

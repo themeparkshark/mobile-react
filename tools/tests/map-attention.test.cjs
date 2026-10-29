@@ -457,3 +457,9 @@ test('signing out or a second player on the phone resets the guide (one shark ne
   assert.match(explore, /guide\.forPlayer\(player\.id\)/);
   assert.match(explore, /guide\.forPlayer\(null\)/);
 });
+
+test('Shark Drop: OK lets the dialog go in a quick fade, so a PLAY! press right after it is not swallowed by a leaving native modal (r3)', () => {
+  const drop = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/SharkDropHandler.tsx'), 'utf8');
+  assert.match(drop, /export const DROP_EXIT_MS = 140;/);
+  assert.match(drop, /animationOut="fadeOut" animationOutTiming=\{DROP_EXIT_MS\} backdropTransitionOutTiming=\{DROP_EXIT_MS\}/);
+});
