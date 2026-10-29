@@ -18,7 +18,7 @@ import {
 } from '../../services/guide/nextCoin';
 import { nextFreeTicket, type FreeTicketsInput } from '../../services/guide/freeTickets';
 import { guideCardCopy, restingSightCopy, type GuideCardCopy } from '../../services/guide/guideCopy';
-import { guideCoinsFor, inLineTaskFor, ridesByTask, showLikeTaskIds, withAdventureCoin, withPlayRange } from './guideCoins';
+import { adventureAfterWin, guideCoinsFor, inLineTaskFor, ridesByTask, showLikeTaskIds, withAdventureCoin, withPlayRange } from './guideCoins';
 
 export interface NextCoinGuideInput {
   readonly enabled: boolean;
@@ -34,6 +34,12 @@ export interface NextCoinGuideInput {
   readonly tasks: readonly TaskType[];
   readonly live: LivePark | null;
   readonly adventure: AdventureTicket | null;
+  /**
+   * Today's Adventure coin was just won on this map, before the trip goal re-read says so: the guide
+   * treats the ticket as on its line story already (the won coin leaves the map list at once, and
+   * without this the guide would grab the nearest ride first and hold it).
+   */
+  readonly adventureWonTaskId?: number | null;
   /** The ride detector's 90 s dwell (a catalog ride id), or null. */
   readonly dwellRideId: number | null;
   readonly starTaskIds?: ReadonlySet<number>;
@@ -87,7 +93,10 @@ const adventureFor = (ticket: AdventureTicket | null, parkId: number | null): Gu
     ? { taskId: ticket.ride.task_id, parkId: ticket.park_id, phase: ticket.phase } : null;
 
 /** The guide as the map sees it. */
-export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGuide {
+export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide {
+  const wonAdventure = useMemo(() => adventureAfterWin(raw.adventure, raw.adventureWonTaskId),
+    [raw.adventure, raw.adventureWonTaskId]);
+  const input = wonAdventure === raw.adventure ? raw : { ...raw, adventure: wonAdventure };
   const { enabled, parkId } = input;
   // The park's ride catalog: which coins are rides, which have a real queue, and the dwell's coin.
   const [catalog, setCatalog] = useState<{ parkId: number; rides: Map<number, RideType> } | null>(null);

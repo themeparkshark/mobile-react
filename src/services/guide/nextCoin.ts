@@ -392,8 +392,9 @@ export function guideState(input: GuideInput, target: GuideTarget | null): Guide
   if (!target) return 'resting';
   const now = finite(input.now) ? input.now : Date.now();
   if (finite(input.arrivedAt) && now - input.arrivedAt >= 0 && now - input.arrivedAt < ARRIVE_MS) return 'arrive';
-  if (input.inLineTaskId != null && input.inLineTaskId === target.taskId) return 'in_line';
+  // Standing in today's Adventure ride's line after its coin: that is where its line story plays.
   if (target.reason === 'line_story') return 'line_story';
+  if (input.inLineTaskId != null && input.inLineTaskId === target.taskId) return 'in_line';
   if (target.reason === 'level_up') return 'level_up';
   if (input.wallet) {
     const step = nextFreeTicket(input.wallet);

@@ -929,3 +929,19 @@ test('round 2 small fixes: 46 pt card buttons, a bare your-team chip at 0 rides,
   assert.equal(copy.kicker, 'YOUR WAIT');
   assert.equal(copy.title, 'In line for Jungle Cruise?');
 });
+
+test('winning today\'s Adventure coin turns the guide to its Line story at once, never the nearest ride first (walk r3: the won coin left the list before the re-read)', () => {
+  const ticket = { phase: 'discover', ride: { task_id: 2 }, park_id: 8 };
+  assert.equal(GC.adventureAfterWin(ticket, 2).phase, 'play');
+  assert.equal(GC.adventureAfterWin(ticket, 3), ticket, 'another coin: unchanged');
+  assert.equal(GC.adventureAfterWin({ ...ticket, phase: 'celebrate' }, 2).phase, 'celebrate', 'never moves a ticket back');
+  // Held on the Adventure ride; its coin is won (owned now). With the ticket on its line story, rule 1 holds the ride.
+  const adventureTarget = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, adventure: { taskId: 2, parkId: 8, phase: 'discover' } }));
+  assert.equal(adventureTarget.reason, 'adventure');
+  const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c));
+  const after = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, current: adventureTarget, adventure: { taskId: 2, parkId: 8, phase: 'play' } }));
+  assert.equal(after.taskId, 2);
+  assert.equal(after.reason, 'line_story');
+  // Standing in its line: the card is the Line story (where its story plays), not "In line for X?".
+  assert.equal(G.guideState(input({ inLineTaskId: 2, adventure: { taskId: 2, parkId: 8, phase: 'play' } }), after), 'line_story');
+});

@@ -243,3 +243,10 @@ export function goalLevelUpTaskId(trip: {
   if (!(energyShort <= 0) || !(partsShort <= 0)) return null;
   return Number.isFinite(goal.task_id) ? goal.task_id : null;
 }
+
+/** A just-won Adventure coin moves its ticket to the line story at once (the server agrees a moment later). */
+export function adventureAfterWin<T extends { readonly phase: string; readonly ride: { readonly task_id: number } }>(
+  ticket: T | null, wonTaskId: number | null | undefined): T | null {
+  if (!ticket || wonTaskId == null || ticket.phase !== 'discover' || ticket.ride.task_id !== wonTaskId) return ticket;
+  return { ...ticket, phase: 'play' };
+}

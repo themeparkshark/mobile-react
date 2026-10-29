@@ -1173,9 +1173,17 @@ export function ExploreScreenBody() {
   // Level up ready: the trip goal's coin with its next level paid for (the only level costs the client has).
   const levelUpTaskId = goalLevelUpTaskId(tripGoalData);
   const levelUpTaskIds = useMemo(() => new Set(levelUpTaskId != null ? [levelUpTaskId] : []), [levelUpTaskId]);
+  // Today's Adventure coin just won here: the guide treats its ticket as on its line story until the
+  // trip goal re-read agrees (or 30 s pass, so a win the server did not count never sticks).
+  const [adventureWonTaskId, setAdventureWonTaskId] = useState<number | null>(null);
+  useEffect(() => {
+    if (adventureWonTaskId == null) return undefined;
+    const timer = setTimeout(() => setAdventureWonTaskId(null), 30_000);
+    return () => clearTimeout(timer);
+  }, [adventureWonTaskId]);
   const nextCoin = useNextCoinGuide({
     enabled: !!player && !!park, ready: guideReady, parkId: park?.id ?? null, parkName: park?.name ?? null, location,
-    tasks: visibleTasks, live: livePark, adventure, dwellRideId: queueDwell?.rideId ?? null,
+    tasks: visibleTasks, live: livePark, adventure, adventureWonTaskId, dwellRideId: queueDwell?.rideId ?? null,
     starTaskIds: starRides, rushTaskIds, ownedTaskIds, levelUpTaskIds,
     starRushUnlocked: coinLevelsRung.open, coinLevelsUnlocked: coinLevelsRung.open,
     wallet, queueTicketsOn: guideFlags.queue_tickets === true,
@@ -1945,6 +1953,8 @@ export function ExploreScreenBody() {
                 setActiveRedeemable(undefined);
                 // The trip goal or today's Adventure ride was won: re-read it, so the guide turns to the
                 // Adventure's Line story state at once (core loop 4.1 rule 1).
+                // The guide moves to the Line story now, not after the re-read (the won coin leaves the list at once).
+                if (!isSecretTask && taskId === adventure?.ride.task_id) setAdventureWonTaskId(taskId);
                 if (!isSecretTask && (taskId === tripGoal?.task_id || taskId === adventure?.ride.task_id)) {
                   setTripGoalVersion(version => version + 1);
                 }
