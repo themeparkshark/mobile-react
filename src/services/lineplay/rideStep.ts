@@ -94,10 +94,11 @@ export function signSaidLine(input: {
   if (waitedMinutes == null || !Number.isFinite(waitedMinutes) || waitedMinutes < 0) return null;
   const waited = Math.round(waitedMinutes);
   const unit = waited === 1 ? 'minute' : 'minutes';
-  if (postedMinutes == null || !(postedMinutes > 0) || waitSource == null || waitSource === 'estimate') {
-    return `You waited ${waited} ${unit}`;
-  }
-  return `Sign said ${Math.round(postedMinutes)}, you waited ${waited}`;
+  const signKnown = !(postedMinutes == null || !(postedMinutes > 0) || waitSource == null || waitSource === 'estimate');
+  // Under a minute is said in words, never "you waited 0".
+  if (waited < 1) return signKnown ? `Sign said ${Math.round(postedMinutes!)}, you walked right on` : 'You walked right on';
+  if (!signKnown) return `You waited ${waited} ${unit}`;
+  return `Sign said ${Math.round(postedMinutes!)}, you waited ${waited}`;
 }
 
 export interface AdventureTicketLike {

@@ -273,6 +273,8 @@ test('leaving the recap without the journal sends the ride as it is, once', asyn
 test('the recap line, the journal label and the Adventure stamp', () => {
   const rideStep = loadTs('src/services/lineplay/rideStep.ts');
   assert.equal(rideStep.signSaidLine({ postedMinutes: 20, waitSource: 'posted', waitedMinutes: 11 }), 'Sign said 20, you waited 11');
+  assert.equal(rideStep.signSaidLine({ postedMinutes: 45, waitSource: 'posted', waitedMinutes: 0.3 }), 'Sign said 45, you walked right on', 'never "you waited 0"');
+  assert.equal(rideStep.signSaidLine({ postedMinutes: null, waitSource: null, waitedMinutes: 0 }), 'You walked right on');
   assert.equal(rideStep.signSaidLine({ postedMinutes: 20, waitSource: 'estimate', waitedMinutes: 11 }), 'You waited 11 minutes',
     'a game estimate is never called the sign');
   assert.equal(rideStep.signSaidLine({ postedMinutes: 20, waitSource: 'posted', waitedMinutes: null }), null);
