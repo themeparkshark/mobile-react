@@ -174,7 +174,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff4cc' },
   held: { width: PIC * 0.9, height: PIC * 0.9, marginTop: -10 },
   tapHand: { position: 'absolute', width: 34, height: 34, top: -10, left: -6 },
-  upArrow: { position: 'absolute', left: -12, top: 18, transform: [{ rotate: '-90deg' }] },
+  // Above the shark, never beside the step arrow (side by side the two read as two arrows in a row).
+  upArrow: { position: 'absolute', top: -16, transform: [{ rotate: '-90deg' }] },
   body: { fontFamily: 'Knockout', fontSize: 18, lineHeight: 23, color: BRAND.navy, textAlign: 'center' },
   win: { fontFamily: 'Knockout', fontSize: 16, lineHeight: 21, color: BRAND.blue, textAlign: 'center', marginTop: 4, marginBottom: 12 },
   pictureToggle: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'stretch', marginBottom: 12,

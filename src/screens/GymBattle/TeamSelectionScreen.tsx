@@ -20,7 +20,7 @@ import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import TeamBadge from '../../components/TeamBadge';
 import { GameIcon } from '../../ui';
 import { QUESTION_BANK } from './teamQuiz';
-import { teamExit, teamStepShown, type TeamSelectionParams } from '../../components/rewards/teamOffer';
+import { teamExit, teamStepGone, teamStepLeaving, teamStepShown, type TeamSelectionParams } from '../../components/rewards/teamOffer';
 
 const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
 const VIBE: Record<TeamId, { tag: string; line: string }> = {
@@ -59,6 +59,8 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
   // After a first coin the win card waits on top until this screen has slid in, then fades into it.
   useEffect(() => navigation?.addListener?.('transitionEnd', (event: { data?: { closing?: boolean } }) => {
     if (!event?.data?.closing) teamStepShown();
+    // Back on the map: the first coin's rewards fly to their places now.
+    else teamStepGone();
   }), [navigation]);
 
   const leader = useMemo(() => {
@@ -108,6 +110,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
 
   const leave = () => {
     const exit = teamExit(route?.params, navigation?.canGoBack?.() !== false);
+    teamStepLeaving(exit.kind !== 'next');
     if (exit.kind === 'next') {
       if (typeof navigation?.replace === 'function') navigation.replace(exit.name, exit.params);
       else navigation?.navigate(exit.name, exit.params);

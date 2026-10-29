@@ -301,7 +301,7 @@ test('picture games only: per player, sent only while the server deals picture g
   assert.deepEqual({ ...prefs.parsePlayPrefs('not json') }, { pictureOnly: false });
   prefs.resetPlayPrefsForTests();
   flags = {};
-  assert.deepEqual({ ...(await prefs.loadPlayFlags()) }, { pictureGames: false, pushWorks: false, queueTickets: false }, 'absent reads as off');
+  assert.deepEqual({ ...(await prefs.loadPlayFlags()) }, { pictureGames: false, pushWorks: false, queueTickets: false, retrySameGame: false }, 'absent reads as off');
 });
 
 test('Settings shows Picture games only while the server deals them, and hides Favorites Alerts while push does not work', () => {
@@ -744,7 +744,7 @@ test('a limited coin won as a first coin gets its own one-line home, with no dat
   assert.equal(win.limitedWinLine(undefined), null);
   const card = read('src/components/PostWinRewardsModal.tsx');
   // The server's shelf count leaves limited coins out (progress null), so the limited line fills that gap only.
-  assert.match(card, /const shelf = shelfLine\(milestones \?\? null\) \?\? \(isNewCoin \? limitedWinLine\(limited\) : null\);/);
+  assert.match(card, /const shelf = winShelfLine\(milestones \?\? null, limited, isNewCoin\);/);
   assert.match(read('src/components/RedeemRedeemableModal.tsx'),
     /limited=\{redeemable\?\.type === 'task' \? \(redeemable\.model as TaskType\)\?\.limited \?\? null : null\}/);
   assert.doesNotMatch(card, /days left|hours left|left!/i);
@@ -776,13 +776,102 @@ test('how-to pictures teach the action: Parade Beat taps on the line, Sharky hol
   assert.equal(topics.GAME_INTROS.timing.how, 'Tap the drum when a note hits the line.');
 });
 
-test('a win card that hands off to the team step lets its rewards land quietly (no coins over that screen)', () => {
+test('a first coin\'s rewards wait for the team step and fly once it has closed back onto the map', async () => {
+  const team = loadTs('src/components/rewards/teamOffer.ts', { '@react-native-async-storage/async-storage': { getItem: async () => null, setItem: async () => undefined } });
+  let flown = 0;
+  // LATER or LET'S GO back to the map: nothing flies until the step has slid away, then once.
+  team.flyAfterTeamStep(() => { flown += 1; });
+  team.teamStepLeaving(true);
+  assert.equal(flown, 0, 'not while the step is still sliding away');
+  team.teamStepGone();
+  assert.equal(flown, 1);
+  team.teamStepGone();
+  assert.equal(flown, 1, 'once only');
+  // A step that goes on to the shelf or a line story drops the flight (no pills there).
+  team.flyAfterTeamStep(() => { flown += 1; });
+  team.teamStepLeaving(false);
+  team.teamStepGone();
+  assert.equal(flown, 1);
+  // A closing transition that never reports still flies, after the cap.
+  team.flyAfterTeamStep(() => { flown += 1; });
+  team.teamStepLeaving(true);
+  await new Promise(resolve => setTimeout(resolve, team.TEAM_STEP_GONE_MAX_MS + 50));
+  assert.equal(flown, 2);
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   const open = modal.slice(modal.indexOf('const openTeamStep = useCallback('), modal.indexOf('const handlePostWinClose'));
-  assert.match(open, /flyAfterHideRef\.current = false;/);
-  assert.match(modal, /if \(postWinOpen\) \{ leavingWinRef\.current = false; flyAfterHideRef\.current = true; \}/, 'every new win flies again');
-  assert.match(modal, /shouldFly=\{\(\) => flyAfterHideRef\.current\}/);
-  assert.match(read('src/components/PostWinRewardsModal.tsx'), /if \(shouldFly\?\.\(\) !== false\) flyRewards\(\);/);
+  assert.match(open, /flyWhenRef\.current = then \? 'never' : 'after_team_step';/);
+  assert.match(modal, /if \(postWinOpen\) \{ leavingWinRef\.current = false; flyWhenRef\.current = 'now'; \}/, 'every new win flies again');
+  const card = read('src/components/PostWinRewardsModal.tsx');
+  assert.match(card, /else if \(when === 'after_team_step'\) flyAfterTeamStep\(flyRewards\);/);
+  const screen = read('src/screens/GymBattle/TeamSelectionScreen.tsx');
+  assert.match(screen, /teamStepLeaving\(exit\.kind !== 'next'\);/);
+  assert.match(screen, /else teamStepGone\(\);/);
+});
+
+test('a Beat the Buzzer ride card leads with right answers: a win with fewer points than Gill still reads as a win', () => {
+  const dr = loadTs('src/games/trivia-duel/ui/DuelResults.tsx', {
+    '../../../services/external': { openExternal() {} }, react: {}, 'react-native': { StyleSheet: { create: (s) => s } },
+    'react-native-reanimated': {}, '../art': { ART: {}, C: {} }, '../../../gamekit/results/ResultsRibbon': {},
+    '../../../gamekit/results/ResultsCard': {}, '../../../gamekit/results/feelings': { feelingChips: (s) => s }, '../../../ui/GameIcon': {},
+    '../../../gamekit/audio/GameAudio': { GameAudio: {} }, '../../../gamekit/Haptics': { playHaptic() {} },
+    'react/jsx-runtime': { jsx() {}, jsxs() {}, Fragment: 'F' }, 'react-native-safe-area-context': { initialWindowMetrics: null },
+  });
+  // 3 of 3 right, 375 vs Gill's 635 (rideStars gave 1): the card says the coin is won, with 3 stars.
+  const win = dr.rideCardView({ won: true, right: 3, need: 2, total: 3 }, 1);
+  assert.equal(win.line, '3 of 3 right. Coin won!');
+  assert.equal(win.stars, 3, 'all 3 right is never 1 star');
+  assert.equal(win.dotsOn, 2);
+  assert.equal(dr.rideCardView({ won: true, right: 2, need: 2, total: 3 }, 1).stars, 2);
+  const loss = dr.rideCardView({ won: false, right: 1, need: 2, total: 3 }, 0);
+  assert.equal(loss.line, '1 of 3 right. 2 wins the coin.');
+  assert.equal(loss.stars, 0, 'no stars on a miss');
+  assert.equal(dr.rideCardView(null, 2), null, 'a duel keeps its score');
+  assert.doesNotMatch(win.line + loss.line, /\d{3}|%|vs/, 'no points and no percentages on a ride card');
+  const src = read('src/games/trivia-duel/ui/DuelResults.tsx');
+  // The points row only off a ride.
+  assert.match(src, /\{rideView \? \(\n\s+\/\/ A ride challenge leads with right answers[^\n]*\n\s+<CoinGoal/);
+});
+
+test('the win card answers a tap at once, and its shelf picture never depends on the words', () => {
+  const win = loadTs('src/components/rewards/postWinModel.ts');
+  const story = { kind: 'line_story', label: 'Play its line story', detail: null };
+  assert.equal(win.winButtonLabel(story, null), 'Play its line story');
+  assert.equal(win.winButtonLabel(story, 'primary'), 'One moment', 'a story lookup never looks like a dead tap');
+  assert.equal(win.winButtonLabel({ kind: 'map', label: 'Back to Map', detail: null }, 'primary'), 'Back to Map');
+  const shelf = { milestones: [], progress: { park_id: 8, park_name: 'Disneyland', before: 0, collected: 1, available: 35 }, next: null };
+  assert.deepEqual({ ...win.winShelfLine(shelf, null, true) }, { text: '1 of 35 coins. Bronze at 12', icon: 'trophyBronze' });
+  assert.deepEqual({ ...win.winShelfLine(null, { active: true }, true) }, { text: 'Limited coin. Yours to keep!', icon: 'sparkle' });
+  assert.equal(win.winShelfLine(null, { active: true }, false), null, 'a limited coin won again keeps quiet');
+  assert.equal(win.winShelfLine(null, null, true), null);
+  const card = read('src/components/PostWinRewardsModal.tsx');
+  assert.doesNotMatch(card, /startsWith\('Limited'\)/);
+  assert.match(card, /<View style=\{\[styles\.footer, leaving && styles\.footerLeaving\]\} pointerEvents=\{leaving \? 'none' : 'auto'\}>/);
+  assert.match(card, /onBackdropPress=\{caught \? closeCard : undefined\}/);
+});
+
+test('"Same game" follows the server\'s own same-game switch when it sends one', () => {
+  const prefs = loadTs('src/services/playPrefs.ts', {
+    react: { useCallback: f => f, useEffect() {}, useSyncExternalStore: (_s, get) => get() },
+    '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => undefined } },
+    '../api/endpoints/platform/feature-flags': { __esModule: true, default: async () => ({ flags: {} }) },
+  });
+  assert.equal(prefs.retrySameGameFlag({ retry_same_game: false, picture_games: true }), false, 'the explicit answer wins');
+  assert.equal(prefs.retrySameGameFlag({ retry_same_game: true }), true);
+  assert.equal(prefs.retrySameGameFlag({ picture_games: true }), true, 'be-core-loop ships retry_of with picture games');
+  assert.equal(prefs.retrySameGameFlag({}), false);
+  assert.equal(prefs.retrySameGameFlag(null), false);
+});
+
+test('a paid ride try\'s X asks Leave? at once (one step, no "saved" card), and Sharky says HOLD', () => {
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /doHold\('manual'\);\n\s+\/\/ A paid ride try[^\n]*\n\s+if \(rideChallenge && onQuit\) requestQuit\(\);/);
+  assert.match(shell, /\) : phase === 'paused' && !quitAsked \? \(/);
+  assert.match(shell, /if \(onQuit\) \{ setQuitAsked\(true\); onQuit\(resumeAfterQuitCancel\); \}/);
+  assert.match(shell, /const resumeAfterQuitCancel = useCallback\(\(\) => \{\n\s+setQuitAsked\(false\);/);
+  const sharky = read('src/games/sharky/SharkySwim.tsx');
+  assert.doesNotMatch(sharky, /TAP TO SWIM/);
+  assert.match(sharky, />HOLD TO SWIM</);
+  assert.doesNotMatch(read('src/components/help/GameIntroCard.tsx'), /upArrow: \{[^}]*left: -12/);
 });
 
 test('a member whose VIP tries are used today sees "comes back tomorrow", never a VIP try that is not there', () => {
@@ -842,5 +931,5 @@ test('the returned-Ticket line promises "same game" only on a server that deals 
   assert.equal(lost.lostTryCopy({ ...base, sameGame: true }).message, 'Your Ticket came back. Same game, try again!');
   assert.equal(lost.lostTryCopy(base).message, 'Your Ticket came back. Same game, try again!', 'callers that do not say keep the line');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.pictureGames \}\);/);
+  assert.match(modal, /retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.retrySameGame \}\);/);
 });

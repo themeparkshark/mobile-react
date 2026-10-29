@@ -33,9 +33,22 @@ export interface PlayFlags {
   readonly pushWorks: boolean;
   /** Queue Tickets: the first wait at a ride earns a Ticket. */
   readonly queueTickets: boolean;
+  /**
+   * TRY AGAIN deals the lost game again (the server honors retry_of). Read from the server's own
+   * retry_same_game switch when it sends one; until then, picture_games stands in, since be-core-loop
+   * ships retry_of with it. The loss card says "Same game" only while this is true.
+   */
+  readonly retrySameGame: boolean;
 }
 
-export const PLAY_FLAGS_OFF: PlayFlags = Object.freeze({ pictureGames: false, pushWorks: false, queueTickets: false });
+export const PLAY_FLAGS_OFF: PlayFlags = Object.freeze({ pictureGames: false, pushWorks: false, queueTickets: false, retrySameGame: false });
+
+/** The same-game switch: the server's explicit answer wins; an older server falls back to picture_games. */
+export function retrySameGameFlag(serverFlags: Record<string, unknown> | null | undefined): boolean {
+  const explicit = serverFlags?.retry_same_game;
+  if (typeof explicit === 'boolean') return explicit;
+  return serverFlags?.picture_games === true;
+}
 
 export function playPrefsKey(playerId: number | string): string {
   return `${KEY}@p${playerId}`;
@@ -76,6 +89,7 @@ export function loadPlayFlags(read: typeof getFeatureFlags = getFeatureFlags): P
       pictureGames: payload.flags.picture_games === true,
       pushWorks: payload.flags.retention_push === true,
       queueTickets: payload.flags.queue_tickets === true,
+      retrySameGame: retrySameGameFlag(payload.flags as Record<string, unknown>),
     };
     emit();
     return flags;

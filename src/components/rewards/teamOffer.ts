@@ -67,7 +67,44 @@ export function whenTeamStepShown(ms: number = TEAM_STEP_SHOWN_MAX_MS): Promise<
   });
 }
 
-/** Where the screen goes after LET'S GO, Later or the close X. */
+/**
+ * When the win card hands off to the first coin's team step, its rewards (Shark Coins and the Ticket
+ * to their header pills, the stamp to the Rewards button) wait for the map instead of being dropped
+ * (blueprint 4.3 rule 3): the team step runs them once it has closed back onto the map. A step that
+ * goes on to another screen (the shelf, a line story) drops them, since their places are not there.
+ */
+export const TEAM_STEP_GONE_MAX_MS = 700;
+/** Where a win card's rewards go when it closes: now, after the team step, or nowhere (another screen). */
+export type WinFlyWhen = 'now' | 'after_team_step' | 'never';
+let queuedFly: (() => void) | null = null;
+let leavingFly: (() => void) | null = null;
+let goneTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** The win card queues its flight here when the team step took over. A newer win replaces it. */
+export function flyAfterTeamStep(fly: () => void): void {
+  queuedFly = fly;
+}
+
+/** TeamSelection calls this as it leaves: back to the map runs the queued flight once the map is in front. */
+export function teamStepLeaving(toMap: boolean): void {
+  const fly = queuedFly;
+  queuedFly = null;
+  if (!fly || !toMap) return;
+  leavingFly = fly;
+  if (goneTimer) clearTimeout(goneTimer);
+  goneTimer = setTimeout(teamStepGone, TEAM_STEP_GONE_MAX_MS);
+}
+
+/** The team step has finished sliding away (its closing transitionEnd), or the cap ran out. */
+export function teamStepGone(): void {
+  if (goneTimer) clearTimeout(goneTimer);
+  goneTimer = null;
+  const fly = leavingFly;
+  leavingFly = null;
+  fly?.();
+}
+
+/** Where LET'S GO, Later or the close X take the player. */
 export interface TeamSelectionParams {
   readonly onTeamSelected?: () => void;
   readonly isOnboarding?: boolean;

@@ -43,7 +43,7 @@ import { adventureLineStoryNext, partsProgress, weekLine } from './rewards/postW
 import { getTripGoal } from '../api/endpoints/me/trip-goal';
 import { withNumberFont } from '../ui/numberText';
 import TicketGift from './rewards/TicketGift';
-import { markTeamOffered, teamOffered, wantsTeamStep, whenTeamStepShown } from './rewards/teamOffer';
+import { markTeamOffered, teamOffered, wantsTeamStep, whenTeamStepShown, type WinFlyWhen } from './rewards/teamOffer';
 import type { ClaimSource } from '../services/guide/freeTickets';
 import { guide, type GuideTarget } from '../services/guide/nextCoin';
 import { useRung } from '../services/reveal/revealLadder';
@@ -690,10 +690,11 @@ export default function RedeemRedeemableModal({
   const canOfferRetry = retryOffered && vipRetryCase && !vipOutToday;
   // One loss card per miss (the game's own card is skipped in a ride challenge, GameShellV2): its title,
   // one honest line from the game, the Ticket picture and the one way on.
-  // "Same game" only once the server deals it (retry_of ships with picture games in be-core-loop): on a
-  // server without it, TRY AGAIN may deal another game, so the line just says try again.
+  // "Same game" only once the server deals it (its retry_same_game switch, or picture games, which ship
+  // retry_of in be-core-loop): on a server without it, TRY AGAIN may deal another game, so the line just
+  // says try again.
   const lostCopy = lostTryCopy({ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,
-    retryOffered: canOfferRetry, near: rideTry?.near === true, sameGame: playFlagsNow().pictureGames });
+    retryOffered: canOfferRetry, near: rideTry?.near === true, sameGame: playFlagsNow().retrySameGame });
   const handleVipRetry = useCallback(async () => {
     const attemptId = attemptRef.current?.id;
     if (adBusy || !attemptId) return;
@@ -753,9 +754,10 @@ export default function RedeemRedeemableModal({
   }, [postWinOpen, needsTeamNow, player?.id, coinTimesCollected, firstCoinEver]);
   // One way out of the win card per win: a second tap while it fades does nothing.
   const leavingWinRef = useRef(false);
-  // The win card's rewards fly to the map's pills, unless the card handed off to another screen.
-  const flyAfterHideRef = useRef(true);
-  useEffect(() => { if (postWinOpen) { leavingWinRef.current = false; flyAfterHideRef.current = true; } }, [postWinOpen]);
+  // The win card's rewards fly to the map's pills: now, or once the first coin's team step has closed
+  // back onto the map, or not at all when the step goes on to another screen (the shelf, a line story).
+  const flyWhenRef = useRef<WinFlyWhen>('now');
+  useEffect(() => { if (postWinOpen) { leavingWinRef.current = false; flyWhenRef.current = 'now'; } }, [postWinOpen]);
 
   /**
    * The first coin's team step, opened right now under the win card, then on to `then` (the shelf, or
@@ -766,7 +768,7 @@ export default function RedeemRedeemableModal({
     const wanted = await teamStepReady.current;
     if (!wanted) return false;
     teamStepReady.current = Promise.resolve(false);
-    flyAfterHideRef.current = false;
+    flyWhenRef.current = then ? 'never' : 'after_team_step';
     void markTeamOffered(player?.id);
     // The card stays on top until the team step has slid in under it, then fades into it (no map between).
     const shown = whenTeamStepShown();
@@ -1199,7 +1201,7 @@ export default function RedeemRedeemableModal({
           afterRewardsHidden.current = null;
           next?.();
         }}
-        shouldFly={() => flyAfterHideRef.current}
+        flyWhen={() => flyWhenRef.current}
         onClose={handlePostWinClose}
         starRide={redeemable?.type === 'task' && starRides.has((redeemable.model as TaskType)?.id)}
         attemptId={attemptRef.current?.status === 'won' ? attemptRef.current.id : null}

@@ -126,7 +126,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       // Ride challenge core loop (cl-ride-challenge): picture games off, no try note, no story lookup,
       // the team step already offered, the pure win-card model for real, and a fly layer with no targets.
       if (/(^|\/)services\/playPrefs$/.test(name)) {
-        const off = { pictureGames: false, pushWorks: false, queueTickets: false };
+        const off = { pictureGames: false, pushWorks: false, queueTickets: false, retrySameGame: false };
         return { pictureOnlyFor: async () => false, playFlagsNow: () => off, loadPlayFlags: async () => off,
           usePlayPrefs: () => ({ flags: off, prefs: { pictureOnly: false }, available: false, setPictureOnly() {} }) };
       }

@@ -234,6 +234,38 @@ export function limitedWinLine(limited: { readonly active: boolean } | null | un
   return limited ? 'Limited coin. Yours to keep!' : null;
 }
 
+/**
+ * The win card's shelf line with its picture, typed so the picture never depends on the words:
+ * the park shelf count with the trophy ("1 of 35 coins. Bronze at 12"), or a new limited coin's
+ * own home with a sparkle. Null when neither applies.
+ */
+export interface WinShelfLine {
+  readonly text: string;
+  readonly icon: 'trophyBronze' | 'sparkle';
+}
+
+export function winShelfLine(
+  milestones: CollectionMilestones | null | undefined,
+  limited: { readonly active: boolean } | null | undefined,
+  isNewCoin: boolean,
+): WinShelfLine | null {
+  const shelf = shelfLine(milestones ?? null);
+  if (shelf) return { text: shelf, icon: 'trophyBronze' };
+  const own = isNewCoin ? limitedWinLine(limited) : null;
+  return own ? { text: own, icon: 'sparkle' } : null;
+}
+
+/** Which way out of the win card was tapped (the card dims its buttons at once). */
+export type WinCardExit = 'primary' | 'shelf' | 'close';
+
+/**
+ * The big button's words while the card is leaving: a line story still being looked up says
+ * One moment (the lookup can take a couple of seconds), every other way keeps its own words.
+ */
+export function winButtonLabel(button: NextCoinButton, leaving: WinCardExit | null): string {
+  return leaving === 'primary' && button.kind === 'line_story' ? 'One moment' : button.label;
+}
+
 /** The win card's big button: the next coin by name and distance, or today's Adventure line story. */
 export interface NextCoinButton {
   readonly kind: 'next' | 'line_story' | 'map';

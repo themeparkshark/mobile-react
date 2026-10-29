@@ -651,13 +651,14 @@ test('duel numbers agree: the no-risk Final never takes points, no idioms, and t
   // A Final can never take points, so the card has no lost-Final row. No dice, no BET.
   assert.doesNotMatch(duel, /BigFinalLost|finalLost/);
   assert.doesNotMatch(duel, /name="dice"|\bBET\b|FINAL BET/, 'no betting picture or words on a results card');
-  assert.match(duel, /<CoinGoal right=\{rideGoal\.right\} need=\{rideGoal\.need\}/, 'two coin dots, not a sentence');
+  // A ride card leads with the coin dots and the right answers line (core loop scope 6), never points.
+  assert.match(duel, /<CoinGoal need=\{rideView\.need\} on=\{rideView\.dotsOn\}/, 'the coin dots lead a ride card');
   assert.match(duel, /<RankHat stripes=/);
   assert.doesNotMatch(duel, /numberOfLines=\{2\}>\{card\.fact\}/, 'a fact is never cut mid-word');
   assert.doesNotMatch(duel, /fill=\{on \? C\.gold : '#ffffff'\}/, 'the shared star art, not white outlined stars');
   const game = read('src/games/trivia-duel/TriviaDuel.tsx');
   assert.doesNotMatch(game, /finalPointsLost|finalLost/);
-  assert.match(game, /ride: \{ won, right: t\.me\.correct, need: 2 \}/);
+  assert.match(game, /ride: \{ won, right: t\.me\.correct, need: 2, total: p\.rounds\.length \}/);
 });
 
 test('no end feels like punishment, and the capture log hears every cue', () => {
@@ -706,13 +707,13 @@ test('round 3: one card per ride miss, one surface, one exit word, honest ticks 
   assert.match(modal, /const handleGameLose = useCallback\(async \(\) => \{\n\s+await resolveAttempt\('loss'\);/);
   assert.match(modal, /\{flowState === 'lost' && <ChallengeStatusCard/);
   assert.doesNotMatch(modal, /skipLostCard|lostFromGameRef/);
-  assert.match(modal, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,\n\s+retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.pictureGames \}\)/);
+  assert.match(modal, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,\n\s+retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.retrySameGame \}\)/);
   const shellSrc = read('src/gamekit/GameShellV2.tsx');
   assert.match(shellSrc, /const rideLoss = !!rideChallenge && phase === 'results' && !!effectiveResult && effectiveResult\.stars <= 0 && !wrap;/);
   assert.match(shellSrc, /noteRideTry\(effectiveResult\);\n\s+handleClaimRef\.current\?\.\(\);/);
   // The duel's coin goal never promises a retry it cannot know about.
   const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
-  assert.match(duel, />NEXT TIME!</);
+  assert.match(duel, /\$\{right\} of \$\{total\} right\. \$\{need\} wins the coin\./);
   assert.doesNotMatch(duel, />TRY AGAIN!</);
   // A bare 0 ticket pill reads as "you have no Tickets": only a change gets a picture.
   const card = read('src/components/rewards/ChallengeStatusCard.tsx');

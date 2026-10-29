@@ -33,9 +33,9 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { playSfx } from '../gamekit/SFX';
 import GameIcon from '../ui/GameIcon';
 import {
-  BACK_TO_MAP_LABEL, flyTargetFor, limitedWinLine, milestoneHeadline, nextCoinButton, partsProgress, shelfLine, teamSentence,
+  BACK_TO_MAP_LABEL, flyTargetFor, milestoneHeadline, nextCoinButton, partsProgress, teamSentence, winButtonLabel, winShelfLine,
   winRewardChips, WIN_FLY_ROUTES,
-  type NextCoinButton, type WinChip, type WinFlyTarget,
+  type NextCoinButton, type WinCardExit, type WinChip, type WinFlyTarget,
 } from './rewards/postWinModel';
 import { watchForReward } from '../services/ads';
 import { holdWinNotes, takeWinNote } from '../screens/LeaderboardsScreen/standingsCache';
@@ -47,6 +47,7 @@ import { withNumberFont } from '../ui/numberText';
 import type { PerkChipData } from './coin/progressionModel';
 import type { LimitedWindow } from '../models/task-type';
 import PerkChipRow from './coin/PerkChip';
+import { flyAfterTeamStep, type WinFlyWhen } from './rewards/teamOffer';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 /** Below this height (iPhone SE is 667 pt) the hero coin shrinks so a first-coin card fits with no scroll. */
@@ -103,11 +104,11 @@ interface Props {
   onViewStampBook?: () => void;
   onHidden?: () => void;
   /**
-   * False when the card has handed off to the team step: the rewards
-   * would fly toward map pills that screen does not draw, so they land quietly (the counts are already
-   * right when the player is back on the map).
+   * Where the rewards fly when the card closes: 'now' (the map is under it), 'after_team_step' (the
+   * first coin's team step took over: they fly once it has closed back onto the map) or 'never' (the
+   * step went on to another screen that has no pills; the counts are already right).
    */
-  shouldFly?: () => boolean;
+  flyWhen?: () => WinFlyWhen;
   onClose: () => void;
   /** The won attempt (a VIP member's double coins are granted on it). */
   attemptId?: number | null;
@@ -191,7 +192,7 @@ export default function PostWinRewardsModal({
   onNextCoin,
   onViewCoin,
   onHidden,
-  shouldFly,
+  flyWhen,
   onClose,
   attemptId = null,
   starRide = false,
@@ -256,7 +257,7 @@ export default function PostWinRewardsModal({
   }), [coinsEarned, nextRideTicketEarned, ridePartsEarned, energyEarned, xpEarned, vipCoins, coinLevels, daily]);
   const headline = milestoneHeadline(milestones ?? null);
   // The shelf line, or for a limited coin (no park shelf count) its own home: "Limited coin. Yours to keep!"
-  const shelf = shelfLine(milestones ?? null) ?? (isNewCoin ? limitedWinLine(limited) : null);
+  const shelf = winShelfLine(milestones ?? null, limited, isNewCoin);
   const team = teamSentence(rideControl as Parameters<typeof teamSentence>[0], name => (isTeam(name) ? teamName(name) : name));
   const next = nextCoinButton(nextTarget, wonTaskId, adventureLineStory);
 
@@ -343,11 +344,23 @@ export default function PostWinRewardsModal({
 
   const coinSource = taskCoinUrl && !coinArtFailed ? taskCoinUrl : null;
   const primary = hasCoin ? next : { kind: 'map' as const, label: BACK_TO_MAP_LABEL, detail: null };
+  // The card answers a way out at once (within a frame): the buttons dim and stop taking taps, and a
+  // line story still being looked up says One moment, so a slow step never looks like a dead tap.
+  const [leaving, setLeaving] = useState<WinCardExit | null>(null);
+  useEffect(() => { if (visible) setLeaving(null); }, [visible]);
+  const leave = (exit: WinCardExit, go: () => void) => {
+    if (leaving) return;
+    setLeaving(exit);
+    go();
+  };
   const pressPrimary = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    if (hasCoin && onNextCoin) onNextCoin(primary);
-    else onClose();
+    leave('primary', () => {
+      if (hasCoin && onNextCoin) onNextCoin(primary);
+      else onClose();
+    });
   };
+  const closeCard = () => leave('close', onClose);
 
   return (
     <Modal
@@ -359,14 +372,17 @@ export default function PostWinRewardsModal({
       style={{ margin: 0 }}
       animationInTiming={reducedMotion ? 120 : 250}
       animationOutTiming={reducedMotion ? 120 : 200}
-      onBackButtonPress={caught ? onClose : undefined}
+      onBackButtonPress={caught ? closeCard : undefined}
       onModalHide={() => {
         layer.onDismissed();
-        if (shouldFly?.() !== false) flyRewards();
+        const when = flyWhen?.() ?? 'now';
+        if (when === 'now') flyRewards();
+        // The first coin's team step took over: the rewards fly once it has closed back onto the map.
+        else if (when === 'after_team_step') flyAfterTeamStep(flyRewards);
         const nextStep = afterHide.current; afterHide.current = null;
         onHidden?.(); nextStep?.();
       }}
-      onBackdropPress={caught ? onClose : undefined}
+      onBackdropPress={caught ? closeCard : undefined}
       backdropColor="#05346e"
       backdropOpacity={0.6}
     >
@@ -421,8 +437,8 @@ export default function PostWinRewardsModal({
               </View>}
               {/* The shelf % and the next trophy in one line: "1 of 35 coins. Bronze at 12". */}
               {shelf && <View style={styles.shelfLine} accessibilityRole="text">
-                <GameIcon name={shelf.startsWith('Limited') ? 'sparkle' : 'trophyBronze'} size={22} />
-                <Text style={styles.shelfText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{shelf}</Text>
+                <GameIcon name={shelf.icon} size={22} />
+                <Text style={styles.shelfText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{shelf.text}</Text>
               </View>}
             </Animated.View>
 
@@ -462,11 +478,11 @@ export default function PostWinRewardsModal({
       </ScrollView>
       {/* One big button and one quiet one, on a solid plate so they never sit on the dimmed tab bar. */}
       <Animated.View testID="post-win-footer" style={[styles.footerPlate, { paddingBottom: Math.max(insets.bottom, 10) + 2 }, footerStyle]}>
-        <View style={styles.footer}>
+        <View style={[styles.footer, leaving && styles.footerLeaving]} pointerEvents={leaving ? 'none' : 'auto'}>
           {primary.detail && <Text style={styles.nextDetail} numberOfLines={1}>{primary.detail}</Text>}
-          <YellowButton text={primary.label} onPress={pressPrimary} />
+          <YellowButton text={winButtonLabel(primary, leaving)} onPress={pressPrimary} />
           {hasCoin && onViewCoin && (
-            <TouchableOpacity onPress={() => onViewCoin(false)} accessibilityRole="button"
+            <TouchableOpacity onPress={() => leave('shelf', () => onViewCoin(false))} accessibilityRole="button"
               accessibilityLabel="See my shelf" style={styles.secondary}>
               <Text style={styles.secondaryText}>See my shelf</Text>
             </TouchableOpacity>
@@ -540,6 +556,7 @@ const styles = StyleSheet.create({
   footerPlate: { alignSelf: 'stretch', backgroundColor: '#05346e', borderTopLeftRadius: 22, borderTopRightRadius: 22,
     borderTopWidth: 3, borderLeftWidth: 3, borderRightWidth: 3, borderColor: '#0879ca', paddingTop: 4 },
   footer: { width: (SW - 28) * 0.9, alignSelf: 'center', paddingTop: 6 },
+  footerLeaving: { opacity: 0.55 },
   nextDetail: { fontFamily: 'Knockout', fontSize: 15, color: '#ffe07a', textAlign: 'center', marginBottom: 2 },
   secondary: { paddingVertical: 8, alignItems: 'center' },
   secondaryText: { color: '#ffffff', textAlign: 'center', fontFamily: 'Shark', fontSize: 17 },

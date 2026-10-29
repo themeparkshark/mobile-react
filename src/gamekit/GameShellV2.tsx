@@ -1237,7 +1237,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const handleClaimRef = useRef(handleClaim);
     handleClaimRef.current = handleClaim;
 
+    // A paid ride try's X asks Leave? straight away (one step): the pause card, with its "saved"
+    // line, stays hidden while that question is up.
+    const [quitAsked, setQuitAsked] = useState(false);
     const resumeAfterQuitCancel = useCallback(() => {
+      setQuitAsked(false);
       setPhase(startedRef.current ? 'playing' : 'countdown');
       if (!startedRef.current) setCountText(firstCount);
       setPauseReason(undefined);
@@ -1246,20 +1250,23 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     }, [onResume]);
 
     const requestQuit = useCallback(() => {
-      if (onQuit) onQuit(resumeAfterQuitCancel);
+      if (onQuit) { setQuitAsked(true); onQuit(resumeAfterQuitCancel); }
       else onClose();
     }, [onQuit, onClose, resumeAfterQuitCancel]);
 
     const handleExit = useCallback(() => {
       // The game's own results card is up: the X is that card's DONE.
       if (ownResultsDoneRef.current) { ownResultsDoneRef.current(); return; }
-      if (phase === 'playing' || phase === 'resuming') doHold('manual');
-      else if (phase === 'results') handleClaim();
+      if (phase === 'playing' || phase === 'resuming') {
+        doHold('manual');
+        // A paid ride try has no pause to come back to later: the X asks Leave? at once.
+        if (rideChallenge && onQuit) requestQuit();
+      } else if (phase === 'results') handleClaim();
       else {
         if (phase === 'countdown') doHold('manual');
         requestQuit();
       }
-    }, [phase, doHold, handleClaim, requestQuit]);
+    }, [phase, doHold, handleClaim, requestQuit, rideChallenge, onQuit]);
 
     // Tap anywhere skips straight to GO (the burst still plays over live play).
     const skipCountdown = useCallback(() => {
@@ -1511,7 +1518,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                 </TouchableOpacity>
               </View>
             </View>
-          ) : phase === 'paused' ? (
+          ) : phase === 'paused' && !quitAsked ? (
             <View style={styles.overlay}>
               <View style={styles.sheet}>
                 <Text style={styles.sheetTitle}>{pauseReason ?? 'Paused'}</Text>

@@ -1474,7 +1474,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
           { label: 'Fastest', value: fastest },
           { label: 'Fastest answer', value: TIER_TEXT[t.me.bestTier].replace('!', '') || 'NONE' },
         ],
-        facts: facts.slice(0, 1).map((f) => ({ ...f, isNew: true })), stars, practice: false, rank: null, best: null, ride: { won, right: t.me.correct, need: 2 },
+        facts: facts.slice(0, 1).map((f) => ({ ...f, isNew: true })), stars, practice: false, rank: null, best: null, ride: { won, right: t.me.correct, need: 2, total: p.rounds.length },
       });
       const result: GameResult = {
         score: t.me.score,

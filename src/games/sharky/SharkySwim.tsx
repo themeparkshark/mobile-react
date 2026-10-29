@@ -775,7 +775,7 @@ export function SharkySwim({
             {frozen ? (
               <View pointerEvents="none" style={styles.freeze}>
                 <View style={styles.freezeBubble}>
-                  <Text style={styles.freezeText}>TAP TO SWIM</Text>
+                  <Text style={styles.freezeText}>HOLD TO SWIM</Text>
                 </View>
               </View>
             ) : null}
