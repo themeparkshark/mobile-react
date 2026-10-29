@@ -52,6 +52,13 @@ import type { ParamListBase } from '@react-navigation/native';
 
 /** How long the first shelf paint waits for today's park story (the shelf never waits longer). */
 
+/**
+ * The last live answer for a park, kept across visits: the shelf opens with it (still under the
+ * 2 minute fresh rule), so NEXT COIN never shows an unchecked ride for a second while the feed reloads.
+ */
+type WaitSnapshot = { parkId: number; entries: WikiLiveEntry[]; checkedAt: number };
+let lastWaitSnapshot: WaitSnapshot | null = null;
+
 export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBase, 'Park'>) {
   const { width, height } = useWindowDimensions();
   // Keep the familiar five-coin rows inside their shelves on smaller phones.
@@ -92,9 +99,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const [loading, setLoading] = useState<boolean>(!seed);
   const [progressStale, setProgressStale] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
-  const [waitSnapshot, setWaitSnapshot] = useState<{
-    parkId: number; entries: WikiLiveEntry[]; checkedAt: number;
-  } | null>(null);
+  const [waitSnapshot, setWaitSnapshot] = useState<WaitSnapshot | null>(() => lastWaitSnapshot);
   const [parkCoinUrl, setParkCoinUrl] = useState<string | null>(null);
   const [rideOnly, setRideOnly] = useState(false);
   // The shelf's tabs: Rides, Sights and Limited (Past events at the bottom of Limited).
@@ -423,7 +428,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
       try {
         const entries = await getWikiTimes(Number(park), controller.signal);
         if (active && !controller.signal.aborted) {
-          setWaitSnapshot({ parkId: Number(park), entries, checkedAt: Date.now() });
+          lastWaitSnapshot = { parkId: Number(park), entries, checkedAt: Date.now() };
+          setWaitSnapshot(lastWaitSnapshot);
         }
       } catch {
         if (active && request === controller) setWaitSnapshot(null);

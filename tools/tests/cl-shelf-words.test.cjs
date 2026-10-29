@@ -578,3 +578,12 @@ test('integration (fails until wired): after guide-map merges, the shelf listens
   assert.match(park, /parkDaySignal\.subscribe/, 'ParkScreen subscribes to park_day_done');
   assert.match(park, /justLeft/, 'storyOnTop gets justLeft from the signal');
 });
+
+test('round 5: the shelf opens with the last live answer, so NEXT COIN never flashes an unchecked ride', () => {
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /let lastWaitSnapshot: WaitSnapshot \| null = null;/);
+  assert.match(park, /useState<WaitSnapshot \| null>\(\(\) => lastWaitSnapshot\)/);
+  assert.match(park, /lastWaitSnapshot = \{ parkId: Number\(park\), entries, checkedAt: Date\.now\(\) \};/);
+  // The 2 minute fresh rule still guards it.
+  assert.match(park, /Date\.now\(\) - waitSnapshot\.checkedAt < 120_000/);
+});
