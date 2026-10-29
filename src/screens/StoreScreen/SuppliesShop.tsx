@@ -114,6 +114,16 @@ export function sharkCoinsWord(line: string): string {
     word ? match : `${pre}Shark Coins`);
 }
 
+/**
+ * A server VIP perk line in the app's words (4.5): treats at home (never finds), Shark Coins for the
+ * money, and Ticket and Energy with capitals, so Supplies and the VIP page read the same.
+ * Exported for tests and for MembershipScreen.
+ */
+export function vipPerkWords(line: string): string {
+  return sharkCoinsWord(line.replace(/\bfinds\b/g, 'treats').replace(/\bfind\b/g, 'treat'))
+    .replace(/\btickets\b/g, 'Tickets').replace(/\bticket\b/g, 'Ticket').replace(/\benergy\b/g, 'Energy');
+}
+
 function unavailableText(product: ShopProduct, holdCap: number | null): string | null {
   switch (product.unavailable_reason) {
     case 'bought_today': return 'Got it today. Back tomorrow.';
@@ -524,7 +534,7 @@ function VipGiftDoor() {
 function VipCard({ perks }: { perks: VipPerk[] | null }) {
   // One home word (4.5): an older server's perk lines say "finds"; the kid reads "treats".
   const lines = (perks ?? []).filter(p => p.icon !== 'member').slice(0, 4)
-    .map(p => ({ ...p, title: sharkCoinsWord(p.title.replace(/\bfinds\b/g, 'treats').replace(/\bfind\b/g, 'treat')) }));
+    .map(p => ({ ...p, title: vipPerkWords(p.title) }));
   return (
     <Animated.View entering={FadeInUp.delay(180).springify().damping(15)} style={st.vipLip}>
       <View style={st.vip}>

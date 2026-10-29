@@ -587,3 +587,19 @@ test('round 5: the shelf opens with the last live answer, so NEXT COIN never fla
   // The 2 minute fresh rule still guards it.
   assert.match(park, /Date\.now\(\) - waitSnapshot\.checkedAt < 120_000/);
 });
+
+test('round 5: VIP perk lines say treats, Shark Coins and Ticket on Supplies and the VIP page', () => {
+  const ts = require(path.join(ROOT, 'node_modules/typescript'));
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  const src = shop.match(/export function sharkCoinsWord[\s\S]*?\n\}/)[0] + '\n' + shop.match(/export function vipPerkWords[\s\S]*?\n\}/)[0];
+  const js = ts.transpileModule(src.replace(/export /g, ''), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+  const words = new Function(`${js}; return vipPerkWords;`)();
+  assert.equal(words('2 extra finds on every home hunt'), '2 extra treats on every home hunt');
+  assert.equal(words('2x energy, tickets and XP from every find.'), '2x Energy, Tickets and XP from every treat.');
+  assert.equal(words('2x XP and coins'), '2x XP and Shark Coins');
+  assert.equal(words('A free ticket every day'), 'A free Ticket every day');
+  assert.equal(words('Win ride coins'), 'Win ride coins');
+  assert.match(shop, /title: vipPerkWords\(p\.title\)/);
+  const vip = read('src/screens/MembershipScreen.tsx');
+  assert.match(vip, /title: vipPerkWords\(p\.title\), body: vipPerkWords\(p\.body\)/);
+});

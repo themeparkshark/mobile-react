@@ -22,6 +22,7 @@ import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import getVipPerks, { type VipPerk } from '../api/endpoints/economy/vip-perks';
+import { vipPerkWords } from './StoreScreen/SuppliesShop';
 import { AD_AUDIENCE_13_PLUS_KNOWN } from '../services/adConfig';
 import {
   buyVip, legalText, loadVipPlans, priceText, restoreVip, savingsText, storeAvailable, trialEndsAt, type VipPlan,
@@ -116,7 +117,10 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   const boxesLive = useMoneyFlag('pin_mystery_boxes');
   useEffect(() => {
     let live = true;
-    getVipPerks().then(next => { if (live && next) setPerks(next); }).catch(() => undefined);
+    // The server's lines in the app's words (treats, Shark Coins, Ticket), the same as Supplies says them.
+    getVipPerks().then(next => {
+      if (live && next) setPerks(next.map(p => ({ ...p, title: vipPerkWords(p.title), body: vipPerkWords(p.body) })));
+    }).catch(() => undefined);
     return () => { live = false; };
   }, []);
 

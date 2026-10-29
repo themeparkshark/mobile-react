@@ -22,7 +22,7 @@ export interface HomeIntroStep {
 export const HOME_INTRO_STEPS: readonly HomeIntroStep[] = [
   {
     title: 'Treats pop up near you',
-    body: 'Snacks and toys show up on the map around you.',
+    body: 'Churros, cookies and toys pop up around you.',
     art: require('../../../assets/images/prep-items/churros/churro_18.png'),
   },
   {
