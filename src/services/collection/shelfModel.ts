@@ -58,6 +58,30 @@ export function visibleTabs(split: boolean, sightsCount: number, limitedCount: n
   return tabs;
 }
 
+/**
+ * The tab a shelf slot lives on, so a coin landing or a coin link always opens
+ * the tab that holds its slot: sights on Sights, limited and past events on
+ * Limited, rides and secret coins on Rides.
+ */
+export function tabForSlot(section: 'normal' | 'limited' | 'secret' | 'archived', taskId: number,
+  rideTaskIds: readonly number[] | null | undefined): ShelfTab {
+  if (section === 'limited' || section === 'archived') return 'limited';
+  if (section === 'secret') return 'rides';
+  if (rideTaskIds?.length && !rideTaskIds.includes(taskId)) return 'sights';
+  return 'rides';
+}
+
+/**
+ * The secret coins the Rides tab shows. Coins you already won always stay on
+ * the shelf; the unfound "?" outlines wait for coin levels (rung 3).
+ */
+export function visibleSecretSlots<T extends { readonly id: number }>(secret: readonly T[],
+  owned: readonly { readonly id: number }[], coinLevelsOpen: boolean): T[] {
+  if (coinLevelsOpen) return [...secret];
+  const ids = new Set(owned.map(task => task.id));
+  return secret.filter(task => ids.has(task.id));
+}
+
 export const TROPHIES = [
   { name: 'Bronze', at: 12 },
   { name: 'Silver', at: 50 },
@@ -74,11 +98,15 @@ export function nextTrophy(wins: number): { name: string; at: number; left: numb
   return next ? { name: next.name, at: next.at, left: next.at - count } : null;
 }
 
-/** "3 more wins here for Bronze" (every coin win here counts), or the full-shelf line. */
+/**
+ * "Bronze: 9 of 12 wins (repeats count)". Trophies count wins, not coins, so the
+ * line names its own unit and never reads like a second shelf count.
+ */
 export function nextTrophyLine(wins: number): string {
-  const next = nextTrophy(wins);
+  const count = Math.max(0, Number(wins) || 0);
+  const next = nextTrophy(count);
   if (!next) return 'All three trophies are yours!';
-  return `${next.left} more ${next.left === 1 ? 'win' : 'wins'} here for ${next.name}`;
+  return `${next.name}: ${count} of ${next.at} wins (repeats count)`;
 }
 
 /** The shelf quarter (0 to 4) a count reaches: 25, 50, 75 and 100 percent. */

@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image as ArtImage } from 'expo-image';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { parkDayLabel } from '../services/collection/parkDayLabel';
@@ -16,11 +16,15 @@ interface Props {
   readonly refreshVersion: number;
   readonly loadRecap?: typeof getParkDayRecap;
   readonly initiallyExpanded?: boolean;
+  /** Today's story, already read with the shelf: the card paints with it, no empty first frame. */
+  readonly initialRecap?: ParkDayRecap | null;
 }
 
 export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadRecap = getParkDayRecap,
-  initiallyExpanded = false }: Props) {
-  const [recap, setRecap] = useState<ParkDayRecap | null>(null);
+  initiallyExpanded = false, initialRecap = null }: Props) {
+  const [recap, setRecap] = useState<ParkDayRecap | null>(initialRecap);
+  const initial = useRef(initialRecap);
+  initial.current = initialRecap;
   const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [retry, setRetry] = useState(0);
@@ -39,7 +43,8 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
 
   useFocusEffect(useCallback(() => {
     let current = true;
-    setRecap(null);
+    // Today's story read with the shelf stays on screen while the fresh copy loads.
+    setRecap(selectedDay ? null : initial.current?.park_id === parkId ? initial.current : null);
     setError(false);
     // The park day lives on this card with its Share button. It never opens full screen by itself
     // (blueprint 4.3: Flex reveals never open on their own).

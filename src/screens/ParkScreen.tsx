@@ -44,10 +44,13 @@ import { guide } from '../services/guide/nextCoin';
 import { useRung } from '../services/reveal/revealLadder';
 import GameIcon from '../ui/GameIcon';
 import { milestoneToday, nextTrophy, nextTrophyLine, partsWaiting, shelfCountLabel, shelfTabs, shelfTotals, storyOnTop,
-  visibleTabs, type ShelfTab } from '../services/collection/shelfModel';
+  tabForSlot, visibleSecretSlots, visibleTabs, type ShelfTab } from '../services/collection/shelfModel';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
+
+/** How long the first shelf paint waits for today's park story (the shelf never waits longer). */
+const RECAP_WAIT_MS = 1200;
 
 export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBase, 'Park'>) {
   const { width, height } = useWindowDimensions();
@@ -97,7 +100,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   // The shelf's tabs: Rides, Sights and Limited (Past events at the bottom of Limited).
   const [tab, setTab] = useState<ShelfTab>('rides');
   useEffect(() => { setTab('rides'); }, [park]);
-  // Secret slots ("?") show once coin levels open (rung 3); veterans see them at once.
+  // Unfound secret slots ("?") show once coin levels open (rung 3); secret coins you won always show.
   const coinLevels = useRung('coin_levels');
   // The guide's plan: GO and "Make this my next coin" both point the one guide (guide.setTarget).
   const guidePlan = useSyncExternalStore(guide.subscribe, guide.plan, guide.plan);
@@ -181,9 +184,13 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     }
     return null;
   })() : null;
+  const focusTab: ShelfTab | null = focusSlot
+    ? tabForSlot(focusSlot.section, focusSlot.task.id, currentPark?.ride_passport_task_ids) : null;
   useEffect(() => {
     if (!focusSlot || !isFocused || requestKey || handledFocus.current === focusAssetId) return undefined;
     handledFocus.current = focusAssetId;
+    // Open the tab that holds the linked coin first, so its slot is on screen when it is measured.
+    if (focusTab) setTab(focusTab);
     const timer = setTimeout(() => {
       const content = contentRef.current;
       if (content) focusSlotRef.current?.measureLayout(content, (_x, y) => {
@@ -193,7 +200,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
       navigation.setParams({ focusCoin: undefined });
     }, 250);
     return () => clearTimeout(timer);
-  }, [focusSlot?.section, focusSlot?.task.id, isFocused, requestKey, focusAssetId, reducedMotion, navigation]);
+  }, [focusSlot?.section, focusSlot?.task.id, isFocused, requestKey, focusAssetId, reducedMotion, navigation, focusTab]);
   const parkTripGoal = canChooseGoal && tripGoalData?.goal?.park_id === Number(park)
     ? tripGoalData.goal : null;
   const goalPlan = parkTripGoal?.coin_owned ? tripGoalData?.goal_plan : null;
@@ -293,19 +300,37 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     available: hasRideCoinProgress ? rideCoinsAvailable : 0 });
   const split = shelfTabs(permanentTasks, currentPark?.ride_passport_task_ids);
   const tabs = visibleTabs(split.split, split.sights.length, limitedShelf.length, archivedTasks.length);
-  const shownTab: ShelfTab = tabs.includes(tab) ? tab : 'rides';
+  // A coin landing opens the tab that holds its slot from the first frame (a sight on Sights, a limited
+  // or past event coin on Limited, a secret coin on Rides), so the slot is mounted when it is measured.
+  const arrivalTab: ShelfTab | null = arrivalSlot && closedKey !== requestKey
+    ? tabForSlot(arrivalSlot.section, arrivalSlot.task.id, currentPark?.ride_passport_task_ids) : null;
+  const shownTab: ShelfTab = arrivalTab && tabs.includes(arrivalTab) ? arrivalTab
+    : tabs.includes(tab) ? tab : 'rides';
+  const shownSecret = visibleSecretSlots(secretTasks, completedSecretTasks, coinLevels.open);
+  // Keep the landing's tab after the coin lands, so the shelf never jumps back to Rides under it.
+  useEffect(() => { if (arrivalTab) setTab(arrivalTab); }, [arrivalTab]);
   const storyTop = canChooseGoal && !!todayRecap && storyOnTop({ atPark: inThisPark,
     ridesWonToday: todayRecap.distinct_rides_won, milestone: milestoneToday(totals, todayRecap.new_coins) });
   const parkStores = inThisPark ? locationPark?.stores ?? [] : [];
   const trophyNext = currentPark ? nextTrophy(currentPark.park_coins_count) : null;
 
+  // Today's park story is read with the shelf on first paint (capped at RECAP_WAIT_MS), so the story card
+  // is already in its place, on top or below, and never jumps over the shelf under the thumb.
+  const shelfPainted = useRef(false);
+  useEffect(() => { shelfPainted.current = false; }, [park, player]);
   useFocusEffect(useCallback(() => {
     let active = true;
     void (async () => {
       try {
+        const story = !shelfPainted.current && canChooseGoal
+          ? Promise.race([loadRecap(Number(park)).catch(() => null),
+            new Promise<null>(resolve => setTimeout(() => resolve(null), RECAP_WAIT_MS))])
+          : null;
         const { visitedPark, available, secret, completed, completedSecret, archived, completedArchived, limited } =
           await loadParkShelf(Number(park), Number(player));
+        await story;
         if (!active) return;
+        shelfPainted.current = true;
         setCurrentPark(visitedPark);
         setTasks(available);
         setLimitedTasks(limited);
@@ -323,7 +348,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
       }
     })();
     return () => { active = false; };
-  }, [park, player, locationPark?.coin_url, refreshVersion]));
+  }, [park, player, locationPark?.coin_url, refreshVersion, canChooseGoal, loadRecap]));
 
   // This is guidance, never a gate on coin collection. Unknown or stale feed
   // data leaves the saved ride goal and proximity suggestion alone.
@@ -491,7 +516,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                 <View style={{ paddingTop: 16, paddingHorizontal: 16, paddingBottom: 14 }}>
                   {/* After a park day (and on 25/50/75/100% days) the day's story waits on top, with Share. */}
                   {storyTop && <ParkDayRecapCard parkId={Number(park)} atPark={inThisPark}
-                    refreshVersion={refreshVersion} loadRecap={loadRecap} />}
+                    refreshVersion={refreshVersion} loadRecap={loadRecap} initialRecap={todayRecap} />}
                   <ParkCollectionHeader
                     parkName={currentPark.display_name ?? currentPark.name}
                     isOwnPark={canChooseGoal}
@@ -541,12 +566,12 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                       <View style={shelfPanel}>
                         {shelfRows('normal', split.rides)}
                         {/* Secret coins: a "?" slot once coin levels open (rung 3). */}
-                        {coinLevels.open && secretTasks.length > 0 && <View
+                        {shownSecret.length > 0 && <View
                           onLayout={event => { secretShelfOffset.current = event.nativeEvent.layout.y; }}>
                           <Text style={{ fontFamily: 'Shark', color: '#fff', fontSize: 16, textAlign: 'center', marginBottom: 6 }}>
                             Secret coins
                           </Text>
-                          {shelfRows('secret', secretTasks)}
+                          {shelfRows('secret', shownSecret)}
                         </View>}
                         {/* The Rides tab's finish line: every ride earns the Ride Passport stamp. */}
                         {split.split && typeof currentPark.ride_passport_available === 'number' && currentPark.ride_passport_available > 0 &&
@@ -698,7 +723,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     </Pressable>)}
                   </View>}
                   {canChooseGoal && !storyTop && <ParkDayRecapCard parkId={Number(park)}
-                    atPark={inThisPark} refreshVersion={refreshVersion} loadRecap={loadRecap} />}
+                    atPark={inThisPark} refreshVersion={refreshVersion} loadRecap={loadRecap} initialRecap={todayRecap} />}
                 </View>
                 </View>
               </ScrollView>

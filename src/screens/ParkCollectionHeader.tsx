@@ -127,9 +127,9 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
       : ticketsNeeded > 0 ? `${ticketsNeeded} more ${ticketsNeeded === 1 ? 'Ticket' : 'Tickets'} to play.`
       : ticketsReadyHint(nextCoinKind),
   } : nearbyRideName ? {
-    eyebrow: nearbyReportedOpen ? 'NEARBY AND REPORTED OPEN' : 'NEAREST MISSING COIN',
+    eyebrow: 'NEXT COIN',
     name: nearbyRideName,
-    hint: 'The nearest coin you can win next.',
+    hint: nearbyReportedOpen ? 'Nearest coin, reported open.' : 'The nearest coin you can win next.',
   } : isOwnPark ? {
     eyebrow: 'NEXT COIN', name: 'Pick a missing coin', hint: 'Tap an empty slot on the shelf.',
   } : null;
@@ -219,10 +219,9 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
       </Pressable> : goal && <View style={styles.goal}>
         <View style={styles.goalIcon}><GameIcon name={nextRideOwned ? 'parts' : 'coin'} size={24} /></View>
         <View style={{ flex: 1 }}>
-          <Text numberOfLines={1} style={styles.goalLine}>
-            <Text style={styles.goalEyebrow}>{goal.eyebrow}  </Text>
-            <Text style={styles.goalName}>{goal.name}</Text>
-          </Text>
+          {/* A short eyebrow on its own line and the full coin name under it, so GO never squeezes the name. */}
+          <Text numberOfLines={1} style={styles.goalEyebrow}>{goal.eyebrow}</Text>
+          <Text numberOfLines={2} style={styles.goalName}>{goal.name}</Text>
           <Text style={styles.goalHint} numberOfLines={1}>{planned && goLabel === 'PLAN' ? 'Planned for your next park day.' : goal.hint}</Text>
         </View>
         {canGo && <Pressable onPress={onGo} hitSlop={8} accessibilityRole="button"
@@ -266,7 +265,7 @@ const styles = StyleSheet.create({
   chipEnergy: { marginLeft: 'auto', borderColor: '#7fd3ff' },
   trophyLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 5, marginRight: 70 },
   trophyText: { fontFamily: 'Knockout', color: '#e9f7ff', fontSize: 14 },
-  go: { minWidth: 58, minHeight: 40, paddingHorizontal: 10, borderRadius: 12, backgroundColor: '#ffcf3b',
+  go: { minWidth: 58, minHeight: 44, paddingHorizontal: 10, borderRadius: 12, backgroundColor: '#ffcf3b',
     borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#d99a00',
     alignItems: 'center', justifyContent: 'center' },
   goPressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2 },
@@ -278,8 +277,7 @@ const styles = StyleSheet.create({
     borderColor: '#ffcf3b', borderWidth: 2, borderRadius: 14, paddingVertical: 5, paddingHorizontal: 8 },
   goalIcon: { width: 34, height: 34, backgroundColor: '#fff', borderRadius: 17,
     borderWidth: 2, borderColor: '#ffcf3b', alignItems: 'center', justifyContent: 'center' },
-  goalLine: { fontFamily: 'Shark', color: '#05346e', fontSize: 17 },
   goalEyebrow: { fontFamily: 'Knockout', color: '#8a5a00', fontSize: 13, letterSpacing: 0.8 },
-  goalName: { fontFamily: 'Shark', color: '#05346e', fontSize: 17 },
+  goalName: { fontFamily: 'Shark', color: '#05346e', fontSize: 17, lineHeight: 20 },
   goalHint: { fontFamily: 'Knockout', color: '#3d5f8c', fontSize: 14, lineHeight: 17 },
 });

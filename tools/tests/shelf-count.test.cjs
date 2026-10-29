@@ -55,9 +55,11 @@ test('tabs: Rides and Sights split the permanent coins; a park without a ride li
 });
 
 test('the trophy shelf names the next trophy in wins (every coin win here counts)', () => {
-  assert.equal(shelf.nextTrophyLine(9), '3 more wins here for Bronze');
-  assert.equal(shelf.nextTrophyLine(11), '1 more win here for Bronze');
-  assert.equal(shelf.nextTrophyLine(12), '38 more wins here for Silver');
+  // Its own unit, so '8 of 35 coins' above it never reads like wrong math.
+  assert.equal(shelf.nextTrophyLine(9), 'Bronze: 9 of 12 wins (repeats count)');
+  assert.equal(shelf.nextTrophyLine(11), 'Bronze: 11 of 12 wins (repeats count)');
+  assert.equal(shelf.nextTrophyLine(12), 'Silver: 12 of 50 wins (repeats count)');
+  assert.doesNotMatch(shelf.nextTrophyLine(3), /coins?/);
   assert.equal(shelf.nextTrophyLine(100), 'All three trophies are yours!');
   assert.deepEqual(plain(shelf.nextTrophy(0)), { name: 'Bronze', at: 12, left: 12 });
   const modal = loadTs('src/components/ParkTrophyModal.tsx', {
@@ -95,4 +97,47 @@ test('every park store opens in one tap from the shelf, with its own icon art', 
   assert.match(park, /RootNavigation\.navigate\('Store', \{ store: store\.id \}\)/, 'the same route as the map store button');
   assert.match(park, /source=\{\{ uri: store\.icon_url \}\}/);
   assert.match(park, /const parkStores = inThisPark \? locationPark\?\.stores \?\? \[\] : \[\];/, 'the same list the map shows at this park');
+});
+
+test('round 2: a coin landing or a coin link opens the tab that holds its slot', () => {
+  // Sights on Sights, limited and past events on Limited, rides and secret coins on Rides.
+  assert.equal(shelf.tabForSlot('normal', 7, [1, 2, 3]), 'sights', 'the Walt Statue lands on the Sights tab');
+  assert.equal(shelf.tabForSlot('normal', 2, [1, 2, 3]), 'rides');
+  assert.equal(shelf.tabForSlot('normal', 7, null), 'rides', 'a park without a ride list has one tab');
+  assert.equal(shelf.tabForSlot('limited', 40, [1]), 'limited', 'a November limited coin lands on Limited');
+  assert.equal(shelf.tabForSlot('archived', 41, [1]), 'limited', 'past events sit at the bottom of Limited');
+  assert.equal(shelf.tabForSlot('secret', 50, [1]), 'rides', 'secret coins live under the Rides shelf');
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /const arrivalTab: ShelfTab \| null = arrivalSlot && closedKey !== requestKey\s*\?\s*tabForSlot\(arrivalSlot\.section, arrivalSlot\.task\.id, currentPark\?\.ride_passport_task_ids\)/);
+  assert.match(park, /const shownTab: ShelfTab = arrivalTab && tabs\.includes\(arrivalTab\) \? arrivalTab/, 'the landing tab shows from the first frame');
+  assert.match(park, /useEffect\(\(\) => \{ if \(arrivalTab\) setTab\(arrivalTab\); \}, \[arrivalTab\]\);/, 'and stays after the coin lands');
+  assert.match(park, /if \(focusTab\) setTab\(focusTab\);\s*const timer = setTimeout/, 'a coin link opens its tab before it measures the slot');
+});
+
+test('round 2: secret coins you won never vanish; only the unfound "?" slots wait for rung 3', () => {
+  const secret = [{ id: 1 }, { id: 2 }, { id: 3 }];
+  assert.deepEqual(plain(shelf.visibleSecretSlots(secret, [{ id: 2 }], false)).map(t => t.id), [2], 'owned secret coins always show');
+  assert.deepEqual(plain(shelf.visibleSecretSlots(secret, [{ id: 2 }], true)).map(t => t.id), [1, 2, 3], 'rung 3 adds the "?" outlines');
+  assert.deepEqual(plain(shelf.visibleSecretSlots(secret, [], false)), []);
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /const shownSecret = visibleSecretSlots\(secretTasks, completedSecretTasks, coinLevels\.open\);/);
+  assert.match(park, /\{shownSecret\.length > 0 && <View/);
+  assert.doesNotMatch(park, /coinLevels\.open && secretTasks\.length > 0/, 'no rung gate on the whole secret shelf');
+});
+
+test('round 2: the next coin card names the coin in full under a short eyebrow, and GO is 44 pt', () => {
+  const header = read('src/screens/ParkCollectionHeader.tsx');
+  assert.match(header, /<Text numberOfLines=\{1\} style=\{styles\.goalEyebrow\}>\{goal\.eyebrow\}<\/Text>\s*<Text numberOfLines=\{2\} style=\{styles\.goalName\}>\{goal\.name\}<\/Text>/);
+  assert.doesNotMatch(header, /NEARBY AND REPORTED OPEN/);
+  assert.match(header, /go: \{ minWidth: 58, minHeight: 44,/);
+});
+
+test('round 2: the park story is read with the shelf, so its card never jumps over the shelf', () => {
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /const RECAP_WAIT_MS = 1200;/);
+  assert.match(park, /Promise\.race\(\[loadRecap\(Number\(park\)\)\.catch\(\(\) => null\),/);
+  assert.match(park, /await loadParkShelf\(Number\(park\), Number\(player\)\);\s*await story;/, 'the first paint waits (capped) for the story');
+  assert.equal((park.match(/initialRecap=\{todayRecap\}/g) || []).length, 2, 'both slots paint with the story already read');
+  const card = read('src/screens/ParkDayRecapCard.tsx');
+  assert.match(card, /useState<ParkDayRecap \| null>\(initialRecap\)/);
 });
