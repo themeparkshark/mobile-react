@@ -38,6 +38,8 @@ export interface NextCoinGuideInput {
   readonly dwellRideId: number | null;
   readonly starTaskIds?: ReadonlySet<number>;
   readonly rushTaskIds?: ReadonlySet<number>;
+  /** Coins on the player's shelf in this park (the map's own list carries no ownership). */
+  readonly ownedTaskIds?: ReadonlySet<number>;
   readonly starRushUnlocked: boolean;
   readonly coinLevelsUnlocked: boolean;
   readonly wallet: FreeTicketsInput | null;
@@ -99,8 +101,8 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
 
   const liveTaskIds = useMemo(() => new Set((input.live?.rides ?? []).map(ride => ride.task_id)), [input.live]);
   const coins = useMemo(() => guideCoinsFor(input.tasks, parkId, {
-    rides, liveTaskIds, starTaskIds: input.starTaskIds, rushTaskIds: input.rushTaskIds,
-  }), [input.tasks, parkId, rides, liveTaskIds, input.starTaskIds, input.rushTaskIds]);
+    rides, liveTaskIds, starTaskIds: input.starTaskIds, rushTaskIds: input.rushTaskIds, ownedTaskIds: input.ownedTaskIds,
+  }), [input.tasks, parkId, rides, liveTaskIds, input.starTaskIds, input.rushTaskIds, input.ownedTaskIds]);
   const inLineTaskId = useMemo(() => inLineTaskFor(input.dwellRideId, rides, coins), [input.dwellRideId, rides, coins]);
 
   // Arrival: the first in-park reading of this visit starts the 30 s welcome.

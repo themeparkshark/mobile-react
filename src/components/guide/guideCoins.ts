@@ -48,6 +48,8 @@ export function guideCoinFor(task: TaskType, parkId: number, opts: {
   readonly star?: boolean;
   readonly rush?: boolean;
   readonly levelUpReady?: boolean;
+  /** The shelf says the player owns this coin (the trip goal's coin_owned). */
+  readonly owned?: boolean;
 }): GuideCoin | null {
   const latitude = finite(task.latitude), longitude = finite(task.longitude);
   if (latitude === null || longitude === null || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
@@ -61,7 +63,9 @@ export function guideCoinFor(task: TaskType, parkId: number, opts: {
     latitude,
     longitude,
     radiusMeters: PLAY_RANGE_METERS,
-    owned: (task.times_completed ?? 0) > 0,
+    // The map's list (today's coins) carries no ownership, so the shelf's word counts too: a coin on the
+    // shelf comes back each day, but the guide never points at a coin the player already owns.
+    owned: !!opts.owned || (task.times_completed ?? 0) > 0,
     // Unknown catalog type: a ride with a live row counts as a queue ride; a sight never queues.
     queue: isRide ? (type === null ? true : QUEUE.has(type)) : false,
     star: !!opts.star,
@@ -76,6 +80,8 @@ export function guideCoinsFor(tasks: readonly TaskType[], parkId: number | null,
   readonly liveTaskIds?: ReadonlySet<number>;
   readonly starTaskIds?: ReadonlySet<number>;
   readonly rushTaskIds?: ReadonlySet<number>;
+  /** Coins on the player's shelf (the trip goal's ride list, coin_owned). */
+  readonly ownedTaskIds?: ReadonlySet<number>;
 } = {}): GuideCoin[] {
   if (parkId == null) return [];
   const seen = new Set<number>();
@@ -88,9 +94,19 @@ export function guideCoinsFor(tasks: readonly TaskType[], parkId: number | null,
       hasLiveRow: opts.liveTaskIds?.has(task.id),
       star: opts.starTaskIds?.has(task.id),
       rush: opts.rushTaskIds?.has(task.id),
+      owned: opts.ownedTaskIds?.has(task.id),
     });
     if (coin) out.push(coin);
   }
+  return out;
+}
+
+/** Coins the player owns in this park, from the trip goal's ride list (every park's rides, with coin_owned). */
+export function ownedTaskIdsFor(rides: readonly { readonly task_id: number; readonly park_id: number; readonly coin_owned: boolean }[] | null | undefined,
+  parkId: number | null): Set<number> {
+  const out = new Set<number>();
+  if (parkId == null) return out;
+  for (const ride of rides ?? []) if (ride?.coin_owned && ride.park_id === parkId && Number.isFinite(ride.task_id)) out.add(ride.task_id);
   return out;
 }
 

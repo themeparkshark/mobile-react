@@ -139,7 +139,7 @@ import { UpperText } from '../ui/upper';
 import { usePlayTapHold } from '../components/guide/playTapHold';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
 import useNextCoinGuide from '../components/guide/useNextCoinGuide';
-import { guideWallet } from '../components/guide/guideCoins';
+import { guideWallet, ownedTaskIdsFor } from '../components/guide/guideCoins';
 import useClaimableTickets from '../components/guide/useClaimableTickets';
 import { guide } from '../services/guide/nextCoin';
 import type { GuideAction } from '../services/guide/guideCopy';
@@ -1158,10 +1158,12 @@ export function ExploreScreenBody() {
   const guideReady = islandsIn && (guideWaitOver || (!!tripGoalData && !!livePark));
   // Welcome back after 14+ days away: the guide's welcome back state comes first (core loop 4.1).
   const welcome = useWelcomeBack(player?.id ?? null);
+  // The shelf's word on which coins the player owns here (the map's list of today's coins has none).
+  const ownedTaskIds = useMemo(() => ownedTaskIdsFor(tripGoalData?.rides, park?.id ?? null), [tripGoalData?.rides, park?.id]);
   const nextCoin = useNextCoinGuide({
     enabled: !!player && !!park, ready: guideReady, parkId: park?.id ?? null, parkName: park?.name ?? null, location,
     tasks: visibleTasks, live: livePark, adventure, dwellRideId: queueDwell?.rideId ?? null,
-    starTaskIds: starRides, rushTaskIds,
+    starTaskIds: starRides, rushTaskIds, ownedTaskIds,
     starRushUnlocked: coinLevelsRung.open, coinLevelsUnlocked: coinLevelsRung.open,
     wallet, queueTicketsOn: guideFlags.queue_tickets === true,
     // PLAY! itself decides "You're here": the server's range check, never the guide's geometry alone.

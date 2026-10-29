@@ -614,3 +614,28 @@ test('LinePlay has its own icon on the guide card; the pocket watch means Wait T
   assert.doesNotMatch(card, /GameIcon name="queue"/, 'no pocket watch on the guide card');
   assert.doesNotMatch(card, /queuetimes\.png/);
 });
+
+test('a coin already on the shelf is never the target, though today\'s map lists it again (the map carries no ownership)', () => {
+  const tasks = [
+    { id: 78, name: 'Walt Statue', latitude: north(5).latitude, longitude: BASE.longitude },
+    { id: 199, name: 'Astro Orbitor', latitude: north(75).latitude, longitude: BASE.longitude },
+  ];
+  const trip = [
+    { task_id: 78, park_id: 8, coin_owned: true }, { task_id: 199, park_id: 8, coin_owned: false },
+    { task_id: 500, park_id: 1, coin_owned: true },
+  ];
+  const owned = GC.ownedTaskIdsFor(trip, 8);
+  assert.deepEqual([...owned], [78], 'only this park\'s owned coins');
+  assert.equal(GC.ownedTaskIdsFor(trip, null).size, 0);
+  const without = GC.guideCoinsFor(tasks, 8, {});
+  assert.equal(G.pickNextCoin(input({ coins: without })).taskId, 78, 'before: the owned statue 5 m away looked unowned');
+  const coins = GC.guideCoinsFor(tasks, 8, { ownedTaskIds: owned });
+  assert.equal(coins.find(c => c.taskId === 78).owned, true);
+  assert.equal(G.pickNextCoin(input({ coins })).taskId, 199, 'the next coin to win, not the one on the shelf');
+  // A target picked before the shelf arrived moves on once the shelf says it is owned.
+  const early = G.pickNextCoin(input({ coins: without }));
+  assert.equal(G.pickNextCoin(input({ coins, current: early })).taskId, 199);
+  const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /const ownedTaskIds = useMemo\(\(\) => ownedTaskIdsFor\(tripGoalData\?\.rides, park\?\.id \?\? null\)/);
+  assert.match(explore, /starTaskIds: starRides, rushTaskIds, ownedTaskIds,/);
+});
