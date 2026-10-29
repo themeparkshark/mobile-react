@@ -383,7 +383,8 @@ test('NEW tags: each reward rung wears one NEW on its own surface, and a shown N
   assert.equal(tag.rowRung('daily_chest'), null, 'the daily chest is rung 0: never NEW');
   assert.equal(tag.rowRung('stamps'), null);
   const rows = [{ key: 'daily_chest' }, { key: 'level_chest' }, { key: 'daily3' }, { key: 'trail' }];
-  assert.equal(tag.newRowKey(rows, 'daily'), 'level_chest', 'one pill, on the first row of the NEW rung');
+  assert.equal(tag.newRowKey(rows, 'daily'), 'daily3', 'one pill, on Daily 3 itself (rung 4)');
+  assert.equal(tag.newRowKey([{ key: 'level_chest' }, { key: 'weekly_box' }], 'daily'), 'level_chest', 'else the rung\'s first row');
   assert.equal(tag.newRowKey(rows, 'trail'), 'trail');
   assert.equal(tag.newRowKey(rows, 'events'), null, 'no row, no pill');
   assert.equal(tag.newRowKey(rows, null), null);

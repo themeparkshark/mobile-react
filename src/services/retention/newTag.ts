@@ -40,8 +40,13 @@ export function rowRung(key: string): Rung | null {
   }
 }
 
-/** The one row that wears the NEW pill: the first row of the NEW rung. Pure. */
+/** The row each rung's NEW prefers: the feature itself (Daily 3 for rung 4), else the rung's first row. */
+const LEAD_ROW: Partial<Record<Rung, string>> = { daily: 'daily3' };
+
+/** The one row that wears the NEW pill: the rung's lead row when it shows, else its first row. Pure. */
 export function newRowKey(rows: readonly { readonly key: string }[], newRung: Rung | null): string | null {
   if (!newRung) return null;
+  const lead = LEAD_ROW[newRung];
+  if (lead && rows.some(r => r.key === lead)) return lead;
   return rows.find(r => rowRung(r.key) === newRung)?.key ?? null;
 }
