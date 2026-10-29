@@ -539,3 +539,38 @@ test('the recap GO says a name that ends in s the kid-readable way', () => {
   assert.equal(rideStep.recapGo({ rideName: 'Matterhorn Bobsleds', coinState: 'unowned', partsEarned: 0, rideTaskId: 68,
     upgradeReady: false, nextCoin: null }).label, 'Win Matterhorn Bobsleds’ coin');
 });
+
+test('one account\'s ride is never another account\'s ride question on a shared phone', async () => {
+  const store = new Map();
+  await withClock(600_000_000, async clock => {
+    const app = launch(store, { player: '48' });
+    await app.ledger.ensureRideQuestionLedger();
+    // Player 48 stands 25 minutes at Space Mountain without LinePlay, then walks off.
+    for (let i = 0; i < 50; i++) { app.s.processLocation(SPACE.lat + (i % 2) * 0.00003, SPACE.lng); clock.now += 30_000; }
+    for (const [lat, lng] of path2([[SPACE.lat, SPACE.lng], [33.8095, -117.9174]])) { app.s.processLocation(lat, lng); clock.now += 5_000; }
+    await app.s.writeQueue;
+    assert.equal(pendingIn(store).length, 1);
+    assert.equal(pendingIn(store)[0].playerId, '48', 'the detection names whose phone saw it');
+    // A brand-new account signs in on the same phone: no batch confirm about player 48's ride.
+    const other = launch(store, { player: '66' });
+    assert.equal(await other.hook.checkAndShowPendingRides(), false);
+    assert.equal(other.navigations.length, 0);
+    assert.equal(pendingIn(store).length, 1, 'kept for its own player');
+    // Player 48 signs back in: asked once.
+    const back = launch(store, { player: '48' });
+    await back.hook.checkAndShowPendingRides();
+    assert.equal(back.navigations.length, 1);
+    // A detection saved before this field (no playerId) still reaches whoever is signed in.
+    const svc = loadTs('src/services/RideDetectionService.ts', {
+      '@react-native-async-storage/async-storage': { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} },
+      'expo-location': { Accuracy: { High: 6 }, hasStartedLocationUpdatesAsync: async () => false },
+      'expo-task-manager': { defineTask() {}, isTaskDefined: () => false },
+      'react-native': { AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) } },
+      '../api/endpoints/rides': {},
+      './lineplay/rideQuestionLedger': app.ledger,
+    });
+    assert.equal(svc.detectionBelongsTo({}, '66'), true);
+    assert.equal(svc.detectionBelongsTo({ playerId: '48' }, '66'), false);
+    assert.equal(svc.detectionBelongsTo({ playerId: '48' }, null), true, 'signed out: nothing is hidden');
+  });
+});

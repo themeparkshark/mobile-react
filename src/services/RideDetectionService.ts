@@ -21,8 +21,8 @@ import * as TaskManager from 'expo-task-manager';
 import { AppState } from 'react-native';
 import { RideType } from '../api/endpoints/rides';
 import { QUEUE_RIDE_TYPES } from '../constants/queueRideTypes';
-import { ensureRideQuestionLedger, noteLinePlayWaitEnded, noteLinePlayWaitStarted, rideHoldUntil, setRideHold,
-  visitInLinePlayWait } from './lineplay/rideQuestionLedger';
+import { ensureRideQuestionLedger, noteLinePlayWaitEnded, noteLinePlayWaitStarted, rideHoldUntil, rideQuestionOwner,
+  setRideHold, visitInLinePlayWait } from './lineplay/rideQuestionLedger';
 
 const STORAGE_KEY = 'pending_ride_detections';
 const RIDES_CACHE_KEY = 'ride_detection_rides_cache';
@@ -163,6 +163,13 @@ export interface DetectedRide {
   confidence: 'high' | 'medium' | 'low';
   isReRide: boolean;
   detectedAt: number;
+  /** The player whose phone saw it (rideQuestionOwner); another account signed in later never sees it. */
+  playerId?: string | null;
+}
+
+/** A detection belongs to this player (an untagged one from before this field belongs to anyone). */
+export function detectionBelongsTo(detection: Pick<DetectedRide, 'playerId'>, player: string | null): boolean {
+  return detection.playerId == null || player == null || detection.playerId === player;
 }
 
 interface ZoneState {
@@ -663,6 +670,7 @@ class RideDetectionService {
       confidence,
       isReRide,
       detectedAt: Date.now(),
+      playerId: rideQuestionOwner(),
     };
 
     // Persist to AsyncStorage (survives app kill, background, etc.)
@@ -775,7 +783,11 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
 export function startDetection() { return rideDetectionService.startDetection(); }
 export function stopDetection() { return rideDetectionService.stopDetection(); }
 export function syncBackgroundRideDetection() { return rideDetectionService.syncBackgroundTracking(); }
-export function getPendingDetections() { return rideDetectionService.getPendingDetections(); }
+/** The signed-in player's waiting detections (never another account's on a shared phone). */
+export async function getPendingDetections() {
+  const player = rideQuestionOwner();
+  return (await rideDetectionService.getPendingDetections()).filter(d => detectionBelongsTo(d, player));
+}
 export function clearPendingDetections() { return rideDetectionService.clearPendingDetections(); }
 export function removePendingDetection(id: string) { return rideDetectionService.removePendingDetection(id); }
 export function setDetectionRides(rides: RideType[]) { rideDetectionService.setRides(rides); }

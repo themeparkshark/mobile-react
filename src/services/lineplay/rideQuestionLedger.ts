@@ -90,6 +90,15 @@ function currentOwner(): string | null {
   return gameSavesPlayer();
 }
 
+/**
+ * Whose phone record this is: the signed-in player, or after a background wake with nobody signed in yet,
+ * the last player who was (null: never known). Ride detections are tagged with it, so one account's rides
+ * never become another account's ride questions on a shared phone.
+ */
+export function rideQuestionOwner(): string | null {
+  return currentOwner() ?? owner;
+}
+
 /** Load the signed-in player's record (once per player). Safe to call often. */
 export function ensureRideQuestionLedger(): Promise<void> {
   const signedIn = currentOwner();
