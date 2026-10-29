@@ -255,15 +255,18 @@ export default function TaskCoinModal({
         onPlayInLine={onPlayInLine}
         onGetParts={onShowOnMap ? () => {
           // GET RIDE PARTS (must-fix 4): the one pointer goes to this ride, then the map draws the path.
-          // The shelf remembers it as a level-up goal, so it says LEVEL UP GOAL, never NEXT COIN, for a coin you own.
-          levelUpGoal.set(task.id, player?.id);
-          guide.setTarget(task.id, 'coin_parts');
-          // The map starts at once (under the 90 ms sheet exit). The shelf's last frame stays on screen
-          // during the pop and no React update reaches it, so its next-coin card fades out on the UI
-          // thread now: it never names the old coin (shelfLeaving.ts). Back on the shelf it says LEVEL UP GOAL.
+          // 1. The shelf's next-coin card fades on the UI thread now (no React render), so the shelf
+          //    that stays on screen while the map pops in never names the old coin (shelfLeaving.ts).
+          // 2. Two frames later (the fade is drawn, the sheet is leaving), the map starts and the pointer
+          //    moves. Pointing first would re-render the whole shelf before the map (about 1 s under load).
+          // The shelf remembers it as a level-up goal, so back on the shelf it says LEVEL UP GOAL, never NEXT COIN.
           shelfLeaving.value = 1;
           setTimeout(() => { shelfLeaving.value = 0; }, 1500);
-          onShowOnMap();
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            onShowOnMap();
+            levelUpGoal.set(task.id, player?.id);
+            guide.setTarget(task.id, 'coin_parts');
+          }));
         } : undefined}
       />}
     </>
