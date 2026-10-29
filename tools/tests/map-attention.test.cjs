@@ -13,6 +13,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { loadTs } = require('./helpers/ts-module.cjs');
 
+/** The map's source: ExploreScreen plus its guide wiring hook (useMapGuide, moved out of the screen in round 4). */
+function mapSource() {
+  const fs = require('node:fs'); const path = require('node:path');
+  return ['src/screens/ExploreScreen.tsx', 'src/components/guide/useMapGuide.ts']
+    .map(rel => fs.readFileSync(path.join(__dirname, '../..', rel), 'utf8')).join('\n');
+}
+
 const root = path.resolve(__dirname, '../..');
 
 /** A tiny hook renderer: enough React for these hooks, effects run after each render, one state per mount. */
@@ -263,7 +270,7 @@ test('every map-path sheet registers with the native modal layer list and frees 
     assert.match(source, /layer\.onHidden/, `${file} settles the layer one transaction after its JS hide (onDismiss never arrives here)`);
   }
   assert.match(read('src/components/SharkDropHandler.tsx'), /useNativeModalLayer\(!!state, 'wait'\)/, 'a Shark Drop waits its turn');
-  const explore = read('src/screens/ExploreScreen.tsx');
+  const explore = mapSource();
   assert.match(explore, /usePlayTapHold\(redeemFlowOpen\)/);
   assert.match(explore, /playTapHold && <View testID="play-ride-tap-hold"/);
 });
@@ -322,7 +329,7 @@ test('attention rules: no chest ever opens by itself at a park; nothing in the f
 });
 
 test('state B at the gate through the first coin: the map wiring keeps chests, reward sheets and offers from opening by themselves', () => {
-  const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.match(explore, /const chestReady = !firstVisitHold && !\(homeIntroOwed && !park\) && attentionFor\('daily_chest'\) && chestMayPresent\(/);
   assert.match(explore, /&& !\(chestUnclaimed && !!dailyGift && !chestDismissed\(dailyGift\.id\)\) && attentionFor\('reward'\),/, 'level chests and Daily 3 sheets');
   assert.match(explore, /eventsRung\.open && attentionFor\('event_recap'\)/);
@@ -344,13 +351,13 @@ test('the Rewards button: one chest, one number; the flame after rung 4, the Tra
   assert.deepEqual({ ...R.withRewardsSummary(m, { count: 2, flame: null, trailRing: null }) }, { count: 2, flame: null, trail: null });
   assert.equal(R.withRewardsSummary(later, undefined), later, 'no sheet in this build: the map count');
   assert.equal(R.withRewardsSummary(later, { count: 'x' }), later, 'a bad summary is ignored');
-  const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.doesNotMatch(explore, /<MapResourcePill icon="energy"/, 'no Energy pill on the resting map');
   assert.match(explore, /style=\{styles\.trailHostHidden\}/, 'no Trail pill: the Rewards ring and its sheet');
 });
 
 test('teaching: park help page 1 opens itself once, only for an account that never had Finn\'s park lesson here, through the queue', () => {
-  const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.match(explore, /const helpPageKey = player \? `tps\.help\.parkPage1\.v1@p\$\{player\.id\}` : null;/, 'once per account');
   assert.match(explore, /&& !parkLessonRan\.current && !isActive && parkTipReady && !parkTipShowing && attentionFor\('help_page'\);/,
     'never after Finn\'s park lesson in this session, never over a tip, never in the park\'s quiet moments');
@@ -367,7 +374,7 @@ test('rewards fly where they live: Energy to the Shelf button (park and home), X
     'react-native': { Dimensions: { get: () => ({ width: 402, height: 874 }) } }, '../../context/CurrencyFlyProvider': { useCurrencyFly: () => ({}) } });
   const at = A.profileTabCenter(402, 874, 34);
   assert.ok(Math.abs(at.x - 344) < 6 && Math.abs(at.y - 818) < 6, `the Profile tab is at about (344, 818): ${at.x}, ${at.y}`);
-  const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.match(explore, /const shelfAnchor = useFlyAnchor\('energy', avatarRef\);/);
   assert.match(explore, /useProfileTabAnchor\(0\);/);
   assert.match(fs.readFileSync(path.join(root, 'src/components/guide/HomeShelfButton.tsx'), 'utf8'), /useFlyAnchor\('energy'\)/);
@@ -395,7 +402,7 @@ test('the guide target\'s island never folds away or hides while it is the targe
   const L = loadTs('src/screens/ExploreScreen/parkMapLayout.ts', { '../../components/map/statusStack': { HUD_BOTTOM: 76 } });
   const plain = { adventure: false, playable: false, goal: false, rush: false, closed: false, near: false, selected: false };
   assert.ok(L.ridePriority({ ...plain, goal: true }, false) > L.ridePriority({ ...plain, near: true }, false), 'the target outranks its neighbours');
-  const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.match(explore, /goal: goalTaskId === task\.id \|\| guideTargetId === task\.id, rush, near, closed, tag \};/);
 });
 
@@ -415,7 +422,7 @@ test('attentionGate: other lanes ask the map\'s rules before opening by themselv
   assert.equal(Q.attentionGate.allowed('membership', t0 + 60_000), false);
   assert.equal(Q.attentionGate.allowed('share_drop', t0 + 60_000), true, 'a link the player tapped');
   Q.attentionQueue.reset(); Q.attentionGate.reset();
-  const explore = fs.readFileSync(path.join(root, 'src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.match(explore, /const placeKnown = parkLoaded && \(!!park \|\| homeLocationConfirmed\);/);
   assert.match(explore, /if \(!placeKnown\) \{ attentionGate\.hold\(\); return; \}/);
   assert.match(explore, /attentionGate\.publish\(\{ atPark: !!park, arrivedAt: nextCoin\.arrivedAt,/);
@@ -440,7 +447,7 @@ test('at home Finn\'s first-time intro goes first: the daily chest waits while t
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /const introOwed = introSeen !== true && introEligible && homeLocationConfirmed;/);
   assert.match(home, /onIntroOwedChange\?\.\(introOwed\)/);
-  const explore = read('src/screens/ExploreScreen.tsx');
+  const explore = mapSource();
   assert.match(explore, /const chestReady = !firstVisitHold && !\(homeIntroOwed && !park\) && attentionFor\('daily_chest'\)/);
   assert.match(explore, /onIntroOwedChange=\{setHomeIntroOwed\}/);
 });
@@ -453,7 +460,7 @@ test('the map\'s team chip is one "your team" chip once the player has a team; t
 });
 
 test('signing out or a second player on the phone resets the guide (one shark never inherits another\'s target)', () => {
-  const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.match(explore, /guide\.forPlayer\(player\.id\)/);
   assert.match(explore, /guide\.forPlayer\(null\)/);
 });

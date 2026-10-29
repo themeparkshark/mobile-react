@@ -8,6 +8,13 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { loadTs } = require('./helpers/ts-module.cjs');
+
+/** The map's source: ExploreScreen plus its guide wiring hook (useMapGuide, moved out of the screen in round 4). */
+function mapSource() {
+  const fs = require('node:fs'); const path = require('node:path');
+  return ['src/screens/ExploreScreen.tsx', 'src/components/guide/useMapGuide.ts']
+    .map(rel => fs.readFileSync(path.join(__dirname, '../..', rel), 'utf8')).join('\n');
+}
 const { plain } = require('./helpers/plain.cjs');
 
 const G = loadTs('src/services/guide/nextCoin.ts');
@@ -587,7 +594,7 @@ test('home: two doors to the shelf (Shelf button and PLAN), Practice games from 
   for (const file of ['src/screens/ExploreScreen/HomeTicketProgress.tsx', 'src/components/PrepItemRedeemModal.tsx']) {
     assert.doesNotMatch(read(file), /HUNT STREAK|hunt streak|PARK TICKET/, `${file}: the flame is the one streak`);
   }
-  const explore = read('src/screens/ExploreScreen.tsx');
+  const explore = mapSource();
   assert.match(explore, /homeGuide=\{homeGuide\}/);
   assert.match(explore, /const homeGuide = useMemo<HomeGuide \| null>\(\(\) => player && !park \?/, 'home only: never a park goal or the Adventure');
 });
@@ -614,7 +621,7 @@ test('dev-only live stub (state D walks): never outside a development bundle; of
   assert.equal(G.liveAnswers({}, off, NOW).answers[1], undefined, 'no live answer: the ride stays eligible after known-open rides');
   const open = L.applyLiveStub(feed, 'open', NOW);
   assert.equal(G.liveAnswers({}, open, NOW).answers[1], 'open');
-  const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.match(explore, /const LIVE_STUB = liveStubMode\(__DEV__, process\.env\.EXPO_PUBLIC_GUIDE_LIVE_STUB\);/);
 });
 
@@ -652,7 +659,7 @@ test('a coin already on the shelf is never the target, though today\'s map lists
   // A target picked before the shelf arrived moves on once the shelf says it is owned.
   const early = G.pickNextCoin(input({ coins: without }));
   assert.equal(G.pickNextCoin(input({ coins, current: early })).taskId, 199);
-  const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.match(explore, /const ownedTaskIds = useMemo\(\(\) => ownedTaskIdsFor\(tripGoalData\?\.rides, park\?\.id \?\? null\)/);
   assert.match(explore, /starTaskIds: starRides, rushTaskIds, ownedTaskIds,/);
 });
@@ -680,7 +687,7 @@ test('after winning today\'s Adventure coin the guide stays on that ride for its
   G.guide.skipLineStory();
   assert.equal(G.guide.resolve({ mode: 'park', parkId: 8, location: BASE, coins: after, live: { 140: 'open' }, adventure }).taskId, 140);
   G.guide.reset();
-  const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.match(explore, /taskId === tripGoal\?\.task_id \|\| taskId === adventure\?\.ride\.task_id/);
 });
 
@@ -705,7 +712,7 @@ test('LINEPLAY on the Line story card opens today\'s Adventure ride even when it
   assert.equal(GC.linePlayRoute({ targetTaskId: null, adventureTaskId: 137, inLineTaskId: null, dwelling: true }), 'dwell');
   assert.equal(GC.linePlayRoute({ targetTaskId: 12, adventureTaskId: null, inLineTaskId: null, dwelling: false }), 'target');
   assert.equal(GC.linePlayRoute({ targetTaskId: null, adventureTaskId: null, inLineTaskId: null, dwelling: false }), 'none');
-  const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.match(explore, /case 'lineplay': void openLinePlayFor\(nextCoin\.target\?\.taskId \?\? null/, 'the card passes the target id, not the map task');
   assert.doesNotMatch(explore, /case 'play':/, 'no dead play action left');
 });
@@ -717,7 +724,7 @@ test('the Line story target keeps a point, a path and an island after its coin l
   const fs = require('node:fs');
   const hook = fs.readFileSync(require('node:path').join(__dirname, '../../src/components/guide/useNextCoinGuide.ts'), 'utf8');
   assert.match(hook, /targetCoin \? \{ latitude: targetCoin\.latitude, longitude: targetCoin\.longitude \}/);
-  const explore = fs.readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.match(explore, /const guidePoint = nextCoin\.targetPoint \?\?/);
   assert.match(explore, /<TaskMarker task=\{lineStoryIsland \?\? PARKED_TASK\} parked=\{!lineStoryIsland\}/, 'one always-mounted island for it');
 });
@@ -783,7 +790,7 @@ test('level up ready comes from the trip goal\'s paid-for next level, and feeds 
   assert.equal(GC.goalLevelUpTaskId(null), null);
   const tasks = [{ id: 63, name: 'Lincoln', latitude: BASE.latitude, longitude: BASE.longitude, times_completed: 1 }];
   assert.equal(GC.guideCoinsFor(tasks, 8, { levelUpTaskIds: new Set([63]) })[0].levelUpReady, true);
-  const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  const explore = mapSource();
   assert.match(explore, /levelUpReady: levelUpTaskId != null,/, 'the ladder hears it too');
 });
 
@@ -842,7 +849,7 @@ test('Adventure ticket tab: the card wears it whenever the Adventure is active h
   const height = Number(card.match(/paddingHorizontal: 6, height: (\d+), marginTop: -8/)[1]);
   const slop = card.match(/hitSlop=\{\{ top: (\d+), bottom: (\d+), left: 6, right: 6 \}\}/);
   assert.ok(height + Number(slop[1]) + Number(slop[2]) >= 46, 'a 46 pt tap target');
-  const screen = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  const screen = mapSource();
   assert.match(screen, /adventureTab=\{nextCoin\.adventureTab && adventure && tripGoalData \? adventureTabProps : null\}/);
   assert.match(screen, /case 'unfold': setAdventureCelebrateRequest/);
   // The closed Adventure ride in its discover phase: the guide never targets it, so the tab is the door to the detour picker.
@@ -883,7 +890,7 @@ test('Adventure sheet and guide card give one answer when earned Tickets wait: c
   assert.equal(A.adventureTicketsLine(2, false, false, Number.NaN), '2 more Tickets needed. 3 treats at home = 1 Ticket. Tomorrow brings a new free try.');
   // The sheet's CLAIM is the map's own claim (one claim path for both surfaces).
   const fs = require('node:fs'); const path = require('node:path');
-  const screen = fs.readFileSync(path.join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  const screen = mapSource();
   assert.match(screen, /claimableTickets=\{claimableTicketCount\} onClaim=\{claimTickets\}/);
 });
 
@@ -955,7 +962,7 @@ test('park day done needs a trusted far reading: good accuracy, or two far readi
   s = P.parkDayStep(s.next, { mode: 'unknown', parkId: null, location: away, today: day, accuracy: 900 });
   assert.deepEqual(plain(s.events.map(e => e.kind)), ['park_day_done']);
   // The map passes the reading's accuracy.
-  const screen = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8')
+  const screen = mapSource()
     + (() => { const f = require('node:path').join(__dirname, '../../src/components/guide/useMapGuide.ts'); return require('node:fs').existsSync(f) ? require('node:fs').readFileSync(f, 'utf8') : ''; })();
   assert.match(screen, /accuracy: latestLocationSampleRef\?\.current\?\.accuracyMeters \?\? null/);
 });
@@ -998,7 +1005,7 @@ test('NEW tags behave: one rung per app open, a tap clears it, the Rewards butto
   assert.match(withTag.props.accessibilityLabel, /^New\. Rewards, 1 to claim, flame 4/);
   assert.doesNotMatch(without.props.accessibilityLabel, /New/);
   // The map marks exactly the NEW the button wore, then opens Rewards.
-  const screen = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8')
+  const screen = mapSource()
     + (() => { const f = require('node:path').join(__dirname, '../../src/components/guide/useMapGuide.ts'); return require('node:fs').existsSync(f) ? require('node:fs').readFileSync(f, 'utf8') : ''; })();
   assert.match(screen, /rewardsNewRungs\(\{ dailyOpen, dailyNew: dailyRung\.isNew, trailOpen, trailNew: trailRung\.isNew \}\)/);
 });

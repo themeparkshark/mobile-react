@@ -155,6 +155,13 @@ exports.exploreScreen = function exploreScreen(options = {}) {
       currentAppOpen: () => 'open-test' },
     ...options.modules,
   };
+  // useMapGuide runs for real in the screen's realm; its own imports get the same stubs as the screen's.
+  for (const [alias, key] of [['./useNextCoinGuide', '../components/guide/useNextCoinGuide'], ['./useWelcomeBack', '../components/guide/useWelcomeBack'],
+    ['./guideCoins', '../components/guide/guideCoins'], ['../../services/guide/nextCoin', '../services/guide/nextCoin'],
+    ['../../services/guide/guideFlags', '../services/guide/guideFlags'], ['../../services/reveal/revealLadder', '../services/reveal/revealLadder'],
+    ['../../screens/ExploreScreen/mapPresentationQueue', './ExploreScreen/mapPresentationQueue']]) {
+    if (!Object.hasOwn(modules, alias) && Object.hasOwn(modules, key)) modules[alias] = modules[key];
+  }
   const imports = new Proxy(modules, {
     getOwnPropertyDescriptor(target, key) {
       if (typeof key !== 'string' || RUNTIME_OWNED.has(key)) return undefined;
@@ -167,6 +174,7 @@ exports.exploreScreen = function exploreScreen(options = {}) {
   const file = options.file ?? 'src/screens/ExploreScreen.tsx';
   const app = runtime(file, imports, options.props ?? {},
     { setInterval: () => 0, clearInterval: () => undefined, Promise, ...options.globals },
-    { exportName: options.exportName ?? (file === 'src/screens/ExploreScreen.tsx' ? 'ExploreScreenBody' : undefined) });
+    { exportName: options.exportName ?? (file === 'src/screens/ExploreScreen.tsx' ? 'ExploreScreenBody' : undefined),
+      realModules: { useMapGuide: 'src/components/guide/useMapGuide.ts' } });
   return Object.assign(app, { navigation, contexts, guidePicks });
 };

@@ -60,6 +60,9 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
   const realModules = { countText: 'src/helpers/countText.ts', useLivePoll: 'src/hooks/useLivePoll.ts', livePollPolicy: 'src/hooks/livePollPolicy.ts',
     gpsWatchPolicy: 'src/context/gpsWatchPolicy.ts', positionFilter: 'src/context/positionFilter.ts', useUserIdle: 'src/hooks/useUserIdle.ts', powerPolicy: 'src/power/powerPolicy.ts', appActive: 'src/hooks/appActive.ts',
     matchLink: 'src/services/match/matchLink.ts', useMatchLink: 'src/hooks/useMatchLink.ts', gameMoments: 'src/gamekit/core/gameMoments.ts' };
+  // A caller may run more of its own modules for real in the component's realm (options.realModules, by base name).
+  Object.assign(realModules, options.realModules ?? {});
+  const callerReal = new Set(Object.keys(options.realModules ?? {}));
   const realCache = new Map();
   let sandbox;
   const loadReal = name => {
@@ -72,6 +75,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
   sandbox = vm.createContext({ module, exports: module.exports, Date, Math, console, __DEV__: false, process: { env: {} }, ...globals,
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, fn); delays.set(id, ms); return id; }, clearTimeout(id) { timers.delete(id); delays.delete(id); },
     require(name) {
+      if (name.startsWith('.') && callerReal.has(name.split('/').pop())) return loadReal(name.split('/').pop());
       if (Object.hasOwn(imports, name)) return imports[name];
       const base = name.split('/').pop();
       if (name.startsWith('.') && Object.hasOwn(realModules, base)) return loadReal(base);
