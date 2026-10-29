@@ -39,6 +39,11 @@ export interface WaitCardProps {
   readonly rideName: string;
   /** The guest does not own this ride's coin yet: the one line says its Parts are saved for it. */
   readonly coinMissing?: boolean;
+  /**
+   * The ride question is up (or closing): the presence check stays quiet under it, so the card never says
+   * "Checking you're in line" to a guest who just rode.
+   */
+  readonly rideQuestionUp?: boolean;
   /** First wait only: what LinePlay is, as one picture line under the card's line (no floating card). */
   readonly introLine?: string | null;
   /** queue_tickets is on for this player: only then is a line Ticket ever mentioned. */
@@ -247,6 +252,7 @@ export function compactCopyLabel({ hero, earned, headline, subline }: {
 export default function WaitCard({
   rideName,
   coinMissing = false,
+  rideQuestionUp = false,
   introLine = null,
   queueTicketsOn = false,
   compact = false,
@@ -368,8 +374,8 @@ export default function WaitCard({
       ? lineRewardsReady === false || rewardUnavailable ? 'No Parts here. Play anytime!'
         : rewardConnectionIssue ? 'Games ready' : 'Checking location…'
       : atCap ? 'Max Parts reached'
-        : countdown.needsCheck ? 'Checking you’re in line…'
-          : countdown.checking ? 'Part on the way…'
+        : countdown.needsCheck && !rideQuestionUp ? 'Checking you’re in line…'
+          : countdown.checking && !rideQuestionUp ? 'Part on the way…'
             // No coin yet: the same calm line, with the Parts saved for this coin; "Win it on your way out" is
             // in Details and the recap.
             : calmPartsLine({ elapsedSeconds, earned, intervalSeconds: interval, coinMissing });
