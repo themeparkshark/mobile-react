@@ -18,7 +18,7 @@ import {
 } from '../../services/guide/nextCoin';
 import { nextFreeTicket, type FreeTicketsInput } from '../../services/guide/freeTickets';
 import { guideCardCopy, restingSightCopy, type GuideCardCopy } from '../../services/guide/guideCopy';
-import { guideCoinsFor, inLineTaskFor, ridesByTask, withAdventureCoin, withPlayRange } from './guideCoins';
+import { guideCoinsFor, inLineTaskFor, ridesByTask, showLikeTaskIds, withAdventureCoin, withPlayRange } from './guideCoins';
 
 export interface NextCoinGuideInput {
   readonly enabled: boolean;
@@ -40,6 +40,8 @@ export interface NextCoinGuideInput {
   readonly rushTaskIds?: ReadonlySet<number>;
   /** Coins on the player's shelf in this park (the map's own list carries no ownership). */
   readonly ownedTaskIds?: ReadonlySet<number>;
+  /** Owned coins ready to level up now (the trip goal's paid-for next level). */
+  readonly levelUpTaskIds?: ReadonlySet<number>;
   readonly starRushUnlocked: boolean;
   readonly coinLevelsUnlocked: boolean;
   readonly wallet: FreeTicketsInput | null;
@@ -49,6 +51,8 @@ export interface NextCoinGuideInput {
   /** Whole days since the last app open (14 or more is a welcome back), or null. */
   readonly daysAway?: number | null;
   readonly welcomeBackDone?: boolean;
+  /** Today's Adventure ride's line is in reach (the Adventure sheet's play gate is not 'far'). */
+  readonly lineStoryNear?: boolean;
 }
 
 export interface NextCoinGuide {
@@ -61,6 +65,14 @@ export interface NextCoinGuide {
   readonly rides: ReadonlyMap<number, RideType>;
   /** The resolved task behind the target (coin art, position), when it is on today's map. */
   readonly targetTask: TaskType | null;
+  /**
+   * Where the target is, from the guide's own coin: set even when the coin is not on today's map
+   * (today's Adventure ride after its coin is won, kept for its Line story), so the card, the dotted
+   * path and the edge arrow always agree (one owner of the pointer).
+   */
+  readonly targetPoint: { readonly latitude: number; readonly longitude: number } | null;
+  /** The target is not one of today's map islands (a won Adventure coin waiting on its Line story). */
+  readonly targetOffMap: boolean;
   /** The first in-park reading of this visit (epoch ms), or null: the attention rules' 30 s quiet. */
   readonly arrivedAt: number | null;
 }
@@ -102,8 +114,15 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
   const liveTaskIds = useMemo(() => new Set((input.live?.rides ?? []).map(ride => ride.task_id)), [input.live]);
   const coins = useMemo(() => withAdventureCoin(guideCoinsFor(input.tasks, parkId, {
     rides, liveTaskIds, starTaskIds: input.starTaskIds, rushTaskIds: input.rushTaskIds, ownedTaskIds: input.ownedTaskIds,
-  }), input.adventure, parkId), [input.tasks, parkId, rides, liveTaskIds, input.starTaskIds, input.rushTaskIds, input.ownedTaskIds, input.adventure]);
-  const inLineTaskId = useMemo(() => inLineTaskFor(input.dwellRideId, rides, coins), [input.dwellRideId, rides, coins]);
+    levelUpTaskIds: input.levelUpTaskIds,
+  }), input.adventure, parkId), [input.tasks, parkId, rides, liveTaskIds, input.starTaskIds, input.rushTaskIds, input.ownedTaskIds,
+    input.levelUpTaskIds, input.adventure]);
+  // Rides the feed has ever posted a wait for this session: a show (open, never a wait) is not a line.
+  const waitSeen = useRef<{ parkId: number | null; ids: Set<number> }>({ parkId: null, ids: new Set() });
+  if (waitSeen.current.parkId !== parkId) waitSeen.current = { parkId, ids: new Set() };
+  for (const row of input.live?.rides ?? []) if (typeof row.wait === 'number') waitSeen.current.ids.add(row.task_id);
+  const showLike = useMemo(() => showLikeTaskIds(input.live, waitSeen.current.ids), [input.live, parkId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const inLineTaskId = useMemo(() => inLineTaskFor(input.dwellRideId, rides, coins, showLike), [input.dwellRideId, rides, coins, showLike]);
 
   // Arrival: the first in-park reading of this visit starts the 30 s welcome.
   const arrived = useRef<{ parkId: number | null; at: number | null }>({ parkId: null, at: null });
@@ -122,7 +141,7 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
   const adventure = adventureFor(input.adventure, parkId);
   const lat = input.location ? Math.round(input.location.latitude * 20000) / 20000 : null;
   const lng = input.location ? Math.round(input.location.longitude * 20000) / 20000 : null;
-  const coinsKey = coins.map(c => `${c.taskId}:${+c.owned}${c.kind[0]}${+!!c.queue}${+!!c.star}${+!!c.rush}`).join('|');
+  const coinsKey = coins.map(c => `${c.taskId}:${+c.owned}${c.kind[0]}${+!!c.queue}${+!!c.star}${+!!c.rush}${+!!c.levelUpReady}`).join('|');
   const answersKey = Object.entries(answers).map(([k, v]) => `${k}${v[0]}`).join(',');
   const ready = input.ready !== false;
   useEffect(() => {
@@ -172,8 +191,12 @@ export default function useNextCoinGuide(input: NextCoinGuideInput): NextCoinGui
   const copy = restingSightCopy(guideCardCopy(state, shown, {
     parkName: input.parkName, ridesResting, allOwned, outOfReach,
     tickets: input.wallet?.tickets ?? 0, freeStep: input.wallet ? nextFreeTicket(input.wallet) : null,
-    queueTicketsOn: input.queueTicketsOn, adventureDots,
+    queueTicketsOn: input.queueTicketsOn, adventureDots, lineStoryNear: input.lineStoryNear,
   }), shown, ridesResting);
   const targetTask = shown ? input.tasks.find(task => task.id === shown.taskId) ?? null : null;
-  return { target: shown, state, copy, inLineTaskId, rides, targetTask, arrivedAt };
+  const targetCoin = shown ? coins.find(coin => coin.taskId === shown.taskId) ?? null : null;
+  const targetPoint = targetTask
+    ? { latitude: Number(targetTask.latitude), longitude: Number(targetTask.longitude) }
+    : targetCoin ? { latitude: targetCoin.latitude, longitude: targetCoin.longitude } : null;
+  return { target: shown, state, copy, inLineTaskId, rides, targetTask, targetPoint, targetOffMap: !!shown && !targetTask && !!targetCoin, arrivedAt };
 }

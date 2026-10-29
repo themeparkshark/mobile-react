@@ -14,6 +14,7 @@ import {
   adventureErrorMessage, adventurePrompt, adventureStamps, detourDetail, type DetourPick,
 } from './adventureTicketPresentation';
 import MapSuggestionStub from './MapSuggestionStub';
+import { LINEPLAY_ICON } from '../../components/guide/linePlayIcon';
 
 const COIN_FALLBACK = require('../../../assets/images/coingold.png');
 const FINN = require('../../../assets/images/screens/pin-collections/shark.png');
@@ -313,7 +314,9 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
             </View>}
             <View style={styles.primaryRow}>
               <GameButton label={stale ? 'Refresh my ticket' : prompt.action} accessibilityLabel={stale ? 'Refresh Adventure Ticket' : prompt.action}
-                icon={prompt.intent === 'play' ? 'queue' : prompt.intent === 'find_line' || prompt.intent === 'discover' ? 'map' : undefined}
+                // Its line story wears LinePlay's own picture (ledger 37): the pocket watch means Wait Times only.
+                image={prompt.intent === 'play' ? LINEPLAY_ICON : undefined}
+                icon={prompt.intent === 'find_line' || prompt.intent === 'discover' ? 'map' : undefined}
                 loading={busy} disabled={busy} onPress={next} />
             </View>
             {ticket.phase !== 'complete' && ticket.phase !== 'celebrate' && prompt.intent !== 'detour' && <GameButton variant="ghost" label="Pick another ride"

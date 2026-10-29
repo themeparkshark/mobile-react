@@ -82,6 +82,8 @@ export function guideCoinsFor(tasks: readonly TaskType[], parkId: number | null,
   readonly rushTaskIds?: ReadonlySet<number>;
   /** Coins on the player's shelf (the trip goal's ride list, coin_owned). */
   readonly ownedTaskIds?: ReadonlySet<number>;
+  /** Owned coins whose next level is fully paid for (goalLevelUpTaskId). */
+  readonly levelUpTaskIds?: ReadonlySet<number>;
 } = {}): GuideCoin[] {
   if (parkId == null) return [];
   const seen = new Set<number>();
@@ -95,6 +97,7 @@ export function guideCoinsFor(tasks: readonly TaskType[], parkId: number | null,
       star: opts.starTaskIds?.has(task.id),
       rush: opts.rushTaskIds?.has(task.id),
       owned: opts.ownedTaskIds?.has(task.id),
+      levelUpReady: opts.levelUpTaskIds?.has(task.id),
     });
     if (coin) out.push(coin);
   }
@@ -129,16 +132,35 @@ export function ownedTaskIdsFor(rides: readonly { readonly task_id: number; read
   return out;
 }
 
-/** The coin whose line the player stands in: the dwell's catalog ride, linked to a queue-ride coin here. */
+/**
+ * The coin whose line the player stands in: the dwell's catalog ride, linked to a queue-ride coin here.
+ * `showLike`: coins the live feed reports open but has never given a posted wait (a show typed as an
+ * attraction, like Great Moments with Mr. Lincoln): standing still there is a seat, not a line.
+ */
 export function inLineTaskFor(dwellRideId: number | null | undefined, rides: ReadonlyMap<number, RideType>,
-  coins: readonly GuideCoin[]): number | null {
+  coins: readonly GuideCoin[], showLike?: ReadonlySet<number>): number | null {
   if (dwellRideId == null) return null;
   for (const [taskId, ride] of rides) {
     if (ride.id !== dwellRideId) continue;
     const coin = coins.find(c => c.taskId === taskId);
+    if (showLike?.has(taskId)) return null;
     return coin && coin.kind === 'ride' && coin.queue !== false ? taskId : null;
   }
   return null;
+}
+
+/**
+ * Coins that look like shows to the live feed: open now, no posted wait now, and no posted wait seen
+ * this session (`waitSeen`). With the feed off (no rows) nothing is show-like, so the in-line state
+ * still fires on a dwell at a queue ride. Pure.
+ */
+export function showLikeTaskIds(live: { readonly rides: readonly { readonly task_id: number; readonly status: string; readonly wait: number | null }[] } | null | undefined,
+  waitSeen: ReadonlySet<number>): Set<number> {
+  const out = new Set<number>();
+  for (const row of live?.rides ?? []) {
+    if (row.status === 'OPERATING' && (row.wait === null || row.wait === undefined) && !waitSeen.has(row.task_id)) out.add(row.task_id);
+  }
+  return out;
 }
 
 /** Earned Tickets waiting in the Stamp Book (earned, not claimed, with Tickets in its rewards). */
@@ -182,4 +204,42 @@ export function withPlayRange(target: GuideTarget | null, playableTaskId: number
   if (!target || playableTaskId === undefined) return target;
   const inRange = playableTaskId === target.taskId;
   return target.inRange === inRange ? target : { ...target, inRange };
+}
+
+/**
+ * Which line the guide card's LINEPLAY opens (core loop 4.1). Keyed on the guide's target id, never
+ * on today's map list: after today's Adventure coin is won it leaves that list, and its Line story
+ * must still open its own ride, never "Pick a ride first!". Pure.
+ * - 'adventure': the target is today's Adventure ride here (its ticket names the catalog ride);
+ * - 'dwell': the player stands in a line (the in-line state, or no target);
+ * - 'target': the target's own ride by name;
+ * - 'none': nothing to open a line for.
+ */
+export function linePlayRoute(input: {
+  readonly targetTaskId: number | null;
+  readonly adventureTaskId: number | null;
+  readonly inLineTaskId: number | null;
+  readonly dwelling: boolean;
+}): 'adventure' | 'dwell' | 'target' | 'none' {
+  const { targetTaskId, adventureTaskId, inLineTaskId, dwelling } = input;
+  if (targetTaskId != null && adventureTaskId != null && targetTaskId === adventureTaskId) return 'adventure';
+  if (dwelling && (targetTaskId == null || inLineTaskId === targetTaskId)) return 'dwell';
+  return targetTaskId != null ? 'target' : 'none';
+}
+
+/**
+ * The one coin the client knows is ready to level up: the trip goal's coin, when it is on the shelf,
+ * not maxed, and its next level's Energy and parts are all in hand (goal_plan). Null otherwise: the
+ * map list carries no level costs, so other coins are never called ready. Pure.
+ */
+export function goalLevelUpTaskId(trip: {
+  readonly goal: { readonly task_id: number; readonly coin_owned: boolean } | null;
+  readonly goal_plan: { readonly next_level: number | null; readonly maxed: boolean; readonly energy_needed: number;
+    readonly parts_needed: number | null } | null;
+} | null | undefined): number | null {
+  const goal = trip?.goal, plan = trip?.goal_plan;
+  if (!goal || !plan || !goal.coin_owned || plan.maxed || plan.next_level == null) return null;
+  const energyShort = Number(plan.energy_needed ?? 0), partsShort = Number(plan.parts_needed ?? 0);
+  if (!(energyShort <= 0) || !(partsShort <= 0)) return null;
+  return Number.isFinite(goal.task_id) ? goal.task_id : null;
 }

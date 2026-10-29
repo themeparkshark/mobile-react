@@ -15,7 +15,6 @@ export type GuideAction =
   | 'go'            // draw the dotted path to the target and follow it
   | 'lineplay'      // open LinePlay for the target's line
   | 'claim'         // claim the earned Tickets in place
-  | 'play'          // PLAY! (free try or extra try): the same button as the map's PLAY!
   | 'see_ways'      // the free ways to a Ticket
   | 'level_up'      // open the coin card to level it up
   | 'shelf'         // the park shelf
@@ -40,8 +39,10 @@ export interface GuideCardCopy {
   readonly secondary: GuideButton | null;
   /** Today's Adventure stamps (win its coin, play its line story, celebrate the ride), when the target is its ride. */
   readonly dots: readonly [boolean, boolean, boolean] | null;
-  /** The ticket-to-coin picture that points at PLAY! (the Here state). */
+  /** The ticket-to-coin picture that points at PLAY! (the Here, free try and extra try states). */
   readonly pointsAtPlay: boolean;
+  /** The free try's gift or the extra try's ticket, drawn on the pointer (the try PLAY! will use). */
+  readonly badge?: 'gift' | 'ticket' | null;
   /** The screen-reader sentence for the whole card. */
   readonly a11y: string;
 }
@@ -66,6 +67,24 @@ export interface GuideCopyContext {
   readonly treatsToTicket?: number | null;
   /** Home: the coin planned for the next park day, if any. */
   readonly planName?: string | null;
+  /**
+   * Line story: the player stands in (or by) the Adventure ride's line, where its story can open
+   * (the Adventure sheet's own play gate). False: the card walks them there first (GO). Default true.
+   */
+  readonly lineStoryNear?: boolean;
+}
+
+/**
+ * The park's everyday name for the arrival kicker, so it fits one line on a 375 pt phone:
+ * "Disney California Adventure Park" says "California Adventure", "Disneyland Park" says
+ * "Disneyland", "Universal's Islands of Adventure" says "Islands of Adventure".
+ */
+export function shortParkName(name: string | null | undefined): string {
+  let out = String(name ?? '').trim();
+  if (!out) return 'the park';
+  out = out.replace(/\s+(Theme\s+)?Park$/i, '');
+  out = out.replace(/^(Disney['\u2019]s|Disney|Universal['\u2019]s)\s+(?=\S)/i, '');
+  return out.trim() || String(name).trim();
 }
 
 /** "40 m", "1.2 km"; rounded to 5 m so the number does not flicker while walking. */
@@ -155,7 +174,7 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
     }
     case 'arrive':
       return card({
-        kicker: `WELCOME TO ${park.toUpperCase()}!`,
+        kicker: `WELCOME TO ${shortParkName(ctx.parkName).toUpperCase()}!`,
         // A coin you already won (today's Adventure ride, for its line story) is never "First coin".
         title: target ? (target.reason === 'line_story' ? `Next: ${possessive(name)} line story` : `First coin: ${name}`) : 'Every ride has a coin',
         line: [far, running].filter(Boolean).join(' · ') || null,
@@ -176,14 +195,17 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         button: null,
         pointsAtPlay: true,
       });
-    case 'line_story':
+    case 'line_story': {
+      // Its story opens in its line (the Adventure sheet's play gate); farther away, GO walks there first.
+      const near = ctx.lineStoryNear !== false;
       return card({
         kicker: 'TODAY\'S ADVENTURE',
         title: `Play ${possessive(name)} line story`,
-        line: far && target && !target.inRange ? far : null,
-        button: { label: 'LINEPLAY', action: 'lineplay' },
+        line: near ? (far && target && !target.inRange ? far : null) : ['Walk to its line', far].filter(Boolean).join(' · '),
+        button: near ? { label: 'LINEPLAY', action: 'lineplay' } : { label: 'GO', action: 'go' },
         secondary: { label: 'Pick another coin', action: 'skip' },
       });
+    }
     case 'in_line':
       return card({
         kicker: 'IN LINE?',
@@ -200,19 +222,24 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         button: { label: 'CLAIM', action: 'claim' },
       });
     }
+    // The map's own PLAY! starts the try: the card points at it (like the Here state), never a second button.
     case 'free_try':
       return card({
         kicker: 'FREE TRY',
-        title: 'Today\'s free try is ready',
+        title: 'Free try! Tap PLAY!',
         line: name || null,
-        button: { label: 'PLAY!', action: 'play', badge: 'gift' },
+        button: null,
+        pointsAtPlay: true,
+        badge: 'gift',
       });
     case 'extra_try':
       return card({
         kicker: 'EXTRA TRY',
-        title: 'Use an extra try',
+        title: 'Extra try! Tap PLAY!',
         line: name || null,
-        button: { label: 'PLAY!', action: 'play', badge: 'ticket' },
+        button: null,
+        pointsAtPlay: true,
+        badge: 'ticket',
       });
     case 'need_ticket': {
       const lines = [`${TREATS_PER_TICKET} treats at home = 1 Ticket.`, 'Tomorrow brings a new free try.'];

@@ -173,7 +173,7 @@ test('stacked rides: every island stays mounted in a stable order (MapLibre inse
     if (named('TaskMarker')(node)) islands.push(node); walk(node.props?.children); };
   walk(app.tree);
   // A fixed pool: the three rides in their first slots, then parked slots (never more, never fewer).
-  assert.equal(islands.length, 81, '80 ride slots and the checklist slot, all mounted');
+  assert.equal(islands.length, 82, '80 ride slots, the Line story island and the checklist slot, all mounted');
   assert.deepEqual(islands.slice(0, 3).map(island => island.props.task.id), [20, 21, 22], 'in first-seen order');
   assert.ok(islands.slice(3, 80).every(island => island.props.parked), 'empty slots are parked');
   assert.match(require('node:fs').readFileSync('src/screens/ExploreScreen.tsx', 'utf8'), /key=\{`ride-\$\{slot\}`\}/,

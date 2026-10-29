@@ -460,6 +460,8 @@ export function liveAnswers(previous: Readonly<Record<number, LiveMemo>> | null 
 
 type Listener = () => void;
 
+/** The player the guide's state belongs to (undefined until the first forPlayer). */
+let servedPlayer: number | null | undefined;
 let held: GuideTarget | null = null;
 let heldPickedAt: number | null = null;
 let pick: { taskId: number; source: string; at: number } | null = null;
@@ -559,6 +561,17 @@ export const guide = {
     if (plan === null) return;
     plan = null;
     emit();
+  },
+  /**
+   * The signed-in player: a different player than the guide last served (a family phone's second
+   * shark, or a sign-out and back in as someone else) starts from nothing, never the first one's
+   * target, plan or declined Line story. Null (signed out) forgets everything too.
+   */
+  forPlayer(playerId: number | null): void {
+    if (playerId === servedPlayer) return;
+    const hadOne = servedPlayer !== undefined;
+    servedPlayer = playerId;
+    if (hadOne) guide.reset();
   },
   /** Sign-out and tests: forget everything. */
   reset(): void {

@@ -113,7 +113,7 @@ import { useTutorial } from '../components/Tutorial';
 import SignInButtons from '../components/SignInButtons';
 import { GameIcon, GameRichText, gameAlert, type GameDialogButton } from '../ui';
 import type { FrightShopStall } from '../api/endpoints/fright/types';
-import { queueHaptic } from '../gamekit/Haptics';
+import { haptic, queueHaptic } from '../gamekit/Haptics';
 import { playSfx } from '../gamekit/SFX';
 import { AWAY_LINE, awayHeadline, awayMessage, stallAction } from '../components/fright/halloweenShop';
 import { useHelp } from '../components/help/HelpProvider';
@@ -139,7 +139,7 @@ import { UpperText } from '../ui/upper';
 import { usePlayTapHold } from '../components/guide/playTapHold';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
 import useNextCoinGuide from '../components/guide/useNextCoinGuide';
-import { guideWallet, ownedTaskIdsFor } from '../components/guide/guideCoins';
+import { goalLevelUpTaskId, guideWallet, linePlayRoute, ownedTaskIdsFor } from '../components/guide/guideCoins';
 import useClaimableTickets from '../components/guide/useClaimableTickets';
 import { guide } from '../services/guide/nextCoin';
 import type { GuideAction } from '../services/guide/guideCopy';
@@ -1132,6 +1132,9 @@ export function ExploreScreenBody() {
   // It replaces the Adventure Ticket chip, the Next Up rail, the ride goal card, the in-line card and
   // the queue games card; every pointer in the app calls guide.setTarget.
   const guideFlags = useGuideFlags(player?.id ?? null);
+  // A family phone's second shark never inherits the first one's target, plan or declined Line story.
+  // Declared before the guide hook, so this effect runs before its first resolve for the new player.
+  useEffect(() => { if (player?.id != null) guide.forPlayer(player.id); }, [player?.id]);
   const teamRung = useRung('team');
   const coinLevelsRung = useRung('coin_levels');
   const dailyRung = useRung('daily');
@@ -1160,15 +1163,19 @@ export function ExploreScreenBody() {
   const welcome = useWelcomeBack(player?.id ?? null);
   // The shelf's word on which coins the player owns here (the map's list of today's coins has none).
   const ownedTaskIds = useMemo(() => ownedTaskIdsFor(tripGoalData?.rides, park?.id ?? null), [tripGoalData?.rides, park?.id]);
+  // Level up ready: the trip goal's coin with its next level paid for (the only level costs the client has).
+  const levelUpTaskId = goalLevelUpTaskId(tripGoalData);
+  const levelUpTaskIds = useMemo(() => new Set(levelUpTaskId != null ? [levelUpTaskId] : []), [levelUpTaskId]);
   const nextCoin = useNextCoinGuide({
     enabled: !!player && !!park, ready: guideReady, parkId: park?.id ?? null, parkName: park?.name ?? null, location,
     tasks: visibleTasks, live: livePark, adventure, dwellRideId: queueDwell?.rideId ?? null,
-    starTaskIds: starRides, rushTaskIds, ownedTaskIds,
+    starTaskIds: starRides, rushTaskIds, ownedTaskIds, levelUpTaskIds,
     starRushUnlocked: coinLevelsRung.open, coinLevelsUnlocked: coinLevelsRung.open,
     wallet, queueTicketsOn: guideFlags.queue_tickets === true,
     // PLAY! itself decides "You're here": the server's range check, never the guide's geometry alone.
     playableTaskId: rangeChecked ? playableTaskId : undefined,
     daysAway: welcome.daysAway, welcomeBackDone: welcome.done,
+    lineStoryNear: adventureGate?.state !== 'far',
   });
   const guideShown = !!player && !!park;
   const guideTargetId = nextCoin.target?.taskId ?? null;
@@ -1195,10 +1202,22 @@ export function ExploreScreenBody() {
   const leftSlotSwapGuard = useSwapTapGuard(leftSlotKey);
   // The dotted path and the edge arrow always agree with the card (one owner of the pointer).
   const [guidePathRequest, setGuidePathRequest] = useState(0);
-  const guideMapTarget = useMemo(() => nextCoin.targetTask && nextCoin.target
-    ? { latitude: Number(nextCoin.targetTask.latitude), longitude: Number(nextCoin.targetTask.longitude),
+  // The point comes from the guide's own coin, so a won Adventure coin (off today's map, waiting on its
+  // Line story) still has its path and edge arrow.
+  const guidePoint = nextCoin.targetPoint ?? (nextCoin.targetTask
+    ? { latitude: Number(nextCoin.targetTask.latitude), longitude: Number(nextCoin.targetTask.longitude) } : null);
+  const guideMapTarget = useMemo(() => guidePoint && nextCoin.target
+    ? { latitude: guidePoint.latitude, longitude: guidePoint.longitude,
       requestId: nextCoin.target.taskId * 1000 + guidePathRequest } : null,
-  [nextCoin.targetTask, nextCoin.target?.taskId, guidePathRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+  [guidePoint?.latitude, guidePoint?.longitude, nextCoin.target?.taskId, guidePathRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+  // That off-map target's island: the coin it is (owned, calm), at its ride, so the card, the dotted
+  // path and the edge arrow all point at something on the map (core loop 4.1, one owner).
+  const lineStoryIsland = useMemo<TaskType | null>(() => {
+    if (!nextCoin.targetOffMap || !nextCoin.target || !guidePoint) return null;
+    return { ...PARKED_TASK, id: nextCoin.target.taskId, name: nextCoin.target.name,
+      latitude: String(guidePoint.latitude), longitude: String(guidePoint.longitude),
+      coin_url: guideCoinUrl ?? '', times_completed: 1, asset_id: -1 } as TaskType;
+  }, [nextCoin.targetOffMap, nextCoin.target?.taskId, nextCoin.target?.name, guidePoint?.latitude, guidePoint?.longitude, guideCoinUrl]); // eslint-disable-line react-hooks/exhaustive-deps
   const [adventureSheetRequest, setAdventureSheetRequest] = useState(0);
   // The Daily 3 / level chest overlay is up: other map moments wait their turn.
   const [retentionOccluding, setRetentionOccluding] = useState(false);
@@ -1359,7 +1378,7 @@ export function ExploreScreenBody() {
     winCount: parkWins,
     progress: player ? {
       coinsWon: player.ride_coins_collected ?? player.completed_tasks_count ?? 0,
-      levelUpReady: false,
+      levelUpReady: levelUpTaskId != null,
       level: player.player_level ?? player.experience_level?.level ?? 0,
       hasTeam,
       keysHeld: player.keys ?? 0,
@@ -1399,9 +1418,16 @@ export function ExploreScreenBody() {
   // only for an account that never had Finn's park lesson here (core loop 4.3 and 5.11). New players see
   // the same picture inside Finn's hand-off, so the guide card is the next thing on their screen.
   const parkLessonRan = useRef(false);
-  useEffect(() => { if (isActive && park) parkLessonRan.current = true; }, [isActive, park]);
   const [helpPageSeen, setHelpPageSeen] = useState<boolean | null>(null);
   const helpPageKey = player ? `tps.help.parkPage1.v1@p${player.id}` : null;
+  // Finn's park lesson teaches the same loop: it marks page 1 as seen for good, so only accounts from
+  // before this build (who never had the lesson) ever get the automatic page.
+  useEffect(() => {
+    if (!isActive || !park || !helpPageKey) return;
+    parkLessonRan.current = true;
+    setHelpPageSeen(true);
+    void AsyncStorage.setItem(helpPageKey, '1').catch(() => undefined);
+  }, [isActive, park, helpPageKey]);
   useEffect(() => {
     setHelpPageSeen(null);
     if (!helpPageKey) return undefined;
@@ -1522,21 +1548,25 @@ export function ExploreScreenBody() {
     [park, declutterStore, declutterItems, declutterInsets]);
 
   // The guide card's one button (core loop 4.1).
-  const openLinePlayFor = useCallback(async (task: TaskType | null) => {
+  const openLinePlayFor = useCallback(async (targetTaskId: number | null, targetName: string | null) => {
     if (!park) return;
-    if (adventure && task && adventure.ride.task_id === task.id) {
+    // Keyed on the guide's target, not on today's map list: a won Adventure coin leaves that list,
+    // and its Line story must still open its own ride (core loop 4.1 rule 1).
+    const route = linePlayRoute({ targetTaskId, adventureTaskId: adventure && adventure.park_id === park.id ? adventure.ride.task_id : null,
+      inLineTaskId: nextCoin.inLineTaskId, dwelling: !!queueDwell });
+    if (route === 'adventure' && adventure) {
       const ride = await resolveQueueStoryContext(adventure.park_id, adventure.ride.ride_id, adventure.ride.ride_name, adventure.ride.task_id);
       if (adventureScope.current === adventureOwner) navigation.navigate('LinePlay', { ride });
       return;
     }
-    if (queueDwell && (!task || nextCoin.inLineTaskId === task.id)) {
+    if (route === 'dwell' && queueDwell) {
       const ride = await resolveQueueStoryContext(park.id, queueDwell.rideId, queueDwell.rideName);
       noteWaitEnded(queueDwell.rideId);
       navigation.navigate('LinePlay', { ride });
       return;
     }
-    const ride = task ? await resolveMapQueueContext(park.id, task.name, task.id) : null;
-    const catalogRide = task ? nextCoin.rides.get(task.id) : undefined;
+    const ride = targetTaskId != null && targetName ? await resolveMapQueueContext(park.id, targetName, targetTaskId) : null;
+    const catalogRide = targetTaskId != null ? nextCoin.rides.get(targetTaskId) : undefined;
     if (catalogRide) noteWaitEnded(catalogRide.id);
     navigation.navigate('LinePlay', ride ? { ride } : undefined);
   }, [park, adventure, adventureOwner, queueDwell, nextCoin.inLineTaskId, nextCoin.rides, navigation]);
@@ -1548,9 +1578,9 @@ export function ExploreScreenBody() {
         setGuidePathRequest(n => n + 1);
         if (task) setSelectedTask(task);
         return;
-      case 'lineplay': void openLinePlayFor(task).catch(() => gameAlert('LinePlay', 'Could not open this line. Try again in a moment.')); return;
+      case 'lineplay': void openLinePlayFor(nextCoin.target?.taskId ?? null, nextCoin.target?.name ?? task?.name ?? null)
+        .catch(() => gameAlert('LinePlay', 'Could not open this line. Try again in a moment.')); return;
       case 'claim': void claimable.claim().then(() => refreshPlayer()).catch(() => undefined); return;
-      case 'play': return; // PLAY! itself sits under the card (the card points at it)
       case 'see_ways':
         gameAlert('Ways to get Tickets', needTicketLines(guideFlags.queue_tickets === true).join(' '), [{ text: 'OK' }], { icon: 'ticket' });
         return;
@@ -1564,7 +1594,7 @@ export function ExploreScreenBody() {
       default:
         if (park && player) RootNavigation.navigate('Park', { park: park.id, player: player.id });
     }
-  }, [nextCoin.targetTask, openLinePlayFor, claimable, refreshPlayer, guideFlags.queue_tickets, park, player, welcome]);
+  }, [nextCoin.targetTask, nextCoin.target?.taskId, nextCoin.target?.name, openLinePlayFor, claimable, refreshPlayer, guideFlags.queue_tickets, park, player, welcome]);
   // The home guide card (core loop 4.1 "Home"): next park day, Tickets ready, the ticket meter, PLAN = your shelf.
   const homePlan = tripGoal && !tripGoal.coin_owned ? tripGoal : null;
   const homeGuide = useMemo<HomeGuide | null>(() => player && !park ? {
@@ -1579,10 +1609,10 @@ export function ExploreScreenBody() {
     // On today's Adventure ride the card is the ticket's frame: it opens the ticket's sheet (stamps, souvenir).
     if (nextCoin.copy.dots) { setAdventureSheetRequest(n => n + 1); return; }
     const task = nextCoin.targetTask;
-    if (!task) return;
+    if (!task && !nextCoin.targetPoint) return;
     setGuidePathRequest(n => n + 1);
-    setSelectedTask(task);
-  }, [nextCoin.copy.dots, nextCoin.targetTask]);
+    if (task) setSelectedTask(task);
+  }, [nextCoin.copy.dots, nextCoin.targetTask, nextCoin.targetPoint]);
 
   // The HUD row is whole from the first map frame (the team bar says its plain no-leader line until
   // today's standings answer); a later lead change cross-fades inside MapStatusStack.
@@ -1895,6 +1925,8 @@ export function ExploreScreenBody() {
             {/* Over PLAY! (never the footer) only while a sheet is still leaving: a press there can never
                 present the challenge card into a half-dismissed sheet (core loop 4.3 rule 10). */}
             {playTapHold && <View testID="play-ride-tap-hold" onStartShouldSetResponder={() => true}
+              // A held press is never silent: a soft tap says "heard you"; PLAY! answers a moment later.
+              onResponderRelease={() => haptic('tapLight')}
               accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
               style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 50 }} />}
           </View>
@@ -1965,7 +1997,7 @@ export function ExploreScreenBody() {
         {/* The Next Coin guide (core loop 4.1): exactly one card in the top-left slot, on every park map. */}
         {guideShown && player && <NextCoinCard copy={nextCoin.copy} state={nextCoin.state} parkName={park.name ?? null}
           coinUrl={guideCoinUrl} top={slotTop} onAction={onGuideAction} onCardPress={onGuideCardPress}
-          teachPlay={!hasWonACoin} />}
+          teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen} />}
         {/* Today's Adventure: its sheet stays for the stamps and the souvenir, opened from the guide card on its ride. */}
         {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`} sheetOnly
           openRequest={adventureSheetRequest}
@@ -2073,6 +2105,10 @@ export function ExploreScreenBody() {
               latitude={sword?.latitude ?? PARKED.latitude} longitude={sword?.longitude ?? PARKED.longitude}
               expiresAt={sword?.expires_at ?? PARKED_TIME} onPress={() => { if (sword) void handleSwordClaim(sword.id); }} />
           ))}
+          {/* The guide's target when it is not on today's map (today's Adventure ride after its coin is
+              won, waiting on its Line story): its owned island, so the path and arrow end on it. */}
+          <TaskMarker task={lineStoryIsland ?? PARKED_TASK} parked={!lineStoryIsland} isSelected={false} isTripGoal={false}
+            adventure={!!lineStoryIsland} onPress={onGuideCardPress} />
           {/* A ride focused from the checklist that is not on today's map (parked otherwise). */}
           <TaskMarker task={checklistRide ?? PARKED_TASK} parked={!checklistRide} isSelected={!!checklistRide} isTripGoal={false}
             onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }} />

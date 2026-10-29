@@ -904,6 +904,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       >
         {/* The compass: how the map turns (with you, or north up); panned away, back to the shark. */}
         <FollowButton state={focusedOnPlayer || followHold ? shownMode : 'away'} bearing={cam.bearing} onPress={onFollowButton}
+          compassAvailable={haveHeading}
           reducedMotion={reducedMotion} hint={compassHint.visible && haveHeading} onHintDone={compassHint.dismiss}
           noCompassFlash={noCompassFlash}
           awayArt={hasDressedShark(lookInventory) ? <View style={styles.awaySharkScale}><MapSharkLook inventory={lookInventory} t={fxClock} kick={fxKick} animate={false} playing={false} /></View> : undefined} />

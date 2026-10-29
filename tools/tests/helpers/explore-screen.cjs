@@ -22,6 +22,8 @@ const frightGeo = loadTs('src/components/map/fright/geo.ts');
 // The Next Coin guide's words run for real; the guide hook itself is unit tested (next-coin-guide).
 const guideCopy = loadTs('src/services/guide/guideCopy.ts');
 const freeTickets = loadTs('src/services/guide/freeTickets.ts');
+// The guide's pure map helpers (LINEPLAY's route, the wallet, owned and level-up coins) run for real too.
+const guideCoins = loadTs('src/components/guide/guideCoins.ts');
 
 /** What the guide hook returns when a test does not pass its own (no target: the resting card). */
 function restingGuide() {
@@ -137,8 +139,9 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '../components/guide/playTapHold': { usePlayTapHold: () => !!options.playTapHold },
     '../components/guide/useWelcomeBack': { default: () => options.welcome ?? { daysAway: null, done: false, finish: () => undefined } },
     '../services/guide/nextCoin': { guide: { setTarget: (taskId, source) => guidePicks.push([taskId, source]),
-      skipLineStory: () => guidePicks.push(['skip']), current: () => null, subscribe: () => () => undefined } },
+      skipLineStory: () => guidePicks.push(['skip']), forPlayer: () => undefined, current: () => null, subscribe: () => () => undefined } },
     '../services/guide/freeTickets': freeTickets,
+    '../components/guide/guideCoins': guideCoins,
     '../services/guide/guideFlags': { useGuideFlags: () => options.flags ?? {} },
     '../services/reveal/revealLadder': { useRung: rung => ({ open: (options.rungs ?? []).includes(rung), isNew: false, markSeen: () => undefined }),
       currentAppOpen: () => 'open-test' },

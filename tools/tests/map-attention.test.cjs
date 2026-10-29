@@ -356,7 +356,7 @@ test('teaching: park help page 1 opens itself once, only for an account that nev
     'never after Finn\'s park lesson in this session, never over a tip, never in the park\'s quiet moments');
   assert.match(explore, /if \(!attentionQueue\.take\(appOpenId, 'help_page'\)\) return;[\s\S]{0,200}openHelpSheet\('park_map'\);/);
   // "Tap PLAY!": the guide card's picture every time PLAY! rises until the first win (no second Finn card).
-  assert.match(explore, /teachPlay=\{!hasWonACoin\} \/>/);
+  assert.match(explore, /teachPlay=\{!hasWonACoin\}/);
   assert.match(explore, /rideCoinInRange: false \}\);/);
   const card = fs.readFileSync(path.join(root, 'src/components/guide/NextCoinCard.tsx'), 'utf8');
   assert.match(card, /\{copy\.pointsAtPlay && teachPlay && <View style=\{styles\.teach\}><CoinTipPicture \/><\/View>\}/);

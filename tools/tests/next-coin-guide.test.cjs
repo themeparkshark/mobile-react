@@ -361,8 +361,15 @@ test('card words for every state: one title, one line, one button, in the 4.5 vo
   const claim = C.guideCardCopy('claim', tgt(), ctx({ tickets: 0, freeStep: { kind: 'claim', tickets: 5, sources: [] } }));
   assert.equal(claim.title, '5 free Tickets are waiting');
   assert.equal(claim.button.label, 'CLAIM');
-  assert.equal(C.guideCardCopy('free_try', tgt({ inRange: true }), ctx()).button.badge, 'gift');
-  assert.equal(C.guideCardCopy('extra_try', tgt({ inRange: true }), ctx()).title, 'Use an extra try');
+  // Free try and extra try point at the map's PLAY! (no second, dead button on the card).
+  const freeTry = C.guideCardCopy('free_try', tgt({ inRange: true }), ctx());
+  assert.equal(freeTry.button, null, 'no card button that could do nothing');
+  assert.equal(freeTry.pointsAtPlay, true);
+  assert.equal(freeTry.badge, 'gift');
+  const extraTry = C.guideCardCopy('extra_try', tgt({ inRange: true }), ctx());
+  assert.equal(extraTry.title, 'Extra try! Tap PLAY!');
+  assert.equal(extraTry.button, null);
+  assert.equal(extraTry.badge, 'ticket');
   assert.equal(C.guideCardCopy('level_up', tgt({ reason: 'level_up', name: 'Haunted Mansion' }), ctx()).title, 'Haunted Mansion is ready to level up');
   const home = C.guideCardCopy('home', tgt({ reason: 'plan' }), ctx({ treatsToTicket: 2, planName: 'Jungle Cruise' }));
   assert.equal(home.title, 'Disneyland: 6 Tickets ready');
@@ -609,7 +616,12 @@ test('dev-only live stub (state D walks): never outside a development bundle; of
 test('LinePlay has its own icon on the guide card; the pocket watch means Wait Times only (ledger 37)', () => {
   const fs = require('node:fs');
   const card = fs.readFileSync(require('node:path').join(__dirname, '../../src/components/guide/NextCoinCard.tsx'), 'utf8');
-  assert.match(card, /LINEPLAY_ICON = require\('\.\.\/\.\.\/\.\.\/assets\/images\/howto\/queue\.webp'\)/);
+  const icon = fs.readFileSync(require('node:path').join(__dirname, '../../src/components/guide/linePlayIcon.ts'), 'utf8');
+  assert.match(icon, /LINEPLAY_ICON = require\('\.\.\/\.\.\/\.\.\/assets\/images\/howto\/queue\.webp'\)/);
+  assert.match(card, /import \{ LINEPLAY_ICON \} from '\.\/linePlayIcon'/);
+  const sheet = fs.readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/AdventureTicketCard.tsx'), 'utf8');
+  assert.match(sheet, /image=\{prompt\.intent === 'play' \? LINEPLAY_ICON : undefined\}/, 'the Adventure sheet\'s line story button wears LinePlay\'s icon');
+  assert.doesNotMatch(sheet, /'queue'/, 'no pocket watch on the Adventure sheet');
   assert.match(card, /button\.action === 'lineplay' && <Image source=\{LINEPLAY_ICON\}/);
   assert.doesNotMatch(card, /GameIcon name="queue"/, 'no pocket watch on the guide card');
   assert.doesNotMatch(card, /queuetimes\.png/);
@@ -677,4 +689,95 @@ test('line story words: a name ending in an apostrophe reads "Soarin\'s", and th
   assert.equal(arrive.title, "Next: Soarin's line story");
   assert.doesNotMatch(arrive.title, /First coin/);
   assert.equal(C.guideCardCopy('arrive', tgt(), ctx()).title, 'First coin: Jungle Cruise');
+});
+
+test('LINEPLAY on the Line story card opens today\'s Adventure ride even when its won coin left the map list (round 1 blocker)', () => {
+  // targetTask is null once the won coin is filtered out of today's list: the route keys on the target id.
+  assert.equal(GC.linePlayRoute({ targetTaskId: 137, adventureTaskId: 137, inLineTaskId: null, dwelling: false }), 'adventure');
+  assert.equal(GC.linePlayRoute({ targetTaskId: 137, adventureTaskId: 137, inLineTaskId: 12, dwelling: true }), 'adventure',
+    'the Adventure ride wins over another dwell');
+  assert.equal(GC.linePlayRoute({ targetTaskId: 12, adventureTaskId: 137, inLineTaskId: 12, dwelling: true }), 'dwell');
+  assert.equal(GC.linePlayRoute({ targetTaskId: null, adventureTaskId: 137, inLineTaskId: null, dwelling: true }), 'dwell');
+  assert.equal(GC.linePlayRoute({ targetTaskId: 12, adventureTaskId: null, inLineTaskId: null, dwelling: false }), 'target');
+  assert.equal(GC.linePlayRoute({ targetTaskId: null, adventureTaskId: null, inLineTaskId: null, dwelling: false }), 'none');
+  const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /case 'lineplay': void openLinePlayFor\(nextCoin\.target\?\.taskId \?\? null/, 'the card passes the target id, not the map task');
+  assert.doesNotMatch(explore, /case 'play':/, 'no dead play action left');
+});
+
+test('the Line story target keeps a point, a path and an island after its coin leaves the map (one owner of the pointer)', () => {
+  const won = GC.withAdventureCoin([], { park_id: 8, phase: 'play', ride: { task_id: 137, ride_name: "Soarin'", lat: 33.8087, lng: -117.9171 } }, 8);
+  assert.equal(won.length, 1);
+  assert.deepEqual(plain([won[0].latitude, won[0].longitude, won[0].owned]), [33.8087, -117.9171, true]);
+  const fs = require('node:fs');
+  const hook = fs.readFileSync(require('node:path').join(__dirname, '../../src/components/guide/useNextCoinGuide.ts'), 'utf8');
+  assert.match(hook, /targetCoin \? \{ latitude: targetCoin\.latitude, longitude: targetCoin\.longitude \}/);
+  const explore = fs.readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /const guidePoint = nextCoin\.targetPoint \?\?/);
+  assert.match(explore, /<TaskMarker task=\{lineStoryIsland \?\? PARKED_TASK\} parked=\{!lineStoryIsland\}/, 'one always-mounted island for it');
+});
+
+test('Line story far from its line: GO walks there first; near: LINEPLAY (the Adventure sheet\'s play gate)', () => {
+  const story = tgt({ reason: 'line_story', meters: 240 });
+  const far = C.guideCardCopy('line_story', story, ctx({ lineStoryNear: false }));
+  assert.equal(far.button.action, 'go');
+  assert.equal(far.line, 'Walk to its line · 240 m');
+  assert.equal(far.secondary.action, 'skip');
+  assert.equal(C.guideCardCopy('line_story', story, ctx({ lineStoryNear: true })).button.action, 'lineplay');
+  assert.equal(C.guideCardCopy('line_story', story, ctx()).button.action, 'lineplay', 'default: near');
+});
+
+test('the arrival kicker uses the park\'s everyday name so it fits one line on a 375 pt phone', () => {
+  assert.equal(C.shortParkName('Disney California Adventure Park'), 'California Adventure');
+  assert.equal(C.shortParkName('Disneyland Park'), 'Disneyland');
+  assert.equal(C.shortParkName("Universal's Islands of Adventure"), 'Islands of Adventure');
+  assert.equal(C.shortParkName('Epic Universe'), 'Epic Universe');
+  assert.equal(C.shortParkName(null), 'the park');
+  const arrive = C.guideCardCopy('arrive', tgt(), ctx({ parkName: 'Disney California Adventure Park' }));
+  assert.equal(arrive.kicker, 'WELCOME TO CALIFORNIA ADVENTURE!');
+  assert.ok(arrive.kicker.length <= 34, 'short enough for the card kicker');
+});
+
+test('a show the feed calls open but never posts a wait for is not a line (Great Moments with Mr. Lincoln)', () => {
+  const rides = new Map([[63, { id: 622, task_id: 63, type: 'attraction' }], [12, { id: 700, task_id: 12, type: 'dark_ride' }]]);
+  const coins = [
+    { taskId: 63, parkId: 8, name: 'Lincoln', kind: 'ride', queue: true, owned: false, latitude: 0, longitude: 0 },
+    { taskId: 12, parkId: 8, name: 'Mansion', kind: 'ride', queue: true, owned: false, latitude: 0, longitude: 0 },
+  ];
+  const live = { rides: [{ task_id: 63, status: 'OPERATING', wait: null }, { task_id: 12, status: 'OPERATING', wait: 25 }] };
+  const showLike = GC.showLikeTaskIds(live, new Set([12]));
+  assert.deepEqual([...showLike], [63]);
+  assert.equal(GC.inLineTaskFor(622, rides, coins, showLike), null, 'sitting in a show is not in line');
+  assert.equal(GC.inLineTaskFor(700, rides, coins, showLike), 12);
+  assert.equal(GC.showLikeTaskIds(live, new Set([12, 63])).size, 0, 'a ride that posted a wait earlier stays a line');
+  assert.equal(GC.showLikeTaskIds({ rides: [] }, new Set()).size, 0, 'feed off: nothing is show-like (state D)');
+  assert.equal(GC.inLineTaskFor(622, rides, coins, GC.showLikeTaskIds(null, new Set())), 63);
+});
+
+test('a second shark on a family phone never inherits the first one\'s target or declined Line story', () => {
+  G.guide.reset();
+  G.guide.forPlayer(46);
+  G.guide.setTarget(3, 'shelf');
+  G.guide.forPlayer(46);
+  const base = { mode: 'park', parkId: 8, location: BASE, coins: RIDES, live: { 1: 'open', 2: 'open', 3: 'open' }, now: NOW };
+  assert.equal(G.guide.resolve(base).taskId, 3, 'same player: the pick holds');
+  G.guide.forPlayer(65);
+  assert.equal(G.guide.current(), null, 'another player starts clean');
+  assert.notEqual(G.guide.resolve(base).source, 'shelf');
+  G.guide.reset();
+});
+
+test('level up ready comes from the trip goal\'s paid-for next level, and feeds the guide and the ladder', () => {
+  const plan = { next_level: 2, maxed: false, energy_needed: 0, parts_needed: 0 };
+  assert.equal(GC.goalLevelUpTaskId({ goal: { task_id: 63, coin_owned: true }, goal_plan: plan }), 63);
+  assert.equal(GC.goalLevelUpTaskId({ goal: { task_id: 63, coin_owned: true }, goal_plan: { ...plan, energy_needed: 4 } }), null, 'Energy short');
+  assert.equal(GC.goalLevelUpTaskId({ goal: { task_id: 63, coin_owned: true }, goal_plan: { ...plan, parts_needed: 1 } }), null, 'parts short');
+  assert.equal(GC.goalLevelUpTaskId({ goal: { task_id: 63, coin_owned: true }, goal_plan: { ...plan, parts_needed: null } }), 63, 'no parts cost');
+  assert.equal(GC.goalLevelUpTaskId({ goal: { task_id: 63, coin_owned: false }, goal_plan: plan }), null, 'not on the shelf');
+  assert.equal(GC.goalLevelUpTaskId({ goal: { task_id: 63, coin_owned: true }, goal_plan: { ...plan, maxed: true } }), null);
+  assert.equal(GC.goalLevelUpTaskId(null), null);
+  const tasks = [{ id: 63, name: 'Lincoln', latitude: BASE.latitude, longitude: BASE.longitude, times_completed: 1 }];
+  assert.equal(GC.guideCoinsFor(tasks, 8, { levelUpTaskIds: new Set([63]) })[0].levelUpReady, true);
+  const explore = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /levelUpReady: levelUpTaskId != null,/, 'the ladder hears it too');
 });
