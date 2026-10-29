@@ -52,7 +52,7 @@ import { buySharkPass, loadSharkPassPrice, onSharkPassDelivered, restoreSharkPas
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { EVENT_COPY, isWearable, claimedLine, passGain, passGrants, lastDayText, nextPassPrize, passSummary, pieceSource, questsLinkDaily3, readyNowLine, rewardWords, seasonSet, setMixText, winsAwayText, type SetPiece } from '../services/money/sharkPassModel';
-import { useRung } from '../services/reveal/revealLadder';
+import { markRungSeen, useRung } from '../services/reveal/revealLadder';
 import { wearItem } from './StoreScreen/inventoryQueue';
 import { trackImpression, trackMoney } from '../services/money/track';
 import { baseRates, formatLike, regularValue } from '../services/money/offers';
@@ -174,6 +174,8 @@ const PASS_GROWN_UP_NOTES = [
 export default function SharkPassScreen() {
   // "+N pass points" ticks only once the pass has unlocked (rung 5); Supplies reaches this screen before that.
   const passRung = useRung('shark_pass').open;
+  // Opening the pass is seeing it: its NEW tag (rung 5) clears.
+  useEffect(() => { if (passRung) markRungSeen('shark_pass'); }, [passRung]);
   const { player, refreshPlayer } = useContext(AuthContext);
   const reduced = useUiReducedMotion();
   const focused = useIsFocused();
@@ -369,7 +371,7 @@ export default function SharkPassScreen() {
       setState(res.pass);
       haptic('success');
       setLanded({ reward: { type: 'item', name: res.name, slot: 'pin', art, icon_url: null, ready: true }, title: 'Gold!',
-        gold: true, caption: `${res.name}. ${countText(res.spent)} coins.`, itemId: Number(res.granted.item_id) || undefined });
+        gold: true, caption: `${res.name}. ${countText(res.spent)} Shark Coins.`, itemId: Number(res.granted.item_id) || undefined });
       void refreshPlayer?.().catch(() => undefined);
     } catch (error) {
       const code = sharkPassErrorCode(error);
@@ -549,9 +551,9 @@ export default function SharkPassScreen() {
                   </View>
                   <ProgressBar value={progress.points_into_tier / season.points_per_tier} reduced={reduced} />
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.points}>
-                    {step >= steps ? 'You finished the season!' : into === 0 ? `${perStep} points to step ${step + 1}` : `${into} / ${perStep} points to step ${step + 1}`}
+                    {step >= steps ? 'You finished the season!' : `On the way to step ${step + 1}`}
                   </Text>
-                  {sinceLast && passRung ? <Text maxFontSizeMultiplier={MAX_FONT} style={[s.points, s.readyNow]}>{`+${sinceLast} points since last time!`}</Text> : null}
+                  {sinceLast && passRung ? <Text maxFontSizeMultiplier={MAX_FONT} style={[s.points, s.readyNow]}>{`+${sinceLast} pass points since last time!`}</Text> : null}
                 </View>
               </View>
               {nextPrize && nextStep > 0 && (
@@ -560,7 +562,7 @@ export default function SharkPassScreen() {
                   <View style={{ flex: 1 }}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextKicker}>{nextPrize.pass && !premium ? 'NEXT SHARK PASS PRIZE' : 'NEXT PRIZE'}</Text>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextPrizeText}>
-                      {`${rewardWords(nextPrize.reward)} · ${countText(nextPrize.pointsAway)} points away`}
+                      {`${rewardWords(nextPrize.reward)} at step ${nextStep}`}
                     </Text>
                     {winsAwayText(nextPrize.pointsAway, progress.today) && (
                       <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextWins}>{winsAwayText(nextPrize.pointsAway, progress.today)}</Text>
@@ -797,7 +799,7 @@ export default function SharkPassScreen() {
             {state.cosmetics && state.cosmetics.gold.pieces.some(g => g.owns_base) && (
               <View style={s.earn}>
                 <Text maxFontSizeMultiplier={MAX_FONT} style={s.earnTitle}>GOLD EDITIONS</Text>
-                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>{`Turn a season pin you have into gold for ${commas(state.cosmetics.gold.coins)} coins. Gold editions stay yours forever.`}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>{`Turn a season pin you have into gold for ${commas(state.cosmetics.gold.coins)} Shark Coins. Gold editions stay yours forever.`}</Text>
                 <View style={s.goldGrid}>
                   {state.cosmetics.gold.pieces.filter(g => g.owns_base).map(g => (
                     <View key={g.art} style={s.goldCell}>
@@ -805,12 +807,12 @@ export default function SharkPassScreen() {
                       <Text maxFontSizeMultiplier={1.1} style={s.goldName} numberOfLines={2}>{g.name}</Text>
                       {g.owns_gold ? <GameIcon name="check" size={20} /> : (
                         <Pressable disabled={!!goldBusy || !g.ready} accessibilityRole="button" hitSlop={8}
-                          accessibilityLabel={`Make it gold for ${commas(state.cosmetics?.gold.coins ?? 0)} coins`}
+                          accessibilityLabel={`Make it gold for ${commas(state.cosmetics?.gold.coins ?? 0)} Shark Coins`}
                           onPress={() => {
                             // A coin spend this big asks once, naming the piece (never gated: no real money moves).
                             const cost = state.cosmetics?.gold.coins ?? 0;
                             const piece = g.name.replace(/^Gold /, '');
-                            gameAlert('Make it gold?', `Your ${piece} turns gold for ${commas(cost)} coins. It stays yours forever.`, [
+                            gameAlert('Make it gold?', `Your ${piece} turns gold for ${commas(cost)} Shark Coins. It stays yours forever.`, [
                               { text: 'Make it gold', image: GOLD_ART[g.art], onPress: () => void makeGold(g.art, cost) },
                               { text: 'Not now', style: 'cancel' },
                             ]);

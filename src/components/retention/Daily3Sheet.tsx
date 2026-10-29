@@ -29,7 +29,7 @@ export type GoalTap = 'chest' | 'closet' | 'friends' | 'snack' | 'ride' | 'shelf
  * Every number on it comes from the server.
  */
 export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyFreeze, onGoal, onClose, onReminders, busy, coins,
-  celebrate, reducedMotion, coach, onCoachDone, atPark = false, passToday = null, remindersReady = false }: {
+  celebrate, reducedMotion, coach, onCoachDone, atPark = false, passToday = null, remindersReady = false, closeLabel = 'BACK TO MAP' }: {
   readonly state: DailyThreeState;
   readonly now: number;
   /** At a park the goals are as sent; at home a park goal shows its home side and GO never names a park. */
@@ -38,6 +38,8 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
   readonly passToday?: readonly { readonly event: string; readonly points: number }[] | null;
   /** Reminder pushes really work (server key set): only then the bell shows. */
   readonly remindersReady?: boolean;
+  /** The close button's word: BACK when Daily 3 was opened from the Rewards sheet (it goes back there). */
+  readonly closeLabel?: string;
   readonly onClaim: () => void;
   readonly onClaimWeekly: () => void;
   readonly onBuyFreeze: () => void;
@@ -62,13 +64,15 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
   void now;
   const tease = milestoneLine(state);
   const reminders = state.reminders !== false;
+  // At home with a goal that only a park can finish, the hero never says "Finish today" for a day the kid cannot finish.
+  const parkGoalWaits = !atPark && state.goals.some(g => !g.done && homeSideGoal(g, false).parkOnly);
   return (
     <View style={styles.card}>
       <View style={styles.hero}>
         <Flame days={s.days} reducedMotion={reducedMotion} />
         <View style={styles.heroText}>
           <Text style={styles.streakBig} numberOfLines={1} adjustsFontSizeToFit>{s.days > 0 ? `${s.days} DAY FLAME` : 'START A FLAME'}</Text>
-          <Text style={styles.streakSub} numberOfLines={2}>{streakSubline(state)}</Text>
+          <Text style={styles.streakSub} numberOfLines={2}>{streakSubline(state, parkGoalWaits)}</Text>
           {tease && (
             <View style={styles.tease}>
               <GameIcon name="gift" size={18} />
@@ -81,7 +85,7 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
             <Image key={i} source={FREEZE} style={styles.freezeIcon} contentFit="contain" />
           ) : (
             <Pressable key={i} onPress={canBuyFreeze ? onBuyFreeze : undefined} disabled={busy || !canBuyFreeze} hitSlop={4}
-              accessibilityRole="button" accessibilityLabel={canBuyFreeze ? `Get a streak freeze for ${s.freeze_price} coins` : 'Empty freeze slot'}
+              accessibilityRole="button" accessibilityLabel={canBuyFreeze ? `Get a streak freeze for ${s.freeze_price} Shark Coins` : 'Empty freeze slot'}
               style={[styles.freezeSlot, canBuyFreeze && styles.freezeSlotBuy]}>
               {canBuyFreeze && <Text style={styles.freezePlus}>+</Text>}
             </Pressable>
@@ -123,7 +127,7 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
       <Text style={styles.weekHint} numberOfLines={1}>{weekStartsLine(state.week)}</Text>
 
       <Pressable onPress={onClose} accessibilityRole="button" style={styles.later}>
-        <Text style={styles.laterText}>BACK TO MAP</Text>
+        <Text style={styles.laterText}>{closeLabel}</Text>
       </Pressable>
       <View style={styles.footer}>
         {/* A date in words, never a clock that ticks down. */}

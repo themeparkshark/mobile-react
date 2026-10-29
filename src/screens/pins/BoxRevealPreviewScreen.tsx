@@ -27,7 +27,7 @@ const KINDS: Record<string, Kind> = {
   completer: { tone: 'blue', golden: false, variant: 'pick', pulls: [pull({ id: 5, pin_id: 0, rare: true, name: 'Space Series Completer' })],
     tag: () => ({ text: 'Series done!', tone: 'gold' }), subtitle: () => 'Space Series' },
   catch: { tone: 'blue', golden: false, variant: 'catch', pulls: [pull({ id: 6, pin_id: 0, rare: true, name: 'Tomorrowland Pin' })],
-    tag: () => ({ text: '+50 coins', tone: 'gold' }), subtitle: () => 'Tomorrowland set done!' },
+    tag: () => ({ text: '+50 Shark Coins', tone: 'gold' }), subtitle: () => 'Tomorrowland set done!' },
 };
 
 /** Release-like capture (EXPO_PUBLIC_MOTION_CAPTURE): the boxes open one after another on their own, over any screen. */

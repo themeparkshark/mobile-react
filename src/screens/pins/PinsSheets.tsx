@@ -49,7 +49,7 @@ const HELP = [
 ] as const;
 
 /** Shown in help only when the Golden Box is on for this player. */
-export const GOLDEN_HELP = 'Golden Box: 900 coins, one at a time. Gold chaser 1 in 4 (1 in 14 once you have it). Only pins you need. Shares the box-20 guarantee. Best value for the chaser is the regular box.';
+export const GOLDEN_HELP = 'Golden Box: 900 Shark Coins, one at a time. Gold chaser 1 in 4 (1 in 14 once you have it). Only pins you need. Shares the box-20 guarantee. Best value for the chaser is the regular box.';
 
 export function PinsHelp({ onClose, golden = false, mystery = true }: { onClose: () => void; golden?: boolean;
   /** Mystery boxes are on for this player (kid-safe: preview only); else the help never promises boxes. */

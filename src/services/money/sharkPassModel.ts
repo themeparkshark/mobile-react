@@ -36,15 +36,15 @@ export function isWearable(r: SharkPassReward | null | undefined): r is Wearable
   return !!r && (r.type === 'item' || r.type === 'frame');
 }
 
-/** "2 coins" style words for a reward. Exported for tests. */
+/** "2 Shark Coins" style words for a reward (one word per thing). Exported for tests. */
 export function rewardWords(reward: SharkPassReward): string {
   switch (reward.type) {
     case 'item': case 'frame': return reward.name;
     case 'mystery_box': return reward.boxes === 1 ? '1 Mystery Pin Box' : `${reward.boxes} Mystery Pin Boxes`;
     case 'rescue_passes': return reward.amount === 1 ? '1 Extra try' : `${reward.amount} Extra tries`;
-    case 'tickets': return `${reward.amount} ${reward.amount === 1 ? 'ticket' : 'tickets'}`;
-    case 'energy': return `${reward.amount} energy`;
-    default: return `${countText(reward.amount)} coins`;
+    case 'tickets': return `${reward.amount} ${reward.amount === 1 ? 'Ticket' : 'Tickets'}`;
+    case 'energy': return `${reward.amount} Energy`;
+    default: return `${countText(reward.amount)} Shark Coins`;
   }
 }
 
@@ -60,7 +60,7 @@ export function passSummary(tiers: readonly SharkPassTier[]): string {
   const parts = [
     items ? `${items} season ${items === 1 ? 'item' : 'items'}` : null,
     boxes ? `${boxes} Mystery Pin ${boxes === 1 ? 'Box' : 'Boxes'}` : null,
-    coins ? `${countText(coins)} coins` : null,
+    coins ? `${countText(coins)} Shark Coins` : null,
   ].filter(Boolean);
   return parts.length ? `${parts.join(', ')} and more` : 'A reward on every step';
 }
@@ -113,7 +113,7 @@ export function readyNowLine(tiers: readonly SharkPassTier[]): string | null {
   const items = ready.filter(isWearable).map(r => rewardWords(r));
   const coins = ready.reduce((n, r) => n + (r.type === 'coins' ? r.amount : 0), 0);
   const boxes = ready.reduce((n, r) => n + (r.type === 'mystery_box' ? r.boxes : 0), 0);
-  const parts = [...items, boxes ? `${boxes} Mystery Pin ${boxes === 1 ? 'Box' : 'Boxes'}` : null, coins ? `${countText(coins)} coins` : null]
+  const parts = [...items, boxes ? `${boxes} Mystery Pin ${boxes === 1 ? 'Box' : 'Boxes'}` : null, coins ? `${countText(coins)} Shark Coins` : null]
     .filter(Boolean).slice(0, 3);
   return `Get ${ready.length} Shark Pass ${ready.length === 1 ? 'reward' : 'rewards'} right away: ${parts.join(', ')}${ready.length > parts.length ? ' and more' : ''}.`;
 }

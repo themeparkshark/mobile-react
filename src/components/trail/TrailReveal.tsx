@@ -307,7 +307,7 @@ function RewardCard({ reward, tier, order, delay, hero, reduced }: {
   return (
     <Animated.View style={[styles.cardWrap, style]}>
       {hero && <HeroRing ring={ring} />}
-      <View style={[styles.card, hero && styles.cardHero]} accessible accessibilityLabel={reward.kind === 'coins' ? `Plus ${reward.amount} coins` : rewardLabel(reward)}>
+      <View style={[styles.card, hero && styles.cardHero]} accessible accessibilityLabel={reward.kind === 'coins' ? `Plus ${reward.amount} Shark Coins` : rewardLabel(reward)}>
         <View style={[styles.strip, { backgroundColor: hero ? BRAND.gold : STRIP[tier] }]} />
         {reward.kind === 'exclusive' && reward.icon_url
           ? <Image source={{ uri: reward.icon_url }} style={{ width: 60, height: 60 }} contentFit="contain" />

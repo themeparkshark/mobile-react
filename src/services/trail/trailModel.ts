@@ -201,12 +201,25 @@ export function missNote(sync: TrailSyncResult | undefined): { steps: number; te
 
 export function rewardLabel(r: TrailReward): string {
   switch (r.kind) {
-    case 'coins': return `${formatSteps(r.amount)} Coins`;
+    case 'coins': return `${formatSteps(r.amount)} Shark Coins`;
     case 'energy': return `${r.amount} Energy`;
     case 'tickets': return r.amount === 1 ? '1 Ticket' : `${r.amount} Tickets`;
     case 'mystery_box': return r.amount === 1 ? 'Mystery Pin Box' : `${r.amount} Mystery Pin Boxes`;
     case 'exclusive': return r.name ?? 'Trail Exclusive';
   }
+}
+
+/**
+ * Mystery Pin Boxes stay preview-only (Dustin, Oct 28, ledger 40): "What's inside" never lists one for a
+ * player whose pin_mystery_boxes switch is off, in any mode. Pure.
+ */
+export function withoutPinBoxes<T extends { readonly kind: string }>(list: readonly T[], pinBoxes: boolean): readonly T[] {
+  return pinBoxes ? list : list.filter(r => r.kind !== 'mystery_box');
+}
+
+/** The "Arrive at a park" earn row's line: honest about the first park day (no box on it in known-contents mode). */
+export function arriveLine(state: { readonly first_box?: string | null }): string {
+  return state.first_box === 'second_park_day' ? 'From your second park day' : 'A box each park day';
 }
 
 export function bonusLabel(kind: TrailRewardKind, amount: number): string {

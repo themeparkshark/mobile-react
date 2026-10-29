@@ -64,12 +64,14 @@ test('every player line follows the glossary and has no jargon or pressure words
 
 test('the rules catch the words Dustin named, and allow the safe ones', () => {
   for (const word of ['Out of rotation', 'Catalog Edition 3', 'New fx!', 'Your allocation', 'Verified time',
-    'eligible minutes', 'Best tier', 'VIP perk', 'Shark Coins', 'Park Tickets', 'Open Inventory', 'Hurry!',
+    'eligible minutes', 'Best tier', 'VIP perk', 'Shark Bucks', 'Park Tickets', 'Open Inventory', 'Hurry!',
     'Last chance!', 'Purchase didn’t go through', 'a parent’s OK', 'underdog bonus']) {
     assert.ok(rules.hardViolations(word).length > 0, `should flag: ${word}`);
   }
   for (const ok of ['Buy for 50', 'It costs 50 coins. You have 120.', 'Ask a grown-up', 'Restore purchases',
-    'Payment is charged to your Apple ID when the free trial ends.', 'VIP members get extra XP and coins']) {
+    'Payment is charged to your Apple ID when the free trial ends.', 'VIP members get extra XP and coins',
+    // Core loop 4.5 (Oct 28 blueprint, Dustin's yes): the money is Shark Coins, apart from ride coins.
+    'Spend Shark Coins on gear.']) {
     assert.deepEqual(rules.hardViolations(ok), [], `should allow: ${ok}`);
   }
 });

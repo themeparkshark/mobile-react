@@ -14,7 +14,7 @@ import { getSharkPass, type SharkPassEvent } from '../../api/endpoints/me/shark-
 import { AuthContext } from '../../context/AuthProvider';
 import { DailyGiftContext } from '../../context/DailyGiftProvider';
 import { LocationStatusContext } from '../../context/LocationProvider';
-import { readStampDotCache, writeStampDotCache } from '../profile/stampDot';
+import { readStampDotCache, stampClaimableCount, writeStampDotCache } from '../profile/stampDot';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
@@ -23,7 +23,8 @@ import { flameDay, playDaily3, preloadLoopMoments } from '../../gamekit/audio/lo
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import * as RootNavigation from '../../RootNavigation';
 import { enablePush } from '../../services/push';
-import { useRung } from '../../services/reveal/revealLadder';
+import { markRungSeen, useRung } from '../../services/reveal/revealLadder';
+import { rowRung } from '../../services/retention/newTag';
 import { flagOn, loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
 import { mayAskForPush, noteParkDaySeen, notePushAsked, parkDaySeen } from '../../services/retention/pushAsk';
@@ -122,8 +123,10 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const parkNow = useContext(LocationStatusContext)?.park ?? null;
   const atPark = o.atPark ?? !!parkNow;
   const parkId = parkNow?.id ?? null;
-  // Daily 3 sends where the map is, so home gets home goals and the park gets park goals.
-  setRetentionMode(atPark ? 'park' : 'home');
+  // Daily 3 sends where the map is, so home gets home goals and the park gets park goals. The mode is set in an
+  // effect and again at each read's call time (never during render).
+  const atParkRef = useRef(atPark);
+  useEffect(() => { atParkRef.current = atPark; setRetentionMode(atPark ? 'park' : 'home'); }, [atPark]);
   const dailyOpen = useRung('daily').open;
   const passOpen = useRung('shark_pass').open;
   const trailOpen = useRung('trail').open;
@@ -197,6 +200,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     const now = Date.now();
     if (!force && now - lastRead.current < MIN_REFRESH_MS) return;
     lastRead.current = now;
+    setRetentionMode(atParkRef.current ? 'park' : 'home');
     // Level chests only change with the level: read them once, then on each level-up.
     const wantChests = wantChestsOn && lastChestRead.current !== level;
     try {
@@ -253,7 +257,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     if (cached != null) { setStamps(cached); return; }
     try {
       const r = await getStamps();
-      const n = stampsToClaim(r).length;
+      // The Stamp Book's own count (it honors the server's summary.claimable), so the row and Profile agree.
+      const n = stampClaimableCount(r);
       writeStampDotCache(playerId, n);
       if (mounted.current) setStamps(n);
     } catch { /* no dot this time */ }
@@ -275,8 +280,13 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const pendingChest = wantChestsOn ? nextLevelChest(chests) : null;
   const freezeSaved = daily?.streak.freeze_saved ?? 0;
   // The map's own attention rules (guide-map's gate) must agree too, when this build has them.
-  const may = (kind: 'level_chest' | 'freeze_saved') => rewardMayAutoOpen({ kind, atPark, firstCatchDone: true,
-    autoOpenUsed: autoOpenUsed(), dailyRungOpen: dailyOpen }) && mapAllows('reward') !== false;
+  // One counter for "one automatic open per app open": the map's queue when this build has it (its gate counts every
+  // automatic open on the map's app-open clock); this lane's own counter only in a build without the gate.
+  const may = (kind: 'level_chest' | 'freeze_saved') => {
+    const mapSays = mapAllows('reward');
+    return rewardMayAutoOpen({ kind, atPark, firstCatchDone: true, autoOpenUsed: mapSays === null ? autoOpenUsed() : false,
+      dailyRungOpen: dailyOpen }) && mapSays !== false;
+  };
   useEffect(() => {
     if (view || !o.screenFree || !o.mapFocused || !o.enabled) return;
     if (pendingChest && may('level_chest')) {
@@ -302,11 +312,12 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   // (the server's retention_push switch: off until the push key is set), and only as the one automatic open.
   useEffect(() => {
     if (view || atPark || !sawParkDay || !o.screenFree || !o.mapFocused || !o.enabled) return;
-    if (!flagOn(flags, 'retention_push') || autoOpenUsed()) return;
+    const used = () => (mapAllows('reward') === null ? autoOpenUsed() : mapAllows('reward') === false);
+    if (!flagOn(flags, 'retention_push') || used()) return;
     let live = true;
     const timer = setTimeout(() => {
       void mayAskForPush().then(ok => {
-        if (!live || !ok || autoOpenUsed() || mapAllows('reward') === false || !mapTake('reward')) return;
+        if (!live || !ok || used() || !mapTake('reward')) return;
         noteAutoOpen();
         setView(v => v ?? { k: 'push' });
       });
@@ -314,7 +325,11 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     return () => { live = false; clearTimeout(timer); };
   }, [view, atPark, sawParkDay, o.screenFree, o.mapFocused, o.enabled, flags]);
 
-  const openSheet = () => {
+  const [sheetFromRewards, setSheetFromRewards] = useState(false);
+  const openSheet = (fromRewards = false) => {
+    // Opening Daily 3 is seeing it: its NEW tag (rung 4) clears.
+    markRungSeen('daily');
+    setSheetFromRewards(fromRewards);
     setView({ k: 'sheet' });
     void AsyncStorage.getItem(COACH_KEY).then(v => { if (!v && mounted.current) setCoach(true); }).catch(() => undefined);
   };
@@ -465,7 +480,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     playSfx('ui.tap');
     setRewardsNote(null);
     setView({ k: 'rewards' });
-    void refreshStamps();
+    // A fresh stamp read: the row never offers CLAIM ALL from a stale count.
+    void refreshStamps(true);
     loadPassToday();
     void refresh(false);
   }, [refreshStamps, loadPassToday, refresh]);
@@ -481,36 +497,47 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const claimStamps = async () => {
     if (rewardsBusy) return;
     setRewardsBusy('stamps');
-    let tickets = 0; let coins = 0; let energy = 0; let xp = 0; let failed = 0;
+    let tickets = 0; let coins = 0; let energy = 0; let xp = 0; let failed = 0; let claimed = 0;
+    let left: number | null = null;
     try {
       const r = await getStamps();
       for (const st of stampsToClaim(r)) {
         try {
           const got = await claimStampReward(st.id);
+          claimed += 1;
           tickets += got.rewards?.tickets ?? 0; coins += got.rewards?.coins ?? 0; energy += got.rewards?.energy ?? 0; xp += got.rewards?.xp ?? 0;
         } catch { failed += 1; }
       }
+      // Read back what is still waiting (the server's own count), so the row is honest after every claim.
+      left = claimed > 0 || failed > 0 ? stampClaimableCount(await getStamps()) : stampClaimableCount(r);
     } catch { failed += 1; }
     if (!mounted.current) return;
-    if (playerId != null) writeStampDotCache(playerId, failed);
-    setStamps(failed);
+    const waiting = left ?? failed;
+    if (playerId != null) writeStampDotCache(playerId, waiting);
+    setStamps(waiting);
     setRewardsBusy(null);
     const paid = { coins, tickets, energy, xp } as PaidRewards;
     if (coins + tickets + energy + xp > 0) { fly(paid); haptic('success'); playSfx('fx.reward'); void refreshPlayer?.(); }
-    setRewardsNote(failed && !(coins + tickets) ? 'Those stamps did not go through. Try again.'
-      : [tickets ? `+${tickets} ${tickets === 1 ? 'Ticket' : 'Tickets'}` : null, coins ? `+${coins} coins` : null]
+    // Nothing was waiting after all (an old count): the row just updates quietly, never a "Claimed!" for nothing.
+    if (claimed === 0 && failed === 0) { setRewardsNote(null); return; }
+    setRewardsNote(failed && !claimed ? 'Those stamps did not go through. Try again.'
+      : [tickets ? `+${tickets} ${tickets === 1 ? 'Ticket' : 'Tickets'}` : null, coins ? `+${coins} Shark Coins` : null,
+        !tickets && !coins && energy ? `+${energy} Energy` : null]
         .filter(Boolean).join(', ') || 'Claimed!');
   };
 
   const onRewardsRow = (key: RewardsRowKey) => {
     playSfx('ui.tap');
+    // A tap on a row is seeing that reward: its NEW tag clears.
+    const rung = rowRung(key);
+    if (rung) markRungSeen(rung);
     switch (key) {
       // The ask is made only once the overlay is really gone: the chest card (already mounted, waiting at a park)
       // would otherwise present while UIKit is still dismissing this sheet and never show.
       case 'daily_chest': closeThen(() => { askForDailyChest(); o.onOpenChest(); }); return;
       case 'daily3':
         if (daily?.claimable) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
-        else openSheet();
+        else openSheet(true);
         return;
       case 'level_chest':
         if (pendingChest) { backToRewards.current = true; setView({ k: 'reveal', src: 'level', level: pendingChest.level, rewards: null, opening: false }); }
@@ -531,7 +558,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       void refreshPlayer?.();
       setView({ k: 'sheet' });
     } catch {
-      gameAlert('No freeze this time', 'You may already hold the most freezes, or need a few more coins.');
+      gameAlert('No freeze this time', 'You may already hold the most freezes, or need a few more Shark Coins.');
       setView({ k: 'sheet' });
     } finally {
       setBusy(false);
@@ -552,14 +579,16 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const close = () => {
     backToRewards.current = false;
     if (view?.k === 'sheet') setCelebrate([]);
+    // Daily 3 opened from the Rewards sheet: BACK goes back to it, like the reveals do.
+    if (view?.k === 'sheet' && sheetFromRewards) { setSheetFromRewards(false); setView({ k: 'rewards' }); return; }
     if (view?.k === 'push') void notePushAsked();
     if (view?.k === 'freezeSaved') void markFreezeSeen().then(r => applyDaily(r.state)).catch(() => undefined);
     setView(null);
   };
 
   const visible = !!view;
-  // A sheet the player opened shows at once; one that opened by itself waits its turn (BLUEPRINT 4.3 rule 10).
-  // One door for every sheet (BLUEPRINT 4.3 rule 10): the overlay waits until no other registered layer is up.
+  // One door for every sheet (BLUEPRINT 4.3 rule 10): the overlay, opened by a tap or by itself, waits until no other
+  // registered layer is up (a sheet still dismissing included), then presents.
   const layer = useNativeModalLayer(visible, 'wait');
   // Self-heal: if UIKit refused to present (another native sheet that does not register was mid-present), the
   // overlay would sit "open" in React and invisible on screen, and every later tap on its doors would do nothing.
@@ -593,7 +622,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     button = (
       <Daily3MapButton pips={b.pips} streak={b.streak} attention={b.attention} popIndex={pop.index} popKey={pop.key}
         active={o.mapFocused && !o.mapCovered && !visible} reducedMotion={reducedMotion}
-        onPress={() => { playSfx('ui.tap'); openSheet(); }} />
+        onPress={() => { playSfx('ui.tap'); openSheet(false); }} />
     );
   }
 
@@ -625,10 +654,11 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     content = (
       <Daily3Sheet state={daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
         atPark={atPark} passToday={passOn ? passToday : null} remindersReady={flagOn(flags, 'retention_push')}
+        closeLabel={sheetFromRewards ? 'BACK' : 'BACK TO MAP'}
         reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone}
         onReminders={on => { void toggleReminders(on); }}
-        onClaim={() => setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false })}
-        onClaimWeekly={() => setView({ k: 'reveal', src: 'weekly', rewards: null, opening: false })}
+        onClaim={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }}
+        onClaimWeekly={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'weekly', rewards: null, opening: false }); }}
         onBuyFreeze={() => setView({ k: 'freeze' })} />
     );
   } else if (view?.k === 'reveal') {
@@ -668,7 +698,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         <Text style={styles.lead}>Miss a day? A freeze keeps your flame safe.</Text>
         <Text style={styles.small}>{`You have ${daily.streak.freezes} of ${daily.streak.freeze_cap}. It works by itself.`}</Text>
         <Pressable onPress={() => { void buyFreeze(); }} disabled={busy} accessibilityRole="button"
-          accessibilityLabel={`Get a Streak Freeze for ${daily.streak.freeze_price} coins`}
+          accessibilityLabel={`Get a Streak Freeze for ${daily.streak.freeze_price} Shark Coins`}
           style={({ pressed }) => [styles.gold, pressed && styles.pressed]}>
           <Text style={styles.goldText}>{busy ? '...' : 'GET ONE'}</Text>
           <View style={styles.priceChip}><GameIcon name="coins" size={20} /><Text style={styles.priceText}>{daily.streak.freeze_price}</Text></View>

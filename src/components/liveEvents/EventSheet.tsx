@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { markRungSeen } from '../../services/reveal/revealLadder';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { Image } from 'expo-image';
@@ -184,6 +185,8 @@ function EventSheet({ event, visible: visibleProp, onClose, atPark, onShowRide, 
   const [asked, setAsked] = useState(false);
   useEffect(() => listenRewardsDoor('events', () => setAsked(true)), []);
   const visible = visibleProp || asked;
+  // Opening the event is seeing it: its NEW tag (rung 9) clears.
+  useEffect(() => { if (visible) markRungSeen('events'); }, [visible]);
   const close = useCallback(() => { setOpened(null); setPeek(null); setAsked(false); onClose(); }, [onClose]);
   const onOpen = useCallback(async (key: string) => {
     if (opening) return; // one open at a time (a double tap on Try again never sends two)

@@ -90,12 +90,12 @@ test('top-up headlines say what is missing in plain words', () => {
 test('Shark Pass words: the real last day, reward names and the pass row summed from the server', () => {
   assert.equal(pass.lastDayText('2026-12-27'), 'Sunday, December 27');
   assert.equal(pass.rewardWords({ type: 'mystery_box', boxes: 1, ready: true }), '1 Mystery Pin Box');
-  assert.equal(pass.rewardWords({ type: 'coins', amount: 1500, ready: true }), '1500 coins');
+  assert.equal(pass.rewardWords({ type: 'coins', amount: 1500, ready: true }), '1500 Shark Coins');
   const tiers = [
     { paid: { type: 'item', name: 'Frosty Scarf' } }, { paid: { type: 'mystery_box', boxes: 2 } },
     { paid: { type: 'coins', amount: 100 } }, { paid: { type: 'coins', amount: 150 } }, { paid: { type: 'energy', amount: 60 } },
   ];
-  assert.equal(pass.passSummary(tiers), '1 season item, 2 Mystery Pin Boxes, 250 coins and more');
+  assert.equal(pass.passSummary(tiers), '1 season item, 2 Mystery Pin Boxes, 250 Shark Coins and more');
   for (const event of ['ride_coin_win', 'daily3_complete', 'trail_box_open', 'pin_of_day', 'mystery_box_open']) assert.ok(pass.EVENT_COPY[event], event);
 });
 
@@ -105,10 +105,10 @@ test('Shark Pass: what the pass row adds for reached steps, and its sums', () =>
     t(1, true, { type: 'item', name: 'Frosty Scarf Pin' }), t(2, true, { type: 'coins', amount: 100 }),
     t(3, true, { type: 'tickets', amount: 2 }), t(4, false, { type: 'rescue_passes', amount: 1 }),
   ];
-  assert.equal(pass.passTwinLine(tiers, false), 'With the Shark Pass you’d also have Frosty Scarf Pin, 100 coins and 1 more.');
+  assert.equal(pass.passTwinLine(tiers, false), 'With the Shark Pass you’d also have Frosty Scarf Pin, 100 Shark Coins and 1 more.');
   assert.equal(pass.passTwinLine(tiers, true), null, 'owners see nothing extra');
   assert.equal(pass.claimedLine([{ type: 'energy', amount: 25 }, { type: 'coins', amount: 50 }, { type: 'item', name: 'Frosty Scarf Pin' }]),
-    'Frosty Scarf Pin, 50 coins and 25 energy', 'best first, all named');
+    'Frosty Scarf Pin, 50 Shark Coins and 25 Energy', 'best first, all named');
   assert.deepEqual(plain(pass.passGrants(tiers)), { coins: 100, tickets: 2, rescue_passes: 1, pins: 1 });
 });
 

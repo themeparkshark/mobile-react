@@ -33,7 +33,7 @@ const state = (over = {}) => ({
 test('reward rows follow what the server paid, rare things last, zeros skipped', () => {
   const rows = L.rewardRows({ coins: 700, tickets: 1, energy: 0, xp: 40, mystery_boxes: 1, item: { id: 3, name: 'Star Shades', image: 'x.png', rarity: 2 } });
   assert.deepEqual(plain(rows.map(r => r.kind)), ['xp', 'coins', 'tickets', 'item', 'mystery_boxes']);
-  assert.equal(rows[1].label, 'coins');
+  assert.equal(rows[1].label, 'Shark Coins');
   assert.equal(rows[2].label, 'Ticket');
   assert.equal(rows[3].label, 'Star Shades');
   assert.equal(rows[4].label, 'Mystery Box');

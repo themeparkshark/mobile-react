@@ -6,7 +6,7 @@
  */
 import { NavigationRouteContext, useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -15,7 +15,8 @@ import * as RootNavigation from '../../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../../ui';
 import { MAX_FONT } from './moneyUi';
 import { nextPassPrize, passGain, rewardWords, stepWords } from '../../services/money/sharkPassModel';
-import { useRung } from '../../services/reveal/revealLadder';
+import { markRungSeen, useRung } from '../../services/reveal/revealLadder';
+import { NewPill } from '../retention/RewardsSheet';
 import countText from '../../helpers/countText';
 
 const EMBLEM = require('../../../assets/images/sharkpass/pass-emblem.webp');
@@ -29,7 +30,8 @@ export function bannerLine(state: SharkPassState | null): string | null {
   const { claimable } = state.progress;
   if (claimable > 0) return `${claimable} ${claimable === 1 ? 'reward' : 'rewards'} to claim`;
   const next = nextPassPrize(state);
-  if (next) return `${countText(next.pointsAway)} points to ${rewardWords(next.reward)}`;
+  // The step bar is the progress; the line names the prize and its step ("Step 4 of 50", no points sums).
+  if (next) { const step = next.tier; return `Next prize: ${rewardWords(next.reward)} at step ${step}`; }
   return stepWords(state.progress.tier, state.season.tier_count);
 }
 
@@ -57,7 +59,8 @@ export default function SharkPassBanner({ style, open, always }: {
   // Core loop rung 5: the banner promotes the pass only once it unlocks (3 coins, after Daily 3 opened).
   // A purchase door never waits for a rung: in the Shark Shop (Supplies) it always shows while the switch is on.
   const route = useContext(NavigationRouteContext);
-  const passRung = useRung('shark_pass').open;
+  const passLadder = useRung('shark_pass');
+  const passRung = passLadder.open;
   const shown = always === true || route?.name?.toLowerCase() === 'store' || passRung;
   const [state, setState] = useState<SharkPassState | null>(null);
   const [gain, setGain] = useState<{ gained: number; stepUp: number | null; from: number } | null>(null);
@@ -85,10 +88,16 @@ export default function SharkPassBanner({ style, open, always }: {
   }, [target, gain, reduced, fillTo]);
   const fillStyle = useAnimatedStyle(() => ({ width: `${Math.max(0.04, fillTo.value) * 100}%` }));
   const line = bannerLine(state);
-  if (!shown || !line || !state || !state.enabled || !state.season) return null;
+  const visibleNow = shown && !!line && !!state && state.enabled && !!state.season;
+  // The pass's first appearance (rung 5): one NEW pill on this banner, cleared on tap or when the screen loses focus.
+  const isNew = visibleNow && passRung && passLadder.isNew && always !== true;
+  const newShown = useRef(false);
+  useEffect(() => { if (isNew) newShown.current = true; }, [isNew]);
+  useFocusEffect(useCallback(() => () => { if (newShown.current) { newShown.current = false; markRungSeen('shark_pass'); } }, []));
+  if (!visibleNow || !line || !state || !state.enabled || !state.season) return null;
   const claim = (state.progress?.claimable ?? 0) > 0;
   return (
-    <Pressable onPress={() => { const go = () => RootNavigation.navigate('SharkPass'); if (open) open(go); else go(); }} accessibilityRole="button"
+    <Pressable onPress={() => { if (isNew) passLadder.markSeen(); const go = () => RootNavigation.navigate('SharkPass'); if (open) open(go); else go(); }} accessibilityRole="button"
       accessibilityLabel={`Shark Pass, ${state.season.title}. ${line}.`}
       style={({ pressed }) => [st.lip, style, pressed && st.lipPressed]}>
       <View style={st.card}>
@@ -97,6 +106,7 @@ export default function SharkPassBanner({ style, open, always }: {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
               {`SHARK PASS · ${stepWords(state.progress?.tier ?? 0, state.season.tier_count).toUpperCase()}`}</Text>
+            {isNew && <NewPill />}
             {/* "+N pass points" ticks only once the pass has unlocked (rung 5). */}
             {gain && passRung && <Text maxFontSizeMultiplier={1.1} style={st.gain}>{gain.stepUp ? `Step ${gain.stepUp}!` : `+${gain.gained} pass points`}</Text>}
           </View>

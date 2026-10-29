@@ -268,7 +268,7 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
     <View style={styles.golden}>
       <Pressable onPress={toggle} hitSlop={4} style={({ pressed }) => [styles.goldenHead, pressed && { transform: [{ scale: 0.98 }] }]}
         accessibilityRole="button" accessibilityState={{ expanded: openOdds }}
-        accessibilityLabel={`Golden Box, ${golden.price} coins. Gold chaser ${formatChance(golden.chaser_bp)}${golden.no_duplicates ? '. Only pins you need' : ''}. ${openOdds ? 'Hide' : 'Show'} what can be inside`}>
+        accessibilityLabel={`Golden Box, ${golden.price} Shark Coins. Gold chaser ${formatChance(golden.chaser_bp)}${golden.no_duplicates ? '. Only pins you need' : ''}. ${openOdds ? 'Hide' : 'Show'} what can be inside`}>
         <Animated.View pointerEvents="none" style={[styles.goldenGlint, glintStyle]} />
         <Image source={GOLDEN_ICON} style={{ width: 54, height: 54 }} contentFit="contain" />
         <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
@@ -408,7 +408,7 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
                 <Animated.View style={[{ flex: 1 }, callBackStyle]}>
                 <Pressable disabled={busy} onPress={() => tryOpen(1)} hitSlop={4}
                   style={({ pressed }) => [styles.openBtn, styles.openOne, pressed && { transform: [{ scale: 0.96 }] }, busy && { opacity: 0.5 }]}
-                  accessibilityRole="button" accessibilityLabel={shortOne > 0 ? `Need ${shortOne} more coins` : `Open one box for ${series.price} coins`}>
+                  accessibilityRole="button" accessibilityLabel={shortOne > 0 ? `Need ${shortOne} more Shark Coins` : `Open one box for ${series.price} Shark Coins`}>
                   <Image source={BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
                   <Text maxFontSizeMultiplier={1.1} style={styles.openOneText}>{allDone ? 'Extras for trading' : 'x1'}</Text>
                   <View style={[styles.price, shortOne > 0 && styles.priceShort]}><GameIcon name="coins" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{shortOne > 0 ? `${shortOne} more` : series.price}</Text></View>

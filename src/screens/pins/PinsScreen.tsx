@@ -233,7 +233,7 @@ export default function PinsScreen() {
           setReveal({
             variant: 'catch', tone: 'blue',
             pulls: [{ id: c.item_id, item_id: c.item_id, pin_id: 0, name: c.name, icon_url: c.icon_url, is_chaser: false, by_pity: false, serial: null, duplicate: false, rare: true }],
-            tag: () => ({ text: `+${r.coins} coins${r.boxes ? ` +${r.boxes} box` : ''}`, tone: 'gold' }),
+            tag: () => ({ text: `+${r.coins} Shark Coins${r.boxes ? ` +${r.boxes} box` : ''}`, tone: 'gold' }),
             subtitle: () => `${set.name} set done!`,
           });
         } else {
@@ -555,7 +555,7 @@ export default function PinsScreen() {
             variant: 'catch', tone: 'blue', coins: r.coins,
             pulls: [{ id: r.pin.item_id, item_id: r.pin.item_id, pin_id: 0, name: r.pin.name, icon_url: r.pin.icon_url,
               is_chaser: false, by_pity: false, serial: null, duplicate: !r.new, rare: r.pin.rarity === 'rare' }],
-            tag: p => (p.duplicate ? { text: `+${r.coins} coins`, tone: 'trader' } : p.rare ? { text: 'RARE park pin!', tone: 'gold' } : { text: 'Park pin!', tone: 'new' }),
+            tag: p => (p.duplicate ? { text: `+${r.coins} Shark Coins`, tone: 'trader' } : p.rare ? { text: 'RARE park pin!', tone: 'gold' } : { text: 'Park pin!', tone: 'new' }),
             subtitle: () => [r.park_name ?? hunt.park_name, day, r.catch_number ? `#${r.catch_number} to find it` : null].filter(Boolean).join(' \u00b7 '),
           });
           setCoins(r.coins_now);

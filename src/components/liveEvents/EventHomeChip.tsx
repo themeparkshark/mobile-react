@@ -6,6 +6,8 @@ import { chipState } from '../../services/liveEvents/model';
 import { BRAND } from '../../ui';
 import { eventArt } from './eventArt';
 import { useEventsOpen } from './eventsRung';
+import { useShownNewTag } from '../../services/retention/newTag';
+import { NewPill } from '../retention/RewardsSheet';
 
 /**
  * The event on the home map's small chip row (beside the free-Ticket pips and
@@ -15,13 +17,16 @@ import { useEventsOpen } from './eventsRung';
 function EventHomeChipInner({ event, onPress, now = Date.now() }: { readonly event: LiveEvent; readonly onPress: () => void; readonly now?: number }) {
   const art = eventArt(event.art_key);
   const s = chipState(event, now);
+  // The event's first appearance (rung 9): one NEW pill, cleared on tap or when the app goes to the background.
+  const tag = useShownNewTag('events');
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }} style={styles.chip}
+    <Pressable accessibilityRole="button" onPress={() => { if (tag.isNew) tag.seen(); onPress(); }} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }} style={styles.chip}
       accessibilityLabel={s.kind === 'open' ? `${event.title}: a chest is ready. Open.` : `${event.title}. Open event.`}>
       <Image source={s.kind === 'open' ? art.chestOpen : art.chestClosed} style={styles.emblem} contentFit="contain" />
       <Text style={styles.word}>{event.title.replace(/\s+week$/i, '')}{s.kind === 'open' ? ': Open!' : ''}</Text>
       {s.kind === 'progress' && <View style={styles.bar}><View style={[styles.fill, { width: `${Math.max(6, s.fill * 100)}%` }]} /></View>}
       {s.kind === 'open' && <View style={styles.dot} />}
+      {tag.isNew && <NewPill />}
     </Pressable>
   );
 }

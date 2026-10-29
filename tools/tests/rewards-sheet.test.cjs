@@ -14,6 +14,7 @@ const { plain } = require('./helpers/plain.cjs');
 
 const root = path.resolve(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+const screen0 = () => read('src/screens/SharkPassScreen.tsx');
 
 const wear = loadTs('src/services/retention/wearReward.ts');
 
@@ -256,9 +257,11 @@ test('Shark Pass: one next prize, Step N of 50, no upsell in free claims, Daily 
   const banner = loadTs('src/components/money/SharkPassBanner.tsx', {
     '@react-navigation/native': {}, 'expo-image': {}, react: {}, 'react-native-reanimated': {}, 'react-native': { StyleSheet: { create: s => s } },
     'react/jsx-runtime': {}, '../../ui/useUiReducedMotion': {}, '../../api/endpoints/me/shark-pass': {}, '../../RootNavigation': {},
-    '../../ui': { BRAND: {}, FONT: {} }, './moneyUi': {}, '../../services/reveal/revealLadder': {},
+    '../../ui': { BRAND: {}, FONT: {} }, './moneyUi': {}, '../../services/reveal/revealLadder': {}, '../retention/RewardsSheet': {},
   });
-  assert.equal(banner.bannerLine(state(false)), '700 points to Free Pin', 'banner and pass screen agree');
+  assert.equal(banner.bannerLine(state(false)), 'Next prize: Free Pin at step 3', 'banner and pass screen agree');
+  // The pass leads with its steps: no points sums next to the step bar or the next prize.
+  assert.doesNotMatch(screen0(), /points to step|points away/);
   const screen = read('src/screens/SharkPassScreen.tsx');
   assert.doesNotMatch(screen, /passTwinLine\(|With the Shark Pass this step also gives/, 'no upsell inside a free claim');
   assert.match(screen, /const nextPrize = progress \? nextPassPrize\(state\) : null;/);
@@ -296,7 +299,8 @@ test('Pins: the door stays; mystery boxes, chaser meter and pips only where pin_
 test('membership look dialogs: home first, through the modal layer, one automatic open', () => {
   const host = read('src/components/MemberLookHost.tsx');
   assert.match(host, /rewardMayAutoOpen\(\{ kind: 'member_look', atPark: atParkRef\.current/);
-  assert.match(host, /await whenNoLayer\(\);/);
+  assert.match(host, /const free = await whenNoLayer\(LAYER_WAIT_MS, alive\.current\);/, 'a capped wait, never forever');
+  assert.match(host, /alive\.current\.abort\?\.\(\)/, 'unmount stops the wait and unsubscribes');
   assert.match(host, /noteAutoOpen\(\);/);
   const p = loadTs('src/services/retention/rewardPresence.ts');
   p.resetAutoOpen(1000);
@@ -353,7 +357,10 @@ test("the map's attention gate: asked when guide-map publishes it, quiet fallbac
   assert.match(host, /!mapTake\('membership'\)/);
   const hook = read('src/components/retention/useRetention.tsx');
   assert.match(hook, /if \(!may\('level_chest'\) \|\| !mapTake\('reward'\)\) return;/);
-  assert.match(hook, /mapAllows\('reward'\) === false \|\| !mapTake\('reward'\)/, 'the reminders ask too');
+  assert.match(hook, /if \(!live \|\| !ok \|\| used\(\) \|\| !mapTake\('reward'\)\) return;/, 'the reminders ask too');
+  // One counter: with the map's gate in the build, its queue alone counts the one automatic open.
+  assert.match(hook, /autoOpenUsed: mapSays === null \? autoOpenUsed\(\) : false/);
+  assert.match(host, /const used = nowSays === null \? autoOpenUsed\(\) : false;/);
 });
 
 test('the empty lanyard never promises boxes while mystery boxes are off (state A)', () => {
@@ -364,4 +371,124 @@ test('the empty lanyard never promises boxes while mystery boxes are off (state 
   assert.equal(pins.lanyardHint(2, false, shared), 'Tap + to hang a pin');
   assert.match(read('src/screens/pins/PinsScreen.tsx'), /lanyardHint\(home\.counts\.pins, mysteryOn, lanyardEmptyHint\)/);
   assert.match(read('src/screens/pins/ProfileLanyardCard.tsx'), /lanyardHint\(data\.pins, mysteryOn, lanyardEmptyHint\)/);
+});
+
+test('NEW tags: each reward rung wears one NEW on its own surface, and a shown NEW is retired so the next rung gets its turn', () => {
+  const tag = loadTs('src/services/retention/newTag.ts', { react: {}, 'react-native': {}, '../reveal/revealLadder': {} });
+  assert.equal(tag.rowRung('daily3'), 'daily');
+  assert.equal(tag.rowRung('level_chest'), 'daily');
+  assert.equal(tag.rowRung('weekly_box'), 'daily');
+  assert.equal(tag.rowRung('trail'), 'trail');
+  assert.equal(tag.rowRung('events'), 'events');
+  assert.equal(tag.rowRung('daily_chest'), null, 'the daily chest is rung 0: never NEW');
+  assert.equal(tag.rowRung('stamps'), null);
+  const rows = [{ key: 'daily_chest' }, { key: 'level_chest' }, { key: 'daily3' }, { key: 'trail' }];
+  assert.equal(tag.newRowKey(rows, 'daily'), 'level_chest', 'one pill, on the first row of the NEW rung');
+  assert.equal(tag.newRowKey(rows, 'trail'), 'trail');
+  assert.equal(tag.newRowKey(rows, 'events'), null, 'no row, no pill');
+  assert.equal(tag.newRowKey(rows, null), null);
+  // The ladder's one NEW slot: once the Daily 3 NEW is seen, the next open gives the slot to the next unseen rung (Pins at level 3).
+  const ladder = loadTs('src/services/reveal/ladderRules.ts', {});
+  const opened = { daily: 100, pins: 200 };
+  assert.equal(ladder.pickNewTag(opened, {}, null, 'open-1'), 'daily');
+  assert.equal(ladder.pickNewTag(opened, { daily: true }, { rung: 'daily', appOpenId: 'open-1' }, 'open-1'), null, 'one NEW per app open');
+  assert.equal(ladder.pickNewTag(opened, { daily: true }, { rung: 'daily', appOpenId: 'open-1' }, 'open-2'), 'pins', 'next open: the Pins NEW');
+  // Every reward surface draws and retires its NEW.
+  const hook = read('src/services/retention/newTag.ts');
+  assert.match(hook, /if \(s === 'background' && wasShown\.current\) \{ wasShown\.current = false; markRungSeen\(rung\); \}/);
+  assert.match(hook, /if \(wasShown\.current\) \{ wasShown\.current = false; markRungSeen\(rung\); \}/, 'seen when the surface goes away');
+  const sheet = read('src/components/retention/RewardsSheet.tsx');
+  for (const rung of ['daily', 'trail', 'events']) assert.match(sheet, new RegExp(`useShownNewTag\\('${rung}', has\\('${rung}'\\)\\)`), rung);
+  assert.match(sheet, /\{newKey === row\.key && <NewPill \/>\}/);
+  const banner = read('src/components/money/SharkPassBanner.tsx');
+  assert.match(banner, /const isNew = visibleNow && passRung && passLadder\.isNew && always !== true;/, 'the pass banner, never on the Supplies door');
+  assert.match(banner, /\{isNew && <NewPill \/>\}/);
+  assert.match(banner, /markRungSeen\('shark_pass'\)/);
+  assert.match(read('src/screens/SharkPassScreen.tsx'), /if \(passRung\) markRungSeen\('shark_pass'\);/);
+  assert.match(read('src/components/trail/TrailSheet.tsx'), /if \(visible\) markRungSeen\('trail'\);/);
+  assert.match(read('src/components/liveEvents/EventSheet.tsx'), /if \(visible\) markRungSeen\('events'\);/);
+  for (const chip of ['EventStatusChip', 'EventHomeChip']) {
+    const src = read(`src/components/liveEvents/${chip}.tsx`);
+    assert.match(src, /useShownNewTag\('events'\)/, chip);
+    assert.match(src, /\{tag\.isNew && <NewPill \/>\}/, chip);
+  }
+  const retention = read('src/components/retention/useRetention.tsx');
+  assert.match(retention, /markRungSeen\('daily'\);\n    setSheetFromRewards\(fromRewards\);/, 'opening Daily 3 clears its NEW');
+  assert.match(retention, /const rung = rowRung\(key\);\n    if \(rung\) markRungSeen\(rung\);/, 'a row tap clears its NEW');
+});
+
+test('stamps row is honest: a fresh read on open, the server count, and no "Claimed!" when nothing was claimed', () => {
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /setView\(\{ k: 'rewards' \}\);\n    \/\/ A fresh stamp read[^\n]*\n    void refreshStamps\(true\);/);
+  assert.match(hook, /const n = stampClaimableCount\(r\);/, 'the row and the Profile dot read the same count (summary.claimable first)');
+  assert.match(hook, /if \(claimed === 0 && failed === 0\) \{ setRewardsNote\(null\); return; \}/);
+  assert.match(hook, /coins \? `\+\$\{coins\} Shark Coins` : null/);
+  const dot = loadTs('src/components/profile/stampDot.ts', {});
+  assert.equal(dot.stampClaimableCount({ stamps: {}, summary: { claimable: 3 } }), 3);
+});
+
+test('Trail Boxes: no Mystery Pin Box where its switch is off, and an honest first park day line', () => {
+  const m = loadTs('src/services/trail/trailModel.ts');
+  const list = [{ kind: 'coins', amount: 50 }, { kind: 'mystery_box', amount: 1 }, { kind: 'tickets', amount: 1 }];
+  assert.deepEqual(plain(m.withoutPinBoxes(list, false).map(r => r.kind)), ['coins', 'tickets']);
+  assert.equal(m.withoutPinBoxes(list, true).length, 3);
+  assert.equal(m.arriveLine({ first_box: 'second_park_day' }), 'From your second park day');
+  assert.equal(m.arriveLine({ first_box: null }), 'A box each park day');
+  assert.equal(m.arriveLine({}), 'A box each park day');
+  const sheet = read('src/components/trail/TrailSheet.tsx');
+  assert.match(sheet, /withoutPinBoxes\(t\.rewards, pinBoxes\)/, 'known contents');
+  assert.match(sheet, /const bonus = withoutPinBoxes\(t\.bonus, pinBoxes\);/, 'random mode');
+  assert.match(sheet, /withoutPinBoxes\(t\.always, pinBoxes\)/);
+  assert.match(sheet, /sub=\{arriveLine\(state\)\}/);
+  assert.doesNotMatch(sheet, /\d+ Coins`|`\$\{[^}]+\} Coins/, 'Shark Coins, never bare Coins');
+});
+
+test('the member look ask never waits forever on a stuck sheet', async () => {
+  let count = 1;
+  const subs = new Set();
+  const layers = { count: () => count, subscribe: fn => { subs.add(fn); return () => subs.delete(fn); } };
+  const host = loadTs('src/components/MemberLookHost.tsx', {
+    react: {}, 'react-native': {}, 'react/jsx-runtime': {}, '../context/LocationProvider': {}, '../services/retention/rewardPresence': {},
+    '../services/retention/mapAttention': {}, '../ui/modalLayers': { modalLayers: layers }, '../api/endpoints/me/member-look': {},
+    '../context/AuthProvider': {}, '../services/memberLook': {}, '../ui': {}, './GrownUpGate': {},
+  });
+  assert.equal(await host.whenNoLayer(30), false, 'a layer that never closes: gives up after the cap');
+  assert.equal(subs.size, 0, 'and unsubscribes');
+  const freed = host.whenNoLayer(5000);
+  count = 0; subs.forEach(fn => fn());
+  assert.equal(await freed, true, 'frees as soon as the last layer closes');
+  assert.equal(subs.size, 0);
+  count = 1;
+  const signal = { cancelled: false };
+  const stopped = host.whenNoLayer(5000, signal);
+  signal.cancelled = true; signal.abort();
+  assert.equal(await stopped, false, 'unmount stops the wait');
+  assert.equal(subs.size, 0);
+});
+
+test('Daily 3: an honest hero line at home while a goal waits for the park; BACK returns to the Rewards sheet', () => {
+  const L = loadTs('src/services/retention/logic.ts');
+  const st = { done: false, claimable: false, streak: { days: 4, best: 4 } };
+  assert.equal(L.streakSubline(st, true), 'One goal waits for your next park day');
+  assert.equal(L.streakSubline(st, false), 'Finish today to make it 5!');
+  assert.equal(L.streakSubline({ ...st, done: true }, true), '4 days in a row!');
+  const sheet = read('src/components/retention/Daily3Sheet.tsx');
+  assert.match(sheet, /const parkGoalWaits = !atPark && state\.goals\.some\(g => !g\.done && homeSideGoal\(g, false\)\.parkOnly\);/);
+  assert.match(sheet, /\{closeLabel\}/);
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /closeLabel=\{sheetFromRewards \? 'BACK' : 'BACK TO MAP'\}/);
+  assert.match(hook, /if \(view\?\.k === 'sheet' && sheetFromRewards\) \{ setSheetFromRewards\(false\); setView\(\{ k: 'rewards' \}\); return; \}/);
+  // The mode is never set during render.
+  assert.doesNotMatch(hook, /\n  setRetentionMode\(atPark/);
+  assert.match(hook, /useEffect\(\(\) => \{ atParkRef\.current = atPark; setRetentionMode\(atPark \? 'park' : 'home'\); \}, \[atPark\]\);/);
+});
+
+test('words: Shark Coins, Tickets and Energy in every reward line this lane owns', () => {
+  const pass = loadTs('src/services/money/sharkPassModel.ts');
+  assert.equal(pass.rewardWords({ type: 'coins', amount: 75 }), '75 Shark Coins');
+  assert.equal(pass.rewardWords({ type: 'tickets', amount: 1 }), '1 Ticket');
+  assert.equal(pass.rewardWords({ type: 'energy', amount: 20 }), '20 Energy');
+  const L = loadTs('src/services/retention/logic.ts');
+  assert.equal(L.rewardRows({ coins: 250 })[0].label, 'Shark Coins');
+  assert.equal(loadTs('src/services/trail/trailModel.ts').rewardLabel({ kind: 'coins', amount: 75 }), '75 Shark Coins');
 });

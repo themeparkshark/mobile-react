@@ -2,7 +2,8 @@ import { Image } from 'expo-image';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import type { RewardsRow, RewardsRowKey } from '../../services/retention/rewardsModel';
-import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
+import { newRowKey, rowRung, useShownNewTag } from '../../services/retention/newTag';
+import { BRAND, FONT, GameIcon, ICON_SOURCES } from '../../ui';
 import { BOX_ART } from '../trail/TrailBoxArt';
 
 const DAILY_CHEST = require('../../../assets/images/daily/chest-closed.png');
@@ -24,6 +25,15 @@ function rowArt(key: RewardsRowKey) {
 }
 
 const LABEL = { open: 'OPEN', go: 'SEE', claim_all: 'CLAIM ALL' } as const;
+
+/** The gold NEW pill (the same one as the Pins lanyard card): a feature's first appearance, never a popup. */
+export function NewPill({ style }: { readonly style?: object }) {
+  return (
+    <View style={[styles.newTag, style]} accessible accessibilityLabel="New">
+      <Text maxFontSizeMultiplier={1.1} style={styles.newText}>NEW</Text>
+    </View>
+  );
+}
 
 /**
  * The Rewards sheet (core loop blueprint 4.2): everything ready in one list,
@@ -47,6 +57,13 @@ export default function RewardsSheet({ rows, flame, empty, busy, note, reducedMo
 }) {
   const { height } = useWindowDimensions();
   const ready = rows.some(r => r.ready > 0);
+  // A reward rung's first appearance (Daily 3, Trail Boxes, event chests): one NEW pill on its first row. It is
+  // marked seen when this sheet closes (or the app goes to the background), so it shows once and clears.
+  const has = (rung: string) => rows.some(r => rowRung(r.key) === rung);
+  const dailyNew = useShownNewTag('daily', has('daily'));
+  const trailNew = useShownNewTag('trail', has('trail'));
+  const eventsNew = useShownNewTag('events', has('events'));
+  const newKey = newRowKey(rows, dailyNew.isNew ? 'daily' : trailNew.isNew ? 'trail' : eventsNew.isNew ? 'events' : null);
   return (
     <View style={styles.card}>
       {flame != null && (
@@ -63,7 +80,10 @@ export default function RewardsSheet({ rows, flame, empty, busy, note, reducedMo
               style={({ pressed }) => [styles.row, row.ready > 0 && styles.rowReady, pressed && styles.pressed]}>
               <View style={styles.artBox}>{rowArt(row.key)}</View>
               <View style={styles.text}>
-                <Text style={[styles.title, row.ready > 0 && styles.titleReady]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{row.title}</Text>
+                <View style={styles.titleRow}>
+                  <Text style={[styles.title, row.ready > 0 && styles.titleReady, styles.titleText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{row.title}</Text>
+                  {newKey === row.key && <NewPill />}
+                </View>
                 <Text style={[styles.line, row.ready > 0 && styles.lineReady]} numberOfLines={2}>{row.line}</Text>
               </View>
               {row.action && (
@@ -103,6 +123,10 @@ const styles = StyleSheet.create({
   artBox: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
   art: { width: 54, height: 54 },
   text: { flex: 1, gap: 1 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  titleText: { flexShrink: 1 },
+  newTag: { backgroundColor: BRAND.gold, borderRadius: 999, borderWidth: 2, borderColor: BRAND.white, paddingHorizontal: 7, paddingVertical: 1 },
+  newText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.navy, paddingTop: 2 },
   title: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white },
   titleReady: { color: BRAND.navy },
   line: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff' },

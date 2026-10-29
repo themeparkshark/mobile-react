@@ -12,13 +12,31 @@ import { openMembership } from './GrownUpGate';
 
 const FOCUS_THROTTLE_MS = 60_000;
 
-/** Resolves once no sheet or dialog is up (one door for every sheet: never over another modal). */
-function whenNoLayer(): Promise<void> {
-  if (modalLayers.count() === 0) return Promise.resolve();
+/** How long a look ask waits for the other sheets to close before it gives up and waits for the next calm check. */
+export const LAYER_WAIT_MS = 30_000;
+
+/**
+ * Resolves true once no sheet or dialog is up (one door for every sheet: never over another modal), or false
+ * after `capMs` or when `signal.cancelled` turns true (unmount). Never waits forever, always unsubscribes.
+ */
+export interface LayerWaitSignal { cancelled: boolean; abort?: () => void }
+export function whenNoLayer(capMs = LAYER_WAIT_MS, signal?: LayerWaitSignal): Promise<boolean> {
+  if (signal?.cancelled) return Promise.resolve(false);
+  if (modalLayers.count() === 0) return Promise.resolve(true);
   return new Promise(resolve => {
-    const off = modalLayers.subscribe(() => {
-      if (modalLayers.count() === 0) { off(); resolve(); }
-    });
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      off();
+      clearTimeout(timer);
+      if (signal) signal.abort = undefined;
+      resolve(ok);
+    };
+    const off = modalLayers.subscribe(() => { if (modalLayers.count() === 0) finish(true); });
+    const timer = setTimeout(() => finish(false), capMs);
+    // Unmount: stop waiting at once and unsubscribe.
+    if (signal) signal.abort = () => finish(false);
   });
 }
 
@@ -51,6 +69,11 @@ export default function MemberLookHost() {
   atParkRef.current = atPark;
   const deferred = useRef(false);
   const busy = useRef(false);
+  const alive = useRef<LayerWaitSignal>({ cancelled: false });
+  useEffect(() => {
+    alive.current = { cancelled: false };
+    return () => { alive.current.cancelled = true; alive.current.abort?.(); };
+  }, []);
   const lastCheck = useRef(0);
   const playerId = player?.id;
   const member = player?.is_subscribed === true;
@@ -60,7 +83,7 @@ export default function MemberLookHost() {
     // The map's attention rules (guide-map's gate) say when a park moment is calm; without the gate a park always waits.
     const mapSays = mapAllows('membership');
     const calm = () => rewardMayAutoOpen({ kind: 'member_look', atPark: atParkRef.current, firstCatchDone: true,
-      autoOpenUsed: autoOpenUsed(), dailyRungOpen: true, parkBusy: mapSays === null ? undefined : !mapSays }) && mapSays !== false;
+      autoOpenUsed: mapSays === null ? autoOpenUsed() : false, dailyRungOpen: true, parkBusy: mapSays === null ? undefined : !mapSays }) && mapSays !== false;
     if (!calm()) {
       deferred.current = true;
       return;
@@ -72,10 +95,14 @@ export default function MemberLookHost() {
       if (!state?.wear_lock) return;
       const asks = (state.note && !state.member) || (state.restore && state.member && Object.keys(state.restore).length > 0);
       if (!asks) return;
-      await whenNoLayer();
+      // A stuck sheet never holds this ask (or `busy`) for the session: after 30 s it waits for the next calm check.
+      const free = await whenNoLayer(LAYER_WAIT_MS, alive.current);
+      if (!free) { deferred.current = true; return; }
       // Walked into a busy park moment, or something else opened by itself meanwhile: ask on the next calm open.
+      // One counter for the one automatic open: the map's queue when this build has its gate, else this lane's.
       const nowSays = mapAllows('membership');
-      if (autoOpenUsed() || nowSays === false || (atParkRef.current && nowSays === null) || !mapTake('membership')) {
+      const used = nowSays === null ? autoOpenUsed() : false;
+      if (used || nowSays === false || (atParkRef.current && nowSays === null) || !mapTake('membership')) {
         deferred.current = true; return;
       }
       deferred.current = false;

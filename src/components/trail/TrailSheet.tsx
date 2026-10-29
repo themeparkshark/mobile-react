@@ -9,7 +9,8 @@ import { openAppSettings } from '../../services/external';
 import type { MotionAccess } from '../../services/trail/TrailProvider';
 import { getSeen, setSeen } from '../../services/trail/trailSeen';
 import {
-  BOX_NAME, boxName, bonusLabel, boxFraction, formatDistance, formatSteps, knownContents, missNote, oddsTiers, stepsToGo, usesMiles,
+  BOX_NAME, arriveLine, boxName, bonusLabel, boxFraction, formatDistance, formatSteps, knownContents, missNote, oddsTiers, stepsToGo, usesMiles,
+  withoutPinBoxes,
   type TrailBox, type TrailOddsTier, type TrailState, type TrailTier,
 } from '../../services/trail/trailModel';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, confirmGame, type GameIconName } from '../../ui';
@@ -18,6 +19,9 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import TrailBoxArt, { STEPS_ART, WHEELS_ART } from './TrailBoxArt';
 import TrailPath from './TrailPath';
 import { UpperText } from '../../ui/upper';
+import { markRungSeen } from '../../services/reveal/revealLadder';
+import { flagOn } from '../../services/retention/flags';
+import useRetentionFlags from '../../services/retention/useRetentionFlags';
 
 const KIND_ICON: Record<string, GameIconName> = { coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'gift', exclusive: 'star' };
 const RANK: Record<TrailTier, number> = { blue: 0, red: 1, gold: 2 };
@@ -54,6 +58,10 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
   const miles = usesMiles(LOCALE);
   const note = missNote(state.sync);
   useEffect(() => { if (visible) { setView(initialView); setPicked(null); } }, [visible, initialView]);
+  // Opening Trail Boxes is seeing them: their NEW tag (rung 6) clears.
+  useEffect(() => { if (visible) markRungSeen('trail'); }, [visible]);
+  // Mystery Pin Boxes are preview-only: never listed where the switch is off.
+  const pinBoxes = flagOn(useRetentionFlags(), 'pin_mystery_boxes');
 
   const slots = useMemo(() => {
     const out: (TrailBox | null)[] = Array.from({ length: state.slots }, () => null);
@@ -97,7 +105,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
             : <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={12}><GameIcon name="close" size={32} /></Pressable>}
         </View>
 
-        {view === 'inside' ? <Inside state={state} /> : (
+        {view === 'inside' ? <Inside state={state} pinBoxes={pinBoxes} /> : (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
             {!inPark && (
               <View style={[styles.card, styles.noteCard]}>
@@ -236,7 +244,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
 
             <UpperText style={styles.section}>Get more boxes</UpperText>
             <View style={styles.card}>
-              <EarnRow icon="map" text="Arrive at a park" sub="A box each park day" />
+              <EarnRow icon="map" text="Arrive at a park" sub={arriveLine(state)} />
               <EarnRow icon="ride" text="Win 2 ride coins" sub={state.next_ride_box != null && inPark
                 ? `Next box in ${state.next_ride_box} ${state.next_ride_box === 1 ? 'win' : 'wins'}` : 'Up to 3 boxes a day'} />
               <EarnRow icon="star" text="Reach your weekly goal" sub="A Blue Box" last />
@@ -380,7 +388,7 @@ function Exclusives({ items }: { readonly items: NonNullable<TrailState['exclusi
   );
 }
 
-function Inside({ state }: { readonly state: TrailState }) {
+function Inside({ state, pinBoxes }: { readonly state: TrailState; readonly pinBoxes: boolean }) {
   const known = knownContents(state);
   const odds = oddsTiers(state);
   return (
@@ -409,7 +417,7 @@ function Inside({ state }: { readonly state: TrailState }) {
                   <Text style={styles.body}>Opens after {formatSteps(t.goal_steps)} steps</Text>
                 </View>
               </View>
-              {t.rewards.map((r, i) => (
+              {withoutPinBoxes(t.rewards, pinBoxes).map((r, i) => (
                 <View key={`${r.kind}-${i}`} style={styles.oddsRow} accessible accessibilityLabel={r.kind === 'exclusive' ? (r.name ?? 'Trail Exclusive') : bonusLabel(r.kind, r.amount)}>
                   {r.kind === 'exclusive' && r.icon_url
                     ? <Image source={{ uri: r.icon_url }} style={{ width: 30, height: 30 }} contentFit="contain" />
@@ -423,18 +431,19 @@ function Inside({ state }: { readonly state: TrailState }) {
       ) : odds ? (
         <>
           {/* An older server still in random mode: what every box holds, in pictures. Never a percent (Dustin, Oct 28: no odds anywhere). */}
-          {odds.map(t => <TierCard key={t.tier} tier={t.tier} t={t} />)}
+          {odds.map(t => <TierCard key={t.tier} tier={t.tier} t={t} pinBoxes={pinBoxes} />)}
         </>
       ) : (
         <View style={[styles.card, { marginTop: 10 }]}>
-          <Text style={styles.body}>Every box holds coins and Tickets.</Text>
+          <Text style={styles.body}>Every box holds Shark Coins and Tickets.</Text>
         </View>
       )}
     </ScrollView>
   );
 }
 
-function TierCard({ tier, t }: { readonly tier: TrailTier; readonly t: TrailOddsTier }) {
+function TierCard({ tier, t, pinBoxes }: { readonly tier: TrailTier; readonly t: TrailOddsTier; readonly pinBoxes: boolean }) {
+  const bonus = withoutPinBoxes(t.bonus, pinBoxes);
   return (
     <View style={[styles.card, { marginTop: 10 }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -444,10 +453,10 @@ function TierCard({ tier, t }: { readonly tier: TrailTier; readonly t: TrailOdds
           <Text style={styles.body}>Opens after {formatSteps(t.goal_steps)} steps</Text>
         </View>
       </View>
-      <OddsRow icon="coins" label={`${formatSteps(t.coins)} Coins`} />
-      {t.always.map((a, i) => <OddsRow key={`a${i}`} icon={KIND_ICON[a.kind]} label={bonusLabel(a.kind, a.amount)} />)}
-      <Text style={[styles.earnSub, { marginTop: 6 }]}>Plus one of these:</Text>
-      {t.bonus.map((b, i) => <OddsRow key={i} icon={KIND_ICON[b.kind]} label={b.note === 'owns_all_exclusives' ? `${formatSteps(b.amount)} Coins (you have every Trail Exclusive!)` : bonusLabel(b.kind, b.amount)} />)}
+      <OddsRow icon="coins" label={`${formatSteps(t.coins)} Shark Coins`} />
+      {withoutPinBoxes(t.always, pinBoxes).map((a, i) => <OddsRow key={`a${i}`} icon={KIND_ICON[a.kind]} label={bonusLabel(a.kind, a.amount)} />)}
+      {bonus.length > 0 && <Text style={[styles.earnSub, { marginTop: 6 }]}>Plus one of these:</Text>}
+      {bonus.map((b, i) => <OddsRow key={i} icon={KIND_ICON[b.kind]} label={b.note === 'owns_all_exclusives' ? `${formatSteps(b.amount)} Shark Coins (you have every Trail Exclusive!)` : bonusLabel(b.kind, b.amount)} />)}
     </View>
   );
 }
