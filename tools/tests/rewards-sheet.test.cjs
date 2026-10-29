@@ -782,6 +782,9 @@ test('reward sheets: closing keeps the card that was up (never a default "Daily 
   assert.match(hook, /const holdOld = !!live && live\.key === 'chest' && !chestArt/);
   assert.match(hook, /<View key=\{`face-\$\{live\.key\}`\} style=\{styles\.pendingFace\} pointerEvents="none">/);
   assert.match(read('src/components/DailyGiftModal.tsx'), /onDisplay=\{showedArt\} onLoadEnd=\{showedArt\}/);
+  // Back from the chest card the Rewards rows are simply there (rows still fading in read as an empty card).
+  assert.match(hook, /enterRows=\{!\(presentNow && shownRef\.current && !!face\.current && face\.current\.key !== 'rewards'\)\}/);
+  assert.match(read('src/components/retention/RewardsSheet.tsx'), /entering=\{reducedMotion \|\| !enterRows \? undefined :/);
   assert.match(hook, /<CalmModal visible=\{layer\.present && !!content\}/);
   assert.doesNotMatch(hook, /react-native-modal/);
   assert.doesNotMatch(read('src/components/DailyGiftModal.tsx'), /react-native-modal/);

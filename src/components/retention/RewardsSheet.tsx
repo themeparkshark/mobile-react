@@ -41,7 +41,7 @@ export function NewPill({ style }: { readonly style?: object }) {
  * (the same chest moments as before); stamps claim in place. Nothing here is
  * for sale and nothing counts down.
  */
-export default function RewardsSheet({ rows, flame, empty, busy, note, reducedMotion, onRow, onClose }: {
+export default function RewardsSheet({ rows, flame, empty, busy, note, reducedMotion, enterRows = true, onRow, onClose }: {
   readonly rows: readonly RewardsRow[];
   /** The flame (Daily 3 streak) once Daily 3 is unlocked; null before. */
   readonly flame: number | null;
@@ -52,6 +52,11 @@ export default function RewardsSheet({ rows, flame, empty, busy, note, reducedMo
   /** A short result line ("+5 Tickets from your stamps"). */
   readonly note: string | null;
   readonly reducedMotion: boolean;
+  /**
+   * Rows drop in as the sheet zooms open. Coming back from a card inside the same sheet (a chest's BACK), they are
+   * simply there: a Rewards card with its rows still fading in read as an empty card.
+   */
+  readonly enterRows?: boolean;
   readonly onRow: (key: RewardsRowKey) => void;
   readonly onClose: () => void;
 }) {
@@ -77,7 +82,7 @@ export default function RewardsSheet({ rows, flame, empty, busy, note, reducedMo
       )}
       <ScrollView style={{ maxHeight: listMax }} contentContainerStyle={[styles.rows, compact && styles.rowsCompact]} showsVerticalScrollIndicator={false}>
         {rows.map((row, i) => (
-          <Animated.View key={row.key} entering={reducedMotion ? undefined : FadeInDown.delay(40 * i).duration(180)}>
+          <Animated.View key={row.key} entering={reducedMotion || !enterRows ? undefined : FadeInDown.delay(40 * i).duration(180)}>
             <Pressable onPress={row.action ? () => onRow(row.key) : undefined} disabled={!row.action || busy === row.key}
               accessibilityRole="button" accessibilityLabel={`${row.title}. ${row.line}`}
               style={({ pressed }) => [styles.row, compact && styles.rowCompact, row.ready > 0 && styles.rowReady, pressed && styles.pressed]}>

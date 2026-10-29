@@ -162,6 +162,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const openChestCard = (back: 'rewards' | 'sheet') => { setChestArt(false); setView({ k: 'chest', back }); };
   /** A reveal opened from the Rewards sheet goes back to it when done. */
   const backToRewards = useRef(false);
+  /** The card the overlay shows (kept while it shrinks away, and while a new card's art is still loading). */
+  const face = useRef<{ title: string | null; content: ReactNode; key: string } | null>(null);
   /** Runs once the overlay is really gone (UIKit dismissed it), so the next native sheet can present. */
   const afterHide = useRef<(() => void) | null>(null);
   const lastRead = useRef(0);
@@ -713,7 +715,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     title = 'Rewards';
     content = (
       <RewardsSheet rows={rows} flame={summary.flame} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
-        reducedMotion={reducedMotion} onRow={onRewardsRow} onClose={close} />
+        reducedMotion={reducedMotion} enterRows={!(presentNow && shownRef.current && !!face.current && face.current.key !== 'rewards')}
+        onRow={onRewardsRow} onClose={close} />
     );
   } else if (view?.k === 'sheet' && daily) {
     content = (
@@ -805,7 +808,6 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
 
   // While the sheet shrinks away (view already null), it keeps showing the card that was up, never a default
   // ribbon over nothing (the lone "DAILY 3" ribbon that floated over the map as Rewards closed).
-  const face = useRef<{ title: string | null; content: ReactNode; key: string } | null>(null);
   const live = content && view ? { title, content, key: view.k === 'reveal' ? `reveal-${view.src}` : view.k } : null;
   // Rewards (or Daily 3) to the chest card: the card it came from stays up while the chest card mounts unseen under
   // it, and they swap once the chest art is drawn (it was about 100 ms of a chest card with no chest). Same key
