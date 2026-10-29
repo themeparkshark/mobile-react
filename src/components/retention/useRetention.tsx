@@ -33,7 +33,7 @@ import {
   askForDailyChest, autoOpenUsed, noteAppState, noteAutoOpen, rewardMayAutoOpen,
 } from '../../services/retention/rewardPresence';
 import { emptyLine, rewardsRows, rewardsSummary, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
-import { openRewardsDoor } from '../../services/retention/rewardsSignals';
+import { openRewardsDoor, rewardsDoorOpen } from '../../services/retention/rewardsSignals';
 import { mapAllows, mapTake } from '../../services/retention/mapAttention';
 import { boxFraction, headlineBox } from '../../services/trail/trailModel';
 import { useTrail } from '../../services/trail/TrailProvider';
@@ -469,9 +469,10 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     weekly: wantDaily && daily ? { claimable: daily.week.claimable } : null,
     levelChest: pendingChest ? { level: pendingChest.level, waiting: chests.filter(c => !c.opened).length } : null,
     trail: trailState ? { ready: trailState.ready.length, walking: trailState.walking.length + trailState.waiting.length,
-      nearest: nearest ? boxFraction(nearest) : null, atPark } : null,
+      nearest: nearest ? boxFraction(nearest) : null, atPark, door: !!o.onOpenTrail || rewardsDoorOpen('trail') } : null,
     stamps: { claimable: stamps },
-    events: eventsOpen && flagOn(flags, 'live_events') && liveEvt.event ? { chests: openableKeys(liveEvt.event).length } : null,
+    events: eventsOpen && flagOn(flags, 'live_events') && liveEvt.event
+      ? { chests: openableKeys(liveEvt.event).length, door: !!o.onOpenEvents || rewardsDoorOpen('events') } : null,
   };
   const rows = rewardsRows(rewardsInput);
   const summary = rewardsSummary(rewardsInput);
@@ -543,8 +544,9 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         if (pendingChest) { backToRewards.current = true; setView({ k: 'reveal', src: 'level', level: pendingChest.level, rewards: null, opening: false }); }
         return;
       case 'weekly_box': backToRewards.current = true; setView({ k: 'reveal', src: 'weekly', rewards: null, opening: false }); return;
-      case 'trail': closeThen(() => { if (o.onOpenTrail) o.onOpenTrail(); else openRewardsDoor('trail'); }); return;
-      case 'events': closeThen(() => { if (o.onOpenEvents) o.onOpenEvents(); else openRewardsDoor('events'); }); return;
+      // The host opens once the sheet is really gone; if it went away meanwhile, the Rewards sheet comes back (never a dead tap).
+      case 'trail': closeThen(() => { if (o.onOpenTrail) o.onOpenTrail(); else if (!openRewardsDoor('trail')) setView({ k: 'rewards' }); }); return;
+      case 'events': closeThen(() => { if (o.onOpenEvents) o.onOpenEvents(); else if (!openRewardsDoor('events')) setView({ k: 'rewards' }); }); return;
       case 'stamps': void claimStamps(); return;
     }
   };

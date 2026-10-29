@@ -510,3 +510,21 @@ test('the lane-only ladder feed is inert in store and OTA bundles', () => {
   assert.equal(fed[0].progress.revealAll, false, 'manual mode climbs the ladder like a real player');
   assert.equal(fed[0].progress.coinsWon, 0, 'manual progress, not the profile');
 });
+
+test('a Trail or event row with no host on screen shows its line with no button (never a dead tap)', () => {
+  const m = loadTs('src/services/retention/rewardsModel.ts');
+  const base = { dailyChest: null, daily3: null, weekly: null, levelChest: null, stamps: null, events: null };
+  const walking = { ready: 0, walking: 2, nearest: 0.4, atPark: false };
+  assert.equal(m.rewardsRows({ ...base, trail: { ...walking, door: false } })[0].action, null);
+  assert.equal(m.rewardsRows({ ...base, trail: { ...walking, door: true } })[0].action, 'go');
+  assert.equal(m.rewardsRows({ ...base, trail: walking })[0].action, 'go', 'a build that does not say still offers it');
+  assert.equal(m.rewardsRows({ ...base, trail: null, events: { chests: 1, door: false } })[0].action, null);
+  const doors = loadTs('src/services/retention/rewardsSignals.ts');
+  assert.equal(doors.rewardsDoorOpen('trail'), false);
+  const off = doors.listenRewardsDoor('trail', () => undefined);
+  assert.equal(doors.rewardsDoorOpen('trail'), true);
+  off();
+  assert.equal(doors.openRewardsDoor('trail'), false, 'nobody listening');
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /else if \(!openRewardsDoor\('trail'\)\) setView\(\{ k: 'rewards' \}\);/);
+});

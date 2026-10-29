@@ -34,11 +34,13 @@ export interface RewardsInput {
   /** The lowest unopened level chest, and how many wait (rung 4). */
   readonly levelChest: { readonly level: number; readonly waiting: number } | null;
   /** Trail Boxes, after rung 6: ready to open, walking, and the walking box nearest to done (0..1). */
-  readonly trail: { readonly ready: number; readonly walking: number; readonly nearest: number | null; readonly atPark: boolean } | null;
+  readonly trail: { readonly ready: number; readonly walking: number; readonly nearest: number | null; readonly atPark: boolean;
+    /** The Trail host is on screen to open (false: the row shows its line with no button, never a dead tap). */
+    readonly door?: boolean } | null;
   /** Earned stamps whose rewards are still to claim. */
   readonly stamps: { readonly claimable: number } | null;
   /** Event chests to open, after rung 9 and only while an event is on. */
-  readonly events: { readonly chests: number } | null;
+  readonly events: { readonly chests: number; readonly door?: boolean } | null;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -63,16 +65,17 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
   }
   if (i.trail) {
     const t = i.trail;
-    if (t.ready > 0) rows.push({ key: 'trail', title: 'Trail Boxes', line: `${plural(t.ready, 'box', 'boxes')} ready to open`, ready: t.ready, action: 'open' });
+    const door = t.door !== false;
+    if (t.ready > 0) rows.push({ key: 'trail', title: 'Trail Boxes', line: `${plural(t.ready, 'box', 'boxes')} ready to open`, ready: t.ready, action: door ? 'open' : null });
     else if (t.walking > 0) {
-      rows.push({ key: 'trail', title: 'Trail Boxes', line: t.atPark ? 'Walk the park to open them' : 'They walk open on your next park day', ready: 0, action: 'go' });
+      rows.push({ key: 'trail', title: 'Trail Boxes', line: t.atPark ? 'Walk the park to open them' : 'They walk open on your next park day', ready: 0, action: door ? 'go' : null });
     }
   }
   if (i.stamps && i.stamps.claimable > 0) {
     rows.push({ key: 'stamps', title: 'Stamps', line: `${plural(i.stamps.claimable, 'stamp prize', 'stamp prizes')} to claim`, ready: i.stamps.claimable, action: 'claim_all' });
   }
   if (i.events && i.events.chests > 0) {
-    rows.push({ key: 'events', title: 'Event Chests', line: `${plural(i.events.chests, 'chest', 'chests')} to open`, ready: i.events.chests, action: 'open' });
+    rows.push({ key: 'events', title: 'Event Chests', line: `${plural(i.events.chests, 'chest', 'chests')} to open`, ready: i.events.chests, action: i.events.door !== false ? 'open' : null });
   }
   // Ready rows first (stable within each group).
   return [...rows.filter(r => r.ready > 0), ...rows.filter(r => r.ready === 0)];

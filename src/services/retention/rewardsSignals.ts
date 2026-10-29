@@ -15,6 +15,11 @@ export function openRewardsDoor(door: RewardsDoor): boolean {
   return set.size > 0;
 }
 
+/** Whether a host for this door is mounted right now (a row with no host gets no button: never a dead tap). */
+export function rewardsDoorOpen(door: RewardsDoor): boolean {
+  return listeners[door].size > 0;
+}
+
 /** A host listens while mounted; returns the unsubscribe. */
 export function listenRewardsDoor(door: RewardsDoor, fn: () => void): () => void {
   listeners[door].add(fn);
