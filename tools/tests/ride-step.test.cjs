@@ -590,12 +590,12 @@ test('the screens give a wrapped-up wait its one "I got to the ride" and keep th
   assert.match(screen, /accessibilityLabel="I got to the ride"\n\s+onPress=\{rodeAfterWrapUp\}/);
   assert.match(screen, /onGotToRide=\{snapshot\.endReason === 'left_queue' && !snapshot\.boardingConfirmed \? rodeAfterWrapUp : undefined\}/);
   assert.match(screen, /rideQuestionPending: linePlayBoardingPending/);
+  assert.match(screen, /rideQuestionUp=\{snapshot\.boardingSuggested \|\| leftLineWrapUp \|\|\n\s+\(snapshot\.startedAt != null && linePlayBoardingPending\(ride\.rideId, snapshot\.startedAt\)\)\}/);
   assert.match(read('src/hooks/useRideDetection.ts'), /if \(wait\.rideId === rideDetectionService\.linePlayOpenHere\(\) \|\| rideLoggedUntil/);
   assert.match(screen, /\/\/ Closing the wait \(Done\) answers its ride question: nothing reopens it later to ask\.\n\s+noteRideQuestionAnswered\(\);/);
   const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
   assert.match(recap, /<GameButton label="I got to the ride" variant="ghost" onPress=\{onGotToRide\}/);
   // Under the ride question (and while it closes) the card never says "Checking you're in line".
-  assert.match(screen, /rideQuestionUp=\{snapshot\.boardingSuggested \|\| leftLineWrapUp\}/);
   assert.match(read('src/screens/LinePlay/components/WaitCard.tsx'), /countdown\.needsCheck && !rideQuestionUp \? 'Checking you’re in line…'/);
   const service = read('src/services/RideDetectionService.ts');
   assert.match(service, /if \(visitInLinePlayWait\(ride\.id, zone\.enteredAt, now, now\)\) \{\n\s+noteLinePlayBoardingSeen\(ride\.id, now, now\);/);

@@ -1530,7 +1530,9 @@ export default function LinePlayScreen() {
                 onOwnership={setCoinOwned}
               />}
               coinMissing={coinOwned === false}
-              rideQuestionUp={snapshot.boardingSuggested || leftLineWrapUp}
+              // A wait reopened to ask about a pocketed ride says nothing about checking the line before it asks.
+              rideQuestionUp={snapshot.boardingSuggested || leftLineWrapUp ||
+                (snapshot.startedAt != null && linePlayBoardingPending(ride.rideId, snapshot.startedAt))}
               queueTicketsOn={queueTicketsOn}
             />
           )}
