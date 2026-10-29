@@ -56,7 +56,8 @@ const ART = {
   'tickets-3': require('../../../assets/images/supplies/ticket-bundle.webp'),
   rescue: require('../../../assets/images/supplies/rescue-pass.webp'),
   gift: require('../../../assets/images/supplies/gift.webp'),
-  chest: require('../../../assets/images/supplies/chest.webp'),
+  // The Starter Pack: Alex's closed wooden chest (no overflowing gold, Dustin Oct 28, ledger 38).
+  chest: require('../../../assets/images/screens/redeem/chest_closed.png'),
   bag: require('../../../assets/images/supplies/park-bag.webp'),
   sticker: require('../../../assets/images/supplies/sticker-new.webp'),
 } as const;

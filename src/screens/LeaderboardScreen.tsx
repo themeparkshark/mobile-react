@@ -203,7 +203,7 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
         setActiveTab(index);
       }} />
       {/* The three boards stay mounted (hidden when not chosen), so a tab switch never paints a
-          blank frame: faces, barrels and rows are already decoded. */}
+          blank frame: faces, podium and rows are already decoded. */}
       {/* collapsable={false}: the panes' zIndex must stay inside this view. When it was flattened
           (Fabric), the visible pane's zIndex 1 out-ranked the nav bar, so the board's cream, rows
           and dock drew over the raised compass and nav icons (r7). */}

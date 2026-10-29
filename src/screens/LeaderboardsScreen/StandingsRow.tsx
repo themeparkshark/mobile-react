@@ -105,7 +105,7 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
   );
 }
 
-/** The cream card the list sits on, tucked under the barrels. */
+/** The cream card the list sits on, tucked under the podium steps. */
 export function StandingsListCard({ children }: { readonly children: React.ReactNode }) {
   return (
     <View style={{

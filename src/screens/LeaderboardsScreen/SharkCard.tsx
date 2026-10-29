@@ -13,7 +13,7 @@ import { unitWord, type StandingsMetric, type StandingsRowModel, type WeekGoal }
 import { UpperText } from '../../ui/upper';
 
 /**
- * Your weekly goals (3, 8, 15 rides): moved here from the pinned row in v3,
+ * Your weekly goals (3, 8, 15 wins): moved here from the pinned row in v3,
  * so the board shows one number and the extras wait for a tap on your row.
  */
 function WeekGoals({ goals, score }: { readonly goals: readonly WeekGoal[]; readonly score: number }) {
@@ -21,7 +21,7 @@ function WeekGoals({ goals, score }: { readonly goals: readonly WeekGoal[]; read
   const next = goals.find(g => !g.reached);
   const allDone = reached === goals.length;
   return (
-    <View accessible accessibilityLabel={allDone ? 'All weekly goals done!' : `Weekly goals: ${reached} of ${goals.length} done. Next: ${next?.at} rides for ${next?.xp} XP.`}
+    <View accessible accessibilityLabel={allDone ? 'All weekly goals done!' : `Weekly goals: ${reached} of ${goals.length} done. Next: ${next?.at} wins for ${next?.xp} XP.`}
       style={{ marginTop: 14, alignItems: 'center' }}>
       {allDone ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 34, borderRadius: RADIUS.pill,
@@ -45,7 +45,7 @@ function WeekGoals({ goals, score }: { readonly goals: readonly WeekGoal[]; read
                   </View>
                 )}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                  <GameIcon name="ride" size={18} />
+                  <ScoreIcon metric="ride_wins" size={18} />
                   <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: 'Shark', fontSize: 17, color: BRAND.navy }}>{goal.at}</Text>
                 </View>
                 {isNext ? (
