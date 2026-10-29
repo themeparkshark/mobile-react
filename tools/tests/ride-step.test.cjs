@@ -123,6 +123,9 @@ test('the ride question waits while walking to the next coin, and asks at most o
   assert.equal(g.ridePromptVerdict({ ...base, rideType: 'show' }), 'not_a_ride');
   assert.equal(g.ridePromptVerdict({ ...base, dwellMs: 3 * 60_000 }), 'too_short');
   assert.equal(g.ridePromptVerdict({ ...base, linePlayRideId: JUNGLE.id }), 'lineplay', 'LinePlay asks its own question');
+  // A LinePlay wait at another ride: nothing lands on top of it; the ride waits for the Ride Tracker.
+  assert.equal(g.ridePromptVerdict({ ...base, linePlayRideId: JUNGLE.id + 1 }), 'in_lineplay');
+  assert.equal(g.keepForBatch('in_lineplay'), true, 'kept for after the wait');
   assert.equal(g.ridePromptVerdict({ ...base, loggedUntil: base.now + 1 }), 'logged');
   assert.equal(g.keepForBatch('walking'), true, 'walking: it waits in the Ride Tracker');
   assert.equal(g.keepForBatch('logged'), false, 'the ride step already logged it');
@@ -710,4 +713,11 @@ test('the batch confirm: its arrow says Go back, and "Back to Ride Tracker" real
   assert.doesNotMatch(batch, /accessibilityLabel="Return to Ride Tracker"/);
   assert.match(batch, /onPress=\{backToRideTracker\}/);
   assert.match(batch, /else navigation\.dispatch\(StackActions\.replace\('RideTracker'\)\);/);
+});
+
+test('the batch confirm never lands on top of LinePlay (its wait, its ride question or its recap)', () => {
+  const hook = read('src/hooks/useRideDetection.ts');
+  assert.match(hook, /if \(pending\.length === 0\) return false;\n[^\n]*\n[^\n]*\n\s+if \(navigationRef\.getCurrentRoute\(\)\?\.name === 'LinePlay'\) return false;/);
+  // The reopen for a pocketed ride comes first, so it is never blocked by this.
+  assert.ok(hook.indexOf('reopenLinePlayForRideQuestion()) return true') < hook.indexOf("name === 'LinePlay') return false;\n\n    // One ride question"));
 });

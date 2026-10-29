@@ -65,6 +65,9 @@ export async function checkAndShowPendingRides(): Promise<boolean> {
     if (await reopenLinePlayForRideQuestion()) return true;
     const pending = await getPendingDetections();
     if (pending.length === 0) return false;
+    // The LinePlay screen is up (a wait, its ride question or its recap): the batch confirm never lands on
+    // top of it. The rides wait here until the guest leaves LinePlay.
+    if (navigationRef.getCurrentRoute()?.name === 'LinePlay') return false;
 
     // One ride question (core loop 4.3): rides the ride step logged, shows, transport and walk-bys
     // never come back as a question; the rest wait here while the guest walks to the next coin or

@@ -59,6 +59,7 @@ export type RidePromptVerdict =
   | 'not_a_ride'   // a show, transport, street or walk-through: never asked
   | 'too_short'    // a walk past, not a ride
   | 'walking'      // walking to the next coin: it waits in the Ride Tracker
+  | 'in_lineplay'  // LinePlay is running at another ride: its own question is the only one; this waits
   | 'too_soon';    // another ride question in the last 20 minutes: it waits in the Ride Tracker
 
 export interface RidePromptInput {
@@ -87,6 +88,8 @@ export function ridePromptVerdict(input: RidePromptInput): RidePromptVerdict {
   const min = minRideDwellMs(input.rideType, input.rideMinDwellMinutes, input.rideDurationMinutes);
   if (min == null) return 'not_a_ride';
   if (!(input.dwellMs >= min)) return 'too_short';
+  // A LinePlay wait is running at another ride: nothing lands on top of it (one question per wait).
+  if (input.linePlayRideId != null) return 'in_lineplay';
   if (input.walking) return 'walking';
   if (input.lastPromptAt != null && input.now - input.lastPromptAt < RIDE_PROMPT_GAP_MS) return 'too_soon';
   return 'ask';
@@ -94,7 +97,7 @@ export function ridePromptVerdict(input: RidePromptInput): RidePromptVerdict {
 
 /** Detections that should stay for the Ride Tracker's batch confirm (never the ones already logged or not rides). */
 export function keepForBatch(verdict: RidePromptVerdict): boolean {
-  return verdict === 'walking' || verdict === 'too_soon' || verdict === 'ask';
+  return verdict === 'walking' || verdict === 'in_lineplay' || verdict === 'too_soon' || verdict === 'ask';
 }
 
 // -- the store ----------------------------------------------------------------
