@@ -9,7 +9,8 @@
 export const QUIET_COIN_BROADCAST = 'quietCoinBroadcast';
 
 // The server says "You earned 25 coins!" (HasCurrency) and older copy said "Shark Coins"; tickets the same way.
-const COIN_EARNED = /^You earned \d+ (?:Shark )?(?:coins?|tickets?)!$/i;
+// "You won a ride coin!" lands over the map a beat before the win card says the same thing (core loop row 329).
+const COIN_EARNED = /^You earned \d+ (?:Shark )?(?:coins?|tickets?)!$|^You won a ride coin!$/i;
 
 export function visibleBroadcasts<T>(broadcasts: readonly T[], quietCoins: boolean): T[] {
   if (!quietCoins) return [...broadcasts];

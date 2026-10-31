@@ -482,6 +482,7 @@ test('reward broadcast banners stop: coins and Tickets fly to their pill with +N
   assert.match(setup, /visibleBroadcasts<string>\(response\.data\.broadcasts, REWARD_BANNERS_FOLDED \|\| Boolean\(cfg\?\.\[QUIET_COIN_BROADCAST\]\)\)/);
   const server = ['You earned 25 coins!', 'You earned 1 Ticket!', 'A new limited coin is here!', 'Maintenance tonight at 2 AM.'];
   assert.deepEqual([...filter.visibleBroadcasts(server, true)], ['A new limited coin is here!', 'Maintenance tonight at 2 AM.']);
+  assert.deepEqual([...filter.visibleBroadcasts(['You won a ride coin!', 'Maintenance tonight at 2 AM.'], true)], ['Maintenance tonight at 2 AM.'], 'the win card says it');
   // The header pill is what shows the gain: it celebrates any plain gain with +N.
   const pill = fs.readFileSync(path.join(__dirname, '../../src/components/Topbar/Currency.tsx'), 'utf8');
   assert.match(pill, /setPlusText\(`\+\$\{countText\(gain\)\}`\)/);
