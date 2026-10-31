@@ -91,11 +91,6 @@ function meters(a: { latitude: number; longitude: number }, b: { latitude: numbe
   return 2 * r * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
 
-function clock(endsAt: string, now: number) {
-  const s = Math.max(0, Math.floor((new Date(endsAt).getTime() - now) / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
 export const ERRORS: Record<Exclude<AttackResult, { ok: true }>['error'], string> = {
   too_far: 'Get closer to the ride to fight in person.',
   no_energy: 'Out of Energy! Win a ride coin or open your Daily Chest to refuel, then jump back in.',

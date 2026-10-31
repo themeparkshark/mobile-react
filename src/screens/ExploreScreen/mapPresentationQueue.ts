@@ -138,8 +138,9 @@ export const WIN_CARD_QUIET_MS = 10_000;
 /**
  * Things that may open by themselves:
  * - daily_chest: at home only, once a day, after the first catch (never at a park).
- * - reward: level chest, Daily 3 chest, Weekly Box, event chests: never by themselves at a park;
- *   at home only in a calm moment (the Rewards button holds them otherwise).
+ * - reward: the freeze card and the reminders ask: never by themselves at a park; at home only as the one
+ *   open of a calm moment. Level chests, the Daily 3 chest, the Weekly Box and event chests never open by
+ *   themselves (they wait in the Rewards sheet).
  * - event_recap, membership, help_page, monday_results: through the queue, one per app open.
  */
 export type AutoOpenKind = 'daily_chest' | 'reward' | 'event_recap' | 'membership' | 'help_page' | 'monday_results'

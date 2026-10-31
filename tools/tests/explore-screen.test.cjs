@@ -131,11 +131,14 @@ test('the Park Project pill stays hidden (Park Story waits for players) and the 
   assert.equal(app.find(named('MapStatusStack')), undefined, 'a raid stays off the map until coin levels unlock');
 });
 
-test('daily chest at home: "Back to map" puts it away, and the Rewards button brings it back', async () => {
+test('daily chest at home: "Back to map" puts it away, and the Rewards button opens the Rewards sheet that holds it', async () => {
   const gift = { dailyGift: { id: 4401, redeemed_at: null } };
+  let sheetOpens = 0;
   const modules = { '../components/Tutorial': { useTutorial: () => ({ startTutorial: () => undefined,
     hasCompleted: id => id === 'onboarding', isReady: true, isActive: false }) },
-    '../context/parkLookupPolicy': { isConfirmedOutsidePark: () => true, isHomeMapConfirmed: () => true, nextHomeAnchor: () => null } };
+    '../context/parkLookupPolicy': { isConfirmedOutsidePark: () => true, isHomeMapConfirmed: () => true, nextHomeAnchor: () => null },
+    '../components/retention/useRetention': { default: () => ({ button: null, overlay: null, occluding: false,
+      openRewards: () => { sheetOpens += 1; }, rewards: { count: 1, flame: null, trailRing: null } }) } };
   const home = { parkLoaded: true, parkLookupRecord: null, location: { latitude: 34.1381, longitude: -118.3534 }, park: null,
     permissionGranted: true, permissionChecked: true };
   const app = exploreScreen({ contexts: { dailyGift: gift, location: home, auth: { player: { id: 5, completed_tasks_count: 4 }, refreshPlayer: async () => undefined } }, modules, redeemables });
@@ -150,9 +153,7 @@ test('daily chest at home: "Back to map" puts it away, and the Rewards button br
   const button = app.find(named('HomeExplore')).props.chestButton;
   assert.equal(button?.type?.name, 'RewardsButton', 'the Rewards button holds the chest while unclaimed');
   button.props.onPress(); app.render();
-  const reopened = app.find(named('DailyGiftModal'));
-  assert.ok(reopened, 'the button reopens the chest');
-  reopened.props.onClosed(false); app.render();
+  assert.equal(sheetOpens, 1, 'the button opens the Rewards sheet (its chest row opens the chest)');
   assert.equal(app.find(named('DailyGiftModal')), undefined);
 });
 

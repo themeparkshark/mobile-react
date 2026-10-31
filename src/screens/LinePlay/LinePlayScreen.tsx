@@ -914,7 +914,7 @@ export default function LinePlayScreen() {
   const recapUpgradeReady = recapCoin != null && recapCoin.current_level < recapCoin.max_level &&
     (recapCoin.available_parts ?? 0) >= recapCoin.parts_to_next_level && recapEnergy != null &&
     recapEnergy >= recapCoin.energy_to_next_level;
-  const guideNext = useGuideTarget();
+  const guideNext = useGuideTarget(rideCatalog?.taskId ?? null);
   const recapPartsEarned = snapshot.rewards?.rideParts.reduce((n, p) => n + p.quantity, 0) ?? 0;
   // A coin not owned yet: the GO counts every Part waiting in its slot, not only this wait's.
   const [slotParts, setSlotParts] = useState<number | null>(null);

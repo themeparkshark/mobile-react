@@ -326,14 +326,16 @@ test('the unlock ladder hears LinePlay: line_played at the first verified minute
 
 test('the recap GO and NEXT COIN follow the guide store, and a coin you do not own counts every Part in its slot', async () => {
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.match(screen, /const guideNext = useGuideTarget\(\);/);
+  assert.match(screen, /const guideNext = useGuideTarget\(rideCatalog\?\.taskId \?\? null\);/);
   assert.doesNotMatch(screen, /guide\.current\(\)/, 'no one-time read of the guide during render');
   assert.match(screen, /partsEarned: slotTaskId != null \? slotPartsShown\(recapPartsEarned, slotParts\) : recapPartsEarned/);
   const log = read('src/screens/RideTracker/RideLogScreen.tsx');
-  assert.match(log, /const nextCoin = useGuideTarget\(\);/);
+  assert.match(log, /const nextCoin = useGuideTarget\(selectedRide\?\.task_id \?\? null\);/);
+  assert.match(log, /guide\.setTarget\(nextCoin\.taskId, 'ride_logged'\); navigation\.navigate\('Explore'\);/, 'NEXT COIN moves the one pointer, so the map names the same coin');
   assert.doesNotMatch(log, /guide\.current\(\)/);
   const hook = read('src/services/lineplay/useGuideTarget.ts');
   assert.match(hook, /useSyncExternalStore\(subscribe, snapshot, snapshot\)/);
+  assert.match(hook, /guide\.nextAfter\(afterTaskId\)/, 'the guide\'s resolver names the next coin');
   // The slot count: never fewer than this wait's Parts, and a failed read falls back to them.
   const calls = [];
   const slot = loadTs('src/services/lineplay/slotParts.ts', { '../../api/api': { __esModule: true, default: {

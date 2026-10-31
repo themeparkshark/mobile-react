@@ -68,6 +68,7 @@ export type TargetReason =
   | 'nearest_unknown' // 8. the nearest ride coin with no live answer ("Check it's running")
   | 'nearest_sight'   // 9. the nearest sight coin you do not own
   | 'level_up'        // 10. a coin ready to level up
+  | 'parts'           // GET RIDE PARTS on a coin you own: its line, where the Parts come from (only by a pick)
   | 'leaves_soon'     // 10. a limited coin that leaves soon
   | 'plan';           // home: the coin planned for the next park day
 
@@ -273,6 +274,7 @@ function heldStillValid(input: GuideInput, coins: readonly GuideCoin[], held: Gu
     && input.resumeTarget.taskId !== held.taskId && !coinInPlayRange(input, coin)) return null;
   if (!coin.owned) return coin;                             // still to win
   if (held.reason === 'level_up') return input.coinLevelsUnlocked && coin.levelUpReady ? coin : null;
+  if (held.reason === 'parts') return coin;                 // GET RIDE PARTS holds until a closure, a walk away or a new pick
   if (held.reason === 'line_story') {
     return adventureLineStory(input) && input.adventure?.taskId === coin.taskId ? coin : null;
   }
@@ -301,6 +303,7 @@ export function pickNextCoin(input: GuideInput): GuideTarget | null {
     if (picked && liveOf(input, picked) !== 'closed' && withinReach(input, picked)) {
       if (!picked.owned) return targetFor(input, picked, 'chosen', input.pickedSource ?? 'pick');
       if (input.coinLevelsUnlocked && picked.levelUpReady) return targetFor(input, picked, 'level_up', input.pickedSource ?? 'pick');
+      if (input.pickedSource === 'coin_parts') return targetFor(input, picked, 'parts', 'coin_parts');
     }
   }
 
@@ -329,6 +332,8 @@ export function pickNextCoin(input: GuideInput): GuideTarget | null {
     const playable = coins.find(c => c.taskId !== base.taskId && winnable(input, c) && coinInPlayRange(input, c));
     if (playable) return targetFor(input, playable, 'in_range');
   }
+  // Parts filled the coin while the guide pointed at its line: now it is ready to level up.
+  if (base && baseCoin && base.reason === 'parts' && input.coinLevelsUnlocked && baseCoin.levelUpReady) return targetFor(input, baseCoin, 'level_up', base.source);
   if (base && baseCoin) return targetFor(input, baseCoin, base.reason, base.source);
 
   // 1. Right after winning today's Adventure coin: that ride, for its line story, then its souvenir.
@@ -402,6 +407,8 @@ export function guideState(input: GuideInput, target: GuideTarget | null): Guide
   if (target.reason === 'line_story') return 'line_story';
   if (input.inLineTaskId != null && input.inLineTaskId === target.taskId) return 'in_line';
   if (target.reason === 'level_up') return 'level_up';
+  // Ride Parts come from its line, not from a Ticket: at the ride the card opens LinePlay.
+  if (target.reason === 'parts') return target.inRange ? 'in_line' : 'walk';
   if (input.wallet) {
     const step = nextFreeTicket(input.wallet);
     if (step?.kind === 'claim') return 'claim';
@@ -546,6 +553,19 @@ export const guide = {
     run(input);
     if (!sameTarget(before, held)) emit();
     return held;
+  },
+  /**
+   * The coin the guide names once this ride is done (the LinePlay recap's GO, Ride logged's NEXT COIN). Read
+   * only: nothing moves until the player taps it. The held target if it is another coin; if the guide holds
+   * this very ride (you stood in its line), the resolver's next pick without it, from the map's last input.
+   */
+  nextAfter(taskId: number | null | undefined): GuideTarget | null {
+    if (taskId == null || (held && held.taskId !== taskId)) return held;
+    if (!lastInput) return null;
+    return pickNextCoin({
+      ...lastInput, coins: lastInput.coins.filter(c => c.taskId !== taskId), inLineTaskId: null,
+      chosenTaskId: plan === taskId ? null : lastInput.chosenTaskId ?? plan,
+    });
   },
   /**
    * "Pick another coin" on the Line story (or souvenir) card: the guide moves on from today's

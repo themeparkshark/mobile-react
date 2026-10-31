@@ -192,7 +192,8 @@ export function rungVisible(rung: Rung, opened: Partial<Record<Rung, number>>, p
  * The one rung that may wear a NEW tag in this app open, or null. Pure.
  * - Opened quietly (veteran, reinstall, reveal_all) never wears NEW, nor do Keys.
  * - Once a rung wore NEW in this app open, no other rung does until the next open.
- * - Otherwise the earliest-opened unseen rung goes first.
+ * - Otherwise the earliest-opened unseen rung goes first. Pins goes last: its NEW lives on Profile, so it
+ *   never holds the slot from a tag the map can show.
  */
 export function pickNewTag(opened: Partial<Record<Rung, number>>, seen: Partial<Record<Rung, boolean>>,
   shown: { rung: Rung; appOpenId: string } | null, appOpenId: string): Rung | null {
@@ -201,7 +202,7 @@ export function pickNewTag(opened: Partial<Record<Rung, number>>, seen: Partial<
   for (const rung of RUNG_ORDER) {
     const at = opened?.[rung];
     if (rung === 'keys' || typeof at !== 'number' || at <= 0 || seen?.[rung]) continue;
-    if (best === null || at < (opened[best] as number)) best = rung;
+    if (best === null || best === 'pins' || (rung !== 'pins' && at < (opened[best] as number))) best = rung;
   }
   return best;
 }

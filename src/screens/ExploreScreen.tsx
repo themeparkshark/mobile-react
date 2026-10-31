@@ -111,7 +111,7 @@ import { useMapFlags } from '../services/mapFlags';
 import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSpawn, TeamInfo } from '../api/endpoints/gym-battle';
 import { useTutorial } from '../components/Tutorial';
 import SignInButtons from '../components/SignInButtons';
-import { GameIcon, GameRichText, gameAlert, type GameDialogButton } from '../ui';
+import { GameIcon, GameRichText, gameAlert } from '../ui';
 import type { FrightShopStall } from '../api/endpoints/fright/types';
 import { haptic, queueHaptic } from '../gamekit/Haptics';
 import { playSfx } from '../gamekit/SFX';
@@ -140,6 +140,7 @@ import { usePlayTapHold } from '../components/guide/playTapHold';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
 import NewTag from '../components/map/NewTag';
 import useMapGuide from '../components/guide/useMapGuide';
+import { retireRungTag, useRung } from '../services/reveal/revealLadder';
 import { linePlayRoute } from '../components/guide/guideCoins';
 import { guide } from '../services/guide/nextCoin';
 import type { GuideAction } from '../services/guide/guideCopy';
@@ -700,7 +701,6 @@ export function ExploreScreenBody() {
   const [eventOpen, setEventOpen] = useState(false);
   const starRides = useStarRides(park?.id ?? null);
   const [recapDue, recapSeen] = useRecapDue(liveEvt.event);
-  const [trailOpenRequest, setTrailOpenRequest] = useState(0);
   const liveByTask = useMemo(() => new globalThis.Map<number, LiveRide>(
     (livePark?.rides ?? []).map(r => [r.task_id, r])), [livePark]);
   // Park pulse: a warm haze over the busiest rides on today's map.
@@ -1137,6 +1137,14 @@ export function ExploreScreenBody() {
   // Raids reach the map only after coin levels unlock (they cost Energy) and while the park is open (core loop 5.2).
   const raidOnMap = raidActive && coinLevelsRung.open && parkOpenNow;
   const liveSlotShown = (coinLevelsRung.open && (raidOnMap || !!rushes.length)) || receiptNeedsCheck || !!bossMap.moment;
+  // The one NEW goes to a surface that wears it. The team step and LinePlay in a real line are their own moment
+  // and wear none; coin levels wear theirs only on a raid or Rush pill. Those rungs never hold the slot.
+  const teamRung = useRung('team');
+  const linePlayRung = useRung('lineplay');
+  const coinLevelsCanWearNew = raidOnMap || rushes.length > 0;
+  useEffect(() => { if (teamRung.isNew) retireRungTag('team'); }, [teamRung.isNew]);
+  useEffect(() => { if (linePlayRung.isNew) retireRungTag('lineplay'); }, [linePlayRung.isNew]);
+  useEffect(() => { if (coinLevelsRung.isNew && !coinLevelsCanWearNew) retireRungTag('coin_levels'); }, [coinLevelsRung.isNew, coinLevelsCanWearNew]);
   // The team bar stays hidden until a team pick, then it is a small team chip (core loop 4.2).
   const hasTeam = !!playerTeam?.has_team;
   // The guide card's words can change under a finger (Walk to In line): swallow taps on it for a moment after a swap.
@@ -1241,23 +1249,12 @@ export function ExploreScreenBody() {
     chestUnclaimed: chestUnclaimed && !chestShowing, trailReady: trail.state?.ready.length ?? 0,
     dailyOpen, flame: player?.daily3_streak ?? 0, trailOpen,
     trailProgress: trailBox ? (trailBox.status === 'ready' ? 1 : 1 - stepsToGo(trailBox) / Math.max(1, trailBox.goal_steps)) : null,
-  }), (retention as { rewards?: unknown }).rewards);
+  }), retention.rewards);
+  const { openRewards: openRewardsSheet } = retention;
   const openRewards = useCallback(() => {
     rewardsTapped.current = true;
-    // The Rewards sheet (rewards-unlocks) when this build has it; until then the one thing, or a short choice.
-    const sheet = (retention as { openRewards?: () => void }).openRewards;
-    if (sheet) { sheet(); return; }
-    const choices: GameDialogButton[] = [];
-    if (chestUnclaimed) choices.push({ text: 'Daily chest', icon: 'chest', onPress: () => setChestRequested(true) });
-    if (dailyOpen) choices.push({ text: 'Daily 3', icon: 'streak', onPress: () => navigation.setParams({ open: 'daily3' }) });
-    if (trailOpen) choices.push({ text: 'Trail Boxes', icon: 'gift', onPress: () => setTrailOpenRequest(n => n + 1) });
-    if (!choices.length) {
-      gameAlert('Rewards', 'Nothing to claim right now. A new daily chest comes tomorrow.', [{ text: 'OK' }], { icon: 'chest' });
-      return;
-    }
-    if (choices.length === 1) { choices[0].onPress?.(); return; }
-    gameAlert('Your rewards', undefined, [...choices, { text: 'Not now', style: 'cancel' }], { equalChoices: true });
-  }, [retention, chestUnclaimed, dailyOpen, trailOpen, navigation]);
+    openRewardsSheet();
+  }, [openRewardsSheet]);
   // The unlock ladder's feed and the park day events (core loop 4.4, "Who records what").
   const trailBoxCount = trail.state ? trail.state.walking.length + trail.state.waiting.length + trail.state.ready.length
     + (trail.state.lifetime?.boxes_opened ?? 0) : 0;
@@ -1278,6 +1275,7 @@ export function ExploreScreenBody() {
       ownsPin: false,
       revealAll: guideFlags.reveal_all === true,
       inLineNow: !!park && nextCoin.state === 'in_line',
+      eventScheduled: !!liveEvt.event,
     } : null,
     flags: guideFlags,
   });
@@ -1671,7 +1669,7 @@ export function ExploreScreenBody() {
           the boxes. The host stays mounted (no pill drawn) so its sheet and reveal open from that button. */}
       {player && permissionGranted && trailOpen && (
         <View pointerEvents="none" style={styles.trailHostHidden} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <TrailHost active={false} inPark={!!park} openRequest={trailOpenRequest} />
+          <TrailHost active={false} inPark={!!park} />
         </View>
       )}
       {/* Guest: play first (Finn's treat, a quick game, a coin on the shelf), then sign in to save the shark. */}

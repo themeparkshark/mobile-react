@@ -298,3 +298,17 @@ test('store: signed out, nothing opens and nothing is saved', () => {
   assert.equal(s.R.rungState('team').open, false);
   assert.equal(s.disk.size, 0);
 });
+
+
+test('the one NEW never waits on a rung nothing can wear: Pins goes last, and the map retires the quiet rungs', () => {
+  const L = require('./helpers/ts-module.cjs').loadTs('src/services/reveal/ladderRules.ts');
+  assert.equal(L.pickNewTag({ pins: 100, daily: 200 }, {}, null, 'a'), 'daily', 'Pins lives on Profile: the map tag goes first');
+  assert.equal(L.pickNewTag({ pins: 100, daily: 200 }, { daily: true }, { rung: 'daily', appOpenId: 'a' }, 'b'), 'pins', 'then Pins');
+  assert.equal(L.pickNewTag({ pins: 100, daily: 200 }, {}, { rung: 'pins', appOpenId: 'a' }, 'a'), 'pins', 'stable within the open');
+  const fs = require('node:fs'); const path = require('node:path');
+  const explore = fs.readFileSync(path.join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(explore, /if \(teamRung\.isNew\) retireRungTag\('team'\)/);
+  assert.match(explore, /if \(linePlayRung\.isNew\) retireRungTag\('lineplay'\)/);
+  assert.match(explore, /if \(coinLevelsRung\.isNew && !coinLevelsCanWearNew\) retireRungTag\('coin_levels'\)/);
+  assert.match(explore, /eventScheduled: !!liveEvt\.event,/, 'rung 9 opens only with an event scheduled');
+});

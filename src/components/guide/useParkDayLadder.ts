@@ -22,6 +22,8 @@ export interface LadderFeed {
   readonly ownsPin: boolean;
   readonly revealAll: boolean;
   readonly inLineNow: boolean;
+  /** An event is scheduled for this player (rung 9 needs one). */
+  readonly eventScheduled: boolean;
 }
 
 export default function useParkDayLadder(input: {

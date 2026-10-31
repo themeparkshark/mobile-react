@@ -486,3 +486,17 @@ test('reward broadcast banners stop: coins and Tickets fly to their pill with +N
   const pill = fs.readFileSync(path.join(__dirname, '../../src/components/Topbar/Currency.tsx'), 'utf8');
   assert.match(pill, /setPlusText\(`\+\$\{countText\(gain\)\}`\)/);
 });
+
+
+test('the Rush and Boss banners say calm whole minutes, never a ticking m:ss (4.3 rule 7)', () => {
+  const fs = require('node:fs'); const path = require('node:path');
+  const pill = fs.readFileSync(path.join(__dirname, '../../src/components/LiveEventsPill.tsx'), 'utf8');
+  assert.doesNotMatch(pill, /padStart/, 'no m:ss');
+  assert.match(pill, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 60_000\)/, 'no seconds tick');
+  assert.equal((pill.match(/minutesLeftLabel\(/g) ?? []).length, 5, 'both banners and both spoken labels use the one label');
+  const J = loadTs('src/components/boss/joinModel.ts', {});
+  const now = Date.parse('2026-10-31T12:00:00Z');
+  assert.equal(J.minutesLeft('2026-10-31T12:16:01Z', now), 17);
+  assert.equal(J.minutesLeft('2026-10-31T12:00:10Z', now), 1, 'never 0 while it is still on');
+  assert.equal(J.minutesLeft('2026-10-31T11:59:00Z', now), 0);
+});

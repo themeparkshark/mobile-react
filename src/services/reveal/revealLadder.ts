@@ -275,6 +275,18 @@ export function markRungSeen(rung: Rung): void {
   emit();
 }
 
+/**
+ * A rung with no surface that wears NEW right now retires its tag, and it gives this app open's one NEW slot
+ * back, so an early rung nobody can see never holds the tag from one the player can (the team step, LinePlay
+ * in a real line, coin levels with no raid or Rush pill up).
+ */
+export function retireRungTag(rung: Rung): void {
+  if (!player || record.seen[rung]) return;
+  record = { ...record, seen: { ...record.seen, [rung]: true }, shown: record.shown?.rung === rung ? null : record.shown };
+  persist();
+  emit();
+}
+
 function rungKey(rung: Rung): string {
   if (!player || !hydrated || !server) return '00';
   const visible = rungVisible(rung, record.opened, progress(), flags);

@@ -705,7 +705,9 @@ test('a shown NEW retires when its surface hides, unmounts or the app goes to th
   // Then the next app open's NEW slot goes to the next rung (Daily 3, the pass or Trail), never stuck on Pins.
   const ladder = loadTs('src/services/reveal/ladderRules.ts', {});
   const opened = { pins: 100, daily: 200 };
-  assert.equal(ladder.pickNewTag(opened, {}, null, 'open-1'), 'pins');
+  assert.equal(ladder.pickNewTag(opened, {}, null, 'open-1'), 'daily', 'a tag the map can show goes first: Pins waits on Profile');
+  assert.equal(ladder.pickNewTag(opened, { daily: true }, { rung: 'daily', appOpenId: 'open-1' }, 'open-2'), 'pins');
+  assert.equal(ladder.pickNewTag({ pins: 100 }, {}, null, 'open-1'), 'pins', 'alone, Pins wears it');
   assert.equal(ladder.pickNewTag(opened, { pins: true }, { rung: 'pins', appOpenId: 'open-1' }, 'open-2'), 'daily');
 });
 

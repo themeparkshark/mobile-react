@@ -570,20 +570,16 @@ test('round 5: the park day story waits on top after park_day_done', () => {
   assert.equal(model.storyOnTop({ atPark: true, ridesWonToday: 2, milestone: false }), false, 'still at the park: lower');
 });
 
-test('integration (fails until wired): after guide-map merges, the shelf listens to park_day_done', t => {
-  // Integration step (BACKEND_NEEDS, lane shelf-words): in src/screens/ParkScreen.tsx
-  //   import { parkDaySignal } from '../services/guide/parkDay';
-  //   const dayDone = useSyncExternalStore(parkDaySignal.subscribe, parkDaySignal.last, parkDaySignal.last);
-  //   const justLeft = !!dayDone && dayDone.parkId === Number(park) && dayDone.day === <today, park-local>;
-  //   pass justLeft to storyOnTop, and re-read the recap (loadRecap(Number(park))) when dayDone changes.
-  // Nothing opens full screen: the card only moves to the top of the shelf.
-  if (!fs.existsSync(path.join(ROOT, 'src/services/guide/parkDay.ts'))) {
-    t.skip('guide-map has not merged parkDay.ts into this branch yet');
-    return;
-  }
+test('after park_day_done the shelf puts the park day story on top, with fresh numbers, and opens nothing by itself', () => {
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /parkDaySignal\.subscribe/, 'ParkScreen subscribes to park_day_done');
-  assert.match(park, /justLeft/, 'storyOnTop gets justLeft from the signal');
+  assert.match(park, /dayDone\.parkId === Number\(park\) && dayDone\.day === localDay\(Date\.now\(\)\)/, 'only this park, only today');
+  assert.match(park, /storyOnTop\(\{ atPark: inThisPark, justLeft,/, 'storyOnTop gets justLeft from the signal');
+  assert.match(park, /recapCache\.current = null;\n\s*void loadRecap\(Number\(park\)\)/, 'the story is read fresh when the day ends');
+  // The card keeps its own rule: Flex reveals never open by themselves.
+  assert.doesNotMatch(read('src/screens/ParkDayRecapCard.tsx'), /shareDay\(\);/);
+  const ladder = read('src/components/guide/useParkDayLadder.ts');
+  assert.match(ladder, /parkDaySignal\.publish\(/, 'the map publishes the signal');
 });
 
 test('round 5: the shelf opens with the last live answer, so NEXT COIN never flashes an unchecked ride', () => {

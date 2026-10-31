@@ -144,7 +144,8 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
   const kickerFor = () => target?.reason === 'adventure' || target?.reason === 'line_story' ? 'TODAY\'S ADVENTURE'
     : target?.reason === 'chosen' ? 'YOUR NEXT COIN'
       : target?.reason === 'star_rush' ? 'SHORT WAIT'
-        : target?.reason === 'leaves_soon' ? 'LIMITED COIN' : 'NEXT COIN';
+        : target?.reason === 'leaves_soon' ? 'LIMITED COIN'
+          : target?.reason === 'parts' ? 'GET RIDE PARTS' : 'NEXT COIN';
   const card = (copy: Omit<GuideCardCopy, 'secondary' | 'dots' | 'pointsAtPlay' | 'a11y'> & Partial<GuideCardCopy>): GuideCardCopy => {
     const out = { ...base, ...copy } as GuideCardCopy;
     // Joined into sentences without doubling a stop ("PARK!. " or "U.S.A.. ").
@@ -182,7 +183,8 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
       return card({
         kicker: `WELCOME TO ${shortParkName(ctx.parkName).toUpperCase()}!`,
         // A coin you already won (today's Adventure ride, for its line story) is never "First coin".
-        title: target ? (target.reason === 'line_story' ? `Next: ${possessive(name)} line story` : `First coin: ${name}`) : 'Every ride has a coin',
+        title: target ? (target.reason === 'line_story' ? `Next: ${possessive(name)} line story`
+          : target.reason === 'parts' ? `Next: ${possessive(name)} Ride Parts` : `First coin: ${name}`) : 'Every ride has a coin',
         line: [far, running].filter(Boolean).join(' · ') || null,
         button: target ? { label: 'GO', action: 'go' } : null,
       });

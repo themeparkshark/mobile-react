@@ -17,18 +17,17 @@ import type { RushPick } from '../services/live/rush';
 import { BRAND, GameIcon } from '../ui';
 import { BOSS_ART } from './boss/bossArt';
 import countText from '../helpers/countText';
+import { minutesLeft } from './boss/joinModel';
 
 export type { RushPick };
 
 /**
- * When it ends, in words ("until 2:45 PM"): calm timers, never a ticking countdown where a kid
- * plays (core loop 4.3 rule 7).
+ * How long it has left in calm whole minutes ("16 min left"), like the raid card: never a ticking m:ss
+ * where a kid plays (core loop 4.3 rule 7).
  */
-export function untilLabel(endsAt: string, now: number): string {
-  const end = new Date(endsAt);
-  if (!Number.isFinite(end.getTime()) || end.getTime() <= now) return 'ending now';
-  const hours = end.getHours(), minutes = end.getMinutes();
-  return `until ${hours % 12 === 0 ? 12 : hours % 12}:${String(minutes).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`;
+export function minutesLeftLabel(endsAt: string, now: number): string {
+  const minutes = minutesLeft(endsAt, now);
+  return minutes > 0 ? `${minutes} min left` : 'ending now';
 }
 
 /** The Rush bolt: his Rush icon with a live pulse (still under reduced motion). */
@@ -124,14 +123,14 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
     const pct = Math.round((boss.hp_left / Math.max(1, boss.hp_max)) * 100);
     return (
       <Pressable accessibilityRole="button" onPress={onBoss} style={[styles.pillShadow, inline && styles.inline]}
-        accessibilityLabel={`Boss raid: ${BOSS_NAMES[boss.boss]} at ${boss.ride_name}. ${pct} percent health, ${boss.fighters} fighting, ${untilLabel(boss.ends_at, now)}. Open.`}>
+        accessibilityLabel={`Boss raid: ${BOSS_NAMES[boss.boss]} at ${boss.ride_name}. ${pct} percent health, ${boss.fighters} fighting, ${minutesLeftLabel(boss.ends_at, now)}. Open.`}>
         <LinearGradient colors={[BRAND.blueBright, BRAND.blue]} style={[styles.pill, styles.bossPill]}>
           <Image source={BOSS_ART[boss.boss]} style={styles.bossIcon} contentFit="contain" />
           <View style={{ flex: 1 }}>
             <Text style={[styles.title, styles.bossTitle]} numberOfLines={1}>{BOSS_NAMES[boss.boss].toUpperCase()}  ·  {boss.ride_name}</Text>
             <View style={styles.hpRow}>
               <View style={styles.hpTrack}><View style={[styles.hpFill, { width: `${Math.max(2, pct)}%` }]} /></View>
-              <Text style={[styles.sub, styles.bossSub]} numberOfLines={1}>{boss.fighters} fighting  ·  {untilLabel(boss.ends_at, now)}</Text>
+              <Text style={[styles.sub, styles.bossSub]} numberOfLines={1}>{boss.fighters} fighting  ·  {minutesLeftLabel(boss.ends_at, now)}</Text>
             </View>
           </View>
           {liveRushes.length > 0 ? (
@@ -148,12 +147,12 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
   const { task, rush, wait } = liveRushes[0];
   return (
     <Pressable accessibilityRole="button" onPress={() => onRush(task)} style={[styles.pill, styles.rushPill, inline && styles.inline]}
-      accessibilityLabel={`Rush on ${task.name}: ${wait} minute wait, usually ${rush.typical}. Extra Parts ${untilLabel(rush.ends_at, now)}. Show on map.`}>
+      accessibilityLabel={`Rush on ${task.name}: ${wait} minute wait, usually ${rush.typical}. Extra Parts, ${minutesLeftLabel(rush.ends_at, now)}. Show on map.`}>
       <RushBolt />
       <View style={{ flex: 1 }}>
         <Text style={[styles.title, styles.rushTitle]} numberOfLines={1}>RUSH  ·  {task.name}</Text>
         <Text style={[styles.sub, styles.rushSub]} numberOfLines={1}>
-          {wait} min wait (usually {rush.typical})  ·  extra Parts {untilLabel(rush.ends_at, now)}
+          {wait} min wait (usually {rush.typical})  ·  extra Parts  ·  {minutesLeftLabel(rush.ends_at, now)}
           {liveRushes.length > 1 ? `  +${liveRushes.length - 1} more` : ''}
         </Text>
       </View>

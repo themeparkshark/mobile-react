@@ -35,6 +35,7 @@ import ProfileStatIcon from '../../components/ProfileStatIcon';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { GameIcon, gameAlert, SharkLoader } from '../../ui';
 import { useGuideTarget } from '../../services/lineplay/useGuideTarget';
+import { guide } from '../../services/guide/nextCoin';
 
 // ─── Park Selector ───
 interface ParkItemProps {
@@ -404,7 +405,8 @@ export default function RideLogScreen() {
     else returnToRideTracker();
   }, [navigation, returnToRideTracker]);
   // Follows the guide store, so NEXT COIN appears (or changes) when the map's resolver moves the pointer.
-  const nextCoin = useGuideTarget();
+  // Never the ride just logged: the guide's resolver names the next coin without it.
+  const nextCoin = useGuideTarget(selectedRide?.task_id ?? null);
 
   if (showSuccess && successData) {
     return (
@@ -419,7 +421,7 @@ export default function RideLogScreen() {
         onDone={fromRideStep ? backToRecap : returnToRideTracker}
         doneLabel={fromRideStep ? 'Back to your wait recap' : 'Return to Ride Tracker'}
         nextCoinName={nextCoin?.name ?? null}
-        onNextCoin={nextCoin ? () => navigation.navigate('Explore') : undefined}
+        onNextCoin={nextCoin ? () => { guide.setTarget(nextCoin.taskId, 'ride_logged'); navigation.navigate('Explore'); } : undefined}
         onLogAnother={() => {
           setShowSuccess(false);
           setSuccessData(null);

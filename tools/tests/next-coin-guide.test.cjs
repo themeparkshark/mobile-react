@@ -225,6 +225,51 @@ test('rule 6 and rule 10 wait for their rungs', () => {
   assert.equal(G.guideState(input(), level), 'level_up');
 });
 
+test('GET RIDE PARTS on a coin you own moves the card and the path to its line, and holds there', () => {
+  const coins = [coin(1, 'Jungle Cruise', 100), coin(2, 'Haunted Mansion', 200, { owned: true })];
+  const live = { 1: 'open', 2: 'open' };
+  const before = G.pickNextCoin(input({ coins, live }));
+  assert.equal(before.taskId, 1);
+  const picked = G.pickNextCoin(input({ coins, live, current: before, pickedTaskId: 2, pickedSource: 'coin_parts' }));
+  assert.equal(picked.taskId, 2, 'the owned coin is the target');
+  assert.equal(picked.reason, 'parts');
+  assert.equal(picked.source, 'coin_parts');
+  assert.equal(G.guideState(input({ coins, live }), picked), 'walk', 'far away: walk to it');
+  const held = G.pickNextCoin(input({ coins, live, current: picked }));
+  assert.equal(held.taskId, 2, 'it holds on the next resolve');
+  assert.equal(held.reason, 'parts');
+  // Any other owned pick is still ignored.
+  const other = G.pickNextCoin(input({ coins, live, current: before, pickedTaskId: 2, pickedSource: 'shelf_next' }));
+  assert.equal(other.taskId, 1);
+  // At the ride the card opens LinePlay (Parts come from the line, never a Ticket).
+  const near = [coins[0], coin(2, 'Haunted Mansion', 10, { owned: true })];
+  const here = G.pickNextCoin(input({ coins: near, live, current: picked }));
+  assert.equal(here.taskId, 2);
+  assert.equal(G.guideState(input({ coins: near, live, wallet: { tickets: 0, freeTryReady: false, extraTries: 0, queueTicketsOn: false } }), here), 'in_line');
+  // Full of Parts: it turns into the level up card. Closed: the guide moves on.
+  const ready = [coins[0], { ...coins[1], levelUpReady: true }];
+  assert.equal(G.pickNextCoin(input({ coins: ready, live, current: picked, coinLevelsUnlocked: true })).reason, 'level_up');
+  assert.equal(G.pickNextCoin(input({ coins, live: { 1: 'open', 2: 'closed' }, current: picked })).taskId, 1);
+});
+
+test('guide.nextAfter names the next coin after a ride: never that ride, and it moves nothing', () => {
+  G.guide.reset();
+  const coins = [coin(1, 'Jungle Cruise', 100), coin(2, 'Haunted Mansion', 200, { owned: true })];
+  const live = { 1: 'open', 2: 'open' };
+  const base = { mode: 'park', parkId: 8, location: BASE, coins, live, now: NOW };
+  assert.equal(G.guide.nextAfter(2), null, 'the map has not resolved yet: no name');
+  G.guide.resolve({ ...base, inLineTaskId: 2 });
+  assert.equal(G.guide.current().taskId, 2, 'standing in its line, the guide holds the ride');
+  const next = G.guide.nextAfter(2);
+  assert.equal(next.taskId, 1, 'the resolver picks the next coin without it');
+  assert.equal(G.guide.current().taskId, 2, 'a read moves nothing');
+  assert.equal(G.guide.nextAfter(null).taskId, 2, 'no ride named: the held target');
+  G.guide.setTarget(1, 'lineplay_recap');
+  G.guide.resolve(base);
+  assert.equal(G.guide.nextAfter(2).taskId, 1, 'held on another coin: that coin');
+  G.guide.reset();
+});
+
 test('never an owned coin, except level up, the Line story and the line you stand in', () => {
   const owned = RIDES.map(c => ({ ...c, owned: true }));
   assert.equal(G.pickNextCoin(input({ coins: owned, live: { 1: 'open' } })), null);
@@ -504,7 +549,7 @@ test('a tapped coin says "Walk closer: N m" until PLAY! can rise; calm timers sa
   const pill = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/LiveEventsPill.tsx'), 'utf8');
   assert.doesNotMatch(pill, /padStart\(2, '0'\)\}`;\n\}/, 'no m:ss clock');
   assert.match(pill, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 60_000\)/, 'no per-second tick');
-  assert.match(pill, /extra Parts \{untilLabel\(rush\.ends_at, now\)\}/);
+  assert.match(pill, /extra Parts  ·  \{minutesLeftLabel\(rush\.ends_at, now\)\}/);
 });
 
 test('the Adventure Ticket: a first ticket never says "detour", and there is one "Pick another ride" button', () => {
@@ -629,7 +674,7 @@ test('LinePlay has its own icon on the guide card; the pocket watch means Wait T
   const fs = require('node:fs');
   const card = fs.readFileSync(require('node:path').join(__dirname, '../../src/components/guide/NextCoinCard.tsx'), 'utf8');
   const icon = fs.readFileSync(require('node:path').join(__dirname, '../../src/components/guide/linePlayIcon.ts'), 'utf8');
-  assert.match(icon, /LINEPLAY_ICON = require\('\.\.\/\.\.\/\.\.\/assets\/images\/howto\/queue\.webp'\)/);
+  assert.match(icon, /LINEPLAY_ICON = require\('\.\.\/\.\.\/\.\.\/assets\/icons\/game\/line\.png'\)/, 'the same file as GameIcon line: one LinePlay icon everywhere');
   assert.match(card, /import \{ LINEPLAY_ICON \} from '\.\/linePlayIcon'/);
   const sheet = fs.readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/AdventureTicketCard.tsx'), 'utf8');
   assert.match(sheet, /image=\{prompt\.intent === 'play' \? LINEPLAY_ICON : undefined\}/, 'the Adventure sheet\'s line story button wears LinePlay\'s icon');

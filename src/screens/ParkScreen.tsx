@@ -1,6 +1,8 @@
 import { Image } from 'expo-image';
 import { goalCoinKind, guideShelfHint, levelUpGoalHint, shelfGuidePick, shelfNearbyPick, stalePlan } from '../services/collection/nextCoinCopy';
 import { levelUpGoal } from '../services/collection/levelUpGoal';
+import { parkDaySignal } from '../services/guide/parkDay';
+import { localDay } from '../services/reveal/revealLadder';
 import { chunk } from 'lodash';
 import { useContext, useState, useEffect, useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useFocusEffect, useIsFocused, useNavigation, type NavigationProp } from '@react-navigation/native';
@@ -362,7 +364,18 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   useEffect(() => { if (arrivalTab) setTab(arrivalTab); }, [arrivalTab]);
   // The story's place is decided when the shelf paints (placedRecap), never after: a story that comes in
   // later sits below the shelf until the next visit, so nothing jumps over the shelf under the thumb.
-  const storyTop = canChooseGoal && !!placedRecap && storyOnTop({ atPark: inThisPark,
+  // One exception: the map says this park day just ended (park_day_done). The day's story goes on top of
+  // the shelf with fresh numbers, even if the place check lags. Nothing opens full screen; only its place moves.
+  const dayDone = useSyncExternalStore(parkDaySignal.subscribe, parkDaySignal.last, parkDaySignal.last);
+  const justLeft = !!dayDone && dayDone.parkId === Number(park) && dayDone.day === localDay(Date.now());
+  useEffect(() => {
+    if (!justLeft || !canChooseGoal) return undefined;
+    let live = true;
+    recapCache.current = null;
+    void loadRecap(Number(park)).then(recap => { if (live && recap) setPlacedRecap(recap); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [justLeft, dayDone?.at, park, canChooseGoal, loadRecap]);
+  const storyTop = canChooseGoal && !!placedRecap && storyOnTop({ atPark: inThisPark, justLeft,
     ridesWonToday: placedRecap.distinct_rides_won, milestone: milestoneToday(totals, placedRecap.new_coins) });
   const parkStores = inThisPark ? locationPark?.stores ?? [] : [];
   const trophyNext = currentPark ? nextTrophy(currentPark.park_coins_count) : null;
