@@ -101,27 +101,27 @@ test('the one next step: top 10 if 3 or fewer away, a weekly goal if 2 or fewer,
   const base = { board: 'week', metric: 'ride_wins' };
   const chase = (over = {}) => ({ name: 'p1010', toPass: 1, tied: false, passes: 1, targetRank: 10, rank: 10, ...over });
   const at11 = { ...base, me: { rank: 11, score: 10 }, chase: chase(), rows: [{ rank: 10, score: 10 }] };
-  assert.deepEqual(plain(model.nextStep(at11)), { kind: 'top10', plus: 1, target: 'TOP 10', icon: 'trophy', text: '1 more ride to make the top 10!' });
+  assert.deepEqual(plain(model.nextStep(at11)), { kind: 'top10', plus: 1, target: 'TOP 10', icon: 'trophy', text: '1 more win to make the top 10!' });
   const leap = { ...base, me: { rank: 30, score: 5 }, chase: chase({ name: 'p1029', passes: 1, targetRank: 29 }), rows: [{ rank: 10, score: 7 }] };
   assert.equal(model.nextStep(leap).kind, 'top10', 'r5 milestone rule: the top 10 within 3 beats a 1-ride jump');
   const block = { ...base, me: { rank: 130, score: 21 }, chase: chase({ name: 'dinoking', tied: true, passes: 23, targetRank: 107 }), rows: [{ rank: 10, score: 37 }] };
   const tie = model.nextStep(block);
-  assert.deepEqual(plain(tie), { kind: 'jump', plus: 1, target: '#107', icon: null, text: '1 more ride jumps you past 23 players!' });
+  assert.deepEqual(plain(tie), { kind: 'jump', plus: 1, target: '#107', icon: null, text: '1 more win jumps you past 23 players!' });
   assert.doesNotMatch(tie.text, /dinoking|got there first/, 'never names who beat you');
   const two = model.nextStep({ ...block, chase: chase({ toPass: 2, passes: 5, targetRank: 125 }) });
-  assert.equal(two.text, '2 more rides jump you past 5 players!');
+  assert.equal(two.text, '2 more wins jump you past 5 players!');
   const goal = model.nextStep({ ...block, me: { rank: 130, score: 7 }, chase: chase({ toPass: 3, passes: 40, targetRank: 90 }),
     goals: [{ at: 3, xp: 10, reached: true }, { at: 8, xp: 25, reached: false }, { at: 15, xp: 50, reached: false }] });
-  assert.deepEqual(plain(goal), { kind: 'goal', plus: 1, target: '8', icon: 'star', text: '1 more ride reaches your weekly goal of 8!' });
+  assert.deepEqual(plain(goal), { kind: 'goal', plus: 1, target: '8', icon: 'star', text: '1 more win reaches your weekly goal of 8!' });
   // r3: a podium landing says so with a crown; a far jump shows how many you pass, not a five-digit rank.
   const podium = model.nextStep({ ...base, me: { rank: 5, score: 30 }, chase: chase({ toPass: 2, passes: 2, targetRank: 3 }), rows: [] });
-  assert.deepEqual(plain([podium.target, podium.icon, podium.text]), ['#3', 'crown', '2 more rides puts you on the podium!']);
+  assert.deepEqual(plain([podium.target, podium.icon, podium.text]), ['#3', 'crown', '2 more wins puts you on the podium!']);
   const far = model.nextStep({ board: 'all_time', metric: 'ride_coins', me: { rank: 12515, score: 3 }, chase: chase({ toPass: 2, passes: 1250, targetRank: 11265 }), rows: [] });
   assert.deepEqual(plain([far.target, far.icon]), ['1250', 'up']);
   const leader = model.nextStep({ ...base, me: { rank: 1, score: 50 }, chase: null });
   assert.equal(leader.kind, 'leader');
   const home = model.nextStep({ ...base, me: { rank: null, score: 0 }, chase: null }, false);
-  assert.deepEqual(plain(home), { kind: 'join', canRide: false, text: 'Next park day: win 1 ride!' });
+  assert.deepEqual(plain(home), { kind: 'join', canRide: false, text: 'Next park day: win 1 coin!' });
   assert.equal(model.nextStep({ ...base, me: { rank: null, score: 0 }, chase: null }, true).canRide, true);
   const parsed = model.boardModel(firstPage({ chase: { id: 1119, screen_name: 'p1119', rank: 119, score: 381, to_pass: 1, tied: true, passes: 12, target_rank: 108 } }), 'week', 5);
   assert.deepEqual(plain([parsed.chase.passes, parsed.chase.targetRank]), [12, 108]);
@@ -460,9 +460,9 @@ test('r7 final: a failed refetch after a revoke never brings the old name back',
 test('r7 final: podium copy, teach the card, no spoiler flash on a cold open', async () => {
   const base = { board: 'week', metric: 'ride_wins', rows: [] };
   const step = (rank, landing, toPass) => model.nextStep({ ...base, me: { rank, score: 6 }, chase: { name: 'p', toPass, tied: false, passes: 1, targetRank: landing, rank: landing } });
-  assert.equal(step(3, 2, 1).text, '1 more ride moves you up to #2!', '#3 is already on the podium');
-  assert.equal(step(2, 1, 2).text, '2 more rides takes the top spot!');
-  assert.equal(step(5, 3, 1).text, '1 more ride puts you on the podium!', 'off the podium it still says so');
+  assert.equal(step(3, 2, 1).text, '1 more win moves you up to #2!', '#3 is already on the podium');
+  assert.equal(step(2, 1, 2).text, '2 more wins takes the top spot!');
+  assert.equal(step(5, 3, 1).text, '1 more win puts you on the podium!', 'off the podium it still says so');
 
   const saved = new Map();
   const store = loadTs('src/screens/LeaderboardsScreen/standingsV2Store.ts', {

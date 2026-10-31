@@ -16,6 +16,10 @@ import { coinLevelLabel } from '../constants/coinTiers';
 import { gameAlert } from '../ui/GameDialog';
 import GameIcon from '../ui/GameIcon';
 import Ribbon from './Ribbon';
+import { guide } from '../services/guide/nextCoin';
+import { levelUpGoal } from '../services/collection/levelUpGoal';
+import { LEAVE_FADE_MS, shelfLeaving } from '../services/collection/shelfLeaving';
+import { useNativeModalLayer } from '../ui/modalLayers';
 import YellowButton from './YellowButton';
 
 export default function TaskCoinModal({
@@ -25,10 +29,12 @@ export default function TaskCoinModal({
   timesCompleted,
   level,
   onPlayInLine,
+  onShowOnMap,
   size = 60,
   phase = 0,
   openRequestKey,
   igniteKey,
+  sight = false,
 }: {
   readonly isSecretTask?: boolean;
   readonly task: TaskType | SecretTaskType;
@@ -38,6 +44,8 @@ export default function TaskCoinModal({
   readonly trigger?: ReactNode;
   readonly readOnly?: boolean;
   readonly onPlayInLine?: () => void;
+  /** At this park: opens the map with the path to this ride (GET RIDE PARTS). */
+  readonly onShowOnMap?: () => void;
   readonly size?: number;
   /** Slot index, spreads the shared shelf shimmer. */
   readonly phase?: number;
@@ -45,6 +53,8 @@ export default function TaskCoinModal({
   readonly openRequestKey?: number;
   /** Plays the slot ignite (a coin just landed here). */
   readonly igniteKey?: number | string;
+  /** A sight (statue, castle): no line, so its Parts come from winning it again. */
+  readonly sight?: boolean;
 }) {
   const [visible, setVisible] = useState(false);
   const [rideCoin, setRideCoin] = useState<RideCoinLevelType | null>(null);
@@ -123,6 +133,8 @@ export default function TaskCoinModal({
   const shownLevel = Math.max(1, Math.min(5, Number(rideCoin?.current_level ?? level ?? publicLevel) || 1));
   const knownLevel = rideCoin?.current_level ?? level ?? publicLevel;
   const ignite = upgradedKey || igniteKey;
+  // The collected-coin card (read-only or offline) takes its turn like every other sheet.
+  const infoLayer = useNativeModalLayer(visible && (readOnly || coinUnavailable), 'wait');
 
   return (
     <>
@@ -132,8 +144,9 @@ export default function TaskCoinModal({
         {trigger ?? <ShelfCoin coinUrl={task.coin_url} level={shownLevel} size={size} phase={phase} igniteKey={ignite} />}
       </Button>
 
-      {readOnly || coinUnavailable ? <Modal isVisible={visible} onBackdropPress={() => setVisible(false)}
+      {readOnly || coinUnavailable ? <Modal isVisible={infoLayer.present} onBackdropPress={() => setVisible(false)}
         onModalHide={() => {
+          infoLayer.onDismissed();
           if (playAfterClose) {
             setPlayAfterClose(false);
             onPlayInLine?.();
@@ -177,8 +190,8 @@ export default function TaskCoinModal({
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#ffcf3b',
                   borderRadius: 12, borderBottomWidth: 4, borderBottomColor: '#d99a00',
                   paddingVertical: 12, paddingHorizontal: 20, marginTop: 18, marginBottom: 12 }}>
-                <GameIcon name="queue" size={24} />
-                <Text style={{ fontFamily: 'Shark', color: '#05346e', fontSize: 18 }}>Play in Line</Text>
+                <GameIcon name="ride" size={24} />
+                <Text style={{ fontFamily: 'Shark', color: '#05346e', fontSize: 18 }}>LinePlay</Text>
               </Pressable>}
               <YellowButton text="Close" onPress={() => setVisible(false)} />
             </View>
@@ -186,6 +199,7 @@ export default function TaskCoinModal({
         </View>
       </Modal> : <CoinLevelingModal
         visible={visible}
+        sight={sight}
         rideCoin={rideCoin}
         playerEnergy={player?.energy ?? 0}
         playerParts={rideCoin?.available_parts ?? 0}
@@ -208,6 +222,8 @@ export default function TaskCoinModal({
             if (ok) {
               upgradedDuringVisit.current = true;
               if (player?.id) upsertCoin(player.id, result.ride_coin);
+              // Leveled up: the shelf's LEVEL UP GOAL for this coin is done, and the next coin shows.
+              levelUpGoal.clear(task.id);
             }
             // The reply carries the v2 reveal (unlocks, level-up XP) for the sheet.
             return ok ? result : false;
@@ -237,6 +253,22 @@ export default function TaskCoinModal({
           return saved;
         }}
         onPlayInLine={onPlayInLine}
+        onGetParts={onShowOnMap ? () => {
+          // GET RIDE PARTS (must-fix 4): the one pointer goes to this ride, then the map draws the path.
+          // 1. The shelf's next-coin card fades on the UI thread now (no React render), so the shelf
+          //    that stays on screen while the map pops in never names the old coin (shelfLeaving.ts).
+          // 2. 34 ms later (two frames: the fade is drawn while the sheet leaves), the map starts and the
+          //    pointer moves. A timer, not requestAnimationFrame: frame callbacks stall while a native sheet
+          //    dismisses under load. Pointing first would re-render the whole shelf before the map.
+          // The shelf remembers it as a level-up goal, so back on the shelf it says LEVEL UP GOAL, never NEXT COIN.
+          shelfLeaving.value = 1;
+          setTimeout(() => { shelfLeaving.value = 0; }, 1500);
+          setTimeout(() => {
+            onShowOnMap();
+            levelUpGoal.set(task.id, player?.id);
+            guide.setTarget(task.id, 'coin_parts');
+          }, LEAVE_FADE_MS);
+        } : undefined}
       />}
     </>
   );

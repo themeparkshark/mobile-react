@@ -31,6 +31,8 @@ interface Props {
   readonly onShowOnMap?: (task: TaskType) => void;
   readonly onPlayInLine?: (task: TaskType) => void;
   readonly onPlayRideInLine?: (ride: RideType) => void;
+  /** The shelf's one count ("9 of 35 coins"), shown on the search button. */
+  readonly shelfCount?: string;
 }
 
 /**
@@ -41,7 +43,7 @@ interface Props {
  */
 export default function ParkRideDirectory({ rides, limited = [], catalogRides = [], parkId, completed, isOwnPark = true,
   goalTaskId, nearbyRideId, nearbyRideReportedOpen = false, savedGoalReportedDown = false, rideTaskIds, rideOnly = false,
-  onRideOnlyChange, onChooseGoal, onShowOnMap, onPlayInLine, onPlayRideInLine }: Props) {
+  onRideOnlyChange, onChooseGoal, onShowOnMap, onPlayInLine, onPlayRideInLine, shelfCount }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState('');
   const ownedIds = useMemo(() => new Set(completed.map(task => task.id)), [completed]);
@@ -107,12 +109,12 @@ export default function ParkRideDirectory({ rides, limited = [], catalogRides = 
             accessibilityRole={onPlayRideInLine ? 'button' : undefined}
             accessibilityLabel={`${ride.name}. LinePlay, no coin at this ride.${onPlayRideInLine ? ' Play in line.' : ''}`}
             style={styles.row}>
-            <View style={styles.coin}><GameIcon name="queue" size={24} /></View>
+            <View style={styles.coin}><GameIcon name="ride" size={24} /></View>
             <View style={styles.copy}>
               <Text style={styles.rideName} numberOfLines={2}>{ride.name}</Text>
               <Text style={styles.status} numberOfLines={1}>LINEPLAY · GAMES WHILE YOU WAIT</Text>
             </View>
-            {onPlayRideInLine && <View style={styles.playChip}><Text style={styles.playChipText}>PLAY IN LINE</Text></View>}
+            {onPlayRideInLine && <View style={styles.playChip}><Text style={styles.playChipText}>LINEPLAY</Text></View>}
           </Pressable>
         </View>;
       }
@@ -133,7 +135,7 @@ export default function ParkRideDirectory({ rides, limited = [], catalogRides = 
             <Text style={styles.limitedText} numberOfLines={1}>{badge.toUpperCase()}</Text>
           </View>}
           <Text style={[styles.status, (goal || nearby) && styles.goalStatus]} numberOfLines={1}>{owned
-            ? !isOwnPark ? 'IN THIS COLLECTION' : goal ? 'ON YOUR SHELF · MASTERY GOAL' : 'ON YOUR SHELF'
+            ? !isOwnPark ? 'IN THIS COLLECTION' : goal ? 'ON YOUR SHELF · LEVEL UP GOAL' : 'ON YOUR SHELF'
             : !isOwnPark ? 'NOT YET COLLECTED' : resting ? 'NOT IN PLAY RIGHT NOW' : goal ? 'YOUR NEXT COIN' : nearby
               ? nearbyRideReportedOpen ? 'REPORTED OPEN NEARBY' : 'NEAREST COIN AREA'
               : 'READY TO DISCOVER'}</Text>
@@ -155,11 +157,11 @@ export default function ParkRideDirectory({ rides, limited = [], catalogRides = 
     })}
     {expanded && visible.length === 0 && <Text style={styles.empty}>No rides or coins match that name.</Text>}
     <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
-      accessibilityLabel={expanded ? 'Close the coin guide' : `Open the coin guide, ${rows.length} rides and coins`}
+      accessibilityLabel={expanded ? 'Close the coin guide' : `Find a coin. Your shelf: ${shelfCount ?? `${rows.length} rides and coins`}`}
       onPress={() => { setExpanded(!expanded); setQuery(''); }}
       style={styles.toggle}>
       <GameIcon name={expanded ? 'close' : 'search'} size={22} />
-      <Text style={styles.toggleText}>{expanded ? 'CLOSE COIN GUIDE' : `FIND A RIDE OR COIN (${rows.length})`}</Text>
+      <Text style={styles.toggleText}>{expanded ? 'CLOSE COIN GUIDE' : shelfCount ? `FIND A COIN · ${shelfCount.toUpperCase()}` : 'FIND A RIDE OR COIN'}</Text>
     </Pressable>
   </View>;
 }

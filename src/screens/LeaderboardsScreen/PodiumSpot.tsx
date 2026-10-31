@@ -64,7 +64,7 @@ type Props = {
   readonly player: PlayerType | null;
   readonly score: number;
   readonly scoreIcon: GameIconName;
-  /** 0 = below the barrel, 1 = landed. Owned by the parent so the three spots are choreographed together. */
+  /** 0 = below the step, 1 = landed. Owned by the parent so the three spots are choreographed together. */
   readonly progress: SharedValue<number>;
   readonly landed: boolean;
   readonly reduced: boolean;

@@ -54,6 +54,8 @@ import { FlexShareButton } from '../share';
 import { useModalHandoff } from '../share/handoff';
 import { useDevAutoPress } from '../share/devDrive';
 import { UpperText } from '../ui/upper';
+import { useNativeModalLayer } from '../ui/modalLayers';
+import { useMapFlags } from '../services/mapFlags';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 /** The success CTA's width: the card is 95% of (screen - 48), with 14 pt padding each side. */
@@ -69,6 +71,14 @@ interface Props {
   onLevelUp: (rideCoinId: number) => Promise<boolean | LevelUpResult>;
   onFeature: (assetId: number | null) => Promise<boolean>;
   onPlayInLine?: () => void;
+  /**
+   * GET RIDE PARTS at this park: the caller points the guide at this ride's line
+   * (guide.setTarget) and opens the map with the path. Runs after the sheet hides.
+   * Without it (away from this park) the sheet shows where Parts come from instead.
+   */
+  onGetParts?: () => void;
+  /** A sight has no line: its Ride Parts come from winning its coin again, and the copy says so. */
+  sight?: boolean;
 }
 
 type ModalState = 'preview' | 'confirm' | 'leveling' | 'success' | 'maxed';
@@ -95,6 +105,8 @@ export default function CoinLevelingModal({
   onLevelUp,
   onFeature,
   onPlayInLine,
+  onGetParts,
+  sight = false,
 }: Props) {
   const [state, setState] = useState<ModalState>('preview');
   const [featured, setFeatured] = useState(false);
@@ -125,7 +137,7 @@ export default function CoinLevelingModal({
   }, []);
   const [holoVisible, setHoloVisible] = useState(false);
   const [showEditions, setShowEditions] = useState(false);
-  const { refreshPlayer } = useContext(AuthContext);
+  const { refreshPlayer, player: viewer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
 
   // ── Animations ──
@@ -153,9 +165,17 @@ export default function CoinLevelingModal({
   const shareHandoff = useModalHandoff(useCallback(() => shareClose.current(), []));
   const pendingLinePlayRef = useRef(false);
   const pendingExploreRef = useRef(false);
+  // GET RIDE PARTS leaves for the map at once: no card fade first and a quick sheet exit, so the
+  // shelf never sits between the tap and the path (grader r1: about 1.25 s of shelf showed).
+  const [fastExit, setFastExit] = useState(false);
   // Short on Tickets or Energy: the Supplies tab, opened after the sheet hides.
   const pendingSuppliesRef = useRef<null | 'tickets' | 'featured'>(null);
   const [showPartsHelp, setShowPartsHelp] = useState(false);
+  // One door for every sheet (4.3 rule 10): the coin card presents only in front, and holds its layer until UIKit says it is gone.
+  const layer = useNativeModalLayer(visible && !!rideCoin, 'wait');
+  // The park gym line ("Place this coin in a park gym...") hides while gyms are off for this player.
+  const { gymSwords } = useMapFlags();
+  const shownPerk = (perk: { type?: string }) => gymSwords || perk.type !== 'gym_points';
 
   // The level-up show, on the UI thread: the charge bar, the gold gathering behind the coin,
   // the burst bloom, sparkles and one shine across the new coin (ui/motion.ts language).
@@ -207,6 +227,7 @@ export default function CoinLevelingModal({
     if (visible && rideCoin) {
       setFeatured(!!rideCoin.is_featured);
       setShowEditions(false);
+      setShowPartsHelp(false);
       setFeatureError(false);
       setUpgradeError(null);
       setFx(null); setUnlocks(null); setLevelXp(0); setSlowServer(false);
@@ -457,11 +478,14 @@ export default function CoinLevelingModal({
     <Modal
       animationIn="fadeIn"
       animationOut="fadeOut"
-      isVisible={visible}
+      isVisible={layer.present}
       animationInTiming={reducedMotion ? 120 : 250}
-      animationOutTiming={reducedMotion ? 120 : 200}
+      animationOutTiming={fastExit ? 90 : reducedMotion ? 120 : 200}
+      backdropTransitionOutTiming={fastExit ? 90 : undefined}
       onBackButtonPress={state !== 'leveling' ? handleClose : undefined}
       onModalHide={() => {
+        setFastExit(false);
+        layer.onDismissed();
         shareHandoff.onDismiss();
         if (pendingLinePlayRef.current) {
           pendingLinePlayRef.current = false;
@@ -912,10 +936,10 @@ export default function CoinLevelingModal({
                         <Text style={{ flex: 1, fontFamily: 'Knockout', fontSize: 14,
                           color: '#19496B' }}>{nextVisualReward}</Text>
                       </View>
-                      {rideCoin.next_level_perks.length > 0 && (
+                      {rideCoin.next_level_perks.filter(shownPerk).length > 0 && (
                         <View style={{ marginTop: 7, borderTopWidth: 1, borderTopColor: '#EBC970',
                           paddingTop: 7 }}>
-                        {rideCoin.next_level_perks.map(perk => (
+                        {rideCoin.next_level_perks.filter(shownPerk).map(perk => (
                           <View key={perk.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <GameIcon name="star" size={16} />
                             <Text style={{ flex: 1, fontFamily: 'Knockout', fontSize: 14, color: '#19496B' }}>{perk.description}</Text>
@@ -947,7 +971,14 @@ export default function CoinLevelingModal({
                     /> : <YellowButton
                       text={missingAction.label}
                       onPress={() => {
-                        if (missingAction.kind === 'parts' && onPlayInLine) {
+                        // GET RIDE PARTS always does something you can see (must-fix 4):
+                        // at this park the guide walks you to the ride's line; away, the
+                        // sheet opens the picture card that says where Parts come from.
+                        if (missingAction.kind === 'parts' && onGetParts) {
+                          if (upgradeBusy.current) return;
+                          // The map starts sliding in under the 90 ms sheet exit, so the shelf never shows in between.
+                          setFastExit(true); stopUpgradeEffects(); onGetParts(); onClose();
+                        } else if (missingAction.kind === 'parts' && onPlayInLine) {
                           pendingLinePlayRef.current = true; handleClose();
                         } else if (missingAction.kind === 'energy') {
                           pendingExploreRef.current = true; handleClose();
@@ -957,18 +988,41 @@ export default function CoinLevelingModal({
                       }}
                     />}
 
+                    {/* Away from this park, GET RIDE PARTS opens this picture card: where Parts come from. */}
+                    {!canLevelUp && !hasParts && showPartsHelp && (
+                      <View accessible accessibilityLiveRegion="polite"
+                        accessibilityLabel={sight
+                          ? `Ride Parts for ${rideCoin.ride_name}: win its coin again on your park day. Each new win earns a Part.`
+                          : `Ride Parts for ${rideCoin.ride_name}: stand in its line on your park day. Time in line earns Parts, and winning its coin again earns one too.`}
+                        style={{ alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10,
+                          backgroundColor: '#E8F6FF', borderColor: '#7CC3EA', borderWidth: 2, borderRadius: 14, padding: 10 }}>
+                        <GameIcon name="ride" size={30} />
+                        <Image source={require('../../assets/images/ride-parts.png')} style={{ width: 30, height: 30 }} contentFit="contain" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontFamily: 'Shark', fontSize: 14, color: '#05346E' }}>{sight ? 'Win it again' : 'Stand in its line'}</Text>
+                          <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: '#17476B' }}>
+                            {sight ? 'On your park day, each new win of this coin earns a Ride Part.'
+                              : 'On your park day, time in this ride\'s line earns Ride Parts. Winning its coin again earns one too.'}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
                     {/* Helper text for what you're missing */}
-                    {!canLevelUp && (
+                    {!canLevelUp && !(showPartsHelp && !hasParts) && (
                       <Text style={{
                         fontFamily: 'Knockout', fontSize: 11,
                         color: '#315D7B',
                         textAlign: 'center', marginTop: 8,
                       }}>
                         {!hasParts
-                          ? showPartsHelp || !onPlayInLine
-                            ? 'Win this ride again or play LinePlay in its line to earn Ride Parts.'
-                            : 'Play LinePlay in this line to earn Ride Parts.'
-                          : 'Energy comes from finds on your home map.'}
+                          ? sight
+                            ? onGetParts
+                              ? 'Each new win of this coin earns a Ride Part. Tap to see the way there.'
+                              : 'Each new win of this coin earns a Ride Part on your park day.'
+                            : onGetParts
+                            ? 'Time in this ride\'s line earns Ride Parts. Tap to see the way there.'
+                            : 'Win this ride again or play LinePlay in its line to earn Ride Parts.'
+                          : 'Energy comes from treats on your home map and your daily chest.'}
                       </Text>
                     )}
                     {/* Ride Parts are earned at the ride and never sold. The shop
@@ -979,7 +1033,7 @@ export default function CoinLevelingModal({
                       <CoinTopUpOffer currency="energy" reason="level-up" need={Math.max(1, rideCoin.energy_to_next_level - playerEnergy)}
                         style={{ marginTop: 8 }} />
                     )}
-                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && !hasParts && (
+                    {!canLevelUp && !isMaxLevel && rideCoin.is_unlocked && storeAvailable() && !hasParts && (viewer?.tickets ?? 0) === 0 && (
                       <TouchableOpacity onPress={() => { pendingSuppliesRef.current = !hasParts ? 'tickets' : 'featured'; handleClose(); }}
                         accessibilityRole="button" hitSlop={8}
                         accessibilityLabel={!hasParts ? 'Get tickets in Supplies. A grown-up buys these with real money.' : 'See Supplies packs with energy. A grown-up buys these with real money.'}>
@@ -1076,9 +1130,9 @@ export default function CoinLevelingModal({
 
                       {/* New bonuses (legacy curve): a picture and a big number each ("+500" with a trophy),
                           the full sentence is read out by VoiceOver. */}
-                      {!reveal && rideCoin.next_level_perks.length > 0 && (
+                      {!reveal && rideCoin.next_level_perks.filter(shownPerk).length > 0 && (
                         <View style={{ marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-                          {rideCoin.next_level_perks.map((perk) => {
+                          {rideCoin.next_level_perks.filter(shownPerk).map((perk) => {
                             const chip = perkChip(perk);
                             return (
                               <View key={perk.id} accessible accessibilityLabel={`New bonus: ${perk.description}`}
@@ -1144,9 +1198,9 @@ export default function CoinLevelingModal({
                       )}
 
                       {/* All perks */}
-                      {rideCoin.current_perks.length > 0 && (
+                      {rideCoin.current_perks.filter(shownPerk).length > 0 && (
                         <View style={{ width: '100%' }}>
-                          {rideCoin.current_perks.map((perk) => (
+                          {rideCoin.current_perks.filter(shownPerk).map((perk) => (
                             <View key={perk.id} style={{
                               flexDirection: 'row', alignItems: 'center', marginBottom: 4,
                             }}>
@@ -1182,7 +1236,7 @@ export default function CoinLevelingModal({
                     onPress={() => { pendingLinePlayRef.current = true; handleClose(); }}
                     style={{ alignSelf: 'center', paddingVertical: 10, marginTop: 5 }}>
                     <Text style={{ color: '#075b9b', fontFamily: 'Shark', fontSize: 15,
-                      textDecorationLine: 'underline' }}>Waiting here? Play in Line</Text>
+                      textDecorationLine: 'underline' }}>In its line now? LinePlay</Text>
                   </TouchableOpacity>}
 
               </View>

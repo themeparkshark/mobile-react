@@ -36,7 +36,7 @@ test('one name per thing: the glossary never uses a retired name', () => {
     const term = glossary.LOCAL_GLOSSARY[key];
     return `${term.label} ${term.what} ${term.earn}`;
   }).join(' ');
-  for (const retired of [/Park Coins/, /\bstamina\b/i, /\btokens?\b/i, /Shark Store/, /queue adventure/i, /\bLine Play\b/, /\bprep items?\b/i, /\btreats?\b/i, /Power Up/i]) {
+  for (const retired of [/Park Coins/, /\bstamina\b/i, /\btokens?\b/i, /Shark Store/, /queue adventure/i, /\bLine Play\b/, /\bprep items?\b/i, /\bhome finds?\b/i, /\bsnacks?\b/i, /Power Up/i, /\bboss/i, /Day streak/]) {
     assert.doesNotMatch(all, retired, String(retired));
   }
 });
@@ -67,7 +67,7 @@ test('server currency wording wins, but only for known currencies and clean stri
     energy_rule: 'Energy powers boss raids and coin upgrades. It never runs out on a timer.',
   });
   assert.equal(merged.tickets.earn, 'Home finds (up to 4 a day), plus your day 7 chest.');
-  assert.equal(merged.coins.label, 'Coins', 'an empty label keeps the local one');
+  assert.equal(merged.coins.label, 'Shark Coins', 'an empty label keeps the local one');
   assert.equal(merged.tickets.label, 'Tickets', 'an old server name becomes the glossary name');
   assert.equal(merged.coins.what, glossary.LOCAL_GLOSSARY.coins.what, 'a non-string keeps the local line');
   assert.equal(merged.coins.earn, 'Catch ride coins, and win raids.', 'an em dash from the server is cleaned');

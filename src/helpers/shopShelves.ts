@@ -519,7 +519,7 @@ export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; n
   if (s.phase === 'unknown') return { label: 'Check again', action: 'recheck', note: 'We couldn’t reach the shop. Let’s check if it went through.', look: 'go' };
   if (s.phase === 'buying' || s.phase === 'landing') return { label: 'Yes, buy it!', action: 'none', note: null, look: 'busy' };
   // Short: say how many; the coin top-up offer (money stream) sits under it with the free path. "Ride coins" are the shelf collectible, not money.
-  if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more coins`, action: 'earn', note: 'Win coins at rides or open your daily chest.', look: 'go' };
+  if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more Shark Coins`, action: 'earn', note: 'Win Shark Coins at rides or open your daily chest.', look: 'go' };
   if (s.paused) return { label: 'Opening soon', action: 'none', note: 'Today’s shop is opening in a moment. Buying is back right after.', look: 'paused' };
   if (s.phase === 'confirm') return { label: 'Yes, buy it!', action: 'buy', note: null, look: 'go' };
   return { label: s.finishes ? `Complete the look: ${formatCoins(s.cost)}` : `Buy for ${formatCoins(s.cost)}`, action: 'ask', note: null, look: 'go' };

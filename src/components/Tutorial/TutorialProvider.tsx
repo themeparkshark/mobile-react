@@ -16,10 +16,10 @@ import TeacherShark from './TeacherShark';
 import MemoryGame from '../../games/memory/MemoryGame';
 import { AuthContext } from '../../context/AuthProvider';
 import { claimGuestWarmup } from '../../services/guestTaste';
+import { loadCompleted, tutorialKey } from './tutorialStore';
 // Sounds disabled temporarily: will re-enable once tutorial flow is stable
 // import { SoundEffectContext } from '../../context/SoundEffectProvider';
 
-const STORAGE_KEY = '@tps_tutorial_completed';
 /** Guides that run over the map, where the footer's compass rises into the screen. */
 const MAP_SEQUENCES = new Set<TutorialSequence>(['onboarding', 'home_first_find', 'park_arrival']);
 
@@ -71,34 +71,35 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isActive, setIsActive] = useState(false);
   const [spotlightTarget, setSpotlightTarget] = useState<SpotlightTarget | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  // Finn's lessons are saved per account (tutorialStore.ts): loaded for the player signed in now.
+  const playerId = player?.id ?? null;
+  const [loadedFor, setLoadedFor] = useState<{ id: number | null; fresh: boolean } | null>(null);
+  const loaded = firstPlayPreview || (loadedFor !== null && loadedFor.id === playerId);
   const refs = useRef<Map<string, any>>(new Map());
   const inParkOnboardingRef = useRef(false);
 
-  // Load completed sequences from storage
+  // Load this player's completed sequences (a new account on the same phone starts its own record).
   useEffect(() => {
-    if (firstPlayPreview) { setLoaded(true); return; }
-    AsyncStorage.getItem(STORAGE_KEY).then((data) => {
-      if (data) {
-        try {
-          const parsed = JSON.parse(data) as string[];
-          const completed = new Set(parsed as TutorialSequence[]);
-          // Players who already saw the park guide should not get a second
-          // arrival tutorial after this sequence is added to older installs.
-          if (completed.has('park')) completed.add('park_arrival');
-          setCompletedSequences(completed);
-        } catch {}
-      }
-      setLoaded(true);
-    }).catch(() => setLoaded(true)); // An unreadable store still lets tutorials run.
-  }, []);
+    if (firstPlayPreview) return;
+    let current = true;
+    setLoadedFor(null);
+    setCompletedSequences(new Set());
+    void loadCompleted(AsyncStorage, playerId)
+      .then(({ completed, fresh }) => {
+        if (!current) return;
+        setCompletedSequences(completed);
+        setLoadedFor({ id: playerId, fresh });
+      })
+      // An unreadable store still lets tutorials run.
+      .catch(() => { if (current) setLoadedFor({ id: playerId, fresh: true }); });
+    return () => { current = false; };
+  }, [playerId, firstPlayPreview]);
 
   // A guest who won Finn's warm-up before signing in keeps it, but only the
   // first account after the taste claims it (a sibling's new account does not).
   // Re-read when the account changes, since the guest plays after this provider mounts.
   // Onboarding waits for this check, so a new account never starts the wrong steps.
   const [guestCheck, setGuestCheck] = useState<{ id: number | null; played: boolean }>({ id: null, played: false });
-  const playerId = player?.id ?? null;
   useEffect(() => {
     let current = true;
     void Promise.resolve().then(() => claimGuestWarmup(playerId))
@@ -110,13 +111,13 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
   const guestPlayed = guestChecked && guestCheck.played;
 
   // Auto-complete all tutorials for existing players (handles a reinstall or cache wipe).
-  // Checked once per install load: after "Replay Tutorials" the empty set is on purpose.
-  const existingPlayerChecked = useRef(false);
+  // Checked once per account load: after "Replay Tutorials" the empty set is on purpose.
+  const existingPlayerChecked = useRef<number | null>(null);
   useEffect(() => {
-    if (!loaded || !player || firstPlayPreview) return;
-    if (existingPlayerChecked.current) return;
-    existingPlayerChecked.current = true;
-    if (completedSequences.size > 0) return; // Already has data, not a fresh wipe
+    if (!loaded || !player || firstPlayPreview || !loadedFor) return;
+    if (existingPlayerChecked.current === player.id) return;
+    existingPlayerChecked.current = player.id;
+    if (!loadedFor.fresh || completedSequences.size > 0) return; // Has its own record, not a fresh account
 
     const isExistingPlayer =
       (player.completed_tasks_count ?? 0) > 0 ||
@@ -126,17 +127,19 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     if (isExistingPlayer) {
       const allDone = new Set<TutorialSequence>(ALL_SEQUENCES);
       setCompletedSequences(allDone);
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(ALL_SEQUENCES)).catch(() => {});
+      const key = tutorialKey(player.id);
+      if (key) AsyncStorage.setItem(key, JSON.stringify(ALL_SEQUENCES)).catch(() => {});
     }
-  }, [loaded, player]);
+  }, [loaded, player, loadedFor]);
 
   // Persist completed sequences
   const persistCompleted = useCallback(async (sequences: Set<TutorialSequence>) => {
-    if (firstPlayPreview) return;
+    const key = tutorialKey(playerId);
+    if (firstPlayPreview || !key) return;
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(sequences)));
+      await AsyncStorage.setItem(key, JSON.stringify(Array.from(sequences)));
     } catch {}
-  }, [firstPlayPreview]);
+  }, [firstPlayPreview, playerId]);
 
   // Resolve spotlight target from ref
   const resolveSpotlight = useCallback((step: TutorialStep, isCurrent: () => boolean) => {
@@ -271,17 +274,18 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
 
   // Reset all tutorial progress
   const resetAll = useCallback(async () => {
-    existingPlayerChecked.current = true;
+    existingPlayerChecked.current = playerId;
     firstPlayRef.current = false; firstPlayOrigin.current = null; setFirstPlayOpen(false);
     inParkOnboardingRef.current = false;
     setCompletedSequences(new Set());
-    if (!firstPlayPreview) await AsyncStorage.removeItem(STORAGE_KEY);
+    const key = tutorialKey(playerId);
+    if (!firstPlayPreview && key) await AsyncStorage.removeItem(key);
     setIsActive(false);
     setCurrentSequence(null);
     setCurrentSteps([]);
     setCurrentIndex(0);
     setSpotlightTarget(null);
-  }, [firstPlayPreview]);
+  }, [firstPlayPreview, playerId]);
 
   const currentStep = isActive && currentSteps.length > 0 ? currentSteps[currentIndex] : null;
 

@@ -54,6 +54,7 @@ import {
   type BookSection, type BookStamp, type GoTarget, type TitleEntry,
 } from './stampbook/model';
 import { UpperText } from '../ui/upper';
+import { stampClaimableCount, writeStampDotCache } from '../components/profile/stampDot';
 
 const GAP = 9;
 const SIDE = 12;
@@ -88,6 +89,10 @@ export default function StampBookScreen() {
 
   // The last book draws on the first frame (memory, then device cache); the network refresh lands behind it.
   const [response, setResponse] = useState<StampsResponse | null>(() => (previewMode ? null : memoryBook(player?.id ?? null)));
+  // The Profile dot clears the moment a claim lands here (blueprint 4.3 rule 5), never 5 minutes later.
+  useEffect(() => {
+    if (!previewMode && response && player?.id) writeStampDotCache(player.id, stampClaimableCount(response));
+  }, [response, player?.id, previewMode]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(() => (response ? 'ready' : 'loading'));
   const [filter, setFilter] = useState<string>('all');
   const [selected, setSelected] = useState<BookStamp | null>(null);

@@ -11,6 +11,7 @@
  * odds) is described without a number unless the number comes from the server.
  */
 import type { GameIconName } from '../../ui/iconNames';
+import { LINEPLAY_ICON } from './glossary';
 import { AD_AUDIENCE_13_PLUS_KNOWN } from '../adConfig';
 
 export type HelpHeroKey =
@@ -61,9 +62,9 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
   standings: {
     id: 'standings', name: 'Standings',
     pages: [
-      { key: 'climb', hero: 'standings_climb', headline: 'Win rides, climb up',
+      { key: 'climb', hero: 'standings_climb', headline: 'Win coins, climb up',
         points: [
-          { icon: 'ride', text: 'Every ride you win adds one point.' },
+          { icon: 'coin', text: 'Every ride coin you win is one win.' },
           { icon: 'check', text: 'Each ride counts once per park day.' },
           { icon: 'timer', text: 'A new week starts every Monday.' },
         ] },
@@ -75,7 +76,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         ] },
       { key: 'boards', hero: 'standings_boards', headline: 'Pick your board',
         points: [
-          { icon: 'timer', text: 'This Week: rides won this week.' },
+          { icon: 'timer', text: 'This Week: your wins this week.' },
           { icon: 'heart', text: 'Friends: the same race, just your crew.' },
           { icon: 'trophy', text: 'All-Time: every ride coin you own.' },
         ] },
@@ -103,7 +104,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
     pages: [
       { key: 'gear', hero: 'shop_gear', headline: 'Dress up your shark',
         points: [
-          { icon: 'coins', text: 'Spend Coins on gear.' },
+          { icon: 'coins', text: 'Spend Shark Coins on gear.' },
           { icon: 'shark', text: 'Try it on before you buy.' },
           { icon: 'heart', text: 'Tap the heart to save it for later.' },
         ] },
@@ -128,15 +129,15 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
     pages: [
       { key: 'shelf', hero: 'park_shelf', headline: 'Your ride coin shelf',
         points: [
-          { icon: 'ride', text: 'Win a ride challenge to earn its coin.' },
+          { icon: 'ride', text: 'Walk up to a ride and tap PLAY! to win its coin.' },
           { icon: 'coin', text: 'Every coin from this park lands here.' },
-          { icon: 'search', text: 'Secret coins hide off the map.' },
+          { icon: 'map', text: 'Tap GO on the next coin to see the path.' },
         ] },
       { key: 'levels', hero: 'park_levels', headline: 'Level up your coins',
         points: [
           { icon: 'coin', text: 'Tap a coin to level it up.' },
           { icon: 'parts', text: 'Spend Energy and that ride\'s Ride Parts.' },
-          { icon: 'queue', text: 'Win the ride or play LinePlay in its line.' },
+          { icon: LINEPLAY_ICON, text: 'Win the ride or play LinePlay in its line.' },
         ] },
     ],
   },
@@ -146,12 +147,12 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
       { key: 'coins', hero: 'basics_park', headline: 'Win ride coins',
         points: [
           { icon: 'map', text: 'Ride coins wait at the rides on the map.' },
-          { icon: 'ticket', text: 'Walk up and tap Play Ride. One Ticket, one try.' },
+          { icon: 'ticket', text: 'Walk up and tap PLAY! One Ticket, one try.' },
           { icon: 'coin', text: 'Win to put the coin on your shelf.' },
         ] },
       { key: 'line', hero: 'basics_line', headline: 'Line time pays',
         points: [
-          { icon: 'queue', text: 'Start LinePlay when you join a ride\'s line.' },
+          { icon: LINEPLAY_ICON, text: 'Start LinePlay when you join a ride\'s line.' },
           { icon: 'parts', text: 'Time near the ride earns its Ride Parts.' },
           { icon: 'star', text: 'Mini-games are bonus fun while you wait.' },
         ] },
@@ -163,7 +164,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
       { key: 'code', hero: 'redeem_chest', headline: 'Redeem a code',
         points: [
           { icon: 'edit', text: 'Type the code and tap Open the chest.' },
-          { icon: 'gift', text: 'Get Coins, Tickets, Energy or a prize.' },
+          { icon: 'gift', text: 'Get Shark Coins, Tickets, Energy or a prize.' },
           { icon: 'timer', text: 'One use per player. Codes can expire.' },
         ] },
     ],
@@ -190,12 +191,12 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
     pages: [
       { key: 'home', hero: 'basics_map', headline: 'Hunt at home',
         points: [
-          { icon: 'map', text: 'Snacks and treasures pop up near you.' },
-          { icon: 'ticket', text: 'Catch them for Tickets and Energy.' },
+          { icon: 'map', text: 'Treats pop up near you, even at home.' },
+          { icon: 'ticket', text: 'Every 3 treats = 1 Ticket for your park day.' },
         ] },
       { key: 'park', hero: 'basics_park', headline: 'Win at the park',
         points: [
-          { icon: 'ride', text: 'Spend a Ticket on a ride challenge.' },
+          { icon: 'ride', text: 'Walk up to a ride and tap PLAY! One Ticket.' },
           { icon: 'coin', text: 'Win to put that ride\'s coin on your shelf.' },
         ] },
     ],

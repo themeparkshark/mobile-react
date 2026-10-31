@@ -10,9 +10,12 @@ export const RIDE_BOSS_UNLOCKS: Readonly<Record<number, string>> = {
   6: 'Shark Ride Bosses',
 };
 
-export const EARN_XP_CAPTION = 'Win rides, find coins and play games for XP';
+export const EARN_XP_CAPTION = 'Win ride coins and grab treats for XP';
 
-/** One short line under the XP numbers: what the next level unlocks, or how to earn XP. */
+/**
+ * One short line under the XP numbers: what the next level unlocks, or how to earn XP.
+ * Only wins and treats are named: a lost game pays no XP, and no boss is promised while bosses are off.
+ */
 export function nextLevelCaption(level: number, rideBoss: boolean): string {
   const next = rideBoss ? RIDE_BOSS_UNLOCKS[level + 1] : undefined;
   return next ? `Level ${level + 1} unlocks ${next}` : EARN_XP_CAPTION;

@@ -47,7 +47,7 @@ function SocialPost({
       onPressIn={() => press(0.96)}
       onPressOut={() => press(1)}
       accessibilityRole="button"
-      accessibilityLabel={`${socialPost.title}. ${watched ? 'Watched' : pendingSave ? `Tap to save ${COIN_REWARD} coins` : `Earn ${COIN_REWARD} coins`}${isNew ? '. New' : ''}`}
+      accessibilityLabel={`${socialPost.title}. ${watched ? 'Watched' : pendingSave ? `Tap to save ${COIN_REWARD} Shark Coins` : `Earn ${COIN_REWARD} Shark Coins`}${isNew ? '. New' : ''}`}
       style={featured ? styles.heroOuter : styles.gridOuter}
     >
       <Animated.View style={[styles.card, featured && styles.heroCard, { transform: [{ scale }] }]}>

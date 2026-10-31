@@ -133,6 +133,7 @@ export default function App() {
           }}
         />
         {/* One screen per store: navigating to another store pushes it instead of rewriting this one. */}
+        {/* vocab-allow: a route name, never shown */}
         <Stack.Screen name="Store" getComponent={() => require('./screens/StoreScreen').default}
           getId={({ params }) => String((params as { store?: number | string } | undefined)?.store ?? '')} />
         <Stack.Screen name="PinCollections" getComponent={() => require('./screens/pins/PinsScreen').default} />
@@ -359,6 +360,7 @@ function RideDetectionDriver({ enabled, parkId }: { readonly enabled: boolean; r
 const NO_DEV_OVERLAYS = __DEV__ && process.env.EXPO_PUBLIC_NO_DEV_OVERLAYS === '1';
 // Capture builds: no LogBox toasts over the screen either.
 if (NO_DEV_OVERLAYS) LogBox.ignoreAllLogs(true);
+// vocab-allow: route names, never shown
 const SCREENS_WITHOUT_JOYSTICK = new Set(['Store', 'Membership', 'Inventory', 'Settings']);
 
 /** The focused route name, updated on every navigation. */

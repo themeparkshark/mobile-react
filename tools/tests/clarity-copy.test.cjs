@@ -88,7 +88,7 @@ test('the bundled server copy (crumbs) is plain too', () => {
 test('the help glossary uses the one name for each currency', () => {
   const glossary = loadTs('src/services/help/glossary.ts');
   const label = key => glossary.LOCAL_GLOSSARY[key].label;
-  assert.equal(label('coins'), 'Coins');
+  assert.equal(label('coins'), 'Shark Coins', 'the money is Shark Coins (core loop 4.5)');
   assert.equal(label('tickets'), 'Tickets');
   assert.equal(label('xp'), 'XP');
   assert.equal(label('vip'), 'VIP');

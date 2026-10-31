@@ -34,6 +34,8 @@ import { GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { kioskLayout, KIOSK_COLORS } from './CommunityCenter/leaveGiftLayout';
 import { ticketLabel, ticketsEarnedFrom } from './CommunityCenter/communityCenterRewards';
+import { useTutorialWhenReady } from '../components/Tutorial';
+import { useAnyModalLayer } from '../ui/modalLayers';
 
 /** A small busy mark for buttons and slots: his fin bobbing, still under reduced motion. */
 function SharkLoaderDot({ style }: { readonly style?: object }) {
@@ -146,6 +148,10 @@ export default function CommunityCenterScreen() {
   
   const [loading, setLoading] = useState(true);
   const [center, setCenter] = useState<CenterData | null>(null);
+  // Finn's Community Center tip runs once, on the first visit, after the screen has loaded and
+  // only while no other sheet or dialog is up (it waits its turn; core loop 5.2).
+  const sheetUp = useAnyModalLayer();
+  useTutorialWhenReady('community_center', !loading && !!center && !sheetUp);
   const [claiming, setClaiming] = useState<number | null>(null); // which slot is being claimed
   const [giving, setGiving] = useState(false);
   const [revealedSlots, setRevealedSlots] = useState<Set<number>>(new Set());
@@ -733,7 +739,7 @@ export default function CommunityCenterScreen() {
         // Center is full
         setErrorMessage('The community center is full! Come back later when someone claims a gift.');
         setShowErrorModal(true);
-      } else if (errorData?.error?.includes('Not enough coins')) {
+      } else if (errorData?.error?.includes('Not enough coins')) { // vocab-allow: the server's error text, never shown
         // Not enough coins (shouldn't happen since we check first, but just in case)
         setShowNotEnoughCoinsModal(true);
       } else {
@@ -1008,7 +1014,7 @@ export default function CommunityCenterScreen() {
               left: KIOSK.cap.left, top: KIOSK.cap.top + KIOSK_NUDGE, width: KIOSK.cap.width, height: KIOSK.cap.height }]} />
             <View pointerEvents="none" style={[styles.kioskFace, {
               left: KIOSK.face.left, top: KIOSK.face.top + KIOSK_NUDGE, width: KIOSK.face.width, height: KIOSK.face.height }]} />
-            <View pointerEvents="none" accessible accessibilityLabel={`A gift costs ${GIFT_COST} coins`}
+            <View pointerEvents="none" accessible accessibilityLabel={`A gift costs ${GIFT_COST} Shark Coins`}
               style={[styles.kioskPrice, { left: KIOSK.price.left, top: KIOSK.price.top + KIOSK_NUDGE, width: KIOSK.price.width, height: KIOSK.price.height }]}>
               <Image source={require('../../assets/icons/game/coins.png')} style={styles.kioskCoin} contentFit="contain" />
               <Text style={styles.kioskPriceText}>{GIFT_COST}</Text>
@@ -1029,7 +1035,7 @@ export default function CommunityCenterScreen() {
             >
               <TouchableOpacity
                 accessibilityRole="button"
-                accessibilityLabel={`Leave a gift for ${GIFT_COST} coins`}
+                accessibilityLabel={`Leave a gift for ${GIFT_COST} Shark Coins`}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 onPress={handleLeaveGiftPress}
                 disabled={giving}
@@ -1165,7 +1171,7 @@ export default function CommunityCenterScreen() {
           <View style={styles.confirmModalContent}>
             <Text style={styles.confirmModalTitle}>Leave a Gift, Get Tickets!</Text>
             <Text style={styles.confirmModalMessage}>
-              Spend coins to leave a gift for another shark. You get tickets right away as a thank you!
+              Spend Shark Coins to leave a gift for another shark. You get Tickets right away as a thank you!
             </Text>
             <View style={styles.exchangeContainer}>
               <View style={styles.exchangeItem}>
@@ -1175,7 +1181,7 @@ export default function CommunityCenterScreen() {
                   contentFit="contain"
                 />
                 <Text style={styles.exchangeValue}>-{GIFT_COST}</Text>
-                <Text style={styles.exchangeLabel}>Coins</Text>
+                <Text style={styles.exchangeLabel}>Shark Coins</Text>
               </View>
               <GameIcon name="arrow" size={32} />
               <View style={styles.exchangeItem}>
@@ -1257,9 +1263,9 @@ export default function CommunityCenterScreen() {
             <GameIcon name="coins" size={56} />
           </View>
           <View style={styles.notEnoughModalContent}>
-            <Text style={styles.notEnoughModalTitle}>Not Enough Coins!</Text>
+            <Text style={styles.notEnoughModalTitle}>Not Enough Shark Coins!</Text>
             <Text style={styles.notEnoughModalMessage}>
-              You need {GIFT_COST} coins to leave a gift for another player.
+              You need {GIFT_COST} Shark Coins to leave a gift for another player.
             </Text>
             <View style={styles.coinCompareContainer}>
               <View style={styles.coinCompareItem}>
@@ -1287,7 +1293,7 @@ export default function CommunityCenterScreen() {
               </View>
             </View>
             <Text style={styles.notEnoughHint}>
-              Win ride challenges around the park to get more coins!
+              Win ride challenges around the park to get more Shark Coins!
             </Text>
             <TouchableOpacity
               style={styles.notEnoughButton}

@@ -12,6 +12,7 @@
 import { isEventShop } from '../fright/halloweenShop';
 
 export const SHARK_SHOP_NAME = 'Shark Shop';
+// vocab-allow: the name an older server gives the Shark Shop (matched, then shown as Shark Shop)
 export const LEGACY_STORE_NAME = 'Store';
 
 type StoreLike = { readonly id: string | number; readonly name: string; readonly is_secret_store: boolean; readonly slug?: string | null };

@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image as ArtImage } from 'expo-image';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { parkDayLabel } from '../services/collection/parkDayLabel';
@@ -8,7 +8,6 @@ import GameRichText from '../ui/GameRichText';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import { shareFlex } from '../share';
 import { parkDayFlexPayload } from '../share/parkDay';
-import { flexRevealOnce } from '../share/revealOnce';
 import * as RootNavigation from '../RootNavigation';
 
 interface Props {
@@ -17,11 +16,15 @@ interface Props {
   readonly refreshVersion: number;
   readonly loadRecap?: typeof getParkDayRecap;
   readonly initiallyExpanded?: boolean;
+  /** Today's story, already read with the shelf: the card paints with it, no empty first frame. */
+  readonly initialRecap?: ParkDayRecap | null;
 }
 
 export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadRecap = getParkDayRecap,
-  initiallyExpanded = false }: Props) {
-  const [recap, setRecap] = useState<ParkDayRecap | null>(null);
+  initiallyExpanded = false, initialRecap = null }: Props) {
+  const [recap, setRecap] = useState<ParkDayRecap | null>(initialRecap);
+  const initial = useRef(initialRecap);
+  initial.current = initialRecap;
   const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [retry, setRetry] = useState(0);
@@ -40,18 +43,13 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
 
   useFocusEffect(useCallback(() => {
     let current = true;
-    setRecap(null);
+    // Today's story read with the shelf stays on screen while the fresh copy loads.
+    setRecap(selectedDay ? null : initial.current?.park_id === parkId ? initial.current : null);
     setError(false);
+    // The park day lives on this card with its Share button. It never opens full screen by itself
+    // (blueprint 4.3: Flex reveals never open on their own).
     void loadRecap(parkId, selectedDay ?? undefined).then(result => {
       if (current) setRecap(result);
-      // A big park day (5+ ride coins) gets the Flex moment once. The host holds it until the
-      // player has left the park, so the picture never says where a kid is right now.
-      if (current && result && !selectedDay) {
-        // Each load updates the waiting moment, and it asks for that day's final count right before it shows.
-        const day = result.park_day;
-        void flexRevealOnce('park_day', `${parkId}:${day}`, parkDayFlexPayload(result), { surface: 'park_day',
-          refresh: () => loadRecap(parkId, day).then(fresh => (fresh ? parkDayFlexPayload(fresh) : null)) });
-      }
     }).catch(() => {
       if (current) setError(true);
     });
@@ -85,12 +83,12 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
     </View>
     {hasActivity ? <>
       <View style={styles.statStrip}>
-        <View style={styles.stat}><Text style={styles.statValue}>{recap.distinct_rides_won}</Text><Text style={styles.statLabel}>RIDES WON</Text></View>
+        <View style={styles.stat}><Text style={styles.statValue}>{recap.distinct_rides_won}</Text><Text style={styles.statLabel}>WINS</Text></View>
         <View style={styles.stat}><Text style={styles.statValue}>{recap.new_coins}</Text><Text style={styles.statLabel}>NEW COINS</Text></View>
         <View style={styles.stat}><Text style={styles.statValue}>{recap.coin_upgrades}</Text><Text style={styles.statLabel}>LEVEL UPS</Text></View>
       </View>
       {recap.line_play_sessions > 0 && <GameRichText style={styles.copy}>
-        {`[icon:queue] ${recap.eligible_line_minutes} minutes in line · [icon:parts] ${recap.ride_parts_earned} Ride Part${recap.ride_parts_earned === 1 ? '' : 's'}`}
+        {`[icon:ride] ${recap.eligible_line_minutes} minutes in line · [icon:parts] ${recap.ride_parts_earned} Ride Part${recap.ride_parts_earned === 1 ? '' : 's'}`}
       </GameRichText>}
       {recap.park_project_points > 0 && <Text style={styles.copy}>
         +{recap.park_project_points} points for the Park Project
@@ -122,11 +120,11 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
         <Text style={styles.shareText}>SHARE MY DAY</Text>
       </Pressable>}
       <Pressable style={styles.link} accessibilityRole="button" onPress={() => RootNavigation.navigate('CoinShelf')}>
-        <Text style={styles.linkText}>All your Ride Coins</Text>
+        <Text style={styles.linkText}>All your park shelves</Text>
         <GameIcon name="arrow" size={20} />
       </Pressable>
     </> : <Text style={styles.copy}>
-      {atPark ? "Your first ride challenge will start this day's story. LinePlay and coin upgrades add more moments."
+      {atPark ? "Your first coin win starts this day's story. Time in line adds more."
         : 'No game wins here today yet. You can still see your earlier park days.'}
     </Text>}
     {recap.previous_active_day && <Pressable style={styles.link} accessibilityRole="button"

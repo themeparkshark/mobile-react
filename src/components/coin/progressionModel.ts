@@ -274,7 +274,7 @@ export function remintCard(notice: RemintNotice | null | undefined) {
   const totals = [notice.total_parts > 0 ? `${notice.total_parts} Ride Part${notice.total_parts === 1 ? '' : 's'}` : null,
     notice.total_energy > 0 ? `${notice.total_energy} Energy` : null].filter(Boolean).join(' and ');
   return {
-    title: 'YOUR RIDE COINS GREW',
+    title: 'YOUR COINS GREW',
     subtitle: totals ? `Ride coins now go up to Level 10. You got ${totals} back for levels you already paid for.` : 'Ride coins now go up to Level 10.',
     rows,
     button: 'See my shelf',

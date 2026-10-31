@@ -315,7 +315,7 @@ export default function YouTubePlayerModal({
                 <View
                   style={[styles.coinPill, unlocked && styles.coinPillDone]}
                   accessible
-                  accessibilityLabel={unlocked ? `${rewardCoins} coins unlocked` : `Keep watching to earn ${rewardCoins} coins`}
+                  accessibilityLabel={unlocked ? `${rewardCoins} Shark Coins unlocked` : `Keep watching to earn ${rewardCoins} Shark Coins`}
                 >
                   <Animated.View style={{ transform: [{ scale: pop }] }}>
                     <Image source={COIN} style={styles.coinIcon} contentFit="contain" />

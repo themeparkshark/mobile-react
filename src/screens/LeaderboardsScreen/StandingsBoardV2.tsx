@@ -38,6 +38,7 @@ import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, SharkLoader, textPreset } 
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import LastWeekCard from './LastWeekCard';
 import MiniPodium, { MINI_PODIUM_HEIGHT, ScoreIcon } from './MiniPodium';
+import PodiumSteps, { type PodiumStep } from './PodiumSteps';
 import { CROWN_ART } from './PodiumSpot';
 import SharkCard from './SharkCard';
 import StandingsShark from './StandingsShark';
@@ -58,7 +59,6 @@ import { UpperText } from '../../ui/upper';
 
 const tapSound = require('../../../assets/sounds/tap.mp3');
 const rewardSound = require('../../../assets/sounds/reward.mp3');
-const BARREL = require('../../../assets/images/screens/leaderboard/barrel.png');
 
 /** Clears the raised compass button in the bottom bar. */
 const YOU_CARD_BOTTOM = 52;
@@ -80,32 +80,29 @@ const sizeOfItem = (layout: { size?: number }, item: ListItem) => {
   layout.size = item.type === 'divider' ? DIVIDER_HEIGHT : item.type === 'retry' ? ROW_HEIGHT * SKELETON_ROWS : ROW_HEIGHT;
 };
 const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
+/** The empty board's podium: the same plain steps, small. */
+const EMPTY_STEPS: readonly PodiumStep[] = [{ rank: 2, width: 60, height: 44 }, { rank: 1, width: 70, height: 66 }, { rank: 3, width: 60, height: 32 }];
 
 /**
  * The board's one pill: what the number is and how long the week has left.
- * Gold on the last day, red (with a slow pulse) in the last three hours.
+ * Gold on the last day ("Ends tonight"), never red and never a ticking count (kid-safe calm timers).
  */
 function WeekPill({ endsAt, now }: { readonly endsAt: string | null; readonly now: number }) {
-  const reduced = useUiReducedMotion();
+  // No pulse: nothing hurries a kid (no fake urgency). The pill stays still on the last day too.
   const week = weekLeft(endsAt, now);
-  const pulse = useSharedValue(1);
-  useEffect(() => {
-    if (reduced || week.urgency !== 'last_hours') { pulse.value = 1; return; }
-    pulse.value = withRepeat(withSequence(withTiming(1.05, { duration: 700 }), withTiming(1, { duration: 700 })), -1);
-  }, [week.urgency, reduced, pulse]);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
-  const tone = week.urgency === 'last_hours' ? BRAND.red : week.urgency === 'last_day' ? BRAND.gold : BRAND.white;
-  const ink = week.urgency === 'last_hours' ? BRAND.white : BRAND.navy;
+  // Calm timers (4.3 rule 7): the last day is gold, never red.
+  const tone = week.urgency === 'last_hours' || week.urgency === 'last_day' ? BRAND.gold : BRAND.white;
+  const ink = BRAND.navy;
   return (
-    <Animated.View accessible accessibilityRole="text" accessibilityLabel={`Ranked by rides won this week. ${week.spoken}`} style={[{
+    <View accessible accessibilityRole="text" accessibilityLabel={`Ranked by wins this week. ${week.spoken}`} style={{
       flexDirection: 'row', alignItems: 'center', gap: 8, height: 40, paddingHorizontal: 14, borderRadius: RADIUS.pill, alignSelf: 'center',
-      backgroundColor: tone, borderWidth: 2, borderColor: week.urgency === 'last_hours' ? BRAND.redLip : week.urgency === 'last_day' ? BRAND.goldLip : 'rgba(5,52,110,0.18)',
-    }, style]}>
+      backgroundColor: tone, borderWidth: 2, borderColor: week.urgency === 'calm' ? 'rgba(5,52,110,0.18)' : BRAND.goldLip,
+    }}>
       <ScoreIcon metric="ride_wins" size={24} />
-      <Text maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 15, color: ink }}>Rides won</Text>
-      {!!week.label && <View style={{ width: 2, height: 18, borderRadius: 1, backgroundColor: week.urgency === 'last_hours' ? 'rgba(255,255,255,0.5)' : 'rgba(5,52,110,0.2)' }} />}
+      <Text maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 15, color: ink }}>Wins this week</Text>
+      {!!week.label && <View style={{ width: 2, height: 18, borderRadius: 1, backgroundColor: 'rgba(5,52,110,0.2)' }} />}
       {!!week.label && <Text maxFontSizeMultiplier={1.25} style={{ fontFamily: 'Shark', fontSize: 15, color: ink }}>{week.label}</Text>}
-    </Animated.View>
+    </View>
   );
 }
 
@@ -1007,8 +1004,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           {board === 'friends' ? <GameIcon name="heart" size={84} /> : (
             <View style={{ alignItems: 'center' }}>
               <Image source={CROWN_ART[1]} style={{ width: 64, height: 64, marginBottom: -14, zIndex: 2 }} contentFit="contain" />
-              <View style={{ width: 200, height: 86, overflow: 'hidden', borderRadius: RADIUS.md }}>
-                <Image source={BARREL} style={{ width: 200, height: 200 * 683 / 1079, marginLeft: 0 }} contentFit="cover" />
+              {/* An empty podium (plain steps, no coin piles) waiting for its first three. */}
+              <View style={{ width: 200, height: 70 }}>
+                <PodiumSteps steps={EMPTY_STEPS} gap={4} />
               </View>
             </View>
           )}

@@ -283,7 +283,7 @@ test("a stranger's stats render without null balances: Keys and Shark Coins tile
   const tiles = [];
   (function walk(n) { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) return n.forEach(walk);
     if (typeof n.type === 'function') tiles.push(n.props); walk(n.props?.children); })(app.tree);
-  assert.deepEqual(tiles.map((t) => t.label), ['Ride Coins', 'Parks', 'Ride Wins', 'Total XP']);
+  assert.deepEqual(tiles.map((t) => t.label), ['Shelf Coins', 'Parks', 'Ride Wins', 'Total XP']);
   assert.ok(tiles.every((t) => typeof t.value === 'number'), 'every tile gets a number');
   // AnimatedStat uses Animated.multiply, which the shared runtime stub lacks: extend its react-native.
   const rn = { ...app.native, Animated: { ...app.native.Animated, multiply: (a) => a } };
@@ -296,7 +296,7 @@ test("a stranger's stats render without null balances: Keys and Shark Coins tile
   const zeroed = runtime('src/components/Stats.tsx', statsImports, { player: { ...stranger, keys: 0, coins: 0 }, hideBalances: true });
   const zl = []; (function walk(x) { if (!x || typeof x !== 'object') return; if (Array.isArray(x)) return x.forEach(walk);
     if (typeof x.type === 'function') zl.push(x.props.label); walk(x.props?.children); })(zeroed.tree);
-  assert.deepEqual(zl, ['Ride Coins', 'Ride Wins', 'Total XP'], 'no balances or park count for strangers');
+  assert.deepEqual(zl, ['Shelf Coins', 'Ride Wins', 'Total XP'], 'no balances or park count for strangers');
   assert.match(read('src/screens/PlayerScreen.tsx'), /<Stats player=\{currentPlayer\} hideBalances=\{!isFriend\} rideCoins=\{rideCoinTotal\(parks\)\} parks=\{visitedParkCount\(parks\)\} \/>/);
   // The signed-in player still sees all six.
   const own = runtime('src/components/Stats.tsx', statsImports, { player: { ...stranger, keys: 0, coins: 1840, experience: 2405 } });

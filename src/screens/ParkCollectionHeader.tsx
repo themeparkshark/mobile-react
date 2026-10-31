@@ -8,8 +8,10 @@ import GameIcon from '../ui/GameIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { limitedDayLabel } from '../services/collection/limitedCoins';
 import { parkCoinParts } from './parkCoinParts';
+import { shelfLeaving } from '../services/collection/shelfLeaving';
 import { playSfx } from '../gamekit/SFX';
 import { haptic } from '../gamekit/Haptics';
+import { nextTrophyLine, TROPHY_HELP, trophyIcon, type ShelfTab } from '../services/collection/shelfModel';
 
 interface Props {
   readonly parkName: string;
@@ -31,8 +33,14 @@ interface Props {
   readonly nextRideName?: string | null;
   readonly nextRideOwned?: boolean;
   readonly ownedGoalHint?: string | null;
+  /** An owned coin you are leveling up (GET RIDE PARTS): GO still walks you to its line. */
+  readonly ownedGo?: boolean;
   readonly nearbyRideName?: string | null;
   readonly nearbyReportedOpen?: boolean;
+  /** The line under the next coin when the map guide picked it (the map and the shelf agree). */
+  readonly nearbyHint?: string | null;
+  /** No ride open and no sight left to win: the closed message, with no GO (blueprint 4.1 rule 11). */
+  readonly parkResting?: { readonly title: string; readonly hint: string } | null;
   readonly ticketsNeeded?: number;
   readonly rescuePassAvailable?: boolean;
   readonly goalStale?: boolean;
@@ -51,16 +59,32 @@ interface Props {
   /** Server coin_kind of the goal coin; only 'ride' is called a ride. */
   readonly nextCoinKind?: string | null;
   readonly tickKey?: string | number | null;
+  /** The shelf tab on screen; the RIDES, SIGHTS and LIMITED chips are the tabs. */
+  readonly tab?: ShelfTab;
+  readonly onTab?: (tab: ShelfTab) => void;
+  /** Tabs this park shows (shelfModel.visibleTabs). */
+  readonly tabs?: readonly ShelfTab[];
+  /** Coin wins here (the trophies count every win): names the next trophy under the bar. */
+  readonly trophyWins?: number;
+  /** GO on the next coin: points the guide at it (and opens the map at this park). */
+  readonly onGo?: () => void;
+  /** 'GO' at this park, 'PLAN' away (saves it as the next park day's coin). */
+  readonly goLabel?: 'GO' | 'PLAN';
+  /** The coin is the guide's plan already. */
+  readonly planned?: boolean;
+  /** Energy for growing coins, shown once coin levels open (rung 3). */
+  readonly energy?: number | null;
 }
 
-/** The slim park header: park, one Ride Coins count, and one next step. */
+/** The slim park header: one shelf count ("9 of 35 coins"), the next trophy, the Rides, Sights and Limited tabs, and the next coin with GO. */
 export default function ParkCollectionHeader({ parkName, isOwnPark = true, collected, available, completionRate,
   ridePassportCollected, ridePassportAvailable, onOpenRidePassport, limitedCollected = 0, limitedAvailable = 0,
   limitedEndsOn, onBrowseLimited, onBrowseSecrets, onOpenStampBook,
-  nextRideName, nextRideOwned, ownedGoalHint, nearbyRideName, ticketsNeeded = 0,
+  nextRideName, nextRideOwned, ownedGoalHint, ownedGo = false, nearbyRideName, ticketsNeeded = 0,
   rescuePassAvailable = false, goalStale = false,
-  goalReportedDown = false, alternateRideName, nearbyReportedOpen = false,
-  secretMilestones, holdCount = false, tickKey, nextCoinKind }: Props) {
+  goalReportedDown = false, alternateRideName, nearbyReportedOpen = false, nearbyHint = null, parkResting = null,
+  secretMilestones, holdCount = false, tickKey, nextCoinKind, tab, onTab, tabs, trophyWins, onGo, goLabel = 'GO',
+  planned = false, energy = null }: Props) {
   const reduced = useReducedGameMotion();
   const shownCollected = holdCount ? Math.max(0, collected - 1) : collected;
   const rate = available > 0 ? Math.max(0, Math.min(100, shownCollected / available * 100))
@@ -97,24 +121,31 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
     fill.value = reduced ? rate : withTiming(rate, { duration: 520, easing: Easing.out(Easing.cubic) });
   }, [rate, reduced, fill]);
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value}%` }));
+  // GET RIDE PARTS fades the next-coin card on the UI thread while the shelf leaves for the map.
+  useEffect(() => { shelfLeaving.value = 0; }, []);
+  const leavingStyle = useAnimatedStyle(() => ({ opacity: 1 - shelfLeaving.value }));
 
   const goal = nextRideName ? {
     eyebrow: goalStale ? 'YOUR LAST SAVED GOAL' : goalReportedDown ? 'YOUR GOAL RIDE IS DOWN'
-      : nextRideOwned ? 'COIN MASTERY GOAL' : nextCoinEyebrow(nextCoinKind),
+      : nextRideOwned ? 'LEVEL UP GOAL' : nextCoinEyebrow(nextCoinKind),
     name: nextRideName,
     hint: goalReportedDown
       ? alternateRideName ? `${alternateRideName} nearby is reported open.` : 'Pick another coin below while you wait.'
       : nextRideOwned ? ownedGoalHint ?? 'On your shelf. Keep earning its Ride Parts.'
-      : rescuePassAvailable ? 'Shark Rescue Pass ready at this ride.'
+      : rescuePassAvailable ? "Today's free try is ready here."
+
       : ticketsNeeded > 0 ? `${ticketsNeeded} more ${ticketsNeeded === 1 ? 'Ticket' : 'Tickets'} to play.`
       : ticketsReadyHint(nextCoinKind),
   } : nearbyRideName ? {
-    eyebrow: nearbyReportedOpen ? 'NEARBY AND REPORTED OPEN' : 'NEAREST MISSING COIN',
+    eyebrow: 'NEXT COIN',
     name: nearbyRideName,
-    hint: 'Tap its coin below to make it your goal.',
+    hint: nearbyHint ?? (nearbyReportedOpen ? 'Nearest coin, reported open.' : 'The nearest coin you can win next.'),
+  } : parkResting ? {
+    eyebrow: 'NEXT COIN', name: parkResting.title, hint: parkResting.hint,
   } : isOwnPark ? {
-    eyebrow: 'NEXT ADVENTURE', name: 'Pick a missing coin', hint: 'Tap an empty slot on the shelf.',
+    eyebrow: 'NEXT COIN', name: 'Pick a missing coin', hint: 'Tap an empty slot on the shelf.',
   } : null;
+  const canGo = !!onGo && !!goal && (!!nextRideName || !!nearbyRideName) && !goalReportedDown && (!nextRideOwned || ownedGo);
 
   return <View style={styles.frame}>
     <LinearGradient colors={['#0a8fe3', '#0768b9']} style={styles.hero}>
@@ -122,12 +153,12 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
         contentFit="contain" style={styles.shark} accessibilityLabel="Theme Park Shark mascot" />
       {/* The title bar already names the park, so the header starts with the count. */}
       <View style={styles.countRow} accessible
-        accessibilityLabel={available > 0 ? `${shownCollected} of ${available} ${parkName} Ride Coins collected` : 'Ride Coins coming soon'}>
+        accessibilityLabel={available > 0 ? `${parkName} shelf: ${shownCollected} of ${available} coins` : 'Coins coming soon'}>
         <Animated.Text style={[styles.count, flash && styles.countFlash, popStyle]}>
-          {available > 0 ? `${shownCollected}/${available}` : 'NEW'}
+          {available > 0 ? `${shownCollected} of ${available}` : 'NEW'}
         </Animated.Text>
         <Text style={[styles.countLabel, coinsLeft <= 1 && styles.countLabelHot]}>
-          {coinsLeft === 0 ? 'PARK COMPLETE!' : coinsLeft === 1 ? 'ONE COIN TO GO!' : <>RIDE COINS</>}
+          {coinsLeft === 0 ? 'PARK COMPLETE!' : coinsLeft === 1 ? 'ONE COIN TO GO!' : <>{available === 1 ? 'COIN' : 'COINS'}</>}
         </Text>
       </View>
       <View style={styles.track}>
@@ -139,27 +170,47 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
           </>}
         </Animated.View>
       </View>
-      <View style={styles.chips}>
-        {parts &&
-          <Pressable style={styles.chip} disabled={!onOpenRidePassport}
-            accessibilityRole={onOpenRidePassport ? 'button' : undefined}
-            accessibilityLabel={`Rides: ${parts.rides.collected} of ${parts.rides.available}${onOpenRidePassport ? '. Show rides only.' : ''}`}
-            onPress={onOpenRidePassport}>
-            <GameIcon name="ride" size={18} />
-            <Text style={styles.chipText}>RIDES {parts.rides.collected}/{parts.rides.available}</Text>
-          </Pressable>}
-        {parts?.sights && <View style={[styles.chip, styles.chipSights]} accessible
-          accessibilityLabel={`Shows and sights: ${parts.sights.collected} of ${parts.sights.available}`}>
+      {typeof trophyWins === 'number' && isOwnPark && <View style={styles.trophyLine} accessible
+        accessibilityLabel={`${nextTrophyLine(trophyWins)}. ${TROPHY_HELP}`}>
+        <GameIcon name={trophyIcon(trophyWins)} size={18} />
+        <Text style={styles.trophyText} numberOfLines={1}>{nextTrophyLine(trophyWins)}</Text>
+      </View>}
+      <View style={styles.chips} accessibilityRole={onTab ? 'tablist' : undefined}>
+        {/* The chips are the shelf's tabs: Rides, Sights and Limited, each with its own part of the count. */}
+        {(parts || onTab) && <Pressable style={[styles.chip, tab === 'rides' && styles.chipOn]}
+          disabled={!onTab && !onOpenRidePassport}
+          accessibilityRole={onTab ? 'tab' : onOpenRidePassport ? 'button' : undefined}
+          accessibilityState={onTab ? { selected: tab === 'rides' } : undefined}
+          accessibilityLabel={parts ? `Rides: ${parts.rides.collected} of ${parts.rides.available}` : `Coins: ${collected} of ${available}`}
+          onPress={onTab ? () => onTab('rides') : onOpenRidePassport}>
+          <GameIcon name="ride" size={18} />
+          <Text style={styles.chipText}>{parts ? `RIDES ${parts.rides.collected}/${parts.rides.available}` : `COINS ${collected}/${available}`}</Text>
+        </Pressable>}
+        {parts?.sights && (!tabs || tabs.includes('sights')) && <Pressable style={[styles.chip, styles.chipSights, tab === 'sights' && styles.chipOn]}
+          disabled={!onTab} accessibilityRole={onTab ? 'tab' : undefined}
+          accessibilityState={onTab ? { selected: tab === 'sights' } : undefined}
+          accessibilityLabel={`Shows and sights: ${parts.sights.collected} of ${parts.sights.available}`}
+          onPress={() => onTab?.('sights')}>
           <GameIcon name="star" size={18} />
           <Text style={styles.chipText}>SIGHTS {parts.sights.collected}/{parts.sights.available}</Text>
-        </View>}
-        {limitedAvailable > 0 && <Pressable style={styles.chip} onPress={onBrowseLimited} disabled={!onBrowseLimited}
-          hitSlop={6} accessibilityRole={onBrowseLimited ? 'button' : undefined}
-          accessibilityLabel={`Limited coins here now, ${limitedCollected} of ${limitedAvailable}${limitedLeaves ? `, leaving ${limitedLeaves}` : ''}${onBrowseLimited ? '. View limited shelf.' : ''}`}>
-          <GameIcon name="timer" size={18} />
-          <Text style={styles.chipText}>LIMITED {limitedCollected}/{limitedAvailable}</Text>
         </Pressable>}
-        {!!onBrowseSecrets && <Pressable style={styles.chip} onPress={onBrowseSecrets} hitSlop={6}
+        {/* As a tab, LIMITED shows only when the Limited tab has rows to open (never a dead tap). */}
+        {(onTab ? !!tabs?.includes('limited') : limitedAvailable > 0) && <Pressable style={[styles.chip, tab === 'limited' && styles.chipOn]}
+          onPress={onTab ? () => onTab('limited') : onBrowseLimited} disabled={!onTab && !onBrowseLimited}
+          hitSlop={6} accessibilityRole={onTab ? 'tab' : onBrowseLimited ? 'button' : undefined}
+          accessibilityState={onTab ? { selected: tab === 'limited' } : undefined}
+          accessibilityLabel={limitedAvailable > 0
+            ? `Limited coins here now, ${limitedCollected} of ${limitedAvailable}${limitedLeaves ? `, leaving ${limitedLeaves}` : ''}`
+            : 'Limited coins and past events'}>
+          <GameIcon name="timer" size={18} />
+          <Text style={styles.chipText}>{limitedAvailable > 0 ? `LIMITED ${limitedCollected}/${limitedAvailable}` : 'LIMITED'}</Text>
+        </Pressable>}
+        {typeof energy === 'number' && <View style={[styles.chip, styles.chipEnergy]} accessible
+          accessibilityLabel={`${energy} Energy for leveling up coins`}>
+          <GameIcon name="energy" size={18} />
+          <Text style={styles.chipText}>{energy}</Text>
+        </View>}
+        {!onTab && !!onBrowseSecrets && <Pressable style={styles.chip} onPress={onBrowseSecrets} hitSlop={6}
           accessibilityRole="button" accessibilityLabel={`${secretMilestones} secret coins found. View secret shelf.`}>
           <GameIcon name="lock" size={18} />
           <Text style={styles.chipText}>SECRETS {secretMilestones}</Text>
@@ -178,16 +229,20 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
           <Text style={styles.goalName}>Claim it in your Stamp Book</Text>
         </View>
         {onOpenStampBook && <GameIcon name="arrow" size={26} />}
-      </Pressable> : goal && <View style={styles.goal}>
+      </Pressable> : goal && <Animated.View style={[styles.goal, leavingStyle]}>
         <View style={styles.goalIcon}><GameIcon name={nextRideOwned ? 'parts' : 'coin'} size={24} /></View>
         <View style={{ flex: 1 }}>
-          <Text numberOfLines={1} style={styles.goalLine}>
-            <Text style={styles.goalEyebrow}>{goal.eyebrow}  </Text>
-            <Text style={styles.goalName}>{goal.name}</Text>
-          </Text>
-          <Text style={styles.goalHint} numberOfLines={1}>{goal.hint}</Text>
+          {/* A short eyebrow on its own line and the full coin name under it, so GO never squeezes the name. */}
+          <Text numberOfLines={1} style={styles.goalEyebrow}>{goal.eyebrow}</Text>
+          <Text numberOfLines={2} style={styles.goalName}>{goal.name}</Text>
+          <Text style={styles.goalHint} numberOfLines={1}>{planned && goLabel === 'PLAN' ? 'Planned for your next park day.' : goal.hint}</Text>
         </View>
-      </View>}
+        {canGo && <Pressable onPress={onGo} hitSlop={8} accessibilityRole="button"
+          accessibilityLabel={goLabel === 'GO' ? `Go to ${goal.name}. Shows the path on the map.` : `Plan ${goal.name} for your next park day`}
+          style={({ pressed }) => [styles.go, pressed && styles.goPressed, planned && goLabel === 'PLAN' && styles.goDone]}>
+          {planned && goLabel === 'PLAN' ? <GameIcon name="check" size={20} /> : <Text style={styles.goText}>{goLabel}</Text>}
+        </Pressable>}
+      </Animated.View>}
     </View>}
   </View>;
 }
@@ -219,14 +274,23 @@ const styles = StyleSheet.create({
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 4,
     backgroundColor: '#fff8e4', borderWidth: 2, borderColor: '#ffcf3b', borderRadius: 12 },
   chipText: { fontFamily: 'Shark', color: '#05346e', fontSize: 14 },
+  chipOn: { backgroundColor: '#ffcf3b', borderColor: '#ffffff' },
+  chipEnergy: { marginLeft: 'auto', borderColor: '#7fd3ff' },
+  trophyLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 5, marginRight: 70 },
+  trophyText: { fontFamily: 'Knockout', color: '#e9f7ff', fontSize: 14 },
+  go: { minWidth: 58, minHeight: 44, paddingHorizontal: 10, borderRadius: 12, backgroundColor: '#ffcf3b',
+    borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#d99a00',
+    alignItems: 'center', justifyContent: 'center' },
+  goPressed: { transform: [{ translateY: 2 }], borderBottomWidth: 2 },
+  goDone: { backgroundColor: '#dff5d8', borderBottomColor: '#7cbf6a' },
+  goText: { fontFamily: 'Shark', color: '#05346e', fontSize: 18 },
   lower: { paddingHorizontal: 8, paddingVertical: 7 },
   completeStamp: { width: 48, height: 48 },
   goal: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff4cc',
     borderColor: '#ffcf3b', borderWidth: 2, borderRadius: 14, paddingVertical: 5, paddingHorizontal: 8 },
   goalIcon: { width: 34, height: 34, backgroundColor: '#fff', borderRadius: 17,
     borderWidth: 2, borderColor: '#ffcf3b', alignItems: 'center', justifyContent: 'center' },
-  goalLine: { fontFamily: 'Shark', color: '#05346e', fontSize: 17 },
   goalEyebrow: { fontFamily: 'Knockout', color: '#8a5a00', fontSize: 13, letterSpacing: 0.8 },
-  goalName: { fontFamily: 'Shark', color: '#05346e', fontSize: 17 },
+  goalName: { fontFamily: 'Shark', color: '#05346e', fontSize: 17, lineHeight: 20 },
   goalHint: { fontFamily: 'Knockout', color: '#3d5f8c', fontSize: 14, lineHeight: 17 },
 });

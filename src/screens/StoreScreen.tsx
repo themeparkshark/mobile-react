@@ -313,11 +313,15 @@ const tabStyles = StyleSheet.create({
   wishText: { fontFamily: 'Shark', fontSize: 14, color: '#c2185b' },
 });
 
+/** The bottom back strip where the footer was (the gear shelf pads insets.bottom + 48, so its last row clears it). */
+const SHOP_BACK_STRIP = 48;
+
 /**
  * One store per screen instance: a new store param (navigate('Store', ...) landing on a Store
  * screen already in the stack) starts a fresh screen, so no tab, shelf, scroll fold, try-on or
  * Secret Shop state carries over from the other store.
  */
+
 export default function StoreScreen(props: NativeStackScreenProps<ParamListBase, 'Store'>) {
   const store = (props.route.params as { store?: number | 'shark-shop' } | undefined)?.store;
   return <StoreScreenBody key={String(store)} {...props} />;
@@ -699,6 +703,15 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
         </ImageBackground>
       )}
       </Reanimated.View>
+      {/* The footer is hidden in the Shark Shop, so a kid's tap where the footer was finds a way
+          back: the same back button, bottom left (core loop 5.1, walk lc-kid 144). It sits on its own
+          solid strip where the footer was, so it never covers a pack, a VIP tile or a gear card: the
+          shop above ends at the strip (the gear shelf already pads its last row clear of it). */}
+      {!shopHandoff && <View testID="shop-bottom-back" style={{ marginTop: 'auto', zIndex: 40,
+        height: SHOP_BACK_STRIP + insets.bottom, paddingBottom: insets.bottom, paddingLeft: 14, justifyContent: 'center',
+        backgroundColor: BRAND.blue, borderTopWidth: 3, borderTopColor: '#ffffff' }}>
+        <BackButton />
+      </View>}
       {/* Buy hand-off into the Set Complete reveal: navy over everything, header included. */}
       {shopHandoff && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY, zIndex: 50 }]} />}
       </View>

@@ -22,6 +22,8 @@ import GameIcon from '../ui/GameIcon';
 import GameRichText from '../ui/GameRichText';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { UpperText } from '../ui/upper';
+import { useNativeModalLayer } from '../ui/modalLayers';
+import { useRung } from '../services/reveal/revealLadder';
 
 interface Props {
   task: TaskType | SecretTaskType;
@@ -50,12 +52,12 @@ export function unfoundCoinCopy({ isSecret, isArchived, isResting, kind, limited
     hint: isResting
       ? 'This mystery coin is resting this week. Check back later to find it.'
       : 'A secret coin. Explore the park to find where it hides.',
-    challenge: 'Secret Challenge',
+    challenge: 'Play Secret!',
   };
   if (isArchived) return {
     ribbon: 'Archived Coin',
     hint: 'This coin is from a past event. It may come back in a future event.',
-    challenge: 'Event Challenge',
+    challenge: 'Past event coin',
   };
   if (limited) {
     const day = limitedDayLabel(limited.ends_on);
@@ -63,14 +65,15 @@ export function unfoundCoinCopy({ isSecret, isArchived, isResting, kind, limited
       ribbon: 'Limited Coin',
       hint: !limited.active
         ? 'This coin is resting. It comes back later.'
-        : day ? `Here until ${day}. Win its challenge before then.`
-        : 'Here for a short time. Win its challenge while it is here.',
-      challenge: kind === 'ride' ? 'Ride Challenge' : 'Coin Challenge',
+        : day ? `Here until ${day}. Win it before then.`
+        : 'Here for a short time. Win it while it is here.',
+      challenge: kind === 'ride' ? 'PLAY! at the ride' : 'PLAY! at this spot',
     };
   }
   return kind === 'ride'
-    ? { ribbon: 'Ride Coin', hint: 'Win this ride’s challenge at the ride to add its coin to your shelf.', challenge: 'Ride Challenge' }
-    : { ribbon: 'Spot Coin', hint: 'Win this spot’s challenge in the park to add its coin to your shelf.', challenge: 'Coin Challenge' };
+    ? { ribbon: 'Ride Coin', hint: 'Walk up to the ride and tap PLAY! to win its coin for your shelf.', challenge: 'PLAY! at the ride' }
+    // A sight on the Sights tab says Sight Coin, the tab's own word (an older server with no ride list keeps Spot Coin).
+    : { ribbon: kind === 'coin' ? 'Sight Coin' : 'Spot Coin', hint: 'Walk up to this spot and tap PLAY! to win its coin for your shelf.', challenge: 'PLAY! at this spot' };
 }
 
 export default function UnfoundCoinModal({ task, isSecret = false, isArchived = false, onChooseGoal, onShowOnMap, onPlayInLine, trigger, size = 62, kind, isGoal = false, limited }: Props) {
@@ -84,6 +87,11 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
   const copy = unfoundCoinCopy({ isSecret, isArchived, isResting: isRestingSecret, kind, limited });
   const outOfRotation = !!limited && !limited.active;
   const playable = !isSecret && !isArchived && !outOfRotation;
+  // One door for every sheet (4.3 rule 10): waits its turn, holds its layer until UIKit says it is gone.
+  const layer = useNativeModalLayer(visible, 'wait');
+  // Prize chips follow the unlock ladder: Energy and Parts with coin levels (rung 3), XP with Daily 3 (rung 4).
+  const levelsOpen = useRung('coin_levels').open;
+  const xpOpen = useRung('daily').open;
 
   const handleOpen = () => {
     setGoalError(false);
@@ -119,8 +127,9 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
       </Pressable>
 
       <Modal
-        isVisible={visible}
+        isVisible={layer.present}
         onModalHide={() => {
+          layer.onDismissed();
           if (afterClose === 'map') onShowOnMap?.();
           if (afterClose === 'line') onPlayInLine?.();
           setAfterClose(null);
@@ -201,15 +210,15 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                     {task.ticket_cost === 0
                       ? 'Free challenge. '
                       : typeof task.ticket_cost === 'number'
-                      ? `Costs ${task.ticket_cost} ticket${task.ticket_cost === 1 ? '' : 's'} to play. `
+                      ? `Costs ${task.ticket_cost} Ticket${task.ticket_cost === 1 ? '' : 's'} to play. `
                       : 'Each try costs tickets. '}
-                    {task.ticket_cost !== 0 && `Out of tickets? You may get a free Rescue Pass ${kind === 'ride' ? 'at the ride' : 'at this spot'}.`}
+                    {task.ticket_cost !== 0 && `Out of Tickets? Today's free try works ${kind === 'ride' ? 'at the ride' : 'at this spot'} too.`}
                   </Text>
                   {'energy_reward' in task && 'ride_parts_reward' in task &&
                     typeof task.coins === 'number' && typeof task.experience === 'number' &&
                     typeof task.energy_reward === 'number' && typeof task.ride_parts_reward === 'number' && (
                       <GameRichText style={{ color: '#327395', fontFamily: 'Knockout', fontSize: 13, lineHeight: 18, marginTop: 8 }} iconSize={15}>
-                        {`You win: [icon:coins] +${task.coins} coins · [icon:xp] +${task.experience} XP · [icon:energy] +${task.energy_reward} energy · [icon:parts] +${task.ride_parts_reward} Ride Part${task.ride_parts_reward === 1 ? '' : 's'}`}
+                        {`You win: [icon:coins] +${task.coins} Shark Coins${xpOpen ? ` · [icon:xp] +${task.experience} XP` : ''}${levelsOpen ? ` · [icon:energy] +${task.energy_reward} Energy · [icon:parts] +${task.ride_parts_reward} Ride Part${task.ride_parts_reward === 1 ? '' : 's'}` : ''}`}
                       </GameRichText>
                     )}
                 </View>
@@ -217,7 +226,7 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
 
               {/* One primary gameplay action: play here in line, else go find it on the map. */}
               {playable && (onPlayInLine || onShowOnMap) && <YellowButton
-                text={onPlayInLine ? 'Play in Line' : 'Show on Park Map'}
+                text={onPlayInLine ? 'LinePlay' : 'Show on Park Map'}
                 onPress={() => { setAfterClose(onPlayInLine ? 'line' : 'map'); setVisible(false); }} />}
               {playable && onPlayInLine && onShowOnMap && <Pressable
                 accessibilityRole="button"
@@ -233,7 +242,7 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                 onPress={() => void handleChooseGoal()}
                 style={[styles.secondary, { opacity: goalBusy ? 0.6 : 1 }]}>
                 <GameIcon name="star" size={22} />
-                <Text style={styles.secondaryText}>{goalBusy ? 'Saving…' : 'Make This My Goal'}</Text>
+                <Text style={styles.secondaryText}>{goalBusy ? 'Saving…' : 'Make this my next coin'}</Text>
               </Pressable>}
               {goalError && <Text style={styles.error}>
                 Could not save this goal. Check your internet and try again.

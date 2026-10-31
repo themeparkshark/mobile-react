@@ -90,14 +90,16 @@ test('the guide plays a coinless ride in line, badges limited coins and searches
   assert.match(park, /loadParkRides\(Number\(park\)\)/);
   assert.match(park, /<Ribbon text="Limited Coins" \/>/);
   assert.match(park, /shelfRows\('limited', limitedShelf\)/);
-  assert.match(park, /shelfRows\('normal', passportMode\s*\n?\s*\? permanentTasks/);
+  // The shelf's tabs (core loop 5.4): Rides and Sights split the permanent coins; Limited holds the rotation.
+  assert.match(park, /shelfRows\('normal', split\.rides\)/);
+  assert.match(park, /shelfRows\('normal', split\.sights\)/);
   assert.match(park, /rides=\{permanentTasks\}/, 'the passport count stays permanent coins only');
 });
 
 test('the park header counts the limited rotation apart from the permanent X/Y', () => {
   const header = fs.readFileSync('src/screens/ParkCollectionHeader.tsx', 'utf8');
-  assert.match(header, /LIMITED \{limitedCollected\}\/\{limitedAvailable\}/);
-  assert.match(header, /\{limitedAvailable > 0 && /);
+  assert.match(header, /`LIMITED \$\{limitedCollected\}\/\$\{limitedAvailable\}`/);
+  assert.match(header, /\(onTab \? !!tabs\?\.includes\('limited'\) : limitedAvailable > 0\) && /, 'as a tab it needs Limited rows (never a dead tap)');
   const park = fs.readFileSync('src/screens/ParkScreen.tsx', 'utf8');
   assert.match(park, /limitedAvailable=\{currentPark\.limited_coins_available\}/);
 });
@@ -121,12 +123,13 @@ test('a limited coin out of rotation explains itself and cannot be played', () =
     'react-native': { StyleSheet: { create: v => v } }, 'react-native-modal': {}, 'expo-haptics': {}, 'expo-image': {},
     '../context/SoundEffectProvider': {}, './Ribbon': {}, './YellowButton': {}, './MysteryCoinArtwork': {},
     './collection/CoinSocket': {}, '../ui/GameIcon': {}, '../ui/GameRichText': {}, '../hooks/useReducedGameMotion': {},
+    '../ui/modalLayers': {}, '../services/reveal/revealLadder': {},
   });
   const base = { isSecret: false, isArchived: false, isResting: false, kind: 'ride' };
   assert.equal(unfoundCoinCopy({ ...base, limited: IN }).ribbon, 'Limited Coin');
-  assert.equal(unfoundCoinCopy({ ...base, limited: IN }).hint, 'Here until Oct 31. Win its challenge before then.');
+  assert.equal(unfoundCoinCopy({ ...base, limited: IN }).hint, 'Here until Oct 31. Win it before then.');
   assert.match(unfoundCoinCopy({ ...base, limited: OUT }).hint, /comes back later/);
-  assert.equal(unfoundCoinCopy({ ...base, limited: OUT }).challenge, 'Ride Challenge');
+  assert.equal(unfoundCoinCopy({ ...base, limited: OUT }).challenge, 'PLAY! at the ride');
   assert.equal(unfoundCoinCopy(base).ribbon, 'Ride Coin');
   const source = fs.readFileSync('src/components/UnfoundCoinModal.tsx', 'utf8');
   assert.match(source, /const playable = !isSecret && !isArchived && !outOfRotation;/);

@@ -156,6 +156,14 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)audio\/gameMomentSound$/.test(name)) return { playGameMoment() {}, playGameHaptic() {}, setGameMomentStudio() {}, gameMomentStudioOn: () => false };
       if (/(^|\/)fx\/CountdownStage$/.test(name)) return { CountdownStage: 'CountdownStage' };
       if (/(^|\/)fx\/FinalSeconds$/.test(name)) return { FinalSeconds: 'FinalSeconds' };
+      // Core loop shared contracts for the shelf-words lane's sheets (same stubs as step 0's tests):
+      // nothing else is up, every rung reads open (a veteran), and the guide holds no target.
+      if (/(^|\/)ui\/modalLayers$/.test(name)) return { useNativeModalLayer: wanted => ({ present: !!wanted, onDismissed() {} }),
+        useModalLayer: active => !!active, useAnyModalLayer: () => false, ModalLayerContext: react.createContext(false) };
+      if (/(^|\/)reveal\/revealLadder$/.test(name)) return { useRung: () => ({ open: true, isNew: false, markSeen() {} }),
+        rungState: () => ({ open: true, isNew: false }), recordProgress() {} };
+      if (/(^|\/)services\/mapFlags$/.test(name)) return { useMapFlags: () => ({ gymSwords: false }), loadMapFlags: async () => ({ gymSwords: false }) };
+      if (/(^|\/)guide\/nextCoin$/.test(name)) return { guide: { current: () => null, subscribe: () => () => {}, setTarget() {}, plan: () => null } };
       if (name.includes('assets/')) return name;
       return { default: name };
     },

@@ -7,9 +7,11 @@
  * that owns each hit file (PLAN.json vocabulary_ownership, copied below; a
  * file no lane owns goes to shelf-words for copy-only edits).
  *
- * REPORT-ONLY for now: it lists every hit and passes. The shelf-words lane
- * turns it strict at the end of its lane by setting STRICT = true (and the
- * other lanes clear their own files first). Comments, import paths, console
+ * STRICT (shelf-words lane, October 28, 2026): the build fails on any hit in a
+ * file owned by a lane that is not in PENDING_LANES. Lanes still building in
+ * parallel stay report-only until they merge; the integrator removes each lane
+ * from PENDING_LANES as it lands (an empty list is the whole app strict, the
+ * PLAN.json integration check). Comments, import paths, console
  * text, identifier-like strings ("daily_three", "pins/mystery"), API
  * endpoints, models and dev-only screens are never hits.
  * A deliberate exception lives next to the string: // vocab-allow: <why>
@@ -21,8 +23,13 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '../..');
 const ts = require(path.join(ROOT, 'node_modules/typescript'));
 
-/** Flip to true at the end of the shelf-words lane. */
-const STRICT = false;
+/** Strict since the end of the shelf-words lane. */
+const STRICT = true;
+/**
+ * Lanes whose hits are reported but do not fail the build yet (they fix their own files on
+ * their own branches). Remove a lane when it merges; empty means every file is strict.
+ */
+const PENDING_LANES = new Set(['guide-map', 'ride-challenge', 'lineplay-ride', 'rewards-unlocks']);
 
 /** [id, pattern, say instead, files it skips]. Case matters only where the old word is a caps label. */
 const RULES = [
@@ -52,7 +59,34 @@ const RULES = [
   ['boss-energy', /\bpowers boss raids\b/i, 'Energy, for growing coins'],
   ['rhythm-tap', /\bRhythm Tap\b/i, 'Parade Beat'],
   ['shop-name', /^(Store|STORE|Shop|SHOP)$|\bShark Store\b/, 'Shark Shop'],
+  // Dustin, Oct 28 (ledger 36): the bot rival is Captain Gill (rank ladder Admiral Gill). Coach Finn and
+  // Fin-ister Nights stay; the internal icon name 'fin' is code, not copy.
+  ['captain-fin', /\b(Captain|Admiral|CAPTAIN|ADMIRAL) (Fin|FIN)\b/, 'Captain Gill (rank ladder: Captain Gill, Admiral Gill)'],
+  // Dustin, Oct 28 (ledger 39): the Green Train Toy left the shop; the app never names it (owners keep it as server data).
+  ['green-train', /\bGreen Train\b/i, 'nothing: the shop list comes from the server'],
+  // Round 3: the money is Shark Coins next to any price or cost ("a gift costs 350 coins" reads like ride coins).
+  // Ride coin counts ("9 of 35 coins") stay. Template text is checked whole, with each ${...} read as N.
+  ['money-coins', /\b(costs?|for|need|needs|spend|earn|get|gets|have|has) (\d+|%s|N) (free |more )?coins\b|\bNot Enough Coins\b|\bXP and coins\b/i,
+    'Shark Coins (the money)'],
 ];
+
+/**
+ * Round 5: a count labeled "Ride Coins" counts sights too (Profile's stat tile counted every shelf coin).
+ * BLUEPRINT 4.5 retires "RIDE COINS counting sights" in any case: a stat label is the shelf's word.
+ * "ride coin" as the name of the collectible (a title, the glossary) stays.
+ */
+const COUNT_LABEL_RULE = ['ride-coins-count', /^ride coins$/i, 'Shelf Coins (the shelf counts rides and sights)'];
+/** A string that is the `label` of an object that also carries a `value` (a stat tile or count row). */
+function isCountLabel(node) {
+  const prop = node.parent;
+  if (!prop || !ts.isPropertyAssignment(prop) || prop.initializer !== node) return false;
+  if (!ts.isIdentifier(prop.name) || prop.name.text !== 'label') return false;
+  const obj = prop.parent;
+  return !!obj && ts.isObjectLiteralExpression(obj) && obj.properties.some(p => p.name && ts.isIdentifier(p.name) && p.name.text === 'value');
+}
+
+/** Rules also checked against a whole template literal (they span a ${...} value). */
+const WHOLE_TEMPLATE_RULES = ['money-coins'];
 
 /** PLAN.json vocabulary_ownership (October 28, 2026). A trailing /** owns a folder. */
 const OWNERS = {
@@ -70,7 +104,9 @@ const OWNERS = {
   'ride-challenge': ['src/components/TimingMiniGame.tsx', 'src/components/rewards/challengeCopy.ts', 'src/components/RedeemRedeemableModal.tsx',
     'src/components/PostWinRewardsModal.tsx', 'src/games/**', 'src/screens/GymBattle/TeamSelectionScreen.tsx'],
   'lineplay-ride': ['src/screens/LinePlay/**', 'src/services/lineplay/**', 'src/components/RideTracker/RideLogSuccess.tsx',
-    'src/screens/RideTracker/RideBatchConfirmScreen.tsx'],
+    'src/screens/RideTracker/RideBatchConfirmScreen.tsx',
+    // Ledger 36 (Captain Gill): LinePlay's party seat names the bot rival.
+    'src/gamekit/party/LineParty.tsx'],
   'rewards-unlocks': ['src/services/money/sharkPassModel.ts', 'src/screens/pins/**'],
 };
 /** Every OTA lane's owns_files (PLAN.json lanes[].owns_files, src/ entries). A hit here that is not listed above is a new hit for that lane. */
@@ -183,18 +219,32 @@ function scanSource(source, file) {
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
   const lines = source.split('\n');
   const hits = [];
-  const report = (node, text) => {
+  const report = (node, text, only) => {
     if (!text || identifierLike(text.trim())) return;
     const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line;
     if (/vocab-allow:/.test(lines[line] ?? '') || /vocab-allow:/.test(lines[line - 1] ?? '')) return;
     for (const [id, re, say, skip] of RULES) {
+      if (only && !only.includes(id)) continue;
       if (skip && skip.test(file)) continue;
       if (re.test(text)) hits.push({ line: line + 1, rule: id, say, text: text.replace(/\s+/g, ' ').trim().slice(0, 70) });
     }
   };
+  const reportWhole = (node, text) => report(node, text, WHOLE_TEMPLATE_RULES);
   const visit = node => {
-    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && !isSkipped(node)) report(node, node.text);
-    else if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) report(node, node.text);
+    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && !isSkipped(node)) {
+      report(node, node.text);
+      if (COUNT_LABEL_RULE[1].test(node.text.trim()) && isCountLabel(node)) {
+        const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line;
+        if (!/vocab-allow:/.test(lines[line] ?? '') && !/vocab-allow:/.test(lines[line - 1] ?? '')) {
+          hits.push({ line: line + 1, rule: COUNT_LABEL_RULE[0], say: COUNT_LABEL_RULE[2], text: node.text });
+        }
+      }
+    }
+    else if (ts.isTemplateExpression(node) && !isSkipped(node)) {
+      // The whole template, each ${...} read as N, for the rules that span a value ("costs ${GIFT_COST} coins").
+      const whole = node.head.text + node.templateSpans.map(span => `N${span.literal.text}`).join('');
+      reportWhole(node, whole);
+    } else if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) report(node, node.text);
     else if (ts.isJsxText(node)) report(node, node.text);
     ts.forEachChild(node, visit);
   };
@@ -222,7 +272,7 @@ function scanVocabulary(root = ROOT) {
   return files;
 }
 
-module.exports = { RULES, OWNERS, LANE_FILES, ownerOf, scanSource, scanVocabulary, STRICT };
+module.exports = { RULES, OWNERS, LANE_FILES, ownerOf, scanSource, scanVocabulary, STRICT, PENDING_LANES };
 
 if (require.main === module || process.env.NODE_TEST_CONTEXT) {
   const test = require('node:test');
@@ -248,9 +298,26 @@ if (require.main === module || process.env.NODE_TEST_CONTEXT) {
     assert.equal(scanSource("const a = 'Do sharks lose their teeth?';", 'src/services/lineplay/content.ts').length, 0);
     assert.equal(scanSource("const a = 'Skip the teeth!';", 'src/games/whack/WhackAShark.tsx')[0].rule, 'teeth');
     assert.equal(scanSource("const a = 'Snack Stand';", 'x.ts').length, 0, 'food snacks are fine');
+    // Ledger 36: the rival is Captain Gill; coach Finn, Fin-ister Nights and the 'fin' icon stay.
+    assert.equal(scanSource("const a = 'Captain Fin';", 'x.ts')[0].rule, 'captain-fin');
+    assert.equal(scanSource("const a = `Beat ADMIRAL FIN!`;", 'x.ts')[0].rule, 'captain-fin');
+    assert.equal(scanSource("const a = 'Captain Gill'; const b = 'Coach Finn says hi'; const c = 'Fin-ister Nights'; const d = 'fin';", 'x.ts').length, 0);
+    // Round 3: money next to a price says Shark Coins; ride coin counts stay.
+    assert.equal(scanSource('const a = `A gift costs ${GIFT_COST} coins`;', 'x.ts')[0].rule, 'money-coins');
+    assert.equal(scanSource("const a = 'Not Enough Coins!';", 'x.ts')[0].rule, 'money-coins');
+    assert.equal(scanSource("const a = 'earn 25 free coins!';", 'x.ts')[0].rule, 'money-coins');
+    assert.equal(scanSource("const a = '2x XP and coins';", 'x.ts')[0].rule, 'money-coins');
+    assert.equal(scanSource('const a = `A gift costs ${GIFT_COST} Shark Coins`; const b = `${n} of ${m} coins`; const c = \'9 of 35 coins\';', 'x.ts').length, 0);
+    // Round 5: a count labeled Ride Coins counts sights too; the collectible's name in a title stays.
+    assert.equal(scanSource("const s = [{ label: 'Ride Coins', value: 9 }];", 'x.ts')[0].rule, 'ride-coins-count');
+    assert.ok(scanSource("const s = { label: 'RIDE COINS', value: n };", 'x.ts').some(h => h.rule === 'ride-coins-count'));
+    assert.equal(scanSource("const t = { label: 'Ride Coins', icon: 'coin' }; const el = <Text>Ride Coins</Text>;", 'x.tsx').length, 0);
+    assert.equal(scanSource("const s = [{ label: 'Shelf Coins', value: 9 }];", 'x.ts').length, 0);
+    // Ledger 39: the Green Train Toy is server data only.
+    assert.equal(scanSource("const a = 'Green Train Toy';", 'x.ts')[0].rule, 'green-train');
   });
 
-  test(`vocabulary (${STRICT ? 'strict' : 'report only'}): banned UI words by owner lane`, t => {
+  test(`vocabulary (${STRICT ? `strict, pending lanes: ${[...PENDING_LANES].join(', ') || 'none'}` : 'report only'}): banned UI words by owner lane`, t => {
     const files = scanVocabulary().filter(f => f.owner !== 'allowlisted');
     const total = files.reduce((n, f) => n + f.hits.length, 0);
     const byOwner = {};
@@ -259,6 +326,11 @@ if (require.main === module || process.env.NODE_TEST_CONTEXT) {
       t.diagnostic(`${owner}: ${list.length} files, ${list.reduce((n, f) => n + f.hits.length, 0)} hits`);
       for (const f of list) t.diagnostic(`  ${f.file}${f.listed ? '' : f.unowned ? ' (new, no lane owns it)' : ' (new, lane owns_files)'}: ${[...new Set(f.hits.map(h => h.rule))].join(', ')}`);
     }
-    if (STRICT) assert.equal(total, 0, 'retired words in player-facing copy (see the diagnostics above)');
+    void total;
+    if (STRICT) {
+      const failing = files.filter(f => !PENDING_LANES.has(f.owner));
+      assert.deepEqual(failing.map(f => `${f.file} (${f.owner}): ${[...new Set(f.hits.map(h => h.rule))].join(', ')}`), [],
+        'retired words in player-facing copy (see the diagnostics above)');
+    }
   });
 }

@@ -1,7 +1,7 @@
 /**
  * The Standings v2 podium: 236 pt, so the race below shows on the first
- * screen. Alex's barrel art (top third, flipped so silver has the taller base) with the top three
- * standing on it, 2nd left, 1st centre, 3rd right, each with its medal.
+ * screen. Three plain podium steps (no coin piles, Dustin Oct 28) with the top three standing on
+ * them, 2nd left, 1st centre, 3rd right, each with Alex's crown.
  *
  * Motion: the rise (3rd, 2nd, 1st) plays only when the top three changed since
  * this player last looked (`celebrate`); every other visit is a 150 ms fade
@@ -11,24 +11,25 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { memo, useContext, useEffect, useState } from 'react';
-import { Image as RNImage, Pressable, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { BRAND, GameIcon, RADIUS } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { CROWN_ART, RANK_RING } from './PodiumSpot';
+import PodiumSteps, { type PodiumStep } from './PodiumSteps';
 import StandingsShark from './StandingsShark';
 import { rowLabel, type StandingsMetric, type StandingsRowModel } from './standingsV2Model';
 import { UpperText } from '../../ui/upper';
 
-// Alex's barrels, flipped and re-lit from the top left (ART_QA round 4), so silver stands on the taller barrel.
-const BARREL = require('../../../assets/images/screens/leaderboard/barrel-flipped.png');
 const RIDE_COIN = require('../../../assets/images/map/ride-coin.png');
 const revealSound = require('../../../assets/sounds/reveal.mp3');
 
 export const MINI_PODIUM_HEIGHT = 236;
-// Barrel tops only (the painted digits sit lower and stay hidden).
-const BARREL_SHOWN = 100;
+/** The podium steps under the spots: each step's top meets its spot's score chip (spot bottom = 42 + SEAT). */
+export const MINI_STEPS: readonly PodiumStep[] = [
+  { rank: 2, width: 104, height: 48 }, { rank: 1, width: 124, height: 98 }, { rank: 3, width: 104, height: 30 },
+];
 const CONFETTI_COLORS = [BRAND.gold, BRAND.goldLight, BRAND.white, BRAND.skyDeep, '#ff8a3d', '#ff5d8f'];
 
 /**
@@ -93,14 +94,20 @@ function ConfettiBurst({ fireKey, width, y }: { readonly fireKey: number; readon
   );
 }
 
-/** The board's unit icon: the ride cart for rides won this week, Alex's ride coin for All-Time. */
+/** All-Time counts ride coins (the coin); This Week counts wins (a coin with a check, one per ride per park day). */
 export function ScoreIcon({ metric, size }: { readonly metric: StandingsMetric; readonly size: number }) {
-  return metric === 'ride_coins'
-    ? <Image source={RIDE_COIN} style={{ width: size, height: size }} contentFit="contain" />
-    : <GameIcon name="ride" size={size} />;
+  if (metric === 'ride_coins') return <Image source={RIDE_COIN} style={{ width: size, height: size }} contentFit="contain" />;
+  return (
+    <View style={{ width: size, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Image source={RIDE_COIN} style={{ width: size, height: size }} contentFit="contain" />
+      <View style={{ position: 'absolute', right: -size * 0.12, bottom: -size * 0.12 }}>
+        <GameIcon name="check" size={Math.round(size * 0.55)} />
+      </View>
+    </View>
+  );
 }
 
-/** Each spot's score chip rests on its barrel rim (flipped art: center, then left, then right). */
+/** Each spot's score chip rests on its step (1st on the tallest, then 2nd, then 3rd). */
 const SEAT: Record<1 | 2 | 3, number> = { 1: 52, 2: 2, 3: -16 };
 
 function Spot({ rank, row, metric, progress, pop, loading, onPress }: {
@@ -216,12 +223,8 @@ function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress, dim
 
   return (
     <View style={{ height: MINI_PODIUM_HEIGHT, width }}>
-      {/* The top of Alex's barrels: coin rims and lids, the spots stand on them. */}
-      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: BARREL_SHOWN, overflow: 'hidden' }}>
-        {/* Alex's art, flipped: the taller barrel sits under silver (left), the shorter under bronze,
-            so the bases read 1 > 2 > 3. Crop and flip only (ART_RULES). */}
-        <RNImage source={BARREL} fadeDuration={0} resizeMode="cover" style={{ width, height: width * 683 / 1079 }} />
-      </View>
+      {/* Plain podium steps, 1 > 2 > 3, the spots stand on them (no gold barrels or coin piles). */}
+      <PodiumSteps steps={MINI_STEPS} gap={8} />
       {/* The dimmed hold is the old stage: VoiceOver skips it (its rows already carry their new
           ranks) and follows the dock's climb instead (r7). */}
       <View pointerEvents="box-none" accessibilityElementsHidden={dimmed} importantForAccessibility={dimmed ? 'no-hide-descendants' : 'auto'} style={{

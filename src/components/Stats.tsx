@@ -190,9 +190,12 @@ export default function Stats({ player, hideBalances = false, rideCoins = null, 
       iconIndex: 0,
     },
     {
-      label: 'Ride Coins',
+      // The shelf's word: this counts every coin on your shelves, rides and sights (BLUEPRINT 4.5),
+      // with the same coin picture the park rows below use ("9 OF 35 COINS").
+      label: 'Shelf Coins',
       value: rideCoins ?? visibleCount(player.park_coins_count),
       iconIndex: 1,
+      gameIcon: 'coin' as GameIconName,
     },
     {
       label: 'Parks',
@@ -200,7 +203,8 @@ export default function Stats({ player, hideBalances = false, rideCoins = null, 
       iconIndex: 2,
     },
     {
-      label: 'Coins',
+      // The money says Shark Coins, so it never reads like the ride coins on the park rows below.
+      label: 'Shark Coins',
       value: hideBalances ? null : visibleCount(player.coins),
       iconIndex: 3,
       gameIcon: 'coins' as GameIconName,

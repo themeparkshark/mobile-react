@@ -146,7 +146,7 @@ test('Gym Join card sits above the pillars and the Leave Gift button stays on sc
     assert.ok(k.button.height + 16 >= 44, `${phone}: still a 44 pt tap target with its hit slop`);
   }
   // The price on the kiosk is the coin stack (the coin you spend everywhere), never the painted ride coin.
-  assert.match(cc, /accessibilityLabel=\{`A gift costs \$\{GIFT_COST\} coins`\}/);
+  assert.match(cc, /accessibilityLabel=\{`A gift costs \$\{GIFT_COST\} Shark Coins`\}/);
   assert.match(cc, /icons\/game\/coins\.png'\)\} style=\{styles\.kioskCoin\}/);
   // It pulses with a white shine, never a scale, and the press squish never passes full size.
   assert.doesNotMatch(cc, /LEAVE_GIFT_PULSE|Animated\.multiply\(pulseAnim/);
@@ -226,7 +226,7 @@ test('one coin for coins you spend: the coin stack on pills, prices and the prof
   assert.doesNotMatch(read('src/screens/pins/MysteryCard.tsx'), /<GameIcon name="coin" /);
   assert.doesNotMatch(read('src/components/Notification.tsx'), /<GameIcon name="coin" /);
   assert.match(read('src/services/liveEvents/model.ts'), /if \(r\.coins\) out\.push\(\{ icon: 'coins'/);
-  assert.match(read('src/components/Stats.tsx'), /label: 'Coins',[\s\S]{0,120}gameIcon: 'coins'/);
+  assert.match(read('src/components/Stats.tsx'), /label: 'Shark Coins',[\s\S]{0,120}gameIcon: 'coins'/);
 });
 
 test('full-screen routes keep clear of the Dynamic Island with one inset (SafeScreen, the JS hook)', () => {
@@ -607,7 +607,7 @@ test('one coin rule: the coin stack is the coin you spend, the gold fin coin mea
   assert.match(read('src/screens/pins/BoxReveal.tsx'), /<GameIcon name="coins" size=\{30\} \/>/);
   assert.match(read('src/screens/StoreScreen/shopUi.tsx'), /styles\.arcCoin, coin\]\}><GameIcon name="coins"/);
   assert.match(read('src/components/liveEvents/ChestReveal.tsx'), /styles\.coin, style\]\}><GameIcon name="coins"/);
-  assert.match(read('src/services/help/helpSheets.ts'), /\{ icon: 'coins', text: 'Spend Coins on gear\.' \}/);
+  assert.match(read('src/services/help/helpSheets.ts'), /\{ icon: 'coins', text: 'Spend Shark Coins on gear\.' \}/);
   const hero = read('src/components/help/HelpHero.tsx');
   assert.match(hero, /styles\.price[^\n]*\n\s*<GameIcon name="coins"/);
   assert.match(read('src/screens/CommunityCenterScreen.tsx'), /icons\/game\/coins\.png'\)\} style=\{styles\.kioskCoin\}/);

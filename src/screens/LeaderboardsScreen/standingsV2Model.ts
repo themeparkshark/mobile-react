@@ -64,10 +64,10 @@ export function defaultStandingsTab(week: Pick<StandingsBoardModel, 'me'> & { re
 
 export type StandingsMetric = 'ride_wins' | 'ride_coins';
 
-/** "1 ride", "3 rides", "1 ride coin", "12 ride coins". */
+/** "1 win", "3 wins" (Wins this week), "1 ride coin", "12 ride coins" (All-Time). */
 export function unitWord(metric: StandingsMetric, count: number): string {
   const one = count === 1;
-  return metric === 'ride_coins' ? (one ? 'ride coin' : 'ride coins') : (one ? 'ride' : 'rides');
+  return metric === 'ride_coins' ? (one ? 'ride coin' : 'ride coins') : (one ? 'win' : 'wins');
 }
 
 /** One of Alex's eight shark colors for a player with no outfit, stable per player. */
@@ -397,10 +397,10 @@ export function nextStep(
   const score = model.me?.score ?? 0;
   const unit = (n: number) => unitWord(model.metric, n);
   if (model.review?.benched && model.board !== 'all_time') {
-    return { kind: 'review', text: 'Keep riding! Your rides are safe.' };
+    return { kind: 'review', text: 'Keep playing! Your wins are safe.' };
   }
   if (score <= 0 || model.me?.rank == null) {
-    const what = model.metric === 'ride_coins' ? 'ride coin' : 'ride';
+    const what = model.metric === 'ride_coins' ? 'ride coin' : 'coin';
     return inPark
       ? { kind: 'join', canRide: true, text: `Win 1 ${what} to join!` }
       : { kind: 'join', canRide: false, text: `Next park day: win 1 ${what}!` };
@@ -454,7 +454,7 @@ export function youLine(model: Parameters<typeof nextStep>[0], inPark = true): {
   const step = nextStep(model, inPark);
   const state: YouState = step.kind === 'review' ? 'review' : step.kind === 'join' ? 'join' : step.kind === 'leader' ? 'leader'
     : model.chase?.tied ? 'tied' : 'chasing';
-  return { state, text: step.text, sub: step.kind === 'review' ? 'The shark crew is double-checking a ride' : null };
+  return { state, text: step.text, sub: step.kind === 'review' ? 'The shark crew is double-checking a win' : null };
 }
 
 /** How many more you need to take 10th place (ties go to whoever got there first), or null when you are in the top 10 or #10 is not loaded. */
@@ -508,12 +508,10 @@ export function weekDots(endsAt: string | null | undefined, now: number): {
   // Index of today: 0 (Monday) .. 6 (Sunday), from the end of the week.
   const todayIndex = Math.max(0, Math.min(6, 6 - Math.floor(msLeft / dayMs)));
   const daysLeft = Math.ceil(msLeft / dayMs);
-  const hours = Math.floor(msLeft / 3_600_000);
-  const minutes = Math.floor((msLeft % 3_600_000) / 60_000);
   const urgency: WeekUrgency = msLeft <= 3 * 3_600_000 ? 'last_hours' : msLeft <= dayMs ? 'last_day' : 'calm';
-  const label = urgency === 'last_hours' ? `Ends in ${hours}h ${minutes}m`
-    : urgency === 'last_day' ? 'Ends today' : `${daysLeft} days left`;
-  const spoken = urgency === 'calm' ? `New week in ${daysLeft} days` : urgency === 'last_day' ? 'Last day of the week' : `This week ends in ${hours} hours ${minutes} minutes`;
+  // Calm timers (core loop 4.3 rule 7): words, never a ticking hours-and-minutes count on a kid screen.
+  const label = urgency === 'calm' ? `${daysLeft} days left` : urgency === 'last_day' ? 'Ends today' : 'Ends tonight';
+  const spoken = urgency === 'calm' ? `New week in ${daysLeft} days` : urgency === 'last_day' ? 'Last day of the week' : 'Last day of the week. It ends tonight';
   return { dots: letters.map((l, i) => ({ label: l, state: i < todayIndex ? 'past' : i === todayIndex ? 'today' : 'future' })), daysLeft, urgency, label, spoken };
 }
 
@@ -597,7 +595,7 @@ export function isUnknownPark(error: unknown): boolean {
 /** Copy for a board with nobody on it yet. */
 export function emptyCopy(board: StandingsBoardKey, friendsCount: number | null): { readonly title: string; readonly message: string; readonly action: string; readonly target: 'Explore' | 'Friends' } {
   if (board === 'friends' && !friendsCount) {
-    return { title: 'Race your friends', message: 'Add a friend and see who rides more this week.', action: 'Add friends', target: 'Friends' };
+    return { title: 'Race your friends', message: 'Add a friend and see who wins more this week.', action: 'Add friends', target: 'Friends' };
   }
   if (board === 'all_time') {
     return { title: 'Be the first collector', message: 'Win a ride challenge to earn a ride coin.', action: 'Find a ride', target: 'Explore' };
@@ -627,7 +625,7 @@ export function youLabel(model: Parameters<typeof nextStep>[0] & Pick<StandingsB
   const line = youLine(model, inPark);
   if (line.state === 'review') {
     const n = model.review?.rides ?? 0;
-    return `Your ${n} ${unitWord('ride_wins', n)} this week are safe. The shark crew is double-checking a ride. Keep riding!`;
+    return `Your ${n} ${unitWord('ride_wins', n)} this week are safe. The shark crew is double-checking a win. Keep playing!`;
   }
   const me = model.me;
   const score = me?.score ?? 0;
@@ -647,10 +645,10 @@ export function winNote(standings: unknown): { readonly text: string; readonly b
   const goals = Array.isArray(s.goals_reached) ? s.goals_reached.filter(g => Number(g?.goal) > 0) : [];
   if (goals.length) {
     const best = goals[goals.length - 1];
-    return { text: `Weekly goal: ${num(best.goal)} rides! +${goals.reduce((sum, g) => sum + num(g.xp), 0)} XP`, big: true };
+    return { text: `Weekly goal: ${num(best.goal)} wins! +${goals.reduce((sum, g) => sum + num(g.xp), 0)} XP`, big: true };
   }
   const week = Math.max(1, num(s.week_rides));
-  return { text: `${week} ${week === 1 ? 'ride' : 'rides'} this week!`, big: false };
+  return { text: `${week} ${week === 1 ? 'win' : 'wins'} this week!`, big: false };
 }
 
 /**

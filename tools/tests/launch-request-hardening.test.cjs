@@ -71,7 +71,7 @@ test('launch promises are never left unhandled', () => {
   assert.match(drop, /if \(!data\?\.data \|\| typeof data\.data !== 'object'\) throw/);
   assert.match(drop, /typeof serverMessage === 'string'/);
   assert.match(read('src/hooks/useAxiosSetup.ts'), /Promise\.resolve\(logoutRef\.current\(\)\)\.catch\(/);
-  assert.match(read('src/components/Tutorial/TutorialProvider.tsx'), /\}\)\.catch\(\(\) => setLoaded\(true\)\)/);
+  assert.match(read('src/components/Tutorial/TutorialProvider.tsx'), /\.catch\(\(\) => \{ if \(current\) setLoadedFor\(\{ id: playerId, fresh: true \}\); \}\)/);
   const auth = read('src/context/AuthProvider.tsx');
   assert.match(auth, /await logout\(\)\.catch\(\(\) => undefined\)/);
   assert.match(auth, /AsyncStorage\.getItem\('player'\)\.catch\(\(\) => null\)/);
