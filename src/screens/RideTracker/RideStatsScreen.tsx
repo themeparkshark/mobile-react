@@ -84,7 +84,9 @@ export default function RideStatsScreen() {
           <View style={styles.statGrid}>
             <StatCard label="Total Rides" value={stats.total_rides} icon="shark" />
             <StatCard label="Unique Rides" value={stats.unique_rides} icon="star" />
-            <StatCard label="Park days in a row" value={stats.current_streak} icon="ride" />
+            {/* Parks ridden at, a true count. The server's current_streak counts consecutive days, so it never wears
+                a "Ride days" label (a distinct-days count is a backend ask). */}
+            <StatCard label="Parks" value={stats.per_park.length} icon="pin" />
           </View>
         )}
 

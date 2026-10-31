@@ -1,5 +1,5 @@
 /**
- * RedeemRetryQueue — generic, AsyncStorage-backed retry queue.
+ * RedeemRetryQueue: generic, AsyncStorage-backed retry queue.
  *
  * Purpose: server-authoritative reward calls (e.g. completeInLineTimer) must
  * never be lost to a flaky network. When such a call fails, enqueue it here.
@@ -9,7 +9,7 @@
  * succeeded but the ack was lost.
  *
  * Why not NetInfo? @react-native-community/netinfo is NOT installed in this
- * project (flagged for architect approval — do not add heavy deps). So drain
+ * project (flagged for architect approval, do not add heavy deps). So drain
  * is driven by AppState foreground transitions + explicit drain() calls after
  * a successful/attempted network op, rather than a connectivity listener.
  * TODO(deps): if NetInfo is approved, add a reachability listener that calls
@@ -24,7 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, AppStateStatus } from 'react-native';
 
 export interface RetryItem<TPayload> {
-  /** Idempotency key — stable across every retry attempt of this item. */
+  /** Idempotency key, stable across every retry attempt of this item. */
   readonly idempotencyKey: string;
   readonly payload: TPayload;
   readonly enqueuedAt: number;
@@ -148,7 +148,7 @@ export class RedeemRetryQueue<TPayload> {
   /**
    * Enqueue a payload for retry. Returns the idempotency key assigned to it.
    * Pass an explicit `idempotencyKey` (recommended) so the same logical action
-   * — e.g. completing a specific session — is never enqueued twice with two
+   * (e.g. completing a specific session) is never enqueued twice with two
    * different keys.
    */
   async enqueue(payload: TPayload, idempotencyKey?: string, options?: { replace?: boolean }): Promise<string> {

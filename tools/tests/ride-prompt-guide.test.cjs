@@ -8,7 +8,7 @@ test('ride suggestions wait behind a guide and keep their pending detection inta
   const app = runtime('src/components/RideTracker/RideDetectionOverlay.tsx', {
     '../Tutorial': { useTutorial: () => ({ isActive: active }) },
     '../../services/RideDetectionEmitter': { rideDetectionEmitter: { on: (_, fn) => { receive = fn; return () => {}; } } },
-    '../../services/RideDetectionService': { removePendingDetection: async id => removed.push(id) },
+    '../../services/RideDetectionService': { removePendingDetection: async id => removed.push(id), linePlayRideNow: () => null },
     '../../RootNavigation': { navigationRef: { isReady: () => false }, navigate: (...args) => navigated.push(args) },
     '../../design-system': { shadows: { xl: {}, sm: {} } },
   });

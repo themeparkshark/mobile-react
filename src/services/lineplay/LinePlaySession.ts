@@ -583,6 +583,22 @@ export function playlistRotation(requestId: string): number {
 // Session controller
 // ---------------------------------------------------------------------------
 
+
+/** A finished wait's recap reopens after a relaunch only this long; after that a tap starts a new wait. */
+export const FINISHED_RECAP_KEEP_MS = 10 * 60_000;
+
+/**
+ * A finished wait whose rewards are settled and that ended over 10 minutes ago is over: the next PLAY IN
+ * LINE at that ride starts a new wait instead of reopening the old recap (its ride is logged and its
+ * rewards are paid). A recap still waiting for rewards always comes back, so nothing is lost.
+ */
+export function finishedRecapIsStale(saved: Pick<LinePlayCheckpoint, 'state' | 'rewardsPending' | 'endedAt'> | null,
+  nowMs = Date.now(), rideQuestionPending = false): boolean {
+  // A wait whose ride question is still to be put (a phone pocketed to board) comes back to ask it.
+  if (!saved || saved.state !== 'complete' || saved.rewardsPending || rideQuestionPending) return false;
+  return saved.endedAt == null || nowMs - saved.endedAt > FINISHED_RECAP_KEEP_MS;
+}
+
 export class LinePlaySession {
   private disposed = false;
   private state: LinePlayState = 'idle';
@@ -658,6 +674,8 @@ export class LinePlaySession {
   private prediction: { card: PredictionCard; guess: 'beat' | 'miss' } | null = null;
   private boardingConfirmed = false;
   private boardingSuggested = false;
+  /** When ride detection saw the guest leave the zone (the boarding signal), while its question is up. */
+  private boardingSeenAt: number | null = null;
   private gameOpen = false;
   /** Grace left when the countdown was held for an open game. */
   private graceHeldMs: number | null = null;
@@ -1111,17 +1129,51 @@ export class LinePlaySession {
    * asks the guest. Play keeps going, nothing counts down, and boarding is
    * recorded only when the guest says so (endNow(true)).
    */
-  suggestBoarded(): void {
-    if (this.state !== 'active' && this.state !== 'paused') return;
+  suggestBoarded(seenAt: number | null = null): void {
+    if (!this.canAskBoarding()) return;
     if (this.boardingSuggested) return;
     this.boardingSuggested = true;
+    this.boardingSeenAt = seenAt != null && Number.isFinite(seenAt) ? seenAt : null;
     this.emit();
+  }
+
+  /**
+   * Can the one ride question still be put for this wait? While it runs, and also after GPS wrapped it up
+   * as "left the line" (a phone pocketed to board usually reads that way), until the guest answers.
+   */
+  canAskBoarding(): boolean {
+    if (this.state === 'active' || this.state === 'paused') return true;
+    if (this.boardingConfirmed || this.endReason !== 'left_queue') return false;
+    return this.state === 'ending' || (this.state === 'complete' && this.startedAt != null);
   }
 
   /** The guest answered "Still in line" to a ride detection. */
   dismissBoardingSuggestion(): void {
     if (!this.boardingSuggested) return;
     this.boardingSuggested = false;
+    this.boardingSeenAt = null;
+    this.emit();
+  }
+
+  /** When the guest boarded: the boarding signal, else the first fix away from the line, else `fallback`. */
+  private boardedAt(fallback: number): number {
+    const at = this.boardingSeenAt ?? (this.endReason === 'left_queue' ? this.firstAwayAt : null) ?? fallback;
+    return this.startedAt != null ? Math.max(this.startedAt, Math.min(at, fallback)) : Math.min(at, fallback);
+  }
+
+  /**
+   * "I got to the ride" after the wait was already wrapped up as "left the line" (the phone was in a
+   * pocket for boarding, so GPS saw the guest walk away). The rewards already settled stay as they are;
+   * the wait becomes a ride: its timed wait ends when the guest left the zone, and the ride step logs it.
+   */
+  confirmRodeAfterWrapUp(): void {
+    if (this.state !== 'complete' || this.boardingConfirmed || this.endReason !== 'left_queue') return;
+    this.boardingConfirmed = true;
+    this.boardingAt = this.boardedAt(this.endedAt ?? Date.now());
+    this.endReason = 'boarded';
+    this.boardingSuggested = false;
+    this.boardingSeenAt = null;
+    this.persistCheckpoint();
     this.emit();
   }
 
@@ -1383,14 +1435,25 @@ export class LinePlaySession {
    * will then no-op the server call gracefully.
    */
   async start(ride: RideContext, initialLocation?: LocationSample, playerId?: number,
-    options: { readonly guest?: boolean } = {}): Promise<void> {
+    options: {
+      readonly guest?: boolean;
+      /** Is a ride question still to be put for the saved wait that started then? (the ride question ledger) */
+      readonly rideQuestionPending?: (rideId: number, startedAt: number) => boolean;
+    } = {}): Promise<void> {
     if (this.disposed || this.state === 'active' || this.state === 'paused') return;
     // A guest has no account: no checkpoint, no reward session, no queued credit.
     this.guest = options.guest === true && !playerId;
 
     const locationDuringLoad = this.lastSample;
-    const saved = playerId ? await readCheckpoint(playerId, ride.rideId) : null;
+    let saved = playerId ? await readCheckpoint(playerId, ride.rideId) : null;
     if (this.disposed) return;
+    // A settled recap from a wait that ended long ago never reopens: this is a new wait.
+    if (playerId && finishedRecapIsStale(saved, Date.now(),
+      saved != null && !saved.boardingConfirmed && options.rideQuestionPending?.(ride.rideId, saved.startedAt) === true)) {
+      await removeCheckpoint(playerId, ride.rideId).catch(() => undefined);
+      if (this.disposed) return;
+      saved = null;
+    }
 
     this.ride = ride;
     // Fact-checked server trivia for this ride; the bundled deck covers offline.
@@ -1475,6 +1538,7 @@ export class LinePlaySession {
     this.awaySamples = 0;
     this.firstAwayAt = null;
     this.boardingSuggested = false;
+    this.boardingSeenAt = null;
     this.graceHeldMs = null;
     this.advanceTrail = [];
     const originalWaitStillFresh = ride.postedWaitMinutes === saved?.plannedWaitMinutes &&
@@ -1905,8 +1969,13 @@ export class LinePlaySession {
     if (this.state !== 'active' && this.state !== 'paused') return;
     this.endReason = reason;
     this.boardingConfirmed = boardingConfirmed;
-    this.boardingSuggested = false;
-    this.boardingAt = boardingConfirmed ? Date.now() : null;
+    // The timed wait ends when the guest left the line for the ride (the boarding signal), never later.
+    this.boardingAt = boardingConfirmed ? this.boardedAt(Date.now()) : null;
+    // A ride question already up stays up when GPS wraps the wait as "left the line": it is still the answer.
+    if (boardingConfirmed || reason !== 'left_queue') {
+      this.boardingSuggested = false;
+      this.boardingSeenAt = null;
+    }
     this.state = 'ending';
     this.graceHeldMs = null;
     this.armGrace(EXIT_GRACE_MS);
@@ -1922,7 +1991,9 @@ export class LinePlaySession {
     if (this.state === 'ending') {
       // Answering the wrap-up sheet: keep the detected reason, record boarding.
       this.boardingConfirmed = boardingConfirmed;
-      this.boardingAt = boardingConfirmed ? this.boardingAt ?? Date.now() : null;
+      this.boardingAt = boardingConfirmed ? this.boardingAt ?? this.boardedAt(Date.now()) : null;
+      this.boardingSuggested = false;
+      this.boardingSeenAt = null;
       if (boardingConfirmed && this.endReason === 'left_queue') this.endReason = 'boarded';
     } else {
       this.beginEnding(boardingConfirmed, boardingConfirmed ? 'boarded' : 'manual');
@@ -1962,6 +2033,7 @@ export class LinePlaySession {
     this.endReason = null;
     this.boardingConfirmed = false;
     this.boardingSuggested = false;
+    this.boardingSeenAt = null;
     this.boardingAt = null;
     this.graceStartedAt = null;
     this.graceHeldMs = null;
@@ -1987,6 +2059,8 @@ export class LinePlaySession {
     this.graceHeldMs = null;
     this.boardingConfirmed = false;
     this.boardingAt = null;
+    this.boardingSuggested = false;
+    this.boardingSeenAt = null;
     this.endReason = null;
     // "Still in line": forget the away streak so the next check starts fresh.
     this.awaySamples = 0;
@@ -2018,7 +2092,8 @@ export class LinePlaySession {
     }
     this.graceStartedAt = null;
     this.graceHeldMs = null;
-    this.boardingSuggested = false;
+    // A ride question put on the "left the line" wrap-up stays up on its recap until the guest answers.
+    if (this.boardingConfirmed || this.endReason !== 'left_queue') { this.boardingSuggested = false; this.boardingSeenAt = null; }
     this.endedAt = Date.now();
     this.state = 'complete';
     this.backgroundTrackingAvailable = null;
@@ -2251,6 +2326,7 @@ export class LinePlaySession {
     this.graceStartedAt = null;
     this.graceHeldMs = null;
     this.boardingSuggested = false;
+    this.boardingSeenAt = null;
     this.playlist = [];
     this.rewards = null;
     this.rewardsPending = false;

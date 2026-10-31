@@ -39,3 +39,13 @@ export function rideLogError(error: unknown): RideLogErrorView {
   if (field('rating') || field('reaction')) return { title: 'Pick again', message: 'Tap your stars and your face again, then save.', action: 'edit' };
   return { title: 'Ride not saved', message: 'Save just the ride now. Or tap Try later to keep your stars and note for later.', action: 'plain' };
 }
+
+/**
+ * The journal's step label. A journal opened on its ride (the ride step or a
+ * confirmed detection) starts at the memory, so it never says "3 of 3" when
+ * steps 1 and 2 never showed.
+ */
+export function journalStepLabel(step: 'park' | 'ride' | 'details', openedOnRide: boolean): string {
+  if (openedOnRide) return 'RIDE JOURNAL';
+  return `RIDE JOURNAL · ${step === 'park' ? 1 : step === 'ride' ? 2 : 3} OF 3`;
+}

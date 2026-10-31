@@ -25,6 +25,11 @@ export const GENERATED_ICON_NAMES = [
   'pause', 'play', 'retry', 'arrow', 'swap', 'moon', 'pumpkin',
   // Battery Saver (Settings). Codex GPT Image from Alex refs; gate sheet in dustin-feedback-oct8/battery/art.
   'battery',
+  // LinePlay's own picture (Dustin's decision Oct 28, ledger 37): the gold posts and rope players already see on
+  // How to Play's line card (assets/images/howto/queue.webp, drawn Oct 2 from Alex refs, art QA passed in
+  // next-wave/home-hunt-v3/art-qa/menu-dex/ART_QA.md), trimmed to a 384 px PNG. No new drawing.
+  // The pocket watch ('queue') means Wait Times only (core loop 4.5).
+  'line',
 ] as const;
 
 export type GameIconName = typeof ORIGINAL_ICON_NAMES[number] | typeof GENERATED_ICON_NAMES[number];

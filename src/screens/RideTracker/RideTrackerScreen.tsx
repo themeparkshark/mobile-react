@@ -143,7 +143,7 @@ export default function RideTrackerScreen() {
 
   const load = useCallback(async () => {
     if (preview) {
-      setStats({ total_rides: 24, unique_rides: 14, per_park: [], top_rated: [],
+      setStats({ total_rides: 24, unique_rides: 14, per_park: [{ park_id: 8, park_name: 'Disneyland', count: 24 }], top_rated: [],
         most_ridden: [{ id: 1, name: 'Space Mountain', type: 'coaster', park_id: 2, ride_count: 4 }],
         current_streak: 2 });
       setProfile(null);
@@ -350,7 +350,7 @@ export default function RideTrackerScreen() {
                   style={s.logBtnIcon} contentFit="contain" />
                 <View style={{ flex: 1 }}>
                   <Text style={s.logBtnTitle}>Log a Ride</Text>
-                  <Text style={s.logBtnSub}>Track your theme park adventures</Text>
+                  <Text style={s.logBtnSub}>Every ride you ride, in one place</Text>
                 </View>
                 <GameIcon name="arrow" size={30} />
               </LinearGradient>
@@ -370,8 +370,9 @@ export default function RideTrackerScreen() {
                   <Text style={s.statLabel}>Unique</Text>
                 </View>
                 <View style={s.statPill}>
-                  <Text style={s.statVal}>{stats.current_streak}</Text>
-                  <Text style={s.statLabel}>Park days in a row</Text>
+                  {/* Parks ridden at: a true count, never the server's days-in-a-row streak. */}
+                  <Text style={s.statVal}>{stats.per_park.length}</Text>
+                  <Text style={s.statLabel}>Parks</Text>
                 </View>
               </View>
             </FadeIn>
@@ -393,7 +394,7 @@ export default function RideTrackerScreen() {
             />
             <MenuRow
               icon={require('../../../assets/images/screens/profile/pin_collections.png')}
-              title="Collections" sub="Ride every mountain, coaster, and more"
+              title="Ride sets" sub="Ride every mountain, coaster, and more"
               onPress={() => nav.navigate('RideCollections')} delay={480}
             />
             <MenuRow

@@ -37,6 +37,8 @@ export interface WaitCoinHeroProps {
   readonly coinSize?: number;
   /** This wait (the session's start time): a level reached in it survives leaving LinePlay and coming back. */
   readonly waitKey?: number | string | null;
+  /** Whether the guest owns this ride's coin (null while unknown): the card says "Parts are saved for this coin" when not. */
+  readonly onOwnership?: (owned: boolean | null) => void;
 }
 
 /** True while the app is in the foreground. */
@@ -59,13 +61,15 @@ function WaitCoinHero(props: WaitCoinHeroProps) {
 }
 
 function WaitCoinHeroBody({ rideId, waitScreen, creditedParts,
-  playerEnergy, covered, rewardsOn, onLeveled, coinSize = 120, waitKey = null, preview = false, previewAutoLevel = false }:
+  playerEnergy, covered, rewardsOn, onLeveled, coinSize = 120, waitKey = null, preview = false, previewAutoLevel = false, onOwnership }:
   WaitCoinHeroProps & { preview?: boolean; previewAutoLevel?: boolean }) {
   const appActive = useAppActive();
   const reducedMotion = useReducedGameMotion();
   const active = appActive && !covered;
   const wait = useWaitScreenCoin({ rideId, waitScreen, creditedParts, enabled: rewardsOn, preview });
   const owned = wait.status === 'owned' && wait.coin != null;
+  const ownership = wait.status === 'owned' ? true : wait.status === 'unowned' ? false : null;
+  useEffect(() => { onOwnership?.(ownership); }, [ownership]); // eslint-disable-line react-hooks/exhaustive-deps
   const progress = useMemo(() => waitCoinProgress({
     level: wait.coin?.level ?? 1,
     maxLevel: wait.coin?.maxLevel ?? 10,

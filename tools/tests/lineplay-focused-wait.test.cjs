@@ -33,8 +33,8 @@ test('focused queue status preserves pause, arcade and honest games-only details
   c.control('Open queue games').props.onPress(); assert.equal(c.arcades(), 1);
   c.control('Show wait and reward details').props.onPress(); c.app.render();
   assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Ride Parts aren’t available at this ride right now.'));
-  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Playing 1:30 · posted wait 35m'));
-  assert.ok(c.app.find(node => node.type === 'Text' && words(node.props.children) === 'The ride sign said 35m.'));
+  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Playing 1 min · posted wait 35 min'));
+  assert.ok(c.app.find(node => node.type === 'Text' && words(node.props.children) === 'The ride sign said 35 min.'));
   assert.ok(!c.app.find(node => node.type === 'Text' && /No posted wait|no sign time/.test(String(node.props.children))));
   c.app.change({ paused: true, pauseReason: 'manual' });
   assert.ok(c.control('Resume queue games'));
@@ -47,17 +47,18 @@ test('focused queue status preserves pause, arcade and honest games-only details
 test('focused reward status uses confirmed credited Parts, with verification details still available', () => {
   const c = wait({ rewardTrackingAvailable: true, lineRewardsReady: true, creditedParts: 2,
     verifiedEligibleSeconds: 450, verifiedPresenceAt: Date.now() });
-  assert.ok(c.app.find(node => node.type === 'Text' && words(node.props.children) === '1:30 · 2 Parts'));
+  assert.ok(c.app.find(node => node.type === 'Text' && words(node.props.children) === 'In line 1 min · 2 Parts'));
   assert.ok(c.control('Open queue games for bonus rewards'));
   c.control('Show wait and reward details').props.onPress(); c.app.render();
-  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Time near the ride: 7:30. You get 1 Ride Part every 5 minutes, up to 3 per wait.'));
+  assert.ok(c.app.find(node => node.type === 'Text' && node.props.children === 'Time near the ride: 7 min. You get 1 Ride Part every 5 minutes, up to 3 per wait.'));
 });
 test('VoiceOver says what the card shows: with the coin, the status first and the wait total named as its own phrase', () => {
   const label = c => c.app.find(node => node.props?.accessible && /earned this wait/.test(node.props?.accessibilityLabel ?? ''))?.props.accessibilityLabel;
   const reward = { rewardTrackingAvailable: true, lineRewardsReady: true, creditedParts: 4, verifiedEligibleSeconds: 450, verifiedPresenceAt: Date.now() };
   const withCoin = wait({ ...reward, hero: 'coin' });
-  assert.equal(label(withCoin), '1:30 until your next Ride Part. 4 Ride Parts earned this wait.');
+  // Core loop 4.3 rule 7: minutes in line and Parts, never a ticking countdown.
+  assert.equal(label(withCoin), 'In line 1 min · 4 Parts. 4 Ride Parts earned this wait.');
   assert.doesNotMatch(label(withCoin), /^4 Ride Parts earned\./, 'never a bare count that disagrees with the coin chip');
   const noCoin = wait(reward);
-  assert.match(label(noCoin), /^4 Ride Parts earned this wait\. 1:30/);
+  assert.match(label(noCoin), /^4 Ride Parts earned this wait\. In line 1 min/);
 });

@@ -18,9 +18,12 @@ export interface QueueToastMessage {
   readonly icon: GameIconName;
   readonly title: string;
   readonly body: string;
+  /** No buzz (the time-away toast: quiet, inside LinePlay). */
+  readonly quiet?: boolean;
 }
 
-const HOLD_MS = 3200;
+/** On screen about 3 s in all (in, hold, out): the toast rule, never longer. */
+const HOLD_MS = 2600;
 /** How far a toast tucked inside the wait card travels in and out (its band's top margin is larger). */
 const TUCKED_DROP = 6;
 
@@ -37,7 +40,7 @@ export default function QueueToast({ message, onDone, top, slim = false }: {
 
   useEffect(() => {
     if (!message) return;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!message.quiet) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     void AccessibilityInfo.announceForAccessibility(`${message.title}. ${message.body}`);
     cancelAnimation(drop);
     drop.value = 0;

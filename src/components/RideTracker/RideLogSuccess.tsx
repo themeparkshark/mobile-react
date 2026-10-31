@@ -14,6 +14,7 @@ import TopbarText from '../Topbar/TopbarText';
 import { SoundEffectContext, SoundEffectContextType } from '../../context/SoundEffectProvider';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { rideLogWaitLine, type RideLogWaitReason } from '../../services/rideLogOutbox';
+import { GameButton, GameIcon } from '../../ui';
 
 const MILESTONES = [10, 25, 50, 100, 200, 500, 1000];
 const MILESTONE_MESSAGES: Record<number, string> = {
@@ -33,15 +34,22 @@ interface RideLogSuccessProps {
   xpEarned: number;
   newAchievements: Array<{ id: number; name: string; icon: string }>;
   onDone: () => void;
+  /** What the back arrow says it does (a ride-step journal goes back to the LinePlay recap). */
+  doneLabel?: string;
   onLogAnother?: () => void;
   /** No signal: the ride is kept on the phone and sent later. */
   queued?: boolean;
   /** Why the kept ride waits: signal (default) or signing in again. */
   queuedReason?: RideLogWaitReason;
+  /** The guide's next coin (its name), for the one NEXT COIN button. */
+  nextCoinName?: string | null;
+  /** Back to the map, where the guide points at the next coin. */
+  onNextCoin?: () => void;
 }
 
 const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
-  ride, rideCount, totalRideCount, xpEarned, newAchievements, onDone, onLogAnother, queued = false, queuedReason = 'signal',
+  ride, rideCount, totalRideCount, xpEarned, newAchievements, onDone, doneLabel = 'Return to Ride Tracker', onLogAnother, queued = false, queuedReason = 'signal',
+  nextCoinName = null, onNextCoin,
 }) => {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -103,7 +111,7 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <Pressable onPress={onDone} accessibilityRole="button" accessibilityLabel="Return to Ride Tracker">
+          <Pressable onPress={onDone} accessibilityRole="button" accessibilityLabel={doneLabel}>
             <Image source={require('../../../assets/images/screens/explore/back.png')}
               style={{ width: 35, height: 35 }} contentFit="contain" />
           </Pressable>
@@ -166,6 +174,21 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
           </Animated.View>
         )}
 
+        {/* The first ride ever: the one idea the old ride intro taught, as one picture line. */}
+        {totalRideCount === 1 && !queued && (
+          <View style={styles.firstRideTip} accessible
+            accessibilityLabel="Next time, just ride. Your shark asks once when you are done.">
+            <GameIcon name="ride" size={28} />
+            <Text style={styles.firstRideTipText}>Next time, just ride. Your shark asks once when you are done.</Text>
+          </View>
+        )}
+
+        {/* One next thing: the guide's next coin, back on the map. */}
+        {onNextCoin && nextCoinName && (
+          <GameButton label={`NEXT COIN: ${nextCoinName}`} icon="coin" fullWidth onPress={onNextCoin}
+            style={styles.nextCoin} accessibilityLabel={`Next coin, ${nextCoinName}. Back to the map.`} />
+        )}
+
         {/* Shareable Card */}
         {showCard && (
           <Animated.View style={[styles.cardContainer, { transform: [{ translateY: cardSlide }] }]}>
@@ -220,6 +243,10 @@ const styles = StyleSheet.create({
   achievementText: { color: '#745012', fontSize: 16, fontFamily: 'Knockout', flex: 1 },
   // Card
   cardContainer: { width: '100%', marginBottom: 20 },
+  firstRideTip: { flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%', backgroundColor: '#FFFFFF',
+    borderRadius: 14, borderWidth: 2, borderColor: '#89CAFA', paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12 },
+  firstRideTipText: { flex: 1, color: '#0B4B83', fontSize: 15, fontFamily: 'Knockout', lineHeight: 19 },
+  nextCoin: { marginBottom: 16 },
   addRideButton: { backgroundColor: '#FFCB35', borderRadius: 13,
     paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: '#A9680C' },
   addRideText: { color: '#603600', fontSize: 12, fontFamily: 'Knockout' },

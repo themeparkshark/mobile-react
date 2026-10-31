@@ -56,6 +56,10 @@ function makeHarness({ backgroundGranted = false, deferredPermissionCheck = fals
       } };
       if (name === 'expo-location') return location;
       if (name === 'expo-task-manager') return { defineTask: () => {} };
+      if (name === './lineplay/rideQuestionLedger') return {
+        ensureRideQuestionLedger: async () => {}, noteLinePlayWaitStarted() {}, noteLinePlayWaitEnded() {},
+        rideHoldUntil: () => null, setRideHold() {}, visitInLinePlayWait: () => false, rideQuestionOwner: () => null,
+      };
       if (name === '../constants/queueRideTypes') return { QUEUE_RIDE_TYPES: ['attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride'] };
       if (name === 'react-native') return { AppState: {
         currentState: 'active', addEventListener: () => ({ remove: () => {} }),
@@ -126,17 +130,18 @@ test('a late permission check cannot start tracking after detection stops', asyn
 
 test('map location samples still queue a ride after a real dwell and exit', async () => {
   const { service, calls, advance } = makeHarness();
-  service.setRides([{ id: 42, name: 'Test Ride', type: 'ride', park_id: 1,
+  // Core loop 4.3: only rides with a queue are asked about, after a stay long enough to be a ride (4 min).
+  service.setRides([{ id: 42, name: 'Test Ride', type: 'attraction', park_id: 1,
     lat: 34, lng: -118, radius: 50, ride_duration_minutes: 2, min_dwell_minutes: 1 }]);
   assert.equal(await service.startDetection(), true);
   service.processForegroundLocation(34, -118);
-  advance(121_000);
+  advance(241_000);
   service.processForegroundLocation(34.002, -118);
   await new Promise(resolve => setImmediate(resolve));
   const detections = await service.getPendingDetections();
   assert.equal(detections.length, 1);
   assert.equal(detections[0].rideId, 42);
-  assert.equal(detections[0].dwellTimeMs, 121_000);
+  assert.equal(detections[0].dwellTimeMs, 241_000);
   assert.equal(calls.watcherStarts, 0);
   await service.stopDetection();
 });
@@ -161,7 +166,7 @@ test('overlapping attraction zones track only the clear nearest ride, not every 
 test('an ambiguous overlap starts no dwell until a clear attraction is available', async () => {
   const { service, advance } = makeHarness();
   service.setRides([-.0001, .0001].map((offset,i) => ({ id: i+1, name: 'Ride '+i,
-    type: 'show', park_id: 1, lat: 34+offset, lng: -118, radius: 60, min_dwell_minutes: 1 })));
+    type: 'attraction', park_id: 1, lat: 34+offset, lng: -118, radius: 60, min_dwell_minutes: 1 })));
   await service.startDetection(); service.processForegroundLocation(34, -118); advance(300_000);
   service.processForegroundLocation(34.002, -118); await new Promise(resolve => setImmediate(resolve));
   assert.equal((await service.getPendingDetections()).length, 0);

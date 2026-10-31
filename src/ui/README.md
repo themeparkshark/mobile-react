@@ -77,8 +77,8 @@ Every icon is a hand-drawn PNG. Three sources, in this order of preference:
    `edit` (pencil), `lock`, `star`, `heart`, `gift`, `chest`, `chestOpen`,
    `trophy` / `trophySilver` / `trophyBronze` (park cups), `map` (compass),
    `xp` (potion), `shark` (classic shark), `fin`, `search`, `new`, `member`,
-   `queue`, `coin` and `coins` (Alex's coin art). Files copied from Alex's pack
-   live in `assets/icons/game/`; the rest point at the existing screen art.
+   `queue` (the pocket watch: Wait Times only), `coin` and `coins` (Alex's coin art). Files copied
+   from Alex's pack live in `assets/icons/game/`; the rest point at the existing screen art.
 2. **Currencies exactly as they look today**: `energy`, `ticket`, `swords`,
    `parts`. These are the Feb-2026 files; they are used only for the currency
    they already represent and are never a style reference.
@@ -87,6 +87,10 @@ Every icon is a hand-drawn PNG. Three sources, in this order of preference:
    `ride`, `camera`, `pause`, `play`, `retry`, `arrow`. Drawn with GPT Image
    2.5 from Alex's references, trimmed, transparent, 384px long side. Review
    sheets: `tps-prime-time-audit/art-ws0/review-sheet-final-{1,2,3}.png`.
+   `line` is LinePlay's picture (Dustin, Oct 28): the gold posts and rope
+   already on How to Play's line card (`assets/images/howto/queue.webp`),
+   trimmed to a 384px PNG, not a new drawing. The pocket watch (`queue`) means
+   Wait Times only.
 
 Old names still resolve through `ICON_ALIASES` (`faq`, `compass`, `explore`,
 `down`, `vip`, `sword`, `ridePart`, `trophyGold`). Icons are decorative by

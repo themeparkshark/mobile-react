@@ -61,7 +61,7 @@ export function ArcadeIconWarmup() {
 }
 
 export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, onHidden, onShowing,
-  kicker = 'LINEPLAY', title = 'QUEUE ARCADE', intro = 'Pick a quick game while you wait.',
+  kicker = 'LINEPLAY', title = 'GAMES', intro = 'Pick a quick game while you wait.',
   note = 'Your wait still counts while you play.', newLabel = 'New game.', showNew = true }: {
   readonly visible: boolean;
   /** Header and helper lines; the defaults are the queue's. The home arcade passes its own. */

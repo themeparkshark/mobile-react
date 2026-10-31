@@ -353,7 +353,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         {phase === 'countdown' && local ? <CountIn boardT={boardT} late={local.lateStart} /> : null}
         {phase === 'ghosting' ? <Banner title="YOUR GHOST IS ON IT" sub="It finishes this round from your score. You keep the result, and you are back for the next round." /> : null}
         {phase === 'spectating' ? <Banner title="NEXT ROUND IS YOURS" sub="This race started before you joined. Cheer them on." /> : null}
-        {phase === 'submitting' || phase === 'waiting' ? <Banner title="FINISH!" sub="Captain Fin is checking every board..." big /> : null}
+        {phase === 'submitting' || phase === 'waiting' ? <Banner title="FINISH!" sub="Captain Gill is checking every board..." big /> : null}
       </View>
       <View style={styles.stickers}>
         <MiniStickers onEmote={onEmote} />
@@ -570,7 +570,8 @@ function HeadsUp({ enabled }: { enabled: boolean }) {
   if (!show) return null;
   return (
     <Animated.View entering={FadeIn.duration(180)} style={styles.headsUp} pointerEvents="none">
-      <GameIcon name="queue" size={18} />
+      {/* LinePlay's own picture; the pocket watch means Wait Times only. */}
+      <GameIcon name="line" size={26} />
       <Text style={styles.headsUpText}>Line's moving. Heads up!</Text>
     </Animated.View>
   );

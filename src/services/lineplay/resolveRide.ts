@@ -1,5 +1,5 @@
 /**
- * resolveRide — map a wait-times entry (name-keyed) to a numeric ride id.
+ * resolveRide: map a wait-times entry (name-keyed) to a numeric ride id.
  *
  * The queue-times feed (WikiLiveEntry) is name-keyed with a string id from
  * themeparks.wiki; the in-line timer server API needs the app's numeric
@@ -84,6 +84,20 @@ async function getRideNameMap(parkId: number): Promise<Map<string, RideType>> {
 /** The park's ride catalog (the same cached request), for the Coin Guide's Line Play rows. */
 export async function loadParkRides(parkId: number): Promise<RideType[]> {
   return [...(await getRideNameMap(parkId)).values()];
+}
+
+/**
+ * The coin task for each wait-times row (by the same name matching as LinePlay), so Wait Times can say
+ * "Make this my next coin" through the guide. Rows with no coin are left out.
+ */
+export async function coinTasksByRideName(parkId: number, names: readonly string[]): Promise<Map<string, number>> {
+  const map = await getRideNameMap(parkId);
+  const out = new Map<string, number>();
+  for (const name of names) {
+    const ride = rideKeysForTask(parkId, name).map(key => map.get(key)).find(Boolean);
+    if (ride?.task_id != null && Number.isInteger(ride.task_id) && ride.task_id > 0) out.set(name, ride.task_id);
+  }
+  return out;
 }
 
 /** Warm the ride lookup while guests read the park checklist. */

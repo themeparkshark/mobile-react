@@ -50,12 +50,12 @@ test('posted vs real: a tracking number only when real waits back it, gone once 
   const m = model();
   const est = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: 0.7, elapsedSeconds: 20 * 60 });
   assert.equal(est.title, 'SIGN SAYS 60'); assert.equal(est.tracking, 42); assert.equal(est.detail, "You're tracking ~42");
-  assert.equal(est.kidValue, '1h 00m', 'one wait number for kids: the sign they can see, never a guess stated as fact');
-  assert.equal(m.waitEstimate({ postedMinutes: 90, waitSource: 'posted', ratio: null, elapsedSeconds: 0 }).kidValue, '1h 30m',
-    'the sign is written like IN LINE (1h 30m), one unit style');
+  assert.equal(est.kidValue, '1 hr', 'one wait number for kids: the sign they can see, never a guess stated as fact');
+  assert.equal(m.waitEstimate({ postedMinutes: 90, waitSource: 'posted', ratio: null, elapsedSeconds: 0 }).kidValue, '1 hr 30 min',
+    'the sign is written like IN LINE (In line 12 min), one unit style, never a bare m (the guide\'s meters)');
   assert.match(est.accessibilityLabel, /about 42 minutes/, 'the guess stays in the spoken label, marked as about');
   const none = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: null, elapsedSeconds: 600 });
-  assert.equal(none.tracking, null); assert.equal(none.detail, 'Posted wait'); assert.equal(none.kidValue, '1h 00m', 'no guess: the sign');
+  assert.equal(none.tracking, null); assert.equal(none.detail, 'Posted wait'); assert.equal(none.kidValue, '1 hr', 'no guess: the sign');
   const past = m.waitEstimate({ postedMinutes: 60, waitSource: 'posted', ratio: 0.7, elapsedSeconds: 45 * 60 });
   assert.equal(past.tracking, null, 'never a countdown that lies');
   const noSign = m.waitEstimate({ postedMinutes: 35, waitSource: 'estimate', ratio: 0.7, elapsedSeconds: 0 });
@@ -117,7 +117,9 @@ test('level-up moment: queueHaptic, sfxLimiter, the v2 burst, and the Crowning o
 
 test('the wait screen body is its own component the screen mounts in the WaitCard slot', () => {
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.match(screen, /hero=\{snapshot\.state !== 'complete' \? <WaitCoinHero/);
+  // The wait card shows only while waiting (the recap is one screen), so its hero is always the coin.
+  assert.match(screen, /\{snapshot\.state !== 'complete' && !\(snapshot\.state === 'ending' && !leftLineWrapUp\) &&\n\s+<View style=\{styles\.waitWrap\}/);
+  assert.match(screen, /hero=\{<WaitCoinHero/);
   assert.match(read('src/screens/LinePlay/components/WaitCard.tsx'), /\{compact && hero\}/);
   const session = read('src/services/lineplay/LinePlaySession.ts');
   assert.match(session, /if \(result\.wait_screen !== undefined\) this\.waitScreen = result\.wait_screen;/);
@@ -146,7 +148,9 @@ test('one coin, one ring, one sentence: no stat columns on the closed card; no s
   assert.match(stage, /const chipShown = owned && \(busy \|\| error != null \|\| progress\.ready\);/);
   // The numbers live in Details, said once with their pictures: the sign (ride car) and your time (stopwatch).
   const cardSrc = read('src/screens/LinePlay/components/WaitCard.tsx');
-  assert.match(cardSrc, /freshReadingMinutes: entranceFresh \? entranceWaitMinutes : null \}\),\n\s*inLineLine: `You have been in line \$\{inLineLabel\(elapsedSeconds\)\}\.`/);
+  // Your time in line is said once, on the Details button ("In line 12 min"), not again inside Details.
+  assert.match(cardSrc, /freshReadingMinutes: entranceFresh \? entranceWaitMinutes : null \}\),\n\s*\/\/ Your own time in line is on the Details button/);
+  assert.doesNotMatch(cardSrc, /You have been in line/);
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(card, /waitStamps\(elapsedSeconds/, 'the marks moved into Details');
   assert.match(card, /const \[expandedState, setExpanded\] = useState\(false\);\n\s*const expanded = detailsOpen \?\? expandedState;/,
@@ -163,24 +167,23 @@ test('one wait source of truth: "no sign time" never shows next to a SIGN SAYS n
         const hint = m.waitSourceHint({ postedMinutes, waitSource });
         const noSign = /no sign time/i.test(hint);
         assert.equal(noSign, est.kidValue == null, `${waitSource} ${postedMinutes} ${ratio}: ${hint} / ${est.kidValue}`);
-        if (est.kidValue != null) assert.equal(est.kidValue, m.inLineLabel(Math.round(postedMinutes) * 60), 'SIGN SAYS is the sign');
+        if (est.kidValue != null) assert.equal(est.kidValue, m.minutesWords(postedMinutes), 'SIGN SAYS is the sign');
         assert.doesNotMatch(hint, /No posted wait was found/);
       }
     }
   }
-  // Details names the sign time exactly as SIGN SAYS writes it on the same card ("35m", "1h 30m"):
-  // one screen, one way to write the sign time.
-  assert.equal(m.waitSourceHint({ postedMinutes: 60, waitSource: 'last_known' }), 'The ride sign said 1h 00m a while ago.');
-  assert.equal(m.waitSourceHint({ postedMinutes: 35, waitSource: 'posted' }), 'The ride sign said 35m.',
+  // Details names the sign time exactly as SIGN SAYS writes it ("35 min", "1 hr 30 min"), like "In line 12 min":
+  // one way to write minutes, never a bare "m" (the guide's meters).
+  assert.equal(m.waitSourceHint({ postedMinutes: 60, waitSource: 'last_known' }), 'The ride sign said 1 hr a while ago.');
+  assert.equal(m.waitSourceHint({ postedMinutes: 35, waitSource: 'posted' }), 'The ride sign said 35 min.',
     'the Details line names the SIGN SAYS number, so it never reads as a dangling "That"');
-  assert.equal(m.waitSourceHint({ postedMinutes: 90, waitSource: 'posted' }), 'The ride sign said 1h 30m.');
-  assert.equal(m.minutesWords, undefined, 'no second minute format');
+  assert.equal(m.waitSourceHint({ postedMinutes: 90, waitSource: 'posted' }), 'The ride sign said 1 hr 30 min.');
   for (const waitSource of ['posted', 'last_known']) {
     for (const posted of [5, 35, 60, 90, 125]) {
       const hint = m.waitSourceHint({ postedMinutes: posted, waitSource });
       const est = m.waitEstimate({ postedMinutes: posted, waitSource, ratio: null, elapsedSeconds: 0 });
       assert.ok(hint.includes(`said ${est.kidValue}`), `${hint}: the same text as SIGN SAYS (${est.kidValue})`);
-      assert.doesNotMatch(hint, /\bmin\b|\bhr\b/, 'never "35 min" under a "35m" card');
+      assert.doesNotMatch(hint, /\d+m\b|\dh\b/, 'never a bare m or h: "35 min", "1 hr"');
       assert.ok(hint.split(/\s+/).length <= 12);
     }
   }
@@ -210,7 +213,7 @@ test('Details under the coin hero: three short lines at most (sign, your time, o
     '../../../services/lineplay/partCountdown': {}, '../../../services/lineplay/bonusRounds': {},
     '../../../services/lineplay/waitScreen': model(), './waitscreen/WaitStampBadge': {},
   });
-  const base = { signLine: 'The ride sign said 35m.', sublineInHeadline: true,
+  const base = { signLine: 'The ride sign said 35 min.', sublineInHeadline: true,
     subline: 'until your next Ride Part', rewardTrackingAvailable: true, atCap: false, intervalSeconds: 600 };
   // One Parts idea with no second number: the countdown right above already says when the next Part lands.
   assert.deepEqual(plain(card.heroDetailLines(base)), [base.signLine, 'Stay near the ride to earn more Parts.']);
@@ -224,16 +227,16 @@ test('Details under the coin hero: three short lines at most (sign, your time, o
       assert.ok(line.split(/\s+/).length <= 12, `short line: ${line}`);
     }
   }
-  assert.equal(card.ticketHint(true, 0, 600), 'Stay near the ride 10:00 more for a ticket.');
+  assert.equal(card.ticketHint(true, 0, 600), 'A ticket comes after 10 min near the ride.'); // no ticking clock
   assert.equal(card.ticketHint(true, 700, 600), 'You get a ticket when this wait ends.');
   const src = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(src, /\{expanded && hero && <Reanimated\.View [^>]*\n[^>]*><HeroDetails/);
   // Wave 6: the closed card no longer prints SIGN SAYS, so Details always names the sign's number once.
   assert.match(src, /signLine: detailsSignLine\(\{ postedMinutes: postedWaitMinutes, waitSource,\n\s*freshReadingMinutes: entranceFresh \? entranceWaitMinutes : null \}\),/);
   const m = model();
-  assert.equal(m.detailsSignLine({ postedMinutes: 35, waitSource: 'posted' }), 'The ride sign said 35m.');
-  assert.equal(m.detailsSignLine({ postedMinutes: 60, waitSource: 'last_known' }), 'The ride sign said 1h 00m a while ago.');
-  assert.equal(m.detailsSignLine({ postedMinutes: 35, waitSource: 'posted', freshReadingMinutes: 90 }), 'The ride sign now says 1h 30m.');
+  assert.equal(m.detailsSignLine({ postedMinutes: 35, waitSource: 'posted' }), 'The ride sign said 35 min.');
+  assert.equal(m.detailsSignLine({ postedMinutes: 60, waitSource: 'last_known' }), 'The ride sign said 1 hr a while ago.');
+  assert.equal(m.detailsSignLine({ postedMinutes: 35, waitSource: 'posted', freshReadingMinutes: 90 }), 'The ride sign now says 1 hr 30 min.');
   assert.equal(m.detailsSignLine({ postedMinutes: 35, waitSource: 'estimate' }), 'No sign time when you started. Games still work.');
   assert.deepEqual(plain(card.heroDetailLines({ ...base, inLineLine: 'You have been in line 20m.' })),
     [base.signLine, 'You have been in line 20m.', 'Stay near the ride to earn more Parts.']);
@@ -241,7 +244,7 @@ test('Details under the coin hero: three short lines at most (sign, your time, o
   assert.equal(m.heroSignDetail({ postedMinutes: 35, waitSource: 'posted' }), null);
   assert.deepEqual(plain(card.heroDetailLines({ ...base, signLine: null })), ['Stay near the ride to earn more Parts.']);
   assert.equal(m.heroSignDetail({ postedMinutes: 35, waitSource: 'posted', freshReadingMinutes: 35 }), null, 'same reading: nothing new');
-  assert.equal(m.heroSignDetail({ postedMinutes: 35, waitSource: 'posted', freshReadingMinutes: 90 }), 'The ride sign now says 1h 30m.',
+  assert.equal(m.heroSignDetail({ postedMinutes: 35, waitSource: 'posted', freshReadingMinutes: 90 }), 'The ride sign now says 1 hr 30 min.',
     'a new reading is written like SIGN SAYS');
   assert.equal(m.heroSignDetail({ postedMinutes: 60, waitSource: 'last_known' }), 'That sign time is from a while ago.',
     'an old sign says so without repeating its number');

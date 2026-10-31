@@ -18,7 +18,8 @@ import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper, { FOOTER_CLEARANCE } from '../components/Wrapper';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
-import getWikiTimes, { WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
+import type { WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
+import waitFeed from '../services/lineplay/liveStub';
 import {
   CLOSED_COLOR,
   DOWN_COLOR,
@@ -27,7 +28,9 @@ import {
   WAIT_COLOR_TIERS,
 } from '../constants/parkWaitTimes';
 import { LocationContext } from '../context/LocationProvider';
-import { resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
+import { coinTasksByRideName, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
+import { guide } from '../services/guide/nextCoin';
+import getRideCoins from '../api/endpoints/me/ride-coins';
 import { queuePlayPolicy } from '../services/lineplay/queuePlayPolicy';
 import { compareQueueWaits, postedStandbyWait } from '../services/lineplay/queueWaitPresentation';
 import { UpperText } from '../ui/upper';
@@ -111,9 +114,21 @@ const SkeletonCard = () => {
 const RideCard = ({
   entry,
   onStartSession,
+  coinTaskId = null,
+  isNextCoin = false,
+  isPlanned = false,
+  onMakeNextCoin,
 }: {
   entry: WikiLiveEntry;
   onStartSession: (entry: WikiLiveEntry) => void;
+  /** This ride's coin (null: no coin to win here). */
+  coinTaskId?: number | null;
+  /** The guide points at this ride's coin now (guide.current()). */
+  isNextCoin?: boolean;
+  /** Kept as the player's plan (guide.plan()) while the guide points elsewhere, e.g. another park. */
+  isPlanned?: boolean;
+  /** Plan the next coin: the guide's one pointer (guide.setTarget). */
+  onMakeNextCoin?: (taskId: number, name: string) => void;
 }) => {
   const badge = getBadgeInfo(entry);
   const ll = entry.queue?.RETURN_TIME;
@@ -128,7 +143,9 @@ const RideCard = ({
       <View style={styles.cardRow}>
         <View style={[styles.badge, { backgroundColor: badge.color }]}>
           {badge.icon ? <GameIcon name={badge.icon} size={30} /> : (
-            <Text style={styles.badgeText} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit numberOfLines={1}>{badge.text}</Text>
+            // Keyed by its text: a recycled list cell keeps iOS's shrunk font from an earlier, longer value
+            // ("50" drew tiny after a refresh), so a new value measures fresh.
+            <Text key={badge.text} style={styles.badgeText} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit numberOfLines={1}>{badge.text}</Text>
           )}
           {badge.minutes && <Text style={styles.badgeUnit}>MIN</Text>}
         </View>
@@ -145,11 +162,28 @@ const RideCard = ({
               style={({ pressed }) => [styles.sessionBtn, pressed && styles.sessionBtnPressed]}
               hitSlop={6}
             >
-              {/* A drawn play icon: the game font has no play-arrow glyph (it drew a box). */}
-              <GameIcon name="play" size={16} />
+              {/* LinePlay's own picture (the line's posts and rope); the pocket watch is Wait Times. */}
+              <GameIcon name="line" size={28} />
               <Text style={styles.sessionBtnText}>{entry.status === 'DOWN'
                 ? 'PLAY WHILE YOU WAIT' : 'PLAY IN LINE'}</Text>
             </Pressable>
+          )}
+          {/* Wait Times plans the next coin (core loop 5.5): one tap makes this ride the guide's target. */}
+          {coinTaskId != null && onMakeNextCoin && entry.status === 'OPERATING' && (
+            isNextCoin || isPlanned ? (
+              <View style={styles.nextCoinDone} accessible
+                accessibilityLabel={isNextCoin ? `${entry.name} is your next coin` : `${entry.name} is in your plan`}>
+                <GameIcon name="check" size={16} />
+                <Text style={styles.nextCoinDoneText}>{isNextCoin ? 'Your next coin' : 'In your plan'}</Text>
+              </View>
+            ) : (
+              <Pressable onPress={() => onMakeNextCoin(coinTaskId, entry.name)} accessibilityRole="button"
+                accessibilityLabel={`Make ${entry.name} my next coin`} hitSlop={6}
+                style={({ pressed }) => [styles.nextCoinBtn, pressed && styles.sessionBtnPressed]}>
+                <GameIcon name="coin" size={16} />
+                <Text style={styles.nextCoinBtnText}>Make this my next coin</Text>
+              </Pressable>
+            )
           )}
         </View>
         {hasLL && (
@@ -231,7 +265,6 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   const [filterMode, setFilterMode] = useState<FilterMode>('open');
   const [lastUpdated, setLastUpdated] = useState<number>(0);
   const [feedError, setFeedError] = useState(false);
-  const [countdown, setCountdown] = useState(60);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fetchGeneration = useRef(0);
 
@@ -240,11 +273,10 @@ export default function QueueTimesScreen({ route }: { route: any }) {
     if (showLoading) setLoading(true);
     setFeedError(false);
     try {
-      const data = previewEntries ?? await getWikiTimes(selectedPark);
+      const data = previewEntries ?? await waitFeed(selectedPark);
       if (generation !== fetchGeneration.current) return;
       setAttractions(data);
       setLastUpdated(Date.now());
-      setCountdown(60);
     } catch (e) {
       if (generation === fetchGeneration.current) {
         setFeedError(true);
@@ -277,8 +309,8 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   };
 
   // Auto-refresh every 60s, only while this screen is on screen and the app is
-  // in front (a 1 s countdown plus a fetch kept running under other screens
-  // and in a pocket). Coming back past due refreshes at once.
+  // in front. No ticking seconds on screen (core loop 4.3 rule 7): one quiet
+  // fetch a minute. Coming back past due refreshes at once.
   const screenFocused = useIsFocused();
   const appActive = useAppActive();
   const ticking = screenFocused && appActive;
@@ -292,15 +324,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   }, [ticking]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!ticking) return undefined;
-    timerRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          fetchData(false);
-          return 60;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    timerRef.current = setInterval(() => { void fetchData(false); }, QUEUE_TIMES_REFRESH_MS);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -310,6 +334,35 @@ export default function QueueTimesScreen({ route }: { route: any }) {
     setRefreshing(true);
     fetchData(false);
   }, [fetchData]);
+
+  // Each row's coin task (for "Make this my next coin") and the coin the guide points at now.
+  const [coinTasks, setCoinTasks] = useState<Map<string, number>>(new Map());
+  // The chip follows the guide store: "Your next coin" only once the guide really points there, "In your
+  // plan" while the pick is kept as the plan (another park, or the map has not resolved yet).
+  const [guidePick, setGuidePick] = useState(() => ({ current: guide.current()?.taskId ?? null, plan: guide.plan() }));
+  useEffect(() => guide.subscribe(() => setGuidePick({ current: guide.current()?.taskId ?? null, plan: guide.plan() })), []);
+  // Coins already on the shelf never get "Make this my next coin": the guide never points at an owned coin.
+  const [ownedTasks, setOwnedTasks] = useState<ReadonlySet<number>>(new Set());
+  useEffect(() => {
+    if (previewEntries) return;
+    let live = true;
+    void getRideCoins(5_000).then(response => {
+      if (live) setOwnedTasks(new Set(response.data.map(coin => coin.ride_id).filter(id => Number.isInteger(id) && id > 0)));
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [previewEntries]);
+  const attractionNames = attractions.map(entry => entry.name).join('|');
+  useEffect(() => {
+    if (!attractionNames) return;
+    let live = true;
+    void coinTasksByRideName(selectedPark, attractionNames.split('|'))
+      .then(tasks => { if (live) setCoinTasks(tasks); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [selectedPark, attractionNames]);
+  const notOwned = (taskId: number | undefined) => taskId != null && !ownedTasks.has(taskId) ? taskId : null;
+  const makeNextCoin = useCallback((taskId: number) => {
+    guide.setTarget(taskId, 'wait_times');
+  }, []);
 
   // Start a LinePlay session for a wait-times row. Resolves the numeric ride id
   // by name (queue-times entries are name-keyed) then navigates to LinePlay.
@@ -356,7 +409,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
       groups[groups.length - 1].parks.push(p);
     }
 
-    // Sort groups by distance to user — nearest park group shows first
+    // Sort groups by distance to user: nearest park group shows first
     if (location) {
       groups.sort((a, b) => {
         const coordsA = PARK_GROUP_COORDS[a.group];
@@ -413,7 +466,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
           </Text>
           <View style={styles.statusRight}>
             <Text style={styles.updatedText}>
-              {previewEntries ? 'SAMPLE DATA' : `${lastUpdated ? `Checked ${timeAgo(lastUpdated)}` : ''} · refresh ${countdown}s`}
+              {previewEntries ? 'SAMPLE DATA' : lastUpdated ? `Checked ${timeAgo(lastUpdated)} · updates every minute` : 'Updates every minute'}
             </Text>
           </View>
         </View>
@@ -453,7 +506,12 @@ export default function QueueTimesScreen({ route }: { route: any }) {
         <FlashList
           data={processedData}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <RideCard entry={item} onStartSession={handleStartSession} />}
+          renderItem={({ item }) => <RideCard entry={item} onStartSession={handleStartSession}
+            coinTaskId={notOwned(coinTasks.get(item.name))}
+            isNextCoin={coinTasks.get(item.name) != null && coinTasks.get(item.name) === guidePick.current}
+            isPlanned={coinTasks.get(item.name) != null && coinTasks.get(item.name) === guidePick.plan}
+            onMakeNextCoin={makeNextCoin} />}
+          extraData={`${guidePick.current}-${guidePick.plan}-${coinTasks.size}-${ownedTasks.size}`}
           estimatedItemSize={80}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -690,6 +748,12 @@ const styles = StyleSheet.create({
     gap: 6,
     minHeight: 36,
   },
+  nextCoinBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: 6,
+    minHeight: 36, paddingHorizontal: 10, borderRadius: 18, borderWidth: 2, borderColor: '#0875c9', backgroundColor: '#ffffff' },
+  nextCoinBtnText: { color: '#075d9f', fontFamily: 'Knockout', fontSize: 14 },
+  nextCoinDone: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: 6,
+    minHeight: 36, paddingHorizontal: 10, borderRadius: 18, backgroundColor: '#fff3ba', borderWidth: 2, borderColor: '#e7ac00' },
+  nextCoinDoneText: { color: '#073b74', fontFamily: 'Knockout', fontSize: 14 },
   sessionBtnPressed: {
     opacity: 0.85,
   },

@@ -41,12 +41,22 @@ export function factSourceLine(source: string | undefined | null,
 export function chapterPageKicker(chapter: Pick<LinePlayChapter, 'parkLabel' | 'episodeLabel'>,
   overrides: LinePlayLabelOverrides = LINEPLAY_LABEL_OVERRIDES): string {
   const park = chapter.parkLabel?.trim();
-  return overrides.hideParkInKicker || !park ? 'SHARK FAN MISSION' : park;
+  return overrides.hideParkInKicker || !park ? 'LINE STORY' : park;
 }
 
 export function chapterKicker(chapter: Pick<LinePlayChapter, 'parkLabel' | 'episodeLabel'>,
   overrides: LinePlayLabelOverrides = LINEPLAY_LABEL_OVERRIDES): string {
   const park = chapter.parkLabel?.trim();
-  const lead = chapter.episodeLabel?.trim() || 'SHARK FAN MISSION';
+  const lead = chapter.episodeLabel?.trim() || 'LINE STORY';
   return overrides.hideParkInKicker || !park ? lead : `${lead} · ${park}`;
 }
+
+/**
+ * LinePlay's first contact: one picture line inside the wait card on the player's first wait (it replaces the
+ * floating 3-line "Welcome to LinePlay" card). It matches the card: never Parts words where none are paid.
+ */
+export const LINEPLAY_INTRO_LINE: Readonly<Record<'on' | 'none' | 'unknown', string>> = {
+  on: 'Your wait powers this coin. Games are bonus fun.',
+  none: 'Play games while you wait.',
+  unknown: 'Play games while you wait.',
+};

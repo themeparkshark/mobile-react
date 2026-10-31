@@ -70,7 +70,7 @@ test('every LinePlay page is a framed window that stays put above the rail', () 
   assert.match(screen, /coinSize=\{fit\.coinSize\}/);
   assert.match(screen, /marginTop: fit\.activityGap/);
   assert.match(screen, /compact=\{fit\.short\}/, 'a short phone gets the one-line mission header');
-  assert.match(screen, /const crewLent = crewRowLent\(fit\.short, detailsOpen, boardPage\);/);
+  assert.match(screen, /const crewLent = crewRowLent\(fit\.short, detailsOpen, boardPage \|\| quizPage\);/, 'a story clue page lends the row too');
   assert.match(screen, /\{!crewLent && <Reanimated\.View/, 'a short phone reading Details (or on the board page) lends the crew row to the page');
 });
 
@@ -80,7 +80,7 @@ test('on a short phone the chapter page puts PLAY NOW on screen: one-line header
   assert.match(card, /headerCompact: \{ minHeight: 0, height: 58 \}/);
   assert.match(card, /compact && styles\.playNowCompact/);
   assert.match(card, /: !compact && <Text style=\{styles\.playNowHint\}>/);
-  assert.match(card, /\{compact \? <>\{playNow\}\{header\}<\/> : <>\{header\}\{playNow\}<\/>\}/, 'SE: the clue to play comes first');
+  assert.match(card, /\{measured && \(compact \? <>\{playNow\}\{header\}<\/> : <>\{header\}\{playNow\}<\/>\)\}/, 'SE: the clue to play comes first');
 });
 
 test('PLAY NOW is always whole: the page leads with it, shrinks it to one row, or the window steps aside', () => {
@@ -165,7 +165,10 @@ test('Details opens smoothly: one commit, the crew row fades and the page window
 
 test('the Welcome tip waits for its own tap and sits under the wait card, never on Details', () => {
   const screen = read(SCREEN);
-  for (const id of ['lineplay_intro', 'first_ride_part']) {
+  // What LinePlay is now lives inside the wait card (one picture line); the first Ride Part tip stays a tip.
+  assert.doesNotMatch(screen, /<OneTimeTip id="lineplay_intro"/);
+  assert.match(read('src/screens/LinePlay/components/WaitCard.tsx'), /\{introLine \? <View style=\{styles\.introLine\}/);
+  for (const id of ['first_ride_part']) {
     const tag = screen.slice(screen.indexOf(`<OneTimeTip id="${id}"`), screen.indexOf('/>', screen.indexOf(`<OneTimeTip id="${id}"`)));
     assert.match(tag, /autoHideMs=\{0\}/, `${id}: no 9 s timer that could vanish under a finger`);
     assert.match(tag, /top: waitCardBottom \+ 6/, `${id}: anchored under the wait card`);
@@ -279,7 +282,6 @@ test('the chapter page in compact mode ends on whole trail bubbles, no small lab
 
 test('the Welcome tip never shows before the wait card is measured', () => {
   const screen = read(SCREEN);
-  assert.match(screen, /<OneTimeTip id="lineplay_intro" ready=\{lineTipReady && pagesShown && waitCardBottom != null\}/);
   assert.match(screen, /<OneTimeTip id="first_ride_part" ready=\{lineTipReady && partTipPending && pagesShown && waitCardBottom != null\}/);
 });
 
@@ -287,7 +289,12 @@ test('the chapter page blocks are keyed, so the order switch after the first lay
   const card = read('src/screens/LinePlay/components/ChapterCard.tsx');
   assert.match(card, /<Animated\.View key="header" entering=\{rise\(compact \? 1 : 0\)\}/);
   assert.match(card, /<Animated\.View key="play-now" entering=\{rise\(compact \? 0 : 1\)\}/);
-  assert.match(card, /\{compact \? <>\{playNow\}\{header\}<\/> : <>\{header\}\{playNow\}<\/>\}/);
+  assert.match(card, /\{measured && \(compact \? <>\{playNow\}\{header\}<\/> : <>\{header\}\{playNow\}<\/>\)\}/);
+  // Round 3 device walk: the order switch mid-entrance still left PLAY stuck under the header now and then.
+  // The blocks now mount only once the window is measured, so the order never switches during the entrance.
+  assert.match(card, /const measured = viewHeight > 0;/);
+  assert.match(card, /if \(!measured\) return undefined;\n\s+const timer = setTimeout\(\(\) => \{ entered\.current = true; \}, 900\);/);
+  assert.match(card, /\{measured && <Animated\.View entering=\{rise\(2\)\}/);
 });
 
 test('an iPhone SE navigation page: the whole board fits BESIDE its header, no scrolling', () => {
@@ -347,12 +354,12 @@ test('the window stepped aside: the rail stays put and the crew row comes back i
   assert.match(screen, /crewBand: \{ position: 'absolute', left: 0, right: 0, top: 0, justifyContent: 'center' \}/);
 });
 
-test('one gold button per screen: the rail Next is quiet on the chapter page and the board page', () => {
+test('one gold button per screen: the rail Next is quiet beside every page\'s own PLAY', () => {
   const screen = read(SCREEN);
-  assert.match(screen, /const railQuiet = visibleItem\?\.kind === 'chapter_intro' \|\| boardPage;/);
+  assert.match(screen, /const railQuiet = visibleItem != null;/);
   assert.match(screen, /mode=\{railMode\} onShowPages=\{onRailBack\} backAction=\{railBack\} quiet=\{railQuiet\}/);
   const rail = read('src/screens/LinePlay/components/ActivityPageRail.tsx');
-  assert.match(rail, /const calm = quiet && !showMore;/);
+  assert.match(rail, /const calm = quiet;/);
   assert.match(rail, /nextQuiet: \{ backgroundColor: '#ffffff'/);
 });
 
@@ -366,7 +373,7 @@ test('one count per screen: the bubbles and the rail own the clue count', () => 
   assert.doesNotMatch(nav, /MISSION 1 OF 3/);
   const labels = loadTs('src/services/lineplay/labels.ts');
   assert.equal(labels.chapterPageKicker({ parkLabel: 'MAGIC KINGDOM', episodeLabel: 'FLIGHT 1 OF 3' }), 'MAGIC KINGDOM');
-  assert.equal(labels.chapterPageKicker({ parkLabel: '' }), 'SHARK FAN MISSION');
+  assert.equal(labels.chapterPageKicker({ parkLabel: '' }), 'LINE STORY'); // core loop 4.5: one word, Line story
 });
 
 test('the chapter page ends on whole blocks: the crew row starts below the window instead of peeking', () => {
@@ -432,7 +439,8 @@ test('one name per activity: PLAY NOW, the rail and the board header say the sam
   assert.equal(m.railNextIndex(pages, 3, null), 0);
   assert.equal(m.railNextIndex(['chapter', 'x'], 0, 'x'), 1, 'two pages: nothing else to point at');
   const screen = read(SCREEN);
-  assert.match(screen, /const nextPageIndex = railNextIndex\(activityPages\.map\(page => page\.id\), visiblePageIndex, playNowId\);/);
+  // The one Next stays inside its tab (Story or Games); outside a tab the rail's own rule still skips PLAY NOW's game.
+  assert.match(screen, /const nextPageIndex = nextInTab\(activityPages, visiblePageIndex, snapshot\.chapter\?\.id, playNowId\)\n\s+\?\? railNextIndex\(activityPages\.map\(page => page\.id\), visiblePageIndex, playNowId\);/);
   assert.match(screen, /\? chapter\.missionNames\[0\] : 'Shark Trivia';/);
   assert.match(screen, /navigationTitle=\{snapshot\.chapter\?\.navigationPanel \? snapshot\.chapter\.missionNames\[0\] : undefined\}/);
   assert.doesNotMatch(screen, /'CHAPTER'/, 'Chapter is only ever the rail button word, never a plain label too');
@@ -692,7 +700,6 @@ test('one name per clue on every chapter: PLAY, the bubble, the rail, the page h
 
 test('a one-time tip waits while the page window has stepped aside, so it never sits over the rail\'s one button', () => {
   const screen = read(SCREEN);
-  assert.match(screen, /<OneTimeTip id="lineplay_intro" ready=\{lineTipReady && pagesShown && waitCardBottom != null\}/);
   assert.match(screen, /<OneTimeTip id="first_ride_part" ready=\{lineTipReady && partTipPending && pagesShown && waitCardBottom != null\}/);
 });
 
@@ -831,8 +838,7 @@ test('one message asks at a time: the idle nudge never shows over a one-time tip
   const screen = read(SCREEN);
   assert.match(screen, /if \(!lineNudgeReady\(\{ busy: sheetOpenRef\.current, tipUp: tipsUp\.current\.size > 0,/);
   assert.match(screen, /sheetOpenRef\.current = somethingAsks;/);
-  assert.match(screen, /const somethingAsks = groupPlay\.sheetOpen \|\| arcadeOpen \|\| projectOpen \|\| waitEndPrompt != null \|\| boardingAsk \|\| lineDone \|\| resuming \|\|\n\s+resumeHandoff != null;/);
-  assert.match(screen, /onVisibleChange=\{onIntroTip\}/);
+  assert.match(screen, /const somethingAsks = groupPlay\.sheetOpen \|\| arcadeOpen \|\| projectOpen \|\| waitEndPrompt != null \|\| boardingAsk \|\| leftLineWrapUp \|\| resuming \|\|\n\s+resumeHandoff != null;/);
   assert.match(screen, /onVisibleChange=\{onPartTip\}/);
   const tip = read('src/components/help/OneTimeTip.tsx');
   assert.match(tip, /onVisibleChange\(visible\);\n\s+return visible \? \(\) => onVisibleChange\(false\) : undefined;/, 'it reports hiding too, even on unmount');
@@ -897,7 +903,7 @@ test('on a short window (iPhone SE) a page banner is one slim row and the clue p
   assert.match(slot, /const slim = heroSlim\(useContext\(PageHeightContext\)\);/);
   assert.match(slot, /heroSlim: \{ height: 46, marginBottom: spacing\.sm \}/);
   assert.match(slot, /return <>\{hero\}\{short \? <><View style=\{styles\.actionFirst\}>\{a\}<\/View>\{s\}<\/> : <>\{s\}\{a\}<\/>\}<\/>;/);
-  assert.equal([...slot.matchAll(/<ActionFirstWhenShort\n/g)].length, 2, 'the clue page and the mini-game page (Play first)');
-  assert.match(slot, /<ActionFirstWhenShort\n\s+hero=\{<ActivityHero kicker=\{navigator \? 'STARPORT' : 'QUEUE QUEST'\}/);
+  assert.equal([...slot.matchAll(/<ActionFirstWhenShort\n/g)].length, 1, 'the clue page (the mini-game page puts Play first on every phone)');
+  assert.match(slot, /<ActionFirstWhenShort\n\s+hero=\{<ActivityHero kicker=\{title != null \|\| navigator \? 'STORY' : 'GAMES'\}/);
   assert.match(read('src/screens/LinePlay/components/PageScroll.tsx'), /<PageHeightContext\.Provider value=\{viewHeight\}>\{children\}<\/PageHeightContext\.Provider>/);
 });

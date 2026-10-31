@@ -32,7 +32,7 @@ export function echoNames(seed: number, count: number): string[] {
 }
 
 /**
- * Seats (queue-bonus.md 6.2): Captain Fin sits in seat 1 of a lonely round,
+ * Seats (queue-bonus.md 6.2): Captain Gill sits in seat 1 of a lonely round,
  * and up to 2 Echo sharks fill the rest at 55% with an ECHO tag. Echoes never
  * guess, never type and are never counted: the count is live players only.
  */
@@ -40,8 +40,8 @@ function CrewSeats({ puzzle }: { puzzle: CrewPuzzleSummary }) {
   const live = Math.max(0, puzzle.live_players ?? 0);
   const echoes = puzzle.lonely ? echoNames((puzzle.generation ?? 1) * 7 + puzzle.stage, 2 - Math.min(2, live)) : [];
   return <View style={styles.seats}>
-    {puzzle.lonely && <View style={styles.seat} accessibilityLabel="Captain Fin is on your crew">
-      <GameIcon name="fin" size={30} /><Text style={styles.seatName}>Captain Fin</Text>
+    {puzzle.lonely && <View style={styles.seat} accessibilityLabel="Captain Gill is on your crew">
+      <GameIcon name="fin" size={30} /><Text style={styles.seatName}>Captain Gill</Text>
     </View>}
     {echoes.map(name => <View key={name} style={[styles.seat, styles.echoSeat]} accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants">
@@ -51,7 +51,7 @@ function CrewSeats({ puzzle }: { puzzle: CrewPuzzleSummary }) {
       <Text style={styles.echoTag}>ECHO</Text>
     </View>)}
     <Text style={styles.liveCount}>
-      {live > 0 ? `${live} shark${live === 1 ? '' : 's'} cracking` : 'Crack it with Captain Fin'}
+      {live > 0 ? `${live} shark${live === 1 ? '' : 's'} cracking` : 'Crack it with Captain Gill'}
     </Text>
   </View>;
 }
@@ -60,8 +60,9 @@ function nextCodeLine(puzzle: CrewPuzzleSummary, now: number): string | null {
   if (!puzzle.completed || !puzzle.next_code_at) return null;
   const at = Date.parse(puzzle.next_code_at);
   if (!Number.isFinite(at)) return null;
-  const left = Math.max(0, Math.floor((at - now) / 1000));
-  return `NEXT CODE IN ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  // A real clock time in words, never a ticking countdown (core loop 4.3 rule 7).
+  if (at <= now) return 'NEW CODE SOON';
+  return `NEXT CODE AT ${new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 }
 
 interface Props {
@@ -113,9 +114,9 @@ export default function CrewPuzzleCard({ puzzle, route, pending, retryPending, r
       <Text style={styles.heading}>{puzzle?.completed ? nextCodeLine(puzzle, Date.now()) ?? 'All gates open'
         : puzzle ? `Gate ${puzzle.stage} of ${puzzle.total_stages}` : 'A shared mystery is waiting'}</Text>
       {puzzle?.fin_hint && !puzzle.completed && <View style={styles.bonusRow}
-        accessibilityLabel={`Captain Fin's hint: ${SYMBOLS[puzzle.fin_hint.symbol] ?? ''} in slot ${puzzle.fin_hint.position + 1}`}>
+        accessibilityLabel={`Captain Gill's hint: ${SYMBOLS[puzzle.fin_hint.symbol] ?? ''} in slot ${puzzle.fin_hint.position + 1}`}>
         <GameIcon name="fin" size={24} />
-        <Text style={styles.bonus}>Captain Fin: slot {puzzle.fin_hint.position + 1} is</Text>
+        <Text style={styles.bonus}>Captain Gill: slot {puzzle.fin_hint.position + 1} is</Text>
         <GameIcon name={SYMBOL_ICONS[puzzle.fin_hint.symbol] ?? 'star'} size={24} />
       </View>}
       <Text style={styles.body}>

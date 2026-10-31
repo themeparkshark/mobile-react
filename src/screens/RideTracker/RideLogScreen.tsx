@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { StackActions, useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getRides, getRide, RideType } from '../../api/endpoints/rides';
 import { logRide, LogRidePayload } from '../../api/endpoints/player-rides';
@@ -26,14 +26,15 @@ import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import { removePendingDetection } from '../../services/RideDetectionService';
 import {
-  clearLetGoRideLog, drainRideLogs, dropRideLog, keepRideLogForLater, manualRideLogId, queueRideLog, rideLogWaitReason,
+  clearLetGoRideLog, drainRideLogs, dropRideLog, keepRideLogForLater, manualRideLogId, queueRideLog, releaseRideLogHold, rideLogWaitReason,
   rideLogWasKept, saveRideLogKeptFirst, shouldQueueRideLog, type RideLogWaitReason,
 } from '../../services/rideLogOutbox';
-import { journalRides, rideLogError } from './rideJournalModel';
+import { journalRides, journalStepLabel, rideLogError } from './rideJournalModel';
 import { AuthContext } from '../../context/AuthProvider';
 import ProfileStatIcon from '../../components/ProfileStatIcon';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { GameIcon, gameAlert, SharkLoader } from '../../ui';
+import { useGuideTarget } from '../../services/lineplay/useGuideTarget';
 
 // ─── Park Selector ───
 interface ParkItemProps {
@@ -85,6 +86,10 @@ export default function RideLogScreen() {
   const autoDetected = route.params?.autoDetected as boolean | undefined;
   const autoRodeAt = route.params?.rodeAt as string | undefined;
   const detectionId = route.params?.detectionId as string | undefined;
+  // The ride step ("I got to the ride" in LinePlay): the ride and the wait LinePlay timed come filled in,
+  // and Save adds the memory to the same ride row the outbox is holding.
+  const fromRideStep = route.params?.fromRideStep === true;
+  const timedWait = route.params?.waitMinutes as number | undefined;
   // "Log it again" from the Ride Tracker: a kept ride that could not join. Its memory comes back.
   const again = route.params?.again as { id: string; payload: LogRidePayload } | undefined;
 
@@ -128,6 +133,15 @@ export default function RideLogScreen() {
 
   // Rides kept on the phone from an earlier dead zone get another try.
   useEffect(() => { void drainRideLogs().catch(() => undefined); }, []);
+  // The ride step's timed wait, filled in (the kid never types a guess like "45").
+  useEffect(() => {
+    if (fromRideStep && timedWait != null && Number.isFinite(timedWait)) setWaitTime(String(Math.max(0, Math.round(timedWait))));
+  }, [fromRideStep, timedWait]);
+  // Leaving the ride step's journal without saving: the ride (with its timed wait) is sent as it is.
+  const saved = useRef(false);
+  useEffect(() => () => {
+    if (fromRideStep && detectionId && !saved.current) void releaseRideLogHold(detectionId).catch(() => undefined);
+  }, [fromRideStep, detectionId]);
 
   const filteredRides = useMemo(() => {
     if (!searchQuery) return rides;
@@ -279,6 +293,7 @@ export default function RideLogScreen() {
       player_id: player.id, queued_at: Date.now() } : null;
     try {
       const result = keep ? (await saveRideLogKeptFirst(keep)).result : await logRide(payload);
+      saved.current = true;
       if (detectionId) void removePendingDetection(detectionId).catch(() => undefined);
       if (again) void clearLetGoRideLog(again.id).catch(() => undefined);
       logId.current = null;
@@ -324,6 +339,7 @@ export default function RideLogScreen() {
       try {
         if (!keep) throw new Error('signed out');
         if (!rideLogWasKept(e)) await queueRideLog(keep);
+        saved.current = true;
       } catch {
         gameAlert('Ride not saved', "We couldn't save it. Check your signal and try again.");
         return;
@@ -352,6 +368,9 @@ export default function RideLogScreen() {
   const handleSubmit = useCallback(() => save(false), [save]);
 
   const handleBack = useCallback(() => {
+    // A journal opened on its ride (the ride step or a confirmed detection) has no ride list behind it:
+    // back leaves, it never lands on a "Choose a Ride" step nobody saw.
+    if (step === 'details' && autoDetected) { navigation.goBack(); return; }
     if (step === 'details') {
       setStep('ride');
       logId.current = null;
@@ -368,7 +387,24 @@ export default function RideLogScreen() {
     } else {
       navigation.goBack();
     }
-  }, [step, navigation]);
+  }, [step, navigation, autoDetected]);
+
+  // "Return to Ride Tracker" really returns there: back when the Ride Tracker opened this journal,
+  // else the Ride Tracker takes this journal's place (a journal opened from the map or LinePlay).
+  const returnToRideTracker = useCallback(() => {
+    const routes = navigation.getState?.()?.routes ?? [];
+    const below = routes[routes.length - 2]?.name;
+    if (below === 'RideTracker') navigation.goBack();
+    else navigation.dispatch(StackActions.replace('RideTracker'));
+  }, [navigation]);
+  // A journal opened from the LinePlay recap ("Ride logged · Add stars") goes back to that recap, where
+  // the wait's one GO is; it never drops the guest into the Ride Tracker mid park day.
+  const backToRecap = useCallback(() => {
+    if (navigation.canGoBack()) navigation.goBack();
+    else returnToRideTracker();
+  }, [navigation, returnToRideTracker]);
+  // Follows the guide store, so NEXT COIN appears (or changes) when the map's resolver moves the pointer.
+  const nextCoin = useGuideTarget();
 
   if (showSuccess && successData) {
     return (
@@ -380,7 +416,10 @@ export default function RideLogScreen() {
         newAchievements={successData.newAchievements}
         queued={successData.queued}
         queuedReason={successData.queuedReason}
-        onDone={() => navigation.goBack()}
+        onDone={fromRideStep ? backToRecap : returnToRideTracker}
+        doneLabel={fromRideStep ? 'Back to your wait recap' : 'Return to Ride Tracker'}
+        nextCoinName={nextCoin?.name ?? null}
+        onNextCoin={nextCoin ? () => navigation.navigate('Explore') : undefined}
         onLogAnother={() => {
           setShowSuccess(false);
           setSuccessData(null);
@@ -418,7 +457,7 @@ export default function RideLogScreen() {
         <ScrollView contentContainerStyle={s.parkList} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={s.stepIntro}>
             <View style={s.stepCopy}>
-              <Text style={s.stepEyebrow}>RIDE JOURNAL · 1 OF 3</Text>
+              <Text style={s.stepEyebrow}>{journalStepLabel('park', autoDetected === true)}</Text>
               <Text style={s.stepTitle}>{stepTitle}</Text>
               <Text style={s.stepDescription}>Keep the rides you loved in your shark's story.</Text>
             </View>
@@ -445,7 +484,7 @@ export default function RideLogScreen() {
       {step === 'ride' && (
         <View style={{ flex: 1 }}>
           <View style={s.compactIntro}>
-            <Text style={s.stepEyebrow}>RIDE JOURNAL · 2 OF 3</Text>
+            <Text style={s.stepEyebrow}>{journalStepLabel('ride', autoDetected === true)}</Text>
             <Text style={s.stepTitle}>{stepTitle}</Text>
           </View>
           {!ridesUnavailable && <View style={s.searchBox}>
@@ -500,7 +539,7 @@ export default function RideLogScreen() {
         <View style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.detailsContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View>
-            <Text style={s.stepEyebrow}>RIDE JOURNAL · 3 OF 3</Text>
+            <Text style={s.stepEyebrow}>{journalStepLabel('details', autoDetected === true)}</Text>
             <Text style={s.stepTitle}>{stepTitle}</Text>
             <Text style={s.detailsHint}>A memory to keep with your rides.</Text>
           </View>
@@ -520,7 +559,7 @@ export default function RideLogScreen() {
           <Text style={s.sectionLabel}>Wait time (minutes)</Text>
           <TextInput
             style={s.input}
-            placeholder="Like 45"
+            placeholder={fromRideStep ? 'Minutes in line' : 'Like 45'}
             placeholderTextColor="#94a3b8"
             keyboardType="number-pad"
             value={waitTime}

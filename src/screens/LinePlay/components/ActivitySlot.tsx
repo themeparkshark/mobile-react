@@ -26,7 +26,7 @@ import { studioMoment } from '../../../gamekit/audio/playMoment';
 import HapticPatterns from '../../../helpers/hapticPatterns';
 import NavigationPanelCard from './NavigationPanelCard';
 import PageScroll, { PageHeightContext } from './PageScroll';
-import { heroSlim } from '../../../services/lineplay/lineLayout';
+import { heroSlim, quizCompact } from '../../../services/lineplay/lineLayout';
 import type { NavigationPanelProgress } from '../../../services/lineplay/navigationPanel';
 import type { CircuitTheme } from '../../../services/lineplay/circuitTheme';
 import { factSourceLine } from '../../../services/lineplay/labels';
@@ -74,7 +74,7 @@ export interface ActivitySlotProps {
 
 const GAME_LABELS: Record<string, string> = {
   tap: 'Whack-a-Shark',
-  timing: 'Rhythm Tap',
+  timing: 'Parade Beat',
   memory: 'Memory Match+',
   trivia: 'Ride Trivia',
   shark: 'Sharky Swim',
@@ -91,7 +91,7 @@ const GAME_PREVIEWS: Record<string, string> = {
   shark: 'Guide your shark through a fast swim challenge.',
   banana: 'Catch the good snacks and dodge the bad ones.',
   current: 'Guide your shark through three changing routes. Collect pearls and find the treasure.',
-  showdown: 'Challenge Captain Fin to a three-question ride trivia duel. Play solo or take turns with your crew.',
+  showdown: 'Challenge Captain Gill to a three-question ride trivia duel. Play solo or take turns with your crew.',
 };
 
 function ActivityHero({ kicker, title, teacher = false, navigator = false }: { kicker: string; title: string; teacher?: boolean; navigator?: boolean }) {
@@ -170,6 +170,24 @@ export default function ActivitySlot({
 
 // -- minigame launch card ----------------------------------------------------
 
+/**
+ * The game page's PLAY, right under the banner. Inside the page window (it reads the window's height), so a
+ * short window (iPhone SE) gets a compact PLAY under the slim banner and all of it sits above the fade.
+ */
+function PlayFirst({ label, icon, paused, onPress, accessibilityLabel, newTag }: {
+  label: string; icon: 'play' | 'retry'; paused: boolean; onPress: () => void; accessibilityLabel: string; newTag: boolean;
+}) {
+  const short = heroSlim(useContext(PageHeightContext));
+  return <View testID="lineplay-play" style={[styles.playFirst, short && styles.playFirstShort]}>
+    <View>
+      <GameButton label={label} icon={icon} disabled={paused} fullWidth={!short} size={short ? 'compact' : 'regular'}
+        onPress={onPress} accessibilityLabel={accessibilityLabel} />
+      {newTag && <View pointerEvents="none" style={[styles.newPill, styles.newCorner]}>
+        <Text style={styles.newPillText}>NEW</Text></View>}
+    </View>
+  </View>;
+}
+
 function MiniGameSlot({
   item,
   navigator,
@@ -194,35 +212,31 @@ function MiniGameSlot({
 }) {
   const isStarChart = item.id.endsWith('-star-chart');
   const label = title ?? item.title ?? (isStarChart ? 'Rebuild the Star Chart' : GAME_LABELS[item.gameId] ?? item.gameId);
+  // A story clue (its mission name came in) says STORY; every free round says GAMES (the two LinePlay tabs).
+  const kicker = title != null || isStarChart ? 'STORY' : 'GAMES';
+  const playLabel = completed && item.gameId === 'showdown' ? 'Rematch' : completed ? 'Play again' : 'Play';
   return (
     <PageScroll fill={CARD_FILL}>
-      {/* A short window (iPhone SE): Play comes right under the slim banner, so a non-reader sees it first. */}
-      <ActionFirstWhenShort
-        hero={<ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE ARCADE'} title={label} navigator={navigator} />}
-        story={short => <>
-          {/* A slim page (iPhone SE) never shows this row half under the fade: NEW rides on PLAY's corner instead. */}
-          {!short && <View style={styles.bestRow} accessible
-            accessibilityLabel={bestStars != null ? `Best this wait: ${bestStars} of 3 stars` : newGame ? 'New game' : 'Not played this wait'}>
-            {bestStars != null ? [1, 2, 3].map(slot => <GameIcon key={slot} name="star" size={24}
-              mono={slot <= bestStars ? undefined : '#b7cfe2'} />)
-              : newGame ? <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View> : null}
-            <Text style={styles.bestLabel}>{bestStars != null ? 'Your best this wait' : newGame ? 'New game' : 'Not played this wait'}</Text>
-          </View>}
-          <View style={styles.gamePlaceholder}>
-            <Text style={styles.gamePlaceholderText}>
-              {item.preview ?? (isStarChart
-                ? 'Match space symbols to restore your shark’s missing chart. Race solo or let your crew call out the pairs.'
-                : GAME_PREVIEWS[item.gameId] ?? 'Play a quick round while you wait.')}
-            </Text>
-          </View>
-        </>}
-        action={short => <View>
-          <GameButton label={completed && item.gameId === 'showdown' ? 'Rematch' : completed ? 'Play again' : 'Play'}
-            icon={completed ? 'retry' : 'play'} disabled={paused} fullWidth onPress={() => onPlayGame(item)}
-            accessibilityLabel={`${completed ? 'Play again' : 'Play'}: ${label}${short && newGame && bestStars == null ? '. New game' : ''}`} />
-          {short && newGame && bestStars == null && <View pointerEvents="none" style={[styles.newPill, styles.newCorner]}>
-            <Text style={styles.newPillText}>NEW</Text></View>}
-        </View>} />
+      {/* PLAY comes right under the banner on every phone, so the one thing to press is on the first screen
+          of the page (never below the fold or behind the rail on a 375 or 402 pt phone). What the game is
+          and the best stars follow it. */}
+      <ActivityHero kicker={kicker} title={label} navigator={navigator} />
+      <PlayFirst label={playLabel} icon={completed ? 'retry' : 'play'} paused={paused} onPress={() => onPlayGame(item)}
+        accessibilityLabel={`${playLabel}: ${label}${newGame && bestStars == null && !completed ? '. New game' : ''}`}
+        newTag={newGame && bestStars == null && !completed} />
+      {bestStars != null && <View style={styles.bestRow} accessible
+        accessibilityLabel={`Best this wait: ${bestStars} of 3 stars`}>
+        {[1, 2, 3].map(slot => <GameIcon key={slot} name="star" size={24}
+          mono={slot <= bestStars ? undefined : '#b7cfe2'} />)}
+        <Text style={styles.bestLabel}>Your best this wait</Text>
+      </View>}
+      <View style={styles.gamePlaceholder}>
+        <Text style={styles.gamePlaceholderText}>
+          {item.preview ?? (isStarChart
+            ? 'Match space symbols to restore your shark’s missing chart. Race solo or let your crew call out the pairs.'
+            : GAME_PREVIEWS[item.gameId] ?? 'Play a quick round while you wait.')}
+        </Text>
+      </View>
       {item.gameId === 'current' && currentQuestBonusStatus && (
         <Text style={styles.note}>
           {currentQuestBonusStatus === 'verified'
@@ -305,8 +319,12 @@ function TriviaSlot({
 
   return (
     <PageScroll fill={CARD_FILL}>
-      <ActivityHero kicker={chapterId ? 'RIDE MISSION' : 'PARK CHALLENGE'} title={title ?? 'Shark Trivia'} teacher />
-      <Text style={styles.question}>{q.question}</Text>
+      {/* A page window too short for the banner, the question and four stacked answers (every phone in a wait,
+          SE and 17 Pro alike): no banner (the Story tab and the PLAY the guest just pressed say what this is),
+          and the answers sit two by two under a smaller question, so every choice shows without scrolling. */}
+      <WhenQuizCompact>{(short, tiny) => <>
+      {!short && <ActivityHero kicker={title != null ? 'STORY' : 'GAMES'} title={title ?? 'Shark Trivia'} teacher />}
+      <Text style={[styles.question, short && styles.questionShort, tiny && styles.questionTiny]}>{q.question}</Text>
       {picked != null && <Animated.Text style={[styles.answerFeedback,
         picked === q.correctIndex ? styles.feedbackCorrect : styles.feedbackWrong, {
           opacity: answerReveal,
@@ -314,7 +332,7 @@ function TriviaSlot({
         }]}>{picked === q.correctIndex
           ? 'Correct! Your crew found the answer.'
           : `The answer is ${q.choices[q.correctIndex]}. Pick your next clue.`}</Animated.Text>}
-      <View style={styles.choices}>
+      <View style={[styles.choices, short && styles.choicesGrid, tiny && styles.choicesGridTiny]}>
         {q.choices.map((choice, i) => {
           const isPicked = picked === i;
           const isCorrect = i === q.correctIndex;
@@ -333,17 +351,21 @@ function TriviaSlot({
               onPress={() => answer(i)}
               style={({ pressed }) => [
                 styles.choice,
+                short && styles.choiceShort,
+                tiny && styles.choiceTiny,
                 paused && styles.disabled,
                 state === 'correct' && styles.choiceCorrect,
                 state === 'wrong' && styles.choiceWrong,
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={styles.choiceText}>{choice}</Text>
+              <Text style={[styles.choiceText, short && styles.choiceTextShort]}
+                numberOfLines={short ? 2 : undefined} adjustsFontSizeToFit={short} minimumFontScale={0.8}>{choice}</Text>
             </Pressable>
           );
         })}
       </View>
+      </>}</WhenQuizCompact>
       {revealed && q.fact && (
         <View style={styles.factBox}>
           <Text style={styles.factKicker}>{picked == null ? 'THE ANSWER' : picked === q.correctIndex ? 'CORRECT · FAN FACT' : 'FAN FACT'}</Text>
@@ -364,6 +386,16 @@ function TriviaSlot({
  * keep the story first.
  */
 type Slot = ReactNode | ((short: boolean) => ReactNode);
+/** Reads the page window inside PageScroll: is it too short for a full clue page (quizCompact)? */
+function WhenQuizCompact({ children }: { children: (compact: boolean, tiny: boolean) => ReactNode }) {
+  const height = useContext(PageHeightContext);
+  // tiny: an iPhone SE window (about 180 pt with a three-line question), so the second row of answers clears the fade too.
+  return <>{children(quizCompact(height), heroSlim(height))}</>;
+}
+/** Reads the page window inside PageScroll: is this a short window (iPhone SE)? */
+function WhenShort({ children }: { children: (short: boolean) => ReactNode }) {
+  return <>{children(heroSlim(useContext(PageHeightContext)))}</>;
+}
 function ActionFirstWhenShort({ hero, story, action }: { hero: ReactNode; story: Slot; action: Slot }) {
   const short = heroSlim(useContext(PageHeightContext));
   const s = typeof story === 'function' ? story(short) : story;
@@ -408,12 +440,12 @@ function LoreSlot({
     };
   }, [rideId, parkId, chapterId, seed]);
 
-  if (!lore) return <SkeletonCard label="QUEUE PROMPT" />;
+  if (!lore) return <SkeletonCard label="Story clue" />;
 
   return (
     <PageScroll fill={CARD_FILL}>
       <ActionFirstWhenShort
-        hero={<ActivityHero kicker={navigator ? 'STARPORT' : 'QUEUE QUEST'} title={title ?? (navigator ? 'Spot the clue' : 'Field Note')} navigator={navigator} />}
+        hero={<ActivityHero kicker={title != null || navigator ? 'STORY' : 'GAMES'} title={title ?? (navigator ? 'Spot the clue' : 'Field Note')} navigator={navigator} />}
         story={<>
           <Text style={styles.loreTitle}>{lore.title}</Text>
           <Text style={styles.loreBody}>{lore.body}</Text>
@@ -552,6 +584,8 @@ const styles = StyleSheet.create({
   shark: { width: 110, height: 110, marginRight: -7 },
   heroSlim: { height: 46, marginBottom: spacing.sm },
   actionFirst: { marginBottom: spacing.md },
+  playFirst: { marginBottom: spacing.sm },
+  playFirstShort: { alignItems: 'center', marginTop: -2 },
   heroTitleSlim: { fontSize: 19, lineHeight: 23, marginTop: 2 },
   sharkSlim: { width: 52, height: 52, marginRight: -2 },
   heroKicker: { color: '#c8efff', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1 },
@@ -586,6 +620,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     gap: spacing.sm,
   },
+  questionShort: { fontSize: 17, lineHeight: 22, marginTop: 0 },
+  choicesGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.sm, gap: 6 },
+  choiceShort: { width: '48.5%', minHeight: 44, paddingVertical: 4, paddingHorizontal: 6 },
+  questionTiny: { fontSize: 15, lineHeight: 19 },
+  choicesGridTiny: { marginTop: 6, gap: 5 },
+  choiceTiny: { minHeight: 40, paddingVertical: 2 },
+  choiceTextShort: { fontSize: 15 },
   choice: {
     backgroundColor: '#ffca30',
     borderRadius: borderRadius.lg,

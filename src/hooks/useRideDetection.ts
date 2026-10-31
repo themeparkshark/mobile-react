@@ -1,5 +1,5 @@
 /**
- * useRideDetection — Smart GPS Ride Detection Hook
+ * useRideDetection: Smart GPS Ride Detection Hook
  * 
  * TWO MODES:
  * 
@@ -19,7 +19,7 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { getRides, RideType } from '../api/endpoints/rides';
-import getWikiTimes from '../api/endpoints/parks/queue-times/getWikiTimes';
+import waitFeed from '../services/lineplay/liveStub';
 import rideDetectionService, {
   setDetectionRides,
   startDetection,
@@ -30,6 +30,11 @@ import rideDetectionService, {
 import { PARK_WIKI_IDS } from '../constants/parkWaitTimes';
 import { navigationRef, navigate } from '../RootNavigation';
 import { rideDetectionEmitter } from '../services/RideDetectionEmitter';
+import { linePlayRideNow, rideLoggedUntil } from '../services/RideDetectionService';
+import { ensureRideQuestionLedger, rideQuestionOwner, unaskedLinePlayBoardings,
+  visitInLinePlayWait } from '../services/lineplay/rideQuestionLedger';
+import { keepForBatch, lastRidePromptAt, noteRidePrompt, ridePromptVerdict, walkingToGuideTarget,
+  watchGuideForRidePrompts, type RidePromptVerdict } from '../services/lineplay/ridePromptGate';
 import { LocationContext } from '../context/LocationProvider';
 import useLivePoll from './useLivePoll';
 
@@ -44,7 +49,7 @@ let batchConfirmNavigating = false;
  * Check pending queue and navigate to batch confirm if there are rides.
  * Guards against double navigation and nav-not-ready.
  */
-async function checkAndShowPendingRides(): Promise<boolean> {
+export async function checkAndShowPendingRides(): Promise<boolean> {
   // Prevent double navigation (BUG 8 fix)
   if (batchConfirmNavigating) return false;
 
@@ -52,11 +57,30 @@ async function checkAndShowPendingRides(): Promise<boolean> {
   if (!navigationRef.isReady()) return false;
 
   try {
+    // The ride step holds, the prompt clock and the LinePlay waits come back from the phone first, so a
+    // relaunch never asks about a ride LinePlay already asked about.
+    await ensureRideQuestionLedger().catch(() => undefined);
+    // A phone pocketed to board, then the app closed: LinePlay comes back on that wait and asks its own
+    // one question. That ride is never a batch confirm.
+    if (await reopenLinePlayForRideQuestion()) return true;
     const pending = await getPendingDetections();
     if (pending.length === 0) return false;
+    // The LinePlay screen is up (a wait, its ride question or its recap): the batch confirm never lands on
+    // top of it. The rides wait here until the guest leaves LinePlay.
+    if (navigationRef.getCurrentRoute()?.name === 'LinePlay') return false;
 
+    // One ride question (core loop 4.3): rides the ride step logged, shows, transport and walk-bys
+    // never come back as a question; the rest wait here while the guest walks to the next coin or
+    // another ride question was asked in the last 20 minutes.
+    const now = Date.now();
+    const verdicts = new Map<string, RidePromptVerdict>(pending.map(d => [d.id, detectionVerdict(d, now)]));
+    for (const d of pending) {
+      if (!keepForBatch(verdicts.get(d.id)!)) await rideDetectionService.removePendingDetection(d.id);
+    }
+    const askable = pending.filter(d => keepForBatch(verdicts.get(d.id)!));
+    if (askable.some(d => verdicts.get(d.id) !== 'ask')) return false;
     // Filter to medium/high confidence only
-    const meaningful = pending.filter(d => d.confidence !== 'low');
+    const meaningful = askable.filter(d => d.confidence !== 'low');
     if (meaningful.length === 0) {
       // Remove low confidence detections individually, not clearAll
       // to prevent race with new detections added between read and clear (ISSUE 10 fix)
@@ -71,6 +95,7 @@ async function checkAndShowPendingRides(): Promise<boolean> {
     if (currentRoute?.name === 'RideBatchConfirm' || currentRoute?.name === 'RideLog') return false;
 
     batchConfirmNavigating = true;
+    noteRidePrompt(now);
     navigate('RideBatchConfirm', { detections: meaningful } as any);
 
     // Reset flag after a short delay to allow re-navigation later
@@ -81,6 +106,43 @@ async function checkAndShowPendingRides(): Promise<boolean> {
     console.warn('Failed to check pending ride detections:', e);
     return false;
   }
+}
+
+/**
+ * Ride detection kept a boarding signal on a LinePlay wait while the phone slept in a pocket, and the
+ * LinePlay that should ask about it is not running (the app was closed, or LinePlay was left). Open
+ * LinePlay on that ride: it restores the wait (its checkpoint) and asks "Did you get to the ride?" once,
+ * then logs the ride with the timed wait. A wait whose recap was closed with Done is marked answered by
+ * LinePlay, so this never opens a new wait. True when it opened LinePlay.
+ */
+export async function reopenLinePlayForRideQuestion(now = Date.now()): Promise<boolean> {
+  if (navigationRef.getCurrentRoute()?.name === 'LinePlay') return false;
+  const player = Number(rideQuestionOwner());
+  if (!Number.isInteger(player) || player <= 0) return false;
+  for (const wait of unaskedLinePlayBoardings(now)) {
+    // A LinePlay screen open in this run asks itself; after a relaunch none is, even if detection kept its ride.
+    if (wait.rideId === rideDetectionService.linePlayOpenHere() || rideLoggedUntil(wait.rideId, now) != null) continue;
+    const ride = rideDetectionService.rideById(wait.rideId);
+    if (!ride) continue;
+    navigate('LinePlay', { ride: { rideId: ride.id, rideName: ride.name, parkId: ride.park_id } } as any);
+    return true;
+  }
+  return false;
+}
+
+/** The prompt gate's verdict for one detection, from what the phone knows right now. */
+export function detectionVerdict(detection: DetectedRide, now = Date.now()): RidePromptVerdict {
+  return ridePromptVerdict({
+    rideId: detection.rideId,
+    rideType: detection.rideType,
+    dwellMs: detection.dwellTimeMs,
+    now,
+    linePlayRideId: linePlayRideNow(),
+    inLinePlayWait: visitInLinePlayWait(detection.rideId, detection.enteredAt, detection.exitedAt, now),
+    loggedUntil: rideLoggedUntil(detection.rideId, now),
+    walking: walkingToGuideTarget(now),
+    lastPromptAt: lastRidePromptAt(),
+  });
 }
 
 export function useRideDetection(enabled: boolean, parkId?: number | null) {
@@ -104,20 +166,30 @@ export function useRideDetection(enabled: boolean, parkId?: number | null) {
   useEffect(() => {
     if (!enabled) return;
 
+    const stopWatchingGuide = watchGuideForRidePrompts();
     const handleForegroundDetection = (detection: DetectedRide) => {
-      if (AppState.currentState === 'active') {
+      if (AppState.currentState !== 'active') return;
+      const verdict = detectionVerdict(detection);
+      // LinePlay at this ride asks its own "I got to the ride" (the one question); the sheet stays quiet.
+      if (verdict === 'lineplay') { rideDetectionEmitter.emit('rideDetected', detection); return; }
+      if (verdict === 'ask') {
+        noteRidePrompt();
         rideDetectionEmitter.emit('rideDetected', detection);
+        return;
       }
+      // Logged by the ride step, or not a ride: forget it. Walking or too soon: it waits in the Ride Tracker.
+      if (!keepForBatch(verdict)) void rideDetectionService.removePendingDetection(detection.id).catch(() => undefined);
     };
 
     rideDetectionService.onForegroundDetection = handleForegroundDetection;
 
     return () => {
       rideDetectionService.onForegroundDetection = null;
+      stopWatchingGuide();
     };
   }, [enabled]);
 
-  // AppState listener — check pending rides when coming back to foreground
+  // AppState listener: check pending rides when coming back to foreground
   useEffect(() => {
     if (!enabled) return;
     // The ref only tracks while enabled; resync so a background stint while
@@ -211,7 +283,7 @@ async function fetchAndSetWaitTimes(rides: RideType[], parkId: number | null) {
     const allEntries: { name: string; queue?: { STANDBY?: { waitTime: number | null } } }[] = [];
 
     // Fetch all parks in parallel (ISSUE 11 fix)
-    const results = await Promise.allSettled(parkIds.map(pid => getWikiTimes(pid)));
+    const results = await Promise.allSettled(parkIds.map(pid => waitFeed(pid)));
 
     for (const result of results) {
       if (result.status === 'fulfilled') {

@@ -4,7 +4,7 @@ import {
   ImageBackground,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { StackActions, useNavigation, useRoute } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { logRide } from '../../api/endpoints/player-rides';
 import SharkRating from '../../components/RideTracker/SharkRating';
@@ -26,7 +26,7 @@ function BatchShell({ children, onBack }: { children: React.ReactNode; onBack: (
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Return to Ride Tracker">
+          <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Go back">
             <Image source={require('../../../assets/images/screens/explore/back.png')}
               style={{ width: 35, height: 35 }} contentFit="contain" />
           </Pressable>
@@ -172,6 +172,13 @@ type Phase = 'select' | 'rate' | 'summary';
 
 export default function RideBatchConfirmScreen() {
   const navigation = useNavigation<any>();
+  // "Back to Ride Tracker" really lands on the Ride Tracker: back when it opened this screen, else it takes
+  // this screen's place (the batch confirm also opens over the map).
+  const backToRideTracker = useCallback(() => {
+    const routes = navigation.getState?.()?.routes ?? [];
+    if (routes[routes.length - 2]?.name === 'RideTracker') navigation.goBack();
+    else navigation.dispatch(StackActions.replace('RideTracker'));
+  }, [navigation]);
   const route = useRoute<any>();
   const detections: DetectedRide[] = route.params?.detections || [];
 
@@ -393,7 +400,7 @@ export default function RideBatchConfirmScreen() {
         )}
 
         <Pressable
-          onPress={() => navigation.goBack()}
+          onPress={backToRideTracker}
           style={batchStyles.doneBtn}
         >
           <Text style={batchStyles.doneBtnText}>Back to Ride Tracker</Text>

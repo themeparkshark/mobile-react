@@ -29,6 +29,8 @@ interface Props {
   readonly chapter: LinePlayChapter;
   readonly completedIds: ReadonlySet<string>;
   readonly crewRelay: CrewRelayProgress | null;
+  /** "Who's in line?" said 2 or more: only then the Crew Relay tile and the Crew Prompts link show (core loop 5.5). */
+  readonly crew?: boolean;
   readonly chapterClue?: ChapterClue | null;
   /** Paused by hand (or counting back in): the buttons rest in pale blue but still act (the 3 2 1, then the page). */
   readonly paused: boolean;
@@ -61,7 +63,7 @@ const riseFor = (reduced: boolean) => (index: number) => reduced ? undefined
 /** Why a locked chapter cannot start, in seven-year-old words. */
 export const LOCKED_LINE = 'Get in line to play';
 
-export default function ChapterCard({ chapter, completedIds, crewRelay, chapterClue = null, paused, locked = false, signalAvailable = false, onChooseMission, compact: shortScreen = false, windowHeight }: Props) {
+export default function ChapterCard({ chapter, completedIds, crewRelay, crew = false, chapterClue = null, paused, locked = false, signalAvailable = false, onChooseMission, compact: shortScreen = false, windowHeight }: Props) {
   const [storyOpen, setStoryOpen] = useState(false);
   // The page's real height decides what leads (it shrinks while Details is open), so PLAY NOW
   // is always whole: never a button cut by the frame's edge.
@@ -87,11 +89,16 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
   const trailBottom = leadBottom > 0 && trailHeight > 0 ? leadBottom + trailGap + trailHeight : trailBottomSeen;
   // Blocks rise in once, when the page first opens. A later layout switch (Details opening
   // or closing changes what leads) just shows the blocks, never replays the entrance.
+  // The blocks mount only once the window is measured: before that the page cannot know its layout (a 17 Pro
+  // reads 'full' at 0, then 'compact' a frame later), and switching the order mid-entrance could leave PLAY
+  // stuck under the header (round 3 device walk). The entrance clock starts when the blocks really mount.
+  const measured = viewHeight > 0;
   const entered = useRef(false);
   useEffect(() => {
+    if (!measured) return undefined;
     const timer = setTimeout(() => { entered.current = true; }, 900);
     return () => clearTimeout(timer);
-  }, []);
+  }, [measured]);
   const reducedUi = useUiReducedMotion();
   const rise = riseFor(reducedUi || entered.current);
   const epilogue = crewRelay ? crewRelayEpilogue(crewRelay, chapter.relay.epilogues) : null;
@@ -211,10 +218,10 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
       {/* A short phone (iPhone SE) puts the clue to play first, fully on screen; the mission header follows.
           Keyed, so when the first layout switches the order mid-entrance each block MOVES with its own
           animation; it is never morphed into the other block and left half faded. */}
-      {compact ? <>{playNow}{header}</> : <>{header}{playNow}</>}
+      {measured && (compact ? <>{playNow}{header}</> : <>{header}{playNow}</>)}
       {/* Compact: just the numbered bubbles (names stay in the spoken label), so the row ends whole
           above the fade instead of small labels dissolving into it. */}
-      <Animated.View entering={rise(2)} style={[styles.trail, compact && styles.trailCompact,
+      {measured && <Animated.View entering={rise(2)} style={[styles.trail, compact && styles.trailCompact,
         { marginTop: trailGap }]}
         onLayout={event => {
           setTrailBottom(layoutBottom(event));
@@ -236,11 +243,12 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
             {!compact && <Text style={styles.stepName} numberOfLines={3}>{name}</Text>}
           </Pressable>;
         })}
-      </Animated.View>
+      </Animated.View>}
 
-      <Animated.View entering={rise(3)} style={[styles.crewRow, { marginTop: foldGap(viewHeight, trailBottom, crewHeight, CREW_ROW_GAP) }]}
+      {measured && (crew || signalAvailable) && <Animated.View entering={rise(3)} style={[styles.crewRow, { marginTop: foldGap(viewHeight, trailBottom, crewHeight, CREW_ROW_GAP) }]}
         onLayout={event => setCrewHeight(Math.round(event.nativeEvent.layout.height))}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chapter.relay.title}`} {...off}
+        {/* A solo wait never meets a crew page (its tile would open a page that is not there). */}
+        {crew && <Pressable accessibilityRole="button" accessibilityLabel={`Open ${chapter.relay.title}`} {...off}
           onPress={() => choose(relayId)}
           style={({ pressed }) => [styles.crewChip, paused && styles.missionPaused, locked && styles.locked, pressed && styles.pressed]}>
           <GameIcon name={relayDone ? 'check' : 'shark'} size={30} />
@@ -248,7 +256,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
             <Text style={styles.crewChipTitle}>CREW RELAY</Text>
             <Text style={styles.crewChipBody} numberOfLines={1}>{relayDone ? 'Your crew story is in the recap' : 'Four turns, one phone'}</Text>
           </View>
-        </Pressable>
+        </Pressable>}
         {signalAvailable && <Pressable accessibilityRole="button" accessibilityLabel="Open community Crew Route" {...off}
           onPress={() => choose('crew-signal')}
           style={({ pressed }) => [styles.crewChip, styles.crewChipBlue, paused && styles.missionPaused, locked && styles.locked, pressed && styles.pressed]}>
@@ -258,7 +266,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
             <Text style={[styles.crewChipBody, styles.onBlueSoft]} numberOfLines={1}>Fans here pick a bonus round</Text>
           </View>
         </Pressable>}
-      </Animated.View>
+      </Animated.View>}
 
       {/* Below the fold: the story, the clue that changed the finale, the crew ending. */}
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: storyOpen }}
@@ -283,11 +291,11 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
           ? chapter.relay.branchDone
           : `${epilogue.prompt} Swipe past the relay to play the new round.`}</Text>
       </View>}
-      <Pressable accessibilityRole="button" accessibilityLabel="Open Crew Prompts" {...off}
+      {crew && <Pressable accessibilityRole="button" accessibilityLabel="Open Crew Prompts" {...off}
         onPress={() => choose(crewGridId)} style={[styles.promptsLink, locked && styles.locked]}>
         <GameIcon name={completedIds.has(crewGridId) ? 'check' : 'sparkle'} size={22} />
         <Text style={styles.promptsText}>Crew Prompts: nine talk-and-notice prompts for the end of your wait</Text>
-      </Pressable>
+      </Pressable>}
       <Text style={styles.footer}>
         {chapter.adaptive
           ? 'Keep playing as the line moves. The shark story is made up. The trivia is about parks in general.'

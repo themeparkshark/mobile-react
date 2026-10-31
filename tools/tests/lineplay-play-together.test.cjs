@@ -273,7 +273,7 @@ test('controller helpers: next game wraps the playlist and the leader line', () 
 test('LinePlay routes crew games through pass-and-play without a new reward path', () => {
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
   assert.match(screen, /groupPlayRef\.current\?\.wantsRound\(item\)\) \{ groupPlayRef\.current\.startRound\(item\); return; \}/);
-  assert.match(screen, /onClose: groupTurn \? \(\) => finishTurn\(0\) : handleGameDone/);
+  assert.match(screen, /onClose: groupTurn \? \(\) => finishTurn\(0\) : closePlayed/);
   assert.match(screen, /difficulty=\{activeGame\.kidRound \? 0 : undefined\}/);
   assert.match(screen, /\{groupPlay\.overlays\}/);
   const controller = read('src/screens/LinePlay/group/useGroupPlay.tsx');

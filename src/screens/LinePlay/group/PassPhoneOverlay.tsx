@@ -49,7 +49,7 @@ export default function PassPhoneOverlay({ mode, moving, onGo, onSkip, onEndRoun
     <Animated.View entering={enter} style={styles.root} accessibilityViewIsModal>
       <LinearGradient colors={['#13a8e9', '#0879ca', '#0768b9']} style={StyleSheet.absoluteFill} />
       {moving && <View style={styles.movingChip} accessibilityLiveRegion="polite">
-        <GameIcon name="queue" size={22} />
+        <GameIcon name="shark" size={22} />
         <Text style={styles.movingText}>Line moving. Eyes up.</Text>
       </View>}
       {mode.kind === 'handoff' ? (

@@ -72,7 +72,7 @@ test('Trivia Duel\'s Final is a no-risk bonus on screen: no chips, no bet copy, 
 
 test('LinePlay Welcome tip never promises Ride Parts when the wait card says "No Parts at this ride"', () => {
   const { loadTs: loadModule } = require('./helpers/ts-module.cjs');
-  const help = loadModule('src/services/help/helpTopics.ts');
+  const labels = loadModule('src/services/lineplay/labels.ts');
   const preview = loadModule('src/screens/LinePlay/components/waitscreen/waitScreenPreview.ts', { react: { useEffect() {}, useState: v => [v, () => {}] } });
   const cases = [
     [{ tracking: true, unavailable: false, ready: true }, 'on'],
@@ -85,13 +85,14 @@ test('LinePlay Welcome tip never promises Ride Parts when the wait card says "No
     assert.equal(state, want);
     // The card's own no-Parts test (WaitCard noPartsHere, not completed).
     const cardSaysNoParts = !rewards.tracking && (rewards.ready === false || rewards.unavailable);
-    const body = help.LINEPLAY_INTRO_BODY[state];
-    if (cardSaysNoParts || state !== 'on') assert.doesNotMatch(body, /earns? Ride Parts/, JSON.stringify(rewards));
+    // LinePlay's first-wait line lives in the wait card now (core loop: one picture line, no floating card).
+    const body = labels.LINEPLAY_INTRO_LINE[state];
+    if (cardSaysNoParts || state !== 'on') assert.doesNotMatch(body, /Ride Parts|powers this coin/, JSON.stringify(rewards));
   }
-  assert.match(help.LINEPLAY_INTRO_BODY.on, /earns Ride Parts/);
+  assert.match(labels.LINEPLAY_INTRO_LINE.on, /powers this coin/);
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.match(screen, /const introBody = LINEPLAY_INTRO_BODY\[linePartsState\(rewards\)\];/);
-  assert.match(screen, /<OneTimeTip id="lineplay_intro"[^>]*body=\{introBody\}/);
+  assert.match(screen, /LINEPLAY_INTRO_LINE\[linePartsState\(rewards\)\]/);
+  assert.doesNotMatch(screen, /<OneTimeTip id="lineplay_intro"/);
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(card, /const noPartsHere = !completed && !rewardTrackingAvailable && \(lineRewardsReady === false \|\| rewardUnavailable\);/);
 });
@@ -121,7 +122,7 @@ test('arcade NEW means something: only games never played on this account, two t
 
 test('the nudge says one short thing a non-reader can follow: "Tap Play!" with the play picture', () => {
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.match(screen, /\{ icon: 'play', title: 'Next adventure is ready!', body: 'Tap Play!' \}/);
+  assert.match(screen, /\{ icon: 'play', title: 'Next story is ready!', body: 'Tap Play!' \}/);
   assert.doesNotMatch(screen, /Swipe or tap Play/);
 });
 
@@ -156,8 +157,16 @@ test('iPhone SE pages: the clue choices sit side by side, kid words, and the fin
   assert.match(slot, /<View style=\{short && styles\.clueRow\}>/);
   assert.match(slot, /clueRow: \{ flexDirection: 'row', gap: 6 \}/);
   assert.match(slot, /clueChoiceSide: \{ flex: 1, minHeight: 52,/);
-  assert.match(slot, /\{!short && <View style=\{styles\.bestRow\} accessible/, 'no NEW row half under the fade on a slim page');
-  assert.match(slot, /\{short && newGame && bestStars == null && <View pointerEvents="none" style=\{\[styles\.newPill, styles\.newCorner\]\}>/);
+  // Core loop must-fix 3: PLAY comes right under the banner on every phone, and NEW rides on PLAY's corner
+  // (no NEW row that could sit half under the fade).
+  const game = slot.slice(slot.indexOf('function MiniGameSlot('), slot.indexOf('// -- trivia'));
+  assert.ok(game.indexOf('<PlayFirst') < game.indexOf('styles.bestRow'), 'PLAY before the best-stars row');
+  assert.ok(game.indexOf('<PlayFirst') < game.indexOf('styles.gamePlaceholder'), 'PLAY before the game blurb');
+  assert.match(game, /newTag=\{newGame && bestStars == null && !completed\}/, 'NEW leaves once the game was played');
+  const play = slot.slice(slot.indexOf('function PlayFirst('), slot.indexOf('function MiniGameSlot('));
+  assert.match(play, /\{newTag && <View pointerEvents="none" style=\{\[styles\.newPill, styles\.newCorner\]\}>/, 'NEW rides on PLAY');
+  assert.match(play, /const short = heroSlim\(useContext\(PageHeightContext\)\);/, 'inside the page window: it knows the window is short');
+  assert.match(play, /fullWidth=\{!short\} size=\{short \? 'compact' : 'regular'\}/);
   const chapters = read('src/services/lineplay/chapters.ts');
   assert.doesNotMatch(chapters, /inspires your clue/);
 });
@@ -195,7 +204,7 @@ test('the recap after a short wait never shows a row of zeros: zero tiles drop o
   const some = recapStats({ ...zero, activityCount: 2, experience: 15 });
   assert.deepEqual(some.map(t => t.key), ['activities', 'xp']);
   for (const t of recapStats({ ...zero, activityCount: 1, earnedEnergy: 5, partsCount: 1, ticketsEarned: 1 })) assert.ok(t.value > 0);
-  assert.match(src, /\{shownStats\.length \? <View style=\{styles\.recapStats\}>/);
+  assert.match(src, /\{earnedAny \? <View style=\{styles\.recapStats\}>/);
   assert.match(src, /<Text style=\{styles\.keepsakeTitle\}>Wait saved!<\/Text>/);
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.doesNotMatch(card, /'game plan' : 'posted wait'\} \$\{postedWaitMinutes\}m · details/, 'no "Session 1:21 · game plan 20m · details" jargon');
@@ -203,5 +212,5 @@ test('the recap after a short wait never shows a row of zeros: zero tiles drop o
 
 test('a finished wait at a ride with no Parts never shows an empty ring and a "0" gem', () => {
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
-  assert.match(card, /\{!rewardTrackingAvailable \? <View style=\{styles\.noPartsWell\}[^>]*>\n\s*<GameIcon name="queue" size=\{54\} \/>/);
+  assert.match(card, /\{!rewardTrackingAvailable \? <View style=\{styles\.noPartsWell\}[^>]*>\n\s*<GameIcon name="line" size=\{54\} \/>/);
 });

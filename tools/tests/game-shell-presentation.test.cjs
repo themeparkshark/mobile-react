@@ -198,16 +198,16 @@ test('QUEUE REALITY: the undoable GPS grace and a boarding guess never end a run
   listener('background'); view.render();
   listener('active'); view.render();
   assert.equal(view.find(node => node.type === 'ResultsCard'), undefined, 'a guess never ends the run');
-  assert.ok(view.find(node => node.type === 'Text' && node.props.children === 'Did your ride start?'));
-  assert.ok(button(view, 'SAVE MY RUN'));
+  assert.ok(view.find(node => node.type === 'Text' && node.props.children === 'Did you get to the ride?'));
+  assert.ok(button(view, 'I GOT TO THE RIDE'));
   // KEEP PLAYING clears the guess and resumes with the 3-2-1.
-  button(view, 'KEEP PLAYING').props.onPress(); view.render();
+  button(view, 'STILL IN LINE').props.onPress(); view.render();
   assert.deepEqual(answers, [false]);
   flush(view);
   assert.equal(calls.resume, 1);
   // Pause again with the guess still up, then SAVE MY RUN: RUN SAVED card, boarding after the run counts.
   view.find(node => node.type === 'TouchableOpacity' && node.props.accessibilityLabel === 'Pause').props.onPress(); view.render();
-  button(view, 'SAVE MY RUN').props.onPress(); view.render();
+  button(view, 'I GOT TO THE RIDE').props.onPress(); view.render();
   const card = view.find(node => node.type === 'ResultsCard');
   assert.equal(card.props.message, "YOUR RIDE'S UP!");
   assert.equal(card.props.stars, 0, 'a run with points but no star is not a lit star');

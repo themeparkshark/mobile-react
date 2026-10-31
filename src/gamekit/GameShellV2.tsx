@@ -1121,7 +1121,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     doResumeRef.current = doResume;
     const rideUpLikelyRef = useRef(false);
     const askBoardingRef = useRef(false);
-    /** The guest tapped SAVE MY RUN: boarding is recorded once the saved run's card closes. */
+    /** The guest tapped I GOT TO THE RIDE: boarding is recorded once the saved run's card closes. */
     const boardingAnsweredRef = useRef(false);
     useEffect(() => {
       if (!visible) return;
@@ -1129,7 +1129,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         if (state === 'background' || state === 'inactive') doHoldRef.current('background', 'Paused while away');
         else if (state === 'active' && holdRef.current === 'background') {
           // Back from the pocket while ride detection thinks the guest boarded:
-          // stay held so the sheet can ask "Did your ride start?". Never guess.
+          // stay held so the sheet can ask "Did you get to the ride?". Never guess.
           if (rideUpLikelyRef.current && startedRef.current && askBoardingRef.current) return;
           doResumeRef.current();
         }
@@ -1165,7 +1165,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // Ride detection thinks the guest boarded. A single GPS fix can fake that
     // (indoor queues most of all), so the hint never ends a run by itself.
     // An active round keeps playing; a held round asks inside the game
-    // ("Did your ride start?") instead of counting down to resume.
+    // ("Did you get to the ride?") instead of counting down to resume.
     const rideUpLikely = !!linePlayMovement?.rideUpLikely;
     const askBoarding = rideUpLikely && !!linePlayMovement?.onBoardingAnswer && !rideChallenge;
     rideUpLikelyRef.current = rideUpLikely;
@@ -1204,7 +1204,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         linePlayMovement?.onRunDone?.(0, effectiveResult?.meta?.partial === true);
         onClose();
       }
-      // SAVE MY RUN: the run is counted above, now the wait records boarding.
+      // I GOT TO THE RIDE: the run is counted above, now the wait records boarding.
       if (boardingAnsweredRef.current) {
         boardingAnsweredRef.current = false;
         linePlayMovement?.onBoardingAnswer?.(true);
@@ -1504,17 +1504,18 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             <View style={styles.overlay}>
               <View style={styles.sheet} accessibilityRole="alert">
                 <View style={styles.sheetIcon}><GameIcon name="ride" size={64} /></View>
-                <Text style={styles.sheetTitle}>Did your ride start?</Text>
+                {/* The one ride question, in LinePlay's ride step words. */}
+                <Text style={styles.sheetTitle}>Did you get to the ride?</Text>
                 <Text style={styles.sheetBody}>Your run is saved either way.</Text>
                 <TouchableOpacity style={[styles.sheetBtn, styles.primaryBtn, styles.bigBtn]} onPress={answerSaveRun}
-                  accessibilityRole="button" accessibilityLabel="Yes, my ride started. Save my run">
+                  accessibilityRole="button" accessibilityLabel="I got to the ride. Save my run">
                   <GameIcon name="ride" size={26} />
-                  <Text style={[styles.primaryBtnTxt, styles.btnGap]}>SAVE MY RUN</Text>
+                  <Text style={[styles.primaryBtnTxt, styles.btnGap]} numberOfLines={1} adjustsFontSizeToFit>I GOT TO THE RIDE</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn]} onPress={answerKeepPlaying}
                   accessibilityRole="button" accessibilityLabel="Still in line. Keep playing">
                   <GameIcon name="play" size={22} />
-                  <Text style={[styles.secondaryBtnCaps, styles.btnGap]}>KEEP PLAYING</Text>
+                  <Text style={[styles.secondaryBtnCaps, styles.btnGap]}>STILL IN LINE</Text>
                 </TouchableOpacity>
               </View>
             </View>
