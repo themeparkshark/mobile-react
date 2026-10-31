@@ -1,7 +1,7 @@
 /**
  * TriviaGame: the LinePlay "Line Trivia" entry point, kept for its public API.
  * It now plays Trivia Duel (Trivia+ merged with Shark Showdown) as a Queue
- * Duel vs Captain Fin, built from the source's ride/park/chapter context.
+ * Duel vs Captain Gill, built from the source's ride/park/chapter context.
  * A task-mode source (server-validated single question) still maps to the
  * ride challenge format; ride challenges should mount TriviaDuel directly.
  */

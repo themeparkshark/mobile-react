@@ -697,7 +697,7 @@ export function SharkySwim({
     );
   }, [resultsData, runMode]);
 
-  const title = runMode === 'ride' ? 'Ride Challenge' : runMode === 'rally' ? 'Rally' : runMode === 'ghost' ? 'Ghost Rally' : 'Sharky Swim';
+  const title = runMode === 'ride' ? 'Win the coin' : runMode === 'rally' ? 'Rally' : runMode === 'ghost' ? 'Ghost Rally' : 'Sharky Swim';
   const objective = runMode === 'ride'
     ? 'Reach the Ride Gate. Hold to swim up, let go to sink.'
     : cfg.tier === 0 ? 'Hold anywhere to swim up. Let go to sink.' : 'Skim close past the sparkle halos to build your chain.';
@@ -775,7 +775,7 @@ export function SharkySwim({
             {frozen ? (
               <View pointerEvents="none" style={styles.freeze}>
                 <View style={styles.freezeBubble}>
-                  <Text style={styles.freezeText}>TAP TO SWIM</Text>
+                  <Text style={styles.freezeText}>HOLD TO SWIM</Text>
                 </View>
               </View>
             ) : null}

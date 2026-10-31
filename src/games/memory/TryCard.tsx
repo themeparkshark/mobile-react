@@ -4,10 +4,8 @@
  * It wears the one results look every game shares: the blue card with a
  * white border, Alex's ribbon over its top edge, the gold TRY AGAIN and a
  * white DONE inside the card. Pictures, not sentences: the pair coins say how
- * far you got (the words are spoken), and the tries left are small retry
- * marks under TRY AGAIN (no "tries on this Ticket" sentence next to the ride's
- * own Ticket card). They sit as flat dots inside TRY AGAIN, never as round
- * marks that look like more buttons.
+ * far you got (the words are spoken), and the tries on this Ticket are three
+ * shells, the used ones faded (no "tries on this Ticket" sentence).
  *
  * A short, sequenced moment on the 232ms grid the results card uses:
  *   0      card rises (opacity + lift only: a scaled, shadowed layer smears on iOS)
@@ -40,8 +38,12 @@ import { MM } from './theme';
 import { ResultsRibbon } from '../../gamekit/results/ResultsRibbon';
 
 const STAR = require('../../assets/games/memory/studio/coin_alex.png');
+/** One shell per try on this Ticket (core loop 5.3: tries as three shells, not words). */
+const SHELL = require('../../assets/games/current-quest/conch.png');
 
 export const TRY_BEAT_MS = 232;
+/** A Ticket buys this many Memory tries (MemoryGame RIDE_TRIES). */
+export const RIDE_TRY_SHELLS = 3;
 /** Gap between pips filling: fast enough that 8 pips take under a second. */
 export const PIP_STEP_MS = 95;
 /** Sparks per pip puff (capped; the brief's particle budget). The last found pip gets double. */
@@ -72,7 +74,8 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
   enter: SharedValue<number>;
   reducedMotion: boolean;
   onTryAgain: () => void;
-  onDone: () => void;
+  /** Absent in a ride challenge while the Ticket still has tries: one card per miss, TRY AGAIN only (the X still leaves). */
+  onDone?: () => void;
 }) {
   const canRetry = left > 0;
   const sched = tryCardSchedule(pairs);
@@ -127,23 +130,27 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
               reducedMotion={reducedMotion} />
           ))}
         </View>
+        {/* Three shells: one per try on this Ticket, the used ones faded (the words are spoken). */}
+        <View style={styles.shells} accessible accessibilityLabel={triesLeftLine(left)}>
+          {Array.from({ length: RIDE_TRY_SHELLS }, (_, i) => (
+            <Animated.Image key={i} source={SHELL} resizeMode="contain"
+              style={[styles.shell, i >= left && styles.shellUsed]} />
+          ))}
+        </View>
         <Animated.View style={[styles.actions, buttonSt]}>
           {canRetry ? (
             <Pressable onPress={onTryAgain} style={({ pressed }) => [styles.btn, compact && styles.btnCompact, pressed && styles.down]}
               accessibilityRole="button" accessibilityLabel={`Try again. ${triesLeftLine(left)}`}>
               <GameIcon name="retry" size={26} />
               <Text style={styles.btnText}>TRY AGAIN</Text>
-              {/* Tries left as flat dots inside the button (one per try; the words
-                  are spoken). Inside it, they can never look like more buttons. */}
-              <View style={styles.leftDots} importantForAccessibility="no-hide-descendants">
-                {Array.from({ length: left }, (_, i) => <View key={i} style={styles.leftDot} />)}
-              </View>
             </Pressable>
           ) : null}
-          <Pressable onPress={onDone} hitSlop={8} style={({ pressed }) => [canRetry ? [styles.done, compact && styles.doneCompact] : styles.btn, pressed && styles.down]}
-            accessibilityRole="button" accessibilityLabel="Done">
-            <Text style={canRetry ? styles.doneText : styles.btnText}>DONE</Text>
-          </Pressable>
+          {onDone || !canRetry ? (
+            <Pressable onPress={onDone} hitSlop={8} style={({ pressed }) => [canRetry ? [styles.done, compact && styles.doneCompact] : styles.btn, pressed && styles.down]}
+              accessibilityRole="button" accessibilityLabel="Done">
+              <Text style={canRetry ? styles.doneText : styles.btnText}>DONE</Text>
+            </Pressable>
+          ) : null}
         </Animated.View>
       </Pressable>
     </Animated.View>
@@ -197,8 +204,9 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch' },
   down: { transform: [{ translateY: 2 }, { scale: 0.97 }] },
   btnText: { fontFamily: 'Shark', fontSize: 24, color: '#05346e' },
-  leftDots: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4 },
-  leftDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#05346e' },
+  shells: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: -4, marginBottom: 12 },
+  shell: { width: 30, height: 30 },
+  shellUsed: { opacity: 0.28 },
   done: { marginTop: 10, alignSelf: 'stretch', minHeight: 48, borderRadius: 14, borderWidth: 3, borderColor: '#05346e', borderBottomWidth: 5,
     backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
   doneText: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },

@@ -104,7 +104,8 @@ function rewardView(reducedMotion) {
 test('reduced-motion reward summary settles immediately and leaves its primary action visible', () => {
   const rewards = rewardView(true); rewards.find(node => node.type === './CoinCatchReveal').props.onDone(); rewards.render();
   assert.equal(rewards.motions.length, 0);
-  assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'Back to the Park');
+  // Core loop 5.3: the one big button points at the next coin; with no coin picked yet it never promises one.
+  assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'Back to Map');
   assert.equal(rewards.find(node => node.type === './CoinCatchReveal'), undefined);
 });
 test('the win footer sits on a solid plate so the tab bar compass never reads over Continue Park', () => {
@@ -124,10 +125,10 @@ test('the win footer sits on a solid plate so the tab bar compass never reads ov
   const link = (function find(node) {
     if (!node || typeof node !== 'object') return undefined;
     if (Array.isArray(node)) return node.map(find).find(Boolean);
-    if (node.props?.accessibilityLabel === 'Go back to the park map') return node;
+    if (node.props?.accessibilityLabel === 'See my shelf') return node;
     return find(node.props?.children);
   })(footer);
-  assert.ok(link, 'Continue Park lives inside the plate');
+  assert.ok(link, 'See my shelf lives inside the plate');
 });
 test('closing reward summary cancels its entrance clock and unmounts the catch', () => {
   const rewards = rewardView(false); rewards.find(node => node.type === './CoinCatchReveal').props.onDone(); rewards.render();
@@ -227,19 +228,22 @@ test('the owner shelf shows each coin at its real level, never a blanket Level 1
 });
 
 
-test('first souvenir shows every confirmed payout as a chip and chooses the shelf before upgrading', () => {
+function rowChips(view) {
+  const chips = [];
+  (function walk(node) { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(walk);
+    if (node.props?.chip && typeof node.props.chip.amount === 'number') chips.push([node.props.chip.label, node.props.chip.amount]); walk(node.props?.children); })(view.tree);
+  return chips;
+}
+test('a first coin shows one reward row on the ladder: Shark Coins, and Energy saved for growing coins until rung 3', () => {
   let opened = null;
   const rewards = rewardView(true); rewards.change({ onViewCoin(open) { opened = open; }, coinProgress: {
     current_level:1,max_level:5,is_unlocked:true,parts_to_next_level:2,available_parts:4,energy_to_next_level:10 }, playerEnergy:40 });
   rewards.find(node => node.type === './CoinCatchReveal').props.onDone(); rewards.render();
-  const chips = [];
-  (function walk(node) { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(walk);
-    if (node.props?.label && typeof node.props.amount === 'number') chips.push([node.props.label, node.props.amount]); walk(node.props?.children); })(rewards.tree);
-  assert.deepEqual(chips, [['Coins', 10], ['XP', 25], ['Ride Parts', 4], ['Energy', 40]]);
+  // Parts wait for coin levels (rung 3) and XP for Daily 3 (rung 4); nothing is lost, it all still flies home.
+  assert.deepEqual(rowChips(rewards), [['Shark Coins', 10], ['saved for growing coins', 40]]);
   assert.equal(rewards.find(node => node.props?.accessibilityLabel?.startsWith('Reward receipt')), undefined);
-  const button = rewards.find(node => node.type === './YellowButton');
-  assert.equal(button.props.text, 'See It On Your Shelf');
-  button.props.onPress(); assert.equal(opened, false);
+  assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'Back to Map', 'no guide target: never a nameless NEXT COIN');
+  rewards.find(node => node.props?.accessibilityLabel === 'See my shelf').props.onPress(); assert.equal(opened, false);
 });
 test('a repeat coin uses a short once-only deposit and cancels pending feedback on skip', async () => {
   let done=0,bursts=0;
@@ -253,37 +257,46 @@ test('a repeat coin uses a short once-only deposit and cancels pending feedback 
 test('a challenge with no confirmed ride coin skips the coin catch and exposes its receipt', () => {
   const view=rewardView(true); view.change({coinTimesCollected:null});
   assert.equal(view.find(node=>node.type==='./CoinCatchReveal'),undefined);
-  assert.ok(view.find(node=>node.props?.label==='Coins'&&node.props.amount===10));
-  assert.equal(view.find(node=>node.type==='./YellowButton').props.text,'Back to the Park');
+  assert.ok(view.find(node=>node.props?.chip?.label==='Shark Coins'&&node.props.chip.amount===10));
+  assert.equal(view.find(node=>node.type==='./YellowButton').props.text,'Back to Map');
 });
 
 
-test('receipt navigation waits for native dismissal and fires only once', () => {
-  const navigated=[]; let closes=0;
+test('no money on the win card: a non-member sees no VIP line, and NEXT COIN hands off once', () => {
+  const navigated=[]; let hidden=0; const presses=[];
   const view=runtime('src/components/PostWinRewardsModal.tsx', {
     '../context/AuthProvider': {AuthContext:{value:{player:null}}},
     '../hooks/useReducedGameMotion':{default:()=>true},
     '../RootNavigation':{navigate:(...args)=>navigated.push(args)},
     './GrownUpGate':{openMembership:()=>{navigated.push(['Membership']);return Promise.resolve(true);}},
-    // A win on a day the rare VIP line is due (services/money/vipNudge.ts).
+    // Even on a day the old rare VIP line was due, the win card stays offer-free (core loop 4.3 rule 4).
     '../services/money/vipNudge':{useVipNudge:()=>true,markVipNudgeShown(){}},
     './rewards/postWinModel': postWinModel, '../screens/LeaderboardsScreen/standingsCache': { takeWinNote: () => null, holdWinNotes: () => undefined, hasWinNote: () => false },
   }, {visible:true,rideName:'Space Mountain',coinTimesCollected:1,coinsEarned:10,xpEarned:25,
-    ridePartsEarned:1,energyEarned:10,onClose(){closes++;}});
+    ridePartsEarned:1,energyEarned:10,onClose(){},onHidden(){hidden++;},onNextCoin(button){presses.push(button.kind);}});
   view.find(n=>n.type==='./CoinCatchReveal').props.onDone();view.render();
-  view.find(n=>n.props?.accessibilityLabel?.startsWith('VIP members get')).props.onPress();
-  assert.equal(closes,1);assert.deepEqual(navigated,[]);assert.equal(view.timers.size,0);
-  view.tree.props.onModalHide();view.tree.props.onModalHide();assert.deepEqual(navigated,[['Membership']]);
+  assert.equal(view.find(n=>/VIP|Starter|Shark Pass/.test(String(n.props?.accessibilityLabel ?? ''))), undefined);
+  view.find(n=>n.type==='./YellowButton').props.onPress();
+  assert.deepEqual(presses,['map'],'no guide target yet: NEXT COIN goes back to the map');
+  view.tree.props.onModalHide();assert.equal(hidden,1);assert.deepEqual(navigated,[]);
 });
-test('repeat summary fills the parts meter, pops ready to power up and offers the one-hop upgrade', () => {
+test('after rung 3 a repeat win shows its Parts as one line, ready to level up; the next coin stays the big button', () => {
   let opened=null;
-  const view=rewardView(true);view.change({coinTimesCollected:9,ridePartsEarned:2,onViewCoin(open){opened=open;},playerEnergy:40,
-    coinProgress:{current_level:1,max_level:5,is_unlocked:true,available_parts:4,parts_to_next_level:2,energy_to_next_level:10}});
+  const view=runtime('src/components/PostWinRewardsModal.tsx', {
+    '../context/AuthProvider': { AuthContext: { value: { player: null } } },
+    '../hooks/useReducedGameMotion': { default: () => true },
+    '../services/reveal/revealLadder': { useRung: rung => ({ open: rung === 'coin_levels', isNew: false, markSeen() {} }) },
+    './rewards/postWinModel': postWinModel, '../screens/LeaderboardsScreen/standingsCache': { takeWinNote: () => null, holdWinNotes: () => undefined, hasWinNote: () => false },
+  }, { visible: true, rideName: 'Forbidden Journey', coinTimesCollected: 9, coinsEarned: 10, xpEarned: 25, ridePartsEarned: 2, energyEarned: 40,
+    onViewCoin(open){opened=open;}, onClose() {}, playerEnergy:40, wonTaskId: 7,
+    nextTarget: { taskId: 8, name: 'Tiki Room', meters: 154, reason: 'nearest_open' },
+    coinProgress:{current_level:1,max_level:5,is_unlocked:true,available_parts:4,parts_to_next_level:2,energy_to_next_level:10} });
   view.find(n=>n.type==='./CoinCatchReveal').props.onDone();view.render();
   assert.equal(view.motions.length,0);
-  assert.ok(view.find(n=>n.props?.children==='READY TO LEVEL UP'));
-  const button=view.find(n=>n.type==='./YellowButton'); assert.equal(button.props.text,'Upgrade Your Coin');
-  button.props.onPress(); assert.equal(opened,true);
+  assert.ok(view.find(n=>n.props?.children==='Ready to level up'));
+  assert.deepEqual(rowChips(view), [['Shark Coins', 10], ['Ride Parts', 2], ['Energy', 40]]);
+  assert.equal(view.find(n=>n.type==='./YellowButton').props.text,'NEXT COIN');
+  view.find(n=>n.props?.accessibilityLabel==='See my shelf').props.onPress(); assert.equal(opened,false);
 });
 test('post-win model: milestone headline, next unlock and parts meter use only confirmed numbers', () => {
   const progress={park_id:1,park_name:'Test Park',before:25,collected:26,available:26};
@@ -307,7 +320,7 @@ test('ride challenge status cards sit on a brand navy scrim, and a free miss say
   const src = require('node:fs').readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
   assert.match(src, /backdropColor="#05346e"/);
   assert.ok(!/backdropOpacity=\{flowState === 'preview' \? 0\.5 : 0\.95\}/.test(src), 'status states must not use a near-black backdrop');
-  assert.match(src, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost, retryOffered: canOfferRetry \}\)/);
+  assert.match(src, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,\n\s+retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.retrySameGame \}\)/);
   assert.deepEqual({ ...lostTryCard.lostTryCopy({ usedRescuePass: false, rescueRetryAvailable: false, firstCoinTicketReturned: false, lostTicketCost: 0 }) },
     { title: 'Good Try!', message: 'No Ticket spent.', ticket: 0 });
   // The dev-only status preview can never reach a release build or a live modal.

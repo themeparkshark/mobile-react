@@ -62,7 +62,7 @@ test('the try card shows what the try cost as a ticket picture', () => {
 
 test('every lost or expired card with a retry turns the guard on', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../src/components/RedeemRedeemableModal.tsx'), 'utf8');
-  assert.match(src, /guardRetry=\{firstCoinTicketReturned \|\| rescueRetryAvailable\}/);
+  assert.match(src, /guardRetry=\{firstCoinTicketReturned \|\| rescueRetryAvailable \|\| canOfferRetry\}/);
   assert.match(src, /guardRetry=\{rescueRetryAvailable\}/);
   const guard = require('node:fs').readFileSync(path.join(__dirname, '../../src/components/rewards/ChallengeStatusCard.tsx'), 'utf8');
   const ms = Number(guard.match(/RETRY_TAP_GUARD_MS = (\d+)/)[1]);
@@ -76,6 +76,8 @@ test('the safe action is a full white results button, not a small text link', ()
   const style = Object.assign({}, ...[].concat(safe.props.style).filter(Boolean));
   assert.ok(style.minHeight >= 44, 'a 44 pt tap target or bigger');
   const src = fs.readFileSync(path.join(__dirname, '../../src/components/rewards/lostTryCard.ts'), 'utf8');
-  assert.match(src, /'Your Ticket came back\. Try again!'/, 'one short line, not two');
-  assert.doesNotMatch(src, /So Close|got away/, 'the card never claims a near miss it cannot see');
+  assert.match(src, /'Your Ticket came back\. Same game, try again!'/, 'one short line, not two');
+  assert.doesNotMatch(src, /got away/);
+  // SO CLOSE! only when the game says the try reached 75% of its goal (rideTry.ts near).
+  assert.match(src, /const title = input\.near \? NEAR_TRY_TITLE :/);
 });

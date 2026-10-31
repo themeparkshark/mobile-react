@@ -935,7 +935,7 @@ test('Finn tips at the park: the welcome stops short of the right buttons, the c
   // The retry note waits while Finn's park tip is on screen (one card at a time).
   assert.match(explore, /mapLoadFailed && !\(parkTip && activeTip === parkTip\) && \(/);
   const { TIP_COPY } = loadTs('src/services/help/helpTopics.ts');
-  assert.equal(TIP_COPY.coin_in_range.title, 'Tap PLAY RIDE!', 'matches the button word for word');
+  assert.equal(TIP_COPY.coin_in_range.title, 'Tap PLAY!', 'matches the button word for word (core loop 4.5)');
   const tip = read('src/components/help/CoachTip.tsx');
   assert.match(tip, /\{art \? <View style=\{styles\.art\}>\{art\}<\/View> : <Text style=\{styles\.body\}>\{body\}<\/Text>\}/);
   assert.match(tip, /accessibilityLabel=\{`\$\{title\}\. \$\{body\}`\}/, 'VoiceOver still reads the line');
@@ -1394,7 +1394,7 @@ test('wave 5 round 3: a ride in range when the map opens has PLAY RIDE on the fi
   const ride = { type: 'task', model: { id: 11, name: 'Space Ride', ticket_cost: 1 } };
   const app = load({ redeemable: ride, covered: true });
   // The pill mounts under the cover (so its art loads there) and the cover waits for that art.
-  assert.ok(app.find(n => n.props?.text === 'Play Ride!'), 'PLAY RIDE is mounted under the cover');
+  assert.ok(app.find(n => n.props?.text === 'PLAY!'), 'PLAY! is mounted under the cover');
   assert.equal(waits.at(-1), true, 'the cover holds its lift for the pill art');
   const redeem = read('src/components/RedeemModal.tsx');
   // Under the cover it stands at rest (no slide), and the in-range cue waits for the reveal.

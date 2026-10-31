@@ -201,7 +201,7 @@ test('every wait opens with a showpiece (Whack or Sharky); Current Quest v1 is n
 test('the shell never ends on a dark screen: fallback timer, shared card, no-star runs still count', () => {
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.match(shell, /RESULTS_FALLBACK_MS = 600/);
-  assert.match(shell, /showSharedCard = phase === 'results' && \(!renderResults \|\| !effectiveResult \|\| \(gameResults == null && \(resultsSafe \|\| resultsSafeRef\.current \|\| wrap != null\)\)\)/);
+  assert.match(shell, /showSharedCard = !rideLoss && phase === 'results' && \(!renderResults \|\| !effectiveResult \|\| \(gameResults == null && \(resultsSafe \|\| resultsSafeRef\.current \|\| wrap != null\)\)\)/);
   // The safety net snaps only the fade; the settle spring keeps its own scale (no pop at 600 ms).
   assert.match(shell, /resultsSafe \|\| reducedMotion \? styles\.resultsShown : resultsFadeStyle/);
   assert.match(shell, /resultsShown: \{ opacity: 1 \}/);
@@ -346,7 +346,7 @@ test('a personal best always feels like a win, even with 0 stars', () => {
   assert.match(shell, /onNewBestLanded=\{stars === 0 \? burstBest : undefined\}/, 'one small confetti burst when the badge lands');
   const card = read('src/gamekit/results/ResultsCard.tsx');
   assert.match(card, /bestAwareTitle\(message, stars, best\.isNewBest\)/);
-  assert.match(card, /saved \? compareBest\(0, personalBest\) : compareBest\(score, personalBest\)/, 'no NEW BEST on a saved run');
+  assert.match(card, /saved \|\| stars <= 0 \? compareBest\(0, personalBest\) : compareBest\(score, personalBest\)/, 'no NEW BEST on a saved run or a run with no star (core loop 5.3)');
 });
 
 test('the line ended the run: title, stamp and note come from the same saved flag; no bar after the ride', () => {
@@ -414,7 +414,8 @@ test('Sharky results use the shared ribbon, buttons and chips; podium only for a
   assert.match(sharky, /<ResultPrimaryButton label=\{primaryLabel\}/);
   assert.match(sharky, /<ResultSecondaryButton label=\{claimLabel\}/);
   assert.match(sharky, /<ResultChip key=\{c\.label\}/);
-  assert.match(sharky, /const newBest = data\.newBest && !saved;\n\s+const cheer = data\.stars > 0 \|\| newBest;/);
+  // Core loop 5.3: no NEW BEST on a run with no star.
+  assert.match(sharky, /const newBest = data\.newBest && !saved && data\.stars > 0;\n\s+const cheer = data\.stars > 0 \|\| newBest;/);
   assert.match(sharky, /\{cheer \? <Image source=\{SHARKY_ART\.podium\}/, 'no podium on a 0-star run');
   assert.match(sharky, /<SharkyUnlock card=\{data\.newCard\}/);
   assert.doesNotMatch(sharky, /missionText\(m\.id\)\}<\/Text>/, 'mission words are spoken only');
@@ -590,8 +591,8 @@ test('the ride try card never claims SO CLOSE!: GOOD TRY! (ONE MORE TRY! with a 
     [{ ...base, lostTicketCost: 1 }, '1 Ticket used.', -1, 'Good Try!'],
     [{ ...base, lostTicketCost: 1, retryOffered: true }, '1 Ticket used.', -1, 'Good Try!'],
     [{ ...base, lostTicketCost: 2 }, '2 Tickets used.', -2, 'Good Try!'],
-    [{ ...base, firstCoinTicketReturned: true }, 'Your Ticket came back. Try again!', 1, 'One More Try!'],
-    [{ ...base, usedRescuePass: true, rescueRetryAvailable: true }, 'No Ticket spent. One more try today!', 0, 'One More Try!'],
+    [{ ...base, firstCoinTicketReturned: true }, 'Your Ticket came back. Same game, try again!', 1, 'One More Try!'],
+    [{ ...base, usedRescuePass: true, rescueRetryAvailable: true }, 'No Ticket used. One more free go!', 0, 'One More Try!'],
     [base, 'No Ticket spent.', 0, 'Good Try!'],
   ];
   for (const [input, message, ticket, title] of cases) {
@@ -600,11 +601,14 @@ test('the ride try card never claims SO CLOSE!: GOOD TRY! (ONE MORE TRY! with a 
     assert.doesNotMatch(copy.title, /so close/i);
     assert.equal(copy.message, message);
     assert.equal(copy.ticket, ticket);
-    assert.ok(copy.message.split(' ').length <= 7, 'one short line');
+    assert.ok(copy.message.split(' ').length <= 8, 'one short line');
   }
+  // Core loop 5.3: SO CLOSE! only when the try reached 75% of its goal (rideTry.ts says so).
+  assert.equal(lost.lostTryCopy({ ...base, firstCoinTicketReturned: true, near: true }).title, 'So Close!');
+  assert.equal(lost.lostTryCopy({ ...base, lostTicketCost: 1, near: false }).title, 'Good Try!');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.doesNotMatch(modal, /title="So Close!"/);
-  assert.match(modal, /<ChallengeStatusCard title=\{lostCopy\.title\} art="soClose" message=\{lostCopy\.message\} ticket=\{lostCopy\.ticket\}/);
+  assert.match(modal, /<ChallengeStatusCard title=\{lostCopy\.title\} art="soClose"\n\s+message=\{vipNote \?\? \(vipOutToday \? VIP_TRY_TOMORROW : lostCopy\.message\)\} ticket=\{lostCopy\.ticket\}/);
   const capture = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
   assert.match(capture, /\{\.\.\.lostTryCopy\(/, 'the capture shows the exact words the modal shows');
   const card = read('src/components/rewards/ChallengeStatusCard.tsx');
@@ -647,13 +651,14 @@ test('duel numbers agree: the no-risk Final never takes points, no idioms, and t
   // A Final can never take points, so the card has no lost-Final row. No dice, no BET.
   assert.doesNotMatch(duel, /BigFinalLost|finalLost/);
   assert.doesNotMatch(duel, /name="dice"|\bBET\b|FINAL BET/, 'no betting picture or words on a results card');
-  assert.match(duel, /<CoinGoal right=\{rideGoal\.right\} need=\{rideGoal\.need\}/, 'two coin dots, not a sentence');
+  // A ride card leads with the coin dots and the right answers line (core loop scope 6), never points.
+  assert.match(duel, /<CoinGoal need=\{rideView\.need\} on=\{rideView\.dotsOn\}/, 'the coin dots lead a ride card');
   assert.match(duel, /<RankHat stripes=/);
   assert.doesNotMatch(duel, /numberOfLines=\{2\}>\{card\.fact\}/, 'a fact is never cut mid-word');
   assert.doesNotMatch(duel, /fill=\{on \? C\.gold : '#ffffff'\}/, 'the shared star art, not white outlined stars');
   const game = read('src/games/trivia-duel/TriviaDuel.tsx');
   assert.doesNotMatch(game, /finalPointsLost|finalLost/);
-  assert.match(game, /ride: \{ won, right: t\.me\.correct, need: 2 \}/);
+  assert.match(game, /ride: \{ won, right: t\.me\.correct, need: 2, total: p\.rounds\.length \}/);
 });
 
 test('no end feels like punishment, and the capture log hears every cue', () => {
@@ -696,19 +701,23 @@ test('a Sharky win is cheap to reveal: one confetti stage, a resting game stage,
 });
 
 test('round 3: one card per ride miss, one surface, one exit word, honest ticks and titles', () => {
-  // A miss with no retry: the game's own card is the only card (no second GOOD TRY!).
+  // Core loop 5.3, one loss card: a ride miss skips the game's own card (the shell hands the try to
+  // rideTry.ts) and the ride's loss card is the one card, every time.
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /lostFromGameRef\.current = true;\s*await resolveAttempt\('loss'\)/);
-  assert.match(modal, /const lostHasRetry = lostTryHasRetry\(\{ firstCoinTicketReturned, rescueRetryAvailable, retryOffered: canOfferRetry \}\);/);
-  assert.match(modal, /if \(lostHasRetry\) \{ lostFromGameRef\.current = false; return; \}[\s\S]{0,140}if \(lostClosingRef\.current\) return;\s*lostClosingRef\.current = true;\s*void handleLostClose\(\);/);
-  assert.match(modal, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost, retryOffered: canOfferRetry \}\)/);
+  assert.match(modal, /const handleGameLose = useCallback\(async \(\) => \{\n\s+await resolveAttempt\('loss'\);/);
+  assert.match(modal, /\{flowState === 'lost' && <ChallengeStatusCard/);
+  assert.doesNotMatch(modal, /skipLostCard|lostFromGameRef/);
+  assert.match(modal, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,\n\s+retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.retrySameGame \}\)/);
+  const shellSrc = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shellSrc, /const rideLoss = !!rideChallenge && phase === 'results' && !!effectiveResult && effectiveResult\.stars <= 0 && !wrap;/);
+  assert.match(shellSrc, /noteRideTry\(effectiveResult\);\n\s+handleClaimRef\.current\?\.\(\);/);
   // The duel's coin goal never promises a retry it cannot know about.
   const duel = read('src/games/trivia-duel/ui/DuelResults.tsx');
-  assert.match(duel, />NEXT TIME!</);
+  assert.match(duel, /\$\{right\} of \$\{total\} right\. \$\{need\} wins the coin\./);
   assert.doesNotMatch(duel, />TRY AGAIN!</);
   // A bare 0 ticket pill reads as "you have no Tickets": only a change gets a picture.
   const card = read('src/components/rewards/ChallengeStatusCard.tsx');
-  assert.match(card, /\{ticket \? <View style=\{styles\.ticket\}/);
+  assert.match(card, /\{ticket \? <View style=\{styles\.ticketRow\}>\n\s+<View style=\{styles\.ticket\}/);
   assert.doesNotMatch(card, /: '0'\}/);
   // Banana Basket leaves a 0-star title to the shared feelings rule.
   const banana = read('src/games/banana-basket/BananaBasketGame.tsx');
@@ -806,7 +815,7 @@ test('a NEW BEST never feels like a loss: no SO CLOSE!, GOOD TRY! or NICE TRY! n
   assert.equal(feelings.bestAwareTitle('INCREDIBLE!', 3, true), 'INCREDIBLE!');
   assert.equal(feelings.endFeel({ stars: 0, isNewBest: true, saved: false }), 'best', 'a 0-star best sounds like a win');
   // Every own-card game runs its title through the same rule.
-  assert.match(read('src/games/memory/MemoryResults.tsx'), /bestAwareTitle\(data\.banner, data\.stars, data\.newBest\)/);
+  assert.match(read('src/games/memory/MemoryResults.tsx'), /const newBest = bestOnWin\(data\.stars, data\.newBest\);\n\s+const title = bestAwareTitle\(data\.banner, data\.stars, newBest\)/);
   assert.match(read('src/games/boss/bash/BashResults.tsx'), /bossTitle\(\{ won, ko, noHits, stars, newBest: best && !noHits \}\)/);
   assert.match(read('src/games/sharky/hud/SharkyResults.tsx'), /bestAwareTitle\(wrapTitle \?\? data\.headline, data\.stars, newBest\)/);
   assert.match(read('src/gamekit/results/ResultsCard.tsx'), /bestAwareTitle\(message, stars, best\.isNewBest\)/);
@@ -1005,7 +1014,7 @@ test('a ride miss with no retry is one card: the modal and the capture share los
   assert.equal(lost.lostTryHasRetry({ firstCoinTicketReturned: true, rescueRetryAvailable: false, retryOffered: false }), true);
   assert.equal(lost.lostTryHasRetry({ firstCoinTicketReturned: false, rescueRetryAvailable: true }), true);
   assert.equal(lost.lostTryHasRetry({ firstCoinTicketReturned: false, rescueRetryAvailable: false, retryOffered: true }), true);
-  assert.match(read('src/components/RedeemRedeemableModal.tsx'), /const lostHasRetry = lostTryHasRetry\(\{ firstCoinTicketReturned, rescueRetryAvailable, retryOffered: canOfferRetry \}\);/);
+  // The ride modal shows its one loss card every time now (core loop 5.3); the capture keeps the shared rule.
   const cap = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
   assert.match(cap, /const retry = lostTryHasRetry\(/);
   assert.match(cap, /captureAutoplay="win"/);

@@ -1084,7 +1084,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
 
   if (!visible) return null;
   const title = plan ? (plan.ftue ? 'First Parade' : STAGES[plan.stage].title) : 'Parade Beat';
-  const subtitle = plan ? (plan.format === 'ride' && !plan.ftue ? 'Ride Challenge' : `Parade Beat · ${['', 'Warm-up', 'Parade', 'Showstopper'][plan.difficulty]}`) : 'Parade Beat';
+  const subtitle = plan ? (plan.format === 'ride' && !plan.ftue ? 'Win the coin' : `Parade Beat · ${['', 'Warm-up', 'Parade', 'Showstopper'][plan.difficulty]}`) : 'Parade Beat';
   const rideTarget = plan && plan.format === 'ride' && !plan.ftue ? Math.ceil(plan.chart.t.length * 0.75) : 0;
 
   return (

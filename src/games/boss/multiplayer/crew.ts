@@ -176,7 +176,7 @@ export function ghostAt(g: GhostTimeline, bout: number, t: number): number {
 
 export const CREW_STRIKE = 8;
 const HOUSE = [
-  { name: 'Captain Fin', skill: 'median' },
+  { name: 'Captain Gill', skill: 'median' },
   { name: 'Bubbles', skill: 'kid' },
   { name: 'Chomps', skill: 'median' },
   { name: 'Coral', skill: 'kid' },

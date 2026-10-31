@@ -8,7 +8,7 @@
  *   /party/time, /party/play, /party/rooms/{id}[/ready|start|rematch|emote|leave|heartbeat],
  *   /party/rounds/{id}/submit
  *
- * Room: me plus three house crew bots (Captain Fin ace, Bubbles regular,
+ * Room: me plus three house crew bots (Captain Gill ace, Bubbles regular,
  * Chomps rookie). A 5-round Party Series of Whack Rush, placement points
  * 4/2/1/0 (the FINAL ROUND doubles), best 4 of 5, crown by points.
  *
@@ -27,7 +27,7 @@ const RESULTS_MS = 9000;
 const GRACE_MS = 15000;
 const POINTS = [4, 2, 1, 0];
 const BOTS: { name: string; avatar: string; profile: 'ace' | 'regular' | 'rookie' }[] = [
-  { name: 'Captain Fin', avatar: 'bot:captain', profile: 'ace' },
+  { name: 'Captain Gill', avatar: 'bot:captain', profile: 'ace' },
   { name: 'Bubbles', avatar: 'bot:bubbles', profile: 'regular' },
   { name: 'Chomps', avatar: 'bot:chomps', profile: 'rookie' },
 ];

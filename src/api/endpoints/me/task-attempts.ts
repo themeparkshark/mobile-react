@@ -109,12 +109,23 @@ export function ticketSourceCopy(sources: TicketSources | null | undefined): str
   return 'Earn Tickets from home finds before your next park visit.';
 }
 
+/**
+ * Core-loop extras (the server honors them once be-core-loop deploys; older servers ignore them):
+ * retry_of names the lost attempt so TRY AGAIN deals the same game, picture_only asks for
+ * Whack-a-Shark or Memory Match only (the "Picture games only" setting).
+ */
+export interface StartAttemptExtras {
+  readonly retry_of?: number | null;
+  readonly picture_only?: boolean;
+}
+
 export async function startTaskAttempt(
   requestId: string,
   type: 'task' | 'secret_task',
   taskId: number,
   latitude: number,
   longitude: number,
+  extras?: StartAttemptExtras,
 ): Promise<TaskAttemptResponse> {
   const { data } = await client.post<{ data: TaskAttemptResponse }>('/me/task-attempts', {
     client_request_id: requestId,
@@ -122,6 +133,8 @@ export async function startTaskAttempt(
     task_id: taskId,
     latitude,
     longitude,
+    ...(extras?.retry_of ? { retry_of: extras.retry_of } : {}),
+    ...(extras?.picture_only ? { picture_only: 1 } : {}),
   });
   return data.data;
 }

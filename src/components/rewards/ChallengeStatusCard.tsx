@@ -7,14 +7,18 @@
  * results buttons: gold first, white under it.
  */
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
+import Animated, {
+  Easing, FadeIn, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withTiming,
+} from 'react-native-reanimated';
 import { ResultsRibbon } from '../../gamekit/results/ResultsRibbon';
 import GameIcon, { type GameIconName } from '../../ui/GameIcon';
 import { ResultPrimaryButton, ResultSecondaryButton } from '../../gamekit/results/ResultButtons';
 import SharkLoader from '../../ui/SharkLoader';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+// Knockout draws 1 like a capital I: "1 Ticket used." read "I Ticket used." on the loss card.
+import { withNumberFont } from '../../ui/numberText';
 
 export type ChallengeStatusArt = 'soClose' | 'loading' | 'none';
 
@@ -26,6 +30,8 @@ export interface ChallengeStatusAction {
   readonly icons?: readonly GameIconName[];
   /** What VoiceOver says when the pictures carry more than the label. */
   readonly a11yLabel?: string;
+  /** A small quiet tag inside the button (a member's "VIP try"). */
+  readonly note?: string;
 }
 
 /**
@@ -42,13 +48,13 @@ export function capsAction<T extends ChallengeStatusAction | undefined>(action: 
   return (action ? { ...action, label: action.label.toUpperCase() } : action) as T;
 }
 
-export default function ChallengeStatusCard({ title, message, art = 'none', primary: primaryIn, secondary: secondaryIn, quiet: quietIn, guardRetry = false, ticket }: {
+export default function ChallengeStatusCard({ title, message, art = 'none', primary: primaryIn, secondary: secondaryIn, quiet: quietIn, guardRetry = false, ticket, line, ticketFlyTo }: {
   readonly title: string;
   readonly message: string;
   readonly art?: ChallengeStatusArt;
   readonly primary?: ChallengeStatusAction;
   readonly secondary?: ChallengeStatusAction;
-  /** The safe way out ("Return to map", DONE): a white button under the big one. */
+  /** The safe way out (Back to Map): a white button under the big one. */
   readonly quiet?: ChallengeStatusAction;
   /**
    * The primary spends a Ticket or a retry: it ignores taps for
@@ -58,6 +64,13 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
   readonly guardRetry?: boolean;
   /** Tickets this try changed, as a picture: -1 spent, +1 came back. 0 or none: no picture. */
   readonly ticket?: number;
+  /** How the try went, in one honest line ("8 of 13 bonks.", "1 of 3 right. 2 wins the coin."). */
+  readonly line?: string | null;
+  /**
+   * Where the header's Ticket pill sits (window coordinates): a Ticket that came back
+   * flies up off the card toward it, so a child sees it go home (blueprint 5.3).
+   */
+  readonly ticketFlyTo?: { x: number; y: number } | null;
 }) {
   const primary = capsAction(primaryIn);
   const secondary = capsAction(secondaryIn);
@@ -84,11 +97,16 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
         {/* Only a change gets a picture: a bare 0 would read as "you have no Tickets". */}
         {/* The ticket picture says it (+1 came back, -1 spent), so its line is
             spoken only; without a picture the short line shows. */}
-        {ticket ? <View style={styles.ticket} accessible accessibilityLabel={message}>
-          <GameIcon name="ticket" size={30} />
-          <Text style={[styles.ticketText, ticket > 0 && styles.ticketBack]}>{ticket > 0 ? `+${ticket}` : `${ticket}`}</Text>
-        </View> : <Text style={styles.message}>{message}</Text>}
-        {primary && <ResultPrimaryButton label={primary.label} icons={primary.icons} a11yLabel={primary.a11yLabel} onPress={primary.onPress}
+        {!!line && <Text style={styles.line}>{line}</Text>}
+        {ticket ? <View style={styles.ticketRow}>
+          <View style={styles.ticket} accessible accessibilityLabel={message}>
+            <GameIcon name="ticket" size={30} />
+            <Text style={[styles.ticketText, ticket > 0 && styles.ticketBack]}>{ticket > 0 ? `+${ticket}` : `${ticket}`}</Text>
+          </View>
+          {ticket > 0 && <TicketFlyBack to={ticketFlyTo ?? null} reduced={reduced} />}
+          <Text style={styles.messageSmall}>{withNumberFont(message)}</Text>
+        </View> : <Text style={styles.message}>{withNumberFont(message)}</Text>}
+        {primary && <ResultPrimaryButton label={primary.label} icons={primary.icons} a11yLabel={primary.a11yLabel} note={primary.note} onPress={primary.onPress}
           disabled={primary.disabled || !armed} style={[styles.primary, primary.disabled && styles.dim]} />}
         {secondary && <ResultSecondaryButton label={secondary.label} onPress={secondary.disabled ? undefined : secondary.onPress}
           style={[styles.secondary, secondary.disabled && styles.dim]} />}
@@ -98,7 +116,43 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
   );
 }
 
+/**
+ * The Ticket that came back flies up off the card toward the header's Ticket pill (UI thread,
+ * one small picture, plays once). With Reduce Motion, or with no known pill, it stays still.
+ */
+function TicketFlyBack({ to, reduced }: { readonly to: { x: number; y: number } | null; readonly reduced: boolean }) {
+  const t = useSharedValue(0);
+  const ref = useRef<View>(null);
+  const [delta, setDelta] = useState<{ dx: number; dy: number } | null>(null);
+  useEffect(() => {
+    if (reduced || !to) return undefined;
+    const timer = setTimeout(() => {
+      ref.current?.measureInWindow((x, y, w, h) => {
+        if (![x, y, w, h].every(Number.isFinite) || w <= 0) return;
+        setDelta({ dx: to.x - (x + w / 2), dy: to.y - (y + h / 2) });
+        t.value = withDelay(120, withTiming(1, { duration: 650, easing: Easing.in(Easing.quad) }));
+      });
+    }, 450);
+    return () => { clearTimeout(timer); cancelAnimation(t); };
+  }, [to, reduced, t]);
+  const dx = delta?.dx ?? 0;
+  const dy = delta?.dy ?? 0;
+  const style = useAnimatedStyle(() => ({
+    opacity: t.value <= 0 || t.value >= 1 ? 0 : 1,
+    transform: [{ translateX: dx * t.value }, { translateY: dy * t.value - Math.sin(t.value * Math.PI) * 40 }, { scale: 1 - t.value * 0.4 }],
+  }));
+  return (
+    <View ref={ref} collapsable={false} pointerEvents="none" style={styles.flyFrom}>
+      <Animated.View style={style}><GameIcon name="ticket" size={30} /></Animated.View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  line: { fontFamily: 'Shark', fontSize: 19, lineHeight: 23, color: '#ffffff', textAlign: 'center', marginBottom: 8 },
+  ticketRow: { alignItems: 'center', marginBottom: 6 },
+  messageSmall: { fontFamily: 'Knockout', fontSize: 17, lineHeight: 21, color: '#ffffff', textAlign: 'center', marginTop: -4 },
+  flyFrom: { position: 'absolute', top: 2, alignSelf: 'center', width: 30, height: 30 },
   wrap: { width: '88%', alignItems: 'center' },
   ribbon: { alignSelf: 'stretch', marginHorizontal: -14, zIndex: 2 },
   card: { alignSelf: 'stretch', marginTop: -40, backgroundColor: '#0879ca', borderWidth: 3, borderColor: '#ffffff',

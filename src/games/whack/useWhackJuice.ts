@@ -41,7 +41,7 @@ import { G_CRIT, G_GOOD, G_QUICK, K_ANGLER, K_BRUISER, K_FINN, K_GOLDEN, K_HELME
 import type { BoardLayout } from './render/layout';
 import { allowWord, createWordGate, droppedPoints, type WordGate } from './wordGate';
 import type { WhackRuntime } from './useWhackRuntime';
-import { calloutAdmit, comboTierRank, comboTierStyle, createCalloutGate } from '../../gamekit/core/gameMoments';
+import { comboTierRank, comboTierStyle, createCalloutGate } from '../../gamekit/core/gameMoments';
 import { KICK } from '../../ui/motion';
 import { budgetedParticles, type PowerBudget } from '../../power/powerPolicy';
 import { TINT } from '../../gamekit/core/particles';
@@ -216,7 +216,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
     double: { sfx: cues.double, pattern: 'whackCrit', priority: WHACK_PRIO.golden, localStop: 80, burst: [{ emitter: 'bubbles', count: 8 }, { emitter: 'stars', count: 6 }],
       flyUp: { size: 'lg', color: '#7fd6ff' } },
     whiff: { sfx: cues.whiff, volume: 0.32, burst: [{ emitter: 'puff', count: 4 }] },
-    // A mash is a gag, never a scolding: one soft bump, one white 'Too fast!' that replaces any callout up (key).
+    // A mash is a gag, never a scolding: one soft bump and a puff (no words over the board).
     butter: { sfx: cues.whiff, volume: 0.5, pattern: [{ t: 0, kind: 'transient', i: 0.35, s: 0.1 }], priority: WHACK_PRIO.decoy,
       burst: [{ emitter: 'puff', count: 5 }], flyUp: { size: 'md', color: '#ffffff', key: 'callout', rise: 36 } },
     escape: { sfx: cues.duck, volume: 0.5, spatial: true },
@@ -469,9 +469,8 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         feel('whiff', { ...holeXY(a) });
         return true;
       case E_BUTTER:
-        // One callout at a time (audit defect 2): the same word waits 600 ms, a newer word replaces the old.
-        if (calloutAdmit(callouts.current, 'Too fast!', now)) feel('butter', { ...holeXY(a), text: 'Too fast!' });
-        else feel('whiff', { ...holeXY(a) });
+        // A fast tapper gets a soft puff, never words (core loop 5.3: no "Too fast!" for a kid who taps fast).
+        feel('whiff', { ...holeXY(a) });
         return true;
       case E_DECOY:
         busy.current.delete(a);

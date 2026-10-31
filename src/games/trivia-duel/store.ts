@@ -38,7 +38,7 @@ export interface DuelMemory {
   ghosts: string[];
   vsSeen: number;
   buzzRulesSeen: boolean;
-  /** C11: per-category [attempts, correct] (drives Fin's Final category pick). */
+  /** C11: per-category [attempts, correct] (drives Gill's Final category pick). */
   catStats: Record<string, [number, number]>;
   /** C9: Relaxed mode (pause sheet toggle). */
   relaxed: boolean;

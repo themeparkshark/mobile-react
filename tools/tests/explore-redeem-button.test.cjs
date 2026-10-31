@@ -16,25 +16,26 @@ const load = props => runtime('src/components/RedeemModal.tsx', {
 }, { park: { id: 1 }, onPress: () => undefined, ...props });
 const ride = { type: 'task', model: { id: 11, name: 'Space Ride', ticket_cost: 1 } };
 
-test('PLAY RIDE names the ride and its Ticket price', () => {
+test('PLAY! names the ride and its Ticket price', () => {
   const app = load({ redeemable: ride });
   assert.ok(app.find(n => n.props?.accessibilityLabel === 'Space Ride. Costs 1 Ticket.'));
+  assert.ok(app.find(n => n.props?.text === 'PLAY!'), 'one word for the one action (core loop 4.5)');
 });
 
 test('PLAY RIDE hides while a different ride is selected on the map', () => {
   const other = load({ redeemable: ride, selectedTaskId: 12 });
-  assert.equal(other.find(n => n.props?.text === 'Play Ride!'), undefined);
+  assert.equal(other.find(n => n.props?.text === 'PLAY!'), undefined);
   const same = load({ redeemable: ride, selectedTaskId: 11 });
-  assert.ok(same.find(n => n.props?.text === 'Play Ride!'));
+  assert.ok(same.find(n => n.props?.text === 'PLAY!'));
 });
 
 const later = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 const resting = { ...ride, model: { ...ride.model, active_from: later } };
 
 test('PLAY RIDE never shows on a resting ride or one the live feed shows closed', () => {
-  assert.equal(load({ redeemable: resting }).find(n => n.props?.text === 'Play Ride!'), undefined);
-  assert.equal(load({ redeemable: ride, liveStatus: 'CLOSED' }).find(n => n.props?.text === 'Play Ride!'), undefined);
-  assert.ok(load({ redeemable: ride, liveStatus: 'OPERATING' }).find(n => n.props?.text === 'Play Ride!'));
+  assert.equal(load({ redeemable: resting }).find(n => n.props?.text === 'PLAY!'), undefined);
+  assert.equal(load({ redeemable: ride, liveStatus: 'CLOSED' }).find(n => n.props?.text === 'PLAY!'), undefined);
+  assert.ok(load({ redeemable: ride, liveStatus: 'OPERATING' }).find(n => n.props?.text === 'PLAY!'));
 });
 
 test('at a resting or closed ride the PLAY spot says why, in a soft pill that is not a button', () => {

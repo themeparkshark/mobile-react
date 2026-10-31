@@ -181,8 +181,9 @@ test('the once-ever Starter Pack: seen per player on the server, shown only with
   assert.match(card, /const visible = !!\(show && serverSeen === false && starter && price\);/, 'needs the server says unseen and a real price');
   assert.match(card, /trackMoney\('starter_seen', 'postwin\.starter', starter\.product_id\)/, 'seen is recorded on the server');
   assert.match(card, /serverSeen === true \? false/, 'seen on another phone: the sheet gets its VIP line back');
+  // Core loop 5.10: the Starter Pack lives in Supplies only, never inside the first win.
   const sheet = read('src/components/PostWinRewardsModal.tsx');
-  assert.match(sheet, /\(starterShown === false \|\| coinsEarned <= 0\)/, 'no VIP line while the Starter Pack is still deciding (null)');
+  assert.doesNotMatch(sheet, /StarterOfferCard|starterShown/);
 });
 
 test('free trial: the end date comes from StoreKit, and one calm reminder goes to the grown-up a day before', () => {
@@ -318,10 +319,9 @@ test('the VIP line on a win is rare: never the first 3 wins, then once every 3 d
   const hook = read('src/services/money/vipNudge.ts');
   assert.match(hook, /useEffect\(\(\) => \{ if \(key != null\) countVipNudgeWin\(key\); \}, \[key\]\)/);
   assert.doesNotMatch(hook, /function decide/);
+  // Core loop 5.10 and 5.13: the VIP upsell line left the win card (members keep their double coins as one chip).
   const sheet = read('src/components/PostWinRewardsModal.tsx');
-  assert.match(sheet, /const vipChipOn = !isVip && vipNudge && /, 'the win card asks the rarity rule');
-  assert.match(sheet, /if \(vipChipOn\) markVipNudgeShown\(vipWinKey\)/, 'the gap starts only when the chip shows');
-  assert.match(sheet, /FadeIn\.duration\(220\)/, 'the chip fades in instead of jumping the sheet');
+  assert.doesNotMatch(sheet, /vipChipOn|useVipNudge|vipWinLine/);
   assert.doesNotMatch(read('src/services/money/offers.ts'), /VIP would/, 'no "you would have had more"');
 });
 

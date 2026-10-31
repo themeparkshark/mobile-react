@@ -41,7 +41,7 @@ export interface Rival {
 }
 
 export const CREW = [
-  { id: 'bot:captain', name: 'Captain Fin', color: '#1f8fff', sigma: 26, lapse: 0.01 },
+  { id: 'bot:captain', name: 'Captain Gill', color: '#1f8fff', sigma: 26, lapse: 0.01 },
   { id: 'bot:bubbles', name: 'Bubbles', color: '#ff8a6b', sigma: 40, lapse: 0.03 },
   { id: 'bot:chomps', name: 'Chomps', color: '#35c46a', sigma: 55, lapse: 0.05 },
   { id: 'bot:coral', name: 'Coral', color: '#ffb02e', sigma: 33, lapse: 0.02 },

@@ -125,12 +125,13 @@ test('every way into the VIP paywall goes through openMembership, by any API or 
   const entries = {
     'src/screens/StoreScreen/Item.tsx': /void openMembership\(\)/,
     'src/components/profile/StatusBadges.tsx': /void openMembership\(\)/,
-    'src/components/PostWinRewardsModal.tsx': /closeTo\(\(\) => \{ void openMembership\(\); \}\)/,
     'src/context/DailyGiftProvider.tsx': /preview === 'vip'\) void openMembership\(\{ devPreview: true \}\)/,
     'src/screens/SocialScreen.tsx': /BecomeAMember\)\) void openMembership\(\)/,
     'src/screens/ProfileScreen.tsx': /is_secret_store && !player\?\.is_subscribed\) \{[\s\S]{0,260}void openMembership\(\)/,
   };
   for (const [file, re] of Object.entries(entries)) assert.match(read(file), re, file);
+  // Core loop 4.3 rule 4: money is never inside a reward, so the win card has no way into the VIP paywall.
+  assert.doesNotMatch(read('src/components/PostWinRewardsModal.tsx'), /openMembership|StarterOfferCard|SharkPassBanner|vipWinLine/);
   assert.match(read('src/dev/ws7Preview.ts'), /if \(!__DEV__\) return '';/);
 });
 

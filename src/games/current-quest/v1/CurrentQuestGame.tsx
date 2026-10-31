@@ -167,7 +167,7 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
       <View style={[styles.play, resting ? styles.playResting : null]} pointerEvents={resting ? 'none' : 'auto'}>
       <View style={styles.hero}>
         <View style={styles.heroCopy}>
-          <Text style={styles.eyebrow}>THE SHARK ARCADE · QUEUE QUEST</Text>
+          <Text style={styles.eyebrow}>THE SHARK ARCADE · CURRENT QUEST</Text>
           <Text style={styles.heroTitle}>Follow the Current</Text>
           <Text style={styles.heroBody}>Three little voyages. One treasure.</Text>
         </View>

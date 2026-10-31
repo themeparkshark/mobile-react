@@ -13,7 +13,7 @@ const moduleRef = { exports: {} };
 vm.runInNewContext(code, { module: moduleRef, exports: moduleRef.exports }, { filename: file });
 const { rivalAnswer, showdownStars, showdownReplaySeed } = moduleRef.exports;
 
-test('Captain Fin is replayable and sometimes misses questions at each difficulty', () => {
+test('Captain Gill is replayable and sometimes misses questions at each difficulty', () => {
   for (const difficulty of ['easy', 'medium', 'hard']) {
     const question = { correctIndex: 2, choices: ['a', 'b', 'c', 'd'], difficulty };
     const answers = Array.from({ length: 100 }, (_, seed) => rivalAnswer(question, seed, 1));

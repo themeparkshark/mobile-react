@@ -44,7 +44,7 @@ import { faceFor } from './faces';
 import { setFirstWinCoinSpot } from './firstWinHandoff';
 import { AlbumBody, ChallengeBody, NewChip, ShareBack, type DailySummary, type RunRewards } from './MemoryExtras';
 import { MM } from './theme';
-import { bestAwareTitle } from '../../gamekit/results/feelings';
+import { bestAwareTitle, bestOnWin } from '../../gamekit/results/feelings';
 import { RESULTS_RIBBON_ART, ResultsRibbon } from '../../gamekit/results/ResultsRibbon';
 import countText from '../../helpers/countText';
 import { STAR_SLOT } from '../../gamekit/results/starSlot';
@@ -170,7 +170,9 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
 
   // The title slams in after the last star stamps, like every other results card.
   const titleAt = reducedMotion ? 0 : data.stars > 0 ? (sched.crowns[sched.crowns.length - 1] ?? 0) + 160 : sched.headline;
-  const title = bestAwareTitle(data.banner, data.stars, data.newBest) ?? data.banner;
+  // No NEW BEST on a run with no star (core loop 5.3).
+  const newBest = bestOnWin(data.stars, data.newBest);
+  const title = bestAwareTitle(data.banner, data.stars, newBest) ?? data.banner;
 
   const canAlbum = !!data.rewards;
   // The first-session warm-up card is one tap to the map: no STATS panel for a stray
@@ -205,7 +207,7 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
           </View>
           <Headline data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.headline} />
           {data.crownHint ? <Reveal show={step >= 3}><Text style={styles.crownHint}>{data.crownHint}</Text></Reveal> : null}
-          {data.newBest ? (
+          {newBest ? (
             <Reveal show={step >= 3}>
               <View style={styles.newBest}>
                 <GameIcon name="crown" size={22} />

@@ -51,7 +51,7 @@ export interface CrewSeat {
 }
 
 export const HOUSE_CREW: CrewSeat[] = [
-  { id: 'bot:captain', name: 'Captain Fin', profile: 'ace', shark: 'blue' },
+  { id: 'bot:captain', name: 'Captain Gill', profile: 'ace', shark: 'blue' },
   { id: 'bot:bubbles', name: 'Bubbles', profile: 'regular', shark: 'pink' },
   { id: 'bot:chomps', name: 'Chomps', profile: 'rookie', shark: 'red' },
   { id: 'bot:coral', name: 'Coral', profile: 'regular', shark: 'orange' },

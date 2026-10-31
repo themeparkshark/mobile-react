@@ -1,5 +1,5 @@
 /**
- * Shark Showdown now plays Trivia Duel vs Captain Fin (the two games merged,
+ * Shark Showdown now plays Trivia Duel vs Captain Gill (the two games merged,
  * design studio/design/trivia.md). The component and its props stay so the
  * LinePlay call sites keep working; logic.ts keeps the replay seed helper.
  */

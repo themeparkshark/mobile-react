@@ -60,6 +60,7 @@ import { memoryLossBanner, memoryLossCopy } from './lossCopy';
 import { TryCard } from './TryCard';
 import { comboCall } from './comboCallout';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
+import { noteRideTry } from '../../gamekit/results/rideTry';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { MemoryCard, makeCardValues, sharedReady, type CardValues, type MemoryCardHandle, type SharedSheets, type ShimmerState } from './MemoryCard';
 import { deckById, deckIdForRideName, type Deck } from './decks';
@@ -382,6 +383,9 @@ export default function MemoryGame({
   const insets = useSafeAreaInsets();
   const movement = useContext(LinePlayMovementContext);
   const rideChallenge = useContext(RideChallengeContext);
+  const rideChallengeRef = useRef(rideChallenge);
+  rideChallengeRef.current = rideChallenge;
+  const giveUpRef = useRef<(() => void) | null>(null);
   const deck: Deck = useMemo(() => deckById(daily?.deckId ?? (mode === 'warmup' ? 'park' : undefined) ?? deckId ?? deckIdForRideName(taskName)) ?? deckById('park')!, [daily?.deckId, deckId, taskName, mode]);
   const baseSeed = useMemo(
     () => (party ? party.seed >>> 0 : seed != null ? seed >>> 0 : (Math.random() * 0xffffffff) >>> 0),
@@ -516,6 +520,8 @@ export default function MemoryGame({
   const moving = !!movement?.moving;
   const walking = walk.walking || moving;
   const walkingRef = useRef(walking);
+  /** A ride Ticket's best try (pairs found), so the loss card tells the best of its three shells, not only the last. */
+  const rideBestPairsRef = useRef(0);
   walkingRef.current = walking;
   const calm = walking || reducedMotion;
 
@@ -1113,6 +1119,9 @@ export default function MemoryGame({
         deck: deck.id,
         turns: e.turns,
         pairs: e.pairs,
+        pairsTotal: e.pairsTotal,
+        // The best of this Ticket's tries (ride only): the loss card's honest line.
+        ...(r.mode === 'ride' ? { bestPairs: Math.max(rideBestPairsRef.current, e.pairs) } : {}),
         maxCombo: e.maxChain,
         showtimes: e.showtimes,
         stars,
@@ -1151,6 +1160,9 @@ export default function MemoryGame({
     if (!r || r.ended) return;
     r.ended = true;
     r.playing = false;
+    if (r.mode === 'ride') {
+      rideBestPairsRef.current = r.tryIndex === 0 ? r.eng.pairs : Math.max(rideBestPairsRef.current, r.eng.pairs);
+    }
     const e = r.eng;
     const stars = r.mode === 'ride' ? rideStars(e) : r.mode === 'daily' ? dailyStars(e) : r.mode === 'warmup' ? (won ? 3 : 0) : timeAttackStars(r.cleared);
     const finalScore = e.score;
@@ -1383,7 +1395,12 @@ export default function MemoryGame({
     later(k > 0 ? 1500 : 600, () => {
       // Ride challenge: every try ends on the same end card (TRY AGAIN while
       // the Ticket has tries, then Done), right over the board.
-      if (r.mode === 'ride') {
+      if (r.mode === 'ride' && left <= 0 && rideChallengeRef.current) {
+        // The Ticket's last try: one loss card (core loop 5.3), the ride's own, which carries
+        // "6 of 8 pairs." and TRY AGAIN when the Ticket came back. No Memory try card before it.
+        noteRideTry({ stars: 0, meta: { game: 'memory', pairs: r.eng.pairs, pairsTotal: r.eng.pairsTotal } });
+        giveUpRef.current?.();
+      } else if (r.mode === 'ride') {
         // Short phones: the card covers more board, so veil it a bit more under the ribbon.
         if ((geoRef.current?.H ?? 999) < 600) wash.value = withTiming(0.95, { duration: 220 });
         setTryScreen({ pairs: r.eng.pairs, total: r.eng.pairsTotal, left, out, flipped: r.eng.turns > 0 });
@@ -2408,6 +2425,8 @@ export default function MemoryGame({
     // offers): go straight there in one tap instead of a second results card.
     const r = runRef.current;
     if (rideChallenge && r?.mode === 'ride') {
+      // The ride's one loss card says how far this try got ("3 of 8 pairs.").
+      noteRideTry({ stars: 0, meta: { game: 'memory', pairs: r.eng.pairs, pairsTotal: r.eng.pairsTotal } });
       r.ended = true;
       r.playing = false;
       clearTimers();
@@ -2419,6 +2438,8 @@ export default function MemoryGame({
     }
     finishRun(false);
   }, [finishRun, rideChallenge, onClose, clearTimers, collectRewards]);
+
+  giveUpRef.current = giveUp;
 
   const onRematch = useCallback(() => {
     setRunIndex((k) => k + 1);
@@ -2494,7 +2515,7 @@ export default function MemoryGame({
   const g = geo;
   const title = mode === 'ride' ? 'Memory Match' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : mode === 'warmup' ? 'Finn’s Warm-up' : 'Memory Match';
   const subtitle = mode === 'ride'
-    ? `${r && r.tryIndex > 0 ? `Try ${r.tryIndex + 1} of ${RIDE_TRIES} · ` : ''}${taskName || deck.label}${r?.signal ? ' · Low signal' : ''}`
+    ? `${taskName || deck.label}${r?.signal ? ' · Low signal' : ''}`
     : mode === 'timeAttack' ? `${deck.label} · Board ${hud.board}`
     : mode === 'daily' ? `${deck.label} · ${daily?.ranked && runIndex === 0 ? 'Ranked' : 'Practice'}`
     : mode === 'race' ? `${deck.label} · Practice race`
@@ -2696,7 +2717,10 @@ export default function MemoryGame({
             {tryScreen ? (
               <TryCard copy={memoryLossCopy(tryScreen.pairs, tryScreen.total, tryScreen.out, tryScreen.flipped)} pairs={tryScreen.pairs}
                 total={tryScreen.total} left={tryScreen.left} bottom={Math.max(8, g.H - (g.felt.y + g.felt.h) + 6)} compact={g.H < 600}
-                enter={tryCardIn} reducedMotion={reducedMotion} onTryAgain={tryAgain} onDone={giveUp} />
+                enter={tryCardIn} reducedMotion={reducedMotion} onTryAgain={tryAgain}
+                // A ride challenge whose Ticket still has tries: TRY AGAIN only. DONE here led straight into the
+                // ride's own loss card with a second TRY AGAIN (two cards for one miss); the X still leaves.
+                onDone={rideChallenge && tryScreen.left > 0 ? undefined : giveUp} />
             ) : null}
           </>
         ) : null}

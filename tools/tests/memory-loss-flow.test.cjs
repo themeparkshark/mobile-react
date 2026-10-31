@@ -44,7 +44,7 @@ test('cards stay visible: only known faces flip, under a light veil', () => {
 
 test('every ride try ends on the end card; Done in a ride challenge goes straight to the ride loss card', () => {
   assert.match(src, /if \(r\.mode === 'ride'\) \{[\s\S]{0,220}setTryScreen\(/);
-  assert.match(src, /if \(rideChallenge && r\?\.mode === 'ride'\) \{[\s\S]{0,400}void collectRewards\(r, false, false, 0\)[\s\S]{0,60}onClose\(\);/);
+  assert.match(src, /if \(rideChallenge && r\?\.mode === 'ride'\) \{[\s\S]{0,700}void collectRewards\(r, false, false, 0\)[\s\S]{0,60}onClose\(\);/);
   assert.match(src, /if \(!prev \|\| RIDE_TRIES - 1 - prev\.tryIndex <= 0\) return;/);
 });
 
@@ -56,7 +56,9 @@ test('a storage failure can never leave a dead board with no result', () => {
 test('header says Memory Match and the ride name, matching the how-to', () => {
   assert.doesNotMatch(src, /'Ride Sprint'/);
   assert.match(src, /const title = mode === 'ride' \? 'Memory Match'/);
-  assert.match(src, /`Try \$\{r\.tryIndex \+ 1\} of \$\{RIDE_TRIES\} · ` : ''\}\$\{taskName \|\| deck\.label\}/, 'try count first, never cut off');
+  // Core loop 5.3: the tries are three shells on the try card, never words in the header.
+  assert.match(src, /\? `\$\{taskName \|\| deck\.label\}\$\{r\?\.signal \? ' · Low signal' : ''\}`/);
+  assert.doesNotMatch(src, /`Try \$\{r\.tryIndex \+ 1\} of/);
 });
 
 test('a low-signal turn limit says OUT OF FLIPS, not TIME\'S UP', () => {

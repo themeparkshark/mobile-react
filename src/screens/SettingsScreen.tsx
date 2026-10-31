@@ -34,6 +34,7 @@ import {
 } from './Settings/accountDeletion';
 import { copyrightLine } from '../api/platform';
 import { setBatterySaver, useBatterySaver } from '../power';
+import { usePlayPrefs } from '../services/playPrefs';
 import { UpperText } from '../ui/upper';
 
 /** Settings-only art (GPT Image 2.5 from Alex's references, see tps-prime-time-audit/art-ws8). */
@@ -73,6 +74,7 @@ function SettingsRow({
   accessory,
   isLast = false,
   destructive = false,
+  checked,
 }: {
   art: RowArt;
   title: string;
@@ -81,6 +83,8 @@ function SettingsRow({
   accessory?: React.ReactNode;
   isLast?: boolean;
   destructive?: boolean;
+  /** The row is an on/off switch (its BrandSwitch only shows the state): VoiceOver hears a switch and On or Off. */
+  checked?: boolean;
 }) {
   const content = (pressed = false) => (
     <View style={[styles.row, !isLast && styles.rowBorder, pressed && styles.rowPressed]}>
@@ -96,7 +100,8 @@ function SettingsRow({
   if (onPress) {
     return (
       <Pressable
-        accessibilityRole="button"
+        accessibilityRole={checked === undefined ? 'button' : 'switch'}
+        accessibilityState={checked === undefined ? undefined : { checked }}
         accessibilityLabel={detail ? `${title}, ${detail}` : title}
         onPress={() => { void Haptics.selectionAsync().catch(() => undefined); onPress(); }}
       >
@@ -108,7 +113,22 @@ function SettingsRow({
   return content();
 }
 
-function BrandSwitch({ value, onValueChange, label }: { readonly value?: boolean; readonly onValueChange: () => void; readonly label: string }) {
+function BrandSwitch({ value, onValueChange, label, rowToggles = false }: {
+  readonly value?: boolean; readonly onValueChange: () => void; readonly label: string;
+  /**
+   * The whole row already toggles (it has its own onPress). The switch then only shows the state:
+   * a tap on the switch reached both the switch and the row, so it flipped twice and seemed dead.
+   */
+  readonly rowToggles?: boolean;
+}) {
+  if (rowToggles) {
+    return (
+      <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants">
+        <Switch trackColor={{ false: BRAND.sky, true: BRAND.blueBright }} ios_backgroundColor={BRAND.sky}
+          thumbColor={BRAND.white} value={value} />
+      </View>
+    );
+  }
   return (
     <Switch
       accessibilityLabel={label}
@@ -149,6 +169,9 @@ export default function SettingsScreen() {
   const { urls, labels } = useCrumbs();
   const { reset, devMode, setDevMode } = useContext(LocationStatusContext);
   const { replayAllTutorials, openHowToPlay } = useHelp();
+  // Picture games only (blueprint 5.1): shown while the server deals picture games; saved per player.
+  // Favorites Alerts hide while push does not work yet (5.13): a switch that cannot send must not show.
+  const play = usePlayPrefs(player?.id ?? null);
 
   useEffect(() => {
     setEnabledMusic(player?.enabled_music);
@@ -340,6 +363,7 @@ export default function SettingsScreen() {
           <SettingsRow
             art="sound"
             title="Sound Effects"
+            isLast={!play.flags.pushWorks}
             accessory={
               <BrandSwitch
                 label="Sound effects"
@@ -358,8 +382,9 @@ export default function SettingsScreen() {
               />
             }
           />
-          {/* Shark Shop wishlist: one note when a hearted item is back (promotional, so opt-in and off any time). */}
-          <SettingsRow
+          {/* Shark Shop wishlist: one note when a hearted item is back (promotional, so opt-in and off any time).
+              Only while push works: the heart still saves favorites either way. */}
+          {play.flags.pushWorks && <SettingsRow
             art="heart"
             title="Favorites Alerts"
             isLast
@@ -381,10 +406,22 @@ export default function SettingsScreen() {
                 }}
               />
             }
-          />
+          />}
         </Section>
 
         <Section title="Park Play" index={2}>
+          {/* A child who cannot read yet: every ride coin deals a picture game (Whack-a-Shark or Memory Match). */}
+          {play.available && <SettingsRow
+            art="shark"
+            title="Picture games only"
+            detail={play.prefs.pictureOnly ? 'On: ride coins deal picture games, never trivia' : 'Off: ride coins can deal trivia'}
+            onPress={() => play.setPictureOnly(!play.prefs.pictureOnly)}
+            checked={play.prefs.pictureOnly}
+            accessory={
+              <BrandSwitch label="Picture games only" value={play.prefs.pictureOnly} rowToggles
+                onValueChange={() => play.setPictureOnly(!play.prefs.pictureOnly)} />
+            }
+          />}
           <SettingsRow
             art="pin"
             title="Ride Finder"
@@ -401,8 +438,9 @@ export default function SettingsScreen() {
             detail={batterySaver ? 'On: lasts longer. Screen goes dark face down, flip it up to play' : 'Off: tap to make your battery last longer'}
             isLast
             onPress={() => setBatterySaver(!batterySaver)}
+            checked={batterySaver}
             accessory={
-              <BrandSwitch label="Battery saver" value={batterySaver} onValueChange={() => setBatterySaver(!batterySaver)} />
+              <BrandSwitch label="Battery saver" value={batterySaver} rowToggles onValueChange={() => setBatterySaver(!batterySaver)} />
             }
           />
         </Section>

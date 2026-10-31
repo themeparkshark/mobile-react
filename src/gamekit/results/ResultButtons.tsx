@@ -12,8 +12,10 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
 import GameIcon, { type GameIconName } from '../../ui/GameIcon';
 
-export function ResultPrimaryButton({ label, icon, icons, a11yLabel, onPress, disabled, style }: {
+export function ResultPrimaryButton({ label, icon, icons, a11yLabel, onPress, disabled, style, note }: {
   label: string;
+  /** A small quiet tag inside the button (a member's "VIP try" inside TRY AGAIN). */
+  note?: string;
   icon?: GameIconName;
   /** Pictures that lead the label (for example play then retry: watch, then go again). */
   icons?: readonly GameIconName[];
@@ -29,6 +31,7 @@ export function ResultPrimaryButton({ label, icon, icons, a11yLabel, onPress, di
       onPress={onPress} disabled={disabled}>
       {lead.map((name, i) => <GameIcon key={`${name}-${i}`} name={name} size={26} />)}
       <Text style={[styles.primaryText, lead.length > 0 && styles.gap]} numberOfLines={1} adjustsFontSizeToFit>{label.toUpperCase()}</Text>
+      {note ? <View style={styles.note}><Text style={styles.noteText} numberOfLines={1}>{note}</Text></View> : null}
     </TouchableOpacity>
   );
 }
@@ -59,5 +62,7 @@ const styles = StyleSheet.create({
   secondary: { flex: 1, backgroundColor: '#ffffff', paddingVertical: 12, borderWidth: 3, borderColor: '#05346e', borderBottomWidth: 5 },
   secondaryText: { color: '#05346e', fontSize: 18, fontFamily: 'Shark' },
   gap: { marginLeft: 8 },
+  note: { marginLeft: 8, backgroundColor: '#fff8e4', borderRadius: 9, borderWidth: 2, borderColor: '#05346e', paddingHorizontal: 6, paddingVertical: 1 },
+  noteText: { color: '#05346e', fontSize: 12, fontFamily: 'Knockout' },
   row: { flexDirection: 'row', gap: 10, width: '100%' },
 });

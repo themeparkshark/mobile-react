@@ -15,7 +15,7 @@ import { BOT_PROFILES, planRun } from './bots';
 export const RALLY_MAX_STEPS = 2700;
 export const RALLY_SEATS = 4;
 export const HOUSE_CREW = [
-  { name: 'Captain Fin', profile: 'ace' },
+  { name: 'Captain Gill', profile: 'ace' },
   { name: 'Bubbles', profile: 'regular' },
   { name: 'Coral', profile: 'rookie' },
   { name: 'Chomps', profile: 'regular' },

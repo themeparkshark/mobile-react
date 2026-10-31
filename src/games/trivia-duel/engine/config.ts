@@ -85,7 +85,7 @@ export const BUZZ = {
 export const FIN_BUZZ_SHARE: Record<FinRank, number> = { deckhand: 0.5, firstmate: 0.6, captain: 0.7, admiral: 0.8 };
 
 /**
- * 5.5 Fin's Final, rev 8 (kid-trust, Oct 26): a no-risk BONUS question. Right = the question's
+ * 5.5 Gill's Final, rev 8 (kid-trust, Oct 26): a no-risk BONUS question. Right = the question's
  * points times `multiplier`; wrong or no answer = nothing lost. Points only ever go up in the
  * Final: no stake and no chips (Dustin, Oct 26: a kids game never risks points).
  */
@@ -119,10 +119,10 @@ export const FIN_PRIORS: Record<Difficulty, { p: number; t: readonly [number, nu
 
 /** 7.2 ranks: accuracy offset and the lock-time quantile he plays at. */
 export const FIN_RANKS: Record<FinRank, { acc: number; accCap: number; quantile: 0 | 1 | 2 | 3; promoteAfter: number; stripes: number; label: string }> = {
-  deckhand: { acc: -0.1, accCap: 0.96, quantile: 3, promoteAfter: 2, stripes: 0, label: 'Deckhand Fin' },
-  firstmate: { acc: 0, accCap: 0.96, quantile: 2, promoteAfter: 3, stripes: 1, label: 'First Mate Fin' },
-  captain: { acc: 0.08, accCap: 0.96, quantile: 1, promoteAfter: 4, stripes: 2, label: 'Captain Fin' },
-  admiral: { acc: 0.15, accCap: 0.96, quantile: 0, promoteAfter: Infinity, stripes: 3, label: 'Admiral Fin' },
+  deckhand: { acc: -0.1, accCap: 0.96, quantile: 3, promoteAfter: 2, stripes: 0, label: 'Deckhand Gill' },
+  firstmate: { acc: 0, accCap: 0.96, quantile: 2, promoteAfter: 3, stripes: 1, label: 'First Mate Gill' },
+  captain: { acc: 0.08, accCap: 0.96, quantile: 1, promoteAfter: 4, stripes: 2, label: 'Captain Gill' },
+  admiral: { acc: 0.15, accCap: 0.96, quantile: 0, promoteAfter: Infinity, stripes: 3, label: 'Admiral Gill' },
 };
 export const FIN_RANK_ORDER: readonly FinRank[] = ['deckhand', 'firstmate', 'captain', 'admiral'];
 export const FIN_LOCK_SIGMA = 0.25;
@@ -160,7 +160,7 @@ export const TEMPLATES: readonly (readonly QueueRoundKey[])[] = [
 /**
  * 2.3 feature unlocks by lifetime queue match (1-based): match 1 is QQQQ with
  * no lifelines; match 2 is QQBQ and brings Chomp, the bell, steals and the
- * Shield; match 3 adds Fin's Final.
+ * Shield; match 3 adds Gill's Final.
  */
 export const UNLOCK_TEMPLATES: Record<1 | 2, readonly QueueRoundKey[]> = {
   1: ['q1', 'q2', 'q4', 'q4'],
@@ -170,7 +170,8 @@ export const UNLOCKS = { chompFromMatch: 2, bellFromMatch: 2, shieldFromMatch: 2
 export const SUDDEN_DEATH: RoundSpec = { type: 'quick', formats: ['choice4'], difficulty: 'medium', windowMs: 10000, horizonMs: 5000 };
 
 /** 4.1 ride challenge: 3 questions at the gate, 8s window. */
-export const RIDE_ROUND: RoundSpec = { type: 'quick', formats: ['choice4', 'truetale'], difficulty: 'easy', windowMs: 8000, horizonMs: 8000 };
+/** Paid ride rounds give at least 10 s per question (core loop 5.3, the server's TRIVIA_QUESTION_MS); the speed bonus keeps its 8 s horizon, so the scoring vectors the PHP port shares are unchanged. */
+export const RIDE_ROUND: RoundSpec = { type: 'quick', formats: ['choice4', 'truetale'], difficulty: 'easy', windowMs: 10000, horizonMs: 8000 };
 export const RIDE_QUESTIONS = 3;
 export const RIDE_WIN_CORRECT = 2;
 export const RIDE_STARS = { two: 420, three: 600 } as const;

@@ -240,7 +240,7 @@ export default function TimingMiniGame({
   return (
     <MiniGameShell
       visible={visible}
-      title="Rhythm Tap!"
+      title="Parade Beat!"
       subtitle={taskName}
       timeLimit={timeLimitSeconds}
       score={hitsRef.current}

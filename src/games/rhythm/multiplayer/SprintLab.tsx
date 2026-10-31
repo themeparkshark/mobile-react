@@ -19,7 +19,7 @@ import { botTaps, buildBoard, resolve, resultHash, type SprintProfile, type Spri
 import countText from '../../../helpers/countText';
 
 const BOTS: { name: string; profile: SprintProfile }[] = [
-  { name: 'Captain Fin', profile: 'ace' },
+  { name: 'Captain Gill', profile: 'ace' },
   { name: 'Bubbles', profile: 'regular' },
   { name: 'Chomps', profile: 'rookie' },
 ];
@@ -133,7 +133,7 @@ export default function SprintLab({ seed = 1, autoplay = null, onClose }: { seed
           {verdict ? (
             <View style={styles.verdict}>
               <Text style={styles.verdictTxt}>{verdict}</Text>
-              <Text style={styles.verdictSub}>{`Captain Fin ${bots[0].final}  Bubbles ${bots[1].final}  Chomps ${bots[2].final}`}</Text>
+              <Text style={styles.verdictSub}>{`Captain Gill ${bots[0].final}  Bubbles ${bots[1].final}  Chomps ${bots[2].final}`}</Text>
             </View>
           ) : null}
         </View>

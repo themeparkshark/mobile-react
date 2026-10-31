@@ -92,3 +92,201 @@ export function partsProgress(coin: Pick<RideCoinLevelType, 'current_level' | 'm
     : `Level ${nextLevel} is ready.`;
   return { have, need, nextLevel, before: clamp(have - Math.max(0, partsEarned)), after: clamp(have), ready, maxed, hint };
 }
+
+/* ---------- The core-loop win card (blueprint 5.3 and 5.13) ---------- */
+
+/** The park trophies, in coins (shelf-words draws them on the park screen). */
+export const TROPHY_STEPS: readonly { readonly name: string; readonly at: number }[] = [
+  { name: 'Bronze', at: 12 }, { name: 'Silver', at: 50 }, { name: 'Gold', at: 100 },
+];
+
+/**
+ * The shelf line under a new coin: "1 of 35 coins. Bronze at 12". The next
+ * trophy this shelf can still reach; a shelf too small for the next trophy
+ * names the full shelf instead; a full shelf says so. Null without numbers.
+ */
+export function shelfLine(result: CollectionMilestones | null | undefined): string | null {
+  const progress = result?.progress;
+  if (!progress || !(progress.available > 0)) return null;
+  const have = Math.max(0, Math.min(progress.collected, progress.available));
+  const lead = `${have} of ${progress.available} coins.`;
+  if (have >= progress.available) return `${lead} Shelf complete!`;
+  const trophy = TROPHY_STEPS.find(step => have < step.at && step.at <= progress.available);
+  return trophy ? `${lead} ${trophy.name} at ${trophy.at}` : `${lead} Full shelf at ${progress.available}`;
+}
+
+export interface WinRowInput {
+  readonly coins: number;
+  readonly tickets: number;
+  readonly parts: number;
+  readonly energy: number;
+  readonly xp: number;
+  /** VIP double coins already granted for a member (one "+N VIP" chip, no button). */
+  readonly vipCoins?: number;
+  /** Rung 3 (coin levels): Parts and Energy show as themselves. */
+  readonly coinLevelsOpen: boolean;
+  /** Rung 4 (daily): XP shows on the card. */
+  readonly dailyOpen: boolean;
+}
+
+/**
+ * Where the win card's rewards fly (blueprint 4.2), by the names the map registers with
+ * CurrencyFlyProvider: the header pills register 'coins' and 'tickets' (Topbar Currency
+ * flyTarget), the Shelf button 'energy' and the Profile tab 'xp' (guide-map's flyAnchors), and
+ * the Rewards button 'rewards' (guide-map's RewardsButton).
+ */
+export type WinFlyTarget = 'coins' | 'tickets' | 'energy' | 'xp' | 'rewards';
+
+/**
+ * Each reward's targets in order: the first one the map has registered wins. A stamp lands on the
+ * Rewards button; on a map that has not drawn one yet it lands on the Profile tab, where the Stamp
+ * Book lives, so a won stamp always has a place to fly (never silently dropped).
+ */
+export const WIN_FLY_ROUTES: Readonly<Record<'coins' | 'tickets' | 'energy' | 'parts' | 'xp' | 'stamp', readonly WinFlyTarget[]>> = {
+  coins: ['coins'],
+  tickets: ['tickets'],
+  energy: ['energy'],
+  parts: ['energy'],
+  xp: ['xp'],
+  stamp: ['rewards', 'xp'],
+};
+
+/** The first registered target of a route, or null when the map has drawn none of them. */
+export function flyTargetFor(route: readonly WinFlyTarget[], registered: (name: string) => unknown): WinFlyTarget | null {
+  return route.find(name => !!registered(name)) ?? null;
+}
+
+export interface WinChip extends RewardChipModel {
+  /** Where it flies when the card closes (CurrencyFly targets, blueprint 4.2). */
+  readonly flyTo: WinFlyTarget;
+  /** A shorter, kinder chip (Energy before rung 3: "saved for growing coins"). */
+  readonly quiet?: boolean;
+}
+
+/**
+ * The one reward row. Shark Coins and Tickets always; the member's VIP coins
+ * as one chip; Parts and Energy only after rung 3 (before it Energy shows as
+ * the battery "saved for growing coins"); XP only after rung 4 (before it, it
+ * still flies to the Profile tab, with no chip). Never a "+0".
+ */
+export function winRewardChips(input: WinRowInput): WinChip[] {
+  const chips: WinChip[] = [];
+  const n = (value: number | undefined) => (Number.isFinite(value) && (value as number) > 0 ? Math.floor(value as number) : 0);
+  if (n(input.coins)) chips.push({ icon: 'coins', amount: n(input.coins), label: 'Shark Coins', flyTo: 'coins' });
+  if (n(input.vipCoins)) chips.push({ icon: 'member', amount: n(input.vipCoins), label: 'VIP', flyTo: 'coins' });
+  if (n(input.tickets)) chips.push({ icon: 'ticket', amount: n(input.tickets), label: n(input.tickets) === 1 ? 'Ticket' : 'Tickets', flyTo: 'tickets' });
+  if (input.coinLevelsOpen && n(input.parts)) {
+    chips.push({ icon: 'parts', amount: n(input.parts), label: n(input.parts) === 1 ? 'Ride Part' : 'Ride Parts', flyTo: 'energy' });
+  }
+  if (n(input.energy)) {
+    chips.push(input.coinLevelsOpen
+      ? { icon: 'energy', amount: n(input.energy), label: 'Energy', flyTo: 'energy' }
+      : { icon: 'energy', amount: n(input.energy), label: 'saved for growing coins', flyTo: 'energy', quiet: true });
+  }
+  if (input.dailyOpen && n(input.xp)) chips.push({ icon: 'xp', amount: n(input.xp), label: 'XP', flyTo: 'xp' });
+  return chips;
+}
+
+/**
+ * The one team sentence after a team pick: "Team Shark took Main Street".
+ * No points, no Captain (the Ride Control sheet explains both). Nothing when
+ * the player has no team yet: the team offer is its own step after the card.
+ */
+export function teamSentence(result: {
+  needs_team?: boolean; team?: string; ride_name?: string | null; flipped?: boolean; controller?: string | null;
+} | null | undefined, teamName: (team: string) => string): string | null {
+  if (!result || result.needs_team || !result.team) return null;
+  const team = teamName(result.team);
+  const ride = (result.ride_name ?? '').trim() || 'this ride';
+  if (result.flipped) return `${team} took ${ride}`;
+  if (result.controller === result.team) return `${team} holds ${ride}`;
+  return `Your win helps ${team} at ${ride}`;
+}
+
+/** "1 coin this week" (the Standings count, one per ride per park day). Null when the server did not count it. */
+export function weekLine(standings: unknown): string | null {
+  const s = standings as { counted?: unknown; week_rides?: unknown } | null | undefined;
+  if (!s || s.counted !== true) return null;
+  const week = Math.max(1, Math.floor(Number(s.week_rides) || 0));
+  return `${week} ${week === 1 ? 'coin' : 'coins'} this week`;
+}
+
+/**
+ * True when this win was today's Adventure coin and its line story is next (Adventure step 2):
+ * the ticket is for this ride and park, its phase moved on to play, and no line story is stamped yet.
+ */
+export function adventureLineStoryNext(ticket: {
+  readonly park_id: number; readonly phase: string; readonly play: unknown; readonly ride: { readonly task_id: number };
+} | null | undefined, wonTaskId: number | null | undefined, parkId: number | null | undefined): boolean {
+  if (!ticket || wonTaskId == null || parkId == null) return false;
+  return ticket.ride?.task_id === wonTaskId && ticket.park_id === parkId && ticket.phase === 'play' && !ticket.play;
+}
+
+/** Every card that leads back to the map says it the same way. */
+export const BACK_TO_MAP_LABEL = 'Back to Map';
+
+/**
+ * A limited coin's win line when the park shelf has no count for it (the server's shelf progress
+ * counts permanent coins only): it is the player's to keep, even after it leaves the map. No date
+ * math and no countdown. Null for a permanent coin.
+ */
+export function limitedWinLine(limited: { readonly active: boolean } | null | undefined): string | null {
+  return limited ? 'Limited coin. Yours to keep!' : null;
+}
+
+/**
+ * The win card's shelf line with its picture, typed so the picture never depends on the words:
+ * the park shelf count with the trophy ("1 of 35 coins. Bronze at 12"), or a new limited coin's
+ * own home with a sparkle. Null when neither applies.
+ */
+export interface WinShelfLine {
+  readonly text: string;
+  readonly icon: 'trophyBronze' | 'sparkle';
+}
+
+export function winShelfLine(
+  milestones: CollectionMilestones | null | undefined,
+  limited: { readonly active: boolean } | null | undefined,
+  isNewCoin: boolean,
+): WinShelfLine | null {
+  const shelf = shelfLine(milestones ?? null);
+  if (shelf) return { text: shelf, icon: 'trophyBronze' };
+  const own = isNewCoin ? limitedWinLine(limited) : null;
+  return own ? { text: own, icon: 'sparkle' } : null;
+}
+
+/** Which way out of the win card was tapped (the card dims its buttons at once). */
+export type WinCardExit = 'primary' | 'shelf' | 'close';
+
+/**
+ * The big button's words while the card is leaving: a line story still being looked up says
+ * One moment (the lookup can take a couple of seconds), every other way keeps its own words.
+ */
+export function winButtonLabel(button: NextCoinButton, leaving: WinCardExit | null): string {
+  return leaving === 'primary' && button.kind === 'line_story' ? 'One moment' : button.label;
+}
+
+/** The win card's big button: the next coin by name and distance, or today's Adventure line story. */
+export interface NextCoinButton {
+  readonly kind: 'next' | 'line_story' | 'map';
+  readonly label: string;
+  readonly detail: string | null;
+}
+
+export function nextCoinButton(target: {
+  taskId: number; name: string; meters: number | null; reason: string;
+} | null | undefined, wonTaskId: number | null | undefined, adventureLineStory = false): NextCoinButton {
+  // Today's Adventure coin was just won and its line story is still to play (the server's Adventure
+  // Ticket says so, even before the map's guide has caught up): the big button plays it.
+  if (adventureLineStory && wonTaskId != null) return { kind: 'line_story', label: 'Play its line story', detail: null };
+  if (target && wonTaskId != null && target.taskId === wonTaskId && target.reason === 'line_story') {
+    return { kind: 'line_story', label: 'Play its line story', detail: null };
+  }
+  if (target && target.taskId !== wonTaskId) {
+    const meters = typeof target.meters === 'number' && Number.isFinite(target.meters) ? Math.max(0, Math.round(target.meters)) : null;
+    const where = meters === null ? null : meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`;
+    return { kind: 'next', label: 'NEXT COIN', detail: [target.name, where].filter(Boolean).join(', ') || null };
+  }
+  // No coin to point at (night, a resting park, every coin owned): the button never promises one.
+  return { kind: 'map', label: BACK_TO_MAP_LABEL, detail: null };
+}

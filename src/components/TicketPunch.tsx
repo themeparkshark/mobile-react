@@ -28,11 +28,17 @@ export default function TicketPunch({
   gameColor,
   rideName,
   note,
+  kicker = "THIS RIDE'S GAME",
+  winLine,
   onDone,
 }: {
   readonly gameName: string;
   readonly gameColor: string;
   readonly rideName: string;
+  /** Over the game's name: "THIS RIDE'S GAME" (one game per ride and day, so TRY AGAIN is the same game). */
+  readonly kicker?: string;
+  /** Under it: "Win the Walt Statue coin!" (never "the The ..."). */
+  readonly winLine?: string;
   /** Small line under the card, e.g. "Rescue Pass used". */
   readonly note?: string;
   readonly onDone: () => void;
@@ -128,7 +134,7 @@ export default function TicketPunch({
 
   return (
     <Pressable style={StyleSheet.absoluteFill} onPress={finish} accessibilityRole="button"
-      accessibilityLabel={`Ticket punched. ${gameName} for ${rideName}. Tap to start.`}>
+      accessibilityLabel={`This ride's game: ${gameName}. ${winLine ?? rideName}. Tap to start.`}>
       <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <View style={[StyleSheet.absoluteFill, styles.scrim]} />
 
@@ -145,9 +151,9 @@ export default function TicketPunch({
 
       <Animated.View style={[styles.cardWrap, { top: height * 0.4 - 70 }, cardStyle]} pointerEvents="none">
         <View style={[styles.card, { borderColor: gameColor }]}>
-          <Text style={styles.cardKicker}>YOUR CHALLENGE</Text>
+          <Text style={styles.cardKicker}>{kicker}</Text>
           <Text style={styles.cardGame} adjustsFontSizeToFit numberOfLines={1}>{gameName}</Text>
-          <Text style={styles.cardRide} numberOfLines={2}>Win to catch the {rideName} coin!</Text>
+          <Text style={styles.cardRide} numberOfLines={2}>{winLine ?? `Win the ${rideName.replace(/^the\s+/i, '')} coin!`}</Text>
         </View>
         {!!note && <Text style={styles.note}>{note}</Text>}
       </Animated.View>

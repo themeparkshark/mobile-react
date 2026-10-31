@@ -161,8 +161,10 @@ test('coin to shelf: the win prefetch paints the shelf on the first frame, no Lo
   assert.match(screen, /const hidden = arriving && landedKey !== requestKey && closedKey !== requestKey && \(!!arrival\.target \|\| arrival\.pending\);/,
     'the earned coin is off its slot until it lands');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  const view = modal.slice(modal.indexOf('const handleViewCoin'), modal.indexOf('const handleViewStampBook'));
-  assert.ok(view.indexOf("RootNavigation.navigate('Park'") < view.indexOf('close();'), 'the shelf opens before the card starts to fade');
+  const view = modal.slice(modal.indexOf('const handleViewCoin'), modal.indexOf('const challengeLayer'));
+  // The first coin ever goes through the team step first (core loop 4.3 rule 3); otherwise the shelf opens at once.
+  assert.match(view, /\{ name: 'Park', params: \{ park: park\.id, player: ownerId, earnedCoin/);
+  assert.ok(view.indexOf('withTeamStep(shelf, () => RootNavigation.navigate(shelf.name') < view.indexOf('close();'), 'the shelf opens before the card starts to fade');
   assert.doesNotMatch(view, /afterRewardsHidden/);
   assert.match(view, /setTimeout\(onPress, SHELF_MAP_REFRESH_DELAY_MS\)/, 'the map refresh waits for the landing');
   assert.match(read('src/Root.tsx'), /earnedCoin \? \{ animation: 'none' \} : \{\}/);

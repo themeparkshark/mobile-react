@@ -57,8 +57,10 @@ test('one results language: the blue family card, no instruction sentence, tries
   assert.match(src, /backgroundColor: '#0768b9', borderRadius: 24, borderWidth: 4,\s*borderColor: '#ffffff'/);
   assert.doesNotMatch(src, /\{copy\.line\}<\/|<Text[^>]*>\{triesLeftLine/, 'no sentence on the card (it is spoken)');
   assert.match(src, /accessibilityLabel=\{`\$\{pairs\} of \$\{total\} pairs found\. \$\{copy\.line\}`\}/);
-  // Tries left are flat dots inside TRY AGAIN, never round retry marks that look like more buttons.
-  assert.match(src, /<Text style=\{styles\.btnText\}>TRY AGAIN<\/Text>[\s\S]{0,260}<View style=\{styles\.leftDots\}[^>]*>\s*\{Array\.from\(\{ length: left \}, \(_, i\) => <View key=\{i\} style=\{styles\.leftDot\} \/>\)\}\s*<\/View>\s*<\/Pressable>/);
+  // Core loop 5.3: the Ticket's tries are three shells (the used ones faded), never words or buttons.
+  assert.match(src, /\{Array\.from\(\{ length: RIDE_TRY_SHELLS \}, \(_, i\) => \(\n\s+<Animated\.Image key=\{i\} source=\{SHELL\}/);
+  assert.match(src, /style=\{\[styles\.shell, i >= left && styles\.shellUsed\]\}/);
+  assert.match(src, /export const RIDE_TRY_SHELLS = 3;/);
   assert.doesNotMatch(src, /tryMark|<GameIcon name="retry" size=\{16\}/);
   assert.match(src, /accessibilityLabel=\{`Try again\. \$\{triesLeftLine\(left\)\}`\}/);
   const game = fs.readFileSync(path.join(root, 'src/games/memory/MemoryGame.tsx'), 'utf8');

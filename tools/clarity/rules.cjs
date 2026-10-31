@@ -11,8 +11,9 @@
  */
 
 const GLOSSARY = [
-  { key: 'coins', use: 'coins', what: 'What you spend in the Shark Shop. Gold coin icon.',
-    never: [/\bShark Coins?\b/, /\bShark Bucks\b/i, /\bgold coins?\b/i, /\bgems?\b/i] },
+  // Core loop blueprint 4.5: the money is "Shark Coins" (gold pill), never "coins" on its own next to ride coins.
+  { key: 'coins', use: 'Shark Coins', what: 'What you spend in the Shark Shop. Gold coin icon.',
+    never: [/\bShark Bucks\b/i, /\bgold coins?\b/i, /\bgems?\b/i] },
   { key: 'ride_coins', use: 'ride coins', what: 'The coin you win at a ride and keep on your shelf. Not money.',
     never: [/\bpark coins?\b/i, /\btask coins?\b/i] },
   { key: 'tickets', use: 'tickets', what: 'One ticket plays one ride challenge. Ticket icon.',

@@ -15,6 +15,8 @@
  * takeover, and flips face-down in 160ms during a HOLD.
  */
 import React, { useEffect } from 'react';
+// Knockout draws 1 like a capital I ("QUESTION I OF 3"): the counter's digits use the number face.
+import { withNumberFont } from '../../../ui/numberText';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Canvas, Line, RoundedRect, vec } from '@shopify/react-native-skia';
 import Animated, {
@@ -151,7 +153,7 @@ export const QuestionCard = React.memo(function QuestionCard({
           onTierEdge={onTierEdge}
         />
         <View style={styles.inner}>
-          <Text style={styles.round} numberOfLines={1}>{roundLabel}</Text>
+          <Text style={styles.round} numberOfLines={1}>{withNumberFont(roundLabel)}</Text>
           {faceDown ? (
             <Text style={[styles.q, styles.paused]}>Back in a sec</Text>
           ) : (

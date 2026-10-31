@@ -249,7 +249,7 @@ export function CqResultsCard({ s, stars, reducedMotion, onDone, onAgain, againF
           </View>
         ) : null}
         <Animated.View entering={skip ? undefined : FadeIn.delay(d(endAt - 300)).duration(220)} style={styles.lines}>
-          {s.newBest ? <View style={styles.best}><Text style={styles.bestTxt}>NEW BEST</Text></View> : null}
+          {s.newBest && stars > 0 ? <View style={styles.best}><Text style={styles.bestTxt}>NEW BEST</Text></View> : null}
           {s.nextStar ? <Text style={styles.next}>{s.nextStar}</Text> : null}
           {s.line ? <Text style={styles.line}>{s.line}</Text> : null}
         </Animated.View>

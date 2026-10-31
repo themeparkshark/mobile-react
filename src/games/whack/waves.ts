@@ -199,7 +199,7 @@ export const NORMALIZED_LIFETIME = 9;
 
 export const FIRST_CALLOUT_V4: Record<number, string> = {
   1: 'HIT IT BEFORE THE RING CLOSES',
-  2: 'WATCH THE TEETH',
+  2: 'WATCH THE TEETH', // vocab-allow: sim data hashed into the party bundle; WhackAShark playerCallout shows NOT THE ANGLERFISH
   3: 'GOLDEN FINN! BONK IT FAST',
   4: 'FOLLOW THE PATH',
   5: 'FILL THE METER, THEN GO FEVER',
@@ -210,7 +210,7 @@ export const FIRST_CALLOUT_V4: Record<number, string> = {
 /** v5 first encounters (6.13). */
 export const FIRST_CALLOUT: Record<number, string> = {
   1: 'HIT IT BEFORE THE RING CLOSES',
-  2: 'WATCH THE TEETH',
+  2: 'WATCH THE TEETH', // vocab-allow: sim data hashed into the party bundle; WhackAShark playerCallout shows NOT THE ANGLERFISH
   3: 'GOLDEN FINN! BONK IT FAST',
   4: 'FOLLOW THE PATH',
   5: 'FILL THE METER, THEN GO FEVER',

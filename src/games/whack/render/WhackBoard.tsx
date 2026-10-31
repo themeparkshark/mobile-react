@@ -153,6 +153,8 @@ export interface HudProps {
   notches: number;
   /** Live party round: the room HUD shows the clock, so the board skips its timer ring. */
   compact?: boolean;
+  /** Home Defend plays the ride format, but its meter fills to DEFENDED!, never a coin it does not give. */
+  winWord?: string;
 }
 
 export interface WhackBoardProps {
@@ -505,12 +507,13 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
     return mW * Math.min(1, s.meter / 100);
   });
   const meterColor = useDerivedValue(() => (tick.value, sim.value.fever ? '#ffe07a' : GOLD));
+  const winWord = hud.winWord ?? 'COIN CAUGHT!';
   const meterLabel = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
     if (s.ride) {
       const left = Math.max(0, Math.ceil((100 - s.coin) / 8));
-      return s.win ? 'COIN CAUGHT!' : `${left} BONKS TO WIN`;
+      return s.win ? winWord : `${left} BONKS TO WIN`;
     }
     return s.fever ? 'FEVER!' : s.feverReady ? 'FEVER READY' : 'BONK METER';
   });

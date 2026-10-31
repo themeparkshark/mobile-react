@@ -1,5 +1,12 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Text, View, type TextStyle, type ViewStyle } from 'react-native';
+import { Image } from 'expo-image';
+import * as Haptics from 'expo-haptics';
+import { AuthContext } from '../context/AuthProvider';
+import { useRung } from '../services/reveal/revealLadder';
+import { playBadge, stampClaimSources, type PlayBadge } from './rewards/challengeCopy';
+import { getStamps } from '../api/endpoints/me/stamps';
+import TicketGift from './rewards/TicketGift';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { nearbyOpportunityOpen, nearbyRideClosedReason, type NearbyClosedReason } from '../screens/ExploreScreen/mapOpportunityTiming';
 import { restingLabel } from '../screens/ExploreScreen/mapMarkerPresentation';
@@ -22,7 +29,7 @@ import { BRAND, GameIcon } from '../ui';
 import { useCoverArt } from './map/mapCover';
 
 /**
- * PLAY RIDE's wrapper sits 50 pt below the map's bottom edge (ExploreScreen); the group rests 120 pt
+ * PLAY!'s wrapper sits 50 pt below the map's bottom edge (ExploreScreen); the group rests 120 pt
  * up from there. Its entrance starts 24 pt lower, still clear of the footer compass, and fully clear.
  */
 const PLAY_RIDE_REST_Y = -120;
@@ -41,15 +48,15 @@ export default function RedeemModal({
   covered = false,
 }: {
   /**
-   * The map's loading cover is still up. A ride already in range gets PLAY RIDE ready under it, at
+   * The map's loading cover is still up. A ride already in range gets PLAY! ready under it, at
    * rest (no slide), and the cover waits for its art: the cover's own fade reveals it with the map.
    */
   readonly covered?: boolean;
-  /** PLAY RIDE (or the closed-ride sign) is up or gone: the map keeps its art out from under it. */
+  /** PLAY! (or the closed-ride sign) is up or gone: the map keeps its art out from under it. */
   readonly onShownChange?: (shown: boolean) => void;
-  /** The live feed's status for the ride in range (DOWN, CLOSED...): no PLAY RIDE on a closed ride. */
+  /** The live feed's status for the ride in range (DOWN, CLOSED...): no PLAY! on a closed ride. */
   readonly liveStatus?: string | null;
-  /** The ride selected on the map; PLAY RIDE hides while a different ride is selected. */
+  /** The ride selected on the map; PLAY! hides while a different ride is selected. */
   readonly selectedTaskId?: number | null;
   /** The challenge flow opened or closed (for the map's one-overlay-at-a-time queue). */
   readonly onOpenChange?: (open: boolean) => void;
@@ -67,7 +74,7 @@ export default function RedeemModal({
   const reducedMotion = useReducedGameMotion();
   const lastAnnounced = useRef<string | null>(null);
   const enter = useRef(new Animated.Value(0)).current;
-  // PLAY RIDE is one piece: the yellow pill, its label and the ride chip under it stay hidden until
+  // PLAY! is one piece: the yellow pill, its label and the ride chip under it stay hidden until
   // the pill art has drawn, then slide up together (never words or a chip on the bare map first).
   const [pillReady, setPillReady] = useState(false);
 
@@ -75,11 +82,49 @@ export default function RedeemModal({
   useEffect(() => { openChange.current?.(modalVisible); }, [modalVisible]);
   useEffect(() => () => openChange.current?.(false), []);
   const task = redeemable?.type === 'task' ? redeemable.model as TaskType : null;
+  const { player } = useContext(AuthContext);
+  // Secret coins arrive with coin levels (rung 3, blueprint 5.13): before that a secret spot offers nothing.
+  const coinLevels = useRung('coin_levels');
+  const secretLocked = redeemable?.type === 'secret_task' && !coinLevels.open;
+  // The coin's own art and name ride along under PLAY! (a ride, a sight or a secret coin).
+  const coin = redeemable && (redeemable.type === 'task' || redeemable.type === 'secret_task')
+    ? redeemable.model as TaskType : null;
+  // Out of Tickets, PLAY! never vanishes: the daily free try wears a gift, a held extra try a ticket-gift.
+  // Earned Tickets waiting in the Stamp Book come first (the card claims them in place), so while any wait
+  // PLAY! wears no gift: the button and the card always agree. Looked up once per Ticket count, only at 0.
+  const short = !!coin && (player?.tickets ?? 0) < Math.max(1, coin.ticket_cost ?? 1) && redeemable?.rescue_pass_available === true;
+  const [claimWaiting, setClaimWaiting] = useState<{ tickets: number; count: number } | null>(null);
+  const ticketsNow = player?.tickets ?? 0;
+  useEffect(() => {
+    if (!short || claimWaiting?.tickets === ticketsNow) return;
+    let alive = true;
+    void getStamps().then(response => {
+      const count = stampClaimSources(Object.values(response.stamps).flat()).reduce((sum, source) => sum + source.tickets, 0);
+      if (alive) setClaimWaiting({ tickets: ticketsNow, count });
+    }).catch(() => { if (alive) setClaimWaiting({ tickets: ticketsNow, count: 0 }); });
+    return () => { alive = false; };
+  }, [short, ticketsNow, claimWaiting?.tickets]);
+  const badge: PlayBadge = coin ? playBadge({
+    tickets: ticketsNow, ticketCost: coin.ticket_cost ?? 1,
+    rescueAvailable: redeemable?.rescue_pass_available, rescueSource: redeemable?.rescue_pass_source,
+    // Until the lookup answers, no gift: a gift that vanishes a moment later would be a false promise.
+    claimable: short && claimWaiting?.tickets !== ticketsNow ? 1 : claimWaiting?.count ?? 0,
+  }) : null;
   // Selecting a different ride on the map means the player is looking elsewhere.
   const otherSelected = !!task && selectedTaskId !== null && selectedTaskId !== task.id;
   // A ride resting until "Back 2:00 PM", or one the live feed shows closed, never offers
-  // PLAY RIDE, even when the server still counts the player in range.
-  const available = !otherSelected && nearbyOpportunityOpen(redeemable, liveStatus);
+  // PLAY!, even when the server still counts the player in range.
+  const available = !otherSelected && !secretLocked && nearbyOpportunityOpen(redeemable, liveStatus);
+  // Press feedback inside 100 ms (blueprint section 11, Feedback): a tap squashes the pill and buzzes at once,
+  // even while the challenge card waits its turn behind a sheet that is still sliding away.
+  const press = useRef(new Animated.Value(1)).current;
+  const pressNow = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    if (reducedMotion) return;
+    press.stopAnimation();
+    press.setValue(0.9);
+    Animated.spring(press, { toValue: 1, stiffness: 420, damping: 12, mass: 0.7, useNativeDriver: true }).start();
+  };
   // Standing at a ride that is not open: the same spot says why (and when it is back), never a blank.
   const closedReason = !otherSelected && !available ? nearbyRideClosedReason(redeemable, liveStatus) : null;
   const closedLabel = closedReason ? closedRideCopy(closedReason) : null;
@@ -126,22 +171,33 @@ export default function RedeemModal({
     <>
       {redeemable && available && (
         <Animated.View style={entrance}>
-          <YellowButton
-            onArtReady={() => { pillArtDrawn(); setPillReady(true); }}
-            onPress={async () => {
-              setOpenedRedeemable(redeemable);
-              setModalVisible(true);
-            }}
-            text={redeemable.type === 'task' ? 'Play Ride!'
-              : redeemable.type === 'secret_task' ? 'Play Secret!' : 'Redeem'}
-          />
-          {task && <View pointerEvents="none" style={styles.caption} accessible
-            accessibilityLabel={`${task.name}. Costs ${task.ticket_cost ?? 1} ${(task.ticket_cost ?? 1) === 1 ? 'Ticket' : 'Tickets'}.`}>
-            <Text style={styles.captionText} numberOfLines={1}>{task.name}</Text>
-            <View style={styles.cost}>
+          <Animated.View style={{ transform: [{ scale: press }] }}>
+            <YellowButton
+              onArtReady={() => { pillArtDrawn(); setPillReady(true); }}
+              onPress={async () => {
+                pressNow();
+                setOpenedRedeemable(redeemable);
+                setModalVisible(true);
+              }}
+              text={redeemable.type === 'secret_task' ? 'Play Secret!'
+                : redeemable.type === 'task' ? 'PLAY!' : 'Redeem'}
+            />
+            {/* The gift on PLAY! is today's free try; a ticket with a gift is a held extra try. */}
+            {badge && <View pointerEvents="none" style={styles.badge} accessible
+              accessibilityLabel={badge === 'free_try' ? 'Free try today' : 'Extra try'}>
+              {badge === 'free_try' ? <GameIcon name="gift" size={30} /> : <TicketGift size={30} />}
+            </View>}
+          </Animated.View>
+          {coin && <View pointerEvents="none" style={styles.caption} accessible
+            accessibilityLabel={badge === 'free_try' ? `${coin.name}. Free try today.`
+              : badge === 'extra_try' ? `${coin.name}. Uses an extra try.`
+              : `${coin.name}. Costs ${coin.ticket_cost ?? 1} ${(coin.ticket_cost ?? 1) === 1 ? 'Ticket' : 'Tickets'}.`}>
+            {!!coin.coin_url && <Image source={{ uri: coin.coin_url }} style={styles.captionCoin} contentFit="contain" />}
+            <Text style={styles.captionText} numberOfLines={1}>{coin.name}</Text>
+            {!badge && <View style={styles.cost}>
               <GameIcon name="ticket" size={16} />
-              <Text style={styles.captionText}>{task.ticket_cost ?? 1}</Text>
-            </View>
+              <Text style={styles.captionText}>{coin.ticket_cost ?? 1}</Text>
+            </View>}
           </View>}
         </Animated.View>
       )}
@@ -204,7 +260,7 @@ export default function RedeemModal({
   );
 }
 
-/** What the PLAY RIDE spot says at a ride that is not open: a picture and a few big words. */
+/** What the PLAY! spot says at a ride that is not open: a picture and a few big words. */
 export function closedRideCopy(reason: NearbyClosedReason): { icon: GameIconName; text: string; a11y: string } {
   switch (reason.kind) {
     case 'resting': {
@@ -217,13 +273,18 @@ export function closedRideCopy(reason: NearbyClosedReason): { icon: GameIconName
   }
 }
 
-const styles: Record<'caption' | 'cost' | 'closedPill', ViewStyle> & { captionText: TextStyle; closedText: TextStyle } = {
-  // A ride that is not open: a soft, untappable cream pill in the PLAY RIDE spot (not a button).
+const styles: Record<'caption' | 'cost' | 'closedPill' | 'badge', ViewStyle> & { captionText: TextStyle; closedText: TextStyle;
+  captionCoin: { width: number; height: number } } = {
+  // The free-try gift sits on PLAY!'s top right corner, on a white disc so it reads on the gold pill.
+  badge: { position: 'absolute', right: -6, top: -10, width: 42, height: 42, borderRadius: 21, backgroundColor: BRAND.white,
+    borderWidth: 3, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  captionCoin: { width: 18, height: 18 },
+  // A ride that is not open: a soft, untappable cream pill in the PLAY! spot (not a button).
   closedPill: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 10, maxWidth: '100%',
     backgroundColor: '#FFF5D3', borderRadius: 26, borderWidth: 3, borderColor: BRAND.navy,
     paddingHorizontal: 20, paddingVertical: 10, marginBottom: 8 },
   closedText: { fontFamily: 'Shark', fontSize: 24, color: BRAND.navy, flexShrink: 1 },
-  // Ride name and price under PLAY RIDE, on a white tab with his navy outline.
+  // Ride name and price under PLAY!, on a white tab with his navy outline.
   caption: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: -4, maxWidth: '100%',
     backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 10, paddingVertical: 3 },
   captionText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, flexShrink: 1 },

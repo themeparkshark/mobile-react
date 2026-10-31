@@ -160,9 +160,18 @@ test('no ad ever shows to a player under 13 or of unknown age (today: everyone);
   assert.deepEqual(calls.offers, []);
   assert.equal(plain(await ads.watchForReward('daily_ticket', null, true)).status, 'granted');
   assert.equal(calls.required, 0, 'the SDK is never required');
-  for (const file of ['src/screens/StoreScreen/SuppliesShop.tsx', 'src/components/RedeemRedeemableModal.tsx', 'src/components/PostWinRewardsModal.tsx', 'src/screens/LinePlay/components/LineSnackOffer.tsx']) {
+  for (const file of ['src/screens/StoreScreen/SuppliesShop.tsx', 'src/screens/LinePlay/components/LineSnackOffer.tsx']) {
     assert.match(read(file), /(vip|isVip) \|\| adsAvailable\(\)|!vip && !adsAvailable\(\)/, `${file}: offers need VIP or adsAvailable()`);
   }
+  // Core loop 4.3 rule 4: no offer inside a win or a loss. The ride cards keep only the members' own perks,
+  // asked for with vip = true (no ad, no VIP line for anyone else).
+  const challenge = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(challenge, /watchForReward\('retry', attemptId, true\)/);
+  assert.doesNotMatch(challenge, /adsAvailable/);
+  const win = read('src/components/PostWinRewardsModal.tsx');
+  assert.match(win, /if \(!visible \|\| !isVip \|\| attemptId == null/);
+  assert.match(win, /watchForReward\('double_coins', attemptId, true\)/);
+  assert.doesNotMatch(win, /adsAvailable/);
 });
 
 test('a store bundle with no real ad units never touches the SDK; VIP still gets the reward', async () => {
@@ -208,7 +217,7 @@ test('offers live on result and recap screens only, never inside a game or a mov
   // "One more try" only on the lost card, after the game resolved.
   const retryUse = modal.indexOf("watchForReward('retry'");
   assert.ok(retryUse > 0);
-  assert.match(modal, /flowState === 'lost' && !skipLostCard && <ChallengeStatusCard[\s\S]*?canOfferRetry/);
+  assert.match(modal, /flowState === 'lost' && <ChallengeStatusCard[\s\S]*?canOfferRetry/);
   // The line snack is passed to the recap only, and only for an ended server session.
   assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /snackSlot=\{snapshot\.serverSessionId && snapshot\.rewards \? <LineSnackOffer/);
   assert.match(read('src/screens/LinePlay/components/SessionRecap.tsx'), /\{rewardsConfirmed && snackSlot\}/);

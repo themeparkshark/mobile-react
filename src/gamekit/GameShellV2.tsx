@@ -65,6 +65,7 @@ import { Haptic } from './Haptics';
 import { playSfx } from './SFX';
 import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovementContext';
 import { RideChallengeContext } from './RideChallengeContext';
+import { noteRideTry } from './results/rideTry';
 import { ShellFrameContext } from './ShellFrameContext';
 import { GrownUpGateSlot } from '../components/GrownUpGate';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -980,6 +981,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       return () => clearTimeout(t);
     }, [rideChallenge, phase, effectiveResult]);
 
+    // Ride challenge loss (core loop 5.3, one loss card): no game card. The run is handed to the
+    // challenge's own loss card (rideTry.ts: "8 of 13 bonks", "1 of 3 right") and play moves on.
+    const rideLoss = !!rideChallenge && phase === 'results' && !!effectiveResult && effectiveResult.stars <= 0 && !wrap;
+    useEffect(() => {
+      if (!rideLoss) return;
+      noteRideTry(effectiveResult);
+      handleClaimRef.current?.();
+    }, [rideLoss, effectiveResult]);
+
     // -- Hold / resume (interruptions only; never movement). ------------------
     const persist = useCallback((reason: HoldReason) => {
       if (!sessionKey || !getSnapshot) return;
@@ -1227,7 +1237,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const handleClaimRef = useRef(handleClaim);
     handleClaimRef.current = handleClaim;
 
+    // A paid ride try's X asks Leave? straight away (one step): the pause card, with its "saved"
+    // line, stays hidden while that question is up.
+    const [quitAsked, setQuitAsked] = useState(false);
     const resumeAfterQuitCancel = useCallback(() => {
+      setQuitAsked(false);
       setPhase(startedRef.current ? 'playing' : 'countdown');
       if (!startedRef.current) setCountText(firstCount);
       setPauseReason(undefined);
@@ -1236,20 +1250,23 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     }, [onResume]);
 
     const requestQuit = useCallback(() => {
-      if (onQuit) onQuit(resumeAfterQuitCancel);
+      if (onQuit) { setQuitAsked(true); onQuit(resumeAfterQuitCancel); }
       else onClose();
     }, [onQuit, onClose, resumeAfterQuitCancel]);
 
     const handleExit = useCallback(() => {
       // The game's own results card is up: the X is that card's DONE.
       if (ownResultsDoneRef.current) { ownResultsDoneRef.current(); return; }
-      if (phase === 'playing' || phase === 'resuming') doHold('manual');
-      else if (phase === 'results') handleClaim();
+      if (phase === 'playing' || phase === 'resuming') {
+        doHold('manual');
+        // A paid ride try has no pause to come back to later: the X asks Leave? at once.
+        if (rideChallenge && onQuit) requestQuit();
+      } else if (phase === 'results') handleClaim();
       else {
         if (phase === 'countdown') doHold('manual');
         requestQuit();
       }
-    }, [phase, doHold, handleClaim, requestQuit]);
+    }, [phase, doHold, handleClaim, requestQuit, rideChallenge, onQuit]);
 
     // Tap anywhere skips straight to GO (the burst still plays over live play).
     const skipCountdown = useCallback(() => {
@@ -1356,9 +1373,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       saved,
       reducedMotion,
     }) : null), [phase, renderResults, effectiveResult, stars, won, wrapReason, handleClaim, rematchOffered, rematchRun, challengeOffered, playAgainFirst, claimLabel, saved, reducedMotion]);
-    const gameResults = isEmptyResultsNode(ownSurface) ? null : ownSurface;
+    const gameResults = rideLoss || isEmptyResultsNode(ownSurface) ? null : ownSurface;
     // A wrap-up (ride's up) has no game surface to wait for: the shared card shows at once.
-    const showSharedCard = phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || resultsSafeRef.current || wrap != null)));
+    const showSharedCard = !rideLoss && phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || resultsSafeRef.current || wrap != null)));
     sharedCardShownRef.current = showSharedCard;
     surfaceShownRef.current = gameResults != null || showSharedCard;
 
@@ -1501,7 +1518,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                 </TouchableOpacity>
               </View>
             </View>
-          ) : phase === 'paused' ? (
+          ) : phase === 'paused' && !quitAsked ? (
             <View style={styles.overlay}>
               <View style={styles.sheet}>
                 <Text style={styles.sheetTitle}>{pauseReason ?? 'Paused'}</Text>

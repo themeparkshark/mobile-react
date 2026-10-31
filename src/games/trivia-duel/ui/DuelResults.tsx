@@ -2,7 +2,7 @@
  * Duel results on stage (design 11.9, rev 7). The crown lands on your avatar
  * up on the stage; this half-height cream card slides up over the bottom 45%
  * while the stage keeps acting above it. Big result line, the score drums,
- * FIN BEATEN / RANK UP / NEW BEST banners or the near-miss line with the gap
+ * GILL BEATEN / RANK UP / NEW BEST banners or the near-miss line with the gap
  * bar, four 18pt stat rows, the Fin rank bar, the Best Moment polaroid that
  * drops in for 1.5s then tucks into the corner, one Fact Card row with Read
  * on TPS, and REMATCH (pulses on the beat) / PASS TO CREW / CONTINUE.
@@ -125,7 +125,7 @@ export const RANK_UP_AT = 1100;
 export const RIBBON_SLAM_MS = 360;
 /**
  * When the Best Moment polaroid drops: after the last star, the title
- * (YOU WIN! lands right after the last star), FIN BEATEN, NEW BEST and the
+ * (YOU WIN! lands right after the last star), GILL BEATEN, NEW BEST and the
  * RANK UP badge have popped (it never lands while they do), and never before
  * two beats. It drops above the card, over the stage, so it covers no badge.
  */
@@ -170,7 +170,29 @@ export interface ResultsModel {
   /** Best Moment: the fastest correct lock. */
   best?: { label: string } | null;
   /** Ride challenge: the coin line instead of the duel title. */
-  ride?: { won: boolean; right?: number; need?: number } | null;
+  ride?: { won: boolean; right?: number; need?: number; total?: number } | null;
+}
+
+/**
+ * A ride challenge's card leads with right answers, never points (the coin is won by
+ * 2 right answers, so Gill's bigger number under RIDE COIN! read like a loss). Pure:
+ * the dots (one per right answer the coin needs, gold for each one got), the line
+ * under them and the stars (one per right answer on a win, so a 3 of 3 win is never
+ * 1 star). Null off a ride.
+ */
+export function rideCardView(ride: ResultsModel['ride'], stars: number): { need: number; dotsOn: number; line: string; spoken: string; stars: number } | null {
+  if (!ride) return null;
+  const need = Math.max(1, ride.need ?? 2);
+  const total = Math.max(need, ride.total ?? 3);
+  const right = Math.max(0, Math.min(total, ride.right ?? 0));
+  const line = ride.won ? `${right} of ${total} right. Coin won!` : `${right} of ${total} right. ${need} wins the coin.`;
+  return {
+    need,
+    dotsOn: Math.min(right, need),
+    line,
+    spoken: ride.won ? `${right} of ${total} right answers. Coin won!` : `${right} of ${total} right answers. ${need} right answers win the coin.`,
+    stars: ride.won ? Math.max(stars, Math.min(3, Math.max(right, need))) : 0,
+  };
 }
 
 interface Props {
@@ -196,7 +218,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   const polS = useSharedValue(1);
   // The Best Moment polaroid leaves the tree once it has popped away. Left
   // mounted at scale 0 over the card, it drew the banners under it hollow
-  // (FIN BEATEN and RANK UP lost their gold; NEW BEST, outside its box, kept it).
+  // (GILL BEATEN and RANK UP lost their gold; NEW BEST, outside its box, kept it).
   const [polGone, setPolGone] = useState(!model.best || reducedMotion);
   // The polaroid drops above the card (over the stage), never over its badges.
   const [cardH, setCardH] = useState(0);
@@ -207,7 +229,8 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
   const polK = polaroidScale(rootBottomY == null || cardH <= 0 ? null : rootBottomY - POL_BOTTOM_PAD - cardH, initialWindowMetrics?.insets.top ?? 47);
   // A won duel always lights at least one star: a YOU WIN! over three empty
   // stars would read like a loss (duelStars gives every win 1 to 3).
-  const stars = model.won && !model.ride ? Math.max(1, model.stars) : model.stars;
+  const rideView = rideCardView(model.ride, model.stars);
+  const stars = rideView ? rideView.stars : model.won ? Math.max(1, model.stars) : model.stars;
   // The polaroid waits for the stars and the title too, so the win's first look is YOU WIN!.
   const polAt = polaroidAt(beatMs, model.banners.length, model.banners.includes('RANK UP'), stars);
 
@@ -242,9 +265,8 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
     opacity: polS.value > 0.02 ? Math.min(1, Math.max(0, 1 + polY.value / POL_DROP_PT)) : 0,
     transform: [{ translateY: polY.value }, { scale: polS.value }, { rotate: '-6deg' }],
   }));
-  // A lost ride challenge shows its right answers on the coin goal row instead.
-  const rideGoal = model.ride && !model.ride.won && model.ride.need ? { right: Math.min(model.ride.right ?? 0, model.ride.need), need: model.ride.need } : null;
-  const chips = duelChips(model.rows).filter((c) => !(rideGoal && c.label === 'RIGHT ANSWERS'));
+  // A ride challenge (won or lost) shows its right answers on the coin goal row instead of points.
+  const chips = duelChips(model.rows).filter((c) => !(rideView && c.label === 'RIGHT ANSWERS'));
   const rankUp = model.banners.includes('RANK UP');
 
   const total = Math.max(1, model.myScore + model.oppScore);
@@ -266,14 +288,19 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
         {/* The one results title every game shares: Alex's ribbon over the card's top edge.
             It waits for the last star, like Sharky, Whack and Boss. */}
         <ResultsRibbon title={title} reducedMotion={reducedMotion} style={styles.ribbonWrap} delayMs={rideRibbonDelay(stars, reducedMotion)} />
-        <View style={styles.head}>
-          {/* Same number style as the score plate above and every other card (countText: digits only). */}
-          <View style={styles.scoreRow}>
-            <Text style={styles.scoreMe}>{countText(model.myScore)}</Text>
-            <Text style={styles.scoreVs}>vs</Text>
-            <Text style={styles.scoreOpp}>{countText(model.oppScore)}</Text>
+        {rideView ? (
+          // A ride challenge leads with right answers: the coin is won by 2 of 3, not by points.
+          <CoinGoal need={rideView.need} on={rideView.dotsOn} won={!!model.ride?.won} line={rideView.line} spoken={rideView.spoken} reducedMotion={reducedMotion} />
+        ) : (
+          <View style={styles.head}>
+            {/* Same number style as the score plate above and every other card (countText: digits only). */}
+            <View style={styles.scoreRow}>
+              <Text style={styles.scoreMe}>{countText(model.myScore)}</Text>
+              <Text style={styles.scoreVs}>vs</Text>
+              <Text style={styles.scoreOpp}>{countText(model.oppScore)}</Text>
+            </View>
           </View>
-        </View>
+        )}
         {/* Every Duel card (Line Trivia, a duel, a ride challenge) stamps the same
             star row the other games do, so a win and a miss read as one family. */}
         <View style={styles.starRow} accessible accessibilityLabel={`${stars} of 3 stars`}>
@@ -293,8 +320,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             {model.banners.map((b, i) => <Banner key={b} text={b} i={i} reducedMotion={reducedMotion} />)}
           </View>
         ) : null}
-        {rideGoal ? <CoinGoal right={rideGoal.right} need={rideGoal.need} reducedMotion={reducedMotion} />
-          : (model.ride ? !model.ride.won : !model.won) && model.nearMiss ? (
+        {!rideView && !model.won && model.nearMiss ? (
             <Text style={styles.near} numberOfLines={1} adjustsFontSizeToFit>{model.nearMiss}</Text>
           ) : null}
         {chips.length ? (
@@ -379,21 +405,24 @@ function StarPip({ on, i, reducedMotion }: { on: boolean; i: number; reducedMoti
 
 /**
  * Two right answers win the coin, as pictures: one dot per answer needed
- * (gold for each right one) and the coin at the end, then NEXT TIME!. This
- * card cannot know whether a retry is on offer (the server decides after the
- * miss), so it never promises TRY AGAIN!: when a retry exists the ride try
- * card offers it next, otherwise DONE goes straight back to the map. The
- * dots pop in one by one, a small beat when the card lands.
+ * (gold for each right one) and the coin at the end, then one line with the
+ * right answers ('3 of 3 right. Coin won!' or '1 of 3 right. 2 wins the
+ * coin.'). It leads every ride card, won or lost, so points never decide what
+ * a child reads. This card cannot know whether a retry is on offer (the server
+ * decides after the miss), so it never promises TRY AGAIN!. The dots pop in
+ * one by one, a small beat when the card lands; on a win the coin glows gold.
  */
-function CoinGoal({ right, need, reducedMotion }: { right: number; need: number; reducedMotion: boolean }) {
+function CoinGoal({ need, on, won, line, spoken, reducedMotion }: { need: number; on: number; won: boolean; line: string; spoken: string; reducedMotion: boolean }) {
   return (
-    <View style={styles.goal} accessible accessibilityLabel={`${right} of ${need} right answers. ${need} right answers win the coin. Next time!`}>
+    <View style={styles.goal} accessible accessibilityLabel={spoken}>
       <View style={styles.goalRow}>
-        {Array.from({ length: need }, (_, k) => <GoalDot key={k} on={k < right} k={k} reducedMotion={reducedMotion} />)}
+        {Array.from({ length: need }, (_, k) => <GoalDot key={k} on={k < on} k={k} reducedMotion={reducedMotion} />)}
         <Text style={styles.goalEq}>=</Text>
-        <Image source={ART.coin} style={styles.goalCoin} resizeMode="contain" />
+        <View style={won ? styles.goalCoinWon : null}>
+          <Image source={ART.coin} style={styles.goalCoin} resizeMode="contain" />
+        </View>
       </View>
-      <Text style={styles.goalText}>NEXT TIME!</Text>
+      <Text style={styles.goalText} numberOfLines={1} adjustsFontSizeToFit>{line}</Text>
     </View>
   );
 }
@@ -495,7 +524,7 @@ function RankUpRow({ from, to, label, reducedMotion }: { from: number; to: numbe
   const popSt = useAnimatedStyle(() => ({ opacity: pop.value > 0.02 ? 1 : 0, transform: [{ scale: pop.value }] }));
   const sparkSt = useAnimatedStyle(() => ({ opacity: spark.value, transform: [{ scale: 0.6 + spark.value * 0.4 }] }));
   return (
-    <View style={[styles.rankRow, styles.rankUpRow]} accessible accessibilityLabel={`Rank up! Fin is now ${label}`}>
+    <View style={[styles.rankRow, styles.rankUpRow]} accessible accessibilityLabel={`Rank up! Gill is now ${label}`}>
       <RankHat stripes={from} big dim />
       <View style={styles.rankUpArrow}>
         <GameIcon name="arrow" size={30} />
@@ -516,7 +545,7 @@ function Banner({ text, i, reducedMotion }: { text: string; i: number; reducedMo
     sx.value = withDelay(BANNER_AT + i * BANNER_GAP, withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 300 })));
   }, [sx, i, reducedMotion]);
   // One even scale, like the rank fins and coin dots. The old squash and
-  // stretch (scaleX against scaleY) drew FIN BEATEN and RANK UP hollow, with
+  // stretch (scaleX against scaleY) drew GILL BEATEN and RANK UP hollow, with
   // no gold fill, on the current bundle. The pop rides a wrapper and the gold
   // sits on a plain view inside it.
   const st = useAnimatedStyle(() => ({ transform: [{ scale: sx.value }] }));
@@ -609,6 +638,7 @@ const styles = StyleSheet.create({
   goalDotOff: { backgroundColor: '#3d9be6' },
   goalEq: { fontFamily: 'Shark', fontSize: 24, color: '#ffffff', marginHorizontal: 6 },
   goalCoin: { width: 36, height: 36 },
+  goalCoinWon: { borderRadius: 22, padding: 2, backgroundColor: C.gold },
   goalText: { fontFamily: 'Shark', fontSize: 20, color: '#ffffff', marginTop: 2 },
   rankHat: { width: 44, alignItems: 'center' },
   rankHatBig: { width: 64, paddingVertical: 3, borderRadius: 16, borderWidth: 3, borderColor: C.gold, backgroundColor: '#ffffff' },

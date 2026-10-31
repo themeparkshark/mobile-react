@@ -158,7 +158,8 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
   // The podium and the cheer are for a real win (a star or a new best). A
   // wipeout is dizzy; any other 0-star run swims calmly, off the podium.
   // A saved run is never written down as a best, so it never claims one.
-  const newBest = data.newBest && !saved;
+  // No NEW BEST on a run with no star (core loop 5.3).
+  const newBest = data.newBest && !saved && data.stars > 0;
   const cheer = data.stars > 0 || newBest;
   const pose = cheer ? 'cheer' : data.wipeout ? 'dizzy' : 'swim';
   const short = win.height < 740;
