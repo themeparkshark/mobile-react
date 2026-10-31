@@ -6,6 +6,7 @@ import type { LiveEvent } from '../../api/endpoints/live-events';
 import { playSfx } from '../../gamekit/SFX';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { frenzyLine } from '../../services/liveEvents/model';
+import { useEventsOpen } from './eventsRung';
 
 const seen = new Set<string>();
 export function resetFrenzySweepForTests(): void { seen.clear(); }
@@ -15,7 +16,7 @@ export function resetFrenzySweepForTests(): void { seen.clear(); }
  * (one gradient view, 1.1 s, UI thread, then unmounts) with the horn cue.
  * Once per Frenzy window. Mount over the map with absoluteFill; it never takes touches.
  */
-function FrenzySweep({ event }: { readonly event: LiveEvent | null }) {
+function FrenzySweepInner({ event }: { readonly event: LiveEvent | null }) {
   const reduced = useReducedGameMotion();
   const { width, height } = useWindowDimensions();
   const key = event && frenzyLine(event) ? `${event.id}:${event.frenzy.ends_at}` : null;
@@ -38,6 +39,11 @@ function FrenzySweep({ event }: { readonly event: LiveEvent | null }) {
         start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
     </Animated.View>
   );
+}
+
+/** Hidden until the events rung opens (rung 9). */
+function FrenzySweep(props: Parameters<typeof FrenzySweepInner>[0]) {
+  return useEventsOpen() ? <FrenzySweepInner {...props} /> : null;
 }
 
 export default memo(FrenzySweep);

@@ -2,7 +2,6 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Modal from 'react-native-modal';
 import Animated, {
   cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
@@ -19,13 +18,18 @@ import { useCaptureMark } from '../dev/captureMark';
 import type { DailyGiftAmountsType, DailyGiftRewardType, DailyGiftType } from '../models/daily-gift-type';
 import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../ui';
 import { ws7Preview } from '../dev/ws7Preview';
-import { loadRetentionFlags, retentionFlagsNow, streakOwner } from '../services/retention/flags';
+import { LocationStatusContext } from '../context/LocationProvider';
+import { useRung } from '../services/reveal/revealLadder';
+import { dailyChestAsked, dailyChestFromRewards, dailyChestMayShow, noteAutoOpen } from '../services/retention/rewardPresence';
+import { returnToRewards } from '../services/retention/rewardsSignals';
+import { useNativeModalLayer } from '../ui/modalLayers';
 import Ribbon from './Ribbon';
 import RewardBurst from './RewardBurst';
 import { GoldBurst } from '../ui/GoldBurst';
 import shortenNumber from '../helpers/shorten-number';
 import { DURATION, EASE, SPRING } from '../ui/motionEasing';
 import TapHint from './TapHint';
+import CalmModal from './retention/CalmModal';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
@@ -81,8 +85,14 @@ export function countStart(amount: number): number {
 export function prizeBlockHeight(extraLines: number, hasMilestone: boolean, ticketDay: boolean): number {
   return (ticketDay ? 0 : 60) + 38 + extraLines * 24 + (hasMilestone ? 24 : 0);
 }
-export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', claim = update, simple = false }: {
+export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', claim = update, simple = false,
+  requested, inline = false, onDone, onArtReady }: {
   readonly dailyGift: DailyGiftType;
+  /**
+   * The player tapped to open it (the Rewards button or sheet). At a park the card shows only then:
+   * it never opens by itself there (core loop blueprint 4.3). At home the map decides when it mounts.
+   */
+  readonly requested?: boolean;
   readonly onMapOcclusionChange?: (busy: boolean) => void;
   /** After the card has gone: whether today's chest was claimed (false for "Back to map"). */
   readonly onClosed?: (claimed: boolean) => void;
@@ -95,6 +105,16 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
    * streak or day count to read. The ladder shows from the next visit on.
    */
   readonly simple?: boolean;
+  /**
+   * Drawn as a card inside the Rewards sheet's own open sheet (a Rewards row or a Daily 3 goal asked for it), not as
+   * a native sheet of its own: no native dismiss and present sits between the two cards, so there is never a bare
+   * map. BACK and AWESOME call `onDone` instead of closing anything.
+   */
+  readonly inline?: boolean;
+  /** Inline only: the card is done. `claimed`: today's chest was opened. `mapFly`: a prize is flying to the header on the map. */
+  readonly onDone?: (claimed: boolean, mapFly: boolean) => void;
+  /** Inline only: the chest art is on screen (the sheet holds the card it came from until then). */
+  readonly onArtReady?: () => void;
 }) {
   const occlusion = useRef(onMapOcclusionChange); occlusion.current = onMapOcclusionChange;
   const closed = useRef(onClosed); closed.current = onClosed;
@@ -108,19 +128,35 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const dims = useWindowDimensions();
   const width = dims.width;
   const height = dims.height ?? 800;
-  const [visible, setVisible] = useState(false);
-  // The flame and "day streak" belong to Daily 3 while it is on: then the chest shows only its day ladder.
-  const [chestOwnsFlame, setChestOwnsFlame] = useState(() => streakOwner(retentionFlagsNow()) === 'chest');
-  useEffect(() => {
-    let live = true;
-    void loadRetentionFlags().then(flags => { if (live && flags) setChestOwnsFlame(streakOwner(flags) === 'chest'); });
-    return () => { live = false; };
-  }, []);
+  const [visible, setVisible] = useState(inline);
+  /** Opened from a Rewards sheet row: BACK (and AWESOME) return to the sheet, as a level chest does. */
+  const fromRewards = useRef(inline);
+  const done = useRef(onDone); done.current = onDone;
+  const artReady = useRef(onArtReady); artReady.current = onArtReady;
+  const artShown = useRef(false);
+  const showedArt = () => {
+    if (artShown.current) return;
+    artShown.current = true;
+    artReady.current?.();
+    if (inline && enter.value !== 1) enter.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.back(1.6)) });
+  };
+  // The chest registers as a native layer until UIKit really dismissed it, so the Rewards sheet coming back waits
+  // for it. 'wait': asked from a Rewards row, it mounts while that sheet is still closing and presents the moment
+  // UIKit says the sheet is gone (no bare map in between, never refused over a closing sheet). Opening by itself at
+  // home, nothing else is up, so it presents at once as before.
+  const layer = useNativeModalLayer(visible && !inline, 'wait');
+  // At a park the chest never opens by itself: it waits in the Rewards button until the player asks.
+  const atPark = !!useContext(LocationStatusContext)?.park;
+  const mayShow = dailyChestMayShow({ atPark, requested, asked: dailyChestAsked() });
+  // Before coin levels unlock (rung 3), Energy is "saved for growing coins": the number alone means nothing yet.
+  const energyExplained = !useRung('coin_levels').open;
   const [phase, setPhase] = useState<'closed' | 'opening' | 'open'>('closed');
   const [confirmedGift, setConfirmedGift] = useState<DailyGiftType | null>(null);
   const [shown, setShown] = useState(0);
   const { setDailyGift } = useContext(DailyGiftContext);
   const reducedMotion = useReducedGameMotion();
+  // Inline, the card takes the Rewards card's place with its own small settle once its chest is drawn.
+  const enter = useSharedValue(inline && !reducedMotion ? 0.94 : 1);
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
   const claiming = useRef(false);
@@ -168,8 +204,15 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   useCaptureMark(pop, 'daily-chest-lid-peak', 1.245);
 
   useEffect(() => {
-    if (!dailyGift.redeemed_at && player?.username) setVisible(true);
-  }, [dailyGift.id, dailyGift.redeemed_at, player?.username]);
+    // Inline it was asked for and is already showing (it is not an automatic open).
+    if (inline) return;
+    if (!dailyGift.redeemed_at && player?.username && mayShow) {
+      // Not asked for: this is the app open's one automatic open (nothing else opens by itself after it).
+      if (requested !== true && !dailyChestAsked()) noteAutoOpen();
+      fromRewards.current = dailyChestFromRewards();
+      setVisible(true);
+    }
+  }, [dailyGift.id, dailyGift.redeemed_at, player?.username, mayShow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     bob.value = 0;
@@ -237,9 +280,10 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     flown.current = true;
     const target = kind === 'coins' ? getTarget('coins') : null;
     const wrap = wrapRef.current; const stageView = stageRef.current;
-    if (!target || !wrap || !stageView || reducedMotionRef.current) { settleWallet(); return; }
+    if (!target || !wrap || !stageView || reducedMotionRef.current) { settleWallet(); landedAll(); return; }
     wrap.measureInWindow((wx, wy) => stageView.measureInWindow((sx, sy, sw, sh) => {
-      if (![wx, wy, sx, sy, sw, sh].every(Number.isFinite) || !mounted.current) { settleWallet(); return; }
+      if (![wx, wy, sx, sy, sw, sh].every(Number.isFinite) || !mounted.current) { settleWallet(); landedAll(); return; }
+      walletFlying.current = true;
       setWalletFly({ from: { x: sx - wx + sw / 2, y: sy - wy + sh * 0.45 }, to: { x: target.x - wx, y: target.y - wy },
         count: walletCoins(amount), start: Math.max(0, walletBefore.current ?? (player?.coins ?? 0)) });
     }));
@@ -248,25 +292,53 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     if (mounted.current) setLanded(n => Math.max(n, i + 1));
     playSfx('tick', 0.7 + i * 0.05);
     void Haptics.selectionAsync?.().catch(() => undefined);
-    if (i === count - 1) settleWallet();
+    if (i === count - 1) { settleWallet(); landedAll(); }
   };
+  // Inline AWESOME waits for the coins to land on the header chip, so the Rewards sheet never comes back over them.
+  const walletFlying = useRef(false);
+  const coinsLanded = useRef(false);
+  const finishWhenLanded = useRef<(() => void) | null>(null);
+  const landTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (landTimer.current) clearTimeout(landTimer.current); }, []);
+  function landedAll() {
+    coinsLanded.current = true;
+    if (landTimer.current) { clearTimeout(landTimer.current); landTimer.current = null; }
+    const next = finishWhenLanded.current;
+    finishWhenLanded.current = null;
+    next?.();
+  }
 
   const dismiss = () => {
-    setVisible(false);
+    if (inline && finishWhenLanded.current) return;
+    // Inline on a coin day: the coins hop into the header chip first (if the tap beat the count-up, they go now),
+    // then the card is done. Never more than 1.6 s.
+    if (inline && phase === 'open' && acknowledgedGift.current && kind === 'coins' && !coinsLanded.current) {
+      finishWhenLanded.current = finishDismiss;
+      landTimer.current = setTimeout(landedAll, 1600);
+      if (!flown.current) { setShown(amount); flyToWallet(); }
+      return;
+    }
+    finishDismiss();
+  };
+  function finishDismiss() {
+    if (!inline) setVisible(false);
     settleWallet();
+    let mapFly = false;
     if (acknowledgedGift.current) {
       // The reward lands in its counter, drawn with the same art as the prize
       // (coins that already flew from the pile are not sent twice).
       const paid = chestAmounts(acknowledgedGift.current, today);
       (['coins', 'tickets', 'energy'] as PrizeKind[]).forEach(k => {
-        if (paid[k] > 0 && !(k === 'coins' && walletFly)) {
+        if (paid[k] > 0 && !(k === 'coins' && walletFlying.current)) {
+          mapFly = true;
           triggerFly({ imageSource: ICON_SOURCES[PRIZE[k].icon],
             amount: Math.min(8, paid[k]), startX: width / 2, startY: height * 0.55, targetPosition: PRIZE[k].fly });
         }
       });
       setDailyGift(acknowledgedGift.current);
     }
-  };
+    if (inline) done.current?.(!!acknowledgedGift.current, mapFly);
+  }
 
   const celebrate = (isTicket: boolean) => {
     if (reducedMotionRef.current) {
@@ -357,7 +429,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       if (current?.id === dailyGift.id && current.redeemed_at) {
         setDailyGift(current);
         void refreshPlayer?.();
-        setVisible(false);
+        if (inline) done.current?.(true, false); else setVisible(false);
         gameAlert('Today’s chest is collected', 'You already got today’s prizes. Come back tomorrow for the next chest.');
       } else {
         setPhase('closed');
@@ -381,7 +453,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const prizeStyle = useAnimatedStyle(() => ({
     opacity: prize.value, transform: [{ translateY: (1 - prize.value) * -36 }, { scale: 0.5 + prize.value * 0.5 }],
   }));
-  const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: cardShake.value }] }));
+  const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: cardShake.value }, { scale: enter.value }] }));
   // Light pours out of the open chest with the lid pop (bright over the pile on a non-coin day).
   const mouthStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, prize.value * 1.4) * (kind === 'coins' ? 0.55 : 0.9),
@@ -414,21 +486,12 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   // light bursts out from under it and the prize itself climbs out and stays above the chest.
   const coinDay = kind === 'coins';
 
-  return (
-    <Modal isVisible={visible} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
-      onModalWillShow={() => occlusion.current?.(true)} onModalHide={() => {
-        occlusion.current?.(false);
-        closed.current?.(!!acknowledgedGift.current);
-      }}
-      animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'}
-      animationInTiming={reducedMotion ? 120 : 260} animationOutTiming={reducedMotion ? 120 : 180}
-      backdropColor={BRAND.navy}
-      backdropOpacity={0.55} onBackdropPress={phase !== 'opening' ? dismiss : undefined}
-      onBackButtonPress={phase !== 'opening' ? dismiss : undefined}>
+  const card = (
       <Animated.View ref={wrapRef} collapsable={false} style={[styles.wrap, cardStyle]}>
         <Ribbon text="Daily Chest" />
         <View style={styles.card}>
-          {simple ? null : <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Today’s chest: day ${day} of ${ladder.length}`}</Text>}
+          {/* The ladder's words are "Day N of 7": the word streak belongs to the Daily 3 flame only. */}
+          {simple ? null : <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Day ${day} of ${ladder.length}`}</Text>}
 
           {simple ? null : <View style={[styles.ladder, styles.aboveGold]}>
             {ladder.map((r) => (
@@ -436,12 +499,6 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                 stamp={r.day === day ? stamp : undefined} />
             ))}
           </View>}
-          {chestOwnsFlame && !simple && (displayedGift.streak ?? 0) > 1 && (
-            <View style={styles.streakRow}>
-              <GameIcon name="streak" size={18} />
-              <Text style={styles.streakText}>{`${displayedGift.streak} day streak`}</Text>
-            </View>
-          )}
 
           <Pressable ref={stageRef} collapsable={false} onPress={onChestPress} disabled={phase !== 'closed'} accessibilityRole="button"
             accessibilityState={{ disabled: phase !== 'closed', busy: phase === 'opening' }}
@@ -460,7 +517,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
                   <Image source={WALLET_GLOW} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor="#fff3b0" />
                 </Animated.View>
               )}
-              <Image source={phase === 'open' && coinDay ? CHEST_OPEN : CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
+              {/* Kept in memory like GameIcon. Inline, the sheet keeps showing the card it came from until this is drawn. */}
+              <Image source={phase === 'open' && coinDay ? CHEST_OPEN : CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain"
+                cachePolicy="memory-disk" onDisplay={showedArt} onLoadEnd={showedArt} />
               {phase === 'open' && coinDay && (
                 <Animated.View pointerEvents="none" style={[styles.mouthGlow, { width: chestSize * 0.8, height: chestSize * 0.42,
                   left: chestSize * 0.12, top: chestSize * 0.1 }, mouthStyle]}>
@@ -486,7 +545,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
             {simple && phase === 'closed' && <TapHint delay={1400} style={{ right: '22%', bottom: chestSize * 0.18 }} />}
           </Pressable>
 
-          <View style={[styles.prizeSlot, { height: prizeBlockHeight(extras.length, !!milestone, ticketDay) }]}>
+          <View style={[styles.prizeSlot, { height: prizeBlockHeight(extras.length + (energyExplained && (kind === 'energy' || extras.includes('energy')) ? 1 : 0), !!milestone, ticketDay) }]}>
           {phase === 'open' ? (
             <Animated.View style={[styles.prize, prizeStyle]}>
               {!ticketDay && <GameIcon name={PRIZE[kind].icon} size={56} />}
@@ -494,6 +553,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               {extras.map(k => (
                 <Text key={k} style={styles.prizeExtra}>+{amounts[k]} {prizeLabel(k, amounts[k])}</Text>
               ))}
+              {energyExplained && (kind === 'energy' || extras.includes('energy')) && (
+                <Text style={styles.prizeExtra}>Energy is saved for growing coins</Text>
+              )}
               {milestone && <Text style={styles.milestone}>{`${milestone.label} bonus!`}</Text>}
             </Animated.View>
           ) : (
@@ -511,8 +573,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
             </Pressable>
           )}
           {phase === 'closed' && <Pressable onPress={dismiss} accessibilityRole="button"
-            accessibilityLabel="Back to map without opening this chest" style={styles.laterButton}>
-            <Text style={styles.laterText}>BACK TO MAP</Text>
+            accessibilityLabel={fromRewards.current ? 'Back to your Rewards without opening this chest' : 'Back to map without opening this chest'}
+            style={styles.laterButton}>
+            <Text style={styles.laterText}>{fromRewards.current ? 'BACK' : 'BACK TO MAP'}</Text>
           </Pressable>}
         </View>
         <RewardBurst progress={burst} x={width * 0.47} y={height * 0.36} />
@@ -523,7 +586,20 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         ))}
         {walletFly && <WalletBump at={walletFly.to} count={walletFly.count} />}
       </Animated.View>
-    </Modal>
+  );
+  if (inline) return card;
+  return (
+    <CalmModal visible={layer.present} reducedMotion={reducedMotion} inMs={260}
+      onWillShow={() => occlusion.current?.(true)} onHide={() => {
+        occlusion.current?.(false);
+        closed.current?.(!!acknowledgedGift.current);
+        if (fromRewards.current) { fromRewards.current = false; returnToRewards(); }
+      }}
+      onDismiss={layer.onDismissed}
+      backdropColor={BRAND.navy} onBackdropPress={phase !== 'opening' ? dismiss : undefined}
+      onBackButtonPress={phase !== 'opening' ? dismiss : undefined}>
+      {card}
+    </CalmModal>
   );
 }
 
@@ -665,8 +741,6 @@ const styles = StyleSheet.create({
   dayAmount: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
   check: { ...StyleSheet.absoluteFillObject, borderRadius: 10, backgroundColor: 'rgba(60, 184, 92, 0.85)',
     justifyContent: 'center', alignItems: 'center' },
-  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
-  streakText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold },
   stage: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginTop: 6 },
   goldWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   mouthGlow: { position: 'absolute' },

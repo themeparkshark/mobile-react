@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { markRungSeen } from '../../services/reveal/revealLadder';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { Image } from 'expo-image';
@@ -17,6 +18,8 @@ import ChestTrack from './ChestTrack';
 import PrizeIcon from './PrizeIcon';
 import { eventArt, type EventArt } from './eventArt';
 import TeamBadge from '../TeamBadge';
+import { listenRewardsDoor, returnToRewards } from '../../services/retention/rewardsSignals';
+import { useNativeModalLayer } from '../../ui/modalLayers';
 
 type Opened = { key: string; rewards: EventReward | null; already?: boolean; failed?: 'not_ready' | 'network' | false };
 
@@ -140,7 +143,7 @@ function TeamRace({ event }: { readonly event: LiveEvent }) {
  * the team race, today's Star Rides and Frenzy. No point totals or tables up
  * front; grown-ups can open "How it works".
  */
-function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.now(), openOverride, devAutoOpen = null }: {
+function EventSheet({ event, visible: visibleProp, onClose, atPark, onShowRide, now = Date.now(), openOverride, devAutoOpen = null }: {
   readonly event: LiveEvent;
   readonly visible: boolean;
   readonly onClose: () => void;
@@ -179,7 +182,20 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
     const others = (event.together.total - prev.total) - Math.max(0, event.me.points - prev.mine);
     if (others > 0) setTogetherTick({ n: others, at: Date.now() });
   }, [event.together.total, event.me.points]);
-  const close = useCallback(() => { setOpened(null); setPeek(null); onClose(); }, [onClose]);
+  // The Rewards sheet's event chest row opens this sheet too (core loop: event chests wait in Rewards).
+  const [asked, setAsked] = useState(false);
+  // Opened through the Rewards door: closing goes back to the Rewards sheet, as every other row does. The sheet
+  // holds its native layer until UIKit says it is gone, so the Rewards sheet presents right after, never over it.
+  const fromRewards = useRef(false);
+  useEffect(() => listenRewardsDoor('events', () => { fromRewards.current = true; setAsked(true); }), []);
+  const visible = visibleProp || asked;
+  const layer = useNativeModalLayer(visible, 'wait');
+  // Opening the event is seeing it: its NEW tag (rung 9) clears.
+  useEffect(() => { if (visible) markRungSeen('events'); }, [visible]);
+  const close = useCallback(() => {
+    setOpened(null); setPeek(null); setAsked(false); onClose();
+    if (fromRewards.current) { fromRewards.current = false; returnToRewards(); }
+  }, [onClose]);
   const onOpen = useCallback(async (key: string) => {
     if (opening) return; // one open at a time (a double tap on Try again never sends two)
     haptic('tapLight');
@@ -219,12 +235,12 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
   const doNow: { icon: 'chest' | 'star' | 'ride' | 'coin'; text: string; go?: () => void } | null = readyCount > 0
     ? { icon: 'chest', text: readyCount === 1 ? 'Open your chest below' : `Open ${readyCount} chests below` }
     : !live ? null
-      : firstStar ? { icon: 'star', text: `Win a Star Ride: x${starTimes(event)}`, go: onShowRide ? () => { close(); onShowRide(firstStar.task_id); } : undefined }
+      : firstStar ? { icon: 'star', text: `Win a Star Ride: x${starTimes(event)}`, go: onShowRide ? () => { fromRewards.current = false; close(); onShowRide(firstStar.task_id); } : undefined }
         : hint ? { icon: atPark && event.here ? 'ride' : 'coin', text: hint } : null;
   const nextFrenzy = live && atPark && event.here && !frenzy && event.frenzy.next_starts_at ? `Next Frenzy ${clockTime(event.frenzy.next_starts_at)}` : null;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
+    <Modal visible={layer.present} onDismiss={layer.onDismissed} transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
       <View style={styles.scrim}>
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close event" accessibilityRole="button" />
         <View style={[styles.sheet, { marginTop: insets.top + 24, paddingBottom: insets.bottom + 12 }]}>
@@ -267,7 +283,7 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
               <Text style={styles.line}>{event.phase === 'upcoming' ? timeLine(event, now)
                 : hint ?? (event.me.chests.every(c => c.claimed) ? 'All your chests opened!' : 'Open your chests!')}</Text>
               {live && event.include_home && (event.daily_caps.home_find ?? 0) > 0 && (
-                <Text style={styles.small}>Rides earn the most  ·  Home snacks: up to {event.daily_caps.home_find} a day</Text>
+                <Text style={styles.small}>Rides earn the most  ·  Treats: up to {event.daily_caps.home_find} a day</Text>
               )}
             </Section>
             {together.chests.length > 0 && (
@@ -316,7 +332,7 @@ function EventSheet({ event, visible, onClose, atPark, onShowRide, now = Date.no
             </Pressable>
             {details && (
               <View style={styles.details}>
-                <Text style={styles.detail}>Ride win {event.points.ride_win} · Star Ride win {event.points.spotlight_win} · Snack find {event.points.home_find} (up to {event.daily_caps.home_find ?? 0} a day) · Boss hit {event.points.boss_hit} (up to {event.daily_caps.boss_hit ?? 0} a day).</Text>
+                <Text style={styles.detail}>Ride win {event.points.ride_win} · Star Ride win {event.points.spotlight_win} · Treat {event.points.home_find} (up to {event.daily_caps.home_find ?? 0} a day) · Boss hit {event.points.boss_hit} (up to {event.daily_caps.boss_hit ?? 0} a day).</Text>
                 {event.frenzy.hours.length > 0 && <Text style={styles.detail}>Frenzy: park ride wins count double from {event.frenzy.hours.map(h => `${h.from} to ${h.to}`).join(' and ')}, park time.</Text>}
                 <Text style={styles.detail}>Everyone's chests open for anyone who helped at least once.</Text>
                 {event.team_race && <Text style={styles.detail}>Team race counts points per player, so a small team can win. Every team that helped gets a chest; the winner's is bigger.</Text>}

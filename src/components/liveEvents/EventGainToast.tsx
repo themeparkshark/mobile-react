@@ -7,6 +7,7 @@ import { playSfx } from '../../gamekit/SFX';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND } from '../../ui';
 import { eventArt } from './eventArt';
+import { useEventsOpen } from './eventsRung';
 
 /**
  * "+8 to the reef!" after play adds points. Shows once per gain (gainedAt),
@@ -17,7 +18,7 @@ import { eventArt } from './eventArt';
  * fillFrom/fillTo (0..1): your chest bar before and after the gain. The bar
  * fills with a wave splash at its edge, so the kid sees what the points did.
  */
-function EventGainToast({ gained, gainedAt, artKey, word = 'reef', fillFrom = 0, fillTo = 0 }: {
+function EventGainToastInner({ gained, gainedAt, artKey, word = 'reef', fillFrom = 0, fillTo = 0 }: {
   readonly gained: number; readonly gainedAt: number; readonly artKey: string | null; readonly word?: string;
   readonly fillFrom?: number; readonly fillTo?: number;
 }) {
@@ -61,6 +62,11 @@ function EventGainToast({ gained, gainedAt, artKey, word = 'reef', fillFrom = 0,
       </View>
     </Animated.View>
   );
+}
+
+/** Hidden until the events rung opens (rung 9). */
+function EventGainToast(props: Parameters<typeof EventGainToastInner>[0]) {
+  return useEventsOpen() ? <EventGainToastInner {...props} /> : null;
 }
 
 export default memo(EventGainToast);

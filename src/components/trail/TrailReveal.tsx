@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing, FadeIn, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence,
@@ -17,6 +17,9 @@ import RewardBurst from '../RewardBurst';
 import { CountUpText } from '../../gamekit/fx/CountUpText';
 import { BOX_ART, BOX_OPEN_ART } from './TrailBoxArt';
 import { UpperText } from '../../ui/upper';
+import { AuthContext } from '../../context/AuthProvider';
+import { wearAndOpenCloset } from '../../services/retention/wearRewardLive';
+import { NATIVE_DISMISS_FALLBACK_MS, useNativeModalLayer } from '../../ui/modalLayers';
 
 const ICON: Record<TrailReward['kind'], GameIconName> = {
   coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'gift', exclusive: 'star',
@@ -56,7 +59,12 @@ function haptic(level: number) {
  * of the box one by one with their own sound. Coins count up. A Trail Exclusive
  * comes out last, alone, with a ring and a firework. Reduce Motion: a soft fade.
  */
-export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }: {
+export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn, visible = true, onGone, onWorn }: {
+  /** WEAR IT went to the closet (nothing comes back over it); defaults to onClose. */
+  readonly onWorn?: () => void;
+  /** False once closed: the opening stays mounted until UIKit says it is gone (then `onGone`). */
+  readonly visible?: boolean;
+  readonly onGone?: () => void;
   /** Boxes until the Gold guarantee, after this open (a progress tick even on a small box). */
   readonly goldIn?: number | null;
   readonly boxes: readonly TrailBox[];
@@ -68,6 +76,22 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
   const reduced = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  // Its own native layer, held until UIKit says it is gone, so whatever comes next (the Trail sheet again, the
+  // Rewards sheet) presents right after it and never over it.
+  const layer = useNativeModalLayer(visible, 'wait');
+  const gone = useRef(onGone); gone.current = onGone;
+  const goneSent = useRef(false);
+  const sendGone = useCallback(() => {
+    if (goneSent.current) return;
+    goneSent.current = true;
+    gone.current?.();
+  }, []);
+  useEffect(() => {
+    if (visible) { goneSent.current = false; return undefined; }
+    // Android, or a sheet that never presented, sends no dismissal: the layer's own fallback time.
+    const t = setTimeout(sendGone, NATIVE_DISMISS_FALLBACK_MS);
+    return () => clearTimeout(t);
+  }, [visible, sendGone]);
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>('ready');
   const [opened, setOpened] = useState(false);
@@ -85,6 +109,15 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
   const pending = useRef<Promise<readonly TrailReward[]> | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const size = Math.min(width * 0.56, 230);
+  // WEAR IT on a Trail Exclusive: the piece goes on, then the closet opens on its tab with it worn (must-fix 5).
+  const { refreshPlayer } = useContext(AuthContext);
+  const [wearing, setWearing] = useState(false);
+  const wearable = rewards.find(r => r.kind === 'exclusive' && typeof r.item_id === 'number' && !r.instead_of);
+  const wear = async () => {
+    if (!wearable?.item_id || wearing) return;
+    setWearing(true);
+    try { await wearAndOpenCloset(wearable.item_id, refreshPlayer); } finally { setWearing(false); (onWorn ?? onClose)(); }
+  };
   const stageTop = insets.top + 20 + 26 + 44;
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
@@ -198,7 +231,8 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
   const showRewards = phase === 'rewards';
 
   return (
-    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={showRewards ? next : onClose}>
+    <Modal visible={layer.present} onDismiss={() => { layer.onDismissed(); sendGone(); }}
+      transparent animationType="fade" statusBarTranslucent onRequestClose={showRewards ? next : onClose}>
       <Pressable style={[styles.scrim, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
         onPress={phase === 'ready' ? start : skipAhead} accessibilityRole="button"
         accessibilityLabel={phase === 'ready' ? `Open your ${boxName(box)}` : BOX_NAME[box.tier]}>
@@ -234,7 +268,11 @@ export default function TrailReveal({ boxes, onOpen, onClose, nextHint, goldIn }
               </View>
             )}
             {left === 0 && !!nextHint && <Text style={styles.hint}>{nextHint}</Text>}
-            <GameButton label={left > 0 ? `Next box (${left})` : 'Nice!'} onPress={next} />
+            {left === 0 && wearable && (
+              <GameButton label={wearing ? 'Putting it on...' : 'WEAR IT'} icon="shark" loading={wearing} onPress={() => { void wear(); }}
+                accessibilityLabel={`Wear ${wearable.name ?? 'your Trail Exclusive'} now`} />
+            )}
+            <GameButton label={left > 0 ? `Next box (${left})` : 'Nice!'} onPress={next} variant={left === 0 && wearable ? 'secondary' : undefined} />
           </Animated.View>
         )}
         {phase === 'error' && (
@@ -292,7 +330,7 @@ function RewardCard({ reward, tier, order, delay, hero, reduced }: {
   return (
     <Animated.View style={[styles.cardWrap, style]}>
       {hero && <HeroRing ring={ring} />}
-      <View style={[styles.card, hero && styles.cardHero]} accessible accessibilityLabel={reward.kind === 'coins' ? `Plus ${reward.amount} coins` : rewardLabel(reward)}>
+      <View style={[styles.card, hero && styles.cardHero]} accessible accessibilityLabel={reward.kind === 'coins' ? `Plus ${reward.amount} Shark Coins` : rewardLabel(reward)}>
         <View style={[styles.strip, { backgroundColor: hero ? BRAND.gold : STRIP[tier] }]} />
         {reward.kind === 'exclusive' && reward.icon_url
           ? <Image source={{ uri: reward.icon_url }} style={{ width: 60, height: 60 }} contentFit="contain" />

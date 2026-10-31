@@ -53,13 +53,49 @@ export interface TrailState {
   readonly lifetime: { readonly steps: number; readonly meters: number; readonly boxes_opened: number };
   readonly week: { readonly steps: number; readonly goal_steps: number | null; readonly goal_hit: boolean; readonly goal_options: readonly number[] };
   readonly wheels: boolean;
-  readonly gold_in: number;
+  /** Random mode only: boxes until the Gold guarantee. */
+  readonly gold_in?: number;
   readonly next_ride_box: number | null;
-  readonly odds: { readonly tiers: readonly TrailOddsTier[]; readonly gold_pity: number; readonly exclusives: readonly string[] };
+  /** Random mode only (preview): the odds table. Known-contents mode (core loop) sends `contents` instead. */
+  readonly odds?: { readonly tiers: readonly TrailOddsTier[]; readonly gold_pity: number; readonly exclusives: readonly string[] };
+  /** 'fixed': boxes come in a known order with known rewards (no roll, no odds). 'random' (or absent): the old odds mode. */
+  readonly mode?: 'fixed' | 'random';
+  /** Known contents: exactly what each box holds for this player. */
+  readonly contents?: readonly { readonly tier: TrailTier; readonly goal_steps: number; readonly rewards: readonly TrailContentReward[] }[];
+  /** Known contents: the next boxes' colours, in order. */
+  readonly next_tiers?: readonly TrailTier[];
+  /** Known contents: 'second_park_day' while the first box has not come yet (it comes on the 2nd park day). */
+  readonly first_box?: string | null;
   /** Trail Exclusives with art and whether you have each (newer servers). */
   readonly exclusives?: readonly { readonly item_id: number; readonly name: string; readonly icon_url: string | null; readonly owned: boolean }[];
   readonly sync?: TrailSyncResult;
   readonly opened?: { readonly box: TrailBox; readonly rewards: readonly TrailReward[]; readonly replayed: boolean };
+}
+
+export interface TrailContentReward {
+  readonly kind: TrailRewardKind;
+  readonly amount: number;
+  readonly item_id?: number;
+  readonly name?: string;
+  readonly icon_url?: string | null;
+}
+
+/** Known contents, from the server: what a tier's box holds, as picture rows (no percent anywhere). */
+export function knownContents(state: Pick<TrailState, 'mode' | 'contents'>): readonly { readonly tier: TrailTier; readonly goal_steps: number; readonly rewards: readonly TrailContentReward[] }[] | null {
+  if (state.mode !== 'fixed' || !Array.isArray(state.contents) || state.contents.length === 0) return null;
+  return state.contents;
+}
+
+/** The odds table only while the server is in random mode and sends one. */
+export function oddsTiers(state: Pick<TrailState, 'mode' | 'odds'>): readonly TrailOddsTier[] | null {
+  if (state.mode === 'fixed') return null;
+  return state.odds?.tiers?.length ? state.odds.tiers : null;
+}
+
+/** "Gold in N" only in random mode (a fixed order needs no promise meter). */
+export function goldIn(state: Pick<TrailState, 'mode' | 'gold_in'>): number | null {
+  if (state.mode === 'fixed') return null;
+  return typeof state.gold_in === 'number' && Number.isFinite(state.gold_in) ? state.gold_in : null;
 }
 
 export interface TrailSyncResult {
@@ -165,12 +201,36 @@ export function missNote(sync: TrailSyncResult | undefined): { steps: number; te
 
 export function rewardLabel(r: TrailReward): string {
   switch (r.kind) {
-    case 'coins': return `${formatSteps(r.amount)} Coins`;
+    case 'coins': return `${formatSteps(r.amount)} Shark Coins`;
     case 'energy': return `${r.amount} Energy`;
     case 'tickets': return r.amount === 1 ? '1 Ticket' : `${r.amount} Tickets`;
     case 'mystery_box': return r.amount === 1 ? 'Mystery Pin Box' : `${r.amount} Mystery Pin Boxes`;
     case 'exclusive': return r.name ?? 'Trail Exclusive';
   }
+}
+
+/**
+ * Mystery Pin Boxes stay preview-only (Dustin, Oct 28, ledger 40): "What's inside" never lists one for a
+ * player whose pin_mystery_boxes switch is off, in any mode. Pure.
+ */
+export function withoutPinBoxes<T extends { readonly kind: string }>(list: readonly T[], pinBoxes: boolean): readonly T[] {
+  return pinBoxes ? list : list.filter(r => r.kind !== 'mystery_box');
+}
+
+/**
+ * The Trail Exclusives line, true to the mode and never a chance word (Dustin, Oct 28: no odds anywhere): known
+ * contents give the next one in every Gold Box; an older random-mode server (production until be-core-loop
+ * deploys) only says where they come from.
+ */
+export function exclusivesLine(state: { readonly mode?: string }): string {
+  return state.mode === 'fixed'
+    ? 'Every Gold Box brings the next one. Wear them to show you walk the parks.'
+    : 'Only in Trail Boxes. Wear them to show you walk the parks.';
+}
+
+/** The "Arrive at a park" earn row's line: honest about the first park day (no box on it in known-contents mode). */
+export function arriveLine(state: { readonly first_box?: string | null }): string {
+  return state.first_box === 'second_park_day' ? 'From your second park day' : 'A box each park day';
 }
 
 export function bonusLabel(kind: TrailRewardKind, amount: number): string {

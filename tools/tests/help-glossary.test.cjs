@@ -171,7 +171,7 @@ test('one streak number: the stats menu shows the Daily Chest streak, and the he
   assert.doesNotMatch(radial, /current_streak/, 'not the hidden home-find streak (a second number)');
   assert.match(radial, /useFlameStreak\(dailyGift\?\.streak, isOpen\)/, 'the chest number, or Daily 3 while it owns the flame');
   const chest = fs2.readFileSync(p2.join(__dirname, '../../src/components/DailyGiftModal.tsx'), 'utf8');
-  assert.match(chest, /displayedGift\.streak/, 'the chest shows the same number');
+  assert.match(chest, /`Day \$\{day\} of \$\{ladder\.length\}`/, 'core loop: the chest shows its ladder day, never a second streak');
   assert.match(glossary.LOCAL_GLOSSARY.day_streak.earn, /Daily Chest/);
 });
 
@@ -182,14 +182,15 @@ test('one flame number: Daily 3 owns the flame while it is on, and ride days nev
   const flags = loadTs('src/services/retention/flags.ts', { '../../api/endpoints/platform/feature-flags': { default: async () => ({ flags: {} }) } });
   assert.equal(flags.streakOwner(null), null);
   assert.equal(flags.streakOwner({ dailyThree: true, levelChests: false }), 'daily3');
-  assert.equal(flags.streakOwner({ dailyThree: false, levelChests: false }), 'chest');
+  assert.equal(flags.streakOwner({ dailyThree: false, levelChests: false }), null, 'core loop: the chest never owns a flame');
   const flame = loadTs('src/services/retention/useFlameStreak.ts', {
     react: { useEffect() {}, useState: v => [typeof v === 'function' ? v() : v, () => {}] },
     '../../api/endpoints/retention': { getDailyThree: async () => null },
     './flags': flags,
     './useOwnStreak': { ownStreakOf: () => null },
+    '../reveal/revealLadder': { useRung: () => ({ open: true, isNew: false, markSeen() {} }) },
   });
-  assert.equal(flame.flameStreak('chest', 4, 9), 4);
+  assert.equal(flame.flameStreak('chest', 4, 9), null, 'core loop: the chest day ladder is never a flame');
   assert.equal(flame.flameStreak('daily3', 4, 9), 9);
   assert.equal(flame.flameStreak('daily3', 4, null), null, 'waits for the Daily 3 number, never shows the chest one');
   assert.equal(flame.flameStreak(null, 4, 9), null);
@@ -201,6 +202,7 @@ test('one flame number: Daily 3 owns the flame while it is on, and ride days nev
     '../../api/endpoints/retention': { getDailyThree: async () => null },
     './flags': { ...flags, loadRetentionFlags: async () => { reads += 1; return null; } },
     './useOwnStreak': { ownStreakOf: () => null },
+    '../reveal/revealLadder': { useRung: () => ({ open: true, isNew: false, markSeen() {} }) },
   });
   warm.default(4, false);
   assert.equal(reads, 1, 'reads once on mount, before the first open');
@@ -211,7 +213,7 @@ test('one flame number: Daily 3 owns the flame while it is on, and ride days nev
   const radial = readSrc('src/components/RadialStatsMenu.tsx');
   assert.match(radial, /useFlameStreak\(dailyGift\?\.streak, isOpen\)/);
   assert.match(radial, /streakFrom === 'daily3' \? 'daily3_streak' : 'day_streak'/);
-  assert.match(readSrc('src/components/DailyGiftModal.tsx'), /\{chestOwnsFlame && !simple && \(displayedGift\.streak/);
+  assert.doesNotMatch(readSrc('src/components/DailyGiftModal.tsx'), /displayedGift\.streak|day streak/, 'the chest ladder says Day N of 7, never a streak');
   assert.match(glossary.LOCAL_GLOSSARY.daily3_streak.what, /Daily 3/);
   // Ride days in a row are their own number: never the flame icon, never "Day Streak".
   for (const f of ['src/screens/RideTracker/RideStatsScreen.tsx', 'src/screens/RideTracker/RideTrackerScreen.tsx', 'src/screens/RideTracker/RideWrappedScreen.tsx']) {

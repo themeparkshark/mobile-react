@@ -8,6 +8,9 @@ import { useEventAmbient } from '../../services/liveEvents/ambient';
 import { chipState, shortEnd, timeLine } from '../../services/liveEvents/model';
 import { BRAND, GameIcon } from '../../ui';
 import { eventArt } from './eventArt';
+import { useEventsOpen } from './eventsRung';
+import { useShownNewTag } from '../../services/retention/newTag';
+import { NewPill } from '../retention/RewardsSheet';
 
 /**
  * The event's pill for the park map's status row (and anywhere a one-line
@@ -17,7 +20,7 @@ import { eventArt } from './eventArt';
  *   otherwise        -> your chest bar
  * The emblem hops only while a chest is ready (UI thread; still under reduced motion).
  */
-function EventStatusChip({ event, onPress, inline = false, paused = false, now = Date.now() }: {
+function EventStatusChipInner({ event, onPress, inline = false, paused = false, now = Date.now() }: {
   readonly event: LiveEvent;
   /** The map is covered or blurred: the hop rests. */
   readonly paused?: boolean;
@@ -39,20 +42,25 @@ function EventStatusChip({ event, onPress, inline = false, paused = false, now =
   }, [hopping, hop]);
   const emblemStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -5 * hop.value }, { scale: 1 + 0.06 * hop.value }] }));
 
+  // The event's first appearance (rung 9): one NEW pill, cleared on tap or when the app goes to the background.
+  const tag = useShownNewTag('events');
   const title = event.title.toUpperCase();
   const label = s.kind === 'open' ? `${event.title}: ${s.count === 1 ? 'a chest is' : `${s.count} chests are`} ready. Open.`
     : s.kind === 'frenzy' ? `${event.title}: Frenzy, ${s.line}. Open event.`
       : s.kind === 'upcoming' ? `${event.title}: ${s.line}. Open event.`
         : `${event.title}: play to open your chests. Open event.`;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={() => { if (tag.isNew) tag.seen(); onPress(); }}
       style={({ pressed }) => [styles.pill, inline && styles.inline, s.kind === 'open' && styles.pillReady, pressed && styles.pressed]}>
       <Animated.View style={emblemStyle}>
         <Image source={s.kind === 'open' ? art.chestOpen : art.chestClosed} style={styles.emblem} contentFit="contain" />
         {s.kind === 'open' && <View style={styles.dot} />}
       </Animated.View>
       <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, styles.titleShrink]} numberOfLines={1}>{title}</Text>
+          {tag.isNew && <NewPill />}
+        </View>
         {s.kind === 'progress' && (
           <View style={styles.barRow}>
             <View style={styles.bar}><View style={[styles.barFill, { width: `${Math.max(4, s.fill * 100)}%` }]} /></View>
@@ -71,9 +79,16 @@ function EventStatusChip({ event, onPress, inline = false, paused = false, now =
   );
 }
 
+/** Hidden until the events rung opens (rung 9). */
+function EventStatusChip(props: Parameters<typeof EventStatusChipInner>[0]) {
+  return useEventsOpen() ? <EventStatusChipInner {...props} /> : null;
+}
+
 export default memo(EventStatusChip);
 
 const styles = StyleSheet.create({
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  titleShrink: { flexShrink: 1 },
   pill: { marginHorizontal: 12, marginTop: 8, minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 16,
     borderWidth: 3, borderColor: BRAND.white, backgroundColor: BRAND.blue, paddingVertical: 4, paddingLeft: 6, paddingRight: 10,
     shadowColor: BRAND.shadow, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },

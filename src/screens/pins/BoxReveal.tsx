@@ -61,6 +61,7 @@ import { PINS_COPY, revealOrder, serialLabel, type Pull } from './pinsModel';
 import { FlexShareButton } from '../../share/FlexShareButton';
 import { useModalHandoff } from '../../share/handoff';
 import { withWearTimeout } from '../../services/money/sharkPassModel';
+import { useNativeModalLayer } from '../../ui/modalLayers';
 
 type Phase = 'drop' | 'ready' | 'shake' | 'hold' | 'pop' | 'show' | 'summary';
 
@@ -266,6 +267,9 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const [kept, setKept] = useState<Set<number>>(new Set());
   const [hidden, setHidden] = useState(false);
   const modal = useModalHandoff(useCallback(() => setHidden(true), []));
+  // One door for every sheet (core loop 4.3 rule 10): the reveal registers with the native modal layer list,
+  // so a dialog that wants to open waits until UIKit has really dismissed this one. Opened on purpose: shows at once.
+  const layer = useNativeModalLayer(!hidden, 'show');
   const ambient = useAmbient();
   const [swappedOut, setSwappedOut] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
@@ -688,7 +692,8 @@ export default function BoxReveal({ pulls: rawPulls, tone, still, onDone, varian
   const shareHandoff = async () => { leaving.current = true; await modal.handoff(); onDone(pulls); };
 
   return (
-    <Modal transparent visible={!hidden} animationType="fade" statusBarTranslucent onDismiss={modal.onDismiss}
+    <Modal transparent visible={layer.present} animationType="fade" statusBarTranslucent
+      onDismiss={() => { modal.onDismiss?.(); layer.onDismissed(); }}
       onRequestClose={() => (phase === 'show' || phase === 'summary') && !wearing && next()}>
       <Pressable style={styles.scrim} onPress={onBackdrop} accessibilityRole="button"
         accessibilityLabel={phase === 'ready' ? 'Open the box' : 'Mystery box'}>

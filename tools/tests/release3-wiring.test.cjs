@@ -100,7 +100,8 @@ test('money on the map and Profile: no Park Day Pack on the map (it lives in Sup
 test('StreakFlame: own streak only from an enabled Daily 3 payload; friend rows, Player page and Standings only when the field is present', () => {
   const s = loadTs('src/services/retention/useOwnStreak.ts', {
     '@react-navigation/native': { useFocusEffect: () => undefined }, react: { useCallback: f => f, useState: v => [v, () => undefined] },
-    '../../api/endpoints/retention': { getDailyThree: async () => ({ enabled: false }) } });
+    '../../api/endpoints/retention': { getDailyThree: async () => ({ enabled: false }) },
+    '../reveal/revealLadder': { useRung: () => ({ open: true, isNew: false, markSeen() {} }) } });
   assert.equal(s.ownStreakOf(null), null);
   assert.equal(s.ownStreakOf({ enabled: false }), null);
   assert.deepEqual(plain(s.ownStreakOf({ enabled: true, streak: { days: 4, best: 9 } })), { days: 4, best: 9 });

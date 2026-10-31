@@ -8,6 +8,13 @@ import getFeatureFlags from '../../api/endpoints/platform/feature-flags';
 export interface RetentionFlags {
   readonly dailyThree: boolean;
   readonly levelChests: boolean;
+  /** Every switch the server sent this player (the reward rungs read theirs from here). */
+  readonly all?: Readonly<Record<string, boolean>>;
+}
+
+/** One switch by its server name; absent reads as off. */
+export function flagOn(flags: RetentionFlags | null | undefined, name: string): boolean {
+  return flags?.all?.[name] === true;
 }
 
 let cached: RetentionFlags | null = null;
@@ -17,7 +24,9 @@ let pending: Promise<RetentionFlags | null> | null = null;
 export function loadRetentionFlags(read: typeof getFeatureFlags = getFeatureFlags): Promise<RetentionFlags | null> {
   if (cached) return Promise.resolve(cached);
   pending ??= read().then((payload): RetentionFlags | null => {
-    cached = { dailyThree: payload.flags.daily_three === true, levelChests: payload.flags.level_chests === true };
+    const all: Record<string, boolean> = {};
+    for (const [k, v] of Object.entries(payload.flags ?? {})) if (typeof v === 'boolean') all[k] = v;
+    cached = { dailyThree: payload.flags.daily_three === true, levelChests: payload.flags.level_chests === true, all };
     return cached;
   }).catch(() => { pending = null; return null; });
   return pending;
@@ -29,14 +38,15 @@ export function retentionFlagsNow(): RetentionFlags | null {
 }
 
 /**
- * One flame number in the whole game: while Daily 3 is on, the flame (and the
- * words "day streak") mean the Daily 3 streak; otherwise the Daily Chest
- * streak. Null while the flags are unknown, so nothing shows a number that
- * could turn out to be the other one.
+ * One flame number in the whole game (core loop blueprint 4.5): the flame is
+ * the Daily 3 streak and nothing else. The daily chest says "Day N of 7" on its
+ * ladder and never shows a streak, so with Daily 3 off there is no flame at
+ * all (never a second number that disagrees). Null while the flags are unknown
+ * or Daily 3 is off.
  */
-export function streakOwner(flags: RetentionFlags | null): 'daily3' | 'chest' | null {
+export function streakOwner(flags: RetentionFlags | null): 'daily3' | null {
   if (!flags) return null;
-  return flags.dailyThree ? 'daily3' : 'chest';
+  return flags.dailyThree ? 'daily3' : null;
 }
 
 /** Tests only. */

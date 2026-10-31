@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { getLiveEvents, openEventChest, type LiveEvent, type OpenChestResult } from '../../api/endpoints/live-events';
 import useLivePoll from '../../hooks/useLivePoll';
 import { pickEvent, pointsGained, starRideIds } from './model';
+import { useRung } from '../reveal/revealLadder';
 
 /**
  * One shared copy of "the event right now" for the map, the chip, the sheet
@@ -99,10 +100,14 @@ export default function useLiveEvent(parkId: number | null, options: { readonly 
   return { event, gained: snap.parkId === parkId ? snap.gained : 0, gainedAt: snap.gainedAt, refresh: load };
 }
 
+const NO_STARS: ReadonlySet<number> = new Set();
+
 /** Star Rides at this park today (task ids). Empty off-event or away from an event park. */
 export function useStarRides(parkId: number | null): ReadonlySet<number> {
   const { event } = useLiveEvent(parkId);
-  const ids = starRideIds(event);
+  // Star Rides are part of Shark Events: none before the events rung opens (rung 9).
+  const eventsOpen = useRung('events').open || (__DEV__ && !!process.env.EXPO_PUBLIC_LIVE_EVENT_PREVIEW);
+  const ids = eventsOpen ? starRideIds(event) : NO_STARS;
   const key = [...ids].sort().join(',');
   const memo = useRef<{ key: string; ids: ReadonlySet<number> }>({ key, ids });
   if (memo.current.key !== key) memo.current = { key, ids };

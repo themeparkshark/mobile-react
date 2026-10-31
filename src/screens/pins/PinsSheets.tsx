@@ -42,21 +42,23 @@ export function PickSheet({ series, busy, onPick, onClose }: { series: MysterySe
 }
 
 const HELP = [
-  { art: BOX_ART.blue.closed, word: 'Open boxes', line: 'Each has 1 pin.' },
-  { art: PIN_ART.chaser, word: 'Gold chaser', line: 'Rare! By box 20 for sure.' },
-  { art: PIN_ART.seal, word: 'Park only', line: 'Found at the park.' },
-  { art: PIN_ART.trade, word: 'Can trade', line: 'Swap extras.' },
+  { art: BOX_ART.blue.closed, word: 'Open boxes', line: 'Each has 1 pin.', mystery: true },
+  { art: PIN_ART.chaser, word: 'Gold chaser', line: 'Rare! By box 20 for sure.', mystery: true },
+  { art: PIN_ART.seal, word: 'Park only', line: 'Found at the park.', mystery: false },
+  { art: PIN_ART.trade, word: 'Can trade', line: 'Swap extras.', mystery: false },
 ] as const;
 
 /** Shown in help only when the Golden Box is on for this player. */
-export const GOLDEN_HELP = 'Golden Box: 900 coins, one at a time. Gold chaser 1 in 4 (1 in 14 once you have it). Only pins you need. Shares the box-20 guarantee. Best value for the chaser is the regular box.';
+export const GOLDEN_HELP = 'Golden Box: 900 Shark Coins, one at a time. Gold chaser 1 in 4 (1 in 14 once you have it). Only pins you need. Shares the box-20 guarantee. Best value for the chaser is the regular box.';
 
-export function PinsHelp({ onClose, golden = false }: { onClose: () => void; golden?: boolean }) {
+export function PinsHelp({ onClose, golden = false, mystery = true }: { onClose: () => void; golden?: boolean;
+  /** Mystery boxes are on for this player (kid-safe: preview only); else the help never promises boxes. */
+  mystery?: boolean }) {
   return (
     <Sheet onClose={onClose}>
       <Text maxFontSizeMultiplier={1.35} style={[styles.title, { marginTop: SPACE.sm }]}>Pins</Text>
       <View style={styles.help}>
-        {HELP.map(h => (
+        {HELP.filter(h => mystery || !h.mystery).map(h => (
           <View key={h.word} style={styles.helpTile} accessible accessibilityLabel={`${h.word}. ${h.line}`}>
             <Image source={h.art} style={{ width: 64, height: 64 }} contentFit="contain" />
             <Text maxFontSizeMultiplier={1.3} style={styles.helpWord}>{h.word}</Text>
@@ -64,7 +66,7 @@ export function PinsHelp({ onClose, golden = false }: { onClose: () => void; gol
           </View>
         ))}
       </View>
-      {golden && (
+      {golden && mystery && (
         <View style={styles.goldenHelp} accessible accessibilityLabel={GOLDEN_HELP}>
           <Image source={BOX_ART.gold.closed} style={{ width: 48, height: 48 }} contentFit="contain" />
           <Text maxFontSizeMultiplier={1.3} style={[styles.helpLine, { flex: 1, textAlign: 'left' }]}>{GOLDEN_HELP}</Text>

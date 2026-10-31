@@ -166,7 +166,7 @@ function ParkSetCardBase({ set, today, busy, still, shine, onClaim, onPin, onHun
         ) : set.complete ? (
           <GameButton size="compact" label="Get reward" icon="gift" loading={busy} disabled={busy} onPress={() => onClaim(set)} />
         ) : (
-          <View style={styles.reward} accessible accessibilityLabel={`Finish it for ${set.reward.coins} coins and ${set.reward.boxes} free mystery box`}>
+          <View style={styles.reward} accessible accessibilityLabel={`Finish it for ${set.reward.coins} Shark Coins and ${set.reward.boxes} free mystery box`}>
             <Text maxFontSizeMultiplier={1.1} style={styles.rewardLead}>Finish:</Text>
             <GameIcon name="coins" size={20} /><Text maxFontSizeMultiplier={1.1} style={styles.rewardNum}>{set.reward.coins}</Text>
             {set.reward.boxes > 0 && <><GameIcon name="gift" size={20} /><Text maxFontSizeMultiplier={1.1} style={styles.rewardNum}>{set.reward.boxes}</Text></>}

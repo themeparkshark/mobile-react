@@ -210,6 +210,11 @@ export const PINS_COPY = {
   networkTitle: 'Pins didn’t load',
   networkMessage: 'Check your internet and try again.',
   closedSeries: 'All done',
+  // An empty tab never shows a blank page (state A on the prod mirror: no park set live, no pins yet).
+  setsEmptyTitle: 'Park sets are on the way',
+  setsEmptyLine: 'A park set is a board of pins you win at the park.',
+  mineEmptyTitle: 'No pins yet',
+  mineEmptyLine: 'Pins you win show up here.',
 } as const;
 
 export type BadgeKind = 'seal' | 'trade' | 'trophy' | 'none';
@@ -402,7 +407,9 @@ export function mysteryShelf(home: { mystery?: readonly unknown[] | null; upcomi
   return 'soon';
 }
 
-export function initialTab(home: Pick<PinHome, 'mystery' | 'park_sets'>): 'mystery' | 'sets' {
+export function initialTab(home: Pick<PinHome, 'mystery' | 'park_sets'>, mysteryOn = true): 'mystery' | 'sets' {
+  // Kid-safe (core loop 5.12): the Mystery tab exists only where pin_mystery_boxes is on for the player.
+  if (!mysteryOn) return 'sets';
   if ((home.mystery ?? []).some(s => s.free_now)) return 'mystery';
   if (home.park_sets.some(s => s.complete && !s.claimed)) return 'sets';
   return 'mystery';
@@ -436,4 +443,25 @@ export function showGolden(series: Pick<MysterySeries, 'golden' | 'open' | 'paid
 /** Coins short for one Golden Box (0 when you have enough). */
 export function goldenShort(series: Pick<MysterySeries, 'golden'>, balance: number): number {
   return Math.max(0, (series.golden?.price ?? 0) - Math.max(0, balance));
+}
+
+/**
+ * Pins door rules (core loop 5.9, FEEDS_CORE): the door shows while Pin of the Day is on or the
+ * player owns a pin (pins you own never hide); mystery boxes, the Golden Box, the chaser meter and
+ * the daily pips show only where pin_mystery_boxes is on for that player (preview only today).
+ */
+export function pinsDoorShown(flags: { readonly pinOfTheDay: boolean; readonly ownsPin: boolean }): boolean {
+  return flags.pinOfTheDay || flags.ownsPin;
+}
+export function mysteryShown(flags: { readonly mysteryBoxes: boolean }): boolean {
+  return flags.mysteryBoxes;
+}
+
+/**
+ * The empty lanyard's hint. It never promises boxes to a player who has none (mystery boxes are
+ * preview only): then pins come from park sets.
+ */
+export function lanyardHint(owned: number, mysteryOn: boolean, sharedHint: (owned: number) => string): string {
+  if (owned > 0 || mysteryOn) return sharedHint(owned);
+  return 'Win pins from park sets';
 }

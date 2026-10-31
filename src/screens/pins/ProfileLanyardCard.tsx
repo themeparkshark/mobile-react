@@ -14,8 +14,12 @@ import { BRAND, FONT, OUTLINE, RADIUS, SPACE } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { Lanyard } from './Lanyard';
 import { PIN_ART } from './PinArt';
-import type { LanyardPin } from './pinsModel';
+import { lanyardHint, mysteryShown, type LanyardPin } from './pinsModel';
+import useRetentionFlags from '../../services/retention/useRetentionFlags';
+import { flagOn } from '../../services/retention/flags';
 import { lanyardCountLabel, lanyardEmptyHint } from '../../components/profile/profileCounts';
+import { useShownNewTag } from '../../services/retention/newTag';
+import { NewPill } from '../../components/retention/RewardsSheet';
 
 export default function ProfileLanyardCard({ playerId, own }: { playerId: number; own: boolean }) {
   const [data, setData] = useState<{
@@ -26,6 +30,10 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
   const { width } = useWindowDimensions();
   const still = useUiReducedMotion();
   const focused = useIsFocused();
+  // The Pins door's one NEW tag at level 3 (core loop rung 8): it shows here on your own lanyard card. A NEW that was
+  // shown retires when the card leaves or the app goes to the background (and at once on a tap), so it never keeps the
+  // ladder's one NEW slot from the next rung.
+  const mysteryOn = mysteryShown({ mysteryBoxes: flagOn(useRetentionFlags(), 'pin_mystery_boxes') });
   useEffect(() => {
     // Fetch when the profile comes into view, not when it leaves.
     if (!focused) return;
@@ -34,12 +42,15 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
     return () => { live = false; };
   }, [playerId, focused]);
 
+  const pinsNew = useShownNewTag('pins', own && !!data && focused);
+  const newTag = pinsNew.isNew;
   if (!data || (!own && data.lanyard.length === 0)) return null;
   const chasers = data.chasers ?? data.lanyard.filter(p => p.is_chaser).length;
   const body = (
     <View style={styles.card} accessible accessibilityLabel={`${own ? 'Your' : 'Their'} lanyard: ${data.lanyard.map(p => p.name).join(', ') || 'empty'}. ${data.pins} pins, ${data.sets_done} park sets done`}>
       <View style={styles.head}>
         <Text maxFontSizeMultiplier={1.3} style={styles.title}>Lanyard</Text>
+        {newTag && <NewPill />}
         <View style={styles.chip}><Image source={PIN_ART.seal} style={styles.icon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>{data.sets_done}</Text></View>
         {chasers > 0 && <View style={styles.chip}><Image source={PIN_ART.chaser} style={styles.icon} contentFit="contain" /><Text maxFontSizeMultiplier={1.1} style={styles.chipText}>{chasers}</Text></View>}
         {!!data.best_serial && <View style={[styles.chip, styles.serialChip]}><Text maxFontSizeMultiplier={1.1} style={[styles.chipText, { color: BRAND.gold }]}>#{data.best_serial}</Text></View>}
@@ -72,13 +83,13 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
       {data.lanyard.length > 0 ? (
         <Lanyard pins={data.lanyard} width={width - 32 - SPACE.md * 2} height={140} still={still} active={focused} />
       ) : (
-        <Text maxFontSizeMultiplier={1.35} style={styles.empty}>{own ? lanyardEmptyHint(data.pins) : 'Wear your best pins here'}</Text>
+        <Text maxFontSizeMultiplier={1.35} style={styles.empty}>{own ? lanyardHint(data.pins, mysteryOn, lanyardEmptyHint) : 'Wear your best pins here'}</Text>
       )}
     </View>
   );
   if (!own) return body;
   return (
-    <Pressable onPress={() => RootNavigation.navigate('PinCollections')} accessibilityRole="button" accessibilityHint="Opens your pins">
+    <Pressable onPress={() => { pinsNew.seen(); RootNavigation.navigate('PinCollections'); }} accessibilityRole="button" accessibilityHint="Opens your pins">
       {body}
     </Pressable>
   );

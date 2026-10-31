@@ -9,7 +9,7 @@ import countText from '../../helpers/countText';
 export const EVENT_COPY: Record<string, { label: string; icon: GameIconName }> = {
   ride_coin_win: { label: 'Win a ride coin', icon: 'coin' },
   mini_game_win: { label: 'Win a mini-game', icon: 'trophy' },
-  home_find: { label: 'Grab a home find', icon: 'search' },
+  home_find: { label: 'Find a treat', icon: 'search' },
   coin_level_up: { label: 'Level up a ride coin', icon: 'parts' },
   daily3_complete: { label: 'Finish your Daily 3', icon: 'check' },
   level_up: { label: 'Level up your shark', icon: 'xp' },
@@ -36,15 +36,15 @@ export function isWearable(r: SharkPassReward | null | undefined): r is Wearable
   return !!r && (r.type === 'item' || r.type === 'frame');
 }
 
-/** "2 coins" style words for a reward. Exported for tests. */
+/** "2 Shark Coins" style words for a reward (one word per thing). Exported for tests. */
 export function rewardWords(reward: SharkPassReward): string {
   switch (reward.type) {
     case 'item': case 'frame': return reward.name;
     case 'mystery_box': return reward.boxes === 1 ? '1 Mystery Pin Box' : `${reward.boxes} Mystery Pin Boxes`;
-    case 'rescue_passes': return reward.amount === 1 ? '1 Rescue Pass' : `${reward.amount} Rescue Passes`;
-    case 'tickets': return `${reward.amount} ${reward.amount === 1 ? 'ticket' : 'tickets'}`;
-    case 'energy': return `${reward.amount} energy`;
-    default: return `${countText(reward.amount)} coins`;
+    case 'rescue_passes': return reward.amount === 1 ? '1 Extra try' : `${reward.amount} Extra tries`;
+    case 'tickets': return `${reward.amount} ${reward.amount === 1 ? 'Ticket' : 'Tickets'}`;
+    case 'energy': return `${reward.amount} Energy`;
+    default: return `${countText(reward.amount)} Shark Coins`;
   }
 }
 
@@ -60,23 +60,90 @@ export function passSummary(tiers: readonly SharkPassTier[]): string {
   const parts = [
     items ? `${items} season ${items === 1 ? 'item' : 'items'}` : null,
     boxes ? `${boxes} Mystery Pin ${boxes === 1 ? 'Box' : 'Boxes'}` : null,
-    coins ? `${countText(coins)} coins` : null,
+    coins ? `${countText(coins)} Shark Coins` : null,
   ].filter(Boolean);
   return parts.length ? `${parts.join(', ')} and more` : 'A reward on every step';
 }
 
 
-/** The next item reward on either row the player hasn't reached yet, and how far it is. */
-export function nextBigPrize(tiers: readonly SharkPassTier[], points: number, perStep: number):
+/**
+ * The next wearable prize, one rule everywhere (the banner and the pass screen, the server's
+ * progress.next_prize): a free player's next free prize; a Shark Pass owner's next prize on the
+ * Shark Pass row first, then the free row. Never the paid row as a tease for a free player.
+ */
+export function nextBigPrize(tiers: readonly SharkPassTier[], points: number, perStep: number, premium = false):
   { tier: number; reward: SharkPassReward; pass: boolean; pointsAway: number } | null {
   for (const t of tiers) {
     if (t.unlocked) continue;
-    const reward = isWearable(t.free) ? t.free : isWearable(t.paid) ? t.paid : null;
+    const reward = premium ? (isWearable(t.paid) ? t.paid : isWearable(t.free) ? t.free : null) : isWearable(t.free) ? t.free : null;
     if (!reward) continue;
-    return { tier: t.tier, reward, pass: reward === t.paid, pointsAway: Math.max(0, t.tier * perStep - points) };
+    return { tier: t.tier, reward, pass: reward === t.paid, pointsAway: Math.max(0, t.tier * Math.max(1, perStep) - points) };
   }
   return null;
 }
+
+/** The one next prize for a pass state: the server's answer when it sends one, else the same rule here. */
+export function nextPassPrize(state: SharkPassState | null | undefined):
+  { tier: number; reward: SharkPassReward; pass: boolean; pointsAway: number } | null {
+  if (!state || !state.enabled || !state.season || !state.progress) return null;
+  const server = (state.progress as { next_prize?: { tier: number; track: 'free' | 'paid'; reward: SharkPassReward; points_away: number } | null }).next_prize;
+  if (server && server.reward && Number.isFinite(server.tier)) {
+    return { tier: server.tier, reward: server.reward, pass: server.track === 'paid', pointsAway: Math.max(0, Number(server.points_away) || 0) };
+  }
+  return nextBigPrize(state.tiers ?? [], state.progress.points, state.season.points_per_tier, !!state.progress.premium);
+}
+
+/** "Step 4 of 50": the pass's progress words (never "pts"). */
+export function stepWords(step: number, of: number): string {
+  return `Step ${Math.max(0, step)} of ${Math.max(1, of)}`;
+}
+
+/**
+ * Daily 3 is the only daily list (core loop 5.8): when the server sends no daily pass quests,
+ * the quests area points to Daily 3 instead (finishing it pays pass points). The weekly quest stays.
+ * The link shows only when Daily 3 is really there for this player (its switch on and rung 4 open);
+ * before that the area says plainly when daily goals come, with no arrow and no dead tap.
+ */
+export type DailyQuestsSlot = 'list' | 'daily3' | 'later';
+export function dailyQuestsSlot(quests: { readonly daily: readonly unknown[] } | null | undefined, daily3Ready: boolean): DailyQuestsSlot {
+  if (!quests || quests.daily.length > 0) return 'list';
+  return daily3Ready ? 'daily3' : 'later';
+}
+export function questsLinkDaily3(quests: { readonly daily: readonly unknown[] } | null | undefined, daily3Ready = true): boolean {
+  return dailyQuestsSlot(quests, daily3Ready) === 'daily3';
+}
+/**
+ * A pass quest's words as a kid reads them. The server still names the home hunt "home finds" or "snacks"
+ * ("Grab 8 home finds"); the app calls them treats everywhere, so the pass does too (until be-core-loop
+ * removes daily pass quests). Only those words change; numbers and the rest of the line stay as sent.
+ */
+export function passQuestLabel(label: string): string {
+  const cap = (m: string, word: string) => (m[0] === m[0].toUpperCase() ? word[0].toUpperCase() + word.slice(1) : word);
+  return label
+    .replace(/\bhome finds\b/gi, m => cap(m, 'treats'))
+    .replace(/\bhome find\b/gi, m => cap(m, 'treat'))
+    .replace(/\bsnacks\b/gi, m => cap(m, 'treats'))
+    .replace(/\bsnack\b/gi, m => cap(m, 'treat'));
+}
+
+/**
+ * Lane checks only: the pass as be-core-loop will send it (no daily pass quests), so the Daily 3 link and the
+ * "later" line can be seen on device before that server ships. Inert unless BOTH lane-only bundle variables are set:
+ * EXPO_PUBLIC_STUDIO_MUTE=1 (only lane.sh sets it) and EXPO_PUBLIC_CL_PASS_FIXTURE=empty-daily. Store and OTA
+ * bundles set neither, so there it returns the server's answer untouched.
+ */
+export function lanePassFixture<T>(state: T, env: Readonly<Record<string, string | undefined>> = {
+  mute: process.env.EXPO_PUBLIC_STUDIO_MUTE, fixture: process.env.EXPO_PUBLIC_CL_PASS_FIXTURE,
+}): T {
+  if (env.mute !== '1' || env.fixture !== 'empty-daily') return state;
+  const s = state as unknown as { enabled?: boolean; quests?: { daily: readonly unknown[] } | null };
+  if (!s || !s.enabled || !s.quests) return state;
+  return { ...s, quests: { ...s.quests, daily: [] } } as unknown as T;
+}
+
+/** The plain line before Daily 3 unlocks (no arrow, nothing to tap). */
+// Rung 4 opens after the first park day or the third home day, so the line names neither.
+export const DAILY_GOALS_LATER = 'Daily goals open up as you play';
 
 /** "You'd get 7 rewards right now: Frosty Scarf Pin, 450 coins and more" for the unlock panel. */
 export function readyNowLine(tiers: readonly SharkPassTier[]): string | null {
@@ -85,7 +152,7 @@ export function readyNowLine(tiers: readonly SharkPassTier[]): string | null {
   const items = ready.filter(isWearable).map(r => rewardWords(r));
   const coins = ready.reduce((n, r) => n + (r.type === 'coins' ? r.amount : 0), 0);
   const boxes = ready.reduce((n, r) => n + (r.type === 'mystery_box' ? r.boxes : 0), 0);
-  const parts = [...items, boxes ? `${boxes} Mystery Pin ${boxes === 1 ? 'Box' : 'Boxes'}` : null, coins ? `${countText(coins)} coins` : null]
+  const parts = [...items, boxes ? `${boxes} Mystery Pin ${boxes === 1 ? 'Box' : 'Boxes'}` : null, coins ? `${countText(coins)} Shark Coins` : null]
     .filter(Boolean).slice(0, 3);
   return `Get ${ready.length} Shark Pass ${ready.length === 1 ? 'reward' : 'rewards'} right away: ${parts.join(', ')}${ready.length > parts.length ? ' and more' : ''}.`;
 }

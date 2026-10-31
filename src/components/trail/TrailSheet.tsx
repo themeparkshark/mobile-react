@@ -8,9 +8,11 @@ import { playSfx } from '../../gamekit/SFX';
 import { openAppSettings } from '../../services/external';
 import type { MotionAccess } from '../../services/trail/TrailProvider';
 import { getSeen, setSeen } from '../../services/trail/trailSeen';
+import { useNativeModalLayer } from '../../ui/modalLayers';
 import {
-  BOX_NAME, boxName, bonusLabel, boxFraction, formatDistance, formatSteps, missNote, percent, stepsToGo, usesMiles,
-  type TrailBox, type TrailState, type TrailTier,
+  BOX_NAME, arriveLine, boxName, bonusLabel, boxFraction, formatDistance, formatSteps, knownContents, missNote, oddsTiers, stepsToGo, usesMiles,
+  exclusivesLine, withoutPinBoxes,
+  type TrailBox, type TrailOddsTier, type TrailState, type TrailTier,
 } from '../../services/trail/trailModel';
 import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, confirmGame, type GameIconName } from '../../ui';
 import { CountUpText } from '../../gamekit/fx/CountUpText';
@@ -18,6 +20,9 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import TrailBoxArt, { STEPS_ART, WHEELS_ART } from './TrailBoxArt';
 import TrailPath from './TrailPath';
 import { UpperText } from '../../ui/upper';
+import { markRungSeen } from '../../services/reveal/revealLadder';
+import { flagOn } from '../../services/retention/flags';
+import useRetentionFlags from '../../services/retention/useRetentionFlags';
 
 const KIND_ICON: Record<string, GameIconName> = { coins: 'coins', energy: 'energy', tickets: 'ticket', mystery_box: 'gift', exclusive: 'star' };
 const RANK: Record<TrailTier, number> = { blue: 0, red: 1, gold: 2 };
@@ -30,7 +35,7 @@ const LOCALE = (() => { try { return Intl.DateTimeFormat().resolvedOptions().loc
  * Trail Boxes sheet: the three boxes walking right now (each a path that
  * fills as you walk), the boxes waiting, ready boxes to open, today's walk, an
  * optional weekly goal, how to earn more, the Trail Exclusives you can collect
- * and what is inside every box with its odds. Pictures first, short words.
+ * and what is inside every box (known contents: no odds page). Pictures first, short words.
  */
 function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen, onFront, onGoal, onWheels, onAskMotion, initialView = 'boxes' }: {
   readonly visible: boolean;
@@ -49,11 +54,18 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
   readonly initialView?: 'boxes' | 'inside';
 }) {
   const insets = useSafeAreaInsets();
+  // Held until UIKit says the sheet is gone, so the next sheet (the box opening, the Rewards sheet) never presents
+  // over a sheet still sliding away.
+  const layer = useNativeModalLayer(visible, 'wait');
   const [view, setView] = useState<'boxes' | 'inside'>(initialView);
   const [picked, setPicked] = useState<number | null>(null);
   const miles = usesMiles(LOCALE);
   const note = missNote(state.sync);
   useEffect(() => { if (visible) { setView(initialView); setPicked(null); } }, [visible, initialView]);
+  // Opening Trail Boxes is seeing them: their NEW tag (rung 6) clears.
+  useEffect(() => { if (visible) markRungSeen('trail'); }, [visible]);
+  // Mystery Pin Boxes are preview-only: never listed where the switch is off.
+  const pinBoxes = flagOn(useRetentionFlags(), 'pin_mystery_boxes');
 
   const slots = useMemo(() => {
     const out: (TrailBox | null)[] = Array.from({ length: state.slots }, () => null);
@@ -78,14 +90,14 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={layer.present} onDismiss={layer.onDismissed} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable accessibilityLabel="Close" onPress={onClose} style={{ flex: 1, backgroundColor: BRAND.scrim }} />
       <View accessibilityViewIsModal style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
         <View style={styles.header}>
           <View style={styles.badge}><Image source={STEPS_ART} style={{ width: 34, height: 34 }} contentFit="contain" /></View>
           <View style={{ flex: 1, marginLeft: 10 }}>
             <UpperText accessibilityRole="header" style={styles.title}>{view === 'inside' ? 'What\'s inside' : 'Trail Boxes'}</UpperText>
-            {view === 'inside' ? <Text style={styles.subtitle}>Every box, every chance</Text> : (
+            {view === 'inside' ? <Text style={styles.subtitle}>What each box holds</Text> : (
               <View style={styles.parkOnly} accessible accessibilityLabel="Only steps in the park count">
                 <Image source={PARK_ART} style={{ width: 24, height: 24 }} contentFit="contain" />
                 <Text style={styles.parkOnlyText}>Park steps only</Text>
@@ -97,7 +109,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
             : <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={12}><GameIcon name="close" size={32} /></Pressable>}
         </View>
 
-        {view === 'inside' ? <Inside state={state} /> : (
+        {view === 'inside' ? <Inside state={state} pinBoxes={pinBoxes} /> : (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
             {!inPark && (
               <View style={[styles.card, styles.noteCard]}>
@@ -236,13 +248,13 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
 
             <UpperText style={styles.section}>Get more boxes</UpperText>
             <View style={styles.card}>
-              <EarnRow icon="map" text="Arrive at a park" sub="A Blue Box each park day" />
-              <EarnRow icon="ride" text="Win 2 ride challenges" sub={state.next_ride_box != null && inPark
+              <EarnRow icon="map" text="Arrive at a park" sub={arriveLine(state)} />
+              <EarnRow icon="ride" text="Win 2 ride coins" sub={state.next_ride_box != null && inPark
                 ? `Next box in ${state.next_ride_box} ${state.next_ride_box === 1 ? 'win' : 'wins'}` : 'Up to 3 boxes a day'} />
               <EarnRow icon="star" text="Reach your weekly goal" sub="A Blue Box" last />
             </View>
 
-            {!!state.exclusives?.length && <Exclusives items={state.exclusives} />}
+            {!!state.exclusives?.length && <Exclusives items={state.exclusives} line={exclusivesLine(state)} />}
 
             <Pressable onPress={() => void toggleWheels()} accessibilityRole="switch"
               accessibilityState={{ checked: state.wheels }} accessibilityLabel="Rolling: count my path on the map. Asks a grown-up first"
@@ -359,7 +371,7 @@ function EarnRow({ icon, text, sub, last }: { readonly icon: GameIconName; reado
   );
 }
 
-function Exclusives({ items }: { readonly items: NonNullable<TrailState['exclusives']> }) {
+function Exclusives({ items, line }: { readonly items: NonNullable<TrailState['exclusives']>; readonly line: string }) {
   const have = items.filter(i => i.owned).length;
   return (
     <>
@@ -375,31 +387,71 @@ function Exclusives({ items }: { readonly items: NonNullable<TrailState['exclusi
           </View>
         ))}
       </View>
-      <Text style={styles.footnote}>Only in Trail Boxes, most often in Gold. Older ones stay in the boxes too, just rarer. Wear them to show you walk the parks.</Text>
+      <Text style={styles.footnote}>{line}</Text>
     </>
   );
 }
 
-function Inside({ state }: { readonly state: TrailState }) {
-  const tiers = state.odds.tiers;
+function Inside({ state, pinBoxes }: { readonly state: TrailState; readonly pinBoxes: boolean }) {
+  const known = knownContents(state);
+  const odds = oddsTiers(state);
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
-      <UpperText style={styles.section}>Which box you get</UpperText>
-      <View style={[styles.card, { flexDirection: 'row', justifyContent: 'space-around' }]}>
-        {tiers.map(t => (
-          <View key={t.tier} style={{ alignItems: 'center' }} accessible accessibilityLabel={`${boxName(t)}: ${percent(t.chance_bp)}`}>
-            <TrailBoxArt tier={t.tier} size={64} active={false} />
-            <Text style={styles.oddsPct}>{percent(t.chance_bp)}</Text>
-          </View>
-        ))}
-      </View>
-      <Text style={styles.footnote}>{state.gold_in > 1 ? `A new Gold Box is coming within ${state.gold_in} boxes you earn!` : 'Your next new box is a Gold Box!'} Arriving at the park gives a Blue Box.</Text>
-      {tiers.map(t => <TierCard key={t.tier} tier={t.tier} t={t} />)}
+      {known ? (
+        <>
+          {/* Known contents (kid-safe): every box holds exactly this. No roll, no percent, no odds page. */}
+          {!!state.next_tiers?.length && (
+            <>
+              <UpperText style={styles.section}>Your next boxes</UpperText>
+              <View style={[styles.card, { flexDirection: 'row', justifyContent: 'space-around' }]}
+                accessible accessibilityLabel={`Your next boxes: ${state.next_tiers.map(t => BOX_NAME[t]).join(', ')}`}>
+                {state.next_tiers.slice(0, 5).map((t, i) => <TrailBoxArt key={`${t}-${i}`} tier={t} size={i === 0 ? 56 : 44} active={false} />)}
+              </View>
+            </>
+          )}
+          {state.first_box === 'second_park_day' && (
+            <Text style={styles.footnote}>Your first box comes on your second park day.</Text>
+          )}
+          {known.map(t => (
+            <View key={t.tier} style={[styles.card, { marginTop: 10 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TrailBoxArt tier={t.tier} size={56} active={false} />
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <UpperText style={styles.cardTitle}>{BOX_NAME[t.tier]}</UpperText>
+                  <Text style={styles.body}>Opens after {formatSteps(t.goal_steps)} steps</Text>
+                </View>
+              </View>
+              {withoutPinBoxes(t.rewards, pinBoxes).map((r, i) => (
+                <View key={`${r.kind}-${i}`} style={styles.oddsRow} accessible accessibilityLabel={r.kind === 'exclusive' ? (r.name ?? 'Trail Exclusive') : bonusLabel(r.kind, r.amount)}>
+                  {r.kind === 'exclusive' && r.icon_url
+                    ? <Image source={{ uri: r.icon_url }} style={{ width: 30, height: 30 }} contentFit="contain" />
+                    : <GameIcon name={KIND_ICON[r.kind] ?? 'gift'} size={24} />}
+                  <Text style={[styles.body, { flex: 1, marginLeft: 8 }]}>{r.kind === 'exclusive' ? (r.name ?? 'Trail Exclusive') : bonusLabel(r.kind, r.amount)}</Text>
+                </View>
+              ))}
+            </View>
+          ))}
+        </>
+      ) : odds ? (
+        <>
+          {/* An older server still in random mode: what every box holds, in pictures. Never a percent (Dustin, Oct 28: no odds anywhere). */}
+          {odds.map(t => <TierCard key={t.tier} tier={t.tier} t={t} pinBoxes={pinBoxes} />)}
+        </>
+      ) : (
+        <View style={[styles.card, { marginTop: 10 }]}>
+          <Text style={styles.body}>Every box holds Shark Coins and Tickets.</Text>
+        </View>
+      )}
     </ScrollView>
   );
 }
 
-function TierCard({ tier, t }: { readonly tier: TrailTier; readonly t: TrailState['odds']['tiers'][number] }) {
+/**
+ * An older random-mode server's box: only what every box always holds (Shark Coins and the always items). The
+ * random bonus is not listed, so nothing here reads as a chance (Dustin, Oct 28: no odds anywhere); the reveal
+ * shows what came out.
+ */
+function TierCard({ tier, t, pinBoxes }: { readonly tier: TrailTier; readonly t: TrailOddsTier; readonly pinBoxes: boolean }) {
   return (
     <View style={[styles.card, { marginTop: 10 }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -409,20 +461,17 @@ function TierCard({ tier, t }: { readonly tier: TrailTier; readonly t: TrailStat
           <Text style={styles.body}>Opens after {formatSteps(t.goal_steps)} steps</Text>
         </View>
       </View>
-      <OddsRow icon="coins" label={`${formatSteps(t.coins)} Coins`} pct="ALWAYS" />
-      {t.always.map((a, i) => <OddsRow key={`a${i}`} icon={KIND_ICON[a.kind]} label={bonusLabel(a.kind, a.amount)} pct="ALWAYS" />)}
-      <Text style={[styles.earnSub, { marginTop: 6 }]}>Plus one of these:</Text>
-      {t.bonus.map((b, i) => <OddsRow key={i} icon={KIND_ICON[b.kind]} label={b.note === 'owns_all_exclusives' ? `${formatSteps(b.amount)} Coins (you have every Trail Exclusive!)` : bonusLabel(b.kind, b.amount)} pct={percent(b.chance_bp)} />)}
+      <OddsRow icon="coins" label={`${formatSteps(t.coins)} Shark Coins`} />
+      {withoutPinBoxes(t.always, pinBoxes).map((a, i) => <OddsRow key={`a${i}`} icon={KIND_ICON[a.kind]} label={bonusLabel(a.kind, a.amount)} />)}
     </View>
   );
 }
 
-function OddsRow({ icon, label, pct }: { readonly icon: GameIconName; readonly label: string; readonly pct: string }) {
+function OddsRow({ icon, label }: { readonly icon: GameIconName; readonly label: string }) {
   return (
-    <View style={styles.oddsRow} accessible accessibilityLabel={`${label}: ${pct}`}>
+    <View style={styles.oddsRow} accessible accessibilityLabel={label}>
       <GameIcon name={icon} size={24} />
       <Text style={[styles.body, { flex: 1, marginLeft: 8 }]}>{label}</Text>
-      <Text style={styles.oddsVal}>{pct}</Text>
     </View>
   );
 }
@@ -495,6 +544,4 @@ const styles = StyleSheet.create({
   knob: { width: 24, height: 24, borderRadius: 12, backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.navy },
   knobOn: { alignSelf: 'flex-end' },
   oddsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-  oddsVal: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy },
-  oddsPct: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, marginTop: 2 },
 });

@@ -51,7 +51,10 @@ import * as RootNavigation from '../RootNavigation';
 import { buySharkPass, loadSharkPassPrice, onSharkPassDelivered, restoreSharkPass, storeAvailable, type ShopPrice } from '../services/purchases';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import { EVENT_COPY, isWearable, claimedLine, passGain, passGrants, passTwinLine, lastDayText, nextBigPrize, passSummary, pieceSource, readyNowLine, rewardWords, seasonSet, setMixText, winsAwayText, type SetPiece } from '../services/money/sharkPassModel';
+import { EVENT_COPY, isWearable, claimedLine, passGain, passGrants, lastDayText, nextPassPrize, passSummary, pieceSource, dailyQuestsSlot, DAILY_GOALS_LATER, passQuestLabel, lanePassFixture, readyNowLine, rewardWords, seasonSet, setMixText, winsAwayText, type SetPiece } from '../services/money/sharkPassModel';
+import { markRungSeen, useRung } from '../services/reveal/revealLadder';
+import { flagOn } from '../services/retention/flags';
+import useRetentionFlags from '../services/retention/useRetentionFlags';
 import { wearItem } from './StoreScreen/inventoryQueue';
 import { trackImpression, trackMoney } from '../services/money/track';
 import { baseRates, formatLike, regularValue } from '../services/money/offers';
@@ -153,8 +156,6 @@ type Landed = {
   /** The Shark Pass step this reward came from (one claim), for the share picture's "Shark Pass · Step 12". */
   step?: number;
 };
-/** The "with the Shark Pass you'd also have" row shows once per app visit, never on every claim. */
-let twinShown = false;
 const stepLabel = (n: number) => `Step ${n}`;
 
 /** Up to 3 rewards for the payoff, the best in the middle (items, then coins, tickets...). */
@@ -168,11 +169,21 @@ function pickTrio(rewards: readonly SharkPassReward[]): SharkPassReward[] {
 const PASS_GROWN_UP_NOTES = [
   'One buy for this season. It never renews and is never charged again.',
   'Steps come only from playing. Points are never sold. VIP members earn 25% more points.',
-  'Nothing in the Shark Pass row is random. Every reward is shown above.',
+  // Short on purpose: at its old length the last word wrapped onto a third line that iOS clipped ("shown al").
+  'No random rewards: every Shark Pass reward is shown above.',
   'Every real-money buy asks a grown-up first. Ask to Buy works too.',
 ];
 
 export default function SharkPassScreen() {
+  // "+N pass points" ticks only once the pass has unlocked (rung 5); Supplies reaches this screen before that.
+  const passRung = useRung('shark_pass').open;
+  // Daily 3 is the daily list only once it is really there: its switch on and rung 4 open (Supplies reaches this
+  // screen earlier).
+  const retentionFlags = useRetentionFlags();
+  const dailyRungOpen = useRung('daily').open;
+  const daily3Ready = flagOn(retentionFlags, 'daily_three') && dailyRungOpen;
+  // Opening the pass is seeing it: its NEW tag (rung 5) clears.
+  useEffect(() => { if (passRung) markRungSeen('shark_pass'); }, [passRung]);
   const { player, refreshPlayer } = useContext(AuthContext);
   const reduced = useUiReducedMotion();
   const focused = useIsFocused();
@@ -203,7 +214,7 @@ export default function SharkPassScreen() {
   const doneSeen = useRef<Set<string> | null>(null);
   const load = useCallback(async () => {
     try {
-      const next = await getSharkPass();
+      const next = lanePassFixture(await getSharkPass());
       // What this visit brought: points since the last look, and quests that just turned done.
       const gain = passGain(lastSharkPassSeen(), next);
       if (gain) setSinceLast(gain.gained);
@@ -273,9 +284,9 @@ export default function SharkPassScreen() {
       setState(res.pass);
       const itemId = Number((res.granted as { item_id?: unknown }).item_id) || undefined;
       const frameKey = typeof (res.granted as { frame?: unknown }).frame === 'string' ? (res.granted as { frame: string }).frame : undefined;
-      // Royal Pass beat: after a free claim, the same step's Shark Pass reward, calm, no timer. Once per visit.
-      const passTwin = track === 'free' && !premium && !twinShown ? `With the Shark Pass this step also gives ${rewardWords(tier.paid)}.` : null;
-      if (passTwin) twinShown = true;
+      // Core loop: a free claim is only what you got. No "with the Shark Pass you'd also have" inside a reward
+      // (money is never inside a reward, BLUEPRINT 4.3 rule 4); the Shark Pass row stays visible on the track.
+      const passTwin: string | null = null;
       // The claim that completes the free set also brings the set bonus: it plays right after.
       const bonus = res.set_bonus;
       const bonusLanded: Landed | undefined = bonus ? { reward: { type: 'frame', name: bonus.name, art: bonus.frame.slice(bonus.frame.lastIndexOf(':') + 1), ready: true },
@@ -303,11 +314,9 @@ export default function SharkPassScreen() {
       setState(res.pass);
       const rewards = res.claimed.map(c => c.reward);
       const hero = rewards.find(r => r.type === 'item') ?? rewards.find(r => r.type === 'coins') ?? rewards[0];
-      // The "you'd also have" row: once per visit, never on every claim.
-      const twin = !twinShown && res.pass.enabled && res.pass.tiers ? passTwinLine(res.pass.tiers, !!res.pass.progress?.premium) : null;
-      if (twin) twinShown = true;
-      const locked = twin && res.pass.enabled && res.pass.tiers && !res.pass.progress?.premium
-        ? res.pass.tiers.filter(t => t.unlocked && !t.paid_claimed && isWearable(t.paid)).map(t => t.paid).slice(0, 3) : [];
+      // Core loop: no "you'd also have" row inside a free claim (money is never inside a reward).
+      const twin: string | null = null;
+      const locked: SharkPassReward[] = [];
       if (hero) setLanded({ reward: hero, title: rewards.length > 1 ? `${rewards.length} rewards!` : 'You got it!',
         caption: claimedLine(rewards), group: pickTrio(rewards), twin: twin ?? undefined, locked });
       void refreshPlayer?.().catch(() => undefined);
@@ -370,7 +379,7 @@ export default function SharkPassScreen() {
       setState(res.pass);
       haptic('success');
       setLanded({ reward: { type: 'item', name: res.name, slot: 'pin', art, icon_url: null, ready: true }, title: 'Gold!',
-        gold: true, caption: `${res.name}. ${countText(res.spent)} coins.`, itemId: Number(res.granted.item_id) || undefined });
+        gold: true, caption: `${res.name}. ${countText(res.spent)} Shark Coins.`, itemId: Number(res.granted.item_id) || undefined });
       void refreshPlayer?.().catch(() => undefined);
     } catch (error) {
       const code = sharkPassErrorCode(error);
@@ -420,7 +429,8 @@ export default function SharkPassScreen() {
   const perStep = season?.points_per_tier ?? 1;
   const into = progress?.points_into_tier ?? 0;
   const summary = useMemo(() => passSummary(tiers), [tiers]);
-  const nextPrize = progress ? nextBigPrize(tiers, progress.points, perStep) : null;
+  // One next prize everywhere: the same answer as the banner (the server's next_prize when it sends one).
+  const nextPrize = progress ? nextPassPrize(state) : null;
   const nextStep = nextPrize?.tier ?? 0;
   const heroLook = useMemo(() => withSeasonPin(player?.inventory as InventoryType | undefined, nextPrize?.reward ?? progress?.top_prize),
     [player?.inventory, nextPrize?.reward, progress?.top_prize]);
@@ -434,7 +444,7 @@ export default function SharkPassScreen() {
     const value = regularValue({ coins: g.coins, tickets: g.tickets, rescue_passes: g.rescue_passes }, baseRates(supplies.catalog.products, supplies.prices));
     if (!value || value < price.amount * 1.5) return null;
     const worth = formatLike(price.price, Math.floor(value * 100) / 100);
-    return worth ? `Climb all ${steps} steps and the Shark Pass row's coins, tickets and Rescue Passes come to ${worth} at Supplies' regular prices. Plus ${g.pins} Shark Pass season items.` : null;
+    return worth ? `Climb all ${steps} steps and the Shark Pass row's coins, Tickets and Extra tries come to ${worth} at Supplies' regular prices. Plus ${g.pins} Shark Pass season items.` : null;
   }, [tiers, price, supplies.catalog, supplies.prices, steps]);
   // The panel's showcase: the season items on the Shark Pass row, the next ones first (up to 5).
   const showcase = useMemo(() => {
@@ -549,9 +559,9 @@ export default function SharkPassScreen() {
                   </View>
                   <ProgressBar value={progress.points_into_tier / season.points_per_tier} reduced={reduced} />
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.points}>
-                    {step >= steps ? 'You finished the season!' : into === 0 ? `${perStep} points to step ${step + 1}` : `${into} / ${perStep} points to step ${step + 1}`}
+                    {step >= steps ? 'You finished the season!' : `On the way to step ${step + 1}`}
                   </Text>
-                  {sinceLast ? <Text maxFontSizeMultiplier={MAX_FONT} style={[s.points, s.readyNow]}>{`+${sinceLast} points since last time!`}</Text> : null}
+                  {sinceLast && passRung ? <Text maxFontSizeMultiplier={MAX_FONT} style={[s.points, s.readyNow]}>{`+${sinceLast} pass points since last time!`}</Text> : null}
                 </View>
               </View>
               {nextPrize && nextStep > 0 && (
@@ -560,7 +570,7 @@ export default function SharkPassScreen() {
                   <View style={{ flex: 1 }}>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextKicker}>{nextPrize.pass && !premium ? 'NEXT SHARK PASS PRIZE' : 'NEXT PRIZE'}</Text>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextPrizeText}>
-                      {`${rewardWords(nextPrize.reward)} · ${countText(nextPrize.pointsAway)} points away`}
+                      {`${rewardWords(nextPrize.reward)} at step ${nextStep}`}
                     </Text>
                     {winsAwayText(nextPrize.pointsAway, progress.today) && (
                       <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextWins}>{winsAwayText(nextPrize.pointsAway, progress.today)}</Text>
@@ -683,19 +693,38 @@ export default function SharkPassScreen() {
             {/* Today's Pass quests: 3 a day (the first always doable at home) and one for the week. */}
             {state.enabled && state.quests && !season.ended && (
               <View style={s.quests}>
-                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questsTitle}>TODAY’S PASS QUESTS</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questsTitle}>{dailyQuestsSlot(state.quests, daily3Ready) === 'list' ? 'TODAY’S PASS QUESTS' : 'PASS QUESTS'}</Text>
+                {/* Daily 3 is the only daily list: with no daily pass quests, this row sends you to it (once it is there). */}
+                {dailyQuestsSlot(state.quests, daily3Ready) === 'later' && (
+                  <View style={s.questRow} accessible accessibilityLabel={DAILY_GOALS_LATER}>
+                    <GameIcon name="streak" size={24} />
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={[s.questLabel, { flex: 1 }]}>{DAILY_GOALS_LATER}</Text>
+                  </View>
+                )}
+                {dailyQuestsSlot(state.quests, daily3Ready) === 'daily3' && (
+                  <Pressable onPress={() => RootNavigation.navigate('Explore', { open: 'daily3' })} accessibilityRole="button"
+                    accessibilityLabel="Your daily goals are your Daily 3. Opens Daily 3"
+                    style={({ pressed }) => [s.questRow, pressed && { opacity: 0.8 }]}>
+                    <GameIcon name="streak" size={24} />
+                    <View style={{ flex: 1 }}>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={s.questLabel}>Daily 3 is your daily list</Text>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>Finish it to earn pass points</Text>
+                    </View>
+                    <GameIcon name="arrow" size={22} />
+                  </Pressable>
+                )}
                 {[...state.quests.daily, ...(state.quests.weekly ? [state.quests.weekly] : [])].map(q => (
                   <View key={`${q.scope}:${q.key}`} style={[s.questRow, q.done && s.questDone]}>
                     <GameIcon name={q.done ? 'check' : q.scope === 'week' ? 'ride' : 'star'} size={24} />
                     <View style={{ flex: 1 }}>
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={s.questLabel}>{q.label}</Text>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={s.questLabel}>{passQuestLabel(q.label)}</Text>
                       <View style={s.questBar}><View style={[s.questFill, { width: `${(q.progress / Math.max(1, q.count)) * 100}%` }]} /></View>
                     </View>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.questCount}>{`${Math.min(q.progress, q.count)}/${q.count}`}</Text>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.questBonus}>{q.done ? (justDone.has(`${q.scope}:${q.key}`) ? `+${q.bonus} pts!` : 'Done!') : `+${q.bonus} pts`}</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.questBonus}>{q.done ? (justDone.has(`${q.scope}:${q.key}`) ? `+${q.bonus} pass points!` : 'Done!') : `+${q.bonus} pass points`}</Text>
                   </View>
                 ))}
-                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>New quests every day. Skipping a day is fine.</Text>
+                {dailyQuestsSlot(state.quests, daily3Ready) === 'list' && <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>New quests every day. Skipping a day is fine.</Text>}
               </View>
             )}
 
@@ -784,7 +813,7 @@ export default function SharkPassScreen() {
             {state.cosmetics && state.cosmetics.gold.pieces.some(g => g.owns_base) && (
               <View style={s.earn}>
                 <Text maxFontSizeMultiplier={MAX_FONT} style={s.earnTitle}>GOLD EDITIONS</Text>
-                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>{`Turn a season pin you have into gold for ${commas(state.cosmetics.gold.coins)} coins. Gold editions stay yours forever.`}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>{`Turn a season pin you have into gold for ${commas(state.cosmetics.gold.coins)} Shark Coins. Gold editions stay yours forever.`}</Text>
                 <View style={s.goldGrid}>
                   {state.cosmetics.gold.pieces.filter(g => g.owns_base).map(g => (
                     <View key={g.art} style={s.goldCell}>
@@ -792,12 +821,12 @@ export default function SharkPassScreen() {
                       <Text maxFontSizeMultiplier={1.1} style={s.goldName} numberOfLines={2}>{g.name}</Text>
                       {g.owns_gold ? <GameIcon name="check" size={20} /> : (
                         <Pressable disabled={!!goldBusy || !g.ready} accessibilityRole="button" hitSlop={8}
-                          accessibilityLabel={`Make it gold for ${commas(state.cosmetics?.gold.coins ?? 0)} coins`}
+                          accessibilityLabel={`Make it gold for ${commas(state.cosmetics?.gold.coins ?? 0)} Shark Coins`}
                           onPress={() => {
                             // A coin spend this big asks once, naming the piece (never gated: no real money moves).
                             const cost = state.cosmetics?.gold.coins ?? 0;
                             const piece = g.name.replace(/^Gold /, '');
-                            gameAlert('Make it gold?', `Your ${piece} turns gold for ${commas(cost)} coins. It stays yours forever.`, [
+                            gameAlert('Make it gold?', `Your ${piece} turns gold for ${commas(cost)} Shark Coins. It stays yours forever.`, [
                               { text: 'Make it gold', image: GOLD_ART[g.art], onPress: () => void makeGold(g.art, cost) },
                               { text: 'Not now', style: 'cancel' },
                             ]);

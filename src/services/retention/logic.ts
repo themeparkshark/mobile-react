@@ -14,8 +14,8 @@ export interface RewardRow {
 }
 
 const LABEL: Record<Exclude<RewardKind, 'item'>, [string, string]> = {
-  coins: ['coin', 'coins'],
-  bonus_coins: ['bonus coin', 'bonus coins'],
+  coins: ['Shark Coin', 'Shark Coins'],
+  bonus_coins: ['bonus Shark Coin', 'bonus Shark Coins'],
   tickets: ['Ticket', 'Tickets'],
   energy: ['Energy', 'Energy'],
   xp: ['XP', 'XP'],
@@ -118,7 +118,9 @@ export function milestoneLine(s: DailyThreeState): string | null {
 }
 
 /** Under the streak when it is 0: keep the record, never shame. */
-export function streakSubline(s: DailyThreeState): string {
+export function streakSubline(s: DailyThreeState, parkGoalWaits = false): string {
+  // At home with a park-only goal left: an honest line, never "Finish today" for a day that cannot be finished here.
+  if (parkGoalWaits && !s.done && !s.claimable) return 'One goal waits for your next park day';
   if (s.streak.days === 0 && s.streak.best > 1 && !s.done) return `Best: ${s.streak.best} days. Start a new flame!`;
   return streakLine(s);
 }
@@ -151,9 +153,9 @@ export function nextLevelChest(chests: readonly LevelChest[]): LevelChest | null
 /** Streak copy: never shames, always says what to do. */
 export function streakLine(s: DailyThreeState): string {
   const d = s.streak.days;
-  if (s.done) return d > 1 ? `${d} days in a row!` : 'Streak started!';
+  if (s.done) return d > 1 ? `${d} days in a row!` : 'Flame started!';
   if (d > 0) return `Finish today to make it ${d + 1}!`;
-  return 'Finish all 3 to start a streak';
+  return 'Finish all 3 to start a flame';
 }
 
 export interface PushAskRecord {

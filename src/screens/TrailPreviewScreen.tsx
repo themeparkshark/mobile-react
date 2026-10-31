@@ -13,9 +13,10 @@ import type { TrailBox, TrailReward, TrailState, TrailTier } from '../services/t
  * the server's. Never shipped in release.
  *
  * Scenes: map, catchup (the walk lands after the app was closed), sheet,
- * ready, inside, ask (motion pre-ask), reveal (a Gold box), reveal3 (three in a row).
+ * ready, inside, ask (motion pre-ask), reveal (a Gold box), reveal3 (three in a row),
+ * known (core loop known-contents mode: 'What's inside' as the be-core-loop server sends it, first box on the 2nd park day).
  */
-const SCENES = ['map', 'catchup', 'sheet', 'ready', 'inside', 'ask', 'reveal', 'reveal3', 'home'] as const;
+const SCENES = ['map', 'catchup', 'sheet', 'ready', 'inside', 'ask', 'reveal', 'reveal3', 'home', 'known'] as const;
 const START = (process.env.EXPO_PUBLIC_TRAIL_PREVIEW ?? 'map') as string;
 const noop = async () => undefined;
 const ASSETS = 'https://assets.themeparkshark.com/mobile/production/assets/';
@@ -24,7 +25,23 @@ const box = (id: number, tier: TrailTier, goal: number, progress: number, status
   id, tier, goal_steps: goal, progress_steps: progress, status, slot, source: 'arrival', earned_at: '2026-10-08T16:00:00Z',
 });
 
+/** Known-contents mode (be-core-loop TrailBoxService, TRAIL_BOXES_FIXED): exact rewards per tier, the next order, no odds. */
+function knownFixture(base: TrailState): TrailState {
+  const { odds: _odds, gold_in: _goldIn, ...rest } = base;
+  return {
+    ...rest, ready: [], walking: [], waiting: [], mode: 'fixed', first_box: 'second_park_day',
+    next_tiers: ['blue', 'blue', 'red', 'blue', 'gold'],
+    contents: [
+      { tier: 'blue', goal_steps: 2000, rewards: [{ kind: 'coins', amount: 30 }, { kind: 'tickets', amount: 1 }] },
+      { tier: 'red', goal_steps: 5000, rewards: [{ kind: 'coins', amount: 75 }, { kind: 'tickets', amount: 2 }] },
+      { tier: 'gold', goal_steps: 10000, rewards: [{ kind: 'coins', amount: 175 }, { kind: 'tickets', amount: 3 },
+        { kind: 'exclusive', amount: 1, item_id: 54, name: 'Party Inflatable Duck', icon_url: `${ASSETS}AzMgxAaIRVnqTnsVxJI7I6PM8N11kU6nEZfhyBhC.png` }] },
+    ],
+  };
+}
+
 function fixture(scene: string, step: number): TrailState {
+  if (scene === 'known') return knownFixture(fixture('inside', step));
   const ready = scene === 'ready' || scene.startsWith('reveal')
     ? (scene === 'reveal' ? [box(9, 'gold', 10000, 10000, 'ready', null)]
       : [box(9, 'gold', 10000, 10000, 'ready', null), box(10, 'red', 5000, 5000, 'ready', null), box(11, 'blue', 2000, 2000, 'ready', null)])
@@ -101,7 +118,7 @@ function Scene({ scene: SCENE, onNext }: { readonly scene: string; readonly onNe
   }), [state, step]);
 
   const preview = SCENE === 'sheet' || SCENE === 'ready' || SCENE === 'ask' ? 'sheet'
-    : SCENE === 'inside' ? 'inside' : SCENE.startsWith('reveal') ? 'reveal' : undefined;
+    : SCENE === 'inside' || SCENE === 'known' ? 'inside' : SCENE.startsWith('reveal') ? 'reveal' : undefined;
   const home = SCENE === 'home';
   return (
     <TrailContext.Provider value={home ? { ...value, parkId: null } : value}>

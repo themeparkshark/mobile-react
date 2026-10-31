@@ -58,7 +58,7 @@ test('steps that did not count are explained kindly, biggest first, silent reaso
 });
 
 test('reward labels', () => {
-  assert.equal(m.rewardLabel({ kind: 'coins', amount: 1250 }), '1250 Coins');
+  assert.equal(m.rewardLabel({ kind: 'coins', amount: 1250 }), '1250 Shark Coins');
   assert.equal(m.rewardLabel({ kind: 'tickets', amount: 1 }), '1 Ticket');
   assert.equal(m.rewardLabel({ kind: 'mystery_box', amount: 2 }), '2 Mystery Pin Boxes');
   assert.equal(m.rewardLabel({ kind: 'exclusive', amount: 1, name: 'Propeller Hat' }), 'Propeller Hat');

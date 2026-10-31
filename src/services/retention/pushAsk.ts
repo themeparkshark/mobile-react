@@ -34,3 +34,17 @@ export async function notePushAsked(now = Date.now()): Promise<void> {
     // Storage is best effort; worst case the card shows once more later.
   }
 }
+
+/**
+ * The reminders ask comes on the first home open after the player's first park
+ * day (core loop blueprint 4.3), never after a chest. A park day is noted the
+ * first time the app sees the player at a park; kept per player.
+ */
+const PARK_DAY_KEY = 'tps.retention.parkDaySeen.v1';
+const parkDayKey = (playerId: number) => `${PARK_DAY_KEY}@p${playerId}`;
+export async function noteParkDaySeen(playerId: number): Promise<void> {
+  try { await AsyncStorage.setItem(parkDayKey(playerId), '1'); } catch { /* best effort */ }
+}
+export async function parkDaySeen(playerId: number): Promise<boolean> {
+  try { return (await AsyncStorage.getItem(parkDayKey(playerId))) === '1'; } catch { return false; }
+}

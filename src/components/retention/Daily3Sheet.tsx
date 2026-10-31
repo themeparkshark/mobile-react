@@ -7,8 +7,9 @@ import Animated, {
 import type { DailyGoal, DailyThreeState, WeekDayState } from '../../api/endpoints/retention';
 import { haptic } from '../../gamekit/Haptics';
 import {
-  doneCount, goalAction, milestoneLine, resetLabel, showsBar, streakSubline, tomorrowLine, weekdayLetter, weeklyLine,
+  doneCount, milestoneLine, showsBar, streakSubline, tomorrowLine, weekdayLetter,
 } from '../../services/retention/logic';
+import { freezesShown, goalGo, goalPassLine, homeSideGoal, weekStartsLine } from '../../services/retention/rewardsModel';
 import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 import { useAmbient } from './power';
 
@@ -19,7 +20,7 @@ const WEEKLY = require('../../../assets/images/retention/weekly-box-closed.png')
 /** The Daily 3 prize is the treasure chest, never the blue daily chest that goal 1 opens. */
 const PRIZE_CHEST = ICON_SOURCES.chest;
 
-export type GoalTap = 'chest' | 'closet' | 'friends' | 'snack' | 'ride';
+export type GoalTap = 'chest' | 'closet' | 'friends' | 'snack' | 'ride' | 'shelf';
 
 /**
  * The Daily 3 card: the streak hero on top (flame, number, freezes, next
@@ -28,9 +29,17 @@ export type GoalTap = 'chest' | 'closet' | 'friends' | 'snack' | 'ride';
  * Every number on it comes from the server.
  */
 export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyFreeze, onGoal, onClose, onReminders, busy, coins,
-  celebrate, reducedMotion, coach, onCoachDone }: {
+  celebrate, reducedMotion, coach, onCoachDone, atPark = false, passToday = null, remindersReady = false, closeLabel = 'BACK TO MAP' }: {
   readonly state: DailyThreeState;
   readonly now: number;
+  /** At a park the goals are as sent; at home a park goal shows its home side and GO never names a park. */
+  readonly atPark?: boolean;
+  /** Shark Pass points per event today, only after the pass unlocks (rung 5): each goal shows its points on one line. */
+  readonly passToday?: readonly { readonly event: string; readonly points: number }[] | null;
+  /** Reminder pushes really work (server key set): only then the bell shows. */
+  readonly remindersReady?: boolean;
+  /** The close button's word: BACK when Daily 3 was opened from the Rewards sheet (it goes back there). */
+  readonly closeLabel?: string;
   readonly onClaim: () => void;
   readonly onClaimWeekly: () => void;
   readonly onBuyFreeze: () => void;
@@ -50,15 +59,20 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
   const s = state.streak;
   // An empty freeze slot shows "+" only when a freeze fits and the coins are there (one tap, coins only).
   const canBuyFreeze = s.freezes < s.freeze_cap && coins >= s.freeze_price;
+  // Freezes arrive with a 3-day flame: before that there is nothing to protect yet.
+  const showFreezes = freezesShown(s);
+  void now;
   const tease = milestoneLine(state);
   const reminders = state.reminders !== false;
+  // At home with a goal that only a park can finish, the hero never says "Finish today" for a day the kid cannot finish.
+  const parkGoalWaits = !atPark && state.goals.some(g => !g.done && homeSideGoal(g, false).parkOnly);
   return (
     <View style={styles.card}>
       <View style={styles.hero}>
         <Flame days={s.days} reducedMotion={reducedMotion} />
         <View style={styles.heroText}>
-          <Text style={styles.streakBig} numberOfLines={1} adjustsFontSizeToFit>{s.days > 0 ? `${s.days} DAY STREAK` : 'START A STREAK'}</Text>
-          <Text style={styles.streakSub} numberOfLines={2}>{streakSubline(state)}</Text>
+          <Text style={styles.streakBig} numberOfLines={1} adjustsFontSizeToFit>{s.days > 0 ? `${s.days} DAY FLAME` : 'START A FLAME'}</Text>
+          <Text style={styles.streakSub} numberOfLines={2}>{streakSubline(state, parkGoalWaits)}</Text>
           {tease && (
             <View style={styles.tease}>
               <GameIcon name="gift" size={18} />
@@ -66,24 +80,29 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
             </View>
           )}
         </View>
-        <View style={styles.freezes} accessible accessibilityLabel={`${s.freezes} of ${s.freeze_cap} streak freezes`}>
+        {showFreezes && <View style={styles.freezes} accessible accessibilityLabel={`${s.freezes} of ${s.freeze_cap} streak freezes`}>
           {Array.from({ length: s.freeze_cap }, (_, i) => i < s.freezes ? (
             <Image key={i} source={FREEZE} style={styles.freezeIcon} contentFit="contain" />
           ) : (
             <Pressable key={i} onPress={canBuyFreeze ? onBuyFreeze : undefined} disabled={busy || !canBuyFreeze} hitSlop={4}
-              accessibilityRole="button" accessibilityLabel={canBuyFreeze ? `Get a streak freeze for ${s.freeze_price} coins` : 'Empty freeze slot'}
+              accessibilityRole="button" accessibilityLabel={canBuyFreeze ? `Get a streak freeze for ${s.freeze_price} Shark Coins` : 'Empty freeze slot'}
               style={[styles.freezeSlot, canBuyFreeze && styles.freezeSlotBuy]}>
               {canBuyFreeze && <Text style={styles.freezePlus}>+</Text>}
             </Pressable>
           ))}
-        </View>
+        </View>}
       </View>
 
       <View style={styles.goals}>
-        {state.goals.map((g, i) => (
-          <GoalRow key={g.key} goal={g} index={i} pop={celebrate.includes(g.key)} reducedMotion={reducedMotion}
-            onPress={() => { const a = goalAction(g); if (a) onGoal(a); }} />
-        ))}
+        {state.goals.map((g, i) => {
+          const shown = homeSideGoal(g, atPark);
+          const go = goalGo(shown, atPark);
+          return (
+            <GoalRow key={g.key} goal={shown} index={i} pop={celebrate.includes(g.key)} reducedMotion={reducedMotion}
+              go={go} passLine={passToday && !shown.parkOnly ? goalPassLine(shown, passToday) : null}
+              onPress={() => { if (go) onGoal(go); }} />
+          );
+        })}
       </View>
 
       <ChestBlock state={state} done={done} busy={busy} onClaim={onClaim} reducedMotion={reducedMotion} />
@@ -105,33 +124,36 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
           </Text>
         </Pressable>
       </View>
-      <Text style={styles.weekHint} numberOfLines={1}>{weeklyLine(state)}</Text>
+      <Text style={styles.weekHint} numberOfLines={1}>{weekStartsLine(state.week)}</Text>
 
       <Pressable onPress={onClose} accessibilityRole="button" style={styles.later}>
-        <Text style={styles.laterText}>BACK TO MAP</Text>
+        <Text style={styles.laterText}>{closeLabel}</Text>
       </Pressable>
       <View style={styles.footer}>
-        <Text style={styles.reset}>{resetLabel(state.resets_at, now)}</Text>
-        <Pressable onPress={() => onReminders(!reminders)} accessibilityRole="switch" accessibilityState={{ checked: reminders }}
-          accessibilityLabel="Daily reminders" hitSlop={8} style={styles.bell}>
-          <View style={!reminders && styles.bellOff}><GameIcon name="bell" size={26} /></View>
-          <Text style={styles.bellText}>{reminders ? 'Reminders on' : 'Reminders off'}</Text>
-        </Pressable>
+        {/* A date in words, never a clock that ticks down. */}
+        <Text style={styles.reset}>New goals tomorrow</Text>
+        {remindersReady && (
+          <Pressable onPress={() => onReminders(!reminders)} accessibilityRole="switch" accessibilityState={{ checked: reminders }}
+            accessibilityLabel="Daily reminders" hitSlop={8} style={styles.bell}>
+            <View style={!reminders && styles.bellOff}><GameIcon name="bell" size={26} /></View>
+            <Text style={styles.bellText}>{reminders ? 'Reminders on' : 'Reminders off'}</Text>
+          </Pressable>
+        )}
       </View>
-      {coach && <Coach onDone={onCoachDone} />}
+      {coach && <Coach onDone={onCoachDone} freezes={showFreezes} />}
     </View>
   );
 }
 
 /** First open only: how Daily 3 works, in three short lines with the real art. */
-function Coach({ onDone }: { readonly onDone: () => void }) {
+function Coach({ onDone, freezes }: { readonly onDone: () => void; readonly freezes: boolean }) {
   return (
     <View style={styles.coachScrim}>
       <View style={styles.coachCard}>
         <Text style={styles.coachTitle}>HOW DAILY 3 WORKS</Text>
         <CoachLine icon={<GameIcon name="streak" size={34} />} text="Do all 3 every day to grow your flame." />
-        <CoachLine icon={<Image source={FREEZE} style={{ width: 34, height: 34 }} contentFit="contain" />} text="Ice saves your flame if you miss a day." />
-        <CoachLine icon={<Image source={WEEKLY} style={{ width: 34, height: 34 }} contentFit="contain" />} text="Flames this week open the gift." />
+        {freezes && <CoachLine icon={<Image source={FREEZE} style={{ width: 34, height: 34 }} contentFit="contain" />} text="Ice saves your flame if you miss a day." />}
+        <CoachLine icon={<Image source={WEEKLY} style={{ width: 34, height: 34 }} contentFit="contain" />} text="Flames this week open the Weekly Box. Your week starts Monday." />
         <Pressable onPress={onDone} accessibilityRole="button" style={({ pressed }) => [styles.open, pressed && styles.openPressed, { marginTop: 6 }]}>
           <Text style={styles.openText}>GOT IT</Text>
         </Pressable>
@@ -170,14 +192,20 @@ function Flame({ days, reducedMotion }: { readonly days: number; readonly reduce
 
 function goalIcon(g: DailyGoal) {
   if (g.kind === 'chest') return <Image source={DAILY_CHEST} style={styles.goalImg} contentFit="contain" />;
+  if ((g.kind as string) === 'level') return <GameIcon name="parts" size={36} />;
+  if ((g.kind as string) === 'plan') return <GameIcon name="coin" size={36} />;
   if (g.kind === 'catch') return g.park ? <GameIcon name="coin" size={36} /> : <Image source={SNACK} style={styles.goalImg} contentFit="contain" />;
   if (g.kind === 'play') return <GameIcon name="play" size={36} />;
   if (g.kind === 'heart') return <GameIcon name="heart" size={36} />;
   return <GameIcon name="shark" size={38} />;
 }
 
-function GoalRow({ goal, index, pop, onPress, reducedMotion }: {
+function GoalRow({ goal, index, pop, onPress, reducedMotion, go, passLine }: {
   readonly goal: DailyGoal; readonly index: number; readonly pop: boolean; readonly onPress: () => void; readonly reducedMotion: boolean;
+  /** Where GO goes (null: no GO, e.g. a park-only goal at home). */
+  readonly go: GoalTap | null;
+  /** "+35 pass points" after the Shark Pass unlocks (one extra line). */
+  readonly passLine: string | null;
 }) {
   const stamp = useSharedValue(goal.done && !pop ? 1 : 0);
   useEffect(() => {
@@ -189,7 +217,7 @@ function GoalRow({ goal, index, pop, onPress, reducedMotion }: {
     return () => clearTimeout(timer);
   }, [goal.done, pop, index, reducedMotion, stamp]);
   const checkStyle = useAnimatedStyle(() => ({ opacity: stamp.value, transform: [{ scale: 1.8 - stamp.value * 0.8 }] }));
-  const actionable = !goal.done && goalAction(goal) !== null;
+  const actionable = !goal.done && go !== null;
   const pct = Math.min(1, goal.progress / Math.max(1, goal.target));
   return (
     <Pressable onPress={actionable ? onPress : undefined} disabled={!actionable} accessibilityRole="button"
@@ -200,10 +228,11 @@ function GoalRow({ goal, index, pop, onPress, reducedMotion }: {
         <Text style={[styles.goalTitle, goal.done && styles.goalTitleDone]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
           {goal.title}
         </Text>
-        {goal.done ? <Text style={styles.goalHintDone} numberOfLines={1}>Done!</Text> : showsBar(goal) ? (
+        {goal.done ? <Text style={styles.goalHintDone} numberOfLines={1}>Done!</Text> : showsBar(goal) && go !== null ? (
           <View style={styles.bar}><View style={[styles.barFill, { width: `${pct * 100}%` }]} />
             <Text style={styles.barText}>{`${goal.progress}/${goal.target}`}</Text></View>
         ) : <Text style={styles.goalHint} numberOfLines={1}>{goal.hint}</Text>}
+        {!!passLine && <Text style={styles.passLine} numberOfLines={1}>{passLine}</Text>}
       </View>
       <View style={styles.goalEnd}>
         {goal.done ? (
@@ -327,6 +356,7 @@ const styles = StyleSheet.create({
   goalTitleDone: { color: '#2c7a43' },
   goalHint: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
   goalHintDone: { fontFamily: 'Knockout', fontSize: 14, color: '#2c7a43' },
+  passLine: { fontFamily: 'Shark', fontSize: 12, color: BRAND.goldLip },
   bar: { height: 16, borderRadius: 8, backgroundColor: BRAND.sky, overflow: 'hidden', justifyContent: 'center', marginTop: 2, marginRight: 4 },
   barFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.gold, borderRadius: 8 },
   barText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.navy, textAlign: 'center' },
