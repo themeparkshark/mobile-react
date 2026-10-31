@@ -506,7 +506,7 @@ export function Breather(p: BreatherProps) {
           <View style={styles.walkRow} accessibilityLabel={p.boostReady ? `Walk boost: ${p.boostReady}` : `Walk boost, ${Math.round(p.walkMeters)} meters`}>
             <View>
               <Ring pct={p.walkPct} size={46} />
-              <View style={styles.ringIcon}><GameIcon name="queue" size={20} /></View>
+              <View style={styles.ringIcon}><GameIcon name="line" size={20} /></View>
             </View>
             {/* The ring fills as you walk; a full ring shows the golden shark it unlocks (no units to read). */}
             {p.boostReady ? <Image source={ART.golden} style={{ width: 34, height: 34, marginLeft: 8 }} resizeMode="contain" /> : null}

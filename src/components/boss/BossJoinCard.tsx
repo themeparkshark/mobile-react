@@ -122,7 +122,7 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
             <Text style={styles.bigPct} maxFontSizeMultiplier={1}>100%</Text>
             <View style={styles.mvp}><GameIcon name="crown" size={14} /><Text style={styles.tileSmall} maxFontSizeMultiplier={1.2}>MVP</Text></View>
           </Tile>}
-        <Tile label="TEAM WINS" wide={repeat} a11y={`If the team wins you get ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? ` and ${rewards.parts} Ride Parts` : ''}`}>
+        <Tile label="TEAM WINS" wide={repeat} a11y={`If the team wins you get ${rewards.coins} Shark Coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? ` and ${rewards.parts} Ride Parts` : ''}`}>
           {/* With Ride Parts the chest picture makes room for the fourth loot line (fits 375 pt). */}
           {!(rewards.parts > 0 && !repeat) && <GameIcon name="chest" size={30} />}
           <View style={styles.lootGrid}>

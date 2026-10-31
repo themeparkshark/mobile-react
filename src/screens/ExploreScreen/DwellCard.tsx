@@ -42,7 +42,7 @@ export default function DwellCard({ rideName, top, onPlay, onDismiss }: {
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value * 10}deg` }] }));
   return <Animated.View style={[styles.slot, { top }, style]}>
     <Pressable accessibilityRole="button" accessibilityLabel={`In line at ${rideName}? Play queue games`} onPress={play} style={styles.chip}>
-      <Animated.View style={iconStyle}><GameIcon name="queue" size={32} /></Animated.View>
+      <Animated.View style={iconStyle}><GameIcon name="line" size={32} /></Animated.View>
       <View style={styles.copy}>
         <Text style={styles.kicker}>IN LINE HERE?</Text>
         <Text style={styles.title} numberOfLines={1}>{error ? 'Not ready yet' : 'Play while you wait'}</Text>

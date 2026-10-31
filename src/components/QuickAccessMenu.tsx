@@ -62,7 +62,7 @@ const POCKET_WATCH = require('../../assets/images/screens/explore/queuetimes.png
 export const MENU_ITEMS: readonly MenuItem[] = [
   { id: 'sets', label: 'Collections', icon: 'chest', round: 'gold', screen: 'SetCollection' },
   { id: 'stamps', label: 'Stamp Book', icon: 'medal1', round: 'green', screen: 'StampBook' },
-  { id: 'shop', label: 'Shark Shop', icon: 'coins', round: 'blue', screen: 'Store', params: { store: 'shark-shop' } },
+  { id: 'shop', label: 'Shark Shop', icon: 'coins', round: 'blue', screen: 'Store', params: { store: 'shark-shop' } }, // vocab-allow: 'Store' is the route name
   { id: 'help', label: 'How to Play', icon: 'info', round: 'purple', screen: 'HowToPlay' },
   { id: 'settings', label: 'Settings', icon: 'settings', round: 'slate', screen: 'Settings' },
 ];

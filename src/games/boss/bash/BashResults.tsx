@@ -207,8 +207,8 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
         </View> : null}
       </View>
 
-      {rewards && <View style={styles.loot} accessible accessibilityLabel={won ? `Yours: ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`
-        : `If your team knocks it out you get ${rewards.coins} coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`}>
+      {rewards && <View style={styles.loot} accessible accessibilityLabel={won ? `Yours: ${rewards.coins} Shark Coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`
+        : `If your team knocks it out you get ${rewards.coins} Shark Coins, ${rewards.xp} XP, ${rewards.energy} Energy${rewards.parts ? `, ${rewards.parts} Ride Parts` : ''}`}>
         {/* Not won yet: the KO crown (the same mark as the finisher's star
             slot), an equals sign, then the prizes pale with a lock, so the
             strip reads "knock it out = these", never "you won these". Won: the

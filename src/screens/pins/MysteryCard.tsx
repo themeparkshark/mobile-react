@@ -291,7 +291,7 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
           {short > 0 ? (
             <Pressable onPress={go} disabled={busy} hitSlop={4}
               style={({ pressed }) => [styles.openBtn, styles.openShort, pressed && { transform: [{ scale: 0.96 }] }]}
-              accessibilityRole="button" accessibilityLabel={`Need ${short} more coins for a Golden Box`}>
+              accessibilityRole="button" accessibilityLabel={`Need ${short} more Shark Coins for a Golden Box`}>
               <Image source={GOLDEN_ICON} style={{ width: 30, height: 30, opacity: 0.6 }} contentFit="contain" />
               <Text maxFontSizeMultiplier={1.1} style={styles.openOneText}>Need</Text>
               <View style={[styles.price, styles.priceShort]}><GameIcon name="coins" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{countText(short)} more</Text></View>
@@ -303,7 +303,7 @@ function GoldenBoxPanel({ series, coins, busy, still, active, onOpen }: {
           {topUp !== null && topUp > 0 && (
             <Animated.View entering={FadeIn.duration(160)} style={styles.earnNote}>
               <GameIcon name="coins" size={18} />
-              <Text maxFontSizeMultiplier={1.3} style={styles.earnText}>Win coins at the park and in your daily chest.</Text>
+              <Text maxFontSizeMultiplier={1.3} style={styles.earnText}>Win Shark Coins at the park and in your daily chest.</Text>
             </Animated.View>
           )}
         </Animated.View>
@@ -418,7 +418,7 @@ function MysteryCardBase({ series, coins, busy, active, still, shine, fresh, onO
                   // Short for the bundle: a plain tap shows the top-up (nothing to hold, nothing spent).
                   <Pressable onPress={() => tryOpen(series.bundle.count)} disabled={busy} hitSlop={4}
                     style={({ pressed }) => [styles.openBtn, styles.openFive, pressed && { transform: [{ scale: 0.96 }] }]}
-                    accessibilityRole="button" accessibilityLabel={`Need ${shortFive} more coins for five boxes`}>
+                    accessibilityRole="button" accessibilityLabel={`Need ${shortFive} more Shark Coins for five boxes`}>
                     <Image source={BOX_ART[tone].closed} style={{ width: 30, height: 30 }} contentFit="contain" />
                     <Text maxFontSizeMultiplier={1.1} style={styles.openFiveText}>x5</Text>
                     <View style={[styles.price, styles.priceShort]}><GameIcon name="coins" size={16} /><Text maxFontSizeMultiplier={1.1} style={styles.priceText}>{countText(shortFive)} more</Text></View>

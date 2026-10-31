@@ -29,7 +29,7 @@ const STRICT = true;
  * Lanes whose hits are reported but do not fail the build yet (they fix their own files on
  * their own branches). Remove a lane when it merges; empty means every file is strict.
  */
-const PENDING_LANES = new Set(['guide-map', 'ride-challenge', 'lineplay-ride', 'rewards-unlocks']);
+const PENDING_LANES = new Set([]);
 
 /** [id, pattern, say instead, files it skips]. Case matters only where the old word is a caps label. */
 const RULES = [

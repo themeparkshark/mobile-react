@@ -114,7 +114,7 @@ export default function FrightSheet({ night, engine }: { readonly night: FrightN
                   </Text>
                   <View style={styles.actions}>
                     {!open && !done && (
-                      <NightButton label={COPY.inLine} icon="queue" disabled={!check.ok} loading={engine.busyKey === spot.key}
+                      <NightButton label={COPY.inLine} icon="line" disabled={!check.ok} loading={engine.busyKey === spot.key}
                         onPress={() => { void engine.enter(spot); }} variant={focused ? 'candy' : 'pumpkin'}
                         accessibilityHint={blocked ?? 'Logs this haunt. Play in line while you wait.'} />
                     )}

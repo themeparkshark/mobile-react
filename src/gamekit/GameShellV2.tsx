@@ -1449,12 +1449,12 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           {/* Line moving: play never pauses; a small chip with walking feet breathes in the corner. */}
           {linePlayMovement?.moving && phase === 'playing' ? (
             <Animated.View pointerEvents="none" style={[styles.walkChip, walkChipStyle]} accessibilityLabel="The line is moving. Keep playing.">
-              <GameIcon name="queue" size={18} />
+              <GameIcon name="line" size={18} />
             </Animated.View>
           ) : null}
           {headsUp && phase === 'playing' ? (
             <View pointerEvents="none" style={styles.headsUp} accessibilityLiveRegion="polite">
-              <GameIcon name="queue" size={20} />
+              <GameIcon name="line" size={20} />
               <Text style={styles.headsUpText}>Heads up, the line moved</Text>
             </View>
           ) : null}

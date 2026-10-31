@@ -26,7 +26,7 @@ export interface CrewPuzzleSummary {
   /** Live players only; Echo seats are app-side flavor and never counted. */
   readonly live_players?: number;
   readonly lonely?: boolean;
-  /** Captain Fin's hint in a lonely round, after your second guess on a stage. */
+  /** Captain Gill's hint in a lonely round, after your second guess on a stage. */
   readonly fin_hint?: { readonly position: number; readonly symbol: number } | null;
 }
 
