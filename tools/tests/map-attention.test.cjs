@@ -209,33 +209,36 @@ test('every API request carries X-Core-Loop: 1 (the server stages ladder feature
 
 const PLAIN_REACT = { react: { createContext: v => ({ value: v }), useContext: () => false, useCallback: f => f, useRef: v => ({ current: v }), useEffect() {}, useState: v => [v, () => {}], useSyncExternalStore: (_s, g) => g() } };
 
-test('PLAY! holds presses while a sheet is still leaving, never longer than HOLD_MAX_MS, never over the open challenge', () => {
+test('PLAY! never holds a press: the merged build queues the challenge card instead (HOLD_PLAY_FOR_LEAVING_SHEETS is off)', () => {
   const H = loadTs('src/components/guide/playTapHold.ts', PLAIN_REACT);
-  assert.equal(H.holdPlayTaps({ layers: 1, sinceChangeMs: 0, flowOpen: false }), true, 'the swipe-closed sheet still holds its layer');
-  assert.equal(H.holdPlayTaps({ layers: 0, sinceChangeMs: 0, flowOpen: false }), false, 'UIKit said it is gone: PLAY! answers');
-  assert.equal(H.holdPlayTaps({ layers: 1, sinceChangeMs: H.HOLD_MAX_MS, flowOpen: false }), false, 'a leaked layer can never block PLAY! for good');
-  assert.equal(H.holdPlayTaps({ layers: 2, sinceChangeMs: 0, flowOpen: true }), false, 'the challenge flow owns its own sheet');
+  assert.equal(H.HOLD_PLAY_FOR_LEAVING_SHEETS, false);
+  assert.equal(H.holdPlayTaps({ layers: 1, sinceChangeMs: 0, flowOpen: false }), false, 'a press after a leaving sheet is taken');
+  assert.equal(H.holdPlayTaps({ layers: 0, sinceChangeMs: 0, flowOpen: false }), false);
+  assert.equal(H.holdPlayTaps({ layers: 2, sinceChangeMs: 0, flowOpen: true }), false);
 });
 
-test('PLAY RIDE after a swipe-closed Ride Control sheet opens the card on the first press it takes, 20 out of 20 (sheet layer plus PLAY hold)', () => {
+test('PLAY RIDE right after a swipe-closed sheet or a loss card opens the card once UIKit is done, 20 out of 20 (the press is never lost)', () => {
   const h = harness();
   const H = loadTs('src/components/guide/playTapHold.ts', PLAIN_REACT);
   h.M.modalLayers.reset();
   let sheetWanted = false;
+  let cardWanted = false;
   const sheet = h.mount(() => h.M.useNativeModalLayer(sheetWanted, 'show'));
+  const card = h.mount(() => h.M.useNativeModalLayer(cardWanted, 'wait'));
   for (let run = 0; run < 20; run += 1) {
     sheetWanted = true; sheet.render();
     assert.equal(sheet.value.present, true, `run ${run}: the sheet opens`);
-    assert.equal(H.holdPlayTaps({ layers: h.M.modalLayers.leavingCount(), sinceChangeMs: 0, flowOpen: false }), false,
-      `run ${run}: an open sheet is not leaving (it covers PLAY! itself)`);
     sheetWanted = false; sheet.render();                       // swiped closed: React hides it at once
     assert.equal(h.M.modalLayers.leavingCount(), 1, `run ${run}: the sheet is leaving`);
-    const held = H.holdPlayTaps({ layers: h.M.modalLayers.leavingCount(), sinceChangeMs: 0, flowOpen: false });
-    assert.equal(held, true, `run ${run}: a press in the dismissal window cannot start the card`);
-    sheet.value.onDismissed(); sheet.render();                  // UIKit: the sheet is gone
-    assert.equal(h.M.modalLayers.count(), 0, `run ${run}: the layer is free`);
     assert.equal(H.holdPlayTaps({ layers: h.M.modalLayers.leavingCount(), sinceChangeMs: 0, flowOpen: false }), false,
-      `run ${run}: the next press opens the card`);
+      `run ${run}: PLAY! takes the press in the dismissal window`);
+    cardWanted = true; card.render();
+    assert.equal(card.value.present, false, `run ${run}: the card waits its turn, never into the leaving sheet`);
+    sheet.value.onDismissed(); sheet.render();                  // UIKit: the sheet is gone
+    card.render();
+    assert.equal(card.value.present, true, `run ${run}: the press is not lost: the card presents`);
+    cardWanted = false; card.render(); card.value.onDismissed(); card.render();
+    assert.equal(h.M.modalLayers.count(), 0, `run ${run}: the layers are free`);
   }
 });
 

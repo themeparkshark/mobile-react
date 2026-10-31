@@ -12,20 +12,19 @@
  * press only while a layer is leaving: a sheet that is up covers PLAY! anyway, and a dialog that
  * waits its turn is not on screen, so neither holds PLAY!. The hold is short-lived on purpose: it
  * ends HOLD_MAX_MS after the leaving started even if a layer leaks somewhere, so PLAY! can never be
- * blocked for good. The challenge card itself also waits for its turn (ride-challenge lane), so in
- * the merged build a press is never lost.
+ * blocked for good.
+ *
+ * In the merged build the challenge card itself waits its turn on the layer list and re-presents if
+ * UIKit refuses it (RedeemRedeemableModal), so the hold is off: a press after a loss card or a leaving
+ * sheet queues the card instead of being swallowed. The hold stays here, off, as the documented guard.
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { modalLayers } from '../../ui/modalLayers';
 
 /** Longest a press waits on a leaving sheet. UIKit takes a sheet down in well under this. */
 export const HOLD_MAX_MS = 1500;
-/**
- * Merge note: once the challenge card itself waits for its turn on the layer list and re-presents
- * when UIKit refuses it (ride-challenge lane, RedeemRedeemableModal), set this to false: a press in a
- * sheet's last 150 ms then queues the card instead of being held.
- */
-export const HOLD_PLAY_FOR_LEAVING_SHEETS = true;
+/** Off: the challenge card waits its turn on the layer list, so a press in a sheet's last 150 ms queues it. */
+export const HOLD_PLAY_FOR_LEAVING_SHEETS = false;
 
 /** Pure: whether PLAY! should hold presses right now. `layers` counts only leaving layers. */
 export function holdPlayTaps(input: { readonly layers: number; readonly sinceChangeMs: number; readonly flowOpen: boolean }): boolean {
