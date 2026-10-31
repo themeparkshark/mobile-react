@@ -43,8 +43,10 @@ export interface RoundSummary {
   marchBars: number[];
   marchShare: number;
   meanErrorMs: number;
-  steadiness: number;
-  steadinessLabel: string;
+  /** null when there are too few judged hits to say anything about the beat. */
+  steadiness: number | null;
+  /** null with too few hits: a kid who barely tapped is never told "Rock steady". */
+  steadinessLabel: string | null;
   timingWords: string;
   histogram: number[];
   rideWin: boolean;
@@ -75,17 +77,24 @@ function sd(a: readonly number[]): number {
 /**
  * osu!'s unstable rate (UR = 10 x sd) in kid words, scaled for a phone
  * touch screen and the rev 6 windows: sd 15 ms -> 93 "Rock steady",
- * 30 ms -> 70 "Steady", 45 ms -> 48 "Wobbly".
+ * 30 ms -> 70 "Steady", 45 ms -> 48 "Warming up" (never a put-down).
  */
-export function steadinessOf(errs: readonly number[]): number {
+export function steadinessOf(errs: readonly number[]): number | null {
+  // With 0 or 1 timing errors there is no spread to measure: sd() is 0,
+  // which used to read as a perfect 100 ("Rock steady") for an empty run.
+  if (errs.length < 2) return null;
   const ur = sd(errs) * 10;
   return Math.max(0, Math.min(100, Math.round(100 - (ur - 100) * 0.15)));
 }
 
-export function steadinessLabel(v: number): string {
+/** Judged hits a run needs before the card may brag about the beat. */
+export const STEADY_MIN_HITS = 8;
+
+export function steadinessLabel(v: number | null): string | null {
+  if (v == null) return null;
   if (v >= 85) return 'Rock steady';
   if (v >= 65) return 'Steady';
-  return 'Wobbly';
+  return 'Warming up';
 }
 
 export function timingWords(meanMs: number): string {
@@ -180,7 +189,9 @@ export function summarize(s: JudgeState, opts: { ftue?: boolean; format: 'queue'
   const hr = hitRate(s);
   let missLike = 0;
   for (let i = 0; i < s.n; i++) if (s.res[i] === J_MISS || s.res[i] === J_WRONG) missLike++;
-  const st = steadinessOf(errs);
+  // The beat chip needs enough judged hits and a real score: an empty or
+  // near-empty run says nothing about the beat.
+  const st = errs.length >= STEADY_MIN_HITS && s.score > 0 ? steadinessOf(errs) : null;
   return {
     score: s.score,
     stars,

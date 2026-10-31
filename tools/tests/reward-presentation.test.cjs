@@ -3,6 +3,7 @@ const test = require('node:test');
 const { runtime } = require('./helpers/reward-hook-runtime.cjs');
 const { loadTs } = require('./helpers/ts-module.cjs');
 const challengeCopy = loadTs('src/components/rewards/challengeCopy.ts');
+const lostTryCard = loadTs('src/components/rewards/lostTryCard.ts');
 const postWinModel = loadTs('src/components/rewards/postWinModel.ts');
 const coinTiers = loadTs('src/constants/coinTiers.ts');
 // Progression v2 (S2): the pure coin model and the app-wide limiters the sheet now uses.
@@ -34,6 +35,7 @@ function recoveredWin() {
     '../api/endpoints/me/ride-coins/milestones': { default: async id => { milestoneReads.push(id);
       return { milestones: [{ type: 'first_park_coin', park_id: 1 }], progress: { park_id: 1, park_name: 'Test Park', before: 0, collected: 1, available: 26 }, next: { percent: 25, coins_needed: 6 } }; } },
     './rewards/challengeCopy': challengeCopy,
+    './rewards/lostTryCard': lostTryCard,
     '../RootNavigation': { navigate: (...args) => navigation.push(args) },
     '../services/collection/earnedShelf': require('./helpers/earned-shelf.cjs'),
     '../constants/coinTiers': coinTiers,
@@ -61,10 +63,11 @@ test('a first coin prefetches its park shelf and reads its collection milestones
   flow.game().props.onModalHide(); flow.view.render();
   assert.equal(flow.rewards().props.milestones.milestones[0].type, 'first_park_coin');
 });
-test('earned coin navigation waits for reward dismissal and keeps its confirmed asset identity', async () => {
+test('earned coin opens the shelf on the tap (under the fading card) and keeps its confirmed asset identity', async () => {
   const flow = recoveredWin(); await flow.view.settle(); flow.game().props.onModalHide(); flow.view.render();
   await flow.rewards().props.onViewCoin(); flow.view.render();
-  assert.equal(flow.rewards().props.visible, false); assert.equal(flow.navigation.length, 0);
+  // Wave 6: no wait for the card to fade and the map to hold still; the shelf is already loaded.
+  assert.equal(flow.rewards().props.visible, false); assert.equal(flow.navigation.length, 1);
   flow.rewards().props.onHidden();
   assert.equal(flow.navigation[0][0], 'Park');
   assert.equal(flow.navigation[0][1].park,1); assert.equal(flow.navigation[0][1].player,5);
@@ -262,6 +265,8 @@ test('receipt navigation waits for native dismissal and fires only once', () => 
     '../hooks/useReducedGameMotion':{default:()=>true},
     '../RootNavigation':{navigate:(...args)=>navigated.push(args)},
     './GrownUpGate':{openMembership:()=>{navigated.push(['Membership']);return Promise.resolve(true);}},
+    // A win on a day the rare VIP line is due (services/money/vipNudge.ts).
+    '../services/money/vipNudge':{useVipNudge:()=>true,markVipNudgeShown(){}},
     './rewards/postWinModel': postWinModel, '../screens/LeaderboardsScreen/standingsCache': { takeWinNote: () => null, holdWinNotes: () => undefined, hasWinNote: () => false },
   }, {visible:true,rideName:'Space Mountain',coinTimesCollected:1,coinsEarned:10,xpEarned:25,
     ridePartsEarned:1,energyEarned:10,onClose(){closes++;}});
@@ -302,7 +307,9 @@ test('ride challenge status cards sit on a brand navy scrim, and a free miss say
   const src = require('node:fs').readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
   assert.match(src, /backdropColor="#05346e"/);
   assert.ok(!/backdropOpacity=\{flowState === 'preview' \? 0\.5 : 0\.95\}/.test(src), 'status states must not use a near-black backdrop');
-  assert.match(src, /'This one got away\. No Ticket was spent\.'/);
+  assert.match(src, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost, retryOffered: canOfferRetry \}\)/);
+  assert.deepEqual({ ...lostTryCard.lostTryCopy({ usedRescuePass: false, rescueRetryAvailable: false, firstCoinTicketReturned: false, lostTicketCost: 0 }) },
+    { title: 'Good Try!', message: 'No Ticket spent.', ticket: 0 });
   // The dev-only status preview can never reach a release build or a live modal.
   assert.match(src, /__DEV__ && previewOnly \? process\.env\.EXPO_PUBLIC_CHALLENGE_FLOW_PREVIEW/);
 });

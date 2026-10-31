@@ -70,6 +70,10 @@ interface Props {
   bandH?: number;
   /** How far the scene drops in a takeover (px); default TAKEOVER_DROP of the extra height. */
   dropPx?: number;
+  /** Live drop (UI thread): wins over dropPx, so the scene can ease onto a measured results card. */
+  dropSv?: SharedValue<number>;
+  /** Results zoom (UI thread, 1 = none): a short card zooms the dropped scene a little around the podiums. */
+  zoomSv?: SharedValue<number>;
   actors: StageActors;
   /** 'fin' draws Captain Fin; a shark look draws a ghost/rival shark. */
   opponent: 'fin' | SharkLook;
@@ -111,13 +115,15 @@ export const TAKEOVER_DROP = 0.62;
 const MARQUEE_BULBS: readonly [number, number][] = [
   [0.174, 0.393], [0.255, 0.271], [0.363, 0.189], [0.495, 0.159], [0.627, 0.191], [0.736, 0.274], [0.817, 0.393],
 ];
+/** The backdrop's top-row sky (sampled from stage_backdrop.jpg). */
+export const BACKDROP_SKY = '#15b6fe';
 const STAGE_ART = {
   backdrop: require('../../../assets/games/trivia-duel/stage_backdrop.jpg'),
   marquee: require('../../../assets/games/trivia-duel/stage_marquee.png'),
   podium: require('../../../assets/games/trivia-duel/stage_podium.png'),
 };
 
-export const Stage = React.memo(function Stage({ width: W, height: FULL, bandH, dropPx, actors: a, opponent, ghost, meLook = 'classic', stripes, sunburstSpeed, reducedMotion }: Props) {
+export const Stage = React.memo(function Stage({ width: W, height: FULL, bandH, dropPx, dropSv, zoomSv, actors: a, opponent, ghost, meLook = 'classic', stripes, sunburstSpeed, reducedMotion }: Props) {
   const H = bandH ?? FULL;
   const drop = dropPx ?? (FULL - H) * TAKEOVER_DROP;
   const finImgs = FIN_POSE_ORDER.map((p) => useImage(FIN_POSES[p])); // eslint-disable-line react-hooks/rules-of-hooks
@@ -133,6 +139,8 @@ export const Stage = React.memo(function Stage({ width: W, height: FULL, bandH, 
   const crownImg = useImage(ART.crown);
   const crowdImgs = [useImage(SHARKS.pink), useImage(SHARKS.green), useImage(SHARKS.orange), useImage(SHARKS.blue), useImage(SHARKS.red), useImage(SHARKS.classic)];
 
+  /** Sky a takeover can reveal above the band (the most the scene can drop). */
+  const sunUp = Math.max(0, FULL - H);
   const seaTop = H * 0.47;
   const deckTop = H * 0.62;
   const podTop = H * 0.7;
@@ -264,8 +272,9 @@ export const Stage = React.memo(function Stage({ width: W, height: FULL, bandH, 
   // Camera rig: push toward the podiums, lateral whip; a takeover drops the scene into the taller band.
   const rig = useDerivedValue(() => [
     { translateX: a.pushX.value + Math.sin(a.t.value / 955) * (reducedMotion ? 0 : 4) },
-    { translateY: a.takeover.value * drop },
-    { scale: a.push.value },
+    { translateY: a.takeover.value * (dropSv ? dropSv.value : drop) },
+    // The results zoom grows in with the takeover, so the match camera is untouched.
+    { scale: a.push.value * (1 + a.takeover.value * ((zoomSv ? zoomSv.value : 1) - 1)) },
   ]);
 
   const breath = useDerivedValue(() => (reducedMotion ? 0 : Math.sin((a.t.value / 1600) * Math.PI * 2)));
@@ -326,14 +335,20 @@ export const Stage = React.memo(function Stage({ width: W, height: FULL, bandH, 
       <Rect x={0} y={H - 2} width={W} height={Math.max(0, FULL - H + 2)} color={C.wood} />
       <Path path={lowerDeck} color={C.woodDeep} style="stroke" strokeWidth={2.5} />
       <Group transform={rig} origin={vec(W / 2, H * 0.75)}>
+        {/* The backdrop's own sky runs on above it: a dropped scene never
+            shows a flat band of a different blue between the rail and the
+            arch (the backdrop's top rows are this colour). */}
+        <Rect x={-80} y={bgRect.y - 1600} width={W + 160} height={1604} color={BACKDROP_SKY} />
         {/* L1 backdrop (gate-passed, studio/art/trivia) */}
         {backdrop ? (
           <SkImage image={backdrop} x={bgRect.x} y={bgRect.y} width={bgRect.w} height={bgRect.h} fit="fill" />
         ) : (
           <Rect x={-40} y={-20} width={W + 80} height={H + 40} color={C.sky} />
         )}
-        <Group opacity={0.55}>
-          <Sunburst cx={W / 2} cy={marq.y + marq.h * 0.55} radius={W * 0.8} intensity={a.sunburst} rays={14} width={W} height={H * 0.62} speed={sunburstSpeed} />
+        {/* The rays reach up into the sky a takeover reveals (sunUp), so a
+            dropped scene shows no edge where they used to stop. */}
+        <Group opacity={0.55} transform={[{ translateY: -sunUp }]}>
+          <Sunburst cx={W / 2} cy={marq.y + marq.h * 0.55 + sunUp} radius={W * 0.8 + sunUp} intensity={a.sunburst} rays={14} width={W} height={H * 0.62 + sunUp} speed={sunburstSpeed} />
         </Group>
         <Path path={shimmer} color="rgba(255,255,255,0.7)" style="stroke" strokeWidth={2} strokeCap="round" />
         {/* Blazing: a warm 10% gold sky tint (never dark) */}

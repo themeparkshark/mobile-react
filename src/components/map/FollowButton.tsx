@@ -89,7 +89,8 @@ function LocatorShark() {
  * one-time hint bubble. The rose turns on the UI thread with the camera
  * (`bearing` is the map's bearing, eased like the camera itself).
  */
-export default function FollowButton({ state, bearing, onPress, reducedMotion, hint, onHintDone, noCompassFlash = 0, awayArt }: {
+export default function FollowButton({ state, bearing, onPress, reducedMotion, hint, onHintDone, noCompassFlash = 0, awayArt,
+  compassAvailable = true }: {
   readonly state: FollowButtonState;
   readonly bearing: SharedValue<number>;
   readonly onPress: () => void;
@@ -101,6 +102,11 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
   readonly noCompassFlash?: number;
   /** The player's own shark for the panned-away state (drawn 44 pt). */
   readonly awayArt?: ReactNode;
+  /**
+   * The phone gives a heading. Without one (some phones, a simulator) the map can only stay north up,
+   * so no mode badge shows: a padlock there would look like a locked feature (core loop 4.2).
+   */
+  readonly compassAvailable?: boolean;
 }) {
   // The new mode's name after a toggle (not on mount, not when coming back from panned away:
   // the button changing back is the feedback there).
@@ -197,7 +203,7 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
               </Reanimated.View>
             </>
           )}
-          {state !== 'away' && (
+          {state !== 'away' && compassAvailable && (
             <Reanimated.View style={[styles.badge, state === 'north' ? styles.badgeNorth : styles.badgeHeading, badgeStyle]}>
               {state === 'north' ? (
                 // A padlock: the map is locked still.

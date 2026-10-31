@@ -9,6 +9,7 @@ import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import { teamSlot } from './teamModel';
+import TeamBadge from '../TeamBadge';
 
 export default function TeamChip({ team, own, onPick }: {
   readonly team: TeamId | null;
@@ -25,7 +26,7 @@ export default function TeamChip({ team, own, onPick }: {
         accessibilityRole="button" accessibilityLabel="Pick your team" accessibilityHint="Opens the team picker">
         <View style={styles.crests}>
           {(['mouse', 'globe', 'shark'] as const).map((t, i) => (
-            <Image key={t} source={TEAMS[t].badge} style={[styles.miniCrest, i > 0 && { marginLeft: -9 }]} contentFit="contain" />
+            <TeamBadge key={t} team={t} style={[styles.miniCrest, i > 0 && { marginLeft: -9 }]} />
           ))}
         </View>
         <Text style={[styles.text, styles.pickText]} maxFontSizeMultiplier={1.3} numberOfLines={1}>Pick your team</Text>
@@ -36,7 +37,7 @@ export default function TeamChip({ team, own, onPick }: {
   return (
     <View style={[styles.pill, { borderColor: TEAMS[team!].color, borderBottomColor: TEAMS[team!].color }]}
       accessible accessibilityRole="text" accessibilityLabel={own ? `Your team: ${name}` : `Team: ${name}`}>
-      <Image source={TEAMS[team!].badge} style={styles.crest} contentFit="contain" />
+      <TeamBadge team={team!} style={styles.crest} />
       <Text style={styles.text} maxFontSizeMultiplier={1.3} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{name}</Text>
     </View>
   );

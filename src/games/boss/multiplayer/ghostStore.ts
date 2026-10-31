@@ -4,7 +4,8 @@
  * lets a player race their own best on the same seed and variant right away,
  * offline, in any line.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../../../gamekit/core/playerStorage';
 import type { RoundLog } from '../sim/round';
 import type { BossId } from '../sim/constants';
 

@@ -19,6 +19,26 @@ const statusStack = loadTs('src/components/map/statusStack.ts');
 const parkMapLayout = loadTs('src/screens/ExploreScreen/parkMapLayout.ts');
 const declutterStore = loadTs('src/components/map/declutter/store.ts');
 const frightGeo = loadTs('src/components/map/fright/geo.ts');
+// The Next Coin guide's words run for real; the guide hook itself is unit tested (next-coin-guide).
+const guideCopy = loadTs('src/services/guide/guideCopy.ts');
+const freeTickets = loadTs('src/services/guide/freeTickets.ts');
+// The guide's pure map helpers (LINEPLAY's route, the wallet, owned and level-up coins) run for real too.
+const guideCoins = loadTs('src/components/guide/guideCoins.ts');
+const rewardsNew = loadTs('src/components/map/RewardsButton.tsx', {
+  'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' }, 'expo-image': { Image: 'Image' },
+  'react-native': { Pressable: 'Pressable', Text: 'Text', View: 'View', StyleSheet: { create: x => x } },
+  'react-native-svg': { __esModule: true, default: 'Svg', Circle: 'Circle' }, '../../gamekit/Haptics': { haptic() {} },
+  '../../ui': { BRAND: {}, GameIcon: 'GameIcon', SHADOW: { card: {} } },
+});
+
+/** What the guide hook returns when a test does not pass its own (no target: the resting card). */
+function restingGuide() {
+  const ctx = { parkName: 'Test Park', ridesResting: false, allOwned: false, tickets: 3, freeStep: null, queueTicketsOn: false, adventureDots: null };
+  return { target: null, state: 'resting', copy: guideCopy.guideCardCopy('resting', null, ctx), inLineTaskId: null,
+    rides: new Map(), targetTask: null, arrivedAt: null };
+}
+exports.restingGuide = restingGuide;
+exports.guideCopy = guideCopy;
 
 // Modules the runtime implements itself; the stub proxy must not shadow them.
 const RUNTIME_OWNED = new Set(['react', 'react/jsx-runtime', 'react-native', 'react-native-reanimated',
@@ -51,6 +71,9 @@ exports.stubModule = stubModule;
 
 exports.exploreScreen = function exploreScreen(options = {}) {
   const navigation = [];
+  // guide.setTarget calls (the one pointer), and this run's one automatic open starts fresh.
+  const guidePicks = [];
+  queue.attentionQueue?.reset();
   let loaded = false;
   const contexts = {
     auth: { player: { id: 5, tickets: 3, energy: 40, username: 'finn' }, refreshPlayer: async () => undefined },
@@ -64,6 +87,9 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '@react-navigation/native': { useIsFocused: () => true, useNavigation: () => nav,
       useRoute: () => ({ params: options.route ?? {} }), useFocusEffect: () => undefined },
     'expo-secure-store': { getItemAsync: async () => null, setItemAsync: async () => undefined, deleteItemAsync: async () => undefined },
+    // Phone storage: the park help page counts as seen unless a test says otherwise (options.storage).
+    '@react-native-async-storage/async-storage': { default: { getItem: async key => (options.storage ?? {})[key] ?? '1',
+      setItem: async (key, value) => { (options.storage ??= {})[key] = value; }, removeItem: async () => undefined } },
     dayjs: { default: Object.assign(() => ({ format: () => '2026-09-30' }), { extend: () => undefined }) },
     'dayjs/plugin/isBetween': {},
     '../context/AuthProvider': { AuthContext: { value: contexts.auth } },
@@ -99,7 +125,7 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '../components/map/declutter/store': declutterStore,
     '../components/map/fright/geo': frightGeo,
     './ExploreScreen/ws2Profiler': { withWs2Profiler: component => component },
-    './ExploreScreen/useQueueDwell': { default: () => options.queueDwell ?? null },
+    './ExploreScreen/useQueueDwell': { default: () => options.queueDwell ?? null, noteWaitEnded: () => undefined },
     '../components/Tutorial': { useTutorial: () => ({ startTutorial: () => undefined, hasCompleted: () => true, isReady: true, isActive: false }) },
     '../components/boss/BossRaidFlow': { default: component('BossRaidFlow'), useParkRaid: () => ({ raid: null, setState: () => undefined }) },
     '../hooks/useBossMapMoment': { default: () => ({ moment: null, flag: null, enqueue: async () => undefined, dismiss: () => undefined, finishExit: () => undefined }) },
@@ -114,8 +140,28 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '../services/lineplay/resolveRide': { resolveMapQueueContext: async () => options.queueRide ?? null },
     '../services/rideLandmark': { rideLook: () => ({ ambience: [] }) },
     '../helpers/currency-balance': { default: () => 0 },
+    // The Next Coin guide and the unlock ladder (core loop): a stubbed guide, real words, rungs from options.
+    '../components/guide/useNextCoinGuide': { default: () => options.guide ?? restingGuide() },
+    '../components/guide/playTapHold': { usePlayTapHold: () => !!options.playTapHold },
+    '../components/guide/useWelcomeBack': { default: () => options.welcome ?? { daysAway: null, done: false, finish: () => undefined } },
+    '../services/guide/nextCoin': { guide: { setTarget: (taskId, source) => guidePicks.push([taskId, source]),
+      skipLineStory: () => guidePicks.push(['skip']), forPlayer: () => undefined, current: () => null, subscribe: () => () => undefined } },
+    '../services/guide/freeTickets': freeTickets,
+    // The Rewards button stays a stub component; its pure NEW rule is real (it decides what a tap marks seen).
+    '../components/map/RewardsButton': stubModule('../components/map/RewardsButton', { rewardsNewRungs: rewardsNew.rewardsNewRungs }),
+    '../components/guide/guideCoins': guideCoins,
+    '../services/guide/guideFlags': { useGuideFlags: () => options.flags ?? {} },
+    '../services/reveal/revealLadder': { useRung: rung => ({ open: (options.rungs ?? []).includes(rung), isNew: false, markSeen: () => undefined }),
+      currentAppOpen: () => 'open-test' },
     ...options.modules,
   };
+  // useMapGuide runs for real in the screen's realm; its own imports get the same stubs as the screen's.
+  for (const [alias, key] of [['./useNextCoinGuide', '../components/guide/useNextCoinGuide'], ['./useWelcomeBack', '../components/guide/useWelcomeBack'],
+    ['./guideCoins', '../components/guide/guideCoins'], ['../../services/guide/nextCoin', '../services/guide/nextCoin'],
+    ['../../services/guide/guideFlags', '../services/guide/guideFlags'], ['../../services/reveal/revealLadder', '../services/reveal/revealLadder'],
+    ['../../screens/ExploreScreen/mapPresentationQueue', './ExploreScreen/mapPresentationQueue']]) {
+    if (!Object.hasOwn(modules, alias) && Object.hasOwn(modules, key)) modules[alias] = modules[key];
+  }
   const imports = new Proxy(modules, {
     getOwnPropertyDescriptor(target, key) {
       if (typeof key !== 'string' || RUNTIME_OWNED.has(key)) return undefined;
@@ -128,6 +174,7 @@ exports.exploreScreen = function exploreScreen(options = {}) {
   const file = options.file ?? 'src/screens/ExploreScreen.tsx';
   const app = runtime(file, imports, options.props ?? {},
     { setInterval: () => 0, clearInterval: () => undefined, Promise, ...options.globals },
-    { exportName: options.exportName ?? (file === 'src/screens/ExploreScreen.tsx' ? 'ExploreScreenBody' : undefined) });
-  return Object.assign(app, { navigation, contexts });
+    { exportName: options.exportName ?? (file === 'src/screens/ExploreScreen.tsx' ? 'ExploreScreenBody' : undefined),
+      realModules: { useMapGuide: 'src/components/guide/useMapGuide.ts' } });
+  return Object.assign(app, { navigation, contexts, guidePicks });
 };

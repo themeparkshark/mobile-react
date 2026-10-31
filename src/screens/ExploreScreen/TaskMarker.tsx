@@ -20,7 +20,8 @@ import { BEHIND, RideAmbience, WaterAmbience } from '../../components/map/RideAm
 import { ambienceNow, rideLook, WATER_AMBIENCE, type AmbienceId, type LandmarkId } from '../../services/rideLandmark';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, GameIcon } from '../../ui';
-import { formatDistance } from './adventureTicketPresentation';
+
+import { calloutDistance } from '../../services/guide/guideCopy';
 import { markerBadge, markerRingColor, restingLabel } from './mapMarkerPresentation';
 import { limitedLabel } from '../../services/collection/limitedCoins';
 import { FoldBadge, Placed, TagSlot, usePlacement } from '../../components/map/declutter/Placed';
@@ -261,10 +262,10 @@ function LimitedShimmer({ seed, moving }: { readonly seed: number; readonly movi
 }
 
 /**
- * The island's timer chip ("m:ss", or "1h 2m" past an hour). Ticks once a second
- * while the map is on screen and holds still otherwise. Counts up to the second
- * (never reads 0:00) and fades itself out at zero, before the ride's data catches
- * up. Always the same View and Text, so nothing inside the map marker swaps.
+ * The island's timer chip in calm whole minutes ("4 min", or "1h 2m" past an hour), never a
+ * ticking clock (core loop 4.3 rule 7). It wakes once a minute while the map is on screen and
+ * holds still otherwise, and fades itself out at zero, before the ride's data catches up.
+ * Always the same View and Text, so nothing inside the map marker swaps.
  */
 function MarkerTimer({ expiresAt, ticking, urgent, badgeStyle }: {
   readonly expiresAt: number; readonly ticking: boolean; readonly urgent: boolean; readonly badgeStyle: StyleProp<ViewStyle>;
@@ -274,13 +275,13 @@ function MarkerTimer({ expiresAt, ticking, urgent, badgeStyle }: {
   const done = left <= 0;
   useEffect(() => {
     if (!ticking || done) return;
-    // Battery: every second only in the last minute (the clock shows seconds); otherwise wake at each minute boundary.
+    // Battery: wake at each minute boundary (the chip shows whole minutes), and once more at zero to fade out.
     let id: ReturnType<typeof setTimeout>;
     const tick = () => {
       const t = Date.now(); setNow(t);
       const rest = expiresAt - t;
       if (rest <= 0) return;
-      id = setTimeout(tick, rest < 60_000 ? 1000 : (rest % 60_000) || 60_000);
+      id = setTimeout(tick, rest < 60_000 ? rest : (rest % 60_000) || 60_000);
     };
     tick();
     return () => clearTimeout(id);
@@ -537,7 +538,7 @@ function IslandArt({
                   <View style={styles.tooltipCopy}>
                     <Text style={styles.tooltipTitle} numberOfLines={1}>{task.name}</Text>
                     <View style={styles.tooltipMeta}>
-                      {distanceMeters !== null && <Text style={styles.tooltipDetail}>{formatDistance(distanceMeters)}</Text>}
+                      {distanceMeters !== null && <Text style={styles.tooltipDetail}>{calloutDistance(distanceMeters, (task.times_completed ?? 0) > 0)}</Text>}
                       {restingUntil ? <Text style={styles.tooltipDetail}>{restingLabel(restingUntil)}</Text> : <>
                         <GameIcon name="ticket" size={14} />
                         <Text style={styles.tooltipDetail}>{ticketCost} {ticketCost === 1 ? 'Ticket' : 'Tickets'}</Text>
@@ -548,7 +549,7 @@ function IslandArt({
                     </Text>}
                   </View>
                 </View>
-                {minsLeft !== null && expiresAt! > Date.now() && <Text style={[styles.tooltipTimer, timerUrgent && styles.timerTextUrgent]}>{minsLeft} min left</Text>}
+                {minsLeft !== null && expiresAt! > Date.now() && <Text style={[styles.tooltipTimer, timerUrgent && styles.tooltipTimerSoon]}>{minsLeft} min left</Text>}
               </View>
               {cardSide === 'above' && <View style={styles.tooltipArrow} />}
             </View>
@@ -651,9 +652,11 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: BRAND.navy },
   // Under a badge, the timer sits on the art's shoulder.
   timerLow: { position: 'absolute', top: -2, zIndex: 20 },
-  timerBadgeUrgent: { borderColor: BRAND.red },
+  // The last 5 minutes: a calm gold chip, never a red ticking clock (kid-trust).
+  timerBadgeUrgent: { backgroundColor: BRAND.gold, borderColor: BRAND.goldLip },
   timerText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, textAlign: 'center' },
-  timerTextUrgent: { color: BRAND.red },
+  timerTextUrgent: { color: BRAND.navy },
+  tooltipTimerSoon: { color: '#9a6a00' },
   cardSlot: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   cardBelow: { justifyContent: 'flex-start' },
   cardBeside: { justifyContent: 'center' },

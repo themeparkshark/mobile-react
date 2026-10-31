@@ -12,9 +12,9 @@
 import { createRng, mixSeed, rngFloat, rngGaussian, rngInt, rngWeighted, type Rng } from '../../../gamekit/core/rng';
 import {
   BUZZ, FIN_BUZZ_FACTOR, FIN_BUZZ_SHARE, FIN_DEMOTE_AFTER_LOSSES, FIN_LOCK_SIGMA, FIN_PRIORS, FIN_RANKS, FIN_RANK_ORDER, FIN_WRONG_SLOWDOWN,
-  WAGER, type Difficulty, type FinRank,
+  type Difficulty, type FinRank,
 } from './config';
-import { clamp, suggestWager, wagerStakes } from './scoring';
+import { clamp } from './scoring';
 
 export interface QuestionStats {
   p: number;
@@ -104,25 +104,6 @@ export function finClosestGuess(seed: number, round: number, rank: FinRank, trut
   return Math.round(clamp(truth + rngGaussian(r) * tol * (1.1 - acc), min, max));
 }
 
-/**
- * Fin's wager (5.5): he takes suggestWager() for his own state. Deckhand and
- * First Mate pick one chip off 25% of the time.
- */
-export function finWagerIndex(seed: number, rank: FinRank, finScore: number, playerScore: number, finMult = 1): number {
-  const r = finRng(seed, 999);
-  let idx = suggestWager(finScore, playerScore, finMult).index;
-  if ((rank === 'deckhand' || rank === 'firstmate') && rngFloat(r) < 0.25) {
-    const step = rngInt(r, 0, 1) === 0 ? -1 : 1;
-    idx = clamp(idx + step, 0, WAGER.percents.length - 1);
-    if (idx === suggestWager(finScore, playerScore, finMult).index) idx = clamp(idx - 2 * step, 0, WAGER.percents.length - 1);
-  }
-  return idx;
-}
-
-export function finStake(seed: number, rank: FinRank, finScore: number, playerScore: number, finMult = 1): number {
-  return wagerStakes(finScore)[finWagerIndex(seed, rank, finScore, playerScore, finMult)];
-}
-
 // -- Rank ladder (7.2): promote after N wins at a rank, demote after 3 straight losses.
 
 export interface FinRankState {
@@ -166,8 +147,8 @@ export const BARKS = {
   youCorrect: ['Nice one, {name}!', 'Sharp shark!', 'You know your stuff!', 'Right on the nose!', 'Spot on, {name}!'],
   finWrong: ['Oops, my bad!', 'Barnacles! Missed it.', 'Well, that was not it!', 'Your round, {name}!'],
   finCorrect: ['Got it!', 'Easy for the captain!', 'Knew that one!', 'Captain scores!'],
-  finalLead: ['Big wager time!', 'Let us make it count!', 'Bet smart, {name}!'],
-  finalTrail: ['All or nothing, eh?', 'Still anyone\'s game!', 'Your move, {name}!'],
+  finalLead: ['Bonus round time!', 'Double points, {name}!', 'Let us make it count!', 'Nothing to lose here!'],
+  finalTrail: ['Double points, catch up!', 'Still anyone\'s game!', 'Your move, {name}!', 'Points only go up now!'],
   finWins: ['Good game! Again?', 'Close one! Rematch?', 'Great duel, {name}!'],
   finLoses: ['You got me! Great game!', 'Captain overboard! GG!', 'Well played, {name}!'],
   buzz: ['Hands on the bell!', 'Who rings first?', 'Bell is live, {name}!'],
@@ -179,7 +160,6 @@ export const BARKS = {
   bullseye: ['Bullseye! Spot on!', 'Right on the number!', 'Dead on, {name}!'],
   categoryPick: ['Your pick, matey!', 'Choose wisely, {name}!'],
   categoryFin: ['I will pick this one!', 'My pick, {name}!'],
-  allIn: ['ALL IN? Bold shark!', 'Going big, I like it!'],
   rematch: ['Back for more? Yes!', 'Round two, {name}!'],
 } as const;
 

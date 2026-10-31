@@ -1,12 +1,13 @@
 /**
  * Queue Arcade: every queue game one tap away. Each tile shows your best stars
- * this wait, or a NEW pill for a game you have not played, and the tiles pop
- * in with a short stagger when the sheet opens (reduced motion: no pop).
+ * this wait, or a NEW pill for a game you have not played. The sheet slides in
+ * already full (every tile and picture is there from its first frame), and the
+ * tiles settle with a small staggered bounce (reduced motion: no bounce).
  */
 import { Image } from 'expo-image';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
-import Animated, { ZoomIn } from 'react-native-reanimated';
+import Animated, { withDelay, withSpring, type EntryAnimationsValues } from 'react-native-reanimated';
 import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../../ui';
 
@@ -18,6 +19,8 @@ export interface QueueArcadeChoice {
   readonly completed: boolean;
   /** Best stars this wait (0-3); undefined when the game has not been played. */
   readonly bestStars?: number;
+  /** NEW: never played on this account, and one of the first two such tiles (playedGames.arcadeNewFlags). */
+  readonly isNew?: boolean;
 }
 
 const ICONS: Record<string, number> = {
@@ -31,9 +34,35 @@ const ICONS: Record<string, number> = {
   showdown: require('../../../../assets/images/screens/lineplay/arcade/showdown.png'),
 };
 
-export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, onHidden,
+/** A tile's settle as the sheet opens: present from the first frame at 88%, then a staggered spring to full size (UI thread). */
+function tileSettle(delay: number) {
+  return (_values: EntryAnimationsValues) => {
+    'worklet';
+    return {
+      initialValues: { transform: [{ scale: 0.88 }] },
+      animations: { transform: [{ scale: withDelay(delay, withSpring(1, { damping: 11, stiffness: 260 })) }] },
+    };
+  };
+}
+
+const ARCADE_HEADER_ICON = require('../../../../assets/images/screens/social/arcade.png');
+
+/**
+ * The arcade's pictures, drawn once out of sight while the screen is up, so the image cache already holds
+ * them decoded at tile size. The sheet then slides in already full: no blank tile waits for its picture.
+ * Static images only, no animation, nothing to tap.
+ */
+export function ArcadeIconWarmup() {
+  return <View pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden
+    style={styles.warmup}>
+    <Image source={ARCADE_HEADER_ICON} style={styles.arcadeIcon} contentFit="contain" />
+    {Object.keys(ICONS).map(key => <Image key={key} source={ICONS[key]} style={styles.gameIcon} contentFit="contain" />)}
+  </View>;
+}
+
+export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, onHidden, onShowing,
   kicker = 'LINEPLAY', title = 'QUEUE ARCADE', intro = 'Pick a quick game while you wait.',
-  note = 'Your wait still counts while you play.', newLabel = 'New this wait.', showNew = true }: {
+  note = 'Your wait still counts while you play.', newLabel = 'New game.', showNew = true }: {
   readonly visible: boolean;
   /** Header and helper lines; the defaults are the queue's. The home arcade passes its own. */
   readonly kicker?: string;
@@ -41,26 +70,28 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
   readonly intro?: string;
   readonly note?: string | null;
   readonly newLabel?: string;
-  /** The NEW pill on unplayed games (off at home, where every game is always open). */
+  /** The NEW pill on tiles marked isNew (off at home, where every game is always open). */
   readonly showNew?: boolean;
   readonly choices: readonly QueueArcadeChoice[];
   readonly onChoose: (index: number) => void;
   readonly onClose: () => void;
   readonly onHidden: () => void;
+  /** The sheet starts coming in (the queue's resume countdown hands over on this frame). */
+  readonly onShowing?: () => void;
 }) {
   const reducedMotion = useReducedGameMotion();
-  return <Modal isVisible={visible} style={styles.modal} hasBackdrop={false}
+  // The slide runs on the UI thread, so a busy JS thread never holds the sheet below the screen.
+  return <Modal isVisible={visible} style={styles.modal} hasBackdrop={false} useNativeDriver hideModalContentWhileAnimating
     animationIn={reducedMotion ? 'fadeIn' : 'slideInUp'}
     animationOut={reducedMotion ? 'fadeOut' : 'slideOutDown'}
     animationInTiming={reducedMotion ? 120 : 260} animationOutTiming={reducedMotion ? 120 : 180}
-    onBackButtonPress={onClose} onModalHide={onHidden}>
+    onBackButtonPress={onClose} onModalHide={onHidden} onModalWillShow={onShowing}>
     <View style={styles.scrim}>
       <Pressable accessibilityRole="button" accessibilityLabel={`Close ${title.toLowerCase()}`}
         onPress={onClose} style={StyleSheet.absoluteFill} />
       <View style={styles.panel}>
         <View style={styles.header}>
-          <Image source={require('../../../../assets/images/screens/social/arcade.png')}
-            style={styles.arcadeIcon} contentFit="contain" />
+          <Image source={ARCADE_HEADER_ICON} style={styles.arcadeIcon} contentFit="contain" />
           <View style={styles.headerCopy}>
             <Text style={styles.kicker}>{kicker}</Text>
             <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{title}</Text>
@@ -73,14 +104,14 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
         <Text style={styles.intro}>{intro}</Text>
         <ScrollView contentContainerStyle={styles.games}>
           {choices.map((choice, order) => <Animated.View key={choice.id} style={styles.gameCell}
-            entering={visible && !reducedMotion ? ZoomIn.delay(90 + order * 60).springify().damping(12) : undefined}>
+            entering={visible && !reducedMotion ? tileSettle(60 + order * 45) : undefined}>
             <Pressable accessibilityRole="button"
               accessibilityLabel={`${choice.completed ? 'Replay' : 'Play'} ${choice.title}.${choice.bestStars == null
-                ? showNew ? ` ${newLabel}` : '' : ` Best ${choice.bestStars} of 3 stars.`}`}
+                ? showNew && choice.isNew ? ` ${newLabel}` : '' : ` Best ${choice.bestStars} of 3 stars.`}`}
               onPress={() => onChoose(choice.index)}
               style={({ pressed }) => [styles.game, pressed && { backgroundColor: '#FFF3C7',
                 borderColor: '#E4B238', transform: [{ scale: reducedMotion ? 1 : 0.96 }] }]}>
-              {showNew && choice.bestStars == null && <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View>}
+              {showNew && choice.isNew && choice.bestStars == null && <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View>}
               {!!choice.gameId && ICONS[choice.gameId] != null &&
                 <Image source={ICONS[choice.gameId]} style={styles.gameIcon} contentFit="contain" />}
               <Text style={styles.gameTitle} numberOfLines={2}>{choice.title}</Text>
@@ -99,6 +130,7 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
 
 const styles = StyleSheet.create({
   gameIcon: { width: 72, height: 72, alignSelf: 'center', marginBottom: 4 },
+  warmup: { position: 'absolute', left: 0, top: 0, width: 72, opacity: 0 },
   gameCell: { width: '48%' },
   newPill: { position: 'absolute', top: 6, right: 6, zIndex: 1, paddingHorizontal: 8, paddingVertical: 2,
     borderRadius: 999, backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy },

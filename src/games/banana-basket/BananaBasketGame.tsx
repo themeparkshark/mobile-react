@@ -27,7 +27,7 @@
  */
 
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Dimensions, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { AppState, Dimensions, Image, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { runOnJS, runOnUI, useSharedValue } from 'react-native-reanimated';
 
@@ -46,9 +46,11 @@ import { firePrimitive } from '../../gamekit/Haptics';
 import { useWalkSense } from '../../gamekit/motion/useWalkSense';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { deckIdForRideName } from '../../services/rideTheme';
+import GameIcon, { type GameIconName } from '../../ui/GameIcon';
+import countText from '../../helpers/countText';
 
 import {
-  BASKET_MAX, BASKET_MIN, CARD_SET_BASE, DRAG_GAIN_Q8, FIELD_H, FIELD_W, G_GOLD_POP, G_PERFECT, G_POP, K_BUNCH, K_COIN,
+  BASKET_MAX, BASKET_MIN, CARD_CATCH, CARD_SET_BASE, DRAG_GAIN_Q8, FIELD_H, FIELD_W, G_GOLD_POP, G_PERFECT, G_POP, K_BUNCH, K_COIN,
   K_LUCKY, K_PUFFER, LANE_Y, QUEUE_SETS, R_INTRO, R_RIDE, RULES_NAMES, TWIST_NAMES,
 } from './constants';
 import {
@@ -59,7 +61,7 @@ import {
   starsFor, step, type SimConfig, type SimState,
 } from './sim';
 import { mixSeed } from './fixed';
-import { nextStarDelta, pileLine, tipLine, whyLine } from './summary';
+import { nextStarDelta, tipLine } from './summary';
 import { botInput, createBot, BOT_EXPERT, type Bot } from './bots';
 import { buildProof, decodeInput, type BananaProof } from './proof';
 import { compareLine, createGhost, finnRun, ghostAdvance, ghostFinal, type Ghost } from './ghost';
@@ -76,6 +78,7 @@ import {
 import { BananaField, fieldLayout, toPx, useFieldImages } from './render/Field';
 import { createVis, notchPass, visEvents, visFrame, type Vis } from './render/vis';
 import { TeachCard, cardInfo, type CardInfo } from './render/TeachCard';
+import { GATE_CLOSE_RUN, GATE_CLOSE_STOP, GATE_RUN, finaleAutoHold, stepGate, timeIsUp } from './endGate';
 
 registerBananaAudio();
 
@@ -85,6 +88,13 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const EVX_FREEZE = 200;
 const EVX_THAW = 201;
 const EVX_NOTCH = 202;
+/** Dev or a release-JS capture build: the results soak's capture-only switches work only here. */
+const CAPTURE_BUILD = __DEV__ || process.env.EXPO_PUBLIC_PERF_CAPTURE === '1';
+
+/** The shell's end watch for a Banana run: TIME! plus the finale, the 1.1 s beat and the card's mount. */
+export const BANANA_END_WATCH_MS = 6000;
+/** From EV_TIME (the sim is done) the card is due in 1.1 s: the watch steps in well after that. */
+export const BANANA_RESULT_WATCH_MS = 3500;
 
 export interface BananaGhostInput {
   name: string;
@@ -118,6 +128,13 @@ export interface BananaBasketGameProps {
   onChallenge?: (proof: BananaProof) => void;
   /** Dev: the Expert bot plays (tester video, perf runs). */
   autoplay?: boolean;
+  /**
+   * Capture builds only (dev, or EXPO_PUBLIC_PERF_CAPTURE=1), for the results soak: the autoplay
+   * thumb lets go the moment time is up (the finale must land on its own), or a teaching card is
+   * forced open on the run's last step (it must close with the run). Store builds ignore both.
+   */
+  captureLiftAtEnd?: boolean;
+  captureEndCard?: boolean;
   /** Wide Basket assist (unranked queue runs only). */
   assist?: boolean;
   /** Dev/lab override of the queue unlock gate (1-3); normally from local progress. */
@@ -141,7 +158,7 @@ function modeOf(m: 'ride' | 'queue' | 'heat'): number {
 export function BananaBasketGame(props: BananaBasketGameProps) {
   const {
     visible, difficulty = 2, seed: seedProp, onComplete, onClose, shellRef, deck: deckProp, rideName, rideId,
-    ghost: ghostProp, staffGhost, onChallenge, autoplay = false, heat,
+    ghost: ghostProp, staffGhost, onChallenge, autoplay = false, heat, captureLiftAtEnd = false, captureEndCard = false,
   } = props;
   const linePlay = useContext(LinePlayMovementContext);
   const rideChallenge = useContext(RideChallengeContext);
@@ -201,6 +218,8 @@ export function BananaBasketGame(props: BananaBasketGameProps) {
       shellRef={shellRef}
       staffGhost={!!staffGhost}
       autoplay={autoplay}
+      liftAtEnd={CAPTURE_BUILD && captureLiftAtEnd}
+      endCard={CAPTURE_BUILD && captureEndCard}
       rideId={rideId}
       heat={heat ?? null}
       onComplete={onComplete}
@@ -228,6 +247,8 @@ interface RunProps {
   shellRef?: React.Ref<GameShellV2Handle>;
   staffGhost: boolean;
   autoplay: boolean;
+  liftAtEnd: boolean;
+  endCard: boolean;
   rideId?: number | string;
   heat: { round: HeatRound; transport: HeatTransport } | null;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
@@ -238,7 +259,7 @@ interface RunProps {
 }
 
 function BananaRun({
-  visible, setup, mode, reducedMotion, progress, setProgress, shellRef, staffGhost, autoplay, rideId, heat, onComplete,
+  visible, setup, mode, reducedMotion, progress, setProgress, shellRef, staffGhost, autoplay, liftAtEnd, endCard, rideId, heat, onComplete,
   onClose, onChallenge, onRematch, onRaceSelf,
 }: RunProps) {
   const { cfg } = setup;
@@ -273,6 +294,7 @@ function BananaRun({
   const dragBase = useSharedValue(200);
   const running = useSharedValue(false);
   const cardGate = useSharedValue(0);
+  const endCardForced = useSharedValue(false);
   const worldScale = useSharedValue(1);
   const wasFrozen = useSharedValue(true);
   const bot = useSharedValue<Bot | null>(autoplay ? createBot(BOT_EXPERT, cfg.seed) : null);
@@ -585,6 +607,8 @@ function BananaRun({
         stopTamb();
         if (!reduced) camera.shake(0.4);
         burst('confetti', 200, 250, 60);
+        // The shell's one end watch: the card is due in 1.1 s; if it never comes, the watch shows one.
+        shell.current?.endWatch?.(BANANA_RESULT_WATCH_MS, rescueResult);
         finishRun.current();
         break;
       case EV_TIPOVER:
@@ -677,6 +701,11 @@ function BananaRun({
 
   // -- cards --------------------------------------------------------------------------------------
   const openCard = useCallback((id: number) => {
+    // A finished run never opens a teaching card over its results.
+    if (endedRef.current) {
+      cardGate.value = 0;
+      return;
+    }
     let info: CardInfo;
     if (id >= CARD_SET_BASE) {
       info = cardInfo(id, { setScore: scoreRef.current, chain: chainRef.current, gullSet: cfg.unlock >= 2 });
@@ -684,6 +713,7 @@ function BananaRun({
     setCard(info);
     setCardReady(false);
     setTimeout(() => {
+      if (endedRef.current) return;
       setCardReady(true);
       cardGate.value = 2;
     }, info.minMs);
@@ -700,13 +730,14 @@ function BananaRun({
     onStep: () => {
       'worklet';
       const s = sim.value;
-      if (!running.value || s.done) return;
-      if (cardGate.value === 1) return;
-      if (cardGate.value === 2) {
-        if (touch.value === 0 && bot.value === null) return;
+      if (!running.value) return;
+      // The run's edges (endGate.ts): a card that opened on the last step closes with the run.
+      const gate = stepGate(s.done === 1, cardGate.value, touch.value !== 0 || bot.value !== null);
+      if (gate === GATE_CLOSE_STOP || gate === GATE_CLOSE_RUN) {
         cardGate.value = 0;
         runOnJS(closeCard)();
       }
+      if (gate !== GATE_RUN && gate !== GATE_CLOSE_RUN) return;
       let t = touch.value;
       let q4 = Math.round(target.value * 16);
       const b = bot.value;
@@ -714,7 +745,11 @@ function BananaRun({
         q4 = botInput(s, b);
         t = 1;
         target.value = q4 / 16;
+        // Soak only: the thumb comes up the moment time is up.
+        if (liftAtEnd && timeIsUp(s)) t = 0;
       }
+      // TIME! is up and the last bunch is still falling: it lands on its own, thumb or not.
+      if (!t && finaleAutoHold(s)) t = 1;
       if (!t && s.holdTs === 0) {
         if (!wasFrozen.value) {
           wasFrozen.value = true;
@@ -733,6 +768,11 @@ function BananaRun({
       if (notchPass(vis.value, s.score + s.bonus, tgt) >= 0) pushEvent(r, EVX_NOTCH, 0, 0, 0, s.clock);
       const g = ghost.value;
       if (g !== null) ghostAdvance(g, s.clock);
+      // Soak only: a teaching card opens on the run's very last step.
+      if (endCard && s.done === 1 && s.cardPending === 0 && !endCardForced.value) {
+        endCardForced.value = true;
+        s.cardPending = CARD_CATCH;
+      }
       if (s.cardPending) {
         cardGate.value = 1;
         runOnJS(openCard)(s.cardPending);
@@ -832,18 +872,39 @@ function BananaRun({
       const left = !running.value || s.done || !lastSet ? null : Math.ceil(leftSteps / 60);
       const next = s.done && lastSet && leftSteps <= 0 ? 0 : left != null && left <= 5 && left >= 1 ? left : null;
       setFinalLeft((v) => (v === next ? v : next));
+      // The timer is empty (or the run ended early): the shell's end watch guarantees the card.
+      if (!endWatchArmed.current && (s.done === 1 || timeIsUp(s))) {
+        endWatchArmed.current = true;
+        shell.current?.endWatch?.(BANANA_END_WATCH_MS, rescueRef.current);
+      }
     }, 200);
     return () => clearInterval(id);
-  }, [visible, mode, sim, running]);
+  }, [visible, mode, sim, running, shell]);
+  const endWatchArmed = useRef(false);
+  const rescueRef = useRef<() => GameResult | null>(() => null);
 
   // -- finish -----------------------------------------------------------------------------------
   const deliver = useCallback((s: SimState) => {
     if (endedRef.current) return;
     endedRef.current = true;
+    // The card compares this run with the best from BEFORE it: saving the new
+    // best first made a record run read BEST 3,745 under 3,745, with no NEW BEST.
+    bestBeforeRun.current = mode === 'ride' ? progress.bestRide : progress.bestQueue;
     running.value = false;
     stopTamb();
+    // A teaching card still up from the last step closes with the run.
+    cardGate.value = 0;
+    closeCard();
     const elapsed = Date.now() - (startedAt.current || Date.now());
     const final = finalScore(s);
+    // The card's numbers come first, so the card always comes even if a save or a stat throws below.
+    const plain: GameResult = {
+      score: final, stars: starsFor(final, targets), maxCombo: s.maxChain, thresholds, stats: [],
+      meta: { game: 'banana-basket', score: final, seed: cfg.seed, mode },
+    };
+    plainResult.current = plain;
+    let res: GameResult = plain;
+    try {
     let verified = true;
     if (__DEV__) {
       // Determinism check: the JS replay of the UI-thread log must match exactly.
@@ -864,20 +925,25 @@ function BananaRun({
     const rideKey = String(rideId ?? 'park');
     const mastery = mode === 'ride' ? masteryAfter(progress.mastery[rideKey] ?? 0, stars) : progress.mastery[rideKey] ?? 0;
     const firstWin = mode === 'ride' && stars >= 1 && !progress.firstWins[jKey];
-    const out = s.endReason === 2;
-    const res: GameResult = {
+    const full: GameResult = {
       score: final,
       stars,
       maxCombo: s.maxChain,
       thresholds,
-      message: out ? 'OUT OF HEARTS' : stars >= 1
+      // A 0-star run leaves the title to the shared feelings rule (SO CLOSE!
+      // only when a star really was near, otherwise GOOD TRY!); why the run
+      // ended is in the note.
+      message: stars >= 1
         ? (mode === 'ride' ? 'RIDE COIN EARNED!' : stars === 3 ? 'BASKET MASTER!' : 'NICE HAUL!')
-        : 'SO CLOSE!',
-      note: stars === 0 ? `${whyLine(facts)} ${tipLine(facts)}`.trim() : cmp ? cmp.line : next ? `+${next.delta} TO ${next.label}` : undefined,
+        : undefined,
+      // A 0-star card's one tip is spoken, never drawn (a 7-year-old reads nothing):
+      // GOOD TRY! and the next-star bar say the rest in pictures.
+      note: stars === 0 ? undefined : cmp ? cmp.line : next ? `+${next.delta} TO ${next.label}` : undefined,
+      spokenNote: stars === 0 ? tipLine(facts) : undefined,
       rival: g ? { name: g.name, score: g.final } : null,
+      // The juggle and the pile are pictures in the rows under the score (ResultsRows): the chips
+      // never say them twice, and no percent is drawn.
       stats: [
-        { label: 'BALL SHARE', value: `${share}%` },
-        { label: 'BEST JUGGLE', value: `${s.bestLife}` },
         { label: 'PERFECT', value: `${s.perfects}` },
       ],
       meta: {
@@ -896,7 +962,7 @@ function BananaRun({
       },
     };
     setExtras({
-      share, juggle: s.bestLife, prevJuggle, pile: pileLine(s.catches), starBonus: mode === 'ride' && stars >= 2, crown,
+      share, juggle: s.bestLife, prevJuggle, catches: s.catches, starBonus: mode === 'ride' && stars >= 2, crown,
       mastery: mode === 'ride' && stars >= 2 ? MASTERY_NAMES[mastery] : '', firstWin,
     });
     // Progress: cards seen, queue runs (unlock gate), best, PB ghost, juggle, mastery, ball learned.
@@ -917,19 +983,48 @@ function BananaRun({
       nextP.ghosts[key] = { input: proof.input, score: final, at: Date.now(), rules: proof.rules, unlock: proof.unlock, cards: proof.cards, twist: proof.twist ?? 0 };
     }
     setProgress(nextP);
-    void saveProgress(nextP);
+    void saveProgress(nextP).catch(() => undefined);
     lastProof.current = proof;
+    res = full;
+    } catch (e) {
+      // Never a dark end: the plain card still comes (the end watch would show one otherwise).
+      if (__DEV__) console.warn('[banana] results build failed', e);
+    }
+    const stars = res.stars;
     setTimeout(() => {
-      if (stars >= 1 && mode === 'ride') {
-        GameAudio.play('fx.coin');
-        setTimeout(() => GameAudio.play('fx.reward'), 350);
-        buzz('success');
-      } else if (stars === 0) GameAudio.play(cues.wah);
-      else GameAudio.play(cues.finale, { volume: 0.8 });
+      // The card first: a cue that fails can never hold it back.
       setResult(res);
+      try {
+        if (stars >= 1 && mode === 'ride') {
+          GameAudio.play('fx.coin');
+          setTimeout(() => GameAudio.play('fx.reward'), 350);
+          buzz('success');
+        } else if (stars === 0) GameAudio.play(cues.wah);
+        else GameAudio.play(cues.finale, { volume: 0.8 });
+      } catch {
+        // Sound is a bonus; the card already came.
+      }
     }, reducedMotion ? 500 : 1100);
-  }, [cfg, targets, thresholds, mode, rideId, progress, setProgress, running, ghost, cues, reducedMotion, buzz]);
+  }, [cfg, targets, thresholds, mode, rideId, progress, setProgress, running, ghost, cues, reducedMotion, buzz, cardGate, closeCard]);
   const lastProof = useRef<BananaProof | null>(null);
+  /** The run's plain card (score and stars), set the moment the run is delivered. */
+  const plainResult = useRef<GameResult | null>(null);
+  /**
+   * The end watch's rescue. The run was delivered but its card never came: hand the
+   * shell the delivered numbers. The sim's end never reached JS: deliver now from the
+   * UI thread (the card follows in about a second, inside the shell's grace).
+   */
+  const rescueResult = useCallback((): GameResult | null => {
+    if (plainResult.current) return plainResult.current;
+    if (__DEV__) console.warn('[banana] end watch: delivering from the UI thread');
+    finishRun.current();
+    return null;
+  }, []);
+  rescueRef.current = rescueResult;
+  /** The best before the run on the card (null while playing): see deliver. */
+  const bestBeforeRun = useRef<number | null>(null);
+  const bestNow = mode === 'ride' ? progress.bestRide : progress.bestQueue;
+  const shownBest = result && bestBeforeRun.current != null ? bestBeforeRun.current : bestNow;
 
   finishRun.current = () => {
     runOnUI(() => {
@@ -977,7 +1072,7 @@ function BananaRun({
       subtitle={subtitle}
       score={score}
       hideHeaderScore
-      personalBest={mode === 'ride' ? progress.bestRide || undefined : progress.bestQueue || undefined}
+      personalBest={shownBest || undefined}
       objective={objective}
       result={result}
       thresholds={thresholds}
@@ -992,10 +1087,14 @@ function BananaRun({
       stageReady={!!(layout && images.poseIdle && images.basket && images.cart)}
       resumeStyle="countdown"
       countdownStyle={mode === 'heat' ? 'none' : undefined}
+      // The rows sit bare on the blue (no cream panel), like every family card's chips.
       resultExtras={extras ? <ResultsRows x={extras} /> : undefined}
+      resultExtrasBeat={!!extras}
+      challengeLabel="Race ghosts"
       onStart={() => {
         if (mode !== 'heat') running.value = true;
         startedAt.current = Date.now();
+        bestBeforeRun.current = null;
       }}
       onPause={() => {
         if (mode === 'heat') {
@@ -1035,6 +1134,7 @@ function BananaRun({
               targets={targets}
               thumb={thumb}
               strip={mode === 'heat' ? strip : undefined}
+              hudBack={!!result}
             />
             <FxStage ref={fx} width={layout.width} height={layout.height} timeScale={worldScale} reducedMotion={reducedMotion} atlasImage={images.fxSheet} />
             {card ? <TeachCard card={card} ready={cardReady} /> : null}
@@ -1054,32 +1154,47 @@ interface ResultsExtras {
   share: number;
   juggle: number;
   prevJuggle: number;
-  pile: string;
+  /** Bananas in the basket (the pile). */
+  catches: number;
   starBonus: boolean;
   crown: boolean;
   mastery: string;
   firstWin: boolean;
 }
 
-/** Results rows (7.7): BALL SHARE bar, BEST JUGGLE, PILE, ribbons. */
+/** The game's own art for the result pictures (no new art). */
+const BALL_ART = require('../../assets/games/banana-basket/v2/ball.png');
+const PILE_ART = require('../../assets/games/banana-basket/v2/bunch.png');
+
+/**
+ * Results rows (7.7) as pictures, bare on the card's blue like every family card:
+ * the ball with your best juggle (a crown when it is a new best), the bunch with
+ * how many you caught, and the badges as icons. Every word is spoken, none drawn.
+ */
 function ResultsRows({ x }: { x: ResultsExtras }) {
+  const newJuggle = x.juggle > x.prevJuggle && x.prevJuggle > 0;
+  const badges: { icon: GameIconName; say: string }[] = [
+    ...(x.starBonus ? [{ icon: 'star' as const, say: 'Star bonus' }] : []),
+    ...(x.crown ? [{ icon: 'crown' as const, say: 'Gold crown' }] : []),
+    ...(x.firstWin ? [{ icon: 'trophy' as const, say: 'First win' }] : []),
+    ...(x.mastery ? [{ icon: 'trophySilver' as const, say: x.mastery.toLowerCase() }] : []),
+  ];
   return (
     <View style={styles.rows}>
-      <View style={styles.shareRow}>
-        <Text style={styles.rowLabel}>BALL {x.share}%</Text>
-        <View style={styles.shareBar}>
-          <View style={[styles.shareFill, { width: `${Math.max(2, Math.min(100, x.share))}%` }]} />
+      <View style={styles.pchip} accessible accessibilityLabel={`Best juggle: ${x.juggle}${newJuggle ? '. New best' : ''}`}>
+        <Image source={BALL_ART} style={styles.pimg} resizeMode="contain" />
+        <Text style={styles.pnum}>{countText(x.juggle)}</Text>
+        {newJuggle ? <GameIcon name="crown" size={18} style={styles.pcrown} /> : null}
+      </View>
+      <View style={styles.pchip} accessible accessibilityLabel={`Bananas caught: ${x.catches}`}>
+        <Image source={PILE_ART} style={styles.pimg} resizeMode="contain" />
+        <Text style={styles.pnum}>{countText(x.catches)}</Text>
+      </View>
+      {badges.map((b) => (
+        <View key={b.icon} style={styles.badge} accessible accessibilityLabel={b.say}>
+          <GameIcon name={b.icon} size={26} />
         </View>
-      </View>
-      <Text style={styles.rowText}>
-        JUGGLE {x.juggle}{x.juggle > x.prevJuggle && x.prevJuggle > 0 ? '  NEW BEST!' : ''}   {x.pile}
-      </Text>
-      <View style={styles.ribbons}>
-        {x.starBonus ? <Text style={[styles.ribbon, styles.ribbonGold]}>STAR BONUS</Text> : null}
-        {x.crown ? <Text style={[styles.ribbon, styles.ribbonGold]}>GOLD CROWN</Text> : null}
-        {x.firstWin ? <Text style={[styles.ribbon, styles.ribbonBlue]}>FIRST WIN</Text> : null}
-        {x.mastery ? <Text style={[styles.ribbon, styles.ribbonBlue]}>{x.mastery}</Text> : null}
-      </View>
+      ))}
     </View>
   );
 }
@@ -1101,16 +1216,15 @@ const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: '#bfeaff' },
   countWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   count: { fontFamily: 'Shark', fontSize: 96, color: '#ffffff', textShadowColor: '#23263a', textShadowRadius: 6, textShadowOffset: { width: 0, height: 3 } },
-  rows: { width: '100%', paddingHorizontal: 8, marginTop: 6 },
-  shareRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  rowLabel: { fontFamily: 'Shark', fontSize: 16, color: '#23263a', width: 92 },
-  shareBar: { flex: 1, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#23263a', backgroundColor: '#ffffff', overflow: 'hidden' },
-  shareFill: { height: '100%', backgroundColor: '#2d9cff' },
-  rowText: { fontFamily: 'Shark', fontSize: 15, color: '#23263a', marginBottom: 4 },
-  ribbons: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  ribbon: { fontFamily: 'Shark', fontSize: 14, color: '#23263a', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10, borderWidth: 2, borderColor: '#23263a', overflow: 'hidden' },
-  ribbonGold: { backgroundColor: '#fec90e' },
-  ribbonBlue: { backgroundColor: '#dff3ff' },
+  // The shared chip look (ResultsCard): cream, navy border, the number in Shark lettering.
+  rows: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', marginTop: 4 },
+  pchip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff8e4', borderRadius: 14, borderWidth: 3, borderColor: '#05346e',
+    paddingHorizontal: 10, paddingVertical: 3, margin: 4 },
+  pimg: { width: 28, height: 28, marginRight: 6 },
+  pnum: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },
+  pcrown: { marginLeft: 4 },
+  badge: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff8e4', borderWidth: 3, borderColor: '#05346e', margin: 4,
+    alignItems: 'center', justifyContent: 'center' },
 });
 
 export default BananaBasketGame;

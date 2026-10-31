@@ -9,9 +9,12 @@ import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, wi
 import client from '../api/client';
 import { AuthContext } from '../context/AuthProvider';
 import { playSfx } from '../gamekit/SFX';
+import { useNativeModalLayer } from '../ui/modalLayers';
 import Ribbon from './Ribbon';
 
 const PENDING_KEY = 'tps.pendingSharkDrop';
+/** How long the drop dialog takes to leave after OK (a quick fade, so PLAY! answers almost at once). */
+export const DROP_EXIT_MS = 140;
 
 /** themeparkshark://drop/CHURRO, .../drop?code=CHURRO, or any link with ?drop=CHURRO. */
 export function parseDropCode(url: string | null): string | null {
@@ -47,6 +50,9 @@ export default function SharkDropHandler() {
   const busy = useRef(false);
   const lid = useSharedValue(0);
   const prize = useSharedValue(0);
+  // A drop the player tapped a link for waits its turn behind any open sheet or dialog and holds its
+  // layer until UIKit says it is gone (core loop 4.3: through the queue and the native modal layer).
+  const layer = useNativeModalLayer(!!state, 'wait');
 
   const queue = async (url: string | null) => {
     const code = parseDropCode(url);
@@ -102,11 +108,16 @@ export default function SharkDropHandler() {
     r.item ? `${r.item.name} unlocked!` : null,
     r.tickets ? `+${r.tickets} ticket${r.tickets === 1 ? '' : 's'}` : null,
     r.coins ? `+${r.coins} coins` : null,
-    r.energy ? `+${r.energy} energy` : null,
+    r.energy ? `+${r.energy} Energy` : null,
   ].filter(Boolean) as string[] : [];
 
   return (
-    <Modal isVisible={!!state} backdropOpacity={0.75} animationIn="zoomIn" animationOut="zoomOut"
+    <Modal isVisible={layer.present} onDismiss={layer.onDismissed} onModalHide={layer.onHidden} backdropOpacity={0.75} animationIn="zoomIn"
+      // The prize zooms in; OK lets it go in a quick fade. While a native modal is still leaving, iOS hands
+      // every touch to it, so a kid's PLAY! right after OK was lost; a 140 ms exit leaves almost no such window.
+      animationOut="fadeOut" animationOutTiming={DROP_EXIT_MS} backdropTransitionOutTiming={DROP_EXIT_MS}
+      // The zoom runs on the UI thread, so the sheet is gone (and its layer free) on time even while JS is busy.
+      useNativeDriver
       onBackdropPress={state?.result || state?.error ? () => setState(null) : undefined}>
       <View style={styles.wrap}>
         <Ribbon text="Shark Drop!" />

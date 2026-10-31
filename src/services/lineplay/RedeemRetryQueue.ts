@@ -151,11 +151,16 @@ export class RedeemRetryQueue<TPayload> {
    * — e.g. completing a specific session — is never enqueued twice with two
    * different keys.
    */
-  async enqueue(payload: TPayload, idempotencyKey?: string): Promise<string> {
+  async enqueue(payload: TPayload, idempotencyKey?: string, options?: { replace?: boolean }): Promise<string> {
     const key = idempotencyKey ?? makeIdempotencyKey('retry');
     await this.mutate((items) => {
-      // Dedupe by idempotency key — never queue the same action twice.
-      if (items.some((it) => it.idempotencyKey === key)) return items;
+      // Dedupe by idempotency key: never queue the same action twice. With
+      // replace, the newest payload wins (an edited draft of the same action).
+      const index = items.findIndex((it) => it.idempotencyKey === key);
+      if (index >= 0) {
+        if (options?.replace) items[index] = { ...items[index], payload };
+        return items;
+      }
       items.push({
         idempotencyKey: key,
         payload,
@@ -166,6 +171,11 @@ export class RedeemRetryQueue<TPayload> {
       return items;
     });
     return key;
+  }
+
+  /** Take one item out (it was sent another way, or the server said no). */
+  async remove(idempotencyKey: string): Promise<void> {
+    await this.mutate((items) => items.filter((it) => it.idempotencyKey !== idempotencyKey));
   }
 
   /** How many items are currently queued. */
@@ -237,9 +247,13 @@ export class RedeemRetryQueue<TPayload> {
         // Keep: survivors (updated attempt counts) + any brand-new items added
         // mid-drain that we never processed.
         const newlyAdded = current.filter((c) => !drainedKeys.has(c.idempotencyKey));
+        // A payload replaced mid-drain keeps its newest version; only the try count comes from the drain.
         const updatedSurvivors = current
           .filter((c) => survivorKeys.has(c.idempotencyKey))
-          .map((c) => survivors.find((s) => s.idempotencyKey === c.idempotencyKey) ?? c);
+          .map((c) => {
+            const tried = survivors.find((s) => s.idempotencyKey === c.idempotencyKey);
+            return tried ? { ...c, attempts: tried.attempts, lastAttemptAt: tried.lastAttemptAt } : c;
+          });
         return [...updatedSurvivors, ...newlyAdded];
       });
 

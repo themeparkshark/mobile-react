@@ -1,9 +1,11 @@
 /**
  * Near-miss line for a loss (design 11.9): find the smallest single change
  * that flips the result and say it in one friendly line.
- *   speed: "Lost by 35. A GREAT answer on question 2 wins it."
- *   wager: "Lost by 120. ALL IN on the Final wins it."
- *   miss:  "Lost by 60. One more right answer wins it."
+ *   speed: "Just 35 away! A GREAT answer on question 2 wins it."
+ *   final: "Just 120 away! A right answer on the bonus question wins it."
+ *   miss:  "Just 60 away! One more right answer wins it."
+ * Never "lost", never a betting word. A big gap gets no sentence at all: the
+ * card shows Fin and the REMATCH button pulses.
  */
 import { POINTS } from './config';
 import type { MatchPlan, MatchTally, RoundResult } from './match';
@@ -11,7 +13,7 @@ import { streakMult } from './scoring';
 
 export interface NearMiss {
   gap: number;
-  kind: 'speed' | 'wager' | 'miss' | 'tie' | 'none';
+  kind: 'speed' | 'final' | 'miss' | 'tie' | 'none';
   line: string;
 }
 
@@ -37,24 +39,23 @@ export function nearMiss(plan: MatchPlan, tally: MatchTally, results: readonly R
   if (bestSpeed) {
     const b = bestSpeed as { round: number; tier: string; add: number };
     const word = b.tier;
-    return { gap, kind: 'speed', line: `Lost by ${gap}. A ${word} answer on question ${b.round + 1} wins it.` };
+    return { gap, kind: 'speed', line: `Just ${gap} away! A ${word} answer on question ${b.round + 1} wins it.` };
   }
 
-  // 2) Wager: a bigger stake on a correct Final.
+  // 2) Final: a right answer on the double-points bonus question.
   const fi = plan.rounds.findIndex((r) => r.spec.type === 'final');
   const fr = fi >= 0 ? results[fi] : undefined;
-  if (fr && fr.me.correct) {
-    const scoreBefore = tally.me.score - fr.me.points;
-    const allIn = Math.max(0, scoreBefore) - fr.me.stake;
-    if (allIn >= need) return { gap, kind: 'wager', line: `Lost by ${gap}. ALL IN on the Final wins it.` };
+  if (fr && !fr.me.correct && POINTS.base * 2 >= need) {
+    return { gap, kind: 'final', line: `Just ${gap} away! A right answer on the bonus question wins it.` };
   }
 
   // 3) Miss: one more right answer.
   if (results.some((r) => !r.me.correct) && POINTS.base * 1.5 >= need) {
-    return { gap, kind: 'miss', line: `Lost by ${gap}. One more right answer wins it.` };
+    return { gap, kind: 'miss', line: `Just ${gap} away! One more right answer wins it.` };
   }
-  if (gap > 300) return { gap, kind: 'miss', line: 'Fin brought his A game. Rematch and take him down!' };
-  return { gap, kind: 'miss', line: `Lost by ${gap}. So close! Rematch?` };
+  // A big gap is not "so close": no sentence, the card shows Fin and REMATCH.
+  if (gap > 300) return { gap, kind: 'miss', line: '' };
+  return { gap, kind: 'miss', line: `Just ${gap} away! So close!` };
 }
 
 /**
@@ -66,5 +67,6 @@ export function rideNearMiss(results: readonly { me: { correct: boolean } }[], n
   if (right >= need) return '';
   const firstMiss = results.findIndex((r) => !r.me.correct);
   if (need - right === 1 && firstMiss >= 0) return `A right answer on Q${firstMiss + 1} wins the coin.`;
-  return 'Two right answers win the coin. You have got this.';
+  return 'Two right answers win the coin.';
 }
+

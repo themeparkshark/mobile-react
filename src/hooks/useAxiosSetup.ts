@@ -3,6 +3,9 @@ import { isStandalonePreviewMode } from '../utils/standalonePreview';
 import { useContext, useEffect, useRef } from 'react';
 import client from '../api/client';
 import { QUIET_COIN_BROADCAST, visibleBroadcasts } from '../api/broadcastFilter';
+
+/** Reward banners fold into the header pills' +N (core loop, guide-map lane). */
+export const REWARD_BANNERS_FOLDED = true;
 import { AuthContext } from '../context/AuthProvider';
 import { BroadcastContext } from '../context/BroadcastProvider';
 import { showToast } from '../utils/toast';
@@ -47,7 +50,9 @@ export const useAxiosSetup = () => {
         const cfg = response.config as Record<string, unknown> | undefined;
         const skipAll = cfg?.skipBroadcasts === true;
         if (!skipAll && response.data && Array.isArray(response.data.broadcasts)) {
-          const shown = visibleBroadcasts<string>(response.data.broadcasts, Boolean(cfg?.[QUIET_COIN_BROADCAST]));
+          // Core loop (BLUEPRINT row 329): every coin and Ticket reward flies into its header pill with +N, so the
+          // server's "You earned N coins!" and "You earned N Tickets!" banners never show; server news still does.
+          const shown = visibleBroadcasts<string>(response.data.broadcasts, REWARD_BANNERS_FOLDED || Boolean(cfg?.[QUIET_COIN_BROADCAST]));
           if (shown.length > 0) enqueueRef.current(shown);
         }
         return response;

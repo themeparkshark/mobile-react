@@ -30,7 +30,7 @@ test('pips land one per beat after the ribbon; the button comes last', () => {
 });
 
 test('feel: ribbon impact, per-pip sound ladder + tick, breathing TRY AGAIN, all skipped under Reduce Motion', () => {
-  assert.match(src, /results_banner\.png/);
+  assert.match(src, /<ResultsRibbon title=\{copy\.title\}/, 'the shared ribbon, the same title every results card wears');
   assert.match(src, /GameAudio\.playLadder\('mm_sharp_twinkle', 2 \+ i/);
   assert.match(src, /Haptic\.tickSelection\(\)/);
   assert.match(src, /Haptic\.hitMedium\(\); GameAudio\.play\('fx\.hit'/);
@@ -51,4 +51,16 @@ test('hold the card to peek at the board; the spent clock hides under the ribbon
   assert.match(src, /onPressOut=\{\(\) => \{ peek\.value = withTiming\(0/);
   const game = fs.readFileSync(path.join(root, 'src/games/memory/MemoryGame.tsx'), 'utf8');
   assert.match(game, /\{tryScreen \? null : <RopeNumeral/);
+});
+
+test('one results language: the blue family card, no instruction sentence, tries as pictures (not Ticket words)', () => {
+  assert.match(src, /backgroundColor: '#0768b9', borderRadius: 24, borderWidth: 4,\s*borderColor: '#ffffff'/);
+  assert.doesNotMatch(src, /\{copy\.line\}<\/|<Text[^>]*>\{triesLeftLine/, 'no sentence on the card (it is spoken)');
+  assert.match(src, /accessibilityLabel=\{`\$\{pairs\} of \$\{total\} pairs found\. \$\{copy\.line\}`\}/);
+  // Tries left are flat dots inside TRY AGAIN, never round retry marks that look like more buttons.
+  assert.match(src, /<Text style=\{styles\.btnText\}>TRY AGAIN<\/Text>[\s\S]{0,260}<View style=\{styles\.leftDots\}[^>]*>\s*\{Array\.from\(\{ length: left \}, \(_, i\) => <View key=\{i\} style=\{styles\.leftDot\} \/>\)\}\s*<\/View>\s*<\/Pressable>/);
+  assert.doesNotMatch(src, /tryMark|<GameIcon name="retry" size=\{16\}/);
+  assert.match(src, /accessibilityLabel=\{`Try again\. \$\{triesLeftLine\(left\)\}`\}/);
+  const game = fs.readFileSync(path.join(root, 'src/games/memory/MemoryGame.tsx'), 'utf8');
+  assert.match(game, /ownResultsDone=\{tryScreen \? giveUp : null\}/, 'the HUD steps back behind the try card and the X is its DONE');
 });

@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { cheerRide, getLiveParks, type HomeCheerTarget, type LiveParks, type LiveParkSummary } from '../../api/endpoints/me/livePark';
 import { BOSS_NAMES } from '../../api/endpoints/parks/raid';
-import { applyTeamNames, TEAM_ORDER, TEAMS, teamName, teamShortName } from '../../constants/teams';
+import { applyTeamNames, TEAM_ORDER, TEAMS, teamChipColor, teamName, teamShortName } from '../../constants/teams';
 import { AuthContext } from '../../context/AuthProvider';
 import { WhackAShark } from '../../games/whack';
 import * as RootNavigation from '../../RootNavigation';
@@ -16,12 +16,14 @@ import PushSoftAsk from '../PushSoftAsk';
 import useLivePoll from '../../hooks/useLivePoll';
 import { useAppActive } from '../../hooks/appActive';
 import { homeLiveBar } from './homeLiveBar';
+import TeamBadge from '../TeamBadge';
 
 const ORDER = TEAM_ORDER;
 
-function clock(endsAt: string, now: number) {
-  const s = Math.max(0, Math.floor((new Date(endsAt).getTime() - now) / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+/** How long a raid has left, in calm whole minutes ("4 min"), never a ticking m:ss (core loop 4.3 rule 7). */
+export function raidMinutes(endsAt: string, now: number): string {
+  const ms = Math.max(0, new Date(endsAt).getTime() - now);
+  return `${Math.max(1, Math.ceil(ms / 60_000))} min`;
 }
 
 /**
@@ -46,7 +48,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
 
   const load = useCallback(() => { getLiveParks().then(setLive).catch(() => undefined); }, []);
   // Live parks refresh every 30 s while the home map is on screen; the raid
-  // clocks tick each second only while a raid is showing.
+  // minutes refresh every 15 s only while a raid is showing (whole minutes, never a ticking clock).
   const focused = useIsFocused();
   const appActive = useAppActive();
   useLivePoll(load, 30000, { focused });
@@ -55,7 +57,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
   useEffect(() => {
     if (!ticking) return;
     setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(id);
   }, [ticking]);
   useEffect(() => {
@@ -112,7 +114,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
             <Image source={BOSS_ART[liveRaid.raid.boss]} style={styles.barBossArt} contentFit="contain" />
             <View style={{ flex: 1 }}>
               <View style={styles.liveRow}><View style={styles.liveDot} /><Text style={styles.barKicker} numberOfLines={1}>HELP FROM HOME  ·  {liveRaid.name}</Text></View>
-              <Text style={styles.barTitle} numberOfLines={1}>{BOSS_NAMES[liveRaid.raid.boss]} attack!  ·  {clock(liveRaid.raid.ends_at, now)}</Text>
+              <Text style={styles.barTitle} numberOfLines={1}>{BOSS_NAMES[liveRaid.raid.boss]} attack!  ·  {raidMinutes(liveRaid.raid.ends_at, now)}</Text>
             </View>
             <View style={styles.joinTag}><Text style={styles.joinTagText}>JOIN</Text></View>
           </>
@@ -123,8 +125,8 @@ export default function HomeLive({ top = 12, onBarChange }: {
             </Text>
             <View style={styles.chips}>
               {ORDER.map(team => (
-                <View key={team} style={[styles.chip, { backgroundColor: TEAMS[team].color }, yours === team && styles.chipYours]}>
-                  <Image source={TEAMS[team].badge} style={styles.chipBadge} contentFit="contain" />
+                <View key={team} style={[styles.chip, { backgroundColor: teamChipColor(team) }, yours === team && styles.chipYours]}>
+                  <TeamBadge team={team} style={styles.chipBadge} />
                   <Text style={styles.chipCount}>{live.totals[team]}</Text>
                 </View>
               ))}
@@ -157,7 +159,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
           <View style={styles.standings}>
             {ORDER.map(team => (
               <View key={team} style={styles.standing}>
-                <Image source={TEAMS[team].badge} style={styles.standingBadge} contentFit="contain" />
+                <TeamBadge team={team} style={styles.standingBadge} />
                 <Text style={[styles.standingCount, { color: TEAMS[team].color }]}>{live.totals[team]}</Text>
                 <Text style={styles.standingLabel}>{teamShortName(team, names)}{yours === team ? ' (you)' : ''}</Text>
               </View>
@@ -191,7 +193,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
                   <View style={styles.miniChips}>
                     {ORDER.map(team => (
                       <View key={team} style={styles.miniChipRow}>
-                        <Image source={TEAMS[team].badge} style={styles.miniBadge} contentFit="contain" />
+                        <TeamBadge team={team} style={styles.miniBadge} />
                         <Text style={[styles.miniChip, { color: TEAMS[team].color }]}>{park.rides_held[team]}</Text>
                       </View>
                     ))}
@@ -208,7 +210,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
                       <View style={styles.hpTrack}>
                         <View style={[styles.hpFill, { width: `${Math.max(2, (park.raid.hp_left / Math.max(1, park.raid.hp_max)) * 100)}%` }]} />
                       </View>
-                      <Text style={styles.raidMeta}>{park.raid.fighters} fighting  ·  {clock(park.raid.ends_at, now)} left</Text>
+                      <Text style={styles.raidMeta}>{park.raid.fighters} fighting  ·  {raidMinutes(park.raid.ends_at, now)} left</Text>
                     </View>
                     <View style={styles.joinTag}><Text style={styles.joinTagText}>JOIN</Text></View>
                   </Pressable>
@@ -218,7 +220,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
                     disabled={live.cheers_left <= 0}
                     onPress={() => { pending.current = () => setCheer({ park, target, seed: Date.now() % 100000 }); setOpen(false); }}>
                     <View style={[styles.flag, { backgroundColor: TEAMS[target.controller].color }]}>
-                      <Image source={TEAMS[target.controller].badge} style={styles.flagBadge} contentFit="contain" />
+                      <TeamBadge team={target.controller} style={styles.flagBadge} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.cheerRide} numberOfLines={1}>{target.ride_name}</Text>

@@ -10,7 +10,8 @@
  * wordmarks, haptics and sound on the same frame). Damage on screen is the
  * server's formula with the raid's weights and the round's home rate.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../../../gamekit/core/playerStorage';
 import { Image } from 'expo-image';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';

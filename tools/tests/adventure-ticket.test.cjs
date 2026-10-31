@@ -34,17 +34,24 @@ function card(phase='discover', options={}) {
  './adventureTicketPresentation':presentation.exports,'../../hooks/useReducedGameMotion':{default:()=>options.reduced ?? true},
  '../../gamekit/SFX':{playSfx:()=>calls.push('sound')},'../../gamekit/Haptics':{haptic:()=>calls.push('haptic')},
  'react-native-modal':{default:'TicketModal'},'../../ui':ui,
+ // The sheet holds its native modal layer until UIKit reports it gone (core loop 4.3 rule 10).
+ '../../ui/modalLayers':{useNativeModalLayer:wanted=>({present:wanted,onDismissed(){},onHidden(){}}),NATIVE_SETTLE_MS:150},
  },props);
  const button=label=>app.find(n=>n.props?.accessibilityLabel===label);
  const modal=()=>app.find(n=>n.type==='TicketModal');
  app.find(n=>n.props?.accessibilityLabel?.startsWith('Open Adventure Ticket')).props.onPress();app.render();
  return {app,calls:calls.filter(c=>c!=='haptic'),raw:calls,work,button,modal,get calls(){return calls.filter(c=>c!=='haptic');}};
 }
-test('ticket hands off only after its native sheet closes, and reduced motion stays still',async()=>{
+test('ticket hands off only after UIKit reports its native sheet gone, and reduced motion stays still',async()=>{
  const p=card();assert.equal(p.modal().props.animationInTiming,0);
  p.button('Find this coin').props.onPress();p.app.render();assert.equal(p.modal().props.isVisible,false);assert.deepEqual(p.calls,[]);
- p.modal().props.onModalHide();p.modal().props.onModalHide();assert.deepEqual(p.calls,['discover']);
- const q=card('complete');q.button('Visit my coin').props.onPress();q.app.unmount();q.modal().props.onModalHide();assert.deepEqual(q.calls,[]);
+ // The JS hide is not enough on iOS: the walk to the ride starts once the native sheet is gone (the settle
+ // after the hide, or onDismiss), never into a leaving sheet.
+ p.modal().props.onModalHide();assert.deepEqual(p.calls,[]);
+ const [[settle,ms]]=[...p.app.timers.entries()].map(([id,fn])=>[fn,p.app.delays.get(id)]).filter(([,d])=>d===150);
+ assert.equal(ms,150);settle();assert.deepEqual(p.calls,['discover']);
+ p.modal().props.onDismiss();assert.deepEqual(p.calls,['discover'],'once');
+ const q=card('complete');q.button('Visit my coin').props.onPress();q.app.unmount();q.modal().props.onDismiss();assert.deepEqual(q.calls,[]);
 });
 test('full motion: the sheet slides in and out with real timings',()=>{
  const p=card('discover',{reduced:false});assert.equal(p.modal().props.animationInTiming,280);assert.equal(p.modal().props.animationOutTiming,200);
@@ -56,23 +63,23 @@ test('celebration double taps submit once, network failure preserves the readabl
  const alert=p.app.find(n=>n.props?.accessibilityRole==='alert');assert.match(alert.props.children,/Check your internet/);assert.deepEqual(p.calls,['celebrate']);
 });
 test('a 422 shows the server reason instead of "Reconnect"',async()=>{
- const p=card('play',{closed:true});p.button('Choose another ride').props.onPress();p.app.render();
+ const p=card('play',{closed:true});p.button('Pick another ride').props.onPress();p.app.render();
  p.button('Continue adventure at Pirate Ride').props.onPress();
  p.work.reject({response:{status:422,data:{message:'The given data was invalid.',errors:{task_id:['Adventures run at rides with a queue. Pick an attraction instead.']}}}});
  await p.app.settle();
  assert.equal(p.app.find(n=>n.props?.accessibilityRole==='alert').props.children,'Adventures run at rides with a queue. Pick an attraction instead.');
 });
 test('ride substitution is explicit, adventure-only, and retains the same visible stamps during saving',async()=>{
- const p=card('play',{closed:true});p.button('Choose another ride').props.onPress();p.app.render();
+ const p=card('play',{closed:true});p.button('Pick another ride').props.onPress();p.app.render();
  p.button('Continue adventure at Pirate Ride').props.onPress();p.button('Continue adventure at Pirate Ride').props.onPress();p.app.render();
  assert.deepEqual(p.calls,[2]);p.work.resolve({...data('play'), adventure_ticket:{...ticket('play'),ride:{...ride,task_id:2}}});await p.app.settle();
  assert.equal(p.modal().props.isVisible,true);
 });
 test('far from the queue, Play becomes "Show me the line"; near it plays',()=>{
  const far=card('play',{gate:{state:'far',meters:340}});
- assert.ok(far.button('Show me the line'));far.button('Show me the line').props.onPress();far.modal().props.onModalHide();
+ assert.ok(far.button('Show me the line'));far.button('Show me the line').props.onPress();far.modal().props.onDismiss();
  assert.deepEqual(far.calls,['line']);
- const near=card('play',{gate:{state:'near',meters:8}});near.button('Play the queue adventure').props.onPress();near.modal().props.onModalHide();
+ const near=card('play',{gate:{state:'near',meters:8}});near.button('Play its line story').props.onPress();near.modal().props.onDismiss();
  assert.deepEqual(near.calls,['play']);
 });
 test('tuck away dismisses the ticket for the day',async()=>{

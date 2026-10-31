@@ -74,7 +74,7 @@ function iconSources() {
 
 test('icon set covers the plan list, and every icon is a PNG that exists', () => {
   const required = ['energy', 'ticket', 'rush', 'wrench', 'pin', 'gift', 'crown', 'medal1', 'medal2', 'medal3',
-    'timer', 'streak', 'dice', 'bell', 'check', 'close', 'pause', 'star', 'sparkle', 'heart', 'map', 'swords', 'shark',
+    'timer', 'streak', 'bell', 'check', 'close', 'pause', 'star', 'sparkle', 'heart', 'map', 'swords', 'shark',
     'fin', 'ride', 'camera', 'play', 'retry', 'arrow', 'lock', 'info', 'trophy', 'chest', 'settings', 'xp', 'edit', 'coin', 'coins'];
   for (const name of required) assert.ok(names.isGameIconName(name), `missing icon ${name}`);
   assert.equal(new Set(names.GAME_ICON_NAMES).size, names.GAME_ICON_NAMES.length, 'icon names are unique');
@@ -353,7 +353,8 @@ function dialogView(props, reduced = false) {
     './gameDialogModel': dialogModel,
     './tokens': tokens,
     // Nothing else is open: the dialog is the front layer (ui/modalLayers.ts has its own tests).
-    './modalLayers': { useModalLayer: () => true, modalLayers: { count: () => 0 } },
+    './modalLayers': { useModalLayer: () => true, useNativeModalLayer: wanted => ({ present: wanted, onDismissed() {} }),
+      modalLayers: { count: () => 0 }, NATIVE_DISMISS_FALLBACK_MS: 1200 },
   }, { visible: true, title: 'Leave the line?', buttons: [{ text: 'Stay', style: 'cancel' }, { text: 'Leave' }], ...props },
   {}, { exportName: 'GameDialog' });
 }

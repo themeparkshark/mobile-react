@@ -5,7 +5,8 @@
  * on this phone). Server state replaces the graded parts when the
  * /trivia-duel routes land (WS1); everything here is safe to lose.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../../gamekit/core/playerStorage';
 import type { FinRank } from './engine/config';
 import { createRankState, type FinRankState } from './engine/finAI';
 import { decodeGhost, encodeGhost, type GhostRecord } from './engine/match';
@@ -48,9 +49,15 @@ function fresh(): DuelMemory {
 }
 
 let cache: DuelMemory | null = null;
+/** The player the cache belongs to: a new player on the same phone never sees it. */
+let cacheOwner = '';
+const savesOwner = (): string => {
+  try { return AsyncStorage.owner(); } catch { return ''; }
+};
 
 export async function loadMemory(): Promise<DuelMemory> {
-  if (cache) return cache;
+  if (cache && cacheOwner === savesOwner()) return cache;
+  cacheOwner = savesOwner();
   try {
     const raw = await AsyncStorage.getItem(KEY);
     cache = raw ? { ...fresh(), ...(JSON.parse(raw) as Partial<DuelMemory>) } : fresh();
@@ -61,7 +68,7 @@ export async function loadMemory(): Promise<DuelMemory> {
 }
 
 export function memorySync(): DuelMemory {
-  return cache ?? fresh();
+  return cache && cacheOwner === savesOwner() ? cache : fresh();
 }
 
 async function persist(): Promise<void> {

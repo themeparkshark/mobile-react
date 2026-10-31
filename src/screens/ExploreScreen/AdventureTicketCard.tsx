@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,10 +9,12 @@ import { playSfx } from '../../gamekit/SFX';
 import { haptic } from '../../gamekit/Haptics';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameButton, GameIcon, SHADOW } from '../../ui';
+import { NATIVE_SETTLE_MS, useNativeModalLayer } from '../../ui/modalLayers';
 import {
-  adventureErrorMessage, adventurePrompt, adventureStamps, detourDetail, type DetourPick,
+  adventureErrorMessage, adventurePrompt, adventureStamps, adventureTicketsLine, detourDetail, type DetourPick,
 } from './adventureTicketPresentation';
 import MapSuggestionStub from './MapSuggestionStub';
+import { LINEPLAY_ICON } from '../../components/guide/linePlayIcon';
 
 const COIN_FALLBACK = require('../../../assets/images/coingold.png');
 const FINN = require('../../../assets/images/screens/pin-collections/shark.png');
@@ -42,6 +44,20 @@ interface Props {
   onCelebrate: () => Promise<unknown>;
   onRefresh: () => Promise<void>;
   onOcclusionChange?: (visible: boolean) => void;
+  /**
+   * The Next Coin guide card is the ticket's frame on the map (core loop 4.1): no chip of its own,
+   * only the sheet (stamps, souvenir), opened whenever openRequest changes.
+   */
+  sheetOnly?: boolean;
+  openRequest?: number;
+  /** The guide card's UNFOLD: open the sheet and unfold the souvenir once it is up (whenever this changes). */
+  celebrateRequest?: number;
+  /** Line Tickets exist (queue_tickets on): only then may the sheet say a wait earns a Ticket. */
+  queueTicketsOn?: boolean;
+  /** Earned Tickets waiting to be claimed (the guide card's CLAIM count): the sheet leads with them. */
+  claimableTickets?: number;
+  /** Claim them right here (the guide card's own claim). */
+  onClaim?: () => Promise<unknown>;
   /** Dev preview only: start with the sheet (or the detour picker) open. */
   initialOpen?: boolean;
   initialPicker?: boolean;
@@ -141,13 +157,23 @@ function ChipEntrance({ reduced, children, style }: { reduced: boolean; children
 
 export default function AdventureTicketCard({ ticket, data, closed, stale, top, collapsed = false, gate, detours = [], slam = [], onSlamDone,
   onDiscover, onPlay, onFindLine, onShelf, onSelect, onDismiss, onCelebrate, onRefresh, onOcclusionChange,
-  initialOpen = false, initialPicker = false }: Props) {
+  sheetOnly = false, openRequest = 0, celebrateRequest = 0, queueTicketsOn = false, claimableTickets = 0, onClaim, initialOpen = false, initialPicker = false }: Props) {
   const [open, setOpen] = useState(initialOpen), [picker, setPicker] = useState(initialPicker);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   const [unfold, setUnfold] = useState(false);
   const mounted = useRef(true), locked = useRef(false), pending = useRef<(() => void) | null>(null);
+  const unfoldOnShow = useRef(false);
   const occlusion = useRef(onOcclusionChange); occlusion.current = onOcclusionChange;
   const reduced = useReducedGameMotion(), insets = useSafeAreaInsets();
+  // The sheet holds its modal layer until UIKit says it is gone; what a button asked for (a walk
+  // to the ride, LinePlay, the shelf) runs only then, never into a leaving sheet (core loop 4.3 rule 10).
+  const layer = useNativeModalLayer(open, 'show');
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
+  const runPending = () => {
+    const action = pending.current; pending.current = null;
+    if (mounted.current) action?.();
+  };
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; pending.current = null; occlusion.current?.(false); };
@@ -158,7 +184,7 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
   const coinUrl = ticket.discover?.coin_url || ticket.ride.coin_url;
   const coinSource = coinUrl ? { uri: coinUrl } : COIN_FALLBACK;
   const complete = ticket.phase === 'complete';
-  const close = () => { pending.current = null; setOpen(false); };
+  const close = () => { pending.current = null; unfoldOnShow.current = false; setOpen(false); };
   const transact = async (operation: () => Promise<unknown>) => {
     if (locked.current) return false;
     locked.current = true; setBusy(true); setError(null);
@@ -203,10 +229,37 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
     if (mounted.current) setOpen(false);
   });
   const openSheet = () => { setPicker(false); setError(null); setOpen(true); haptic('tapLight'); };
+  const lastRequest = useRef(openRequest);
+  useEffect(() => {
+    if (openRequest === lastRequest.current) return;
+    lastRequest.current = openRequest;
+    openSheet();
+  }, [openRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+  // UNFOLD on the guide card: the sheet opens on the souvenir and unfolds it once the sheet is up.
+  const lastCelebrate = useRef(celebrateRequest);
+  useEffect(() => {
+    if (celebrateRequest === lastCelebrate.current) return;
+    lastCelebrate.current = celebrateRequest;
+    unfoldOnShow.current = true;
+    openSheet();
+  }, [celebrateRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onShown = () => {
+    if (!unfoldOnShow.current) return;
+    unfoldOnShow.current = false;
+    if (!stale && prompt.intent === 'celebrate') next();
+  };
+  const ticketsLine = adventureTicketsLine(data.wallet.tickets_needed, !!data.wallet.rescue_pass_available, queueTicketsOn,
+    claimableTickets);
+  const [claiming, setClaiming] = useState(false);
+  const claimHere = () => {
+    if (!onClaim || claiming) return;
+    setClaiming(true);
+    void onClaim().catch(() => undefined).finally(() => { if (mounted.current) setClaiming(false); });
+  };
   const a11y = `Open Adventure Ticket. ${ticket.ride.ride_name}. ${prompt.title}. ${earnedCount} of 3 chapters complete.`;
 
   return <>
-    {complete ? (
+    {sheetOnly ? null : complete ? (
       // Finished: the ticket tucks into a small souvenir stub in the same slot.
       <ChipEntrance reduced={reduced} style={[styles.stubSlot, { top }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={a11y} onPress={openSheet} style={styles.stub}>
@@ -235,25 +288,28 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
         </Pressable>
       </ChipEntrance>
     )}
-    <Modal isVisible={open} onBackdropPress={close} onBackButtonPress={close}
+    <Modal isVisible={layer.present} onBackdropPress={close} onBackButtonPress={close}
       animationIn="slideInUp" animationOut="slideOutDown" animationInTiming={reduced ? 0 : 280} animationOutTiming={reduced ? 0 : 200}
       backdropColor={BRAND.navy} backdropOpacity={0.3}
       backdropTransitionInTiming={reduced ? 0 : 180} backdropTransitionOutTiming={reduced ? 0 : 180}
-      onModalWillShow={() => occlusion.current?.(true)} onModalHide={() => {
+      onModalWillShow={() => occlusion.current?.(true)} onModalShow={onShown} onModalHide={() => {
         occlusion.current?.(false);
-        const action = pending.current; pending.current = null;
-        if (mounted.current) action?.();
-      }} style={styles.modal}>
+        // The native sheet is gone one transaction after its JS hide: the hand-off runs then, never into it.
+        layer.onHidden();
+        if (Platform.OS !== 'ios') { runPending(); return; }
+        if (settleTimer.current) clearTimeout(settleTimer.current);
+        settleTimer.current = setTimeout(() => { settleTimer.current = null; runPending(); }, NATIVE_SETTLE_MS);
+      }} onDismiss={() => { layer.onDismissed(); runPending(); }} style={styles.modal}>
       <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.sheetHeader}>
-          <Text style={styles.sheetEyebrow}>PARK-DAY ADVENTURE  {ticket.park_day.slice(5).replace('-', '/')}</Text>
+          <Text style={styles.sheetEyebrow}>TODAY'S ADVENTURE  {ticket.park_day.slice(5).replace('-', '/')}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Close Adventure Ticket" onPress={close} hitSlop={8} style={styles.close}>
             <GameIcon name="close" size={34} />
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {picker ? <>
-            <Text style={styles.title}>Choose your detour</Text>
+            <Text style={styles.title}>Pick another ride</Text>
             <Text style={styles.support}>A different ride, the same adventure. Every stamp you earned stays.</Text>
             {detours.map(choice => <Pressable key={choice.ride.task_id} accessibilityRole="button"
               accessibilityLabel={`Continue adventure at ${choice.ride.ride_name}`} disabled={busy} onPress={() => pick(choice)}
@@ -281,18 +337,22 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
                   <View style={{ flex: 1 }}><Text style={styles.chapterTitle}>{chapter.label}</Text><Text style={styles.chapterDetail}>{chapter.detail}</Text></View>
                 </View>)}
             </View>
-            {ticket.phase === 'discover' && data.wallet.tickets_needed > 0 && <View style={styles.resource}>
+            {ticket.phase === 'discover' && data.wallet.tickets_needed > 0 && !!ticketsLine && <View style={styles.resource}>
               <GameIcon name="ticket" size={34} />
-              <Text style={styles.resourceText}>{data.wallet.rescue_pass_available ? 'Your free first-coin pass is ready for this challenge.'
-                : `${data.wallet.tickets_needed} more ${data.wallet.tickets_needed === 1 ? 'Ticket' : 'Tickets'} needed. Time in line and home finds can earn more.`}</Text>
+              <Text style={styles.resourceText}>{ticketsLine}</Text>
             </View>}
+            {ticket.phase === 'discover' && data.wallet.tickets_needed > 0 && claimableTickets > 0 && !!onClaim &&
+              <GameButton variant="secondary" size="compact" label="CLAIM" icon="ticket" accessibilityLabel={`Claim ${claimableTickets} free Tickets`}
+                loading={claiming} disabled={claiming} onPress={claimHere} style={{ alignSelf: 'center', marginTop: 10 }} />}
             <View style={styles.primaryRow}>
               <GameButton label={stale ? 'Refresh my ticket' : prompt.action} accessibilityLabel={stale ? 'Refresh Adventure Ticket' : prompt.action}
-                icon={prompt.intent === 'play' ? 'queue' : prompt.intent === 'find_line' || prompt.intent === 'discover' ? 'map' : undefined}
+                // Its line story wears LinePlay's own picture (ledger 37): the pocket watch means Wait Times only.
+                image={prompt.intent === 'play' ? LINEPLAY_ICON : undefined}
+                icon={prompt.intent === 'find_line' || prompt.intent === 'discover' ? 'map' : undefined}
                 loading={busy} disabled={busy} onPress={next} />
             </View>
-            {ticket.phase !== 'complete' && ticket.phase !== 'celebrate' && <GameButton variant="ghost" label="Choose a different ride"
-              accessibilityLabel="Choose a different adventure ride" disabled={busy} onPress={() => setPicker(true)} />}
+            {ticket.phase !== 'complete' && ticket.phase !== 'celebrate' && prompt.intent !== 'detour' && <GameButton variant="ghost" label="Pick another ride"
+              accessibilityLabel="Pick another ride for the adventure" disabled={busy} onPress={() => setPicker(true)} />}
             {onDismiss && <GameButton variant="ghost" label="Hide for today" accessibilityLabel="Hide the Adventure Ticket for today"
               disabled={busy} onPress={tuckAway} />}
             {complete && <Text style={styles.private}>Saved for you. Sharing is always your choice.</Text>}

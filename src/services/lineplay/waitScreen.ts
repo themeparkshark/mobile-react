@@ -49,7 +49,15 @@ export interface WaitCoinProgress {
   /** Parts and Energy both cover it: the coin offers a one-tap level up. */
   readonly ready: boolean;
   readonly energyShort: number;
+  /** The full sentence, for the coin's spoken label: "2 of 4 Parts to Level 3". */
   readonly label: string;
+  /**
+   * What the chip under the coin shows: just the count with the Parts gem beside
+   * it ("2 of 4"). The level it counts toward lives on the ring as a goal badge.
+   */
+  readonly chip: string;
+  /** The level the ring is filling toward (its goal badge), or null at max level. */
+  readonly goalLevel: number | null;
 }
 
 export function waitCoinProgress(input: WaitCoinInput): WaitCoinProgress {
@@ -58,7 +66,7 @@ export function waitCoinProgress(input: WaitCoinInput): WaitCoinProgress {
   const banked = Math.max(0, Math.floor(input.partsBanked || 0));
   if (level >= maxLevel) {
     return { fill: 1, notches: 0, lit: 0, maxed: true, partsReady: false, ready: false, energyShort: 0,
-      label: `Level ${level} · max level` };
+      label: `Level ${level} · max level`, chip: `Level ${level} · max level`, goalLevel: null };
   }
   const need = Math.max(1, Math.round(input.partsToNext || 1));
   const fill = Math.min(1, banked / need);
@@ -66,13 +74,18 @@ export function waitCoinProgress(input: WaitCoinInput): WaitCoinProgress {
   const energyKnown = input.playerEnergy != null;
   const energyShort = energyKnown ? Math.max(0, Math.round(input.energyToNext) - Math.round(input.playerEnergy!)) : 0;
   const ready = partsReady && energyKnown && energyShort === 0;
-  const next = input.nextTierName ? ` to ${input.nextTierName}` : ` to Level ${level + 1}`;
-  const label = ready ? 'Ready to level up'
-    : partsReady ? energyKnown ? `Parts ready · ${energyShort} more Energy` : 'Parts ready'
-      : `${banked} of ${need} Parts${next}`;
+  // One Parts idea on the wait card: the ring, its "Lv 3" goal badge and the "2 of 4"
+  // chip (one number pair, the gem says what they count). The chip always counts toward
+  // the NEXT level, so right after a level up "0 of 6" sits under a "Lv 4" goal: a new
+  // goal, never "you earned nothing". The full sentence is the coin's spoken label.
+  const status = ready ? 'Ready to level up'
+    : partsReady ? energyKnown ? `Parts ready · ${energyShort} more Energy` : 'Parts ready' : null;
   return {
     fill, notches: need <= MAX_RING_NOTCHES ? need : 0, lit: Math.min(banked, need),
-    maxed: false, partsReady, ready, energyShort, label,
+    maxed: false, partsReady, ready, energyShort,
+    label: status ?? `${banked} of ${need} Parts to Level ${level + 1}`,
+    chip: status ?? `${banked} of ${need}`,
+    goalLevel: level + 1,
   };
 }
 
@@ -92,19 +105,77 @@ export interface WaitEstimate {
   readonly title: string;
   /** Small line: "You're tracking ~42". */
   readonly detail: string;
+  /**
+   * The one wait number a 7-year-old reads on the card: the minutes on the
+   * ride's sign ("60m", "1h 30m"), the same number they can see at the line,
+   * written the same way as their own IN LINE time so the two read alike.
+   * Never the real-waits guess, which would state a guess as a fact; the
+   * guess lives in the spoken label ("about 42"). Null with no sign time.
+   */
+  readonly kidValue: string | null;
   readonly accessibilityLabel: string;
 }
 
-export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
-  const posted = input.waitSource !== 'estimate' && input.postedMinutes != null && input.postedMinutes > 0
+/** The sign's minutes this session started from, or null (no sign time). One rule for the number and its hint. */
+export function signMinutes(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'>): number | null {
+  return input.waitSource !== 'estimate' && input.postedMinutes != null && input.postedMinutes > 0
     ? Math.round(input.postedMinutes) : null;
+}
+
+/**
+ * The details line under the wait card, in kid words. It always agrees with
+ * the SIGN SAYS number: "no sign time" only when no SIGN SAYS shows.
+ */
+export function waitSourceHint(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'>): string {
+  const posted = signMinutes(input);
+  if (posted == null) return 'No sign time when you started. Games still work.';
+  // Names the number exactly as SIGN SAYS writes it on the card ("35m", "1h 30m"), so one
+  // screen never shows the sign time two ways. The ride-car picture ties the two together.
+  const shown = inLineLabel(posted * 60);
+  return input.waitSource === 'last_known'
+    ? `The ride sign said ${shown} a while ago.`
+    : `The ride sign said ${shown}.`;
+}
+
+/**
+ * The sign line in Details UNDER THE COIN HERO, where SIGN SAYS already prints the
+ * sign's number: a plain posted sign needs no line at all (the number is said
+ * once on screen). An old sign says so without repeating its number; a fresh
+ * different reading at the line is new, so it is said, written like SIGN SAYS.
+ */
+export function heroSignDetail(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'> & {
+  readonly freshReadingMinutes?: number | null;
+}): string | null {
+  const posted = signMinutes(input);
+  const fresh = input.freshReadingMinutes;
+  if (fresh != null && Number.isFinite(fresh) && fresh > 0 && fresh !== posted) {
+    return `The ride sign now says ${inLineLabel(Math.round(fresh) * 60)}.`;
+  }
+  if (posted == null) return 'No sign time when you started. Games still work.';
+  return input.waitSource === 'last_known' ? 'That sign time is from a while ago.' : null;
+}
+
+/**
+ * The sign line in Details now that the closed card no longer prints SIGN SAYS (wave 6: one coin, one
+ * ring, one sentence): a fresh, different reading at the line if there is one, else the sign's own number
+ * ("The ride sign said 35m." / "... a while ago." / "No sign time when you started."). Said once, here.
+ */
+export function detailsSignLine(input: Pick<WaitEstimateInput, 'postedMinutes' | 'waitSource'> & {
+  readonly freshReadingMinutes?: number | null;
+}): string {
+  const fresh = heroSignDetail(input);
+  return fresh != null && fresh.startsWith('The ride sign now says') ? fresh : waitSourceHint(input);
+}
+
+export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
+  const posted = signMinutes(input);
   const elapsedMinutes = Math.max(0, input.elapsedSeconds) / 60;
   const ratio = input.ratio != null && Number.isFinite(input.ratio) && input.ratio > 0 ? input.ratio : null;
   const raw = posted != null && ratio != null ? Math.max(1, Math.round(posted * ratio)) : null;
   // Past the estimate it has nothing honest left to say.
   const tracking = raw != null && elapsedMinutes < raw ? raw : null;
   if (posted == null) {
-    return { posted: null, tracking: null, title: 'NO SIGN TIME', detail: 'Your time in line still counts',
+    return { posted: null, tracking: null, title: 'NO SIGN TIME', detail: 'Your time in line still counts', kidValue: null,
       accessibilityLabel: 'No posted wait for this ride right now.' };
   }
   const title = `SIGN SAYS ${posted}`;
@@ -112,7 +183,7 @@ export function waitEstimate(input: WaitEstimateInput): WaitEstimate {
     : tracking != null ? `Tracking ~${tracking} today`
       : 'Posted wait';
   return {
-    posted, tracking, title, detail,
+    posted, tracking, title, detail, kidValue: inLineLabel(posted * 60),
     accessibilityLabel: tracking != null
       ? `Posted wait ${posted} minutes. Recent waits here suggest about ${tracking} minutes.`
       : `Posted wait ${posted} minutes.`,
@@ -123,15 +194,21 @@ export interface SharksInLine {
   readonly value: string;
   readonly label: string;
   readonly accessibilityLabel: string;
+  /**
+   * The card shows the crowd as 1 to 3 shark pictures, never a number (the closed
+   * card keeps its numbers to the wait, the clock, the Parts count and the
+   * countdown). One: just you. Two: a few. Three: ten or more. The spoken label keeps the count.
+   */
+  readonly sharks: 1 | 2 | 3;
 }
 
 /** Null hides the stat (offline, older server, or the flag off). */
 export function sharksInLine(count: number | null | undefined): SharksInLine | null {
   if (count == null || !Number.isFinite(count) || count < 1) return null;
   const n = Math.round(count);
-  if (n === 1) return { value: '1', label: 'FIRST SHARK HERE', accessibilityLabel: 'You are the first shark in this line right now.' };
+  if (n === 1) return { value: '1', label: 'FIRST SHARK HERE', accessibilityLabel: 'You are the first shark in this line right now.', sharks: 1 };
   const value = n > 999 ? '999+' : String(n);
-  return { value, label: 'SHARKS IN LINE', accessibilityLabel: `${value} sharks in this line now.` };
+  return { value, label: 'SHARKS HERE', accessibilityLabel: `${value} sharks in this line now.`, sharks: n >= 10 ? 3 : 2 };
 }
 
 /** "23m", "1h 05m". */

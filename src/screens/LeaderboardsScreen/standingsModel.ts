@@ -73,26 +73,40 @@ export function formatParkDay(parkDay: string | null | undefined): string {
 }
 
 /**
- * VIP-neutral Experience standings (Dustin decides; see WS7). Off by default,
- * which keeps today's behaviour: rank by total_experience. When the flag is on
- * and the server sends base_total_experience (XP before the VIP multiplier),
- * that is the number shown.
+ * The XP number shown on the Experience board is always the number the list
+ * is ranked by, so the order on screen can never disagree with the numbers
+ * (rank 1 at 600 above rank 2 at 700). PlayerController@index orders by its
+ * ranking column and sends that column as total_experience: total XP today,
+ * XP without the VIP bonus once ECONOMY_VIP_NEUTRAL_STANDINGS is on (server
+ * switch, BACKEND_NEEDS). The app never swaps in base_total_experience on its
+ * own, because the server would still be ranking by the total.
  */
-export const VIP_NEUTRAL_STANDINGS_DEFAULT = false;
-
-export function vipNeutralStandingsEnabled(env: Record<string, string | undefined> | undefined): boolean {
-  const value = env?.EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS;
-  if (value === '1' || value === 'true') return true;
-  if (value === '0' || value === 'false') return false;
-  return VIP_NEUTRAL_STANDINGS_DEFAULT;
+export function experienceScore(player: { readonly total_experience?: number | null }): number {
+  return Number(player.total_experience) || 0;
 }
 
-export function experienceScore(
-  player: { readonly total_experience?: number | null; readonly base_total_experience?: number | null },
-  vipNeutral: boolean,
-): number {
-  if (vipNeutral && typeof player.base_total_experience === 'number') return player.base_total_experience;
-  return Number(player.total_experience) || 0;
+/**
+ * Whether this board's XP includes the VIP bonus, from the list's `meta.xp_includes_vip_bonus`.
+ * A server that does not send it ranks by total XP, which includes the VIP bonus (true).
+ */
+export function xpIncludesVipBonus(meta: unknown): boolean {
+  const flag = (meta as { xp_includes_vip_bonus?: unknown } | null | undefined)?.xp_includes_vip_bonus;
+  return flag === false || flag === 0 || flag === '0' || flag === 'false' ? false : true;
+}
+
+/** The plain line under the XP board's pills while VIP bonus XP counts and a VIP player is on it. */
+export const XP_VIP_NOTE = 'VIP players earn bonus XP. It counts here.';
+
+/**
+ * Honest standings: while the board ranks total XP (VIP members earn extra), say so in one kid line
+ * whenever a VIP player is on the board. No VIP on the board, or a board ranked without the bonus: no line.
+ */
+export function xpVipNote(players: readonly { readonly is_subscribed?: boolean | null; readonly flex?: unknown }[],
+  includesVipBonus: boolean): string | null {
+  if (!includesVipBonus) return null;
+  const vipHere = players.some(player => player.is_subscribed === true
+    || (player.flex as { vip?: unknown } | null | undefined)?.vip === true);
+  return vipHere ? XP_VIP_NOTE : null;
 }
 
 export type RideMetric = 'today' | 'collection' | 'mastery' | 'masters';

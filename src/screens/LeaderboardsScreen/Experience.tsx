@@ -1,27 +1,27 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import * as RootNavigation from '../../RootNavigation';
-import all from '../../api/endpoints/players/all';
+import { allWithMeta } from '../../api/endpoints/players/all';
 import FloatingParticles from '../../components/FloatingParticles';
 import { AuthContext } from '../../context/AuthProvider';
 import { PlayerType } from '../../models/player-type';
-import { GameButton, SharkLoader } from '../../ui';
+import { BRAND, GameButton, GameIcon, SharkLoader } from '../../ui';
 import StandingsPodium from './StandingsPodium';
 import { StandingsInvite, StandingsListCard, StandingsNudge, StandingsRow } from './StandingsRow';
 import {
-  experienceScore, podiumSlots, STANDINGS_EMPTY_COPY, standingsStatus, vipNeutralStandingsEnabled, type StandingsStatus,
+  experienceScore, podiumSlots, STANDINGS_EMPTY_COPY, standingsStatus, xpIncludesVipBonus, xpVipNote, type StandingsStatus,
 } from './standingsModel';
 import { standingsGeneration } from './standingsCache';
 
 const PAGE_SIZE_HINT = 15;
-// Read by name so Expo inlines the public env value at build time.
-const VIP_NEUTRAL = vipNeutralStandingsEnabled({ EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS: process.env.EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS });
 
 // Survives tab switches, so returning to this tab shows the last board at once.
-const cache: { players: PlayerType[]; page: number; more: boolean; generation: number } =
-  { players: [], page: 1, more: true, generation: standingsGeneration() };
+// vipNote is remembered across every loaded page: a VIP player first seen on page 2 still turns the line on.
+const cache: { players: PlayerType[]; page: number; more: boolean; generation: number; vipBonus: boolean; vipNote: string | null } =
+  { players: [], page: 1, more: true, generation: standingsGeneration(), vipBonus: true, vipNote: null };
 
-const xpScore = (player: PlayerType) => experienceScore(player as PlayerType & { base_total_experience?: number }, VIP_NEUTRAL);
+/** The number the server ranked this list by (see experienceScore). */
+const xpScore = (player: PlayerType) => experienceScore(player);
 
 export default function Experience() {
   const { player } = useContext(AuthContext);
@@ -36,9 +36,11 @@ export default function Experience() {
     cache.generation = standingsGeneration();
     const id = ++request.current;
     setStatus('loading');
-    all(1).then(list => {
+    allWithMeta(1).then(({ players: list, meta }) => {
       if (id !== request.current) return;
+      cache.vipBonus = xpIncludesVipBonus(meta);
       cache.players = list ?? [];
+      cache.vipNote = xpVipNote(cache.players, cache.vipBonus);
       cache.page = 1;
       cache.more = (list?.length ?? 0) >= PAGE_SIZE_HINT;
       setPlayers(cache.players);
@@ -50,11 +52,13 @@ export default function Experience() {
     if (loadingMore || !cache.more) return;
     setLoadingMore(true);
     try {
-      const next = await all(cache.page + 1);
+      const { players: next, meta } = await allWithMeta(cache.page + 1);
+      cache.vipBonus = xpIncludesVipBonus(meta);
       cache.page += 1;
       cache.more = (next?.length ?? 0) >= PAGE_SIZE_HINT;
       const seen = new Set(cache.players.map(p => p.id));
       cache.players = [...cache.players, ...(next ?? []).filter(p => !seen.has(p.id))];
+      cache.vipNote = xpVipNote(cache.players, cache.vipBonus);
       setPlayers(cache.players);
     } catch {
       // Keep what is shown; the button stays so the player can try again.
@@ -70,6 +74,8 @@ export default function Experience() {
 
   const slots = podiumSlots(players);
   const copy = STANDINGS_EMPTY_COPY.xp;
+  // Honest board: while VIP bonus XP counts in this ranking, one plain line says so.
+  const vipNote = cache.vipNote ?? xpVipNote(players, cache.vipBonus);
 
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
@@ -80,7 +86,15 @@ export default function Experience() {
         scoreIcon="xp"
         meId={player?.id}
         playKey={`xp:${slots.podium.map(p => p?.id ?? 0).join(',')}`}
-        header={<View style={{ height: 24 }} />}
+        header={<View style={{ height: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+          {/* A soft navy pill keeps the white line readable over the podium's bright light rays. */}
+          {vipNote && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '94%', height: 24,
+            paddingLeft: 4, paddingRight: 10, borderRadius: 12, backgroundColor: 'rgba(7, 61, 119, 0.72)' }}>
+            <GameIcon name="member" size={16} />
+            <Text accessibilityRole="text" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}
+              style={{ fontFamily: 'Knockout', fontSize: 14, color: BRAND.white, flexShrink: 1 }}>{vipNote}</Text>
+          </View>}
+        </View>}
       />
       <StandingsListCard>
         {slots.count === 0 ? (

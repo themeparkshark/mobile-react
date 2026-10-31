@@ -75,7 +75,7 @@ export default function Daily3MapButton({ pips, streak, attention, onPress, popI
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pop.value * 0.9 }] }));
   const done = pips.filter(Boolean).length;
   const label = ready ? 'Daily 3: a reward is ready to open'
-    : `Daily 3: ${done} of 3 done${streak > 0 ? `, ${streak} day streak` : ''}`;
+    : `Daily 3: ${done} of 3 done${streak > 0 ? `, flame ${streak}` : ''}`;
 
   return (
     <Animated.View style={buttonStyle}>

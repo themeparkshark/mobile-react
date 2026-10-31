@@ -372,7 +372,14 @@ export interface PatternOptions {
  * Play a named pattern (or custom steps) under the grammar rules. Returns
  * false when it was dropped (disabled, rival-caused, or out-ranked in the gap).
  */
+/**
+ * Capture screens only: hears every named pattern asked for (the queue
+ * results check logs a run's finish cues with it). Null in the app.
+ */
+export const hapticTrace: { listener: ((pattern: string) => void) | null } = { listener: null };
+
 export function playHaptic(pattern: HapticPatternName | HapticStep[], opts: PatternOptions & { input?: boolean } = {}): boolean {
+  if (hapticTrace.listener && typeof pattern === 'string') hapticTrace.listener(pattern);
   if (!enabled) return false;
   if (opts.tell && !tellsEnabled) return false;
   const steps: readonly HapticStep[] = typeof pattern === 'string' ? HAPTIC_PATTERNS[pattern] : pattern;

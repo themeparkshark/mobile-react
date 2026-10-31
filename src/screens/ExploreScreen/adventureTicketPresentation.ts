@@ -56,19 +56,22 @@ export interface AdventurePrompt {
  */
 export function adventurePrompt(ticket: AdventureTicket, closed = false,
   gate: { state: 'near' | 'far' | 'unknown'; meters: number | null } = { state: 'unknown', meters: null }): AdventurePrompt {
-  if (ticket.phase === 'complete') return { title: 'Your park-day souvenir', chip: 'Souvenir ready', action: 'Visit my coin', detail: 'A coin, a story, a day to remember.', intent: 'shelf' };
-  if (closed && ticket.phase !== 'celebrate') return { title: 'Adventure takes a detour', chip: 'Pick a detour', action: 'Choose another ride', detail: 'Keep every stamp you have earned.', intent: 'detour' };
+  if (ticket.phase === 'complete') return { title: 'Your Adventure souvenir', chip: 'Souvenir ready', action: 'Visit my coin', detail: 'A coin, a story, a day to remember.', intent: 'shelf' };
+  // A first ticket (nothing stamped yet) never says "detour": it simply offers another ride.
+  if (closed && ticket.phase !== 'celebrate') return ticket.discover || ticket.play
+    ? { title: 'Today\'s Adventure moves on', chip: 'Pick another ride', action: 'Pick another ride', detail: 'Keep every stamp you have earned.', intent: 'detour' }
+    : { title: 'This ride is resting', chip: 'Pick another ride', action: 'Pick another ride', detail: 'Today\'s Adventure can start at another ride.', intent: 'detour' };
   if (ticket.phase === 'discover') return { title: 'Your first chapter awaits', chip: 'Find your coin', action: 'Find this coin', detail: 'Win its coin challenge at the ride.', intent: 'discover' };
   if (ticket.phase === 'play') {
     if (ticket.play_hint === 'get_in_line') {
-      return { title: `Get in line at ${ticket.ride.ride_name}`, chip: 'Get in its line', action: gate.state === 'far' ? 'Show me the line' : 'Play the queue adventure',
+      return { title: `Get in line at ${ticket.ride.ride_name}`, chip: 'Get in its line', action: gate.state === 'far' ? 'Show me the line' : 'Play its line story',
         detail: 'Your story part is done. Play in this ride\'s line to punch the Play stamp.', intent: gate.state === 'far' ? 'find_line' : 'play' };
     }
     if (gate.state === 'far') {
       return { title: 'A story for your next wait', chip: 'Walk to its line', action: 'Show me the line',
         detail: `${formatDistance(gate.meters ?? 0)} away. The story opens when you are in its queue.`, intent: 'find_line' };
     }
-    return { title: 'A story for your next wait', chip: 'Play in this line', action: 'Play the queue adventure', detail: 'Three short missions, made to play as the line moves.', intent: 'play' };
+    return { title: 'A story for your next wait', chip: 'Play in this line', action: 'Play its line story', detail: 'Three short missions, made to play as the line moves.', intent: 'play' };
   }
   return { title: 'You made a park memory', chip: 'Unfold your souvenir', action: 'Unfold my souvenir', detail: 'Your coin and your story, together.', intent: 'celebrate' };
 }
@@ -140,4 +143,26 @@ export function adventureShelfArrival(ticket: AdventureTicket) {
   if (!discover || discover.kind !== 'coin_win' || !discover.attempt_id) return null;
   return { attemptId: discover.attempt_id, assetId: discover.asset_id, taskId: discover.task_id,
     taskType: 'task' as const, firstCollection: false };
+}
+
+/** Treats per Ticket (TREATS_PER_TICKET in src/services/guide/freeTickets.ts; a test keeps them equal). This file stays import-free. */
+export const SHEET_TREATS_PER_TICKET = 3;
+
+/**
+ * The Adventure sheet's Ticket line while its coin waits (discover phase). LinePlay earns line
+ * Tickets only while queue_tickets is on (state A, production today, has none), so with the
+ * switch off it promises treats and tomorrow's free try only. Tickets already earned and waiting to be
+ * claimed lead, exactly like the guide card ('N free Tickets are waiting', CLAIM), so both say one thing.
+ */
+export function adventureTicketsLine(ticketsNeeded: number, freeTryReady: boolean, queueTicketsOn: boolean,
+  claimableTickets = 0): string | null {
+  // Earned Tickets come first, before the free try (the guide card's own order: claim, then free try).
+  const waiting = Number.isFinite(claimableTickets) && claimableTickets > 0 ? Math.floor(claimableTickets) : 0;
+  if (waiting > 0) return `${waiting} free ${waiting === 1 ? 'Ticket is' : 'Tickets are'} waiting. Claim, then play.`;
+  if (freeTryReady) return 'Today\'s free try is ready for this coin.';
+  if (!(ticketsNeeded > 0)) return null;
+  const need = `${ticketsNeeded} more ${ticketsNeeded === 1 ? 'Ticket' : 'Tickets'} needed.`;
+  return queueTicketsOn === true
+    ? `${need} Your first wait at a ride earns one, and ${SHEET_TREATS_PER_TICKET} treats at home make one more.`
+    : `${need} ${SHEET_TREATS_PER_TICKET} treats at home = 1 Ticket. Tomorrow brings a new free try.`;
 }

@@ -6,7 +6,7 @@
  * tools/tests/fixtures/trivia-duel-vectors.json).
  */
 import {
-  BUZZ, GRACE, HOT_STREAK, BLAZING, POINTS, READ_LOCK, RELAXED, RIDE_STARS, RIDE_WIN_CORRECT, STREAK_MULT, TIERS, WAGER,
+  BUZZ, GRACE, HOT_STREAK, BLAZING, POINTS, READ_LOCK, RELAXED, RIDE_STARS, RIDE_WIN_CORRECT, STREAK_MULT, TIERS, FINAL_BONUS,
   type SpeedTier,
 } from './config';
 
@@ -184,43 +184,11 @@ export function closestPoints(guess: number, truth: number, tol: number, t: numb
 }
 
 /**
- * 5.5 wager stakes (rev 7): SAFE 0, HALF round5(score / 2), ALL IN = score.
- * Always a share of what you hold, so a stake can never exceed your score
- * and no stake is ever free (S0-3: the old fixed stakes under 200 are gone).
+ * Fin's Final (rev 8): a no-risk bonus. Right = score + question points x FINAL_BONUS.multiplier;
+ * wrong or timeout = the score as it was. A Final can never take points away.
  */
-export function wagerStakes(score: number): number[] {
-  const s = Math.max(0, Math.floor(score));
-  return WAGER.percents.map((p) => (p >= 1 ? s : Math.min(s, round5(p * s))));
-}
-
-export interface WagerSuggestion {
-  index: number;
-  reason: string;
-}
-
-/**
- * 5.5 suggestWager (the gold-glow chip; doing nothing takes it):
- *  1. a chip that makes you unbeatable when right (you + 100m + stake > 2 x opp + 350): the smallest one;
- *  2. else trailing: ALL IN;
- *  3. else (leading or tied): the smallest chip with you + 100m + stake > 2 x opp + 100, else SAFE.
- * `m` is the multiplier your streak would carry into a right answer.
- */
-export function suggestWager(me: number, opp: number, m: number): WagerSuggestion {
-  const stakes = wagerStakes(me);
-  const right = (k: number) => me + Math.round(POINTS.base * m) + stakes[k];
-  for (let k = 0; k < stakes.length; k++) {
-    if (right(k) > 2 * opp + WAGER.lockMargin) return { index: k, reason: "Wins it if you're right." };
-  }
-  if (me < opp) return { index: stakes.length - 1, reason: 'You need it all.' };
-  for (let k = 0; k < stakes.length; k++) {
-    if (right(k) > 2 * opp + WAGER.coverMargin) return { index: k, reason: 'Covers their best bet.' };
-  }
-  return { index: 0, reason: 'Keeps the lead if they miss.' };
-}
-
-/** Final: correct = question points + stake; wrong/timeout = -stake. Score never drops below 0. */
-export function applyFinal(score: number, correct: boolean, questionPts: number, stake: number): number {
-  return Math.max(0, correct ? score + questionPts + stake : score - stake);
+export function applyFinal(score: number, correct: boolean, questionPts: number): number {
+  return Math.max(0, score) + (correct ? Math.max(0, questionPts) * FINAL_BONUS.multiplier : 0);
 }
 
 /** 4.2 duel stars: loss 0; win 1; win by 150+ or 4+ correct 2; all 5 correct 3. */

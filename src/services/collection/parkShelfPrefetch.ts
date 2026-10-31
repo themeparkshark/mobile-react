@@ -32,7 +32,14 @@ export interface ParkShelfData {
 
 export const MAX_AGE_MS = 20_000;
 
-const prefetched = new Map<string, { at: number; request: Promise<ParkShelfData> }>();
+/**
+ * How long a finished prefetch can seed the shelf's first frame after a win. Nothing else can
+ * change this player's shelf while the win card is up, so a slow reader still gets the shelf at
+ * once; the screen reads the server again right after.
+ */
+export const ARRIVAL_SEED_MAX_AGE_MS = 30 * 60_000;
+
+const prefetched = new Map<string, { at: number; request: Promise<ParkShelfData>; data?: ParkShelfData }>();
 const key = (park: number, player: number) => `${player}:${park}`;
 
 export function fetchParkShelf(park: number, player: number): Promise<ParkShelfData> {
@@ -49,8 +56,26 @@ export function fetchParkShelf(park: number, player: number): Promise<ParkShelfD
 export function prefetchParkShelf(park: number, player: number, now = Date.now()): void {
   if (!park || !player) return;
   const request = fetchParkShelf(park, player);
-  request.catch(() => { if (prefetched.get(key(park, player))?.request === request) prefetched.delete(key(park, player)); });
-  prefetched.set(key(park, player), { at: now, request });
+  const entry: { at: number; request: Promise<ParkShelfData>; data?: ParkShelfData } = { at: now, request };
+  request.then(data => { entry.data = data; },
+    () => { if (prefetched.get(key(park, player))?.request === request) prefetched.delete(key(park, player)); });
+  prefetched.set(key(park, player), entry);
+  lastSeed = { key: key(park, player), entry };
+}
+
+/** The newest arrival prefetch, kept after loadParkShelf takes it so a remount can still paint at once. */
+let lastSeed: { key: string; entry: { at: number; data?: ParkShelfData } } | null = null;
+
+/**
+ * The shelf a win already loaded, ready to paint on the very first frame (no Loading screen), or
+ * null when it has not arrived yet or is too old. Never starts a request.
+ */
+export function peekParkShelf(park: number, player: number, now = Date.now(),
+  maxAge = ARRIVAL_SEED_MAX_AGE_MS): ParkShelfData | null {
+  const waiting = prefetched.get(key(park, player));
+  const entry = waiting ?? (lastSeed?.key === key(park, player) ? lastSeed.entry : undefined);
+  if (!entry?.data || now - entry.at > maxAge) return null;
+  return entry.data;
 }
 
 /** The shelf: a fresh prefetch if one is waiting (used once), otherwise a new read. */
@@ -63,4 +88,5 @@ export function loadParkShelf(park: number, player: number, now = Date.now()): P
 
 export function clearParkShelfPrefetch(): void {
   prefetched.clear();
+  lastSeed = null;
 }

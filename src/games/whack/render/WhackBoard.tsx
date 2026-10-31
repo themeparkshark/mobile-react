@@ -30,6 +30,7 @@ import {
   F_GOLDEN_DAZED, F_HATOFF, F_PEEK, F_POP, F_PUFFED, F_PUFFER, F_SPIRAL, F_TONGUE, type RenderState,
 } from './renderState';
 import { TIER_MULT, MULT_CAP } from '../waves';
+import countText from '../../../helpers/countText';
 import { chaseOffset, comboTierRank, comboTierStyle, timerPulse } from '../../../gamekit/core/gameMoments';
 
 const NAVY = '#0b3a66';
@@ -200,7 +201,7 @@ export const WhackHud = React.memo(function WhackHud({ L, sim, rs, tick, hud, pa
       <HudPlate L={L} sim={sim} rs={rs} tick={tick} hud={hud} fontS={fontS} fontM={fontM} fontL={fontL} />
       {chase ? <ChaseTrack L={L} pace={pace} showPace={showPace} chase={chase} />
         : null}
-      <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace && !chase} paceLabel={paceLabel ?? 'VS BEST'} />
+      <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace && !chase} paceLabel={paceLabel ?? 'VS BEST BURST'} />
     </Canvas>
   );
 });
@@ -312,7 +313,7 @@ export const WhackBoard = React.memo(function WhackBoard({ L, sim, rs, tick, ima
       <Boss L={L} rs={rs} sim={sim} tick={tick} boss={images.boss} bossFx={bossFx} on={hud.boss} />
       <Picture picture={wells} />
       {hudOutside ? null : <HudPlate L={L} sim={sim} rs={rs} tick={tick} hud={hud} fontS={fontS} fontM={fontM} fontL={fontL} />}
-      {hudOutside ? null : <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace} paceLabel={paceLabel ?? 'VS BEST'} />}
+      {hudOutside ? null : <StagePrompts L={L} rs={rs} tick={tick} fontS={fontS} fontM={fontM} pace={pace} showPace={showPace} paceLabel={paceLabel ?? 'VS BEST BURST'} />}
     </Canvas>
   );
 });
@@ -582,7 +583,8 @@ function StagePrompts({ L, rs, tick, fontS, fontM, pace, showPace, paceLabel }: 
   // chase (no minus number, never red).
   const paceText = useDerivedValue(() => {
     const d = Math.round(pace.value);
-    return d > 0 ? `+${d} ${paceLabel}` : paceLabel;
+    // countText: digits only, like every drawn number (the Shark font's comma reads as a period).
+    return d > 0 ? `+${countText(d)} ${paceLabel}` : paceLabel;
   });
   const paceColor = useDerivedValue(() => (pace.value > 0 ? '#5a3200' : NAVY));
   const paceFill = useDerivedValue(() => (pace.value > 0 ? '#FFD54A' : CREAM));

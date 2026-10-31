@@ -53,7 +53,7 @@ export function nextGroupGame(pages: readonly { id: string; kind: string }[], af
   return games[(at + 1) % games.length] ?? null;
 }
 
-export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, gameOpen, openTurn }: {
+export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, gameOpen, openTurn, compact = false }: {
   readonly session: LinePlaySession;
   readonly snapshot: SessionSnapshot;
   readonly playerId: number | null;
@@ -62,6 +62,8 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
   /** Any game (solo or a turn) covers the screen. */
   readonly gameOpen: boolean;
   readonly openTurn: (launch: GroupTurnLaunch) => void;
+  /** A short phone: the crew strip is one size smaller so the activity pages keep their room. */
+  readonly compact?: boolean;
 }) {
   const waitKey = snapshot.ride && snapshot.startedAt != null
     ? lineGroupWaitKey(snapshot.ride.rideId, snapshot.startedAt) : null;
@@ -180,9 +182,11 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
       onClose={() => setEditing(false)} />
   </>;
 
-  const strip: ReactNode = live && crew.loaded && crew.chosen
-    ? <GroupStrip group={group} onEdit={() => { if (!group?.active) setEditing(true); }} />
-    : null;
+  const onEditCrew = () => { if (!group?.active) setEditing(true); };
+  const showStrip = live && crew.loaded && crew.chosen;
+  const strip: ReactNode = showStrip ? <GroupStrip group={group} compact={compact} onEdit={onEditCrew} /> : null;
+  /** The same row for the free band above the rail (a short phone reading Details): full 44 pt, centred. */
+  const bandStrip: ReactNode = showStrip ? <GroupStrip group={group} compact={compact} band onEdit={onEditCrew} /> : null;
 
   const recapSlot = (args: {
     readonly realMinutes: number; readonly postedMinutes: number | null; readonly partsEarned: number | null;
@@ -192,7 +196,7 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
 
   /** The crew opener or a pass-the-phone card is up: one-time tips wait. */
   const sheetOpen = (openerVisible && !mode) || !!mode;
-  return { group, wantsRound, startRound, finishTurn, overlays, strip, recapSlot, sheetOpen };
+  return { group, wantsRound, startRound, finishTurn, overlays, strip, bandStrip, recapSlot, sheetOpen };
 }
 
 export type { MiniGameId };

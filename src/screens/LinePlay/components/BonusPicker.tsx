@@ -31,6 +31,8 @@ export interface BonusPickerProps {
   readonly onOpenCodebreaker: () => void;
   readonly onClose: () => void;
   readonly onHidden: () => void;
+  /** The sheet starts coming in (the queue's resume countdown hands over on this frame). */
+  readonly onShowing?: () => void;
 }
 
 /** "2 sharks cracking", or Captain Fin when nobody else is here. Echo seats never count. */
@@ -48,7 +50,7 @@ export function crewStageLine(crew: CrewPuzzleSummary, now = Date.now()): string
 }
 
 export default function BonusPicker({ visible, bonus, secondsToNext, questChoice, crew, funChoices,
-  onChoose, onOpenCodebreaker, onClose, onHidden }: BonusPickerProps) {
+  onChoose, onOpenCodebreaker, onClose, onHidden, onShowing }: BonusPickerProps) {
   const reducedMotion = useReducedGameMotion();
   const badge = pickerBadge(bonus, secondsToNext);
   const available: BonusGameId[] = [
@@ -82,7 +84,7 @@ export default function BonusPicker({ visible, bonus, secondsToNext, questChoice
   };
 
   return <Modal isVisible={visible} style={styles.modal} onBackdropPress={onClose} onBackButtonPress={onClose}
-    onSwipeComplete={onClose} swipeDirection="down" onModalHide={onHidden}
+    onSwipeComplete={onClose} swipeDirection="down" onModalHide={onHidden} onModalWillShow={onShowing}
     animationIn={reducedMotion ? 'fadeIn' : 'slideInUp'} animationOut={reducedMotion ? 'fadeOut' : 'slideOutDown'}>
     <View style={styles.sheet}>
       <View style={styles.grabber} />

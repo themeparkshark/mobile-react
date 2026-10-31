@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import GameIcon from '../ui/GameIcon';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -225,7 +226,7 @@ function ResultStar({
           textShadowRadius: filled ? 10 : 0,
         },
       ]}>
-        ⭐
+        <GameIcon name="star" size={starSize} />
       </Text>
     </Animated.View>
   );
@@ -552,11 +553,12 @@ export default function MiniGameShell({
   const getResultMessage = () => {
     if (!result) return '';
     if (result.won) {
-      if (result.stars === 3) return '🌟 PERFECT! 🌟';
-      if (result.stars === 2) return '✨ GREAT! ✨';
-      return '👏 NICE! 👏';
+      if (result.stars === 3) return 'INCREDIBLE!';
+      if (result.stars === 2) return 'GREAT!';
+      return 'NICE!';
     }
-    return '💪 SO CLOSE!';
+    // Never a made-up "so close", never emoji: the same words every results card uses.
+    return 'GOOD TRY!';
   };
 
   if (!visible) return null;
@@ -661,12 +663,12 @@ export default function MiniGameShell({
               colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
               style={styles.objectiveBox}
             >
-              <Text style={styles.objectiveLabel}>🎯 YOUR GOAL</Text>
+              <Text style={styles.objectiveLabel}>YOUR GOAL</Text>
               <Text style={styles.objectiveText}>{objective}</Text>
             </LinearGradient>
 
             <View style={styles.timeDisplay}>
-              <Text style={styles.timeIcon}>⏱️</Text>
+              <GameIcon name="timer" size={28} />
               <Text style={styles.timeValue}>{timeLimit}</Text>
               <Text style={styles.timeUnit}>SEC</Text>
             </View>
@@ -682,7 +684,7 @@ export default function MiniGameShell({
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
               >
-                <Text style={styles.startBtnText}>🎮 START!</Text>
+                <Text style={styles.startBtnText}>START!</Text>
               </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
@@ -701,7 +703,7 @@ export default function MiniGameShell({
               ]}
             >
               <Text style={styles.countdownText}>
-                {countNum > 0 ? countNum : '🚀'}
+                {countNum > 0 ? countNum : 'GO'}
               </Text>
             </Animated.View>
             <Text style={styles.countdownLabel}>
@@ -789,7 +791,7 @@ export default function MiniGameShell({
                     styles.starIcon,
                     { opacity: i < result.stars ? 1 : 0.25 }
                   ]}>
-                    ⭐
+                    <GameIcon name="star" size={40} />
                   </Text>
                 </View>
               ))}
@@ -802,7 +804,7 @@ export default function MiniGameShell({
                 onPress={handleBack}
                 activeOpacity={0.8}
               >
-                <Text style={styles.backBtnText}>← Menu</Text>
+                <Text style={styles.backBtnText}>Menu</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -814,7 +816,7 @@ export default function MiniGameShell({
                 activeOpacity={0.85}
               >
                 <Text style={styles.doneBtnText}>
-                  {result.won ? '🎉 Collect!' : '🔄 Retry'}
+                  {result.won ? 'Collect!' : 'Retry'}
                 </Text>
               </TouchableOpacity>
             </View>

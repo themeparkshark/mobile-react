@@ -188,6 +188,18 @@ class GameAudioEngine {
     return this.initPromise;
   }
 
+  /**
+   * Capture screens only: run on the given backend (a silent one), never the
+   * native audio engine. A stuck simulator audio server can block the main
+   * thread or abort the app; a capture only needs the cue names.
+   */
+  useCaptureBackend(backend: AudioBackend): void {
+    this.backend?.stopAll();
+    backend.setMasterGain(this.masterVolume);
+    this.backend = backend;
+    this.initPromise = Promise.resolve();
+  }
+
   get backendName(): string {
     return this.backend?.name ?? 'none';
   }

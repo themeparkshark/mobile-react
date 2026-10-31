@@ -115,16 +115,21 @@ export function NewChip({ index, label, face, foil, stamp, reducedMotion, dark, 
   }, [index, r, reducedMotion, startMs]);
   const back = useAnimatedStyle(() => ({ opacity: r.value < 0.5 ? 1 : 0, transform: [{ perspective: 600 }, { rotateY: `${r.value * 180}deg` }] }));
   const front = useAnimatedStyle(() => ({ opacity: r.value >= 0.5 ? 1 : 0, transform: [{ perspective: 600 }, { rotateY: `${r.value * 180 - 180}deg` }] }));
+  // A picture, not a caption: one gold NEW tag on the card's corner (the same tag every unlock wears).
+  // The words (NEW CARD, NEW FOIL, NEW STAMP) are only spoken.
+  void dark;
   return (
-    <View style={styles.newChip}>
+    <View style={styles.newChip} accessible accessibilityLabel={label.toLowerCase()}>
       <View style={{ width: 40, height: 50 }}>
         <Animated.Image source={CARD_BACK} style={[styles.chipCard, back]} resizeMode="cover" />
         <Animated.View style={[styles.chipCard, front]}>
           {stamp ? <Image source={STAMP} style={{ width: 40, height: 40, marginTop: 5 }} resizeMode="contain" />
             : face ? <FaceThumb face={face} w={40} h={50} foil={foil} /> : null}
         </Animated.View>
+        <Animated.View style={[styles.newTagPos, front]} pointerEvents="none">
+          <View style={styles.newTag}><Text style={styles.newTagText}>NEW</Text></View>
+        </Animated.View>
       </View>
-      <Text style={[styles.newLabel, dark && { color: MM.navyText }, foil && { color: MM.goldDeep }]}>{label}</Text>
     </View>
   );
 }
@@ -349,14 +354,22 @@ export function AlbumBody({ album, focusDeck, compact }: { album: Album; focusDe
               const on = d.id === deck.id;
               const c = collected(album.decks[d.id], d.symbols.length);
               return (
-                <Pressable key={d.id} onPress={() => setDeckId(d.id)} style={[styles.tab, on && styles.tabOn]} accessibilityRole="tab" accessibilityState={{ selected: on }}>
-                  <Text style={[styles.tabText, on && styles.tabTextOn]}>{d.label}</Text>
+                // A picture tab (the deck's first card) and its count: no long names to cut off.
+                <Pressable key={d.id} onPress={() => setDeckId(d.id)} style={[styles.tab, on && styles.tabOn]} accessibilityRole="tab"
+                  accessibilityState={{ selected: on }} accessibilityLabel={`${d.label}, ${c} of ${d.symbols.length}`}>
+                  <FaceThumb face={faceFor(d, 0)} w={28} h={35} radius={5} />
                   <Text style={[styles.tabCount, on && styles.tabTextOn]}>{`${c}/${d.symbols.length}`}</Text>
                 </Pressable>
               );
             })}
           </ScrollView>
-          <Text style={styles.pageMeta}>{`${collected(page, size)}/${size} collected · ${foils(page, size)} foil${page?.perfect ? ' · PERFECT' : ''}`}</Text>
+          {/* The page's name and count; foil and perfect show on the cards themselves. */}
+          <View style={styles.pageHead} accessible
+            accessibilityLabel={`${deck.label}: ${collected(page, size)} of ${size} cards, ${foils(page, size)} gold${page?.perfect ? ', perfect' : ''}`}>
+            <Text style={styles.pageName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{deck.label}</Text>
+            <Text style={styles.pageCount}>{`${collected(page, size)}/${size}`}</Text>
+            {page?.perfect ? <Image source={STAMP} style={styles.pagePerfect} resizeMode="contain" /> : null}
+          </View>
           <View style={styles.albumGrid}>
             {deck.symbols.map((_, i) => {
               const f = page?.faces[String(i)];
@@ -383,7 +396,12 @@ export function AlbumBody({ album, focusDeck, compact }: { album: Album; focusDe
                 </View>
               ))}
             </ScrollView>
-          ) : <Text style={styles.sheetHint}>Clear a ride's Daily Deck at or under par to stamp its page.</Text>}
+          ) : (
+            // No stamps yet: a faded stamp picture; the how-to is spoken only.
+            <View accessible accessibilityLabel="No ride stamps yet. Clear a ride's Daily Deck at or under par to stamp its page." style={styles.stampEmpty}>
+              <Image source={STAMP} style={{ width: 44, height: 44 }} resizeMode="contain" />
+            </View>
+          )}
     </View>
   );
 }
@@ -452,7 +470,9 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 8 },
   newChip: { alignItems: 'center', width: 64 },
   chipCard: { position: 'absolute', left: 0, top: 0, width: 40, height: 50, borderRadius: 6, overflow: 'hidden', backfaceVisibility: 'hidden' },
-  newLabel: { fontFamily: 'Knockout', fontSize: 11, color: '#ffffff', marginTop: 3, letterSpacing: 0.5 },
+  newTagPos: { position: 'absolute', top: -9, right: -18 },
+  newTag: { backgroundColor: '#ffcf3b', borderRadius: 8, borderWidth: 2, borderColor: '#05346e', paddingHorizontal: 4, paddingVertical: 0, transform: [{ rotateZ: '8deg' }] },
+  newTagText: { fontFamily: 'Shark', fontSize: 11, color: '#05346e' },
   foilDone: { fontFamily: 'Knockout', fontSize: 13, color: MM.gold, marginBottom: 6 },
   btnRow: { flexDirection: 'row', gap: 8, justifyContent: 'center' },
   smallBtn: { backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 3, borderColor: MM.ink, paddingHorizontal: 14, paddingVertical: 8, minHeight: 44, justifyContent: 'center' },
@@ -498,12 +518,15 @@ const styles = StyleSheet.create({
   storyCrown: { width: 32, height: 29 },
   storyStat: { fontFamily: 'Knockout', fontSize: 20, color: MM.navyText, marginTop: 2 },
   tabs: { gap: 6, paddingVertical: 4 },
-  tab: { backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: MM.ink, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center' },
+  tab: { backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 2, borderColor: MM.ink, paddingHorizontal: 6, paddingVertical: 4, alignItems: 'center', gap: 2 },
   tabOn: { backgroundColor: MM.blue },
-  tabText: { fontFamily: 'Knockout', fontSize: 13, color: MM.navyText },
   tabTextOn: { color: '#ffffff' },
   tabCount: { fontFamily: 'Shark', fontSize: 12, color: MM.ink },
-  pageMeta: { fontFamily: 'Knockout', fontSize: 14, color: MM.navyText, marginVertical: 8 },
+  pageHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 8, maxWidth: '100%', paddingHorizontal: 6 },
+  pageName: { fontFamily: 'Shark', fontSize: 16, color: MM.navyText, flexShrink: 1 },
+  pageCount: { fontFamily: 'Shark', fontSize: 16, color: MM.ink },
+  pagePerfect: { width: 24, height: 24 },
+  stampEmpty: { opacity: 0.3, paddingVertical: 2 },
   albumGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
   albumSlot: { alignItems: 'center', padding: 3, borderRadius: 9 },
   albumPerfect: { backgroundColor: 'rgba(254,201,14,0.35)' },

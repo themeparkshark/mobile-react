@@ -150,11 +150,70 @@ export function wrapGate(g: ResumeGate, reason: WrapUpReason, now: number): bool
   return true;
 }
 
-export const WRAP_UP_COPY: Record<WrapUpReason, { title: string; body: string }> = {
-  boarding: { title: "YOUR RIDE'S UP!", body: 'Run saved. Enjoy the ride!' },
-  'left-queue': { title: 'RUN SAVED', body: 'You left the line, so we saved your score.' },
-  'session-ended': { title: 'RUN SAVED', body: 'Your score is locked in.' },
+/**
+ * The wrap-up card's words. A run saved before its first star shows the gold
+ * RUN SAVED stamp, so its title and note never say "saved" again (savedTitle,
+ * savedBody): the stamp says it once.
+ */
+export const WRAP_UP_COPY: Record<WrapUpReason, { title: string; body: string; savedTitle: string; savedBody: string }> = {
+  boarding: { title: "YOUR RIDE'S UP!", body: 'Run saved. Enjoy the ride!', savedTitle: "YOUR RIDE'S UP!", savedBody: 'Enjoy the ride!' },
+  'left-queue': { title: 'RUN SAVED', body: 'You left the line, so we saved your score.', savedTitle: 'ALL DONE!', savedBody: 'You left the line.' },
+  'session-ended': { title: 'RUN SAVED', body: 'Your score is locked in.', savedTitle: 'ALL DONE!', savedBody: '' },
 };
+
+/** The wrap-up title and note, with "saved" said once (by the stamp) on a saved run. */
+export function wrapUpCopy(reason: WrapUpReason, saved: boolean): { title: string; body: string } {
+  const c = WRAP_UP_COPY[reason];
+  return saved ? { title: c.savedTitle, body: c.savedBody } : { title: c.title, body: c.body };
+}
+
+/**
+ * Stars for a run a queue event ended. Boarding mid-run never throws the run
+ * away: a run with points but no star yet is a saved run (partial). It shows a
+ * RUN SAVED stamp instead of a star and counts as played, but it is never
+ * written down as a real star (no best, no difficulty change). A paid ride
+ * challenge has no saved runs: its goal has to be met for real.
+ */
+export function wrapUpStars(stars: number, score: number, paid: boolean): { stars: number; partial: boolean } {
+  const safe = Number.isFinite(stars) ? Math.max(0, stars) : 0;
+  return { stars: safe, partial: safe === 0 && !paid && score > 0 };
+}
+
+/** The bits of a run result the wrap-up credit touches. */
+export interface WrapResultLike {
+  score?: number;
+  stars?: number;
+  message?: string;
+  meta?: Record<string, unknown>;
+}
+
+/**
+ * Apply the wrap-up credit to a run result, so the title, the RUN SAVED stamp
+ * and the note always agree. `gameMessage` is a title the game picked itself
+ * (kept as is); otherwise the title comes from this result's own saved flag,
+ * never from an older snapshot's.
+ */
+export function creditWrapResult<T extends WrapResultLike>(
+  result: T,
+  reason: WrapUpReason,
+  paid: boolean,
+  gameMessage?: string,
+): T & { stars: number; message: string; meta: Record<string, unknown> } {
+  const score = result.score ?? 0;
+  const credit = wrapUpStars(result.stars ?? 0, score, paid);
+  const saved = credit.partial || score <= 0;
+  return {
+    ...result,
+    stars: credit.stars,
+    message: gameMessage ?? wrapUpCopy(reason, saved).title,
+    meta: { ...(result.meta ?? {}), wrapUp: reason, ...(credit.partial ? { partial: true } : {}) },
+  };
+}
+
+/** True when a game-owned results surface rendered nothing (null, false, true, undefined or ''). */
+export function isEmptyResultsNode(node: unknown): boolean {
+  return node == null || node === false || node === true || node === '';
+}
 
 // =============================================================================
 // Movement: never pause. A gentle heads-up when the line advances a lot.

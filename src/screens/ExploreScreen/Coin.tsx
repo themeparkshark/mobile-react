@@ -70,6 +70,8 @@ export default function Coin({
         }}>
           <Countdown
             date={Date.parse(coin.active_to)}
+            // Whole minutes only: no need to re-render every second (battery).
+            intervalDelay={15_000}
             renderer={({ total }) => (
               <Text style={{
                 fontFamily: 'Shark',

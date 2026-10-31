@@ -24,6 +24,11 @@ import type { LocationType } from '../models/location-type';
 import { cachedBook, clearBook, invalidateBook, prefetchBook, rewardWaitingFrom } from '../screens/SetCollection/dexCache';
 import { BRAND, GameIcon, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { useLadderCounters } from '../services/reveal/revealLadder';
+import HomeArcade from './HomeArcade';
+
+/** The park Wait Times opens for at home: the player's last park, else Disneyland. */
+const DEFAULT_WAIT_PARK = 8;
 
 const ROUND = {
   gold: require('../../assets/images/alex-ui/round-gold.webp'),
@@ -46,7 +51,13 @@ export interface MenuItem {
   readonly round: keyof typeof ROUND;
   readonly screen: string;
   readonly params?: object;
+  /** Bundled art in place of the icon (the pocket watch is Wait Times only). */
+  readonly image?: number;
+  /** Opens a sheet on the home map instead of a screen. */
+  readonly action?: 'arcade';
 }
+
+const POCKET_WATCH = require('../../assets/images/screens/explore/queuetimes.png');
 
 export const MENU_ITEMS: readonly MenuItem[] = [
   { id: 'sets', label: 'Collections', icon: 'chest', round: 'gold', screen: 'SetCollection' },
@@ -55,6 +66,20 @@ export const MENU_ITEMS: readonly MenuItem[] = [
   { id: 'help', label: 'How to Play', icon: 'info', round: 'purple', screen: 'HowToPlay' },
   { id: 'settings', label: 'Settings', icon: 'settings', round: 'slate', screen: 'Settings' },
 ];
+
+/**
+ * The home menu (core loop 5.7): Collections, Practice games (from the 2nd home visit), Wait Times,
+ * Stamp Book, Shark Shop, How to Play and Settings. The shelf stays on the Shelf button and the
+ * guide card's PLAN, so the menu needs no third door to it. Pure.
+ */
+export function homeMenuItems(input: { readonly practice: boolean; readonly waitTimesPark: number | null }): readonly MenuItem[] {
+  const out: MenuItem[] = [MENU_ITEMS[0]];
+  if (input.practice) out.push({ id: 'practice', label: 'Practice games', icon: 'play', round: 'purple', screen: '', action: 'arcade' });
+  if (input.waitTimesPark != null) {
+    out.push({ id: 'waits', label: 'Wait Times', icon: 'timer', round: 'blue', screen: 'QueueTimes', params: { park: input.waitTimesPark }, image: POCKET_WATCH });
+  }
+  return [...out, ...MENU_ITEMS.slice(1)];
+}
 
 // Whether the menu is open, for the home map to hide its find card while the menu covers it (useQuickMenuOpen).
 let menuOpen = false;
@@ -109,6 +134,13 @@ export default function QuickAccessMenu(_props: Props) {
   const { player } = useContext(AuthContext);
   const { location } = useContext(LocationContext);
   const rewardWaiting = useRewardWaiting(open, player?.id, location ?? null);
+  // Practice games join the menu from the 2nd home visit (core loop 4.4 "Place").
+  const counters = useLadderCounters();
+  const items = homeMenuItems({ practice: counters.homeDays >= 2,
+    waitTimesPark: player ? (player.current_park_id || DEFAULT_WAIT_PARK) : null });
+  const [arcadeOpen, setArcadeOpen] = useState(false);
+  // What a row asked for runs once the menu's native sheet is gone (never a sheet into a leaving sheet).
+  const afterDismiss = useRef<(() => void) | null>(null);
   // Signed out or switched accounts: the old player's book copy is dropped (cachedBook also refuses a mismatched player).
   const lastPlayer = useRef(player?.id ?? null);
   useEffect(() => {
@@ -131,7 +163,7 @@ export default function QuickAccessMenu(_props: Props) {
   const animateTo = useCallback((next: boolean, then?: () => void) => {
     scrim.value = withTiming(next ? 1 : 0, { duration: next ? 200 : 180 });
     fabSpin.value = reduced ? withTiming(next ? 1 : 0, { duration: 150 }) : withSpring(next ? 1 : 0, { damping: 12, stiffness: 220 });
-    const total = next ? 0 : (reduced ? 150 : menuDelay(0, MENU_ITEMS.length, false) + 140);
+    const total = next ? 0 : (reduced ? 150 : menuDelay(0, MENU_ITEMS.length + 2, false) + 140);
     timers.current.push(setTimeout(() => then?.(), total));
   }, [reduced, scrim, fabSpin]);
 
@@ -167,6 +199,12 @@ export default function QuickAccessMenu(_props: Props) {
     if (Platform.OS === 'ios') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPopIndex(index);
     // Push at once (the screen slides in under the fading menu): no stop on the map, no rows over a clear map.
+    if (item.action === 'arcade') {
+      // The practice sheet opens only after the menu's own native sheet is gone.
+      afterDismiss.current = () => setArcadeOpen(true);
+      later(() => closeMenu(() => { if (Platform.OS !== 'ios') { afterDismiss.current?.(); afterDismiss.current = null; } }), reduced ? 0 : 90);
+      return;
+    }
     later(() => {
       RootNavigation.navigate(item.screen, item.params);
       closeMenu();
@@ -207,7 +245,8 @@ export default function QuickAccessMenu(_props: Props) {
       <View pointerEvents="box-none" style={[styles.stack, { bottom, left: 14 }]}>
         {fab(false)}
       </View>
-      <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={() => closeMenu()}>
+      <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={() => closeMenu()}
+        onDismiss={() => { const next = afterDismiss.current; afterDismiss.current = null; next?.(); }}>
         <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'auto' : 'none'}>
           <AnimatedBlur animatedProps={blurProps} tint="dark" style={StyleSheet.absoluteFill} />
           <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,52,110,0.86)' }, scrimStyle]} />
@@ -222,30 +261,31 @@ export default function QuickAccessMenu(_props: Props) {
               <Image source={RIBBON} style={StyleSheet.absoluteFill} contentFit="fill" />
               <Text style={styles.headerText} accessibilityRole="header" maxFontSizeMultiplier={1.2}>Menu</Text>
             </Animated.View>
-            {MENU_ITEMS.map((item, index) => (
-              <MenuRow key={item.id} item={item} index={index} open={open} reduced={reduced} popped={popIndex === index}
+            {items.map((item, index) => (
+              <MenuRow key={item.id} item={item} index={index} count={items.length} open={open} reduced={reduced} popped={popIndex === index}
                 badge={item.id === 'sets' && rewardWaiting} onPress={() => choose(item, index)} />
             ))}
           </Animated.View>
           {fab(true)}
         </View>
       </Modal>
+      <HomeArcade visible={arcadeOpen} onClose={() => setArcadeOpen(false)} />
     </>
   );
 }
 
-function MenuRow({ item, index, open, reduced, popped, badge, onPress }: {
-  readonly item: MenuItem; readonly index: number; readonly open: boolean; readonly reduced: boolean; readonly popped: boolean;
+function MenuRow({ item, index, count, open, reduced, popped, badge, onPress }: {
+  readonly item: MenuItem; readonly index: number; readonly count: number; readonly open: boolean; readonly reduced: boolean; readonly popped: boolean;
   readonly badge: boolean; readonly onPress: () => void;
 }) {
   const t = useSharedValue(0);
   const pop = useSharedValue(1);
   useEffect(() => {
-    const delay = menuDelay(index, MENU_ITEMS.length, open);
+    const delay = menuDelay(index, count, open);
     if (reduced) t.value = withTiming(open ? 1 : 0, { duration: 150 });
     else if (open) t.value = withDelay(delay, withSpring(1, { damping: 11, stiffness: 190 }));
     else t.value = withDelay(delay, withTiming(0, { duration: 130 }));
-  }, [open, reduced, index, t]);
+  }, [open, reduced, index, count, t]);
   useEffect(() => {
     if (popped && !reduced) pop.value = withSequence(withTiming(1.08, { duration: 90 }), withSpring(1, { damping: 10, stiffness: 260 }));
   }, [popped, reduced, pop]);
@@ -256,16 +296,16 @@ function MenuRow({ item, index, open, reduced, popped, badge, onPress }: {
   const bounce = useSharedValue(1);
   useEffect(() => {
     if (!open || !badge || reduced) return;
-    bounce.value = withDelay(menuDelay(index, MENU_ITEMS.length, true) + 260,
+    bounce.value = withDelay(menuDelay(index, count, true) + 260,
       withSequence(withTiming(1.35, { duration: 140 }), withSpring(1, { damping: 6, stiffness: 260 })));
-  }, [open, badge, reduced, index, bounce]);
+  }, [open, badge, reduced, index, count, bounce]);
   const badgeStyle = useAnimatedStyle(() => ({ transform: [{ scale: bounce.value }] }));
   const press = useSharedValue(1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   const round = (
     <View style={styles.round}>
       <Image source={ROUND[item.round]} style={StyleSheet.absoluteFill} contentFit="contain" />
-      <GameIcon name={item.icon} size={38} />
+      {item.image ? <Image source={item.image} style={styles.rowArt} contentFit="contain" /> : <GameIcon name={item.icon} size={38} />}
       {badge && <Animated.View style={[styles.badge, badgeStyle]}><GameIcon name="gift" size={20} /></Animated.View>}
     </View>
   );
@@ -296,6 +336,7 @@ const styles = StyleSheet.create({
   headerText: { fontFamily: 'Shark', fontSize: 22, color: '#7a3d00', marginTop: -4 },
   row: { flexDirection: 'row', alignItems: 'center', minHeight: 66, marginBottom: 6 },
   round: { width: 62, height: 62, alignItems: 'center', justifyContent: 'center' },
+  rowArt: { width: 42, height: 42 },
   badge: {
     position: 'absolute', top: -4, right: -4, width: 30, height: 30, borderRadius: 15, backgroundColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BRAND.gold,

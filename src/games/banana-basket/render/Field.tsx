@@ -21,13 +21,14 @@
  * by k = width / 400 and adds extra sky on tall phones.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import {
   Atlas, BlendColor, Canvas, Circle, Group, Image as SkImage, LinearGradient, Oval, Path, Rect, RoundedRect, Skia, Text,
   rect, useFont, useImage, useRSXformBuffer, useRectBuffer, vec, type SkImage as SkImageT, type Transforms3d,
 } from '@shopify/react-native-skia';
-import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
+import { useDerivedValue, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import { HUD_STEP_BACK_MS } from '../../../gamekit/results/HudStepBack';
 import { useSpriteAtlas } from '../../../gamekit/fx/SpriteAtlas';
 import {
   BALL_ARC_BOUNCES, BALL_R, FIELD_H, FIELD_W, HALF_ZONE, ITEM_SIZE, K_BANANA, K_BUNCH, K_COIN, K_LUCKY, K_PUFFER, LANE_Y,
@@ -252,11 +253,18 @@ export interface FieldProps {
   thumb: SharedValue<{ x: number; y: number }>;
   /** Line Heat live strip (null outside heats). */
   strip?: SharedValue<HeatStripEntry[] | null>;
+  /** The results card is up: the top band (hearts, timer, score) steps back, like Whack's HUD. */
+  hudBack?: boolean;
 }
 
 export const BananaField = React.memo(function BananaField(props: FieldProps) {
-  const { layout, sim, vis, tick, images, camera, cameraOrigin, ghost, ghostName, reducedMotion, targets, thumb, strip } = props;
+  const { layout, sim, vis, tick, images, camera, cameraOrigin, ghost, ghostName, reducedMotion, targets, thumb, strip, hudBack = false } = props;
   const { k, oy, width, height } = layout;
+  // The card owns the numbers at the results moment: the HUD band fades out under it (UI thread, one timing).
+  const hudOp = useSharedValue(hudBack ? 0 : 1);
+  useEffect(() => {
+    hudOp.value = reducedMotion ? (hudBack ? 0 : 1) : withTiming(hudBack ? 0 : 1, { duration: HUD_STEP_BACK_MS });
+  }, [hudBack, reducedMotion, hudOp]);
   const atlas = useSpriteAtlas(images.atlasSources, { cell: 256 });
   const font = useFont(require('../../../../assets/fonts/shark-random-funnyness-2.ttf'), 28);
   const fontSmall = useFont(require('../../../../assets/fonts/shark-random-funnyness-2.ttf'), 17);
@@ -1800,7 +1808,8 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
         <Path path={buntA} style="stroke" strokeWidth={2} color={INK} opacity={0.7} />
         <Path path={buntB} style="stroke" strokeWidth={2} color={INK} opacity={0.7} />
 
-        {/* Top band: hearts, time bar, star meter */}
+        {/* Top band: hearts, time bar, star meter (steps back under the results card) */}
+        <Group opacity={hudOp}>
         {im.heart ? (
           <>
             <Group transform={hs0} opacity={h0}><SkImage image={im.heart} x={0} y={0} width={26} height={24} /></Group>
@@ -1852,6 +1861,7 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
           <Circle cx={TIME_X + TIME_W - 28} cy={70} r={5} style="stroke" strokeWidth={2} color={INK} />
           <Circle cx={TIME_X + TIME_W - 12} cy={70} r={5} style="stroke" strokeWidth={2} color={INK} />
           <Circle cx={TIME_X + TIME_W + 4} cy={70} r={5} style="stroke" strokeWidth={2} color={INK} />
+        </Group>
         </Group>
 
         {/* Line Heat strip: 8 ranked pills under the star meter */}

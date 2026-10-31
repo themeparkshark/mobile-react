@@ -309,8 +309,8 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
                   {parkId == null && !project.ended && project.targeted && (
                     <Text style={styles.target}>
                       {project.stage === 3
-                        ? 'YOUR HOME PROJECT · The meter is full. New fans can still vote after a home find.'
-                        : 'YOUR HOME PROJECT · Home finds add a point.'}
+                        ? 'YOUR HOME PROJECT · The meter is full. New fans can still vote after a treat.'
+                        : 'YOUR HOME PROJECT · Treats add a point.'}
                     </Text>
                   )}
                   {project.personal_clue && (

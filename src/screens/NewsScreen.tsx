@@ -55,6 +55,7 @@ import {
 } from './NewsScreen/newsFeed';
 import {
   filterByKey,
+  isGrownUpStory,
   matchesFilter,
   mergeEntries,
   searchLocal,
@@ -158,7 +159,7 @@ export default function NewsScreen() {
       setLists(prev => {
         const base = mode === 'more' ? (prev[k] ?? EMPTY).entries : [];
         const entries = mergeEntries(base, result.entries);
-        return { ...prev, [k]: { ...(prev[k] ?? EMPTY), entries, page, hasMore: result.hasMore && result.entries.length > 0, loading: 'idle', failed: false } };
+        return { ...prev, [k]: { ...(prev[k] ?? EMPTY), entries, page, hasMore: result.hasMore && (result.fetched ?? result.entries.length) > 0, loading: 'idle', failed: false } };
       });
       if (k === 'all:') {
         setOffline(false);
@@ -267,8 +268,8 @@ export default function NewsScreen() {
     if (key === 'all:') return withLead(topEntries.filter(e => matchesFilter(e, 'all')));
     if (search) {
       // Headline matches already on the phone first, then the site's wider matches, newest first.
-      const local = searchLocal(allLoaded, search);
-      return [...local, ...mergeEntries(state.entries).filter(e => !local.some(r => r.id === e.id))];
+      const local = searchLocal(allLoaded, search).filter(e => !isGrownUpStory(e));
+      return [...local, ...mergeEntries(state.entries).filter(e => !isGrownUpStory(e) && !local.some(r => r.id === e.id))];
     }
     return withLead(mergeEntries(allLoaded, withCats(state.entries)).filter(e => matchesFilter(e, filter, park)));
   }, [key, topEntries, search, allLoaded, state.entries, filter, park, withCats]);

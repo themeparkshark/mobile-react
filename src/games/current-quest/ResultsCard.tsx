@@ -18,7 +18,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  FadeIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, ZoomIn,
+  FadeIn, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, ZoomIn,
 } from 'react-native-reanimated';
 import { Canvas, Circle, Group, Path, Rect, RoundedRect, Skia } from '@shopify/react-native-skia';
 import { CQ } from './theme';
@@ -120,6 +120,8 @@ interface Props {
   reducedMotion: boolean;
   onDone: () => void;
   onAgain?: () => void;
+  /** The shared button rule: PLAY AGAIN leads unless a won reward is still waiting (then DONE leads). */
+  againFirst?: boolean;
   onChallenge?: () => void;
   onShare?: () => void;
 }
@@ -129,7 +131,7 @@ const BURST_AT = 520;
 const SHELL_STEP = 90;
 const STAR_STEP = 300;
 
-export function CqResultsCard({ s, stars, reducedMotion, onDone, onAgain, onChallenge, onShare }: Props) {
+export function CqResultsCard({ s, stars, reducedMotion, onDone, onAgain, againFirst = true, onChallenge, onShare }: Props) {
   const flat: boolean[] = s.grid.flat();
   const earned = flat.filter(Boolean).length;
   const shellsEnd = BURST_AT + 120 + earned * SHELL_STEP;
@@ -252,14 +254,19 @@ export function CqResultsCard({ s, stars, reducedMotion, onDone, onAgain, onChal
           {s.line ? <Text style={styles.line}>{s.line}</Text> : null}
         </Animated.View>
         <Animated.View entering={skip ? undefined : FadeIn.delay(d(endAt)).duration(220)} style={styles.actions}>
-          {onAgain ? (
+          {onAgain && againFirst ? (
             <Pressable onPress={onAgain} style={({ pressed }) => [styles.btn, styles.btnGold, pressed && styles.pressed]} accessibilityRole="button">
-              <Text style={styles.btnTxt}>Play again</Text>
+              <Text style={styles.btnTxt}>PLAY AGAIN</Text>
             </Pressable>
           ) : null}
-          <Pressable onPress={onDone} style={({ pressed }) => [styles.btn, !onAgain && styles.btnGold, pressed && styles.pressed]} accessibilityRole="button">
-            <Text style={styles.btnTxt}>Done</Text>
+          <Pressable onPress={onDone} style={({ pressed }) => [styles.btn, !(onAgain && againFirst) && styles.btnGold, pressed && styles.pressed]} accessibilityRole="button">
+            <Text style={styles.btnTxt}>{stars > 0 ? 'CONTINUE' : 'DONE'}</Text>
           </Pressable>
+          {onAgain && !againFirst ? (
+            <Pressable onPress={onAgain} style={({ pressed }) => [styles.btn, pressed && styles.pressed]} accessibilityRole="button">
+              <Text style={styles.btnTxt}>PLAY AGAIN</Text>
+            </Pressable>
+          ) : null}
         </Animated.View>
         {onChallenge || (onShare && s.shareLabel) ? (
           <Animated.View entering={skip ? undefined : FadeIn.delay(d(endAt + 120)).duration(220)} style={styles.actions}>
@@ -289,11 +296,15 @@ export function ResultsVeil() {
   return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.veil, st]} />;
 }
 
-/** A soft gold pulse used by the stake card's coin stacks. */
+/** Pulses before the stake card's coins rest (a card left open costs no frames). */
+export const STAKE_PULSES = 4;
+
+/** A soft gold pulse used by the stake card's coin stacks: a few beats, then still. */
 export function usePulse(on: boolean) {
   const p = useSharedValue(1);
   useEffect(() => {
-    if (on) p.value = withRepeat(withSequence(withTiming(1.06, { duration: 380 }), withTiming(1, { duration: 380 })), -1, true);
+    if (on) p.value = withRepeat(withSequence(withTiming(1.06, { duration: 380 }), withTiming(1, { duration: 380 })), STAKE_PULSES);
+    return () => cancelAnimation(p);
   }, [on, p]);
   return useAnimatedStyle(() => ({ transform: [{ scale: p.value }] }));
 }

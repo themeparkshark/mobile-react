@@ -13,6 +13,7 @@ import { getShop, type ShopCatalog, type ShopGrants, type ShopProduct } from '..
 import { trackMoney } from './track';
 import { buyShopProduct, loadShopPrices, storeAvailable, type ShopPrice, type ShopPurchaseOutcome } from '../purchases';
 import countText from '../../helpers/countText';
+import { baseRates, bundleWorth } from './offers';
 
 export type SuppliesState = {
   readonly catalog: ShopCatalog | null;
@@ -96,8 +97,18 @@ export function grantsText(grants: ShopGrants): string {
 }
 
 /** What the grown-up gate restates before a real-money buy: "$4.99 for 15 tickets". */
-export function gateReasonFor(product: ShopProduct, price: ShopPrice | undefined): GateReason {
-  return { kind: 'money', price: price?.price ?? 'Real money', gets: `${grantsText(product.grants)}${product.frame ? ` and the ${product.frame.name}` : ''}` };
+export function gateReasonFor(product: ShopProduct, price: ShopPrice | undefined, worth: string | null = null): GateReason {
+  return { kind: 'money', price: price?.price ?? 'Real money', gets: `${grantsText(product.grants)}${product.frame ? ` and the ${product.frame.name}` : ''}`,
+    ...(worth ? { worth } : null) };
+}
+
+/**
+ * A bundle's worth at regular pack prices ("$6.60"), for the grown-up only: the shop cards a kid
+ * sees never show it (kid-trust: no value anchors aimed at children). Null when it is not a bundle.
+ */
+export function grownUpWorth(product: ShopProduct, catalog: ShopCatalog | null, prices: Record<string, ShopPrice>): string | null {
+  if (!catalog) return null;
+  return bundleWorth(product, prices, baseRates(catalog.products, prices))?.worth ?? null;
 }
 
 let buying = false;
@@ -123,7 +134,7 @@ export async function buyPack(product: ShopProduct, options: { onStart?: () => v
   try {
     trackMoney('tap', where, product.product_id);
     trackMoney('gate_shown', where, product.product_id);
-    if (!(await askGrownUp(gateReasonFor(product, state.prices[product.product_id])))) {
+    if (!(await askGrownUp(gateReasonFor(product, state.prices[product.product_id], grownUpWorth(product, catalog, state.prices))))) {
       trackMoney('gate_declined', where, product.product_id);
       return { status: 'declined' };
     }

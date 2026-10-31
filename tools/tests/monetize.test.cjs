@@ -208,7 +208,7 @@ test('offers live on result and recap screens only, never inside a game or a mov
   // "One more try" only on the lost card, after the game resolved.
   const retryUse = modal.indexOf("watchForReward('retry'");
   assert.ok(retryUse > 0);
-  assert.match(modal, /flowState === 'lost' && <ChallengeStatusCard[\s\S]*?canOfferRetry/);
+  assert.match(modal, /flowState === 'lost' && !skipLostCard && <ChallengeStatusCard[\s\S]*?canOfferRetry/);
   // The line snack is passed to the recap only, and only for an ended server session.
   assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /snackSlot=\{snapshot\.serverSessionId && snapshot\.rewards \? <LineSnackOffer/);
   assert.match(read('src/screens/LinePlay/components/SessionRecap.tsx'), /\{rewardsConfirmed && snackSlot\}/);

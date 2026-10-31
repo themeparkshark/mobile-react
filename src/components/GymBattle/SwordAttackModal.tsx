@@ -15,6 +15,7 @@ import { Image } from 'expo-image';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import { GameIcon, GameRichText } from '../../ui';
 import { friendlyActionError } from '../../services/match/matchLink';
+import TeamBadge from '../TeamBadge';
 import countText from '../../helpers/countText';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -106,7 +107,7 @@ export default function SwordAttackModal({
                     onPress={() => handleAttack(team)}
                     disabled={scores[team] <= 0}
                   >
-                    <Image source={TEAMS[team].badge} style={{ width: 40, height: 40, marginBottom: 4 }} contentFit="contain" />
+                    <TeamBadge team={team} style={{ width: 40, height: 40, marginBottom: 4 }} />
                     <Text style={styles.targetName}>{TEAM_NAMES[team]}</Text>
                     <Text style={[styles.targetScore, { color: TEAM_COLORS[team] }]}>
                       {countText(scores[team])} pts

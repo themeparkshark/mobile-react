@@ -11,6 +11,9 @@
 
 import { getRides, RideType } from '../../api/endpoints/rides';
 import type { RideContext } from './LinePlaySession';
+import { QUEUE_RIDE_TYPES } from '../../constants/queueRideTypes';
+
+const QUEUE_TYPES = new Set<string>(QUEUE_RIDE_TYPES);
 
 const norm = (s: string) => s.toLowerCase().trim();
 
@@ -166,10 +169,26 @@ export async function resolveRideContextOrOffline(
   };
 }
 
+/** The queue ride a coin task earns, for coin labels that differ from the ride title ("Tiki Room"). */
+async function resolveRideContextByTask(parkId: number, taskId: number): Promise<RideContext | null> {
+  try {
+    const map = await getRideNameMap(parkId);
+    for (const ride of map.values()) {
+      if (ride.task_id !== taskId || !QUEUE_TYPES.has(ride.type)) continue;
+      return await resolveRideContextById(parkId, ride.id);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Map markers include non-rides, so only cataloged rides or explicit authored chapters open LinePlay. */
-export async function resolveMapQueueContext(parkId: number, taskName: string): Promise<RideContext | null> {
+export async function resolveMapQueueContext(parkId: number, taskName: string, taskId?: number): Promise<RideContext | null> {
   const ride = await resolveRideContext(parkId, taskName, null);
   if (ride) return ride;
+  const byTask = taskId ? await resolveRideContextByTask(parkId, taskId) : null;
+  if (byTask) return byTask;
   const rideSlug = OFFLINE_MAP_CHAPTERS[parkId]?.[norm(taskName)];
   return rideSlug ? {
     rideId: 0,
@@ -180,4 +199,20 @@ export async function resolveMapQueueContext(parkId: number, taskName: string): 
     imageUrl: null,
     lineRewardsReady: false,
   } : null;
+}
+
+/**
+ * A queue story for a ride the server already named (Adventure Ticket, dwell
+ * card). Never null: the catalog row by id, then by name, then the template
+ * story under the server's own ride id. A coin label like "Tiki Room" that
+ * does not match the catalog title, or a catalog that will not load, still
+ * opens a story instead of an error. Rewards stay the server's call.
+ */
+export async function resolveQueueStoryContext(parkId: number, rideId: number, rideName: string,
+  taskId?: number): Promise<RideContext> {
+  const byId = rideId > 0 ? await resolveRideContextById(parkId, rideId) : null;
+  if (byId) return byId;
+  const byName = await resolveMapQueueContext(parkId, rideName, taskId);
+  if (byName) return byName;
+  return { rideId: Math.max(0, rideId), rideName, parkId, postedWaitMinutes: null, imageUrl: null };
 }

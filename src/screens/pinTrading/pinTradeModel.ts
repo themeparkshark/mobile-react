@@ -11,6 +11,7 @@
 import type { ItemType } from '../../models/item-type';
 import type { PinSwapType } from '../../models/pin-swap-type';
 import type { GameIconName } from '../../ui/iconNames';
+import { ipHeld, ipSafeName } from '../../constants/ipHold';
 
 /** Under this many seconds the timer turns red and pulses. */
 export const HOLD_URGENT_S = 30;
@@ -65,7 +66,7 @@ export function cardTilt(id: number): number {
 }
 
 export function pinName(item: Pick<ItemType, 'name' | 'display_name'>): string {
-  return (item.display_name || item.name || 'Pin').trim();
+  return (item.display_name?.trim() || ipSafeName(item.name || '') || 'Pin').trim();
 }
 
 /** Pages of /me/pins appended in order, without repeats. */
@@ -75,11 +76,12 @@ export function mergePins(current: readonly ItemType[], page: readonly ItemType[
 }
 
 /**
- * Pins you could give for this board pin (never the same pin), except a numbered gold copy:
+ * Pins you could give for this board pin (never the same pin, never a look-alike pin held off the board), except a numbered gold copy:
  * your own numbered copy of that pin can go for the board's (trade your #3 for the #1).
  */
 export function givablePins(pins: readonly ItemType[], boardItemId: number, boardSerial?: number | null): ItemType[] {
-  return pins.filter(item => item.id !== boardItemId || (!!boardSerial && !!item.serial && item.serial !== boardSerial));
+  return pins.filter(item => !ipHeld(item)
+    && (item.id !== boardItemId || (!!boardSerial && !!item.serial && item.serial !== boardSerial)));
 }
 
 /** Only what the screen needs from a swap: the board never keeps who posted it. */

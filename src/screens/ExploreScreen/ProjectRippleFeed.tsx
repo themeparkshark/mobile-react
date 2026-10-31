@@ -6,7 +6,7 @@ type Action = NonNullable<ParkProject['recent_actions']>[number];
 
 function actionCopy(action: Action, project: ParkProject): { heading: string; body: string } {
   switch (action.kind) {
-    case 'home_find': return { heading: 'HOME FIND', body: 'A fan found something at home.' };
+    case 'home_find': return { heading: 'TREAT', body: 'A fan found a treat at home.' };
     case 'fan_challenge': return { heading: 'FAN CHALLENGE', body: 'A fan solved a story clue from home.' };
     case 'ride_coin': return { heading: 'RIDE COIN', body: 'A guest won a ride coin at this park.' };
     case 'queue_part': return { heading: 'LINEPLAY', body: 'A player in line earned a Ride Part.' };

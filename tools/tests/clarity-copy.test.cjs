@@ -129,6 +129,10 @@ test('real money: the shop and the VIP page say "real money" before any price, a
   // After the answer the grown-up (only) sees the price and what it gets.
   assert.deepEqual(plain(gate.gateDetails({ kind: 'money', price: '$0.99', gets: '6 tickets and 60 Energy' })),
     { head: '$0.99', lines: ['For 6 tickets and 60 Energy.', 'Paid with the Apple ID on this device.'] });
+  // A bundle's worth at single-pack prices is grown-up talk: only here, after the answer (kid-trust w6).
+  assert.deepEqual(plain(gate.gateDetails({ kind: 'money', price: '$1.99', gets: '600 coins', worth: '$6.60' })),
+    { head: '$1.99', lines: ['For 600 coins.', 'Bought as single packs, this would cost $6.60.', 'Paid with the Apple ID on this device.'] });
+  assert.doesNotMatch(JSON.stringify(gate.gateReasonLines({ kind: 'money', price: '$1.99', gets: '600 coins', worth: '$6.60' })), /\$|worth|cost \$/);
   // A plan that renews: the trial, the renewal and how to cancel (App Store 3.1.2), never shown to the child first.
   const renews = { kind: 'renews', what: 'VIP', price: '$4.99', period: 'month', trial: 'One week free' };
   assert.doesNotMatch(JSON.stringify(gate.gateReasonLines(renews)), /free|\$/);

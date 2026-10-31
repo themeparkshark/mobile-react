@@ -1,5 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import playerStorage from '../gamekit/core/playerStorage';
 import { useContext, useEffect, useMemo, useState } from 'react';
+import { silenceForCapture } from '../gamekit/audio/captureSilence';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BOSS_NAMES, type BossId, type BossRaid } from '../api/endpoints/parks/raid';
 import type { RideControlClaim, RideControlPark } from '../api/endpoints/parks/rideControl';
@@ -45,7 +46,7 @@ function fixtureRaid(boss: BossId, over: Partial<BossRaid> = {}): BossRaid {
   return { id: 900000 + boss.length, task_id: 900109, boss, ride_name: 'Practice space attraction',
     latitude: RIDE.latitude, longitude: RIDE.longitude, hp_max: 6100, hp_left: 3480, status: 'active', starts_at: stamp,
     ends_at: new Date(Date.now() + 18 * 60000).toISOString(), fighters: 6, teams: { mouse: 1240, globe: 860, shark: 520 },
-    team_names: { mouse: 'Team Mouse', globe: 'Team Globe', shark: 'Team Shark' },
+    team_names: { mouse: 'Team Gold', globe: 'Team Green', shark: 'Team Shark' },
     feed: [], top: [{ username: 'finnfan22', damage: 1480, you: false, team: 'mouse' }, { username: 'sharkbait_sam', damage: 1144, you: true, team: 'shark' },
       { username: 'coasterkid', damage: 640, you: false, team: 'globe' }],
     mvp_is_you: false, ride_control: null, energy_cost: 10, reach_meters: 90, max_attacks: 5,
@@ -60,6 +61,8 @@ function fixtureRaid(boss: BossId, over: Partial<BossRaid> = {}): BossRaid {
  * `themeparkshark://ws6?section=win&boss=robo_shark&held=1` (simulator capture).
  */
 export default function BossMapPreviewScreen() {
+  // A capture screen is silent and never touches the native audio stack.
+  useEffect(() => silenceForCapture(), []);
   const [section, setSection] = useState<Section>('map');
   const [boss, setBoss] = useState<BossId>('kraken'), [run, setRun] = useState(0), [selected, setSelected] = useState(false);
   const [held, setHeld] = useState(false);
@@ -90,7 +93,8 @@ export default function BossMapPreviewScreen() {
       setKnobs({ energy: num('energy', 120), tickets: num('tickets', 2), attacks: num('attacks', 0), joined: query.get('joined') === '1', autoplay: num('autoplay', 0), hp: num('hp', 3480), live: query.get('live') === '1' });
       if (query.get('play') === '1') setRun(value => value + 1);
       // First-time Boss Bash lesson again (capture only).
-      if (query.get('fresh') === '1') void AsyncStorage.multiRemove(['boss_bash_seen_v1', 'boss_bash_best_kraken']).catch(() => undefined);
+      // Game saves are per player (playerStorage), so clear this player's copies.
+      if (query.get('fresh') === '1') void Promise.all(['boss_bash_seen_v1', 'boss_bash_best_kraken'].map((k) => playerStorage.removeItem(k))).catch(() => undefined);
     };
     void Linking.getInitialURL().then(apply).catch(() => undefined);
     const sub = Linking.addEventListener('url', event => apply(event.url));

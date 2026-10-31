@@ -5,7 +5,8 @@
  * contexts stays server-side (design 4.1); this is only presentation state.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../../gamekit/core/playerStorage';
 import type { RunProgressHint } from './library';
 
 const KEY = 'cq.progress.v2';
@@ -60,9 +61,15 @@ export const EMPTY_PROGRESS: CqProgress = {
 };
 
 let cache: CqProgress | null = null;
+/** The player the cache belongs to: a new player on the same phone never sees it. */
+let cacheOwner = '';
+const savesOwner = (): string => {
+  try { return AsyncStorage.owner(); } catch { return ''; }
+};
 
 export async function loadProgress(): Promise<CqProgress> {
-  if (cache) return cache;
+  if (cache && cacheOwner === savesOwner()) return cache;
+  cacheOwner = savesOwner();
   try {
     const raw = await AsyncStorage.getItem(KEY);
     cache = raw ? { ...EMPTY_PROGRESS, ...(JSON.parse(raw) as Partial<CqProgress>) } : { ...EMPTY_PROGRESS };

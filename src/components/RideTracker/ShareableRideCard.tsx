@@ -12,7 +12,7 @@ import SharkReactionIcon, { reactionLabel } from './SharkReactionIcon';
 import { GameIcon, gameAlert } from '../../ui';
 import countText from '../../helpers/countText';
 import { ShareFace } from '../../share/FlexShareButton';
-import { captureFlex, openShareSheet } from '../../share/capture';
+import { captureFlex, openShareSheet, shareCardFileName } from '../../share/capture';
 import { campaignUrl, shareMessage } from '../../share/link';
 import { OFFSCREEN, StoryShareFrame } from '../../share/StoryShareFrame';
 import { LocationStatusContext } from '../../context/LocationProvider';
@@ -167,7 +167,7 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
       // The gate shows above this card's sheet (GrownUpGateSlot). Back on the card after the sheet
       // (even a cancel): a kid who backs out lands on their card, with the plain Share Ride Card
       // button again. The Shared! check is only for a share iOS says really went (never a cancel).
-      const { ended: outcome } = await openShareSheet(uri, shareMessage(campaignUrl('ride_log')), `${ride.ride_name} Ride Card`);
+      const { ended: outcome } = await openShareSheet(uri, shareMessage(campaignUrl('ride_log')), shareCardFileName('ride_card'));
       if (outcome === 'shared') setShared(true);
       if (outcome === 'shared' || outcome === 'closed') onShare?.();
     } catch {

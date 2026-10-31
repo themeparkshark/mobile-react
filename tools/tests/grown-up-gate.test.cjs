@@ -142,7 +142,7 @@ test('real money is bought in exactly two gated places', () => {
   // and a grown-up answers (price and contents restated) before StoreKit is called.
   // Funnel tracking may sit around the gate; the gate must come before the one StoreKit call.
   const code = strip(supplies);
-  assert.match(code, /if \(buying\) return \{ status: 'busy' \};[\s\S]{0,320}buying = true;\s*try \{[\s\S]{0,200}if \(!\(await askGrownUp\(gateReasonFor\(product, state\.prices\[product\.product_id\]\)\)\)\) \{[\s\S]{0,120}return \{ status: 'declined' \};/);
+  assert.match(code, /if \(buying\) return \{ status: 'busy' \};[\s\S]{0,320}buying = true;\s*try \{[\s\S]{0,200}if \(!\(await askGrownUp\(gateReasonFor\(product, state\.prices\[product\.product_id\], grownUpWorth\(product, catalog, state\.prices\)\)\)\)\) \{[\s\S]{0,120}return \{ status: 'declined' \};/);
   assert.ok(code.indexOf('await askGrownUp(') < code.indexOf('await purchaseNow('), 'the gate comes before the buy');
   assert.ok(code.indexOf('async function purchaseNow') > code.indexOf('await askGrownUp('), 'StoreKit is reached only from purchaseNow, after the gate');
   assert.equal((strip(supplies).match(/buyShopProduct\(/g) || []).length, 1, 'StoreKit is reached from one line, after the gate');
@@ -350,13 +350,14 @@ test('Memory Daily (and its SHARE NOW) is dev-only in 1.7.3: no player-facing sc
   const menu = read('src/games/memory/MemoryMenu.tsx');
   assert.match(menu, /const menu = props\.menu \|\| devMenu;/);
   assert.match(menu, /const devMenu = typeof __DEV__ !== 'undefined' && __DEV__ && /);
-  // Only MiniGameSelector passes menu, and only outside a ride challenge.
+  // Only MiniGameSelector passes menu, and only outside a ride challenge (menu={false}, as the
+  // dev results capture passes, turns the menu off and does not count).
   const passers = [];
   const walk = dir => {
     for (const entry of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
       const rel = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(rel);
-      else if (/\.tsx$/.test(entry.name) && /<MemoryGame\b[^>]*\bmenu[=\s}]/.test(read(rel))) passers.push(rel);
+      else if (/\.tsx$/.test(entry.name) && /<MemoryGame\b[^>]*\bmenu(?!=\{false\})[=\s}]/.test(read(rel))) passers.push(rel);
     }
   };
   walk('src');

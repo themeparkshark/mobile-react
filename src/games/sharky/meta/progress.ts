@@ -7,7 +7,8 @@
  * Every read and write tolerates missing or broken storage.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../../../gamekit/core/playerStorage';
 import type { InputEntry } from '../sim/core';
 
 const KEY = '@sharky_swim/v2';

@@ -189,3 +189,56 @@ export function createDialogStore(nativeFallback: NativeFallback) {
 
   return { show, answer, attach, pending: () => queue.length, hostCount: () => hosts.length };
 }
+
+/**
+ * One dialog's close bookkeeping (core loop attention rules, October 2026).
+ *
+ * Two races, both fixed here so the dialog never ends the wrong request:
+ * - A late fade: the close's fade finishes on the UI thread and its "done" reaches JS after
+ *   the dialog was shown again (a second request 0 to 180 ms after OK). Each close gets a
+ *   token, a re-open makes every older token stale, and only the close in progress may end
+ *   the dialog (adopted from the held wow-ui lane, a68c86c6).
+ * - A native sheet still leaving: the answer (which can show the next dialog or open a
+ *   sheet from a button) is delivered only after UIKit reports the dialog gone, once.
+ */
+export interface DialogCloseGate {
+  /** The dialog is (re)shown: any close still in flight no longer counts. */
+  open(): void;
+  /** Start a close with the chosen button. Returns its token, or null while a close is already running. */
+  close(index: number | null): number | null;
+  /** The close fade finished. True only for the close in progress: hide the native dialog now. */
+  fadeDone(token: number): boolean;
+  /** The native dialog is gone: the answer to deliver, exactly once, or null. */
+  answer(): { readonly index: number | null } | null;
+  /** A close is running or waiting for its native dismissal. */
+  readonly busy: boolean;
+}
+
+export function createDialogCloseGate(): DialogCloseGate {
+  let token = 0;
+  let phase: 'idle' | 'closing' | 'hidden' = 'idle';
+  let chosen: number | null = null;
+  return {
+    open() { token += 1; phase = 'idle'; chosen = null; },
+    close(index) {
+      if (phase !== 'idle') return null;
+      token += 1;
+      phase = 'closing';
+      chosen = index;
+      return token;
+    },
+    fadeDone(done) {
+      if (phase !== 'closing' || done !== token) return false;
+      phase = 'hidden';
+      return true;
+    },
+    answer() {
+      if (phase !== 'hidden') return null;
+      phase = 'idle';
+      const index = chosen;
+      chosen = null;
+      return { index };
+    },
+    get busy() { return phase !== 'idle'; },
+  };
+}

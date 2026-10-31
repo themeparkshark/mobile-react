@@ -31,6 +31,7 @@ import * as RootNavigation from '../RootNavigation';
 import TicketPunch from './TicketPunch';
 import { serverPerkChips, type PerkChipData } from './coin/progressionModel';
 import ChallengeStatusCard from './rewards/ChallengeStatusCard';
+import { AD_RETRY_ACTION, VIP_RETRY_ACTION, lostTryCopy, lostTryHasRetry } from './rewards/lostTryCard';
 import { markStandingsStale } from '../screens/LeaderboardsScreen/standingsCache';
 import { challengeRibbon, outOfTicketsCopy, type TicketSources } from './rewards/challengeCopy';
 import { prefetchParkShelf } from '../services/collection/parkShelfPrefetch';
@@ -82,6 +83,10 @@ const GAMES = [
 
 type FlowState = 'recovering' | 'auth-required' | 'preview' | 'retrying' | 'wheel' | 'spinning' | 'minigame' | 'postwin' | 'lost' | 'claim-error' | 'spend-error' | 'save-error' | 'expired';
 type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'photo';
+
+
+/** After "See It On Your Shelf", the map behind refreshes once the coin has landed (the flight takes about 1 s). */
+export const SHELF_MAP_REFRESH_DELAY_MS = 1800;
 
 export default function RedeemRedeemableModal({
   open,
@@ -161,6 +166,10 @@ export default function RedeemRedeemableModal({
   const [proofRejected, setProofRejected] = useState(false);
   const spendingRef = useRef(false);
   const protectedRetryRef = useRef(false);
+  // A miss in the game just played: its own results card already said GOOD
+  // TRY!, so the try card only shows when it has a real retry to offer.
+  const lostFromGameRef = useRef(false);
+  const lostClosingRef = useRef(false);
   const claimingRef = useRef(false);
   const afterRewardsHidden = useRef<(() => void) | null>(null);
   const attemptRef = useRef<TaskAttempt | null>(null);
@@ -231,6 +240,8 @@ export default function RedeemRedeemableModal({
       setRetryOffered(true);
       setUsedRescuePass(false);
       setRescueRetryAvailable(false);
+      lostFromGameRef.current = false;
+      lostClosingRef.current = false;
       setStartError(null);
       setRescueUnavailable(false);
       setProofRejected(false);
@@ -519,6 +530,7 @@ export default function RedeemRedeemableModal({
   }, [resolveAttempt]);
 
   const handleGameLose = useCallback(async () => {
+    lostFromGameRef.current = true;
     await resolveAttempt('loss');
   }, [resolveAttempt]);
 
@@ -567,6 +579,21 @@ export default function RedeemRedeemableModal({
   // that cost a Ticket; never during the game itself.
   const canOfferRetry = retryOffered && taskType !== null && lostTicketCost > 0 && !usedRescuePass
     && !firstCoinTicketReturned && !rescueRetryAvailable && (vip || adsAvailable());
+  // The try card's title, line and ticket picture (GOOD TRY!, never a made-up SO CLOSE!).
+  const lostCopy = lostTryCopy({ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost, retryOffered: canOfferRetry });
+  const lostHasRetry = lostTryHasRetry({ firstCoinTicketReturned, rescueRetryAvailable, retryOffered: canOfferRetry });
+  // One card per miss in a moving line: when the game's own card was the
+  // GOOD TRY! and nothing can be retried, its CONTINUE goes straight back to
+  // the map (no second GOOD TRY! card, no second tap).
+  useEffect(() => {
+    if (flowState !== 'lost' || !lostFromGameRef.current) return;
+    if (lostHasRetry) { lostFromGameRef.current = false; return; }
+    // Once only: the map is never asked to close twice if a callback changes.
+    if (lostClosingRef.current) return;
+    lostClosingRef.current = true;
+    void handleLostClose();
+  }, [flowState, lostHasRetry, handleLostClose]);
+  const skipLostCard = lostFromGameRef.current && !lostHasRetry;
   const handleAdRetry = useCallback(async () => {
     const attemptId = attemptRef.current?.id;
     if (adBusy || !attemptId) return;
@@ -599,18 +626,19 @@ export default function RedeemRedeemableModal({
     const focusCoinAssetId = attemptRef.current?.rewards?.coin_asset_id;
     const earnedCoin = createEarnedShelfArrival(attemptRef.current);
     const ownerId = player?.id;
-    await clearAttemptCheckpoint().catch(error =>
+    void clearAttemptCheckpoint().catch(error =>
       console.warn('Could not clear confirmed ride win:', error));
-    onPress();
-    afterRewardsHidden.current = () => {
-      if (earnedCoin && ownerId) RootNavigation.navigate('Park', {
-        park: park.id, player: ownerId, earnedCoin, ...(openMastery ? { openMastery: true } : {}),
-      });
-      else RootNavigation.navigate('CoinShelf', {
-        focusCoin: focusCoinAssetId ? { assetId: focusCoinAssetId } : undefined,
-      });
-    };
+    // Coin to shelf in one move: the shelf (already loaded during the win card) opens right now
+    // under the fading card, never after the card has faded and the map has held still. The
+    // map's own refresh waits until the coin has landed, so it never competes with the flight.
+    if (earnedCoin && ownerId) RootNavigation.navigate('Park', {
+      park: park.id, player: ownerId, earnedCoin, ...(openMastery ? { openMastery: true } : {}),
+    });
+    else RootNavigation.navigate('CoinShelf', {
+      focusCoin: focusCoinAssetId ? { assetId: focusCoinAssetId } : undefined,
+    });
     close();
+    setTimeout(onPress, SHELF_MAP_REFRESH_DELAY_MS);
   }, [onPress, close, clearAttemptCheckpoint, player?.id, park.id]);
 
   const handleViewStampBook = useCallback(async () => {
@@ -849,7 +877,7 @@ export default function RedeemRedeemableModal({
                 : 'This Rescue Pass try timed out. No Ticket was spent.'
               : 'This challenge was not finished, so your Ticket came back to you.'}
             primary={rescueRetryAvailable ? { label: 'Try Again', onPress: handleProtectedRetry } : { label: 'Return to Map', onPress: handleLostClose }}
-            quiet={rescueRetryAvailable ? { label: 'Return to map', onPress: handleLostClose } : undefined}
+            quiet={rescueRetryAvailable ? { label: 'DONE', onPress: handleLostClose } : undefined}
             guardRetry={rescueRetryAvailable} />}
           {flowState === 'claim-error' && <ChallengeStatusCard title={proofRejected ? 'Replay This Game' : 'Checking Your Score'}
             art={proofRejected ? 'none' : 'loading'}
@@ -866,22 +894,14 @@ export default function RedeemRedeemableModal({
               } else if (outcomeRef.current) resolveAttempt(outcomeRef.current);
             } }}
             quiet={{ label: 'Return to map', onPress: handleLostClose }} />}
-          {flowState === 'lost' && <ChallengeStatusCard title="So Close!" art="soClose"
-            message={usedRescuePass
-              ? rescueRetryAvailable
-                ? 'No Ticket spent. Your Rescue Pass gives you one more try at this ride today.'
-                : 'Your Rescue Pass tries are used up. No Ticket was spent.'
-              : firstCoinTicketReturned
-              ? 'This coin is still out there, and your Ticket came back. Give it another go.'
-              : lostTicketCost > 0 ? `This one got away. ${lostTicketCost} Ticket${lostTicketCost === 1 ? '' : 's'} spent.`
-              : 'This one got away. No Ticket was spent.'}
+          {flowState === 'lost' && !skipLostCard && <ChallengeStatusCard title={lostCopy.title} art="soClose" message={lostCopy.message} ticket={lostCopy.ticket}
             primary={firstCoinTicketReturned || rescueRetryAvailable
               ? { label: location ? 'Try Again' : 'Finding You', onPress: handleProtectedRetry, disabled: !location }
               : canOfferRetry
-              ? { label: adBusy ? 'One Moment' : vip ? 'One More Try (VIP)' : 'Watch Ad: One More Try',
+              ? { ...(adBusy ? { label: 'One Moment' } : vip ? VIP_RETRY_ACTION : AD_RETRY_ACTION),
                 onPress: () => { void handleAdRetry(); }, disabled: adBusy || !location }
               : { label: 'Continue', onPress: handleLostClose }}
-            quiet={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry ? { label: canOfferRetry ? 'No thanks' : 'Return to map', onPress: handleLostClose } : undefined}
+            quiet={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry ? { label: 'DONE', onPress: handleLostClose } : undefined}
             guardRetry={firstCoinTicketReturned || rescueRetryAvailable} />}
 
           {/* MINIGAME STATE - rendered inside the same modal */}

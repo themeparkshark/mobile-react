@@ -23,8 +23,9 @@ const vectors = require('../trivia/duel-vectors.cjs');
 test('shared scoring vectors (TS source of the PHP port) are stable', () => {
   const want = JSON.parse(fs.readFileSync(vectors.FIXTURE, 'utf8'));
   assert.deepEqual(vectors.build(), want, 'run node tools/trivia/duel-vectors.cjs --write after a deliberate rule change');
-  assert.equal(want.version, 7);
-  for (const w of want.wager) for (const s of w.stakes) assert.ok(s <= w.score);
+  assert.equal(want.version, 8);
+  assert.equal(want.wager, undefined, 'rev 8: no wager rows');
+  for (const f of want.final) assert.ok(f.after >= f.score, 'the Final never takes points away');
 });
 
 test('the drum equals the scored value on every frame: Quick Draw x mult, the bell x mult, the ride', () => {
@@ -129,7 +130,6 @@ test('balance sim (18.3): the Final flips the winner in 15-30% of matches; the s
       });
       const isFinal = r.spec.type === 'final';
       if (isFinal) before = Math.sign(t.me.score - t.opp.score);
-      const sug = sc.suggestWager(t.me.score, t.opp.score, sc.streakMult(t.me.streak.streak + 1));
       const me = r.question.format === 'closest'
         ? { choice: -1, lockMs: human.lockMs, guess: r.question.slider.truth + (human.correct ? 1 : 6) }
         : {
@@ -138,7 +138,6 @@ test('balance sim (18.3): the Final flips the winner in 15-30% of matches; the s
           buzzMs: r.spec.type === 'buzz' ? human.buzzMs : undefined,
           stealChoice: r.spec.type === 'buzz' ? human.choice : undefined,
           stealMs: r.spec.type === 'buzz' ? 1500 : undefined,
-          stake: isFinal ? sc.wagerStakes(t.me.score)[sug.index] : undefined,
         };
       const { input } = match.finInput(plan, r, t);
       match.resolveRound('queue', r, me, input, t);

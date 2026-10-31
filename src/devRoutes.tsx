@@ -29,6 +29,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'ParkChecklistPreview', getComponent: () => require('./screens/ParkChecklistPreviewScreen').default },
       { name: 'ParkArrivalPreview', getComponent: () => require('./screens/ParkArrivalPreviewScreen').default },
       { name: 'CrewRelayPreview', getComponent: () => require('./screens/LinePlay/CrewRelayPreviewScreen').default },
+      { name: 'QueueResultsCapture', getComponent: () => require('./screens/LinePlay/QueueResultsCaptureScreen').default },
       { name: 'ParkProjectPreview', getComponent: () => require('./screens/ExploreScreen/ParkProjectPreviewScreen').default },
       { name: 'TripGoalPreview', getComponent: () => require('./screens/ExploreScreen/TripGoalPreviewScreen').default },
       { name: 'MapAlivePreview', getComponent: () => require('./screens/ExploreScreen/MapAlivePreviewScreen').default },
@@ -62,7 +63,9 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
   // Release-mode frame-time captures only (EXPO_PUBLIC_PERF_CAPTURE=1 with `expo start --no-dev`); store builds never set it,
   // so this branch folds away like the dev list.
   : process.env.EXPO_PUBLIC_PERF_CAPTURE === '1'
-    ? [{ name: 'BossMapPreview', getComponent: () => require('./screens/BossMapPreviewScreen').default }]
+    ? process.env.EXPO_PUBLIC_PERF_CAPTURE_ROUTE === 'QueueResultsCapture'
+      ? [{ name: 'QueueResultsCapture', getComponent: () => require('./screens/LinePlay/QueueResultsCaptureScreen').default }]
+      : [{ name: 'BossMapPreview', getComponent: () => require('./screens/BossMapPreviewScreen').default }]
     // Release-like share walks only (EXPO_PUBLIC_SHARE_WALK=1 with `expo start --no-dev`): the real reveals and
     // the grown-up gate in release JS, with stub saves. Store builds never set it, so this folds away too.
     : process.env.EXPO_PUBLIC_SHARE_WALK === '1'
@@ -97,7 +100,9 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
  */
 export function devInitialRoute(): string | null {
   if (!__DEV__) {
-    if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1') return 'BossMapPreview';
+    if (process.env.EXPO_PUBLIC_PERF_CAPTURE === '1') {
+      return process.env.EXPO_PUBLIC_PERF_CAPTURE_ROUTE === 'QueueResultsCapture' ? 'QueueResultsCapture' : 'BossMapPreview';
+    }
     if (process.env.EXPO_PUBLIC_SHARE_WALK === '1') return 'SharePicturesPreview';
     const motion = process.env.EXPO_PUBLIC_MOTION_CAPTURE;
     if (motion === 'Whack') return 'MiniGameTester';

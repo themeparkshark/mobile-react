@@ -253,7 +253,9 @@ test('Finn’s warm-up win is its own card: Finn cheering, a burst, what is next
   assert.ok(card.includes('source={FINN_CHEER}'));
   assert.match(card, /<SparkleBurst /);
   assert.match(card, /playLadder\('mm_sharp_twinkle'/, 'the twinkle ladder, not a lone hit');
-  assert.match(card, /FIRST_WIN_COPY\.next/);
+  // Wave 6: the next step is a picture (ride car and coin); the words are only spoken.
+  assert.doesNotMatch(card, /\{FIRST_WIN_COPY\.next\}/);
+  assert.match(card, /FIRST_WIN_COPY\.a11y/);
   assert.match(card, /colors=\{\['#0a5a9e', '#04305f'\]\}/, 'an opaque scrim: no empty board or booth shark behind');
   assert.match(read('src/games/memory/MemoryGame.tsx'), /mode === 'warmup' \? 'Finn’s Warm-up'/);
 });
@@ -359,7 +361,9 @@ test('Finn is the only voice in minute one: event chips, park story, live parks 
   assert.match(explore, /parkStory=\{activeParkProject && !finnOwnsMap \?/);
   assert.match(explore, /eventChip=\{liveEvt\.event\?\.include_home && !finnOwnsMap \?/);
   assert.match(explore, /quiet=\{finnOwnsMap\}/);
-  assert.match(explore, /visible=\{recapDue && mapFocused && !eventOpen && !finnOwnsMap\}/);
+  // The recap also waits for its rung and the attention rules (core loop 4.3), and stays away while Finn talks.
+  assert.match(explore, /const recapShown = !!liveEvt\.event && recapDue && mapFocused && !eventOpen && !finnOwnsMap && eventsRung\.open && attentionFor\('event_recap'\);/);
+  assert.match(explore, /visible=\{recapShown\}/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /\{quiet \? null : <HomeLive /);
   assert.match(home, /useEffect\(\(\) => \{ if \(quiet\) setLiveBar\(null\); \}, \[quiet\]\);/, 'the controls move back up while the bar is away');
@@ -402,11 +406,11 @@ test('save card: the dots sit centred above the title and a returning family see
   assert.doesNotMatch(GUEST_TASTE_COPY.save.have, /saved|stays yours|your coin/i);
 });
 
-test('the name step starts with a rolled kid-safe name, so a kid can just tap the button', () => {
+test('the name step starts with a picked kid-safe name, so a kid can just tap the button', () => {
   const src = read('src/screens/WelcomeScreen.tsx');
-  assert.match(src, /useState\(rollName\)/);
-  assert.doesNotMatch(src, /'Dole'/, 'no brand names in rolled names');
-  assert.match(src, /selectTextOnFocus/, 'typing your own name replaces the rolled one');
+  assert.match(src, /useState\(pickName\)/);
+  assert.doesNotMatch(src, /'Dole'/, 'no brand names in picked names');
+  assert.match(src, /selectTextOnFocus/, 'typing your own name replaces the picked one');
 });
 
 // Wave 2 round 1 (Oct 23): a guaranteed first-win end, no empty or skippable first frames,
@@ -417,7 +421,8 @@ test('the warm-up first win never waits: the card is built on the frame the run 
   const finish = source.slice(source.indexOf('const finishRun = useCallback'), source.indexOf('// Board clear (3 beats'));
   assert.match(finish, /if \(r\.mode === 'warmup'\) \{[\s\S]*?showEnd\(r, won\);[\s\S]*?return;/, 'warm-up result is synchronous');
   assert.match(source, /const armEndWatch = useCallback/, 'an end watchdog exists');
-  assert.match(source, /endWatch\.current = setTimeout\(/, 'the watchdog is its own timer, not one of later()');
+  // Wave 6: the watchdog is the shell's one end watch (its own timer, never one of later()); Memory hands it the rescue.
+  assert.match(source, /shellRef\.current\?\.endWatch\(ms, \(\) => \{/, 'the watchdog is the shell end watch, not one of later()');
   assert.doesNotMatch(source.slice(source.indexOf('const clearTimers'), source.indexOf('const clearTimers') + 200), /endWatch/, 'clearTimers can never cancel the watchdog');
   assert.match(source, /armEndWatch\(r, true, r\.mode === 'warmup' \? 1800 : 7000\)/, 'armed the moment the board is clear');
   assert.match(source, /if \(reducedMotion\) \{\s*\/\/ Still: the CLEARED sign lands the instant/, 'reduced motion shows CLEARED at once');
@@ -458,7 +463,10 @@ test('Reduce Motion: the results card never hangs at opacity 0, and the CLEARED 
   const shell = read('src/gamekit/GameShellV2.tsx');
   // Root cause of the first-win freeze: in Reduce Motion the results value jumps 0 -> 1 with no
   // animation, and a jump that lands before the animated style is hooked up is never drawn.
-  assert.equal((shell.match(/reducedMotion \? styles\.resultsStill : resultsStyle/g) || []).length, 2, 'both results cards');
+  // Both results cards: the scale wrapper is still and the fade wrapper is plainly shown.
+  assert.equal((shell.match(/reducedMotion \? styles\.resultsStill : resultsScaleStyle/g) || []).length, 2, 'both results cards, scale');
+  assert.equal((shell.match(/resultsSafe \|\| reducedMotion \? styles\.resultsShown : resultsFadeStyle/g) || []).length, 2, 'both results cards, fade');
+  assert.match(shell, /resultsShown: \{ opacity: 1 \}/);
   assert.match(shell, /resultsStill: \{ opacity: 1, transform: \[\{ scale: 1 \}\] \}/);
   const booth = read('src/games/memory/MemoryBooth.tsx');
   // Reanimated finishes timings at once under the system Reduce Motion, so a delayed fade-out hid the sign.
@@ -476,7 +484,7 @@ test('first visit: "Let\'s hunt!" leads to hunting; the daily chest waits for a 
   assert.equal(q.firstVisitChestWaits({ ...base, catchesThisVisit: 2 }), false, 'a second catch frees the chest');
   assert.equal(q.firstVisitChestWaits({ ...base, firstVisit: false }), false, 'returning players are unchanged');
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /const chestReady = !firstVisitHold && chestMayPresent\(/);
+  assert.match(explore, /const chestReady = !firstVisitHold && !\(homeIntroOwed && !park\) && attentionFor\('daily_chest'\) && chestMayPresent\(/);
   assert.match(explore, /simple=\{!!firstVisit\.current\}/);
   const chest = read('src/components/DailyGiftModal.tsx');
   assert.match(chest, /\{simple \? null : <View style=\{(?:styles\.ladder|\[styles\.ladder, styles\.aboveGold\])\}>/, 'first visit: no 7-day strip');
@@ -711,19 +719,22 @@ test('warm-up sky: four outlined clouds and a two-card picture cue replace the s
 
 test('first hunt map: no Trail Box pill or badge, no chest buttons during the 30 s, ticket chip dimmed, level chests wait too', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /\{player && !park && permissionGranted && !firstHunt && !finnOwnsMap && \(\s*<View pointerEvents="box-none"[^>]*>\s*<TrailHost/);
-  assert.match(explore, /const mapControlsCount = firstVisitHold \? 0 :/);
+  // Trail Boxes draw no pill on the map at all (core loop 4.2): the Rewards button's ring, and it is hidden on the first hunt.
+  assert.match(explore, /\{player && permissionGranted && trailOpen && \(\s*<View pointerEvents="none" style=\{styles\.trailHostHidden\}/);
+  assert.match(explore, /const mapControlsCount = firstVisitHold \|\| !player \? 0 :/);
   assert.match(explore, /const mapControls = mapControlsCount > 0 \?/);
   assert.match(explore, /screenFree: chestScreenFree && !firstVisitHold && !chestShowing/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /trailHidden=\{firstHunt\}/);
   assert.match(home, /firstHunt && styles\.hudDim/);
-  assert.match(read('src/components/Map.tsx'), /<TrailBoxBadge trail=\{trailHidden \? null : liveTrail\} live=\{lifeOn\} \/>/);
+  // Core loop 4.2: no gift badge on the shark at all (Trail Boxes are a ring on the Rewards button).
+  assert.match(read('src/components/Map.tsx'), /<TrailBoxBadge trail=\{trailHidden \|\| !SHARK_TRAIL_BADGE \? null : liveTrail\} live=\{lifeOn\} \/>/);
+  assert.match(read('src/components/Map.tsx'), /const SHARK_TRAIL_BADGE = false;/);
 });
 
 test('first-win card: its pictures are mounted (invisible) during the warm-up, so frame one is whole', () => {
   const results = read('src/games/memory/MemoryResults.tsx');
-  assert.match(results, /export const FIRST_WIN_ART = \[FINN_CHEER, FIRST_WIN_COIN, FIRST_WIN_RIDE, FIRST_WIN_BACKDROP, BANNER, SHOWER_BUBBLE, SHOWER_SPARKLE\] as const;/);
+  assert.match(results, /export const FIRST_WIN_ART = \[FINN_CHEER, FIRST_WIN_COIN, FIRST_WIN_RIDE, FIRST_WIN_BACKDROP, RESULTS_RIBBON_ART, SHOWER_BUBBLE, SHOWER_SPARKLE\] as const;/);
   const game = read('src/games/memory/MemoryGame.tsx');
   assert.match(game, /\{mode === 'warmup' \? \(\s*<View style=\{styles\.preload\}[^>]*>\s*\{FIRST_WIN_ART\.map/);
   assert.match(game, /preload: \{ position: 'absolute', left: 0, top: 0, width: 24, height: 24, opacity: 0/);

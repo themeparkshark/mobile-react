@@ -433,10 +433,12 @@ function shell(extra = {}) {
     './theme': { GAME_COLORS: {}, COUNTDOWN: { stepMs: 600, goMs: 400 }, JUICE: {}, LINE_MOVING_TOAST: 'Moving' },
     './LinePlayMovementContext': { LinePlayMovementContext: { value: null }, shouldPauseForMovement: () => false },
     './RideChallengeContext': { RideChallengeContext: { value: false } },
+    './ShellFrameContext': { ShellFrameContext: { value: null } },
     './Haptics': { Haptic: new Proxy({}, { get: () => () => {} }) }, './SFX': { playSfx() {} },
     '../hooks/useReducedGameMotion': { default: () => false },
     '../ui/GameIcon': { default: 'GameIcon' },
     './results/ResultsCard': { ResultsCard: 'ResultsCard' },
+    './results/feelings': loadTs('src/gamekit/results/feelings.ts'),
     './core/session': session, './core/scoring': scoring,
     './session/snapshotStore': { saveSnapshot: async () => {}, clearSnapshot: async () => {} },
     './audio/GameAudio': { GameAudio: { music: { pause: async () => {}, resume: async () => {}, setTrimDb() {} } } },
@@ -473,7 +475,7 @@ test('shell: header score hide / replace, scrim none, hold-sheet extras, results
   view.change({ result: { score: 900, stars: 2, note: 'Tip: tap on the beat' } });
   const card = view.find((n) => n.type === 'ResultsCard');
   assert.equal(card.props.note, 'Tip: tap on the beat');
-  assert.ok(view.find((n) => n.type === 'Text' && n.props.children === 'Race a friend'));
+  assert.ok(view.find((n) => n.type === 'Text' && n.props.children === 'RACE A FRIEND'), 'buttons share one caps font');
   view.unmount();
   const custom = shell({ headerScore: 'RUN BAR' });
   assert.equal(custom.view.find((n) => n.type === 'ScoreDisplay'), undefined);

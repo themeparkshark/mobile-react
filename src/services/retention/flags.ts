@@ -23,6 +23,22 @@ export function loadRetentionFlags(read: typeof getFeatureFlags = getFeatureFlag
   return pending;
 }
 
+/** The flags read this app run, or null before the first read finished. */
+export function retentionFlagsNow(): RetentionFlags | null {
+  return cached;
+}
+
+/**
+ * One flame number in the whole game: while Daily 3 is on, the flame (and the
+ * words "day streak") mean the Daily 3 streak; otherwise the Daily Chest
+ * streak. Null while the flags are unknown, so nothing shows a number that
+ * could turn out to be the other one.
+ */
+export function streakOwner(flags: RetentionFlags | null): 'daily3' | 'chest' | null {
+  if (!flags) return null;
+  return flags.dailyThree ? 'daily3' : 'chest';
+}
+
 /** Tests only. */
 export function resetRetentionFlagsForTests(): void {
   cached = null;

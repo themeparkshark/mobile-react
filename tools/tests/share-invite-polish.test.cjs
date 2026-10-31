@@ -70,7 +70,7 @@ test('Whack and Memory results share a story-size picture with the link and QR, 
   assert.match(memory, /campaign="memory"/);
   for (const code of [whack, memory]) assert.doesNotMatch(code, /shareFileExternal|captureRef/, 'one share path: gate, then the share sheet');
   // One share look everywhere: the gold-rimmed pill, and Memory previews the picture that ships.
-  assert.match(whack, /<ShareFace size="reveal" dim=\{busy\} \/>/);
+  assert.match(whack, /<ShareFace size=\{chip \? 'md' : 'reveal'\} dim=\{busy\} \/>/);
   assert.match(memory, /<ShareFace size="reveal" dim=\{busy\} \/>/);
   assert.doesNotMatch(memory, /SHARE NOW/);
   const back = memory.slice(memory.indexOf('export function ShareBack('), memory.indexOf('// Album'));
@@ -134,7 +134,7 @@ test('every campaign QR encodes its own counted link', () => {
 
 test('a Share Studio sheet fades out before the grown-up gate, and is a layer while up', () => {
   const host = src('src/share/ShareStudioHost.tsx');
-  assert.match(host, /const uri = await captureFlex\(cardRef, format\);[\s\S]{0,400}setStage\('leaving'\);[\s\S]{0,700}const outcome = await openShareSheet\(uri, shareMessage\(link\), flexCopy\(request\.kind, request\.payload\)\.title, copyLink\);/,
+  assert.match(host, /const uri = await captureFlex\(cardRef, format\);[\s\S]{0,400}setStage\('leaving'\);[\s\S]{0,700}const outcome = await openShareSheet\(uri, shareMessage\(link\), shareCardFileName\(request\.kind\), copyLink\);/,
     'the picture is made first, then the sheet leaves, then the gate and share sheet');
   assert.match(host, /useModalLayer\(stage !== 'gone', 'show'\)/, 'Root dialogs and the gate wait for the sheet');
   assert.equal((host.match(/visible=\{visible\} onShow=\{onShow\} onDismiss=\{onDismiss\}/g) || []).length, 2, 'sheet and moment both hand off');
@@ -148,7 +148,7 @@ test('a Share Studio sheet fades out before the grown-up gate, and is a layer wh
 
 test('a ride card shares from inside its sheet: the gate slot shows above it, a no keeps the card open', async () => {
   const card = src('src/components/RideTracker/ShareableRideCard.tsx');
-  assert.match(card, /const uri = await captureFlex\(storyRef, 'story'\);[\s\S]{0,700}const \{ ended: outcome \} = await openShareSheet\(uri, shareMessage\(campaignUrl\('ride_log'\)\), `\$\{ride\.ride_name\} Ride Card`\);\s*if \(outcome === 'shared'\) setShared\(true\);/);
+  assert.match(card, /const uri = await captureFlex\(storyRef, 'story'\);[\s\S]{0,700}const \{ ended: outcome \} = await openShareSheet\(uri, shareMessage\(campaignUrl\('ride_log'\)\), shareCardFileName\('ride_card'\)\);\s*if \(outcome === 'shared'\) setShared\(true\);/);
   assert.doesNotMatch(card, /shareFileExternal|beforeShare/, 'one share path for every card (gate, then the iOS share sheet)');
   for (const file of ['src/screens/RideTracker/RideHistoryScreen.tsx', 'src/screens/RideTracker/RideDetailScreen.tsx']) {
     const screen = src(file);
@@ -1178,7 +1178,7 @@ test('the link goes on the clipboard only after the grown-up says yes (a Not now
   const shareBody = studio.slice(studio.indexOf('const share = useCallback'), studio.indexOf('const offscreen ='));
   assert.equal((shareBody.match(/Clipboard\.setStringAsync/g) || []).length, 1);
   assert.ok(shareBody.indexOf('Clipboard.setStringAsync') > shareBody.indexOf('captureFlex('), 'no copy before the picture and the gate');
-  assert.match(shareBody, /openShareSheet\(uri, shareMessage\(link\), flexCopy\(request\.kind, request\.payload\)\.title, copyLink\)/);
+  assert.match(shareBody, /openShareSheet\(uri, shareMessage\(link\), shareCardFileName\(request\.kind\), copyLink\)/);
   for (const os of ['ios', 'android']) {
     for (const yes of [false, true]) {
       const order = [];

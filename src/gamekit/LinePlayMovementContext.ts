@@ -33,8 +33,39 @@ export interface LinePlayMovement {
   readonly justForFunNote?: JustForFunNote | null;
   /** Optional: the most recent queue advance (drives the heads-up). */
   readonly lastAdvance?: { readonly at: number; readonly metres?: number } | null;
-  /** Optional: a real queue event ended the session ("Your ride's up!"). */
+  /**
+   * Optional: a real queue event ended the session ("Your ride's up!"): the
+   * wait finished, or the guest said they are boarding. The undoable wrap-up
+   * grace (GPS says they left) never sets this while a game is open.
+   */
   readonly queueEnded?: WrapUpReason | null;
+  /**
+   * Optional: ride detection thinks the guest just boarded. Only a hint (one
+   * GPS fix can fake it, indoors most of all), so it never ends a run by
+   * itself: an active round keeps playing, and a held round (paused,
+   * backgrounded, pocketed) asks "Did your ride start?" inside the game
+   * instead of counting down to resume.
+   */
+  readonly rideUpLikely?: boolean;
+  /**
+   * Optional: the guest answered that in-game question. true = "SAVE MY RUN"
+   * (sent after the saved run's card closes, so the run counts first);
+   * false = "KEEP PLAYING" (the hint is cleared).
+   */
+  readonly onBoardingAnswer?: (boarded: boolean) => void;
+  /**
+   * Optional: a finished run the shell did not hand to onComplete (no star,
+   * a saved partial run, or a run the guest replays with PLAY AGAIN). Without
+   * this, such a run looked like it never happened ("Not played this wait").
+   * A partial run counts as played but is not a real star.
+   */
+  readonly onRunDone?: (stars: number, partial: boolean) => void;
+  /**
+   * Optional: this is one kid's pass-and-play group turn. Each kid gets one
+   * try, so the results card shows only DONE (it hands the turn on). No PLAY
+   * AGAIN and no challenge: a replay here would never finish the turn.
+   */
+  readonly turnOnly?: boolean;
 }
 
 export const LinePlayMovementContext = createContext<LinePlayMovement | null>(null);

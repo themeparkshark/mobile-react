@@ -44,6 +44,7 @@ import RewardBurst from '../../components/RewardBurst';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { isTeam, TEAMS } from '../../constants/teams';
+import TeamBadge from '../../components/TeamBadge';
 import * as Haptics from '../../helpers/haptics';
 import type { ThreadType } from '../../models/thread-type';
 import { BRAND, GameIcon } from '../../ui';
@@ -300,7 +301,7 @@ export default function Composer({
                     <Text style={[styles.segText, !toTeam && styles.segTextOn]}>Everyone</Text>
                   </PressScale>
                   <PressScale onPress={() => setToTeam(true)} accessibilityRole="button" accessibilityState={{ selected: toTeam }} style={[styles.segBtn, toTeam && styles.segOn]}>
-                    <Image source={team.badge} style={{ width: 20, height: 20 }} contentFit="contain" />
+                    <TeamBadge team={team.id} size={20} />
                     <Text style={[styles.segText, toTeam && styles.segTextOn]} numberOfLines={1}>{team.name}</Text>
                   </PressScale>
                 </View>

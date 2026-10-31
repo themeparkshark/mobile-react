@@ -5,12 +5,14 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { RideControlPark } from '../api/endpoints/parks/rideControl';
-import { applyTeamNames, TEAM_ORDER, TEAMS, teamName, teamShortName, type TeamId } from '../constants/teams';
+import { applyTeamNames, TEAM_ORDER, TEAMS, teamChipColor, teamName, teamShortName, type TeamId } from '../constants/teams';
 import { haptic } from '../gamekit/Haptics';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import type { TaskType } from '../models/task-type';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, GameButton, GameIcon } from '../ui';
+import { useNativeModalLayer } from '../ui/modalLayers';
+import TeamBadge from './TeamBadge';
 
 /** The bar's title before any team holds a ride (never a ride-status claim). */
 export const NO_LEADER_HEADLINE = 'NO TEAM HAS A RIDE YET';
@@ -20,9 +22,11 @@ export const NO_LEADER_HEADLINE = 'NO TEAM HAS A RIDE YET';
  * standings answer (or offline), the chip is just the team's shield: no number it cannot know.
  * The number fades in when the standings arrive, in a slot that keeps its width (no jump).
  */
-export function TeamChip({ team, count, yours, leading, known = true }: {
+export function TeamChip({ team, count, yours, leading, known = true, bare = false }: {
   readonly team: TeamId; readonly count: number; readonly yours: boolean; readonly leading: boolean;
   readonly known?: boolean;
+  /** Just the team's badge, no number slot (the map's your-team chip while the team holds no rides). */
+  readonly bare?: boolean;
 }) {
   const reduced = useReducedGameMotion();
   const pop = useSharedValue(1);
@@ -49,9 +53,9 @@ export function TeamChip({ team, count, yours, leading, known = true }: {
   const chipStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const crownStyle = useAnimatedStyle(() => ({ opacity: crown.value, transform: [{ translateY: (1 - crown.value) * 6 }, { rotate: '-14deg' }, { scale: 0.6 + crown.value * 0.4 }] }));
   return (
-    <Animated.View style={[styles.chip, { backgroundColor: TEAMS[team].color }, yours && styles.chipYours, chipStyle]}>
-      <Image source={TEAMS[team].badge} style={styles.chipBadge} contentFit="contain" />
-      <Animated.Text style={[styles.chipCount, countStyle]}>{known ? count : 0}</Animated.Text>
+    <Animated.View style={[styles.chip, { backgroundColor: teamChipColor(team) }, yours && styles.chipYours, bare && styles.chipBare, chipStyle]}>
+      <TeamBadge team={team} style={styles.chipBadge} />
+      {!bare && <Animated.Text style={[styles.chipCount, countStyle]}>{known ? count : 0}</Animated.Text>}
       <Animated.View style={[styles.crown, crownStyle]} pointerEvents="none">
         <GameIcon name="crown" size={18} />
       </Animated.View>
@@ -75,6 +79,9 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
   readonly onFocusTask: (task: TaskType) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // The sheet holds its modal layer until UIKit says it is gone, so PLAY! (or any sheet) that comes
+  // next never presents into a half-dismissed sheet (the PLAY RIDE freeze, core loop 4.3 rule 10).
+  const layer = useNativeModalLayer(open, 'show');
   const names = control?.team_names;
   useEffect(() => applyTeamNames(names), [names]);
   const held = control?.rides_held ?? { mouse: 0, globe: 0, shark: 0 };
@@ -111,24 +118,31 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
   }, [headline, reduced, titleIn]);
   const titleStyle = useAnimatedStyle(() => ({ opacity: titleIn.value }));
 
+  // On the map's status row (compact) it is one "your team" chip once the player has a team (core loop
+  // 4.2): the three-team scoreboard waits in the sheet a tap away.
+  const chipTeams = compact && yours ? [yours] : TEAM_ORDER;
   return (
     <>
       <Pressable accessibilityRole="button"
-        accessibilityLabel={known
-          ? `${headline}. ${TEAM_ORDER.map(team => `${teamShortName(team, names)} ${held[team]}`).join(', ')} rides. Show rides to take.`
-          : `${headline}. Show rides to take.`}
+        accessibilityLabel={compact && yours
+          ? `Your team, ${teamName(yours, names)}${known && held[yours] > 0 ? `: ${held[yours]} ${held[yours] === 1 ? 'ride' : 'rides'}` : ''}. Show rides to take.`
+          : known
+            ? `${headline}. ${TEAM_ORDER.map(team => `${teamShortName(team, names)} ${held[team]}`).join(', ')} rides. Show rides to take.`
+            : `${headline}. Show rides to take.`}
         onPress={() => setOpen(true)} style={[styles.barWrap, compact && styles.barWrapCompact, inline && styles.inline]}>
         <LinearGradient colors={[BRAND.blueBright, BRAND.blue, BRAND.blueLip]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
           style={[styles.bar, compact && styles.barCompact]}>
           {!compact && <Animated.Text style={[styles.kicker, titleStyle]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{headline}</Animated.Text>}
           <View style={styles.chips}>
-            {TEAM_ORDER.map(team => <TeamChip key={team} team={team} count={held[team]} yours={yours === team}
-              leading={leader === team} known={known} />)}
+            {/* The map's one your-team chip shows its badge alone until the team holds a ride (never a lone "0"). */}
+            {chipTeams.map(team => <TeamChip key={team} team={team} count={held[team]} yours={yours === team}
+              leading={leader === team} known={known} bare={compact && !!yours && !(held[team] > 0)} />)}
           </View>
         </LinearGradient>
       </Pressable>
 
-      <Modal isVisible={open} onBackdropPress={() => setOpen(false)} onSwipeComplete={() => setOpen(false)}
+      <Modal isVisible={layer.present} onBackdropPress={() => setOpen(false)} onSwipeComplete={() => setOpen(false)}
+        onDismiss={layer.onDismissed} onModalHide={layer.onHidden}
         swipeDirection="down" style={styles.sheetModal} backdropColor={BRAND.navy} backdropOpacity={0.35}>
         <View style={styles.sheet}>
           <View style={styles.grabber} />
@@ -140,11 +154,13 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
                 : `Catch coins and earn Parts in line to win rides for ${teamName(yours, names)}.`
               : 'Pick a team to start winning rides.'}
           </Text>
+          {/* Team points and Captain are explained here, once, not on the win card (core loop 5.13). */}
+          <Text style={styles.sheetExplain}>Each coin you win gives your team points at that ride. The top player there is its Captain.</Text>
           <View style={styles.standings}>
             {TEAM_ORDER.map(team => (
               <View key={team} style={styles.standing}>
                 <View>
-                  <Image source={TEAMS[team].badge} style={styles.standingBadge} contentFit="contain" />
+                  <TeamBadge team={team} style={styles.standingBadge} />
                   {leader === team && <View style={styles.standingCrown}><GameIcon name="crown" size={26} /></View>}
                 </View>
                 <Text style={[styles.standingCount, { color: TEAMS[team].color }]}>{known ? held[team] : ' '}</Text>
@@ -163,7 +179,7 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
                 <Pressable key={r.asset_id} style={styles.row} accessibilityRole="button"
                   onPress={() => { setOpen(false); onFocusTask(task); }}>
                   <View style={[styles.rowFlag, { backgroundColor: TEAMS[r.controller].color }]}>
-                    <Image source={TEAMS[r.controller].badge} style={styles.rowBadge} contentFit="contain" />
+                    <TeamBadge team={r.controller} style={styles.rowBadge} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowName} numberOfLines={1}>{task.name}</Text>
@@ -203,6 +219,7 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: 'transparent' },
   chipYours: { borderColor: BRAND.white },
   chipBadge: { width: 22, height: 22 },
+  chipBare: { paddingRight: 3 },
   chipCount: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, marginLeft: 2, textShadowColor: 'rgba(5,52,110,0.6)',
     textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
   crown: { position: 'absolute', top: -12, right: -6 },
@@ -213,6 +230,7 @@ const styles = StyleSheet.create({
   sheetTitle: { fontFamily: 'Shark', fontSize: 28, color: BRAND.gold, textAlign: 'center', textShadowColor: BRAND.navy,
     textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   sheetSub: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff', textAlign: 'center', marginTop: 4 },
+  sheetExplain: { fontFamily: 'Knockout', fontSize: 13, color: '#cdeaff', textAlign: 'center', marginTop: 6 },
   standings: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 14 },
   standing: { alignItems: 'center' },
   standingBadge: { width: 54, height: 54 },

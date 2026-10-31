@@ -23,7 +23,7 @@ export interface ParkStoryChip {
  * The home map's top HUD row: small chips only, never a card. The free-Ticket countdown (a ticket and
  * three pips; tap for the line) and the park story (a paper-and-pencil and n/goal; tap opens the story).
  */
-function HomeHudChips({ top, onWidth, findsUntilTicket, ticketsCapped = false, onTicketPress, parkStory = null, eventChip = null }: {
+function HomeHudChips({ top, onWidth, findsUntilTicket, ticketsCapped = false, onTicketPress, parkStory = null, eventChip = null, ticketHidden = false }: {
   readonly top: number;
   /** The row's width, so the map can keep finds out from under it. */
   readonly onWidth?: (width: number) => void;
@@ -33,8 +33,10 @@ function HomeHudChips({ top, onWidth, findsUntilTicket, ticketsCapped = false, o
   readonly parkStory?: ParkStoryChip | null;
   /** Shark Events: the event's home chip, after the story (nothing when no event is on). */
   readonly eventChip?: ReactNode;
+  /** The home guide card carries the ticket meter (core loop 5.7): the pips chip folds into it. */
+  readonly ticketHidden?: boolean;
 }) {
-  const line = ticketLine(findsUntilTicket, ticketsCapped);
+  const line = ticketHidden ? null : ticketLine(findsUntilTicket, ticketsCapped);
   const remaining = findsUntilTicket == null ? 3 : Math.max(1, Math.min(3, Math.round(findsUntilTicket)));
   // A find that fills a pip pops the chip; one find from a Ticket, the last pip breathes.
   const reduced = useReducedGameMotion();

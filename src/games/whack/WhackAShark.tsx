@@ -24,7 +24,8 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo
 import { LogBox, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { runOnJS, runOnUI, useAnimatedReaction, useDerivedValue, useSharedValue, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Saves belong to the signed-in player, not the phone.
+import AsyncStorage from '../../gamekit/core/playerStorage';
 import { deckIdForRideName } from '../../services/rideTheme';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
@@ -57,7 +58,8 @@ import { useWalkSense } from '../../gamekit/motion/useWalkSense';
 import { PerfOverlay, usePerfProbe } from '../../gamekit/perf/PerfOverlay';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BOSS_ART, THEMED_SHARK_FRAMES, THEMES, type WhackTheme } from './assets';
-import { buildBurst, walkOk, type Timeline, type WalkBoost } from './timeline';
+import { buildBurst, walkOk, type Timeline, type WalkBoost, type WhackThemeId } from './timeline';
+import { FinnUnlock } from './FinnUnlock';
 import {
   E_ATTACK, E_BLOCKED, E_BOSS_DMG, E_BOSS_DOWN, E_DECOY, E_END, E_HIT, E_SPLAT, E_SPLAT_CLEAR, E_WIN, NO_CARRY, createSim, type BurstCarry, type BurstResult,
 } from './sim';
@@ -72,6 +74,7 @@ import { boxesFor, poseScaleFor } from './render/boxes';
 import { CURTAIN_SHORT, THEME_FX, curtainEndMs, curtainKindFor } from './render/renderState';
 import { ShareCardButton, TILE_DECOY, TILE_QUICK } from './ui/ShareCard';
 import { WhackBoard, WhackHud, useBoardImages } from './render/WhackBoard';
+import { HudStepBack } from '../../gamekit/results/HudStepBack';
 import { useWhackRuntime } from './useWhackRuntime';
 import { Banner, Breather, DuelCard, COIN_FLY, streakFlameTier } from './ui/Overlays';
 import { duelTimeline } from './net/duel';
@@ -79,7 +82,7 @@ import { ghostFromRun, paceAt, pbGhostKey } from './net/ghost';
 import { mapGhostHole } from './formations';
 import { createLocalNetAdapter } from './net/localAdapter';
 import { ghostDeltaLine, lineDaySeed, lineDayXform, parkLocalDate, type LineDayEntry } from './net/lineDay';
-import { applyMastery, applyRunToBook, cardTitle, nextRunOfDay, type CardBook, type FinnCard, type MasteryBook } from './meta/collection';
+import { applyMastery, applyRunToBook, nextRunOfDay, type CardBook, type FinnCard, type MasteryBook } from './meta/collection';
 import type { DuelReveal, WhackDuelConfig, WhackGhost, WhackNetAdapter, WhackRaidConfig } from './net/types';
 import countText from '../../helpers/countText';
 
@@ -120,6 +123,13 @@ export interface WhackASharkProps {
   raid?: WhackRaidConfig | null;
   net?: WhackNetAdapter | null;
   autoplay?: boolean;
+  /**
+   * Capture only (dev or a release-JS capture build, never a store build):
+   * this run unlocks its ride's costume Finn as if a golden was bonked and the
+   * book were empty, so the new-Finn moment can be checked on demand. The
+   * real Finn book is never read or written for it.
+   */
+  captureNewFinn?: boolean;
   /** Wave 2 (MiniGameTester only): Boss Run finales every 3rd Run. The Wave 1 build is Golden Rush only. */
   bossRuns?: boolean;
   onBurstBanked?: (b: BurstBanked) => void;
@@ -133,6 +143,13 @@ export interface WhackHandle {
   bankAndExit: () => void;
 }
 
+/**
+ * The live pace chip races this Burst's best (a per-Burst ghost), so it says
+ * so: a Burst can run ahead while the whole run still ends under BEST.
+ */
+export const PACE_BEST_LABEL = 'VS BEST BURST';
+/** How long a finished run may take to hand the shell its card (the Finn book read) before the end watch steps in. */
+export const WHACK_END_WATCH_MS = 3000;
 /** The last-5 ticks are queued this far ahead of each second crossing (absorbs a late JS thread). */
 // r6: 320 ms of lead (r5 measured JS lag up to 206 ms against 160), so every tick and the whistle land on the stamp.
 const LAST5_LEAD_MS = 320;
@@ -171,6 +188,8 @@ const FLAME_RECORD_KEY = '@whack/flame_record';
 const CARDS_KEY = '@whack/finn_cards';
 const MASTERY_KEY = '@whack/mastery';
 const PB_KEY = '@whack_a_shark/best';
+/** A between-bursts streak worth a brag chip (fewer is just playing). */
+const BREATHER_STREAK_BRAG = 5;
 const pbKeyFor = (f: WhackFormat) => (f === 'ride' ? '@whack_a_shark/ride_best' : f === 'queue' ? PB_KEY : `@whack_a_shark/best_${f}`);
 const GOLD = '#ffcf3b';
 /** Star slams on the win stinger's beat (129.2 BPM quarter notes). */
@@ -266,6 +285,16 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const lastLeftRef = useRef<number | null>(null);
   const [result, setResult] = useState<GameResult | null>(null);
+  // The costume Finn this run unlocked: shown as a picture in the card, never as the title.
+  const [unlockedTheme, setUnlockedTheme] = useState<WhackThemeId | null>(null);
+  // The capture autoplay's "ready" tap between bursts: cleared when the run ends,
+  // restarts or unmounts, so it can never start a burst under the next run's countdown.
+  const autoReadyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearAutoReady = useCallback(() => {
+    if (autoReadyTimer.current) clearTimeout(autoReadyTimer.current);
+    autoReadyTimer.current = null;
+  }, []);
+  useEffect(() => clearAutoReady, [clearAutoReady]);
   const [banner, setBanner] = useState<{ text: string | null; sub?: string | null; color?: string; stamp: number }>({ text: null, stamp: 0 });
   const [breather, setBreather] = useState<null | {
     burstScore: number; runScore: number; bonks: number; bestStreak: number; stats: { label: string; value: string }[]; next: string; readyAt: number; goal: string | null;
@@ -311,6 +340,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const startWall = useRef(Date.now());
   const ghostRef = useRef<WhackGhost | null>(ghostProp ?? null);
   const finishing = useRef(false);
+  /** The line ended this run (ride's up, left the line): the shell's calm send-off is the only finish sound. */
+  const wrappedRef = useRef(false);
   // Each run gets a token; a finish timer from an earlier run (or after unmount) is ignored.
   const runToken = useRef(0);
   useEffect(() => () => { runToken.current += 1; }, []);
@@ -688,6 +719,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     finishWall.current = -1;
     chaseMem.current.ahead = false;
     const sim = createSim(t, carryRef.current);
+    // A new Burst starts level with its ghost: never the last Burst's lead.
+    pace.value = 0;
     curtainKind.current = curtainKindFor(bi, totalBursts, baseSeed + runIdx * 131);
     juice.reset(carryRef.current.streak);
     setFever(t.feverStart || (carryRef.current.feverLeft > 0 && t.fever));
@@ -737,6 +770,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     if (finishing.current) return;
     finishing.current = true;
     // The Run is over the moment this is called: no breather timer or autoplay may start another Burst.
+    clearAutoReady();
     setPhase('done');
     setBreather(null);
     runtime.setRunning(false);
@@ -756,7 +790,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     let message: string | undefined;
     if (ride) {
       stars = last?.result.stars ?? 0;
-      message = last?.result.win ? 'COIN CAUGHT!' : `SO CLOSE! ${Math.max(1, 100 - (last?.result.coin ?? 0))}% TO GO`;
+      // Words, not a percent: the coin bar on the board already shows how far.
+      message = last?.result.win ? 'COIN CAUGHT!' : (last?.result.coin ?? 0) >= 75 ? 'SO CLOSE!' : 'GOOD TRY!';
     } else if (format === 'raid') {
       const r = raidRef.current;
       const dmg = last?.result.bossDamage ?? 0;
@@ -780,6 +815,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     const base = sum((r) => r.quick * PTS_FINN[2] + r.good * PTS_FINN[1] + r.late * PTS_FINN[0]);
     const bonus = sum((r) => (r.goldens - r.ripeHits) * PTS_GOLDEN + r.ripePoints + r.doubles * PTS_DOUBLE + r.crits * PTS_CRIT + r.perfects * PTS_PERFECT);
     const combo = Math.max(0, total - base - bonus);
+    // One bucket would only repeat the score: buckets show when there are two or more to add up.
+    const filled = [{ label: 'POINTS', value: base }, { label: 'COMBO', value: combo }, { label: 'BONUS', value: bonus }].filter((t) => t.value > 0);
+    const tallies = filled.length >= 2 ? filled : [];
     const nextBoss = format === 'queue' && isBossRun('queue', runOfDayRef.current + 1, (lifetime ?? 0) + 8, 5, !!props.bossRuns);
     const goal = ride ? null : nextStarGoal(total, thresholds);
     const rivals = props.lineDay?.rivals ?? [];
@@ -808,9 +846,21 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       finaleShown: false,
       ...(reason ? { reason } : {}),
     };
+    // The shell's one end watch: the card is due once the Finn book answers. If a save
+    // never answers, the watch shows this run's own numbers (core/endWatch.ts).
+    const plain: GameResult = {
+      score: total, stars, message, maxCombo: maxStreak,
+      thresholds: ride || format === 'raid' || format === 'duel' ? undefined : thresholds, meta,
+    };
+    shellRef.current?.endWatch(WHACK_END_WATCH_MS, () => plain);
     let unlocked: FinnCard | null = null;
+    const forceFinn = !!props.captureNewFinn && (__DEV__ || process.env.EXPO_PUBLIC_PERF_CAPTURE === '1');
     const collect = (async () => {
       if (!rideKey) return;
+      if (forceFinn) {
+        unlocked = applyRunToBook({}, { rideId: rideKey, theme, format, goldens: Math.max(1, goldens), date: today, rank: null }).unlocked;
+        return;
+      }
       const book = (await readJson<CardBook>(CARDS_KEY)) ?? {};
       const applied = applyRunToBook(book, { rideId: rideKey, theme, format, goldens, date: today, rank: null });
       if (applied.unlocked) {
@@ -823,24 +873,32 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     })();
     void collect.catch(() => undefined).finally(() => {
       meta.cardsUnlocked = unlocked ? [unlocked] : [];
-      if (!(ride && last?.result.win)) GameAudio.play(stars > 0 ? cues.stingWin : cues.stingLose);
+      // One finish sound: Whack's own sting (the shell then adds only the
+      // haptic), and none at all when the line ended the run (no lose sting
+      // under a YOUR RIDE'S UP! card).
+      const sting = !wrappedRef.current && !(ride && last?.result.win);
+      if (sting) GameAudio.play(stars > 0 ? cues.stingWin : cues.stingLose);
+      meta.ownFinishSfx = sting;
+      // The star title keeps its moment; the new Finn is a picture inside the card.
+      setUnlockedTheme(unlocked ? (unlocked as FinnCard).theme as WhackThemeId : null);
       setResult({
         score: total,
         stars,
-        message: unlocked ? `NEW FINN: ${cardTitle(theme)}` : message,
+        message,
         maxCombo: maxStreak,
         thresholds: ride || format === 'raid' || format === 'duel' ? undefined : thresholds,
         rival: format === 'duel' ? { name: duel?.rival.name ?? 'Captain Fin', score: rivalTotalRef.current }
           : target ? { name: target.name.split(' ')[0], score: target.score } : null,
-        buckets: ride ? undefined : [{ label: 'HITS', value: `${judged}` }, { label: 'COMBO', value: `+${countText(combo)}` }, { label: 'BONUS', value: `+${countText(bonus)}` }],
-        bucketValues: ride ? undefined : [base, combo, bonus],
+        // Every number true to its label, and no zero buckets ("0 COMBO" is not a brag). Drawn digits only (countText).
+        buckets: ride || !tallies.length ? undefined : tallies.map((t) => ({ label: t.label, value: `+${countText(t.value)}` })),
+        bucketValues: ride || !tallies.length ? undefined : tallies.map((t) => t.value),
         starStepMs: STAR_STEP_MS,
+        // Feelings first (the shared card keeps two brag chips; BEST COMBO is the streak).
         stats: [
-          { label: 'QUICK', value: `${judged ? Math.round((100 * quick) / judged) : 0}%` },
-          { label: 'BEST STREAK', value: `${maxStreak}` },
-          ...(ride ? [{ label: 'COIN', value: `${last?.result.coin ?? 0}%` }]
+          // A ride card says a feeling (COIN CAUGHT!, SO CLOSE!, GOOD TRY!), never "0% COIN" data.
+          ...(ride ? []
             : format === 'raid' ? [{ label: 'BOSS DAMAGE', value: `${last?.result.bossDamage ?? 0}` }]
-              : [{ label: 'BURSTS', value: `${banked.length}/${totalBursts}` }]),
+              : [{ label: 'BURSTS', value: `${banked.length}/${totalBursts}`, pips: [banked.length, totalBursts] as const }]),
           ...(ghostLine ? [{ label: 'LINE OF THE DAY', value: ghostLine }] : []),
           ...(nextBoss ? [{ label: 'NEXT', value: 'BOSS RUN' }]
             : goal && goal.remaining > 0 && format !== 'raid' && format !== 'duel' ? [{ label: 'NEXT STAR', value: `+${goal.remaining}` }] : []),
@@ -910,7 +968,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         laterInRun(() => finishRun(), wait);
       } else {
         GameAudio.play(cues.whistle, { volume: 0.8 });
-        flash('TIME!', `SO CLOSE! ${Math.max(1, 100 - b.result.coin)}% TO GO`, '#ffffff', 1200);
+        flash('TIME!', b.result.coin >= 75 ? 'SO CLOSE!' : 'GOOD TRY!', '#ffffff', 1200);
         laterInRun(() => finishRun(), 1100);
       }
       return;
@@ -1037,9 +1095,12 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       // and their one later pulse), so the idle card's numbers are a truly idle card's alone (w5r2).
       if (PERF_GRAPH) setTimeout(() => { if (runToken.current === token) perf.reset(); }, landIn + padsAfter(curtainKind.current) + PADS_SETTLED_MS);
       // Autoplay saves a banked fever for the finale (the expert line).
-      if (autoplay) setTimeout(() => onReadyRef.current(feverReady && next === totalBursts - 1), landIn + AUTO_GO_MS);
+      if (autoplay) {
+        clearAutoReady();
+        autoReadyTimer.current = setTimeout(() => { autoReadyTimer.current = null; onReadyRef.current(feverReady && next === totalBursts - 1); }, landIn + AUTO_GO_MS);
+      }
     }, mountIn);
-  }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay, cardAt, clearRest, runtime, perf, restBoard]);
+  }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay, cardAt, clearRest, runtime, perf, restBoard, clearAutoReady]);
 
   const onReady = useCallback((goFever: boolean) => {
     if (phase !== 'breather' || finishing.current) return;
@@ -1067,6 +1128,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   // Shell lifecycle.
   const handleStart = useCallback(() => {
     finishing.current = false;
+    wrappedRef.current = false;
     runToken.current += 1;
     passedBestRef.current = false;
     bankedRef.current = [];
@@ -1074,7 +1136,10 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     boostedRunRef.current = false;
     lastBoostRef.current = -9;
     walkBaseRef.current = metersNow();
+    clearAutoReady();
     setResult(null);
+    setUnlockedTheme(null);
+    setBreather(null);
     if (pendingBest.current != null) { setBest(pendingBest.current); pendingBest.current = null; }
     setShellScore(0);
     runtime.resetScore();
@@ -1120,8 +1185,12 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     }
   }, [runtime, phase, flash, cues.pip]);
 
+  // PLAY AGAIN: get the next run ready, then let the shell's 3-2-1 start it
+  // (onStart), like every other game. Starting a Burst here as well ran the
+  // game under the count, then restarted it at GO.
   const handleRematch = useCallback(() => {
     finishing.current = false;
+    wrappedRef.current = false;
     runToken.current += 1;
     clearRest();
     // The rematch count plays over a live board (its wells breathe again), not the frozen results frame.
@@ -1132,15 +1201,19 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     bankedRef.current = [];
     carryRef.current = NO_CARRY;
     boostedRunRef.current = false;
+    clearAutoReady();
     setResult(null);
+    setUnlockedTheme(null);
     if (pendingBest.current != null) { setBest(pendingBest.current); pendingBest.current = null; }
     setShellScore(0);
     runtime.resetScore();
     setBreather(null);
     showTimerLen(buildTimeline(0, nextRun).lengthMs);
+    // The header reads BURST 1/4 under PLAY AGAIN's 3-2-1, never the last run's 4/4.
+    setBurstIdx(0);
     // The shell runs the fresh count (2-1-GO on a repeat) and calls onStart at GO, which starts the
     // burst: no second READY/GO slam and no burst running under the count (one start, one callout).
-  }, [runIndex, showTimerLen, buildTimeline, runtime, clearRest, restBoard]);
+  }, [runIndex, showTimerLen, buildTimeline, runtime, clearRest, restBoard, clearAutoReady]);
 
   // Wrap-up (boarding / left the queue): bank the live Burst from a coherent snapshot.
   const wrapMirror = useRef<{ score: number } | null>(null);
@@ -1150,6 +1223,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     return () => clearInterval(iv);
   }, [visible, phase]);
   const onWrapUp = useCallback((reason: string): GameResult | null => {
+    wrappedRef.current = true;
     runtime.bank();
     finisher.cancel();
     const live = phase === 'play' ? wrapMirror.current?.score ?? Math.max(0, liveScoreRef.current) : 0;
@@ -1317,7 +1391,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       onResume={handleResume}
       onRematch={!ride && format !== 'duel' ? handleRematch : undefined}
       onComplete={onComplete}
-      resultExtras={result ? <ShareCardButton tiles={tilesRef.current} rideName={taskName ?? null} score={result.score} stars={result.stars ?? 0} /> : undefined}
+      resultExtras={result && unlockedTheme ? <FinnUnlock theme={unlockedTheme} reducedMotion={reducedMotion} /> : undefined}
+      resultExtrasBeat={!!unlockedTheme}
+      resultCardFooter={result && (result.stars ?? 0) > 0 ? <ShareCardButton chip tiles={tilesRef.current} rideName={taskName ?? null} score={result.score} stars={result.stars ?? 0} /> : undefined}
       onClose={onClose}
       onQuit={onQuit}
     >
@@ -1329,14 +1405,21 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
                   late taps fall through to nothing, so the results card arrives cleanly. */}
               <Animated.View style={[StyleSheet.absoluteFill, camera.style]} pointerEvents={phase === 'play' ? 'auto' : 'none'}>
                 <WhackBoard L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} images={images} hud={hud} theme={theme}
-                  bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'} hudOutside />
+                  bossFx={bossFx} pace={pace} showPace={!!ghostRef.current && !ride && !result && phase === 'play'} paceLabel={rivalName ? `VS ${rivalName}` : PACE_BEST_LABEL} hudOutside />
               </Animated.View>
             </GestureDetector>
           ) : null}
           {L ? (
-            <WhackHud L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} hud={hud} pace={pace}
-              showPace={!!ghostRef.current && !ride} paceLabel={rivalName ? `VS ${rivalName}` : 'VS BEST'}
-              chase={{ star: chaseStar, starPop: chasePop, earned: chaseEarned, showStar: !ride && format !== 'raid' && format !== 'duel' }} />
+            // The HUD steps all the way back under the results card: no pace
+            // chip or score plate may say a different number than the card.
+            // It stays back through PLAY AGAIN's 3-2-1 (the last run's burst,
+            // combo and FEVER READY never show over the new count) and comes
+            // back when the new run's first Burst starts.
+            <HudStepBack back={!!result || phase === 'done'} reducedMotion={reducedMotion}>
+              <WhackHud L={L} sim={runtime.sim} rs={runtime.rs} tick={runtime.tick} hud={hud} pace={pace}
+                showPace={!!ghostRef.current && !ride && !result && phase === 'play'} paceLabel={rivalName ? `VS ${rivalName}` : PACE_BEST_LABEL}
+                chase={{ star: chaseStar, starPop: chasePop, earned: chaseEarned, showStar: !ride && format !== 'raid' && format !== 'duel' }} />
+            </HudStepBack>
           ) : null}
           {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={capacity} textMinY={L.hudH + 6}
             flyArrived={flyArrived} onArrive={onCoinsArrive} asleep={asleep} /> : null}

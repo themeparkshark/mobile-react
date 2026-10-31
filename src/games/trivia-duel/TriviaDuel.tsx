@@ -5,15 +5,15 @@
  * A bright boardwalk game show you play one-thumbed while the line moves.
  * Race Captain Fin (or a recorded crew ghost) to the right answer. Answers
  * stay face-down until unlock, a ring of 24 marquee bulbs burns out as your
- * points drain, the bell lets you bet you know it before you see the
- * choices, and the Final is a wager.
+ * points drain, the bell lets you show you know it before you see the
+ * choices, and the Final is a no-risk bonus question worth double points.
  *
  * The whole rulebook:
  *  1. Faster lock, more points. Watch the bulbs.
  *  2. Right answers in a row multiply your points. Three in a row gives you a Shield.
  *  3. Chomp clears 2 wrong answers, but caps your speed bonus.
  *  4. Buzz to see the answers first. Miss and you lose 100, and they get to steal.
- *  5. In the Final, whoever is behind picks the topic, then everyone bets.
+ *  5. In the Final, whoever is behind picks the topic. A right answer is worth double; a miss costs nothing.
  *
  * Clocks: the question clock lives on the UI thread (useGameClock onFrame):
  * read-lock, unlock, the window, Fin's calibrated lock and buzz, the fuse
@@ -49,7 +49,7 @@ import { mixSeed } from '../../gamekit/core/rng';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { AuthContext } from '../../context/AuthProvider';
 import {
-  BUZZ, CATEGORY_PICK, CEREMONY, FIN_RANKS, FIN_RANK_ORDER, FIN_RESOLVE_AFTER_MS, HOLD, POINTS, READ_LOCK, RIDE_QUESTIONS, UNLOCK_GUARD_MS, WAGER,
+  BUZZ, CATEGORY_PICK, CEREMONY, FIN_RANKS, FIN_RANK_ORDER, FIN_RESOLVE_AFTER_MS, HOLD, POINTS, READ_LOCK, RIDE_QUESTIONS, UNLOCK_GUARD_MS, FINAL_BONUS,
   type DuelMode, type FinRank, type SpeedTier,
 } from './engine/config';
 import { factKeysOf, type PoolQuestion } from './engine/content';
@@ -61,7 +61,7 @@ import {
 } from './engine/match';
 import { nearMiss, rideNearMiss } from './engine/nearMiss';
 import {
-  bellValue, duelStars, flameTier, rideStars, rideWon, speedPoints, streakMult, suggestWager, wagerStakes,
+  bellValue, duelStars, flameTier, rideStars, rideWon, speedPoints, streakMult,
 } from './engine/scoring';
 import { ART, C, FIN_POSE_ORDER, type FinPose, type SharkLook } from './art';
 import {
@@ -76,14 +76,17 @@ import { Stage, type StageActors } from './ui/Stage';
 import { Rail, type PipState } from './ui/Rail';
 import { BOARD_H, QuestionCard, ROPE_H } from './ui/Card';
 import { TILE_COMPACT_CHARS, Tile, type TileState } from './ui/Tile';
-import { Bark, BuzzBell, CategoryPick, ClosestSlider, LifelineButton, OutlinedText, Stamp, VsIntro, WagerChips, type StampSpec } from './ui/Overlays';
+import { Bark, BuzzBell, CategoryPick, ClosestSlider, LifelineButton, OutlinedText, Stamp, VsIntro, type StampSpec } from './ui/Overlays';
 import { DuelResults, type ResultsModel } from './ui/DuelResults';
+import { takeoverDrop, takeoverZoom } from './engine/takeover';
 import { DeskFront } from './ui/DeskFront';
 import { RideCoinCrate } from './ui/RideCoinCrate';
 
 // -- Question clock (UI thread) ------------------------------------------------------
 
 const GUARD_MS: number = UNLOCK_GUARD_MS;
+/** From the last answer to a lit card: the takeover beats, the ride crate and the card rise fit well inside this. */
+export const DUEL_END_WATCH_MS = 9000;
 const PH_IDLE = 0;
 const PH_READ = 1;
 const PH_LIVE = 2;
@@ -141,7 +144,7 @@ function freshClock(): QClock {
 }
 
 type SubMode = 'buzzAnswer' | 'steal' | 'open' | null;
-type Phase = 'loading' | 'intro' | 'question' | 'finalIntro' | 'category' | 'wager' | 'reveal' | 'between' | 'crate' | 'results';
+type Phase = 'loading' | 'intro' | 'question' | 'finalIntro' | 'category' | 'bonus' | 'reveal' | 'between' | 'crate' | 'results';
 type Framing = 'wide' | 'two' | 'singleMe' | 'singleOpp';
 
 export interface TriviaDuelProps {
@@ -159,6 +162,12 @@ export interface TriviaDuelProps {
   coinImage?: ImageSourcePropType | string | null;
   /** Pre-loaded authored pool (tests / previews); loaded from LinePlay content otherwise. */
   pool?: PoolQuestion[];
+  /**
+   * Capture screens only: 'win' plays every answer right and fast so the won
+   * card can be checked on the real stage in release-like JS. Ignored unless
+   * __DEV__ or a capture build (EXPO_PUBLIC_PERF_CAPTURE=1); store builds never set it.
+   */
+  captureAutoplay?: 'win' | 'partial';
   ghost?: GhostRecord | null;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
@@ -167,6 +176,8 @@ export interface TriviaDuelProps {
 
 const { width: SW } = Dimensions.get('window');
 const AUTOPLAY = __DEV__ && process.env.EXPO_PUBLIC_TRIVIA_AUTOPLAY === '1';
+/** Dev or a release-JS capture build: the only places captureAutoplay works. */
+const CAPTURE_OK = __DEV__ || process.env.EXPO_PUBLIC_PERF_CAPTURE === '1';
 const TIER_TEXT: Record<SpeedTier, string> = { lightning: 'LIGHTNING!', great: 'GREAT', nice: 'NICE', none: '' };
 const TIER_COLOR: Record<SpeedTier, string> = { lightning: '#fff3b0', great: C.gold, nice: C.blue, none: C.cream };
 /** 11.6 stamp widths (share of screen width): tier stamps 38-45%, event stamps 55-70%. */
@@ -188,6 +199,10 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const auth = useContext(AuthContext) as { player?: { username?: string } } | null;
   const myName = (auth?.player?.username ?? 'You').slice(0, 12);
   const isRide = mode === 'ride';
+  const autoWin = CAPTURE_OK && props.captureAutoplay === 'win';
+  // Capture only: two right answers, then misses and a missed GO BIG (a partial-score loss card).
+  const autoPart = CAPTURE_OK && props.captureAutoplay === 'partial';
+  const auto = AUTOPLAY || autoWin || autoPart;
   const shell = useRef<GameShellV2Handle>(null);
   const fx = useRef<FxStageHandle>(null);
   const backFx = useRef<FxStageHandle>(null);
@@ -214,12 +229,23 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const STAGE_BAND = Math.max(130, BOARD_TOP + ROPE_H * 0.5 - STAGE_TOP);
   const STAGE_FULL = H - STAGE_TOP;
   const RESULTS_H = Math.round(H * 0.5);
-  // Takeover: the scene drops just enough that the podiums sit above the half-height results card.
+  // VS takeover: the scene drops just enough that the podiums sit above the middle of the screen.
   const DROP_PX = Math.max(0, Math.min(STAGE_FULL - STAGE_BAND, (H - RESULTS_H - 28) - (STAGE_TOP + STAGE_BAND * 0.7)));
+  /**
+   * Results takeover: the scene drops until the bottom of its band tucks just
+   * under the top of the real results card (measured, the card hugs its
+   * content), so the podiums stand right on the card and no wood, railing or
+   * flat sky shows between them. The sky above the dropped scene is the
+   * backdrop's own sky (Stage), so rail to card reads as one picture.
+   */
+  const resultsDrop = useCallback((cardH: number) => takeoverDrop({ H, cardH, stageTop: STAGE_TOP, band: STAGE_BAND, full: STAGE_FULL }), [H, STAGE_TOP, STAGE_BAND, STAGE_FULL]);
+  /** A short card zooms the dropped scene a little (capped), so empty sky never fills a third of the screen. */
+  const resultsZoom = useCallback((cardH: number) => takeoverZoom({ H, cardH, stageTop: STAGE_TOP, band: STAGE_BAND, full: STAGE_FULL }), [H, STAGE_TOP, STAGE_BAND, STAGE_FULL]);
   const railScore = { x: 92, y: 46 };
 
   // -- Match state ------------------------------------------------------------------
   const [phase, setPhase] = useState<Phase>('loading');
+  const resultsUp = phase === 'results' || phase === 'crate';
   const [plan, setPlan] = useState<MatchPlan | null>(null);
   const [roundIdx, setRoundIdx] = useState(0);
   const [round, setRound] = useState<PlannedRound | null>(null);
@@ -242,7 +268,6 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const [bellOn, setBellOn] = useState(false);
   const [bellKey, setBellKey] = useState(0);
   const [chip, setChip] = useState<string | null>(null);
-  const [wager, setWager] = useState<{ stakes: number[]; picked: number; suggested: number; reason: string; ifRight: number[]; left: number } | null>(null);
   const [relaxed, setRelaxed] = useState(false);
   useEffect(() => { void loadMemory().then((m) => setRelaxed(!!m.relaxed)); }, []);
   const toggleRelaxed = useCallback(() => {
@@ -289,11 +314,9 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const barkN = useRef(0);
   const nextTap = useRef<(() => void) | null>(null);
   const factsRef = useRef<FactCard[]>([]);
-  const finalWager = useRef(0);
   const seedRef = useRef(baseSeed >>> 0);
   const rankRef = useRef<FinRank>('deckhand');
   const flashes = useRef(0);
-  const wagerOpen = useRef(false);
   const lastCut = useRef(0);
   const decisiveDone = useRef(false);
 
@@ -359,6 +382,12 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const podOpp = useSharedValue(0);
   const takeover = useSharedValue(0);
   const retract = useSharedValue(0);
+  /** How far a takeover drops the scene (UI thread, eased when the card measures itself). */
+  const dropSv = useSharedValue(0);
+  const zoomSv = useSharedValue(1);
+  /** 1 = the camera-locked set (railing, marquee strip, desk) has stepped away for the results. */
+  const fgHide = useSharedValue(0);
+  const lastCardH = useRef(0);
   const crown = useSharedValue(0);
   useEffect(() => {
     const target = streakView.streak >= 5 ? 2 : streakView.streak >= 3 ? 1 : 0;
@@ -714,6 +743,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     setCrate(null);
     retract.value = withTiming(0, { duration: 200 });
     takeover.value = withTiming(0, { duration: 200 });
+    fgHide.value = withTiming(0, { duration: 200 });
     const mem = await loadMemory();
     if (!poolRef.current.length) poolRef.current = props.pool ?? await loadPool({ rideId, parkId, chapterId });
     // Queue and practice vary per play even from a fixed base seed; ride and daily keep the issued seed.
@@ -734,7 +764,6 @@ export function TriviaDuel(props: TriviaDuelProps) {
     factsRef.current = [];
     flashes.current = 0;
     decisiveDone.current = false;
-    wagerOpen.current = false;
     setFeatures({ ...p.features });
     setStreakView({ streak: carry.streak, shield: carry.shield && p.features.shield });
     setScores({ me: 0, opp: 0 });
@@ -763,6 +792,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
       setPhase('intro');
       setVs({ ms: vsMs });
       if (vsMs >= CEREMONY.vsFirstMs && !reducedMotion) {
+        dropSv.value = DROP_PX;
+        zoomSv.value = 1;
         retract.value = withTiming(1, { duration: beatMs(), easing: Easing.out(Easing.cubic) });
         takeover.value = withTiming(1, { duration: beatMs(), easing: Easing.out(Easing.cubic) });
       }
@@ -865,7 +896,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
   }, [isRide, setClock, ghost, frame, reducedMotion]);
 
   // FIN'S FINAL (5.5): stamp on a half-beat (flash 1 of 2), music lifts to duel_loop_final on the bar,
-  // category pick (2.5s, trailing player, vs Fin only), then the wager (4.0s, 3 chips, suggestion glows).
+  // category pick (2.5s, trailing player, vs Fin only), then the DOUBLE POINTS banner (rev 8: a no-risk
+  // bonus, nothing to bet and nothing to lose), then the question.
   const runFinalIntro = useCallback(async (p: MatchPlan, r: PlannedRound) => {
     setPhase('finalIntro');
     setMusicBed(BEDS.final);
@@ -881,41 +913,20 @@ export function TriviaDuel(props: TriviaDuelProps) {
       flash();
       setFin(t0.opp.score > t0.me.score ? 'point' : 'nervous');
     });
-    const toWager = (fr: PlannedRound) => {
+    const toBonus = (fr: PlannedRound) => {
       const t = tally.current;
-      if (t.me.score <= 0) {
-        // Nothing to bet: every chip is 0, so the wager beat is skipped (no dead 4s in a moving line).
-        meIn.current.stake = 0;
-        setStakes({ me: '0', opp: '?' });
-        later(300, () => F.current.presentQuestion(p, fr));
-        return;
-      }
-      say(t.opp.score > t.me.score ? 'finalLead' : 'finalTrail');
+      say(t.opp.score > t.me.score ? 'finalTrail' : 'finalLead');
       frame('two');
-      const st = wagerStakes(t.me.score);
-      const m = streakMult(t.me.streak.streak + 1);
-      const sug = suggestWager(t.me.score, t.opp.score, m);
-      finalWager.current = sug.index;
-      const ifRight = st.map((s) => t.me.score + Math.round(POINTS.base * m) + s);
-      setWager({ stakes: st, picked: -1, suggested: sug.index, reason: sug.reason, ifRight, left: Math.round(WAGER.pickMs / 1000) });
-      setPhase('wager');
+      setPhase('bonus');
+      // Both sides show x2: the same bonus for everyone, points can only go up.
+      setStakes({ me: `x${FINAL_BONUS.multiplier}`, opp: isRide ? null : `x${FINAL_BONUS.multiplier}` });
+      stamp('DOUBLE POINTS', C.gold, 0.7, W / 2, RAIL_H + STAGE_BAND * 0.5, 'Bonus question!');
       sfx(CUE.chip, { volume: 0.7 });
-      wagerOpen.current = true;
-      let left = Math.round(WAGER.pickMs / 1000);
-      const tick = () => {
-        if (!wagerOpen.current) return;
-        left -= 1;
-        if (left <= 0) {
-          F.current.lockWager(p, fr);
-          return;
-        }
-        setWager((w) => (w ? { ...w, left } : w));
-        later(1000, tick);
-      };
-      later(1000, tick);
+      Haptic.hitMedium();
+      later(FINAL_BONUS.bannerMs, () => { frame('wide'); F.current.presentQuestion(p, fr); });
     };
     if (!alt) {
-      later(d + 600, () => toWager(r));
+      later(d + 600, () => toBonus(r));
       return;
     }
     const picker = finalPicker(tally.current);
@@ -933,7 +944,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       setCatPick((c) => (c ? { ...c, picked: i } : c));
       sfx(CUE.chip);
       Haptic.hitMedium();
-      later(420, () => { setCatPick(null); toWager(fr); });
+      later(420, () => { setCatPick(null); toBonus(fr); });
     };
     later(d + 600, () => {
       setPhase('category');
@@ -953,30 +964,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [W, H, reducedMotion, ghost, STAGE_BAND]);
 
-  const lockWager = useCallback((p: MatchPlan, r: PlannedRound) => {
-    // One lock per Final: the countdown and a tap can both get here; only the first counts.
-    if (!wagerOpen.current) return;
-    wagerOpen.current = false;
-    const st = wagerStakes(tally.current.me.score);
-    meIn.current.stake = st[finalWager.current] ?? 0;
-    setWager(null);
-    setStakes({ me: '?', opp: '?' });
-    sfx(CUE.chip);
-    Haptic.hitMedium();
-    frame('wide');
-    later(250, () => F.current.presentQuestion(p, r));
-  }, [later, frame]);
-
   const pickCategory = useCallback((i: number) => { catDone.current?.(i); }, []);
-
-  const pickWager = useCallback((i: number) => {
-    finalWager.current = i;
-    setWager((w) => (w ? { ...w, picked: i } : w));
-    sfx(CUE.chip);
-    Haptic.tapLight();
-    if (i === WAGER.percents.length - 1) say('allIn');
-    if (plan && round) later(220, () => F.current.lockWager(plan, round));
-  }, [plan, round, later, say]);
 
   // -- Events from the UI thread ------------------------------------------------------------------
   const lockLabel = useCallback((ms: number) => `${(ms / 1000).toFixed(1)}s`, []);
@@ -1031,11 +1019,12 @@ export function TriviaDuel(props: TriviaDuelProps) {
       });
       // The buzzer's answer badge lands on their clock (the pick stays hidden until the reveal).
       const ans = ghost ? Math.max(600, Math.min(BUZZ.answerMs - 200, (o.stealMs ?? 1600))) : (plan && round ? finBellAnswerMs(plan, round) : 1600);
-      later(ans, () => resolveOppShown(buzzAt));
+      // A steal locked before Fin's answer lands reveals the moment it does (never a stuck board).
+      later(ans, () => { resolveOppShown(buzzAt); maybeReveal(); });
     } else {
       // Fin/ghost steal pick: tiles flip 1.0s after your buzz, he picks at stealMs from that flip.
       const sm = o.stealMs ?? -1;
-      if (o.stealChoice != null && o.stealChoice >= 0 && sm >= 0) later(BUZZ.stealFlipMs + sm, () => resolveOppShown(sm));
+      if (o.stealChoice != null && o.stealChoice >= 0 && sm >= 0) later(BUZZ.stealFlipMs + sm, () => { resolveOppShown(sm); maybeReveal(); });
       else later(BUZZ.stealFlipMs + BUZZ.answerMs, () => { resolved.current.opp = true; maybeReveal(); });
       later(BUZZ.stealFlipMs + Math.max(0, sm) + 5, () => maybeReveal());
     }
@@ -1045,7 +1034,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   dispatchRef.current = (ev: number, a: number, b: number) => {
     const r = round;
     if (!r || !plan) return;
-    if (AUTOPLAY) autoplayOn(ev, r);
+    if (auto) autoplayOn(ev, r);
     if (__DEV__ && (ev === EV_LOCK || ev === EV_SUB_LOCK || ev === EV_BUZZ || ev === EV_FIN_BUZZ)) console.log('[trivia-duel] ev', { ev, a, b, round: r.index, type: r.spec.type, sub: subMode });
     switch (ev) {
       case EV_UNLOCK: {
@@ -1120,7 +1109,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
           oppIn.current = { choice: pick, lockMs: pick >= 0 ? at : -1, buzzMs: -1 };
           setSubMode('open');
           setClock({ phase: PH_SUB, sub: 0, subLimit: BUZZ.openPhaseMs, urgent: 0, lastBeat: -1 });
-          if (pick >= 0) later(at, () => resolveOppShown(at));
+          // Open tiles: if you locked first, the reveal runs when Fin locks (it froze the board before).
+          if (pick >= 0) later(at, () => { resolveOppShown(at); maybeReveal(); });
           else resolved.current.opp = true;
           return;
         }
@@ -1265,7 +1255,9 @@ export function TriviaDuel(props: TriviaDuelProps) {
     } else if (q.slider) {
       stamp(String(q.slider.truth), C.gold, 0.4, W / 2, BOARD_TOP + ROPE_H + 20, res.me.bullseye ? 'BULLSEYE!' : `You: ${meIn.current.guess ?? '-'}`);
     }
-    setStakes(final ? { me: `${res.me.stake}`, opp: isRide ? null : `${res.opp.stake}` } : { me: null, opp: null });
+    // The rail pill shows what the bonus Final really did: plus what it added. A miss costs nothing, so it shows nothing.
+    const finalPill = (r: { correct: boolean; points: number }) => (r.correct && r.points > 0 ? `+${r.points}` : null);
+    setStakes(final ? { me: finalPill(res.me), opp: isRide ? null : finalPill(res.opp) } : { me: null, opp: null });
 
     const meOK = res.me.correct;
     const tier = res.me.tier;
@@ -1434,12 +1426,31 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const takeoverOn = useCallback((on: boolean) => {
     const d = reducedMotion ? 300 : beatMs();
     retract.value = withTiming(on ? 1 : 0, { duration: d, easing: Easing.out(Easing.cubic) });
+    // Until the card has measured itself, drop for a typical card; it eases to the real one.
+    if (on) {
+      dropSv.value = resultsDrop(lastCardH.current || Math.round(H * 0.42));
+      zoomSv.value = resultsZoom(lastCardH.current || Math.round(H * 0.42));
+    }
     takeover.value = withTiming(on ? 1 : 0, { duration: d, easing: Easing.out(Easing.cubic) });
-  }, [retract, takeover, reducedMotion]);
+    // The railing, marquee strip and desk front step away with the board, so
+    // the dropped scene never shows a cut where the set used to sit.
+    fgHide.value = withTiming(on ? 1 : 0, { duration: d });
+  }, [retract, takeover, dropSv, zoomSv, fgHide, resultsDrop, resultsZoom, H, reducedMotion]);
+  const onCardLayout = useCallback((cardH: number) => {
+    lastCardH.current = cardH;
+    const to = resultsDrop(cardH);
+    const z = resultsZoom(cardH);
+    dropSv.value = reducedMotion ? to : withTiming(to, { duration: 240, easing: Easing.out(Easing.cubic) });
+    zoomSv.value = reducedMotion ? z : withTiming(z, { duration: 240, easing: Easing.out(Easing.cubic) });
+  }, [resultsDrop, resultsZoom, dropSv, zoomSv, reducedMotion]);
+  const fgStyle = useAnimatedStyle(() => ({ opacity: 1 - fgHide.value }));
 
   const finishMatch = useCallback(async () => {
     const p = plan;
     if (!p) return;
+    // The shell's one end watch: the takeover, the crate and the card take a few beats; if a
+    // save never answers or a beat is lost, the ride card's result (or the shared card) shows.
+    shell.current?.endWatch(DUEL_END_WATCH_MS, () => pendingShell.current ?? null);
     clearTimers();
     setClock({ phase: PH_IDLE });
     setRound(null);
@@ -1463,7 +1474,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
           { label: 'Fastest', value: fastest },
           { label: 'Fastest answer', value: TIER_TEXT[t.me.bestTier].replace('!', '') || 'NONE' },
         ],
-        facts: facts.slice(0, 1).map((f) => ({ ...f, isNew: true })), stars, practice: false, rank: null, best: null, ride: { won },
+        facts: facts.slice(0, 1).map((f) => ({ ...f, isNew: true })), stars, practice: false, rank: null, best: null, ride: { won, right: t.me.correct, need: 2 },
       });
       const result: GameResult = {
         score: t.me.score,
@@ -1554,7 +1565,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
     setResults({
       won, tie: t.me.score === t.opp.score, myScore: t.me.score, oppScore: t.opp.score, oppName,
       banners, nearMiss: nm.line, rows, facts: newCards.slice(0, 1), stars, practice: mode === 'practice',
-      rank: ghost ? null : { label: FIN_RANKS[rk.rank].label, progress: nextRank ? Math.min(1, rk.winsAtRank / FIN_RANKS[rk.rank].promoteAfter) : 1, next: nextRank },
+      rank: ghost ? null : {
+        label: FIN_RANKS[rk.rank].label, progress: nextRank ? Math.min(1, rk.winsAtRank / FIN_RANKS[rk.rank].promoteAfter) : 1, next: nextRank,
+        wins: rk.winsAtRank, need: nextRank ? FIN_RANKS[rk.rank].promoteAfter : 0,
+        stripes: FIN_RANKS[rk.rank].stripes, nextStripes: ri < FIN_RANK_ORDER.length - 1 ? FIN_RANKS[FIN_RANK_ORDER[ri + 1]].stripes : null,
+      },
+      // A missed Big Final is why right answers can still end on a low score:
+      // the card shows it, so every number agrees with every other number.
       best: t.me.fastestMs >= 0 ? { label: `${fastest} on Q${Math.max(0, fastestIdx) + 1}` } : null,
     });
     later(beatMs() * 2, () => setPhase('results'));
@@ -1617,7 +1634,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const autoplayOn = (ev: number, r: PlannedRound) => {
     const q = r.question;
     const k = (autoN.current += 1);
-    const skill = (mixSeed(seedRef.current, k) % 100) / 100;
+    const skill = autoWin ? 0 : autoPart ? (k <= 2 ? 0 : 0.99) : (mixSeed(seedRef.current, k) % 100) / 100;
     const pick = skill < 0.78 ? q.correctIndex : (q.correctIndex + 1) % Math.max(2, q.choices.length);
     const tapAt = (i: number, ms: number) => later(ms, () => {
       const alive = tilesRef.current.map((t, kk) => (t !== 'removed' ? kk : -1)).filter((kk) => kk >= 0);
@@ -1625,10 +1642,11 @@ export function TriviaDuel(props: TriviaDuelProps) {
       runOnUI((y: number) => { 'worklet'; onTapUI(y); })(x);
     });
     if (ev === EV_UNLOCK) {
-      const ms = 900 + skill * 2200;
+      const ms = autoWin ? 650 : autoPart ? 1500 : 900 + skill * 2200;
       if (r.spec.type === 'buzz') {
         const fb = oppIn.current.buzzMs ?? -1;
-        if (playsRef.current % 2 === 0 || fb < 0) later(Math.min(ms * 0.6, fb >= 0 ? fb - 150 : 99999), onBuzzUI);
+        if (autoPart) return;
+        if (autoWin || playsRef.current % 2 === 0 || fb < 0) later(Math.min(ms * 0.6, fb >= 0 ? fb - 150 : 99999), onBuzzUI);
       } else if (q.format === 'closest' && q.slider) {
         const guess = q.slider.truth + (skill < 0.7 ? 0 : 3);
         later(ms * 0.6, () => setSliderVal(guess));
@@ -1642,14 +1660,14 @@ export function TriviaDuel(props: TriviaDuelProps) {
     else if (ev === EV_TIMEOUT && r.spec.type === 'buzz') tapAt(pick, 1200);
   };
   useEffect(() => {
-    if (!AUTOPLAY) return;
-    if (phase === 'wager' && wager) later(1600, () => pickWager((mixSeed(seedRef.current, 77) % 10) < 7 ? wager.suggested : (wager.suggested + 1) % 3));
+    if (!auto) return;
     if (phase === 'category' && catPick?.picker === 'me') later(900, () => pickCategory(1));
-    if (phase === 'results' && results && !isRide) later(6500, () => (playsRef.current < 3 ? onRematch() : playsRef.current === 3 && !ghost ? void onPassToCrew() : onContinue()));
+    // A capture win stays on its card (the capture taps DONE itself).
+    if (phase === 'results' && results && !isRide && !autoWin && !autoPart) later(6500, () => (playsRef.current < 3 ? onRematch() : playsRef.current === 3 && !ghost ? void onPassToCrew() : onContinue()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, results]);
 
-  F.current = { startRound, presentQuestion, runFinalIntro, reveal, advance, finishMatch, lockWager };
+  F.current = { startRound, presentQuestion, runFinalIntro, reveal, advance, finishMatch };
 
   // -- Chomp (6): server-removed in graded modes; speed capped at 50 ----------------------------------
   const twoTile = (round?.question.choices.length ?? 4) <= 2;
@@ -1789,7 +1807,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const roundLabel = round
     ? (isRide ? `QUESTION ${round.index + 1} OF ${plan?.rounds.length ?? 3}` : `ROUND ${round.index + 1}  ${ROUND_NAMES[round.spec.type]}`)
     : (isRide ? 'QUESTION 1 OF 3' : 'ROUND 1  QUICK DRAW');
-  const showBoard = (preview && visible) || (!!round && (phase === 'question' || phase === 'reveal' || phase === 'between' || phase === 'finalIntro' || phase === 'category' || phase === 'wager'));
+  const showBoard = (preview && visible) || (!!round && (phase === 'question' || phase === 'reveal' || phase === 'between' || phase === 'finalIntro' || phase === 'category' || phase === 'bonus'));
   const showTiles = !!round && (phase === 'question' || phase === 'reveal' || phase === 'between');
   const mult = isRide ? 1 : streakMult(streakView.streak + 1);
   const multChip = !isRide && mult > 1 ? `x${mult}` : null;
@@ -1797,11 +1815,12 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const finalRound = round?.spec.type === 'final';
   const zoneTiles = q?.choices.length ? q.choices : ['', '', '', ''];
   const finStripes = FIN_RANKS[rankRef.current].stripes;
-  // Before the Final's read-lock the board never shows its question: the intro, the topic pick and the wager say what is coming.
+  // Before the Final's read-lock the board never shows its question: the intro, the topic pick and the bonus banner say what is coming.
   const finalTopic = plan?.rounds[roundIdx]?.question.category ?? '';
   const boardText = phase === 'finalIntro' ? "Fin's Final is next"
     : phase === 'category' ? (catPick?.picker === 'me' ? 'You pick the topic' : `${oppName} picks the topic`)
-    : phase === 'wager' ? `Topic: ${finalTopic}. Place your bet.`
+    // The topic sits crisp in the white card (never over the marquee bulbs).
+    : phase === 'bonus' ? `Bonus question: ${finalTopic}. Double points!`
     : preview ? '' : q?.prompt ?? '';
 
   return (
@@ -1827,11 +1846,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
       renderResults={isRide ? (args) => (
         <View style={{ width: '100%', height: Dimensions.get('window').height }} pointerEvents="box-none">
           {results ? (
-            <DuelResults model={{ ...results, stars: args.stars }} beatMs={beatMs()} onContinue={args.claim} reducedMotion={args.reducedMotion} height={RESULTS_H} />
+            <DuelResults model={{ ...results, stars: args.stars }} beatMs={beatMs()} onContinue={args.claim} reducedMotion={args.reducedMotion} height={RESULTS_H} onCardLayout={onCardLayout} />
           ) : null}
         </View>
       ) : undefined}
       hideHeaderScore
+      // Line Trivia draws its own results in the field: the HUD steps back and the X is DONE.
+      ownResultsDone={results && phase === 'results' && !isRide ? onContinue : null}
       pauseExtras={<RelaxedToggle on={relaxed} onToggle={toggleRelaxed} />}
     >
       <GestureHandlerRootView style={styles.field} onLayout={onLayout}>
@@ -1843,6 +1864,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
               height={STAGE_FULL}
               bandH={STAGE_BAND}
               dropPx={DROP_PX}
+              dropSv={dropSv}
+              zoomSv={zoomSv}
               actors={actors}
               opponent={opponentLook}
               ghost={!!ghost}
@@ -1854,12 +1877,15 @@ export function TriviaDuel(props: TriviaDuelProps) {
           {/* Bloom lives BEHIND the board and tiles (rev 7 H7): never Plus over cream. */}
           <FxStage ref={backFx} width={W} height={H} timeScale={clock.fxScale} reducedMotion={reducedMotion} flashCap={0} style={StyleSheet.absoluteFill} />
 
-          {/* Camera-locked foreground set: railing, marquee header strip, board, desk front. */}
-          <Image source={ART.railing} style={[styles.railing, { top: BOARD_TOP + ROPE_H + BOARD_H * 0.35 - (W / 390) * 130, width: W, height: (W / 390) * 130 }]} resizeMode="stretch" />
-          <View style={[styles.deskWrap, { top: DESK_TOP }]} pointerEvents="none">
-            <DeskFront width={W} height={H - DESK_TOP + 6} />
-          </View>
-          <MarqueeStrip width={W} top={BOARD_TOP - 6} />
+          {/* Camera-locked foreground set: railing, marquee header strip, board, desk front.
+              The set steps away for the results takeover (fgHide). */}
+          <Animated.View style={[StyleSheet.absoluteFill, fgStyle]} pointerEvents="none">
+            <Image source={ART.railing} style={[styles.railing, { top: BOARD_TOP + ROPE_H + BOARD_H * 0.35 - (W / 390) * 130, width: W, height: (W / 390) * 130 }]} resizeMode="stretch" />
+            <View style={[styles.deskWrap, { top: DESK_TOP }]} pointerEvents="none">
+              <DeskFront width={W} height={H - DESK_TOP + 6} />
+            </View>
+            <MarqueeStrip width={W} top={BOARD_TOP - 6} />
+          </Animated.View>
 
           {showBoard ? (
             <View style={[styles.boardWrap, { top: BOARD_TOP }]} pointerEvents="box-none">
@@ -1963,32 +1989,18 @@ export function TriviaDuel(props: TriviaDuelProps) {
             </View>
           ) : null}
 
-          {wager ? (
-            <View style={[styles.zone, { top: ZONE_TOP - 18, height: ZONE_H + 18, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2 }]}>
-              <WagerChips
-                stakes={wager.stakes}
-                labels={WAGER.labels}
-                picked={wager.picked}
-                suggested={wager.suggested}
-                reason={wager.reason}
-                ifRight={wager.ifRight}
-                onPick={pickWager}
-                secondsLeft={wager.left}
-                category={plan?.rounds[roundIdx]?.question.category ?? 'Trivia'}
-                height={ZONE_H + 18}
-              />
-            </View>
-          ) : null}
           {catPick ? (
             <View style={[styles.zone, { top: ZONE_TOP - 18, height: ZONE_H + 18, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2 }]}>
               <CategoryPick cats={catPick.cats} mine={catPick.picker === 'me'} picked={catPick.picked} left={catPick.left} oppName={oppName} onPick={pickCategory} height={ZONE_H + 18} />
             </View>
           ) : null}
 
-          <View style={styles.railWrap}>
+          {/* While the results card is up it is the only thing to read: the rail
+              dims and drops its lock times (TIME, 2.3s) and Final stake pills. */}
+          <View style={[styles.railWrap, resultsUp && styles.railDim]}>
             <Rail
-              me={{ name: myName, score: scores.me, look: 'classic', lockLabel: locks.me, stake: stakes.me }}
-              opp={{ name: oppName, score: scores.opp, look: opponentLook, lockLabel: locks.opp, stake: stakes.opp, ghost: !!ghost }}
+              me={{ name: myName, score: scores.me, look: 'classic', lockLabel: resultsUp ? null : locks.me, stake: resultsUp ? null : stakes.me }}
+              opp={{ name: oppName, score: scores.opp, look: opponentLook, lockLabel: resultsUp ? null : locks.opp, stake: resultsUp ? null : stakes.opp, ghost: !!ghost }}
               pips={pips}
               flame={flameT}
               streak={streakView.streak}
@@ -2021,7 +2033,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
           {crate ? (
             <RideCoinCrate
               key={crate.key}
-              podium={{ x: W * 0.22, y: STAGE_TOP + STAGE_BAND * 0.7 - 6 + DROP_PX }}
+              podium={{ x: W * 0.22, y: STAGE_TOP + STAGE_BAND * 0.7 - 6 + resultsDrop(lastCardH.current || Math.round(H * 0.42)) }}
               counter={{ x: 40, y: 10 }}
               width={W}
               height={H}
@@ -2060,6 +2072,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
               onContinue={onContinue}
               reducedMotion={reducedMotion}
               height={RESULTS_H}
+              onCardLayout={onCardLayout}
             />
           ) : null}
           {/* Stamps draw above the board and the countdown preview. */}
@@ -2141,6 +2154,7 @@ const styles = StyleSheet.create({
   bg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#bfeaff' },
   stageWrap: { position: 'absolute', left: 0, right: 0 },
   railWrap: { position: 'absolute', left: 0, right: 0, top: 0 },
+  railDim: { opacity: 0.45 },
   railing: { position: 'absolute', left: 0 },
   deskWrap: { position: 'absolute', left: 0, right: 0 },
   boardWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },

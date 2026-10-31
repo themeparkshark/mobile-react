@@ -5,11 +5,29 @@ export type TeamId = 'mouse' | 'globe' | 'shark';
  * server (PlayerTeam::TEAM_COLORS). Screens import from here and never keep
  * their own copy.
  */
-export const TEAMS: Record<TeamId, { name: string; color: string; badge: number }> = {
-  mouse: { name: 'Team Mouse', color: '#F59E0B', badge: require('../../assets/images/teams/mouse-small.png') },
-  globe: { name: 'Team Globe', color: '#22C55E', badge: require('../../assets/images/teams/globe-small.png') },
-  shark: { name: 'Team Shark', color: '#3B82F6', badge: require('../../assets/images/teams/shark-small.png') },
+/*
+ * IP safety (Oct 23 2026): "Team Mouse" and "Team Globe" read as two famous
+ * park brands, so players see the shield colors instead: Team Gold and Team
+ * Green. The ids stay 'mouse' and 'globe' (the server and saved data use them).
+ * New badge art for both is Dustin's call (his GPT Image pipeline from Alex's
+ * references); until then components/TeamBadge covers the old center with a
+ * plain star (Gold) or compass (Green). Draw `badge` only through TeamBadge.
+ */
+export const TEAMS: Record<TeamId, { id: TeamId; name: string; color: string; badge: number }> = {
+  mouse: { id: 'mouse', name: 'Team Gold', color: '#F59E0B', badge: require('../../assets/images/teams/mouse-small.png') },
+  globe: { id: 'globe', name: 'Team Green', color: '#22C55E', badge: require('../../assets/images/teams/globe-small.png') },
+  shark: { id: 'shark', name: 'Team Shark', color: '#3B82F6', badge: require('../../assets/images/teams/shark-small.png') },
 };
+
+/**
+ * The fill behind a team badge on a small chip (map status row, Live bar).
+ * Team Green's chip is one step deeper than its shield's green, so the
+ * shield and its compass do not melt into a green-on-green blob at 22pt.
+ */
+const CHIP_COLORS: Partial<Record<TeamId, string>> = { globe: '#16A34A' };
+export function teamChipColor(team: TeamId): string {
+  return CHIP_COLORS[team] ?? TEAMS[team].color;
+}
 
 export const TEAM_ORDER: readonly TeamId[] = ['mouse', 'globe', 'shark'];
 
@@ -25,7 +43,10 @@ export function isTeam(value: unknown): value is TeamId {
 const overrides: Partial<Record<TeamId, string>> = {};
 
 type TeamNames = Partial<Record<TeamId, string>> | null | undefined;
-const clean = (value: unknown) => (typeof value === 'string' && value.trim() && value.trim().length <= 40 ? value.trim() : null);
+/** The old look-alike names a server still sends by default: never shown; the app's own names win. */
+const RETIRED_NAMES = /^(?:team\s+)?(?:mouse|globe)$/i;
+const clean = (value: unknown) => (typeof value === 'string' && value.trim() && value.trim().length <= 40
+  && !RETIRED_NAMES.test(value.trim()) ? value.trim() : null);
 
 /** Remember the newest server names for surfaces without a payload of their own. Call from an effect, not render. */
 export function applyTeamNames(names: unknown): void {
@@ -36,12 +57,12 @@ export function applyTeamNames(names: unknown): void {
   }
 }
 
-/** "Team Mouse", or the name from this payload's team_names, or the newest server name seen. */
+/** "Team Gold", or the name from this payload's team_names, or the newest server name seen. */
 export function teamName(team: TeamId, names?: TeamNames): string {
   return clean(names?.[team]) ?? overrides[team] ?? TEAMS[team].name;
 }
 
-/** "Mouse": the name without its "Team " prefix, for tight chips. */
+/** "Gold": the name without its "Team " prefix, for tight chips. */
 export function teamShortName(team: TeamId, names?: TeamNames): string {
   return teamName(team, names).replace(/^Team\s+/i, '');
 }

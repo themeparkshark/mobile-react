@@ -18,7 +18,10 @@ test('a failed park map load keeps the park buttons and shows the calm retry not
   } });
   await app.settle(); await app.settle();
   assert.ok(app.find(named('HelpButton')), 'How to play stays on the park map');
-  assert.ok(app.find(named('MapResourcePill')), 'Energy stays on the park map');
+  // Core loop 4.2: Energy left the resting park map (coin card, shelf, raid card); the Shelf button and the guide stay.
+  assert.equal(app.find(named('MapResourcePill')), undefined, 'no Energy pill on the resting map');
+  assert.ok(app.find(named('NextCoinCard')), 'the guide card stays on the park map');
+  assert.ok(app.find(named('Avatar')), 'the Shelf button stays on the park map');
   assert.ok(app.find(named('ParkMapRetry')), 'the retry note shows');
 });
 

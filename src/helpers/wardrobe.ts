@@ -1,3 +1,4 @@
+import { ipSafeName } from '../constants/ipHold';
 import { wearableRarityUi, WearableRarity } from '../design-system';
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
@@ -177,7 +178,7 @@ export function lookSlotsOf(inventory: InventoryType | null | undefined): LookSl
 /** The name players see: a reviewed override when the server sends one. */
 export function itemDisplayName(item: Pick<ItemType, 'name' | 'display_name'>): string {
   const override = item.display_name?.trim();
-  return override ? override : item.name;
+  return override ? override : ipSafeName(item.name);
 }
 
 export interface WearableBadge {

@@ -124,3 +124,106 @@ export function firstVisitChestWaits(state: {
   if (state.huntStartedAt == null) return true;
   return state.now - state.huntStartedAt < FIRST_VISIT_CHEST_WAIT_MS;
 }
+
+// ---------------------------------------------------------------------------
+// The attention rules (core loop blueprint 4.3, October 2026): who may ask for the player's
+// attention by itself, and when. Everything that may not open by itself waits with a count on its
+// button (the Rewards button, the event sheet, "?").
+
+/** At a park, nothing opens by itself this long after arriving (the map, the guide and PLAY! come first). */
+export const PARK_QUIET_MS = 30_000;
+/** Nothing opens by itself this long after a win card closes. */
+export const WIN_CARD_QUIET_MS = 10_000;
+
+/**
+ * Things that may open by themselves:
+ * - daily_chest: at home only, once a day, after the first catch (never at a park).
+ * - reward: level chest, Daily 3 chest, Weekly Box, event chests: never by themselves at a park;
+ *   at home only in a calm moment (the Rewards button holds them otherwise).
+ * - event_recap, membership, help_page, monday_results: through the queue, one per app open.
+ */
+export type AutoOpenKind = 'daily_chest' | 'reward' | 'event_recap' | 'membership' | 'help_page' | 'monday_results'
+  | 'ride_question' | 'share_drop';
+
+export interface AttentionState {
+  readonly atPark: boolean;
+  readonly now: number;
+  /** The first in-park reading of this visit (epoch ms), or null. */
+  readonly arrivedAt: number | null;
+  /** The guide is walking the player to its target. */
+  readonly walkingToTarget: boolean;
+  /** A game, the challenge flow or LinePlay is open. */
+  readonly playing: boolean;
+  /** When the last win card closed (epoch ms), or null. */
+  readonly winCardClosedAt: number | null;
+  /** Something already opened by itself in this app open. */
+  readonly autoOpenUsed: boolean;
+}
+
+/** Pure: may this open by itself right now? (Finn's first-session lessons and sign-in are not asked here.) */
+export function autoOpenAllowed(kind: AutoOpenKind, s: AttentionState): boolean {
+  if (s.atPark && (kind === 'daily_chest' || kind === 'reward' || kind === 'monday_results')) return false;
+  if (s.autoOpenUsed) return false;                       // one automatic open per app open
+  if (s.playing) return false;
+  if (s.winCardClosedAt != null && s.now - s.winCardClosedAt >= 0 && s.now - s.winCardClosedAt < WIN_CARD_QUIET_MS) return false;
+  if (s.atPark) {
+    if (s.arrivedAt == null || s.now - s.arrivedAt < PARK_QUIET_MS) return false;
+    if (s.walkingToTarget) return false;
+  }
+  return true;
+}
+
+let usedIn: string | null = null;
+let usedBy: AutoOpenKind | null = null;
+
+/** The one automatic open per app open (keyed by the ladder's app-open id). */
+export const attentionQueue = {
+  /** True when something already opened by itself in this app open (and it was not `kind`). */
+  used(appOpenId: string, kind?: AutoOpenKind): boolean {
+    return usedIn === appOpenId && usedBy !== kind;
+  },
+  /** Take this app open's one automatic open. False when another kind already took it. */
+  take(appOpenId: string, kind: AutoOpenKind): boolean {
+    if (usedIn === appOpenId && usedBy !== kind) return false;
+    usedIn = appOpenId;
+    usedBy = kind;
+    return true;
+  },
+  /** Tests only. */
+  reset(): void { usedIn = null; usedBy = null; },
+};
+
+// ---------------------------------------------------------------------------
+// The gate other lanes ask (rewards-unlocks' membership look, lineplay-ride's ride question,
+// shelf-words' cards): the map publishes its attention state here; anything that wants to open by
+// itself asks request(kind) first and waits on its button when the answer is no.
+
+let published: { state: Omit<AttentionState, 'now' | 'autoOpenUsed'>; appOpenId: string } | null = null;
+
+export const attentionGate = {
+  /** The map only (guide-map): its current attention state and this app open's id. */
+  publish(state: Omit<AttentionState, 'now' | 'autoOpenUsed'>, appOpenId: string): void {
+    published = { state, appOpenId };
+  },
+  /**
+   * The map does not know yet where the player is (launch, a park check-in on its way): nothing may
+   * open by itself until it publishes again (seen: the Ride Journal opened 3 s after launch, before the
+   * map knew it was at a park).
+   */
+  hold(): void {
+    published = null;
+  },
+  /** Whether `kind` may open by itself right now (does not take the one automatic open). */
+  allowed(kind: AutoOpenKind, now: number = Date.now()): boolean {
+    // Before the map knows the place, only what the player asked for themselves (a Shark Drop link) opens.
+    if (!published) return kind === 'share_drop';
+    return autoOpenAllowed(kind, { ...published.state, now, autoOpenUsed: attentionQueue.used(published.appOpenId, kind) });
+  },
+  /** Ask to open by itself: true takes this app open's one automatic open; false means wait on your button. */
+  request(kind: AutoOpenKind, now: number = Date.now()): boolean {
+    if (!attentionGate.allowed(kind, now)) return false;
+    return published ? attentionQueue.take(published.appOpenId, kind) : true;
+  },
+  /** Tests only. */
+  reset(): void { published = null; },
+};

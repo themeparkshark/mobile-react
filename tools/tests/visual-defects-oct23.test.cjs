@@ -561,7 +561,8 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   assert.match(explore, /if \(!mapOnScreen \|\| !mapCalm \|\| !player/);
   assert.match(explore, /if \(!\(mapOnScreen && player && isReady/);
   assert.match(explore, /introAllowed=\{mapOnScreen && homeIntroAllowed\}/);
-  assert.match(explore, /slam=\{mapCovered \? undefined : adventureMoment\.slam\}/);
+  // The Adventure Ticket chip folded into the Next Coin guide card (core loop 4.1): only its sheet stays.
+  assert.match(explore, /<AdventureTicketCard key=\{`adventure-\$\{player\.id\}-\$\{park\.id\}-\$\{adventure\.id\}`\} sheetOnly/);
   // One cover through the home-to-park swap at launch.
   assert.match(explore, /const mapChoicePending = !!player && permissionGranted && !park && !homeLocationConfirmed;/);
   // The cover's art and the first map buttons are warm before the splash hands off.
@@ -998,8 +999,9 @@ test('team bar: before standings answer it says RIDE CONTROL with plain shields,
   const bar = read('src/components/RideControlBar.tsx');
   assert.match(bar, /const known = control !== null;/);
   assert.match(bar, /: leader \? `\$\{teamName\(leader, names\)\.toUpperCase\(\)\} LEADS` : !known \? 'RIDE CONTROL' : NO_LEADER_HEADLINE;/);
-  assert.match(bar, /<Animated\.Text style=\{\[styles\.chipCount, countStyle\]\}>\{known \? count : 0\}<\/Animated\.Text>/);
-  assert.match(bar, /leading=\{leader === team\} known=\{known\} \/>/);
+  assert.match(bar, /\{!bare && <Animated\.Text style=\{\[styles\.chipCount, countStyle\]\}>\{known \? count : 0\}<\/Animated\.Text>\}/);
+  // The map's one your-team chip is just its badge until the team holds a ride (never a lone "0").
+  assert.match(bar, /leading=\{leader === team\} known=\{known\} bare=\{compact && !!yours && !\(held\[team\] > 0\)\} \/>/);
   assert.match(bar, /\{known \? held\[team\] : ' '\}/);
 });
 
@@ -1150,8 +1152,9 @@ test('launch never starts the login music while sign-in is still loading (no aud
 
 test('map rail: Daily 3 first and the late chest joins at the end, popping in on the UI thread (no button ever moves)', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /const mapControls = mapControlsCount > 0 \? <>\{retention\.button\}\{chestButton\}<\/> : null;/);
-  assert.doesNotMatch(explore, /<>\{chestButton\}\{retention\.button\}<\/>/);
+  // Core loop 4.2: the chest and Daily 3 buttons fold into one Rewards button (one chest, one number), so no button moves.
+  assert.match(explore, /const mapControls = mapControlsCount > 0 \? <RewardsButton model=\{rewardsModel\} onPress=\{onRewardsPress\} isNew=\{rewardsNew\} \/> : null;/);
+  assert.doesNotMatch(explore, /retention\.button/);
   const chest = read('src/components/map/ChestMapButton.tsx');
   assert.match(chest, /Animated\.spring\(shown, \{ toValue: 1, stiffness: 320, damping: 18, mass: 0\.8, useNativeDriver: true \}\)/);
   assert.match(chest, /outputRange: \[0\.7, 1\]/);
@@ -1251,8 +1254,8 @@ test('launch bar: between real steps it keeps creeping on the UI thread (the par
 
 test('wave 5 round 2: the chest pops in once and is never remounted when Daily 3 joins or the rail changes sides', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
-  // One fragment, two fixed slots (Daily 3, chest), or nothing: never a bare chest that later moves into a fragment.
-  assert.match(explore, /const mapControls = mapControlsCount > 0 \? <>\{retention\.button\}\{chestButton\}<\/> : null;/);
+  // One Rewards button, or nothing: never a chest that later moves (core loop 4.2).
+  assert.match(explore, /const mapControls = mapControlsCount > 0 \? <RewardsButton /);
   assert.doesNotMatch(explore, /: chestButton;/);
   // The map keeps one wrapper around the extras and only switches its style.
   const map = read('src/components/Map.tsx');
@@ -1267,8 +1270,8 @@ test('wave 5 round 2: the chest pops in once and is never remounted when Daily 3
   assert.match(chest, /if \(!drawn\) return;\s*if \(settled \|\| reduced\) \{ fade\.setValue\(1\); shown\.setValue\(1\); poppedGift = giftId; return; \}/);
   // The pop is native-driven: a parent re-render never drops a running or finished pop back to its mount value.
   assert.doesNotMatch(chest, /react-native-reanimated/);
-  // A new day's chest is a new button (keyed by gift id) that pops again.
-  assert.match(explore, /<ChestMapButton key=\{dailyGiftId \?\? 0\} giftId=\{dailyGiftId \?\? 0\}/);
+  // The chest button file stays for previews; the map draws the Rewards button instead.
+  assert.doesNotMatch(explore, /<ChestMapButton /);
 });
 
 test("wave 5 round 2: Finn's coin card shows only once Finn and all three pictures have drawn", () => {

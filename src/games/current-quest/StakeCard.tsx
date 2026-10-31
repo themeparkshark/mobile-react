@@ -36,7 +36,7 @@ export function StakeCard({ onDone, ready = true }: { onDone: () => void; ready?
   useEffect(() => { if (ready && elapsed.current) done.current(); }, [ready]);
   return (
     <Animated.View entering={FadeIn.duration(120)} exiting={FadeOut.duration(160)} style={styles.scrim}>
-      <Pressable style={styles.fill} onPress={() => { if (readyRef.current) done.current(); else elapsed.current = true; }} accessibilityLabel="Ride stakes. Tap to start.">
+      <Pressable style={styles.fill} onPress={() => { if (readyRef.current) done.current(); else elapsed.current = true; }} accessibilityLabel="Ride Challenge. Tap to start.">
         <Animated.View entering={ZoomIn.springify().damping(12)} style={styles.card}>
           <Text style={styles.title}>Ride Challenge</Text>
           <View style={styles.row}>

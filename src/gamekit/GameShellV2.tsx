@@ -28,6 +28,7 @@ import React, {
   useContext,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -64,16 +65,23 @@ import { Haptic } from './Haptics';
 import { playSfx } from './SFX';
 import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovementContext';
 import { RideChallengeContext } from './RideChallengeContext';
+import { ShellFrameContext } from './ShellFrameContext';
 import { GrownUpGateSlot } from '../components/GrownUpGate';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import GameIcon from '../ui/GameIcon';
-import { ResultsCard, type ResultStat } from './results/ResultsCard';
-import { starsFor, type StarThresholds } from './core/scoring';
+import GameIcon, { type GameIconName } from '../ui/GameIcon';
+import { ResultsCard, SHORT_PHONE_PT, type ResultStat, type ResultStarGoal } from './results/ResultsCard';
+import { ResultsPodium } from './results/ResultsPodium';
+import { initialWindowMetrics } from 'react-native-safe-area-context';
+import { endFeel } from './results/feelings';
+import { compareBest, starsFor, type StarThresholds } from './core/scoring';
+import { END_WATCH_GRACE_MS, END_WATCH_MS, endWatchResult, traceLit, traceRunOver } from './core/endWatch';
 import {
-  WRAP_UP_COPY,
+  wrapUpCopy,
   createHeadsUp,
+  isEmptyResultsNode,
   makeSnapshot,
   reportAdvance,
+  creditWrapResult,
   type HoldReason,
   type MovementPolicy,
   type WrapUpReason,
@@ -105,6 +113,8 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 export type ShellPhase = 'countdown' | 'playing' | 'paused' | 'resuming' | 'results';
 
 /** Result a game hands to the shell when the round ends. */
+export type { ResultStarGoal };
+
 export interface GameResult {
   /** Final score. */
   score: number;
@@ -133,6 +143,14 @@ export interface GameResult {
   meta?: Record<string, unknown>;
   /** One line under the card (a coaching tip). A wrap-up note wins over it. */
   note?: string;
+  /** A tip that is only spoken (VoiceOver), never drawn: a 7-year-old reads nothing. */
+  spokenNote?: string;
+  /**
+   * The next-star bar for a game whose stars are not points (Rhythm stars by
+   * timing). progress is 0..1 toward the next star; the words for it live in
+   * a11y (spoken only, never on the card).
+   */
+  starGoal?: ResultStarGoal;
 }
 
 /** What a game-owned results surface receives (`renderResults`). */
@@ -147,6 +165,16 @@ export interface ShellResultsArgs {
   /** Present only when Play again / Challenge are allowed (never on paid rides or wrap-ups). */
   rematch?: () => void;
   challenge?: () => void;
+  /**
+   * PLAY AGAIN is the big button (the shared rule for every results card).
+   * False only when a win's reward is still waiting to be collected and a
+   * replay would skip it: then the claim button leads.
+   */
+  playAgainFirst: boolean;
+  /** The exit word every results card uses: DONE, or CONTINUE when a reward is still to collect. */
+  claimLabel: 'DONE' | 'CONTINUE';
+  /** A queue event saved a run that had points but no star yet (RUN SAVED stamp). */
+  saved: boolean;
   reducedMotion: boolean;
 }
 
@@ -163,7 +191,20 @@ export interface GameShellV2Handle {
   wrapUp: (reason?: WrapUpReason) => void;
   /** Current phase (read on demand). */
   getPhase: () => ShellPhase;
+  /**
+   * The run is over: its results card must follow. If the game's result has not
+   * arrived `ms` later (default END_WATCH_MS), `rescue` is asked for one from the
+   * game's live state (it may also show the game's own card and return nothing);
+   * if there is still nothing END_WATCH_GRACE_MS after that, the shared card shows
+   * the score. A rescue that returns false stands the watch down (the run that armed
+   * it is gone, or its card is already up). The one results watchdog for every game
+   * (core/endWatch.ts).
+   */
+  endWatch: (ms?: number, rescue?: EndWatchRescue) => void;
 }
+
+/** The end watch's rescue: a result, null (the game is showing its own card), or false (stand down). */
+export type EndWatchRescue = () => GameResult | null | false | void;
 
 /** Snapshot payload a game hands the shell when it is held. */
 export interface ShellSnapshotData {
@@ -241,16 +282,41 @@ interface GameShellV2Props {
   onChallenge?: () => void;
   /** Label for the CHALLENGE button (default 'Challenge'). */
   challengeLabel?: string;
-  /** Game-owned row under the results card (share, album, missions, unlock card). */
+  /** Game-owned row under the results card (album, missions, unlock card). */
   resultExtras?: React.ReactNode;
+  /** The extras panel waits for its own beat (after the stars, tally and total land). */
+  resultExtrasBeat?: boolean;
+  /** A small chip inside the shared results card, under the brags (Whack's SHARE). */
+  resultCardFooter?: React.ReactNode;
+  /**
+   * One extra caps button in the results button stack (Rhythm's EASY BEAT
+   * replay), drawn like every other secondary. Hidden on group turns, in a
+   * ride challenge and once the line ended the run, the same as PLAY AGAIN.
+   */
+  resultAction?: { label: string; icon?: GameIconName; onPress: () => void; a11yLabel?: string };
   /** @deprecated alias of resultExtras (Sharky). */
   resultsExtra?: React.ReactNode;
   /** Replace the whole results surface (card and actions). The shell still owns timing, confetti and the claim contract. */
   renderResults?: (args: ShellResultsArgs) => React.ReactNode;
+  /**
+   * The game's own results surface fires its own confetti (Sharky's corner
+   * cannons): the shell skips its star bursts, so a win has one celebration
+   * on screen, not two particle stages at once.
+   */
+  ownCelebration?: boolean;
   /** Game-specific settings in the hold sheet (Trivia Duel's Relaxed pace). */
   pauseExtras?: React.ReactNode;
   /** Hide the header score (the game draws its own, e.g. Trivia's rail). */
   hideHeaderScore?: boolean;
+  /**
+   * The game drew its own results card inside the play field while the shell
+   * is still 'playing' (Line Trivia). Set it to that card's DONE: the header
+   * steps back exactly as it does in the shell's own results (title and score
+   * hidden, a dimmed close X), the X does what DONE does, and nothing can
+   * open a pause sheet over a finished game (a tap, the app going to the
+   * background, or the line moving).
+   */
+  ownResultsDone?: (() => void) | null;
   /** Replace the header score with a game-owned node (Current Quest's run bar chip). */
   headerScore?: React.ReactNode;
   /** Start count style. Default 'full'. */
@@ -294,6 +360,10 @@ const cancelFrame = (id: unknown): void => {
 };
 const RESUME_GO_MS = 220;
 const HEADS_UP_MS = 2600;
+/** A run never ends on a dark screen: past this, the results show with no fade, and an empty game surface falls back to the shared card. */
+export const RESULTS_FALLBACK_MS = 600;
+/** One number per finished run across every shell (win streaks count each run once). */
+let resultsRunSeq = 0;
 
 export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
   function GameShellV2(
@@ -322,10 +392,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       onChallenge,
       challengeLabel = 'Challenge',
       resultExtras,
+      resultExtrasBeat,
       resultsExtra,
+      resultCardFooter,
+      resultAction,
       renderResults,
+      ownCelebration = false,
       pauseExtras,
       hideHeaderScore = false,
+      ownResultsDone = null,
       headerScore,
       countdownStyle: countdownStyleProp,
       introCountdown,
@@ -351,6 +426,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const [phase, setPhase] = useState<ShellPhase>('countdown');
     const linePlayMovement = useContext(LinePlayMovementContext);
     const rideChallenge = useContext(RideChallengeContext);
+    const shellFrame = useContext(ShellFrameContext);
     const reducedMotion = useReducedGameMotion();
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
@@ -359,8 +435,26 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const [countText, setCountText] = useState(firstCount);
     const [pauseReason, setPauseReason] = useState<string | undefined>();
     const [holdReason, setHoldReason] = useState<HoldReason | null>(null);
-    const [wrap, setWrap] = useState<{ reason: WrapUpReason; result: GameResult } | null>(null);
+    const [wrap, setWrap] = useState<{ reason: WrapUpReason; result: GameResult; gameMessage?: string } | null>(null);
+    // The end watch's card for a finished run whose result never came (core/endWatch.ts).
+    const [rescue, setRescue] = useState<GameResult | null>(null);
     const [headsUp, setHeadsUp] = useState(false);
+    // Safety net: once the results have had RESULTS_FALLBACK_MS to appear, show them with no fade.
+    const [resultsSafe, setResultsSafe] = useState(false);
+    // The cheering shark's peek over a tall shared card (0 = none), measured by the podium zone.
+    const [peekK, setPeekK] = useState(0);
+    /**
+     * The same "safe" flag without a re-render: set when the fade landed on a
+     * mounted surface (so the tree is not rebuilt for nothing). A game surface
+     * that empties on a later render still falls back to the shared card.
+     */
+    const resultsSafeRef = useRef(false);
+    const ownCelebrationRef = useRef(ownCelebration);
+    ownCelebrationRef.current = ownCelebration && !!renderResults;
+    /** A results surface (the game's own or the shared card) is on screen. */
+    const surfaceShownRef = useRef(false);
+    /** Counts finished runs, so the win streak counts each run once. */
+    const resultsRunRef = useRef(0);
     const confettiRef = useRef<ParticleHandle>(null);
     const startedRef = useRef(false);
     const claimedRef = useRef(false);
@@ -371,8 +465,90 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const headsUpState = useRef(createHeadsUp());
     const scoreRef = useRef(score);
     scoreRef.current = score;
+    const personalBestRef = useRef(personalBest);
+    personalBestRef.current = personalBest;
+    // The shared results card is on screen (it fires its own NEW BEST burst).
+    const sharedCardShownRef = useRef(false);
+    const bestBurstRunRef = useRef(-1);
+    const burstBest = useCallback(() => {
+      if (bestBurstRunRef.current === resultsRunRef.current || reducedMotionRef.current) return;
+      bestBurstRunRef.current = resultsRunRef.current;
+      confettiRef.current?.burst({ x: SCREEN_W * 0.5, y: SCREEN_H * 0.4, preset: 'confetti', count: 28 });
+    }, []);
 
-    const effectiveResult = result ?? wrap?.result ?? null;
+    // A queue event wrapped the run up. A game that hands back its own result
+    // after the wrap (Whack banks the burst it was in) still gets the wrap-up
+    // credit, title and RUN SAVED flag, so its card never looks like a plain loss.
+    const effectiveResult = useMemo((): GameResult | null => {
+      // The game's own result always wins over the end watch's rescue (it may arrive late).
+      if (!wrap) return result ?? rescue ?? null;
+      if (!result) return wrap.result;
+      // Title from this result's own saved flag, so title, stamp and note agree.
+      return creditWrapResult(result, wrap.reason, !!rideChallenge, wrap.gameMessage);
+    }, [result, wrap, rideChallenge, rescue]);
+
+    // -- The end watch: a finished run always gets a lit card (core/endWatch.ts). --
+    const endWatchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    /** The trace row of the run being watched (0 = none). */
+    const endWatchRun = useRef(0);
+    /** A result is in: the game's, a wrap-up's, or the game's own card in the field. */
+    const resultInRef = useRef(false);
+    resultInRef.current = !!result || !!wrap || !!ownResultsDone;
+    const effectiveResultRef = useRef(effectiveResult);
+    effectiveResultRef.current = effectiveResult;
+    const thresholdsRef = useRef(thresholds);
+    thresholdsRef.current = thresholds;
+    const gameIdRef = useRef(gameId ?? title);
+    gameIdRef.current = gameId ?? title;
+    const clearEndWatch = useCallback(() => {
+      if (endWatchTimer.current) clearTimeout(endWatchTimer.current);
+      endWatchTimer.current = null;
+    }, []);
+    const armEndWatch = useCallback((ms: number = END_WATCH_MS, rescueFn?: EndWatchRescue) => {
+      clearEndWatch();
+      // One row per run: a game that re-arms (a longer finale) keeps its row.
+      if (!endWatchRun.current) endWatchRun.current = traceRunOver(gameIdRef.current, Date.now());
+      endWatchTimer.current = setTimeout(() => {
+        endWatchTimer.current = null;
+        if (resultInRef.current) return;
+        let fromGame: GameResult | null | false = null;
+        try {
+          fromGame = rescueFn?.() ?? null;
+        } catch {
+          // A rescue that throws is the same as no rescue: the shared card follows.
+          fromGame = null;
+        }
+        if (fromGame === false) {
+          endWatchRun.current = 0;
+          return;
+        }
+        if (fromGame) {
+          setRescue(endWatchResult(fromGame, scoreRef.current, thresholdsRef.current) as GameResult);
+          return;
+        }
+        endWatchTimer.current = setTimeout(() => {
+          endWatchTimer.current = null;
+          if (resultInRef.current) return;
+          setRescue(endWatchResult(null, scoreRef.current, thresholdsRef.current) as GameResult);
+        }, END_WATCH_GRACE_MS);
+      }, Math.max(0, ms));
+    }, [clearEndWatch]);
+    // A result arrived: the watch stands down. The game's own field card counts as lit at once,
+    // and when the game takes that card down to play again, the next run gets a fresh watch.
+    const hadOwnCard = useRef(false);
+    useEffect(() => {
+      if (!ownResultsDone && hadOwnCard.current) {
+        hadOwnCard.current = false;
+        endWatchRun.current = 0;
+      }
+      if (!result && !wrap && !ownResultsDone) return;
+      clearEndWatch();
+      if (ownResultsDone) {
+        hadOwnCard.current = true;
+        if (endWatchRun.current) traceLit(endWatchRun.current, Date.now(), 'game');
+      }
+    }, [result, wrap, ownResultsDone, clearEndWatch]);
+    useEffect(() => clearEndWatch, [clearEndWatch]);
 
     // Results animation values.
     const resultsScale = useSharedValue(0.7);
@@ -397,14 +573,21 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       headsUpTimer.current = null;
     }, []);
 
+    // The how-to line under the count is for the first play of each opening only:
+    // PLAY AGAIN's 3-2-1 is just the count (a kid who just played knows the rules).
+    const playedOnceRef = useRef(false);
     // -- Reset when (re)opened. ---------------------------------------------
     useEffect(() => {
       if (!visible) return;
+      playedOnceRef.current = false;
       startedRef.current = false;
       claimedRef.current = false;
       setPhase('countdown');
       setCountText(firstCount);
       setWrap(null);
+      setRescue(null);
+      clearEndWatch();
+      endWatchRun.current = 0;
       setHoldReason(null);
       return () => {
         clearCountdown();
@@ -413,7 +596,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         clearHeadsUp();
         [resultsScale, resultsOpacity, countScale, glow].forEach(cancelAnimation);
       };
-    }, [visible, clearCountdown, clearCelebration, clearResume, clearHeadsUp, resultsScale, resultsOpacity, countScale, glow]);
+    }, [visible, clearCountdown, clearCelebration, clearResume, clearHeadsUp, clearEndWatch, resultsScale, resultsOpacity, countScale, glow]);
 
     useEffect(() => {
       if (!reducedMotion) return;
@@ -427,12 +610,17 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     }, [reducedMotion, phase, clearCelebration, resultsScale, resultsOpacity, countScale]);
 
     // -- Run the 3-2-1-GO countdown. ----------------------------------------
+    // The latest onStart, read when GO lands: a game that re-renders during
+    // the count (a new onStart each render) never restarts the 3-2-1.
+    const onStartRef = useRef(onStart);
+    onStartRef.current = onStart;
     const beginPlay = useCallback(() => {
       if (startedRef.current) return;
       startedRef.current = true;
+      playedOnceRef.current = true;
       setPhase('playing');
-      onStart();
-    }, [onStart]);
+      onStartRef.current();
+    }, []);
 
     const punchCount = useCallback(() => {
       if (reducedMotionRef.current) { countScale.value = 1; return; }
@@ -656,19 +844,20 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // -- Play again: the game cleared its result, so run a fresh start count. --
     const hadResultRef = useRef(false);
     useEffect(() => {
-      if (result) {
+      if (result || rescue) {
         hadResultRef.current = true;
         return;
       }
       if (!visible || !hadResultRef.current || phase !== 'results' || wrap) return;
       hadResultRef.current = false;
+      endWatchRun.current = 0;
       startedRef.current = false;
       claimedRef.current = false;
       clearCelebration();
       setCountText(firstCount);
       setPhase('countdown');
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [result, phase, wrap, visible]);
+    }, [result, rescue, phase, wrap, visible]);
 
     // -- Transition to results when the game (or a wrap-up) reports one. ----
     useEffect(() => {
@@ -676,13 +865,44 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       if (phase === 'results') return;
       clearCountdown();
       clearResume();
+      resultsRunRef.current = ++resultsRunSeq;
       setPhase('results');
       setHeadsUp(false);
       if (sessionKey) void clearSnapshot(sessionKey);
-      Haptic[effectiveResult.stars > 0 ? 'success' : 'failBuzz']();
-      playSfx(effectiveResult.stars > 0 ? 'win' : 'lose');
+      // A personal best feels like a win even with 0 stars; a saved run is calm.
+      const feel = endFeel({
+        stars: effectiveResult.stars,
+        isNewBest: compareBest(effectiveResult.score ?? 0, personalBestRef.current).isNewBest,
+        saved: effectiveResult.meta?.partial === true,
+        // Any line ending (ride's up, left the line), even at 0 points.
+        wrapped: wrap != null || effectiveResult.meta?.wrapUp != null,
+      });
+      // A game that already played its own finish cue (Rhythm's drum roll)
+      // keeps it: the shell adds only the haptic, never a second sound.
+      const ownSfx = effectiveResult.meta?.ownFinishSfx === true;
+      if (feel === 'win' || feel === 'best') {
+        Haptic.success();
+        if (!ownSfx) playSfx('win');
+      } else if (feel === 'try') {
+        // A plain 0-star finish is a "go again", never a punishment: one soft
+        // bump and a light swish as the card arrives (no fail buzz, no nope).
+        Haptic.softBump();
+        if (!ownSfx) playSfx('fx.whoosh', 0.6);
+      } else {
+        // Calm send-off: a soft tap and a small happy chime, never the lose sound.
+        Haptic.hitSoft();
+        if (!ownSfx) playSfx('ui.confirm', 0.7);
+      }
       clearCelebration();
-      if (effectiveResult.stars > 0 && !reducedMotionRef.current) {
+      // The fade starts in the effect below, once the results view is on screen.
+      if (feel === 'best' && !reducedMotionRef.current) {
+        // One small burst for a 0-star personal best. The shared card fires it
+        // when its NEW BEST badge lands; a game's own card gets it here.
+        celebrationTimers.current.push(setTimeout(() => {
+          if (!sharedCardShownRef.current) burstBest();
+        }, 1200));
+      }
+      if (effectiveResult.stars > 0 && !reducedMotionRef.current && !ownCelebrationRef.current) {
         // Confetti bursts timed to the star stamps.
         celebrationTimers.current.push(setTimeout(() => {
           confettiRef.current?.burst({ x: SCREEN_W * 0.5, y: SCREEN_H * 0.32, preset: 'confetti', count: 40 });
@@ -694,20 +914,64 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       }
     }, [visible, effectiveResult, phase, sessionKey, clearCountdown, clearResume, clearCelebration]);
 
-    // The results card fades in from here only, AFTER the card has mounted. Passive effects
-    // run after the new card view is attached, so every animation frame reaches it. Starting
-    // the fade in the same effect that sets phase 'results' raced the card's mount: when the
-    // JS thread was busy (a kid still tapping at the buzzer), the 220 ms fade finished before
-    // the card view attached, and the card stayed at opacity 0 over a dimmed board.
+    // Fade the results in only after they mount. An animated style hands a
+    // newly mounted view the style it had when the shell first rendered
+    // (hidden), and it only updates while the value is still changing. A fade
+    // started before the view mounted could finish first, leaving the card
+    // invisible on a dimmed screen (audit shots games/13, games/33, boss/12).
     useEffect(() => {
-      if (phase !== 'results') {
-        resultsOpacity.value = 0;
-        resultsScale.value = 0.7;
+      if (!visible || phase !== 'results') return;
+      cancelAnimation(resultsOpacity);
+      cancelAnimation(resultsScale);
+      if (reducedMotionRef.current) {
+        resultsOpacity.value = 1;
+        resultsScale.value = 1;
         return;
       }
-      resultsOpacity.value = reducedMotionRef.current ? 1 : withTiming(1, { duration: 220 });
-      resultsScale.value = reducedMotionRef.current ? 1 : withSpring(1, JUICE.settleSpring);
-    }, [phase, resultsOpacity, resultsScale]);
+      resultsOpacity.value = 0;
+      resultsScale.value = 0.7;
+      resultsOpacity.value = withTiming(1, { duration: 220 });
+      resultsScale.value = withSpring(1, JUICE.settleSpring);
+    }, [visible, phase, resultsOpacity, resultsScale]);
+
+    // The results always show: after RESULTS_FALLBACK_MS the card drops its
+    // fade-in (a stalled animation can never leave a dimmed, empty screen) and
+    // a game surface that rendered nothing is replaced by the shared card.
+    useEffect(() => {
+      if (!visible || phase !== 'results') {
+        setResultsSafe(false);
+        resultsSafeRef.current = false;
+        return undefined;
+      }
+      // Reduced motion has no fade to wait for: the results are safe at once.
+      if (reducedMotionRef.current) {
+        setResultsSafe(true);
+        if (endWatchRun.current) {
+          const by = effectiveResultRef.current?.meta?.endWatch;
+          traceLit(endWatchRun.current, Date.now(), by === 'shared' ? 'shared' : by === 'game' ? 'rescue' : 'game');
+        }
+        return undefined;
+      }
+      // The results view that was on screen when the fade started.
+      const surfaceAtFade = surfaceShownRef.current;
+      const t = setTimeout(() => {
+        // The fade finished on a view that was already mounted: the card is
+        // solid, so skip the extra re-render of the whole results tree.
+        resultsSafeRef.current = true;
+        if (endWatchRun.current) {
+          const by = effectiveResultRef.current?.meta?.endWatch;
+          traceLit(endWatchRun.current, Date.now(), by === 'shared' ? 'shared' : by === 'game' ? 'rescue' : 'game');
+        }
+        if (surfaceAtFade && surfaceShownRef.current && resultsOpacity.value >= 0.999 && resultsScale.value > 0.98) return;
+        // Land the fade on its end values too, so the card is solid either way.
+        cancelAnimation(resultsOpacity);
+        cancelAnimation(resultsScale);
+        resultsOpacity.value = 1;
+        resultsScale.value = 1;
+        setResultsSafe(true);
+      }, RESULTS_FALLBACK_MS);
+      return () => clearTimeout(t);
+    }, [visible, phase, resultsOpacity, resultsScale]);
 
     // Ride challenge win: a short stamp, then straight into the coin reveal.
     useEffect(() => {
@@ -730,9 +994,14 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       }
     }, [sessionKey, getSnapshot, gameId, title]);
 
+    const ownResultsDoneRef = useRef(ownResultsDone);
+    ownResultsDoneRef.current = ownResultsDone;
     const doHold = useCallback(
       (reason: HoldReason, label?: string) => {
         if (phase !== 'playing' && phase !== 'countdown' && phase !== 'resuming') return;
+        // A finished game never pauses behind its card: its own card in the field, or a
+        // run that is over and waiting for its results (the end watch is armed).
+        if (ownResultsDoneRef.current || endWatchRun.current) return;
         if (phase === 'countdown') { clearCountdown(); stopCountStage(); }
         if (phase === 'resuming') clearResume();
         setPhase('paused');
@@ -840,11 +1109,20 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     doHoldRef.current = doHold;
     const doResumeRef = useRef(doResume);
     doResumeRef.current = doResume;
+    const rideUpLikelyRef = useRef(false);
+    const askBoardingRef = useRef(false);
+    /** The guest tapped SAVE MY RUN: boarding is recorded once the saved run's card closes. */
+    const boardingAnsweredRef = useRef(false);
     useEffect(() => {
       if (!visible) return;
       const subscription = AppState.addEventListener('change', state => {
         if (state === 'background' || state === 'inactive') doHoldRef.current('background', 'Paused while away');
-        else if (state === 'active' && holdRef.current === 'background') doResumeRef.current();
+        else if (state === 'active' && holdRef.current === 'background') {
+          // Back from the pocket while ride detection thinks the guest boarded:
+          // stay held so the sheet can ask "Did your ride start?". Never guess.
+          if (rideUpLikelyRef.current && startedRef.current && askBoardingRef.current) return;
+          doResumeRef.current();
+        }
       });
       return () => subscription.remove();
     }, [visible]);
@@ -864,14 +1142,32 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       };
       setWrap({
         reason,
-        result: { ...base, message: base.message ?? WRAP_UP_COPY[reason].title, meta: { ...(base.meta ?? {}), wrapUp: reason } },
+        gameMessage: base.message,
+        result: creditWrapResult({ ...base, score: base.score ?? finalScore }, reason, !!rideChallenge, base.message),
       });
-    }, [phase, wrap, clearCountdown, clearResume, onPause, onWrapUp, thresholds]);
+    }, [phase, wrap, clearCountdown, clearResume, onPause, onWrapUp, thresholds, rideChallenge]);
 
     const queueEnded = linePlayMovement?.queueEnded ?? null;
     useEffect(() => {
       if (visible && queueEnded) wrapUp(queueEnded);
     }, [visible, queueEnded, wrapUp]);
+
+    // Ride detection thinks the guest boarded. A single GPS fix can fake that
+    // (indoor queues most of all), so the hint never ends a run by itself.
+    // An active round keeps playing; a held round asks inside the game
+    // ("Did your ride start?") instead of counting down to resume.
+    const rideUpLikely = !!linePlayMovement?.rideUpLikely;
+    const askBoarding = rideUpLikely && !!linePlayMovement?.onBoardingAnswer && !rideChallenge;
+    rideUpLikelyRef.current = rideUpLikely;
+    askBoardingRef.current = askBoarding;
+    const answerSaveRun = useCallback(() => {
+      boardingAnsweredRef.current = true;
+      wrapUp('boarding');
+    }, [wrapUp]);
+    const answerKeepPlaying = useCallback(() => {
+      linePlayMovement?.onBoardingAnswer?.(false);
+      doResume();
+    }, [linePlayMovement, doResume]);
 
     useImperativeHandle(
       ref,
@@ -880,8 +1176,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         resume: doResume,
         wrapUp,
         getPhase: () => phase,
+        endWatch: armEndWatch,
       }),
-      [doHold, doResume, wrapUp, phase],
+      [doHold, doResume, wrapUp, phase, armEndWatch],
     );
 
     // -- Completion: stars -> multiplier -> external contract. ----------------
@@ -893,9 +1190,39 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       if (stars > 0) {
         onComplete(mult, effectiveResult?.meta);
       } else {
+        // A finished run still counts as played in the queue, even with no star.
+        linePlayMovement?.onRunDone?.(0, effectiveResult?.meta?.partial === true);
         onClose();
       }
-    }, [effectiveResult, starMultipliers, onComplete, onClose]);
+      // SAVE MY RUN: the run is counted above, now the wait records boarding.
+      if (boardingAnsweredRef.current) {
+        boardingAnsweredRef.current = false;
+        linePlayMovement?.onBoardingAnswer?.(true);
+      }
+    }, [effectiveResult, starMultipliers, onComplete, onClose, linePlayMovement]);
+
+    // PLAY AGAIN in a queue: the run just played is counted first, so a
+    // replay never throws a finished run (or its star) away.
+    const canBankRun = !!linePlayMovement?.onRunDone;
+    const rematchRun = useMemo(() => (onRematch ? () => {
+      if (!claimedRef.current && effectiveResult && linePlayMovement?.onRunDone) {
+        claimedRef.current = true;
+        linePlayMovement.onRunDone(effectiveResult.stars ?? 0, effectiveResult.meta?.partial === true);
+      }
+      clearEndWatch();
+      endWatchRun.current = 0;
+      setRescue(null);
+      onRematch();
+    } : undefined), [onRematch, effectiveResult, linePlayMovement, clearEndWatch]);
+
+    // The extra replay button banks the finished run first, like PLAY AGAIN.
+    const resultActionPress = useCallback(() => {
+      if (!claimedRef.current && effectiveResult && linePlayMovement?.onRunDone) {
+        claimedRef.current = true;
+        linePlayMovement.onRunDone(effectiveResult.stars ?? 0, effectiveResult.meta?.partial === true);
+      }
+      resultAction?.onPress();
+    }, [effectiveResult, linePlayMovement, resultAction]);
 
     const handleClaimRef = useRef(handleClaim);
     handleClaimRef.current = handleClaim;
@@ -914,6 +1241,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     }, [onQuit, onClose, resumeAfterQuitCancel]);
 
     const handleExit = useCallback(() => {
+      // The game's own results card is up: the X is that card's DONE.
+      if (ownResultsDoneRef.current) { ownResultsDoneRef.current(); return; }
       if (phase === 'playing' || phase === 'resuming') doHold('manual');
       else if (phase === 'results') handleClaim();
       else {
@@ -945,15 +1274,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     }, [visible, rideChallenge, handleExit]);
 
     // Reduce Motion shows the results card with a plain still style, never the
-    // animated one. The animated style takes its first frame when the card
-    // mounts; in Reduce Motion the value jumps 0 -> 1 with no animation, and when
-    // that jump lands between the first frame and the style's UI-thread hookup it
-    // was never applied: the card stayed at opacity 0 over a cleared board (the
-    // first-win freeze, most warm-ups in release JS with Reduce Motion on).
-    const resultsStyle = useAnimatedStyle(() => ({
-      opacity: resultsOpacity.value,
-      transform: [{ scale: resultsScale.value }],
-    }));
+    // animated one (first-session's fix): a 0 -> 1 jump that lands between the
+    // card's first frame and the style's UI-thread hookup was never applied,
+    // and the card stayed at opacity 0 over a cleared board.
+    const resultsFadeStyle = useAnimatedStyle(() => ({ opacity: resultsOpacity.value }));
+    const resultsScaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: resultsScale.value }] }));
     const countStyle = useAnimatedStyle(() => ({
       transform: [{ scale: countScale.value }],
     }));
@@ -999,22 +1324,74 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const stars = effectiveResult?.stars ?? 0;
     const won = stars > 0;
 
+    // One button rule for every results card: PLAY AGAIN is the big button,
+    // unless a win's reward is still waiting and a replay would skip it.
+    // A pass-and-play group turn is one try per kid: DONE is the only button.
+    const turnOnly = linePlayMovement?.turnOnly === true;
+    const rematchOffered = !rideChallenge && !wrap && !turnOnly && !!rematchRun;
+    const challengeOffered = !rideChallenge && !wrap && !turnOnly ? onChallenge : undefined;
+    const playAgainFirst = rematchOffered && (!won || canBankRun);
+    const saved = effectiveResult?.meta?.partial === true;
+    // One exit word on every results card: DONE, and CONTINUE only when a
+    // reward is still to collect (a won ride coin, or a win the line has not
+    // banked yet).
+    const claimLabel = won && (rideChallenge || !canBankRun) ? 'CONTINUE' : 'DONE';
+
+    // A game-owned results surface, when the game has one and it rendered.
+    // Nothing rendered by the time the fallback fires: the shared card shows.
+    // Memoized: shell-only re-renders (the fade's safety net, heads-up flags)
+    // never rebuild the game's results tree; a game re-render passes a new
+    // renderResults and rebuilds it.
+    const wrapReason = wrap?.reason ?? null;
+    const ownSurface = useMemo(() => (phase === 'results' && renderResults && effectiveResult ? renderResults({
+      result: effectiveResult,
+      stars,
+      won,
+      wrapReason,
+      claim: handleClaim,
+      rematch: rematchOffered ? rematchRun : undefined,
+      challenge: challengeOffered,
+      playAgainFirst,
+      claimLabel,
+      saved,
+      reducedMotion,
+    }) : null), [phase, renderResults, effectiveResult, stars, won, wrapReason, handleClaim, rematchOffered, rematchRun, challengeOffered, playAgainFirst, claimLabel, saved, reducedMotion]);
+    const gameResults = isEmptyResultsNode(ownSurface) ? null : ownSurface;
+    // A wrap-up (ride's up) has no game surface to wait for: the shared card shows at once.
+    const showSharedCard = phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || resultsSafeRef.current || wrap != null)));
+    sharedCardShownRef.current = showSharedCard;
+    surfaceShownRef.current = gameResults != null || showSharedCard;
+
     if (!visible) return null;
+
+    // The HUD steps back behind any results card: the shell's own, or one the game draws itself.
+    const hudBack = phase === 'results' || !!ownResultsDone;
+    // On a short phone (iPhone SE) the shared card's ribbon reaches the
+    // header: the X would sit half under the ribbon's left tail. DONE is
+    // inside the card there, so the X steps out entirely (no half-covered
+    // button), and the card is the only way on.
+    const xGone = showSharedCard && SCREEN_H < SHORT_PHONE_PT;
 
     const gameContent = (
         <View style={styles.root}>
           {/* Header */}
+          {/* While results are up the card is the only thing to read: the
+              game's title and score step back and the close X dims (it still
+              works, a safe way out if a card ever stalls). */}
           <View style={styles.header}>
             <TouchableOpacity
-              style={styles.iconBtn}
+              style={[styles.iconBtn, hudBack && styles.headerDim, xGone && styles.headerGone]}
               onPress={handleExit}
+              disabled={xGone}
+              importantForAccessibility={xGone ? 'no-hide-descendants' : 'auto'}
+              accessibilityElementsHidden={xGone}
               hitSlop={12}
               accessibilityRole="button"
-              accessibilityLabel={phase === 'playing' ? 'Pause' : 'Close'}
+              accessibilityLabel={phase === 'playing' && !hudBack ? 'Pause' : 'Close'}
             >
-              <GameIcon name={phase === 'playing' ? 'pause' : 'close'} size={26} />
+              <GameIcon name={phase === 'playing' && !hudBack ? 'pause' : 'close'} size={26} />
             </TouchableOpacity>
-            <View style={styles.headerCenter}>
+            <View style={[styles.headerCenter, hudBack && styles.headerHidden]} importantForAccessibility={hudBack ? 'no-hide-descendants' : 'auto'}>
               <Text style={styles.title} numberOfLines={1}>
                 {title}
               </Text>
@@ -1025,7 +1402,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               ) : null}
             </View>
             {hideHeaderScore ? null : (
-              <View style={styles.headerScore}>
+              <View style={[styles.headerScore, hudBack && styles.headerHidden]} importantForAccessibility={hudBack ? 'no-hide-descendants' : 'auto'}>
                 {headerScore ?? (
                   <ScoreDisplay
                     score={score}
@@ -1090,7 +1467,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
               {pillShown ? (
               <Animated.View style={[styles.cdPill, countdownPillFieldY != null && fieldY > 0 ? { top: Math.max(188, fieldY + countdownPillFieldY) } : null, pillBreath]} pointerEvents="none">
                 {goal ? <Text style={styles.goalHeadline}>{`${goal.target} ${goal.label}`}</Text> : null}
-                {countdownDemo ? <React.Fragment key={demoRun}>{countdownDemo}</React.Fragment> : (objective ? <Text style={styles.cdPillText} numberOfLines={2}>{objective}</Text> : null)}
+                {countdownDemo ? <React.Fragment key={demoRun}>{countdownDemo}</React.Fragment> : (objective && !playedOnceRef.current ? <Text style={styles.cdPillText} numberOfLines={2}>{objective}</Text> : null)}
                 {countdownDemo ? null : <Text style={styles.skipHint}>tap to skip</Text>}
               </Animated.View>
               ) : null}
@@ -1105,8 +1482,26 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </View>
           ) : null}
 
-          {/* Hold sheet */}
-          {phase === 'paused' ? (
+          {/* Hold sheet. Ride detection thinks the guest boarded: ask, never guess. */}
+          {phase === 'paused' && askBoarding && startedRef.current ? (
+            <View style={styles.overlay}>
+              <View style={styles.sheet} accessibilityRole="alert">
+                <View style={styles.sheetIcon}><GameIcon name="ride" size={64} /></View>
+                <Text style={styles.sheetTitle}>Did your ride start?</Text>
+                <Text style={styles.sheetBody}>Your run is saved either way.</Text>
+                <TouchableOpacity style={[styles.sheetBtn, styles.primaryBtn, styles.bigBtn]} onPress={answerSaveRun}
+                  accessibilityRole="button" accessibilityLabel="Yes, my ride started. Save my run">
+                  <GameIcon name="ride" size={26} />
+                  <Text style={[styles.primaryBtnTxt, styles.btnGap]}>SAVE MY RUN</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn]} onPress={answerKeepPlaying}
+                  accessibilityRole="button" accessibilityLabel="Still in line. Keep playing">
+                  <GameIcon name="play" size={22} />
+                  <Text style={[styles.secondaryBtnCaps, styles.btnGap]}>KEEP PLAYING</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : phase === 'paused' ? (
             <View style={styles.overlay}>
               <View style={styles.sheet}>
                 <Text style={styles.sheetTitle}>{pauseReason ?? 'Paused'}</Text>
@@ -1122,69 +1517,98 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </View>
           ) : null}
 
-          {/* Results */}
-          {phase === 'results' && renderResults && effectiveResult ? (
+          {/* Results. The fade wrapper drops to a plain style after the safety
+              net (opacity only); the settle spring keeps its own scale. The scrim
+              fades in with the card (w5r2: never a navy board with no card). */}
+          {gameResults != null ? (
             <View style={[styles.overlay, styles.scrimNone]} pointerEvents="box-none">
-              {/* w5r2: the scrim fades in with the card (it used to land a frame early: a navy board with no card). */}
               <Animated.View pointerEvents="none" style={[styles.scrimFill, resultsScrim === 'light' ? styles.scrimLight : resultsScrim === 'none' ? styles.scrimNone : null,
-                reducedMotion ? null : resultsScrimStyle]} />
-              <Animated.View style={[{ width: '100%', alignItems: 'center' }, reducedMotion ? styles.resultsStill : resultsStyle]}>
-                {renderResults({
-                  result: effectiveResult,
-                  stars,
-                  won,
-                  wrapReason: wrap?.reason ?? null,
-                  claim: handleClaim,
-                  rematch: !rideChallenge && !wrap ? onRematch : undefined,
-                  challenge: !rideChallenge && !wrap ? onChallenge : undefined,
-                  reducedMotion,
-                })}
+                resultsSafe || reducedMotion ? null : resultsScrimStyle]} />
+              <Animated.View style={[styles.resultsFill, resultsSafe || reducedMotion ? styles.resultsShown : resultsFadeStyle]}>
+                <Animated.View style={[styles.resultsFill, reducedMotion ? styles.resultsStill : resultsScaleStyle]}>
+                  {gameResults}
+                </Animated.View>
               </Animated.View>
             </View>
           ) : null}
-          {phase === 'results' && !(renderResults && effectiveResult) ? (
-            <View style={styles.overlay} pointerEvents="box-none">
-              <Animated.View style={[{ width: '86%' }, reducedMotion ? styles.resultsStill : resultsStyle]}>
-                <ResultsCard
-                  score={effectiveResult?.score ?? score}
-                  stars={stars}
-                  message={effectiveResult?.message}
-                  thresholds={effectiveResult?.thresholds ?? thresholds}
-                  personalBest={personalBest}
-                  maxCombo={effectiveResult?.maxCombo}
-                  stats={effectiveResult?.stats}
-                  rival={effectiveResult?.rival}
-                  buckets={effectiveResult?.buckets}
-                  bucketValues={effectiveResult?.bucketValues}
-                  starStepMs={effectiveResult?.starStepMs}
-                  note={wrap ? WRAP_UP_COPY[wrap.reason].body : effectiveResult?.note}
-                  reducedMotion={reducedMotion}
-                />
-                {resultExtras ?? resultsExtra ?? null}
-                <View style={styles.actions}>
-                  <TouchableOpacity
-                    style={[styles.sheetBtn, styles.primaryBtn, styles.claimBtn]}
-                    onPress={handleClaim}
+          {showSharedCard ? (
+            // One results language on every game: the scene (the shark on its
+            // podium for a star or a new best) stands on the card, the card
+            // sits at the bottom with its buttons inside, like Sharky, the
+            // Duel and the Boss.
+            <View style={[styles.overlay, styles.sharedStage]} pointerEvents="box-none">
+              <ResultsPodium cheer={stars > 0 || (!saved && compareBest(effectiveResult?.score ?? score, personalBest).isNewBest)} reducedMotion={reducedMotion}
+                onPeek={setPeekK} />
+              <Animated.View style={[{ width: '90%' }, resultsSafe || reducedMotion ? styles.resultsShown : resultsFadeStyle]}>
+                <Animated.View style={reducedMotion ? styles.resultsStill : resultsScaleStyle}>
+                  <ResultsCard
+                    score={effectiveResult?.score ?? score}
+                    stars={stars}
+                    message={effectiveResult?.message}
+                    thresholds={effectiveResult?.thresholds ?? thresholds}
+                    personalBest={personalBest}
+                    maxCombo={effectiveResult?.maxCombo}
+                    stats={effectiveResult?.stats}
+                    rival={effectiveResult?.rival}
+                    buckets={effectiveResult?.buckets}
+                    bucketValues={effectiveResult?.bucketValues}
+                    starStepMs={effectiveResult?.starStepMs}
+                    starGoal={effectiveResult?.starGoal}
+                    streakKey={gameId ?? title}
+                    runToken={resultsRunRef.current}
+                    saved={saved}
+                    note={wrap ? wrapUpCopy(wrap.reason, saved || (effectiveResult?.score ?? 0) <= 0).body || undefined : effectiveResult?.note}
+                    spokenNote={wrap ? undefined : effectiveResult?.spokenNote}
+                    footer={resultCardFooter}
+                    onNewBestLanded={stars === 0 ? burstBest : undefined}
+                    wrapUp={wrap != null}
+                    wrapReason={wrap?.reason ?? null}
+                    reducedMotion={reducedMotion}
+                    peek={peekK}
+                    extras={resultExtras ?? resultsExtra ?? undefined}
+                    extrasBeat={resultExtrasBeat}
                   >
-                    <Text style={styles.primaryBtnTxt}>{won ? 'Continue' : 'Close'}</Text>
-                  </TouchableOpacity>
-                  {!rideChallenge && !wrap && (onRematch || onChallenge) ? (
-                    <View style={styles.row}>
-                      {onRematch ? (
-                        <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.half]} onPress={onRematch}>
-                          <GameIcon name="retry" size={20} />
-                          <Text style={styles.secondaryBtnTxtBold}>Play again</Text>
-                        </TouchableOpacity>
-                      ) : null}
-                      {onChallenge ? (
-                        <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.half]} onPress={onChallenge}>
-                          <GameIcon name="swords" size={20} />
-                          <Text style={styles.secondaryBtnTxtBold}>{challengeLabel}</Text>
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  ) : null}
-                </View>
+                  <View style={styles.actions}>
+                    <TouchableOpacity
+                      style={[styles.sheetBtn, styles.primaryBtn, styles.bigBtn]}
+                      onPress={playAgainFirst ? rematchRun : handleClaim}
+                      accessibilityRole="button"
+                    >
+                      {playAgainFirst ? <GameIcon name="retry" size={26} /> : null}
+                      <Text style={[styles.primaryBtnTxt, playAgainFirst && styles.btnGap]}>{playAgainFirst ? 'PLAY AGAIN' : claimLabel}</Text>
+                    </TouchableOpacity>
+                    {playAgainFirst || (rematchOffered && rematchRun) || challengeOffered ? (
+                      <View style={styles.row}>
+                        {playAgainFirst ? (
+                          <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.rowBtn]} onPress={handleClaim} accessibilityRole="button">
+                            <Text style={styles.secondaryBtnCaps}>{claimLabel}</Text>
+                          </TouchableOpacity>
+                        ) : rematchOffered && rematchRun ? (
+                          <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.rowBtn]} onPress={rematchRun} accessibilityRole="button">
+                            <GameIcon name="retry" size={20} />
+                            <Text style={[styles.secondaryBtnCaps, styles.btnGap]}>PLAY AGAIN</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        {challengeOffered ? (
+                          <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.rowBtn]} onPress={challengeOffered} accessibilityRole="button">
+                            <GameIcon name="rush" size={20} />
+                            <Text style={[styles.secondaryBtnCaps, styles.btnGap]} numberOfLines={1} adjustsFontSizeToFit>{challengeLabel.toUpperCase()}</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    ) : null}
+                    {resultAction && !rideChallenge && !wrap && !turnOnly && (!won || canBankRun) ? (
+                      <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.rowBtn, styles.extraBtn]} onPress={resultActionPress}
+                        accessibilityRole="button" accessibilityLabel={resultAction.a11yLabel ?? resultAction.label}>
+                        {resultAction.icon ? <GameIcon name={resultAction.icon} size={20} /> : null}
+                        <Text style={[styles.secondaryBtnCaps, resultAction.icon && styles.btnGap]} numberOfLines={1} adjustsFontSizeToFit>
+                          {resultAction.label.toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                  </ResultsCard>
+                </Animated.View>
               </Animated.View>
             </View>
           ) : null}
@@ -1203,7 +1627,12 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     );
     return rideChallenge ? gameContent : (
       <Modal visible={visible} animationType={reducedMotion ? 'none' : 'fade'} transparent statusBarTranslucent onRequestClose={handleExit}>
-        {gameContent}
+        {shellFrame ? (
+          // Capture only: the shell at a smaller phone's exact size.
+          <View style={styles.frameBackdrop}>
+            <View style={{ width: shellFrame.width, height: shellFrame.height }}>{gameContent}</View>
+          </View>
+        ) : gameContent}
       </Modal>
     );
   },
@@ -1240,8 +1669,14 @@ function GoalMeter({ current, target, label, reducedMotion }: { current: number;
 }
 
 const styles = StyleSheet.create({
+  headerDim: { opacity: 0.45 },
+  headerHidden: { opacity: 0 },
+  frameBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#05346e' },
+  resultsShown: { opacity: 1 },
   countTrace: { position: 'absolute', left: 4, right: 4, bottom: 4, fontSize: 11, color: '#05346e', backgroundColor: 'rgba(255,255,255,0.85)' },
   resultsStill: { opacity: 1, transform: [{ scale: 1 }] },
+  headerGone: { opacity: 0 },
+  resultsFill: { width: '100%', alignItems: 'center' },
   root: {
     flex: 1,
     backgroundColor: '#0879ca',
@@ -1279,6 +1714,9 @@ const styles = StyleSheet.create({
   },
   scrimFill: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,56,128,0.45)' },
   scrimLight: { backgroundColor: 'rgba(255,255,255,0.3)' },
+  // The shared card stands at the bottom with the scene above it.
+  sharedStage: { justifyContent: 'flex-end', paddingTop: (initialWindowMetrics?.insets.top ?? 20) + 56,
+    paddingBottom: Math.max(10, initialWindowMetrics?.insets.bottom ?? 0) + 6 },
   scrimNone: { backgroundColor: 'transparent' },
   overlayLight: {
     ...StyleSheet.absoluteFillObject,
@@ -1364,14 +1802,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   primaryBtn: { backgroundColor: '#ffcf3b', borderBottomWidth: 4, borderBottomColor: '#d99a00' },
-  primaryBtnTxt: { color: '#075083', fontSize: 20, fontFamily: 'Shark' },
+  primaryBtnTxt: { color: '#05346e', fontSize: 22, fontFamily: 'Shark' },
   secondaryBtnTxt: { color: '#e4f7ff', fontSize: 17, fontFamily: 'Knockout' },
   secondaryBtn: { backgroundColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9cc9ec', flexDirection: 'row',
     justifyContent: 'center' },
-  secondaryBtnTxtBold: { color: '#05346e', fontSize: 17, fontFamily: 'Shark', marginLeft: 6 },
+  secondaryBtnCaps: { color: '#05346e', fontSize: 18, fontFamily: 'Shark' },
+  bigBtn: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 16, marginTop: 14,
+    borderWidth: 3, borderColor: '#05346e', borderBottomWidth: 6 },
+  btnGap: { marginLeft: 8 },
+  sheetIcon: { marginTop: -6, marginBottom: 4 },
   actions: { width: '100%', marginTop: 6 },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
-  half: { width: '48.5%' },
-  claimBtn: { marginTop: 12 },
+  row: { flexDirection: 'row', gap: 10 },
+  rowBtn: { flex: 1, borderWidth: 3, borderColor: '#05346e', borderBottomWidth: 5, paddingVertical: 12 },
+  extraBtn: { flex: 0, alignSelf: 'stretch', marginTop: 10 },
   confetti: { ...StyleSheet.absoluteFillObject },
 });

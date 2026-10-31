@@ -21,8 +21,16 @@ export interface QueueToastMessage {
 }
 
 const HOLD_MS = 3200;
+/** How far a toast tucked inside the wait card travels in and out (its band's top margin is larger). */
+const TUCKED_DROP = 6;
 
-export default function QueueToast({ message, onDone }: { message: QueueToastMessage | null; onDone: () => void }) {
+export default function QueueToast({ message, onDone, top, slim = false }: {
+  message: QueueToastMessage | null; onDone: () => void;
+  /** Where the toast lands (LinePlay: inside the wait card's middle band, so it never covers its ride name or buttons). */
+  top?: number;
+  /** One line each for the title and the body, a smaller icon: fits a short wait card's middle band. */
+  slim?: boolean;
+}) {
   const reducedMotion = useReducedGameMotion();
   const drop = useSharedValue(0);
   const wiggle = useSharedValue(0);
@@ -49,17 +57,23 @@ export default function QueueToast({ message, onDone }: { message: QueueToastMes
 
   const toastStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, drop.value * 1.4),
-    transform: reducedMotion ? [] : [{ translateY: (1 - drop.value) * -70 }, { scale: 0.92 + drop.value * 0.08 }],
+    // Inside the wait card (a `top` was given) it drops only a little, so its way in and out never
+    // crosses the card's top row (ride name, ARCADE, pause).
+    transform: reducedMotion ? [] : [{ translateY: (1 - drop.value) * (top != null ? -TUCKED_DROP : -70) },
+      { scale: 0.92 + drop.value * 0.08 }],
   }));
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value}deg` }] }));
 
   if (!message) return null;
-  return <View pointerEvents="none" style={styles.wrap}>
-    <Animated.View style={[styles.toast, toastStyle]} accessibilityLiveRegion="polite">
-      <Animated.View style={[styles.iconWell, iconStyle]}><GameIcon name={message.icon} size={34} /></Animated.View>
+  return <View pointerEvents="none" style={[styles.wrap, top != null && { top }]}>
+    <Animated.View style={[styles.toast, slim && styles.toastSlim, toastStyle]} accessibilityLiveRegion="polite">
+      <Animated.View style={[styles.iconWell, slim && styles.iconWellSlim, iconStyle]}>
+        <GameIcon name={message.icon} size={slim ? 24 : 34} />
+      </Animated.View>
       <View style={styles.copy}>
-        <Text style={styles.title} numberOfLines={1}>{message.title}</Text>
-        <Text style={styles.body} numberOfLines={2}>{message.body}</Text>
+        <Text style={[styles.title, slim && styles.titleSlim]} numberOfLines={1}>{message.title}</Text>
+        <Text style={[styles.body, slim && styles.bodySlim]} numberOfLines={slim ? 1 : 2}
+          adjustsFontSizeToFit={slim} minimumFontScale={0.85}>{message.body}</Text>
       </View>
     </Animated.View>
   </View>;
@@ -74,6 +88,10 @@ const styles = StyleSheet.create({
   iconWell: { width: 46, height: 46, borderRadius: 23, backgroundColor: BRAND.gold, alignItems: 'center',
     justifyContent: 'center', borderWidth: 3, borderColor: BRAND.navy },
   copy: { flexShrink: 1 },
+  toastSlim: { height: 54, paddingVertical: 4, paddingLeft: 6, paddingRight: 12, borderRadius: 16, gap: 8 },
+  iconWellSlim: { width: 36, height: 36, borderRadius: 18, borderWidth: 2 },
+  titleSlim: { fontSize: 16 },
+  bodySlim: { fontSize: 13, lineHeight: 15 },
   title: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
   body: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, color: BRAND.navySoft, marginTop: 1 },
 });

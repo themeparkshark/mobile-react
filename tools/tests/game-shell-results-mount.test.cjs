@@ -16,6 +16,8 @@ function shell(extra = {}, reduced = false) {
     './theme': { GAME_COLORS: {}, COUNTDOWN: { stepMs: 600, goMs: 400 }, JUICE: {}, LINE_MOVING_TOAST: 'Moving' },
     './LinePlayMovementContext': { LinePlayMovementContext: { value: null }, shouldPauseForMovement: () => false },
     './RideChallengeContext': { RideChallengeContext: { value: false } },
+    './ShellFrameContext': { ShellFrameContext: { value: null } },
+    './results/feelings': loadTs('src/gamekit/results/feelings.ts'),
     './Haptics': { Haptic: haptic }, './SFX': { playSfx() {} },
     '../hooks/useReducedGameMotion': { default: () => reduced },
     '../ui/GameIcon': { default: 'GameIcon' },
@@ -29,7 +31,8 @@ function shell(extra = {}, reduced = false) {
 }
 const isCard = node => node.type === 'ResultsCard';
 const opacityOf = view => {
-  const wrap = view.find(node => node.type === 'ReanimatedView' && node.props.style?.[0]?.width === '86%');
+  // The shared card's fade wrapper (the scale lives on its own inner wrapper).
+  const wrap = view.find(node => node.type === 'ReanimatedView' && node.props.style?.[0]?.width === '90%');
   return wrap?.props.style?.[1]?.opacity;
 };
 
