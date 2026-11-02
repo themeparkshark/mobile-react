@@ -2,7 +2,7 @@ import Lottie from 'lottie-react-native';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Dimensions, Pressable, View, Text, StyleSheet } from 'react-native';
-import Modal from 'react-native-modal';
+import CalmModal from './retention/CalmModal';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
 import { AuthContext } from '../context/AuthProvider';
@@ -73,7 +73,7 @@ import { CHALLENGE_GAME_COLORS } from '../constants/coinTiers';
 import { storeAvailable } from '../services/purchases';
 import { watchForReward } from '../services/ads';
 import { useNativeModalLayer } from '../ui/modalLayers';
-import { usePresentWatchdog } from './rewards/usePresentWatchdog';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 
 // Ticket cost by ride importance tier
@@ -110,6 +110,8 @@ export const NEED_TICKET_BUTTON = BACK_TO_MAP;
 const TREAT_ART = require('../../assets/images/prep-items/churros/churro_18.png');
 /** Taps beside the challenge card in its first moment on screen are queued PLAY! taps, not a close. */
 export const SCRIM_GRACE_MS = 900;
+/** The card waits this long on a sheet that registered before it, then asks the native door itself. */
+export const CHALLENGE_PATIENCE_MS = 3000;
 /** The line story lookup gets this long while the win card waits; after it the template story opens. */
 export const STORY_LOOKUP_MS = 2500;
 function storyWithin<T>(lookup: Promise<T>, fallback: T): Promise<T> {
@@ -157,8 +159,6 @@ export default function RedeemRedeemableModal({
   const devFlow = devFlowEnv && ['lost', 'expired', 'claim-error', 'spend-error', 'save-error'].includes(devFlowEnv)
     ? devFlowEnv : undefined;
   const [flowState, setFlowState] = useState<FlowState>(devFlow ?? 'preview');
-  // iOS must finish dismissing the game presentation before showing rewards.
-  const [challengeModalHidden, setChallengeModalHidden] = useState(true);
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [selectedGameData, setSelectedGameData] = useState<typeof CHALLENGE_GAMES[0] | null>(null);
   const selectedIndexRef = useRef<number | null>(null);
@@ -303,7 +303,6 @@ export default function RedeemRedeemableModal({
   // Reset state when modal opens/closes
   useEffect(() => {
     if (open) {
-      setChallengeModalHidden(false);
       setFlowState(devFlow ?? (isTaskType ? 'recovering' : 'preview'));
       setSelectedGame(null);
       setSelectedGameData(null);
@@ -835,13 +834,13 @@ export default function RedeemRedeemableModal({
     setTimeout(onPress, SHELF_MAP_REFRESH_DELAY_MS);
   }, [onPress, close, clearAttemptCheckpoint, player?.id, park.id, openTeamStep]);
 
-  // One door for every sheet (blueprint 4.3 rule 10, the PLAY RIDE freeze): the
-  // challenge card waits until every sheet before it (a swipe-closed Ride
-  // Control sheet still sliding away) is really gone, and holds its own layer
-  // until UIKit reports it dismissed, so the win card never presents into it.
-  const challengeLayer = useNativeModalLayer(open === true && flowState !== 'postwin' && !!redeemable, 'wait');
-  // A sheet not on the layer list (or still dismissing) can make UIKit refuse the card: present it again.
-  const challengeWatch = usePresentWatchdog(challengeLayer.present);
+  // One native sheet for the whole challenge: the card, the punch, the game, the loss card and the win card take turns
+  // inside it (rewards-unlocks' CalmModal), so no dismiss and present ever races between them and a win never shows a
+  // bare map. It waits its turn among the layers, but never for long: past its patience it asks the app's one native
+  // door anyway (ui/nativeModalDoor.ts), which presents it when whatever is up has gone, so PLAY! can never be dead.
+  const challengeLayer = useNativeModalLayer(open === true && !!redeemable, 'wait', CHALLENGE_PATIENCE_MS);
+  const reducedMotion = useReducedGameMotion();
+  const winHidden = useRef<(() => void) | null>(null);
   // A kid mashing PLAY! while a sheet slides away: the card waits its turn, then zooms in under the
   // next taps. Those taps land beside the card, and must not close the card they just opened, so the
   // scrim only closes it once the card has been up for a moment.
@@ -866,23 +865,23 @@ export default function RedeemRedeemableModal({
 
   return (
     <>
-      <Modal
-        key={`challenge-${challengeWatch.key}`}
-        onShow={challengeWatch.onShow}
-        animationIn="zoomIn"
-        animationOut="zoomOut"
-        swipeDirection={flowState === 'preview' ? 'down' : undefined}
-        isVisible={challengeLayer.present}
-        onModalWillShow={() => { cardShownAt.current = Date.now(); setChallengeModalHidden(false); }}
-        onModalHide={() => { setChallengeModalHidden(true); challengeLayer.onDismissed(); }}
-        onSwipeComplete={safeClose}
+      <CalmModal
+        visible={challengeLayer.present}
+        reducedMotion={reducedMotion}
+        fullBleed={flowState === 'spinning' || flowState === 'minigame' || flowState === 'postwin'}
+        fadeOnly={flowState === 'postwin'}
+        onSwipeDown={flowState === 'preview' ? safeClose : undefined}
+        onWillShow={() => { cardShownAt.current = Date.now(); }}
+        onHide={() => {
+          challengeLayer.onHidden();
+          if (flowStateRef.current === 'postwin') winHidden.current?.();
+        }}
+        onDismiss={challengeLayer.onDismissed}
         onBackdropPress={closeFromScrim}
-        onBackButtonPress={safeClose}
+        onBackButtonPress={flowState === 'postwin' ? () => { void handlePostWinClose(); } : safeClose}
+        onPresentLost={close}
         backdropColor="#05346e"
-        backdropOpacity={flowState === 'preview' ? 0.5 : 0.88}
-        useNativeDriverForBackdrop
-        statusBarTranslucent={flowState === 'minigame'}
-        style={flowState === 'spinning' || flowState === 'minigame' || flowState === 'postwin' ? { margin: 0 } : undefined}
+        backdropOpacity={flowState === 'preview' ? 0.5 : flowState === 'postwin' ? 0.6 : 0.88}
       >
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           {flowState === 'recovering' && <ChallengeStatusCard title="Checking" art="loading"
@@ -1160,12 +1159,13 @@ export default function RedeemRedeemableModal({
               </RideChallengeContext.Provider>
             </View>
           )}
-        </View>
-      </Modal>
-
-      {/* The win card */}
+          {/* The win card, in this same sheet: mounted from the start so its coin art is warm when the game ends. */}
+          <View style={flowState === 'postwin' ? styles.minigameContainer : styles.parkedCard}
+            pointerEvents={flowState === 'postwin' ? 'auto' : 'none'}>
       <PostWinRewardsModal
-        visible={open === true && flowState === 'postwin' && challengeModalHidden}
+        embedded
+        hiddenRef={winHidden}
+        visible={open === true && flowState === 'postwin'}
         rideName={taskName}
         limited={redeemable?.type === 'task' ? (redeemable.model as TaskType)?.limited ?? null : null}
         taskCoinUrl={
@@ -1206,6 +1206,9 @@ export default function RedeemRedeemableModal({
         starRide={redeemable?.type === 'task' && starRides.has((redeemable.model as TaskType)?.id)}
         attemptId={attemptRef.current?.status === 'won' ? attemptRef.current.id : null}
       />
+          </View>
+        </View>
+      </CalmModal>
     </>
   );
 }
@@ -1243,4 +1246,5 @@ const styles = StyleSheet.create({
     paddingTop: 7, borderTopWidth: 1, borderTopColor: 'rgba(7, 91, 155, 0.2)' },
   shopRowText: { color: '#075b9b', fontFamily: 'Knockout', fontSize: 15, flexShrink: 1 },
   minigameContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  parkedCard: { position: 'absolute', width: 0, height: 0 },
 });

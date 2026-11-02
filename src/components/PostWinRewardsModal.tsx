@@ -1,7 +1,7 @@
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
-import Modal from 'react-native-modal';
+import CalmModal from './retention/CalmModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Animated, {
@@ -41,7 +41,6 @@ import { watchForReward } from '../services/ads';
 import { holdWinNotes, takeWinNote } from '../screens/LeaderboardsScreen/standingsCache';
 import countText from '../helpers/countText';
 import { useNativeModalLayer } from '../ui/modalLayers';
-import { usePresentWatchdog } from './rewards/usePresentWatchdog';
 import { useRung } from '../services/reveal/revealLadder';
 import { withNumberFont } from '../ui/numberText';
 import type { PerkChipData } from './coin/progressionModel';
@@ -103,6 +102,13 @@ interface Props {
   /** Kept for older callers; the stamp is claimed from the Rewards button now. */
   onViewStampBook?: () => void;
   onHidden?: () => void;
+  /**
+   * Inside the challenge's own native sheet (RedeemRedeemableModal): this card brings no sheet of its own, so a game
+   * goes straight to the win card with no dismiss, no present and no bare map between them. The host calls
+   * `hiddenRef.current` when its sheet has finished fading away.
+   */
+  embedded?: boolean;
+  hiddenRef?: MutableRefObject<(() => void) | null>;
   /**
    * Where the rewards fly when the card closes: 'now' (the map is under it), 'after_team_step' (the
    * first coin's team step took over: they fly once it has closed back onto the map) or 'never' (the
@@ -192,6 +198,8 @@ export default function PostWinRewardsModal({
   onNextCoin,
   onViewCoin,
   onHidden,
+  embedded = false,
+  hiddenRef,
   flyWhen,
   onClose,
   attemptId = null,
@@ -245,9 +253,9 @@ export default function PostWinRewardsModal({
   const [caught, setCaught] = useState(false);
   const [handoff, setHandoff] = useState<CatchHandoff | null>(null);
   const heroRef = useRef<View>(null);
+  // Closing keeps the card as it is while the sheet fades; it resets once the sheet is gone (handleHidden).
   useEffect(() => {
-    if (!visible) { setCaught(false); setHandoff(null); }
-    else if (!hasCoin) setCaught(true);
+    if (visible) { setCaught(!hasCoin); setHandoff(null); }
   }, [visible, hasCoin]);
 
   const parts = coinLevels && !isNewCoin ? partsProgress(coinProgress ?? null, playerEnergy, ridePartsEarned) : null;
@@ -339,8 +347,28 @@ export default function PostWinRewardsModal({
 
   // The win card waits its turn among the native modal layers (blueprint 4.3 rule 10): it presents
   // only once the challenge card is really gone, and holds its layer until UIKit says it is dismissed.
-  const layer = useNativeModalLayer(visible, 'wait');
-  const watch = usePresentWatchdog(layer.present);
+  const layer = useNativeModalLayer(visible && !embedded, 'wait');
+
+  // The sheet has finished fading: the rewards fly home and the next step runs.
+  const handleHidden = () => {
+    const when = flyWhen?.() ?? 'now';
+    if (when === 'now') flyRewards();
+    // The first coin's team step took over: the rewards fly once it has closed back onto the map.
+    else if (when === 'after_team_step') flyAfterTeamStep(flyRewards);
+    const nextStep = afterHide.current; afterHide.current = null;
+    onHidden?.(); nextStep?.();
+    setCaught(false); setHandoff(null); setBodyUp(false);
+  };
+  if (hiddenRef) hiddenRef.current = handleHidden;
+  // Embedded, the card stays drawn while the host's sheet fades, and fades in over the game it follows.
+  const [bodyUp, setBodyUp] = useState(false);
+  const bodyFade = useSharedValue(0);
+  useEffect(() => {
+    if (!embedded || !visible) return;
+    setBodyUp(true);
+    bodyFade.value = withTiming(1, { duration: reducedMotion ? 120 : 250 });
+  }, [embedded, visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  const bodyStyle = useAnimatedStyle(() => ({ flex: 1, opacity: bodyFade.value }));
 
   const coinSource = taskCoinUrl && !coinArtFailed ? taskCoinUrl : null;
   const primary = hasCoin ? next : { kind: 'map' as const, label: BACK_TO_MAP_LABEL, detail: null };
@@ -362,30 +390,8 @@ export default function PostWinRewardsModal({
   };
   const closeCard = () => leave('close', onClose);
 
-  return (
-    <Modal
-      key={`win-${watch.key}`}
-      onShow={watch.onShow}
-      animationIn="fadeIn"
-      animationOut="fadeOut"
-      isVisible={layer.present}
-      style={{ margin: 0 }}
-      animationInTiming={reducedMotion ? 120 : 250}
-      animationOutTiming={reducedMotion ? 120 : 200}
-      onBackButtonPress={caught ? closeCard : undefined}
-      onModalHide={() => {
-        layer.onDismissed();
-        const when = flyWhen?.() ?? 'now';
-        if (when === 'now') flyRewards();
-        // The first coin's team step took over: the rewards fly once it has closed back onto the map.
-        else if (when === 'after_team_step') flyAfterTeamStep(flyRewards);
-        const nextStep = afterHide.current; afterHide.current = null;
-        onHidden?.(); nextStep?.();
-      }}
-      onBackdropPress={caught ? closeCard : undefined}
-      backdropColor="#05346e"
-      backdropOpacity={0.6}
-    >
+  const body = (
+    <>
       {/* The summary is laid out under the catch (hidden) so its hero slot can be measured. */}
       <View style={{ flex: 1, opacity: caught ? 1 : 0 }} pointerEvents={caught ? 'auto' : 'none'}>
       <ScrollView style={styles.scroll}
@@ -498,7 +504,27 @@ export default function PostWinRewardsModal({
       {visible && hasCoin && !caught && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName}
         isNewCoin={isNewCoin} handoff={handoff}
         onDone={() => setCaught(true)} />}
-    </Modal>
+    </>
+  );
+
+  if (embedded) return visible || bodyUp ? <Animated.View style={bodyStyle}>{body}</Animated.View> : null;
+  return (
+    <CalmModal
+      visible={layer.present}
+      reducedMotion={reducedMotion}
+      fullBleed
+      fadeOnly
+      inMs={250}
+      outMs={200}
+      onHide={() => { layer.onHidden(); handleHidden(); }}
+      onDismiss={layer.onDismissed}
+      onBackButtonPress={caught ? closeCard : undefined}
+      onBackdropPress={caught ? closeCard : undefined}
+      backdropColor="#05346e"
+      backdropOpacity={0.6}
+    >
+      {body}
+    </CalmModal>
   );
 }
 

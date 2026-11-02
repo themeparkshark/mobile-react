@@ -82,16 +82,17 @@ function layerHarness() {
 
 /* ---------- Trap 1: the PLAY RIDE freeze (must-fix 1) ---------- */
 
-test('the challenge card and the win card both join the native modal layers and free them only on native dismiss', () => {
+test('the challenge sheet and a standalone win card both join the native modal layers and free them only on native dismiss', () => {
   const challenge = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(challenge, /useNativeModalLayer\(open === true && flowState !== 'postwin' && !!redeemable, 'wait'\)/);
-  assert.match(challenge, /isVisible=\{challengeLayer\.present\}/);
-  assert.match(challenge, /onModalHide=\{\(\) => \{ setChallengeModalHidden\(true\); challengeLayer\.onDismissed\(\); \}\}/);
-  assert.doesNotMatch(challenge, /isVisible=\{showModal\}/, 'never a bare visible flag that ignores the layers');
+  assert.match(challenge, /useNativeModalLayer\(open === true && !!redeemable, 'wait', CHALLENGE_PATIENCE_MS\)/);
+  assert.match(challenge, /visible=\{challengeLayer\.present\}/);
+  assert.match(challenge, /onDismiss=\{challengeLayer\.onDismissed\}/);
+  assert.doesNotMatch(challenge, /react-native-modal/, 'the paid game never lives in react-native-modal');
   const win = read('src/components/PostWinRewardsModal.tsx');
-  assert.match(win, /useNativeModalLayer\(visible, 'wait'\)/);
-  assert.match(win, /isVisible=\{layer\.present\}/);
-  assert.match(win, /onModalHide=\{\(\) => \{\n\s+layer\.onDismissed\(\);/);
+  assert.match(win, /useNativeModalLayer\(visible && !embedded, 'wait'\)/);
+  assert.match(win, /visible=\{layer\.present\}/);
+  assert.match(win, /onDismiss=\{layer\.onDismissed\}/);
+  assert.doesNotMatch(win, /react-native-modal/);
 });
 
 test('PLAY! after a swipe-closed sheet: the card waits, opens, wins, and the win card waits for it, 20 out of 20', () => {
@@ -522,19 +523,6 @@ test('Parade Beat is the rhythm game\'s one name; Home Defend has its own title 
   assert.match(read('src/games/sharky/hud/SharkyUnlock.tsx'), /caption=\{`\$\{unlockName\(card\)\} unlocked`\}/);
 });
 
-test('a card that UIKit refused to present comes back: the watchdog presents it again, a few times at most', () => {
-  const w = loadTs('src/components/rewards/usePresentWatchdog.ts', { react: { useCallback: f => f, useEffect() {}, useRef: v => ({ current: v }), useState: v => [v, () => {}] } });
-  assert.equal(w.presentWatchdogNext({ shown: false, tries: 0 }, true), 'retry');
-  assert.equal(w.presentWatchdogNext({ shown: true, tries: 0 }, true), 'wait', 'on screen: nothing to do');
-  assert.equal(w.presentWatchdogNext({ shown: false, tries: 0 }, false), 'wait', 'not wanted: nothing to do');
-  assert.equal(w.presentWatchdogNext({ shown: false, tries: w.PRESENT_WATCHDOG_TRIES }, true), 'give_up');
-  assert.ok(w.PRESENT_WATCHDOG_MS >= 1000 && w.PRESENT_WATCHDOG_MS <= 2000, 'longer than the zoom-in, short enough to feel instant');
-  for (const file of ['src/components/RedeemRedeemableModal.tsx', 'src/components/PostWinRewardsModal.tsx']) {
-    const src = read(file);
-    assert.match(src, /key=\{`(challenge|win)-\$\{(challengeWatch|watch)\.key\}`\}\n\s+onShow=\{(challengeWatch|watch)\.onShow\}/, file);
-  }
-});
-
 test('a tap anywhere off the challenge card closes it: the wide card row lets scrim taps through', () => {
   const src = read('src/components/RedeemRedeemableModal.tsx');
   // Without box-none the row beside the card swallowed the tap (react-native-modal's swipe handler took it).
@@ -625,7 +613,7 @@ test('the challenge card reads the guide only while its win card is up, so walki
 test('PLAY! taps queued behind a leaving sheet open the card and never close it: the scrim waits a moment', () => {
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /export const SCRIM_GRACE_MS = 900;/);
-  assert.match(modal, /onModalWillShow=\{\(\) => \{ cardShownAt\.current = Date\.now\(\); setChallengeModalHidden\(false\); \}\}/);
+  assert.match(modal, /onWillShow=\{\(\) => \{ cardShownAt\.current = Date\.now\(\); \}\}/);
   assert.match(modal, /const closeFromScrim = useCallback\(\(\) => \{\n\s+if \(Date\.now\(\) - cardShownAt\.current < SCRIM_GRACE_MS\) return;\n\s+safeClose\(\);/);
   // The wide scrim Pressable under the card follows the same rule.
   assert.match(modal, /onPress=\{\(\) => \{\n\s+if \(Date\.now\(\) - cardShownAt\.current < SCRIM_GRACE_MS\) return;\n\s+playSound\(require\('\.\.\/\.\.\/assets\/sounds\/redeem_modal_close\.mp3'\)\);\n\s+safeClose\(\);/);

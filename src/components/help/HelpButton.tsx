@@ -3,10 +3,13 @@ import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-nat
 import type { HelpTopicId } from '../../services/help/glossary';
 import type { HelpSheetId } from '../../services/help/helpSheets';
 import { BRAND, GameIcon } from '../../ui';
+import { modalLayers } from '../../ui/modalLayers';
 import { useHelp } from './HelpProvider';
 
 /** Round "?" that opens a help sheet (`sheet`), or How to play at one card. */
-export default function HelpButton({ topic, sheet, size = 44, style, label = 'How to play', onPress }: {
+export default function HelpButton({ topic, sheet, size = 44, style, label = 'How to play', onPress, firstPressWins = false }: {
+  /** On the map: does nothing while another sheet is up or on its way (modalLayers.pressClear). */
+  readonly firstPressWins?: boolean;
   readonly topic?: HelpTopicId;
   /** Open this "?" sheet instead of How to play. */
   readonly sheet?: HelpSheetId;
@@ -19,7 +22,7 @@ export default function HelpButton({ topic, sheet, size = 44, style, label = 'Ho
   const { openHowToPlay, openHelpSheet } = useHelp();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={8}
-      onPress={() => { void Haptics.selectionAsync().catch(() => undefined); if (onPress) onPress(); else if (sheet) openHelpSheet(sheet); else openHowToPlay(topic); }}
+      onPress={() => { if (firstPressWins && !modalLayers.pressClear()) return; void Haptics.selectionAsync().catch(() => undefined); if (onPress) onPress(); else if (sheet) openHelpSheet(sheet); else openHowToPlay(topic); }}
       style={({ pressed }) => [styles.button, { width: size, height: size, borderRadius: size / 2 },
         pressed && { transform: [{ scale: 0.94 }] }, style]}>
       <GameIcon name="info" size={Math.round(size * 0.72)} />

@@ -11,7 +11,7 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import type { TaskType } from '../models/task-type';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, GameButton, GameIcon } from '../ui';
-import { useNativeModalLayer } from '../ui/modalLayers';
+import { modalLayers, useNativeModalLayer } from '../ui/modalLayers';
 import TeamBadge from './TeamBadge';
 
 /** The bar's title before any team holds a ride (never a ride-status claim). */
@@ -129,7 +129,7 @@ export default function RideControlBar({ control, tasks, onFocusTask, compact = 
           : known
             ? `${headline}. ${TEAM_ORDER.map(team => `${teamShortName(team, names)} ${held[team]}`).join(', ')} rides. Show rides to take.`
             : `${headline}. Show rides to take.`}
-        onPress={() => setOpen(true)} style={[styles.barWrap, compact && styles.barWrapCompact, inline && styles.inline]}>
+        onPress={() => { if (modalLayers.pressClear()) setOpen(true); }} style={[styles.barWrap, compact && styles.barWrapCompact, inline && styles.inline]}>
         <LinearGradient colors={[BRAND.blueBright, BRAND.blue, BRAND.blueLip]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
           style={[styles.bar, compact && styles.barCompact]}>
           {!compact && <Animated.Text style={[styles.kicker, titleStyle]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{headline}</Animated.Text>}

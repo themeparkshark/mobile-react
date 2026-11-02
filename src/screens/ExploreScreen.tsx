@@ -137,6 +137,7 @@ import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, energ
   type FindLayoutInput, type FixedLayoutInput, type HauntLayoutInput } from './ExploreScreen/parkMapLayout';
 import { UpperText } from '../ui/upper';
 import { usePlayTapHold } from '../components/guide/playTapHold';
+import { modalLayers } from '../ui/modalLayers';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
 import NewTag from '../components/map/NewTag';
 import useMapGuide from '../components/guide/useMapGuide';
@@ -835,8 +836,10 @@ export function ExploreScreenBody() {
     mapRequest.current = { context: mapContext, promise };
     return promise;
   }, [mapContext, park?.id, player?.id]);
+  // PLAY! stays up through this refresh (the range check runs again when the list lands). A won coin already left
+  // the map in onTaskCompleted; clearing here hid PLAY! after every loss for as long as the server took to answer,
+  // while the guide card kept saying Tap PLAY! (core loop fix round, item 4).
   const getRedeemables = useCallback(async () => {
-    setActiveRedeemable(undefined);
     await refreshMapOpportunities();
   }, [refreshMapOpportunities]);
   const timedOpportunities = useMemo(() => [
@@ -1132,7 +1135,10 @@ export function ExploreScreenBody() {
     setAdventureSheetRequest, adventureCelebrateRequest, setAdventureCelebrateRequest, flowClosedAt, appOpenId, attentionFor, adventureTabProps, onGuideCardPress,
   } = useMapGuide({
     player, park, mapFocused, location, redeemables, visibleTasks, livePark, adventure, tripGoalData, queueDwell, starRides,
-    rushes, rangeChecked, playableTaskId, adventureGate, activeRedeemable, refreshPlayer, parkWins, redeemFlowOpen, parkLoaded, homeLocationConfirmed, setSelectedTask,
+    rushes, rangeChecked,
+    // Another ride is selected: PLAY! hides (RedeemModal), so the guide must not say Tap PLAY! either.
+    playableTaskId: selectedTask && selectedTask.id !== playableTaskId ? null : playableTaskId,
+    adventureGate, activeRedeemable, refreshPlayer, parkWins, redeemFlowOpen, parkLoaded, homeLocationConfirmed, setSelectedTask,
   });
   // Raids reach the map only after coin levels unlock (they cost Energy) and while the park is open (core loop 5.2).
   const raidOnMap = raidActive && coinLevelsRung.open && parkOpenNow;
@@ -1252,6 +1258,7 @@ export function ExploreScreenBody() {
   }), retention.rewards);
   const { openRewards: openRewardsSheet } = retention;
   const openRewards = useCallback(() => {
+    if (!modalLayers.pressClear()) return; // PLAY!'s card is on its way: the first press wins.
     rewardsTapped.current = true;
     openRewardsSheet();
   }, [openRewardsSheet]);
@@ -1694,7 +1701,7 @@ export function ExploreScreenBody() {
           >
             {/* How to play, reachable at the park too (the home menu is not shown here). */}
             {/* One "?": while Fin-ister Nights is on it offers the Fin-ister tutorial or the park help. */}
-            <HelpButton sheet="park_map" size={44} style={{ marginBottom: 10, marginLeft: 13 }}
+            <HelpButton sheet="park_map" size={44} firstPressWins style={{ marginBottom: 10, marginLeft: 13 }}
               label={frightNight.modeOn ? `How to play: ${frightNight.title} or the park` : 'How to play at the park'}
               onPress={frightNight.modeOn ? () => gameAlert('How to play', undefined, frightHelpChoices({
                 title: frightNight.title, onFright: frightEngine.replayTutorial, onPark: () => openHelpSheet('park_map'),

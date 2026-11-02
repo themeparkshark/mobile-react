@@ -121,7 +121,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)ui\/numberText$/.test(name)) return { withNumberFont: line => line, NUMBER_FONT: 'Shark', NUMBER_GAP: ' ' };
       if (/(^|\/)ui\/GoldBurst$/.test(name)) return { GoldBurst: 'GoldBurst', SparkleBurst: 'SparkleBurst', ShineSweep: 'ShineSweep' };
       // Native modal layers (core loop step 0): nothing else is up, so a wanted sheet presents at once.
-      if (/(^|\/)ui\/modalLayers$/.test(name)) return { useNativeModalLayer: wanted => ({ present: !!wanted, onDismissed() {} }),
+      if (/(^|\/)ui\/modalLayers$/.test(name)) return { useNativeModalLayer: wanted => ({ present: !!wanted, onDismissed() {}, onHidden() {} }),
         useModalLayer: active => !!active, useAnyModalLayer: () => false, ModalLayerContext: react.createContext(false),
         modalLayers: { add: () => 1, remove() {}, isFront: () => true, count: () => 0, subscribe: () => () => {}, reset() {} } };
       // The unlock ladder (core loop step 0): every rung reads closed until the map feeds it, as on a new install.
@@ -158,7 +158,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)fx\/FinalSeconds$/.test(name)) return { FinalSeconds: 'FinalSeconds' };
       // Core loop shared contracts for the shelf-words lane's sheets (same stubs as step 0's tests):
       // nothing else is up, every rung reads open (a veteran), and the guide holds no target.
-      if (/(^|\/)ui\/modalLayers$/.test(name)) return { useNativeModalLayer: wanted => ({ present: !!wanted, onDismissed() {} }),
+      if (/(^|\/)ui\/modalLayers$/.test(name)) return { useNativeModalLayer: wanted => ({ present: !!wanted, onDismissed() {}, onHidden() {} }),
         useModalLayer: active => !!active, useAnyModalLayer: () => false, ModalLayerContext: react.createContext(false) };
       if (/(^|\/)reveal\/revealLadder$/.test(name)) return { useRung: () => ({ open: true, isNew: false, markSeen() {} }),
         rungState: () => ({ open: true, isNew: false }), recordProgress() {} };

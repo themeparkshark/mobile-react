@@ -55,6 +55,12 @@ export const modalLayers = {
     leaving = leaving.filter(l => l !== id);
     emit();
   },
+  /**
+   * May a button on the map open its sheet now? False while another sheet is up or on its way (the first press wins):
+   * a press beside PLAY! in the moment its card comes up does nothing, instead of opening a sheet after the game.
+   * A sheet that is only leaving does not count, so a press right after a close still works.
+   */
+  pressClear(): boolean { return layers.every(id => leaving.includes(id)); },
   /** How many layers are hidden in JS but not yet gone natively (PLAY! holds presses only then). */
   leavingCount(): number { return leaving.length; },
   subscribe(listener: () => void): () => void {
@@ -136,7 +142,7 @@ export const NATIVE_SETTLE_MS = 150;
  * layers (inside another sheet's <Modal>) never register and always present.
  * Shared contract: owned by the guide-map lane; other lanes import it.
  */
-export function useNativeModalLayer(wanted: boolean, mode: 'show' | 'wait' = 'wait'):
+export function useNativeModalLayer(wanted: boolean, mode: 'show' | 'wait' = 'wait', patienceMs?: number):
   { present: boolean; onDismissed: () => void; onHidden: () => void } {
   const nested = useContext(ModalLayerContext);
   const [id, setId] = useState<number | null>(null);
@@ -187,7 +193,16 @@ export function useNativeModalLayer(wanted: boolean, mode: 'show' | 'wait' = 'wa
 
   const front = useSyncExternalStore(modalLayers.subscribe,
     () => (id != null ? modalLayers.isFront(id) : modalLayers.count() === 0));
-  const present = wanted && (nested || mode === 'show' || (id != null && front));
+  // A layer ahead that never goes away (a sheet that lost its presentation) must not hold a waiting sheet for good:
+  // past its patience it presents anyway, and the app's native door (nativeModalDoor.ts) still keeps it from racing.
+  const [outOfPatience, setOutOfPatience] = useState(false);
+  useEffect(() => {
+    setOutOfPatience(false);
+    if (!wanted || !patienceMs || nested) return undefined;
+    const timer = setTimeout(() => setOutOfPatience(true), patienceMs);
+    return () => clearTimeout(timer);
+  }, [wanted, patienceMs, nested]);
+  const present = wanted && (nested || mode === 'show' || (id != null && (front || outOfPatience)));
   useEffect(() => {
     if (present) presentedRef.current = true;
   }, [present]);

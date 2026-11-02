@@ -39,18 +39,18 @@ function recoveredWin() {
     '../RootNavigation': { navigate: (...args) => navigation.push(args) },
     '../services/collection/earnedShelf': require('./helpers/earned-shelf.cjs'),
     '../constants/coinTiers': coinTiers,
+    '../hooks/useReducedGameMotion': { default: () => false },
     '../screens/LeaderboardsScreen/standingsCache': { markStandingsStale: () => { standingsMarks.count++; } },
     ...progressionStubs,
   }, { open: true, park: { id: 1 }, redeemable: { type: 'task', model: { id: 104, name: 'Forbidden Journey' } },
     close() { view.props.open = false; }, onPress() {} });
-  return { view, navigation, prefetches, milestoneReads, standingsMarks, game: () => view.find(node => node.type === 'react-native-modal'),
+  return { view, navigation, prefetches, milestoneReads, standingsMarks, game: () => view.find(node => node.type === './retention/CalmModal'),
     rewards: () => view.find(node => node.type === './PostWinRewardsModal') };
 }
-test('confirmed rewards wait until the native challenge presentation has dismissed', async () => {
+test('a confirmed win goes straight to the win card in the same native sheet: no dismiss, no present, no bare map', async () => {
   const flow = recoveredWin(); await flow.view.settle();
-  assert.equal(flow.game().props.isVisible, false);
-  assert.equal(flow.rewards().props.visible, false);
-  flow.game().props.onModalHide(); flow.view.render();
+  assert.equal(flow.game().props.visible, true, 'the one sheet stays up from the game to the win card');
+  assert.equal(flow.rewards().props.embedded, true);
   assert.equal(flow.rewards().props.visible, true);
   assert.equal(flow.rewards().props.coinTimesCollected, 1);
   assert.equal(flow.rewards().props.rideName, 'Forbidden Journey');
@@ -60,11 +60,10 @@ test('a first coin prefetches its park shelf and reads its collection milestones
   const flow = recoveredWin(); await flow.view.settle(); await flow.view.settle();
   assert.deepEqual(flow.prefetches, [[1, 5]]);
   assert.deepEqual(flow.milestoneReads, [10]);
-  flow.game().props.onModalHide(); flow.view.render();
   assert.equal(flow.rewards().props.milestones.milestones[0].type, 'first_park_coin');
 });
 test('earned coin opens the shelf on the tap (under the fading card) and keeps its confirmed asset identity', async () => {
-  const flow = recoveredWin(); await flow.view.settle(); flow.game().props.onModalHide(); flow.view.render();
+  const flow = recoveredWin(); await flow.view.settle();
   await flow.rewards().props.onViewCoin(); flow.view.render();
   // Wave 6: no wait for the card to fade and the map to hold still; the shelf is already loaded.
   assert.equal(flow.rewards().props.visible, false); assert.equal(flow.navigation.length, 1);
@@ -76,7 +75,7 @@ test('earned coin opens the shelf on the tap (under the fading card) and keeps i
   assert.equal(flow.navigation[0][1].openMastery, undefined);
 });
 test('"Upgrade Your Coin" lands on the shelf and asks it to open mastery (one hop)', async () => {
-  const flow = recoveredWin(); await flow.view.settle(); flow.game().props.onModalHide(); flow.view.render();
+  const flow = recoveredWin(); await flow.view.settle();
   await flow.rewards().props.onViewCoin(true); flow.view.render(); flow.rewards().props.onHidden();
   assert.equal(flow.navigation[0][0], 'Park'); assert.equal(flow.navigation[0][1].openMastery, true);
 });
@@ -279,7 +278,7 @@ test('no money on the win card: a non-member sees no VIP line, and NEXT COIN han
   assert.equal(view.find(n=>/VIP|Starter|Shark Pass/.test(String(n.props?.accessibilityLabel ?? ''))), undefined);
   view.find(n=>n.type==='./YellowButton').props.onPress();
   assert.deepEqual(presses,['map'],'no guide target yet: NEXT COIN goes back to the map');
-  view.tree.props.onModalHide();assert.equal(hidden,1);assert.deepEqual(navigated,[]);
+  view.tree.props.onHide();assert.equal(hidden,1);assert.deepEqual(navigated,[]);
 });
 test('after rung 3 a repeat win shows its Parts as one line, ready to level up; the next coin stays the big button', () => {
   let opened=null;

@@ -201,7 +201,7 @@ test('every WS3 modal dims the app with the brand navy scrim, never near-black',
     'src/components/PostWinRewardsModal.tsx', 'src/components/RedeemRedeemableModal.tsx'];
   for (const file of rnModal) {
     const src = fs.readFileSync(file, 'utf8');
-    const opens = src.split(/<Modal\b/).slice(1).map(chunk => chunk.slice(0, 1500)); // the Modal's own props
+    const opens = src.split(/<(?:Calm)?Modal\b/).slice(1).map(chunk => chunk.slice(0, 1500)); // the Modal's own props
     assert.ok(opens.length > 0, `${file} has no modal`);
     for (const props of opens) assert.match(props, /backdropColor="#05346e"/, `${file} modal has no navy backdrop`);
     for (const [, value] of src.matchAll(/backdropOpacity=\{[^}]*?(0\.\d+)\s*\}/g))
