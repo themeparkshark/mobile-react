@@ -123,7 +123,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       // Native modal layers (core loop step 0): nothing else is up, so a wanted sheet presents at once.
       if (/(^|\/)ui\/modalLayers$/.test(name)) return { useNativeModalLayer: wanted => ({ present: !!wanted, onDismissed() {}, onHidden() {} }),
         useModalLayer: active => !!active, useAnyModalLayer: () => false, ModalLayerContext: react.createContext(false),
-        modalLayers: { add: () => 1, remove() {}, isFront: () => true, count: () => 0, subscribe: () => () => {}, reset() {} } };
+        modalLayers: { add: () => 1, remove() {}, isFront: () => true, count: () => 0, pressClear: () => true, subscribe: () => () => {}, reset() {} } };
       // The unlock ladder (core loop step 0): every rung reads closed until the map feeds it, as on a new install.
       if (/(^|\/)services\/reveal\/revealLadder$/.test(name)) return { useRung: () => ({ open: false, isNew: false, markSeen() {} }),
         rungState: () => ({ open: false, isNew: false }), recordProgress() {} };
@@ -159,7 +159,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       // Core loop shared contracts for the shelf-words lane's sheets (same stubs as step 0's tests):
       // nothing else is up, every rung reads open (a veteran), and the guide holds no target.
       if (/(^|\/)ui\/modalLayers$/.test(name)) return { useNativeModalLayer: wanted => ({ present: !!wanted, onDismissed() {}, onHidden() {} }),
-        useModalLayer: active => !!active, useAnyModalLayer: () => false, ModalLayerContext: react.createContext(false) };
+        useModalLayer: active => !!active, useAnyModalLayer: () => false, ModalLayerContext: react.createContext(false), modalLayers: { pressClear: () => true } };
       if (/(^|\/)reveal\/revealLadder$/.test(name)) return { useRung: () => ({ open: true, isNew: false, markSeen() {} }),
         rungState: () => ({ open: true, isNew: false }), recordProgress() {} };
       if (/(^|\/)services\/mapFlags$/.test(name)) return { useMapFlags: () => ({ gymSwords: false }), loadMapFlags: async () => ({ gymSwords: false }) };
