@@ -8,7 +8,7 @@
  * 2. Never dismissed mid-present (UIKit ignores that and leaves an orphan on screen): a sheet asked to go while it is
  *    still coming up goes as soon as UIKit reports it up.
  * 3. A refused host can never take a touch. The host is pointerEvents box-none (a real sheet's contents live in its
- *    own view controller, not under the host), and a sheet UIKit did not put up is presented again, a few times.
+ *    own view controller, not under the host), and a sheet UIKit did not put up asks again, a few times.
  */
 import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { I18nManager, StyleSheet } from 'react-native';
@@ -56,7 +56,8 @@ export default function DoorModal(props: DoorModalProps) {
   const wants = props.visible !== false;
   const animated = !!props.animationType && props.animationType !== 'none';
   const [phase, setPhase] = useState<DoorPhase>('off');
-  const [hostKey, setHostKey] = useState(0);
+  // One commit with the native host told to hide: React Native's host then asks UIKit to present again.
+  const [blink, setBlink] = useState(false);
   const id = useRef(0);
   if (id.current === 0) id.current = nextId++;
   const live = useRef(true);
@@ -89,15 +90,18 @@ export default function DoorModal(props: DoorModalProps) {
     }
   }, [phase, wants, nested]);
 
-  // UIKit gets a moment to say the sheet is up. The refused host is dropped and a fresh one presented.
+  useEffect(() => { if (blink) setBlink(false); }, [blink]);
+
+  // UIKit gets a moment to say the sheet is up. A refused host asks again. The host stays mounted with its children
+  // (a remount would hand a card's Reanimated styles fresh views with values that no longer change).
   useEffect(() => {
-    if (phase !== 'presenting') return undefined;
+    if (phase !== 'presenting' || blink) return undefined;
     const timer = setTimeout(() => {
       const next = doorPresentTimedOut(tries.current, now.current.wants);
       if (next === 'present_again') {
         tries.current += 1;
-        if (__DEV__) console.log(`[door] no native onShow after ${DOOR_PRESENT_MS} ms: presenting again (try ${tries.current})`);
-        setHostKey(key => key + 1);
+        if (__DEV__) console.log(`[door] no native onShow after ${DOOR_PRESENT_MS} ms: asking again (try ${tries.current})`);
+        setBlink(true);
       } else if (next === 'gone') {
         freeSlot();
         setPhase('off');
@@ -108,7 +112,7 @@ export default function DoorModal(props: DoorModalProps) {
       }
     }, DOOR_PRESENT_MS);
     return () => clearTimeout(timer);
-  }, [phase, hostKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, blink]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A sheet asked to go: UIKit's completion frees the slot; one it refused never sends it, so a fallback does.
   useEffect(() => {
@@ -129,7 +133,9 @@ export default function DoorModal(props: DoorModalProps) {
     };
   }, []);
 
-  if (phase === 'off') return null;
+  // Wanted sheets mount their children in this very commit, like React Native's Modal: react-native-modal reads its
+  // content ref in the same commit's callback, and with no ref its open animation never ends and it can never close.
+  if (phase === 'off' && !wants) return null;
 
   const presentationStyle = props.presentationStyle ?? (props.transparent === true ? 'overFullScreen' : 'fullScreen');
   const containerStyles = { backgroundColor: props.transparent === true ? 'transparent' : 'white' };
@@ -137,7 +143,6 @@ export default function DoorModal(props: DoorModalProps) {
 
   return (
     <RCTModalHostView
-      key={hostKey}
       animationType={props.animationType ?? 'none'}
       presentationStyle={presentationStyle}
       transparent={props.transparent}
@@ -149,7 +154,7 @@ export default function DoorModal(props: DoorModalProps) {
         props.onShow?.(event);
       }}
       onDismiss={gone}
-      visible={doorNativeVisible(phase)}
+      visible={doorNativeVisible(phase) && !blink}
       statusBarTranslucent={props.statusBarTranslucent}
       identifier={id.current}
       style={styles.modal}

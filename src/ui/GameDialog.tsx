@@ -164,15 +164,22 @@ export function GameDialog({
       gate.open();
       setMounted(true);
       setNativeUp(true);
-      scrim.value = withTiming(1, { duration: MOTION.fadeMs });
-      pop.value = reducedMotion
-        ? withTiming(1, { duration: MOTION.fadeMs })
-        : withSpring(1, MOTION.popSpring);
       if (hapticKind !== 'none') haptic(hapticKind);
     }
-    // Opening only depends on visibility; haptic kind and motion are read at open time.
+    // Opening only depends on visibility; haptic kind is read at open time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shown]);
+  // The fade starts once the dialog's views exist (this commit mounted them), never before. A view that mounts after
+  // its animation has ended keeps its first frame: Reanimated sees no change to send. With a busy JS thread right after
+  // a game, that left the dialog on screen at opacity 0, taking every tap: the LinePlay freeze (November 2026).
+  useEffect(() => {
+    if (!shown || !mounted) return;
+    scrim.value = withTiming(1, { duration: MOTION.fadeMs });
+    pop.value = reducedMotion
+      ? withTiming(1, { duration: MOTION.fadeMs })
+      : withSpring(1, MOTION.popSpring);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown, mounted]);
 
   /** UIKit says the dialog is gone (or the fallback ran): answer once, then free the layer. */
   const deliver = () => {

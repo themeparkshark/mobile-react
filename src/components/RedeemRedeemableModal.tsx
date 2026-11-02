@@ -235,6 +235,7 @@ export default function RedeemRedeemableModal({
   const retryOfRef = useRef<number | null>(null);
   // First coin ever (team step after the win card): the player's coin count when the card opened.
   const rideCoinsBeforeRef = useRef<number | null>(null);
+  const clearing = useRef<Promise<unknown> | null>(null);
   const spendingRef = useRef(false);
   const protectedRetryRef = useRef(false);
   const claimingRef = useRef(false);
@@ -440,6 +441,8 @@ export default function RedeemRedeemableModal({
     let alive = true;
     void (async () => {
       try {
+        // PLAY! right after a card closed: its finished try is still being cleared. Read after that, or it comes back.
+        await clearing.current;
         const saved = await readTaskAttemptCheckpoint(player.id, taskType, taskId);
         if (!alive) return;
         if (!saved) {
@@ -469,6 +472,13 @@ export default function RedeemRedeemableModal({
     if (!player?.id || !taskType || !taskId) return;
     await removeTaskAttemptCheckpoint(player.id, taskType, taskId);
   }, [player?.id, taskType, taskId]);
+  // A finished try's checkpoint is cleared beside the close, never before it: the wait held the card on screen for up
+  // to 0.8 s after its button, and a PLAY! press in that time landed on the leaving card and was lost.
+  const clearFinishedTry = useCallback((why: string) => {
+    const run: Promise<unknown> = clearAttemptCheckpoint().catch(error => console.warn(why, error));
+    clearing.current = run;
+    void run.finally(() => { if (clearing.current === run) clearing.current = null; });
+  }, [clearAttemptCheckpoint]);
 
   // The request ID and active attempt survive retries while this modal is open.
   const handleStartWheel = useCallback(async () => {
@@ -477,6 +487,7 @@ export default function RedeemRedeemableModal({
     spendingRef.current = true;
     let saved: TaskAttemptCheckpoint | null;
     try {
+      await clearing.current;
       saved = await readTaskAttemptCheckpoint(player.id, taskType, taskId);
     } catch (error) {
       console.warn('Could not check saved ride challenge:', error);
@@ -630,15 +641,14 @@ export default function RedeemRedeemableModal({
     await resolveAttempt('loss');
   }, [resolveAttempt]);
 
-  const handleLostClose = useCallback(async () => {
+  const handleLostClose = useCallback(() => {
     if (flowStateRef.current === 'lost' || flowStateRef.current === 'expired') {
-      await clearAttemptCheckpoint().catch(error =>
-        console.warn('Could not clear resolved ride challenge:', error));
+      clearFinishedTry('Could not clear resolved ride challenge:');
     }
     refreshPlayer?.(); // Refresh to show updated ticket count
     onPress(); // Refresh explore screen
     close();
-  }, [refreshPlayer, onPress, close, clearAttemptCheckpoint]);
+  }, [refreshPlayer, onPress, close, clearFinishedTry]);
 
   const handleProtectedRetry = useCallback(async () => {
     if (!location || protectedRetryRef.current) return;
@@ -779,21 +789,19 @@ export default function RedeemRedeemableModal({
   const handlePostWinClose = useCallback(async () => {
     if (leavingWinRef.current) return;
     leavingWinRef.current = true;
-    await clearAttemptCheckpoint().catch(error =>
-      console.warn('Could not clear confirmed ride win:', error));
+    clearFinishedTry('Could not clear confirmed ride win:');
     afterRewardsHidden.current = null;
     await openTeamStep(null);
     onPress();
     close();
-  }, [onPress, close, clearAttemptCheckpoint, openTeamStep]);
+  }, [onPress, close, clearFinishedTry, openTeamStep]);
 
   // NEXT COIN: point the guide (the one owner, guide.setTarget), close, and the map draws the path.
   // On today's Adventure ride the big button plays its line story instead.
   const handleNextCoin = useCallback(async (button: { kind: 'next' | 'line_story' | 'map' }) => {
     if (leavingWinRef.current) return;
     leavingWinRef.current = true;
-    await clearAttemptCheckpoint().catch(error =>
-      console.warn('Could not clear confirmed ride win:', error));
+    clearFinishedTry('Could not clear confirmed ride win:');
     const target = guide.current();
     if (button.kind === 'next' && target) guide.setTarget(target.taskId, 'win_card');
     afterRewardsHidden.current = null;
@@ -812,7 +820,7 @@ export default function RedeemRedeemableModal({
     }
     onPress();
     close();
-  }, [clearAttemptCheckpoint, onPress, close, park.id, taskName, taskId, openTeamStep]);
+  }, [clearFinishedTry, onPress, close, park.id, taskName, taskId, openTeamStep]);
 
   const handleViewCoin = useCallback(async (openMastery = false) => {
     if (leavingWinRef.current) return;
@@ -820,8 +828,7 @@ export default function RedeemRedeemableModal({
     const focusCoinAssetId = attemptRef.current?.rewards?.coin_asset_id;
     const earnedCoin = createEarnedShelfArrival(attemptRef.current);
     const ownerId = player?.id;
-    void clearAttemptCheckpoint().catch(error =>
-      console.warn('Could not clear confirmed ride win:', error));
+    clearFinishedTry('Could not clear confirmed ride win:');
     // Coin to shelf in one move: the shelf (already loaded during the win card) opens right now
     // under the fading card, never after the card has faded and the map has held still. The
     // map's own refresh waits until the coin has landed, so it never competes with the flight.
@@ -832,7 +839,7 @@ export default function RedeemRedeemableModal({
     if (!(await openTeamStep(shelf))) RootNavigation.navigate(shelf.name as never, shelf.params as never);
     close();
     setTimeout(onPress, SHELF_MAP_REFRESH_DELAY_MS);
-  }, [onPress, close, clearAttemptCheckpoint, player?.id, park.id, openTeamStep]);
+  }, [onPress, close, clearFinishedTry, player?.id, park.id, openTeamStep]);
 
   // One native sheet for the whole challenge: the card, the punch, the game, the loss card and the win card take turns
   // inside it (rewards-unlocks' CalmModal), so no dismiss and present ever races between them and a win never shows a

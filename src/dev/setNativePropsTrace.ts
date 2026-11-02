@@ -42,3 +42,35 @@ if (process.env.EXPO_PUBLIC_SNP_TRACE === '1') {
   }, 5000);
 }
 export {};
+
+/**
+ * Same flag: a watch on Reanimated's frame loop. One worklet that throws inside a frame drops every other callback of
+ * that frame, so running animations stop where they are, silently. Each throw is reported with its message, and a
+ * small timed value every 2 s says whether UI-thread animations still finish.
+ */
+if (process.env.EXPO_PUBLIC_SNP_TRACE === '1') {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const R = require('react-native-reanimated');
+  const report = (message: string) => console.log(`[uiframe] throw: ${message}`);
+  R.runOnUI(() => {
+    'worklet';
+    const g = global as unknown as { requestAnimationFrame: (cb: (t: number) => void) => number; __tpsRaf?: boolean };
+    if (g.__tpsRaf) return;
+    g.__tpsRaf = true;
+    const raf = g.requestAnimationFrame;
+    g.requestAnimationFrame = (cb: (t: number) => void) => raf((t: number) => {
+      try { cb(t); } catch (error) {
+        const e = error as { message?: string; stack?: string };
+        R.runOnJS(report)(`${e?.message ?? String(error)} ${String(e?.stack ?? '').slice(0, 400)}`);
+        throw error;
+      }
+    });
+  })();
+  const beat = R.makeMutable(0);
+  let target = 0; let dead = 0;
+  setInterval(() => {
+    if (beat.value !== target) { dead += 1; console.log(`[uiframe] timed value stuck at ${beat.value}, wanted ${target} (${dead} in a row)`); } else if (dead) { dead = 0; console.log('[uiframe] timed values run again'); }
+    target += 1;
+    beat.value = R.withTiming(target, { duration: 120 });
+  }, 2000);
+}
