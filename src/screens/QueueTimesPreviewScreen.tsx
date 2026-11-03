@@ -5,7 +5,8 @@ const sampleEntries: WikiLiveEntry[] = [
   { id: 'preview-pirates', name: 'Pirates of the Caribbean', entityType: 'ATTRACTION',
     status: 'OPERATING', queue: { STANDBY: { waitTime: 35 } } },
   { id: 'preview-space', name: 'Space Mountain', entityType: 'ATTRACTION',
-    status: 'OPERATING', queue: { STANDBY: { waitTime: 70 } } },
+    // A paid return time, so the preview shows the SKIP LINE chip (fix round W1 item 16).
+    status: 'OPERATING', queue: { STANDBY: { waitTime: 70 }, RETURN_TIME: { state: 'AVAILABLE', returnStart: '2026-11-03T13:30:00-08:00' } } },
   { id: 'preview-haunted', name: 'Haunted Mansion', entityType: 'ATTRACTION',
     status: 'DOWN', queue: { STANDBY: { waitTime: null } } },
   { id: 'preview-jungle', name: 'Jungle Cruise', entityType: 'ATTRACTION',

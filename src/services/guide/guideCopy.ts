@@ -69,6 +69,8 @@ export interface GuideCopyContext {
   readonly treatsToTicket?: number | null;
   /** Home: the coin planned for the next park day, if any. */
   readonly planName?: string | null;
+  /** Home: a coin on the shelf with the Ride Parts and Energy to level up now (after coin levels unlock). */
+  readonly levelUpName?: string | null;
   /**
    * Line story: the player stands in (or by) the Adventure ride's line, where its story can open
    * (the Adventure sheet's own play gate). False: the card walks them there first (GO). Default true.
@@ -183,6 +185,17 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
       const shelf = ctx.shelf;
       const meter = ctx.treatsToTicket && ctx.treatsToTicket > 0
         ? `${ctx.treatsToTicket} more ${ctx.treatsToTicket === 1 ? 'treat' : 'treats'} = 1 Ticket` : `${TREATS_PER_TICKET} treats = 1 Ticket`;
+      // Tonight's real goal first (fix round W1 item 17): a coin that can level up now says so, and the one
+      // button opens it. Otherwise the plan, the shelf and the ticket meter, as before.
+      if (ctx.levelUpName) {
+        return card({
+          kicker: 'READY TO LEVEL UP',
+          title: `Level up ${ctx.levelUpName}!`,
+          line: `Ride Parts and Energy ready. ${meter}`,
+          button: { label: 'LEVEL UP', action: 'level_up' },
+          dots: null,
+        });
+      }
       return card({
         kicker: 'NEXT PARK DAY',
         title: ctx.parkName ? `${ctx.parkName}: ${tickets(ctx.tickets)} ready` : `${tickets(ctx.tickets)} ready`,

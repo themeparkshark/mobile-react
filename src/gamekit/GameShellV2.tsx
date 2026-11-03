@@ -251,6 +251,8 @@ interface GameShellV2Props {
   remainingMs?: SharedValue<number> | null;
   /** Show TIME! at 0 (false when the game ends on its own banner, like Whack's FINISH!). Default true. */
   finalTimeStamp?: boolean;
+  /** Draw the last-5 counting numbers and their ring (default true). False on a paid ride game: no ticking number (fix round W1 item 18). */
+  finalCount?: boolean;
   /**
    * The stage is drawn (board, art, cards). The 3-2-1 waits for it so the count never slams
    * over a blank stage; the field fades in when it turns true. Default true. A stage that
@@ -420,6 +422,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       finalStampFieldY,
       remainingMs,
       finalTimeStamp = true,
+      finalCount = true,
       stageReady = true,
       finalSecondsFeedback = true,
       countdownY = 0.5,
@@ -1466,7 +1469,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           <Animated.View style={[styles.field, kickStyle, fieldInStyle]} onLayout={onFieldLayout}>{children}</Animated.View>
 
           {/* The last 5 seconds: gold edge, stamped seconds, TIME!. */}
-          <FinalSeconds secondsLeft={secondsLeft} remainingMs={remainingMs} timeStamp={finalTimeStamp} width={SCREEN_W} height={SCREEN_H}
+          <FinalSeconds secondsLeft={secondsLeft} remainingMs={remainingMs} timeStamp={finalTimeStamp} count={finalCount} width={SCREEN_W} height={SCREEN_H}
             stampY={finalStampFieldY != null ? fieldY + finalStampFieldY : finalStampY ?? SCREEN_H * countdownY}
             reduced={reducedMotion} active={phase === 'playing'} edge={budget.level !== 'calm' || !!budget.ambient} />
 

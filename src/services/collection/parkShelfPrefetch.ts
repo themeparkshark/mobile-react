@@ -63,6 +63,15 @@ export function prefetchParkShelf(park: number, player: number, now = Date.now()
   lastSeed = { key: key(park, player), entry };
 }
 
+/**
+ * The shelf a win just started loading, without taking it (the Park screen still gets it once).
+ * The win card reads this park's wins from it (park_coins_count, every win counts) for its trophy
+ * line and the Bronze moment, so a win costs no extra request. Null when nothing is loading.
+ */
+export function parkShelfRequest(park: number, player: number): Promise<ParkShelfData> | null {
+  return prefetched.get(key(park, player))?.request ?? null;
+}
+
 /** The newest arrival prefetch, kept after loadParkShelf takes it so a remount can still paint at once. */
 let lastSeed: { key: string; entry: { at: number; data?: ParkShelfData } } | null = null;
 

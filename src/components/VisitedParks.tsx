@@ -57,7 +57,7 @@ export default function VisitedParks({
                 key={park.id}
                 accessibilityRole="button"
                 accessibilityLabel={`${park.name}. ${rideCoinProgress
-                  ? `${park.ride_coins_collected ?? 0} of ${park.ride_coins_available} ride coins`
+                  ? `${park.ride_coins_collected ?? 0} of ${park.ride_coins_available} coins`
                   : `${park.completion_rate} percent complete`}. Open collection.`}
                 onPress={() => {
                   RootNavigation.navigate('Park', {

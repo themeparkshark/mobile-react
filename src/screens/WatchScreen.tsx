@@ -306,7 +306,7 @@ export default function WatchScreen() {
                     <Image source={COIN_ART} style={styles.bannerCoin} contentFit="contain" />
                     <View style={{ flex: 1 }}>
                       <UpperText style={styles.bannerTitle}>
-                        {toEarn === 0 ? 'All caught up!' : `Watch a video, get +${COIN_REWARD} coins`}
+                        {toEarn === 0 ? 'All caught up!' : `Watch a video, get +${COIN_REWARD} Shark Coins`}
                       </UpperText>
                       <WatchMeter watched={watchedCount} total={videos.length} />
                     </View>

@@ -379,6 +379,12 @@ export default function MemoryGame({
   const devMode = DEV ? process.env.EXPO_PUBLIC_MEMORY_MODE || null : null;
   const mode: MemoryMode = resolveMemoryMode({ party, devMode, mode: modeProp, difficulty });
   const flags = modeFlags(mode === 'race' ? 'race' : mode);
+  // A clock whose Overtime is look and sound only (a paid ride coin, a line duel) stays calm: no counting-down
+  // number, no OVERTIME ribbon and no orange rope (fix round W1 item 18). The rope still drains, the music still
+  // turns and the last-5 drumroll still plays, so the end is felt without a ticking number over a kid's board.
+  const calmClock = flags.overtime === 'look';
+  const calmClockRef = useRef(calmClock);
+  calmClockRef.current = calmClock;
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const movement = useContext(LinePlayMovementContext);
@@ -592,7 +598,7 @@ export default function MemoryGame({
     const turnsLeft = e.cfg.signalTurns > 0 ? Math.max(0, e.cfg.signalTurns - e.turns) : null;
     const next = {
       seconds,
-      urgent: clock && e.overtime,
+      urgent: clock && e.overtime && !calmClockRef.current,
       chain: e.chain,
       gauge: e.gauge,
       showtime: inShowtime(e),
@@ -615,7 +621,7 @@ export default function MemoryGame({
       rope.frac.value = withTiming(frac, { duration: TICK_MS + 10, easing: Easing.linear });
       rope.dim.value = withTiming(isLineBleed(e) ? 1 : 0, { duration: 200 });
       marquee.dim.value = rope.dim.value;
-      rope.urgent.value = e.overtime ? 1 : 0;
+      rope.urgent.value = e.overtime && !calmClockRef.current ? 1 : 0;
     }
     if (turnsLeft != null) beadsLeft.value = turnsLeft;
     // Daily rail ghost: by turns, on the counter rail (6.8).
@@ -2038,7 +2044,7 @@ export default function MemoryGame({
         case 'overtime': {
           GameAudio.play('mm_overtime_hit');
           Haptic.comboHeavy();
-          awning.current?.ribbon(e.cfg.overtimeMult > 1 ? 'OVERTIME x2' : 'OVERTIME');
+          if (!calmClockRef.current) awning.current?.ribbon(e.cfg.overtimeMult > 1 ? 'OVERTIME x2' : 'OVERTIME');
           if (!inShowtime(e)) setBed('mm_loop_overtime');
           if (!calm) camera.frame(1.03);
           syncHud();
@@ -2546,6 +2552,7 @@ export default function MemoryGame({
       personalBest={personalBest}
       secondsLeft={finalLeft}
       finalSecondsFeedback={false}
+      finalCount={!calmClock}
       countdownY={0.62}
       stageReady={stageDealt}
       objective={mode === 'ride' ? (r?.signal ? 'Low signal: clear in 24 turns' : 'Clear the board') : mode === 'daily' ? 'Two slips and you are out' : mode === 'race' ? 'Same board, four sharks. First to clear wins.' : mode === 'warmup' ? 'Find the pairs. Remember where you saw them.' : 'Find the pairs. Beat the clock!'}
@@ -2674,7 +2681,7 @@ export default function MemoryGame({
               </View>
             </View>
             {/* The spent clock (0) hides under the end card's ribbon instead of peeking out behind it. */}
-            {tryScreen ? null : <RopeNumeral x={g.W / 2} y={g.rope.y} seconds={flags.clock !== 'none' ? hud.seconds : null} turnsLeft={hud.turnsLeft} urgent={hud.urgent} reducedMotion={reducedMotion} />}
+            {tryScreen ? null : <RopeNumeral x={g.W / 2} y={g.rope.y} seconds={flags.clock !== 'none' && !calmClock ? hud.seconds : null} turnsLeft={hud.turnsLeft} urgent={hud.urgent} reducedMotion={reducedMotion} />}
             <AwningCallouts ref={awning} geo={g} reducedMotion={reducedMotion} />
 
             {/* Peek (Time Attack, from its unlock): the counter's right end. */}

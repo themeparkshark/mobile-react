@@ -30,16 +30,17 @@ import shortenNumber from '../helpers/shorten-number';
 import { DURATION, EASE, SPRING } from '../ui/motionEasing';
 import TapHint from './TapHint';
 import CalmModal from './retention/CalmModal';
+import { rewardWord } from '../services/words/playerWords';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
 const WALLET_GLOW = require('../../assets/images/reveal/soft-spot.webp');
 
 type PrizeKind = 'coins' | 'energy' | 'tickets';
-const PRIZE: Record<PrizeKind, { icon: 'coins' | 'energy' | 'ticket'; one: string; many: string; fly: string }> = {
-  coins: { icon: 'coins', one: 'coin', many: 'coins', fly: 'coins' },
-  energy: { icon: 'energy', one: 'energy', many: 'energy', fly: 'energy' },
-  tickets: { icon: 'ticket', one: 'ticket', many: 'tickets', fly: 'tickets' },
+const PRIZE: Record<PrizeKind, { icon: 'coins' | 'energy' | 'ticket'; fly: string }> = {
+  coins: { icon: 'coins', fly: 'coins' },
+  energy: { icon: 'energy', fly: 'energy' },
+  tickets: { icon: 'ticket', fly: 'tickets' },
 };
 
 // Older servers send no ladder; show today's coins as day 1.
@@ -53,8 +54,9 @@ function mainKind(r: DailyGiftAmountsType): PrizeKind {
   return 'coins';
 }
 
+/** One word per thing (blueprint 4.5): "+25 Shark Coins", never "+25 coins" beside ride coins. */
 export function prizeLabel(kind: PrizeKind, amount: number): string {
-  return amount === 1 ? PRIZE[kind].one : PRIZE[kind].many;
+  return rewardWord(kind, amount);
 }
 
 /**

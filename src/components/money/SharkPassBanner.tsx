@@ -35,7 +35,7 @@ export function bannerLine(state: SharkPassState | null): string | null {
   return stepWords(state.progress.tier, state.season.tier_count);
 }
 
-/** The last points this app run saw, so the next banner can say "+120 pass points" after a win. */
+/** The last points this app run saw, so the next banner can say the pass climbed after a win. */
 let lastSeen: { season: string; points: number; tier: number } | null = null;
 /** Dev only (captures): pretend the last look was `points` earlier, so the next banner shows its tick. */
 export function devPretendEarlier(points: number): void {
@@ -107,8 +107,8 @@ export default function SharkPassBanner({ style, open, always }: {
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
               {`SHARK PASS · ${stepWords(state.progress?.tier ?? 0, state.season.tier_count).toUpperCase()}`}</Text>
             {isNew && <NewPill />}
-            {/* "+N pass points" ticks only once the pass has unlocked (rung 5). */}
-            {gain && passRung && <Text maxFontSizeMultiplier={1.1} style={st.gain}>{gain.stepUp ? `Step ${gain.stepUp}!` : `+${gain.gained} pass points`}</Text>}
+            {/* The climb shows only once the pass has unlocked (rung 5); steps, never points (blueprint 4.5). */}
+            {gain && passRung && <Text maxFontSizeMultiplier={1.1} style={st.gain}>{gain.stepUp ? `Step ${gain.stepUp}!` : 'Your pass climbed!'}</Text>}
           </View>
           <Text maxFontSizeMultiplier={MAX_FONT} style={[st.line, claim && st.lineClaim]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{line}</Text>
           {state.progress && (

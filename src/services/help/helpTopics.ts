@@ -125,7 +125,7 @@ export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy
   park_hud: { title: 'You\'re at the park!', body: 'Walk to a ride to win its coin.' },
   // Matches the button word for word (PLAY!); the card shows a ticket, an arrow and the coin
   // instead of this line, which VoiceOver reads.
-  coin_in_range: { title: 'Tap PLAY!', body: 'One Ticket gets one try. Win the ride coin!' },
+  coin_in_range: { title: 'Tap PLAY!', body: 'One Ticket plays one game. Win the ride coin!' },
   ride_challenge: { title: 'One Ticket, one game',
     body: 'Tap PLAY! to spend a Ticket. Win the game to win this coin.' },
   // LinePlay passes the line that matches its wait card (LINEPLAY_INTRO_BODY); this is the Parts-on default.

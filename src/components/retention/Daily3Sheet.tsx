@@ -204,7 +204,7 @@ function GoalRow({ goal, index, pop, onPress, reducedMotion, go, passLine }: {
   readonly goal: DailyGoal; readonly index: number; readonly pop: boolean; readonly onPress: () => void; readonly reducedMotion: boolean;
   /** Where GO goes (null: no GO, e.g. a park-only goal at home). */
   readonly go: GoalTap | null;
-  /** "+35 pass points" after the Shark Pass unlocks (one extra line). */
+  /** "Climbs your Shark Pass" after the Shark Pass unlocks (one extra line). */
   readonly passLine: string | null;
 }) {
   const stamp = useSharedValue(goal.done && !pop ? 1 : 0);

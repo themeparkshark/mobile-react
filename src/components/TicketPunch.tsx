@@ -28,14 +28,14 @@ export default function TicketPunch({
   gameColor,
   rideName,
   note,
-  kicker = "THIS RIDE'S GAME",
+  kicker = 'YOUR GAME',
   winLine,
   onDone,
 }: {
   readonly gameName: string;
   readonly gameColor: string;
   readonly rideName: string;
-  /** Over the game's name: "THIS RIDE'S GAME" (one game per ride and day, so TRY AGAIN is the same game). */
+  /** Over the game's name: "THIS RIDE'S GAME" where the server deals one game per ride and day, else "YOUR GAME" (punchLines). */
   readonly kicker?: string;
   /** Under it: "Win the Walt Statue coin!" (never "the The ..."). */
   readonly winLine?: string;
@@ -134,7 +134,7 @@ export default function TicketPunch({
 
   return (
     <Pressable style={StyleSheet.absoluteFill} onPress={finish} accessibilityRole="button"
-      accessibilityLabel={`This ride's game: ${gameName}. ${winLine ?? rideName}. Tap to start.`}>
+      accessibilityLabel={`${kicker.charAt(0)}${kicker.slice(1).toLowerCase()}: ${gameName}. ${winLine ?? rideName}. Tap to start.`}>
       <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <View style={[StyleSheet.absoluteFill, styles.scrim]} />
 

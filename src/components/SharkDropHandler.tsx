@@ -107,7 +107,7 @@ export default function SharkDropHandler() {
   const lines = r ? [
     r.item ? `${r.item.name} unlocked!` : null,
     r.tickets ? `+${r.tickets} ticket${r.tickets === 1 ? '' : 's'}` : null,
-    r.coins ? `+${r.coins} coins` : null,
+    r.coins ? `+${r.coins} Shark Coins` : null,
     r.energy ? `+${r.energy} Energy` : null,
   ].filter(Boolean) as string[] : [];
 

@@ -33,7 +33,7 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { playSfx } from '../gamekit/SFX';
 import GameIcon from '../ui/GameIcon';
 import {
-  BACK_TO_MAP_LABEL, flyTargetFor, milestoneHeadline, nextCoinButton, partsProgress, teamSentence, winButtonLabel, winShelfLine,
+  type TrophyMoment, BACK_TO_MAP_LABEL, flyTargetFor, milestoneHeadline, nextCoinButton, partsProgress, teamSentence, winButtonLabel, winShelfLine,
   winRewardChips, WIN_FLY_ROUTES,
   type NextCoinButton, type WinCardExit, type WinChip, type WinFlyTarget,
 } from './rewards/postWinModel';
@@ -90,6 +90,8 @@ interface Props {
   playerEnergy?: number | null;
   /** What this win did for the park shelf (first coin, 25/50/75%, complete). */
   milestones?: CollectionMilestones | null;
+  /** This park's wins after this win (every win counts, repeats too): the trophy line and the trophy moment. */
+  parkWins?: number | null;
   /** "1 coin this week" (the Standings count), or null. */
   weekLine?: string | null;
   /** The guide's next target after this win (null until the map has picked one). */
@@ -149,6 +151,41 @@ function CountUp({ value, start, reduced, style }: { value: number; start: boole
   return <Text style={style}>+{countText(shown)}</Text>;
 }
 
+/* ─── The trophy this win earned (fix round W1 item 17): the trophy itself pops onto the card ─── */
+const TROPHY_ART: Record<string, number> = {
+  Bronze: require('../../assets/images/screens/park/bronze.png'),
+  Silver: require('../../assets/images/screens/park/silver.png'),
+  Gold: require('../../assets/images/screens/park/gold.png'),
+};
+
+function TrophyMomentRow({ trophy, started, reduced }: { trophy: TrophyMoment; started: boolean; reduced: boolean }) {
+  const pop = useSharedValue(reduced ? 1 : 0);
+  const cheered = useRef(false);
+  useEffect(() => {
+    if (!started) return undefined;
+    if (!cheered.current) {
+      cheered.current = true;
+      // One cheer for the trophy, after the coin has landed (sound and buzz stay with Reduce Motion).
+      const timer = setTimeout(() => { haptic('success'); playSfx('fx.firework', 0.7); }, reduced ? 0 : 520);
+      if (!reduced) pop.value = withSequence(withTiming(0, { duration: 420 }), withSpring(1, SPRING.pop));
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [started, reduced, pop]);
+  const art = useAnimatedStyle(() => ({ opacity: Math.min(1, pop.value * 1.6),
+    transform: [{ scale: 0.4 + 0.6 * pop.value }, { rotate: `${(1 - pop.value) * -14}deg` }] }));
+  return (
+    <View style={styles.trophyLine} accessible accessibilityRole="text"
+      accessibilityLabel={`New trophy! ${trophy.name} trophy, ${trophy.wins} wins here.`}>
+      <Animated.View style={art}><Image source={TROPHY_ART[trophy.name] ?? TROPHY_ART.Bronze} style={styles.trophyArt} contentFit="contain" /></Animated.View>
+      <View style={{ flexShrink: 1 }}>
+        <Text style={styles.trophyTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{`${trophy.name.toUpperCase()} TROPHY!`}</Text>
+        <Text style={styles.trophySub} numberOfLines={1}>{`${trophy.wins} wins here`}</Text>
+      </View>
+    </View>
+  );
+}
+
 /* ─── One reward chip in the one reward row; pops in on the shared entrance clock ─── */
 function RewardChip({ chip, index, enter, reduced, started }: {
   chip: WinChip; index: number; enter: SharedValue<number>; reduced: boolean; started: boolean;
@@ -170,7 +207,7 @@ function RewardChip({ chip, index, enter, reduced, started }: {
 
 /**
  * The win card (core loop blueprint 5.3 and 5.13): one 375 pt screen for a
- * first coin. The coin and its shelf line ("1 of 35 coins. Bronze at 12")
+ * first coin. The coin and its shelf line ("1 of 35 coins. 11 more wins for Bronze")
  * lead, then one reward row, then one team sentence after a team pick. One
  * big button, NEXT COIN (or "Play its line story" on today's Adventure ride),
  * and one quiet See my shelf. No offers, no stamp button (a new stamp is a small
@@ -196,6 +233,7 @@ export default function PostWinRewardsModal({
   coinProgress,
   playerEnergy,
   milestones,
+  parkWins = null,
   weekLine = null,
   nextTarget = null,
   wonTaskId = null,
@@ -271,7 +309,7 @@ export default function PostWinRewardsModal({
   }), [coinsEarned, nextRideTicketEarned, ridePartsEarned, energyEarned, xpEarned, vipCoins, coinLevels, daily]);
   const headline = milestoneHeadline(milestones ?? null);
   // The shelf line, or for a limited coin (no park shelf count) its own home: "Limited coin. Yours to keep!"
-  const shelf = winShelfLine(milestones ?? null, limited, isNewCoin);
+  const shelf = winShelfLine(milestones ?? null, limited, isNewCoin, parkWins);
   const team = teamSentence(rideControl as Parameters<typeof teamSentence>[0], name => (isTeam(name) ? teamName(name) : name));
   const next = nextCoinButton(nextTarget, wonTaskId, adventureLineStory);
 
@@ -450,11 +488,12 @@ export default function PostWinRewardsModal({
                 <GameIcon name="sparkle" size={18} />
                 <Text style={styles.editionText} numberOfLines={1}>{earnedEdition.name} Edition</Text>
               </View>}
-              {/* The shelf % and the next trophy in one line: "1 of 35 coins. Bronze at 12". */}
-              {shelf && <View style={styles.shelfLine} accessibilityRole="text">
-                <GameIcon name={shelf.icon} size={22} />
-                <Text style={styles.shelfText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{shelf.text}</Text>
-              </View>}
+              {/* The shelf count and the next trophy in wins ("1 of 35 coins. 11 more wins for Bronze"), or the trophy this win earned. */}
+              {shelf?.trophy ? <TrophyMomentRow trophy={shelf.trophy} started={caught} reduced={reducedMotion} />
+                : shelf && <View style={styles.shelfLine} accessibilityRole="text">
+                  <GameIcon name={shelf.icon} size={22} />
+                  <Text style={styles.shelfText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{shelf.text}</Text>
+                </View>}
             </Animated.View>
 
             {/* ── The one reward row, counting up ── */}
@@ -561,6 +600,11 @@ const styles = StyleSheet.create({
   shelfLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: '#fff4cc', borderRadius: 14,
     borderWidth: 2, borderColor: '#ffcf3b', paddingVertical: 4, paddingHorizontal: 10, maxWidth: '100%' },
   shelfText: { fontFamily: 'Shark', fontSize: 16, color: '#05346e', flexShrink: 1 },
+  trophyLine: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, backgroundColor: '#fff4cc', borderRadius: 16,
+    borderWidth: 2, borderColor: '#ffcf3b', paddingVertical: 2, paddingLeft: 6, paddingRight: 14, maxWidth: '100%' },
+  trophyArt: { width: 44, height: 44 },
+  trophyTitle: { fontFamily: 'Shark', fontSize: 20, lineHeight: 23, color: '#05346e' },
+  trophySub: { fontFamily: 'Knockout', fontSize: 14, color: '#3d5f8c' },
   // One reward row: the chips share the width (a fifth chip after rung 4 wraps rather than shrinking past reading).
   chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 10, alignSelf: 'stretch' },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff8e4', borderRadius: 14,

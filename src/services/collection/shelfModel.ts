@@ -187,3 +187,31 @@ export function partsWaiting(task: object): number {
   const value = Number((task as { parts_waiting?: unknown }).parts_waiting);
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
+
+/**
+ * The coin guide's suggested row, from the same pick as the NEXT COIN card at the top of the shelf
+ * (fix round W1 item 17): a coin to level up, the guide's coin, then the saved goal (with an open
+ * ride beside it when the goal is reported down), then the shelf's own nearby pick. Never a second,
+ * different next coin on one screen.
+ */
+export function directoryNextCoin(input: {
+  readonly levelUpId: number | null;
+  readonly guideId: number | null;
+  /** The guide's pick replaces the saved goal on the card. */
+  readonly guideOverGoal: boolean;
+  readonly goalId: number | null;
+  readonly goalReportedDown: boolean;
+  readonly alternateId: number | null;
+  readonly nearbyId: number | null;
+  readonly nearbyReportedOpen: boolean;
+}): { goalTaskId: number | undefined; nearbyRideId: number | undefined; nearbyReportedOpen: boolean } {
+  const top = input.levelUpId ?? input.guideId;
+  if (top != null) return { goalTaskId: top, nearbyRideId: undefined, nearbyReportedOpen: false };
+  if (input.guideOverGoal) return { goalTaskId: undefined, nearbyRideId: undefined, nearbyReportedOpen: false };
+  if (input.goalId != null) {
+    return input.goalReportedDown && input.alternateId != null
+      ? { goalTaskId: input.goalId, nearbyRideId: input.alternateId, nearbyReportedOpen: true }
+      : { goalTaskId: input.goalId, nearbyRideId: undefined, nearbyReportedOpen: false };
+  }
+  return { goalTaskId: undefined, nearbyRideId: input.nearbyId ?? undefined, nearbyReportedOpen: input.nearbyId != null && input.nearbyReportedOpen };
+}

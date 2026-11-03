@@ -185,11 +185,13 @@ test('Daily 3 at home never sends GO to a park', () => {
   assert.match(read('src/components/retention/useRetention.tsx'), /setRetentionMode\(atPark \? 'park' : 'home'\)/);
 });
 
-test('Daily 3: pass points per goal after rung 5, freezes after a 3-day flame, the week starts Monday', () => {
+test('Daily 3: a Shark Pass line per goal after rung 5 (steps, never points), freezes after a 3-day flame, the week starts Monday', () => {
   const today = [{ event: 'home_find', points: 35 }, { event: 'ride_coin_win', points: 120 }];
-  assert.equal(model.goalPassLine({ kind: 'catch', park: false, target: 3 }, today), '+35 pass points each');
-  assert.equal(model.goalPassLine({ kind: 'catch', park: true, target: 1 }, today), '+120 pass points');
-  assert.equal(model.goalPassLine({ kind: 'catch', park: true, target: 2 }, today), '+120 pass points', 'one ride coin wins it: no "each"');
+  // Fix round W1 item 16: a kid cannot read "+120 pass points"; the pass shows steps (blueprint 4.5).
+  assert.equal(model.goalPassLine({ kind: 'catch', park: false, target: 3 }, today), 'Each one climbs your Shark Pass');
+  assert.equal(model.goalPassLine({ kind: 'catch', park: true, target: 1 }, today), 'Climbs your Shark Pass');
+  assert.equal(model.goalPassLine({ kind: 'catch', park: true, target: 2 }, today), 'Climbs your Shark Pass', 'one ride coin wins it: no "each"');
+  assert.equal(model.goalPassLine({ kind: 'catch', park: true, target: 1 }, today, 120), '+1 Shark Pass step', 'whole steps say how many');
   assert.equal(model.goalPassLine({ kind: 'chest', park: false, target: 1 }, today), null);
   assert.equal(model.goalPassLine({ kind: 'catch', park: false, target: 3 }, null), null);
   assert.equal(model.freezesShown({ days: 2, best: 2, freezes: 0 }), false);
@@ -291,9 +293,9 @@ test('Shark Pass: one next prize, Step N of 50, no upsell in free claims, Daily 
   assert.match(passSrc, /const daily3Ready = flagOn\(retentionFlags, 'daily_three'\) && dailyRungOpen;/);
   assert.match(passSrc, /dailyQuestsSlot\(state\.quests, daily3Ready\) === 'later' && \(\n\s*<View style=\{s\.questRow\}/, 'the later line is a View, never a Pressable');
   assert.match(passSrc, /dailyQuestsSlot\(state\.quests, daily3Ready\) === 'daily3' && \(\n\s*<Pressable/);
-  // Quest bonuses say pass points, like the banner and the Daily 3 rows.
-  assert.match(passSrc, /`\+\$\{q\.bonus\} pass points!`/);
-  assert.match(passSrc, /: `\+\$\{q\.bonus\} pass points`\}/);
+  // Quest bonuses climb the pass in its own unit (steps), like the banner and the Daily 3 rows; never points.
+  assert.match(passSrc, /questStepWords\(q\.bonus, perStep\)/);
+  assert.doesNotMatch(passSrc, /pass points/);
   assert.doesNotMatch(passSrc, /\} points!?`/);
   const banner = loadTs('src/components/money/SharkPassBanner.tsx', {
     '@react-navigation/native': {}, 'expo-image': {}, react: {}, 'react-native-reanimated': {}, 'react-native': { StyleSheet: { create: s => s } },

@@ -84,7 +84,7 @@ test('the reveal card names the new perk and its XP and coin chips', () => {
   const card = m.revealCard(fixtures().previewUnlocks(7), 100);
   assert.equal(card.title, 'NEW BONUS: Ride Regular');
   assert.deepEqual(plain(card.chips), ['+100 XP']);
-  assert.deepEqual(plain(m.revealCard(fixtures().previewUnlocks(6), 80).chips), ['+80 XP', '+100 coins']);
+  assert.deepEqual(plain(m.revealCard(fixtures().previewUnlocks(6), 80).chips), ['+80 XP', '+100 Shark Coins']);
   assert.deepEqual(plain(m.revealCard(fixtures().previewUnlocks(5), 60).chips), ['+60 XP', 'Boss Glimpse unlocked']);
   assert.equal(m.revealCard(null, 0), null);
   assert.equal(m.levelRibbon(7), 'LEVEL 7 · TIDAL');

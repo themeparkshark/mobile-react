@@ -199,11 +199,12 @@ function chapterMissionTitle(chapter: LinePlayChapter | null | undefined, id: st
   return index >= 0 ? chapter.missionNames[index] : undefined;
 }
 
-function tabLabel(screen: string): string {
-  return screen === 'Leaderboard' ? 'Standings' : screen;
-}
 
 import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLiveActivity';
+import { tabWord } from '../../services/words/playerWords';
+
+/** The footer tab's own name ("the Map", never the route name "Explore"). */
+const tabLabel = tabWord;
 
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
