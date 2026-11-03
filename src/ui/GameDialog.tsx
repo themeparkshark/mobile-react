@@ -183,10 +183,14 @@ export function GameDialog({
 
   /** UIKit says the dialog is gone (or the fallback ran): answer once, then free the layer. */
   const deliver = () => {
-    setNativeUp(false);
-    layer.onDismissed();
+    // Only the close that finished its fade answers. A late dismiss from an earlier showing (the owner asked again
+    // while UIKit was still taking the last one down) must not clear this showing's native flag: that left the next
+    // answer waiting on a flag already cleared, the owner never heard back, and End, Back and every tab in LinePlay
+    // went dead (the LinePlay freeze, November 2026).
     const answer = gate.answer();
     if (!answer) return;
+    setNativeUp(false);
+    layer.onDismissed();
     onAnswer?.(answer.index);
     const button = answer.index === null ? undefined : (buttons && buttons.length ? buttons : [{ text: 'OK' }])[answer.index];
     if (runButtonHandlers) button?.onPress?.();
@@ -200,12 +204,13 @@ export function GameDialog({
   };
   // Hidden: UIKit takes the dialog down one mount transaction later (onDismiss does not arrive on this
   // React Native), so the answer goes out NATIVE_SETTLE_MS after the hide, or at once on onDismiss.
+  // Keyed on the hide alone: the answer of a close that finished its fade always goes out.
   useEffect(() => {
-    if (mounted || !nativeUp) return;
+    if (mounted || !gate.busy) return;
     if (Platform.OS !== 'ios') { deliverRef.current(); return; }
     const timer = setTimeout(() => deliverRef.current(), NATIVE_SETTLE_MS);
     return () => clearTimeout(timer);
-  }, [mounted, nativeUp]);
+  }, [mounted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const close = (index: number | null) => {
     const token = gate.close(index);

@@ -123,3 +123,18 @@ test('a ride win never shows a dim map: the game stays under the win card until 
   assert.match(flow, /<PostWinRewardsModal\n\s+embedded/);
   assert.match(flow, /const buttonLabel = !stepReady \|\| starting \? 'One moment'/, 'a slow server never looks like a dead button');
 });
+
+test('a dialog always answers its owner: a late dismiss from an earlier showing can never swallow the next answer', () => {
+  const D = loadTs('src/ui/gameDialogModel.ts');
+  const gate = D.createDialogCloseGate();
+  gate.open();
+  assert.equal(gate.answer(), null, 'a stale dismiss while the dialog is up answers nothing');
+  const token = gate.close(2);
+  assert.ok(gate.fadeDone(token));
+  assert.equal(JSON.stringify(gate.answer()), '{"index":2}', 'the close that finished its fade answers, once');
+  assert.equal(gate.answer(), null);
+  const src = read('src/ui/GameDialog.tsx');
+  const deliver = src.slice(src.indexOf('const deliver = () => {'), src.indexOf('const deliverRef'));
+  assert.ok(deliver.indexOf('gate.answer()') < deliver.indexOf('setNativeUp(false)'), 'only a real answer clears the native flag');
+  assert.match(src, /if \(mounted \|\| !gate\.busy\) return;/, 'the answer goes out on the hide alone');
+});
