@@ -34,19 +34,22 @@ import { UpperText } from '../../../ui/upper';
 const QUEUE_STAMP_IMAGE = require('../../../../assets/images/stamps/stamp-09.png');
 const QUEUE_RECAP_SHARK = require('../../../../assets/images/screens/lineplay/queue-recap-shark.png');
 
-/** Counts a number up once on arrival; reduced motion shows it at once. */
+/** A count this small lands as itself: counting 0 to 1 only ever showed a "+0" row first. */
+const COUNT_UP_MIN = 4;
+
+/** Counts a number up once on arrival; reduced motion (or a count of 3 or less) shows it at once. */
 function useCountUp(target: number, delayMs: number, reducedMotion: boolean): number {
-  const [value, setValue] = useState(reducedMotion ? target : 0);
+  const [value, setValue] = useState(reducedMotion || target < COUNT_UP_MIN ? target : 1);
   const frame = useRef<number | null>(null);
   useEffect(() => {
-    if (reducedMotion || target <= 0) { setValue(target); return; }
+    if (reducedMotion || target < COUNT_UP_MIN) { setValue(target); return; }
     const duration = Math.min(900, 380 + target * 18);
     let start: number | null = null;
     const timer = setTimeout(() => {
       const step = (now: number) => {
         start ??= now;
         const t = Math.min(1, (now - start) / duration);
-        setValue(Math.round(target * (1 - Math.pow(1 - t, 3))));
+        setValue(Math.max(1, Math.round(target * (1 - Math.pow(1 - t, 3)))));
         if (t < 1) frame.current = requestAnimationFrame(step);
       };
       frame.current = requestAnimationFrame(step);

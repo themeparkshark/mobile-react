@@ -2001,6 +2001,10 @@ export class LinePlaySession {
       this.boardingSuggested = false;
       this.boardingSeenAt = null;
       if (boardingConfirmed && this.endReason === 'left_queue') this.endReason = 'boarded';
+      // Said now, not when the server answers: the screen swaps the left-the-line page for the recap at the
+      // tap (no flash of the wait page under the closing dialog).
+      this.persistCheckpoint();
+      this.emit();
     } else {
       this.beginEnding(boardingConfirmed, boardingConfirmed ? 'boarded' : 'manual');
     }

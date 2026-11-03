@@ -960,6 +960,8 @@ export default function LinePlayScreen() {
     return () => clearTimeout(id);
   }, [recapSettling]);
   const holdRecap = recapSettling && !settleTimedOut;
+  // A ridden wait's "Ride logged!" row is part of the recap's first look (it is set the moment the wait completes).
+  const rideLoggedPending = snapshot.state === 'complete' && snapshot.boardingConfirmed && rideLogged == null;
   const handleRecapGo = useCallback(async () => {
     if (!go) return;
     releaseRideStep();
@@ -1594,7 +1596,7 @@ export default function LinePlayScreen() {
               server settles the rewards and the GO one calm block holds their room (no near-empty page, no jump). */}
           {snapshot.state === 'complete' || (snapshot.state === 'ending' && !leftLineWrapUp) ? (
             <SessionRecap
-              settling={snapshot.state !== 'complete' || holdRecap}
+              settling={snapshot.state !== 'complete' || holdRecap || rideLoggedPending}
               nextAdventure={ride ? nextAdaptiveStoryTitle(snapshot.chapter, ride.rideName) : null}
               adventuresFound={adventuresFound && adventuresFound.count > 0 ? [adventuresFound.count, ADAPTIVE_STORY_TOTAL, adventuresFound.isNew] : null}
               snackSlot={snapshot.serverSessionId && snapshot.rewards ? <LineSnackOffer sessionId={snapshot.serverSessionId} /> : null}

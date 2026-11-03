@@ -257,7 +257,12 @@ test('the recap: only what you got, "Sign said 20, you waited 11", one GO, the l
   assert.match(screen, /goPending=\{go == null && !goReady\}/);
   // The recap lands the moment the wait ends (never the locked in-line pages, never a near-empty page): the
   // hero now, and one calm block holding the room of the rewards and the GO until they are known (capped).
-  assert.match(screen, /\{snapshot\.state === 'complete' \|\| \(snapshot\.state === 'ending' && !leftLineWrapUp\) \? \(\n\s+<SessionRecap\n\s+settling=\{snapshot\.state !== 'complete' \|\| holdRecap\}/);
+  assert.match(screen, /\{snapshot\.state === 'complete' \|\| \(snapshot\.state === 'ending' && !leftLineWrapUp\) \? \(\n\s+<SessionRecap\n\s+settling=\{snapshot\.state !== 'complete' \|\| holdRecap \|\| rideLoggedPending\}/);
+  // A ridden wait's "Ride logged!" row is in the recap's first look, never inserted above it a moment later.
+  assert.match(screen, /const rideLoggedPending = snapshot\.state === 'complete' && snapshot\.boardingConfirmed && rideLogged == null;/);
+  // Answering the ride question on the left-the-line wrap-up says so at once (the page under the dialog swaps then).
+  const session = read('src/services/lineplay/LinePlaySession.ts');
+  assert.match(session, /if \(boardingConfirmed && this\.endReason === 'left_queue'\) this\.endReason = 'boarded';\n[^\n]*\n[^\n]*\n\s+this\.persistCheckpoint\(\);\n\s+this\.emit\(\);/);
   assert.match(recap, /\{settling \? \(\n\s+<View style=\{styles\.settleBlock\}/);
   assert.match(recap, /settleBlock: \{ minHeight: RECAP_SETTLE_BLOCK_HEIGHT/);
   assert.doesNotMatch(screen, /WaitWrapUpCard/);
