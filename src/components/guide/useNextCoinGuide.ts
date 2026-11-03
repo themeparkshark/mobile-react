@@ -17,7 +17,9 @@ import {
   type GuideAdventure, type GuideState, type GuideTarget, type LiveMemo,
 } from '../../services/guide/nextCoin';
 import { nextFreeTicket, type FreeTicketsInput } from '../../services/guide/freeTickets';
-import { guideCardCopy, restingSightCopy, type GuideCardCopy } from '../../services/guide/guideCopy';
+import { guideCardCopy, oneGoldButton, restingSightCopy, type GuideCardCopy } from '../../services/guide/guideCopy';
+import { coinsToday, INSIDE_PARK_METERS, leavingPark, parkDayStore, welcomedToday } from '../../services/guide/parkDay';
+import { localDay } from '../../services/reveal/revealLadder';
 import { adventureAfterWin, guideCoinsFor, inLineTaskFor, ridesByTask, showLikeTaskIds, withAdventureCoin, withPlayRange } from './guideCoins';
 
 export interface NextCoinGuideInput {
@@ -64,6 +66,8 @@ export interface NextCoinGuideInput {
   readonly welcomeBackDone?: boolean;
   /** Today's Adventure ride's line is in reach (the Adventure sheet's play gate is not 'far'). */
   readonly lineStoryNear?: boolean;
+  /** Today's free try exists for this player (ride_rescue_pass on): the Need a Ticket line may promise one tomorrow. */
+  readonly freeTryDaily?: boolean;
 }
 
 export interface NextCoinGuide {
@@ -96,6 +100,8 @@ export interface NextCoinGuide {
   readonly targetOffMap: boolean;
   /** The first in-park reading of this visit (epoch ms), or null: the attention rules' 30 s quiet. */
   readonly arrivedAt: number | null;
+  /** The goodbye card shows for this park (the one the player is leaving), or null. */
+  readonly leavingParkId: number | null;
 }
 
 const adventureFor = (ticket: AdventureTicket | null, parkId: number | null): GuideAdventure | null =>
@@ -147,6 +153,9 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   for (const row of input.live?.rides ?? []) if (typeof row.wait === 'number') waitSeen.current.ids.add(row.task_id);
   const showLike = useMemo(() => showLikeTaskIds(input.live, waitSeen.current.ids), [input.live, parkId]); // eslint-disable-line react-hooks/exhaustive-deps
   const inLineTaskId = useMemo(() => inLineTaskFor(input.dwellRideId, rides, coins, showLike), [input.dwellRideId, rides, coins, showLike]);
+  // A show typed as an attraction (open, never a posted wait) has no line: no Line story pull to it either.
+  const guideCoins = useMemo(() => showLike.size ? coins.map(coin => showLike.has(coin.taskId) && coin.queue !== false
+    ? { ...coin, queue: false } : coin) : coins, [coins, showLike]);
 
   // Arrival: the first in-park reading of this visit starts the 30 s welcome.
   const arrived = useRef<{ parkId: number | null; at: number | null }>({ parkId: null, at: null });
@@ -165,13 +174,13 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   const adventure = adventureFor(input.adventure, parkId);
   const lat = input.location ? Math.round(input.location.latitude * 20000) / 20000 : null;
   const lng = input.location ? Math.round(input.location.longitude * 20000) / 20000 : null;
-  const coinsKey = coins.map(c => `${c.taskId}:${+c.owned}${c.kind[0]}${+!!c.queue}${+!!c.star}${+!!c.rush}${+!!c.levelUpReady}`).join('|');
+  const coinsKey = guideCoins.map(c => `${c.taskId}:${+c.owned}${c.kind[0]}${+!!c.queue}${+!!c.star}${+!!c.rush}${+!!c.levelUpReady}`).join('|');
   const answersKey = Object.entries(answers).map(([k, v]) => `${k}${v[0]}`).join(',');
   const ready = input.ready !== false;
   // What the guide picks from, built fresh each render (resolve, the pick re-run and a release share it).
   const resolveInput = () => parkId == null ? null : ({
     mode: 'park' as const, parkId, location: input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null,
-    coins, live: answers, adventure, inLineTaskId, playableTaskId: input.playableTaskId,
+    coins: guideCoins, live: answers, adventure, inLineTaskId, playableTaskId: input.playableTaskId,
     starRushUnlocked: input.starRushUnlocked, coinLevelsUnlocked: input.coinLevelsUnlocked,
   });
   useEffect(() => {
@@ -193,6 +202,20 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
     guide.resolve(next);
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A player's own pick holds against a line dwell for PICK_HOLD_MS. Standing still in a line sends no new
+  // location, so re-resolve when that hold ends (the Jungle Cruise line waited past 10 minutes for nothing).
+  const holdEndsAt = useSyncExternalStore(guide.subscribe, guide.pickHoldEndsAt, guide.pickHoldEndsAt);
+  const [, setHoldTick] = useState(0);
+  useEffect(() => {
+    if (holdEndsAt == null || !enabled || !ready) return undefined;
+    const timer = setTimeout(() => {
+      const next = resolveInput();
+      if (next) guide.resolve(next);
+      setHoldTick(t => t + 1);
+    }, Math.max(0, holdEndsAt - Date.now()) + 50);
+    return () => clearTimeout(timer);
+  }, [holdEndsAt, enabled, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // A coin the guide chose on partial data (no trip goal or no ride catalog yet) gives way once when both
   // land: the player never picked it, and the full data may hold today's Adventure (rule 1 or 5).
   const complete = input.tripGoalLoaded !== false && catalog?.parkId === parkId;
@@ -213,31 +236,57 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
     return undefined;
   });
   const target = useSyncExternalStore(guide.subscribe, guide.current, guide.current);
+  // One welcome per visit, and a goodbye on leaving (fix W1 item 10), from today's park day record.
+  const dayRecord = useSyncExternalStore(parkDayStore.subscribe, parkDayStore.get, parkDayStore.get);
+  const today = localDay(Date.now());
+  // Read once per visit (this park, this arrival): the welcome marked a moment ago never cuts itself short.
+  // Before the record has loaded the card stays neutral (no welcome), so a relaunch never re-greets.
+  const visitKey = `${parkId}:${arrivedAt}:${today}`;
+  const welcomeSeen = useRef<{ key: string; welcomed: boolean } | null>(null);
+  if (dayRecord && arrivedAt != null && welcomeSeen.current?.key !== visitKey) {
+    welcomeSeen.current = { key: visitKey, welcomed: welcomedToday(dayRecord, parkId, today) };
+  }
+  const welcomed = welcomeSeen.current?.key === visitKey ? welcomeSeen.current.welcomed : true;
+  const here = input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null;
+  const lastInside = useRef<{ parkId: number; parkName: string | null } | null>(null);
+  if (parkId != null && here && coins.some(coin => guideMeters(here, coin) <= INSIDE_PARK_METERS)) {
+    lastInside.current = { parkId, parkName: input.parkName };
+  }
+  const leavingFrom = lastInside.current;
+  const leaving = enabled && leavingPark({ parkId, location: here, coins, lastInside: leavingFrom,
+    coinsToday: coinsToday(dayRecord, leavingFrom?.parkId, today) });
   const held = enabled && ready && target && target.parkId === parkId ? target : null;
   // "You're here" only while PLAY! is really up for this coin (the server's range check wins over geometry).
   const shown = withPlayRange(held, input.playableTaskId);
-  const state = !ready && enabled ? 'arrive' : guideState({
-    mode: 'park', parkId, location: input.location ?? null, coins, live: answers, adventure, inLineTaskId,
+  const state = leaving ? 'goodbye' : !ready && enabled ? 'arrive' : guideState({
+    mode: 'park', parkId, location: input.location ?? null, coins: guideCoins, live: answers, adventure, inLineTaskId,
     now: Date.now(), arrivedAt, daysAway: input.daysAway ?? null, welcomeBackDone: input.welcomeBackDone,
-    wallet: input.wallet,
+    wallet: input.wallet, welcomed, leaving,
   }, shown);
+  // The welcome said once is said for today: a relaunch or a walk back in names the park only.
+  useEffect(() => {
+    if (state === 'arrive' && !welcomed && parkId != null && ready) parkDayStore.markWelcomed(parkId, today);
+  }, [state, welcomed, parkId, ready, today, dayRecord?.day]);
 
   // Resting = closed for the night: no ride known open, and some known closed (one ride down is not a closed park).
   const known = Object.values(answers);
   const ridesResting = known.some(answer => answer === 'closed') && !known.some(answer => answer === 'open');
   const allOwned = coins.length > 0 && coins.every(coin => coin.owned);
-  const here = input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null;
   const outOfReach = !!here && coins.some(coin => !coin.owned) &&
     coins.filter(coin => !coin.owned).every(coin => guideMeters(here, coin) > MAX_TARGET_METERS);
   const adventureDots: [boolean, boolean, boolean] | null = input.adventure && shown &&
     input.adventure.ride.task_id === shown.taskId && input.adventure.park_id === parkId
     ? [!!input.adventure.discover, !!input.adventure.play, input.adventure.phase === 'complete'] : null;
   const adventureStep = adventureDots && input.adventure?.phase === 'celebrate' ? 'celebrate' : 'play';
-  const copy = restingSightCopy(guideCardCopy(state, shown, {
+  const playUp = input.playableTaskId != null;
+  const copy = oneGoldButton(restingSightCopy(guideCardCopy(state, shown, {
     parkName: input.parkName, ridesResting, allOwned, outOfReach,
     tickets: input.wallet?.tickets ?? 0, freeStep: input.wallet ? nextFreeTicket(input.wallet) : null,
     queueTicketsOn: input.queueTicketsOn, adventureDots, lineStoryNear: input.lineStoryNear, adventureStep,
-  }), shown, ridesResting);
+    welcomed, ownedHere: coins.filter(coin => coin.owned).length + (input.ownedTaskIds?.size ?? 0) > 0 ? 1 : 0, playUp,
+    freeTryDaily: input.freeTryDaily, leaving: leaving ? { parkName: leavingFrom?.parkName ?? null,
+      coins: coinsToday(dayRecord, leavingFrom?.parkId, today) } : null,
+  }), shown, ridesResting), playUp);
   const targetTask = shown ? input.tasks.find(task => task.id === shown.taskId) ?? null : null;
   const targetCoin = shown ? coins.find(coin => coin.taskId === shown.taskId) ?? null : null;
   const targetPoint = targetTask
@@ -248,6 +297,7 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   const adventureTab = !!input.adventure && input.adventure.park_id === parkId && input.adventure.phase !== 'complete'
     && !adventureDots && state !== 'arrive' && state !== 'welcome_back';
   const pathPoint = guidePathPoint(targetPoint, adventureStep);
-  return { target: shown, state, copy, inLineTaskId, rides, targetTask, targetPoint, pathPoint, targetOffMap: !!shown && !targetTask && !!targetCoin,
-    arrivedAt, adventureTab };
+  return { target: shown, state, copy, inLineTaskId, rides, targetTask, targetPoint, pathPoint: leaving ? null : pathPoint,
+    targetOffMap: !!shown && !targetTask && !!targetCoin, arrivedAt, adventureTab: adventureTab && !leaving,
+    leavingParkId: leaving ? leavingFrom?.parkId ?? null : null };
 }

@@ -123,8 +123,9 @@ export function BossSheetSkeleton() {
 
 export const parts = StyleSheet.create({
   hpTrack: { width: '100%', backgroundColor: 'rgba(5,52,110,0.55)', borderWidth: 2, borderColor: BRAND.white, overflow: 'hidden' },
-  hpLag: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#ffd9d4' },
-  hpFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.red },
+  // Gold, never red: the boss's health is a team goal, not an alarm (fix W1 item 11).
+  hpLag: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#fff1c2' },
+  hpFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.gold },
   hpShine: { position: 'absolute', left: 4, right: 4, top: 2, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.35)' },
   hpFlash: { ...StyleSheet.absoluteFillObject, backgroundColor: BRAND.white },
   pips: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 12 },

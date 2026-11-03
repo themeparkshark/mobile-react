@@ -29,6 +29,7 @@ const rewardsNew = loadTs('src/components/map/RewardsButton.tsx', {
   'react-native': { Pressable: 'Pressable', Text: 'Text', View: 'View', StyleSheet: { create: x => x } },
   'react-native-svg': { __esModule: true, default: 'Svg', Circle: 'Circle' }, '../../gamekit/Haptics': { haptic() {} },
   '../../ui': { BRAND: {}, GameIcon: 'GameIcon', SHADOW: { card: {} } },
+  '../guide/flyAnchors': { useFlyAnchor: () => ({ ref: {}, onLayout() {} }) },
 });
 
 /** What the guide hook returns when a test does not pass its own (no target: the resting card). */

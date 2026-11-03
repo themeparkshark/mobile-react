@@ -180,7 +180,9 @@ export function stampTicketSources(stamps: Record<string, readonly StampData[]> 
 /** The player's Tickets and free ways, for the guide card's wallet states. */
 export function guideWallet(input: {
   readonly tickets: number | null | undefined;
-  readonly heldPasses: number | null | undefined;
+  readonly heldPasses?: number | null | undefined;
+  /** Extra tries from the one free try signal (freeTrySignal); wins over heldPasses when given. */
+  readonly extraTries?: number | null | undefined;
   readonly freeTryReady: boolean | null | undefined;
   readonly queueTicketsOn: boolean;
   readonly claimable: readonly ClaimSource[];
@@ -190,7 +192,7 @@ export function guideWallet(input: {
     tickets: n(input.tickets),
     claimable: input.claimable,
     freeTryReady: input.freeTryReady === true,
-    extraTries: n(input.heldPasses),
+    extraTries: n(input.extraTries ?? input.heldPasses),
     queueTicketsOn: input.queueTicketsOn === true,
   };
 }

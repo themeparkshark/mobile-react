@@ -20,7 +20,8 @@ export type GuideAction =
   | 'shelf'         // the park shelf
   | 'plan'          // home: open the shelf to plan the next park day
   | 'unfold'        // Today's Adventure souvenir: open its sheet and unfold the souvenir
-  | 'skip';         // Line story or souvenir: pick another coin (the guide moves on to the next one)
+  | 'skip'          // Line story or souvenir: pick another coin (the guide moves on to the next one)
+  | 'story';        // Goodbye: the shelf of the park you just left, with today's park story on top
 
 export interface GuideButton {
   readonly label: string;
@@ -78,6 +79,28 @@ export interface GuideCopyContext {
    * (its souvenir, after the line story is played). Default 'play'.
    */
   readonly adventureStep?: 'play' | 'celebrate' | null;
+  /** This park was already welcomed today: the arrive window never says "Welcome to ..." again (fix W1 item 10). */
+  readonly welcomed?: boolean;
+  /** Coins the player already owns in this park: a veteran never reads "First coin". */
+  readonly ownedHere?: number;
+  /**
+   * PLAY! is up on the map right now. PLAY! is the one gold button then: the card's own button steps down to a
+   * quiet link (fix W1 item 9, "In line? LINEPLAY never beside PLAY!").
+   */
+  readonly playUp?: boolean;
+  /** Today's free try exists for this player (its switch is on). Off: the card never promises one tomorrow. */
+  readonly freeTryDaily?: boolean;
+  /** Goodbye: the park the player is leaving and the coins they won there today. */
+  readonly leaving?: { readonly parkName: string | null; readonly coins: number } | null;
+}
+
+/**
+ * One gold button per screen (fix W1 item 9): while PLAY! is up, the card's own gold button becomes its quiet
+ * link (or goes, when a quiet link is already there). Pure.
+ */
+export function oneGoldButton(copy: GuideCardCopy, playUp: boolean): GuideCardCopy {
+  if (!playUp || !copy.button) return copy;
+  return { ...copy, button: null, secondary: copy.secondary ?? { ...copy.button, badge: null } };
 }
 
 /**
@@ -181,13 +204,28 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
     }
     case 'arrive':
       return card({
-        kicker: `WELCOME TO ${shortParkName(ctx.parkName).toUpperCase()}!`,
-        // A coin you already won (today's Adventure ride, for its line story) is never "First coin".
+        // One welcome per visit: a relaunch or a return to the same park today just names the park.
+        kicker: ctx.welcomed ? shortParkName(ctx.parkName).toUpperCase() : `WELCOME TO ${shortParkName(ctx.parkName).toUpperCase()}!`,
+        // A coin you already won (today's Adventure ride, for its line story) is never "First coin", and a
+        // player with coins here already is never told "First coin" either.
         title: target ? (target.reason === 'line_story' ? `Next: ${possessive(name)} line story`
-          : target.reason === 'parts' ? `Next: ${possessive(name)} Ride Parts` : `First coin: ${name}`) : 'Every ride has a coin',
+          : target.reason === 'parts' ? `Next: ${possessive(name)} Ride Parts`
+            : (ctx.ownedHere ?? 0) > 0 || ctx.welcomed ? `Next coin: ${name}` : `First coin: ${name}`)
+          : ctx.welcomed ? 'Finding your next coin' : 'Every ride has a coin',
         line: [far, running].filter(Boolean).join(' · ') || null,
         button: target ? { label: 'GO', action: 'go' } : null,
       });
+    case 'goodbye': {
+      const n = Math.max(0, ctx.leaving?.coins ?? 0);
+      const left = shortParkName(ctx.leaving?.parkName ?? ctx.parkName);
+      return card({
+        kicker: `GREAT DAY AT ${left.toUpperCase()}!`,
+        title: n > 0 ? `${n} ${n === 1 ? 'coin' : 'coins'} won today` : 'See you next park day',
+        line: 'Your park day story is on your shelf',
+        button: { label: 'SHELF', action: 'story' },
+        dots: null,
+      });
+    }
     case 'walk':
       return card({
         kicker: kickerFor(),
@@ -260,13 +298,15 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         badge: 'ticket',
       });
     case 'need_ticket': {
-      const lines = [`${TREATS_PER_TICKET} treats at home = 1 Ticket.`, 'Tomorrow brings a new free try.'];
+      const lines = [`${TREATS_PER_TICKET} treats at home = 1 Ticket.`];
+      if (ctx.freeTryDaily !== false) lines.push('Tomorrow brings a new free try.');
       if (ctx.queueTicketsOn) lines.push('Your first wait at a ride earns a Ticket.');
       return card({
         kicker: 'NEED A TICKET',
         title: name ? `Next coin: ${name}` : 'Out of Tickets',
+        // The line names every real way, so there is no SEE WAYS that only repeats it (fix W1 item 6).
         line: lines.join(' '),
-        button: ctx.queueTicketsOn ? { label: 'LINEPLAY', action: 'lineplay' } : { label: 'SEE WAYS', action: 'see_ways' },
+        button: ctx.queueTicketsOn ? { label: 'LINEPLAY', action: 'lineplay' } : null,
       });
     }
     case 'level_up':

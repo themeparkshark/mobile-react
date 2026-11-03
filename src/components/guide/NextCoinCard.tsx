@@ -83,7 +83,7 @@ function AdventureTab({ stamps, onPress }: { stamps: readonly [boolean, boolean,
   </Pressable>;
 }
 
-export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAction, onCardPress, teachPlay = false,
+export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAction, onCardPress, onDotsPress, teachPlay = false,
   slam = NO_SLAM, onSlamDone, adventureTab = null, testID = 'next-coin-card' }: {
   readonly copy: GuideCardCopy;
   readonly state: GuideState;
@@ -93,8 +93,10 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   readonly parkName: string | null;
   readonly top: number;
   readonly onAction: (action: GuideAction) => void;
-  /** A tap on the card itself (not its button): the Adventure sheet on its ride, else the path. */
+  /** A tap on the card itself (not its button): the same as its one button (fix W1 item 11), else PLAY! or the path. */
   readonly onCardPress?: () => void;
+  /** A tap on today's Adventure stamp dots: the ticket's sheet (its stamps and souvenir). */
+  readonly onDotsPress?: () => void;
   /** Before the first win: the "Tap PLAY!" picture (ticket, arrow, coin) shows every time PLAY! rises (core loop 5.11). */
   readonly teachPlay?: boolean;
   /** Adventure stamps earned since the player last looked (their index), for the stamp slam. */
@@ -133,8 +135,13 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
       <View style={styles.copy}>
         <Text style={styles.kicker} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{copy.kicker}</Text>
         <Text style={styles.title} numberOfLines={2}>{copy.title}</Text>
-        {copy.dots && <Dots dots={copy.dots} slam={slam} reduced={reduced} onSlamDone={onSlamDone}
-          coin={coinUrl ? { uri: coinUrl } : COIN_FALLBACK} />}
+        {copy.dots && (onDotsPress
+          ? <Pressable testID="adventure-dots" accessibilityRole="button" accessibilityLabel="Today's Adventure stamps. Open your ticket"
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 12 }} onPress={() => { haptic('tapLight'); onDotsPress(); }} style={styles.dotsPress}>
+            <Dots dots={copy.dots} slam={slam} reduced={reduced} onSlamDone={onSlamDone} coin={coinUrl ? { uri: coinUrl } : COIN_FALLBACK} />
+          </Pressable>
+          : <Dots dots={copy.dots} slam={slam} reduced={reduced} onSlamDone={onSlamDone}
+            coin={coinUrl ? { uri: coinUrl } : COIN_FALLBACK} />)}
         {copy.pointsAtPlay && teachPlay && <View style={styles.teach}><CoinTipPicture /></View>}
         {!!copy.line && <Text style={styles.line} numberOfLines={2}>{copy.line}</Text>}
         {(copy.button || copy.secondary) && <View style={styles.actions}>
@@ -175,13 +182,14 @@ const styles = StyleSheet.create({
   title: { color: BRAND.white, fontFamily: 'Shark', fontSize: 15, marginTop: 1 },
   line: { color: '#dff4ff', fontFamily: 'Knockout', fontSize: 12, marginTop: 1 },
   dots: { flexDirection: 'row', gap: 5, marginTop: 3 },
+  dotsPress: { alignSelf: 'flex-start' },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 5 },
   button: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.gold, borderRadius: 12,
     borderBottomWidth: 3, borderBottomColor: BRAND.goldLip, paddingHorizontal: 12, paddingVertical: 4, minHeight: 30 },
   lineIcon: { width: 30, height: 16 },
   buttonText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 14 },
   pressed: { transform: [{ scale: 0.95 }], opacity: 0.9 },
-  quiet: { paddingVertical: 4, minHeight: 30, justifyContent: 'center' },
+  quiet: { paddingVertical: 4, paddingHorizontal: 6, minHeight: 30, justifyContent: 'center' },
   quietText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 12, textDecorationLine: 'underline' },
   walkArrow: { alignSelf: 'center' },
   teach: { marginTop: 4, alignSelf: 'flex-start' },

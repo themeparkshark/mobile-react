@@ -7,7 +7,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
 import { feedLadder, localDay, recordProgress } from '../../services/reveal/revealLadder';
-import { EMPTY_PARK_DAY, parkDaySignal, parkDayStep, type ParkDayRecord } from '../../services/guide/parkDay';
+import { EMPTY_PARK_DAY, parkDaySignal, parkDayStep, parkDayStore, type ParkDayRecord } from '../../services/guide/parkDay';
 import type { GuidePoint } from '../../services/guide/nextCoin';
 
 const KEY = 'tps.parkday.v1';
@@ -25,6 +25,10 @@ export interface LadderFeed {
   /** An event is scheduled for this player (rung 9 needs one). */
   readonly eventScheduled: boolean;
 }
+
+const persistFor = (playerId: number) => (value: ParkDayRecord) => {
+  void AsyncStorage.setItem(`${KEY}@p${playerId}`, JSON.stringify(value)).catch(() => undefined);
+};
 
 export default function useParkDayLadder(input: {
   readonly playerId: number | null;
@@ -54,15 +58,23 @@ export default function useParkDayLadder(input: {
       let value: ParkDayRecord = EMPTY_PARK_DAY;
       try { if (raw) value = { ...EMPTY_PARK_DAY, ...JSON.parse(raw) }; } catch { value = EMPTY_PARK_DAY; }
       record.current = { player: playerId, value };
+      parkDayStore.set(playerId, value, persistFor(playerId));
       setLoaded(n => n + 1);
-    }).catch(() => { if (live) { record.current = { player: playerId, value: EMPTY_PARK_DAY }; setLoaded(n => n + 1); } });
+    }).catch(() => {
+      if (!live) return;
+      record.current = { player: playerId, value: EMPTY_PARK_DAY };
+      parkDayStore.set(playerId, EMPTY_PARK_DAY, persistFor(playerId));
+      setLoaded(n => n + 1);
+    });
     return () => { live = false; };
   }, [playerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lat = input.location ? Math.round(input.location.latitude * 2000) / 2000 : null;
   const lng = input.location ? Math.round(input.location.longitude * 2000) / 2000 : null;
   useEffect(() => {
-    const prev = record.current.value;
+    // The store may hold a newer record (the guide marked a park welcomed): step from it.
+    const stored = parkDayStore.player() === playerId ? parkDayStore.get() : null;
+    const prev = stored ?? record.current.value;
     if (playerId == null || record.current.player !== playerId || !prev) return;
     const won = Math.max(0, winCount - counted.current);
     counted.current = winCount;
@@ -70,7 +82,10 @@ export default function useParkDayLadder(input: {
       mode, parkId, location: input.location ?? null, today: localDay(Date.now()), coinsWon: won, accuracy: input.accuracy ?? null,
     });
     record.current = { player: playerId, value: next };
-    if (next !== prev) void AsyncStorage.setItem(`${KEY}@p${playerId}`, JSON.stringify(next)).catch(() => undefined);
+    if (next !== prev) {
+      void AsyncStorage.setItem(`${KEY}@p${playerId}`, JSON.stringify(next)).catch(() => undefined);
+      parkDayStore.set(playerId, next);
+    }
     for (const event of events) {
       if (event.kind === 'park_day_started') recordProgress('park_day_started', { parkId: event.parkId });
       else if (event.kind === 'home_day') recordProgress('home_day');

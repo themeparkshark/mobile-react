@@ -49,7 +49,16 @@ export default function RedeemModal({
   onOpenChange,
   onShownChange,
   covered = false,
+  claimableTickets,
+  playRequest = 0,
 }: {
+  /**
+   * Earned Tickets waiting to be claimed, from the map guide's own Stamp Book read (one source: the guide card and
+   * PLAY!'s gift always agree). null: that read has not answered yet (no gift). Omitted: PLAY! looks them up itself.
+   */
+  readonly claimableTickets?: number | null;
+  /** Bumped by the guide card's body on "You're here! Tap PLAY!": the same press as PLAY! itself, when PLAY! is up. */
+  readonly playRequest?: number;
   /**
    * The map's loading cover is still up. A ride already in range gets PLAY! ready under it, at
    * rest (no slide), and the cover waits for its art: the cover's own fade reveals it with the map.
@@ -99,19 +108,20 @@ export default function RedeemModal({
   const [claimWaiting, setClaimWaiting] = useState<{ tickets: number; count: number } | null>(null);
   const ticketsNow = player?.tickets ?? 0;
   useEffect(() => {
-    if (!short || claimWaiting?.tickets === ticketsNow) return;
+    if (!short || claimableTickets !== undefined || claimWaiting?.tickets === ticketsNow) return;
     let alive = true;
     void getStamps().then(response => {
       const count = stampClaimSources(Object.values(response.stamps).flat()).reduce((sum, source) => sum + source.tickets, 0);
       if (alive) setClaimWaiting({ tickets: ticketsNow, count });
     }).catch(() => { if (alive) setClaimWaiting({ tickets: ticketsNow, count: 0 }); });
     return () => { alive = false; };
-  }, [short, ticketsNow, claimWaiting?.tickets]);
+  }, [short, ticketsNow, claimWaiting?.tickets, claimableTickets]);
+  const ownClaimable = short && claimWaiting?.tickets !== ticketsNow ? 1 : claimWaiting?.count ?? 0;
   const badge: PlayBadge = coin ? playBadge({
     tickets: ticketsNow, ticketCost: coin.ticket_cost ?? 1,
     rescueAvailable: redeemable?.rescue_pass_available, rescueSource: redeemable?.rescue_pass_source,
     // Until the lookup answers, no gift: a gift that vanishes a moment later would be a false promise.
-    claimable: short && claimWaiting?.tickets !== ticketsNow ? 1 : claimWaiting?.count ?? 0,
+    claimable: claimableTickets === undefined ? ownClaimable : claimableTickets === null ? 1 : claimableTickets,
   }) : null;
   // Selecting a different ride on the map means the player is looking elsewhere.
   const otherSelected = !!task && selectedTaskId !== null && selectedTaskId !== task.id;
@@ -179,6 +189,13 @@ export default function RedeemModal({
     setOpenedRedeemable(redeemable ?? null);
     setModalVisible(true);
   };
+  // The guide card's body says "Tap PLAY!": a tap there is PLAY!'s own press, only while PLAY! is shown.
+  const seenPlayRequest = useRef(playRequest);
+  useEffect(() => {
+    if (playRequest === seenPlayRequest.current) return;
+    seenPlayRequest.current = playRequest;
+    if (pillShown && !modalVisible) pressPlayRef.current();
+  }, [playRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const entrance = {
     opacity: enter.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }),
     transform: [

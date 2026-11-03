@@ -16,6 +16,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
 import NewTag from './NewTag';
+import { useFlyAnchor } from '../guide/flyAnchors';
 
 const CHEST = require('../../../assets/images/daily/chest-closed.png');
 const SIZE = 54;
@@ -95,8 +96,11 @@ export default function RewardsButton({ model, onPress, isNew = false }: {
 }) {
   const r = (SIZE + RING) / 2 - RING / 2;
   const circumference = 2 * Math.PI * r;
+  // Stamps and chests fly here (core loop 4.2): the button registers itself as the 'rewards' fly target, so the
+  // first coin's stamp lands on it instead of the fallback spot.
+  const anchor = useFlyAnchor('rewards');
   return (
-    <Pressable onPress={() => { haptic('tapLight'); onPress(); }} accessibilityRole="button"
+    <Pressable ref={anchor.ref as React.RefObject<View>} onLayout={anchor.onLayout} onPress={() => { haptic('tapLight'); onPress(); }} accessibilityRole="button"
       accessibilityLabel={`${isNew ? 'New. ' : ''}${rewardsLabel(model)}`} hitSlop={6} testID="map-rewards-button"
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
       {model.trail !== null && <View style={styles.ring} pointerEvents="none">

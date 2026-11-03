@@ -22,7 +22,7 @@
 import { nextFreeTicket, type FreeTicketsInput } from './freeTickets';
 
 export type GuideState = 'arrive' | 'walk' | 'here' | 'line_story' | 'in_line' | 'claim'
-  | 'free_try' | 'extra_try' | 'need_ticket' | 'level_up' | 'resting' | 'welcome_back' | 'home';
+  | 'free_try' | 'extra_try' | 'need_ticket' | 'level_up' | 'resting' | 'welcome_back' | 'home' | 'goodbye';
 
 export type CoinKind = 'ride' | 'sight';
 
@@ -141,6 +141,17 @@ export interface GuideInput {
   readonly welcomeBackDone?: boolean;
   /** The player's Tickets and free ways. Omitted: the card does not show wallet states. */
   readonly wallet?: FreeTicketsInput | null;
+  /**
+   * This park was already welcomed today (one welcome per visit, fix W1 item 10): a relaunch or a return
+   * keeps the arrive window's quiet but never says "Welcome to ..." again.
+   */
+  readonly welcomed?: boolean;
+  /**
+   * The player is leaving a park where they won coins today (walked out of reach of its coins, or the place
+   * check moved them to the next park before they reached its coins): the card says goodbye, never another
+   * park's welcome.
+   */
+  readonly leaving?: boolean;
 }
 
 /** Default PLAY! range when a coin has no radius. */
@@ -157,6 +168,17 @@ export const LIVE_FRESH_MS = 180_000;
 export const CLOSED_HOLD_MS = 12 * 60 * 60 * 1000;
 /** A coin the player picked holds against a line dwell for this long (then standing in a line wins). */
 export const PICK_HOLD_MS = 10 * 60 * 1000;
+/**
+ * Pointers that only accept the guide's own suggestion (the win card's NEXT COIN, the LinePlay recap's GO, Ride
+ * logged's NEXT COIN). They move the pointer like a pick, but they are not a player's choice, so they never hold
+ * against a line the player stands in or a PLAY! that rises (fix W1 item 7: the Jungle Cruise line got no
+ * "In line?" for 10 minutes after NEXT COIN).
+ */
+export const SUGGESTION_SOURCES: ReadonlySet<string> = new Set(['win_card', 'lineplay_recap', 'ride_logged']);
+/** Standing this close to today's Adventure ride, its Line story always leads (its line is right here). */
+export const LINE_STORY_NEAR_METERS = 60;
+/** Another coin must be this much nearer than the Adventure ride to take over from its Line story (no flip-flop on GPS jitter). */
+const LINE_STORY_MARGIN_METERS = 25;
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
@@ -227,8 +249,27 @@ function winnable(input: GuideInput, coin: GuideCoin): boolean {
  */
 function adventureLineStory(input: GuideInput): boolean {
   const adventure = input.adventure;
-  return !!adventure && adventure.parkId === input.parkId && (adventure.phase === 'play' || adventure.phase === 'celebrate')
-    && !adventure.lineStoryDeclined;
+  if (!adventure || adventure.parkId !== input.parkId || (adventure.phase !== 'play' && adventure.phase !== 'celebrate')
+    || adventure.lineStoryDeclined) return false;
+  const ride = (input.coins ?? []).find(c => c && c.taskId === adventure.taskId && c.parkId === input.parkId);
+  if (!ride) return true;
+  // A Line story needs a line: a show or walk-through with no queue never pulls the guide back (fix W1 item 8).
+  if (adventure.phase === 'play' && ride.queue === false) return false;
+  return !nearerWinnable(input, ride);
+}
+
+/**
+ * Another coin to win is clearly nearer than this owned ride (fix W1 item 8: never a 364 m pull back to an owned
+ * coin past a coin 30 m away). Standing at the ride itself, its Line story always leads.
+ */
+function nearerWinnable(input: GuideInput, ride: GuideCoin): boolean {
+  const rideMeters = metersTo(ride, input.location);
+  if (rideMeters === null || rideMeters <= LINE_STORY_NEAR_METERS) return false;
+  return parkCoins(input).some(coin => {
+    if (coin.taskId === ride.taskId || !winnable(input, coin)) return false;
+    const meters = metersTo(coin, input.location);
+    return meters !== null && meters + LINE_STORY_MARGIN_METERS < rideMeters;
+  });
 }
 
 /** The in-line ride, when it is a real queue ride in this park that is not known closed. Owned is fine: the wait powers it. */
@@ -311,7 +352,7 @@ export function pickNextCoin(input: GuideInput): GuideTarget | null {
   // picked another coin (a fresh pick holds: the target never changes without a win, a closure or a pick).
   const line = inLineCoin(input, coins);
   const now = finite(input.now) ? input.now : Date.now();
-  const freshPick = !!input.current && input.current.source !== 'guide' && finite(input.currentPickedAt) &&
+  const freshPick = !!input.current && input.current.source !== 'guide' && !SUGGESTION_SOURCES.has(input.current.source) && finite(input.currentPickedAt) &&
     now - input.currentPickedAt >= 0 && now - input.currentPickedAt < PICK_HOLD_MS && !!heldStillValid(input, coins, input.current);
   // Today's Adventure ride's own line, after its coin: that is its Line story (where the story plays).
   const lineReason = (coin: GuideCoin) => adventureLineStory(input) && input.adventure?.taskId === coin.taskId ? 'line_story' : 'in_line';
@@ -400,9 +441,12 @@ export function guideState(input: GuideInput, target: GuideTarget | null): Guide
   const welcomeBack = finite(input.daysAway) && input.daysAway >= WELCOME_BACK_DAYS && !input.welcomeBackDone;
   if (input.mode === 'home') return welcomeBack ? 'welcome_back' : 'home';
   if (welcomeBack) return 'welcome_back';
+  if (input.leaving) return 'goodbye';
   if (!target) return 'resting';
   const now = finite(input.now) ? input.now : Date.now();
-  if (finite(input.arrivedAt) && now - input.arrivedAt >= 0 && now - input.arrivedAt < ARRIVE_MS) return 'arrive';
+  // The welcome is for the walk in: standing at a coin PLAY! is up for, the card says Tap PLAY!, never GO.
+  if (finite(input.arrivedAt) && now - input.arrivedAt >= 0 && now - input.arrivedAt < ARRIVE_MS && !input.welcomed
+    && !target.inRange) return 'arrive';
   // Standing in today's Adventure ride's line after its coin: that is where its line story plays.
   if (target.reason === 'line_story') return 'line_story';
   if (input.inLineTaskId != null && input.inLineTaskId === target.taskId) return 'in_line';
@@ -606,6 +650,14 @@ export const guide = {
   plan(): number | null {
     return plan;
   },
+  /**
+   * When the player's own pick stops holding against a line dwell (epoch ms), or null. The map re-resolves then:
+   * standing still in a line sends no new location, so without it the hold never ended on screen.
+   */
+  pickHoldEndsAt(): number | null {
+    if (!held || heldPickedAt === null || held.source === 'guide' || SUGGESTION_SOURCES.has(held.source)) return null;
+    return heldPickedAt + PICK_HOLD_MS;
+  },
   /** Forget the plan once its coin is won or the player signs out. */
   clearPlan(): void {
     if (plan === null) return;
@@ -655,6 +707,12 @@ function run(input: ResolveInput, freshStart = false): void {
     resumeTarget: resume,
   });
   pick = null;
+  // Walking away from today's Adventure ride toward a nearer coin passes on its Line story for this step, so the
+  // guide never flips back to it on the way (the Adventure's ticket tab keeps it one tap away).
+  if (!freshStart && held?.reason === 'line_story' && next && next.taskId !== held.taskId && next.reason !== 'in_range'
+    && !fresh && input.adventure?.taskId === held.taskId) {
+    declinedLineStory = { taskId: held.taskId, phase: lastAdventurePhase };
+  }
   // A coin in PLAY! range took over from a held target: remember that target to go back to it.
   if (next?.reason === 'in_range' && next.source === 'guide' && held && !freshStart && held.taskId !== next.taskId) {
     if (!resume) resume = held;   // keep the first target from before, through any number of coins in passing

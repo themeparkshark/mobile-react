@@ -54,9 +54,12 @@ export function shortfallCopy(short: JoinCost['short']): string | null {
   return 'Joining from home needs 1 Ticket. Grab treats to get more.';
 }
 
-/** The join button's verb: repeat attackers skip straight to ATTACK AGAIN. */
-export function joinLabel(raid: Pick<BossRaid, 'you'>, remote: boolean): string {
-  return raid.you.attacks > 0 ? 'ATTACK AGAIN' : remote ? 'JOIN FROM HOME' : 'FIGHT!';
+/**
+ * The join button's verb: repeat attackers skip straight to ATTACK AGAIN. A player in the raid's park but not at
+ * its ride joins in the park (never "from home" while standing in the park, fix W1 item 11).
+ */
+export function joinLabel(raid: Pick<BossRaid, 'you'>, remote: boolean, inPark = false): string {
+  return raid.you.attacks > 0 ? 'ATTACK AGAIN' : remote ? (inPark ? 'JOIN IN THE PARK' : 'JOIN FROM HOME') : 'FIGHT!';
 }
 
 /** Whole minutes left in the raid, rounded up (never "0 min" while it is still on). */

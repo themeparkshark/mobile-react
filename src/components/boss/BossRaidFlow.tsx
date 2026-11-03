@@ -420,7 +420,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             </ScrollView>
             {/* The button is pinned in the thumb zone; while a saved attack is being confirmed there is no button. */}
             {!(receiptBlocked && recovery.snapshot && !againPending) && <View style={styles.footer}>
-              <BossJoinCta raid={raid} remote={remote} energy={energy} tickets={tickets}
+              <BossJoinCta raid={raid} remote={remote} inPark={walkCloser} energy={energy} tickets={tickets}
                 blocked={!active ? (raid.status === 'defeated' ? 'Your team beat it!' : 'The fight is over.') : againPending ? 'Sending your attack...' : blocked}
                 starting={starting || againPending} onFight={() => { void startBrawl(); }} onClose={closeSheet} paused={fighting} />
             </View>}
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
   bossDisc: { width: 104, height: 104, borderRadius: 52, backgroundColor: BRAND.sky, borderWidth: 3, borderColor: BRAND.white,
     alignItems: 'center', justifyContent: 'center' },
   bossArt: { width: 92, height: 92 },
-  kickerChip: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.red, borderRadius: 10,
+  kickerChip: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.blue, borderRadius: 10,
     borderWidth: 2, borderColor: BRAND.white, paddingHorizontal: 8, paddingVertical: 2 },
   kickerDone: { backgroundColor: BRAND.navySoft },
   kicker: { fontFamily: 'Shark', fontSize: 13, letterSpacing: 0.6, color: BRAND.white },

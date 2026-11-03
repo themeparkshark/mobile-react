@@ -708,7 +708,8 @@ export default function RedeemRedeemableModal({
   // retry_of in be-core-loop): on a server without it, TRY AGAIN may deal another game, so the line just
   // says try again.
   const lostCopy = lostTryCopy({ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,
-    retryOffered: canOfferRetry, near: rideTry?.near === true, sameGame: playFlagsNow().retrySameGame });
+    retryOffered: canOfferRetry, near: rideTry?.near === true, sameGame: playFlagsNow().retrySameGame,
+    rescueSource: redeemable?.rescue_pass_source });
   const handleVipRetry = useCallback(async () => {
     const attemptId = attemptRef.current?.id;
     if (adBusy || !attemptId) return;
@@ -1132,8 +1133,8 @@ export default function RedeemRedeemableModal({
           {flowState === 'expired' && <ChallengeStatusCard title="Time Ran Out"
             message={usedRescuePass
               ? rescueRetryAvailable
-                ? 'This free try timed out. No Ticket was used, and you have one more go here today.'
-                : 'This free try timed out. No Ticket was used.'
+                ? `This ${redeemable?.rescue_pass_source === 'daily' ? 'free' : 'extra'} try timed out. No Ticket was used, and you have one more go here today.`
+                : `This ${redeemable?.rescue_pass_source === 'daily' ? 'free' : 'extra'} try timed out. No Ticket was used.`
               : 'This game was not finished, so your Ticket came back to you.'}
             primary={rescueRetryAvailable ? { label: 'Try Again', onPress: handleProtectedRetry } : { label: BACK_TO_MAP, onPress: handleLostClose }}
             quiet={rescueRetryAvailable ? { label: BACK_TO_MAP, onPress: handleLostClose } : undefined}

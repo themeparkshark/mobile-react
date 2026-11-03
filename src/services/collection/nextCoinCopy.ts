@@ -89,6 +89,8 @@ export function shelfGuidePick<T extends { readonly id: number }>(input: ShelfGu
     const hit = row(targetHere.taskId);
     if (hit && !owned.has(hit.id)) return { row: hit, levelUp: false, reason: targetHere.reason ?? 'chosen' };
     if (hit && targetHere.reason === 'level_up') return { row: hit, levelUp: true, reason: 'level_up' };
+    // Today's Adventure ride on its Line story: the shelf names it too (the guide and the shelf never disagree).
+    if (hit && targetHere.reason === 'line_story') return { row: hit, levelUp: false, reason: 'line_story' };
     return null;
   }
   const planned = row(plan);
@@ -116,6 +118,7 @@ export function levelUpGoalHint(reason: string, sight: boolean): string {
 /** The NEXT COIN card's line under the guide's target, in a 7-year-old's words. */
 export function guideShelfHint(reason: string | null | undefined): string {
   if (reason === 'in_line') return 'You are in its line. Play while you wait!';
+  if (reason === 'line_story') return 'Play its line story in its line.';
   if (reason === 'level_up') return 'Ready to level up!';
   if (reason === 'plan') return 'Your plan. The map shows the way.';
   return 'The map shows the way.';

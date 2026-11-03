@@ -14,10 +14,17 @@ const READ_EVERY_MS = 60_000;
 
 export default function useClaimableTickets(enabled: boolean, tickets: number, playerId: number | null): {
   readonly sources: readonly ClaimSource[];
+  /**
+   * The Stamp Book answered for this player (or the player holds a Ticket, so there is nothing to look up).
+   * Until then the guide shows no wallet state and PLAY! wears no gift: a gift that vanishes a moment
+   * later, when a claim turns up, would be a false promise. Offline counts as answered (nothing to claim).
+   */
+  readonly loaded: boolean;
   /** Claim every waiting Ticket source, stamps first. Resolves with the Tickets claimed. */
   readonly claim: () => Promise<number>;
 } {
   const [sources, setSources] = useState<readonly ClaimSource[]>([]);
+  const [answeredFor, setAnsweredFor] = useState<number | null | undefined>(undefined);
   const lastRead = useRef<{ player: number | null; at: number }>({ player: null, at: 0 });
   const owner = useRef(playerId); owner.current = playerId;
   const read = useCallback(async (force = false) => {
@@ -28,8 +35,9 @@ export default function useClaimableTickets(enabled: boolean, tickets: number, p
       const book = await getStamps();
       if (owner.current === player) setSources(orderClaimSources(stampTicketSources(book?.stamps)));
     } catch { /* offline: the card goes on to the free try */ }
+    if (owner.current === player) setAnsweredFor(player);
   }, []);
-  useEffect(() => { setSources([]); lastRead.current = { player: null, at: 0 }; }, [playerId]);
+  useEffect(() => { setSources([]); setAnsweredFor(undefined); lastRead.current = { player: null, at: 0 }; }, [playerId]);
   useEffect(() => {
     if (!enabled || playerId == null || tickets > 0) return;
     void read();
@@ -46,5 +54,5 @@ export default function useClaimableTickets(enabled: boolean, tickets: number, p
     await read(true);
     return claimed;
   }, [sources, read]);
-  return { sources, claim };
+  return { sources, claim, loaded: tickets > 0 || (answeredFor !== undefined && answeredFor === playerId) };
 }

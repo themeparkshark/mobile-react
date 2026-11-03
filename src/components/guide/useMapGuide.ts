@@ -14,6 +14,8 @@ import type { LivePark } from '../../api/endpoints/parks/live';
 import type { AdventureTicket, TripGoalData } from '../../api/endpoints/me/trip-goal';
 import { attentionGate, attentionQueue, autoOpenAllowed } from '../../screens/ExploreScreen/mapPresentationQueue';
 import { guide } from '../../services/guide/nextCoin';
+import type { GuideAction } from '../../services/guide/guideCopy';
+import { freeTrySignal } from '../../services/guide/freeTickets';
 import { useGuideFlags } from '../../services/guide/guideFlags';
 import { currentAppOpen, useRung } from '../../services/reveal/revealLadder';
 import useNextCoinGuide from './useNextCoinGuide';
@@ -21,6 +23,8 @@ import { goalLevelUpTaskId, guideWallet, ownedTaskIdsFor } from './guideCoins';
 import useClaimableTickets from './useClaimableTickets';
 import useWelcomeBack from './useWelcomeBack';
 
+/** Within this distance of one of today's coins the player is really at the park (the guide's 1.5 km reach). */
+const AT_PARK_METERS = 1500;
 /** The guide picks its first coin once the islands, live feed and Adventure are in, or after this wait. */
 const GUIDE_DATA_WAIT_MS = 4000;
 /** The calm stand-in island for a target that left today's map (a won Adventure coin on its Line story). */
@@ -81,11 +85,23 @@ export default function useMapGuide(input: MapGuideInput) {
   const claimableTicketCount = (claimable.sources ?? []).reduce((sum, source) => sum + (source.tickets > 0 ? source.tickets : 0), 0);
   const claimTickets = useCallback(() => claimable.claim().then(() => refreshPlayer()).catch(() => undefined),
     [claimable.claim]); // eslint-disable-line react-hooks/exhaustive-deps
-  const wallet = useMemo(() => player ? guideWallet({
-    tickets: player.tickets, heldPasses: player.rescue_passes,
-    freeTryReady: guideFlags.ride_rescue_pass === true && tripGoalData?.wallet?.rescue_pass_available === true,
-    queueTicketsOn: guideFlags.queue_tickets === true, claimable: claimable.sources,
-  }) : null, [player, guideFlags, tripGoalData?.wallet?.rescue_pass_available, claimable.sources]);
+  // One free try signal (fix W1 item 6): the card and PLAY! read the same server answer, the rescue fields
+  // of the coin PLAY! is up for. Away from PLAY!, the last coin answer at this park today says whether the
+  // free try is used (the trip goal's wallet only answers for the goal coin, which said "tomorrow" while
+  // PLAY! said "free try today").
+  const playUp = activeRedeemable && (activeRedeemable.type === 'task' || activeRedeemable.type === 'secret_task')
+    && playableTaskId != null && (activeRedeemable.model as TaskType).id === playableTaskId ? activeRedeemable : null;
+  const usedToday = useRef<{ parkId: number | null; day: string; used: boolean } | null>(null);
+  const today = new Date().toDateString();
+  if (usedToday.current && (usedToday.current.parkId !== (park?.id ?? null) || usedToday.current.day !== today)) usedToday.current = null;
+  if (park && typeof activeRedeemable?.rescue_pass_used_today === 'boolean') {
+    usedToday.current = { parkId: park.id, day: today, used: activeRedeemable.rescue_pass_used_today };
+  }
+  const usedTodayHere = usedToday.current?.used ?? null;
+  const wallet = useMemo(() => player && claimable.loaded ? guideWallet({
+    tickets: player.tickets, queueTicketsOn: guideFlags.queue_tickets === true, claimable: claimable.sources,
+    ...freeTrySignal({ dailyOn: guideFlags.ride_rescue_pass === true, heldPasses: player.rescue_passes, playUp, usedTodayHere }),
+  }) : null, [player, guideFlags, claimable.loaded, claimable.sources, playUp, usedTodayHere]);
   const rushTaskIds = useMemo(() => new Set(rushes.map(pick => pick.task.id)), [rushes]);
   // The guide picks its first coin once the islands, the live feed and today's Adventure are in (or
   // GUIDE_DATA_WAIT_MS ran out: a missing feed never stalls it), so a half-loaded map never sets a
@@ -124,8 +140,18 @@ export default function useMapGuide(input: MapGuideInput) {
     playableTaskId: rangeChecked ? playableTaskId : undefined,
     daysAway: welcome.daysAway, welcomeBackDone: welcome.done,
     lineStoryNear: adventureGate?.state !== 'far',
+    freeTryDaily: guideFlags.ride_rescue_pass === true,
   });
   const guideShown = !!player && !!park;
+  // Really at the park: in park mode AND within reach of one of its coins (or no reading yet). The place
+  // check can keep a park after the player went home (a sticky server park), so tips such as "You're at
+  // the park!" ask this, never park mode alone.
+  const atParkNow = !!park && (!location || !Number.isFinite(location.latitude) || visibleTasks.length === 0
+    || visibleTasks.some(task => {
+      const k = Math.cos(location.latitude * Math.PI / 180);
+      return Math.hypot((Number(task.latitude) - location.latitude) * 111_320, (Number(task.longitude) - location.longitude) * 111_320 * k)
+        <= AT_PARK_METERS;
+    }));
   const guideTargetId = nextCoin.target?.taskId ?? null;
   // The target's own coin art: the map list has none, so the trip goal's ride list (or PLAY!'s coin) supplies it.
   const guideCoinUrl = useMemo(() => {
@@ -203,18 +229,26 @@ export default function useMapGuide(input: MapGuideInput) {
     stamps: [adventureStampsKey[0] === '1', adventureStampsKey[1] === '1', adventureStampsKey[2] === '1'] as [boolean, boolean, boolean],
     onPress: () => setAdventureSheetRequest(n => n + 1),
   }), [adventureStampsKey]);
-  const onGuideCardPress = useCallback(() => {
+  // The card's body acts like its one button (fix W1 item 11): a kid taps the words, not only the button.
+  // "Tap PLAY!" presses PLAY! itself; with no button, today's Adventure frame opens its ticket and any
+  // other card shows the way to its coin.
+  const [playRequest, setPlayRequest] = useState(0);
+  const onGuideCardPress = useCallback((act?: (action: GuideAction) => void) => {
+    const button = nextCoin.copy.button;
+    if (button && act) { act(button.action); return; }
+    if (nextCoin.copy.pointsAtPlay && playableTaskId != null) { setPlayRequest(n => n + 1); return; }
     // On today's Adventure ride the card is the ticket's frame: it opens the ticket's sheet (stamps, souvenir).
     if (nextCoin.copy.dots) { setAdventureSheetRequest(n => n + 1); return; }
     const task = nextCoin.targetTask;
     if (!task && !nextCoin.targetPoint) return;
     setGuidePathRequest(n => n + 1);
     if (task) setSelectedTask(task);
-  }, [nextCoin.copy.dots, nextCoin.targetTask, nextCoin.targetPoint]);
+  }, [nextCoin.copy.button, nextCoin.copy.pointsAtPlay, nextCoin.copy.dots, nextCoin.targetTask, nextCoin.targetPoint, playableTaskId]);
 
   return {
     guideFlags, coinLevelsRung, dailyRung, trailRung, eventsRung, claimable, claimableTicketCount, claimTickets, wallet, welcome,
     levelUpTaskId, setAdventureWonTaskId, nextCoin, guideShown, guideCoinUrl, hasWonACoin, guideTargetId, setGuidePathRequest, guideMapTarget, lineStoryIsland, adventureSheetRequest,
     setAdventureSheetRequest, adventureCelebrateRequest, setAdventureCelebrateRequest, flowClosedAt, appOpenId, attentionFor, adventureTabProps, onGuideCardPress,
+    playRequest, atParkNow,
   };
 }
