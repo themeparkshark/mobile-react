@@ -181,7 +181,8 @@ test('the queue card names the ride the guest stands at, not the walk-in neighbo
 test('the LinePlay screen tells ride detection which ride is in play', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../src/services/lineplay/useLinePlaySession.ts'), 'utf8');
   assert.match(src, /setLinePlayDetectionRide\(linePlayRideId, session\.snapshot\(\)\.startedAt\)/);
-  assert.match(src, /return \(\) => setLinePlayDetectionRide\(null\)/);
+  // Leaving the screen with the wait still running (a footer tab peek) keeps the wait; an ended wait clears it.
+  assert.match(src, /if \(state === 'active' \|\| state === 'paused'\) stepAwayFromLinePlay\(linePlayRideId\);\n\s+else setLinePlayDetectionRide\(null\);/);
   const bg = fs.readFileSync(path.join(__dirname, '../../src/services/RideDetectionService.ts'), 'utf8');
   assert.match(bg, /await rideDetectionService\.loadLinePlayFromCache\(\)/);
 });

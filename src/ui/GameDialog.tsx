@@ -113,6 +113,17 @@ export type GameDialogProps = GameDialogOptions & {
   readonly visible: boolean;
   /** Called after the close animation with the chosen button index, or null. */
   readonly onAnswer?: (index: number | null) => void;
+  /**
+   * Called at the tap, before the close animation, with the chosen button index: the screen under the dialog
+   * can already change (LinePlay shows the ride-up recap under the fading dialog, never a flash of the wait).
+   */
+  readonly onPick?: (index: number) => void;
+  /**
+   * With onPick: after a tap on one of these buttons the dialog stays up until its owner hides it (visible false),
+   * so the screen under it is already redrawn when it fades (never a frame of the old screen). Only for buttons
+   * whose onPick changes the screen. HOLD_FOR_OWNER_MAX_MS at most.
+   */
+  readonly holdUntilHidden?: readonly number[];
   /** Extra content between the message and the buttons. */
   readonly children?: ReactNode;
   /** Run the chosen button's onPress after closing. Default true; the host sets false because the store runs it. */
@@ -123,6 +134,9 @@ export type GameDialogProps = GameDialogOptions & {
 };
 
 /** Controlled dialog. Button onPress handlers run after the close animation. */
+/** The longest a tapped dialog waits for its owner to hide it (holdUntilHidden). */
+export const HOLD_FOR_OWNER_MAX_MS = 1200;
+
 export function GameDialog({
   visible,
   title,
@@ -132,6 +146,8 @@ export function GameDialog({
   dismissible,
   haptic: hapticKind = 'none',
   onAnswer,
+  onPick,
+  holdUntilHidden,
   children,
   runButtonHandlers = true,
   avoidKeyboard = false,
@@ -212,19 +228,40 @@ export function GameDialog({
     return () => clearTimeout(timer);
   }, [mounted]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const close = (index: number | null) => {
-    const token = gate.close(index);
-    if (token === null) return;
+  const fadeOut = (token: number) => {
     scrim.value = withTiming(0, { duration: MOTION.dialogOutMs });
     pop.value = withTiming(0, { duration: MOTION.dialogOutMs, easing: Easing.in(Easing.quad) }, done => {
       if (done) runOnJS(fadeDone)(token);
     });
   };
+  /** A tapped answer waiting for its owner to hide the dialog (holdUntilHidden). */
+  const held = useRef<number | null>(null);
+  const close = (index: number | null) => {
+    const token = gate.close(index);
+    if (token === null) return;
+    if (index !== null) onPick?.(index);
+    if (index !== null && holdUntilHidden?.includes(index) && visible) { held.current = token; return; }
+    fadeOut(token);
+  };
 
   useEffect(() => {
+    if (!visible && held.current != null) {
+      // The owner redrew the screen under the dialog: now it fades.
+      const token = held.current;
+      held.current = null;
+      fadeOut(token);
+      return;
+    }
     if (!visible && mounted && !gate.busy) close(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
+  // An owner that never hides the dialog still gets it closed.
+  useEffect(() => {
+    if (held.current == null) return undefined;
+    const token = held.current;
+    const timer = setTimeout(() => { if (held.current === token) { held.current = null; fadeOut(token); } }, HOLD_FOR_OWNER_MAX_MS);
+    return () => clearTimeout(timer);
+  });
 
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.value }));
   const cardStyle = useAnimatedStyle(() => ({

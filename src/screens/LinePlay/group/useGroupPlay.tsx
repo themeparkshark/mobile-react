@@ -65,8 +65,10 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
   /** A short phone: the crew strip is one size smaller so the activity pages keep their room. */
   readonly compact?: boolean;
 }) {
+  // Keyed by the wait's own id, never its start time: the server's answer moves startedAt to its clock, and a
+  // key on the time asked "Who's in line?" a second time the moment the location answered.
   const waitKey = snapshot.ride && snapshot.startedAt != null
-    ? lineGroupWaitKey(snapshot.ride.rideId, snapshot.startedAt) : null;
+    ? lineGroupWaitKey(snapshot.ride.rideId, snapshot.waitId ?? snapshot.startedAt) : null;
   const crew = useLineGroup(playerId, waitKey);
   const group = crew.group;
   const [editing, setEditing] = useState(false);
@@ -171,6 +173,7 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
       onNext={() => { if (nextGame) startRound(nextGame); }}
       onDone={() => setPodiumFor(null)} />}
     <WhosInLineSheet visible={openerVisible && !mode} ownerName={ownerName} lastCrew={editing ? null : crew.lastCrew}
+      counting={snapshot.verifiedPresenceAt != null}
       editing={editing ? group : null}
       onChoose={next => {
         // Editing keeps the results of anyone still in the crew.

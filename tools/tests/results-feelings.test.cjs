@@ -157,7 +157,7 @@ test('a ride-detection guess never ends a run: a held round asks inside the game
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.doesNotMatch(shell, /rideUpLikely && phase === 'paused' && startedRef\.current\) wrapUp/, 'no auto wrap-up on the hint');
   assert.doesNotMatch(shell, /wrapUpRef\.current\('boarding'\)/, 'coming back from the pocket never wraps up');
-  assert.match(shell, /if \(rideUpLikelyRef\.current && startedRef\.current && askBoardingRef\.current\) return;\n\s+doResumeRef\.current\(\);/);
+  assert.match(shell, /if \(rideUpLikelyRef\.current && startedRef\.current && askBoardingRef\.current\) return;\n\s+backFromPocketRef\.current = true;\n\s+doResumeRef\.current\(\);/);
   assert.match(shell, /Did you get to the ride\?/);
   assert.match(shell, /I GOT TO THE RIDE/);
   assert.match(shell, /STILL IN LINE/);

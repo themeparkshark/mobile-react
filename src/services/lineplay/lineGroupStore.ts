@@ -15,8 +15,9 @@ const CREW_KEY = (playerId: number) => `lineplay_last_crew_v1:${playerId}`;
 export const LAST_CREW_TTL_MS = 14 * 60 * 60 * 1000;
 
 /** Identifies one wait: the same ride and start time survive an app restart. */
-export function lineGroupWaitKey(rideId: number, startedAt: number): string {
-  return `${rideId}:${Math.floor(startedAt)}`;
+/** One wait's crew key: the ride and the wait's own id (or, for an old caller, its start time). */
+export function lineGroupWaitKey(rideId: number, wait: number | string): string {
+  return typeof wait === 'string' ? `${rideId}:${wait}` : `${rideId}:${Math.floor(wait)}`;
 }
 
 export async function loadWaitGroup(playerId: number, waitKey: string): Promise<{ chosen: boolean; group: LineGroup | null }> {

@@ -43,6 +43,14 @@ function flush(view) {
   }
 }
 
+/** Run only the timers pending now (one step), then render. */
+function runTimersOnce(view) {
+  const pending = Array.from(view.timers.entries());
+  view.timers.clear();
+  pending.forEach(([, fn]) => fn());
+  view.render();
+}
+
 /** True when a node (or anything under it) is a Text with exactly this label. */
 function hasText(node, label) {
   if (node == null || typeof node !== 'object') return false;
@@ -140,6 +148,8 @@ test('QUEUE REALITY: backgrounding holds with an exact snapshot, and coming back
   assert.deepEqual(JSON.parse(JSON.stringify(saved.state)), snapshot.state);
   assert.ok(calls.music.includes('pause'));
   listener('active'); view.render();
+  // A moment for LinePlay's wake-up news (a boarding kept while the phone slept), then the 3-2-1.
+  runTimersOnce(view);
   assert.equal(calls.resume, 0, 'play waits for the 3-2-1');
   assert.ok(view.find(node => node.type === 'Text' && node.props.children === 'Back in!'));
   flush(view);
@@ -323,5 +333,41 @@ test('QUEUE REALITY: a ride that comes up before the first point never says "Run
   assert.equal(card.props.saved, false, 'no stamp for 0 points');
   assert.equal(card.props.note, 'Enjoy the ride!');
   assert.equal(card.props.message, "YOUR RIDE'S UP!");
+  view.unmount();
+});
+
+test('QUEUE REALITY: back from the pocket, a boarding LinePlay learns of a moment later still asks inside the held round', () => {
+  let listener;
+  const answers = [];
+  const movement = { moving: false, onResume() {}, onBoardingAnswer: b => answers.push(b), onRunDone() {} };
+  const { view, calls, movementContext } = shell(false, false, { score: 40, thresholds: { one: 100, two: 300, three: 600 } }, movement);
+  view.native.AppState.addEventListener = (_name, fn) => { listener = fn; return { remove() { listener = undefined; } }; };
+  view.change({ visible: false }); view.change({ visible: true });
+  startPlaying(view);
+  listener('background'); view.render();
+  // The game hears 'active' first; LinePlay's own wake-up listener then marks the boarding it kept.
+  listener('active'); view.render();
+  movementContext.value = { ...movement, rideUpLikely: true }; view.render();
+  runTimersOnce(view);
+  assert.equal(calls.resume, 0, 'no countdown over the ride question');
+  assert.ok(view.find(node => node.type === 'Text' && node.props.children === 'Did you get to the ride?'));
+  view.unmount();
+});
+
+test('QUEUE REALITY: boarding news during the 3-2-1 back from the pocket holds the round again and asks', () => {
+  let listener;
+  const movement = { moving: false, onResume() {}, onBoardingAnswer() {}, onRunDone() {} };
+  const { view, calls, movementContext } = shell(false, false, { score: 40, thresholds: { one: 100, two: 300, three: 600 } }, movement);
+  view.native.AppState.addEventListener = (_name, fn) => { listener = fn; return { remove() { listener = undefined; } }; };
+  view.change({ visible: false }); view.change({ visible: true });
+  startPlaying(view);
+  listener('background'); view.render();
+  listener('active'); view.render();
+  runTimersOnce(view); // the settle passes with no news: the 3-2-1 starts
+  assert.ok(view.find(node => node.type === 'Text' && node.props.children === 'Back in!'));
+  movementContext.value = { ...movement, rideUpLikely: true }; view.render();
+  flush(view);
+  assert.equal(calls.resume, 0, 'the round never starts over the ride question');
+  assert.ok(view.find(node => node.type === 'Text' && node.props.children === 'Did you get to the ride?'));
   view.unmount();
 });

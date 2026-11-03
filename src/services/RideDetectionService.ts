@@ -21,8 +21,9 @@ import * as TaskManager from 'expo-task-manager';
 import { AppState } from 'react-native';
 import { RideType } from '../api/endpoints/rides';
 import { QUEUE_RIDE_TYPES } from '../constants/queueRideTypes';
-import { ensureRideQuestionLedger, noteLinePlayBoardingSeen, noteLinePlayWaitEnded, noteLinePlayWaitStarted, rideHoldUntil, rideQuestionOwner,
-  setRideHold, visitInLinePlayWait } from './lineplay/rideQuestionLedger';
+import { ensureRideQuestionLedger, lastCoinGameAt, linePlayWaitAt, noteLinePlayBoardingSeen, noteLinePlayWaitEnded,
+  noteLinePlayWaitStarted, rideHoldUntil, rideQuestionOwner, setRideHold, visitInLinePlayWait } from './lineplay/rideQuestionLedger';
+import { noteRideLineCatalog, noteRideLive, rideLineState, type RideLiveRow } from './lineplay/rideLines';
 
 const STORAGE_KEY = 'pending_ride_detections';
 const RIDES_CACHE_KEY = 'ride_detection_rides_cache';
@@ -78,6 +79,54 @@ const LINEPLAY_STICKY_MAX_MS = 3 * 60 * 60_000;
 export const RIDE_STEP_HOLD_MS = 30 * 60_000;
 
 /**
+ * The longest stay that can still be a queue and a ride. Longer is a seat, a parade stand or an app left
+ * asleep in a zone (a 416 minute "ride" was offered at launch the next day).
+ */
+export const RIDE_VISIT_MAX_MS = 3 * 60 * 60_000;
+/** With a posted wait, a real stay is at most about twice the sign plus the ride and a walk. */
+export const POSTED_WAIT_STAY_FACTOR = 2;
+export const POSTED_WAIT_STAY_SLACK_MS = 20 * 60_000;
+/** A detection older than this (or from an earlier day) is never asked about: it belongs to another park day. */
+export const DETECTION_MAX_AGE_MS = 8 * 60 * 60_000;
+/**
+ * GPS goes quiet inside a dark ride: a stretch this long with no fix, ending shortly before the guest left the
+ * zone, is the ride itself, so the wait ended when it began.
+ */
+export const BOARDING_GAP_MS = 150_000;
+/** The walk from a ride's exit to the edge of its zone takes at most this long. */
+export const EXIT_WALK_MAX_MS = 8 * 60_000;
+
+/** The longest stay at a ride that can be a queue and a ride (posted wait in minutes when the feed has one). */
+export function maxRideVisitMs(postedWaitMinutes: number | null | undefined, rideDurationMinutes?: number | null): number {
+  if (postedWaitMinutes == null || !Number.isFinite(postedWaitMinutes) || postedWaitMinutes < 0) return RIDE_VISIT_MAX_MS;
+  const ride = rideDurationMinutes != null && rideDurationMinutes > 0 ? rideDurationMinutes * 60_000 : 0;
+  return Math.min(RIDE_VISIT_MAX_MS, postedWaitMinutes * 60_000 * POSTED_WAIT_STAY_FACTOR + ride + POSTED_WAIT_STAY_SLACK_MS);
+}
+
+/**
+ * When the guest boarded, from the fixes of the visit that just ended: the start of a fix gap that ended
+ * shortly before the last fix in the zone (GPS quiet inside the ride), else the last fix in the zone minus the
+ * ride time when the catalog knows it, else the last fix in the zone. Never before `notBefore` (the wait's start).
+ */
+export function boardingEstimate(input: {
+  readonly lastInZoneAt: number;
+  readonly exitAt: number;
+  readonly gapStart: number | null;
+  readonly gapEnd: number | null;
+  readonly rideDurationMinutes?: number | null;
+  readonly notBefore: number;
+}): number {
+  const { lastInZoneAt, exitAt, gapStart, gapEnd, notBefore } = input;
+  let at: number;
+  if (exitAt - lastInZoneAt >= BOARDING_GAP_MS) at = lastInZoneAt;           // quiet until the first fix outside
+  else if (gapStart != null && gapEnd != null && gapEnd - gapStart >= BOARDING_GAP_MS &&
+    lastInZoneAt - gapEnd <= EXIT_WALK_MAX_MS) at = gapStart;               // quiet on the ride, then the exit walk
+  else if (input.rideDurationMinutes != null && input.rideDurationMinutes > 0) at = lastInZoneAt - input.rideDurationMinutes * 60_000;
+  else at = lastInZoneAt;
+  return Math.max(notBefore, Math.min(at, exitAt));
+}
+
+/**
  * The least time in a ride's zone that can be a real ride, by type. A walk past
  * a 60 m zone at a stroll takes about 90 s; a real ride (even a walk-on) is a
  * short queue plus the ride itself. The ride's own min_dwell_minutes (or its
@@ -130,8 +179,12 @@ interface VisitZone { ride: RideType; enteredAt: number; nearestMs: number }
  * A stretch of time inside overlapping attraction zones. Every zone the guest
  * is in is tracked; the ride credited is the active LinePlay ride when it is
  * one of them, else the zone the guest was closest to for the longest time.
+ * The newest stretch with no fix (gapStart to gapEnd) tells when a ride began.
  */
-interface ZoneVisit { zones: Map<number, VisitZone>; nearestId: number | null; lastFixAt: number }
+interface ZoneVisit {
+  zones: Map<number, VisitZone>; nearestId: number | null; lastFixAt: number;
+  gapStart: number | null; gapEnd: number | null;
+}
 
 interface LinePlayRide { rideId: number; endedAt: number | null }
 
@@ -171,6 +224,29 @@ export interface DetectedRide {
   detectedAt: number;
   /** The player whose phone saw it (rideQuestionOwner); another account signed in later never sees it. */
   playerId?: string | null;
+  /** A LinePlay ride's boarding: when the guest most likely boarded (the timed wait ends here). */
+  boardedAt?: number | null;
+}
+
+/**
+ * Can this waiting detection still be asked about? Never one from an earlier park day or older than 8 hours,
+ * one whose times do not add up (no stay, or a stay longer than any queue and ride), or one from another park
+ * than the one the guest is in now (it waits for that park or the Ride Tracker).
+ */
+export function detectionStillAskable(d: Pick<DetectedRide, 'enteredAt' | 'exitedAt' | 'dwellTimeMs' | 'detectedAt' | 'parkId'>,
+  now: number, parkId: number | null): boolean {
+  const end = d.exitedAt ?? d.detectedAt;
+  if (!Number.isFinite(d.enteredAt) || !Number.isFinite(end) || !Number.isFinite(d.dwellTimeMs)) return false;
+  if (d.dwellTimeMs <= 0 || end < d.enteredAt || d.dwellTimeMs > RIDE_VISIT_MAX_MS) return false;
+  if (end > now + 60_000 || now - end > DETECTION_MAX_AGE_MS) return false;
+  if (new Date(end).toDateString() !== new Date(now).toDateString()) return false;
+  return parkId == null || d.parkId === parkId;
+}
+
+/** A detection that can never be asked about again (stale or broken), as opposed to one waiting for its park. */
+export function detectionExpired(d: Pick<DetectedRide, 'enteredAt' | 'exitedAt' | 'dwellTimeMs' | 'detectedAt' | 'parkId'>,
+  now: number): boolean {
+  return !detectionStillAskable(d, now, null);
 }
 
 /** A detection belongs to this player (an untagged one from before this field belongs to anyone). */
@@ -246,7 +322,11 @@ class RideDetectionService {
    * sits 28 m from Star Tours and 37 m from Astro Orbitor, so the first zone a
    * guest walked through used to keep the card on the wrong ride (or none).
    */
-  private queueArea: { lastSeenAt: number; nearestId: number | null; candidates: Map<number, QueueCandidate> } | null = null;
+  private queueArea: {
+    lastSeenAt: number; nearestId: number | null; candidates: Map<number, QueueCandidate>;
+    /** At the last fix a show, a walk-through or a show-like attraction was clearly nearer than any line. */
+    seatNearer: boolean;
+  } | null = null;
   private rides: RideType[] = [];
   private running = false;
   private lifecycleToken = 0;
@@ -291,12 +371,19 @@ class RideDetectionService {
 
   setRides(rides: RideType[]) {
     this.rides = Array.isArray(rides) ? rides.filter(isDetectionCandidate) : [];
+    // Which rides have a line (the win card, the ride question and the in-line offer ask the same answer).
+    noteRideLineCatalog(Array.isArray(rides) ? rides : []);
     // Cache to AsyncStorage for background task (BUG 3 fix)
     this.cacheRides();
   }
 
   setCurrentWaitTimes(waitTimes: Map<number, number>) {
     this.currentWaitTimes = waitTimes;
+  }
+
+  /** The live feed's open, closed and posted-wait answers for the park the guest is in. */
+  setLiveRows(parkId: number | null, rows: readonly RideLiveRow[]) {
+    noteRideLive(parkId, rows);
   }
 
   /**
@@ -316,6 +403,7 @@ class RideDetectionService {
         radius: r.radius,
         ride_duration_minutes: r.ride_duration_minutes,
         min_dwell_minutes: r.min_dwell_minutes,
+        task_id: r.task_id ?? null,
       }));
       await AsyncStorage.setItem(RIDES_CACHE_KEY, JSON.stringify(minimal));
     } catch (e) {
@@ -333,6 +421,7 @@ class RideDetectionService {
       if (raw) {
         const cached = JSON.parse(raw) as RideType[];
         this.rides = Array.isArray(cached) ? cached.filter(isDetectionCandidate) : [];
+        noteRideLineCatalog(this.rides);
       }
     } catch (e) {
       console.warn('Failed to load rides from cache:', e);
@@ -419,6 +508,12 @@ class RideDetectionService {
     // What LinePlay on this run of the app says (never the copy kept for a background wake after a kill).
     this.linePlayHere = rideId != null && Number.isInteger(rideId) && rideId > 0 ? rideId : null;
     if (rideId != null && Number.isInteger(rideId) && rideId > 0) {
+      // A wait the guest stepped away from (a footer tab) at another ride ends when a new one starts here.
+      if (this.linePlay && this.linePlay.endedAt == null && this.linePlay.rideId !== rideId) {
+        const away = this.linePlay.rideId;
+        this.lastLinePlayEnd = { rideId: away, at: now };
+        noteLinePlayWaitEnded(away, now);
+      }
       this.linePlay = { rideId, endedAt: null };
       // LinePlay owns this wait's ride question: detection never asks about a visit inside it.
       noteLinePlayWaitStarted(rideId, startedAt != null && Number.isFinite(startedAt) && startedAt <= now ? startedAt : now);
@@ -435,6 +530,23 @@ class RideDetectionService {
       return;
     }
     void this.persistLinePlay();
+  }
+
+  /**
+   * The LinePlay screen closed while its wait still runs (the guest peeked at a footer tab): the wait goes
+   * on exactly as after an app close. Detection keeps the LinePlay ride, its ride question stays LinePlay's
+   * (kept on the wait in the ledger, asked when LinePlay is back), and the map's in-line card leads back to it.
+   */
+  stepAwayFromLinePlay(rideId: number): void {
+    if (this.linePlayHere === rideId) this.linePlayHere = null;
+    if (!this.linePlay || this.linePlay.rideId !== rideId || this.linePlay.endedAt != null) return;
+    void this.persistLinePlay();
+  }
+
+  /** A LinePlay wait still runs here with no LinePlay screen open (the guest stepped away to a tab). */
+  linePlayAway(): number | null {
+    return this.linePlay && this.linePlay.endedAt == null && this.linePlayHere !== this.linePlay.rideId
+      ? this.linePlay.rideId : null;
   }
 
   /**
@@ -511,7 +623,7 @@ class RideDetectionService {
     const ranked = this.findNearbyRides(lat, lng, linePlayRideId);
     const nearbyRides = ranked.map(entry => entry.ride);
     const nearbyIds = new Set(nearbyRides.map(r => r.id));
-    this.trackQueueArea(lat, lng, nearbyRides, now);
+    this.trackQueueArea(lat, lng, ranked, now);
 
     let visit = this.visit;
     if (visit && now - visit.lastFixAt > VISIT_FIX_GAP_MAX_MS) {
@@ -520,6 +632,8 @@ class RideDetectionService {
       visit = null;
     }
     if (visit) {
+      // A coin game played at a ride is not its line: that zone's clock starts after the game.
+      this.dropCoinGameTime(visit, now);
       // The time since the last fix belongs to the ride the guest was closest to.
       const nearest = visit.nearestId != null ? visit.zones.get(visit.nearestId) : undefined;
       if (nearest) nearest.nearestMs += Math.max(0, now - visit.lastFixAt);
@@ -527,7 +641,7 @@ class RideDetectionService {
       if (credited && !nearbyIds.has(credited.ride.id)) {
         // Leaving the credited ride's zone ends the visit, even while a
         // neighbor's overlapping zone still holds the guest.
-        this.closeVisit(credited, now);
+        this.closeVisit(credited, now, visit);
         visit = null;
       } else {
         for (const rideId of Array.from(visit.zones.keys())) {
@@ -537,7 +651,9 @@ class RideDetectionService {
     }
     if (ranked.length === 0) { this.visit = null; return; }
 
-    if (!visit) visit = this.visit = { zones: new Map(), nearestId: null, lastFixAt: now };
+    if (!visit) visit = this.visit = { zones: new Map(), nearestId: null, lastFixAt: now, gapStart: null, gapEnd: null };
+    // A stretch with no fix inside the zones (GPS quiet in a dark ride): kept to time the boarding.
+    if (now - visit.lastFixAt >= BOARDING_GAP_MS) { visit.gapStart = visit.lastFixAt; visit.gapEnd = now; }
     for (const ride of nearbyRides) {
       if (!visit.zones.has(ride.id)) visit.zones.set(ride.id, { ride, enteredAt: now, nearestMs: 0 });
     }
@@ -574,13 +690,59 @@ class RideDetectionService {
     return best;
   }
 
-  private closeVisit(zone: VisitZone, now: number): void {
+  /**
+   * Time a guest spent playing a ride's coin game is not a queue: the zone's clock (and its share of
+   * "closest") starts again when the game closed. Without this a coin game at the Tiki Room, then ten
+   * minutes standing near Jungle Cruise, came back as a 19 minute Tiki Room "ride".
+   */
+  private dropCoinGameTime(visit: ZoneVisit, now: number): void {
+    for (const zone of visit.zones.values()) {
+      const game = lastCoinGameAt(zone.ride.task_id ?? null, now);
+      if (game != null && game > zone.enteredAt && game <= now) {
+        zone.enteredAt = game;
+        zone.nearestMs = 0;
+      }
+    }
+  }
+
+  private closeVisit(zone: VisitZone, now: number, visit: ZoneVisit | null = this.visit): void {
     this.visit = null;
     if (this.linePlay?.endedAt != null) {
       this.linePlay = null;
       void this.persistLinePlay();
     }
     const { ride } = zone;
+    // A visit inside a LinePlay wait at this ride is LinePlay's question, never the batch confirm's, and the
+    // wait is the dwell: a zone visit that restarted a moment ago (one jitter fix outside an indoor queue)
+    // still carries the boarding. The boarding signal is kept on that wait (the ride question ledger), so a
+    // phone pocketed to board still gets LinePlay's one "Did you get to the ride?" when it is back in front,
+    // even after a relaunch. On screen, LinePlay hears it now. Either way it is one question per wait.
+    if (visitInLinePlayWait(ride.id, zone.enteredAt, now, now)) {
+      const wait = linePlayWaitAt(ride.id, now, now) ?? linePlayWaitAt(ride.id, zone.enteredAt, now);
+      const since = wait?.startedAt ?? zone.enteredAt;
+      if (now - since <= MAX_WALKTHROUGH_MS) return;
+      // The timed wait ends when the guest boarded, never after the ride and the walk out.
+      const boardedAt = boardingEstimate({
+        lastInZoneAt: visit?.lastFixAt ?? now, exitAt: now, gapStart: visit?.gapStart ?? null, gapEnd: visit?.gapEnd ?? null,
+        rideDurationMinutes: ride.ride_duration_minutes, notBefore: since,
+      });
+      noteLinePlayBoardingSeen(ride.id, boardedAt, now);
+      if (this.linePlayRideNow() === ride.id && this.lastKnownAppState === 'active' && this.onForegroundDetection) {
+        const history = this.rideHistory.get(ride.id);
+        this.rideHistory.set(ride.id, { lastDetectionTime: now, detectionCount: (history?.detectionCount ?? 0) + 1 });
+        try {
+          this.onForegroundDetection({
+            id: generateId(), rideId: ride.id, rideName: ride.name, rideType: ride.type, parkId: ride.park_id,
+            enteredAt: since, exitedAt: now, dwellTimeMs: now - since, isReRide: false, detectedAt: Date.now(),
+            confidence: calculateConfidence(now - since, ride.ride_duration_minutes, this.currentWaitTimes.get(ride.id) ?? null),
+            boardedAt,
+          });
+        } catch (e) {
+          console.warn('Foreground detection callback error:', e);
+        }
+      }
+      return;
+    }
     const dwellMs = now - zone.enteredAt;
     if (dwellMs <= MAX_WALKTHROUGH_MS) return;
     const history = this.rideHistory.get(ride.id);
@@ -589,29 +751,14 @@ class RideDetectionService {
     // walk-throughs), and only after a stay long enough for that kind of ride: a walk past is not a ride.
     const minDwellMs = minRideDwellMs(ride.type, ride.min_dwell_minutes, ride.ride_duration_minutes);
     if (minDwellMs == null || dwellMs < minDwellMs) return;
+    // The live feed knows better than the catalog: a closed ride was not ridden, and a place it reports open
+    // with no posted wait ever is a show typed as an attraction (a seat, not a line).
+    const line = rideLineState(ride.id);
+    if (line === 'closed' || line === 'no_line') return;
+    // A stay far longer than its line plus the ride is a parade stand or a seat, not a ride.
+    if (dwellMs > maxRideVisitMs(this.currentWaitTimes.get(ride.id) ?? null, ride.ride_duration_minutes)) return;
     // "I got to the ride" already logged it: nothing asks again for 30 minutes.
     if (rideLoggedUntil(ride.id, now) != null) return;
-    // A visit inside a LinePlay wait at this ride is LinePlay's question, never the batch confirm's. The
-    // boarding signal is kept on that wait (the ride question ledger), so a phone pocketed to board still
-    // gets LinePlay's one "Did you get to the ride?" when it is back in front, even after a relaunch. On
-    // screen, LinePlay hears it now. Either way it is one question per wait.
-    if (visitInLinePlayWait(ride.id, zone.enteredAt, now, now)) {
-      noteLinePlayBoardingSeen(ride.id, now, now);
-      if (this.linePlayRideNow() === ride.id && this.lastKnownAppState === 'active' && this.onForegroundDetection) {
-        const history = this.rideHistory.get(ride.id);
-        this.rideHistory.set(ride.id, { lastDetectionTime: now, detectionCount: (history?.detectionCount ?? 0) + 1 });
-        try {
-          this.onForegroundDetection({
-            id: generateId(), rideId: ride.id, rideName: ride.name, rideType: ride.type, parkId: ride.park_id,
-            enteredAt: zone.enteredAt, exitedAt: now, dwellTimeMs: dwellMs, isReRide: false, detectedAt: Date.now(),
-            confidence: calculateConfidence(dwellMs, ride.ride_duration_minutes, this.currentWaitTimes.get(ride.id) ?? null),
-          });
-        } catch (e) {
-          console.warn('Foreground detection callback error:', e);
-        }
-      }
-      return;
-    }
     const state: ZoneState = {
       rideId: ride.id,
       rideName: ride.name,
@@ -627,13 +774,15 @@ class RideDetectionService {
     this.enqueueWrite(() => this.queueDetection(state, dwellMs, now, wasActive));
   }
 
-  private trackQueueArea(lat: number, lng: number, nearbyRides: RideType[], now: number): void {
-    const queueRides = nearbyRides.filter(ride => QUEUE_TYPES.has(ride.type))
-      .map(ride => ({ ride, distance: haversineDistance(lat, lng, ride.lat!, ride.lng!) }))
+  private trackQueueArea(lat: number, lng: number, ranked: { ride: RideType; distance: number }[], now: number): void {
+    // A line to play in: a queue ride the live feed does not call closed or a show.
+    const hasLine = (ride: RideType) => QUEUE_TYPES.has(ride.type) && rideLineState(ride.id) !== 'closed' &&
+      rideLineState(ride.id) !== 'no_line';
+    const queueRides = ranked.filter(entry => hasLine(entry.ride))
       .sort((a, b) => a.distance - b.distance || a.ride.id - b.ride.id);
     if (queueRides.length === 0) { this.queueArea = null; return; }
     if (!this.queueArea || now - this.queueArea.lastSeenAt > QUEUE_DWELL_STALE_MS) {
-      this.queueArea = { lastSeenAt: now, nearestId: null, candidates: new Map() };
+      this.queueArea = { lastSeenAt: now, nearestId: null, candidates: new Map(), seatNearer: false };
     }
     const area = this.queueArea;
     const inside = new Set(queueRides.map(entry => entry.ride.id));
@@ -646,6 +795,17 @@ class RideDetectionService {
     }
     area.lastSeenAt = now;
     area.nearestId = queueRides[0].ride.id;
+    // The same unambiguous-nearest rule closeVisit uses: a seat (the Piano Player, the Tiki Room's show) that is
+    // clearly closer than the nearest line means the guest is watching, not queuing.
+    const seat = ranked.find(entry => !hasLine(entry.ride));
+    const line = queueRides[0];
+    if (seat && seat.distance < line.distance) {
+      const gap = haversineDistance(seat.ride.lat!, seat.ride.lng!, line.ride.lat!, line.ride.lng!);
+      const lead = line.distance - seat.distance;
+      area.seatNearer = lead >= Math.min(AMBIGUOUS_DISTANCE_MARGIN, gap / 2);
+    } else {
+      area.seatNearer = false;
+    }
   }
 
   private findNearbyRides(lat: number, lng: number, linePlayRideId: number | null = null): { ride: RideType; distance: number }[] {
@@ -753,8 +913,16 @@ class RideDetectionService {
    * now (the map's "In line at X? Play" card). Read-only; null when none.
    */
   currentDwell(minMs = DWELL_SUGGESTION_MS, now = Date.now()): { rideId: number; rideName: string; parkId: number; dwellMs: number } | null {
+    // A LinePlay wait still runs with its screen closed (a footer tab peek): the map's in-line card leads back to it.
+    const away = this.linePlayAway();
+    if (away != null && this.visit?.zones.has(away)) {
+      const ride = this.rideById(away);
+      const started = linePlayWaitAt(away, now, now)?.startedAt ?? null;
+      if (ride && started != null) return { rideId: ride.id, rideName: ride.name, parkId: ride.park_id, dwellMs: Math.max(minMs, now - started) };
+    }
     const area = this.queueArea;
     if (!area || now - area.lastSeenAt > QUEUE_DWELL_STALE_MS) return null;
+    if (area.seatNearer) return null;
     // Time since the last fix counts for the ride the guest stood closest to:
     // iOS sends nothing while a guest stands still in line.
     let leader: QueueCandidate | null = null, leaderWeight = -1;
@@ -828,6 +996,14 @@ export function setLinePlayDetectionRide(rideId: number | null, startedAt?: numb
 export function dropAnsweredRideDetections(rideId: number) { return rideDetectionService.dropAnsweredDetections(rideId); }
 /** The ride LinePlay is running at right now, or null. */
 export function linePlayRideNow() { return rideDetectionService.linePlayRideNow(); }
+/** LinePlay's screen closed with its wait still running (a footer tab peek): the wait goes on. */
+export function stepAwayFromLinePlay(rideId: number) { rideDetectionService.stepAwayFromLinePlay(rideId); }
+/** The ride of a LinePlay wait running with no LinePlay screen open, or null. */
+export function linePlayAway() { return rideDetectionService.linePlayAway(); }
+/** The live feed's answers for the park the guest is in (open, closed, posted waits). */
+export function setDetectionLiveRows(parkId: number | null, rows: readonly RideLiveRow[]) {
+  rideDetectionService.setLiveRows(parkId, rows);
+}
 
 export default rideDetectionService;
 export function currentRideDwell(minMs?: number) { return rideDetectionService.currentDwell(minMs); }

@@ -3,6 +3,7 @@ import { winNote } from '../../../screens/LeaderboardsScreen/standingsV2Model';
 import { showToast } from '../../../utils/toast';
 import type { PerkChipData } from '../../../components/coin/progressionModel';
 import client from '../../client';
+import { noteCoinGame } from '../../../services/lineplay/coinGames';
 
 export type TaskAttemptGame = 'tap' | 'timing' | 'memory' | 'trivia' | 'photo';
 export type TaskAttemptStatus = 'started' | 'won' | 'lost' | 'expired';
@@ -136,6 +137,8 @@ export async function startTaskAttempt(
     ...(extras?.retry_of ? { retry_of: extras.retry_of } : {}),
     ...(extras?.picture_only ? { picture_only: 1 } : {}),
   });
+  // A coin game is open at this coin: ride detection never counts the time spent playing it as its line.
+  if (type === 'task') noteCoinGame(taskId);
   return data.data;
 }
 
@@ -153,6 +156,9 @@ export async function resolveTaskAttempt(
     `/me/task-attempts/${id}/resolve`,
     { outcome, ...(outcome === 'win' && proof ? { proof } : {}) },
   );
+  // The coin game closed: a ride's clock in ride detection starts from here.
+  const played = data?.data?.attempt;
+  if (played?.task_type === 'task') noteCoinGame(played.task_id);
   // Standings v2: a won ride changes your weekly number, so the next Standings
   // look refetches (and can celebrate the climb) instead of showing the old board.
   if (data?.data?.attempt?.status === 'won') {

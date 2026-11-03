@@ -59,6 +59,10 @@ function makeHarness({ backgroundGranted = false, deferredPermissionCheck = fals
       if (name === './lineplay/rideQuestionLedger') return {
         ensureRideQuestionLedger: async () => {}, noteLinePlayWaitStarted() {}, noteLinePlayWaitEnded() {},
         rideHoldUntil: () => null, setRideHold() {}, visitInLinePlayWait: () => false, rideQuestionOwner: () => null,
+        lastCoinGameAt: () => null, linePlayWaitAt: () => null,
+      };
+      if (name === './lineplay/rideLines') return {
+        noteRideLineCatalog() {}, noteRideLive() {}, rideLineState: () => null,
       };
       if (name === '../constants/queueRideTypes') return { QUEUE_RIDE_TYPES: ['attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride'] };
       if (name === 'react-native') return { AppState: {

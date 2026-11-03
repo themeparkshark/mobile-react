@@ -255,15 +255,21 @@ test('the recap: only what you got, "Sign said 20, you waited 11", one GO, the l
   assert.match(screen, /if \(go\.taskId != null\) guide\.setTarget\(go\.taskId, 'lineplay_recap'\);/);
   assert.match(recap, /variant=\{\(go && onGo\) \|\| goPending \? 'ghost' : undefined\}/, 'Done is the quiet second button, also while the GO is worked out');
   assert.match(screen, /goPending=\{go == null && !goReady\}/);
-  // Between the ride step and the recap: one calm card, never the locked in-line pages.
-  // It stays until the recap's rewards and GO are known (capped), so the recap arrives whole and nothing jumps.
-  assert.match(screen, /\(snapshot\.state === 'ending' && !leftLineWrapUp\) \|\| holdRecap \? \(/);
-  assert.match(screen, /\{snapshot\.state === 'complete' && !holdRecap \? \(\n\s+<SessionRecap/);
+  // The recap lands the moment the wait ends (never the locked in-line pages, never a near-empty page): the
+  // hero now, and one calm block holding the room of the rewards and the GO until they are known (capped).
+  assert.match(screen, /\{snapshot\.state === 'complete' \|\| \(snapshot\.state === 'ending' && !leftLineWrapUp\) \? \(\n\s+<SessionRecap\n\s+settling=\{snapshot\.state !== 'complete' \|\| holdRecap \|\| rideLoggedPending\}/);
+  // A ridden wait's "Ride logged!" row is in the recap's first look, never inserted above it a moment later.
+  assert.match(screen, /const rideLoggedPending = snapshot\.state === 'complete' && snapshot\.boardingConfirmed && rideLogged == null;/);
+  // Answering the ride question on the left-the-line wrap-up says so at once (the page under the dialog swaps then).
+  const session = read('src/services/lineplay/LinePlaySession.ts');
+  assert.match(session, /if \(boardingConfirmed && this\.endReason === 'left_queue'\) this\.endReason = 'boarded';\n[^\n]*\n[^\n]*\n\s+this\.persistCheckpoint\(\);\n\s+this\.emit\(\);/);
+  assert.match(recap, /\{settling \? \(\n\s+<View style=\{styles\.settleBlock\}/);
+  assert.match(recap, /settleBlock: \{ minHeight: RECAP_SETTLE_BLOCK_HEIGHT/);
+  assert.doesNotMatch(screen, /WaitWrapUpCard/);
   assert.match(screen, /const recapSettling = snapshot\.state === 'complete' && \(!goReady \|\|/);
   assert.match(screen, /setTimeout\(\(\) => setSettleTimedOut\(true\), RECAP_SETTLE_MAX_MS\)/);
   // A wrapped-up or ridden wait is said once by the hero: no "Wait saved!" keepsake under it.
   assert.match(recap, /signLine \|\| rideLogged \|\| activityNames\.length > 0 \|\| rideUp \|\| wrappedUp \? null : \(/);
-  assert.match(screen, /<WaitWrapUpCard rideUp=\{snapshot\.endReason === 'boarded'\} \/>/);
   assert.match(screen, /signLine=\{snapshot\.boardingConfirmed \? signSaidLine\(/);
   // Games alone are said once (the Played line), never also as a lone "1 GAME" tile; the shelf GO wears the coins.
   assert.match(recap, /const earnedAny = shownStats\.some\(t => t\.key !== 'activities'\);/);

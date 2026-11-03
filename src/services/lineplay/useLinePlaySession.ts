@@ -11,7 +11,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import * as Location from 'expo-location';
 import { AppState } from 'react-native';
 import { LocationContext } from '../../context/LocationProvider';
-import { setLinePlayDetectionRide } from '../RideDetectionService';
+import { setLinePlayDetectionRide, stepAwayFromLinePlay } from '../RideDetectionService';
 import { noteLinePlayWaitStarted } from './rideQuestionLedger';
 import {
   LinePlaySession,
@@ -100,7 +100,13 @@ export function useLinePlaySession(): UseLinePlaySession {
   useEffect(() => {
     if (linePlayRideId == null) return;
     setLinePlayDetectionRide(linePlayRideId, session.snapshot().startedAt);
-    return () => setLinePlayDetectionRide(null);
+    return () => {
+      // The screen closed with the wait still running (a footer tab peek): the wait goes on, exactly as after
+      // an app close. Only an ended wait (rode, left, or End) clears LinePlay's ride from detection.
+      const state = session.getState();
+      if (state === 'active' || state === 'paused') stepAwayFromLinePlay(linePlayRideId);
+      else setLinePlayDetectionRide(null);
+    };
   }, [linePlayRideId, session]);
   // The wait's real start (known once the session starts): detection never asks about a visit inside it.
   const linePlayStartedAt = queueTracking ? snapshot.startedAt ?? null : null;

@@ -34,19 +34,22 @@ import { UpperText } from '../../../ui/upper';
 const QUEUE_STAMP_IMAGE = require('../../../../assets/images/stamps/stamp-09.png');
 const QUEUE_RECAP_SHARK = require('../../../../assets/images/screens/lineplay/queue-recap-shark.png');
 
-/** Counts a number up once on arrival; reduced motion shows it at once. */
+/** A count this small lands as itself: counting 0 to 1 only ever showed a "+0" row first. */
+const COUNT_UP_MIN = 4;
+
+/** Counts a number up once on arrival; reduced motion (or a count of 3 or less) shows it at once. */
 function useCountUp(target: number, delayMs: number, reducedMotion: boolean): number {
-  const [value, setValue] = useState(reducedMotion ? target : 0);
+  const [value, setValue] = useState(reducedMotion || target < COUNT_UP_MIN ? target : 1);
   const frame = useRef<number | null>(null);
   useEffect(() => {
-    if (reducedMotion || target <= 0) { setValue(target); return; }
+    if (reducedMotion || target < COUNT_UP_MIN) { setValue(target); return; }
     const duration = Math.min(900, 380 + target * 18);
     let start: number | null = null;
     const timer = setTimeout(() => {
       const step = (now: number) => {
         start ??= now;
         const t = Math.min(1, (now - start) / duration);
-        setValue(Math.round(target * (1 - Math.pow(1 - t, 3))));
+        setValue(Math.max(1, Math.round(target * (1 - Math.pow(1 - t, 3)))));
         if (t < 1) frame.current = requestAnimationFrame(step);
       };
       frame.current = requestAnimationFrame(step);
@@ -195,7 +198,15 @@ export interface SessionRecapProps {
   showTickets?: boolean;
   /** Who's in line was 2 or more: crew lines show. */
   crew?: boolean;
+  /**
+   * The wait is being saved (rewards, the coin check, the GO): the hero lands now with its count-up, and one calm
+   * block holds the room the rest will take, so the payoff never waits on a near-empty page and nothing jumps.
+   */
+  settling?: boolean;
 }
+
+/** The room the settling block holds: about the earned tiles, the GO card and Done. */
+export const RECAP_SETTLE_BLOCK_HEIGHT = 300;
 
 export default function SessionRecap({
   elapsedSeconds, activityCount, activityNames, earnedEnergy, experience, partsCount, ticketsEarned,
@@ -206,7 +217,7 @@ export default function SessionRecap({
   feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine, onGotToRide,
   doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null, snackSlot = null, nextAdventure = null, adventuresFound = null,
   signLine = null, rideLogged = null, onAddMemory, adventureStamped = false, go = null, goPending = false, onGo, showEnergy = true, showXp = true,
-  showTickets = false, crew = false,
+  showTickets = false, crew = false, settling = false,
 }: SessionRecapProps) {
   const bonusMode = rewardsConfirmed && bonusRecap != null;
   const rows = bonusMode ? recapRows(bonusRecap) : [];
@@ -258,6 +269,11 @@ export default function SessionRecap({
         )}
       </LinearGradient>
 
+      {settling ? (
+        <View style={styles.settleBlock} accessible accessibilityLiveRegion="polite" accessibilityLabel="Saving your wait">
+          <Text style={styles.settleText}>Saving your wait…</Text>
+        </View>
+      ) : <>
       {leftQueue && onStillInLine && (
         <Animated.View entering={enter(0)} style={styles.stillInLineCard}>
           <View style={styles.stillInLineRow}>
@@ -267,7 +283,8 @@ export default function SessionRecap({
               <Text style={styles.stillInLineBody}>Pick up where you left off. You keep what you earned.</Text>
             </View>
           </View>
-          <GameButton label="Keep playing" icon="arrow" onPress={onStillInLine} fullWidth
+          {/* A white secondary: the GO below is the one gold button on this screen. */}
+          <GameButton label="Keep playing" icon="arrow" variant="ghost" onPress={onStillInLine} fullWidth
             accessibilityLabel="Still in line. Keep playing this wait." />
           {onGotToRide && (
             <GameButton label="I got to the ride" variant="ghost" onPress={onGotToRide} fullWidth
@@ -457,18 +474,22 @@ export default function SessionRecap({
 
       {rewardsConfirmed && snackSlot}
       {nextAdventure && <View style={styles.nextAdventure} accessible accessibilityLabel={`Next time in this line: ${nextAdventure}`}>
-        <GameIcon name="map" size={22} />
+        {/* Story wears the magnifier everywhere in LinePlay (the compass is the footer's MAP). */}
+        <GameIcon name="search" size={22} />
         <Text style={styles.nextAdventureText} maxFontSizeMultiplier={1.3}>
           {`Next time in this line: ${nextAdventure}`}{adventuresFound && adventuresFound[0] > 0 ? `\n${adventuresFound[2] ? 'New line story found! ' : ''}Stories found ${adventuresFound[0]} of ${adventuresFound[1]}` : ''}
         </Text>
       </View>}
       {/* With a GO above, Done is the quiet second button (one gold button per screen). */}
       <GameButton label={doneLabel} onPress={onDone} fullWidth variant={(go && onGo) || goPending ? 'ghost' : undefined} style={styles.recapBtn} />
+      </>}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  settleBlock: { minHeight: RECAP_SETTLE_BLOCK_HEIGHT, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 28 },
+  settleText: { color: '#315C7C', fontFamily: 'Knockout', fontSize: 16 },
   nextAdventure: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, backgroundColor: '#fff8e4', borderWidth: 2, borderColor: '#ffcf3b' },
   nextAdventureText: { flex: 1, fontFamily: 'Knockout', fontSize: 15, color: '#073b74' },
   heroCard: { width: 130, height: 180 },

@@ -13,6 +13,8 @@
  *    A boarding signal heard while the phone slept in a pocket is kept on its
  *    wait (boardingSeenAt) for LinePlay to ask about once, when the app is
  *    back in front (boardingAsked marks that the one question was put).
+ *  - coinGames: when the guest last played each coin's game (task id). The time spent playing a
+ *    ride's coin game is a coin game, not a queue, so ride detection starts that ride's clock after it.
  *
  * Reads are synchronous from memory; the record loads from AsyncStorage once
  * (ensureRideQuestionLedger) and every change writes it back. Stored under
@@ -23,6 +25,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { gameSavesPlayer, playerKey } from '../../gamekit/core/playerStorage';
+import { setCoinGameSink } from './coinGames';
 
 export const RIDE_QUESTION_KEY = 'tps.ride_question.v1';
 const OWNER_KEY = 'tps.ride_question.owner';
@@ -53,9 +56,14 @@ interface LedgerRecord {
   holds: Record<string, number>;
   lastPromptAt: number | null;
   waits: LinePlayWait[];
+  /** Task id -> when its coin game was last open (started or finished). */
+  coinGames: Record<string, number>;
 }
 
-const fresh = (): LedgerRecord => ({ v: 1, holds: {}, lastPromptAt: null, waits: [] });
+/** A coin game played longer ago than this no longer decides anything. */
+export const COIN_GAME_KEEP_MS = 6 * 60 * 60_000;
+
+const fresh = (): LedgerRecord => ({ v: 1, holds: {}, lastPromptAt: null, waits: [], coinGames: {} });
 
 let record: LedgerRecord = fresh();
 let owner: string | null = null;
@@ -75,7 +83,11 @@ function parse(raw: string | null): LedgerRecord | null {
     for (const [id, until] of Object.entries(value.holds ?? {})) {
       if (Number.isFinite(until as number)) holds[id] = until as number;
     }
-    return { v: 1, holds, waits, lastPromptAt: Number.isFinite(value.lastPromptAt) ? value.lastPromptAt : null };
+    const coinGames: Record<string, number> = {};
+    for (const [id, at] of Object.entries(value.coinGames ?? {})) {
+      if (Number.isFinite(at as number)) coinGames[id] = at as number;
+    }
+    return { v: 1, holds, waits, coinGames, lastPromptAt: Number.isFinite(value.lastPromptAt) ? value.lastPromptAt : null };
   } catch {
     return null;
   }
@@ -96,7 +108,9 @@ function merge(stored: LedgerRecord, live: LedgerRecord): LedgerRecord {
     } else waits.push(wait);
   }
   const lastPromptAt = Math.max(stored.lastPromptAt ?? 0, live.lastPromptAt ?? 0) || null;
-  return { v: 1, holds, lastPromptAt, waits: waits.slice(-MAX_WAITS) };
+  const coinGames = { ...stored.coinGames };
+  for (const [id, at] of Object.entries(live.coinGames)) coinGames[id] = Math.max(coinGames[id] ?? 0, at);
+  return { v: 1, holds, lastPromptAt, waits: waits.slice(-MAX_WAITS), coinGames };
 }
 
 function currentOwner(): string | null {
@@ -142,6 +156,7 @@ function waitEnd(w: LinePlayWait, now: number): number {
 function prune(now: number): void {
   for (const [id, until] of Object.entries(record.holds)) if (until <= now) delete record.holds[id];
   record.waits = record.waits.filter(w => waitEnd(w, now) > now - LINEPLAY_WAIT_KEEP_MS).slice(-MAX_WAITS);
+  for (const [id, at] of Object.entries(record.coinGames)) if (at < now - COIN_GAME_KEEP_MS) delete record.coinGames[id];
 }
 
 function save(): void {
@@ -165,6 +180,34 @@ export function rideHoldUntil(rideId: number, now = Date.now()): number | null {
   if (until == null) return null;
   if (until <= now) { delete record.holds[String(rideId)]; return null; }
   return until;
+}
+
+// -- coin games ----------------------------------------------------------------
+
+/**
+ * The guest has a coin's game open (PLAY! started it) or just finished it. Called at the start and at the
+ * end, so the newest time is when the game closed: a ride's clock in detection starts after it.
+ */
+export function noteCoinGamePlayed(taskId: number, at = Date.now()): void {
+  if (!Number.isInteger(taskId) || taskId <= 0 || !Number.isFinite(at)) return;
+  record.coinGames[String(taskId)] = Math.max(record.coinGames[String(taskId)] ?? 0, at);
+  save();
+}
+
+// The task attempt calls tell coinGames; the ledger keeps them per player.
+setCoinGameSink((taskId, at) => noteCoinGamePlayed(taskId, at));
+
+/** When this coin's game was last open (null: not in the last 6 hours). */
+export function lastCoinGameAt(taskId: number | null | undefined, now = Date.now()): number | null {
+  if (taskId == null || !Number.isInteger(taskId)) return null;
+  const at = record.coinGames[String(taskId)];
+  return at != null && at >= now - COIN_GAME_KEEP_MS ? at : null;
+}
+
+/** The LinePlay wait at this ride that `at` falls in, or null. */
+export function linePlayWaitAt(rideId: number, at: number, now = Date.now()): LinePlayWait | null {
+  const i = waitIndexAt(rideId, at, now);
+  return i >= 0 ? record.waits[i] : null;
 }
 
 // -- the prompt clock --------------------------------------------------------

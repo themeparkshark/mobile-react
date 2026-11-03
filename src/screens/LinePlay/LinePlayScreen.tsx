@@ -32,7 +32,7 @@ import TopbarText from '../../components/Topbar/TopbarText';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import Wrapper from '../../components/Wrapper';
 import * as Haptics from 'expo-haptics';
-import { StackActions, useNavigation, useRoute } from '@react-navigation/native';
+import { StackActions, useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import { colors, spacing, borderRadius } from '../../design-system';
 import { BRAND, GameButton, GameDialog, gameAlert } from '../../ui';
 import GameIcon from '../../ui/GameIcon';
@@ -130,6 +130,9 @@ const DAY_BACKDROP = ['#0a7dd1', '#07569e', '#073e87'] as const;
 const NIGHT_BACKDROP = ['#3B2A6B', '#2B2350', '#1E1838'] as const;
 /** Returning after this long away gets a quick "welcome back" heads up. */
 const WELCOME_BACK_AFTER_MS = 20_000;
+/** The dialog answers that end the wait at the tap: the dialog fades once the recap is drawn under it. */
+const RODE_OR_LEFT: readonly number[] = [0, 1];
+const RODE: readonly number[] = [1];
 /** The longest the "Saving your wait" card waits for the recap's rewards and GO before the recap opens anyway. */
 const RECAP_SETTLE_MAX_MS = 6000;
 /** The longest the resume countdown waits on the 1 for the arcade or the page it is handing over to. */
@@ -609,10 +612,16 @@ export default function LinePlayScreen() {
   // It asks once per wait: "Still in line" is an answer, and a second ask would be a repeat ride question.
   // The phone keeps that it asked (the ride question ledger), so a relaunch never asks again.
   const boardingAsked = useRef<number | null>(null);
+  // A footer tab can sit on top of this screen while the wait runs (a peek): nothing asks while it is hidden.
+  // The boarding signal stays kept on the wait (the ledger), and the ask comes when LinePlay is in front again.
+  const focused = useIsFocused();
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
   useEffect(() => {
     if (!ride) return;
     return rideDetectionEmitter.on('rideDetected', detection => {
       if (detection.rideId !== ride.rideId) return;
+      if (!focusedRef.current) return;
       const startedAt = session.snapshot().startedAt;
       const waitKey = startedAt ?? 0;
       if (boardingAsked.current === waitKey) return;
@@ -620,7 +629,9 @@ export default function LinePlayScreen() {
       boardingAsked.current = waitKey;
       if (startedAt != null) markLinePlayBoardingAsked(ride.rideId, startedAt);
       noteRidePrompt();
-      session.suggestBoarded(Number.isFinite(detection.exitedAt) ? detection.exitedAt : null);
+      // The timed wait ends when the guest boarded (before the ride and the walk out), not when the zone ended.
+      const boardedAt = detection.boardedAt ?? detection.exitedAt;
+      session.suggestBoarded(boardedAt != null && Number.isFinite(boardedAt) ? boardedAt : null);
     });
   }, [ride?.rideId, session]);
   const finishFailed = useCallback(() =>
@@ -630,7 +641,7 @@ export default function LinePlayScreen() {
   // was closed). When LinePlay is back in front, it asks its one "Did you get to the ride?", even if GPS
   // already wrapped the wait up as "left the line". The timed wait ends when the guest left the zone.
   const askKeptBoarding = useCallback(() => {
-    if (!ride || AppState.currentState !== 'active') return;
+    if (!ride || AppState.currentState !== 'active' || !focusedRef.current) return;
     const snap = session.snapshot();
     if (snap.startedAt == null || snap.ride?.rideId !== ride.rideId || !session.canAskBoarding()) return;
     if (boardingAsked.current === snap.startedAt) return;
@@ -644,7 +655,7 @@ export default function LinePlayScreen() {
     let live = true;
     void ensureRideQuestionLedger().then(() => { if (live) askKeptBoarding(); }).catch(() => undefined);
     return () => { live = false; };
-  }, [askKeptBoarding, snapshot.state, snapshot.startedAt]);
+  }, [askKeptBoarding, snapshot.state, snapshot.startedAt, focused]);
   useEffect(() => {
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') askKeptBoarding(); });
     return () => subscription.remove();
@@ -874,7 +885,10 @@ export default function LinePlayScreen() {
   const handleNavigateTab = useCallback((screen: string) => {
     const state = session.getState();
     if (state === 'active' || state === 'paused') {
-      setWaitEndPrompt({ tab: screen });
+      // A peek, never "How did your wait end?": the wait keeps counting. Another tab opens on top (Back comes
+      // straight back here); the map is under LinePlay, so LinePlay closes and the wait runs on, saved, with
+      // the map's in-line card leading back to it. The wait ends only by End, the ride question or leaving.
+      navigation.navigate(screen as never);
       return;
     }
     if (state === 'ending') {
@@ -949,6 +963,8 @@ export default function LinePlayScreen() {
     return () => clearTimeout(id);
   }, [recapSettling]);
   const holdRecap = recapSettling && !settleTimedOut;
+  // A ridden wait's "Ride logged!" row is part of the recap's first look (it is set the moment the wait completes).
+  const rideLoggedPending = snapshot.state === 'complete' && snapshot.boardingConfirmed && rideLogged == null;
   const handleRecapGo = useCallback(async () => {
     if (!go) return;
     releaseRideStep();
@@ -1547,6 +1563,8 @@ export default function LinePlayScreen() {
             {leftLineWrapUp && (
               <Pressable accessibilityRole="button" accessibilityLabel="I got to the ride"
                 onPress={rodeAfterWrapUp} hitSlop={8} style={styles.leftLineRideButton}>
+                {/* The ride car, as on the ask sheet: a non-reader finds the choice that logs the ride. */}
+                <GameIcon name="ride" size={26} />
                 <Text style={styles.leftLineRideButtonText}>I GOT TO THE RIDE</Text>
               </Pressable>
             )}
@@ -1557,7 +1575,8 @@ export default function LinePlayScreen() {
           </View>
         )}
 
-        {snapshot.state !== 'complete' && <LinePlayLiveRail crew={liveCrew} chip={railChip}
+        {/* The rail steps away with the wait card the moment the recap lands (it never vanishes under it later). */}
+        {snapshot.state !== 'complete' && !(snapshot.state === 'ending' && !leftLineWrapUp) && <LinePlayLiveRail crew={liveCrew} chip={railChip}
           projectTitle={projectMission?.title} projectStage={snapshot.parkProject?.stage}
           onOpenCrew={() => {
             if (liveCrew) jumpToPage(activityPages.findIndex(page => page.id === liveCrew.pageId));
@@ -1576,8 +1595,11 @@ export default function LinePlayScreen() {
 
         {/* Activity area (bottom) */}
         <View style={[styles.activityArea, { marginTop: fit.activityGap }, !pagesShown && styles.activityAreaAside]}>
-          {snapshot.state === 'complete' && !holdRecap ? (
+          {/* The recap lands the moment the wait ends: its hero (ride, sign said, waited) at once, and while the
+              server settles the rewards and the GO one calm block holds their room (no near-empty page, no jump). */}
+          {snapshot.state === 'complete' || (snapshot.state === 'ending' && !leftLineWrapUp) ? (
             <SessionRecap
+              settling={snapshot.state !== 'complete' || holdRecap || rideLoggedPending}
               nextAdventure={ride ? nextAdaptiveStoryTitle(snapshot.chapter, ride.rideName) : null}
               adventuresFound={adventuresFound && adventuresFound.count > 0 ? [adventuresFound.count, ADAPTIVE_STORY_TOTAL, adventuresFound.isNew] : null}
               snackSlot={snapshot.serverSessionId && snapshot.rewards ? <LineSnackOffer sessionId={snapshot.serverSessionId} /> : null}
@@ -1668,10 +1690,6 @@ export default function LinePlayScreen() {
                 else void handleExit();
               }}
             />
-          ) : (snapshot.state === 'ending' && !leftLineWrapUp) || holdRecap ? (
-            // Between "I got to the ride" (or End) and the recap the wait is being saved: one calm card, never
-            // the in-line pages with their "Get in line to play" locks.
-            <WaitWrapUpCard rideUp={snapshot.endReason === 'boarded'} />
           ) : snapshot.playlist.length === 0 ? (
             <ActivitySkeleton />
           ) : (
@@ -1760,6 +1778,7 @@ export default function LinePlayScreen() {
                       nextLabel={pageName(activityPages[index + 1 < activityPages.length ? index + 1 : 0], snapshot.chapter)}
                       bestStars={item.kind === 'minigame'
                         ? snapshot.gameBestStars[(item as Extract<ActivityItem, { kind: 'minigame' }>).gameId] : undefined}
+                      crew={crewInLine}
                       newGame={item.kind === 'minigame' && playedEver != null
                         && !playedEver.has((item as Extract<ActivityItem, { kind: 'minigame' }>).gameId)}
                       rideId={ride.rideId}
@@ -1963,7 +1982,7 @@ export default function LinePlayScreen() {
 
       {/* End by hand: one branded sheet (header End, back, or a footer tab). */}
       <GameDialog
-        visible={waitEndPrompt != null && (snapshot.state === 'active' || snapshot.state === 'paused')}
+        visible={focused && waitEndPrompt != null && (snapshot.state === 'active' || snapshot.state === 'paused')}
         title="How did your wait end?"
         message={waitEndPrompt?.tab
           ? `Your recap opens first, then ${tabLabel(waitEndPrompt.tab)}. You keep what you earned either way.`
@@ -1976,12 +1995,15 @@ export default function LinePlayScreen() {
           { text: 'I got to the ride' },
           { text: 'Keep playing', style: 'cancel' },
         ]}
-        onAnswer={index => answerWaitEnd(index === 1 ? true : index === 0 ? false : null)}
+        // Rode or left: the wait ends at the tap, and the dialog fades only once the recap is drawn under it.
+        holdUntilHidden={RODE_OR_LEFT}
+        onPick={index => { if (index === 0 || index === 1) answerWaitEnd(index === 1); }}
+        onAnswer={index => { if (index !== 0 && index !== 1) answerWaitEnd(null); }}
       />
 
       {/* The ride question, once per wait, in the ride step's own words: nothing counts down and play keeps going. */}
       <GameDialog
-        visible={boardingAsk}
+        visible={focused && boardingAsk}
         title="Did you get to the ride?"
         message="Your games and wait are saved either way."
         icon="ride"
@@ -1990,14 +2012,20 @@ export default function LinePlayScreen() {
           { text: 'Still in line', style: 'cancel', variant: 'secondary' },
           { text: 'I got to the ride' },
         ]}
-        onAnswer={index => {
+        // "I got to the ride" ends the wait at the tap, and the dialog fades only once the recap's hero is drawn
+        // under it (never a flash of the wait page while the dialog closes).
+        holdUntilHidden={RODE}
+        onPick={index => {
+          if (index !== 1) return;
           noteRideQuestionAnswered();
           const state = session.getState();
-          if (index === 1) {
-            if (state === 'complete') session.confirmRodeAfterWrapUp();
-            else void session.endNow(true).catch(finishFailed);
-            return;
-          }
+          if (state === 'complete') session.confirmRodeAfterWrapUp();
+          else void session.endNow(true).catch(finishFailed);
+        }}
+        onAnswer={index => {
+          if (index === 1) return;
+          noteRideQuestionAnswered();
+          const state = session.getState();
           // "Still in line": back to the wait (a wrapped-up one picks up where it left off).
           session.dismissBoardingSuggestion();
           if (state === 'ending') session.undoEnd();
@@ -2020,20 +2048,6 @@ function WaitCardSkeleton({ rideName }: { rideName: string }) {
     </View>
     <Image source={QUEUE_RECAP_SHARK} style={styles.waitSkeletonShark} contentFit="contain" />
   </LinearGradient>;
-}
-
-/** The wait is being saved: one picture line while the recap gets ready (no lock, no countdown). */
-export function WaitWrapUpCard({ rideUp }: { rideUp: boolean }) {
-  return (
-    <View style={styles.page}>
-      <View style={[styles.activitySkeleton, styles.wrapUpCard]} accessible accessibilityLiveRegion="polite"
-        accessibilityLabel={rideUp ? 'Your ride is up. Saving your wait.' : 'Saving your wait.'}>
-        <GameIcon name={rideUp ? 'ride' : 'line'} size={54} />
-        <Text style={styles.activitySkeletonTitle}>{rideUp ? 'Your ride’s up!' : 'Wait wrapped up'}</Text>
-        <Text style={styles.activitySkeletonHint}>Saving your wait…</Text>
-      </View>
-    </View>
-  );
 }
 
 function ActivitySkeleton() {
@@ -2083,7 +2097,7 @@ const styles = StyleSheet.create({
   leftLineText: { flex: 1, fontFamily: 'Knockout', fontSize: 15, color: '#083f7c' },
   leftLineButton: { minHeight: 44, paddingHorizontal: 14, borderRadius: 12, backgroundColor: '#fec90e', justifyContent: 'center' },
   leftLineRideButton: { minHeight: 44, paddingHorizontal: 10, marginRight: 8, borderRadius: 12, backgroundColor: '#ffffff',
-    borderWidth: 2, borderColor: '#9fd2f2', justifyContent: 'center' },
+    borderWidth: 2, borderColor: '#9fd2f2', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 5 },
   leftLineRideButtonText: { fontFamily: 'Shark', fontSize: 13, color: '#075083' },
   leftLineButtonText: { fontFamily: 'Shark', fontSize: 15, color: '#075083' },
   queueTrackingHint: { backgroundColor: '#0a548f', borderBottomWidth: 1,
@@ -2127,7 +2141,6 @@ const styles = StyleSheet.create({
     shadowRadius: 7, elevation: 4,
   },
   activitySkeletonKicker: { color: '#0873bd', fontFamily: 'Knockout', fontSize: 13, letterSpacing: 0.5 },
-  wrapUpCard: { alignItems: 'center' },
   activitySkeletonTitle: { color: '#093d77', fontFamily: 'Shark', fontSize: 21, marginTop: 8 },
   activitySkeletonHint: { color: '#245879', fontFamily: 'Knockout', fontSize: 16, marginTop: 8 },
   activitySkeletonRule: { width: 72, height: 5, borderRadius: 3, backgroundColor: '#ffcb31', marginTop: 17 },

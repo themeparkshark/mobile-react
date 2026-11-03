@@ -182,8 +182,9 @@ export default function RideBatchConfirmScreen() {
   const route = useRoute<any>();
   const detections: DetectedRide[] = route.params?.detections || [];
 
+  // Nothing is pre-checked: the guest taps the rides they really rode (a guess never becomes a journal entry).
   const [rides, setRides] = useState<ConfirmedRide[]>(
-    detections.map(d => ({ ...d, selected: d.confidence !== 'low' })),
+    detections.map(d => ({ ...d, selected: false })),
   );
   const [phase, setPhase] = useState<Phase>('select');
   const [rateIndex, setRateIndex] = useState(0);
@@ -302,7 +303,8 @@ export default function RideBatchConfirmScreen() {
             style={[batchStyles.confirmBtn, selectedRides.length === 0 && { opacity: 0.4 }]}
           >
             <Text style={batchStyles.confirmBtnText}>
-              Rate {selectedRides.length} {selectedRides.length === 1 ? 'Ride' : 'Rides'}
+              {selectedRides.length === 0 ? 'Tap the rides you rode'
+                : `Rate ${selectedRides.length} ${selectedRides.length === 1 ? 'Ride' : 'Rides'}`}
             </Text>
           </Pressable>
         </View>

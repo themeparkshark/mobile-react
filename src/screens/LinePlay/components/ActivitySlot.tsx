@@ -70,6 +70,14 @@ export interface ActivitySlotProps {
   readonly bestStars?: number;
   /** A queue game this account has never played (the arcade's NEW rule). */
   readonly newGame?: boolean;
+  /** Who's in line was 2 or more: a right answer is the crew's, else the player's own. */
+  readonly crew?: boolean;
+}
+
+/** The line under a story clue after a pick. */
+export function clueFeedback(correct: boolean, answer: string, crew: boolean): string {
+  if (correct) return crew ? 'Correct! Your crew found the answer.' : 'Correct! You found it.';
+  return `The answer is ${answer}. Pick your next clue.`;
 }
 
 const GAME_LABELS: Record<string, string> = {
@@ -139,6 +147,7 @@ export default function ActivitySlot({
   nextLabel,
   bestStars,
   newGame,
+  crew = false,
 }: ActivitySlotProps) {
   switch (item.kind) {
     case 'minigame':
@@ -155,7 +164,7 @@ export default function ActivitySlot({
         return <NavigationPanelCard seed={item.seed} title={navigationTitle} targetHeight={navigationTargetHeight}
           progress={navigationProgress} completed={completed} paused={paused}
           onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} onMakeRoom={onNavigationMakeRoom} />;
-      return <TriviaSlot title={missionTitle} rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed} completed={completed} paused={paused} onAnswered={() => onActivityCompleted(item.id)} />;
+      return <TriviaSlot title={missionTitle} rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed} completed={completed} paused={paused} crew={crew} onAnswered={() => onActivityCompleted(item.id)} />;
     case 'lore':
       return <LoreSlot title={missionTitle} navigator={navigationPanel && item.id === `${chapterId}-field-note`} rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed}
         selectedClue={savedLoreChoice} completed={completed} paused={paused}
@@ -260,6 +269,7 @@ function TriviaSlot({
   seed,
   completed,
   paused,
+  crew = false,
   onAnswered,
 }: {
   title?: string;
@@ -269,6 +279,7 @@ function TriviaSlot({
   seed: number;
   completed: boolean;
   paused: boolean;
+  crew?: boolean;
   onAnswered: () => void;
 }) {
   const [q, setQ] = useState<TriviaQuestion | null>(null);
@@ -325,13 +336,6 @@ function TriviaSlot({
       <WhenQuizCompact>{(short, tiny) => <>
       {!short && <ActivityHero kicker={title != null ? 'STORY' : 'GAMES'} title={title ?? 'Shark Trivia'} teacher />}
       <Text style={[styles.question, short && styles.questionShort, tiny && styles.questionTiny]}>{q.question}</Text>
-      {picked != null && <Animated.Text style={[styles.answerFeedback,
-        picked === q.correctIndex ? styles.feedbackCorrect : styles.feedbackWrong, {
-          opacity: answerReveal,
-          transform: [{ translateY: answerReveal.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
-        }]}>{picked === q.correctIndex
-          ? 'Correct! Your crew found the answer.'
-          : `The answer is ${q.choices[q.correctIndex]}. Pick your next clue.`}</Animated.Text>}
       <View style={[styles.choices, short && styles.choicesGrid, tiny && styles.choicesGridTiny]}>
         {q.choices.map((choice, i) => {
           const isPicked = picked === i;
@@ -365,6 +369,12 @@ function TriviaSlot({
           );
         })}
       </View>
+      {/* Under the answers, never above them: nothing shifts under the finger that just tapped. */}
+      {picked != null && <Animated.Text style={[styles.answerFeedback,
+        picked === q.correctIndex ? styles.feedbackCorrect : styles.feedbackWrong, {
+          opacity: answerReveal,
+          transform: [{ translateY: answerReveal.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+        }]}>{clueFeedback(picked === q.correctIndex, q.choices[q.correctIndex], crew)}</Animated.Text>}
       </>}</WhenQuizCompact>
       {revealed && q.fact && (
         <View style={styles.factBox}>
