@@ -198,6 +198,7 @@ test('item 10: a goodbye on leaving, never the next park\'s welcome', () => {
   assert.equal(bye.title, '5 coins won today');
   assert.equal(bye.button.label, 'SHELF');
   assert.equal(bye.button.action, 'story');
+  assert.match(read('src/components/guide/NextCoinCard.tsx'), /const art = state === 'goodbye' \? COIN_FALLBACK :/);
   const hook = read('src/components/guide/useNextCoinGuide.ts');
   // The welcome starts inside the next park with its own coins, never on the way out of the last one.
   assert.match(hook, /const arrivalReading = parkId != null && !!input\.location && parkCoinsKnown && !leaving;/);
