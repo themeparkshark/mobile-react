@@ -1035,7 +1035,13 @@ test('item 15 and grade fixes 3, 5, 6: one gold button on the wrapped-up recap, 
   assert.match(screen, /style=\{styles\.leftLineRideButton\}>\n[^\n]*\n\s+<GameIcon name="ride" size=\{26\} \/>\n\s+<Text style=\{styles\.leftLineRideButtonText\}>I GOT TO THE RIDE<\/Text>/);
   // The ride question ends the wait at the tap: the recap is under the fading dialog, never the wait page.
   assert.match(screen, /onPick=\{index => \{\n\s+if \(index !== 1\) return;/);
-  assert.match(read('src/ui/GameDialog.tsx'), /if \(index !== null\) onPick\?\.\(index\);/);
+  const dialog = read('src/ui/GameDialog.tsx');
+  assert.match(dialog, /if \(index !== null\) onPick\?\.\(index\);/);
+  // ... and the dialog fades only once LinePlay hid it (the recap drawn under it), never a frame of the wait page.
+  assert.match(dialog, /if \(index !== null && holdUntilHidden\?\.includes\(index\) && visible\) \{ held\.current = token; return; \}/);
+  assert.match(dialog, /if \(!visible && held\.current != null\) \{/);
+  assert.match(screen, /holdUntilHidden=\{RODE\}/);
+  assert.match(screen, /holdUntilHidden=\{RODE_OR_LEFT\}/);
   const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
   assert.match(slot, /if \(correct\) return crew \? 'Correct! Your crew found the answer\.' : 'Correct! You found it\.';/);
   // The line after a pick sits under the answers (nothing shifts under the finger).

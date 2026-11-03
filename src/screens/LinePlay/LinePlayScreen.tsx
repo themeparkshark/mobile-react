@@ -130,6 +130,9 @@ const DAY_BACKDROP = ['#0a7dd1', '#07569e', '#073e87'] as const;
 const NIGHT_BACKDROP = ['#3B2A6B', '#2B2350', '#1E1838'] as const;
 /** Returning after this long away gets a quick "welcome back" heads up. */
 const WELCOME_BACK_AFTER_MS = 20_000;
+/** The dialog answers that end the wait at the tap: the dialog fades once the recap is drawn under it. */
+const RODE_OR_LEFT: readonly number[] = [0, 1];
+const RODE: readonly number[] = [1];
 /** The longest the "Saving your wait" card waits for the recap's rewards and GO before the recap opens anyway. */
 const RECAP_SETTLE_MAX_MS = 6000;
 /** The longest the resume countdown waits on the 1 for the arcade or the page it is handing over to. */
@@ -1992,7 +1995,8 @@ export default function LinePlayScreen() {
           { text: 'I got to the ride' },
           { text: 'Keep playing', style: 'cancel' },
         ]}
-        // Rode or left: the wait ends at the tap, so the recap is under the fading dialog (no flash of the wait).
+        // Rode or left: the wait ends at the tap, and the dialog fades only once the recap is drawn under it.
+        holdUntilHidden={RODE_OR_LEFT}
         onPick={index => { if (index === 0 || index === 1) answerWaitEnd(index === 1); }}
         onAnswer={index => { if (index !== 0 && index !== 1) answerWaitEnd(null); }}
       />
@@ -2008,8 +2012,9 @@ export default function LinePlayScreen() {
           { text: 'Still in line', style: 'cancel', variant: 'secondary' },
           { text: 'I got to the ride' },
         ]}
-        // "I got to the ride" ends the wait at the tap: the recap's hero is already under the fading dialog
-        // (never a flash of the wait page while the dialog closes).
+        // "I got to the ride" ends the wait at the tap, and the dialog fades only once the recap's hero is drawn
+        // under it (never a flash of the wait page while the dialog closes).
+        holdUntilHidden={RODE}
         onPick={index => {
           if (index !== 1) return;
           noteRideQuestionAnswered();
