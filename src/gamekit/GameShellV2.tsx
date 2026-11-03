@@ -111,6 +111,9 @@ import { usePowerBudget } from '../power';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
+/** Back from the pocket: how long a held round waits for LinePlay's wake-up news (a boarding kept while asleep). */
+export const BACK_FROM_POCKET_SETTLE_MS = 600;
+
 export type ShellPhase = 'countdown' | 'playing' | 'paused' | 'resuming' | 'results';
 
 /** Result a game hands to the shell when the round ends. */
@@ -1120,6 +1123,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const doResumeRef = useRef(doResume);
     doResumeRef.current = doResume;
     const rideUpLikelyRef = useRef(false);
+    const backTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const askBoardingRef = useRef(false);
     /** The guest tapped I GOT TO THE RIDE: boarding is recorded once the saved run's card closes. */
     const boardingAnsweredRef = useRef(false);
@@ -1130,11 +1134,21 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         else if (state === 'active' && holdRef.current === 'background') {
           // Back from the pocket while ride detection thinks the guest boarded:
           // stay held so the sheet can ask "Did you get to the ride?". Never guess.
-          if (rideUpLikelyRef.current && startedRef.current && askBoardingRef.current) return;
-          doResumeRef.current();
+          // LinePlay learns of a boarding kept while the phone slept in its own wake-up listener, which can run
+          // after this one: decide a moment later, so the held round asks instead of counting down (seen on device).
+          if (backTimer.current) clearTimeout(backTimer.current);
+          backTimer.current = setTimeout(() => {
+            backTimer.current = null;
+            if (holdRef.current !== 'background') return;
+            if (rideUpLikelyRef.current && startedRef.current && askBoardingRef.current) return;
+            doResumeRef.current();
+          }, BACK_FROM_POCKET_SETTLE_MS);
         }
       });
-      return () => subscription.remove();
+      return () => {
+        subscription.remove();
+        if (backTimer.current) { clearTimeout(backTimer.current); backTimer.current = null; }
+      };
     }, [visible]);
 
     // A real queue event (boarding / left the queue) ends the run.
