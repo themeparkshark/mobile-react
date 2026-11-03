@@ -353,3 +353,21 @@ test('QUEUE REALITY: back from the pocket, a boarding LinePlay learns of a momen
   assert.ok(view.find(node => node.type === 'Text' && node.props.children === 'Did you get to the ride?'));
   view.unmount();
 });
+
+test('QUEUE REALITY: boarding news during the 3-2-1 back from the pocket holds the round again and asks', () => {
+  let listener;
+  const movement = { moving: false, onResume() {}, onBoardingAnswer() {}, onRunDone() {} };
+  const { view, calls, movementContext } = shell(false, false, { score: 40, thresholds: { one: 100, two: 300, three: 600 } }, movement);
+  view.native.AppState.addEventListener = (_name, fn) => { listener = fn; return { remove() { listener = undefined; } }; };
+  view.change({ visible: false }); view.change({ visible: true });
+  startPlaying(view);
+  listener('background'); view.render();
+  listener('active'); view.render();
+  runTimersOnce(view); // the settle passes with no news: the 3-2-1 starts
+  assert.ok(view.find(node => node.type === 'Text' && node.props.children === 'Back in!'));
+  movementContext.value = { ...movement, rideUpLikely: true }; view.render();
+  flush(view);
+  assert.equal(calls.resume, 0, 'the round never starts over the ride question');
+  assert.ok(view.find(node => node.type === 'Text' && node.props.children === 'Did you get to the ride?'));
+  view.unmount();
+});

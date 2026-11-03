@@ -1030,8 +1030,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       [onPause, phase, clearCountdown, clearResume, persist, stopCountStage],
     );
 
+    /** The 3-2-1 running now started on the way back from the pocket (a boarding may still be told). */
+    const backFromPocketRef = useRef(false);
     const finishResume = useCallback(() => {
       clearResume();
+      backFromPocketRef.current = false;
       setPhase('playing');
       setPauseReason(undefined);
       setHoldReason(null);
@@ -1141,6 +1144,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             backTimer.current = null;
             if (holdRef.current !== 'background') return;
             if (rideUpLikelyRef.current && startedRef.current && askBoardingRef.current) return;
+            backFromPocketRef.current = true;
             doResumeRef.current();
           }, BACK_FROM_POCKET_SETTLE_MS);
         }
@@ -1184,6 +1188,14 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const askBoarding = rideUpLikely && !!linePlayMovement?.onBoardingAnswer && !rideChallenge;
     rideUpLikelyRef.current = rideUpLikely;
     askBoardingRef.current = askBoarding;
+    // The boarding news came while the 3-2-1 back from the pocket was still counting (a slow wake-up): the round
+    // holds again and asks, it never starts over the ride question. Once play is back on, it keeps playing.
+    useEffect(() => {
+      if (phase === 'resuming' && backFromPocketRef.current && askBoarding && startedRef.current) {
+        backFromPocketRef.current = false;
+        doHold('background', 'Paused while away');
+      }
+    }, [phase, askBoarding, doHold]);
     const answerSaveRun = useCallback(() => {
       boardingAnsweredRef.current = true;
       wrapUp('boarding');
