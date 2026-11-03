@@ -160,6 +160,9 @@ export default function RedeemRedeemableModal({
     ? devFlowEnv : undefined;
   const [flowState, setFlowState] = useState<FlowState>(devFlow ?? 'preview');
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
+  const [winCovered, setWinCovered] = useState(false);
+  // The server is starting the game: the card says so at once, so a slow answer never looks like a dead button.
+  const [starting, setStarting] = useState(false);
   const [selectedGameData, setSelectedGameData] = useState<typeof CHALLENGE_GAMES[0] | null>(null);
   const selectedIndexRef = useRef<number | null>(null);
   const collectingRef = useRef(false);
@@ -307,6 +310,8 @@ export default function RedeemRedeemableModal({
       setFlowState(devFlow ?? (isTaskType ? 'recovering' : 'preview'));
       setSelectedGame(null);
       setSelectedGameData(null);
+      setWinCovered(false);
+      setStarting(false);
       selectedIndexRef.current = null;
       setCoinsEarned(0);
       setXpEarned(0);
@@ -872,12 +877,13 @@ export default function RedeemRedeemableModal({
 
   const ticketTarget = flowState === 'lost' && firstCoinTicketReturned ? getTarget?.('tickets') ?? null : null;
   const freeBadge = freeStep?.kind === 'free_try' ? 'free' : freeStep?.kind === 'extra_try' ? 'extra' : null;
-  const buttonLabel = !stepReady ? 'One moment' : claiming ? 'Claiming...' : needTicket ? NEED_TICKET_BUTTON : challengeButtonLabel(freeStep, ticketCost);
+  const buttonLabel = !stepReady || starting ? 'One moment' : claiming ? 'Claiming...' : needTicket ? NEED_TICKET_BUTTON : challengeButtonLabel(freeStep, ticketCost);
   const pressChallenge = () => {
     if (previewOnly || !stepReady || claiming) return;
     if (freeStep?.kind === 'claim') { void handleClaimTickets(); return; }
     if (needTicket) { safeClose(); return; }
-    void handleStartWheel();
+    setStarting(true);
+    void handleStartWheel().finally(() => setStarting(false));
   };
   const coinUri = isTaskType ? (redeemable.model as TaskType).coin_url : undefined;
 
@@ -1025,7 +1031,7 @@ export default function RedeemRedeemableModal({
                         {freeStep?.kind === 'claim' && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
                         <YellowButton
                           text={buttonLabel}
-                          disabled={!stepReady || claiming || (playsNow && !needTicket && freeStep?.kind !== 'claim' && !location)}
+                          disabled={!stepReady || claiming || starting || (playsNow && !needTicket && freeStep?.kind !== 'claim' && !location)}
                           onPress={pressChallenge}
                         />
                         {needTicket && <View style={styles.ticketHelpCard}>
@@ -1161,7 +1167,8 @@ export default function RedeemRedeemableModal({
             guardRetry={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry} />}
 
           {/* MINIGAME STATE - rendered inside the same modal */}
-          {selectedGame && flowState === 'minigame' && (
+          {/* The game stays under the win card until the card covers it, so a win never shows a dim map. */}
+          {selectedGame && (flowState === 'minigame' || (flowState === 'postwin' && !winCovered)) && (
             <View style={styles.minigameContainer}>
               <RideChallengeContext.Provider value={true}>
               <MiniGameSelector
@@ -1184,6 +1191,7 @@ export default function RedeemRedeemableModal({
       <PostWinRewardsModal
         embedded
         hiddenRef={winHidden}
+        onCovered={() => setWinCovered(true)}
         visible={open === true && flowState === 'postwin'}
         rideName={taskName}
         limited={redeemable?.type === 'task' ? (redeemable.model as TaskType)?.limited ?? null : null}

@@ -117,3 +117,10 @@ test('a press on a sheet on its way out, right over PLAY!, is PLAY!\'s press: he
   off();
   modalLayers.remove(id);
 });
+
+test('a ride win never shows a dim map: the game stays under the win card until the card covers it, in one sheet', () => {
+  const flow = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(flow, /selectedGame && \(flowState === 'minigame' \|\| \(flowState === 'postwin' && !winCovered\)\)/);
+  assert.match(flow, /<PostWinRewardsModal\n\s+embedded/);
+  assert.match(flow, /const buttonLabel = !stepReady \|\| starting \? 'One moment'/, 'a slow server never looks like a dead button');
+});

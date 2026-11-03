@@ -62,6 +62,9 @@ const FLY_ART = {
   stamp: require('../../assets/images/stamps/first-ride-coin-v1.png'),
 } as const;
 
+/** How long the game stays under a win card fading in. */
+const WIN_COVER_MS = 500;
+
 interface Props {
   visible: boolean;
   rideName: string;
@@ -109,6 +112,8 @@ interface Props {
    */
   embedded?: boolean;
   hiddenRef?: MutableRefObject<(() => void) | null>;
+  /** Embedded: this card now covers the screen, so the game under it can go (never a dim map between them). */
+  onCovered?: () => void;
   /**
    * Where the rewards fly when the card closes: 'now' (the map is under it), 'after_team_step' (the
    * first coin's team step took over: they fly once it has closed back onto the map) or 'never' (the
@@ -200,6 +205,7 @@ export default function PostWinRewardsModal({
   onHidden,
   embedded = false,
   hiddenRef,
+  onCovered,
   flyWhen,
   onClose,
   attemptId = null,
@@ -367,6 +373,9 @@ export default function PostWinRewardsModal({
     if (!embedded || !visible) return;
     setBodyUp(true);
     bodyFade.value = withTiming(1, { duration: reducedMotion ? 120 : 250 });
+    // The catch's own backdrop has come up by then (it starts with the card, in 180 ms).
+    const timer = setTimeout(() => onCovered?.(), reducedMotion ? 160 : WIN_COVER_MS);
+    return () => clearTimeout(timer);
   }, [embedded, visible]); // eslint-disable-line react-hooks/exhaustive-deps
   const bodyStyle = useAnimatedStyle(() => ({ flex: 1, opacity: bodyFade.value }));
 
