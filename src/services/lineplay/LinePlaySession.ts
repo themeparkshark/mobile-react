@@ -229,6 +229,11 @@ export interface SessionSnapshot {
   readonly puzzleRetrySymbols: readonly number[] | null;
   readonly puzzleError: string | null;
   readonly startedAt: number | null;
+  /**
+   * This wait's own id (its start request id): steady from the first moment, through the server's answer
+   * (which moves startedAt to the server's clock) and a relaunch. Null before a wait starts.
+   */
+  readonly waitId: string | null;
   readonly endedAt: number | null;
   /** Posted wait used to size the session (minutes). */
   readonly plannedWaitMinutes: number;
@@ -817,6 +822,7 @@ export class LinePlaySession {
       puzzleRetrySymbols: this.puzzleRequest?.symbols ?? null,
       puzzleError: this.puzzleError,
       startedAt: this.startedAt,
+      waitId: this.startedAt != null ? this.startRequestId : null,
       endedAt: this.endedAt,
       plannedWaitMinutes: this.plannedWaitMinutes,
       waitSource: this.waitSource,

@@ -25,8 +25,16 @@ const DOORS: ReadonlyArray<{ kind: GroupKind; icon: GameIconName; title: string;
   { kind: 'friends', icon: 'crown', title: 'Friends', body: 'Up to 6, pass the phone' },
 ];
 
-/** The opener's line. A guest's wait earns no Parts yet, so it never says the wait is counting. */
+/**
+ * The opener's line. It says the wait is counting only once the location answered (the server verified the
+ * guest is at the ride); before that, and for a guest whose wait earns no Parts, it never claims it.
+ */
 export const WHOS_IN_LINE_BODY = { player: 'Your wait is already counting. Pick your crew.', guest: 'Play while you wait. Pick your crew.' } as const;
+
+/** Which opener line to show. */
+export function whosInLineBody(guest: boolean, counting: boolean): string {
+  return !guest && counting ? WHOS_IN_LINE_BODY.player : WHOS_IN_LINE_BODY.guest;
+}
 
 const KIND_TITLE: Record<GroupKind, string> = {
   solo: 'Just me', couple: 'The two of us', family: 'Family crew', friends: 'Friend crew',
@@ -39,8 +47,10 @@ export function crewSummary(group: LineGroup): string {
   return names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} +${names.length - 3}`;
 }
 
-export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing, onChoose, onClose }: {
+export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing, counting = false, onChoose, onClose }: {
   readonly visible: boolean;
+  /** The location answered and the wait is verified: only then may the opener say it is counting. */
+  readonly counting?: boolean;
   readonly ownerName?: string | null;
   /** Today's earlier crew, offered as one tap. */
   readonly lastCrew?: LineGroup | null;
@@ -102,7 +112,7 @@ export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing,
                 <View style={styles.headerCopy}>
                   <Text style={styles.kicker}>LINEPLAY</Text>
                   <Text style={styles.title} accessibilityRole="header">Who&apos;s in line?</Text>
-                  <Text style={styles.body}>{guest ? WHOS_IN_LINE_BODY.guest : WHOS_IN_LINE_BODY.player}</Text>
+                  <Text style={styles.body}>{whosInLineBody(guest, counting)}</Text>
                 </View>
                 <Image source={CREW_ART} style={styles.crewArt} contentFit="contain"
                   accessibilityLabel="A crew of sharks waiting together" />

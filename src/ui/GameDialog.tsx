@@ -113,6 +113,11 @@ export type GameDialogProps = GameDialogOptions & {
   readonly visible: boolean;
   /** Called after the close animation with the chosen button index, or null. */
   readonly onAnswer?: (index: number | null) => void;
+  /**
+   * Called at the tap, before the close animation, with the chosen button index: the screen under the dialog
+   * can already change (LinePlay shows the ride-up recap under the fading dialog, never a flash of the wait).
+   */
+  readonly onPick?: (index: number) => void;
   /** Extra content between the message and the buttons. */
   readonly children?: ReactNode;
   /** Run the chosen button's onPress after closing. Default true; the host sets false because the store runs it. */
@@ -132,6 +137,7 @@ export function GameDialog({
   dismissible,
   haptic: hapticKind = 'none',
   onAnswer,
+  onPick,
   children,
   runButtonHandlers = true,
   avoidKeyboard = false,
@@ -215,6 +221,7 @@ export function GameDialog({
   const close = (index: number | null) => {
     const token = gate.close(index);
     if (token === null) return;
+    if (index !== null) onPick?.(index);
     scrim.value = withTiming(0, { duration: MOTION.dialogOutMs });
     pop.value = withTiming(0, { duration: MOTION.dialogOutMs, easing: Easing.in(Easing.quad) }, done => {
       if (done) runOnJS(fadeDone)(token);

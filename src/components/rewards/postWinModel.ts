@@ -7,6 +7,7 @@
 import type { GameIconName } from '../../ui/iconNames';
 import type { CollectionMilestones } from '../../api/endpoints/me/ride-coins/milestones';
 import type { RideCoinLevelType } from '../../models/ride-coin-level-type';
+import { taskHasLine } from '../../services/lineplay/rideLines';
 
 export interface RewardChipModel { readonly icon: GameIconName; readonly amount: number; readonly label: string }
 
@@ -213,13 +214,17 @@ export function weekLine(standings: unknown): string | null {
 
 /**
  * True when this win was today's Adventure coin and its line story is next (Adventure step 2):
- * the ticket is for this ride and park, its phase moved on to play, and no line story is stamped yet.
+ * the ticket is for this ride and park, its phase moved on to play, no line story is stamped yet, and
+ * the ride really has a line now (a show like Great Moments with Mr. Lincoln, or a closed ride, has none:
+ * the big button is NEXT COIN there). `hasLine` defaults to what ride detection knows (rideLines).
  */
 export function adventureLineStoryNext(ticket: {
   readonly park_id: number; readonly phase: string; readonly play: unknown; readonly ride: { readonly task_id: number };
-} | null | undefined, wonTaskId: number | null | undefined, parkId: number | null | undefined): boolean {
+} | null | undefined, wonTaskId: number | null | undefined, parkId: number | null | undefined,
+  hasLine: (taskId: number) => boolean = taskHasLine): boolean {
   if (!ticket || wonTaskId == null || parkId == null) return false;
-  return ticket.ride?.task_id === wonTaskId && ticket.park_id === parkId && ticket.phase === 'play' && !ticket.play;
+  return ticket.ride?.task_id === wonTaskId && ticket.park_id === parkId && ticket.phase === 'play' && !ticket.play &&
+    hasLine(wonTaskId);
 }
 
 /** Every card that leads back to the map says it the same way. */

@@ -197,7 +197,9 @@ test('home words at home: Park Trivia says Home Arcade, and a guest line never s
   assert.match(read('src/components/HomeArcade.tsx'), /taskName=\{HOME_ARCADE_TASK_NAME\}/);
   const sheet = read('src/screens/LinePlay/group/WhosInLineSheet.tsx');
   assert.match(sheet, /guest: 'Play while you wait\. Pick your crew\.'/);
-  assert.match(sheet, /guest \? WHOS_IN_LINE_BODY\.guest : WHOS_IN_LINE_BODY\.player/);
+  // The counting line only for a signed-in player whose location answered; a guest never gets it.
+  assert.match(sheet, /return !guest && counting \? WHOS_IN_LINE_BODY\.player : WHOS_IN_LINE_BODY\.guest;/);
+  assert.match(sheet, /\{whosInLineBody\(guest, counting\)\}/);
 });
 
 test('one Finn and a clean underwater scene on the location cards', () => {

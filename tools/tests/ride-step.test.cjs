@@ -317,7 +317,7 @@ test('the screens wire the one ride question', () => {
   assert.match(screen, /title="Did you get to the ride\?"/);
   assert.match(screen, /\{ text: 'I got to the ride' \}/);
   assert.match(screen, /if \(boardingAsked\.current === waitKey\) return;/);
-  assert.match(screen, /noteRidePrompt\(\);\n\s+session\.suggestBoarded\(Number\.isFinite\(detection\.exitedAt\) \? detection\.exitedAt : null\);/);
+  assert.match(screen, /noteRidePrompt\(\);\n[^\n]*\n\s+const boardedAt = detection\.boardedAt \?\? detection\.exitedAt;\n\s+session\.suggestBoarded\(/);
   // "Line done?" with its seconds countdown is gone: leaving ends quietly, the card keeps RESUME, the recap offers Undo.
   assert.doesNotMatch(screen, /title="Line done\?"/);
   assert.doesNotMatch(screen, /This wait ends in/);
@@ -376,7 +376,7 @@ test('Wait Times plans the next coin through the guide', () => {
 // all on one AsyncStorage store. A relaunch builds them again from the same store with empty memory.
 const SPACE = { id: 588, name: 'Space Mountain', type: 'coaster', park_id: 8, lat: 33.8113, lng: -117.9174, radius: 60, ride_duration_minutes: null, min_dwell_minutes: null };
 
-function launch(store, { appState = 'active', player = '48', route = 'Explore', checkpoints = new Map() } = {}) {
+function launch(store, { appState = 'active', player = '48', route = 'Explore', checkpoints = new Map(), gate = { open: true, asks: [] } } = {}) {
   const storage = {
     getItem: async key => store.get(key) ?? null,
     setItem: async (key, value) => { store.set(key, value); },
@@ -388,7 +388,9 @@ function launch(store, { appState = 'active', player = '48', route = 'Explore', 
     '@react-native-async-storage/async-storage': storage,
     '../../gamekit/core/playerStorage': playerStorage,
   });
+  const rideLines = loadTs('src/services/lineplay/rideLines.ts');
   const svcModule = loadTs('src/services/RideDetectionService.ts', {
+    './lineplay/rideLines': rideLines,
     '@react-native-async-storage/async-storage': storage,
     'expo-location': { Accuracy: { High: 6 }, hasStartedLocationUpdatesAsync: async () => false },
     'expo-task-manager': { defineTask() {}, isTaskDefined: () => false },
@@ -418,18 +420,24 @@ function launch(store, { appState = 'active', player = '48', route = 'Explore', 
     '../services/RideDetectionEmitter': emitter,
     '../services/lineplay/rideQuestionLedger': ledger,
     '../services/lineplay/ridePromptGate': gateModule,
+    '../services/lineplay/rideLines': rideLines,
     '../context/LocationProvider': { LocationContext: {} },
     './useLivePoll': { __esModule: true, default: () => undefined },
     '../services/lineplay/checkpoint': { readCheckpoint: async (playerId, rideId) => checkpoints.get(`${playerId}_${rideId}`) ?? null },
+    // The map's attention rules (guide-map's gate): open unless a test closes it.
+    '../screens/ExploreScreen/mapPresentationQueue': { attentionGate: { request: kind => { gate.asks.push(kind); return gate.open; } } },
   });
   const s = svcModule.default, heard = [];
   s.onForegroundDetection = detection => {
     heard.push(detection);
     // LinePlay on screen hears it and puts its one question (LinePlayScreen marks the wait asked).
-    if (svcModule.linePlayRideNow() === detection.rideId) ledger.markLinePlayBoardingAsked(detection.rideId, detection.exitedAt);
+    // With its screen closed (a footer tab peek) nobody is there to ask: the ledger keeps the boarding.
+    if (svcModule.linePlayRideNow() === detection.rideId && s.linePlayOpenHere() === detection.rideId) {
+      ledger.markLinePlayBoardingAsked(detection.rideId, detection.exitedAt);
+    }
   };
   s.setRides([JUNGLE, PIANO, SPACE]);
-  return { s, svcModule, gate: gateModule, ledger, hook, navigations, heard };
+  return { s, svcModule, gate: gateModule, ledger, hook, navigations, heard, attention: gate, rideLines };
 }
 
 const pendingIn = store => JSON.parse(store.get('pending_ride_detections') ?? '[]');
@@ -618,7 +626,10 @@ test('the screens give a wrapped-up wait its one "I got to the ride" and keep th
   // Under the ride question (and while it closes) the card never says "Checking you're in line".
   assert.match(read('src/screens/LinePlay/components/WaitCard.tsx'), /countdown\.needsCheck && !rideQuestionUp \? 'Checking you’re in line…'/);
   const service = read('src/services/RideDetectionService.ts');
-  assert.match(service, /if \(visitInLinePlayWait\(ride\.id, zone\.enteredAt, now, now\)\) \{\n\s+noteLinePlayBoardingSeen\(ride\.id, now, now\);/);
+  // The LinePlay wait is checked first (the wait is the dwell), and the boarding is kept on it with its estimate.
+  const closeVisit = service.slice(service.indexOf('private closeVisit('));
+  assert.ok(closeVisit.indexOf('if (visitInLinePlayWait(ride.id, zone.enteredAt, now, now))') < closeVisit.indexOf('if (dwellMs <= MAX_WALKTHROUGH_MS) return;'));
+  assert.match(service, /noteLinePlayBoardingSeen\(ride\.id, boardedAt, now\);/);
 });
 
 test('within the 30 minutes after the ride step, a relaunch still holds the ride and the 20 minute clock', async () => {
@@ -737,7 +748,296 @@ test('the batch confirm: its arrow says Go back, and "Back to Ride Tracker" real
 
 test('the batch confirm never lands on top of LinePlay (its wait, its ride question or its recap)', () => {
   const hook = read('src/hooks/useRideDetection.ts');
-  assert.match(hook, /if \(pending\.length === 0\) return false;\n[^\n]*\n[^\n]*\n\s+if \(navigationRef\.getCurrentRoute\(\)\?\.name === 'LinePlay'\) return false;/);
+  assert.match(hook, /if \(pending\.length === 0\) \{ questionWaiting = false; return false; \}\n[^\n]*\n[^\n]*\n\s+if \(navigationRef\.getCurrentRoute\(\)\?\.name === 'LinePlay'\) return false;/);
   // The reopen for a pocketed ride comes first, so it is never blocked by this.
   assert.ok(hook.indexOf('reopenLinePlayForRideQuestion()) return true') < hook.indexOf("name === 'LinePlay') return false;\n\n    // One ride question"));
+});
+
+// -- Fix round after the first gate (Nov 2026): items 12 to 15 ------------------------------------------
+// Disneyland rows from the scratch catalog (Nov 3): the Tiki Room and Mr. Lincoln are typed 'attraction'
+// though they are shows; "it's a small world" was closed for repairs on the walk.
+const TIKI = { id: 578, name: "Walt Disney's Enchanted Tiki Room", type: 'attraction', park_id: 8, lat: 33.8118290, lng: -117.9195690, radius: 60, ride_duration_minutes: null, min_dwell_minutes: null, task_id: 77 };
+const SMALL_WORLD = { id: 560, name: '"it\'s a small world"', type: 'attraction', park_id: 8, lat: 33.8144000, lng: -117.9177820, radius: 60, ride_duration_minutes: null, min_dwell_minutes: null, task_id: 65 };
+const INDY = { id: 580, name: 'Indiana Jones Adventure', type: 'attraction', park_id: 8, lat: 33.8113055, lng: -117.9203269, radius: 60, ride_duration_minutes: null, min_dwell_minutes: null, task_id: 147 };
+const JUNGLE_TASK = { ...JUNGLE, task_id: 66 };
+/** Saturday Oct 31, 2026 at 2:00 PM in Anaheim (the gate walk's day). */
+const PARK_DAY_2PM = Date.parse('2026-10-31T21:00:00Z');
+
+function staleWebSlingers(now) {
+  const entered = new Date(now - 24 * 3600_000); entered.setHours(12, 34, 0, 0);
+  return { id: 'det_ws', rideId: 712, rideName: 'WEB SLINGERS: A Spider-Man Adventure', rideType: 'attraction', parkId: 13,
+    enteredAt: entered.getTime(), exitedAt: entered.getTime() + 416 * 60_000, dwellTimeMs: 416 * 60_000, confidence: 'medium',
+    isReRide: false, detectedAt: entered.getTime() + 416 * 60_000, playerId: '48' };
+}
+const detectionAt = (ride, enteredAt, exitedAt, id = `det_${ride.id}`) => ({ id, rideId: ride.id, rideName: ride.name,
+  rideType: ride.type, parkId: ride.park_id, enteredAt, exitedAt, dwellTimeMs: exitedAt - enteredAt, confidence: 'medium',
+  isReRide: false, detectedAt: exitedAt, playerId: '48' });
+
+test('item 12: a launch at a park with a stale detection opens nothing in the first 30 s, and never a ride from another day or park', async () => {
+  const store = new Map();
+  await withClock(PARK_DAY_2PM, async clock => {
+    const gate = { open: false, asks: [] };
+    const app = launch(store, { gate });
+    app.s.setRides([JUNGLE_TASK, TIKI, INDY]);
+    await app.ledger.ensureRideQuestionLedger();
+    // Yesterday's 416 minute "ride" at another park, a broken one (it ends before it starts), and a real Indiana Jones today.
+    const broken = { ...detectionAt(INDY, clock.now - 30 * 60_000, clock.now - 40 * 60_000, 'det_broken'), dwellTimeMs: -10 * 60_000 };
+    const indy = detectionAt(INDY, clock.now - 40 * 60_000, clock.now - 10 * 60_000);
+    store.set('pending_ride_detections', JSON.stringify([staleWebSlingers(clock.now), broken, indy]));
+    // The first 30 s at the park (the map's gate says no): nothing opens, the real ride waits.
+    assert.equal(await app.hook.checkAndShowPendingRides(), false);
+    assert.equal(app.navigations.length, 0, 'nothing opens by itself in the first 30 s');
+    assert.deepEqual(plain(app.attention.asks), ['ride_question'], 'the ride question asked the map\'s attention rules');
+    assert.deepEqual(pendingIn(store).map(d => d.id), ['det_580'], 'the stale and broken ones are gone for good');
+    // A calm moment later: one batch with the real ride only, nothing pre-checked (the screen's own rule).
+    gate.open = true;
+    clock.now += 30_000;
+    assert.equal(await app.hook.checkAndShowPendingRides(), true);
+    assert.deepEqual(plain(app.navigations.map(n => [n.name, n.params.detections.map(d => d.rideName)])),
+      [['RideBatchConfirm', ['Indiana Jones Adventure']]]);
+  });
+  const svc = loadTs('src/services/RideDetectionService.ts', {
+    '@react-native-async-storage/async-storage': { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} },
+    'expo-location': { Accuracy: { High: 6 } }, 'expo-task-manager': { defineTask() {} },
+    'react-native': { AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) } },
+  });
+  const now = PARK_DAY_2PM;
+  assert.equal(svc.detectionStillAskable(staleWebSlingers(now), now, null), false, 'yesterday, 416 minutes');
+  assert.equal(svc.detectionStillAskable(detectionAt(INDY, now - 30 * 60_000, now - 5 * 60_000), now, 13), false, 'another park waits');
+  assert.equal(svc.detectionStillAskable(detectionAt(INDY, now - 30 * 60_000, now - 5 * 60_000), now, 8), true);
+  assert.equal(svc.detectionStillAskable(detectionAt(INDY, now - 4 * 3600_000, now - 5 * 60_000), now, 8), false, 'longer than any line and ride');
+  assert.equal(svc.detectionStillAskable(detectionAt(INDY, now - 9.5 * 3600_000, now - 9 * 3600_000), now, 8), false, 'older than 8 hours');
+});
+
+test('item 12: the batch never lists a ride closed for repairs or a stay that was only its coin game', async () => {
+  const store = new Map();
+  await withClock(PARK_DAY_2PM, async clock => {
+    const app = launch(store);
+    app.s.setRides([JUNGLE_TASK, TIKI, INDY, SMALL_WORLD]);
+    app.s.setLiveRows(8, [{ rideId: SMALL_WORLD.id, status: 'REFURBISHMENT', wait: null }]);
+    await app.ledger.ensureRideQuestionLedger();
+    // Kept by an older build: the closed Small World, and the Tiki Room where the guest played its coin game.
+    app.ledger.noteCoinGamePlayed(TIKI.task_id, clock.now - 17 * 60_000);
+    store.set('pending_ride_detections', JSON.stringify([
+      detectionAt(SMALL_WORLD, clock.now - 14 * 60_000, clock.now - 10 * 60_000),
+      detectionAt(TIKI, clock.now - 34 * 60_000, clock.now - 15 * 60_000)]));
+    assert.equal(await app.hook.checkAndShowPendingRides(), false);
+    assert.equal(app.navigations.length, 0);
+    assert.equal(pendingIn(store).length, 0, 'neither is ever a ride question');
+  });
+  // The screen: nothing is pre-checked, and the button asks for a pick.
+  const batch = read('src/screens/RideTracker/RideBatchConfirmScreen.tsx');
+  assert.match(batch, /detections\.map\(d => \(\{ \.\.\.d, selected: false \}\)\)/);
+  assert.match(batch, /selectedRides\.length === 0 \? 'Tap the rides you rode'/);
+});
+
+test('item 12: detection never makes a ride question of a closed ride, a show-like attraction or a coin game visit', async () => {
+  const store = new Map();
+  await withClock(PARK_DAY_2PM, async clock => {
+    const app = launch(store);
+    app.s.setRides([JUNGLE_TASK, TIKI, SMALL_WORLD]);
+    await app.ledger.ensureRideQuestionLedger();
+    // The live feed: Jungle Cruise posts 25 min; the Tiki Room is open with no posted wait (a show); Small World is closed.
+    app.s.setLiveRows(8, [{ rideId: JUNGLE.id, status: 'OPERATING', wait: 25 },
+      { rideId: TIKI.id, status: 'OPERATING', wait: null }, { rideId: SMALL_WORLD.id, status: 'REFURBISHMENT', wait: null }]);
+    const stay = async (ride, minutes) => {
+      for (let i = 0; i < minutes * 2; i++) { app.s.processLocation(ride.lat, ride.lng); clock.now += 30_000; }
+      app.s.processLocation(33.8095, -117.9189); // Town Square, far from all three
+      clock.now += 5 * 60_000;
+      await app.s.writeQueue;
+    };
+    await stay(SMALL_WORLD, 10);
+    await stay(TIKI, 12);
+    // A coin game at Jungle Cruise, then two minutes there: a coin game, not a ride.
+    for (let i = 0; i < 6; i++) { app.s.processLocation(JUNGLE.lat, JUNGLE.lng); clock.now += 30_000; }
+    app.ledger.noteCoinGamePlayed(JUNGLE_TASK.task_id, clock.now);
+    await stay(JUNGLE, 2);
+    assert.equal(app.heard.length + pendingIn(store).length, 0, 'zero ride questions');
+    // A real wait after a coin game still counts from the end of the game.
+    for (let i = 0; i < 4; i++) { app.s.processLocation(JUNGLE.lat, JUNGLE.lng); clock.now += 30_000; }
+    app.ledger.noteCoinGamePlayed(JUNGLE_TASK.task_id, clock.now);
+    await stay(JUNGLE, 20);
+    const asked = [...app.heard, ...pendingIn(store)];
+    assert.equal(new Set(asked.map(d => d.id)).size, 1);
+    assert.ok(Math.abs(asked[0].dwellTimeMs - 20 * 60_000) <= 60_000, `the ride's clock starts after the game (${asked[0].dwellTimeMs})`);
+  });
+});
+
+test('grade fix 1: no in-line offer at the Piano Player or the Tiki Room show, and a 30 min parade stand by the Tiki Room asks nothing', async () => {
+  const store = new Map();
+  await withClock(PARK_DAY_2PM, async clock => {
+    const app = launch(store);
+    app.s.setRides([PIANO, TIKI, JUNGLE_TASK]);
+    await app.ledger.ensureRideQuestionLedger();
+    // No feed yet (state D): the Piano Player is a show and clearly nearer than the Tiki Room's point (55 m away).
+    for (let i = 0; i < 36; i++) { app.s.processLocation(PIANO.lat, PIANO.lng); clock.now += 5_000; }
+    assert.equal(app.s.currentDwell(90_000, clock.now), null, 'listening to the piano is not a line');
+    // With the feed: the Tiki Room is open and has never posted a wait, so it has no line at all.
+    app.s.setLiveRows(8, [{ rideId: TIKI.id, status: 'OPERATING', wait: null }, { rideId: JUNGLE.id, status: 'OPERATING', wait: 25 }]);
+    const stand = [33.81183, -117.91922]; // the hub's west side, 32 m from the Tiki Room's point
+    for (let i = 0; i < 60; i++) {
+      app.s.processLocation(stand[0] + (i % 2) * 0.00001, stand[1]);
+      clock.now += 30_000;
+      if (i > 5) assert.equal(app.s.currentDwell(90_000, clock.now), null, 'no in-line offer at a show');
+    }
+    for (const [lat, lng] of path2([stand, [33.8135, -117.9180]])) { app.s.processLocation(lat, lng); clock.now += 5_000; }
+    await app.s.writeQueue;
+    assert.equal(app.heard.length + pendingIn(store).length, 0, 'no ride question after the parade');
+    // A real line still gets the offer.
+    for (let i = 0; i < 8; i++) { app.s.processLocation(JUNGLE.lat, JUNGLE.lng); clock.now += 30_000; }
+    assert.equal(app.s.currentDwell(90_000, clock.now)?.rideId, JUNGLE.id);
+  });
+  // The pure rule.
+  const lines = loadTs('src/services/lineplay/rideLines.ts');
+  assert.equal(lines.lineStateFor('show', null, false), 'no_line');
+  assert.equal(lines.lineStateFor('attraction', null, false), 'line', 'no feed: the catalog decides');
+  assert.equal(lines.lineStateFor('attraction', { rideId: 1, status: 'OPERATING', wait: null }, false), 'no_line');
+  assert.equal(lines.lineStateFor('attraction', { rideId: 1, status: 'OPERATING', wait: null }, true), 'line', 'a ride whose wait blinked out');
+  assert.equal(lines.lineStateFor('attraction', { rideId: 1, status: 'REFURBISHMENT', wait: null }, true), 'closed');
+  assert.equal(lines.lineStateFor('attraction', { rideId: 1, status: 'DOWN', wait: null }, true), 'line');
+});
+
+test('grade fix 2: a pocketed ride\'s timed wait ends at boarding: 25 min in line, 12 min of no fix on the ride, an exit walk', async () => {
+  const store = new Map();
+  await withClock(PARK_DAY_2PM, async clock => {
+    const app = launch(store, { appState: 'background' });
+    app.s.setRides([JUNGLE_TASK]);
+    await app.ledger.ensureRideQuestionLedger();
+    const startedAt = clock.now;
+    app.s.setLinePlayRide(JUNGLE.id, clock.now, startedAt);
+    for (let i = 0; i <= 25; i++) { app.s.processLocation(33.81140 + (i % 2) * 0.00004, -117.92005); if (i < 25) clock.now += 60_000; }
+    clock.now += 12 * 60_000; // the boat: GPS goes quiet
+    // The exit walk, still inside LinePlay's widened zone, then out.
+    for (const [lat, lng] of path2([[33.81150, -117.91990], [33.8130, -117.9225]])) { app.s.processLocation(lat, lng); clock.now += 5_000; }
+    await app.s.writeQueue;
+    const kept = app.ledger.unaskedLinePlayBoardings(clock.now);
+    assert.equal(kept.length, 1);
+    const waited = loadTs('src/services/lineplay/rideStep.ts').timedWaitMinutes(startedAt, kept[0].boardingSeenAt);
+    assert.equal(waited, 25, `the wait excludes the ride and the walk out (${waited})`);
+  });
+  const { m } = service();
+  assert.equal(m.boardingEstimate({ lastInZoneAt: 1000 + 37 * 60_000, exitAt: 1000 + 38 * 60_000, gapStart: 1000 + 25 * 60_000,
+    gapEnd: 1000 + 37 * 60_000, notBefore: 1000 }), 1000 + 25 * 60_000);
+  assert.equal(m.boardingEstimate({ lastInZoneAt: 1000 + 30 * 60_000, exitAt: 1000 + 30.2 * 60_000, gapStart: null, gapEnd: null,
+    rideDurationMinutes: 6, notBefore: 1000 }), 1000 + 24 * 60_000, 'the catalog\'s ride time when there is no quiet stretch');
+  assert.equal(m.boardingEstimate({ lastInZoneAt: 1000, exitAt: 2000, gapStart: null, gapEnd: null, rideDurationMinutes: 6, notBefore: 1500 }),
+    1500, 'never before the wait started');
+});
+
+test('grade fix 7: a jitter exit two minutes before boarding never drops the boarding of a LinePlay wait', async () => {
+  const store = new Map();
+  await withClock(PARK_DAY_2PM, async clock => {
+    const app = launch(store, { appState: 'background' });
+    app.s.setRides([JUNGLE_TASK]);
+    await app.ledger.ensureRideQuestionLedger();
+    const startedAt = clock.now;
+    app.s.setLinePlayRide(JUNGLE.id, clock.now, startedAt);
+    for (let i = 0; i < 36; i++) { app.s.processLocation(33.81140, -117.92005); clock.now += 30_000; }
+    // One fix far outside (an indoor queue's jitter), then back in line for two minutes, then the ride.
+    app.s.processLocation(33.8140, -117.9230); clock.now += 30_000;
+    for (let i = 0; i < 4; i++) { app.s.processLocation(33.81140, -117.92005); clock.now += 30_000; }
+    const boardAt = clock.now;
+    for (const [lat, lng] of path2([[33.81140, -117.92005], [33.8135, -117.9235]])) { app.s.processLocation(lat, lng); clock.now += 5_000; }
+    await app.s.writeQueue;
+    const kept = app.ledger.unaskedLinePlayBoardings(clock.now);
+    assert.equal(kept.length, 1);
+    assert.ok(kept[0].boardingSeenAt >= boardAt - 30_000, 'the real boarding is kept, not the jitter');
+  });
+});
+
+test('item 14: a footer tab peek keeps the wait running, leads back from the map, and a boarding then reopens LinePlay at a calm moment', async () => {
+  const store = new Map();
+  await withClock(PARK_DAY_2PM, async clock => {
+    const gate = { open: false, asks: [] };
+    const app = launch(store, { gate });
+    app.s.setRides([JUNGLE_TASK, TIKI]);
+    await app.ledger.ensureRideQuestionLedger();
+    const startedAt = clock.now;
+    app.s.setLinePlayRide(JUNGLE.id, clock.now, startedAt);
+    for (let i = 0; i < 10; i++) { app.s.processLocation(33.81140, -117.92005); clock.now += 30_000; }
+    // The screen closes with the wait running (the Map tab): the wait goes on.
+    app.s.stepAwayFromLinePlay(JUNGLE.id);
+    assert.equal(app.s.linePlayOpenHere(), null);
+    assert.equal(app.svcModule.linePlayRideNow(), JUNGLE.id, 'still LinePlay\'s ride');
+    assert.equal(app.svcModule.linePlayAway(), JUNGLE.id);
+    assert.ok(app.ledger.visitInLinePlayWait(JUNGLE.id, startedAt, clock.now, clock.now), 'the wait is still open');
+    const dwell = app.s.currentDwell(90_000, clock.now);
+    assert.equal(dwell?.rideId, JUNGLE.id, 'the map\'s in-line card leads back to the wait');
+    assert.ok(dwell.dwellMs >= 5 * 60_000 - 1);
+    // Boarding while away: kept on the wait, then LinePlay reopens only when the map's rules allow.
+    for (let i = 0; i < 20; i++) { app.s.processLocation(33.81140, -117.92005); clock.now += 30_000; }
+    for (const [lat, lng] of path2([[33.81140, -117.92005], [33.8135, -117.9235]])) { app.s.processLocation(lat, lng); clock.now += 5_000; }
+    await app.s.writeQueue;
+    assert.equal(app.ledger.unaskedLinePlayBoardings(clock.now).length, 1);
+    assert.equal(await app.hook.checkAndShowPendingRides(), false, 'walking away from the ride: not now');
+    assert.equal(app.navigations.length, 0);
+    gate.open = true;
+    assert.equal(await app.hook.checkAndShowPendingRides(), true);
+    assert.deepEqual(plain(app.navigations), [{ name: 'LinePlay', params: { ride: { rideId: JUNGLE.id, rideName: JUNGLE.name, parkId: 8 } } }]);
+    // A new wait elsewhere ends a wait the guest stepped away from.
+    app.s.setLinePlayRide(TIKI.id, clock.now, clock.now);
+    assert.equal(app.ledger.ledgerWaits().find(w => w.rideId === JUNGLE.id).endedAt, clock.now);
+  });
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  const tab = screen.slice(screen.indexOf('const handleNavigateTab'), screen.indexOf('const handleOpenCoin'));
+  assert.doesNotMatch(tab, /setWaitEndPrompt/, 'a footer tab never asks how the wait ended');
+  assert.match(tab, /if \(state === 'active' \|\| state === 'paused'\) \{[\s\S]*navigation\.navigate\(screen as never\);\n\s+return;/);
+  // Nothing asks while a tab sits on top of LinePlay.
+  assert.match(screen, /visible=\{focused && boardingAsk\}/);
+  assert.match(screen, /visible=\{focused && waitEndPrompt != null/);
+  assert.match(screen, /if \(!focusedRef\.current\) return;/);
+});
+
+test('item 13: Who\'s in line? is asked once per wait (its own id), and never says "already counting" before the location answers', () => {
+  const store = loadTs('src/services/lineplay/lineGroupStore.ts', {
+    '@react-native-async-storage/async-storage': { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} },
+  });
+  assert.equal(store.lineGroupWaitKey(583, 'line-1-a-b'), '583:line-1-a-b');
+  const group = read('src/screens/LinePlay/group/useGroupPlay.tsx');
+  assert.match(group, /lineGroupWaitKey\(snapshot\.ride\.rideId, snapshot\.waitId \?\? snapshot\.startedAt\)/);
+  assert.match(group, /counting=\{snapshot\.verifiedPresenceAt != null\}/);
+  const session = read('src/services/lineplay/LinePlaySession.ts');
+  assert.match(session, /waitId: this\.startedAt != null \? this\.startRequestId : null,/);
+  // The server's answer moves startedAt; the wait id stays.
+  assert.match(session, /this\.startedAt = Date\.parse\(result\.started_at\) \|\| this\.startedAt;/);
+  const sheet = loadTs('src/screens/LinePlay/group/WhosInLineSheet.tsx', {
+    react: {}, 'react-native': { StyleSheet: { create: x => x }, Platform: { OS: 'ios' } }, 'expo-image': {},
+    'react-native-reanimated': {}, '../../../context/AuthProvider': {},
+    '../../../hooks/useReducedGameMotion': {}, '../../../services/lineplay/lineGroup': {}, './PlayerBadge': {},
+    // Style tokens only: any name reads as a plain value.
+    '../../../ui': new Proxy({}, { get: () => new Proxy({}, { get: () => 0 }) }),
+    'react/jsx-runtime': {},
+  });
+  assert.equal(sheet.whosInLineBody(false, false), 'Play while you wait. Pick your crew.');
+  assert.equal(sheet.whosInLineBody(false, true), 'Your wait is already counting. Pick your crew.');
+  assert.equal(sheet.whosInLineBody(true, true), 'Play while you wait. Pick your crew.');
+});
+
+test('item 13: the win card offers PLAY ITS LINE STORY only where a line exists', () => {
+  const lines = loadTs('src/services/lineplay/rideLines.ts');
+  const model = loadTs('src/components/rewards/postWinModel.ts', { '../../services/lineplay/rideLines': lines });
+  const ticket = task => ({ park_id: 8, phase: 'play', play: null, ride: { task_id: task } });
+  lines.noteRideLineCatalog([{ id: 622, type: 'attraction', park_id: 8, task_id: 63 }, { id: 583, type: 'attraction', park_id: 8, task_id: 66 }]);
+  lines.noteRideLive(8, [{ rideId: 622, status: 'OPERATING', wait: null }, { rideId: 583, status: 'OPERATING', wait: 25 }]);
+  assert.equal(model.adventureLineStoryNext(ticket(63), 63, 8), false, 'Great Moments with Mr. Lincoln is a show: NEXT COIN instead');
+  assert.equal(model.adventureLineStoryNext(ticket(66), 66, 8), true, 'Jungle Cruise has a line');
+  lines.noteRideLive(8, [{ rideId: 583, status: 'CLOSED', wait: null }]);
+  assert.equal(model.adventureLineStoryNext(ticket(66), 66, 8), false, 'a closed ride has no line now');
+  assert.equal(model.adventureLineStoryNext(ticket(99), 99, 8), true, 'unknown ride: the server\'s choice stands');
+});
+
+test('item 15 and grade fixes 3, 5, 6: one gold button on the wrapped-up recap, the ride car on I GOT TO THE RIDE, solo words', () => {
+  const recap = read('src/screens/LinePlay/components/SessionRecap.tsx');
+  assert.match(recap, /<GameButton label="Keep playing" icon="arrow" variant="ghost" onPress=\{onStillInLine\}/);
+  assert.match(recap, /<GameIcon name="search" size=\{22\} \/>\n\s+<Text style=\{styles\.nextAdventureText\}/);
+  assert.doesNotMatch(recap, /<GameIcon name="map"/);
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(screen, /style=\{styles\.leftLineRideButton\}>\n[^\n]*\n\s+<GameIcon name="ride" size=\{26\} \/>\n\s+<Text style=\{styles\.leftLineRideButtonText\}>I GOT TO THE RIDE<\/Text>/);
+  // The ride question ends the wait at the tap: the recap is under the fading dialog, never the wait page.
+  assert.match(screen, /onPick=\{index => \{\n\s+if \(index !== 1\) return;/);
+  assert.match(read('src/ui/GameDialog.tsx'), /if \(index !== null\) onPick\?\.\(index\);/);
+  const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
+  assert.match(slot, /if \(correct\) return crew \? 'Correct! Your crew found the answer\.' : 'Correct! You found it\.';/);
+  // The line after a pick sits under the answers (nothing shifts under the finger).
+  assert.ok(slot.indexOf('clueFeedback(picked === q.correctIndex') > slot.indexOf('{q.choices.map((choice, i) => {'));
 });
