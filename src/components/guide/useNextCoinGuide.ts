@@ -157,10 +157,29 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   const guideCoins = useMemo(() => showLike.size ? coins.map(coin => showLike.has(coin.taskId) && coin.queue !== false
     ? { ...coin, queue: false } : coin) : coins, [coins, showLike]);
 
-  // Arrival: the first in-park reading of this visit starts the 30 s welcome.
+  // The map's coins belong to this park only once its own list arrived: right after the place check moves the
+  // player to the next park, one render still carries the last park's islands (they are reset a beat later).
+  const taskOwner = useRef<{ parkId: number | null; stale: readonly TaskType[] | null }>({ parkId: null, stale: null });
+  if (taskOwner.current.parkId !== parkId) taskOwner.current = { parkId, stale: input.tasks };
+  else if (taskOwner.current.stale && input.tasks !== taskOwner.current.stale) taskOwner.current = { parkId, stale: null };
+  const parkCoinsKnown = !taskOwner.current.stale && coins.length > 0;
+  // A goodbye on leaving (fix W1 item 10): the park the player was last inside, and whether they are leaving it.
+  const dayRecord = useSyncExternalStore(parkDayStore.subscribe, parkDayStore.get, parkDayStore.get);
+  const today = localDay(Date.now());
+  const here = input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null;
+  const lastInside = useRef<{ parkId: number; parkName: string | null } | null>(null);
+  if (parkId != null && here && parkCoinsKnown && coins.some(coin => guideMeters(here, coin) <= INSIDE_PARK_METERS)) {
+    lastInside.current = { parkId, parkName: input.parkName };
+  }
+  const leavingFrom = lastInside.current;
+  const leaving = enabled && parkCoinsKnown && leavingPark({ parkId, location: here, coins, lastInside: leavingFrom,
+    coinsToday: coinsToday(dayRecord, leavingFrom?.parkId, today) });
+  // Arrival: the first reading in this park, with its own coins and not on the way out of another, starts the 30 s
+  // welcome (walking from the esplanade into the next park welcomes there, after the goodbye).
+  const arrivalReading = parkId != null && !!input.location && parkCoinsKnown && !leaving;
   const arrived = useRef<{ parkId: number | null; at: number | null }>({ parkId: null, at: null });
-  if (arrived.current.parkId !== parkId) arrived.current = { parkId, at: parkId != null && input.location ? Date.now() : null };
-  else if (arrived.current.at === null && parkId != null && input.location) arrived.current = { parkId, at: Date.now() };
+  if (arrived.current.parkId !== parkId) arrived.current = { parkId, at: arrivalReading ? Date.now() : null };
+  else if (arrived.current.at === null && arrivalReading) arrived.current = { parkId, at: Date.now() };
   const arrivedAt = arrived.current.at;
   const [, setArriveTick] = useState(0);
   useEffect(() => {
@@ -236,9 +255,7 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
     return undefined;
   });
   const target = useSyncExternalStore(guide.subscribe, guide.current, guide.current);
-  // One welcome per visit, and a goodbye on leaving (fix W1 item 10), from today's park day record.
-  const dayRecord = useSyncExternalStore(parkDayStore.subscribe, parkDayStore.get, parkDayStore.get);
-  const today = localDay(Date.now());
+  // One welcome per visit (fix W1 item 10), from today's park day record.
   // Read once per visit (this park, this arrival): the welcome marked a moment ago never cuts itself short.
   // Before the record has loaded the card stays neutral (no welcome), so a relaunch never re-greets.
   const visitKey = `${parkId}:${arrivedAt}:${today}`;
@@ -247,14 +264,6 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
     welcomeSeen.current = { key: visitKey, welcomed: welcomedToday(dayRecord, parkId, today) };
   }
   const welcomed = welcomeSeen.current?.key === visitKey ? welcomeSeen.current.welcomed : true;
-  const here = input.location ? { latitude: input.location.latitude, longitude: input.location.longitude } : null;
-  const lastInside = useRef<{ parkId: number; parkName: string | null } | null>(null);
-  if (parkId != null && here && coins.some(coin => guideMeters(here, coin) <= INSIDE_PARK_METERS)) {
-    lastInside.current = { parkId, parkName: input.parkName };
-  }
-  const leavingFrom = lastInside.current;
-  const leaving = enabled && leavingPark({ parkId, location: here, coins, lastInside: leavingFrom,
-    coinsToday: coinsToday(dayRecord, leavingFrom?.parkId, today) });
   const held = enabled && ready && target && target.parkId === parkId ? target : null;
   // "You're here" only while PLAY! is really up for this coin (the server's range check wins over geometry).
   const shown = withPlayRange(held, input.playableTaskId);
