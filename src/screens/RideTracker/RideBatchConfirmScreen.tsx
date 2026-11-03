@@ -93,7 +93,8 @@ const DetectionRow: React.FC<DetectionRowProps> = React.memo(({ ride, onToggle }
       <View style={{ flex: 1 }}>
         <Text style={batchStyles.rideName}>{ride.rideName}</Text>
         <Text style={batchStyles.rideDetail}>
-          {time} • ~{dwellMin} min{ride.isReRide ? ' • Re-ride' : ''}
+          {/* "about 10 min": this font draws ~ like a minus, so "~10 min" read as negative minutes. */}
+          {time} • about {dwellMin} min{ride.isReRide ? ' • Re-ride' : ''}
         </Text>
       </View>
       <ConfidenceBadge level={ride.confidence} />
