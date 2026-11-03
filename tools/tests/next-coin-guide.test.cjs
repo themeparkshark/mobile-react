@@ -671,6 +671,9 @@ test('dev-only live stub (state D walks): never outside a development bundle; of
   assert.equal(G.liveAnswers({}, off, NOW).answers[1], undefined, 'no live answer: the ride stays eligible after known-open rides');
   const open = L.applyLiveStub(feed, 'open', NOW);
   assert.equal(G.liveAnswers({}, open, NOW).answers[1], 'open');
+  assert.equal(open.rides[0].wait, L.STUB_WAIT_MINUTES, 'a night feed posts no waits: the stub posts one, so rides read as lines, not shows');
+  const GC2 = loadTs('src/components/guide/guideCoins.ts');
+  assert.equal(GC2.showLikeTaskIds(open, new Set()).size, 0);
   const explore = mapSource();
   assert.match(explore, /const LIVE_STUB = liveStubMode\(__DEV__, process\.env\.EXPO_PUBLIC_GUIDE_LIVE_STUB\);/);
 });

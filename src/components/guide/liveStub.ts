@@ -9,6 +9,9 @@ import type { LivePark } from '../../api/endpoints/parks/live';
 
 export type LiveStubMode = 'off' | 'open' | null;
 
+/** The posted wait the 'open' stub gives a ride the night feed left without one. */
+export const STUB_WAIT_MINUTES = 15;
+
 /** The stub mode for this bundle: always null outside a development bundle. */
 export function liveStubMode(dev: boolean, value: string | undefined): LiveStubMode {
   if (!dev) return null;
@@ -19,6 +22,7 @@ export function liveStubMode(dev: boolean, value: string | undefined): LiveStubM
 export function applyLiveStub(live: LivePark | null, mode: LiveStubMode, now: number): LivePark | null {
   if (!mode) return live;
   if (mode === 'off') return { rides: [], fetched_at: null };
-  const rides = (live?.rides ?? []).map(ride => ({ ...ride, status: 'OPERATING' as const }));
+  // A daytime park posts waits: a ride with none at night would read as a show (no line, no In line?).
+  const rides = (live?.rides ?? []).map(ride => ({ ...ride, status: 'OPERATING' as const, wait: ride.wait ?? STUB_WAIT_MINUTES }));
   return { ...(live ?? { rides: [] }), rides, fetched_at: new Date(now).toISOString() };
 }
