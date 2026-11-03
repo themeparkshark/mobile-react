@@ -27,6 +27,11 @@ export interface LostTryInput {
    * returned-Ticket line never promises "same game". Callers that do not say keep the promise.
    */
   readonly sameGame?: boolean;
+  /**
+   * Which pass paid for this try: 'daily' is today's free try, 'held' and 'held_retry' are extra tries.
+   * An extra try is never called free (fix W1 item 6). Omitted: today's free try.
+   */
+  readonly rescueSource?: string | null;
 }
 
 export interface LostTryCopy {
@@ -48,6 +53,13 @@ export const TICKET_BACK_LINE_ANY_GAME = 'Your Ticket came back. Try again!';
 export function lostTryCopy(input: LostTryInput): LostTryCopy {
   const title = input.near ? NEAR_TRY_TITLE : lostTryHasFreeRetry(input) ? RETRY_TRY_TITLE : LOST_TRY_TITLE;
   if (input.usedRescuePass) {
+    if (input.rescueSource === 'held' || input.rescueSource === 'held_retry') {
+      return {
+        title,
+        message: input.rescueRetryAvailable ? 'No Ticket used. One more go on this extra try!' : 'No Ticket used. Your extra try is done.',
+        ticket: 0,
+      };
+    }
     return {
       title,
       message: input.rescueRetryAvailable ? 'No Ticket used. One more free go!' : 'No Ticket used. Free try done today.',

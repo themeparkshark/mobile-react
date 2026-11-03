@@ -109,9 +109,9 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
             <GameIcon name="shark" size={14} /></View>)}</View>
         </Tile>}
         {remote
-          ? <Tile label="FROM HOME" tone="home" a11y={`From home your hits count ${Math.round(raid.remote.damage_rate * 100)} percent, loot is ${Math.round((raid.remote.reward_rate ?? raid.remote.damage_rate) * 100)} percent and you cannot be MVP`}>
+          ? <Tile label={walkCloser ? 'FROM HERE' : 'FROM HOME'} tone="home" a11y={`${walkCloser ? 'From here' : 'From home'} your hits count ${Math.round(raid.remote.damage_rate * 100)} percent, loot is ${Math.round((raid.remote.reward_rate ?? raid.remote.damage_rate) * 100)} percent and you cannot be MVP`}>
             {/* One compact block that fits the 58 pt picture slot (the house, the share and "no MVP" used to spill over the label). */}
-            <View style={styles.homeRow}><Image source={HOUSE} style={styles.house} contentFit="contain" />
+            <View style={styles.homeRow}>{walkCloser ? <GameIcon name="pin" size={24} /> : <Image source={HOUSE} style={styles.house} contentFit="contain" />}
               <Text style={styles.bigPct} maxFontSizeMultiplier={1}>{Math.round(raid.remote.damage_rate * 100)}%</Text></View>
             <View style={styles.mvp}>
               <View><GameIcon name="crown" size={16} /><View style={styles.crossOut} /></View>
@@ -150,16 +150,18 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
 }
 
 /** The one button, with the cost on it and your Energy after. Pinned to the bottom of the sheet. */
-export function BossJoinCta({ raid, remote, energy, tickets, blocked, starting, onFight, onClose, paused = false }: {
+export function BossJoinCta({ raid, remote, inPark = false, energy, tickets, blocked, starting, onFight, onClose, paused = false }: {
   raid: BossRaid; remote: boolean; energy: number; tickets: number; blocked: string | null; starting: boolean;
   onFight: () => void; onClose: () => void; paused?: boolean;
+  /** The player is in this raid's park, just not at its ride: never "from home" (fix W1 item 11). */
+  inPark?: boolean;
 }) {
   const reduced = useReducedGameMotion();
   const { ambient } = usePowerBudget();
   const cost = joinCost(raid, remote, energy, tickets);
   const short = cost.short;
   const label = short && !starting ? `NEED ${short.need - short.have} ${short.kind === 'energy' ? 'ENERGY' : short.need - short.have === 1 ? 'TICKET' : 'TICKETS'}`
-    : joinLabel(raid, remote);
+    : joinLabel(raid, remote, inPark);
   const off = !!blocked || starting;
   const [how, setHow] = useState(false);
   const pulse = useSharedValue(1);
@@ -238,7 +240,8 @@ function Loot({ icon, n }: { icon: 'coins' | 'xp' | 'energy' | 'parts'; n: numbe
 
 const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  live: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BRAND.redLip, borderRadius: 14, borderWidth: 2, borderColor: BRAND.white,
+  // Calm, never red (no fake urgency, core loop 4.3 rule 7): the minutes left in words on a blue chip.
+  live: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BRAND.blue, borderRadius: 14, borderWidth: 2, borderColor: BRAND.white,
     paddingHorizontal: 9, paddingVertical: 3 },
   liveDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: BRAND.white },
   liveText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
@@ -284,12 +287,13 @@ const styles = StyleSheet.create({
   hintText: { flex: 1, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy },
   note: { marginTop: 8, fontFamily: 'Shark', fontSize: 15, color: BRAND.white, textAlign: 'center', backgroundColor: 'rgba(5,52,110,0.55)',
     borderRadius: 12, padding: 6 },
-  cta: { minHeight: 70, borderRadius: 22, backgroundColor: BRAND.red, borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 7,
-    borderBottomColor: BRAND.redLip, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 14 },
+  // The house gold button (one gold button on the sheet), never a red one.
+  cta: { minHeight: 70, borderRadius: 22, backgroundColor: BRAND.gold, borderWidth: 3, borderColor: BRAND.white, borderBottomWidth: 7,
+    borderBottomColor: BRAND.goldLip, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 14 },
   // Disabled: a calm sky button with navy text (never a see-through red over blue).
   ctaOff: { backgroundColor: BRAND.sky, borderBottomColor: BRAND.skyDeep },
-  ctaText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 25, color: BRAND.white, letterSpacing: 0.5, textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowOffset: { width: 1, height: 1.5 }, textShadowRadius: 0 },
+  ctaText: { flexShrink: 1, fontFamily: 'Shark', fontSize: 25, color: BRAND.navy, letterSpacing: 0.5, textShadowColor: 'transparent',
+    textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 0 },
   ctaTextOff: { color: BRAND.navy, textShadowColor: 'transparent' },
   costPill: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: BRAND.cream, borderRadius: 16, borderWidth: 2,
     borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 3 },

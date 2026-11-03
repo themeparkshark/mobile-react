@@ -75,9 +75,9 @@ export default function BossMarker({ raid, onPress, animate = true }: {
 const styles = StyleSheet.create({
   wrap: { width: 96, height: 118, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 2 },
   boss: { width: BOSS_MARKER_SIZE, height: BOSS_MARKER_SIZE },
-  ring: { position: 'absolute', bottom: 0, width: 78, height: 26, borderRadius: 39, borderWidth: 3, borderColor: '#ef4a3c' },
+  ring: { position: 'absolute', bottom: 0, width: 78, height: 26, borderRadius: 39, borderWidth: 3, borderColor: '#ffcf3b' },
   splash: { position: 'absolute', bottom: 2, width: 70, height: 20, borderRadius: 35, borderWidth: 3, borderColor: '#ffffff' },
   hpTrack: { width: 60, height: 8, borderRadius: 4, backgroundColor: 'rgba(5,52,110,0.45)', borderWidth: 1.5, borderColor: '#fff',
     overflow: 'hidden', marginBottom: 3 },
-  hpFill: { height: '100%', backgroundColor: '#ef4a3c' },
+  hpFill: { height: '100%', backgroundColor: '#ffcf3b' },
 });

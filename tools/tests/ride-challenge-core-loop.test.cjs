@@ -177,7 +177,7 @@ test('out of Tickets PLAY! never vanishes: today\'s free try wears a gift, a hel
   assert.equal(copy.playBadge({ ...base, rescueAvailable: false }), null);
   assert.equal(copy.playBadge({ ...base, claimable: 5 }), null, 'earned Tickets wait: the card claims them first, so no gift yet');
   const play = read('src/components/RedeemModal.tsx');
-  assert.match(play, /claimable: short && claimWaiting\?\.tickets !== ticketsNow \? 1 : claimWaiting\?\.count \?\? 0/,
+  assert.match(play, /const ownClaimable = short && claimWaiting\?\.tickets !== ticketsNow \? 1 : claimWaiting\?\.count \?\? 0;/,
     'no gift until the Stamp Book lookup answers, so PLAY! and the card always agree');
   const redeem = read('src/components/RedeemModal.tsx');
   // The pill shows for an open ride whatever the Ticket count (no ticket check hides it).
@@ -921,5 +921,5 @@ test('the returned-Ticket line promises "same game" only on a server that deals 
   assert.equal(lost.lostTryCopy({ ...base, sameGame: true }).message, 'Your Ticket came back. Same game, try again!');
   assert.equal(lost.lostTryCopy(base).message, 'Your Ticket came back. Same game, try again!', 'callers that do not say keep the line');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.retrySameGame \}\);/);
+  assert.match(modal, /retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.retrySameGame,\n\s+rescueSource: redeemable\?\.rescue_pass_source \}\);/);
 });

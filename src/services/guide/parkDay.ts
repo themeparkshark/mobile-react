@@ -11,7 +11,7 @@
  * parkDayStep is pure (node tests); the map calls it on every location and mode change.
  * Owned by the guide-map lane.
  */
-import { guideMeters, type GuidePoint } from './nextCoin';
+import { guideMeters, type GuideCoin, type GuidePoint } from './nextCoin';
 
 /** A reading this far from the last in-park reading counts as having left the park. */
 export const LEFT_PARK_METERS = 2000;
@@ -35,6 +35,10 @@ export interface ParkDayRecord {
   readonly homeDay: string | null;
   /** Far readings in a row that were not yet trusted (one GPS jump never ends the day). */
   readonly farStreak?: number;
+  /** Coins won today by park id (the goodbye card names the park you leave and what you won there). */
+  readonly coinsByPark?: Readonly<Record<string, number>>;
+  /** Parks already welcomed on `day` (one welcome per visit: a relaunch never says "Welcome to ..." again). */
+  readonly welcomed?: readonly number[];
 }
 
 export const EMPTY_PARK_DAY: ParkDayRecord = Object.freeze({ day: null, parkId: null, coins: 0, lastInPark: null, done: false, homeDay: null, farStreak: 0 });
@@ -62,8 +66,34 @@ export function farReadingTrusted(accuracy: number | null | undefined, farStreak
   return good || (farStreak ?? 0) >= 1;
 }
 
-/** One step: what to record and the record to keep. Pure. */
+/**
+ * One step: what to record and the record to keep. Pure. Also keeps today's coins by park and today's
+ * welcomed parks (both start over with a new day).
+ */
 export function parkDayStep(prev: ParkDayRecord, input: ParkDayInput): { next: ParkDayRecord; events: ParkDayEvent[] } {
+  const out = parkDayStepCore(prev, input);
+  let next = out.next;
+  const sameDay = prev.day === next.day && prev.day != null;
+  const byPark: Record<string, number> = sameDay ? { ...(prev.coinsByPark ?? {}) } : {};
+  const won = Number.isFinite(input.coinsWon) && (input.coinsWon ?? 0) > 0 ? Math.floor(input.coinsWon!) : 0;
+  const wonAt = input.mode === 'park' && input.parkId != null ? input.parkId : next.parkId;
+  if (won > 0 && wonAt != null && next.day === input.today) byPark[String(wonAt)] = (byPark[String(wonAt)] ?? 0) + won;
+  next = { ...next, coinsByPark: byPark, welcomed: sameDay ? prev.welcomed ?? [] : [] };
+  return { next, events: out.events };
+}
+
+/** Today's coins won at one park, from the record. Pure. */
+export function coinsToday(record: ParkDayRecord | null | undefined, parkId: number | null | undefined, today: string): number {
+  if (!record || parkId == null || record.day !== today) return 0;
+  return Math.max(0, Number(record.coinsByPark?.[String(parkId)] ?? 0) || 0);
+}
+
+/** This park was welcomed today. Pure. */
+export function welcomedToday(record: ParkDayRecord | null | undefined, parkId: number | null | undefined, today: string): boolean {
+  return !!record && parkId != null && record.day === today && (record.welcomed ?? []).includes(parkId);
+}
+
+function parkDayStepCore(prev: ParkDayRecord, input: ParkDayInput): { next: ParkDayRecord; events: ParkDayEvent[] } {
   const events: ParkDayEvent[] = [];
   let next: ParkDayRecord = { ...EMPTY_PARK_DAY, ...prev };
   const won = Number.isFinite(input.coinsWon) && (input.coinsWon ?? 0) > 0 ? Math.floor(input.coinsWon!) : 0;
@@ -127,6 +157,67 @@ export function parkDayStep(prev: ParkDayRecord, input: ParkDayInput): { next: P
   } else if ((next.farStreak ?? 0) > 0) next = { ...next, farStreak: 0 };
   return { next, events };
 }
+
+/** Within this distance of one of a park's coins the player is inside that park (welcome, goodbye). */
+export const INSIDE_PARK_METERS = 120;
+/** Farther than this from every coin of the park they were inside, a player with coins today is leaving it. */
+export const LEFT_PARK_COINS_METERS = 400;
+
+/**
+ * Whether the player is leaving a park where they won coins today (fix W1 item 10: a goodbye on leaving, never
+ * another park's welcome). `lastInside` is the park they were last inside on this map. Pure.
+ */
+export function leavingPark(input: {
+  readonly parkId: number | null;
+  readonly location: { readonly latitude: number; readonly longitude: number } | null;
+  readonly coins: readonly GuideCoin[];
+  readonly lastInside: { readonly parkId: number } | null;
+  readonly coinsToday: number;
+}): boolean {
+  if (!input.lastInside || input.coinsToday <= 0 || input.parkId == null || !input.location) return false;
+  const here = input.location;
+  if (input.lastInside.parkId !== input.parkId) {
+    // The place check moved the player to the next park before they reached its coins (the esplanade).
+    return !input.coins.some(coin => guideMeters(here, coin) <= INSIDE_PARK_METERS);
+  }
+  return input.coins.length > 0 && input.coins.every(coin => guideMeters(here, coin) > LEFT_PARK_COINS_METERS);
+}
+
+// ---------------------------------------------------------------------------
+// Today's park day record as the map reads it (the guide's welcome once per visit and its goodbye card).
+
+let storeRecord: { player: number | null; record: ParkDayRecord } | null = null;
+let storePersist: ((record: ParkDayRecord) => void) | null = null;
+const storeListeners = new Set<() => void>();
+const storeEmit = () => storeListeners.forEach(listener => { try { listener(); } catch { /* keep going */ } });
+
+export const parkDayStore = {
+  /** The signed-in player's record, or null before it loaded. */
+  get(): ParkDayRecord | null { return storeRecord?.record ?? null; },
+  /** The player the record belongs to (undefined before any load). */
+  player(): number | null | undefined { return storeRecord?.player; },
+  subscribe(listener: () => void): () => void {
+    storeListeners.add(listener);
+    return () => { storeListeners.delete(listener); };
+  },
+  /** useParkDayLadder only: the loaded or stepped record, and how to save a change made here. */
+  set(player: number | null, record: ParkDayRecord, persist?: (record: ParkDayRecord) => void): void {
+    storeRecord = { player, record };
+    if (persist) storePersist = persist;
+    storeEmit();
+  },
+  /** The guide showed this park's welcome today: never again until tomorrow. */
+  markWelcomed(parkId: number, today: string): void {
+    const current = storeRecord?.record;
+    if (!storeRecord || !current || current.day !== today || (current.welcomed ?? []).includes(parkId)) return;
+    const record = { ...current, welcomed: [...(current.welcomed ?? []), parkId] };
+    storeRecord = { player: storeRecord.player, record };
+    storePersist?.(record);
+    storeEmit();
+  },
+  /** Tests and sign-out. */
+  reset(): void { storeRecord = null; storePersist = null; storeEmit(); },
+};
 
 // ---------------------------------------------------------------------------
 // The park day done signal (for the shelf's park day story card).

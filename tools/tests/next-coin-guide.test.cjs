@@ -29,6 +29,8 @@ const coin = (taskId, name, meters, extra = {}) => ({
 const NOW = Date.parse('2026-10-28T19:00:00Z');
 const input = (extra = {}) => ({ mode: 'park', parkId: 8, location: BASE, coins: [], live: {}, now: NOW, ...extra });
 
+/** Right after a win the player stands at the ride: today's Adventure ride (Haunted Mansion) is 200 m north. */
+const AT_RIDE = north(200);
 const RIDES = [
   coin(1, 'Jungle Cruise', 300),
   coin(2, 'Haunted Mansion', 200),
@@ -109,27 +111,27 @@ test('home: never a park goal or the Adventure; only the planned coin, and the h
 test('Adventure Line story: after winning its coin, the ride stays the target until the story is played or another coin is picked', () => {
   const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c));
   const adventure = { taskId: 2, parkId: 8, phase: 'play' };
-  const first = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure }));
+  const first = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure }));
   assert.equal(first.taskId, 2, 'rule 1 beats the nearest open ride');
   assert.equal(first.reason, 'line_story');
   assert.equal(G.guideState(input({ adventure }), first), 'line_story');
   // Held across moves. PLAY! rising for another coin shows "You're here" for it only while the
   // player stands there; walking on, the Line story comes back.
-  const passing = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure, current: first, location: north(120) }));
+  const passing = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure, current: first, location: north(120) }));
   assert.equal(passing.taskId, 3);
   assert.equal(passing.reason, 'in_range');
-  const held = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure, current: passing, resumeTarget: first, location: north(60) }));
+  const held = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure, current: passing, resumeTarget: first, location: north(185) }));
   assert.equal(held.taskId, 2);
   assert.equal(held.reason, 'line_story');
   // Story played: phase moves to celebrate, and the ride stays the target for its souvenir (step 3).
-  const played = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure: { ...adventure, phase: 'celebrate' }, current: held }));
+  const played = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure: { ...adventure, phase: 'celebrate' }, current: held }));
   assert.equal(played.taskId, 2, 'step 3: the souvenir keeps the ride');
   assert.equal(played.reason, 'line_story');
   // Souvenir unfolded: the Adventure is complete and the guide moves on.
-  const complete = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure: { ...adventure, phase: 'complete' }, current: played }));
+  const complete = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure: { ...adventure, phase: 'complete' }, current: played }));
   assert.equal(complete.taskId, 1);
   // Declined: the player picked another coin.
-  const declined = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, adventure: { ...adventure, lineStoryDeclined: true } }));
+  const declined = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure: { ...adventure, lineStoryDeclined: true } }));
   assert.equal(declined.taskId, 1);
   // Before the coin is won, today's Adventure ride is rule 5 (after in-range, in-line and chosen).
   const discover = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, adventure: { ...adventure, phase: 'discover' } }));
@@ -350,12 +352,12 @@ test('the guide store is the one pointer: setTarget, current, subscribe', () => 
   G.guide.reset();
   const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c));
   const adventure = { taskId: 2, parkId: 8, phase: 'play' };
-  assert.equal(G.guide.resolve({ ...base, coins: won, adventure }).reason, 'line_story');
+  assert.equal(G.guide.resolve({ ...base, location: AT_RIDE, coins: won, adventure }).reason, 'line_story');
   G.guide.setTarget(3, 'callout');
-  assert.equal(G.guide.resolve({ ...base, coins: won, adventure }).taskId, 3);
+  assert.equal(G.guide.resolve({ ...base, location: AT_RIDE, coins: won, adventure }).taskId, 3);
   G.guide.clearPlan();
   G.guide.reset();
-  assert.equal(G.guide.resolve({ ...base, coins: won, adventure }).reason, 'line_story', 'reset forgets the declined story');
+  assert.equal(G.guide.resolve({ ...base, location: AT_RIDE, coins: won, adventure }).reason, 'line_story', 'reset forgets the declined story');
   off();
   G.guide.setTarget(Number.NaN, 'bad');
   assert.equal(G.guide.plan(), null, 'a bad id is ignored');
@@ -441,8 +443,11 @@ test('card words for every state: one title, one line, one button, in the 4.5 vo
 test('state A: the line Ticket sentence shows only while queue_tickets is on', () => {
   const off = C.guideCardCopy('need_ticket', tgt(), ctx({ tickets: 0, queueTicketsOn: false }));
   assert.doesNotMatch(off.line, /wait at a ride/i, 'App Store switches: no line Ticket copy');
-  assert.equal(off.button.label, 'SEE WAYS');
+  // The line names every real way, so no SEE WAYS button that only repeats it (fix W1 item 6).
+  assert.equal(off.button, null);
   assert.match(off.line, /3 treats at home = 1 Ticket\. Tomorrow brings a new free try\./);
+  const noDaily = C.guideCardCopy('need_ticket', tgt(), ctx({ tickets: 0, queueTicketsOn: false, freeTryDaily: false }));
+  assert.doesNotMatch(noDaily.line, /free try/i, 'no daily free try switch: no promise of one tomorrow');
   const on = C.guideCardCopy('need_ticket', tgt(), ctx({ tickets: 0, queueTicketsOn: true }));
   assert.match(on.line, /Your first wait at a ride earns a Ticket\./);
   assert.equal(on.button.label, 'LINEPLAY');
@@ -666,6 +671,9 @@ test('dev-only live stub (state D walks): never outside a development bundle; of
   assert.equal(G.liveAnswers({}, off, NOW).answers[1], undefined, 'no live answer: the ride stays eligible after known-open rides');
   const open = L.applyLiveStub(feed, 'open', NOW);
   assert.equal(G.liveAnswers({}, open, NOW).answers[1], 'open');
+  assert.equal(open.rides[0].wait, L.STUB_WAIT_MINUTES, 'a night feed posts no waits: the stub posts one, so rides read as lines, not shows');
+  const GC2 = loadTs('src/components/guide/guideCoins.ts');
+  assert.equal(GC2.showLikeTaskIds(open, new Set()).size, 0);
   const explore = mapSource();
   assert.match(explore, /const LIVE_STUB = liveStubMode\(__DEV__, process\.env\.EXPO_PUBLIC_GUIDE_LIVE_STUB\);/);
 });
@@ -845,19 +853,19 @@ test('Adventure step 3: the souvenir state is its own card (UNFOLD), and declini
   G.guide.reset();
   const live = { 1: 'open', 3: 'open' };
   const play = { taskId: 2, parkId: 8, phase: 'play' };
-  const first = G.guide.resolve(input({ coins: won, live, adventure: play }));
+  const first = G.guide.resolve(input({ location: AT_RIDE, coins: won, live, adventure: play }));
   assert.equal(first.reason, 'line_story');
   // Pick another coin on the Line story card: the guide moves on.
   G.guide.skipLineStory();
-  const next = G.guide.resolve(input({ coins: won, live, adventure: play }));
+  const next = G.guide.resolve(input({ location: AT_RIDE, coins: won, live, adventure: play }));
   assert.notEqual(next.taskId, 2, 'declined: the guide points at another coin');
   // The line story is played from the Adventure sheet (opened by its ticket tab): phase celebrate.
   // The held coin still holds (no flip-flop), and once it is won the souvenir leads again.
   const celebrate = { ...play, phase: 'celebrate' };
-  const stillHeld = G.guide.resolve(input({ coins: won, live, adventure: celebrate }));
+  const stillHeld = G.guide.resolve(input({ location: AT_RIDE, coins: won, live, adventure: celebrate }));
   assert.equal(stillHeld.taskId, next.taskId, 'the held coin holds');
   const wonNext = won.map(c => (c.taskId === next.taskId ? { ...c, owned: true } : c));
-  const souvenir = G.guide.resolve(input({ coins: wonNext, live, adventure: celebrate }));
+  const souvenir = G.guide.resolve(input({ location: AT_RIDE, coins: wonNext, live, adventure: celebrate }));
   assert.equal(souvenir.taskId, 2, 'declining the line story never declines the souvenir');
   assert.equal(souvenir.reason, 'line_story');
   assert.equal(G.guideState(input({ adventure: celebrate }), souvenir), 'line_story');
@@ -870,13 +878,13 @@ test('Adventure step 3: the souvenir state is its own card (UNFOLD), and declini
   assert.deepEqual(plain(copy.dots), [true, true, false]);
   // Declining the souvenir step too: the guide moves on (the ticket tab keeps the sheet one tap away).
   G.guide.skipLineStory();
-  const after = G.guide.resolve(input({ coins: wonNext, live, adventure: celebrate }));
+  const after = G.guide.resolve(input({ location: AT_RIDE, coins: wonNext, live, adventure: celebrate }));
   assert.notEqual(after?.taskId, 2);
   // A tapped island (another coin's pick) while the souvenir waits declines that step only.
   G.guide.reset();
-  G.guide.resolve(input({ coins: wonNext, live, adventure: celebrate }));
+  G.guide.resolve(input({ location: AT_RIDE, coins: wonNext, live, adventure: celebrate }));
   G.guide.setTarget(1, 'callout');
-  const picked = G.guide.resolve(input({ coins: wonNext, live, adventure: celebrate }));
+  const picked = G.guide.resolve(input({ location: AT_RIDE, coins: wonNext, live, adventure: celebrate }));
   assert.equal(picked.taskId, 1);
   G.guide.reset();
 });
@@ -1064,6 +1072,7 @@ function rewardsStubs() {
     'react-native-svg': { __esModule: true, default: 'Svg', Circle: 'Circle' },
     '../../gamekit/Haptics': { haptic() {} },
     '../../ui': { BRAND: {}, GameIcon: 'GameIcon', SHADOW: { card: {} } },
+    '../guide/flyAnchors': { useFlyAnchor: () => ({ ref: {}, onLayout() {} }) },
   };
 }
 function findAll(node, match, out = []) {
@@ -1097,7 +1106,7 @@ test('winning today\'s Adventure coin turns the guide to its Line story at once,
   const adventureTarget = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, adventure: { taskId: 2, parkId: 8, phase: 'discover' } }));
   assert.equal(adventureTarget.reason, 'adventure');
   const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c));
-  const after = G.pickNextCoin(input({ coins: won, live: { 1: 'open' }, current: adventureTarget, adventure: { taskId: 2, parkId: 8, phase: 'play' } }));
+  const after = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, current: adventureTarget, adventure: { taskId: 2, parkId: 8, phase: 'play' } }));
   assert.equal(after.taskId, 2);
   assert.equal(after.reason, 'line_story');
   // Standing in its line: the card is the Line story (where its story plays), not "In line for X?".
@@ -1126,11 +1135,11 @@ test('a coin the guide chose before the trip goal answered gives way once the Ad
   G.guide.reset();
   const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c));
   // Partial data: no Adventure yet. The guide takes the nearest open ride.
-  const early = G.guide.resolve(input({ coins: won, live: { 1: 'open' } }));
+  const early = G.guide.resolve(input({ location: AT_RIDE, coins: won, live: { 1: 'open' } }));
   assert.equal(early.taskId, 1);
   // The trip goal lands with the Adventure on its souvenir step: the held guess would hold...
   const celebrate = { taskId: 2, parkId: 8, phase: 'celebrate' };
-  assert.equal(G.guide.resolve(input({ coins: won, live: { 1: 'open' }, adventure: celebrate })).taskId, 1);
+  assert.equal(G.guide.resolve(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure: celebrate })).taskId, 1);
   // ...so the map releases the guess made on partial data, and rule 1 leads at once (the release
   // picks again with the latest input; nobody ever reads a null target in between).
   const seen = [];
@@ -1142,10 +1151,10 @@ test('a coin the guide chose before the trip goal answered gives way once the Ad
   const full = G.guide.current();
   assert.equal(full.taskId, 2);
   assert.equal(full.reason, 'line_story');
-  assert.equal(G.guide.resolve(input({ coins: won, live: { 1: 'open' }, adventure: celebrate })).taskId, 2, 'the next resolve agrees');
+  assert.equal(G.guide.resolve(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure: celebrate })).taskId, 2, 'the next resolve agrees');
   // A player's pick is never released.
   G.guide.setTarget(3, 'shelf');
-  G.guide.resolve(input({ coins: won, live: { 1: 'open', 3: 'open' }, adventure: celebrate }));
+  G.guide.resolve(input({ location: AT_RIDE, coins: won, live: { 1: 'open', 3: 'open' }, adventure: celebrate }));
   G.guide.releaseGuidePick();
   assert.equal(G.guide.current().taskId, 3);
   const hook = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/guide/useNextCoinGuide.ts'), 'utf8');

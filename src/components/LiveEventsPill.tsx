@@ -139,7 +139,7 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
               <GameIcon name="rush" size={16} />
               <Text style={styles.rushChipText}>RUSH</Text>
             </Pressable>
-          ) : <View style={styles.fightTag}><Text style={styles.fightTagText}>FIGHT</Text></View>}
+          ) : <><Text style={[styles.go, styles.bossGo]}>SEE</Text><GameIcon name="arrow" size={18} /></>}
         </LinearGradient>
       </Pressable>
     );
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
   bossIcon: { width: 38, height: 38 },
   hpRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   hpTrack: { width: 70, height: 8, borderRadius: 4, backgroundColor: 'rgba(5,52,110,0.5)', borderWidth: 1.5, borderColor: BRAND.white, overflow: 'hidden' },
-  hpFill: { height: '100%', backgroundColor: BRAND.red },
+  hpFill: { height: '100%', backgroundColor: BRAND.gold },
   fightTag: { backgroundColor: BRAND.red, borderRadius: 10, borderWidth: 2, borderColor: BRAND.white, borderBottomWidth: 4,
     borderBottomColor: BRAND.redLip, paddingHorizontal: 9, paddingVertical: 3 },
   fightTagText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white },

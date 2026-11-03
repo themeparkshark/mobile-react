@@ -11,7 +11,8 @@
  *
  * Pure and import-free. Shared contract: owned by the guide-map lane, every
  * other lane imports it and never edits it. The guide card, the challenge card
- * and the out-of-Tickets button all read the same order from here.
+ * and the out-of-Tickets button all read the same order from here, and the
+ * guide card and PLAY! read the same free try signal (freeTrySignal).
  */
 
 /** Where earned, unclaimed Tickets are waiting. Stamps always come first. */
@@ -103,10 +104,52 @@ export function playsNow(step: FreeTicketStep | null): boolean {
 /**
  * The "Need a Ticket" lines, in the vocabulary of blueprint 4.5. The line
  * Ticket sentence is present only while queue_tickets is on (test state A
- * must never show it).
+ * must never show it), and the free try sentence only while the daily free
+ * try exists for this player (its switch, ride_rescue_pass, is on).
  */
-export function needTicketLines(queueTicketsOn: boolean): string[] {
-  const lines = [`${TREATS_PER_TICKET} treats at home = 1 Ticket.`, 'Tomorrow brings a new free try.'];
+export function needTicketLines(queueTicketsOn: boolean, freeTryDaily = true): string[] {
+  const lines = [`${TREATS_PER_TICKET} treats at home = 1 Ticket.`];
+  if (freeTryDaily !== false) lines.push('Tomorrow brings a new free try.');
   if (queueTicketsOn === true) lines.push('Your first wait at a ride earns a Ticket.');
   return lines;
+}
+
+/** What the server says about a free or extra try for the coin PLAY! is up for (/me/current-redeemables). */
+export interface ServerTry {
+  readonly rescue_pass_available?: boolean | null;
+  /** 'daily' is today's free try; 'held' and 'held_retry' are extra tries. */
+  readonly rescue_pass_source?: string | null;
+  readonly rescue_passes?: number | null;
+  readonly rescue_pass_used_today?: boolean | null;
+}
+
+/**
+ * The one free try signal (core loop fix W1 item 6). The guide card and PLAY! read the same server
+ * answer: the coin PLAY! is up for (its rescue fields) is the truth for "can I play this coin free".
+ * Away from any PLAY!, the guide only needs to know whether today's free try is still unused here:
+ * the last coin answer at this park today says so, and with no answer yet, an unused free try is
+ * assumed while its switch is on (the card then shows the walk, never "tomorrow").
+ * Pure: returns the wallet's freeTryReady and extraTries.
+ */
+export function freeTrySignal(input: {
+  /** The ride_rescue_pass switch for this player. Off: there is no daily free try at all. */
+  readonly dailyOn: boolean;
+  /** Extra tries the player holds (users.rescue_passes). */
+  readonly heldPasses: number | null | undefined;
+  /** The coin PLAY! is up for right now, with its server rescue fields, or null when PLAY! is down. */
+  readonly playUp: ServerTry | null | undefined;
+  /** The last coin answer at this park today said the free try was used, or null when there was none. */
+  readonly usedTodayHere: boolean | null | undefined;
+}): { freeTryReady: boolean; extraTries: number } {
+  const play = input.playUp;
+  if (play && typeof play.rescue_pass_available === 'boolean') {
+    const available = play.rescue_pass_available === true;
+    const daily = available && play.rescue_pass_source === 'daily';
+    const extra = available && !daily ? Math.max(1, count(play.rescue_passes)) : 0;
+    return { freeTryReady: daily, extraTries: extra };
+  }
+  return {
+    freeTryReady: input.dailyOn === true && input.usedTodayHere !== true,
+    extraTries: count(input.heldPasses),
+  };
 }

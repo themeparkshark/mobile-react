@@ -60,9 +60,14 @@ test('the in-line state opens LinePlay for that line; Line story plays today\'s 
   assert.equal(card.props.copy.secondary.label, 'Pick another coin');
   card.props.onAction('skip');
   assert.deepEqual(lineStory.guidePicks.at(-1), ['skip']);
+  // The card's body acts like its one button (fix W1 item 11); its stamp dots open the ticket sheet (stamps, souvenir).
+  const before = stories.length;
   card.props.onCardPress();
+  await lineStory.settle(); await lineStory.settle();
+  assert.equal(stories.length, before + 1, 'a tap on the card body is its LINEPLAY');
+  card.props.onDotsPress();
   lineStory.render();
-  assert.equal(lineStory.find(named('AdventureTicketCard')).props.openRequest, 1, 'the card on its ride opens the ticket sheet (stamps, souvenir)');
+  assert.equal(lineStory.find(named('AdventureTicketCard')).props.openRequest, 1, 'the stamp dots open the ticket sheet');
 });
 
 test('first minute: the daily chest waits for the first catch, opens by itself only at home, never at a park (core loop 4.3)', async () => {

@@ -343,7 +343,8 @@ test('state B at the gate through the first coin: the map wiring keeps chests, r
 test('the Rewards button: one chest, one number; the flame after rung 4, the Trail ring after rung 6', () => {
   const R = loadTs('src/components/map/RewardsButton.tsx', {
     react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} }, 'react-native': { StyleSheet: { create: v => v } }, 'expo-image': {},
-    'react-native-svg': {}, '../../gamekit/Haptics': {}, '../../ui': { BRAND: {}, SHADOW: { card: {} }, GameIcon: 'GameIcon' } });
+    'react-native-svg': {}, '../../gamekit/Haptics': {}, '../../ui': { BRAND: {}, SHADOW: { card: {} }, GameIcon: 'GameIcon' },
+    '../guide/flyAnchors': { useFlyAnchor: () => ({ ref: {}, onLayout() {} }) } });
   const m = R.rewardsButtonModel({ chestUnclaimed: true, trailReady: 2, dailyOpen: false, flame: 4, trailOpen: false, trailProgress: 0.4 });
   assert.deepEqual({ ...m }, { count: 1, flame: null, trail: null }, 'before rungs 4 and 6: just the chest');
   const later = R.rewardsButtonModel({ chestUnclaimed: false, trailReady: 1, dailyOpen: true, flame: 4, trailOpen: true, trailProgress: 1.4 });
