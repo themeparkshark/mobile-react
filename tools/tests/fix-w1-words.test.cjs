@@ -136,6 +136,8 @@ test('item 17: at home the guide says which coin can level up now, and LEVEL UP 
   assert.equal(ready.button.action, 'level_up');
   assert.equal(ready.button.label, 'LEVEL UP');
   assert.match(ready.line, /2 more treats = 1 Ticket/, 'the ticket meter stays');
+  assert.ok(ready.line.length <= 56, `two lines on the card: ${ready.line}`);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /planCoinUrl: \(homeLevelUp \? homeLevelUp\.coin_url : homePlan\?\.coin_url\) \|\| null,/, 'the card wears that coin');
   assert.equal(guideCopy.guideCardCopy('home', null, ctx).button.action, 'plan', 'nothing ready: the plan card as before');
   const coins = loadTs('src/context/CoinCollection.tsx', {
     react: { useCallback: f => f, useEffect() {}, useState: v => [v, () => {}] },

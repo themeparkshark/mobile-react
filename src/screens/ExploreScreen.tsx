@@ -1510,7 +1510,9 @@ export function ExploreScreenBody() {
   const homeCoins = useCoinCollection(!park && coinLevelsRung.open ? player?.id : null);
   const homeLevelUp = !park && coinLevelsRung.open ? homeLevelUpCoin(homeCoins.coins, player?.energy ?? 0) : null;
   const homeGuide = useMemo<HomeGuide | null>(() => player && !park ? {
-    parkName: tripGoal?.park_name ?? null, planName: homePlan?.ride_name ?? null, planCoinUrl: homePlan?.coin_url || null,
+    parkName: tripGoal?.park_name ?? null, planName: homePlan?.ride_name ?? null,
+    // The card wears the coin it is about: the one to level up, else the planned coin.
+    planCoinUrl: (homeLevelUp ? homeLevelUp.coin_url : homePlan?.coin_url) || null,
     levelUpName: homeLevelUp?.ride_name ?? null,
     tickets: player.tickets ?? 0, welcomeBack: welcome.daysAway != null && welcome.daysAway >= 14 && !welcome.done,
     onAction: action => {

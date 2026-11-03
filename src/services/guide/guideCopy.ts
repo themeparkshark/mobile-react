@@ -168,7 +168,7 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         return card({
           kicker: 'READY TO LEVEL UP',
           title: `Level up ${ctx.levelUpName}!`,
-          line: `You have the Ride Parts and Energy. ${meter}`,
+          line: `Ride Parts and Energy ready. ${meter}`,
           button: { label: 'LEVEL UP', action: 'level_up' },
           dots: null,
         });
