@@ -35,6 +35,7 @@ function mapChallenge(initial = task) {
         timing: () => ({ start() {} }), spring: () => ({ start() {} }),
       } };
       if (name === '../hooks/useReducedGameMotion') return { default: () => false };
+      if (name === '../ui/modalLayers') return { leavingSheetTap: { listen: () => () => undefined, note() {} } };
       if (name.endsWith('mapOpportunityTiming')) return timing.exports;
       if (name === '../context/SoundEffectProvider') return { SoundEffectContext: {} };
       if (name === '../gamekit/audio/playMoment') return { studioMoment: () => false };

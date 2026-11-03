@@ -46,6 +46,7 @@ export const modalLayers = {
   /** Mark a registered layer as leaving: hidden in JS, still on screen natively until it is removed. */
   markLeaving(id: number): void {
     if (!layers.includes(id) || leaving.includes(id)) return;
+    if (leaving.length === 0) leavingSince = Date.now();
     leaving = [...leaving, id];
     emit();
   },
@@ -70,6 +71,29 @@ export const modalLayers = {
   /** Tests only. */
   reset(): void { layers = []; leaving = []; emit(); },
 };
+
+/**
+ * A tap that lands on a sheet that is on its way out. Its dim still covers the screen for a moment (longer on a busy
+ * JS thread: up to about 1.5 s), so a kid's press on PLAY! landed on the leaving sheet and vanished, 20 of 20 in the
+ * safety panel, while the guide said Tap PLAY!. DoorModal reports those taps here, and PLAY! claims one that falls on
+ * it: the press is held and honored, never lost. A tap right at the start of the leaving is the same tap that closed
+ * the sheet (a double tap on its button), so it does not count.
+ */
+export const LEAVING_TAP_MIN_MS = 200;
+let leavingSince = 0;
+const leavingTapListeners = new Set<(x: number, y: number) => void>();
+export const leavingSheetTap = {
+  /** PLAY! listens while it is drawn. */
+  listen(fn: (x: number, y: number) => void): () => void {
+    leavingTapListeners.add(fn);
+    return () => { leavingTapListeners.delete(fn); };
+  },
+  note(x: number, y: number, now: number = Date.now()): void {
+    if (leaving.length === 0 || now - leavingSince < LEAVING_TAP_MIN_MS) return;
+    leavingTapListeners.forEach(fn => fn(x, y));
+  },
+};
+
 // Dev builds: the lane tools read the layer list over the debugger (never in a store or OTA bundle).
 const devLog: { t: number; op: string; id: number }[] = [];
 if (typeof __DEV__ !== 'undefined' && __DEV__) (globalThis as { __tpsModalLayers?: unknown }).__tpsModalLayers = { count: () => layers.length, ids: () => [...layers], log: () => devLog.splice(0) };

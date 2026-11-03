@@ -161,7 +161,7 @@ test('PLAY! is the one action word, with the coin and place under it, and press 
   assert.doesNotMatch(redeem, /'Play Ride!'/);
   assert.match(redeem, /<Image source=\{\{ uri: coin\.coin_url \}\} style=\{styles\.captionCoin\}/, 'the coin picture rides with the place name');
   // Inside 100 ms: a haptic and a squash on the native driver, before the card has its turn.
-  assert.match(redeem, /onPress=\{async \(\) => \{\n\s+pressNow\(\);/);
+  assert.match(redeem, /pressPlayRef\.current = \(\) => \{\n\s+pressNow\(\);/);
   assert.match(redeem, /Haptics\.impactAsync\(Haptics\.ImpactFeedbackStyle\.Medium\)/);
   assert.match(redeem, /press\.setValue\(0\.9\);\n\s+Animated\.spring\(press, \{[^}]*useNativeDriver: true \}\)/);
   // Secret coins arrive with coin levels (rung 3).

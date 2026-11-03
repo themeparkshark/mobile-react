@@ -95,3 +95,25 @@ test('the paid game host has no pan responder on a tap: the swipe to close exist
   const flow = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(flow, /onSwipeDown=\{flowState === 'preview' \? safeClose : undefined\}/);
 });
+
+test('a press on a sheet on its way out, right over PLAY!, is PLAY!\'s press: held and honored, never lost', () => {
+  const { modalLayers, leavingSheetTap, LEAVING_TAP_MIN_MS } = loadTs('src/ui/modalLayers.ts', {
+    react: { createContext: () => ({}), useCallback: f => f, useContext() {}, useEffect() {}, useRef: v => ({ current: v }), useState: v => [v, () => {}], useSyncExternalStore() {} },
+  });
+  modalLayers.reset();
+  const heard = [];
+  const off = leavingSheetTap.listen((x, y) => heard.push([x, y]));
+  const start = Date.now();
+  leavingSheetTap.note(120, 685, start + 1000);
+  assert.deepEqual(heard, [], 'no sheet is leaving: a normal tap on a sheet stays on that sheet');
+  const id = modalLayers.add();
+  assert.equal(modalLayers.pressClear(), false, 'a sheet is up: the first press won');
+  modalLayers.markLeaving(id);
+  assert.equal(modalLayers.pressClear(), true, 'it is going: map buttons work again');
+  leavingSheetTap.note(120, 685, Date.now());
+  assert.deepEqual(heard, [], 'the tap that closed it is not a new press');
+  leavingSheetTap.note(120, 685, Date.now() + LEAVING_TAP_MIN_MS + 1);
+  assert.deepEqual(heard, [[120, 685]]);
+  off();
+  modalLayers.remove(id);
+});

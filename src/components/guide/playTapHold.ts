@@ -14,9 +14,10 @@
  * ends HOLD_MAX_MS after the leaving started even if a layer leaks somewhere, so PLAY! can never be
  * blocked for good.
  *
- * In the merged build the challenge card itself waits its turn on the layer list and re-presents if
- * UIKit refuses it (RedeemRedeemableModal), so the hold is off: a press after a loss card or a leaving
- * sheet queues the card instead of being swallowed. The hold stays here, off, as the documented guard.
+ * In the merged build the challenge card itself waits its turn on the layer list and the native door presents it
+ * (ui/nativeModalDoor.ts), so this hold is off: a press on a leaving sheet right over PLAY! is claimed by PLAY!
+ * (leavingSheetTap in ui/modalLayers.ts) and queues the card instead of being swallowed. The hold stays here, off, as
+ * the documented guard.
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { modalLayers } from '../../ui/modalLayers';

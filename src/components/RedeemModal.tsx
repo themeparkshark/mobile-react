@@ -1,3 +1,4 @@
+import { leavingSheetTap } from '../ui/modalLayers';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
@@ -34,6 +35,8 @@ import { useCoverArt } from './map/mapCover';
  */
 const PLAY_RIDE_REST_Y = -120;
 const PLAY_RIDE_ENTER_FROM = -96;
+/** How far around PLAY! a tap on a leaving sheet still counts as PLAY! (a kid's finger). */
+const PLAY_HOLD_SLOP = 8;
 
 export default function RedeemModal({
   redeemable,
@@ -118,6 +121,9 @@ export default function RedeemModal({
   // Press feedback inside 100 ms (blueprint section 11, Feedback): a tap squashes the pill and buzzes at once,
   // even while the challenge card waits its turn behind a sheet that is still sliding away.
   const press = useRef(new Animated.Value(1)).current;
+  // A press that lands on a sheet still on its way out, right over PLAY!, is PLAY!'s press (ui/modalLayers.ts).
+  const pill = useRef<View>(null);
+  const pressPlayRef = useRef<() => void>(() => undefined);
   const pressNow = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     if (reducedMotion) return;
@@ -159,6 +165,20 @@ export default function RedeemModal({
     else Animated.timing(enter, { toValue: 0, duration: 140, useNativeDriver: true }).start();
     return () => enter.stopAnimation();
   }, [shown, identity, reducedMotion, enter, covered]);
+  const playDrawn = !!redeemable && available;
+  useEffect(() => {
+    if (!playDrawn) return undefined;
+    return leavingSheetTap.listen((x, y) => {
+      pill.current?.measureInWindow((px, py, width, height) => {
+        if (x >= px - PLAY_HOLD_SLOP && x <= px + width + PLAY_HOLD_SLOP && y >= py - PLAY_HOLD_SLOP && y <= py + height + PLAY_HOLD_SLOP) pressPlayRef.current();
+      });
+    });
+  }, [playDrawn]);
+  pressPlayRef.current = () => {
+    pressNow();
+    setOpenedRedeemable(redeemable ?? null);
+    setModalVisible(true);
+  };
   const entrance = {
     opacity: enter.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }),
     transform: [
@@ -171,14 +191,10 @@ export default function RedeemModal({
     <>
       {redeemable && available && (
         <Animated.View style={entrance}>
-          <Animated.View style={{ transform: [{ scale: press }] }}>
+          <Animated.View ref={pill} collapsable={false} style={{ transform: [{ scale: press }] }}>
             <YellowButton
               onArtReady={() => { pillArtDrawn(); setPillReady(true); }}
-              onPress={async () => {
-                pressNow();
-                setOpenedRedeemable(redeemable);
-                setModalVisible(true);
-              }}
+              onPress={() => pressPlayRef.current()}
               text={redeemable.type === 'secret_task' ? 'Play Secret!'
                 : redeemable.type === 'task' ? 'PLAY!' : 'Redeem'}
             />

@@ -12,6 +12,7 @@
  */
 import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { I18nManager, StyleSheet } from 'react-native';
+import { leavingSheetTap } from './modalLayers';
 import {
   DOOR_DISMISS_ANIMATED_MS, DOOR_DISMISS_MS, DOOR_PRESENT_MS, DOOR_TORN_ANIMATED_MS, DOOR_TORN_MS,
   doorNativeVisible, doorPresentTimedOut, modalDoor, type DoorPhase,
@@ -166,7 +167,10 @@ export default function DoorModal(props: DoorModalProps) {
       <VirtualizedListContextResetter>
         <ScrollView.Context.Provider value={null}>
           <InsideNativeModal.Provider value>
-            <View style={[styles.container, containerStyles]} collapsable={false}>{children}</View>
+            <View style={[styles.container, containerStyles]} collapsable={false}
+              onTouchEnd={(event: { nativeEvent: { pageX: number; pageY: number } }) => leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY)}>
+              {children}
+            </View>
           </InsideNativeModal.Provider>
         </ScrollView.Context.Provider>
       </VirtualizedListContextResetter>

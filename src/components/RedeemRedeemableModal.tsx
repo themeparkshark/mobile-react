@@ -848,6 +848,17 @@ export default function RedeemRedeemableModal({
   const challengeLayer = useNativeModalLayer(open === true && !!redeemable, 'wait', CHALLENGE_PATIENCE_MS);
   const reducedMotion = useReducedGameMotion();
   const winHidden = useRef<(() => void) | null>(null);
+  // The win card's rewards fly when its sheet has gone, or at once if PLAY! brought the sheet back before that.
+  const winLeaving = useRef(false);
+  const winOut = () => {
+    if (!winLeaving.current) return;
+    winLeaving.current = false;
+    winHidden.current?.();
+  };
+  useEffect(() => {
+    if (open !== true && flowStateRef.current === 'postwin') winLeaving.current = true;
+    if (open === true) winOut();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   // A kid mashing PLAY! while a sheet slides away: the card waits its turn, then zooms in under the
   // next taps. Those taps land beside the card, and must not close the card they just opened, so the
   // scrim only closes it once the card has been up for a moment.
@@ -881,7 +892,7 @@ export default function RedeemRedeemableModal({
         onWillShow={() => { cardShownAt.current = Date.now(); }}
         onHide={() => {
           challengeLayer.onHidden();
-          if (flowStateRef.current === 'postwin') winHidden.current?.();
+          winOut();
         }}
         onDismiss={challengeLayer.onDismissed}
         onBackdropPress={closeFromScrim}
