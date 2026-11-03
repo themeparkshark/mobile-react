@@ -160,6 +160,8 @@ export interface HomeGuide {
   readonly parkName: string | null;
   readonly planName: string | null;
   readonly planCoinUrl: string | null;
+  /** A coin that can level up now (Ride Parts and Energy in hand, coin levels unlocked): the card says so. */
+  readonly levelUpName?: string | null;
   readonly tickets: number;
   readonly welcomeBack: boolean;
   readonly onAction: (action: GuideAction) => void;
@@ -749,7 +751,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const hudTop = useMemo(() => (hudWidth > 0 ? hudRowTop(obstacles, chipsTop, hudWidth) : chipsTop), [obstacles, chipsTop, hudWidth]);
   const homeCopy = useMemo(() => homeGuide ? guideCardCopy(homeGuide.welcomeBack ? 'welcome_back' : 'home', null, {
     parkName: homeGuide.parkName, ridesResting: false, allOwned: false, tickets: homeGuide.tickets, freeStep: null,
-    queueTicketsOn: false, adventureDots: null, planName: homeGuide.planName,
+    queueTicketsOn: false, adventureDots: null, planName: homeGuide.planName, levelUpName: homeGuide.levelUpName ?? null,
     treatsToTicket: ticket.capped ? null : ticket.until == null ? null : Math.max(1, Math.min(3, Math.round(ticket.until))),
   }) : null, [homeGuide, ticket.until, ticket.capped]);
   // A tapped find's peek docks low, or higher until it covers no find (never another find's timer).

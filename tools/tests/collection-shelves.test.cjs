@@ -111,7 +111,9 @@ test('challenge copy: "Win the X coin", PLAY!, and the free ways in one order (c
   assert.equal(copy.challengeTitle('task', 'Walt Statue'), 'Win the Walt Statue coin');
   assert.equal(copy.challengeTitle('task', 'The Matterhorn'), 'Win the Matterhorn coin', 'never "the The"');
   assert.equal(copy.punchLines('The Sword in the Stone').win, 'Win the Sword in the Stone coin!');
-  assert.equal(copy.punchLines('Walt Statue').kicker, "THIS RIDE'S GAME");
+  // Fix round W1 item 16: "This ride's game" only where the server deals one game per ride and day.
+  assert.equal(copy.punchLines('Walt Statue', true).kicker, "THIS RIDE'S GAME");
+  assert.equal(copy.punchLines('Walt Statue').kicker, 'YOUR GAME', 'a new game each Ticket: the ride has no one game');
   assert.equal(copy.challengeTitle('task', 'Indiana Jones Adventure Temple'), 'Win this coin', 'a long name keeps the short title');
   assert.equal(copy.challengeTitle('task', 'Mad Tea Party'), 'Win the Mad Tea Party coin');
   assert.equal(copy.challengeTitle('secret_task', 'Anything'), 'Win the secret coin');

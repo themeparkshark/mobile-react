@@ -157,3 +157,15 @@ export function isUpgradeReady(coin: Pick<CollectedRideCoin, 'is_unlocked' | 'cu
   return coin.is_unlocked && coin.current_level < coin.max_level &&
     (coin.available_parts ?? 0) >= coin.parts_to_next_level && energy >= coin.energy_to_next_level;
 }
+
+/**
+ * The coin to level up at home (fix round W1 item 17: "level up tonight" on the home guide): a coin with
+ * the Ride Parts and Energy to level up now, the one closest to its next level first (fewest Parts
+ * needed), then by name. Null when none is ready, or the coin has no park to open it on.
+ */
+export function homeLevelUpCoin<T extends Pick<CollectedRideCoin, 'is_unlocked' | 'current_level' | 'max_level' | 'available_parts'
+  | 'parts_to_next_level' | 'energy_to_next_level' | 'ride_name' | 'park_id'>>(coins: readonly T[], energy: number): T | null {
+  const ready = coins.filter(coin => coin.park_id != null && isUpgradeReady(coin, energy));
+  if (!ready.length) return null;
+  return [...ready].sort((a, b) => a.parts_to_next_level - b.parts_to_next_level || String(a.ride_name).localeCompare(String(b.ride_name)))[0];
+}

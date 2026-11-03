@@ -31,7 +31,7 @@ function recoveredWin() {
     '../services/task-attempt/recovery': { recoverTaskAttempt: async () => ({ attempt }) },
     '../api/endpoints/me/stamps': { getStamps: async () => ({ stamps: {}, newly_earned: [] }) },
     '../context/CoinCollection': { invalidateCoinCollection() {}, loadCoin: async () => null },
-    '../services/collection/parkShelfPrefetch': { prefetchParkShelf: (...args) => prefetches.push(args) },
+    '../services/collection/parkShelfPrefetch': { prefetchParkShelf: (...args) => prefetches.push(args), parkShelfRequest: () => null },
     '../api/endpoints/me/ride-coins/milestones': { default: async id => { milestoneReads.push(id);
       return { milestones: [{ type: 'first_park_coin', park_id: 1 }], progress: { park_id: 1, park_name: 'Test Park', before: 0, collected: 1, available: 26 }, next: { percent: 25, coins_needed: 6 } }; } },
     './rewards/challengeCopy': challengeCopy,

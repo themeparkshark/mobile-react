@@ -9,6 +9,7 @@
  * A null input means "not on for this player yet" (its switch is off or its
  * unlock rung has not opened): it never shows and never counts.
  */
+import { kidWords, passGainWords } from '../words/playerWords';
 
 export type RewardsRowKey = 'daily_chest' | 'daily3' | 'level_chest' | 'weekly_box' | 'trail' | 'stamps' | 'events';
 export type RewardsAction = 'open' | 'go' | 'claim_all';
@@ -119,14 +120,22 @@ export interface GoalLike {
 /** The chest goal's line (the server still says "Tap the chest on the map"). */
 export const CHEST_GOAL_HINT = 'In your Rewards';
 
+/** The park catch goal's line (the server's "or find 2 snacks" is a home thing). */
+export const PARK_CATCH_HINT = 'Any ride coin counts';
+
 /**
  * At home a park goal shows its home side: a ride-coin catch becomes "Find N
  * treats" (the server counts either), and a park-only goal waits for the next
  * park day with no GO. At a park every goal is as sent.
  */
-export function homeSideGoal<T extends GoalLike>(goal: T, atPark: boolean): T & { readonly parkOnly: boolean } {
+export function homeSideGoal<T extends GoalLike>(sent: T, atPark: boolean): T & { readonly parkOnly: boolean } {
+  // The server still says "snacks" and "home finds": the app's word is treats (blueprint 4.5).
+  const goal: T = { ...sent, title: kidWords(sent.title), hint: kidWords(sent.hint) };
   // The daily chest lives in the Rewards sheet now (not on the map), so its goal says where it really is.
   if (goal.kind === 'chest') return { ...goal, hint: CHEST_GOAL_HINT, parkOnly: false };
+  // At a park the catch goal is a ride coin: treats only pop up at home, so its "or find 2 treats" half
+  // is not something a kid in the park can do. The line says what counts here instead.
+  if (atPark && goal.park && goal.kind === 'catch') return { ...goal, hint: PARK_CATCH_HINT, parkOnly: false };
   if (atPark || !goal.park) return { ...goal, parkOnly: false };
   if (goal.kind === 'catch') {
     const t = Math.max(1, goal.target);
@@ -150,7 +159,7 @@ export function goalGo(goal: { readonly kind: string; readonly park: boolean; re
   }
 }
 
-/** The Daily 3 goal's Shark Pass event, for its "+N pass points" line after rung 5. */
+/** The Daily 3 goal's Shark Pass event, for its Shark Pass line after rung 5. */
 export function goalPassEvent(goal: { readonly kind: string; readonly park: boolean }): string | null {
   switch (goal.kind) {
     case 'catch': return goal.park ? 'ride_coin_win' : 'home_find';
@@ -160,15 +169,19 @@ export function goalPassEvent(goal: { readonly kind: string; readonly park: bool
   }
 }
 
-/** "+35 pass points" (each, for a goal that counts more than one) from the server's own points, or null. */
+/**
+ * The goal's Shark Pass line when the server pays pass progress for it, or null. The pass shows steps,
+ * never points (blueprint 4.5): "Climbs your Shark Pass", or "+1 Shark Pass step" for whole steps.
+ */
 export function goalPassLine(goal: { readonly kind: string; readonly park: boolean; readonly target: number },
-  today: readonly { readonly event: string; readonly points: number }[] | null | undefined): string | null {
+  today: readonly { readonly event: string; readonly points: number }[] | null | undefined,
+  pointsPerStep?: number | null): string | null {
   const event = goalPassEvent(goal);
   const points = event ? today?.find(e => e.event === event)?.points ?? 0 : 0;
   if (!points) return null;
   // "each" only where the goal counts several of the same thing (treats, ride games), never on a one-coin goal.
   const counts = goal.target > 1 && (goal.kind === 'play' || (goal.kind === 'catch' && !goal.park));
-  return counts ? `+${points} pass points each` : `+${points} pass points`;
+  return passGainWords(points, pointsPerStep, counts);
 }
 
 /** The Weekly Box line: the week always starts Monday, said plainly. */

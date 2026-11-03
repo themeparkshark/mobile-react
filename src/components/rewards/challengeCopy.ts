@@ -31,10 +31,14 @@ export function challengeTitle(taskType: 'task' | 'secret_task' | null, name?: s
   return full.length <= RIBBON_MAX_CHARS ? full : 'Win this coin';
 }
 
-/** The punch card's line: "This ride's game", then "Win the X coin!" under the game's name. */
-export function punchLines(rideName: string | null | undefined): { kicker: string; win: string } {
+/**
+ * The punch card's line over the game's name, then "Win the X coin!" under it. "THIS RIDE'S GAME" only
+ * where the server deals one game per player, ride and day (be-core-loop; playFlagsNow().retrySameGame):
+ * on a server that deals a new game each Ticket, the ride has no one game, so the card says "YOUR GAME".
+ */
+export function punchLines(rideName: string | null | undefined, oneGameToday = false): { kicker: string; win: string } {
   const short = coinName(rideName);
-  return { kicker: "THIS RIDE'S GAME", win: short ? `Win the ${short} coin!` : 'Win this coin!' };
+  return { kicker: oneGameToday ? "THIS RIDE'S GAME" : 'YOUR GAME', win: short ? `Win the ${short} coin!` : 'Win this coin!' };
 }
 
 /** The badge on PLAY! when the player has no Ticket: the daily gift or a held extra try. */

@@ -7,6 +7,7 @@
 import type { GameIconName } from '../../ui/iconNames';
 import type { CollectionMilestones } from '../../api/endpoints/me/ride-coins/milestones';
 import type { RideCoinLevelType } from '../../models/ride-coin-level-type';
+import { TROPHIES, nextTrophy, nextTrophyLine, trophyIcon } from '../../services/collection/shelfModel';
 
 export interface RewardChipModel { readonly icon: GameIconName; readonly amount: number; readonly label: string }
 
@@ -37,12 +38,12 @@ export function milestoneHeadline(result: CollectionMilestones | null): Mileston
   const types = result.milestones.map(milestone => milestone.type);
   if (types.includes('park_complete')) {
     return { ribbon: 'Shelf Complete!', title: `${park} shelf complete`, big: true, icon: 'trophy',
-      body: `All ${available} Ride Coins collected. Every ride on this shelf is yours.` };
+      body: `All ${available} coins collected. Every coin on this shelf is yours.` };
   }
   const percent = result.milestones.find(milestone => milestone.type === 'park_percent')?.percent;
   if (percent) {
     return { ribbon: `${percent}% Shelf!`, title: `${park} shelf ${percent}% full`, big: false, icon: 'star',
-      body: `${collected} of ${available} Ride Coins collected.` };
+      body: `${collected} of ${available} coins collected.` };
   }
   if (types.includes('first_park_coin')) {
     return { ribbon: 'First Coin Here!', title: `First coin at ${park}`, big: false, icon: 'new',
@@ -95,24 +96,39 @@ export function partsProgress(coin: Pick<RideCoinLevelType, 'current_level' | 'm
 
 /* ---------- The core-loop win card (blueprint 5.3 and 5.13) ---------- */
 
-/** The park trophies, in coins (shelf-words draws them on the park screen). */
-export const TROPHY_STEPS: readonly { readonly name: string; readonly at: number }[] = [
-  { name: 'Bronze', at: 12 }, { name: 'Silver', at: 50 }, { name: 'Gold', at: 100 },
-];
+/** The park trophies. They count wins at this park (a repeat win counts too), never coins: one table, shelfModel's. */
+export const TROPHY_STEPS: readonly { readonly name: string; readonly at: number }[] = TROPHIES;
+
+/** The trophy this very win earned, or null. Every win adds exactly one park win, so wins === a trophy's count is the win that reached it. */
+export interface TrophyMoment {
+  readonly name: string;
+  readonly wins: number;
+  readonly icon: 'trophyBronze' | 'trophySilver' | 'trophy';
+}
+
+export function trophyMoment(parkWins: number | null | undefined): TrophyMoment | null {
+  const wins = Number(parkWins);
+  if (!Number.isFinite(wins)) return null;
+  const step = TROPHY_STEPS.find(t => t.at === wins);
+  if (!step) return null;
+  return { name: step.name, wins, icon: step.name === 'Bronze' ? 'trophyBronze' : step.name === 'Silver' ? 'trophySilver' : 'trophy' };
+}
 
 /**
- * The shelf line under a new coin: "1 of 35 coins. Bronze at 12". The next
- * trophy this shelf can still reach; a shelf too small for the next trophy
- * names the full shelf instead; a full shelf says so. Null without numbers.
+ * The shelf line under a new coin. Each half names its own unit, so coins and wins never mix
+ * (fix round W1 item 16): "11 of 35 coins. 1 more win for Bronze". Trophies count wins, so the
+ * trophy half needs this park's wins (the server's park_coins_count); without it the line is the
+ * coin count alone. A full shelf says so. Null without numbers.
  */
-export function shelfLine(result: CollectionMilestones | null | undefined): string | null {
+export function shelfLine(result: CollectionMilestones | null | undefined, parkWins?: number | null): string | null {
   const progress = result?.progress;
   if (!progress || !(progress.available > 0)) return null;
   const have = Math.max(0, Math.min(progress.collected, progress.available));
-  const lead = `${have} of ${progress.available} coins.`;
-  if (have >= progress.available) return `${lead} Shelf complete!`;
-  const trophy = TROPHY_STEPS.find(step => have < step.at && step.at <= progress.available);
-  return trophy ? `${lead} ${trophy.name} at ${trophy.at}` : `${lead} Full shelf at ${progress.available}`;
+  const lead = `${have} of ${progress.available} coins`;
+  if (have >= progress.available) return `${lead}. Shelf complete!`;
+  const wins = Number(parkWins);
+  const next = parkWins != null && Number.isFinite(wins) ? nextTrophy(wins) : null;
+  return next ? `${lead}. ${next.left} more ${next.left === 1 ? 'win' : 'wins'} for ${next.name}` : lead;
 }
 
 export interface WinRowInput {
@@ -236,23 +252,33 @@ export function limitedWinLine(limited: { readonly active: boolean } | null | un
 
 /**
  * The win card's shelf line with its picture, typed so the picture never depends on the words:
- * the park shelf count with the trophy ("1 of 35 coins. Bronze at 12"), or a new limited coin's
- * own home with a sparkle. Null when neither applies.
+ * a trophy this win just earned ("Bronze trophy! 12 wins here", the card's trophy moment), the park
+ * shelf count with the next trophy in wins ("11 of 35 coins. 1 more win for Bronze"), a repeat win's
+ * trophy progress in the shelf's own words ("Bronze trophy: 11 of 12 wins"), or a new limited coin's
+ * own home with a sparkle. Null when none applies.
  */
 export interface WinShelfLine {
   readonly text: string;
-  readonly icon: 'trophyBronze' | 'sparkle';
+  readonly icon: 'trophyBronze' | 'trophySilver' | 'trophy' | 'sparkle';
+  /** Set when this win earned a trophy: the card shows its trophy moment. */
+  readonly trophy?: TrophyMoment;
 }
 
 export function winShelfLine(
   milestones: CollectionMilestones | null | undefined,
   limited: { readonly active: boolean } | null | undefined,
   isNewCoin: boolean,
+  parkWins?: number | null,
 ): WinShelfLine | null {
-  const shelf = shelfLine(milestones ?? null);
-  if (shelf) return { text: shelf, icon: 'trophyBronze' };
+  const earned = trophyMoment(parkWins);
+  if (earned) return { text: `${earned.name} trophy! ${earned.wins} wins here`, icon: earned.icon, trophy: earned };
+  const wins = parkWins != null && Number.isFinite(Number(parkWins)) ? Number(parkWins) : null;
+  const shelf = shelfLine(milestones ?? null, wins);
+  if (shelf) return { text: shelf, icon: wins != null ? trophyIcon(wins) : 'trophyBronze' };
   const own = isNewCoin ? limitedWinLine(limited) : null;
-  return own ? { text: own, icon: 'sparkle' } : null;
+  if (own) return { text: own, icon: 'sparkle' };
+  // A coin won again: the trophy it counts toward, in the shelf's own words.
+  return wins != null && wins > 0 ? { text: nextTrophyLine(wins), icon: trophyIcon(wins) } : null;
 }
 
 /** Which way out of the win card was tapped (the card dims its buttons at once). */

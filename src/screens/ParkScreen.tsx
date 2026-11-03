@@ -47,7 +47,7 @@ import { guide } from '../services/guide/nextCoin';
 import { useRung } from '../services/reveal/revealLadder';
 import GameIcon from '../ui/GameIcon';
 import { milestoneToday, nextTrophy, nextTrophyLine, partsWaiting, TROPHY_HELP, shelfCountLabel, shelfTabs, shelfTotals, storyOnTop,
-  landingTab, recapWaitMs, shownShelfTab, tabForSlot, visibleSecretSlots, visibleTabs, type ShelfTab } from '../services/collection/shelfModel';
+  directoryNextCoin, landingTab, recapWaitMs, shownShelfTab, tabForSlot, visibleSecretSlots, visibleTabs, type ShelfTab } from '../services/collection/shelfModel';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
@@ -302,6 +302,11 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const nextCoinTask = levelUpTask ?? guideTask ?? (parkTripGoal && !parkTripGoal.coin_owned
     ? [...tasks, ...limitedTasks].find(task => task.id === parkTripGoal.task_id) ?? null
     : nearbySuggestion?.task ?? null);
+  // The coin guide's top row names the same coin as the NEXT COIN card at the top of the shelf
+  // (fix round W1 item 17: the top said Frontierland while the guide row said Jungle Cruise).
+  const directoryNext = directoryNextCoin({ levelUpId: levelUpTask?.id ?? null, guideId: guideTask?.id ?? null, guideOverGoal,
+    goalId: parkTripGoal?.task_id ?? null, goalReportedDown, alternateId: alternateRide?.task.id ?? null,
+    nearbyId: nearbySuggestion?.task.id ?? null, nearbyReportedOpen: !!nearbyReportedOpenRide });
   const goToCoin = useCallback((task: TaskType, source: string) => {
     guide.setTarget(task.id, source);
     if (inThisPark) RootNavigation.navigate('Explore', { focusRide: { parkId: Number(park), task } });
@@ -689,9 +694,9 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                             parkId={Number(park)}
                             completed={completedTasks}
                             isOwnPark={canChooseGoal}
-                            goalTaskId={parkTripGoal?.task_id}
-                            nearbyRideId={goalReportedDown ? alternateRide?.task.id : nearbySuggestion?.task.id}
-                            nearbyRideReportedOpen={goalReportedDown ? !!alternateRide : !!nearbyReportedOpenRide}
+                            goalTaskId={directoryNext.goalTaskId}
+                            nearbyRideId={directoryNext.nearbyRideId}
+                            nearbyRideReportedOpen={directoryNext.nearbyReportedOpen}
                             savedGoalReportedDown={goalReportedDown}
                             rideTaskIds={currentPark.ride_passport_task_ids}
                             rideOnly={passportMode}
@@ -769,10 +774,11 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                           justifyContent: 'center',
                         }}
                       >
+                        {/* In size order, small to big (fix round W1 item 17): Bronze 12, Silver 50, Gold 100. */}
                         {([
-                          { name: 'Silver', image: silver, at: 50, size: { width: 90, height: 95 }, align: 'flex-end' as const },
-                          { name: 'Gold', image: gold, at: 100, size: { width: 100, height: 140 }, align: 'center' as const },
                           { name: 'Bronze', image: bronze, at: 12, size: { width: 70, height: 75 }, align: 'flex-start' as const },
+                          { name: 'Silver', image: silver, at: 50, size: { width: 90, height: 95 }, align: 'center' as const },
+                          { name: 'Gold', image: gold, at: 100, size: { width: 100, height: 140 }, align: 'flex-end' as const },
                         ]).map(trophy => {
                           const unlocked = currentPark.park_coins_count >= trophy.at;
                           const isNext = trophyNext?.name === trophy.name;

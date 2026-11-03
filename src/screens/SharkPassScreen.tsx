@@ -51,6 +51,8 @@ import * as RootNavigation from '../RootNavigation';
 import { buySharkPass, loadSharkPassPrice, onSharkPassDelivered, restoreSharkPass, storeAvailable, type ShopPrice } from '../services/purchases';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { passGainWords, passSinceLine } from '../services/words/playerWords';
+
 import { EVENT_COPY, isWearable, claimedLine, passGain, passGrants, lastDayText, nextPassPrize, passSummary, pieceSource, dailyQuestsSlot, DAILY_GOALS_LATER, passQuestLabel, lanePassFixture, readyNowLine, rewardWords, seasonSet, setMixText, winsAwayText, type SetPiece } from '../services/money/sharkPassModel';
 import { markRungSeen, useRung } from '../services/reveal/revealLadder';
 import { flagOn } from '../services/retention/flags';
@@ -60,6 +62,12 @@ import { trackImpression, trackMoney } from '../services/money/track';
 import { baseRates, formatLike, regularValue } from '../services/money/offers';
 import { useSupplies } from '../services/money/supplies';
 import countText from '../helpers/countText';
+
+/** A pass quest's reward in the pass's own unit: "+1 step" for whole steps, else "Climbs" (steps, never points). */
+function questStepWords(bonus: number, perStep: number): string {
+  const words = passGainWords(bonus, perStep);
+  return words && words.startsWith('+') ? words.replace(' Shark Pass ', ' ') : 'Climbs';
+}
 
 const SEASON_ART: Record<string, number> = {
   'frosty-scarf': require('../../assets/images/sharkpass/frosty-scarf.webp'),
@@ -175,7 +183,7 @@ const PASS_GROWN_UP_NOTES = [
 ];
 
 export default function SharkPassScreen() {
-  // "+N pass points" ticks only once the pass has unlocked (rung 5); Supplies reaches this screen before that.
+  // The "since last time" line shows only once the pass has unlocked (rung 5); Supplies reaches this screen before that.
   const passRung = useRung('shark_pass').open;
   // Daily 3 is the daily list only once it is really there: its switch on and rung 4 open (Supplies reaches this
   // screen earlier).
@@ -561,7 +569,8 @@ export default function SharkPassScreen() {
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.points}>
                     {step >= steps ? 'You finished the season!' : `On the way to step ${step + 1}`}
                   </Text>
-                  {sinceLast && passRung ? <Text maxFontSizeMultiplier={MAX_FONT} style={[s.points, s.readyNow]}>{`+${sinceLast} pass points since last time!`}</Text> : null}
+                  {/* The pass shows steps, never points (blueprint 4.5). */}
+                  {sinceLast && passRung ? <Text maxFontSizeMultiplier={MAX_FONT} style={[s.points, s.readyNow]}>{passSinceLine(sinceLast, perStep)}</Text> : null}
                 </View>
               </View>
               {nextPrize && nextStep > 0 && (
@@ -708,7 +717,7 @@ export default function SharkPassScreen() {
                     <GameIcon name="streak" size={24} />
                     <View style={{ flex: 1 }}>
                       <Text maxFontSizeMultiplier={MAX_FONT} style={s.questLabel}>Daily 3 is your daily list</Text>
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>Finish it to earn pass points</Text>
+                      <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>Finish it to climb your Shark Pass</Text>
                     </View>
                     <GameIcon name="arrow" size={22} />
                   </Pressable>
@@ -721,7 +730,8 @@ export default function SharkPassScreen() {
                       <View style={s.questBar}><View style={[s.questFill, { width: `${(q.progress / Math.max(1, q.count)) * 100}%` }]} /></View>
                     </View>
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.questCount}>{`${Math.min(q.progress, q.count)}/${q.count}`}</Text>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.questBonus}>{q.done ? (justDone.has(`${q.scope}:${q.key}`) ? `+${q.bonus} pass points!` : 'Done!') : `+${q.bonus} pass points`}</Text>
+                    {/* Steps, never points: a quest says it climbs the pass (whole steps by number) and Done! once done. */}
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.questBonus}>{q.done ? (justDone.has(`${q.scope}:${q.key}`) ? 'Climbed!' : 'Done!') : questStepWords(q.bonus, perStep)}</Text>
                   </View>
                 ))}
                 {dailyQuestsSlot(state.quests, daily3Ready) === 'list' && <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>New quests every day. Skipping a day is fine.</Text>}

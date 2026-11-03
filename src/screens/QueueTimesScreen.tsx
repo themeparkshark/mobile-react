@@ -12,6 +12,10 @@ import {
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { useAppActive } from '../hooks/appActive';
 
+
+/** The paid return-time chip's word (fix round W1 item 16: "LL" meant nothing to a player). */
+const RETURN_TIME_WORD = 'SKIP LINE';
+
 const QUEUE_TIMES_REFRESH_MS = 60_000;
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -186,9 +190,11 @@ const RideCard = ({
             )
           )}
         </View>
+        {/* The park's paid return time, in plain words (never an unexplained "LL" or a park's own brand name). */}
         {hasLL && (
-          <View style={styles.llBadge}>
-            <Text style={styles.llText}>LL</Text>
+          <View style={styles.llBadge} accessible
+            accessibilityLabel={returnTime ? `Skip-the-line return time ${returnTime}. The park sells these.` : 'Skip-the-line returns available. The park sells these.'}>
+            <Text style={styles.llText}>{RETURN_TIME_WORD}</Text>
             {returnTime && <Text style={styles.llTime}>{returnTime}</Text>}
           </View>
         )}

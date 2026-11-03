@@ -49,9 +49,15 @@ export interface FinalSecondsProps {
   active: boolean;
   /** The breathing gold edge may draw (power budget). Default true. */
   edge?: boolean;
+  /**
+   * Draw the counting-down seconds (the 5-4-3 stamps and the ring closing over each). False for a paid
+   * ride game (Whack and Memory on a coin): no ticking number over a kid's board (fix round W1 item 18).
+   * The gold edge, TIME! and the shell's sounds stay, so the end still lands.
+   */
+  count?: boolean;
 }
 
-export const FinalSeconds = React.memo(function FinalSeconds({ secondsLeft, remainingMs, timeStamp = true, width, height, stampY, reduced, active, edge: edgeOn = true }: FinalSecondsProps) {
+export const FinalSeconds = React.memo(function FinalSeconds({ secondsLeft, remainingMs, timeStamp = true, width, height, stampY, reduced, active, edge: edgeOn = true, count = true }: FinalSecondsProps) {
   const font = useDisplayFont(NUM_PX);
   const timeFont = useDisplayFont(TIME_PX);
   const ms = useSharedValue(-1);
@@ -167,14 +173,14 @@ export const FinalSeconds = React.memo(function FinalSeconds({ secondsLeft, rema
           </Rect>
         </Group>
       ) : null}
-      <Group opacity={ringOpacity}>
+      {count ? <Group opacity={ringOpacity}>
         <Circle cx={cx} cy={stampY} r={RING_R} color="rgba(5,52,110,0.28)" />
         <Circle cx={cx} cy={stampY} r={RING_R} color="#ffffff" style="stroke" strokeWidth={9} opacity={0.75} />
         <Group transform={ringT}>
           <Path path={ring} color={GOLD_FX.rays} style="stroke" strokeWidth={9} strokeCap="round" start={0} end={ringEnd} />
         </Group>
-      </Group>
-      {font ? (
+      </Group> : null}
+      {font && count ? (
         <Group transform={numT} opacity={numOpacity}>
           <SkText x={0} y={6} text={numText} font={font} color="#05346e" style="stroke" strokeWidth={14} strokeJoin="round" opacity={0.5} />
           <SkText x={0} y={0} text={numText} font={font} color="#05346e" style="stroke" strokeWidth={14} strokeJoin="round" />

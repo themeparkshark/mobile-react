@@ -147,7 +147,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
       { key: 'coins', hero: 'basics_park', headline: 'Win ride coins',
         points: [
           { icon: 'map', text: 'Ride coins wait at the rides on the map.' },
-          { icon: 'ticket', text: 'Walk up and tap PLAY! One Ticket, one try.' },
+          { icon: 'ticket', text: 'Walk up and tap PLAY! One Ticket, one game.' },
           { icon: 'coin', text: 'Win to put the coin on your shelf.' },
         ] },
       { key: 'line', hero: 'basics_line', headline: 'Line time pays',

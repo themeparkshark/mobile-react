@@ -213,7 +213,7 @@ export default function CoinShelfScreen({ route }: {
             return <Animated.View key={group.parkId ?? 'none'} entering={reduced ? undefined : FadeInDown.delay(60 * groupIndex).duration(260)}
               style={styles.park}>
               <Pressable accessibilityRole="button" disabled={group.parkId === null}
-                accessibilityLabel={`${group.parkName}, ${total ? `${total.owned} of ${total.total}` : group.coins.length} Ride Coins. Open park shelf.`}
+                accessibilityLabel={`${group.parkName}, ${total ? `${total.owned} of ${total.total}` : group.coins.length} coins. Open park shelf.`}
                 onPress={() => openPark(group.parkId)} style={styles.parkHeader}>
                 <Text style={styles.parkName} numberOfLines={1}>{group.parkName}</Text>
                 <Text style={styles.parkCount}>{total ? `${total.owned}/${total.total}` : group.coins.length}</Text>

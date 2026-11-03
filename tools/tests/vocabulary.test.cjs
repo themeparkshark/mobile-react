@@ -66,8 +66,16 @@ const RULES = [
   ['green-train', /\bGreen Train\b/i, 'nothing: the shop list comes from the server'],
   // Round 3: the money is Shark Coins next to any price or cost ("a gift costs 350 coins" reads like ride coins).
   // Ride coin counts ("9 of 35 coins") stay. Template text is checked whole, with each ${...} read as N.
-  ['money-coins', /\b(costs?|for|need|needs|spend|earn|get|gets|have|has) (\d+|%s|N) (free |more )?coins\b|\bNot Enough Coins\b|\bXP and coins\b/i,
+  ['money-coins', /\b(costs?|for|need|needs|spend|earn|get|gets|have|has) (\d+|%s|N) (free |more )?coins\b|\bNot Enough Coins\b|\bXP and coins\b|\+(\d+|N) coins\b/i,
     'Shark Coins (the money)'],
+  // Fix round after the first gate (Nov 2, 2026), items 16 and 17: each word Dustin's walk tripped on.
+  ['pass-points', /\bpass points?\b/i, 'Shark Pass steps: "Step 4 of 50", "Climbs your Shark Pass" (playerWords.passGainWords)'],
+  ['one-try', /\bOne Ticket,? (gets |buys )?(you )?one try\b/i, 'One Ticket, one game (Memory gives 3 tries on one Ticket)'],
+  ['ll-chip', /^LL$/, 'SKIP LINE (the park\'s paid return time, in words)'],
+  ['med-confidence', /^Med$/, 'Likely, Maybe, Not sure'],
+  ['explore-tab', /\b(then|to) Explore\b/, 'the Map (the footer tab says Map; playerWords.tabWord)'],
+  ['ride-coin-count', /\b(\d+|N) of (\d+|N) ride coins\b/i, '"9 of 35 coins" (the shelf count says coins)'],
+  ['trophy-at', /\b(Bronze|Silver|Gold) at (\d+|N)\b/, 'trophies count wins: "1 more win for Bronze", "Bronze trophy: 11 of 12 wins"'],
 ];
 
 /**
@@ -86,7 +94,7 @@ function isCountLabel(node) {
 }
 
 /** Rules also checked against a whole template literal (they span a ${...} value). */
-const WHOLE_TEMPLATE_RULES = ['money-coins'];
+const WHOLE_TEMPLATE_RULES = ['money-coins', 'ride-coin-count', 'trophy-at'];
 
 /** PLAN.json vocabulary_ownership (October 28, 2026). A trailing /** owns a folder. */
 const OWNERS = {
@@ -313,6 +321,19 @@ if (require.main === module || process.env.NODE_TEST_CONTEXT) {
     assert.ok(scanSource("const s = { label: 'RIDE COINS', value: n };", 'x.ts').some(h => h.rule === 'ride-coins-count'));
     assert.equal(scanSource("const t = { label: 'Ride Coins', icon: 'coin' }; const el = <Text>Ride Coins</Text>;", 'x.tsx').length, 0);
     assert.equal(scanSource("const s = [{ label: 'Shelf Coins', value: 9 }];", 'x.ts').length, 0);
+    // Fix round W1 (Nov 2): the words the gate walk tripped on cannot come back.
+    assert.equal(scanSource("const a = '+120 pass points';", 'x.ts')[0].rule, 'pass-points');
+    assert.equal(scanSource('const a = `+${n} pass points each`;', 'x.ts')[0].rule, 'pass-points');
+    assert.equal(scanSource("const a = 'Walk up and tap PLAY! One Ticket, one try.';", 'x.ts')[0].rule, 'one-try');
+    assert.equal(scanSource("const a = 'One Ticket gets one try.';", 'x.ts')[0].rule, 'one-try');
+    assert.equal(scanSource('const el = <Text>LL</Text>;', 'x.tsx')[0].rule, 'll-chip');
+    assert.equal(scanSource("const c = { label: 'Med' };", 'x.ts')[0].rule, 'med-confidence');
+    assert.equal(scanSource("const a = 'Your recap opens first, then Explore.';", 'x.ts')[0].rule, 'explore-tab');
+    assert.equal(scanSource("const a = 'Continue to Explore';", 'x.ts')[0].rule, 'explore-tab');
+    assert.equal(scanSource('const a = `${a} of ${b} ride coins`;', 'x.ts')[0].rule, 'ride-coin-count');
+    assert.equal(scanSource('const a = `${lead} Bronze at ${at}`;', 'x.ts')[0].rule, 'trophy-at');
+    assert.equal(scanSource('const a = `+${n} coins`;', 'x.ts')[0].rule, 'money-coins');
+    assert.equal(scanSource("const a = 'Explore the park'; const b = 'Win ride coins'; const c = '9 of 35 coins'; const d = 'Medium';", 'x.ts').length, 0);
     // Ledger 39: the Green Train Toy is server data only.
     assert.equal(scanSource("const a = 'Green Train Toy';", 'x.ts')[0].rule, 'green-train');
   });

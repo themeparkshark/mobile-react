@@ -1,3 +1,4 @@
+import { homeLevelUpCoin, useCoinCollection } from '../context/CoinCollection';
 import { useIsFocused, useNavigation, useRoute, type NavigationProp, type ParamListBase } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
@@ -1505,14 +1506,23 @@ export function ExploreScreenBody() {
   }, [nextCoin.targetTask, nextCoin.target?.taskId, nextCoin.target?.name, openLinePlayFor, claimTickets, guideFlags.queue_tickets, park, player, welcome]);
   // The home guide card (core loop 4.1 "Home"): next park day, Tickets ready, the ticket meter, PLAN = your shelf.
   const homePlan = tripGoal && !tripGoal.coin_owned ? tripGoal : null;
+  // At home, a coin that can level up now leads the card (fix round W1 item 17), once coin levels are unlocked.
+  const homeCoins = useCoinCollection(!park && coinLevelsRung.open ? player?.id : null);
+  const homeLevelUp = !park && coinLevelsRung.open ? homeLevelUpCoin(homeCoins.coins, player?.energy ?? 0) : null;
   const homeGuide = useMemo<HomeGuide | null>(() => player && !park ? {
     parkName: tripGoal?.park_name ?? null, planName: homePlan?.ride_name ?? null, planCoinUrl: homePlan?.coin_url || null,
+    levelUpName: homeLevelUp?.ride_name ?? null,
     tickets: player.tickets ?? 0, welcomeBack: welcome.daysAway != null && welcome.daysAway >= 14 && !welcome.done,
-    onAction: () => {
+    onAction: action => {
       welcome.finish();
+      // LEVEL UP opens that coin on its park shelf (its level card); PLAN opens the next park day's shelf.
+      if (action === 'level_up' && homeLevelUp?.park_id) {
+        RootNavigation.navigate('Park', { park: homeLevelUp.park_id, player: player.id, focusCoin: { assetId: homeLevelUp.id } });
+        return;
+      }
       RootNavigation.navigate('Park', { park: tripGoal?.park_id ?? homeShelfPark(player.current_park_id), player: player.id });
     },
-  } : null, [player, park, tripGoal, homePlan, welcome]);
+  } : null, [player, park, tripGoal, homePlan, welcome, homeLevelUp]);
 
   // The HUD row is whole from the first map frame (the team bar says its plain no-leader line until
   // today's standings answer); a later lead change cross-fades inside MapStatusStack.

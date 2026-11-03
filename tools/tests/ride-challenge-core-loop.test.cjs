@@ -241,7 +241,8 @@ test('the Ticket Punch says "This ride\'s game" and never names Rhythm Tap or Sn
   assert.match(games, /'Beat the Buzzer'/);
   assert.equal(copy.punchLines('The Sword in the Stone').win, 'Win the Sword in the Stone coin!');
   const punch = read('src/components/TicketPunch.tsx');
-  assert.match(punch, /kicker = "THIS RIDE'S GAME"/);
+  assert.match(punch, /kicker = 'YOUR GAME'/);
+  assert.match(read('src/components/RedeemRedeemableModal.tsx'), /punchLines\(taskName, playFlagsNow\(\)\.retrySameGame\)\.kicker/);
   assert.doesNotMatch(punch, /YOUR CHALLENGE|Win to catch the \{rideName\}/);
   const selector = read('src/components/MiniGameSelector.tsx');
   assert.doesNotMatch(selector, /SnapTheRide/);
@@ -411,13 +412,32 @@ test('paid trivia: at least 10 s a question, one even tone, the Final a no-risk 
 
 const win = loadTs('src/components/rewards/postWinModel.ts');
 
-test('the win card\'s shelf line names the next trophy: "1 of 35 coins. Bronze at 12"', () => {
-  const at = (collected, available) => win.shelfLine({ milestones: [], progress: { park_id: 8, park_name: 'Disneyland', before: 0, collected, available }, next: null });
-  assert.equal(at(1, 35), '1 of 35 coins. Bronze at 12');
-  assert.equal(at(12, 35), '12 of 35 coins. Full shelf at 35', 'Silver needs 50: this shelf names its end instead');
-  assert.equal(at(13, 60), '13 of 60 coins. Silver at 50');
-  assert.equal(at(35, 35), '35 of 35 coins. Shelf complete!');
+test('the win card\'s shelf line: coins and wins each say their own unit (fix round W1 item 16)', () => {
+  const at = (collected, available, wins) => win.shelfLine({ milestones: [], progress: { park_id: 8, park_name: 'Disneyland', before: 0, collected, available }, next: null }, wins);
+  // Trophies count wins (repeats too), so the trophy half reads the park's wins, never the coin count.
+  assert.equal(at(10, 35, 11), '10 of 35 coins. 1 more win for Bronze');
+  assert.equal(at(1, 35, 1), '1 of 35 coins. 11 more wins for Bronze');
+  assert.equal(at(13, 60, 20), '13 of 60 coins. 30 more wins for Silver', 'a small shelf still reaches Silver with repeat wins');
+  assert.equal(at(10, 35, null), '10 of 35 coins', 'no wins known: no trophy half, never "Bronze at 12" next to a coin count');
+  assert.equal(at(35, 35, 40), '35 of 35 coins. Shelf complete!');
   assert.equal(win.shelfLine(null), null);
+});
+
+test('the win that reaches a trophy is its moment on the win card (fix round W1 item 17)', () => {
+  const shelf = { milestones: [], progress: { park_id: 8, park_name: 'Disneyland', before: 11, collected: 12, available: 35 }, next: null };
+  const bronze = win.winShelfLine(shelf, null, true, 12);
+  assert.equal(bronze.text, 'Bronze trophy! 12 wins here');
+  assert.equal(bronze.icon, 'trophyBronze');
+  assert.equal(bronze.trophy.name, 'Bronze');
+  assert.equal(win.winShelfLine(null, null, false, 50).trophy.name, 'Silver', 'a repeat win can reach a trophy too');
+  assert.equal(win.winShelfLine(null, null, false, 100).trophy.name, 'Gold');
+  assert.equal(win.winShelfLine(shelf, null, true, 13).trophy, undefined, 'the next win is a normal line');
+  assert.equal(win.trophyMoment(null), null);
+  // A repeat win names the trophy it counts toward in the shelf's own words.
+  assert.deepEqual({ ...win.winShelfLine(null, null, false, 11) }, { text: 'Bronze trophy: 11 of 12 wins', icon: 'trophyBronze' });
+  const card = read('src/components/PostWinRewardsModal.tsx');
+  assert.match(card, /shelf\?\.trophy \? <TrophyMomentRow trophy=\{shelf\.trophy\}/);
+  assert.match(read('src/components/RedeemRedeemableModal.tsx'), /parkShelfRequest\(park\.id, player\.id\)\?\.then/, 'the wins come from the shelf the win already loads');
 });
 
 test('one reward row on the ladder; a member\'s double coins as one +N VIP chip; every reward flies home', () => {
@@ -732,7 +752,7 @@ test('a limited coin won as a first coin gets its own one-line home, with no dat
   assert.equal(win.limitedWinLine(undefined), null);
   const card = read('src/components/PostWinRewardsModal.tsx');
   // The server's shelf count leaves limited coins out (progress null), so the limited line fills that gap only.
-  assert.match(card, /const shelf = winShelfLine\(milestones \?\? null, limited, isNewCoin\);/);
+  assert.match(card, /const shelf = winShelfLine\(milestones \?\? null, limited, isNewCoin, parkWins\);/);
   assert.match(read('src/components/RedeemRedeemableModal.tsx'),
     /limited=\{redeemable\?\.type === 'task' \? \(redeemable\.model as TaskType\)\?\.limited \?\? null : null\}/);
   assert.doesNotMatch(card, /days left|hours left|left!/i);
@@ -827,7 +847,7 @@ test('the win card answers a tap at once, and its shelf picture never depends on
   assert.equal(win.winButtonLabel(story, 'primary'), 'One moment', 'a story lookup never looks like a dead tap');
   assert.equal(win.winButtonLabel({ kind: 'map', label: 'Back to Map', detail: null }, 'primary'), 'Back to Map');
   const shelf = { milestones: [], progress: { park_id: 8, park_name: 'Disneyland', before: 0, collected: 1, available: 35 }, next: null };
-  assert.deepEqual({ ...win.winShelfLine(shelf, null, true) }, { text: '1 of 35 coins. Bronze at 12', icon: 'trophyBronze' });
+  assert.deepEqual({ ...win.winShelfLine(shelf, null, true, 1) }, { text: '1 of 35 coins. 11 more wins for Bronze', icon: 'trophyBronze' });
   assert.deepEqual({ ...win.winShelfLine(null, { active: true }, true) }, { text: 'Limited coin. Yours to keep!', icon: 'sparkle' });
   assert.equal(win.winShelfLine(null, { active: true }, false), null, 'a limited coin won again keeps quiet');
   assert.equal(win.winShelfLine(null, null, true), null);

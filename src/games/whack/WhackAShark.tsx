@@ -1407,6 +1407,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       stageReady={!!L && !!images.bg && !!images.peek && !!images.rim && !!images.deck}
       remainingMs={remainingMs}
       finalTimeStamp={false}
+      // A paid ride game: no 5-4-3 counting number over the board (fix round W1 item 18); the gold edge, the ring and the drumroll stay.
+      finalCount={!ride}
       finalStampFieldY={L ? L.hudH + (L.deckTop - L.hudH) * 0.52 : undefined}
       onStart={handleStart}
       onPause={handlePause}

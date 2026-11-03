@@ -50,7 +50,7 @@ import { useRung } from '../services/reveal/revealLadder';
 import { pictureOnlyFor, playFlagsNow, loadPlayFlags } from '../services/playPrefs';
 import { takeRideTry, type RideTrySummary } from '../gamekit/results/rideTry';
 import { resolveQueueStoryContext } from '../services/lineplay/resolveRide';
-import { prefetchParkShelf } from '../services/collection/parkShelfPrefetch';
+import { parkShelfRequest, prefetchParkShelf } from '../services/collection/parkShelfPrefetch';
 import getCollectionMilestones, { type CollectionMilestones } from '../api/endpoints/me/ride-coins/milestones';
 import GameIcon from '../ui/GameIcon';
 import { createEarnedShelfArrival } from '../services/collection/earnedShelf';
@@ -212,6 +212,8 @@ export default function RedeemRedeemableModal({
   const [postWinCoin, setPostWinCoin] = useState<RideCoinLevelType | null>(null);
   const [postWinEnergy, setPostWinEnergy] = useState<number | null>(null);
   const [milestones, setMilestones] = useState<CollectionMilestones | null>(null);
+  /** This park's wins after this win (the shelf prefetch's park_coins_count): the win card's trophy line and Bronze moment. */
+  const [parkWins, setParkWins] = useState<number | null>(null);
   const [firstCoinTicketReturned, setFirstCoinTicketReturned] = useState(false);
   const [lostTicketCost, setLostTicketCost] = useState(0);
   const [usedRescuePass, setUsedRescuePass] = useState(false);
@@ -326,6 +328,7 @@ export default function RedeemRedeemableModal({
       setPostWinCoin(null);
       setPostWinEnergy(null);
       setMilestones(null);
+      setParkWins(null);
       setFirstCoinTicketReturned(false);
       setLostTicketCost(0);
       setRetryOffered(true);
@@ -410,6 +413,10 @@ export default function RedeemRedeemableModal({
         });
         // The shelf the coin will fly to loads while the player reads the summary.
         prefetchParkShelf(park.id, player.id);
+        parkShelfRequest(park.id, player.id)?.then(shelf => {
+          const wins = Number(shelf.visitedPark?.park_coins_count);
+          if (savedAttemptIdRef.current === attempt.id && Number.isFinite(wins)) setParkWins(wins);
+        }).catch(() => undefined);
         if (attempt.rewards.coin_times_collected === 1) {
           getCollectionMilestones(attempt.id).then(result => {
             if (savedAttemptIdRef.current === attempt.id) setMilestones(result);
@@ -1108,7 +1115,7 @@ export default function RedeemRedeemableModal({
               gameName={selectedGameData.name}
               gameColor={selectedGameData.color}
               rideName={taskName}
-              kicker={punchLines(taskName).kicker}
+              kicker={punchLines(taskName, playFlagsNow().retrySameGame).kicker}
               winLine={punchLines(taskName).win}
               note={proofRejected ? 'Same game. No new Ticket.'
                 : attemptRef.current?.rescue_pass ? (redeemable?.rescue_pass_source === 'daily' ? 'Today’s free try' : 'An extra try') : undefined}
@@ -1217,6 +1224,7 @@ export default function RedeemRedeemableModal({
         coinProgress={postWinCoin}
         playerEnergy={postWinEnergy}
         milestones={milestones}
+        parkWins={parkWins}
         weekLine={weekWins}
         nextTarget={guideTarget}
         wonTaskId={attemptRef.current?.task_id ?? taskId}

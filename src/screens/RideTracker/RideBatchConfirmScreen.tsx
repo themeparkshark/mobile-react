@@ -53,11 +53,14 @@ interface RatingState {
 }
 
 // ─── Confidence Badge ───
+/** How sure the app is that you rode it, in words a kid reads. */
+const CONFIDENCE_WORDS: Record<'high' | 'medium' | 'low', string> = { high: 'Likely', medium: 'Maybe', low: 'Not sure' };
 const ConfidenceBadge: React.FC<{ level: 'high' | 'medium' | 'low' }> = React.memo(({ level }) => {
   const config = {
-    high: { label: 'High', color: colors.success, bg: 'rgba(76,175,80,0.15)' },
-    medium: { label: 'Med', color: colors.warning, bg: 'rgba(255,193,7,0.15)' },
-    low: { label: 'Low', color: colors.error, bg: 'rgba(244,67,54,0.15)' },
+    // Plain words for how sure the guess is (fix round W1 item 16: "Med" read as nothing), and no red.
+    high: { label: CONFIDENCE_WORDS.high, color: colors.success, bg: 'rgba(76,175,80,0.15)' },
+    medium: { label: CONFIDENCE_WORDS.medium, color: colors.warning, bg: 'rgba(255,193,7,0.15)' },
+    low: { label: CONFIDENCE_WORDS.low, color: '#46617A', bg: 'rgba(70,97,122,0.12)' },
   }[level];
 
   return (
@@ -100,7 +103,7 @@ const DetectionRow: React.FC<DetectionRowProps> = React.memo(({ ride, onToggle }
 DetectionRow.displayName = 'DetectionRow';
 
 function levelLabel(level: 'high' | 'medium' | 'low'): string {
-  return level === 'medium' ? 'medium' : level;
+  return CONFIDENCE_WORDS[level].toLowerCase();
 }
 
 // ─── Quick Rating Card ───
