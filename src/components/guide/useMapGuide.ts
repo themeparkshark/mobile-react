@@ -236,7 +236,9 @@ export default function useMapGuide(input: MapGuideInput) {
   const onGuideCardPress = useCallback((act?: (action: GuideAction) => void) => {
     const button = nextCoin.copy.button;
     if (button && act) { act(button.action); return; }
-    if (nextCoin.copy.pointsAtPlay && playableTaskId != null) { setPlayRequest(n => n + 1); return; }
+    // PLAY! is up and the card has no gold button of its own (it points at PLAY!, or its button stepped down to
+    // a quiet link beside PLAY!): the card's body is PLAY!, the one next thing.
+    if (playableTaskId != null) { setPlayRequest(n => n + 1); return; }
     // On today's Adventure ride the card is the ticket's frame: it opens the ticket's sheet (stamps, souvenir).
     if (nextCoin.copy.dots) { setAdventureSheetRequest(n => n + 1); return; }
     const task = nextCoin.targetTask;

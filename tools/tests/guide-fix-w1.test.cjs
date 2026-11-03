@@ -240,7 +240,7 @@ test('item 11: the raid is calm (no red), joins in the park, and the card body a
   assert.match(read('src/components/boss/BossRaidFlow.tsx'), /<BossJoinCta raid=\{raid\} remote=\{remote\} inPark=\{walkCloser\}/);
   const hook = read('src/components/guide/useMapGuide.ts');
   assert.match(hook, /if \(button && act\) \{ act\(button\.action\); return; \}/);
-  assert.match(hook, /if \(nextCoin\.copy\.pointsAtPlay && playableTaskId != null\) \{ setPlayRequest\(n => n \+ 1\); return; \}/);
+  assert.match(hook, /if \(playableTaskId != null\) \{ setPlayRequest\(n => n \+ 1\); return; \}/);
   assert.match(read('src/components/RedeemModal.tsx'), /if \(pillShown && !modalVisible\) pressPlayRef\.current\(\);/);
 });
 
