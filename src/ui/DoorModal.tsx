@@ -168,7 +168,8 @@ export default function DoorModal(props: DoorModalProps) {
         <ScrollView.Context.Provider value={null}>
           <InsideNativeModal.Provider value>
             <View style={[styles.container, containerStyles]} collapsable={false}
-              onTouchEnd={(event: { nativeEvent: { pageX: number; pageY: number } }) => leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY)}>
+              // On touch down: the sheet can be gone before the finger lifts, and that touch would never end here.
+              onTouchStart={(event: { nativeEvent: { pageX: number; pageY: number } }) => leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing')}>
               {children}
             </View>
           </InsideNativeModal.Provider>

@@ -1,7 +1,7 @@
 import Lottie from 'lottie-react-native';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Dimensions, Pressable, View, Text, StyleSheet } from 'react-native';
+import { Dimensions, Platform, Pressable, View, Text, StyleSheet } from 'react-native';
 import CalmModal from './retention/CalmModal';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
@@ -891,7 +891,8 @@ export default function RedeemRedeemableModal({
         onSwipeDown={flowState === 'preview' ? safeClose : undefined}
         onWillShow={() => { cardShownAt.current = Date.now(); }}
         onHide={() => {
-          challengeLayer.onHidden();
+          // iOS: the door reports the real dismiss (onDismiss). Android has no such event.
+          if (Platform.OS !== 'ios') challengeLayer.onHidden();
           winOut();
         }}
         onDismiss={challengeLayer.onDismissed}

@@ -88,8 +88,9 @@ export const leavingSheetTap = {
     leavingTapListeners.add(fn);
     return () => { leavingTapListeners.delete(fn); };
   },
-  note(x: number, y: number, now: number = Date.now()): void {
-    if (leaving.length === 0 || now - leavingSince < LEAVING_TAP_MIN_MS) return;
+  /** `going`: this sheet's own native dismiss has started (it counts even with no layer listed as leaving). */
+  note(x: number, y: number, now: number = Date.now(), going: boolean = false): void {
+    if (!going && (leaving.length === 0 || now - leavingSince < LEAVING_TAP_MIN_MS)) return;
     leavingTapListeners.forEach(fn => fn(x, y));
   },
 };
