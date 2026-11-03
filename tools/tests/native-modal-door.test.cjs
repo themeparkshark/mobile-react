@@ -110,9 +110,8 @@ test('a press on a sheet on its way out, right over PLAY!, is PLAY!\'s press: he
   assert.equal(modalLayers.pressClear(), false, 'a sheet is up: the first press won');
   modalLayers.markLeaving(id);
   assert.equal(modalLayers.pressClear(), true, 'it is going: map buttons work again');
+  assert.equal(LEAVING_TAP_MIN_MS, 0, 'no wait: the close reaches JS late under load');
   leavingSheetTap.note(120, 685, Date.now());
-  assert.deepEqual(heard, [], 'the tap that closed it is not a new press');
-  leavingSheetTap.note(120, 685, Date.now() + LEAVING_TAP_MIN_MS + 1);
   assert.deepEqual(heard, [[120, 685]]);
   off();
   modalLayers.remove(id);

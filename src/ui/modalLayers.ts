@@ -75,11 +75,12 @@ export const modalLayers = {
 /**
  * A tap that lands on a sheet that is on its way out. Its dim still covers the screen for a moment (longer on a busy
  * JS thread: up to about 1.5 s), so a kid's press on PLAY! landed on the leaving sheet and vanished, 20 of 20 in the
- * safety panel, while the guide said Tap PLAY!. DoorModal reports those taps here, and PLAY! claims one that falls on
- * it: the press is held and honored, never lost. A tap right at the start of the leaving is the same tap that closed
- * the sheet (a double tap on its button), so it does not count.
+ * safety panel, while the guide said Tap PLAY!. DoorModal reports those taps here (on touch down), and PLAY! claims
+ * one that falls on it: the press is held and honored, never lost. The touch that closed the sheet went down before
+ * the sheet started leaving, so it never counts. No wait after the start: under load the close itself reaches JS late,
+ * and a 200 ms wait from then still dropped 1 press in 30 at 0.5 s.
  */
-export const LEAVING_TAP_MIN_MS = 200;
+export const LEAVING_TAP_MIN_MS = 0;
 let leavingSince = 0;
 const leavingTapListeners = new Set<(x: number, y: number) => void>();
 export const leavingSheetTap = {
