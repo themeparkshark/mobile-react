@@ -172,8 +172,11 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
     lastInside.current = { parkId, parkName: input.parkName };
   }
   const leavingFrom = lastInside.current;
-  const leaving = enabled && parkCoinsKnown && leavingPark({ parkId, location: here, coins, lastInside: leavingFrom,
-    coinsToday: coinsToday(dayRecord, leavingFrom?.parkId, today) });
+  // Until the next park's own coins arrive, a player who just left a park with coins today is still leaving it
+  // (never a "Nothing to win right here" frame in between).
+  const leaving = enabled && (parkCoinsKnown
+    ? leavingPark({ parkId, location: here, coins, lastInside: leavingFrom, coinsToday: coinsToday(dayRecord, leavingFrom?.parkId, today) })
+    : !!leavingFrom && parkId != null && leavingFrom.parkId !== parkId && coinsToday(dayRecord, leavingFrom.parkId, today) > 0);
   // Arrival: the first reading in this park, with its own coins and not on the way out of another, starts the 30 s
   // welcome (walking from the esplanade into the next park welcomes there, after the goodbye).
   const arrivalReading = parkId != null && !!input.location && parkCoinsKnown && !leaving;

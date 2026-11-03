@@ -201,7 +201,8 @@ test('item 10: a goodbye on leaving, never the next park\'s welcome', () => {
   const hook = read('src/components/guide/useNextCoinGuide.ts');
   // The welcome starts inside the next park with its own coins, never on the way out of the last one.
   assert.match(hook, /const arrivalReading = parkId != null && !!input\.location && parkCoinsKnown && !leaving;/);
-  assert.match(hook, /const leaving = enabled && parkCoinsKnown && leavingPark\(/);
+  assert.match(hook, /const leaving = enabled && \(parkCoinsKnown\n\s+\? leavingPark\(/);
+  assert.match(hook, /: !!leavingFrom && parkId != null && leavingFrom\.parkId !== parkId && coinsToday\(dayRecord, leavingFrom\.parkId, today\) > 0\);/);
   assert.match(read('src/screens/ExploreScreen.tsx'), /case 'story':\n[^\n]*\n\s+if \(player\) RootNavigation\.navigate\('Park', \{ park: nextCoin\.leavingParkId \?\? park\?\.id/);
 });
 
