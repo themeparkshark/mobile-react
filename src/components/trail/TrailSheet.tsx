@@ -122,7 +122,7 @@ function TrailSheet({ visible, state, motion, inPark, parkName, onClose, onOpen,
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <UpperText style={styles.cardTitle}>Grown-ups: count pocket steps?</UpperText>
                   <Text style={styles.body}>Boxes keep opening with the app closed.</Text>
-                  <GameButton label="Count my steps" size="compact" onPress={onAskMotion} style={{ marginTop: 8, alignSelf: 'flex-start' }} />
+                  <GameButton label="Continue" size="compact" onPress={onAskMotion} style={{ marginTop: 8, alignSelf: 'flex-start' }} />
                 </View>
               </View>
             )}

@@ -216,7 +216,7 @@ export default function SettingsScreen() {
         const ok = await confirmGame({
           title: 'Find rides with your phone locked?',
           message: 'At the park, your phone can tell which ride you are near, even in your pocket. LinePlay keeps counting too. Say no and you can still play with the app open.',
-          confirmLabel: 'Turn it on',
+          confirmLabel: 'Continue',
           cancelLabel: 'Not now',
           icon: 'pin',
         });

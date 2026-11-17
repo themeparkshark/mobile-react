@@ -1467,16 +1467,16 @@ export default function LinePlayScreen() {
         {trackingHintNeeded && trackingHint === 'show' && (
             <View style={styles.queueTrackingHint}>
               <Text style={styles.queueTrackingHintText}>
-                Keep LinePlay open to earn Parts. Or tap Turn on to play with your phone locked.
+                Keep LinePlay open to earn Parts. Or tap Continue to play with your phone locked.
               </Text>
               <Pressable onPress={() => void enableLockedScreenPlay()}
                 disabled={backgroundPermissionBusy}
                 hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
                 accessibilityRole="button"
-                accessibilityLabel="Turn on LinePlay while your phone is locked"
+                accessibilityLabel="Continue to play with your phone locked"
                 style={styles.queueTrackingButton}>
                 <Text style={styles.queueTrackingButtonText}>
-                  {backgroundPermissionBusy ? 'Checking…' : 'Turn on'}
+                  {backgroundPermissionBusy ? 'Checking…' : 'Continue'}
                 </Text>
               </Pressable>
             </View>

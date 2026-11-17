@@ -802,7 +802,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         <Text style={styles.small}>One a day, never at night. Turn it off anytime.</Text>
         <Pressable onPress={() => { void notePushAsked(); setView(null); void enablePush().catch(() => undefined); }}
           accessibilityRole="button" style={({ pressed }) => [styles.gold, pressed && styles.pressed]}>
-          <Text style={styles.goldText}>YES, REMIND ME</Text>
+          <Text style={styles.goldText}>CONTINUE</Text>
         </Pressable>
         <Pressable onPress={close} accessibilityRole="button" style={({ pressed }) => [styles.plain, pressed && styles.pressed]}>
           <Text style={styles.plainText}>NOT NOW</Text>

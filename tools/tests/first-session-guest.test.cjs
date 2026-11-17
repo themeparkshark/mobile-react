@@ -84,7 +84,7 @@ test('Not now on location opens play (home arcade and a park pick), not News', (
   assert.match(notNow, /setPlaying\(true\)/);
   assert.match(source, /<HomeArcade /);
   assert.match(source, /navigate\('CoinShelf'\)/);
-  assert.match(source, /Turn On Location/);
+  assert.match(source, /<YellowButton text={buttonText}/, 'the primer button reads Continue, or Open Settings after iOS stops asking');
 });
 
 test('home arcade is practice only: no coins, no Parts, no location', () => {

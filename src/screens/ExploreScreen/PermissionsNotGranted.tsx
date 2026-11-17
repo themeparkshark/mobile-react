@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
-import { useContext, useEffect, useState } from 'react';
+import * as Location from 'expo-location';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import * as RootNavigation from '../../RootNavigation';
 import Animated, {
@@ -22,6 +23,13 @@ export const NOT_NOW_COPY = {
   hint: 'Turn on location any time to find treats near you.',
   news: 'Read park news',
 } as const;
+
+/**
+ * The primer's button. App Review (guideline 5.1.1(iv), Oct 31 2026) wants a
+ * neutral word on a button shown before the iOS prompt, never "Turn On
+ * Location". Once iOS will not ask again the button opens Settings and says so.
+ */
+export const PRIMER_BUTTON = { ask: 'Continue', settings: 'Open Settings', busy: 'One sec…' } as const;
 
 /** One Finn and one underwater scene in the first minute (no castle or globe shapes behind him). */
 const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
@@ -69,11 +77,28 @@ export default function PermissionsNotGranted() {
   const [asking, setAsking] = useState(false);
   const [playing, setPlaying] = useState(choseNotNow);
   const [arcadeOpen, setArcadeOpen] = useState(false);
+  // Whether iOS can still show its prompt (false after a "Don't Allow").
+  const [canAsk, setCanAsk] = useState(true);
+  const mounted = useRef(true);
+  const readCanAsk = () => {
+    Location.getForegroundPermissionsAsync()
+      .then(p => { if (mounted.current) setCanAsk(p.canAskAgain !== false); })
+      .catch(() => undefined);
+  };
+  useEffect(() => {
+    mounted.current = true;
+    readCanAsk();
+    return () => { mounted.current = false; };
+  }, []);
   const turnOn = async () => {
     if (asking) return;
     setAsking(true);
-    try { await requestPermission(); } finally { setAsking(false); }
+    try { await requestPermission(); } finally {
+      if (mounted.current) setAsking(false);
+      readCanAsk();
+    }
   };
+  const buttonText = asking ? PRIMER_BUTTON.busy : canAsk ? PRIMER_BUTTON.ask : PRIMER_BUTTON.settings;
   // Short phones (iPhone SE): a smaller Finn and finds, so his cap stays clear of the status bar.
   const compact = useWindowDimensions().height < 700;
   // Finn's cap rises above the card: the card layer starts below the status bar, plus his overhang.
@@ -84,7 +109,7 @@ export default function PermissionsNotGranted() {
   const preference = useReduceMotionPreference();
   const reduced = preference !== false;
   if (preference === null) return <><Backdrop /><View style={styles.wrap}><FullBackdrop /></View></>;
-  if (playing) return <NotNowPlay reduced={reduced} asking={asking} onTurnOn={turnOn} arcadeOpen={arcadeOpen} setArcadeOpen={setArcadeOpen} compact={compact} top={top} />;
+  if (playing) return <NotNowPlay reduced={reduced} buttonText={buttonText} onTurnOn={turnOn} arcadeOpen={arcadeOpen} setArcadeOpen={setArcadeOpen} compact={compact} top={top} />;
 
   return (
     <>
@@ -101,7 +126,7 @@ export default function PermissionsNotGranted() {
         <Text style={styles.body}>Treats pop up near you, even at home!</Text>
         <Text style={styles.small}>Your location only puts treats and rides near you.</Text>
         <View style={{ width: '82%', marginTop: 16 }}>
-          <YellowButton text={asking ? 'One sec…' : 'Turn On Location'} onPress={turnOn} />
+          <YellowButton text={buttonText} onPress={turnOn} />
         </View>
         {/* The way out is still play: games and a park pick need no location. */}
         <Pressable onPress={() => { choseNotNow = true; setPlaying(true); }} hitSlop={8} accessibilityRole="button"
@@ -115,8 +140,8 @@ export default function PermissionsNotGranted() {
 }
 
 /** The "Not now" card: two big picture buttons, then location and News as quiet options. */
-function NotNowPlay({ reduced, asking, onTurnOn, arcadeOpen, setArcadeOpen, compact, top }: {
-  reduced: boolean; asking: boolean; onTurnOn: () => void; arcadeOpen: boolean; setArcadeOpen: (open: boolean) => void; compact: boolean; top: number;
+function NotNowPlay({ reduced, buttonText, onTurnOn, arcadeOpen, setArcadeOpen, compact, top }: {
+  reduced: boolean; buttonText: string; onTurnOn: () => void; arcadeOpen: boolean; setArcadeOpen: (open: boolean) => void; compact: boolean; top: number;
 }) {
   return (
     <>
@@ -142,7 +167,7 @@ function NotNowPlay({ reduced, asking, onTurnOn, arcadeOpen, setArcadeOpen, comp
         </View>
         <Text style={styles.small}>{NOT_NOW_COPY.hint}</Text>
         <View style={{ width: '82%', marginTop: 12 }}>
-          <YellowButton text={asking ? 'One sec…' : 'Turn On Location'} onPress={onTurnOn} />
+          <YellowButton text={buttonText} onPress={onTurnOn} />
         </View>
         <Pressable onPress={() => RootNavigation.navigate('News')} hitSlop={8} accessibilityRole="button"
           accessibilityHint="Opens News" style={styles.notNow}>

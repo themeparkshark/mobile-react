@@ -13,9 +13,9 @@ export default function PushSoftAsk({ dark = false }: { readonly dark?: boolean 
     <View style={[styles.card, dark && styles.cardDark]}>
       <GameIcon name="bell" size={30} />
       <Text style={styles.text} numberOfLines={2}>Want an alert when a boss shows up or a ride has a Rush bonus?</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Turn on alerts" style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
+      <Pressable accessibilityRole="button" accessibilityLabel="Continue" style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
         onPress={() => { enablePush().then(setState).catch(() => undefined); }}>
-        <Text style={styles.btnText}>TURN ON</Text>
+        <Text style={styles.btnText}>CONTINUE</Text>
       </Pressable>
       {/* A clear way out: hides the ask for now; nothing changes on the phone. */}
       <Pressable accessibilityRole="button" accessibilityLabel="Not now" hitSlop={8} onPress={() => setHidden(true)}>
