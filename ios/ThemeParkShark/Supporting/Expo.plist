@@ -8,6 +8,11 @@
     <true/>
     <key>EXUpdatesLaunchWaitMs</key>
     <integer>0</integer>
+    <key>EXUpdatesRequestHeaders</key>
+    <dict>
+      <key>expo-channel-name</key>
+      <string>production</string>
+    </dict>
     <key>EXUpdatesRuntimeVersion</key>
     <string>file:fingerprint</string>
     <key>EXUpdatesURL</key>

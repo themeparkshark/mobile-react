@@ -106,6 +106,14 @@ reporting). On Oct 1 2026 hand-run internal-tunnel publishes inlined the bare
 tunnel host (no `/api`) and every tester request 404'd with no offline banner.
 The app now also appends `/api` to a bare origin (src/apiTarget.ts).
 
+**Local store archives need the channel header.** EAS builds write
+`EXUpdatesRequestHeaders` (`expo-channel-name`) into Expo.plist from eas.json;
+an xcodebuild archive does not, and without it u.expo.dev answers HTTP 400, so
+that binary never receives an OTA. 1.7.3 build .18 (a local archive) shipped
+without it. Since build .19 (Nov 17 2026) the committed Expo.plist carries
+`production` (it does not change the fingerprint); switch it for a local
+testflight-channel build.
+
 **Not yet proven on a device.** The simulator check (one expo-updates request
 per cold start) ran before an EAS channel existed, so every request got HTTP
 400. After the first TestFlight build, run this once and log the result here:

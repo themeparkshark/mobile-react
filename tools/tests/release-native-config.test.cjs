@@ -74,6 +74,10 @@ test('OTA runtime is fingerprint based on both the native and config side', () =
   assert.equal(expoPlist.EXUpdatesRuntimeVersion, 'file:fingerprint');
   assert.equal(expoPlist.EXUpdatesCheckOnLaunch, 'ALWAYS');
   assert.equal(expoPlist.EXUpdatesLaunchWaitMs, 0);
+  // A local archive gets no channel from eas.json: without this header the
+  // update server answers 400 and the store binary never sees an OTA (found
+  // Nov 17 2026: 1.7.3 build .18 was built this way). EAS builds overwrite it.
+  assert.deepEqual(expoPlist.EXUpdatesRequestHeaders, { 'expo-channel-name': 'production' });
   assert.match(appConfig, /runtimeVersion: process\.env\.TPS_INTERNAL_TUNNEL_BUILD === '1' \? 'internal-tunnel-1\.6\.0' : \{ policy: 'fingerprint' \}/);
   assert.doesNotMatch(appConfig, /runtimeVersion: '/); // store builds never pin a static runtime
   assert.doesNotMatch(appConfig, /bitcode/);
