@@ -38,6 +38,7 @@ test('T021: Wait Times finds a ride by name across every ride', () => {
   assert.equal(W.searchKey('Pirates of the Caribbean'), 'piratesofthecaribbean');
   assert.ok(W.searchKey("Peter Pan's Flight").includes(W.searchKey('peter pans')));
   assert.match(wait, /<SearchField placeholder="Find a ride" onChangeText=\{setQuery\} accessibilityLabel="Find a ride by name" \/>/);
+  assert.match(wait, /\{\(loading \|\| attractions\.length > 0 \|\| !!query\) && \(\s*<View style=\{styles\.searchWrap\}>/, 'never remounts mid-search');
   assert.match(wait, /if \(wanted\) return data\.filter\(e => searchKey\(e\.name\)\.includes\(wanted\)\)/);
 });
 

@@ -501,7 +501,9 @@ export default function QueueTimesScreen({ route }: { route: any }) {
       )}
 
       {/* Find a ride, then sort and filter */}
-      {!loading && attractions.length > 0 && (
+      {/* Stays mounted through a reload or a park change: the field keeps its own text, so it must never
+          remount while a search is on (it came back empty with the list still filtered). */}
+      {(loading || attractions.length > 0 || !!query) && (
         <View style={styles.searchWrap}>
           <SearchField placeholder="Find a ride" onChangeText={setQuery} accessibilityLabel="Find a ride by name" />
         </View>
