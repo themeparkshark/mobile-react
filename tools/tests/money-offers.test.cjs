@@ -144,7 +144,7 @@ test('coin packs say what they buy from the server median gear price, never inve
   assert.equal(offers.gearLine(undefined), null);
   assert.equal(offers.gearLine({ gear: 21, gear_price: 330 }, 38), 'Buys about 21 pieces of gear (38% more)');
   assert.equal(pass.winsAwayText(1220, [{ event: 'ride_coin_win', points: 120 }]), 'about 11 ride coin wins away');
-  assert.equal(pass.setMixText([{ row: 'free' }, { row: 'pass' }, { row: 'pass' }, { row: 'plus' }]), '1 free, 2 on the Shark Pass, 1 with Plus');
+  assert.equal(pass.setMixText([{ row: 'free' }, { row: 'pass' }, { row: 'pass' }, { row: 'plus' }]), '1 free, 2 on the Shark Pass, 1 with Shark Pass Plus');
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
   assert.match(shop, /main === 'coins' \? \[gearLine\(product\.buys, bonus\)/);
 });
@@ -163,7 +163,7 @@ test('the season set counts every wearable, owned = claimed, and says where each
   assert.deepEqual(plain(set.pieces.map(p => p.reward.art)), ['mittens', 'finisher', 'scarf', 'beanie', 'lights', 'crown'], 'free row first');
   assert.equal(pass.pieceSource(set.pieces[0]), 'Free at step 10');
   assert.equal(pass.pieceSource(set.pieces[3]), 'Shark Pass, step 10');
-  assert.equal(pass.pieceSource(set.pieces[5]), 'Shark Pass Plus');
+  assert.equal(pass.pieceSource(set.pieces[5]), 'Comes with Shark Pass Plus, the bigger Shark Pass');
   assert.equal(pass.seasonSet(tiers, [it('crown')], true).owned, 3, 'Plus extras are owned with Plus');
   assert.match(read('src/screens/SharkPassScreen.tsx'), /YOUR SEASON SET/);
 });

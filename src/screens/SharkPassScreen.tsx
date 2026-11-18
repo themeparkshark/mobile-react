@@ -53,7 +53,7 @@ import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIco
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { passGainWords, passSinceLine } from '../services/words/playerWords';
 
-import { EVENT_COPY, isWearable, claimedLine, passGain, passGrants, lastDayText, nextPassPrize, passSummary, pieceSource, dailyQuestsSlot, DAILY_GOALS_LATER, passQuestLabel, lanePassFixture, readyNowLine, rewardWords, seasonSet, setMixText, winsAwayText, type SetPiece } from '../services/money/sharkPassModel';
+import { EVENT_COPY, isWearable, claimedLine, passGain, passGrants, lastDayText, nextPassPrize, passSummary, pieceSource, dailyQuestsSlot, DAILY_GOALS_LATER, passQuestLabel, lanePassFixture, readyNowLine, rewardWords, seasonSet, setMixText, nextPrizeTodayText, passSale, passSoonLines, plusWords, trackCountLine, type SetPiece } from '../services/money/sharkPassModel';
 import { markRungSeen, useRung } from '../services/reveal/revealLadder';
 import { flagOn } from '../services/retention/flags';
 import useRetentionFlags from '../services/retention/useRetentionFlags';
@@ -264,13 +264,17 @@ export default function SharkPassScreen() {
   const progress = state && state.enabled ? state.progress : undefined;
   const tiers = (state && state.enabled ? state.tiers : undefined) ?? [];
   const premium = !!progress?.premium;
+  // T091: owned, for sale, not for sale yet ('soon') or over. Only 'owned' and 'on_sale' show the
+  // Shark Pass row: a locked row nobody can buy is a dead end.
+  const sale = passSale(season, premium);
+  const paidShown = sale === 'owned' || sale === 'on_sale';
 
-  useEffect(() => { if (season && !premium && price) trackImpression('sharkpass', season.product_id); }, [season?.product_id, premium, price]);
+  useEffect(() => { if (season && sale === 'on_sale' && price) trackImpression('sharkpass', season.product_id); }, [season?.product_id, sale, price]);
   useEffect(() => {
-    if (!season || premium || !storeAvailable()) return;
+    if (!season || sale !== 'on_sale' || !storeAvailable()) return;
     void loadSharkPassPrice(season.product_id).then(setPrice).catch(() => setPrice(null));
     if (season.plus_product_id) void loadSharkPassPrice(season.plus_product_id).then(setPlusPrice).catch(() => setPlusPrice(null));
-  }, [season?.product_id, premium]);
+  }, [season?.product_id, sale]);
 
   // Open on the step the player is on.
   const scrolled = useRef(false);
@@ -440,12 +444,13 @@ export default function SharkPassScreen() {
   // One next prize everywhere: the same answer as the banner (the server's next_prize when it sends one).
   const nextPrize = progress ? nextPassPrize(state) : null;
   const nextStep = nextPrize?.tier ?? 0;
+  const nextPrizeLine = nextPrize && progress ? nextPrizeTodayText({ stepsAway: nextStep - step, pointsAway: nextPrize.pointsAway, perStep, daily3Ready, today: progress.today }) : null;
   const heroLook = useMemo(() => withSeasonPin(player?.inventory as InventoryType | undefined, nextPrize?.reward ?? progress?.top_prize),
     [player?.inventory, nextPrize?.reward, progress?.top_prize]);
   const readyNow = useMemo(() => readyNowLine(tiers), [tiers]);
   // The honest worth of the Shark Pass row: its coins, tickets and Rescue Passes at Supplies' regular
   // pack prices (Apple's prices, rounded down), pins and energy listed apart. Shown only when every part has a price.
-  const supplies = useSupplies(!premium && !!season);
+  const supplies = useSupplies(sale === 'on_sale');
   const worthLine = useMemo(() => {
     if (!price || !supplies.catalog) return null;
     const g = passGrants(tiers);
@@ -454,13 +459,18 @@ export default function SharkPassScreen() {
     const worth = formatLike(price.price, Math.floor(value * 100) / 100);
     return worth ? `Climb all ${steps} steps and the Shark Pass row's coins, Tickets and Extra tries come to ${worth} at Supplies' regular prices. Plus ${g.pins} Shark Pass season items.` : null;
   }, [tiers, price, supplies.catalog, supplies.prices, steps]);
-  // The panel's showcase: the season items on the Shark Pass row, the next ones first (up to 5).
+  // The panel's showcase: the season items on the Shark Pass row, the next ones first (three, so the buy stays calm).
   const showcase = useMemo(() => {
     const items = tiers.filter(t => isWearable(t.paid));
     const ahead = items.filter(t => !t.unlocked || !premium);
-    return (ahead.length ? ahead : items).slice(0, 5);
+    return (ahead.length ? ahead : items).slice(0, 3);
   }, [tiers, premium]);
   const readyCount = tiers.filter(t => t.unlocked && !t.paid_claimed).length;
+  const countLine = useMemo(() => trackCountLine(tiers, paidShown), [tiers, paidShown]);
+  const soonLines = passSoonLines(season);
+  // Shark Pass Plus in plain words; its pieces join the set only while it can be had (or is owned).
+  const plusLine = plusWords(season?.plus_rewards);
+  const plusShown = !!progress?.plus || (sale === 'on_sale' && !!plusPrice && !!plusLine);
 
   // The reward card's wear button and Share: Share is the last reveal's, and a wearable piece asks to wear it first.
   const landedCanShare = !!landed && !landed.twin && isWearable(landed.reward) && !landed.emblem && !landed.next;
@@ -581,47 +591,46 @@ export default function SharkPassScreen() {
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextPrizeText}>
                       {`${rewardWords(nextPrize.reward)} at step ${nextStep}`}
                     </Text>
-                    {winsAwayText(nextPrize.pointsAway, progress.today) && (
-                      <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextWins}>{winsAwayText(nextPrize.pointsAway, progress.today)}</Text>
-                    )}
+                    {/* How far, counted from what can still be done today, home first (T117). */}
+                    {nextPrizeLine && <Text maxFontSizeMultiplier={MAX_FONT} style={s.nextWins}>{nextPrizeLine}</Text>}
                   </View>
                 </View>
               )}
-              {progress.top_prize && isWearable(progress.top_prize) && step < steps && (
-                // The season's top prize, always in view: tap to see it behind your own shark.
-                <Pressable onPress={() => setTryOn({ reward: progress.top_prize as SetPiece['reward'], step: steps, row: 'pass', owned: false })}
-                  accessibilityRole="button" accessibilityLabel={`Top prize at step ${steps}: ${rewardWords(progress.top_prize)}. Tap to try it.`} style={s.topChip}>
-                  <RewardPicture reward={progress.top_prize} size={24} />
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={s.topChipText} numberOfLines={1}>{`Step ${steps}: ${rewardWords(progress.top_prize)}`}</Text>
-                </Pressable>
-              )}
-              {progress.vip && <Text maxFontSizeMultiplier={MAX_FONT} style={s.vipLine}>{`VIP: +${progress.vip_bonus_percent}% points on everything`}</Text>}
-              {progress.catch_up && <Text maxFontSizeMultiplier={MAX_FONT} style={s.vipLine}>{`Catch-up boost on: +${progress.catch_up_percent}% points until you’re back on pace`}</Text>}
+              {/* T105: the top prize, VIP and catch-up lines live under More (How to climb), so the
+                  first read is one next prize and one claim. */}
               {progress.claimable > 0 && (
                 <GameButton label={progress.claimable === 1 ? 'Claim 1 reward' : `Claim ${progress.claimable} rewards`} icon="gift"
                   loading={busy === 'all'} disabled={!!busy} onPress={() => void claimAll()} style={{ marginTop: 6 }} />
               )}
             </Animated.View>
 
-            {/* The track: free row on top, Shark Pass row below, every reward visible. */}
+            {/* The track: free row on top, Shark Pass row below (only while it can be had), every reward visible. */}
             <View style={s.trackHead}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={s.rowLabelFree}>FREE</Text>
-              <Text maxFontSizeMultiplier={MAX_FONT} style={s.rowLabelPass}>{premium ? 'SHARK PASS · YOURS' : 'SHARK PASS'}</Text>
+              {paidShown && (
+                // One lock on the row's name instead of a lock on all 50 of its cells.
+                <View style={s.rowLabelPassWrap}>
+                  {!premium && <GameIcon name="lock" size={16} />}
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={s.rowLabelPass}>{premium ? 'SHARK PASS · YOURS' : 'SHARK PASS'}</Text>
+                </View>
+              )}
             </View>
             <FlatList ref={list} horizontal data={tiers as SharkPassTier[]} keyExtractor={t => String(t.tier)}
               showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10 }}
               getItemLayout={(_, i) => ({ length: CELL_W, offset: CELL_W * i + 10, index: i })}
               initialNumToRender={8} windowSize={5}
               renderItem={({ item }) => (
-                <TierColumn tier={item} current={progress.tier} premium={premium} busy={busy} pulse={running} burst={climbed?.to === item.tier}
-                  onClaim={(track) => void claim(item, track)} onLocked={() => {
+                <TierColumn tier={item} current={progress.tier} premium={premium} paidShown={paidShown} busy={busy} pulse={running} burst={climbed?.to === item.tier}
+                  onClaim={(track) => void claim(item, track)} onLocked={(track) => {
                     const n = item.tier;
                     // An info tap is a light toast, never a modal a kid has to dismiss.
                     const away = n - progress.tier;
                     if (!item.unlocked) showToast(`Step ${n} is ${away} ${away === 1 ? 'step' : 'steps'} away. Keep playing!`, 'info');
-                    else if (!premium) showToast(`${rewardWords(item.paid)} comes with the Shark Pass.`, 'info');
+                    else if (track === 'paid' && !premium) showToast(`${rewardWords(item.paid)} comes with the Shark Pass.`, 'info');
                   }} />
               )} />
+            {/* The counts sit under the track, not over it (T105). */}
+            {countLine && <Text maxFontSizeMultiplier={MAX_FONT} style={s.countLine}>{countLine}</Text>}
 
             {season.ended && (
               <View style={s.ended}>
@@ -629,14 +638,9 @@ export default function SharkPassScreen() {
                 <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>
                   {season.claim_last_day ? `Claim what you reached by ${lastDayText(season.claim_last_day)}.` : 'Claim what you reached soon.'}
                 </Text>
-                {!premium && (
-                  <Pressable onPress={() => void restore()} hitSlop={8} disabled={!!busy}>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={s.restore}>{busy === 'restore' ? 'Checking…' : 'Restore purchases'}</Text>
-                  </Pressable>
-                )}
               </View>
             )}
-            {!premium && !season.ended && season.on_sale !== false && (
+            {sale === 'on_sale' && (
               <Animated.View entering={reduced ? undefined : FadeInUp.delay(200).springify().damping(15)} style={s.buyLip}>
                 <View style={s.buy}>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyTitle}>UNLOCK THE SHARK PASS ROW</Text>
@@ -651,7 +655,6 @@ export default function SharkPassScreen() {
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>{`A reward on all ${steps} steps: ${summary}.`}</Text>
                   {/* What the kid has already climbed to, in real rewards, right above the price. */}
                   {readyNow && <Text maxFontSizeMultiplier={MAX_FONT} style={[s.buyBody, s.readyNow]}>{readyNow}</Text>}
-                  {worthLine && <Text maxFontSizeMultiplier={MAX_FONT} style={s.worthSmall}>{worthLine}</Text>}
                   {storeAvailable() ? (
                     <Pressable onPress={() => void buy(false)} disabled={!price || !!busy} accessibilityRole="button"
                       accessibilityLabel={price ? `Get the Shark Pass for ${price.price}. Real money, one time, a grown-up buys it.` : 'Loading the price'}
@@ -667,20 +670,19 @@ export default function SharkPassScreen() {
                   ) : (
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>Update Theme Park Shark to get the Shark Pass.</Text>
                   )}
-                  {plusPrice && season.plus_rewards && season.plus_rewards.length > 0 && (
+                  {plusPrice && plusLine && (
+                    // The bigger pass is a quiet second choice under the one clear buy, said in plain words (T116).
                     <Pressable onPress={() => void buy(true)} disabled={!!busy} accessibilityRole="button"
-                      accessibilityLabel={`Shark Pass Plus for ${plusPrice.price}: the Shark Pass row plus ${season.plus_rewards.map(rewardWords).join(' and ')}. Real money, one time.`}
+                      accessibilityLabel={`${plusLine} ${plusPrice.price}. Real money, one time.`}
                       style={({ pressed }) => [s.plus, pressed && { opacity: 0.9 }]}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                        {season.plus_rewards.filter(r => r.type === 'item').slice(0, 1).map(r => <RewardPicture key="p" reward={r} size={54} />)}
-                        <View style={{ flex: 1 }}>
+                      {(season.plus_rewards ?? []).filter(r => r.type === 'item').slice(0, 1).map(r => <RewardPicture key="p" reward={r} size={40} />)}
+                      <View style={{ flex: 1 }}>
+                        <View style={s.ctaRow}>
                           <Text maxFontSizeMultiplier={MAX_FONT} style={s.plusTitle}>SHARK PASS PLUS</Text>
-                          <Text maxFontSizeMultiplier={MAX_FONT} style={s.plusBody}>{`Everything above, plus ${season.plus_rewards.map(rewardWords).join(' and ')} right away.`}</Text>
+                          {busy !== 'buy' && <RealMoneyMark size={18} />}
+                          <Text maxFontSizeMultiplier={1.15} style={s.plusPrice}>{busy === 'buy' ? '…' : plusPrice.price}</Text>
                         </View>
-                      </View>
-                      <View style={s.ctaRow}>
-                        {busy !== 'buy' && <RealMoneyMark size={22} />}
-                        <Text maxFontSizeMultiplier={1.15} style={s.plusPrice}>{busy === 'buy' ? 'ONE MOMENT…' : `${plusPrice.price} · one time`}</Text>
+                        <Text maxFontSizeMultiplier={MAX_FONT} style={s.plusBody}>{plusLine}</Text>
                       </View>
                     </Pressable>
                   )}
@@ -691,14 +693,43 @@ export default function SharkPassScreen() {
                 </View>
               </Animated.View>
             )}
-
-            {!premium && !season.ended && season.on_sale === false && (
-              // Not for sale right now: an earlier buy can always be brought back.
-              <Pressable onPress={() => void restore()} hitSlop={8} disabled={!!busy} style={{ alignSelf: 'center' }}>
-                <Text maxFontSizeMultiplier={MAX_FONT} style={s.restore}>{busy === 'restore' ? 'Checking…' : 'Restore purchases'}</Text>
-              </Pressable>
+            {sale === 'soon' && (
+              // T091: not for sale yet. No locked row, no price, no "one buy": why, when, and that climbing still counts.
+              <Animated.View entering={reduced ? undefined : FadeInUp.delay(200).springify().damping(15)} style={s.buyLip}>
+                <View style={s.buy} accessible accessibilityLabel={`${soonLines.title}. ${soonLines.body}`}>
+                  <Image source={EMBLEM} style={{ width: 64, height: 64 }} contentFit="contain" />
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyTitle}>{soonLines.title}</Text>
+                  {showcase.length > 0 && (
+                    <View style={s.preview}>
+                      {showcase.map(t => (
+                        <View key={t.tier} style={s.previewCell}>
+                          <RewardPicture reward={t.paid} size={48} />
+                          <Text maxFontSizeMultiplier={1.1} style={s.previewText} numberOfLines={1}>{stepLabel(t.tier)}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  <Text maxFontSizeMultiplier={MAX_FONT} style={s.buyBody}>{soonLines.body}</Text>
+                </View>
+              </Animated.View>
             )}
 
+            {/* T105: quests, the season set, frames, gold editions, how to climb and the grown-ups box fold
+                under one toggle, so the first read is the climb, the next prize, the track and one buy. */}
+            <Pressable onPress={() => { haptic('tapLight'); setMoreOpen(o => !o); }} accessibilityRole="button"
+              accessibilityState={{ expanded: moreOpen }} style={s.moreToggle}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={s.moreToggleText}>{moreOpen ? 'Show less' : 'Quests, your set and more'}</Text>
+              <GameIcon name="arrow" size={20} style={{ transform: [{ rotate: moreOpen ? '-90deg' : '90deg' }] }} />
+            </Pressable>
+            {moreOpen && <>
+            {progress.top_prize && isWearable(progress.top_prize) && step < steps && (
+              // The season's top prize: tap to see it behind your own shark.
+              <Pressable onPress={() => setTryOn({ reward: progress.top_prize as SetPiece['reward'], step: steps, row: 'pass', owned: false })}
+                accessibilityRole="button" accessibilityLabel={`Top prize at step ${steps}: ${rewardWords(progress.top_prize)}. Tap to try it.`} style={s.topChip}>
+                <RewardPicture reward={progress.top_prize} size={24} />
+                <Text maxFontSizeMultiplier={MAX_FONT} style={s.topChipText} numberOfLines={1}>{`Step ${steps}: ${rewardWords(progress.top_prize)}`}</Text>
+              </Pressable>
+            )}
             {/* Today's Pass quests: 3 a day (the first always doable at home) and one for the week. */}
             {state.enabled && state.quests && !season.ended && (
               <View style={s.quests}>
@@ -740,7 +771,7 @@ export default function SharkPassScreen() {
 
             {/* The season set: every pin and scene, owned ones bright, tap any to try it on. */}
             {(() => {
-              const set = seasonSet(tiers, season.plus_rewards ?? [], !!progress.plus);
+              const set = seasonSet(tiers, plusShown ? season.plus_rewards ?? [] : [], !!progress.plus);
               if (!set.pieces.length) return null;
               // The free Finisher Pin leads the set: the season's top look anyone can earn.
               const pieces = [...set.pieces].sort((a, b) => Number(b.row === 'free' && b.step === steps) - Number(a.row === 'free' && a.step === steps));
@@ -753,6 +784,8 @@ export default function SharkPassScreen() {
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.setCount}>{`${set.owned} of ${set.pieces.length}`}</Text>
                   </View>
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>{setMixText(set.pieces)}</Text>
+                  {/* T116: "Plus" never appears without saying what it is. */}
+                  {set.pieces.some(p => p.row === 'plus') && plusLine && <Text maxFontSizeMultiplier={MAX_FONT} style={s.questFoot}>{plusLine}</Text>}
                   {freeSet && bonus && (
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.freeSet}>
                       {bonus.owned ? `Free set done! The ${bonus.name} is yours.` : `Free set: ${freeSet.owned} of ${freeSet.total}. Collect all ${freeSet.total} for the ${bonus.name}.`}
@@ -778,14 +811,6 @@ export default function SharkPassScreen() {
               );
             })()}
 
-            {/* Focus: frames, gold editions and the points table fold under one toggle, so the
-                track, buy panel, quests and set stay the whole first read. */}
-            <Pressable onPress={() => { haptic('tapLight'); setMoreOpen(o => !o); }} accessibilityRole="button"
-              accessibilityState={{ expanded: moreOpen }} style={s.moreToggle}>
-              <Text maxFontSizeMultiplier={MAX_FONT} style={s.moreToggleText}>{moreOpen ? 'Show less' : 'More about the Shark Pass'}</Text>
-              <GameIcon name="arrow" size={20} style={{ transform: [{ rotate: moreOpen ? '-90deg' : '90deg' }] }} />
-            </Pressable>
-            {moreOpen && <>
             {/* Your frames: a ring around your shark on your profile, Standings and share cards. */}
             {state.cosmetics && state.cosmetics.frames.length > 0 && (
               <View style={s.earn}>
@@ -868,11 +893,11 @@ export default function SharkPassScreen() {
                   <Text maxFontSizeMultiplier={MAX_FONT} style={s.earnPts}>{`+${e.points}`}</Text>
                 </View>
               ))}
+              {progress.vip && <Text maxFontSizeMultiplier={MAX_FONT} style={s.vipLine}>{`VIP: +${progress.vip_bonus_percent}% points on everything`}</Text>}
+              {progress.catch_up && <Text maxFontSizeMultiplier={MAX_FONT} style={s.vipLine}>{`Catch-up boost on: +${progress.catch_up_percent}% points until you’re back on pace`}</Text>}
             </View>
 
-            </>}
-
-            {!premium && !season.ended && (
+            {sale === 'on_sale' && (
               <View style={s.grownUps} accessible accessibilityLabel={`For grown-ups. ${PASS_GROWN_UP_NOTES.join(' ')}`}>
                 <Text maxFontSizeMultiplier={MAX_FONT} style={s.grownUpsHead}>FOR GROWN-UPS</Text>
                 {PASS_GROWN_UP_NOTES.map(line => (
@@ -881,8 +906,11 @@ export default function SharkPassScreen() {
                     <Text maxFontSizeMultiplier={MAX_FONT} style={s.grownUpText}>{line}</Text>
                   </View>
                 ))}
+                {worthLine && <Text maxFontSizeMultiplier={MAX_FONT} style={s.worthSmall}>{worthLine}</Text>}
               </View>
             )}
+
+            </>}
 
             <Text maxFontSizeMultiplier={MAX_FONT} style={s.fine}>
               {`Everything you claim, gold editions too, is yours to keep. ${season.title} items are given out until ${lastDayText(season.last_day)}.`}
@@ -957,9 +985,9 @@ function ProgressBar({ value, reduced }: { value: number; reduced: boolean }) {
   );
 }
 
-const TierColumn = memo(function TierColumn({ tier, current, premium, busy, pulse, burst = false, onClaim, onLocked }: {
-  tier: SharkPassTier; current: number; premium: boolean; busy: string | null; pulse: boolean; burst?: boolean;
-  onClaim: (track: 'free' | 'paid') => void; onLocked: () => void;
+const TierColumn = memo(function TierColumn({ tier, current, premium, paidShown = true, busy, pulse, burst = false, onClaim, onLocked }: {
+  tier: SharkPassTier; current: number; premium: boolean; paidShown?: boolean; busy: string | null; pulse: boolean; burst?: boolean;
+  onClaim: (track: 'free' | 'paid') => void; onLocked: (track: 'free' | 'paid') => void;
 }) {
   const freeReady = tier.unlocked && !!tier.free && !tier.free_claimed;
   const paidReady = tier.unlocked && premium && !tier.paid_claimed;
@@ -974,7 +1002,7 @@ const TierColumn = memo(function TierColumn({ tier, current, premium, busy, puls
   return (
     <View style={[s.col, premium && tier.unlocked && s.colOwned]}>
       <Cell reward={tier.free} claimed={tier.free_claimed} ready={freeReady} locked={!tier.unlocked} pass={false}
-        pulse={pulse} busy={busy === `${tier.tier}:free`} onPress={() => (freeReady ? onClaim('free') : onLocked())} />
+        pulse={pulse} busy={busy === `${tier.tier}:free`} onPress={() => (freeReady ? onClaim('free') : onLocked('free'))} />
       {/* The rail runs through every step: gold up to where the player is. */}
       <View style={s.railWrap} pointerEvents="none">
         <View style={[s.rail, tier.unlocked && s.railOn]} />
@@ -982,14 +1010,17 @@ const TierColumn = memo(function TierColumn({ tier, current, premium, busy, puls
       <Animated.View style={[s.node, tier.unlocked && s.nodeOn, tier.tier === current && s.nodeNow, nodePop]}>
         <Text maxFontSizeMultiplier={1.1} style={[s.nodeText, tier.unlocked && s.nodeTextOn]}>{tier.tier}</Text>
       </Animated.View>
-      <Cell reward={tier.paid} claimed={tier.paid_claimed} ready={paidReady} locked={!tier.unlocked || !premium} pass
-        pulse={pulse} busy={busy === `${tier.tier}:paid`} onPress={() => (paidReady ? onClaim('paid') : onLocked())} />
+      {/* Not for sale yet (or over without it): no Shark Pass row at all (T091). Not owned: one lock on the row's name, none per cell. */}
+      {paidShown && (
+        <Cell reward={tier.paid} claimed={tier.paid_claimed} ready={paidReady} locked={!tier.unlocked || !premium} pass quietLock={!premium}
+          pulse={pulse} busy={busy === `${tier.tier}:paid`} onPress={() => (paidReady ? onClaim('paid') : onLocked('paid'))} />
+      )}
     </View>
   );
 });
 
-function Cell({ reward, claimed, ready, locked, pass, pulse, busy, onPress }: {
-  reward: SharkPassReward | null; claimed: boolean; ready: boolean; locked: boolean; pass: boolean; pulse: boolean; busy: boolean; onPress: () => void;
+function Cell({ reward, claimed, ready, locked, pass, quietLock = false, pulse, busy, onPress }: {
+  reward: SharkPassReward | null; claimed: boolean; ready: boolean; locked: boolean; pass: boolean; quietLock?: boolean; pulse: boolean; busy: boolean; onPress: () => void;
 }) {
   const glow = useSharedValue(0);
   const ambient = useAmbient();
@@ -1008,7 +1039,7 @@ function Cell({ reward, claimed, ready, locked, pass, pulse, busy, onPress }: {
         <View style={{ opacity: claimed ? 0.45 : 1 }}><RewardPicture reward={reward} size={50} /></View>
         <Text maxFontSizeMultiplier={1.1} style={[s.cellText, pass && s.cellTextPass, pass && !locked && s.cellTextOwned]} numberOfLines={2}>{rewardWords(reward)}</Text>
         {claimed && <View style={s.badge}><GameIcon name="check" size={22} /></View>}
-        {!claimed && locked && <View style={s.badge}><GameIcon name="lock" size={20} /></View>}
+        {!claimed && locked && !quietLock && <View style={s.badge}><GameIcon name="lock" size={20} /></View>}
         {ready && !busy && <View style={s.claimTag}><Text maxFontSizeMultiplier={1.1} style={s.claimTagText}>CLAIM</Text></View>}
       </Pressable>
     </Animated.View>
@@ -1062,6 +1093,8 @@ const s = StyleSheet.create({
   trackHead: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: -6 },
   rowLabelFree: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   rowLabelPass: { fontFamily: FONT.display, fontSize: 15, color: BRAND.gold },
+  rowLabelPassWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  countLine: { fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff', textAlign: 'center', marginHorizontal: 24, marginTop: -6 },
   col: { width: CELL_W, alignItems: 'center', gap: 6, paddingVertical: 6 },
   // Shark Pass owners: every reached step sits on a warm gold band (the row is theirs).
   colOwned: { backgroundColor: 'rgba(255,211,77,0.14)', borderRadius: 16 },
@@ -1099,10 +1132,10 @@ const s = StyleSheet.create({
   ctaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   ctaText: { fontFamily: FONT.display, fontSize: 24, color: '#6a3b00' },
   ctaSub: { fontFamily: FONT.body, fontSize: 14, color: '#6a3b00' },
-  plus: { alignSelf: 'stretch', backgroundColor: '#1f5fae', borderRadius: 18, padding: 12, gap: 8, borderWidth: 3, borderColor: '#7dffb0', alignItems: 'center' },
-  plusTitle: { fontFamily: FONT.display, fontSize: 18, color: '#7dffb0' },
-  plusBody: { fontFamily: FONT.body, fontSize: 14, color: '#ffffff', lineHeight: 18 },
-  plusPrice: { fontFamily: FONT.display, fontSize: 20, color: '#ffffff' },
+  plus: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 16, paddingVertical: 8, paddingHorizontal: 10, minHeight: 44 },
+  plusTitle: { fontFamily: FONT.display, fontSize: 15, color: '#7dffb0' },
+  plusBody: { fontFamily: FONT.body, fontSize: 13, color: '#e2f6ff', lineHeight: 17 },
+  plusPrice: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
   realMoney: { fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff' },
   restore: { fontFamily: FONT.body, fontSize: 15, color: '#ffffff', textDecorationLine: 'underline' },
   quests: { marginHorizontal: 14, backgroundColor: '#123f80', borderRadius: 20, padding: 12, gap: 8, borderWidth: 3, borderColor: '#7dffb0' },
