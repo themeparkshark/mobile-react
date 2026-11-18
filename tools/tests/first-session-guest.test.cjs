@@ -573,7 +573,7 @@ test('one word for one thing: every kid-facing line in minute one says treats, n
   assert.doesNotMatch(steps, /'[^']*\b[Ff]inds?\b[^']*'/, 'no "find" in the intro cards a kid reads');
   const primer = read('src/screens/ExploreScreen/PermissionsNotGranted.tsx');
   assert.doesNotMatch(primer, /[Tt]reasures?/);
-  assert.match(primer, /Treats pop up near you, even at home!/);
+  assert.match(primer, /home: 'Treats pop up near you, even at home!'/);
   const look = loadTs('src/screens/ExploreScreen/findPresentation.ts');
   assert.equal(look.mapStatusLine({ homeLocationConfirmed: true, isLoading: true, empty: true, loadError: false }).text, 'Scouting for treats...');
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /'A treat is close! Tap it to catch\.'/);

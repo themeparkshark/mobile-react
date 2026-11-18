@@ -50,3 +50,11 @@ test('T185: the name field counts letters and says when it cut a long name; T182
   assert.equal(size(200), 168, 'a short stage gets a smaller shark (stage minus its bob)');
   assert.equal(size(600), 260);
 });
+
+test('T181: the location card is right at the park and at home, and after Don’t Allow it says location is off', () => {
+  const src = read('src/screens/ExploreScreen/PermissionsNotGranted.tsx');
+  assert.match(src, /park: 'Win ride coins at the park\.'/);
+  assert.match(src, /offTitle: 'Location is off',\n\s*off: 'Turn it on in Settings to see the rides near you\.'/);
+  assert.match(src, /\{canAsk \? PRIMER_COPY\.title : PRIMER_COPY\.offTitle\}/);
+  assert.match(src, /: <Text style=\{styles\.body\}>\{PRIMER_COPY\.off\}<\/Text>\}/);
+});
