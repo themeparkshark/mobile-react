@@ -4,10 +4,13 @@ import client from '../../client';
 export default async function me({
   token,
   throwOnError = false,
-}: { token?: string; throwOnError?: boolean } = {}): Promise<PlayerType | null> {
+  fresh = false,
+}: { token?: string; throwOnError?: boolean; fresh?: boolean } = {}): Promise<PlayerType | null> {
   try {
     const response = await client.get('/me', {
       timeout: 15000,
+      // A refresh after a grant must not join a /me that left before the grant (dedupeGet.ts).
+      ...(fresh ? { tpsNoDedupe: true } : {}),
       ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
     });
     let data = response.data;

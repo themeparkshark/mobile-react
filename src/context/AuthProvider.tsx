@@ -15,6 +15,7 @@ import { clearQueueBackgroundHeartbeat } from '../services/lineplay/backgroundQu
 import { clearCache } from '../utils/apiCache';
 import { isStandalonePreviewMode } from '../utils/standalonePreview';
 import { loadLaunchProfile } from './launchProfile';
+import { setWalletSink } from '../services/walletSync';
 
 export interface AuthContextType {
   readonly isReady: boolean;
@@ -201,15 +202,33 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     return adopted;
   };
 
+  // T139: /me answers apply in the order they were asked. A slow older read that lands after a newer
+  // one never paints old balances over new ones, and each refresh is its own fresh request (never joined
+  // to a /me that left before the grant).
+  const meAsked = useRef(0);
+  const meApplied = useRef(0);
   const refreshPlayer = async (): Promise<PlayerType> => {
-    const response = await getMe({ throwOnError: true });
+    const asked = ++meAsked.current;
+    const response = await getMe({ throwOnError: true, fresh: true });
     if (!response) throw new Error('Player profile is unavailable.');
+    if (asked < meApplied.current) return response;
+    meApplied.current = asked;
     setPlayer(response);
 
     await AsyncStorage.setItem('player', JSON.stringify(response));
 
     return response;
   };
+  const refreshRef = useRef(refreshPlayer);
+  refreshRef.current = refreshPlayer;
+  // Every grant and spend updates the header in place (services/walletSync.ts).
+  useEffect(() => {
+    setWalletSink({
+      patch: patch => setPlayer(current => (current?.id ? { ...current, ...patch } : current)),
+      refresh: () => refreshRef.current(),
+    });
+    return () => setWalletSink(null);
+  }, []);
 
   const logout = async () => {
     // Friend answers and hearts belong to this player only.

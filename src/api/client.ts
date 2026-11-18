@@ -1,4 +1,4 @@
-import axios, { type AxiosAdapter, type AxiosError, type AxiosResponse } from 'axios';
+import axios, { AxiosError as AxiosErrorClass, type AxiosAdapter, type AxiosError, type AxiosResponse, type AxiosRequestConfig } from 'axios';
 import * as Device from 'expo-device';
 import config from '../config';
 import { classifyCoreLoopRequest } from '../services/telemetry/coreLoopEvents';
@@ -8,6 +8,8 @@ import { httpStatus, isNetworkFailure, isTimeout, withGetRetry } from './getRetr
 import { withInflightDedupe } from './dedupeGet';
 import { withOwnStack } from '../utils/hermesSafeError';
 import { isNonJsonBody, NON_JSON_BEFORE_OFFLINE, nonJsonError, withNonJsonRetry } from './jsonGuard';
+import { withLaneDelay } from '../dev/laneDelay';
+import { noteApiAnswer } from '../services/walletSync';
 
 const client = axios.create({
   baseURL: config.apiUrl,
@@ -47,7 +49,10 @@ export function recordCoreLoopResponse(
 // interceptor (here and in useAxiosSetup) runs once per logical request.
 // Identical GETs already in flight share one request (dedupeGet.ts).
 if (client.defaults.adapter) {
-  client.defaults.adapter = withInflightDedupe(withGetRetry(withNonJsonRetry(client.defaults.adapter as AxiosAdapter))) as AxiosAdapter;
+  // Lane simulators only (EXPO_PUBLIC_STUDIO_MUTE bundles): an optional slow server for device proofs; elsewhere a no-op.
+  const transport = withLaneDelay(client.defaults.adapter as AxiosAdapter,
+    (config: AxiosRequestConfig) => new AxiosErrorClass(`timeout of ${config.timeout}ms exceeded`, 'ECONNABORTED', config));
+  client.defaults.adapter = withInflightDedupe(withGetRetry(withNonJsonRetry(transport))) as AxiosAdapter;
 }
 
 /**
@@ -76,6 +81,8 @@ client.interceptors.response.use(
     consecutiveTimeouts = 0;
     reportReachable();
     recordCoreLoopResponse(response.config?.method, response.config?.url, response.status);
+    // T139: a grant or spend keeps the header true (walletSync.ts); never lets a bad body fail the call.
+    try { noteApiAnswer(response.config?.method, response.config?.url, response.data); } catch { /* header sync is best effort */ }
     return response;
   },
   (error: AxiosError) => {
