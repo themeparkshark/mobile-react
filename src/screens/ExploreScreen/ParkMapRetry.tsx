@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BRAND, FONT, GameIcon, OUTLINE, RADIUS, SHADOW } from '../../ui';
+import { requestRideDetectionRetry } from '../../services/rideDetectionInit';
 
 /** Calm retries while the park map data will not load: 5 s, 10 s, 20 s, then every 30 s. */
 export function mapRetryDelay(attempt: number): number {
@@ -17,6 +18,8 @@ export function useParkMapRetry(failed: boolean, active: boolean, retry: () => P
   const latest = useRef(retry); latest.current = retry;
   const run = useCallback(() => {
     setRetrying(true);
+    // The same weak signal can have stopped ride detection at launch (T073): the map's retry restarts it too.
+    requestRideDetectionRetry();
     void latest.current().catch(() => undefined).finally(() => setRetrying(false));
   }, []);
   useEffect(() => { if (!failed) attempt.current = 0; }, [failed]);

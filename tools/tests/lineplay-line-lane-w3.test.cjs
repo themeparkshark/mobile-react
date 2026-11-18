@@ -41,3 +41,19 @@ test('T081: a line story counts as found only after real time in this line', () 
   assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'),
     /if \(!storyCreditEarned\(\{ waitTimed: snapshot\.waitTimed, elapsedSeconds: snapshot\.elapsedSeconds \}\)\) return;\n\s+void noteFoundAdventure/);
 });
+
+test('T073: ride detection retries a failed start with backoff, and the map retry restarts it at once', async () => {
+  const init = loadTs('src/services/rideDetectionInit.ts');
+  assert.deepEqual([1, 2, 3, 4, 5, 9].map(init.rideInitRetryDelay), [5_000, 15_000, 30_000, 60_000, 120_000, 120_000]);
+  let asked = 0;
+  const stop = init.onRideDetectionRetry(() => { asked += 1; });
+  init.requestRideDetectionRetry();
+  stop();
+  init.requestRideDetectionRetry();
+  assert.equal(asked, 1);
+  const hook = read('src/hooks/useRideDetection.ts');
+  assert.match(hook, /const stopRetryListen = onRideDetectionRetry\(retryNow\);/);
+  assert.match(hook, /if \(!cancelled && !started\) retryTimer = setTimeout\(retryNow, rideInitRetryDelay\(failures\)\);/);
+  assert.match(hook, /stopRetryListen\(\);\n\s+if \(retryTimer\) clearTimeout\(retryTimer\);/);
+  assert.match(read('src/screens/ExploreScreen/ParkMapRetry.tsx'), /setRetrying\(true\);\n[^\n]*\n\s+requestRideDetectionRetry\(\);/);
+});
