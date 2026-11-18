@@ -21,6 +21,7 @@ test('T036: a fresh spend starts the punch before the server answers', () => {
   // The punch waits for the dealt game, and a tap never skips past an undealt game.
   assert.match(punch, /if \(!torn \|\| !gameName \|\| cardShown\.current \|\| reduced == null\) return;/);
   assert.match(punch, /if \(done\.current \|\| !cardShown\.current\) return;/);
+  assert.match(punch, /withRepeat\(withTiming\(1, \{ duration: 700/, 'the ticket bobs while the spend is on its way: never an empty scene');
 });
 
 test('T036: the game mounts hidden under the punch and becomes visible when it hands over', () => {
