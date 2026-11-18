@@ -46,6 +46,9 @@ function mapChallenge(initial = task) {
       if (name === './rewards/challengeCopy') return require('./helpers/ts-module.cjs').loadTs('src/components/rewards/challengeCopy.ts');
       if (name === 'expo-haptics') return { impactAsync: async () => undefined, ImpactFeedbackStyle: { Medium: 2 } };
       if (name === '../context/AuthProvider') return { AuthContext: {} };
+      if (name === '../api/endpoints/me/stamps') return { getStamps: async () => ({ stamps: {}, newly_earned: [] }) };
+      if (name === './rewards/playPill') return require('./helpers/ts-module.cjs').loadTs('src/components/rewards/playPill.ts');
+      if (name === './rewards/coinCardSeen') return { coinCardSeenNow: () => false, warmCoinCardsSeen() {}, markCoinCardSeen: async () => undefined };
       if (name.includes('assets/')) return 1;
       return { default: name };
     },

@@ -86,7 +86,8 @@ test('the challenge sheet and a standalone win card both join the native modal l
   const challenge = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(challenge, /useNativeModalLayer\(open === true && !!redeemable, 'wait', CHALLENGE_PATIENCE_MS\)/);
   assert.match(challenge, /visible=\{challengeLayer\.present\}/);
-  assert.match(challenge, /onDismiss=\{challengeLayer\.onDismissed\}/);
+  // Fix W3: the native dismiss also runs what waits for the sheet to be gone (the practice games, T031).
+  assert.match(challenge, /onDismiss=\{\(\) => \{ challengeLayer\.onDismissed\(\); runAfterDismiss\(\); \}\}/);
   assert.doesNotMatch(challenge, /react-native-modal/, 'the paid game never lives in react-native-modal');
   const win = read('src/components/PostWinRewardsModal.tsx');
   assert.match(win, /useNativeModalLayer\(visible && !embedded, 'wait'\)/);
@@ -623,7 +624,8 @@ test('every place a win card reward flies is a name the map registers (blueprint
 
 test('the challenge card reads the guide only while its win card is up, so walking never re-renders it', () => {
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /const watchGuide = open === true && flowState === 'postwin';/);
+  // Fix W3 T029: the loss card names the next coin too, so the guide is read while the win or the loss card is up.
+  assert.match(modal, /const watchGuide = open === true && \(flowState === 'postwin' \|\| flowState === 'lost'\);/);
   assert.match(modal, /if \(!watchGuide\) return undefined;\n\s+setGuideTarget\(guide\.current\(\)\);\n\s+return guide\.subscribe\(\(\) => setGuideTarget\(guide\.current\(\)\)\);\n\s+\}, \[watchGuide\]\);/);
   assert.equal((modal.match(/guide\.subscribe\(/g) || []).length, 1, 'one subscription, and only inside that effect');
   assert.doesNotMatch(modal, /useState<GuideTarget \| null>\(\(\) => guide\.current\(\)\)/);
@@ -686,7 +688,8 @@ test('kid test: the Trivia toggle shows a question with a cross, the ball a chec
   assert.ok(fs.existsSync(path.join(root, 'assets/images/screens/community-center-question.png')));
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /const TREAT_ART = require\('\.\.\/\.\.\/assets\/images\/prep-items\/churros\/churro_18\.png'\);/);
-  assert.match(modal, /: <Image source=\{TREAT_ART\} style=\{styles\.treatArt\} contentFit="contain" \/>/);
+  // Fix W3 T030: the treats way is a picture, three churros = a Ticket.
+  assert.match(modal, /<Image key=\{i\} source=\{TREAT_ART\} style=\{styles\.treatArt\} contentFit="contain" \/>/);
   assert.doesNotMatch(modal, /name=\{step\.kind === 'line_ticket' \? 'ride' : 'map'\}/, 'the treats line never wears the compass');
   assert.match(modal, /export const BACK_TO_MAP = 'Back to Map';/);
   assert.match(modal, /export const NEED_TICKET_BUTTON = BACK_TO_MAP;/);
@@ -697,7 +700,8 @@ test('kid test: the Trivia toggle shows a question with a cross, the ball a chec
 test('short lines draw their digits in the number face, so "1" never reads "I"', () => {
   assert.match(read('src/components/PostWinRewardsModal.tsx'), /<Text style=\{styles\.weekText\}>\{withNumberFont\(weekLine\)\}<\/Text>/);
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /withNumberFont\(step\.kind === 'line_ticket'/);
+  // Fix W3 T030: the free ways are pictures now; their words are spoken, never drawn.
+  assert.match(modal, /accessibilityLabel=\{`\$\{TREATS_PER_TICKET\} treats at home make 1 Ticket\.`\}/);
   assert.match(modal, /<Text style=\{styles\.stepLine\}>\{withNumberFont\(challengeStepLine\(freeStep\) \?\? ''\)\}<\/Text>/);
   assert.match(read('src/games/trivia-duel/ui/Card.tsx'), /\{withNumberFont\(roundLabel\)\}/, '"QUESTION 1 OF 3" never reads "I OF 3"');
   // The loss card's try line ("1 of 3 right.") is already in the number face; its message ("1 Ticket used.") now too.
@@ -738,7 +742,8 @@ test('today\'s Adventure coin won: the big button plays its line story, even bef
 test('one phrase back to the map: every card that leads to the map says Back to Map', () => {
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.doesNotMatch(modal, /Return to [Mm]ap|label: 'Continue'|label: 'DONE'/);
-  assert.ok((modal.match(/label: BACK_TO_MAP/g) ?? []).length >= 8);
+  // Fix W3 T029: the loss card's map button is its small second button now (quiet), never its only way on.
+  assert.ok((modal.match(/label: BACK_TO_MAP/g) ?? []).length >= 7);
   const card = read('src/components/PostWinRewardsModal.tsx');
   assert.doesNotMatch(card, /Back to the Park/);
   assert.match(card, /label: BACK_TO_MAP_LABEL/);

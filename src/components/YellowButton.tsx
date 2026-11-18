@@ -44,7 +44,10 @@ export default function YellowButton({
   onPress,
   onArtReady,
   estimatedWidth,
+  hitSlop,
 }: {
+  /** Taps a little past the art still count (the coin card's main button, fix W3 T062). */
+  readonly hitSlop?: { readonly top?: number; readonly bottom?: number; readonly left?: number; readonly right?: number };
   readonly disabled?: boolean;
   readonly text: string;
   readonly onPress?: () => void;
@@ -137,6 +140,7 @@ export default function YellowButton({
       accessibilityLabel={text}
       accessibilityState={{ disabled }}
       disabled={disabled}
+      hitSlop={hitSlop}
       onPress={() => {
         if (disabled) {
           return;

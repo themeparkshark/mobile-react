@@ -7,8 +7,8 @@
  * results buttons: gold first, white under it.
  */
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, FadeIn, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withTiming,
 } from 'react-native-reanimated';
@@ -17,6 +17,8 @@ import GameIcon, { type GameIconName } from '../../ui/GameIcon';
 import { ResultPrimaryButton, ResultSecondaryButton } from '../../gamekit/results/ResultButtons';
 import SharkLoader from '../../ui/SharkLoader';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { RESULT_INPUT_LOCK_MS, nextMashUnlock } from './mashGuard';
+import TryPips from './TryPips';
 // Knockout draws 1 like a capital I: "1 Ticket used." read "I Ticket used." on the loss card.
 import { withNumberFont } from '../../ui/numberText';
 
@@ -40,6 +42,18 @@ export interface ChallengeStatusAction {
  * spot under the message and the retry wakes up after this guard.
  */
 export const RETRY_TAP_GUARD_MS = 800;
+/**
+ * Every button on a result or try card ignores taps for this long after the card appears (fix W3 T046),
+ * and a tap that lands while it is locked starts the wait again (mashGuard.ts): a kid still mashing the
+ * holes where the buttons now sit never skips the card or restarts the game.
+ */
+export { RESULT_INPUT_LOCK_MS } from './mashGuard';
+
+/** A small line under the buttons: what comes next ("Next coin: Tiki Room, 60 m"), with its picture. */
+export interface ChallengeFootnote {
+  readonly icon: GameIconName;
+  readonly text: string;
+}
 
 export const SO_CLOSE_SHARK = require('../../../assets/images/screens/redeem/so-close-shark.png');
 
@@ -48,7 +62,7 @@ export function capsAction<T extends ChallengeStatusAction | undefined>(action: 
   return (action ? { ...action, label: action.label.toUpperCase() } : action) as T;
 }
 
-export default function ChallengeStatusCard({ title, message, art = 'none', primary: primaryIn, secondary: secondaryIn, quiet: quietIn, guardRetry = false, ticket, line, ticketFlyTo }: {
+export default function ChallengeStatusCard({ title, message, art = 'none', primary: primaryIn, secondary: secondaryIn, quiet: quietIn, guardRetry = false, ticket, line, ticketFlyTo, pips, footnotes, extraRow, onClose }: {
   readonly title: string;
   readonly message: string;
   readonly art?: ChallengeStatusArt;
@@ -71,18 +85,40 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
    * flies up off the card toward it, so a child sees it go home (blueprint 5.3).
    */
   readonly ticketFlyTo?: { x: number; y: number } | null;
+  /** The line as a picture (fix W3 T053): one pip per bonk, pair or answer the coin needs, the ones got filled. */
+  readonly pips?: { readonly have: number; readonly need: number } | null;
+  /** Small lines under the buttons: what comes next, how many Tickets are left (fix W3 T029). */
+  readonly footnotes?: readonly ChallengeFootnote[];
+  /** One optional row under the free ways (a calm offer, mounted by a later step; nothing by default). */
+  readonly extraRow?: ReactNode;
+  /** A small X like every other sheet (fix W3 T047); omitted on cards that must be answered. */
+  readonly onClose?: () => void;
 }) {
   const primary = capsAction(primaryIn);
   const secondary = capsAction(secondaryIn);
   const quiet = capsAction(quietIn);
   const reduced = useReducedGameMotion();
-  const [armed, setArmed] = useState(!guardRetry);
+  // Input lock (T046): every button waits RESULT_INPUT_LOCK_MS after the card appears (a paid or free retry
+  // waits RETRY_TAP_GUARD_MS), and a tap while locked starts the wait again, so mashing never presses a button.
+  const lockMs = guardRetry ? Math.max(RETRY_TAP_GUARD_MS, RESULT_INPUT_LOCK_MS) : RESULT_INPUT_LOCK_MS;
+  const [armed, setArmed] = useState(false);
+  const unlockAt = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const arm = (delay: number) => {
+    unlockAt.current = Date.now() + delay;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setArmed(true), delay);
+  };
   useEffect(() => {
-    if (!guardRetry) { setArmed(true); return; }
     setArmed(false);
-    const timer = setTimeout(() => setArmed(true), RETRY_TAP_GUARD_MS);
-    return () => clearTimeout(timer);
-  }, [guardRetry]);
+    arm(lockMs);
+    return () => { if (timer.current) clearTimeout(timer.current); };
+  }, [lockMs]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lockedTap = () => {
+    const now = Date.now();
+    const next = nextMashUnlock(unlockAt.current, now, RESULT_INPUT_LOCK_MS);
+    if (next !== unlockAt.current) { setArmed(false); arm(next - now); }
+  };
   // One button system with every results card: the big gold button first,
   // then white buttons under it (never a small text link, never above it).
   return (
@@ -97,7 +133,8 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
         {/* Only a change gets a picture: a bare 0 would read as "you have no Tickets". */}
         {/* The ticket picture says it (+1 came back, -1 spent), so its line is
             spoken only; without a picture the short line shows. */}
-        {!!line && <Text style={styles.line}>{line}</Text>}
+        {!!line && <Text style={styles.line}>{withNumberFont(line)}</Text>}
+        {pips && pips.need > 0 && <TryPips have={pips.have} need={pips.need} />}
         {ticket ? <View style={styles.ticketRow}>
           <View style={styles.ticket} accessible accessibilityLabel={message}>
             <GameIcon name="ticket" size={30} />
@@ -108,10 +145,23 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
         </View> : <Text style={styles.message}>{withNumberFont(message)}</Text>}
         {primary && <ResultPrimaryButton label={primary.label} icons={primary.icons} a11yLabel={primary.a11yLabel} note={primary.note} onPress={primary.onPress}
           disabled={primary.disabled || !armed} style={[styles.primary, primary.disabled && styles.dim]} />}
-        {secondary && <ResultSecondaryButton label={secondary.label} onPress={secondary.disabled ? undefined : secondary.onPress}
+        {secondary && <ResultSecondaryButton label={secondary.label} onPress={secondary.disabled || !armed ? undefined : secondary.onPress}
           style={[styles.secondary, secondary.disabled && styles.dim]} />}
-        {quiet && <ResultSecondaryButton label={quiet.label} onPress={quiet.onPress} style={styles.secondary} />}
+        {quiet && <ResultSecondaryButton label={quiet.label} onPress={armed ? quiet.onPress : undefined} style={styles.secondary} />}
+        {extraRow ?? null}
+        {footnotes?.map(note => (
+          <View key={note.text} style={styles.footnote} accessible accessibilityLabel={note.text}>
+            <GameIcon name={note.icon} size={20} />
+            <Text style={styles.footnoteText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{withNumberFont(note.text)}</Text>
+          </View>
+        ))}
+        {/* While locked, a tap anywhere on the card is caught here and starts the lock again (never a button press). */}
+        {!armed && <View style={StyleSheet.absoluteFill} onStartShouldSetResponder={() => { lockedTap(); return true; }} />}
       </View>
+      {onClose && <Pressable onPress={armed ? onClose : lockedTap} style={styles.close} hitSlop={12}
+        accessibilityRole="button" accessibilityLabel="Close">
+        <GameIcon name="close" size={34} />
+      </Pressable>}
     </Animated.View>
   );
 }
@@ -169,4 +219,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 2, marginBottom: 12 },
   ticketText: { fontFamily: 'Shark', fontSize: 22, color: '#05346e' },
   ticketBack: { color: '#1f8a3a' },
+  footnote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10, maxWidth: '100%' },
+  footnoteText: { fontFamily: 'Knockout', fontSize: 16, color: '#ffe07a', flexShrink: 1 },
+  close: { position: 'absolute', top: 30, right: -4, zIndex: 5 },
 });
