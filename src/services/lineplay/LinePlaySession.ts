@@ -107,6 +107,20 @@ export interface LocationSample {
 }
 
 /** Queue credit requires a real, recent position fix rather than a cached coordinate. */
+/** T072: the recap's retry steps while a complete is queued (the last repeats). */
+export const PENDING_RETRY_MS: readonly number[] = [3_000, 8_000, 15_000, 30_000, 60_000];
+
+/**
+ * T072: why a complete call failed. An axios timeout (ECONNABORTED, or a timeout message) or any server answer is
+ * 'slow': the server is there and may already have finished. Only no answer at all is 'offline'.
+ */
+export function completeFailureReason(error: unknown): 'slow' | 'offline' {
+  const e = error as { code?: string; message?: string; response?: unknown } | null;
+  if (e?.response) return 'slow';
+  if (e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT' || /timeout/i.test(e?.message ?? '')) return 'slow';
+  return 'offline';
+}
+
 export function isRecentQueueSample(sample: LocationSample | null | undefined, now = Date.now()): sample is LocationSample & { timestamp: number } {
   return Boolean(sample && Number.isFinite(sample.latitude) && Number.isFinite(sample.longitude) &&
     typeof sample.timestamp === 'number' && Number.isFinite(sample.timestamp) &&
@@ -261,6 +275,11 @@ export interface SessionSnapshot {
   readonly rewards: SessionRewards | null;
   /** True while the complete call is queued for retry (offline). */
   readonly rewardsPending: boolean;
+  /**
+   * Why rewards are still on their way (T072): 'slow' when the server was reached but did not answer in time (the
+   * recap keeps retrying and never says No internet), 'offline' when nothing answered at all. Null when not pending.
+   */
+  readonly rewardsPendingReason: 'slow' | 'offline' | null;
   readonly completedActivityIds: readonly string[];
   readonly loreChoices: Readonly<Record<string, number>>;
   readonly navigationPanels?: Readonly<Record<string, NavigationPanelProgress>>;
@@ -758,6 +777,10 @@ export class LinePlaySession {
 
   private readonly retryQueue = linePlayRewardQueue;
   private readonly unsubscribeRecovery: () => void;
+  /** T072: why the complete is queued, and the recap's own retry timer while it waits. */
+  private pendingReason: 'slow' | 'offline' = 'offline';
+  private pendingRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingRetryCount = 0;
 
   constructor() {
     // The queue executes completeInLineTimer with idempotency. On success it
@@ -813,6 +836,7 @@ export class LinePlaySession {
       partsRemainingToday: this.partsRemainingToday,
       rewards: this.rewards,
       rewardsPending: this.rewardsPending,
+      rewardsPendingReason: this.rewardsPending ? this.pendingReason : null,
       partIntervalSeconds: this.partIntervalSeconds,
       sessionPartCap: this.sessionPartCap,
       ticketIntervalSeconds: this.ticketIntervalSeconds,
@@ -2165,6 +2189,8 @@ export class LinePlaySession {
           offlineStart: { rideId: this.ride.rideId, startRequestId: this.startRequestId, entry: this.entryFix },
           checkpoint, currentQuestProof: null, storyMemento: this.storyMemento() },
         `offline_${this.startRequestId}`);
+        this.pendingReason = 'offline';
+        this.schedulePendingRetry();
         this.emit();
         return;
       }
@@ -2188,10 +2214,12 @@ export class LinePlaySession {
         this.offlineTrail = [];
         this.applyServerSnapshot(res);
       } else {
+        this.pendingReason = 'slow';
         await this.queueComplete(sessionId, checkpoint);
       }
     } catch (e) {
       console.warn('[LinePlaySession] completeInLineTimer failed, queueing:', e);
+      this.pendingReason = completeFailureReason(e);
       await this.queueComplete(sessionId, checkpoint);
     }
     this.emit();
@@ -2232,6 +2260,25 @@ export class LinePlaySession {
     await this.retryQueue.enqueue({ sessionId,
       currentQuestProof: this.currentQuestVerified ? null : this.currentQuestProof,
       storyMemento: this.storyMemento(), checkpoint }, `complete_${sessionId}`);
+    this.schedulePendingRetry();
+  }
+
+  /**
+   * T072: while the recap waits for a queued complete, retry it (3 s, 8 s, 15 s, 30 s, then every 60 s) so a slow
+   * answer lands on the open recap with its real Part and Ticket. Idempotent on the server (the session id); the
+   * recovery listener applies the answer. Stops once rewards land or the session is disposed.
+   */
+  private schedulePendingRetry(): void {
+    if (this.pendingRetryTimer || this.disposed || !this.rewardsPending) return;
+    const delay = PENDING_RETRY_MS[Math.min(this.pendingRetryCount, PENDING_RETRY_MS.length - 1)];
+    this.pendingRetryTimer = setTimeout(() => {
+      this.pendingRetryTimer = null;
+      if (this.disposed || !this.rewardsPending || this.state !== 'complete') return;
+      this.pendingRetryCount += 1;
+      void this.retryQueue.drain().catch(() => 0).finally(() => {
+        if (!this.disposed && this.rewardsPending) this.schedulePendingRetry();
+      });
+    }, delay);
   }
 
   private storyMemento(): QueueStoryMemento | null {
@@ -2403,6 +2450,8 @@ export class LinePlaySession {
   /** Full teardown: call when the session controller is discarded. */
   dispose(): void {
     this.disposed = true;
+    if (this.pendingRetryTimer) clearTimeout(this.pendingRetryTimer);
+    this.pendingRetryTimer = null;
     this.clearForcedHeartbeats();
     this.stopTicking();
     if (this.graceTimer) clearTimeout(this.graceTimer);

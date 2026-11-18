@@ -1076,3 +1076,31 @@ test('T071: the screen asks first when away, and an untimed wait shows games, ne
   assert.match(recap, /Wait not timed/);
   assert.match(recap, /\{waitTimed && rideLogged && \(/);
 });
+
+test('T072: a slow complete never says No internet, and the open recap keeps retrying until the real rewards land', async () => {
+  const timeout = Object.assign(new Error('timeout of 15000ms exceeded'), { code: 'ECONNABORTED' });
+  const { Session, calls } = makeHarness(null, server, null, null, null, { granted: true },
+    () => { throw timeout; });
+  const session = new Session();
+  await session.start(ride, { latitude: 1, longitude: 2, timestamp: Date.now() }, 12);
+  await session.endNow(true);
+  assert.equal(session.snapshot().rewardsPending, true);
+  assert.equal(session.snapshot().rewardsPendingReason, 'slow', 'the server was reached: not offline');
+  assert.equal(calls.queued.at(-1).key, 'complete_server-123', 'queued under the session id (idempotent)');
+  session.dispose();
+
+  const offline = makeHarness(null, server, null, null, null, { granted: true },
+    () => { throw new Error('Network Error'); });
+  const away = new offline.Session();
+  await away.start(ride, { latitude: 1, longitude: 2, timestamp: Date.now() }, 12);
+  await away.endNow(true);
+  assert.equal(away.snapshot().rewardsPendingReason, 'offline');
+  away.dispose();
+
+  const src = fs.readFileSync(path.join(root, 'src/services/lineplay/LinePlaySession.ts'), 'utf8');
+  assert.match(src, /storyMemento: this\.storyMemento\(\), checkpoint \}, `complete_\$\{sessionId\}`\);\n\s+this\.schedulePendingRetry\(\);/);
+  assert.match(src, /export const PENDING_RETRY_MS: readonly number\[\] = \[3_000, 8_000, 15_000, 30_000, 60_000\];/);
+  const recap = fs.readFileSync(path.join(root, 'src/screens/LinePlay/components/SessionRecap.tsx'), 'utf8');
+  assert.match(recap, /rewardsPendingReason === 'slow' && \(\n\s+<Text[^>]*>Saving your rewards/);
+  assert.match(recap, /rewardsPendingReason !== 'slow' && \(\n\s+<Text style=\{styles\.recapPending\}>No internet/);
+});

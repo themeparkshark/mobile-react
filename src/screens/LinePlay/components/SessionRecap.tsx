@@ -129,6 +129,8 @@ export interface SessionRecapProps {
   crewPuzzleBonusParts?: number;
   currentQuestBonusParts?: number;
   rewardsPending: boolean;
+  /** T072: 'slow' (the server was reached) never shows No internet. */
+  rewardsPendingReason?: 'slow' | 'offline' | null;
   rewardsConfirmed: boolean;
   rewardTrackingAvailable: boolean;
   queueStamp?: { earned: boolean; new: boolean } | null;
@@ -215,7 +217,7 @@ export const RECAP_SETTLE_BLOCK_HEIGHT = 300;
 
 export default function SessionRecap({
   elapsedSeconds, activityCount, activityNames, earnedEnergy, experience, partsCount, ticketsEarned,
-  masteryBonusParts, crewPuzzleBonusParts = 0, currentQuestBonusParts = 0, rewardsPending, rewardsConfirmed,
+  masteryBonusParts, crewPuzzleBonusParts = 0, currentQuestBonusParts = 0, rewardsPending, rewardsPendingReason = null, rewardsConfirmed,
   rewardTrackingAvailable, queueStamp = null, onOpenStampBook, resolution, predictionUnscored, crewPuzzle,
   crewRelay, crewRouteNames, crewScoreNoun, coin, coinState, playerEnergy, energyUnavailable = false, rideName,
   onOpenCoin, onOpenPark, parkAvailable, feedbackEnabled = false, feedback = null, feedbackLoading = false,
@@ -445,7 +447,11 @@ export default function SessionRecap({
       )}
 
       {/* One message, never two that disagree: offline sync only applies when this wait could earn. */}
-      {rewardsPending && rewardTrackingAvailable && (
+      {/* T072: a slow server is never "No internet": the recap keeps retrying and shows the real rewards here. */}
+      {rewardsPending && rewardTrackingAvailable && rewardsPendingReason === 'slow' && (
+        <Text style={styles.recapPending} accessibilityLiveRegion="polite">Saving your rewards… they show up here in a moment.</Text>
+      )}
+      {rewardsPending && rewardTrackingAvailable && rewardsPendingReason !== 'slow' && (
         <Text style={styles.recapPending}>No internet. Your rewards will show up when you&apos;re back online.</Text>
       )}
       {rewardTrackingAvailable && !rewardsConfirmed && !rewardsPending && (

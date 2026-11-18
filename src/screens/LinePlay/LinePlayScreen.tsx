@@ -1677,6 +1677,7 @@ export default function LinePlayScreen() {
               })}
               onOpenInventory={() => RootNavigation.navigate('Inventory')}
               rewardsPending={snapshot.rewardsPending}
+              rewardsPendingReason={snapshot.rewardsPendingReason}
               rewardsConfirmed={snapshot.rewards != null}
               rewardTrackingAvailable={snapshot.serverSessionId != null}
               queueStamp={queueStamp}
