@@ -76,6 +76,8 @@ import { useNativeModalLayer } from '../ui/modalLayers';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { lossNext } from './rewards/lossNext';
 import { holdBroadcasts } from '../api/broadcastFilter';
+import { reconcileDelayMs } from '../services/task-attempt/reconcileDelay';
+import { markWinShown } from '../services/task-attempt/pendingWins';
 import { needTicketMain, previewRewardTiles, rangeErrorCleared } from './rewards/coinCardModel';
 import { markCoinCardSeen } from './rewards/coinCardSeen';
 import { NeedTicketOfferSlot } from './rewards/offerSlots';
@@ -252,6 +254,8 @@ export default function RedeemRedeemableModal({
   const [startError, setStartError] = useState<string | null>(null);
   const [rescueUnavailable, setRescueUnavailable] = useState(false);
   const [proofRejected, setProofRejected] = useState(false);
+  // Bumped after each reconcile read that got no answer (T033), so the next one is scheduled.
+  const [reconcileBeat, setReconcileBeat] = useState(0);
   // Out of Tickets: earned Tickets waiting in the Stamp Book are claimed right here, first (blueprint 4.1).
   const [claimable, setClaimable] = useState<ClaimSource[] | null>(null);
   const [claiming, setClaiming] = useState(false);
@@ -458,6 +462,8 @@ export default function RedeemRedeemableModal({
       onTaskCompleted?.(attempt.task_id, attempt.task_type === 'secret_task');
       markStandingsStale();
       setWeekWins(weekLine((attempt.rewards as { standings?: unknown }).standings));
+      // This win's card is showing now: the map's pending-win look never opens it a second time (T033).
+      markWinShown(attempt.id);
       // Shark Coins, Tickets and the rest fly to where they live as the win card closes (PostWinRewardsModal).
       setFlowState('postwin');
     } else if (attempt.status === 'lost') {
@@ -565,6 +571,9 @@ export default function RedeemRedeemableModal({
       // TRY AGAIN after a loss: the same game (the server honors it after be-core-loop deploys).
       ...((saved?.retryOf ?? retryOfRef.current) ? { retryOf: saved?.retryOf ?? retryOfRef.current } : {}),
       ...(pictureOnly ? { pictureOnly: true } : {}),
+      // The coin's card rides along (T033): a win whose answer was lost can still show its card from the map.
+      card: { name: taskName, coin_url: (redeemable?.model as TaskType | undefined)?.coin_url ?? null,
+        coins: (redeemable?.model as TaskType | undefined)?.coins, experience: (redeemable?.model as TaskType | undefined)?.experience },
     };
     try {
       await writeTaskAttemptCheckpoint(checkpoint);
@@ -616,7 +625,7 @@ export default function RedeemRedeemableModal({
     } finally {
       spendingRef.current = false;
     }
-  }, [location, redeemable, player?.id, taskType, taskId, applyAttemptState, playSound, refreshPlayer, clearAttemptCheckpoint]);
+  }, [location, redeemable, player?.id, taskType, taskId, taskName, applyAttemptState, playSound, refreshPlayer, clearAttemptCheckpoint]);
 
   const handleCheckRideAccess = useCallback(async () => {
     setStartError(null);
@@ -677,6 +686,29 @@ export default function RedeemRedeemableModal({
       claimingRef.current = false;
     }
   }, [applyAttemptState]);
+
+  // T033: a lost answer is asked again by itself while "Checking your score" is up (2, 4, 8, then every 15 s), so a
+  // win the server granted turns into its win card the moment the signal is back, with no tap needed.
+  const reconcileTry = useRef(0);
+  useEffect(() => {
+    if (!open || flowState !== 'claim-error' || proofRejected) { reconcileTry.current = 0; return undefined; }
+    const id = attemptRef.current?.id;
+    if (!id) return undefined;
+    let alive = true;
+    const delay = reconcileDelayMs(reconcileTry.current);
+    const timer = setTimeout(() => {
+      reconcileTry.current += 1;
+      void getTaskAttempt(id).then(result => {
+        if (!alive || attemptRef.current?.id !== id) return;
+        if (result.attempt.status === 'started' && outcomeRef.current) void resolveAttempt(outcomeRef.current);
+        else applyAttemptState(result.attempt);
+      }).catch(() => {
+        // Still no answer: the next look comes on the next beat (this effect runs again for the new try count).
+        if (alive) setReconcileBeat(beat => beat + 1);
+      });
+    }, delay);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [open, flowState, proofRejected, reconcileBeat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleGameWin = useCallback(async (proof?: TaskGameProof) => {
     await resolveAttempt('win', proof);
@@ -1409,7 +1441,8 @@ export default function RedeemRedeemableModal({
 export const MAIN_BUTTON_HIT_SLOP = { top: 6, bottom: 14, left: 12, right: 12 } as const;
 
 const styles = StyleSheet.create({
-  cardClose: { position: 'absolute', top: '4%', right: 4, zIndex: 30 },
+  // Inside the card's top right corner, under the ribbon (never on the ribbon's words).
+  cardClose: { position: 'absolute', top: 70, right: '9.5%', zIndex: 30 },
   wayTiles: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 8 },
   // The same chip as the win card's reward row (cream, white rim, blue lip), never a thin-bordered box.
   wayTile: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff8e4', borderRadius: 14, borderWidth: 2,

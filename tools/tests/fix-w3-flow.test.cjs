@@ -145,3 +145,41 @@ test('T068 a win\'s Ride Parts banner folds (the card shows it) and server news 
   assert.match(read('src/hooks/useAxiosSetup.ts'), /routeBroadcasts\(shown, messages => enqueueRef\.current\(messages\)\)/);
   assert.match(read('src/components/RedeemRedeemableModal.tsx'), /flowState === 'minigame' \|\| flowState === 'postwin'/);
 });
+
+/* T033: a server-granted win always shows its win card. */
+function memoryStorage() {
+  const data = new Map();
+  return { data, store: { __esModule: true, default: {
+    getItem: async key => (data.has(key) ? data.get(key) : null), setItem: async (key, value) => { data.set(key, value); },
+    removeItem: async key => { data.delete(key); }, getAllKeys: async () => [...data.keys()],
+    multiGet: async keys => keys.map(key => [key, data.has(key) ? data.get(key) : null]),
+  } } };
+}
+test('T033 a saved try the server says was won comes back as its win card; lost tries clear; a shown win never repeats', async () => {
+  const { data, store } = memoryStorage();
+  const statuses = { 501: 'won', 502: 'lost', 503: 'started' };
+  const pending = loadTs('src/services/task-attempt/pendingWins.ts', {
+    '@react-native-async-storage/async-storage': store,
+    '../../api/endpoints/me/task-attempts': { getTaskAttempt: async id => ({ attempt: { id, status: statuses[id] } }) },
+  });
+  const cp = loadTs('src/services/task-attempt/checkpoint.ts', { '@react-native-async-storage/async-storage': store });
+  const base = { version: 1, playerId: 96, requestId: 'tps-1234567890-abcdefgh', latitude: 33.81, longitude: -117.92, savedAt: Date.now() };
+  await cp.writeTaskAttemptCheckpoint({ ...base, taskType: 'task', taskId: 11, attemptId: 501, card: { name: 'Walt Statue', coin_url: 'https://x/c.png', coins: 10 } });
+  await cp.writeTaskAttemptCheckpoint({ ...base, taskType: 'task', taskId: 12, attemptId: 502, card: { name: 'Tiki Room' }, savedAt: base.savedAt + 1 });
+  await cp.writeTaskAttemptCheckpoint({ ...base, taskType: 'task', taskId: 13, attemptId: 503, card: { name: 'Jungle Cruise' } });
+  const found = await pending.findPendingWin(96);
+  assert.equal(found.win.attempt.id, 501);
+  assert.equal(found.win.checkpoint.card.name, 'Walt Statue');
+  assert.equal(pending.pendingWinRedeemable(found.win).model.name, 'Walt Statue');
+  assert.equal(data.has('task_attempt_checkpoint_v1_96_task_12'), false, 'a lost try is cleared quietly');
+  assert.equal(data.has('task_attempt_checkpoint_v1_96_task_13'), true, 'a try still being played stays');
+  pending.markWinShown(501);
+  assert.equal((await pending.findPendingWin(96)).win, null, 'a win whose card showed never opens again');
+  assert.equal(pending.pendingTryAction('expired'), 'clear');
+  const delay = loadTs('src/services/task-attempt/reconcileDelay.ts');
+  assert.deepEqual([0, 1, 2, 3, 9].map(delay.reconcileDelayMs), [2000, 4000, 8000, 15000, 15000]);
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(modal, /if \(!open \|\| flowState !== 'claim-error' \|\| proofRejected\)/, 'Checking your score asks again by itself');
+  assert.match(modal, /card: \{ name: taskName, coin_url:/, 'the coin card rides in the checkpoint');
+  assert.match(read('src/components/RedeemModal.tsx'), /void findPendingWin\(player\.id\)/);
+});

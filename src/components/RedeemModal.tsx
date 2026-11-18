@@ -1,6 +1,6 @@
 import { leavingSheetTap } from '../ui/modalLayers';
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Text, View, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated, AppState, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { AuthContext } from '../context/AuthProvider';
@@ -31,6 +31,7 @@ import { useCoverArt } from './map/mapCover';
 import HomeArcade from './HomeArcade';
 import { coinCardSeenNow, warmCoinCardsSeen } from './rewards/coinCardSeen';
 import { playPillState } from './rewards/playPill';
+import { findPendingWin, pendingWinRedeemable } from '../services/task-attempt/pendingWins';
 
 /**
  * PLAY!'s wrapper sits 50 pt below the map's bottom edge (ExploreScreen); the group rests 120 pt
@@ -103,6 +104,33 @@ export default function RedeemModal({
   const task = redeemable?.type === 'task' ? redeemable.model as TaskType : null;
   const { player } = useContext(AuthContext);
   useEffect(() => { warmCoinCardsSeen(player?.id); }, [player?.id]);
+  // A server-granted win always shows its win card (fix W3 T033): a won try whose card never showed (its answer was
+  // lost, the card closed, the app was shut) opens as its win card here, on the map, as soon as the server says so.
+  // Looked at when the map opens, when the app comes back, after a challenge card closes, and again a little later
+  // while a saved try could not be read.
+  const [pendingLook, setPendingLook] = useState(0);
+  const pendingBusy = useRef(false);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => { if (state === 'active') setPendingLook(n => n + 1); });
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (modalVisible || !player?.id || pendingBusy.current) return undefined;
+    let alive = true;
+    let again: ReturnType<typeof setTimeout> | null = null;
+    pendingBusy.current = true;
+    void findPendingWin(player.id).then(({ win, unsure }) => {
+      if (!alive) return;
+      if (win) {
+        setQuickStart(false);
+        setOpenedRedeemable(pendingWinRedeemable(win) as unknown as CurrentRedeemableType);
+        setModalVisible(true);
+      } else if (unsure) {
+        again = setTimeout(() => setPendingLook(n => n + 1), 15000);
+      }
+    }).catch(() => undefined).finally(() => { pendingBusy.current = false; });
+    return () => { alive = false; if (again) clearTimeout(again); };
+  }, [modalVisible, player?.id, pendingLook]);
   // Secret coins arrive with coin levels (rung 3, blueprint 5.13): before that a secret spot offers nothing.
   const coinLevels = useRung('coin_levels');
   const secretLocked = redeemable?.type === 'secret_task' && !coinLevels.open;

@@ -143,6 +143,8 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)rewards\/challengeCopy$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/challengeCopy.ts');
       // Fix W3 flow: the coin card's pure rules run for real; the seen-cards store, the offer slots and the line lookup are quiet.
       if (/(^|\/)api\/broadcastFilter$/.test(name)) return require('./ts-module.cjs').loadTs('src/api/broadcastFilter.ts');
+      if (/(^|\/)task-attempt\/pendingWins$/.test(name)) return { markWinShown() {}, findPendingWin: async () => ({ win: null, unsure: false }), pendingWinRedeemable() {} };
+      if (/(^|\/)task-attempt\/reconcileDelay$/.test(name)) return require('./ts-module.cjs').loadTs('src/services/task-attempt/reconcileDelay.ts');
       if (/(^|\/)mashGuard$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/mashGuard.ts');
       if (/(^|\/)tryPipsModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/tryPipsModel.ts');
       if (/(^|\/)rewards\/coinCardModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/coinCardModel.ts');
