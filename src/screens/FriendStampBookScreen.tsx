@@ -20,11 +20,13 @@ import GameIcon from '../ui/GameIcon';
 import { stampRarity } from './stampbook/rarity';
 import { INK, MUTED_INK, PAPER, SLOT, SLOT_EDGE, tiltFor } from './stampbook/StampTile';
 import { UpperText } from '../ui/upper';
+import { SEABED_PLATE } from '../constants/backdrops';
 
 /** Last friend books this session: a reopen draws at once and refreshes behind (friends-only data, memory only). */
 const friendBooks = new Map<number, FriendBook>();
 
-const BACKGROUND = require('../../assets/images/screens/leaderboard/standings-bg.png');
+// Fix w3 T219: the plain seabed plate (no coin piles).
+const BACKGROUND = SEABED_PLATE;
 const SHARK = require('../../assets/images/howto/shark-happy.webp');
 const FALLBACK = require('../../assets/images/stamps/stamp-fallback.png');
 

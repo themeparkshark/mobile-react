@@ -163,3 +163,11 @@ test('T128: the shelf opens on the tab holding your coins, fades in once, and Fi
   assert.match(park, /!loading && !!currentPark && !progressStale && !tutorialActive/, 'no lesson over a failed or blank shelf');
   assert.match(park, /const first = openingTab\(split, limitedShelf, owned, tabs\);/);
 });
+
+test('T219: Standings, News and the Stamp Books sit on the plain seabed plate, never the coin-pile backdrop', () => {
+  assert.match(read('src/constants/backdrops.ts'), /SEABED_PLATE = require\('\.\.\/\.\.\/assets\/images\/screens\/park\/background-new\.png'\)/);
+  for (const file of ['src/screens/LeaderboardScreen.tsx', 'src/screens/NewsScreen.tsx', 'src/screens/StampBookScreen.tsx', 'src/screens/FriendStampBookScreen.tsx']) {
+    assert.doesNotMatch(read(file), /standings-bg\.png/, file);
+    assert.match(read(file), /SEABED_PLATE/, file);
+  }
+});

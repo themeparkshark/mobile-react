@@ -64,6 +64,7 @@ import {
   type NewsFilterKey,
 } from './NewsScreen/newsModel';
 import { buildFeedRows, keepOrder, shopLast, type FeedRow } from './NewsScreen/feedRows';
+import { SEABED_PLATE } from '../constants/backdrops';
 
 
 type ListState = {
@@ -389,7 +390,7 @@ export default function NewsScreen() {
         </TopbarColumn>
       </Topbar>
       <View style={{ marginTop: -8, flex: 1 }}>
-        <ImageBackground style={{ flex: 1 }} source={require('../../assets/images/screens/leaderboard/standings-bg.png')}>
+        <ImageBackground style={{ flex: 1 }} source={SEABED_PLATE}>
           <View onLayout={e => setTopPillTop(e.nativeEvent.layout.height + 6)}>
           <NewsFilterBar filter={filter} park={park} searching={searching} query={query} endInset={showTop ? 60 : 0}
             onFilter={pickFilter} onPark={pickPark}

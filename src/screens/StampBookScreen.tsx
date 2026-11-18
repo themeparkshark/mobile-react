@@ -55,6 +55,7 @@ import {
 } from './stampbook/model';
 import { UpperText } from '../ui/upper';
 import { stampClaimableCount, writeStampDotCache } from '../components/profile/stampDot';
+import { SEABED_PLATE } from '../constants/backdrops';
 
 const GAP = 9;
 const SIDE = 12;
@@ -70,7 +71,8 @@ const NAV_COVER = 150;
 const SECTION_ICON: Record<string, GameIconName> = {
   parks: 'map', hunt: 'pin', rides: 'coin', friends: 'member', streaks: 'streak', milestones: 'trophy', special: 'star',
 };
-const BACKGROUND = require('../../assets/images/screens/leaderboard/standings-bg.png');
+// Fix w3 T219: the plain seabed plate (no coin piles).
+const BACKGROUND = SEABED_PLATE;
 const SHARK = require('../../assets/images/howto/shark-happy.webp');
 /** Sticky bookmark band height: a tab scroll lands the page just under it. */
 const TABS_H = 64;
