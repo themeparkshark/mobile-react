@@ -212,3 +212,12 @@ test('T113: the Rewards badge shows once, settled; a claim drops it at once', ()
   const hook = read('src/components/retention/useRetention.tsx');
   assert.match(hook, /rewards: settledSummary \}/);
 });
+
+test('T118: the level chest waits while the Daily 3 chest is ready, then takes its turn', () => {
+  const base = { dailyChest: null, weekly: null, trail: null, stamps: null, events: null, levelChest: { level: 3, waiting: 1 } };
+  const d = { done: 3, total: 3, claimed: false, flame: 1, seen: true };
+  const both = model.rewardsRows({ ...base, daily3: { ...d, claimable: true } }).map(r => r.key);
+  assert.deepEqual(plain(both), ['daily3']);
+  const after = model.rewardsRows({ ...base, daily3: { ...d, claimable: false, claimed: true } }).map(r => r.key);
+  assert.ok(after.includes('level_chest'));
+});

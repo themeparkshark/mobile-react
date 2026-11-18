@@ -65,7 +65,9 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
     else if (d.claimed) rows.push({ key: 'daily3', title: 'Daily 3', line: 'Done for today. New goals tomorrow', ready: 0, action: 'go' });
     else rows.push({ key: 'daily3', title: 'Daily 3', line: `${d.done} of ${d.total} done`, ready: 0, action: 'go' });
   }
-  if (i.levelChest && i.levelChest.waiting > 0) {
+  // T118: one chest moment at a time. While the Daily 3 chest is ready, the level chest waits its turn (it shows the
+  // moment the Daily 3 chest is opened, so the two are never offered together).
+  if (i.levelChest && i.levelChest.waiting > 0 && !i.daily3?.claimable) {
     rows.push({ key: 'level_chest', title: `Level ${i.levelChest.level} Chest`, line: 'New gear inside', ready: i.levelChest.waiting, action: 'open' });
   }
   if (i.weekly?.claimable) {
