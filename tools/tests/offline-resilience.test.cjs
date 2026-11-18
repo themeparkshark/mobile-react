@@ -322,7 +322,7 @@ test('the offline banner is built from the WS0 kit: brand tokens and his yellow 
 
 test('on Explore the banner goes straight to the chip so it never covers the HUD cards', () => {
   const source = read('src/components/OfflineBanner.tsx');
-  assert.match(source, /CHIP_ONLY_ROUTES[^=]*= new Set\(\['Explore', 'Login'\]\)/);
+  assert.match(source, /CHIP_ONLY_ROUTES[^=]*= new Set\(\['Explore', 'Login', 'TeamSelection'\]\)/);
   assert.match(source, /navigationRef\.addListener\('state'/, 'follows the current route');
   assert.match(source, /if \(chipOnly\) \{[\s\S]*?\{cardShown && \(/, 'no full card on a HUD screen until the chip is tapped');
   assert.match(source, /<Animated\.View style=\{\[styles\.chipAlone, cardStyle\]\}>\{chip\}<\/Animated\.View>/, 'the chip is the whole banner there');

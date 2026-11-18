@@ -45,7 +45,10 @@ const MAP_CHIP_TOP = 0.43;
 // card would cover them, so the banner is only the small chip, docked on the
 // right edge of the map under the recenter button like the other map controls.
 // Sign-in too: the full card would sit over the title art.
-export const CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['Explore', 'Login']);
+export const CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['Explore', 'Login', 'TeamSelection']);
+// T180: full-screen pages with their title right under the status bar (the team pick): the chip waits in the top-left
+// corner, its own slot clear of the title, the X and the primary button.
+export const TOP_LEFT_DOCK_ROUTES: ReadonlySet<string> = new Set(['TeamSelection']);
 // The map declutter preview mirrors Explore, so its captures show the real docked chip, in internal
 // Release builds too (the route only exists when the preview is registered; store builds never have it).
 const DEV_CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['MapDeclutterPreview']);
@@ -258,7 +261,8 @@ export default function OfflineBanner() {
   const top = (initialWindowMetrics?.insets.top ?? 47) + HEADER_CLEARANCE + (routeName ? ROUTE_EXTRA_TOP[routeName] ?? 0 : 0);
   // On sign-in the chip tucks under the status bar, clear of the title art and the sign-in card.
   const onMap = routeName !== 'Login' && !!mapDock;
-  const dockTop = routeName === 'Login' ? (initialWindowMetrics?.insets.top ?? 47) + 8
+  const topLeft = routeName !== undefined && TOP_LEFT_DOCK_ROUTES.has(routeName);
+  const dockTop = routeName === 'Login' || topLeft ? (initialWindowMetrics?.insets.top ?? 47) + 8
     : onMap ? mapDock.top : Math.round(windowHeight * MAP_CHIP_TOP);
 
   const card = (
@@ -311,7 +315,8 @@ export default function OfflineBanner() {
     // the full card under the header for a moment (its own layer), so the retry is seen; the chip stays put.
     return (
       <>
-        <View pointerEvents="box-none" style={[styles.hostDocked, { top: dockTop }, onMap && { right: mapDock.right }]}>
+        <View pointerEvents="box-none" style={[styles.hostDocked, { top: dockTop }, onMap && !topLeft && { right: mapDock.right },
+          topLeft && styles.hostTopLeft]}>
           <Animated.View style={[styles.chipAlone, cardStyle]}>{chip}</Animated.View>
         </View>
         {cardShown && (
@@ -349,6 +354,7 @@ const BANNER_Z = Z.dialog - 1;
 const styles = StyleSheet.create({
   host: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: BANNER_Z, elevation: BANNER_Z },
   hostDocked: { position: 'absolute', right: 16, zIndex: BANNER_Z, elevation: BANNER_Z },
+  hostTopLeft: { right: undefined, left: 16 },
   lip: { borderRadius: 24, backgroundColor: BRAND.navy, paddingBottom: 4, maxWidth: 360, marginHorizontal: 16 },
   card: {
     flexDirection: 'row',

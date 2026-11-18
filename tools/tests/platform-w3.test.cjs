@@ -97,3 +97,31 @@ test('T183: the guide card grows with Larger Text up to 1.3x and wraps instead o
   assert.match(src, /<Text style=\{styles\.line\} numberOfLines=\{3\} maxFontSizeMultiplier=\{CARD_TEXT_MAX\}>/);
   assert.equal((src.match(/maxFontSizeMultiplier=\{CARD_TEXT_MAX\}/g) || []).length, 5, 'every word on the card');
 });
+
+test('T180: shelf and closet loads retry once quietly, then show his shark with one button; the coach waits for a shelf', async () => {
+  const Q = loadTs('src/api/quietRetry.ts');
+  let calls = 0;
+  const flaky = async () => { calls += 1; if (calls === 1) throw { code: 'ECONNABORTED' }; return 'shelf'; };
+  assert.equal(await Q.quietRetry(flaky, async () => undefined), 'shelf');
+  assert.equal(calls, 2, 'one silent retry');
+  calls = 0;
+  await assert.rejects(Q.quietRetry(async () => { calls += 1; throw { response: { status: 403 } }; }, async () => undefined));
+  assert.equal(calls, 1, 'a refusal is not asked again');
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /await quietRetry\(\(\) => loadParkShelf\(Number\(park\), Number\(player\)\), undefined, \(\) => active\);/);
+  assert.match(park, /<SharkLoader state="error" tone="onBlue" title="Your shelf didn’t load"/);
+  assert.doesNotMatch(park, /Could not load your park progress/);
+  assert.match(park, /!loading && !progressStale && !!currentPark && !tutorialActive/, 'Finn never teaches over a failed shelf');
+  const closet = read('src/screens/InventoryScreen.tsx');
+  assert.match(closet, /quietRetry\(\(\) => getItemTypes\(\)\)/);
+  assert.match(closet, /quietRetry\(\(\) => getItems\(currentItemType\.id, page, pin\), undefined, \(\) => !cancelled\)/);
+  assert.equal((closet.match(/<SharkLoader state="error"/g) || []).length, 2);
+  assert.doesNotMatch(closet, /\{loadError\} Tap to try again\./);
+  const banner = read('src/components/OfflineBanner.tsx');
+  assert.match(banner, /TOP_LEFT_DOCK_ROUTES: ReadonlySet<string> = new Set\(\['TeamSelection'\]\)/, 'the team pick title is never covered');
+});
+
+test('T186: the team card pictures "for keeps" with a lock', () => {
+  const src = read('src/screens/GymBattle/TeamSelectionScreen.tsx');
+  assert.match(src, /<GameIcon name="lock" size=\{26\} \/>\n\s*<Text style=\{s\.warnText\}>This is for keeps/);
+});

@@ -35,6 +35,9 @@ import { SLOT_KEYS } from '../models/look-type';
 import useLook from '../hooks/useLook';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { LookNotice } from '../helpers/lookQueue';
+import SharkLoader from '../ui/SharkLoader';
+import { quietRetry } from '../api/quietRetry';
+import { tryAgainLine } from '../services/connectionCopy';
 import { explainMemberLock } from '../components/MemberLookHost';
 import { MEMBER_WEAR_COPY, memberWearLocked, refreshMemberLook, useMemberWearLock } from '../services/memberLook';
 
@@ -179,7 +182,8 @@ export default function InventoryScreen() {
 
   useAsyncEffect(async () => {
     try {
-      const response = await getItemTypes();
+      // T180: one silent retry before a slow server's miss shows anything.
+      const response = await quietRetry(() => getItemTypes());
       setItemTypes(response);
       setCurrentItemType(response.find((itemType) => itemType.id === requestedItemTypeId) ?? response[0]);
       setLoading(false);
@@ -197,7 +201,7 @@ export default function InventoryScreen() {
     setItemsLoading(true);
     setLoadError(null);
     const pin = pinItemId && currentItemType.id === requestedItemTypeId ? pinItemId : undefined;
-    getItems(currentItemType.id, page, pin)
+    quietRetry(() => getItems(currentItemType.id, page, pin), undefined, () => !cancelled)
       .then(({ items: response, hasMore: nextPageAvailable }) => {
         if (cancelled || generation !== requestGeneration.current) return;
         setItems((previous) => page === 1 ? response : [
@@ -240,10 +244,10 @@ export default function InventoryScreen() {
         <TopbarColumn stretch={false} />
       </Topbar>
       {loading && <Loading />}
+      {/* T180: his shark with one button, never a plain text line. */}
       {!loading && !currentItemType && loadError && (
-        <Pressable onPress={() => { setLoading(true); setLoadError(null); setTypeLoadAttempt((value) => value + 1); }} style={{ padding: 24, alignItems: 'center' }}>
-          <Text style={{ color: 'white', textAlign: 'center' }}>{loadError} Tap to try again.</Text>
-        </Pressable>
+        <SharkLoader state="error" tone="onBlue" title={loadError} message={tryAgainLine()}
+          onRetry={() => { setLoading(true); setLoadError(null); setTypeLoadAttempt((value) => value + 1); }} />
       )}
       {!loading && !player?.inventory && currentItemType && (
         <Pressable
@@ -398,9 +402,8 @@ export default function InventoryScreen() {
                 </View>
               )}
               {!itemsLoading && loadError && items.length === 0 && (
-                <Pressable onPress={() => { setItemsLoading(true); setItemLoadAttempt((value) => value + 1); }} style={{ padding: 20, alignItems: 'center' }}>
-                  <Text style={{ color: '#15395B', textAlign: 'center', fontWeight: '700' }}>{loadError} Tap to try again.</Text>
-                </Pressable>
+                <SharkLoader state="error" compact title={loadError} message={tryAgainLine()}
+                  onRetry={() => { setItemsLoading(true); setItemLoadAttempt((value) => value + 1); }} />
               )}
               {items.length > 0 || (!itemsLoading && !loadError) ? (
                 <FlashList

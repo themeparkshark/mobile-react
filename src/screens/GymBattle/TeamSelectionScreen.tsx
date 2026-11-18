@@ -204,7 +204,9 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
             <Text style={[s.teamName, { color: TEAMS[team].color }]}>{teamName(team).toUpperCase()}</Text>
             <Text style={s.tag}>{VIBE[team].tag}</Text>
             <Text style={s.line}>{VIBE[team].line}</Text>
-            <View style={s.warn}>
+            {/* T186: a lock picture says "for keeps" before a word is read. */}
+            <View style={s.warn} accessible accessibilityLabel="This is for keeps: you can’t switch teams later.">
+              <GameIcon name="lock" size={26} />
               <Text style={s.warnText}>This is for keeps: you can’t switch teams later.</Text>
             </View>
             {stage === 'error' && <Text style={s.error}>{`Couldn’t join just now. ${tryAgainLine()}`}</Text>}
@@ -333,8 +335,9 @@ const s = StyleSheet.create({
   teamName: { fontFamily: 'Shark', fontSize: 40, marginTop: 4, textShadowColor: '#021e45', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   tag: { fontFamily: 'Knockout', fontSize: 14, letterSpacing: 2, color: '#cdeaff' },
   line: { fontFamily: 'Knockout', fontSize: 18, color: '#fff', textAlign: 'center', marginTop: 8, lineHeight: 23, paddingHorizontal: 8 },
-  warn: { marginTop: 16, backgroundColor: 'rgba(5,52,110,0.3)', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12 },
-  warnText: { fontFamily: 'Knockout', fontSize: 14, color: '#ffe08a', textAlign: 'center' },
+  warn: { marginTop: 16, backgroundColor: 'rgba(5,52,110,0.3)', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 8 },
+  warnText: { fontFamily: 'Knockout', fontSize: 14, color: '#ffe08a', textAlign: 'center', flexShrink: 1 },
   error: { fontFamily: 'Knockout', fontSize: 14, color: '#fecaca', marginTop: 10, textAlign: 'center' },
   join: { width: '100%', marginTop: 18, borderRadius: 20, paddingVertical: 16, alignItems: 'center', borderWidth: 3, borderColor: '#fff' },
   joinText: { fontFamily: 'Shark', fontSize: 24, color: '#fff', textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
