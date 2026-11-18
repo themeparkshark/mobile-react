@@ -141,13 +141,14 @@ test('T229: fewer currencies on screen: the shop wallet shows Tickets and Shark 
 
 test('T141: the coin flips over to its new level with a rim that reads at a glance (UI thread, Reduce Motion skips it)', () => {
   const modal = read('src/components/CoinLevelingModal.tsx');
-  assert.match(modal, /\{ perspective: 700 \}, \{ rotateY: `\$\{coinFlip\.value\}deg` \}/);
+  assert.match(modal, /\{ scaleX: Math\.max\(0\.04, coinFlip\.value\) \}/, 'a flat flip: a 3D turn cut the coin behind the header');
+  assert.doesNotMatch(modal, /rotateY: `\$\{coinFlip/);
   const flipAt = modal.indexOf('coinFlip.value = uiSequence(');
   const reducedAt = modal.lastIndexOf('if (reducedMotionRef.current) {', flipAt);
   const elseAt = modal.indexOf('} else {', reducedAt);
   assert.ok(reducedAt > 0 && elseAt < flipAt, 'the flip runs only on the full-motion path');
-  assert.match(modal, /uiTiming\(180, \{ duration: 200, easing: EASE\.in \}\),\s*uiSpring\(360, SPRING\.pop\)/, 'a spring, never linear movement');
-  assert.match(modal, /coinShake, coinFlip\]\.forEach\(value => cancelUi\(value\)\); coinFlip\.value = 0;/, 'stopped and reset with the rest of the show');
+  assert.match(modal, /uiTiming\(0\.04, \{ duration: 160, easing: EASE\.in \}\), uiSpring\(1, SPRING\.pop\)/, 'a spring, never linear movement');
+  assert.match(modal, /coinShake, coinFlip\]\.forEach\(value => cancelUi\(value\)\); coinFlip\.value = 1;/, 'stopped and reset with the rest of the show');
   const { COIN_TIERS } = loadTs('src/constants/coinTiers.ts');
   assert.notEqual(COIN_TIERS[1].ring.toLowerCase(), '#ffffff', 'Shiny never looks like Classic white');
   assert.ok(COIN_TIERS[1].ringWidth > COIN_TIERS[0].ringWidth, 'a thicker rim from Level 2');

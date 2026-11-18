@@ -150,10 +150,11 @@ export default function CoinLevelingModal({
   const coinPop = useSharedValue(1);
   const coinShake = useSharedValue(0);
   const successIn = useSharedValue(0);
-  // Fix w3 T141: the coin flips over to its new level (one full turn on the UI thread), so the level-up
-  // is the coin itself changing, not only a pill.
-  const coinFlip = useSharedValue(0);
-  const coinStyle = useAnimatedStyle(() => ({ transform: [{ perspective: 700 }, { rotateY: `${coinFlip.value}deg` },
+  // Fix w3 T141: the coin flips over to its new level, so the level-up is the coin itself changing, not only
+  // a pill. A flat flip (the coin narrows to its edge and springs back wide) on the UI thread: a 3D rotateY
+  // passed behind the card's blue header and cut the coin in half on iOS.
+  const coinFlip = useSharedValue(1);
+  const coinStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.04, coinFlip.value) },
     { scale: coinPop.value }, { translateX: coinShake.value }] }));
   const successStyle = useAnimatedStyle(() => ({
     transform: [{ scale: Math.max(0, successIn.value) }, { rotate: `${-15 * (1 - Math.min(1, successIn.value))}deg` }],
@@ -196,7 +197,7 @@ export default function CoinLevelingModal({
   const [fanScale, setFanScale] = useState(1.5);
   const budget = usePowerBudget();
   const [slowServer, setSlowServer] = useState(false);
-  const stopUiShow = () => { [charge, gold, bloom, sparkle, sparkle2, shine, ringPulse, bloomOut, slow, coinShake, coinFlip].forEach(value => cancelUi(value)); coinFlip.value = 0; };
+  const stopUiShow = () => { [charge, gold, bloom, sparkle, sparkle2, shine, ringPulse, bloomOut, slow, coinShake, coinFlip].forEach(value => cancelUi(value)); coinFlip.value = 1; };
   const chargeStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.001, charge.value) }] }));
   // 0 while charging, 1 once the server is slow (scheduled on the UI thread with the charge).
   const slow = useSharedValue(0);
@@ -417,9 +418,8 @@ export default function CoinLevelingModal({
         } else {
           coinPop.value = uiSequence(uiTiming(1.35, { duration: 140, easing: EASE.out }), uiSpring(1, SPRING.pop));
           // The flip: a quick turn onto its edge, then the new face springs round and settles (T141).
-          coinFlip.value = 0;
-          coinFlip.value = uiSequence(uiTiming(180, { duration: 200, easing: EASE.in }),
-            uiSpring(360, SPRING.pop), uiTiming(0, { duration: 0 }));
+          coinFlip.value = 1;
+          coinFlip.value = uiSequence(uiTiming(0.04, { duration: 160, easing: EASE.in }), uiSpring(1, SPRING.pop));
           // The new rim catches the light twice more after the first sweep, then rests (no idle loop).
           shine.value = uiDelay(380, uiSequence(uiTiming(1, { duration: 620, easing: EASE.inOut }), uiTiming(0, { duration: 0 }),
             uiDelay(700, uiTiming(1, { duration: 620, easing: EASE.inOut })), uiTiming(0, { duration: 0 }),
