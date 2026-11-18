@@ -52,6 +52,9 @@ function Dots({ dots, slam, coin, reduced, onSlamDone }: {
 }
 
 function CardButton({ button, onPress, quiet = false }: { button: GuideButton; onPress: (action: GuideAction) => void; quiet?: boolean }) {
+  // LinePlay is never a small underlined text link (T080): beside a gold PLAY! it is the white picture button.
+  const line = button.action === 'lineplay' || button.action === 'lineplay_here';
+  if (quiet && line) return <LineButton label={button.label} onPress={() => onPress(button.action)} />;
   // 30 pt tall plus 8 pt above and below: a 46 pt tap target (the 44 pt floor), without growing the card.
   return <Pressable accessibilityRole="button" accessibilityLabel={button.label} hitSlop={BUTTON_SLOP}
     onPress={() => { haptic('tapLight'); onPress(button.action); }}
@@ -61,6 +64,21 @@ function CardButton({ button, onPress, quiet = false }: { button: GuideButton; o
     {/* LinePlay's own icon (Dustin, Oct 28, ledger 37); the pocket watch means Wait Times only. */}
     {button.action === 'lineplay' && <Image source={LINEPLAY_ICON} style={styles.lineIcon} contentFit="contain" />}
     <Text style={quiet ? styles.quietText : styles.buttonText} numberOfLines={1}>{button.label}</Text>
+  </Pressable>;
+}
+
+/**
+ * LinePlay's picture button when the gold button belongs to PLAY! (T074, T080): white with the blue rim, the gold
+ * posts and rope, a real button (the gold card button's shape and lip), never a text link.
+ */
+function LineButton({ label, onPress, title }: { label: string; onPress: () => void; title?: string }) {
+  return <Pressable testID="guide-line-button" accessibilityRole="button"
+    accessibilityLabel={title ? `${title} ${label}` : label} hitSlop={BUTTON_SLOP}
+    onPress={() => { haptic('tapLight'); onPress(); }}
+    style={({ pressed }) => [styles.lineButton, pressed && styles.pressed]}>
+    <Image source={LINEPLAY_ICON} style={styles.lineIcon} contentFit="contain" />
+    {title ? <Text style={styles.lineButtonAsk} numberOfLines={1}>{title}</Text> : null}
+    <Text style={styles.lineButtonText} numberOfLines={1}>{label}</Text>
   </Pressable>;
 }
 
@@ -84,8 +102,10 @@ function AdventureTab({ stamps, onPress }: { stamps: readonly [boolean, boolean,
 }
 
 export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAction, onCardPress, onDotsPress, teachPlay = false,
-  slam = NO_SLAM, onSlamDone, adventureTab = null, testID = 'next-coin-card' }: {
+  slam = NO_SLAM, onSlamDone, adventureTab = null, testID = 'next-coin-card', lineOffer = null }: {
   readonly copy: GuideCardCopy;
+  /** Standing in an open ride line (T074): "In line? LINEPLAY" as its own picture button under the card's words. */
+  readonly lineOffer?: { readonly title: string; readonly label: string } | null;
   readonly state: GuideState;
   /** The target coin's art, or null (wallet and resting states draw the Ticket). */
   readonly coinUrl: string | null;
@@ -149,6 +169,10 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
           {copy.button && <CardButton button={copy.button} onPress={onAction} />}
           {copy.secondary && <CardButton button={copy.secondary} onPress={onAction} quiet />}
         </View>}
+        {/* Its own line under the card's words, so it never crowds the card's button on a small phone. */}
+        {lineOffer && <View style={styles.actions}>
+          <LineButton title={lineOffer.title} label={lineOffer.label} onPress={() => onAction('lineplay_here')} />
+        </View>}
       </View>
       {state === 'walk' && <View style={styles.walkArrow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <GameIcon name="arrow" size={22} />
@@ -188,6 +212,10 @@ const styles = StyleSheet.create({
   button: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.gold, borderRadius: 12,
     borderBottomWidth: 3, borderBottomColor: BRAND.goldLip, paddingHorizontal: 12, paddingVertical: 4, minHeight: 30 },
   lineIcon: { width: 30, height: 16 },
+  lineButton: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.white, borderRadius: 12,
+    borderWidth: 2, borderColor: BRAND.blueBright, borderBottomWidth: 4, paddingHorizontal: 8, minHeight: 30 },
+  lineButtonAsk: { color: BRAND.blueBright, fontFamily: 'Knockout', fontSize: 12 },
+  lineButtonText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 14 },
   buttonText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 14 },
   pressed: { transform: [{ scale: 0.95 }], opacity: 0.9 },
   quiet: { paddingVertical: 4, paddingHorizontal: 6, minHeight: 30, justifyContent: 'center' },

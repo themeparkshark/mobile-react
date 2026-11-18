@@ -14,6 +14,7 @@ import { TREATS_PER_TICKET, type FreeTicketStep } from './freeTickets';
 export type GuideAction =
   | 'go'            // draw the dotted path to the target and follow it
   | 'lineplay'      // open LinePlay for the target's line
+  | 'lineplay_here' // open LinePlay for the line the player is standing in (the in-line offer, T074)
   | 'claim'         // claim the earned Tickets in place
   | 'see_ways'      // the free ways to a Ticket
   | 'level_up'      // open the coin card to level it up
@@ -94,6 +95,17 @@ export interface GuideCopyContext {
   readonly freeTryDaily?: boolean;
   /** Goodbye: the park the player is leaving and the coins they won there today. */
   readonly leaving?: { readonly parkName: string | null; readonly coins: number } | null;
+}
+
+/**
+ * The in-line offer (T074): standing about 90 s in an open ride line puts "In line? LINEPLAY" on the card as its
+ * own picture button under whatever the card says (PLAY!, the path, a pick), feed or no feed, owned coin or not.
+ * It never replaces the card, so the card never flips between Tap PLAY! and In line?. Null when the card already
+ * is about this line (the in-line or Line story state). Pure.
+ */
+export function lineOffer(state: string, dwellRideName: string | null | undefined): { readonly title: string; readonly label: string } | null {
+  if (!dwellRideName || state === 'in_line' || state === 'line_story' || state === 'goodbye' || state === 'home') return null;
+  return { title: 'In line?', label: 'LINEPLAY' };
 }
 
 /**

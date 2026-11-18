@@ -57,3 +57,37 @@ test('T073: ride detection retries a failed start with backoff, and the map retr
   assert.match(hook, /stopRetryListen\(\);\n\s+if \(retryTimer\) clearTimeout\(retryTimer\);/);
   assert.match(read('src/screens/ExploreScreen/ParkMapRetry.tsx'), /setRetrying\(true\);\n[^\n]*\n\s+requestRideDetectionRetry\(\);/);
 });
+
+test('T074 and T080: the in-line offer is its own picture button under the card, steady, and never swaps out Tap PLAY!', () => {
+  const copy = loadTs('src/services/guide/guideCopy.ts');
+  assert.deepEqual({ ...copy.lineOffer('here', 'Indiana Jones Adventure') }, { title: 'In line?', label: 'LINEPLAY' }, 'under Tap PLAY!');
+  assert.deepEqual({ ...copy.lineOffer('walk', 'Autopia') }, { title: 'In line?', label: 'LINEPLAY' }, 'with a fresh pick elsewhere');
+  assert.equal(copy.lineOffer('in_line', 'Autopia'), null, 'the card already is about this line');
+  assert.equal(copy.lineOffer('line_story', 'Autopia'), null);
+  assert.equal(copy.lineOffer('here', null), null, 'no dwell: no offer');
+
+  const dwell = loadTs('src/screens/ExploreScreen/useQueueDwell.ts', { react: { useEffect() {}, useRef() {}, useState() {} },
+    '../../services/RideDetectionService': { currentRideDwell: () => null } });
+  const indy = { rideId: 580, rideName: 'Indiana Jones Adventure', parkId: 8 };
+  const base = { endedRideId: null, endedAt: null };
+  const t0 = 1_000_000;
+  // The 096/097 jitter trace: shown, one jittery check misses (not still), the next is still again. No flip.
+  let shown = dwell.nextDwell(null, indy, true, { ...base, now: t0, lastShownAt: t0 });
+  assert.equal(shown.rideId, 580);
+  shown = dwell.nextDwell(shown, indy, false, { ...base, now: t0 + 10_000, lastShownAt: t0 });
+  assert.equal(shown?.rideId, 580, 'a jitter miss holds the offer');
+  shown = dwell.nextDwell(shown, null, false, { ...base, now: t0 + 40_000, lastShownAt: t0 });
+  assert.equal(shown?.rideId, 580, 'a missed poll holds it too');
+  assert.equal(dwell.nextDwell(shown, null, false, { ...base, now: t0 + 61_000, lastShownAt: t0 }), null, 'walked off: it goes');
+  assert.equal(dwell.nextDwell(shown, { ...indy, rideId: 571 }, false, { ...base, now: t0 + 20_000, lastShownAt: t0 }), null,
+    'another line now: never the old one');
+  assert.equal(dwell.nextDwell(shown, null, false, { now: t0 + 20_000, lastShownAt: t0, endedRideId: 580, endedAt: t0 + 15_000 }), null,
+    'its wait just ended');
+
+  const state = read('src/services/guide/nextCoin.ts');
+  assert.match(state, /if \(input\.inLineTaskId != null && input\.inLineTaskId === target\.taskId && !playUpHere\) return 'in_line';/);
+  const card = read('src/components/guide/NextCoinCard.tsx');
+  assert.match(card, /if \(quiet && line\) return <LineButton label=\{button\.label\}/, 'never an underlined text link');
+  assert.match(card, /\{lineOffer && <View style=\{styles\.actions\}>\n\s+<LineButton title=\{lineOffer\.title\}/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /case 'lineplay_here': void openLinePlayHere\(\)/);
+});

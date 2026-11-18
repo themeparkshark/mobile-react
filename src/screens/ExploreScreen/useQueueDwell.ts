@@ -39,6 +39,27 @@ export function dwellShows(dwell: QueueDwell | null, input: {
   return true;
 }
 
+/**
+ * One fix of GPS jitter or one missed poll must not take the in-line offer away and bring it back (T074: the card
+ * alternated at Indiana Jones). A shown dwell holds this long after its last good check, unless its wait just ended
+ * or the detector now names another line.
+ */
+export const DWELL_HOLD_MS = 60_000;
+
+/** Pure: the dwell to show after one check. */
+export function nextDwell(previous: QueueDwell | null, seen: QueueDwell | null, shows: boolean, input: {
+  readonly now: number;
+  readonly lastShownAt: number | null;
+  readonly endedRideId: number | null;
+  readonly endedAt: number | null;
+}): QueueDwell | null {
+  if (seen && shows) return previous?.rideId === seen.rideId ? previous : seen;
+  if (!previous || input.lastShownAt == null) return null;
+  if (seen && seen.rideId !== previous.rideId) return null;
+  if (input.endedRideId === previous.rideId && input.endedAt != null && input.now - input.endedAt < WAIT_ENDED_QUIET_MS) return null;
+  return input.now - input.lastShownAt <= DWELL_HOLD_MS ? previous : null;
+}
+
 let waitEnded: { rideId: number; at: number } | null = null;
 /** A wait at this ride just ended (the player opened LinePlay for it from the map): no "In line?" there for a while. */
 export function noteWaitEnded(rideId: number, at = Date.now()): void {
@@ -55,6 +76,7 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
   location?: { readonly latitude: number; readonly longitude: number } | null): QueueDwell | null {
   const [dwell, setDwell] = useState<QueueDwell | null>(null);
   const samples = useRef<Sample[]>([]);
+  const lastShownAt = useRef<number | null>(null);
   const lat = location?.latitude, lng = location?.longitude;
   useEffect(() => {
     if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
@@ -69,10 +91,10 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
       const shows = !!now && now.parkId === parkId && dwellShows({ rideId: now.rideId, rideName: now.rideName, parkId: now.parkId }, {
         still: nearlyStill(samples.current, at), endedRideId: waitEnded?.rideId ?? null, endedAt: waitEnded?.at ?? null, now: at,
       });
-      setDwell(previous => {
-        if (!now || !shows) return null;
-        return previous?.rideId === now.rideId ? previous : { rideId: now.rideId, rideName: now.rideName, parkId: now.parkId };
-      });
+      if (now && shows) lastShownAt.current = at;
+      setDwell(previous => nextDwell(previous,
+        now && now.parkId === parkId ? { rideId: now.rideId, rideName: now.rideName, parkId: now.parkId } : null, shows,
+        { now: at, lastShownAt: lastShownAt.current, endedRideId: waitEnded?.rideId ?? null, endedAt: waitEnded?.at ?? null }));
     };
     check();
     const timer = setInterval(check, everyMs);
