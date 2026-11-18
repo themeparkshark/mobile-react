@@ -8,7 +8,7 @@
 import { useAmbient } from '../../services/money/useAmbient';
 import { Image } from 'expo-image';
 import { useContext, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image as RNImage, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import getShopToday from '../../api/endpoints/stores/today';
 import getStores from '../../api/endpoints/stores/stores';
@@ -26,6 +26,13 @@ const RAYS = require('../../../assets/images/reveal/rays.webp');
 /** The first Secret piece the shark can wear on the stage (a backdrop scene needs the full try-on stage). */
 export function stagePiece(items: readonly ShopItem[]): ShopItem | null {
   return items.find(item => !!fxKeyOf(item) && !!item.paper_url && slotForItem(item) && slotForItem(item) !== 'background_item') ?? null;
+}
+
+/** The player's look with this month's VIP pin on its pin spot (nothing is saved): the VIP page's try-on (T156). */
+export function withMemberPin(base: InventoryType, pin: { name: string; source: number } | null | undefined): InventoryType {
+  const uri = pin ? RNImage.resolveAssetSource(pin.source)?.uri : null;
+  if (!pin || !uri) return base;
+  return { ...base, pin_item: { id: -2, name: pin.name, icon_url: uri, paper_url: null, item_type: { id: 8 } } } as unknown as InventoryType;
 }
 
 /** The player's look with one piece put on (nothing is saved). */
@@ -53,7 +60,10 @@ async function loadPiece(): Promise<ShopItem | null> {
   }
 }
 
-export default function MemberStage() {
+export default function MemberStage({ pin }: {
+  /** This month's VIP pin, tried on the player's own shark (T156). Nothing is saved. */
+  pin?: { name: string; source: number } | null;
+} = {}) {
   const { player } = useContext(AuthContext);
   const still = !useAmbient();
   const [piece, setPiece] = useState<ShopItem | null>(cachedPiece ?? null);
@@ -74,10 +84,12 @@ export default function MemberStage() {
   }, [still, bob]);
   const bobStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -bob.value * 6 }] }));
   const base = player?.inventory as InventoryType | undefined;
-  const look = base?.skin_item ? (piece ? withPiece(base, piece) : base) : null;
+  const dressed = base?.skin_item ? (piece ? withPiece(base, piece) : base) : null;
+  const look = dressed && pin ? withMemberPin(dressed, pin) : dressed;
 
   return (
-    <View style={st.stage} accessible accessibilityLabel={piece ? `Your shark wearing ${piece.name}, a VIP piece from the Secret Shop.` : 'Your shark as a VIP.'}>
+    <View style={st.stage} accessible accessibilityLabel={piece ? `Your shark wearing ${piece.name}, a VIP piece from the Secret Shop.`
+      : pin && look ? `Your shark trying on the ${pin.name}, this month's VIP pin.` : 'Your shark as a VIP.'}>
       <Animated.Image source={RAYS} style={[st.rays, rays]} resizeMode="contain" />
       {/* The member's stage: a painted snow plaza in a rounded card and a VIP medallion. The shark floats
           above the plaza, so a ground shadow under the card read as an empty gray name bar. */}
@@ -87,13 +99,20 @@ export default function MemberStage() {
       <View style={st.medal}><GameIcon name="member" size={30} /></View>
       {look ? (
         <Animated.View entering={still ? undefined : ZoomIn.springify().damping(12)} style={[st.card, bobStyle]}>
-          <Playercard inventory={look} showBackground={false} style={StyleSheet.absoluteFill} fxLod="full" fxSound={false} />
+          <Playercard inventory={look} showBackground={false} pinAnchor={pin ? 'body' : 'card'} style={StyleSheet.absoluteFill} fxLod="full" fxSound={false} />
         </Animated.View>
       ) : (
         <Image source={require('../../../assets/images/vip-hero.png')} style={st.fallback} contentFit="contain" />
       )}
       {/* No Secret piece to show: the VIP look is a gold crown on your own shark, never a bare stage. */}
       {!piece && look && <View style={st.crown} pointerEvents="none"><GameIcon name="crown" size={70} /></View>}
+      {!piece && pin && look && (
+        // The same gold TRY-ON tag the Shark Pass hero uses: it is a look, not a buy.
+        <View style={st.caption}>
+          <GameIcon name="crown" size={18} />
+          <Text maxFontSizeMultiplier={1.2} style={st.captionText} numberOfLines={1}>{`Try-on: ${pin.name}`}</Text>
+        </View>
+      )}
       {piece && (
         <View style={st.caption}>
           <GameIcon name="crown" size={18} />

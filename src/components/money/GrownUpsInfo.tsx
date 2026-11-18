@@ -13,7 +13,7 @@ export const GROWN_UP_LINES: readonly string[] = [
   'Every real-money buy asks a grown-up question first. Ask to Buy in Family Sharing works too.',
   'VIP is a subscription. A free trial turns into a paid plan unless it is turned off at least 24 hours before. Turn it off in Settings, your name, Subscriptions.',
   'The Shark Pass is one buy per season. It never renews. Steps come only from playing.',
-  'Gift plans of VIP (1 or 12 months) never renew.',
+  'VIP for 1 or 12 months on this account never renews.',
   'Nothing random is sold for real money. Coins can be bought with real money; Mystery Pin Boxes cost coins and show their odds on the box.',
   'Gold editions and frames are looks only. They never change how the game plays, and they stay yours forever.',
   'If a buy is refunded, the coins, tickets and passes from it that are still unspent are taken back. Pins and frames already given stay.',
@@ -24,7 +24,7 @@ export const GROWN_UP_LINES: readonly string[] = [
 /** "This month on this account: $6.98 in 2 buys." Exported for tests. */
 export function spendLine(spend: { usd: number; buys: number } | null): string | null {
   if (!spend) return null;
-  const what = 'Counts Supplies, the Shark Pass and VIP gift plans at US list prices before tax, refunds left out. VIP plans (first payment and renewals) are in the Apple ID\u2019s history of buys.';
+  const what = 'Counts Supplies, the Shark Pass and VIP that never renews at US list prices before tax, refunds left out. VIP plans (first payment and renewals) are in the Apple ID\u2019s history of buys.';
   if (spend.buys === 0) return `This month on this account: none of these bought yet. ${what}`;
   return `This month on this account: $${spend.usd.toFixed(2)} in ${spend.buys} ${spend.buys === 1 ? 'buy' : 'buys'}. ${what}`;
 }

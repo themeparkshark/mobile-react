@@ -14,7 +14,7 @@ import { FlexShareButton } from '../../share';
 import { useModalHandoff } from '../../share/handoff';
 import countText from '../../helpers/countText';
 
-const PIN_ART: Record<string, number> = {
+export const VIP_PIN_ART: Record<string, number> = {
   'vip-pin-nov': require('../../../assets/images/sharkpass/vip-pin-nov.webp'),
   'vip-pin-dec': require('../../../assets/images/sharkpass/vip-pin-dec.webp'),
 };
@@ -37,7 +37,7 @@ export default function MonthlyGiftCard() {
   const landedShare = useModalHandoff(useCallback(() => setLanded(null), []));
   useEffect(() => { if (player?.is_subscribed) load(); }, [player?.is_subscribed, load]);
   if (!gift || !gift.enabled || !gift.member) return null;
-  const art = gift.pin ? PIN_ART[gift.pin.art] : undefined;
+  const art = gift.pin ? VIP_PIN_ART[gift.pin.art] : undefined;
 
   const open = async () => {
     setBusy(true);
@@ -79,12 +79,12 @@ export default function MonthlyGiftCard() {
       </View>
       {landed && (
         <GotIt grants={{ coins: landed.coins }} art="gift" title="Your VIP gift!"
-          picture={landed.art && PIN_ART[landed.art] ? <Image source={PIN_ART[landed.art]} style={{ width: 170, height: 170 }} contentFit="contain" /> : undefined}
+          picture={landed.art && VIP_PIN_ART[landed.art] ? <Image source={VIP_PIN_ART[landed.art]} style={{ width: 170, height: 170 }} contentFit="contain" /> : undefined}
           caption={[`${countText(landed.coins)} coins`, landed.pin].filter(Boolean).join(' and ')}
           // Show off the month's members-only pin. No price, no "VIP costs".
-          share={landed.pin && landed.art && PIN_ART[landed.art] ? (
+          share={landed.pin && landed.art && VIP_PIN_ART[landed.art] ? (
             <FlexShareButton kind="find" surface="vip_gift" size="reveal" handoff={landedShare.handoff}
-              payload={{ itemName: landed.pin, artUrl: PIN_ART[landed.art], prize: 'member', sourceLine: `${monthName(gift.month, false)} member gift` }} />
+              payload={{ itemName: landed.pin, artUrl: VIP_PIN_ART[landed.art], prize: 'member', sourceLine: `${monthName(gift.month, false)} member gift` }} />
           ) : undefined}
           onDone={() => setLanded(null)} />
       )}

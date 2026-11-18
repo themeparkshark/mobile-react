@@ -130,3 +130,87 @@ test('T091 lane fixture: inert unless the lane mute and the fixture are both set
   assert.equal(plain(pass.lanePassFixture(st, { mute: '1', fixture: 'not-on-sale' })).season.on_sale, false);
   assert.match(plain(pass.lanePassFixture(st, { mute: '1', fixture: 'not-on-sale-dated' })).season.sale_opens_on, /^\d{4}-\d{2}-\d{2}$/);
 });
+
+function gateModule() {
+  return loadTs('src/components/GrownUpGate.tsx', {
+    '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => {} } },
+    react: { useEffect() {}, useState: v => [v, () => {}] },
+    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
+    '../ui/iconNames': {}, './RealMoneyMark': { default: 'RealMoneyMark' },
+    'react-native': { Modal: 'Modal', Platform: { OS: 'ios' }, Pressable: 'Pressable', StyleSheet: { create: s => s }, Text: 'Text', View: 'View' },
+    '../RootNavigation': { navigate: () => {} },
+    '../ui': { BRAND: { goldLip: '#d99a00', navy: '#05346e' }, FONT: {}, GameIcon: 'GameIcon' },
+    '../ui/modalLayers': { useModalLayer: () => true },
+  }, { __DEV__: true });
+}
+
+test('T161: a free trial starts its free time; a buy still says Continue to buy', () => {
+  const gate = gateModule();
+  const renews = trial => ({ kind: 'renews', what: 'VIP', price: '$39.99', period: 'year', trial });
+  assert.equal(gate.gateContinueLabel(renews('One week free')), 'Start the free week');
+  assert.equal(gate.gateContinueLabel(renews('Seven days free')), 'Start the free week');
+  assert.equal(gate.gateContinueLabel(renews('1 month free')), 'Start the free month');
+  assert.equal(gate.gateContinueLabel(renews('Three days free')), 'Start the 3 free days');
+  assert.equal(gate.gateContinueLabel(renews(null)), 'Continue to buy', 'no trial: a real buy');
+  assert.equal(gate.gateContinueLabel({ kind: 'money', price: '$4.99', gets: 'the Shark Pass' }), 'Continue to buy');
+  const src = strip(read('src/components/GrownUpGate.tsx'));
+  assert.match(src, /\{gateContinueLabel\(req\.reason\)\}<\/Text>/);
+  assert.doesNotMatch(src, />Continue to buy<\/Text>/, 'no fixed buy word on the details card');
+});
+
+test('T162: SAVE on the yearly plan is the gold sticker, not a red pill', () => {
+  const screen = read('src/screens/MembershipScreen.tsx');
+  const badge = screen.match(/planBadge: \{[^}]*\}/)[0];
+  assert.match(badge, /backgroundColor: '#ffcf3b'/);
+  assert.match(badge, /color: '#6a3b00'/);
+  assert.doesNotMatch(badge, /#e8322a/);
+});
+
+test('T171: VIP time that never renews is for this account, never "a gift"', () => {
+  for (const file of ['src/screens/MembershipScreen.tsx', 'src/screens/StoreScreen/SuppliesShop.tsx', 'src/components/money/GrownUpsInfo.tsx']) {
+    const visible = strip(read(file));
+    assert.doesNotMatch(visible, /AS A GIFT|as a gift|VIP GIFT PLANS|VIP gift plans\.|Gift plans of VIP|This VIP gift belongs/, file);
+  }
+  assert.match(read('src/screens/MembershipScreen.tsx'), /VIP for this account for a set time\. Pay once, no renewing\./);
+  assert.match(read('src/screens/StoreScreen/SuppliesShop.tsx'), /VIP for this account, no renewing/);
+});
+
+const offers = loadTs('src/services/money/offers.ts');
+
+test('T230: the win card VIP line has its copy and numbers, and never shows for VIP, kids or a loss', () => {
+  const o = plain(offers.vipWinOffer({ coins: 60, xp: 50, multiplier: 2, isVip: false }));
+  assert.deepEqual(o, { where: 'win_vip', title: 'VIP doubles this', line: 'VIP doubles this: +60 Shark Coins, +50 XP', extraCoins: 60, extraXp: 50, gate: 'money' });
+  assert.equal(plain(offers.vipWinOffer({ coins: 25, xp: 0, multiplier: 3, isVip: false })).line, 'VIP triples this: +50 Shark Coins');
+  for (const off of [{ isVip: true }, { kid: true }, { loss: true }, { multiplier: null }, { multiplier: 1 }, { coins: 0, xp: 0 }]) {
+    assert.equal(offers.vipWinOffer({ coins: 60, xp: 50, multiplier: 2, isVip: false, ...off }), null, JSON.stringify(off));
+  }
+  assert.doesNotMatch(o.line, /would|miss|lost|hurry/i, 'no loss framing, no pressure');
+});
+
+test('T156: three concrete VIP perks with the player own week, the rest folded', () => {
+  const PERKS = [
+    { key: 'ride', icon: 'xp', title: '2x XP and Shark Coins', body: 'Every time you win a ride coin at the park.' },
+    { key: 'home', icon: 'search', title: '2 extra treats on every home hunt', body: '2x Energy, Tickets and XP from every treat.' },
+    { key: 'daily_ticket', icon: 'ticket', title: 'A free Ticket every day', body: 'Claim it in Supplies.' },
+    { key: 'monthly_gift', icon: 'gift', title: 'A gift every month', body: '500 Shark Coins and a pin, every month you are VIP.' },
+    { key: 'pass_points', icon: 'star', title: '25% more Shark Pass points', body: 'On everything.' },
+    { key: 'badge', icon: 'member', title: 'VIP badge on your profile', body: 'Everyone can see it.' },
+  ];
+  const r = plain(offers.vipHeroPerks(PERKS, { lastWeekWins: 4, thisWeekWins: 1, giftCoins: 500, giftPin: 'VIP November Pin' }));
+  assert.deepEqual(r.hero.map(p => p.key), ['ride', 'daily_ticket', 'monthly_gift']);
+  assert.equal(r.hero[0].body, 'Last week you won 4 ride coins. VIP doubles every one.');
+  assert.equal(r.hero[1].body, 'That is 7 more Tickets every week. Claim it in Supplies.');
+  assert.equal(r.hero[2].body, 'This month: 500 Shark Coins and the VIP November Pin.');
+  assert.deepEqual(r.rest.map(p => p.key), ['home', 'pass_points', 'badge']);
+  assert.equal(plain(offers.vipHeroPerks(PERKS, { thisWeekWins: 1 })).hero[0].body, 'This week you won 1 ride coin. VIP doubles every one.');
+  assert.equal(plain(offers.vipHeroPerks(PERKS, {})).hero[0].body, 'Every ride coin you win at the park pays double.');
+  assert.equal(plain(offers.vipHeroPerks(PERKS, {})).hero[2].body, PERKS[3].body, 'no gift numbers: the server line');
+  // An older server without keys: matched by its words.
+  const nokey = PERKS.map(({ key, ...p }) => p);
+  assert.equal(plain(offers.vipHeroPerks(nokey, {})).hero.length, 3);
+  const screen = strip(read('src/screens/MembershipScreen.tsx'));
+  assert.match(screen, /!member && hero\.hero\.length > 0 \?/);
+  assert.match(screen, /<MemberStage pin=\{!member && gift\?\.pin && VIP_PIN_ART\[gift\.pin\.art\]/);
+  assert.match(screen, /getStandings\('week'\)\.then\(b => \{ if \(live\) setWeek\(\{ last: b\.last_week\?\.score \?\? null, now: b\.me\?\.score \?\? null \}\); \}\)/);
+  assert.doesNotMatch(screen, /Bigger rewards at home and at the park\./, 'no vague headline');
+});
