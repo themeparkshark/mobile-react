@@ -424,7 +424,8 @@ const COPY: { readonly [K in FlexKind]: CopyFnCore<K> } = {
       big: String(n),
       bigLabel: n === 1 ? 'COIN' : 'COINS',
       stat: fresh ? `${fresh} new for my shelf` : 'Ridden and won',
-      sub: null,
+      // Fix w3 T130: the line time and level ups the day turned into games, as plain numbers.
+      sub: parkDaySub(p.extraStats),
       cta: 'Catch the coins I missed!',
       frame: 'coins',
       prop: 'coins',
@@ -480,4 +481,11 @@ export function shouldFlexReveal<K extends FlexKind>(kind: K, payload: FlexPaylo
     case 'park_day': return Number(p.coinsCaught) >= 5;
   }
   return false;
+}
+
+/** "36 min in line · 2 level ups": the share card's quiet second line, numbers only. */
+export function parkDaySub(stats: readonly { readonly value: number; readonly label: string }[] | undefined): string | null {
+  const parts = (stats ?? []).filter(s => Number.isFinite(s.value) && s.value > 0)
+    .map(s => `${Math.floor(s.value)} ${s.label.toLowerCase()}`);
+  return parts.length ? parts.join(' \u00b7 ') : null;
 }

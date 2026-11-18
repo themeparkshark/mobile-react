@@ -86,7 +86,7 @@ test('Ride Tracker pages wear the shared game header, not web gradients', () => 
 test('park names are uppercased in code so iOS never clips them', () => {
   const src = read('src/components/VisitedParks.tsx');
   assert.doesNotMatch(src, /textTransform: 'uppercase'/);
-  assert.match(src, /String\(park\.name \?\? ''\)\.toUpperCase\(\)/);
+  assert.match(src, /\{parkLabel\(park\)\.toUpperCase\(\)\}/);
 });
 
 test('launch screens sit on the splash blue with the video poster: no dark navy flash', () => {
@@ -226,7 +226,8 @@ test('one coin for coins you spend: the coin stack on pills, prices and the prof
   assert.doesNotMatch(read('src/screens/pins/MysteryCard.tsx'), /<GameIcon name="coin" /);
   assert.doesNotMatch(read('src/components/Notification.tsx'), /<GameIcon name="coin" /);
   assert.match(read('src/services/liveEvents/model.ts'), /if \(r\.coins\) out\.push\(\{ icon: 'coins'/);
-  assert.match(read('src/components/Stats.tsx'), /label: 'Shark Coins',[\s\S]{0,120}gameIcon: 'coins'/);
+  // Fix w3 T121: Shark Coins left the Profile tiles (the shop and map header show the money).
+  assert.doesNotMatch(read('src/components/Stats.tsx'), /label: 'Shark Coins'/);
 });
 
 test('full-screen routes keep clear of the Dynamic Island with one inset (SafeScreen, the JS hook)', () => {
@@ -621,7 +622,8 @@ test('plain ride names: no trademark marks from the wait-times feed or the ride 
   assert.equal(plainRideName('Indiana Jones\u2122 Adventure'), 'Indiana Jones Adventure');
   assert.equal(plainRideName('Space Mountain\u00AE'), 'Space Mountain');
   assert.equal(plainRideName('Soarin\u2019 Around the World (TM)'), 'Soarin\u2019 Around the World');
-  assert.equal(plainRideName('"it\'s a small world"'), '"it\'s a small world"', 'words never change');
+  // Fix w3 T122: one display name per ride, with proper casing.
+  assert.equal(plainRideName('"it\'s a small world"'), "It's a Small World");
   assert.equal(plainRideName(null), '');
   const rows = [{ name: 'Matterhorn Bobsleds' }, { name: 'Indiana Jones\u2122 Adventure', id: 2 }];
   const out = withPlainNames(rows);

@@ -1,4 +1,5 @@
 import api from '../../../api';
+import { plainRideName } from '../../../../helpers/plainRideName';
 import type { RideCoinLevelType } from '../../../../models/ride-coin-level-type';
 
 /** Park grouping and tier fields the collection API adds to every coin. */
@@ -20,5 +21,8 @@ export interface CollectedRideCoin extends RideCoinLevelType {
 /** One owned coin for its detail sheet (GET /me/ride-coins/{assetId}). 404 when not collected. */
 export default async function getRideCoin(assetId: number, timeoutMs = 8_000): Promise<{ data: CollectedRideCoin }> {
   const response = await api.get(`/me/ride-coins/${assetId}`, { timeout: timeoutMs });
-  return response.data;
+  const body = response.data;
+  // One display name per ride (fix w3 T122).
+  if (body?.data && typeof body.data.ride_name === 'string') return { ...body, data: { ...body.data, ride_name: plainRideName(body.data.ride_name) } };
+  return body;
 }

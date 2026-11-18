@@ -6,12 +6,7 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '../..');
 const ts = require(path.join(root, 'node_modules/typescript'));
 const file = 'src/screens/parkRideAvailability.ts';
-const code = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-}).outputText;
-const moduleRef = { exports: {} };
-vm.runInNewContext(code, { module: moduleRef, exports: moduleRef.exports }, { filename: file });
-const { reportedRideStatus } = moduleRef.exports;
+const { reportedRideStatus } = require('./helpers/ts-module.cjs').loadTs(file);
 
 const suggestionFile = 'src/screens/parkRideSuggestion.ts';
 const suggestionCode = ts.transpileModule(fs.readFileSync(path.join(root, suggestionFile), 'utf8'), {
@@ -36,8 +31,11 @@ test('a park reroute needs one exact ride-name match in the live feed', () => {
     8, 'Haunted Mansion'), 'DOWN');
   assert.equal(reportedRideStatus([{ id: '5', name: 'Pirates of the Caribbean', status: 'OPERATING' }],
     8, 'Pirates'), 'OPERATING');
+  // Fix w3 T122: one display name per ride in every park, so "Pirates" is Pirates of the Caribbean at
+  // Magic Kingdom too (both sides pass through plainRideName; no per-park alias table to keep in step).
   assert.equal(reportedRideStatus([{ id: '5', name: 'Pirates of the Caribbean', status: 'OPERATING' }],
-    2, 'Pirates'), null);
+    2, 'Pirates'), 'OPERATING');
+  assert.equal(reportedRideStatus([{ id: '6', name: "Walt Disney's Enchanted Tiki Room", status: 'DOWN' }], 8, 'Tiki Room'), 'DOWN');
 });
 
 test('a nearby non-ride coin cannot be described as a reported-open attraction', () => {

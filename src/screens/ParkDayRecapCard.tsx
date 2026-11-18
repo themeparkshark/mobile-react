@@ -7,7 +7,9 @@ import GameIcon from '../ui/GameIcon';
 import GameRichText from '../ui/GameRichText';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import { shareFlex } from '../share';
-import { parkDayFlexPayload } from '../share/parkDay';
+import { parkDayFlexPayload, parkDayCoinRow } from '../share/parkDay';
+import { shortParkName } from '../helpers/parkName';
+import { plainRideName } from '../helpers/plainRideName';
 import * as RootNavigation from '../RootNavigation';
 
 interface Props {
@@ -65,6 +67,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   }
 
   const hasActivity = recap.moments.length > 0;
+  const coinRow = parkDayCoinRow(recap);
   if (!hasActivity && !atPark && !recap.previous_active_day) return null;
 
   const showEarlier = (day: string | null) => {
@@ -75,7 +78,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   return <View style={styles.card}>
     <View style={styles.header}>
       <View style={styles.headerCopy}>
-        <Text style={styles.kicker}>{parkDayLabel(recap.park_day)} · {recap.park_name}</Text>
+        <Text style={styles.kicker}>{parkDayLabel(recap.park_day)} · {shortParkName(recap.park_name)}</Text>
         <Text style={styles.title}>{selectedDay ? 'PARK DAY STORY' : "TODAY'S PARK STORY"}</Text>
       </View>
       <Image source={require('../../assets/images/screens/pin-collections/shark.png')}
@@ -87,6 +90,18 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
         <View style={styles.stat}><Text style={styles.statValue}>{recap.new_coins}</Text><Text style={styles.statLabel}>NEW COINS</Text></View>
         <View style={styles.stat}><Text style={styles.statValue}>{recap.coin_upgrades}</Text><Text style={styles.statLabel}>LEVEL UPS</Text></View>
       </View>
+      {/* The day's coins by name with their art (fix w3 T130): the story says which rides you won. */}
+      {coinRow.length > 0 && <View style={styles.coinRow} accessible
+        accessibilityLabel={`Coins today: ${coinRow.map(c => c.name).join(', ')}`}>
+        {coinRow.map(coin => <View key={coin.assetId} style={styles.coinCell}>
+          <View style={styles.coinDisc}>
+            {coin.url ? <ArtImage source={coin.url} style={styles.coinArt} contentFit="contain" cachePolicy="memory-disk" />
+              : <GameIcon name="coin" size={40} />}
+            {coin.isNew && <View style={styles.newTag}><Text style={styles.newTagText}>NEW</Text></View>}
+          </View>
+          <Text style={styles.coinName} numberOfLines={2}>{plainRideName(coin.name)}</Text>
+        </View>)}
+      </View>}
       {recap.line_play_sessions > 0 && <GameRichText style={styles.copy}>
         {`[icon:ride] ${recap.eligible_line_minutes} minutes in line · [icon:parts] ${recap.ride_parts_earned} Ride Part${recap.ride_parts_earned === 1 ? '' : 's'}`}
       </GameRichText>}
@@ -176,5 +191,13 @@ const styles = StyleSheet.create({
   momentTime: { color: '#427a9d', fontFamily: 'Knockout', fontSize: 12 },
   link: { alignSelf: 'flex-start', paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
   linkText: { color: '#005da4', fontFamily: 'Knockout', fontSize: 16 },
+  coinRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, justifyContent: 'center' },
+  coinCell: { width: 72, alignItems: 'center' },
+  coinDisc: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
+  coinArt: { width: 56, height: 56 },
+  newTag: { position: 'absolute', top: -4, right: -6, backgroundColor: '#ffcf3b', borderRadius: 8,
+    borderWidth: 2, borderColor: '#075083', paddingHorizontal: 4 },
+  newTagText: { fontFamily: 'Shark', fontSize: 10, color: '#075083' },
+  coinName: { color: '#153e67', fontFamily: 'Knockout', fontSize: 12, lineHeight: 14, textAlign: 'center', marginTop: 3 },
   note: { color: '#376888', fontFamily: 'Knockout', fontSize: 12, lineHeight: 16, marginTop: 8 },
 });

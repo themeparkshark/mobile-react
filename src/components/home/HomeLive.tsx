@@ -1,4 +1,5 @@
 import { useIsFocused } from '@react-navigation/native';
+import { parkLabel } from '../../helpers/parkName';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -189,7 +190,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
             {live.parks.map(park => (
               <View key={park.park_id} style={styles.park}>
                 <View style={styles.parkHead}>
-                  <Text style={styles.parkName} numberOfLines={1}>{park.name}</Text>
+                  <Text style={styles.parkName} numberOfLines={1}>{parkLabel(park)}</Text>
                   <View style={styles.miniChips}>
                     {ORDER.map(team => (
                       <View key={team} style={styles.miniChipRow}>

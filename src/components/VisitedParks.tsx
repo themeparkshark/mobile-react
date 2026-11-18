@@ -8,6 +8,7 @@ import { ParkType } from '../models/park-type';
 import { PlayerType } from '../models/player-type';
 import Progress from './Progress';
 import GameIcon from '../ui/GameIcon';
+import { parkLabel } from '../helpers/parkName';
 
 function ParkArtwork({ uri }: { readonly uri?: string | null }) {
   const [unavailable, setUnavailable] = useState(!uri);
@@ -56,7 +57,7 @@ export default function VisitedParks({
               <TouchableOpacity
                 key={park.id}
                 accessibilityRole="button"
-                accessibilityLabel={`${park.name}. ${rideCoinProgress
+                accessibilityLabel={`${parkLabel(park)}. ${rideCoinProgress
                   ? `${park.ride_coins_collected ?? 0} of ${park.ride_coins_available} coins`
                   : `${park.completion_rate} percent complete`}. Open collection.`}
                 onPress={() => {
@@ -90,7 +91,7 @@ export default function VisitedParks({
                       color: '#174D76',
                     }}
                   >
-                    {String(park.name ?? '').toUpperCase()}
+                    {parkLabel(park).toUpperCase()}
                   </Text>
                   <Progress progress={progress} />
                   <Text

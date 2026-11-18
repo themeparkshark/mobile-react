@@ -556,7 +556,9 @@ test('round 5: the shelf forgets only a plan it watched you win; the level-up go
 
 test('round 5: Profile counts shelf coins in the shelf word with the coin picture', () => {
   const stats = read('src/components/Stats.tsx');
-  assert.match(stats, /label: 'Shelf Coins',\n\s*value: rideCoins \?\? visibleCount\(player\.park_coins_count\),\n\s*iconIndex: 1,\n\s*gameIcon: 'coin'/);
+  // Fix w3 T133: the tile reads the shelf sum only, never park_coins_count (that counts parks with a shelf).
+  assert.match(stats, /label: 'Shelf Coins',\n\s*value: rideCoins,\n\s*iconIndex: 1,\n\s*gameIcon: 'coin'/);
+  assert.doesNotMatch(stats, /player\.park_coins_count/);
   assert.doesNotMatch(stats, /label: 'Ride Coins'/);
   assert.match(read('src/components/Tutorial/steps.ts'), /Then follow the glowing coin on the map\./);
   assert.match(read('src/screens/LeaderboardsScreen/PodiumSteps.tsx'), /numberAt === 'top' \? 'rgba\(5,52,110,0\.55\)'/);

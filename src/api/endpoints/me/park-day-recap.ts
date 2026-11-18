@@ -1,4 +1,5 @@
 import client from '../../client';
+import { withPlainField } from '../../../helpers/plainRideName';
 
 export interface ParkDayRecap {
   readonly park_id: number;
@@ -36,5 +37,7 @@ export async function getParkDayRecap(parkId: number, date?: string): Promise<Pa
   const { data } = await client.get<{ data: ParkDayRecap }>('/me/park-day-recap', {
     params: { park_id: parkId, ...(date ? { date } : {}) },
   });
-  return data.data;
+  const recap = data.data;
+  // One display name per ride (fix w3 T122): the story names rides the way the shelf does.
+  return recap && Array.isArray(recap.coins) ? { ...recap, coins: withPlainField(recap.coins, 'ride_name') } : recap;
 }

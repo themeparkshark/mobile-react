@@ -183,31 +183,20 @@ export default function Stats({ player, hideBalances = false, rideCoins = null, 
 }) {
   // Standings v2: a stranger's limited profile (server profile_limited) also hides where a kid has been.
   const limited = (player as PlayerType & { profile_limited?: boolean }).profile_limited === true;
+  // Three tiles that pull (fix w3 T121): coins on your shelves, ride wins, parks started. Shark Coins live
+  // in the shop and Total XP in the level bar above, so the Profile no longer repeats them. Keys show only
+  // while you hold one (T229), and a count the screen could not load drops its tile instead of borrowing
+  // another number: the old fallback read park_coins_count, which counts parks with a shelf, so a
+  // 14-coin player read "1 SHELF COINS" whenever the park list timed out (T133).
+  const keys = hideBalances ? null : visibleCount(player.keys);
   const all = [
+    ...(keys !== null && keys > 0 ? [{ label: 'Keys', value: keys as number | null, iconIndex: 0 }] : []),
     {
-      label: 'Keys',
-      value: hideBalances ? null : visibleCount(player.keys),
-      iconIndex: 0,
-    },
-    {
-      // The shelf's word: this counts every coin on your shelves, rides and sights (BLUEPRINT 4.5),
-      // with the same coin picture the park rows below use ("9 OF 35 COINS").
+      // The shelf's word: every coin on your shelves (the same sum the Your Parks rows show, "9 of 35 coins").
       label: 'Shelf Coins',
-      value: rideCoins ?? visibleCount(player.park_coins_count),
+      value: rideCoins,
       iconIndex: 1,
       gameIcon: 'coin' as GameIconName,
-    },
-    {
-      label: 'Parks',
-      value: hideBalances || limited ? null : parks ?? visibleCount(player.visited_parks_count),
-      iconIndex: 2,
-    },
-    {
-      // The money says Shark Coins, so it never reads like the ride coins on the park rows below.
-      label: 'Shark Coins',
-      value: hideBalances ? null : visibleCount(player.coins),
-      iconIndex: 3,
-      gameIcon: 'coins' as GameIconName,
     },
     {
       label: 'Ride Wins',
@@ -215,16 +204,13 @@ export default function Stats({ player, hideBalances = false, rideCoins = null, 
       iconIndex: 4,
     },
     {
-      label: 'Total XP',
-      // Lifetime XP can never read lower than the XP inside the current level.
-      value: visibleCount(player.total_experience) === null && visibleCount(player.experience) === null
-        ? null
-        : Math.max(Number(player.total_experience) || 0, Number(player.experience) || 0),
-      iconIndex: 5,
+      label: 'Parks',
+      value: hideBalances || limited ? null : parks ?? visibleCount(player.visited_parks_count),
+      iconIndex: 2,
     },
   ];
 
-  // Hidden values (a stranger's Keys and Shark Coins) drop their tile; the rest stay in even rows.
+  // Hidden or unknown values drop their tile; the rest stay in even rows.
   const stats = all.filter((s): s is typeof s & { value: number } => s.value !== null);
   if (stats.length === 0) return null;
   const perRow = stats.length === 4 ? 2 : 3;

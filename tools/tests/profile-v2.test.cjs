@@ -179,7 +179,8 @@ test("another player's page: kind actions first, park history for friends only, 
   assert.match(player, /loaded\.is_friend \? await getVisitedParks\(player\) : \[\]/);
   assert.match(player, /trophy=\{<><ProfileEventChip playerId=\{currentPlayer\.id\} \/>/);
   const stats = read('src/components/Stats.tsx');
-  assert.match(stats, /Math\.max\(Number\(player\.total_experience\) \|\| 0, Number\(player\.experience\) \|\| 0\)/);
+  // Fix w3 T121: XP lives in the level bar, so the tiles never repeat it (and never disagree with it).
+  assert.doesNotMatch(stats, /label: 'Total XP'/);
 });
 
 function fakeClock() {
@@ -279,30 +280,40 @@ const statsImports = {
 };
 
 test("a stranger's stats render without null balances: Keys and Shark Coins tiles hide, no tile gets null", () => {
+  const collect = (tree) => { const out = []; (function walk(n) { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) return n.forEach(walk);
+    if (typeof n.type === 'function') out.push(n.props); walk(n.props?.children); })(tree); return out; };
+  // Fix w3 T121/T133: three tiles that pull (Shelf Coins, Ride Wins, Parks). A coin count the screen
+  // could not load drops its tile: it never borrows park_coins_count (4 here: parks with a shelf).
   const app = runtime('src/components/Stats.tsx', statsImports, { player: stranger });
-  const tiles = [];
-  (function walk(n) { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) return n.forEach(walk);
-    if (typeof n.type === 'function') tiles.push(n.props); walk(n.props?.children); })(app.tree);
-  assert.deepEqual(tiles.map((t) => t.label), ['Shelf Coins', 'Parks', 'Ride Wins', 'Total XP']);
+  const tiles = collect(app.tree);
+  assert.deepEqual(tiles.map((t) => t.label), ['Ride Wins', 'Parks']);
   assert.ok(tiles.every((t) => typeof t.value === 'number'), 'every tile gets a number');
-  // AnimatedStat uses Animated.multiply, which the shared runtime stub lacks: extend its react-native.
   const rn = { ...app.native, Animated: { ...app.native.Animated, multiply: (a) => a } };
   for (const t of tiles) {
     const tile = runtime('src/components/Stats.tsx', { ...statsImports, 'react-native': rn }, t,
       { setInterval: () => 0, clearInterval: () => {} }, { exportName: 'AnimatedStat' });
     assert.match(tile.find((n) => n.type === 'Pressable').props.accessibilityLabel, new RegExp(`^${t.label}: `));
   }
-  // The hotfix's current fail-soft answer is 0, not null: a non-friend page hides balances anyway.
-  const zeroed = runtime('src/components/Stats.tsx', statsImports, { player: { ...stranger, keys: 0, coins: 0 }, hideBalances: true });
-  const zl = []; (function walk(x) { if (!x || typeof x !== 'object') return; if (Array.isArray(x)) return x.forEach(walk);
-    if (typeof x.type === 'function') zl.push(x.props.label); walk(x.props?.children); })(zeroed.tree);
-  assert.deepEqual(zl, ['Shelf Coins', 'Ride Wins', 'Total XP'], 'no balances or park count for strangers');
+  const zeroed = runtime('src/components/Stats.tsx', statsImports, { player: { ...stranger, keys: 0, coins: 0 }, hideBalances: true, rideCoins: 9 });
+  assert.deepEqual(collect(zeroed.tree).map((t) => t.label), ['Shelf Coins', 'Ride Wins'], 'no balances or park count for strangers');
   assert.match(read('src/screens/PlayerScreen.tsx'), /<Stats player=\{currentPlayer\} hideBalances=\{!isFriend\} rideCoins=\{rideCoinTotal\(parks\)\} parks=\{visitedParkCount\(parks\)\} \/>/);
-  // The signed-in player still sees all six.
-  const own = runtime('src/components/Stats.tsx', statsImports, { player: { ...stranger, keys: 0, coins: 1840, experience: 2405 } });
-  let n = 0; (function walk(x) { if (!x || typeof x !== 'object') return; if (Array.isArray(x)) return x.forEach(walk);
-    if (typeof x.type === 'function') n++; walk(x.props?.children); })(own.tree);
-  assert.equal(n, 6);
+  // The signed-in player: the shelf sum (14), wins and parks; no Keys tile while they hold none.
+  const own = collect(runtime('src/components/Stats.tsx', statsImports, { player: { ...stranger, keys: 0, coins: 1840, experience: 2405 }, rideCoins: 14, parks: 1 }).tree);
+  assert.deepEqual(own.map((t) => [t.label, t.value]), [['Shelf Coins', 14], ['Ride Wins', 7], ['Parks', 1]]);
+  // A held key shows its tile first.
+  const keyed = collect(runtime('src/components/Stats.tsx', statsImports, { player: { ...stranger, keys: 2 }, rideCoins: 14, parks: 1 }).tree);
+  assert.deepEqual(keyed.map((t) => t.label), ['Keys', 'Shelf Coins', 'Ride Wins', 'Parks']);
+});
+
+test('fix w3 T121/T129: Profile is calm: three tiles, every park started with its coins, the lanyard behind the Pins door', () => {
+  const profile = read('src/screens/ProfileScreen.tsx');
+  const statsAt = profile.indexOf('<Stats player={player}');
+  const parksAt = profile.indexOf("labels.your_parks || 'Your parks'");
+  const friendsAt = profile.indexOf("labels.your_friends || 'Your friends'");
+  assert.ok(statsAt > 0 && statsAt < parksAt && parksAt < friendsAt, 'Your parks (the all-parks completion view) sits right under the tiles');
+  const visited = read('src/components/VisitedParks.tsx');
+  assert.match(visited, /`\$\{park\.ride_coins_collected \?\? 0\} of \$\{park\.ride_coins_available\} \$\{park\.ride_coins_available === 1 \? 'coin' : 'coins'\}`/);
+  assert.match(read('src/screens/pins/ProfileLanyardCard.tsx'), /if \(!data \|\| data\.lanyard\.length === 0\) return null;/);
 });
 
 test("a stranger's level card shows the level only, never 0 / N XP", () => {

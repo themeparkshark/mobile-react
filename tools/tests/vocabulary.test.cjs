@@ -76,6 +76,10 @@ const RULES = [
   ['explore-tab', /\b(then|to) Explore\b/, 'the Map (the footer tab says Map; playerWords.tabWord)'],
   ['ride-coin-count', /\b(\d+|N) of (\d+|N) ride coins\b/i, '"9 of 35 coins" (the shelf count says coins)'],
   ['trophy-at', /\b(Bronze|Silver|Gold) at (\d+|N)\b/, 'trophies count wins: "1 more win for Bronze", "Bronze trophy: 11 of 12 wins"'],
+  // Fix round w3 (Nov 18, 2026), lane shelf: each word a grader tripped on, so it cannot come back.
+  // T122: one display name per ride. A screen never spells a ride itself; RIDE_DISPLAY_NAMES does.
+  ['ride-name-drift', /^(Thunder Mountain|Tiki Room|Walt Disney's Enchanted Tiki Room|Haunted Mansion Holiday|It's A Small World|The Many Adventures Of (Winnie the )?Pooh|Smugglers|Astro Blasters|Mr\. Toad|Mr\. Lincoln)$/,
+    'one ride name: RIDE_DISPLAY_NAMES in src/helpers/plainRideName.ts', /^src\/share\/placeNames\.ts$/],
 ];
 
 /**

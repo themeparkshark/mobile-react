@@ -8,6 +8,7 @@
  * Owned by the guide-map lane (src/services/guide/**).
  */
 import type { GuideState, GuideTarget } from './nextCoin';
+import { shortParkName } from '../../helpers/parkName';
 import { TREATS_PER_TICKET, type FreeTicketStep } from './freeTickets';
 
 /** What the card's one button does. */
@@ -105,18 +106,8 @@ export function oneGoldButton(copy: GuideCardCopy, playUp: boolean): GuideCardCo
   return { ...copy, button: null, secondary: copy.secondary ?? { ...copy.button, badge: null } };
 }
 
-/**
- * The park's everyday name for the arrival kicker, so it fits one line on a 375 pt phone:
- * "Disney California Adventure Park" says "California Adventure", "Disneyland Park" says
- * "Disneyland", "Universal's Islands of Adventure" says "Islands of Adventure".
- */
-export function shortParkName(name: string | null | undefined): string {
-  let out = String(name ?? '').trim();
-  if (!out) return 'the park';
-  out = out.replace(/\s+(Theme\s+)?Park$/i, '');
-  out = out.replace(/^(Disney['\u2019]s|Disney|Universal['\u2019]s)\s+(?=\S)/i, '');
-  return out.trim() || String(name).trim();
-}
+/** The park's everyday name (one helper app-wide, src/helpers/parkName.ts). */
+export { shortParkName };
 
 /** "40 m", "1.2 km"; rounded to 5 m so the number does not flicker while walking. */
 export function guideDistance(meters: number | null): string | null {

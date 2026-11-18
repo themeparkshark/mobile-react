@@ -335,7 +335,9 @@ test('Pins: the door stays; mystery boxes, chaser meter and pips only where pin_
   assert.match(screen, /<BackButton \/>/, 'a visible back button (the footer is hidden here)');
   assert.match(screen, /pinsRung\.markSeen\(\)/, 'opening Pins clears the NEW tag');
   const lanyard = read('src/screens/pins/ProfileLanyardCard.tsx');
-  assert.match(lanyard, /useShownNewTag\('pins', own && !!data && focused\)/, 'the lanyard NEW retires once shown');
+  assert.match(lanyard, /useShownNewTag\('pins', own && !!data && data\.lanyard\.length > 0 && focused\)/, 'the lanyard NEW retires once shown');
+  // Fix w3 T121: an empty strap folds into the Pins door, which wears the NEW dot instead.
+  assert.match(read('src/screens/ProfileScreen.tsx'), /const pinsNew = useShownNewTag\('pins', focused\);[\s\S]*dot: pinsNew\.isNew,/);
   assert.match(lanyard, /\{newTag && <NewPill \/>\}/, 'the shared pill, no copied styles');
   assert.doesNotMatch(lanyard, /newText|useRung\('pins'\)/);
   assert.match(read('src/screens/pins/BoxReveal.tsx'), /useNativeModalLayer\(!hidden, 'show'\)/);

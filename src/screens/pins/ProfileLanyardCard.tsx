@@ -42,9 +42,12 @@ export default function ProfileLanyardCard({ playerId, own }: { playerId: number
     return () => { live = false; };
   }, [playerId, focused]);
 
-  const pinsNew = useShownNewTag('pins', own && !!data && focused);
+  // Calm Profile (fix w3 T121): an empty strap folds into the Pins door in the shortcut row (Shark Shop,
+  // Stamp Book, Pins), which wears the NEW dot and the empty hint. The card comes back, as the flex
+  // others see, once a pin hangs on it.
+  const pinsNew = useShownNewTag('pins', own && !!data && data.lanyard.length > 0 && focused);
   const newTag = pinsNew.isNew;
-  if (!data || (!own && data.lanyard.length === 0)) return null;
+  if (!data || data.lanyard.length === 0) return null;
   const chasers = data.chasers ?? data.lanyard.filter(p => p.is_chaser).length;
   const body = (
     <View style={styles.card} accessible accessibilityLabel={`${own ? 'Your' : 'Their'} lanyard: ${data.lanyard.map(p => p.name).join(', ') || 'empty'}. ${data.pins} pins, ${data.sets_done} park sets done`}>
