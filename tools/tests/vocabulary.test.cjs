@@ -87,6 +87,8 @@ const RULES = [
   ['finds-ticket', /\bmore finds?\b|\bnext find\b/i, 'treats ("2 more treats = 1 Ticket")'],
   ['stamp-prizes', /\bstamp prizes?\b|\b(N|\d+) free Tickets? (is|are) waiting\b/i, 'stamp Tickets'],
   ['sharky-boxes', /\bPrize Box(es)?\b/i, 'Sea Treasures (Sharky); boxes are reward boxes only'],
+  // T228: no deal wording on a kid's shop shelf.
+  ['deal-words', /\b(new )?deal every day\b/i, "TODAY'S PICK (the band) and 'Changes each day'"],
   ['wins-for-trophy', /\bmore wins? for (Bronze|Silver|Gold)\b/, '"Silver trophy: 35 more wins" on its own line'],
 ];
 

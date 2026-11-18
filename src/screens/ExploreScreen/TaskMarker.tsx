@@ -23,7 +23,6 @@ import { BRAND, GameIcon } from '../../ui';
 
 import { calloutDistance } from '../../services/guide/guideCopy';
 import { markerBadge, markerRingColor, restingLabel } from './mapMarkerPresentation';
-import { limitedLabel } from '../../services/collection/limitedCoins';
 import { FoldBadge, Placed, TagSlot, usePlacement } from '../../components/map/declutter/Placed';
 import type { Placement } from '../../components/map/declutter/solver';
 import { RIDE_BODY, RIDE_BOX, SELECTED_TAG, rideLayoutId, rideTagKind, rideTagSize, selectedCardSide } from './parkMapLayout';
@@ -385,9 +384,11 @@ function TaskMarker({
 
   // Rush gold, a held ride its team colour, red only in the last 5 minutes, gold in reach, else blue.
   const ringColor = markerRingColor({ rush: !!rush, team: control ? TEAMS[control.controller].color : null, urgent: timerUrgent, near: near || playable });
-  // A limited coin on the map is in rotation: "Limited · leaves Oct 31".
-  const limited = task.limited?.active ? limitedLabel(task.limited) : null;
-  const badge = markerBadge({ rush: !!rush, adventure, goal: isTripGoal, owned, limited: !!limited, selected: isSelected });
+  // Fix w3 T228: the Limited tag and its date live on the shelf only. On the kid's map a limited coin is
+  // just a coin (its island keeps its soft shimmer), so no "LIMITED LEAVES NOV 30" chip or line.
+  // '' (not null) keeps the island's shimmer while every chip, line and label reads it as no tag.
+  const limited: string | null = task.limited?.active ? '' : null;
+  const badge = markerBadge({ rush: !!rush, adventure, goal: isTripGoal, owned, limited: false, selected: isSelected });
   const showTimer = !resting && expiresAt !== null && expiresAt > Date.now() && !rush && (isSelected || near || timerUrgent);
   // One chip above the art: the badge, else the timer (the timer drops into the art when a badge holds the chip).
   const tagKind = isSelected ? null : rideTagKind({ badge, showTimer });
@@ -586,7 +587,7 @@ function IslandArt({
 
         {alive.light.lamps >= 0.05 && <LampGlow id={task.id} level={alive.light.lamps} moving={!calm && withinBudget(aliveRank, alive.caps.pulsingRides)} />}
         {glow && <WaitGlow id={task.id} glow={glow} moving={!calm && withinBudget(aliveRank, alive.caps.pulsingRides)} />}
-        {limited && <LimitedShimmer seed={task.id} moving={!calm && withinBudget(aliveRank, alive.caps.limitedShimmer)} />}
+        {limited !== null && <LimitedShimmer seed={task.id} moving={!calm && withinBudget(aliveRank, alive.caps.limitedShimmer)} />}
         {/* Ground ring: flat, bright, no glow. */}
         <View style={[styles.groundRing, { borderColor: ringColor, backgroundColor: `${ringColor}33` }]} />
         {playable && !resting && <PlayPulse color={ringColor} reducedMotion={reducedMotion || !alive.active} />}

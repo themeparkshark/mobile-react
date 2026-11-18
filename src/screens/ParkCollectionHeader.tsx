@@ -216,6 +216,10 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
           <Text style={styles.chipText}>SECRETS {secretMilestones}</Text>
         </Pressable>}
       </View>
+      {/* Fix w3 T228: on the Limited tab the leave date shows in words, not only to VoiceOver. */}
+      {tab === 'limited' && limitedAvailable > 0 && !!limitedLeaves && <Text style={styles.limitedLine} accessibilityRole="text">
+        {`These limited coins leave ${limitedLeaves}`}
+      </Text>}
     </LinearGradient>
     {(passportComplete || goal) && <View style={styles.lower}>
       {passportComplete ? <Pressable onPress={onOpenStampBook} disabled={!onOpenStampBook}
@@ -251,6 +255,8 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
 const SIGHTS_ORANGE = '#ff9b2f';
 
 const styles = StyleSheet.create({
+  limitedLine: { fontFamily: 'Knockout', fontSize: 15, color: '#ffffff', textAlign: 'center', marginTop: 6,
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
   frame: { borderRadius: 20, borderWidth: 3, borderColor: '#fff', backgroundColor: '#fff8e4',
     overflow: 'hidden', shadowColor: '#05346e', shadowOpacity: 0.22,
     shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 5 },
