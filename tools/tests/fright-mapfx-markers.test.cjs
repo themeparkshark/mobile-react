@@ -77,7 +77,7 @@ test('Map.tsx: both tints are background layers and no direct MapView child is m
   const open = map.indexOf('<MapView\n');
   const region = map.slice(open, map.indexOf('</MapView>'));
   const conditional = region.split('\n').filter(l => /^\s*\{[^{}]*(\?|&&)\s*\(?\s*<[A-Z]/.test(l) || /^\s*\{[^{}]*(\?|&&)\s*\($/.test(l));
-  assert.deepEqual(conditional.map(l => l.trim()), ['{fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}'],
+  assert.deepEqual(conditional.map(l => l.trim()), ['{fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={nativeMap} hud={rail} />}'],
     'only the fright markers (the LAST child, so nothing shifts) mount on a condition');
 });
 

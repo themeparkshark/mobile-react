@@ -438,7 +438,7 @@ test('the map loading cover shows Alex clouds, a bobbing shark and the splash ba
   // The map registers with the one screen cover; it draws the cover itself only on preview screens.
   assert.match(map, /useLayoutEffect\(\(\) => \{\s*const tok = beginMapCover\(\);/);
   assert.match(map, /return \(\) => releaseMapCover\(tok\);/);
-  assert.match(map, /const revealMap = \(\) => \{ mapCoverDrawn\(coverToken\.current\);/);
+  assert.match(map, /const revealMap = \(\) => \{ mapGate\.ready\(\); mapCoverDrawn\(coverToken\.current\);/);
   assert.match(map, /\{coverHost === 'self' && <MapLaunchCover style=\{styles\.cover\} \/>\}/);
   assert.doesNotMatch(map, /Animated\.timing\(cover/, 'no JS-timer lift (RN Animated delay is a JS setTimeout)');
   const cover = read('src/components/map/MapCoverSky.tsx');
@@ -734,8 +734,9 @@ test('buttons and the map on small and busy screens: GameButton art waits for it
   assert.match(detail, /\{emptySharkSize > 0 && !\(community/);
   assert.match(detail, /<GameIcon name="shark" size=\{emptySharkSize\} \/>/);
   const map = read('src/components/Map.tsx');
-  assert.match(map, /findWater: async \(latitude: number, longitude: number, margin\?: number\) => \{\s*if \(!mapAlive\.current\) return null;/);
-  assert.match(map, /if \(key === decoKey\.current \|\| !mapAlive\.current\) return;/);
+  // The unmount guard is now the native map gate (T187, map-native-gate.test.cjs).
+  assert.match(map, /findWater: async \(latitude: number, longitude: number, margin\?: number\) => \{\s*const map = nativeMap\.current;\s*if \(!map\) return null;/);
+  assert.match(map, /if \(key === decoKey\.current \|\| !mapGate\.isOpen\(\)\) return;/);
 });
 
 test('launch bubbles move a plain layer: the drawn bubble (with its border) is a still child', () => {

@@ -48,6 +48,7 @@ import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput, type HudRect } from './map/fright';
 import { nearestWaterPoint } from './map/water';
+import { createNativeMapGate } from './map/nativeMapGate';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { useFocusEffect } from '@react-navigation/native';
 import { canMirrorShark, hasDressedShark } from '../helpers/wardrobe';
@@ -411,7 +412,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const coverToken = useRef(0);
   // Tiles drawn at least once: until then a light sheet hides the bare lawn if the cover lifted early.
   const [tilesDrawn, setTilesDrawn] = useState(false);
-  const revealMap = () => { mapCoverDrawn(coverToken.current); if (!tilesDrawn) setTilesDrawn(true); };
+  // Only native map events call it, so it also opens the native query gate (T187).
+  const revealMap = () => { mapGate.ready(); mapCoverDrawn(coverToken.current); if (!tilesDrawn) setTilesDrawn(true); };
   // A JS backstop for the sheet's own UI-thread fade: whatever happens, it is gone shortly after its cap.
   const [tileWaitOver, setTileWaitOver] = useState(false);
   useEffect(() => {
@@ -427,11 +429,16 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     return () => releaseMapCover(tok);
   }, []);
   const mapViewRef = useRef<MapViewRef>(null);
+  // Every native query reads the view through the gate: null until the native view has reported in
+  // (a native map event) and after unmount, so a query never names a view UIKit does not have (T187).
+  const [mapGate] = useState(() => createNativeMapGate(mapViewRef));
+  const nativeMap = mapGate.ref;
+  useLayoutEffect(() => () => mapGate.gone(), [mapGate]);
   const rootRef = useRef<View>(null);
   useEffect(() => {
     if (!projector) return;
     projector.current = async (latitude, longitude) => {
-      const point = await mapViewRef.current?.getPointInView([longitude, latitude]).catch(() => null);
+      const point = await nativeMap.current?.getPointInView([longitude, latitude]).catch(() => null);
       if (!point) return null;
       const origin = await new Promise<{ x: number; y: number } | null>(resolve => {
         if (!rootRef.current) { resolve(null); return; }
@@ -444,20 +451,19 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   useEffect(() => {
     if (!snapshotter) return;
     snapshotter.current = async () => {
-      try { return (await mapViewRef.current?.takeSnap(false)) ?? null; } catch { return null; }
+      try { return (await nativeMap.current?.takeSnap(false)) ?? null; } catch { return null; }
     };
     return () => { snapshotter.current = null; };
   }, [snapshotter]);
   const window = useWindowDimensions();
-  // A map that unmounted (the home map handing over to the park map at launch) is never queried:
-  // the native view is gone and the query would raise "Invalid react tag".
-  const mapAlive = useRef(true);
-  useEffect(() => { mapAlive.current = true; return () => { mapAlive.current = false; }; }, []);
+  // A map that unmounted (the home map handing over to the park map at launch) or has not reached
+  // UIKit yet is never queried: the gate's ref is null then (see nativeMapGate.ts).
   const mapQuery = useMemo(() => ({
     findWater: async (latitude: number, longitude: number, margin?: number) => {
-      if (!mapAlive.current) return null;
+      const map = nativeMap.current;
+      if (!map) return null;
       // MapLibre's rect is [top, right, bottom, left] with top the larger y.
-      const found = await mapViewRef.current?.queryRenderedFeaturesInRect(
+      const found = await map.queryRenderedFeaturesInRect(
         [window.height, window.width, 0, 0], undefined, ['water']);
       return nearestWaterPoint(found?.features ?? [], latitude, longitude, margin);
     },
@@ -476,13 +482,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const refreshDecorations = useCallback(() => {
     clearTimeout(decoTimer.current);
     decoTimer.current = setTimeout(async () => {
-      const map = mapViewRef.current;
-      if (!map || !mapAlive.current || decoFrozen.current) return;
+      const map = nativeMap.current;
+      if (!map || decoFrozen.current) return;
       try {
         const [zoom, [[east, north], [west, south]]] = await Promise.all([map.getZoom(), map.getVisibleBounds()]);
         // Skip rebuilding for tiny camera nudges (walking follow) at the same density.
         const key = `${decorationBand(zoom)}|${(north * 4000).toFixed(0)}|${(west * 4000).toFixed(0)}|${((north - south) * 400).toFixed(0)}`;
-        if (key === decoKey.current || !mapAlive.current) return;
+        if (key === decoKey.current || !mapGate.isOpen()) return;
         const rect: [number, number, number, number] = [window.height, window.width, 0, 0];
         const [wood, green, water, homes, buildings, roads] = await Promise.all([
           map.queryRenderedFeaturesInRect(rect, undefined, ['wood']),
@@ -519,7 +525,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     const target = guideRef.current;
     if (!target) { setGuidePoint(null); return; }
     try {
-      const point = await mapViewRef.current?.getPointInView([target.longitude, target.latitude]);
+      const point = await nativeMap.current?.getPointInView([target.longitude, target.latitude]);
       if (guideRef.current?.requestId === target.requestId) setGuidePoint(point ? { x: point[0], y: point[1] } : null);
     } catch { /* the map is not ready; the next camera move retries */ }
   }, []);
@@ -930,6 +936,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         pitchEnabled={false}
         regionWillChangeDebounceTime={0}
         onRegionWillChange={(feature) => {
+          mapGate.ready();
           if (!feature.properties?.isUserInteraction) return;
           lastTouchRef.current = Date.now();
           onUserPan?.();
@@ -954,11 +961,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         // the cover is up: after that the per-frame event is switched off.
         onDidFinishLoadingMap={revealMap}
         onDidFinishRenderingFrameFully={covered || !tilesDrawn ? revealMap : undefined}
-        onDidFinishRenderingMapFully={() => { refreshDecorations(); revealMap(); cam.resync();
-          void mapViewRef.current?.getZoom().then(zoom => {
+        onDidFinishRenderingMapFully={() => { mapGate.ready(); refreshDecorations(); revealMap(); cam.resync();
+          void nativeMap.current?.getZoom().then(zoom => {
             if (Number.isFinite(zoom)) { setCameraZoom(zoom); onZoomChange?.(zoom); }
           }).catch(() => undefined); }}
         onRegionIsChanging={(feature) => {
+          mapGate.ready();
           // While the map moves: held declutter passes (markers on screen stay put, art reaching the
           // HUD fades first), and the panned-away shark hides before iOS parks it in the corner.
           // Camera eases (following the walk, a tap-to-focus) get the same held passes, less often.
@@ -982,6 +990,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           checkPlayer(feature.properties?.visibleBounds);
         }}
         onRegionDidChange={(feature) => {
+          mapGate.ready();
           refreshDecorations();
           void projectGuide();
           const zoom = Number(feature.properties?.zoomLevel);
@@ -1024,7 +1033,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           // Panned away: a tap on your own shark does a trick and brings the map back to it.
           const sx = Number(feature?.properties?.screenPointX), sy = Number(feature?.properties?.screenPointY);
           if (!focusedOnPlayer && location && playerOnScreen && Number.isFinite(sx) && Number.isFinite(sy)) {
-            void mapViewRef.current?.getPointInView([location.longitude, location.latitude]).then(pt => {
+            void nativeMap.current?.getPointInView([location.longitude, location.latitude]).then(pt => {
               if (pt && sharkHit(pt as [number, number], [sx as number, sy as number])) { onSharkTap(); recenterOnPlayer(); }
             }).catch(() => undefined);
           }
@@ -1106,7 +1115,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
             mount appends instead of inserting mid-list, and a fixed set that never mounts or
             unmounts afterwards (MapLibre insertReactSubview crash). */}
-        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}
+        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={nativeMap} hud={rail} />}
       </MapView>
       </Reanimated.View>
       </DeclutterContext.Provider>

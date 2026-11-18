@@ -64,7 +64,7 @@ test('facades stay while half visible (40 pt slack); farther off they hide (corn
 test('Map hides the panned-away player shark while it is off screen (no corner shark; the declutter owns it)', () => {
   const map = read('src/components/Map.tsx');
   assert.match(map, /<PlayerSharkMarker target=\{location \?\? null\} visible=\{!focusedOnPlayer && playerOnScreen\}/);
-  assert.match(map, /<FrightMapSources input=\{fright\} zoom=\{cameraZoom\} mapRef=\{mapViewRef\} hud=\{rail\} \/>/);
+  assert.match(map, /<FrightMapSources input=\{fright\} zoom=\{cameraZoom\} mapRef=\{nativeMap\} hud=\{rail\} \/>/);
 });
 
 test('scareactor sheets (rows idle, lurk, scare, slide) play their scare row as the jump', () => {
