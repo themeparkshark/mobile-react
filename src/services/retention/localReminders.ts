@@ -137,3 +137,17 @@ export async function refreshLocalReminders(on: boolean, remindersOff: boolean, 
   if (!(await localRemindersChosen())) return 0;
   return scheduleLocalReminders(now);
 }
+
+// Dev JS only (never in a store or OTA bundle): lane checks read what is scheduled.
+if (__DEV__) {
+  (globalThis as { __tpsLocalReminders?: unknown }).__tpsLocalReminders = {
+    read: () => {
+      void Notifications.getAllScheduledNotificationsAsync().then(all => {
+        (globalThis as { __tpsLocalRemindersLast?: unknown }).__tpsLocalRemindersLast = all.map(n => ({
+          id: n.identifier, title: n.content.title, body: n.content.body, sound: n.content.sound,
+          trigger: n.trigger,
+        }));
+      }).catch(e => { (globalThis as { __tpsLocalRemindersLast?: unknown }).__tpsLocalRemindersLast = String(e); });
+    },
+  };
+}
