@@ -113,7 +113,7 @@ test('T124/T137: the coin card says something true about the ride: its land and 
   assert.equal(rideFact('Some New Ride'), null, 'no note is ever guessed');
   const src = read('src/services/collection/rideFacts.ts');
   for (const m of src.matchAll(/note: '((?:[^'\\]|\\.)*)'/g)) assert.ok(m[1].length <= 72, m[1]);
-  assert.doesNotMatch(src, /—/, 'no em dashes');
+  assert.doesNotMatch(src, /\u2014/, 'no em dashes');
   assert.match(read('src/components/CoinLevelingModal.tsx'), /<RideFactLine rideName=\{rideCoin\.ride_name\}/);
 });
 
