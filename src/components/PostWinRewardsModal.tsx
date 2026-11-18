@@ -497,7 +497,7 @@ export default function PostWinRewardsModal({
         contentContainerStyle={[styles.container, { paddingTop: Math.max(insets.top, 20) + 4, paddingBottom: 12 }]}
         showsVerticalScrollIndicator={false} testID="post-win-scroll">
         <Animated.View style={[styles.card, cardStyle]}>
-          <Ribbon text={headline?.ribbon ?? (hasCoin ? isNewCoin ? 'Coin Caught!' : 'Coin Added!' : 'You won!')} />
+          <Ribbon text={panel === 'team' ? 'Pick Your Team!' : headline?.ribbon ?? (hasCoin ? isNewCoin ? 'Coin Caught!' : 'Coin Added!' : 'You won!')} />
 
           <View style={styles.content}>
             <Image source={require('../../assets/images/water_background.png')} contentFit="cover"
@@ -666,7 +666,7 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 10, alignSelf: 'stretch' },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff8e4', borderRadius: 14,
     borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9ccbe9',
-    paddingVertical: 5, paddingLeft: 5, paddingRight: 6, flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 74, maxWidth: '50%' },
+    paddingVertical: 5, paddingLeft: 5, paddingRight: 6, flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 64, maxWidth: '50%' },
   chipQuiet: { backgroundColor: '#e8f6ff' },
   chipAmount: { fontFamily: 'Shark', fontSize: 18, lineHeight: 20, color: '#05346e', fontVariant: ['tabular-nums'] },
   chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#3d5f8c' },

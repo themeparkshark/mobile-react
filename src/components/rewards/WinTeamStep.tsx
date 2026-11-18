@@ -46,7 +46,7 @@ export default function WinTeamStep({ reducedMotion, onDone }: {
   }
   return (
     <Animated.View entering={reducedMotion ? FadeIn.duration(120) : FadeIn.duration(220)} style={styles.wrap}>
-      <Text style={styles.title}>PICK YOUR TEAM</Text>
+      {/* The card's ribbon says "Pick Your Team!" (one title, never two). */}
       <Text style={styles.sub}>Every coin you win helps your team.</Text>
       {TEAM_STEP_ORDER.map(team => (
         <Pressable key={team} onPress={() => { void Haptics.selectionAsync().catch(() => undefined); setPicked(team); }}
