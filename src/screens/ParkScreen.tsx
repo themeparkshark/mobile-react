@@ -589,7 +589,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
           >
             {/* T180: never a plain text box. No shelf yet: his shark with one button. An old shelf on screen: a slim
                 note in the kit's card look above it, and the shelf stays. */}
-            {progressStale && !currentPark && <SharkLoader state="error" tone="onBlue" title="Your shelf didn’t load"
+            {progressStale && !currentPark && <SharkLoader state="error" title="Your shelf didn’t load"
               message={tryAgainLine()} onRetry={() => setRefreshVersion(version => version + 1)} />}
             {progressStale && !!currentPark && <Pressable onPress={() => setRefreshVersion(version => version + 1)}
               accessibilityRole="button" accessibilityLabel="Your shelf may be old. Tap to try again"

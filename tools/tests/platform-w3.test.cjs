@@ -109,7 +109,7 @@ test('T180: shelf and closet loads retry once quietly, then show his shark with 
   assert.equal(calls, 1, 'a refusal is not asked again');
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /await quietRetry\(\(\) => loadParkShelf\(Number\(park\), Number\(player\)\), undefined, \(\) => active\);/);
-  assert.match(park, /<SharkLoader state="error" tone="onBlue" title="Your shelf didn’t load"/);
+  assert.match(park, /<SharkLoader state="error" title="Your shelf didn’t load"/, 'navy words on the light shelf water');
   assert.doesNotMatch(park, /Could not load your park progress/);
   assert.match(park, /!loading && !progressStale && !!currentPark && !tutorialActive/, 'Finn never teaches over a failed shelf');
   const closet = read('src/screens/InventoryScreen.tsx');
