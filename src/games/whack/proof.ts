@@ -49,6 +49,8 @@ export interface WhackProofV4 {
   wake_at: number | null;
   /** v5: Boss Run finales enabled (Wave 2 flag; false in the Wave 1 build). */
   boss_runs?: boolean;
+  /** Kid rules (picture-only ride, fix round w3 T027): 8 bonks win, slower targets. */
+  kid?: boolean;
   incoming?: { match_seed: number; sender_event_ids: number[] } | null;
   carry: { meter: number; fever_left: number; streak: number; fever_ready: boolean };
   elapsed_ms: number;
@@ -85,6 +87,7 @@ export function proofInput(p: WhackProofV4): BurstInput {
     incoming: p.incoming ? { matchSeed: p.incoming.match_seed, senderEventIds: p.incoming.sender_event_ids } : null,
     rules: p.v === 4 ? 4 : 5,
     bossRuns: !!p.boss_runs,
+    ...(p.kid ? { kid: true } : {}),
   };
 }
 
@@ -132,6 +135,7 @@ export function buildProof(tl: Timeline, carry: BurstCarry, taps: number[], res:
     fever_fired_burst: tl.feverStart ? inp.burstIndex : null,
     wake_at: null,
     boss_runs: !!inp.bossRuns,
+    ...(tl.kid ? { kid: true } : {}),
     incoming: inp.incoming ? { match_seed: inp.incoming.matchSeed, sender_event_ids: inp.incoming.senderEventIds } : null,
     carry: { meter: carry.meter, fever_left: carry.feverLeft, streak: carry.streak, fever_ready: !!carry.feverReady },
     elapsed_ms: res.elapsedMs,
@@ -313,9 +317,9 @@ export function plausibility(p: WhackProofV4, detail: ReplayDetail): Plausibilit
         den += (xs[i] - mx) * (xs[i] - mx);
       }
       report.fittsSlope = den > 1e-9 ? num / den : 0;
-      // The slope is only trusted on 12+ samples (a short ride win gives 8-10, where it is noise);
-      // below that, reaction regularity that the beat grid does not explain carries F2 alone.
-      const flat = pairs.length >= 12 ? report.fittsSlope < 3 : true;
+      // The slope is only trusted on 16+ samples (a ride win gives 10-13 bonks on the bonk meter, where it
+      // is noise); below that, reaction regularity that the beat grid does not explain carries F2 alone.
+      const flat = pairs.length >= 16 ? report.fittsSlope < 3 : true;
       if (flat && report.reactionSd < 30 && !report.onBeat) report.flags.push('F2');
     }
   }

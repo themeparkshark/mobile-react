@@ -534,7 +534,7 @@ test('Parade Beat is the rhythm game\'s one name; Home Defend has its own title 
   assert.match(whack, /export const HOME_DEFEND = \{ title: 'Home Defend', win: 'DEFENDED!'/);
   assert.match(whack, /const defend = ride && !rideChallenge;/);
   assert.match(whack, /text: defendRef\.current \? HOME_DEFEND\.win : 'COIN CAUGHT!'/);
-  assert.match(read('src/games/whack/render/WhackBoard.tsx'), /return s\.win \? winWord : `\$\{left\} BONKS TO WIN`;/);
+  assert.match(read('src/games/whack/render/WhackBoard.tsx'), /return s\.win \? winWord : bonksToWinLabel\(left\);/);
   assert.match(whack, /return text\.replace\(\/\\bWATCH THE TEETH\\b\/, 'NOT THE ANGLERFISH'\);/, 'the anglerfish, never teeth');
   assert.match(whack, /const callout = playerCallout\(t\.callout\);/);
   const unlock = read('src/gamekit/results/UnlockTile.tsx');

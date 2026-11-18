@@ -29,7 +29,7 @@ import {
   FRAME_COUNT, F_ANGLER, F_ANGLER_ANGRY, F_ANGLER_PEEK, F_BRUISER, F_BRUISER_DAZED, F_CONTACT, F_DAZED, F_DUCK, F_GLANCE, F_GOLDEN,
   F_GOLDEN_DAZED, F_HATOFF, F_PEEK, F_POP, F_PUFFED, F_PUFFER, F_SPIRAL, F_TONGUE, type RenderState,
 } from './renderState';
-import { TIER_MULT, MULT_CAP } from '../waves';
+import { TIER_MULT, MULT_CAP, bonksToWinLabel } from '../waves';
 import countText from '../../../helpers/countText';
 import { chaseOffset, comboTierRank, comboTierStyle, timerPulse } from '../../../gamekit/core/gameMoments';
 
@@ -512,8 +512,9 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
     tick.value;
     const s = sim.value;
     if (s.ride) {
-      const left = Math.max(0, Math.ceil((100 - s.coin) / 8));
-      return s.win ? winWord : `${left} BONKS TO WIN`;
+      // T040: the bonk meter counts real bonks (never backward); T057: "1 BONK TO WIN".
+      const left = s.bonkMeter ? Math.max(0, s.winBonks - s.bonks) : Math.max(0, Math.ceil((100 - s.coin) / 8));
+      return s.win ? winWord : bonksToWinLabel(left);
     }
     return s.fever ? 'FEVER!' : s.feverReady ? 'FEVER READY' : 'BONK METER';
   });
@@ -576,7 +577,7 @@ function StagePrompts({ L, rs, tick, fontS, fontM, pace, showPace, paceLabel }: 
 }) {
   const W = L.w;
   const midY = L.hudH + (L.deckTop - L.hudH) * 0.55;
-  const promptOp = useDerivedValue(() => (tick.value, rs.value.veil));
+  const promptOp = useDerivedValue(() => (tick.value, rs.value.prompt));
   const promptT = useDerivedValue(() => {
     tick.value;
     const sc = 1 + 0.04 * Math.sin(rs.value.tick * 0.087);

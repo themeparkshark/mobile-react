@@ -66,7 +66,7 @@ import {
 } from './sim';
 import { buildProof, type WhackProofV4 } from './proof';
 import {
-  PTS_CRIT, PTS_DOUBLE, PTS_FINN, PTS_GOLDEN, PTS_PERFECT, RIDE_WIN_NOTCHES, RUN_STARS, WALK_BOOST_EVERY, WALK_PCT_PER_M, burstCount, isBossRun,
+  PTS_CRIT, PTS_DOUBLE, PTS_FINN, PTS_GOLDEN, PTS_PERFECT, RIDE_WIN_BONKS, RIDE_WIN_BONKS_KID, RUN_STARS, WALK_BOOST_EVERY, WALK_PCT_PER_M, burstCount, isBossRun,
   type Difficulty, type WhackFormat,
 } from './waves';
 import { A_CANDY, A_FADE, A_INK, A_SCAN, BOSS_NAMES } from './timeline';
@@ -133,6 +133,11 @@ export interface WhackASharkProps {
   captureNewFinn?: boolean;
   /** Wave 2 (MiniGameTester only): Boss Run finales every 3rd Run. The Wave 1 build is Golden Rush only. */
   bossRuns?: boolean;
+  /**
+   * Kid rules for the ride round (picture-only players, fix round w3 T027): 8 bonks win and every
+   * target stays up longer. The server checks the same goal for the attempt (kid_rules).
+   */
+  kid?: boolean;
   onBurstBanked?: (b: BurstBanked) => void;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
@@ -241,6 +246,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const devAuto = (__DEV__ || WHACK_CAPTURE) && process.env.EXPO_PUBLIC_GAME_AUTOPLAY === '1';
   const autoplay = !!props.autoplay || devAuto;
   const difficulty: Difficulty = props.difficulty ?? 2;
+  /** Bonks that win the ride round (kid rules 8, else 13); the timeline carries the same number. */
+  const winBonks = ride && props.kid ? RIDE_WIN_BONKS_KID : RIDE_WIN_BONKS;
   const rideKey = props.rideId != null ? String(props.rideId) : (taskName ?? null);
   const [runIndex, setRunIndex] = useState(0);
   // Dev bench: EXPO_PUBLIC_WHACK_THEME=cycle walks the 6 themes, one per PLAY AGAIN (screenshot matrix).
@@ -412,8 +419,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       runOfDay: runOfDayRef.current,
       bossRuns: !!props.bossRuns,
       feverFired,
+      ...(ride && props.kid ? { kid: true } : {}),
     });
-  }, [format, duel, difficulty, theme, lifetime, baseSeed, ride, raid, lineRun, props.seed, lineSeed, lineXform, props.bossRuns]);
+  }, [format, duel, difficulty, theme, lifetime, baseSeed, ride, raid, lineRun, props.seed, lineSeed, lineXform, props.bossRuns, props.kid]);
 
   // ---------------------------------------------------------------- audio
   const cues = useWhackCues(visible);
@@ -861,6 +869,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       proof: ride ? last?.proof : banked.map((b) => b.proof),
       // Ride challenge: how full the coin meter got (the loss card says "8 of 13 bonks", rideTry.ts).
       ...(ride ? { ridePercent: Math.max(0, Math.min(100, Math.round(last?.result.coin ?? 0))) } : {}),
+      // T040: the bonks the meter showed, so the loss card says the same count ("5 of 8 bonks").
+      ...(ride && last ? { rideBonks: last.result.bonks, winBonks: last.result.winBonks } : {}),
       fps_p5: perf.summary().fpsP5,
       perf_tier: TIER_NAMES[perfTier.tierJs],
       thermal_max: THERMAL_NAMES[thermalMax.current],
@@ -1363,9 +1373,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     ride,
     feverOn: !!tl?.fever,
     boss: !!tl?.boss,
-    notches: RIDE_WIN_NOTCHES,
+    notches: tl?.winBonks ?? winBonks,
     ...(defend ? { winWord: HOME_DEFEND.win } : {}),
-  }), [ride, format, burstIdx, totalBursts, tl?.fever, tl?.boss, defend]);
+  }), [ride, format, burstIdx, totalBursts, tl?.fever, tl?.boss, tl?.winBonks, winBonks, defend]);
   useEffect(() => {
     runtime.rt.value.reducedMotion = reducedMotion;
   }, [reducedMotion, runtime.rt]);
@@ -1373,7 +1383,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const rivalName = props.lineDay?.rivals?.length ? props.lineDay.rivals[props.lineDay.rivals.length - 1].name.split(' ')[0].toUpperCase() : null;
   // Countdown pill copy: six words or fewer, one name per thing (audit G6).
   const objective = ride
-    ? defend ? HOME_DEFEND.objective(RIDE_WIN_NOTCHES) : `Bonk ${RIDE_WIN_NOTCHES} sharks. Not the anglerfish!`
+    ? defend ? HOME_DEFEND.objective(winBonks) : `Bonk ${winBonks} sharks. Not the anglerfish!`
     : format === 'duel' ? `Beat ${duel?.rival.name ?? 'Captain Gill'}! Not the anglerfish!`
       : format === 'raid' ? 'Bonk the tentacles together!'
         : lineRun ? 'Beat the sharks above you!'

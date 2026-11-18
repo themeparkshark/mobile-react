@@ -133,6 +133,8 @@ export interface RenderState {
   medSlam: number;
   // Board-wide.
   veil: number;
+  /** The TAP TO KEEP BONKING pill (0..1): only after 2 s with no tap (T058), the veil comes first. */
+  prompt: number;
   fever: number;
   occupied: number;
   /** Count of hat deck bounces (the runtime turns increments into a sound + haptic). */
@@ -202,7 +204,7 @@ export function createRenderState(): RenderState {
     ripple: arr(0), rippleOp: arr(0), caustic: arr(0), splat: arr(0), splatType: arr(0), fade: arr(1), lock: arr(0),
     hfx: arr(0), hfy: arr(0), hfr: arr(0), hfo: arr(0),
     hatX: arr(0, HAT_SLOTS), hatY: arr(0, HAT_SLOTS), hatR: arr(0, HAT_SLOTS), hatO: arr(0, HAT_SLOTS),
-    fingerX: 0, fingerY: 0, fingerRot: 0, fingerScale: 1, fingerOp: 0, medShake: 0, medSlam: 1, veil: 0, fever: 0, occupied: 0, hatBounces: 0, tick: 0,
+    fingerX: 0, fingerY: 0, fingerRot: 0, fingerScale: 1, fingerOp: 0, medShake: 0, medSlam: 1, veil: 0, prompt: 0, fever: 0, occupied: 0, hatBounces: 0, tick: 0,
     studs: arr(0), studPulse: arr(0), clipTop: arr(0), foam: arr(0), foamW: arr(0), foamY: arr(0), foamStep: 0,
     glX: arr(0), glY: arr(0), glW: arr(0), outline: arr(0), smear: 0, release: -1, releaseX: 0, releaseY: 0,
     ghostOp: arr(0, GHOST_SLOTS), ghostX: arr(0, GHOST_SLOTS), ghostY: arr(0, GHOST_SLOTS), ghostC: arr(0, GHOST_SLOTS),
@@ -257,6 +259,9 @@ export interface HoleAnim {
   fingerSpin: number;
   fxNow: number;
   veil: number;
+  /** Fx ms the board has been frozen (the pill waits for PROMPT_AFTER_FROZEN_MS). */
+  frozenFor: number;
+  prompt: number;
   fever: number;
   /** v5: the physics hat launches when the hat-off pose hands over (local ms), -1 none; crit launches harder. */
   hatAt: number[];
@@ -289,7 +294,7 @@ export function createHoleAnim(): HoleAnim {
     hatVy: arr(0, HAT_SLOTS), hatR: arr(0, HAT_SLOTS), hatVr: arr(0, HAT_SLOTS), hatAge: arr(0, HAT_SLOTS), hatFloor: arr(0, HAT_SLOTS),
     hatBounced: arr(0, HAT_SLOTS), hatSlid: arr(0, HAT_SLOTS), hatNext: 0,
     lastTier: 0, medShakeAt: -99999, medSlamAt: -99999,
-    fingerAt: -99999, fingerX: 0, fingerY: 0, fingerSpin: 0, fxNow: 0, veil: 0, fever: 0,
+    fingerAt: -99999, fingerX: 0, fingerY: 0, fingerSpin: 0, fxNow: 0, veil: 0, frozenFor: 0, prompt: 0, fever: 0,
     hatAt: arr(-1), hatCrit: arr(0), releaseAt: -99999, releaseX: 0, releaseY: 0,
     ghostAt: arr(-99999, GHOST_SLOTS), ghostHole: arr(0, GHOST_SLOTS), ghostC: arr(0, GHOST_SLOTS), ghostNext: 0,
     curtainAt: -1, curtainKind: 0,
@@ -475,6 +480,9 @@ export function curtainPose(i: number, now: number, at: number, reduced: boolean
  * compute every draw value. `boxes` indexes by frame code; `poseScale` is a
  * per-frame size multiplier for the key poses (art framing differences).
  */
+/** Freeze starts at 1200 ms idle (LOOKUP_IDLE_MS): the pill shows at 2000 ms idle. */
+export const PROMPT_AFTER_FROZEN_MS = 800;
+
 export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: BoardLayout, boxes: BoxTable,
   dtFx: number, localDt: number[], reducedMotion: boolean, poseScale?: number[], tfx?: number[]): void {
   'worklet';
@@ -487,6 +495,12 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
   an.veil += ((s.frozen ? 1 : 0) - an.veil) * clamp01((dt > 0 ? dt : 16) / 150);
   an.fever += ((s.fever ? 1 : 0) - an.fever) * clamp01((dt > 0 ? dt : 16) / 300);
   rs.veil = an.veil;
+  // T058: the board freezes 1.2 s after the last tap; the words wait until 2 s (0.8 s more), so a
+  // player who is tapping never sees the pill and a quick glance at the line only sees the soft veil.
+  an.frozenFor = s.frozen ? an.frozenFor + (dt > 0 ? dt : 16) : 0;
+  const wantPrompt = s.frozen && an.frozenFor >= PROMPT_AFTER_FROZEN_MS ? 1 : 0;
+  an.prompt += (wantPrompt - an.prompt) * clamp01((dt > 0 ? dt : 16) / 150);
+  rs.prompt = an.prompt;
   rs.fever = an.fever;
   // Medallion: slam on tier-up, shake on a tier drop (engaged escape at x2+).
   if (s.tier > an.lastTier) an.medSlamAt = now;

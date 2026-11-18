@@ -17,7 +17,7 @@ import type { Timeline } from './timeline';
 import { K_ANGLER, K_BRUISER, K_GOLDEN, K_HELMET, K_PUFFER, RIPE_STAGE_AT, SIXTEENTH_MS } from './waves';
 
 export type ProfileName = 'novice' | 'median' | 'expert' | 'onbeat' | 'bot' | 'jitterbot' | 'glance' | 'walking' | 'masher'
-  | 'greedy' | 'cash2' | 'lookup';
+  | 'greedy' | 'cash2' | 'lookup' | 'kid';
 
 export interface Profile {
   median: number;
@@ -51,6 +51,8 @@ export interface Profile {
   ripeLead?: [number, number];
   /** 'lookup' (v5 acceptance #7): the chance a target is a "hard read" the player freezes the board to study. */
   studyRate?: number;
+  /** The fastest this player taps again (ms): the slow picture-only kid taps about once a second. */
+  minGapMs?: number;
 }
 
 export const PROFILES: Record<ProfileName, Profile> = {
@@ -69,6 +71,11 @@ export const PROFILES: Record<ProfileName, Profile> = {
   glance: { median: 420, sd: 90, decoyMistake: 0.04, lookAway: 0.3, bumpsPerSec: 0, mashPerSec: 0, miss: 0.03, fitts: 25 },
   walking: { median: 540, sd: 110, decoyMistake: 0.06, lookAway: 0.15, bumpsPerSec: 1 / 20, mashPerSec: 0, miss: 0.05, fitts: 30 },
   masher: { median: 0, sd: 0, decoyMistake: 1, lookAway: 0, bumpsPerSec: 0, mashPerSec: 12, miss: 1 },
+  /**
+   * The slow picture-only kid (fix round w3 T027): slow to react, taps about once a second at most,
+   * sometimes bonks the anglerfish, misses some targets and looks at the line now and then.
+   */
+  kid: { median: 1250, sd: 250, decoyMistake: 0.3, lookAway: 0.1, bumpsPerSec: 0, mashPerSec: 0, miss: 0.15, fitts: 60, minGapMs: 1000 },
 };
 
 interface Plan { at: number; hole: number; swipe: boolean; dx: number; dy: number; sub: number }
@@ -112,6 +119,8 @@ export function autoplayBurst(tl: Timeline, profile: ProfileName | Profile, seed
   let resumeAt = -1;
   let wall = 0;
   let studyUntil = -1;
+  let lastTapWall = -1e9;
+  const minGap = p.minGapMs ?? 0;
   const style = p.style ?? 'human';
   // Per-run thumb bias (1/32 cell) and the jitterbot's fixed delay.
   const biasX = style === 'bot' ? 0 : (rngFloat(r) - 0.5) * 4;
@@ -154,7 +163,8 @@ export function autoplayBurst(tl: Timeline, profile: ProfileName | Profile, seed
       stats.frozenWallMs += 1;
       const studied = p.studyRate != null;
       if (looking && resumeAt < 0) resumeAt = wall + (studied ? 150 : reaction(r, p));
-      if (looking && wall >= resumeAt) {
+      if (looking && wall >= resumeAt && wall - lastTapWall >= minGap) {
+        lastTapWall = wall;
         let hole = -1;
         for (let h = 0; h < 9; h++) {
           if (s.hPh[h] === P_UP && s.hSplat[h] !== SPLAT_DOWN && s.evKind[s.hEv[h]] !== K_ANGLER && s.evKind[s.hEv[h]] !== K_PUFFER) { hole = h; break; }
@@ -228,8 +238,11 @@ export function autoplayBurst(tl: Timeline, profile: ProfileName | Profile, seed
     for (let i = plans.length - 1; i >= 0; i--) {
       if (plans[i].at <= wall) {
         const pl = plans[i];
+        // A slow tapper cannot tap again yet: the tap waits (it lands late, or on an empty hole).
+        if (minGap > 0 && wall - lastTapWall < minGap) { pl.at = lastTapWall + minGap; continue; }
         plans.splice(i, 1);
         if (!looking) continue;
+        lastTapWall = wall;
         if (pl.swipe) simSwipe(s, pl.hole);
         else simTap(s, pl.hole, pl.dx, pl.dy, pl.sub);
       }

@@ -60,6 +60,13 @@ export function rideTrySummary(run: RunLike | null | undefined): RideTrySummary 
     return { game: 'memory', near: got / total >= NEAR_SHARE, line: `${got} of ${total} pairs.` };
   }
   if (meta.game === 'tap') {
+    // T040: the bonks the meter showed (rules 5 bonk meter); older runs fall back to the percent.
+    const bonksSeen = int(meta.rideBonks);
+    const goal = int(meta.winBonks);
+    if (bonksSeen !== null && goal) {
+      const got = Math.min(bonksSeen, goal);
+      return { game: 'tap', near: got / goal >= NEAR_SHARE, line: `${got} of ${goal} bonks.` };
+    }
     const pct = int(meta.ridePercent);
     if (pct === null) return { game: 'tap', near: false, line: null };
     const bonks = Math.min(RIDE_WHACK_BONKS, Math.floor((Math.min(100, pct) * RIDE_WHACK_BONKS) / 100));

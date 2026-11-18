@@ -21,6 +21,7 @@ import {
   RIDE_BRUISER_FROM, RIPE_BOLT_FROM, RIPE_BOLT_SPAN, RIPE_FIRST_BOLT, SHAPES, SIXTEENTH_MS, TELL_MS, feverBanked, isBossRun,
   quantize, quantize16, ripeUpMs, unlockFor, upTimeFor,
   type BurstShape, type BurstShapeId, type Difficulty, type RulesVersion, type UnlockLadder, type WhackFormat,
+  KID_ANGLER_FROM, KID_ANGLER_SHARE, KID_GAP_SCALE, KID_UP_MULT, RIDE_WIN_BONKS, RIDE_WIN_BONKS_KID,
 } from './waves';
 
 export type WhackThemeId = 'park' | 'pirates' | 'mansion' | 'space' | 'jungle' | 'backlot';
@@ -91,6 +92,8 @@ export interface BurstInput {
   rules?: RulesVersion;
   /** Wave 2 flag (MiniGameTester only): Boss Run finales every 3rd Run. Wave 1 ships Golden Rush only. */
   bossRuns?: boolean;
+  /** Kid rules (ride only, picture-only players): 8 bonks win, slower targets (waves.ts KID_*). */
+  kid?: boolean;
 }
 
 export interface Timeline {
@@ -126,6 +129,12 @@ export interface Timeline {
   rules: RulesVersion;
   /** v5 PERFECT pip on on-beat QUICKs (queue formats from lifetime 6; never ride or live rounds). */
   perfect: boolean;
+  /** Ride rules 5: the meter counts bonks (one notch each, never backward) up to winBonks. */
+  bonkMeter: boolean;
+  /** Bonks that win the ride (13, or 8 under kid rules). */
+  winBonks: number;
+  /** Kid rules were used to build this timeline. */
+  kid: boolean;
   events: SpawnEvent[];
   attacks: Attack[];
 }
@@ -164,6 +173,8 @@ interface Builder {
   events: SpawnEvent[];
   quiet: [number, number][];
   lengthMs: number;
+  /** Up-time multiplier (kid rules 1.4, else 1). */
+  upMult: number;
 }
 
 function upWindow(e: SpawnEvent): number {
@@ -192,7 +203,7 @@ function makeEvent(b: Builder, emergeAt: number, hole: number, kind: number, opt
   // A Ripe Golden holds its well for the longest bolt (0.92 U_g) while the timeline is built;
   // the seeded bolt is applied once ids are final (step 7).
   const ug = opts.ripe && kind === K_GOLDEN ? ripeUpMs(b.d) : 0;
-  const up = ug > 0 ? Math.round(ug * RIPE_FIRST_BOLT) : upTimeFor(kind, b.d);
+  const up = ug > 0 ? Math.round(ug * RIPE_FIRST_BOLT) : Math.round(upTimeFor(kind, b.d) * b.upMult);
   return {
     id: 0, tellAt: emergeAt - tell, emergeAt, duckAt: emergeAt + up, hole, kind,
     formation: opts.formation ?? 0, formationLead: !!opts.lead, linkId: opts.link ?? 0, first: !!opts.first, ug,
@@ -271,11 +282,13 @@ export function buildBurst(input: BurstInput): Timeline {
   const finale: Timeline['finale'] = shapeId === 'rush' ? 'rush' : shapeId === 'b5' ? 'boss' : null;
   const burstSeed = mixSeed(input.seed >>> 0, (input.burstIndex + 1) >>> 0);
   const rng = createRng(burstSeed);
-  const b: Builder = { rng, d, unl: UNLOCK, events: [], quiet: [], lengthMs };
   const ride = input.format === 'ride';
+  // Kid rules only change the ride round (rules 5): longer up time, slower spawns, later and fewer anglers.
+  const kid = ride && rules === 5 && !!input.kid;
+  const b: Builder = { rng, d, unl: UNLOCK, events: [], quiet: [], lengthMs, upMult: kid ? KID_UP_MULT : 1 };
   const queueFirsts = input.format === 'queue';
   const first = queueFirsts ? lifetime : -1;
-  const scale = GAP_SCALE[d];
+  const scale = GAP_SCALE[d] * (kid ? KID_GAP_SCALE : 1);
   const has = (k: keyof UnlockLadder) => ride ? false : lifetime >= UNLOCK[k];
   const anglersOn = ride || has('angler');
   const ripeOn = rules === 5 && ripeFormat(input.format) && has('ripe');
@@ -356,7 +369,7 @@ export function buildBurst(input: BurstInput): Timeline {
     const r = rngFloat(rng);
     let kind = K_FINN;
     if (base.boss && r < base.tentacle) kind = K_TENTACLE;
-    else if (anglersOn && (!ride || t >= RIDE_ANGLER_FROM) && r < base.tentacle + base.angler) kind = K_ANGLER;
+    else if (anglersOn && (!ride || t >= (kid ? KID_ANGLER_FROM : RIDE_ANGLER_FROM)) && r < base.tentacle + base.angler * (kid ? KID_ANGLER_SHARE : 1)) kind = K_ANGLER;
     else if (has('helmet') && r < base.tentacle + base.angler + base.helmet) kind = K_HELMET;
     const probe = makeEvent(b, tq, 0, kind);
     if (probe.tellAt < 0 || upCount(b, probe.emergeAt) >= maxUp) { t += step; continue; }
@@ -429,6 +442,9 @@ export function buildBurst(input: BurstInput): Timeline {
     meterStart: 0,
     rules,
     perfect: ripeOn,
+    bonkMeter: ride && rules === 5,
+    winBonks: kid ? RIDE_WIN_BONKS_KID : RIDE_WIN_BONKS,
+    kid,
     events,
     attacks,
   };
@@ -446,7 +462,8 @@ export function timelineFingerprint(tl: Timeline): string {
   // v5 appends the Ripe Golden's U_g only on ripe events, so every v4 fingerprint is unchanged.
   const ev = tl.events.map((e) => `${e.id}:${e.tellAt}:${e.emergeAt}:${e.duckAt}:${e.hole}:${e.kind}:${e.formation}:${e.linkId}:${e.first ? 1 : 0}${e.ug > 0 ? `:r${e.ug}` : ''}`).join(',');
   const at = tl.attacks.map((a) => `${a.type}:${a.tellAt}:${a.landAt}:${a.hole}:${a.hole2}:${a.row}`).join(',');
-  return `${tl.shape}|${tl.lengthMs}|${tl.bossHp}|${tl.feverStart ? 1 : 0}|${ev}|${at}`;
+  // Kid rules append a marker, so every adult fingerprint is unchanged.
+  return `${tl.shape}|${tl.lengthMs}|${tl.bossHp}|${tl.feverStart ? 1 : 0}|${ev}|${at}${tl.kid ? '|kid' : ''}`;
 }
 
 export { K_BRUISER, K_TENTACLE };
