@@ -232,6 +232,24 @@ test('the queue dwell skips a ride whose LinePlay just ended', async () => {
     assert.equal(s.currentDwell(90_000, clock.now)?.rideId, JUNGLE.id, 'a real new line later is offered again');
   });
   assert.equal(m.dwellSkipsRide(1, { rideId: 1, at: 0 }, 29 * 60_000), true);
+  // T074 (fix round w3, device walk): the ride next door is not "In line for" the moment the recap closes.
+  const next = service();
+  const AUTOPIA = { id: 571, name: 'Autopia', type: 'attraction', park_id: 8, lat: 33.8124087, lng: -117.9165033, radius: 60,
+    ride_duration_minutes: null, min_dwell_minutes: null };
+  const MONORAIL = { id: 630, name: 'Disneyland Monorail', type: 'attraction', park_id: 8, lat: 33.8127, lng: -117.9169, radius: 60,
+    ride_duration_minutes: null, min_dwell_minutes: null };
+  next.s.setRides([AUTOPIA, MONORAIL]);
+  await withClock(90_000_000, async clock => {
+    next.s.setLinePlayRide(AUTOPIA.id);
+    for (let i = 0; i < 14; i++) { next.s.processLocation(33.81265, -117.91685); clock.now += 30_000; }
+    next.s.setLinePlayRide(null);
+    clock.now += 5_000;
+    next.s.processLocation(33.81265, -117.91685);
+    assert.equal(next.s.currentDwell(90_000, clock.now), null, 'no Monorail line right after the Autopia wait');
+    clock.now += 60_000;
+    next.s.processLocation(33.81265, -117.91685);
+    assert.equal(next.s.currentDwell(90_000, clock.now), null, 'still no carried dwell a minute later');
+  });
   assert.equal(m.dwellSkipsRide(1, { rideId: 1, at: 0 }, 31 * 60_000), false);
   assert.equal(m.dwellSkipsRide(1, null, 0, 10), true, 'the ride step hold');
 });
