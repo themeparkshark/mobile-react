@@ -27,3 +27,24 @@ test('T152: the Store opens on the Shark Shop with no params, bad params or a st
   assert.doesNotMatch(screen, /route\.params as \{/, 'no raw cast of route.params (undefined crashes)');
   assert.match(read('src/Root.tsx'), /name="Store"[\s\S]{0,120}initialParams=\{\{ store: 'shark-shop' \}\}/);
 });
+
+test('T153: real-money coin packs say gear only, and the grown-up box names Mystery Pin Boxes only while they are live', () => {
+  const stub = { default: () => null };
+  const info = loadTs('src/components/money/GrownUpsInfo.tsx', {
+    react: { useEffect: () => undefined, useState: v => [v, () => undefined] },
+    'react-native': { StyleSheet: { create: x => x }, Text: 'Text', View: 'View' },
+    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'F' },
+    '../../api/endpoints/me/money-spend': { getMoneySpend: async () => null },
+    '../../services/money/wishlist': { useWishlist: () => [] },
+    '../../services/money/flags': { useMoneyFlag: () => false },
+    '../../ui': { FONT: {}, GameIcon: stub.default },
+  });
+  const off = plain(info.grownUpLines(false)).join(' ');
+  assert.doesNotMatch(off, /Mystery|box/i, 'boxes off: no box sentence');
+  assert.match(off, /Nothing random is sold for real money\./);
+  const on = plain(info.grownUpLines(true)).join(' ');
+  assert.match(on, /Mystery Pin Boxes cost Shark Coins and show their odds/);
+  assert.match(read('src/components/money/GrownUpsInfo.tsx'), /grownUpLines\(useMoneyFlag\('pin_mystery_boxes'\)\)/);
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx').replace(/\/\/.*$/gm, '');
+  assert.doesNotMatch(shop, /boxesLine|Mystery Pin Boxes\. Odds/, 'no box math or box note on Supplies coin packs');
+});

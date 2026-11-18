@@ -146,7 +146,7 @@ test('coin packs say what they buy from the server median gear price, never inve
   assert.equal(pass.winsAwayText(1220, [{ event: 'ride_coin_win', points: 120 }]), 'about 11 ride coin wins away');
   assert.equal(pass.setMixText([{ row: 'free' }, { row: 'pass' }, { row: 'pass' }, { row: 'plus' }]), '1 free, 2 on the Shark Pass, 1 with Plus');
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
-  assert.match(shop, /main === 'coins' \? \[gearLine\(product\.buys, bonus\)/);
+  assert.match(shop, /main === 'coins' \? gearLine\(product\.buys, bonus\)/);
 });
 
 test('the season set counts every wearable, owned = claimed, and says where each one comes from', () => {
@@ -255,12 +255,12 @@ test('the season ring is earned on the free track (10/25/40/50), never bought', 
   assert.doesNotMatch(src.replace(/\/\*[\s\S]*?\*\//g, ''), /premium|\.plus\b|price/i, 'the ring never looks at money');
 });
 
-test('mystery boxes: coin packs say how many boxes they open, and a box top-up ends with "Open your box"', () => {
+test('mystery boxes: a box top-up ends with "Open your box" (real-money coin packs never count boxes, T153)', () => {
   assert.equal(offers.boxesLine(1200, 250), '= 4 boxes');
   assert.equal(offers.boxesLine(250, 250), '= 1 box');
   assert.equal(offers.boxesLine(100, 250), null);
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
-  assert.match(shop, /boxesLive \? boxesLine\(n, MYSTERY_BOX_COINS\) : null/, 'only while boxes are live');
+  assert.doesNotMatch(shop, /boxesLine/, 'no box math on real-money coin packs');
   const top = read('src/components/money/CoinTopUpOffer.tsx');
   assert.match(top, /return reason === 'mystery-box' && retries \? 'Open your box' : undefined;/);
   assert.match(top, /doneLabel=\{topUpDoneLabel\(reason, !!onDone\)\} onDone=\{\(\) => \{ setLanded\(null\); onDone\?\.\(\); \}\}/, 'the button retries the open');
