@@ -135,7 +135,8 @@ export default function App() {
         {/* One screen per store: navigating to another store pushes it instead of rewriting this one. */}
         {/* vocab-allow: a route name, never shown */}
         <Stack.Screen name="Store" getComponent={() => require('./screens/StoreScreen').default}
-          getId={({ params }) => String((params as { store?: number | string } | undefined)?.store ?? '')} />
+          initialParams={{ store: 'shark-shop' }}
+          getId={({ params }) => String((params as { store?: number | string } | undefined)?.store ?? 'shark-shop')} />
         <Stack.Screen name="PinCollections" getComponent={() => require('./screens/pins/PinsScreen').default} />
         <Stack.Screen
           name="Profile"

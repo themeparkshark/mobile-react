@@ -50,7 +50,8 @@ import { useTutorial } from '../components/Tutorial';
 import { SECRET_THEME } from '../fx/secretTheme';
 import { loadSecretShopFlag } from '../services/secretShopFlag';
 import Item from './StoreScreen/Item';
-import SuppliesShop, { type SuppliesFocus } from './StoreScreen/SuppliesShop';
+import SuppliesShop from './StoreScreen/SuppliesShop';
+import { storeParams } from './StoreScreen/storeParams';
 import GearShelf from './StoreScreen/GearShelf';
 import { useBudgetedPoll } from '../power';
 import { SecretRoomSkeleton } from './StoreScreen/SecretShowroom';
@@ -323,18 +324,13 @@ const SHOP_BACK_STRIP = 48;
  */
 
 export default function StoreScreen(props: NativeStackScreenProps<ParamListBase, 'Store'>) {
-  const store = (props.route.params as { store?: number | 'shark-shop' } | undefined)?.store;
+  // Missing params (a bare link, a push, a dev navigate) read as the Shark Shop, never a crash (T152).
+  const { store } = storeParams(props.route?.params);
   return <StoreScreenBody key={String(store)} {...props} />;
 }
 
 function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store'>) {
-  const { store, tab: initialTab, focus, focus_item: focusItem, secret: routeSecret } = route.params as {
-    store: number | 'shark-shop'; tab?: 'gear' | 'supplies'; focus?: SuppliesFocus;
-    /** Opened as the Secret Shop (Profile knows): while loading, show its own room, not the generic loader. */
-    secret?: boolean;
-    /** Wishlist push deep link: open this item's try-on. */
-    focus_item?: number;
-  };
+  const { store, tab: initialTab, focus, focus_item: focusItem, secret: routeSecret } = storeParams(route?.params);
   const [tab, setTab] = useState<'gear' | 'supplies'>(initialTab ?? 'gear');
   const [currentStore, setCurrentStore] = useState<StoreType>();
   const [catalog, setCatalog] = useState<CatalogType>();

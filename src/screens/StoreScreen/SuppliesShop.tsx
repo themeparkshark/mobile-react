@@ -60,7 +60,8 @@ export { grantsText, gateReasonFor } from '../../services/money/supplies';
 
 const APP_STORE_URL = 'itms-apps://apps.apple.com/app/id6758812566';
 
-export type SuppliesFocus = 'tickets' | 'coins' | 'rescue' | 'featured';
+import type { SuppliesFocus } from './storeParams';
+export type { SuppliesFocus } from './storeParams';
 
 const WALLET: { key: keyof ShopGrants; icon: GameIconName; term: GlossaryKey; many: string }[] = [
   { key: 'tickets', icon: 'ticket', term: 'tickets', many: 'tickets' },
