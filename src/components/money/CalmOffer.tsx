@@ -169,11 +169,11 @@ export default function CalmOffer({ placement, loss = false, style, onShown }: C
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.kicker}>{copy.kicker.toUpperCase()}</Text>
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{copy.title}</Text>
           {'body' in copy ? <Text maxFontSizeMultiplier={MAX_FONT} style={st.body}>{copy.body}</Text>
-            : pack ? <Contents grants={pack.grants} size="small" /> : null}
+            : pack ? <Contents grants={pack.grants} size="tight" /> : null}
         </View>
         <View style={st.ask}>
           <GameIcon name={placement === 'high_point' ? 'arrow' : 'member'} size={20} />
-          <Text maxFontSizeMultiplier={MAX_FONT} style={st.askText} numberOfLines={2}>{busy ? 'One moment' : copy.action}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={st.askText} numberOfLines={2}>{busy ? 'One moment' : copy.action.replace(/^(\S+ \S+) /, '$1\n')}</Text>
         </View>
       </Pressable>
       <Pressable onPress={dismiss} hitSlop={8} accessibilityRole="button" style={st.notNow}>
@@ -190,11 +190,12 @@ const st = StyleSheet.create({
   kicker: { fontFamily: FONT.display, fontSize: 13, color: '#ffd34d' },
   title: { fontFamily: FONT.display, fontSize: 19, color: '#ffffff' },
   body: { fontFamily: FONT.body, fontSize: 14, color: '#e2f6ff' },
-  ask: { width: 86, alignItems: 'center', gap: 2, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 14, borderWidth: 2,
+  ask: { width: 92, alignItems: 'center', gap: 2, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 14, borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.35)', paddingVertical: 6, paddingHorizontal: 4 },
   askText: { fontFamily: FONT.display, fontSize: 13, color: '#ffffff', textAlign: 'center' },
-  notNow: { alignSelf: 'center', paddingVertical: 4 },
-  notNowText: { fontFamily: FONT.display, fontSize: 14, color: '#e2f6ff' },
+  // Its own small navy pill, so it reads on any host (cream ticket card or blue recap).
+  notNow: { alignSelf: 'center', marginTop: 4, backgroundColor: '#123f80', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 3 },
+  notNowText: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
   vipLine: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 8, backgroundColor: '#123f80', borderRadius: 999,
     borderWidth: 2, borderColor: BRAND.gold, paddingLeft: 10, paddingRight: 8, paddingVertical: 5 },
   vipTap: { flexDirection: 'row', alignItems: 'center', gap: 6 },

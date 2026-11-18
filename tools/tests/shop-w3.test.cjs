@@ -146,6 +146,10 @@ test('T218: extra tries wear their own life-ring picture in every chip', () => {
   assert.match(ui, /if \(kind === 'rescue_passes'\) \{\s*return <Image source=\{ART\.rescue\}/);
   assert.doesNotMatch(ui.slice(ui.indexOf('export function Contents')), /<GameIcon name=\{CURRENCY_ICON\[k\]\}/, 'Contents uses CurrencyPicture');
   assert.match(read('src/screens/StoreScreen/SuppliesShop.tsx'), /<CurrencyPicture kind=\{w\.key\} size=\{22\} \/>/);
+  // And one word: a pack's chips and its payoff say extra tries, never passes.
+  const copy = loadTs('src/services/money/copy.ts');
+  assert.equal(copy.unitWord('rescue_passes', 2), 'extra tries');
+  assert.equal(copy.unitWord('rescue_passes', 1), 'extra try');
 });
 
 test('T163: the Starter Pack card shows the player\'s own shark in the Starter Frame', () => {
