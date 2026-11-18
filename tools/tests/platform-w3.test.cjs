@@ -58,3 +58,14 @@ test('T181: the location card is right at the park and at home, and after Don’
   assert.match(src, /\{canAsk \? PRIMER_COPY\.title : PRIMER_COPY\.offTitle\}/);
   assert.match(src, /: <Text style=\{styles\.body\}>\{PRIMER_COPY\.off\}<\/Text>\}/);
 });
+
+test('T184: the game motion hook knows Reduce Motion on the first render (off means entrances play)', () => {
+  const react = { useState: v => [typeof v === 'function' ? v() : v, () => {}], useEffect() {} };
+  const rn = { AccessibilityInfo: { isReduceMotionEnabled: async () => false, addEventListener: () => ({ remove() {} }) } };
+  const hook = startup => loadTs('src/hooks/useReducedGameMotion.ts', {
+    react, 'react-native': rn,
+    '../ui/useUiReducedMotion': loadTs('src/ui/useUiReducedMotion.ts', { react, 'react-native': rn, 'react-native-reanimated': { useReducedMotion: () => startup } }),
+  }).default;
+  assert.equal(hook(false)(), false, 'motion on: the first render animates (it used to start true for everyone)');
+  assert.equal(hook(true)(), true);
+});

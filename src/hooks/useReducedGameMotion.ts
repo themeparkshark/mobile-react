@@ -1,22 +1,15 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
 
-/** Stay still until the native preference is known; respect changes in-session. */
-export default function useReducedGameMotion() {
-  const [reduced, setReduced] = useState(true);
-  useEffect(() => {
-    let mounted = true;
-    let preferenceChanged = false;
-    void AccessibilityInfo.isReduceMotionEnabled().then(value => {
-      if (mounted && !preferenceChanged) setReduced(value);
-    }).catch(() => undefined);
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', value => {
-      preferenceChanged = true;
-      if (mounted) setReduced(value);
-    });
-    return () => { mounted = false; subscription.remove(); };
-  }, []);
-  return reduced;
+/**
+ * The Reduce Motion preference, known on the first render (T184). It used to start at true until
+ * AccessibilityInfo answered, so every mount entrance (cards, chips, rewards) took the still path for
+ * everyone. It now shares the UI kit's answer: seeded from Reanimated's synchronous startup value,
+ * cached for the session, and following in-session changes.
+ */
+export default function useReducedGameMotion(): boolean {
+  return useUiReducedMotion();
 }
 
 /**
