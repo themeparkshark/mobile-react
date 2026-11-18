@@ -11,6 +11,8 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
 import GameIcon, { type GameIconName } from '../../ui/GameIcon';
+// Knockout draws 1 like a capital I: the price tag ("1 Ticket") wears the number face (fix W3 T029).
+import { withNumberFont } from '../../ui/numberText';
 
 export function ResultPrimaryButton({ label, icon, icons, a11yLabel, onPress, disabled, style, note }: {
   label: string;
@@ -31,7 +33,7 @@ export function ResultPrimaryButton({ label, icon, icons, a11yLabel, onPress, di
       onPress={onPress} disabled={disabled}>
       {lead.map((name, i) => <GameIcon key={`${name}-${i}`} name={name} size={26} />)}
       <Text style={[styles.primaryText, lead.length > 0 && styles.gap]} numberOfLines={1} adjustsFontSizeToFit>{label.toUpperCase()}</Text>
-      {note ? <View style={styles.note}><Text style={styles.noteText} numberOfLines={1}>{note}</Text></View> : null}
+      {note ? <View style={styles.note}><Text style={styles.noteText} numberOfLines={1}>{withNumberFont(note)}</Text></View> : null}
     </TouchableOpacity>
   );
 }
