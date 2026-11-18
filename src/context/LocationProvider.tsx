@@ -425,6 +425,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         presenceRef.current = nextParkPresence(presenceRef.current, {
           outcome: newPark ? 'park' : 'outside', park: newPark, at,
           accuracyMeters: latestLocationSampleRef.current?.accuracyMeters,
+          latitude: coordinates.latitude, longitude: coordinates.longitude,
         });
         setParkState(presenceRef.current.park);
         setParkLoaded(true);
