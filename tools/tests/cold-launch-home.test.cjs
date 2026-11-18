@@ -12,6 +12,8 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const path = require('node:path');
 const { loadTs, root } = require('./helpers/load-ts.cjs');
+// Fix w3 T122/T132: trip goals pass through the one ride and park name helpers (pure, stubbed as identity here).
+const PLAIN_NAMES = { '../../../helpers/plainRideName': { plainRideName: (n) => n }, '../../../helpers/parkName': { shortParkName: (n) => n } };
 
 const { resolveApiUrl, normalizeApiUrl } = loadTs('src/apiTarget.ts');
 const { isConfirmedOutsidePark } = loadTs('src/context/parkLookupPolicy.ts');
@@ -80,7 +82,7 @@ function loadClient(apiUrl, log) {
 
 async function coldLaunchAtHome(client) {
   const currentPark = loadTs('src/api/endpoints/me/current-park.ts', { '../../client': client, '../../../screens/stampbook/dirty': { noteCurrentPark() {} } }).default;
-  const { getTripGoal } = loadTs('src/api/endpoints/me/trip-goal.ts', { '../../client': client });
+  const { getTripGoal } = loadTs('src/api/endpoints/me/trip-goal.ts', { '../../client': client, ...PLAIN_NAMES });
   const me = await client.get('/me');
   // LocationProvider.lookupParkAt: a 422 means outside, an error means unknown.
   let record;
@@ -112,7 +114,7 @@ test('the pre-fix base URL reproduces the outage, so this test guards the right 
   const log = [];
   const { client } = loadClient(TUNNEL_HOST, log);
   await assert.rejects(client.get('/me'), error => error?.response?.status === 404);
-  const { getTripGoal } = loadTs('src/api/endpoints/me/trip-goal.ts', { '../../client': client });
+  const { getTripGoal } = loadTs('src/api/endpoints/me/trip-goal.ts', { '../../client': client, ...PLAIN_NAMES });
   await assert.rejects(getTripGoal());
   assert.ok(log.every(line => !line.includes(' /api/')), log.join(', '));
 });

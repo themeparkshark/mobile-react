@@ -43,7 +43,8 @@ test('T122: the map, LinePlay, Wait Times and the shelf read one name for each r
     'src/api/endpoints/players/parks/getCompletedTasks.ts', 'src/api/endpoints/players/parks/getCompletedSecretTasks.ts',
     'src/api/endpoints/players/parks/getCompletedArchivedTasks.ts', 'src/api/endpoints/rides/index.ts',
     'src/api/endpoints/parks/queue-times/getWikiTimes.ts', 'src/api/endpoints/me/current-redeemables.js',
-    'src/api/endpoints/me/ride-coins/index.ts', 'src/api/endpoints/me/ride-coins/show.ts', 'src/api/endpoints/me/park-day-recap.ts']) {
+    'src/api/endpoints/me/ride-coins/index.ts', 'src/api/endpoints/me/ride-coins/show.ts', 'src/api/endpoints/me/park-day-recap.ts',
+    'src/api/endpoints/me/trip-goal.ts']) {
     assert.match(read(file), /plainRideName|withPlainNames|withPlainField|withPlainTaskNames/, file);
   }
   assert.doesNotMatch(read('src/screens/parkRideAvailability.ts'), /FEED_ALIASES/, 'no second alias table');

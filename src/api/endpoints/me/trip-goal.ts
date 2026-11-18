@@ -1,4 +1,15 @@
 import client from '../../client';
+import { plainRideName } from '../../../helpers/plainRideName';
+import { shortParkName } from '../../../helpers/parkName';
+
+/** One ride name and one park name everywhere (fix w3 T122, T132): the Ride Coins picker reads like the shelf. */
+function plainRide<T extends { ride_name: string; park_name?: string }>(ride: T): T {
+  return { ...ride, ride_name: plainRideName(ride.ride_name), ...(typeof ride.park_name === 'string' ? { park_name: shortParkName(ride.park_name) } : {}) };
+}
+function plainTripGoal(data: TripGoalData): TripGoalData {
+  if (!data || typeof data !== 'object') return data;
+  return { ...data, rides: Array.isArray(data.rides) ? data.rides.map(plainRide) : data.rides, goal: data.goal ? plainRide(data.goal) : data.goal };
+}
 
 export interface AdventureRide {
   readonly task_id: number;
@@ -84,17 +95,17 @@ export async function getTripGoal(): Promise<TripGoalData> {
   const { data } = await client.get<{ data: TripGoalData }>('/me/trip-goal', {
     timeout: 10_000,
   });
-  return data.data;
+  return plainTripGoal(data.data);
 }
 
 export async function setTripGoal(taskId: number): Promise<TripGoalData> {
   const { data } = await client.put<{ data: TripGoalData }>('/me/trip-goal', { task_id: taskId });
-  return data.data;
+  return plainTripGoal(data.data);
 }
 
 export async function clearTripGoal(): Promise<TripGoalData> {
   const { data } = await client.delete<{ data: TripGoalData }>('/me/trip-goal');
-  return data.data;
+  return plainTripGoal(data.data);
 }
 
 export async function celebrateAdventureTicket(ticketId: number): Promise<AdventureTicket> {
