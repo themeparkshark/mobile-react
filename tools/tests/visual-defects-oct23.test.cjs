@@ -1390,6 +1390,7 @@ test('wave 5 round 3: a ride in range when the map opens has PLAY RIDE on the fi
     '../context/SoundEffectProvider': { SoundEffectContext: { value: { playSound: async () => undefined } } },
     '../ui': { BRAND: new Proxy({}, { get: () => '#fff' }), GameIcon: 'GameIcon' },
     './map/mapCover': { useCoverArt: enabled => { waits.push(enabled); return () => undefined; } },
+    './guide/playPressQueue': loadTs('src/components/guide/playPressQueue.ts'),
   }, { park: { id: 1 }, onPress: () => undefined, ...props });
   const ride = { type: 'task', model: { id: 11, name: 'Space Ride', ticket_cost: 1 } };
   const app = load({ redeemable: ride, covered: true });

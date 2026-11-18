@@ -259,3 +259,25 @@ test('T019: a sight coin\'s win says NEW COIN, never NEW RIDE COIN', () => {
   assert.match(read('src/components/PostWinRewardsModal.tsx'), /isNewCoin \? \(sight \? 'NEW COIN' : 'NEW RIDE COIN'\)/);
   assert.match(read('src/components/RedeemRedeemableModal.tsx'), /coin_kind\?: string \| null \}\)\.coin_kind !== 'ride'/);
 });
+
+test('safety finding 2: a PLAY! press while the last card is still leaving waits for it, then opens (never lost)', () => {
+  const Q = loadTs('src/components/guide/playPressQueue.ts');
+  let leaving = 1; const listeners = new Set(); const timers = [];
+  const layers = { leavingCount: () => leaving, subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); } };
+  const q = Q.createPressQueue(layers, { setTimeout: (run, ms) => { timers.push({ run, ms }); return timers.length; }, clearTimeout: () => undefined });
+  let opened = 0;
+  assert.equal(q.press(() => opened++), 'queued', 'the card is still leaving: the press waits');
+  assert.equal(q.press(() => opened++), 'already', 'a second tap is the same press');
+  assert.equal(opened, 0);
+  leaving = 0; listeners.forEach(fn => fn());
+  assert.equal(opened, 1, 'the sheet is gone: the card opens, once');
+  assert.equal(q.press(() => opened++), 'now', 'nothing leaving: at once');
+  assert.equal(opened, 2);
+  // A leaked layer never blocks PLAY!: the wait ends by itself.
+  leaving = 1; q.press(() => opened++);
+  assert.equal(timers.at(-1).ms, Q.PRESS_WAIT_MAX_MS);
+  timers.at(-1).run();
+  assert.equal(opened, 3);
+  const src = read('src/components/RedeemModal.tsx');
+  assert.match(src, /const how = pressQueue\.press\(\(\) => openRef\.current\(\)\);/);
+});

@@ -1,4 +1,5 @@
-import { leavingSheetTap } from '../ui/modalLayers';
+import { leavingSheetTap, modalLayers } from '../ui/modalLayers';
+import { createPressQueue } from './guide/playPressQueue';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
@@ -201,10 +202,19 @@ export default function RedeemModal({
     if (redeemable.type === openedRedeemable.type && redeemable.model.id === openedRedeemable.model.id
       && !(redeemable as { provisional?: boolean }).provisional) setOpenedRedeemable(redeemable);
   }, [redeemable, openedRedeemable]);
+  // A press while the last card is still leaving waits for it, then opens (safety finding 2, ./guide/playPressQueue.ts).
+  const pressQueue = useRef(createPressQueue(modalLayers)).current;
+  useEffect(() => () => pressQueue.cancel(), [pressQueue]);
+  const openRef = useRef<() => void>(() => undefined);
+  openRef.current = () => {
+    if (!redeemable) return;   // walked off while the press waited: nothing to open
+    setOpenedRedeemable(redeemable);
+    setModalVisible(true);
+  };
   pressPlayRef.current = () => {
     pressNow();
-    setOpenedRedeemable(redeemable ?? null);
-    setModalVisible(true);
+    const how = pressQueue.press(() => openRef.current());
+    if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[press] PLAY! ${identity} ${how} modalVisible=${modalVisible} t=${Date.now()}`);
   };
   // The guide card's body says "Tap PLAY!": a tap there is PLAY!'s own press, only while PLAY! is shown.
   const seenPlayRequest = useRef(playRequest);
@@ -225,7 +235,8 @@ export default function RedeemModal({
     <>
       {redeemable && available && (
         <Animated.View style={entrance}>
-          <Animated.View ref={pill} collapsable={false} style={{ transform: [{ scale: press }] }}>
+          <Animated.View ref={pill} collapsable={false} style={{ transform: [{ scale: press }] }}
+            onTouchStart={() => { if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[press] touch t=${Date.now()}`); }}>
             <YellowButton
               onArtReady={() => { pillArtDrawn(); setPillReady(true); }}
               onPress={() => pressPlayRef.current()}
