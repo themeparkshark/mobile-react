@@ -114,9 +114,27 @@ export default function OfflineBanner() {
   const [expanded, setExpanded] = useState(false);
   const expandTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (expandTimer.current) clearTimeout(expandTimer.current); }, []);
-  const dockedRoute = routeName !== undefined && (CHIP_ONLY_ROUTES.has(routeName) || DEV_CHIP_ONLY_ROUTES.has(routeName));
-  const chipOnly = dockedRoute && !expanded;
+  const chipOnly = routeName !== undefined && (CHIP_ONLY_ROUTES.has(routeName) || DEV_CHIP_ONLY_ROUTES.has(routeName));
+  // Off the map, a tap on the small chip opens the full card again for a moment.
   const compact = timedCompact && !expanded;
+  // The tapped chip's card: its own spring in and out, mounted only while it shows.
+  const expand = useSharedValue(0);
+  const [cardShown, setCardShown] = useState(false);
+  useEffect(() => {
+    if (expanded) setCardShown(true);
+    const done = (finished?: boolean) => {
+      'worklet';
+      if (finished && !expanded) runOnJS(setCardShown)(false);
+    };
+    expand.value = reduceMotion
+      ? withTiming(expanded ? 1 : 0, { duration: 160 }, done)
+      : expanded ? withSpring(1, { damping: 15, stiffness: 180, mass: 0.8 }, done)
+        : withTiming(0, { duration: 200, easing: Easing.in(Easing.quad) }, done);
+  }, [expanded, expand, reduceMotion]);
+  const expandStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, expand.value * 1.4),
+    transform: reduceMotion ? [] : [{ translateY: (1 - expand.value) * -20 }, { scale: 0.94 + 0.06 * expand.value }],
+  }));
 
   // Full card first so the player learns what happened, then the small chip.
   useEffect(() => {
@@ -243,67 +261,82 @@ export default function OfflineBanner() {
   const dockTop = routeName === 'Login' ? (initialWindowMetrics?.insets.top ?? 47) + 8
     : onMap ? mapDock.top : Math.round(windowHeight * MAP_CHIP_TOP);
 
-  return (
-    <View
-      pointerEvents="box-none"
-      style={chipOnly ? [styles.hostDocked, { top: dockTop }, onMap && { right: mapDock.right }] : [styles.host, { top }]}
+  const card = (
+    <View style={[styles.card, back && styles.cardBack]}>
+      <Animated.View style={iconStyle}>
+        <Image source={stateIcon} style={styles.icon} accessibilityElementsHidden importantForAccessibility="no" />
+      </Animated.View>
+      <View style={styles.copy}>
+        <Text style={styles.title} maxFontSizeMultiplier={1.3}>{copy.title}</Text>
+        <Text style={styles.body} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+          {copy.body}
+        </Text>
+      </View>
+      {!back && (
+        <GameButton
+          label="Retry"
+          size="compact"
+          fullWidth={false}
+          loading={probing}
+          onPress={onRetry}
+          accessibilityLabel={slow ? 'Try again' : 'Try to reconnect'}
+          style={styles.retry}
+        />
+      )}
+    </View>
+  );
+  const chip = (
+    <Pressable
+      onPress={onChip}
+      hitSlop={HIT_SLOP}
+      accessibilityRole="button"
+      accessibilityLabel={copy.label}
+      disabled={back}
+      style={styles.chipStack}
     >
+      <View style={styles.chip}>
+        <Animated.View style={iconStyle}>
+          <Image source={stateIcon} style={styles.chipIcon} accessibilityElementsHidden importantForAccessibility="no" />
+        </Animated.View>
+      </View>
+      {/* T176: the picture always says what it means, like every other map button. */}
+      <View style={styles.chipTag} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <Text style={styles.chipTagText} numberOfLines={1} maxFontSizeMultiplier={1.2}>{copy.chip}</Text>
+      </View>
+    </Pressable>
+  );
+
+  if (chipOnly) {
+    // On a HUD screen the chip is the whole banner, docked by the map's button rail. A tap on it opens
+    // the full card under the header for a moment (its own layer), so the retry is seen; the chip stays put.
+    return (
+      <>
+        <View pointerEvents="box-none" style={[styles.hostDocked, { top: dockTop }, onMap && { right: mapDock.right }]}>
+          <Animated.View style={[styles.chipAlone, cardStyle]}>{chip}</Animated.View>
+        </View>
+        {cardShown && (
+          <View pointerEvents="box-none" style={[styles.host, { top }]}>
+            <Animated.View style={[styles.lip, expandStyle]} accessibilityLiveRegion="polite">{card}</Animated.View>
+          </View>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <View pointerEvents="box-none" style={[styles.host, { top }]}>
       <Animated.View
         style={cardStyle}
         accessibilityLiveRegion="polite"
         accessibilityRole="alert"
         accessibilityLabel={copy.label}
       >
-        {!chipOnly && (
         <Animated.View style={[styles.lip, fullStyle]} pointerEvents={compact ? 'none' : 'auto'}>
-        <View style={[styles.card, back && styles.cardBack]}>
-          <Animated.View style={iconStyle}>
-            <Image source={stateIcon} style={styles.icon} accessibilityElementsHidden importantForAccessibility="no" />
-          </Animated.View>
-          <View style={styles.copy}>
-            <Text style={styles.title} maxFontSizeMultiplier={1.3}>{copy.title}</Text>
-            <Text style={styles.body} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-              {copy.body}
-            </Text>
-          </View>
-          {!back && (
-            <GameButton
-              label="Retry"
-              size="compact"
-              fullWidth={false}
-              loading={probing}
-              onPress={onRetry}
-              accessibilityLabel={slow ? 'Try again' : 'Try to reconnect'}
-              style={styles.retry}
-            />
-          )}
-        </View>
+          {card}
         </Animated.View>
-        )}
-        {/* On a HUD screen the chip is the whole banner: it enters with the
-            card animation and never sits on a hidden card. */}
-        <Animated.View
-          style={chipOnly ? styles.chipAlone : [styles.chipHost, chipStyle]}
-          pointerEvents={chipOnly || compact ? 'box-none' : 'none'}
-        >
-          <Pressable
-            onPress={onChip}
-            hitSlop={HIT_SLOP}
-            accessibilityRole="button"
-            accessibilityLabel={copy.label}
-            disabled={back}
-            style={styles.chipStack}
-          >
-            <View style={styles.chip}>
-              <Animated.View style={iconStyle}>
-                <Image source={stateIcon} style={styles.chipIcon} accessibilityElementsHidden importantForAccessibility="no" />
-              </Animated.View>
-            </View>
-            {/* T176: the picture always says what it means, like every other map button. */}
-            <View style={styles.chipTag} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-              <Text style={styles.chipTagText} numberOfLines={1} maxFontSizeMultiplier={1.2}>{copy.chip}</Text>
-            </View>
-          </Pressable>
+        {/* A long outage shrinks the card to the small chip where it was. */}
+        <Animated.View style={[styles.chipHost, chipStyle]} pointerEvents={compact ? 'box-none' : 'none'}>
+          {chip}
         </Animated.View>
       </Animated.View>
     </View>

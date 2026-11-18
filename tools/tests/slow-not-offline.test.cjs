@@ -47,7 +47,7 @@ test('T172 + T176: the banner has a slow state, and the map chip is a labelled p
   assert.match(src, /accessibilityLabel=\{copy\.label\}/, 'the chip is in the accessibility tree with what it means');
   assert.match(src, /<Text style=\{styles\.chipTagText\}[^>]*>\{copy\.chip\}<\/Text>/, 'a word tag under the picture');
   assert.match(src, /setExpanded\(true\);\n\s*expandTimer\.current = setTimeout\(\(\) => \{ expandTimer\.current = null; setExpanded\(false\); \}, CHIP_EXPAND_MS\);/, 'a tap opens the full card with the Retry button');
-  assert.match(src, /const chipOnly = dockedRoute && !expanded;/);
+  assert.match(src, /\{cardShown && \(\n\s*<View pointerEvents=\"box-none\" style=\{\[styles\.host, \{ top \}\]\}>/, 'the tapped card is its own layer under the header; the chip stays put');
   assert.match(src, /state === 'offline' \? OFFLINE_SHOW_DELAY_MS : SLOW_SHOW_DELAY_MS/, 'slow shows only once it lasts');
   assert.match(src, /onConnectionState\(apply\)/);
   assert.doesNotMatch(src, /—/);
