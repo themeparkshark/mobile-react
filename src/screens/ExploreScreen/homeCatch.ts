@@ -24,7 +24,8 @@ export function pickupFix(latest: (Fix & { readonly timestamp: number }) | null 
 }
 
 export type CatchResult =
-  | { readonly kind: 'caught'; readonly data: RedeemPrepItemResponseType['data'] }
+  /** `pending`: the moment plays now while a slow server finishes the claim (it retries quietly in the claim queue). */
+  | { readonly kind: 'caught'; readonly data: RedeemPrepItemResponseType['data']; readonly pending?: boolean }
   | { readonly kind: 'gone'; readonly line: string }
   | { readonly kind: 'failed'; readonly line: string; readonly ridesLeft?: number | null };
 
@@ -52,4 +53,67 @@ export async function catchFind(redeem: Redeem, itemId: number, pivotId: number,
     const line = catchErrorLine(status, serverError);
     return status === 410 ? { kind: 'gone', line } : ridesLeft != null ? { kind: 'failed', line, ridesLeft } : { kind: 'failed', line };
   }
+}
+
+/** A treat catch waits this long for the server before its moment plays anyway (T175). */
+export const CATCH_ANSWER_BUDGET_MS = 2500;
+
+export type CatchClaim = {
+  readonly itemId: number; readonly pivotId: number; readonly latitude: number; readonly longitude: number;
+  readonly details?: RedeemCatchDetails;
+};
+
+type PendingItem = {
+  readonly id: number; readonly name: string; readonly rarity?: number | null; readonly rarity_label?: string | null;
+  readonly icon_url?: string | null; readonly set_name?: string | null; readonly set_slug?: string | null; readonly set_color?: string | null;
+  readonly is_new_variant?: boolean; readonly flavor?: string | null;
+};
+
+/** The catch as the phone knows it while the server is slow: the find itself, and no reward numbers it cannot promise. */
+export function pendingCatchData(item: PendingItem): RedeemPrepItemResponseType['data'] {
+  return {
+    rewards: { energy: 0, tickets: 0, coins: 0, experience: 0 },
+    streak: { current: 0, multiplier: 1 },
+    replayed: false,
+    is_new_variant: item.is_new_variant ?? false,
+    item: {
+      id: item.id, name: item.name, rarity: item.rarity ?? 1, rarity_label: item.rarity_label ?? '',
+      icon_url: item.icon_url ?? null, set_name: item.set_name ?? null, set_slug: item.set_slug ?? null,
+      set_color: item.set_color ?? null, flavor: item.flavor ?? null,
+    },
+  };
+}
+
+/** No answer, a timeout or a busy server: the claim may still land (asking again is safe; a second claim is refused). */
+export function catchAnswerWasLate(error: unknown): boolean {
+  const response = (error as { response?: { status?: number } } | null)?.response;
+  const status = typeof response?.status === 'number' && response.status > 0 ? response.status : null;
+  return status === null || status >= 500 || status === 429 || status === 408;
+}
+
+/**
+ * T175: a treat catch never fails because the server is slow. The claim goes out at once; if it has not
+ * answered within CATCH_ANSWER_BUDGET_MS, or answers late with no word, the catch moment plays anyway and
+ * the claim finishes quietly in the claim queue (queue). A real refusal that comes in time (it wandered
+ * off, too far) still says so. Only for treat catches: a Ride Photo's Legendary roll is the server's call.
+ */
+export function catchFindQuick(redeem: Redeem, item: PendingItem, pivotId: number,
+  fix: { latitude: number; longitude: number } | null, details: RedeemCatchDetails | undefined,
+  queue: (claim: CatchClaim) => void, budgetMs: number = CATCH_ANSWER_BUDGET_MS,
+  wait: (ms: number) => Promise<unknown> = ms => new Promise(resolve => setTimeout(resolve, ms))): Promise<CatchResult> {
+  if (!fix) return catchFind(redeem, item.id, pivotId, fix, details);
+  const claim: CatchClaim = { itemId: item.id, pivotId, latitude: fix.latitude, longitude: fix.longitude, details };
+  const answer: Promise<CatchResult> = redeem(item.id, pivotId, fix.latitude, fix.longitude, details).then(
+    (response): CatchResult => (response?.data ? { kind: 'caught', data: response.data } : { kind: 'caught', data: pendingCatchData(item), pending: true }),
+    (error): CatchResult => {
+      if (catchAnswerWasLate(error)) {
+        queue(claim);
+        return { kind: 'caught', data: pendingCatchData(item), pending: true };
+      }
+      const { status, serverError, ridesLeft } = errorStatus(error);
+      const line = catchErrorLine(status, serverError);
+      return status === 410 ? { kind: 'gone', line } : ridesLeft != null ? { kind: 'failed', line, ridesLeft } : { kind: 'failed', line };
+    });
+  const budget = wait(budgetMs).then((): CatchResult => ({ kind: 'caught', data: pendingCatchData(item), pending: true }));
+  return Promise.race([answer, budget]);
 }

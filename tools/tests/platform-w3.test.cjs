@@ -125,3 +125,37 @@ test('T186: the team card pictures "for keeps" with a lock', () => {
   const src = read('src/screens/GymBattle/TeamSelectionScreen.tsx');
   assert.match(src, /<GameIcon name="lock" size=\{26\} \/>\n\s*<Text style=\{s\.warnText\}>This is for keeps/);
 });
+
+test('T175: a treat catch plays at once on a slow server and its claim finishes in the claim queue', async () => {
+  const H = loadTs('src/screens/ExploreScreen/homeCatch.ts', { './findPresentation': { catchErrorLine: (s, e) => e ?? (s === 410 ? 'gone' : 'Could not catch it. Tap to try again.') } });
+  const item = { id: 5, name: 'Galaxy Swirl Churro', rarity: 2, set_name: 'Churro Collection' };
+  const fix = { latitude: 33.68, longitude: -117.82 };
+  const queued = [];
+  let release;
+  // A server that answers after the budget: the moment does not wait for it.
+  const slow = () => new Promise(resolve => { release = resolve; });
+  const quick = await H.catchFindQuick(slow, item, 9, fix, { catch_style: 'chomp' }, c => queued.push(c), 10, ms => new Promise(r => setTimeout(r, ms)));
+  assert.equal(quick.kind, 'caught');
+  assert.equal(quick.pending, true);
+  assert.equal(quick.data.rewards.coins, 0, 'no reward numbers the phone cannot promise');
+  assert.equal(quick.data.item.name, 'Galaxy Swirl Churro');
+  release({ data: { rewards: { coins: 1 } } });
+  // A timeout after the moment started: the claim goes to the queue.
+  const timedOut = async () => { throw { code: 'ECONNABORTED' }; };
+  const r2 = await H.catchFindQuick(timedOut, item, 10, fix, undefined, c => queued.push(c), 1000, () => new Promise(() => {}));
+  assert.equal(r2.kind, 'caught');
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].pivotId, 10);
+  // A quick real answer is used as is; a refusal in time still says so.
+  const ok = await H.catchFindQuick(async () => ({ data: { rewards: { coins: 3 } } }), item, 11, fix, undefined, () => {}, 1000, () => new Promise(() => {}));
+  assert.equal(ok.data.rewards.coins, 3);
+  assert.equal(ok.pending, undefined);
+  const gone = await H.catchFindQuick(async () => { throw { response: { status: 410 } }; }, item, 12, fix, undefined, () => {}, 1000, () => new Promise(() => {}));
+  assert.equal(gone.kind, 'gone');
+  const src = read('src/screens/ExploreScreen/HomeCatchMoment.tsx');
+  assert.match(src, /catchFindQuick\(latest\.current\.redeem, item, pivotId, latest\.current\.getFix\(\), \{ catch_style: 'chomp' \}, queueCatchClaim\)/);
+  assert.match(src, /catchFind\(latest\.current\.redeem, req\.item\.id, req\.pivotId, latest\.current\.getFix\(\), details\)/, 'Ride Photo keeps the server’s roll');
+  const q = read('src/services/catchClaimQueue.ts');
+  assert.match(q, /storageKey: 'home_catch_claim_queue'/);
+  assert.match(q, /if \(typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429\) return true;/);
+});

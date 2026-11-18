@@ -40,7 +40,8 @@ import { findDisplayName } from './homeFindCopy';
 import { setHomeHuntRankLine } from './homeHuntRankStore';
 import { findImageSource, FIND_ART_SIZE } from './PrepItem';
 import { burstSparkCount, CATCH_TIMING, catchSummary, rarityColor, rarityTier, type CatchSummary } from './findPresentation';
-import { catchFind, type CatchResult } from './homeCatch';
+import { catchFind, catchFindQuick, type CatchResult } from './homeCatch';
+import { queueCatchClaim } from '../../services/catchClaimQueue';
 import { GRADE_LABEL, GRADE_STARS, catchStyleFor, type PhotoGrade } from './ridePhoto';
 import { Sunburst } from '../../gamekit/fx/ShaderFx';
 import RidePhotoCatch, { BLANK_IMAGE, prebuildRideStage, rideStageReady, setRidePhotoPlayer, warmStagePicture, type RideStageHandle } from './ridePhoto/RidePhotoCatch';
@@ -1198,7 +1199,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     startRef.current = () => { startRef.current = null; runOnUI(startClock)(plan.hitStopAt, !motion, pivotId); };
     const startTimer = setTimeout(() => startRef.current?.(), 280);
     const t0 = Date.now();
-    const run = catchFind(latest.current.redeem, item.id, pivotId, latest.current.getFix(), { catch_style: 'chomp' });
+    // T175: the moment plays at once; a slow server finishes the claim quietly in the claim queue.
+    const run = catchFindQuick(latest.current.redeem, item, pivotId, latest.current.getFix(), { catch_style: 'chomp' }, queueCatchClaim);
 
     void (async () => {
       const settled = await run;
