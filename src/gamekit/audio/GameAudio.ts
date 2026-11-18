@@ -324,6 +324,8 @@ class GameAudioEngine {
     if (this.traceMode) { traceEvent('legacy', 'setting', `music ${v ? 'on' : 'off'} (trace keeps the engine on, silent)`); v = true; }
     this.musicEnabled = v;
     if (!v) this.music.stop(200);
+    // Running stems follow the switch at once (T188).
+    this.stemGains.forEach((gain, deck) => this.backend?.musicGain(deck, gain * this.stemGate(), 150));
   }
 
   isMusicEnabled(): boolean {
@@ -555,14 +557,28 @@ class GameAudioEngine {
     return keys.every((k) => (b.routeOf ? b.routeOf(k) === 'audio-api' : true));
   }
 
+  /**
+   * Fix round w3 T188: stems are music (Parade Beat's song stages), so they obey the Music setting. A muted
+   * stem keeps running at gain 0, because the rhythm game reads its position as the beat clock.
+   */
+  private stemGains = new Map<string, number>();
+
+  private stemGate(): number {
+    return this.musicEnabled ? 1 : 0;
+  }
+
   startStems(decks: { deck: string; key: string; gain: number }[], fromMs: number): void {
     const b = this.backend;
     if (!b) return;
-    for (const d of decks) b.musicStart(d.deck, d.key, { gain: d.gain, loop: false, fadeMs: 0, fromMs: Math.max(0, fromMs) });
+    for (const d of decks) {
+      this.stemGains.set(d.deck, d.gain);
+      b.musicStart(d.deck, d.key, { gain: d.gain * this.stemGate(), loop: false, fadeMs: 0, fromMs: Math.max(0, fromMs) });
+    }
   }
 
   stemGain(deck: string, gain: number, rampMs: number): void {
-    this.backend?.musicGain(deck, Math.max(0, gain), Math.max(0, rampMs));
+    this.stemGains.set(deck, Math.max(0, gain));
+    this.backend?.musicGain(deck, Math.max(0, gain) * this.stemGate(), Math.max(0, rampMs));
   }
 
   async stemPosition(deck: string): Promise<number> {
@@ -570,7 +586,10 @@ class GameAudioEngine {
   }
 
   stopStems(decks: string[], fadeMs: number): void {
-    for (const d of decks) this.backend?.musicStop(d, fadeMs);
+    for (const d of decks) {
+      this.stemGains.delete(d);
+      this.backend?.musicStop(d, fadeMs);
+    }
   }
 }
 

@@ -18,6 +18,12 @@
  */
 
 import { Audio, type AVPlaybackStatus } from 'expo-av';
+import { GameAudio } from '../../../gamekit/audio/GameAudio';
+
+/** Fix round w3 T188: the song obeys the Music setting (it still runs, silent, as the game's clock). */
+function musicGate(): number {
+  return GameAudio.isMusicEnabled() ? 1 : 0;
+}
 
 export interface SongAnchor {
   /** Song position (ms). */
@@ -58,7 +64,7 @@ export class SongPlayer {
     }).catch(() => undefined);
     const onStatus = (st: AVPlaybackStatus) => this.onStatus(st);
     const [a, b] = await Promise.all([
-      Audio.Sound.createAsync(this.songSrc, { shouldPlay: false, progressUpdateIntervalMillis: STATUS_MS, volume: this.gain }, onStatus),
+      Audio.Sound.createAsync(this.songSrc, { shouldPlay: false, progressUpdateIntervalMillis: STATUS_MS, volume: this.gain * musicGate() }, onStatus),
       this.feverSrc != null
         ? Audio.Sound.createAsync(this.feverSrc, { shouldPlay: false, progressUpdateIntervalMillis: 1000, volume: 0 })
         : Promise.resolve(null),
@@ -88,10 +94,10 @@ export class SongPlayer {
   async play(fromMs = 0): Promise<void> {
     if (!this.song) return;
     const jobs: Promise<unknown>[] = [
-      this.song.setStatusAsync({ positionMillis: Math.max(0, Math.round(fromMs)), shouldPlay: true, volume: this.gain * (1 - this.feverMix) }),
+      this.song.setStatusAsync({ positionMillis: Math.max(0, Math.round(fromMs)), shouldPlay: true, volume: this.gain * musicGate() * (1 - this.feverMix) }),
     ];
     if (this.fever) {
-      jobs.push(this.fever.setStatusAsync({ positionMillis: Math.max(0, Math.round(fromMs)), shouldPlay: true, volume: this.gain * this.feverMix }));
+      jobs.push(this.fever.setStatusAsync({ positionMillis: Math.max(0, Math.round(fromMs)), shouldPlay: true, volume: this.gain * musicGate() * this.feverMix }));
     }
     await Promise.all(jobs).catch(() => undefined);
     this.playing = true;
@@ -120,8 +126,8 @@ export class SongPlayer {
   }
 
   private applyVolumes(): void {
-    void this.song?.setVolumeAsync(this.gain * (1 - this.feverMix)).catch(() => undefined);
-    void this.fever?.setVolumeAsync(this.gain * this.feverMix).catch(() => undefined);
+    void this.song?.setVolumeAsync(this.gain * musicGate() * (1 - this.feverMix)).catch(() => undefined);
+    void this.fever?.setVolumeAsync(this.gain * musicGate() * this.feverMix).catch(() => undefined);
   }
 
   /** Crossfade to (1) or from (0) the Fever mix over `ms`. */
@@ -154,7 +160,7 @@ export class SongPlayer {
       const decks = [this.song, this.fever].filter(Boolean) as Audio.Sound[];
       if (!decks.length) return resolve();
       const t0 = Date.now();
-      const v0 = this.gain;
+      const v0 = this.gain * musicGate();
       this.tapeTimer = setInterval(() => {
         const k = Math.min(1, (Date.now() - t0) / ms);
         const rate = 1 - 0.7 * k * k;

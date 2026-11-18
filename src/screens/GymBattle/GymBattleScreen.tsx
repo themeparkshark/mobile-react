@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { Audio } from 'expo-av';
+import { SoundEffectContext } from '../../context/SoundEffectProvider';
 // LinearGradient removed - not installed
 import { BlurView } from 'expo-blur';
 import { useFocusEffect } from '@react-navigation/native';
@@ -685,31 +685,10 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     }
   }, [gymData?.player?.seconds_until_defend]);
 
-  const playButtonSound = async () => {
-    try {
-      const { sound } = await Audio.Sound.createAsync(
-        require('../../../assets/sounds/button_press.mp3'),
-        { volume: 0.5 }
-      );
-      await sound.playAsync();
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) sound.unloadAsync();
-      });
-    } catch (e) {}
-  };
-
-  const playEntrySound = async () => {
-    try {
-      const { sound } = await Audio.Sound.createAsync(
-        require('../../../assets/sounds/reveal.mp3'),
-        { volume: 0.6 }
-      );
-      await sound.playAsync();
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) sound.unloadAsync();
-      });
-    } catch (e) {}
-  };
+  // Fix round w3 T188: through the app's sound effects player, so the Sound Effects setting is obeyed.
+  const { playSound: playSfx } = useContext(SoundEffectContext);
+  const playButtonSound = () => playSfx(require('../../../assets/sounds/button_press.mp3'), { volume: 0.5 });
+  const playEntrySound = () => playSfx(require('../../../assets/sounds/reveal.mp3'), { volume: 0.6 });
 
   // Reconnect with backoff when the park can't be reached; the arena keeps its last real scores.
   const fetchGymRef = useRef<() => void>(() => undefined);
