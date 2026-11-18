@@ -168,6 +168,7 @@ function sessionHarness({ start, heartbeat, complete, saved = null, steps = null
       takeBackgroundTrail: async () => [],
     },
     './checkpointCredit': credit,
+    './lineZone': require('./helpers/lineplay-zone.cjs'),
     './queuePedometer': {
       prepareQueuePedometer: async () => {},
       readQueueSteps: async (from, to) => { calls.steps.push([from, to]); return steps ? steps(from, to) : null; },

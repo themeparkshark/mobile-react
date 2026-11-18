@@ -22,3 +22,11 @@ export async function noteFoundAdventure(playerId: number, title: string): Promi
     return { count: 0, isNew: false };
   }
 }
+
+/** Real line time a story needs before it counts as found (T081): a few minutes, never a walk-on. */
+export const STORY_CREDIT_MIN_SECONDS = 180;
+
+/** Does this finished wait earn its line story? Only a wait timed in the ride's line, of real length. */
+export function storyCreditEarned(input: { readonly waitTimed: boolean; readonly elapsedSeconds: number }): boolean {
+  return input.waitTimed && Number.isFinite(input.elapsedSeconds) && input.elapsedSeconds >= STORY_CREDIT_MIN_SECONDS;
+}

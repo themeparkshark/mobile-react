@@ -270,7 +270,7 @@ test('the recap: only what you got, "Sign said 20, you waited 11", one GO, the l
   assert.match(screen, /setTimeout\(\(\) => setSettleTimedOut\(true\), RECAP_SETTLE_MAX_MS\)/);
   // A wrapped-up or ridden wait is said once by the hero: no "Wait saved!" keepsake under it.
   assert.match(recap, /signLine \|\| rideLogged \|\| activityNames\.length > 0 \|\| rideUp \|\| wrappedUp \? null : \(/);
-  assert.match(screen, /signLine=\{snapshot\.boardingConfirmed \? signSaidLine\(/);
+  assert.match(screen, /signLine=\{snapshot\.boardingConfirmed && snapshot\.waitTimed \? signSaidLine\(/);
   // Games alone are said once (the Played line), never also as a lone "1 GAME" tile; the shelf GO wears the coins.
   assert.match(recap, /const earnedAny = shownStats\.some\(t => t\.key !== 'activities'\);/);
   assert.match(recap, /\{earnedAny \? <View style=\{styles\.recapStats\}>/);
@@ -333,7 +333,10 @@ test('the unlock ladder hears LinePlay: line_played at the first verified minute
 test('the recap GO and NEXT COIN follow the guide store, and a coin you do not own counts every Part in its slot', async () => {
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
   assert.match(screen, /const guideNext = useGuideTarget\(rideCatalog\?\.taskId \?\? null\);/);
-  assert.doesNotMatch(screen, /guide\.current\(\)/, 'no one-time read of the guide during render');
+  // The one mount-time snapshot (T076: DONE keeps the coin held when LinePlay opened) is not a render read.
+  assert.doesNotMatch(screen.replace('const heldAtOpen = useRef(guide.current());', '')
+    .replace('doneKeepsTarget(heldAtOpen.current, guide.current())', ''), /guide\.current\(\)/,
+    'no one-time read of the guide during render');
   assert.match(screen, /partsEarned: slotTaskId != null \? slotPartsShown\(recapPartsEarned, slotParts\) : recapPartsEarned/);
   const log = read('src/screens/RideTracker/RideLogScreen.tsx');
   assert.match(log, /const nextCoin = useGuideTarget\(selectedRide\?\.task_id \?\? null\);/);

@@ -75,6 +75,7 @@ import { createNavigationPanel, createNavigationPanelProgress, traceNavigationPa
 import { nextQueueDifficulty, replaySeed, type QueueDifficulty } from './replay';
 import { primeTriviaDeck } from './triviaDeck';
 import { primeTriviaHistory } from './triviaHistory';
+import { insideLineZone, waitIsTimed, type LineZone } from './lineZone';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -133,6 +134,8 @@ export interface RideContext {
   readonly imageUrl?: string | null;
   /** False means the server catalog cannot award Parts for this ride. */
   readonly lineRewardsReady?: boolean;
+  /** The ride's line zone from the catalog (lineZone.ts), when known: a wait is claimed only with evidence. */
+  readonly zone?: LineZone | null;
 }
 
 export type WaitSource = 'posted' | 'last_known' | 'estimate';
@@ -201,6 +204,11 @@ export interface SessionSnapshot {
   readonly serverSessionId: string | null;
   /** The server explicitly cannot offer ride rewards for this session. */
   readonly rewardUnavailable: boolean;
+  /**
+   * Honesty (T071): is there evidence this wait happened in the ride's line (the server's timed session, or a fix
+   * inside the line zone)? False means games only: no minutes in line, no ride step, no line story credit.
+   */
+  readonly waitTimed: boolean;
   readonly rewardConnectionIssue?: RewardConnectionIssue | null;
   readonly backgroundTrackingAvailable: boolean | null;
   readonly verifiedEligibleSeconds: number;
@@ -612,6 +620,8 @@ export class LinePlaySession {
   private adaptiveEpisodeRecorded = false;
   private serverSessionId: string | null = null;
   private rewardUnavailable = false;
+  /** A fix inside the ride's line zone, or the server's own timed session, was seen this wait (T071). */
+  private atLineSeen = false;
   private rewardConnectionIssue: RewardConnectionIssue | null = null;
   private verifiedEligibleSeconds = 0;
   private creditedParts: number | null = null;
@@ -793,6 +803,8 @@ export class LinePlaySession {
       chapter: this.chapter,
       serverSessionId: this.serverSessionId,
       rewardUnavailable: this.rewardUnavailable,
+      waitTimed: waitIsTimed({ serverSessionId: this.serverSessionId, atLineSeen: this.atLineSeen,
+        zoneKnown: this.ride?.zone != null, serverSaidNotNear: this.rewardConnectionIssue === 'nearby' }),
       rewardConnectionIssue: this.guest ? 'sign_in' : this.rewardConnectionIssue,
       backgroundTrackingAvailable: this.backgroundTrackingAvailable,
       verifiedEligibleSeconds: this.verifiedEligibleSeconds,
@@ -1051,6 +1063,7 @@ export class LinePlaySession {
       bonusQuestProof: this.bonusQuestProof,
       entryFix: this.entryFix,
       offlineTrail: this.offlineTrail,
+      atLineSeen: this.atLineSeen,
     };
     this.checkpointWrites = this.checkpointWrites.then(() => writeCheckpoint(data))
       .catch(error => console.warn('[LinePlaySession] checkpoint unavailable:', error));
@@ -1471,6 +1484,7 @@ export class LinePlaySession {
     this.backgroundTrackingSessionId = null;
     this.backgroundTrackingAvailable = null;
     this.rewardUnavailable = false;
+    this.atLineSeen = false;
     this.rewardConnectionIssue = null;
     this.verifiedEligibleSeconds = 0;
     this.lastSuccessfulPresenceUpdateAt = 0;
@@ -1598,6 +1612,7 @@ export class LinePlaySession {
         : createCrewRelay(Math.floor(this.startedAt / 1000) + ride.rideId)
       : null;
     this.serverSessionId = saved?.serverSessionId ?? null;
+    this.atLineSeen = saved?.atLineSeen === true || saved?.serverSessionId != null;
     this.verifiedEligibleSeconds = saved?.verifiedEligibleSeconds ?? 0;
     this.state = saved?.state === 'complete' ? 'complete' : 'active';
     if (this.state === 'active') this.startTicking();
@@ -1609,6 +1624,7 @@ export class LinePlaySession {
     // too, so a stationary player does not wait for another GPS update.
     const startLocation = initialLocation ?? locationDuringLoad;
     if (!this.entryFix && startLocation && this.state === 'active') this.captureEntry(startLocation);
+    if (startLocation && isRecentQueueSample(startLocation)) this.noteLineZone(startLocation);
     if (this.serverSessionId) {
       try {
         const response = await readInLineTimer(this.serverSessionId);
@@ -1683,6 +1699,8 @@ export class LinePlaySession {
     if (!result.success || !result.session_id) return;
     this.serverSnapshotRevision += 1;
     this.serverSessionId = result.session_id;
+    // The server opens a timed session only near the ride: that is the evidence of this line.
+    this.atLineSeen = true;
     this.rewardConnectionIssue = null;
     this.verifiedEligibleSeconds = result.eligible_seconds;
     this.creditedParts = result.parts_credited ?? null;
@@ -2134,7 +2152,10 @@ export class LinePlaySession {
     }
     if (!sessionId) {
       if (this.entryFix && this.startRequestId && this.ride && this.ride.rideId > 0 &&
-          this.ride.lineRewardsReady !== false && !this.rewardUnavailable) {
+          this.ride.lineRewardsReady !== false && !this.rewardUnavailable &&
+          // Only a wait with evidence of this line is sent late: never one the server said was not near it.
+          waitIsTimed({ serverSessionId: null, atLineSeen: this.atLineSeen, zoneKnown: this.ride.zone != null,
+            serverSaidNotNear: this.rewardConnectionIssue === 'nearby' })) {
         // The whole wait was offline (airplane mode, a dead zone at the
         // entrance). Its entry checkpoint starts the session late and the
         // exit completes it, from the reward queue, whenever signal returns.
@@ -2297,6 +2318,7 @@ export class LinePlaySession {
     this.adaptiveEpisodeRecorded = false;
     this.serverSessionId = null;
     this.rewardUnavailable = false;
+    this.atLineSeen = false;
     this.rewardConnectionIssue = null;
     this.verifiedEligibleSeconds = 0;
     this.lastSuccessfulPresenceUpdateAt = 0;
@@ -2403,6 +2425,7 @@ export class LinePlaySession {
   ingestLocation(sample: LocationSample): void {
     const now = sample.timestamp ?? Date.now();
     this.lastSample = { ...sample, timestamp: now };
+    this.noteLineZone(sample);
 
     if (!this.serverSessionId &&
         (this.state === 'active' || this.state === 'paused' || this.state === 'ending')) {
@@ -2431,6 +2454,15 @@ export class LinePlaySession {
     this.lastAdvanceAt = now;
     this.queueAdvanceAt = now;
     this.advanceTrail = [fix];
+    this.emit();
+  }
+
+  /** A live fix inside the ride's line zone is evidence of this line (kept for the whole wait and its relaunch). */
+  private noteLineZone(sample: LocationSample | null | undefined): void {
+    if (this.atLineSeen || !this.ride?.zone || (this.state !== 'active' && this.state !== 'paused')) return;
+    if (!insideLineZone(sample, this.ride.zone)) return;
+    this.atLineSeen = true;
+    this.persistCheckpoint();
     this.emit();
   }
 

@@ -89,6 +89,7 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
       calls.sync = (calls.sync ?? 0) + 1; return server;
     }),
     './checkpointCredit': require('./helpers/lineplay-checkpoint-credit.cjs'),
+    './lineZone': require('./helpers/lineplay-zone.cjs'),
     './queuePedometer': { prepareQueuePedometer: async () => {}, readQueueSteps: async () => null },
   };
   const moduleRef = { exports: {} };
@@ -1008,4 +1009,70 @@ test('a signed-out guest plays the whole wait locally: no server start, no check
   assert.equal(calls.queued.length, 0, 'nothing waits to be credited later');
   assert.equal(calls.written.length, 0, 'no checkpoint without an account');
   session.dispose();
+});
+
+// T071 (fix round w3, lane line): LinePlay never claims a wait that did not happen.
+test('T071: games started away from the line never claim a wait; a fix in the line zone or a server session does', async () => {
+  const zone = require('./helpers/lineplay-zone.cjs');
+  // The server's circle: radius 60 + 75 buffer = 135 m; a 40 m radius still gets the 50 m floor; never past 250 m.
+  assert.equal(zone.lineZoneFor({ lat: 33.81, lng: -117.92, radius: 60 }).radiusMeters, 135);
+  assert.equal(zone.lineZoneFor({ lat: 33.81, lng: -117.92, radius: 40 }).radiusMeters, 125);
+  assert.equal(zone.lineZoneFor({ lat: 33.81, lng: -117.92, radius: 900 }).radiusMeters, 250);
+  assert.equal(zone.lineZoneFor({ lat: null, lng: -117.92, radius: 60 }), null);
+  const tiki = zone.lineZoneFor({ lat: 33.811829, lng: -117.919569, radius: 60 });
+  const away = { latitude: 33.81331, longitude: -117.919569 }; // about 165 m north
+  const inLine = { latitude: 33.81190, longitude: -117.919569 };
+  assert.ok(zone.startAwayMeters(away, tiki) >= 160 && zone.startAwayMeters(away, tiki) <= 170);
+  assert.equal(zone.startAwayMeters(inLine, tiki), null);
+  assert.equal(zone.startAwayMeters(null, tiki), null, 'no fix: we cannot tell, so no question');
+  assert.match(zone.startAwayCopy(170).title, /^You're 170 m away$/);
+
+  // The kid's walk: started 165 m away, the server says not near, games played, "I got to the ride".
+  const { Session, calls } = makeHarness(null, () => { throw { response: { status: 422, data: { code: 'NOT_NEAR_RIDE' } } }; });
+  const session = new Session();
+  const zoned = { ...ride, zone: tiki };
+  await session.start(zoned, { ...away, timestamp: Date.now() }, 12);
+  assert.equal(session.snapshot().waitTimed, false, 'away from the line: games only');
+  await session.endNow(true);
+  assert.equal(session.snapshot().state, 'complete');
+  assert.equal(session.snapshot().waitTimed, false);
+  assert.equal(calls.queued.length, 0, 'never sends a late start for a wait the server said was not near');
+  session.dispose();
+
+  // Walked into the line afterwards: the next live fix inside the zone is evidence (offline first).
+  const second = makeHarness(null, () => { throw new Error('Network offline'); });
+  const walker = new second.Session();
+  await walker.start(zoned, { ...away, timestamp: Date.now() }, 12);
+  assert.equal(walker.snapshot().waitTimed, false);
+  walker.ingestLocation({ ...inLine, timestamp: Date.now() });
+  assert.equal(walker.snapshot().waitTimed, true);
+  await walker.checkpointWrites;
+  assert.equal(second.calls.written.at(-1).atLineSeen, true, 'the evidence survives a relaunch');
+  walker.dispose();
+
+  // The server's own timed session is evidence too, even with no zone on file.
+  const third = makeHarness(null, server);
+  const timed = new third.Session();
+  await timed.start(ride, { ...away, timestamp: Date.now() }, 12);
+  assert.equal(timed.snapshot().waitTimed, true);
+  timed.dispose();
+
+  // No zone on file and the server says not near: untimed. No zone and offline: offline first, as before.
+  assert.equal(zone.waitIsTimed({ serverSessionId: null, atLineSeen: false, zoneKnown: false, serverSaidNotNear: true }), false);
+  assert.equal(zone.waitIsTimed({ serverSessionId: null, atLineSeen: false, zoneKnown: false, serverSaidNotNear: false }), true);
+});
+
+test('T071: the screen asks first when away, and an untimed wait shows games, never minutes or a logged ride', () => {
+  const screen = fs.readFileSync(path.join(root, 'src/screens/LinePlay/LinePlayScreen.tsx'), 'utf8');
+  const recap = fs.readFileSync(path.join(root, 'src/screens/LinePlay/components/SessionRecap.tsx'), 'utf8');
+  assert.match(screen, /const away = saved\?\.state === 'active' \? null : startAwayMeters\(sample, zone\);/);
+  assert.match(screen, /if \(away != null\) \{ setAwayAsk\(/);
+  assert.match(screen, /\{ text: 'Play anyway', icon: 'play' \}/);
+  assert.match(screen, /!snapshot\.waitTimed\) return;\n\s+const id = rideStepLogId\(/, 'no ride step without evidence');
+  assert.match(screen, /signLine=\{snapshot\.boardingConfirmed && snapshot\.waitTimed \?/);
+  assert.match(screen, /waitTimed=\{snapshot\.waitTimed\}/);
+  assert.match(screen, /title="Done playing\?"/);
+  assert.match(recap, /const rideUp = waitTimed && endReason === 'boarded';/);
+  assert.match(recap, /Wait not timed/);
+  assert.match(recap, /\{waitTimed && rideLogged && \(/);
 });
