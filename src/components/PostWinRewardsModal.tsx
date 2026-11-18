@@ -200,15 +200,17 @@ function TrophyMomentRow({ trophy, started, reduced }: { trophy: TrophyMoment; s
 }
 
 /* ─── One reward chip in the one reward row; pops in on the shared entrance clock ─── */
-function RewardChip({ chip, index, enter, reduced, started }: {
+function RewardChip({ chip, index, enter, reduced, started, wide = false }: {
   chip: WinChip; index: number; enter: SharedValue<number>; reduced: boolean; started: boolean;
+  /** Five chips sit as a 3 + 2 grid (never four and one lonely chip). */
+  wide?: boolean;
 }) {
   const style = useAnimatedStyle(() => {
     const t = Math.max(0, Math.min(1, (enter.value - 0.35 - index * 0.08) / 0.3));
     return { opacity: t, transform: [{ translateY: (1 - t) * 14 }, { scale: 0.85 + 0.15 * t }] };
   });
   return (
-    <Animated.View style={[styles.chip, chip.quiet && styles.chipQuiet, style]} accessible accessibilityLabel={`${chip.amount} ${chip.label}`}>
+    <Animated.View style={[styles.chip, wide && styles.chipThird, chip.quiet && styles.chipQuiet, style]} accessible accessibilityLabel={`${chip.amount} ${chip.label}`}>
       <GameIcon name={chip.icon} size={22} />
       <View style={{ flexShrink: 1 }}>
         <CountUp value={chip.amount} start={started} reduced={reduced} style={styles.chipAmount} />
@@ -553,7 +555,7 @@ export default function PostWinRewardsModal({
             {/* ── The one reward row, counting up ── */}
             {(chips.length > 0 || (rush && coinLevels) || starRide) && <View style={styles.chips}>
               {chips.map((chip, index) => <RewardChip key={chip.label} chip={chip} index={index} enter={enter}
-                reduced={reducedMotion} started={caught} />)}
+                reduced={reducedMotion} started={caught} wide={chips.length >= 5} />)}
               {rush && coinLevels && <View style={styles.badge} accessible
                 accessibilityLabel={`Rush: ${rush.bonus_parts} extra Ride Parts for a short wait`}>
                 <GameIcon name="rush" size={20} />
@@ -668,6 +670,7 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9ccbe9',
     paddingVertical: 5, paddingLeft: 5, paddingRight: 6, flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 64, maxWidth: '50%' },
   chipQuiet: { backgroundColor: '#e8f6ff' },
+  chipThird: { flexBasis: '30%', maxWidth: '32%' },
   chipAmount: { fontFamily: 'Shark', fontSize: 18, lineHeight: 20, color: '#05346e', fontVariant: ['tabular-nums'] },
   chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#3d5f8c' },
   chipLabelQuiet: { fontSize: 11, lineHeight: 12 },
