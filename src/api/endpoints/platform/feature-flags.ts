@@ -60,6 +60,8 @@ export async function fetchFeatureFlags(timeout: number = FLAG_TIMEOUTS_MS[0]): 
 }
 
 type Listener = (payload: FeatureFlagsPayload) => void;
+/** Dev JS only: one log line per read outcome (lane device proofs read the Metro log). */
+const DEV_LOG = typeof __DEV__ !== 'undefined' && __DEV__;
 type Timer = ReturnType<typeof setTimeout>;
 
 let good: FeatureFlagsPayload | null = null;
@@ -113,6 +115,7 @@ function read(): Promise<FeatureFlagsPayload> {
   const timeout = FLAG_TIMEOUTS_MS[Math.min(failures, FLAG_TIMEOUTS_MS.length - 1)];
   pending = fetcher(timeout).then(payload => {
     if (sessionKey() !== key) return payload; // signed out or switched meanwhile: not this session's answer
+    if (DEV_LOG) console.log(`[flags] answer after ${failures} failed tries: ${Object.keys(payload.flags).filter(k => payload.flags[k] === true).length} on, ${listeners.size} listeners`);
     good = payload; goodAt = clock(); goodFor = key; failures = 0;
     clearRetry();
     listeners.forEach(listener => { try { listener(payload); } catch { /* one bad listener never blocks the rest */ } });
@@ -120,6 +123,7 @@ function read(): Promise<FeatureFlagsPayload> {
   }, error => {
     failures += 1;
     scheduleRetry();
+    if (DEV_LOG) console.log(`[flags] read failed (${(error as { code?: string })?.code ?? 'error'}, timeout ${timeout} ms), try ${failures}; retry ${retryTimer ? 'scheduled' : 'on focus'}; serving ${good ? 'last good' : 'nothing yet'}`);
     // The last good answer stands in while the server is slow: a feature that was on stays on.
     if (good && goodFor === key) return good;
     throw error;
