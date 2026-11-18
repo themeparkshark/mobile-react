@@ -88,6 +88,17 @@ export function countStart(amount: number): number {
 export function prizeBlockHeight(extraLines: number, hasMilestone: boolean, ticketDay: boolean): number {
   return (ticketDay ? 0 : 60) + 38 + extraLines * 24 + (hasMilestone ? 24 : 0);
 }
+/** Quiet looks after a late claim answer (the claim may have landed): then the chest offers another tap. */
+export const CHEST_RECHECK_MS = [2000, 5000, 10000] as const;
+
+/** The claim's answer came late or the server was busy: it may have landed. A refusal or no answer at all did not. */
+export function claimAnswerWasLate(error: unknown): boolean {
+  const e = error as { code?: string; response?: { status?: number } } | null | undefined;
+  if (e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT') return true;
+  const status = e?.response?.status;
+  return typeof status === 'number' && (status >= 500 || status === 429);
+}
+
 export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', claim = update, simple = false,
   requested, inline = false, onDone, onArtReady }: {
   readonly dailyGift: DailyGiftType;
@@ -154,6 +165,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   // Before coin levels unlock (rung 3), Energy is "saved for growing coins": the number alone means nothing yet.
   const energyExplained = !useRung('coin_levels').open;
   const [phase, setPhase] = useState<'closed' | 'opening' | 'open'>('closed');
+  // T172: the chest's own words while the server is slow (still opening, or safe and ready for another tap).
+  const [slowNote, setSlowNote] = useState<'opening' | 'retry' | null>(null);
   const [confirmedGift, setConfirmedGift] = useState<DailyGiftType | null>(null);
   const [shown, setShown] = useState(0);
   const { setDailyGift } = useContext(DailyGiftContext);
@@ -395,6 +408,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     claiming.current = true;
     walletBefore.current = player?.coins ?? null;
     setPhase('opening');
+    setSlowNote(null);
     const startedAt = Date.now();
     if (!reducedMotion) {
       shake.value = withSequence(
@@ -421,14 +435,36 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         setPhase('open');
         celebrate(isTicket);
       }, reducedMotion ? 0 : Math.max(0, 440 - (Date.now() - startedAt)));
-    } catch {
-      // A previous successful claim can outlive this screen. Reconcile before retrying.
+    } catch (error) {
+      // T172: a slow server is not a lost chest. When the claim's answer was late (a timeout or a busy
+      // server), it may have landed: the chest keeps opening and looks again quietly, and a claim that did
+      // land plays its real prize, exactly like a quick answer.
+      const late = claimAnswerWasLate(error);
       let current: DailyGiftType | null = null;
-      try { current = await getDailyGift(); } catch { /* Leave an ordinary retry available. */ }
+      for (const wait of late ? CHEST_RECHECK_MS : [0]) {
+        if (wait) {
+          setSlowNote('opening');
+          await new Promise(resolve => setTimeout(resolve, wait));
+          if (!mounted.current) return;
+        }
+        try { current = await getDailyGift(); break; } catch { /* still slow: look again, then offer a retry */ }
+      }
       if (!mounted.current) return;
+      if (late && current?.id === dailyGift.id && current.redeemed_at) {
+        setSlowNote(null);
+        acknowledgedGift.current = current;
+        setConfirmedGift(current);
+        const landedLadder = current.ladder?.length ? current.ladder : fallbackLadder(current);
+        const landedToday = landedLadder[Math.min(landedLadder.length, Math.max(1, current.day ?? 1)) - 1];
+        const isTicket = mainKind(chestAmounts(current, landedToday)) === 'tickets';
+        setPhase('open');
+        celebrate(isTicket);
+        return;
+      }
       claiming.current = false;
       cancelAnimation(shake); shake.value = 0;
       cancelAnimation(pop); pop.value = 1; cancelAnimation(gold); gold.value = 0;
+      setSlowNote(late && !current ? 'retry' : null);
       if (current?.id === dailyGift.id && current.redeemed_at) {
         setDailyGift(current);
         void refreshPlayer?.();
@@ -436,7 +472,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         gameAlert('Today’s chest is collected', 'You already got today’s prizes. Come back tomorrow for the next chest.');
       } else {
         setPhase('closed');
-        gameAlert('Could not open your chest', `Your chest is still waiting. ${tryAgainLine()}`);
+        // Inside the Rewards sheet the note on the card says it (a dialog would sit under the sheet).
+        if (!(inline && late)) gameAlert('Could not open your chest', `Your chest is still waiting. ${tryAgainLine()}`);
       }
     }
   };
@@ -562,7 +599,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               {milestone && <Text style={styles.milestone}>{`${milestone.label} bonus!`}</Text>}
             </Animated.View>
           ) : (
-            <Text style={styles.hint}>{phase === 'opening' ? 'Opening your chest…' : 'Tap the chest to open it!'}</Text>
+            <Text style={styles.hint}>{phase === 'opening'
+              ? (slowNote === 'opening' ? 'The game is slow. Still opening your chest…' : 'Opening your chest…')
+              : slowNote === 'retry' ? 'The game is slow right now. Your chest is safe. Tap it again.' : 'Tap the chest to open it!'}</Text>
           )}
           </View>
 
