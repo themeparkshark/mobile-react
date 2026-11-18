@@ -486,3 +486,32 @@ test('a selected ride card never lands under the following shark (player 40 pt a
     assert.ok(!hit(card, shark), `ride at ${dx},${dy}: card ${JSON.stringify(card)} under the shark ${JSON.stringify(shark)}`);
   }
 });
+
+test('T022: the selected ride\'s card never sits under the guide card: it takes the first clear side', () => {
+  // The guide card's inset across the top-left (what ExploreScreen adds when the guide shows).
+  const guide = s.resolveInsets([{ left: 0, top: 76, width: 393 - 70, height: 100 }], 393, 700);
+  // A selected island just under the guide card: above it would be under the card.
+  const ride = rideAt(1, -40, -350 + 76 + 100 + 100, { pinned: true, tag: L.SELECTED_TAG });
+  const out = s.solveLayout([ride], frame(), { insets: guide });
+  const tag = out.get('ride:1').tag;
+  assert.ok(tag, 'the card is placed');
+  const p = s.project(ride.latitude, ride.longitude, frame());
+  const rect = { x: p.x + tag.x, y: p.y + tag.y, w: L.SELECTED_TAG.w, h: L.SELECTED_TAG.h };
+  assert.ok(rect.y >= 76 + 100 || rect.x >= 393 - 70, `clear of the guide card: ${JSON.stringify(rect)}`);
+  assert.notEqual(tag.side, 'top');
+  // In the open map it still sits right above its island.
+  const free = s.solveLayout([rideAt(2, 0, 120, { pinned: true, tag: L.SELECTED_TAG })], frame(), { insets: guide });
+  assert.equal(free.get('ride:2').tag.side, 'top');
+});
+
+test('T022 and T148: one cheap idle loop on the target island and on the nearest treat (off under Reduce Motion)', () => {
+  const fs = require('node:fs');
+  const task = fs.readFileSync('src/screens/ExploreScreen/TaskMarker.tsx', 'utf8');
+  assert.match(task, /\(isSelected \|\| near \|\| guideTarget\) && !resting && <FloatingCoin seed=\{task\.id\}\s*moving=\{!calm && !reducedMotion && \(isSelected \|\| guideTarget/);
+  assert.match(fs.readFileSync('src/screens/ExploreScreen.tsx', 'utf8'), /guideTarget=\{guideTargetId === task\.id\}/);
+  const prep = fs.readFileSync('src/screens/ExploreScreen/PrepItem.tsx', 'utf8');
+  assert.match(prep, /const live = moving && \(band !== 'far' \|\| idleBob\);/);
+  const home = fs.readFileSync('src/screens/ExploreScreen/HomeExplore.tsx', 'utf8');
+  assert.match(home, /const idlePivot = useMemo\(\(\) => fingerPivot != null \? null :/, 'only while nothing is in range');
+  assert.match(home, /idleBob=\{idlePivot != null && prepItem\.pivot_id === idlePivot\}/);
+});

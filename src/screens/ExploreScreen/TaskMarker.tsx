@@ -331,6 +331,8 @@ export interface TaskMarkerProps {
   readonly adventure?: boolean;
   /** Other rides folded under this island (declutter), shown as +N. */
   readonly clusterCount?: number;
+  /** The guide's next coin: its coin keeps a slow bob at rest, the one idle loop on the resting map (T022). */
+  readonly guideTarget?: boolean;
   /** A timed ride that opens later: drawn resting with "Back 2:00 PM". */
   readonly restingUntil?: number | null;
   /** Selected chip: distance from the player and the Ticket price. */
@@ -356,7 +358,7 @@ export interface TaskMarkerProps {
  */
 function TaskMarker({
   task, isSelected, isTripGoal = false, control, flagRaiseKey, ambient = false, live, onPress,
-  near = false, playable = false, adventure = false, clusterCount = 0, restingUntil = null,
+  near = false, playable = false, adventure = false, clusterCount = 0, restingUntil = null, guideTarget = false,
   distanceMeters = null, ticketCost = 1, revealDelay, aliveRank, parked = false, star = false,
 }: TaskMarkerProps) {
   const reducedMotion = useReducedGameMotion();
@@ -443,7 +445,7 @@ function TaskMarker({
       anchor={{ x: 0.5, y: 0.9 }}
     >
       {/* Same 72 x 96 box either way, so the marker's layout never changes (no corner blink). */}
-      {materialized ? <IslandArt placement={placement} task={task} isSelected={isSelected} cardSide={cardSide}
+      {materialized ? <IslandArt placement={placement} task={task} isSelected={isSelected} guideTarget={guideTarget} cardSide={cardSide}
         distanceMeters={distanceMeters} restingUntil={restingUntil} ticketCost={ticketCost} status={status}
         isTripGoal={isTripGoal} adventure={adventure} limited={limited} stay={stay} expiresAt={expiresAt}
         timerUrgent={timerUrgent} tagKind={tagKind} tagSize={tagSize} playable={playable} rush={rush} live={live}
@@ -457,7 +459,7 @@ function TaskMarker({
 
 
 type IslandArtProps = {
-  readonly placement: Placement; readonly task: TaskType; readonly isSelected: boolean;
+  readonly placement: Placement; readonly task: TaskType; readonly isSelected: boolean; readonly guideTarget: boolean;
   readonly cardSide: ReturnType<typeof selectedCardSide>; readonly distanceMeters: number | null;
   readonly restingUntil: number | null; readonly ticketCost: number; readonly status: string | null | undefined;
   readonly isTripGoal: boolean; readonly adventure: boolean; readonly limited: string | null; readonly stay: StayWords | null;
@@ -478,7 +480,7 @@ type IslandArtProps = {
  * ride leaves draws it parked and hidden, and nothing inside a marker mounts or unmounts again.
  */
 function IslandArt({
-  placement, task, isSelected, cardSide, distanceMeters, restingUntil, ticketCost, status, isTripGoal, adventure, limited,
+  placement, task, isSelected, guideTarget, cardSide, distanceMeters, restingUntil, ticketCost, status, isTripGoal, adventure, limited,
   stay, expiresAt, timerUrgent, tagKind, tagSize, playable, rush, live, timerTicking, star, parked, alive, badge, showTimer,
   glow, calm, aliveRank, ringColor, resting, reducedMotion, control, flagRaiseKey, behindKinds, frontKinds, near, look, owned,
   down, folded, revealDelay,
@@ -614,7 +616,8 @@ function IslandArt({
         {/* The ride's landmark: themed art, or the classic shark tower. */}
         <Animated.View style={[styles.buildingContainer, liftStyle]}>
           <View style={[styles.landmarkWrap, resting && styles.landmarkResting]}>
-            {(isSelected || near) && !resting && <FloatingCoin seed={task.id} moving={!calm && (isSelected || withinBudget(aliveRank, alive.caps.idleCoins))} />}
+            {(isSelected || near || guideTarget) && !resting && <FloatingCoin seed={task.id}
+              moving={!calm && !reducedMotion && (isSelected || guideTarget || withinBudget(aliveRank, alive.caps.idleCoins))} />}
             <Image source={LANDMARKS[look.landmark]} style={styles.landmarkImage} contentFit="contain" />
           </View>
           {owned && !isSelected && <View style={styles.levelPip}><Text style={styles.levelText}>{task.coin_level ?? 1}</Text></View>}

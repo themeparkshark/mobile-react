@@ -17,7 +17,7 @@ export function findLabel(item: PrepItemType, distance: number | null, inRange: 
  * One find on the home map, memoized: GPS ticks re-render it only when its
  * own range, rounded distance, motion budget or hidden state changes.
  */
-function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onExpire, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null, plainDistance = false }: {
+function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onExpire, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null, plainDistance = false, idleBob = false }: {
   readonly item: PrepItemType;
   readonly distance: number | null;
   readonly inRange: boolean;
@@ -35,6 +35,8 @@ function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onEx
   readonly pulseKey?: number | null;
   /** First hunt: footsteps only, no distance number. */
   readonly plainDistance?: boolean;
+  /** The nearest find while none is in range: a small idle bob (T148). */
+  readonly idleBob?: boolean;
 }) {
   const coordinate = useMemo(() => ({ latitude: item.latitude!, longitude: item.longitude! }), [item.latitude, item.longitude]);
   const press = useCallback(() => { squashFind(item.pivot_id); onTap(item, distance, inRange); }, [onTap, item, distance, inRange]);
@@ -42,7 +44,7 @@ function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onEx
     // Kids press and hold: a long-press is the same as a tap (no report dialog here).
     <Marker coordinate={coordinate} anchor={PREP_MARKER_ANCHOR} onPress={press} onLongPress={press}
       accessibilityLabel={findLabel(item, distance, inRange)}>
-      <PrepItemMarker prepItem={item} onExpire={onExpire} inRange={inRange} distance={distance} animated={animated} hidden={hidden} fingerSide={fingerSide} count={count} chromeless={chromeless} showFinger={showFinger} pulseKey={pulseKey} plainDistance={plainDistance} />
+      <PrepItemMarker prepItem={item} onExpire={onExpire} inRange={inRange} distance={distance} animated={animated} hidden={hidden} fingerSide={fingerSide} count={count} chromeless={chromeless} showFinger={showFinger} pulseKey={pulseKey} plainDistance={plainDistance} idleBob={idleBob} />
     </Marker>
   );
 }

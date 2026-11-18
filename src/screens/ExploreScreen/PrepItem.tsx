@@ -108,6 +108,8 @@ export function findImageSource(prepItem: Pick<PrepItemType, 'icon_url' | 'varia
 export type FingerSide = 'left' | 'right' | 'below-left' | 'below-right';
 
 interface Props {
+  /** The nearest find while none is in range: a small idle bob even far away (T148). */
+  readonly idleBob?: boolean;
   prepItem: PrepItemType;
   onExpire: () => void;
   inRange?: boolean;
@@ -215,7 +217,7 @@ function RarityMark({ tier }: { tier: number }) {
  * twinkle with 4-point stars. One shared glow image, no iOS shadows, and motion
  * only when `animated` (in range or among the nearest), on the map's clock.
  */
-function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null, distance = null, plainDistance = false }: Props) {
+function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null, distance = null, plainDistance = false, idleBob = false }: Props) {
   const { clock, active } = useMapAlive();
   const reduced = useReducedGameMotion();
   const reducedRef = useRef(reduced);
@@ -252,7 +254,9 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   // Round 4: a far find is still (BAND_LOOK far), so its styles read a constant instead of the map's clock and
   // stop evaluating every frame; it wakes up on the shared clock the moment it is no longer far.
   const still = useSharedValue(0);
-  const live = moving && band !== 'far';
+  // T148: the one nearest treat keeps a small idle bob even far away (the map's only other idle life was the
+  // shark). Every other far find stays still (battery).
+  const live = moving && (band !== 'far' || idleBob);
   const tick = live ? clock : still;
   const bob = useAnimatedStyle(() => {
     const lv = level.value;

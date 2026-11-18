@@ -2034,6 +2034,7 @@ export function ExploreScreenBody() {
               task={task}
               isSelected={selectedTask?.id === task.id}
               isTripGoal={goalTaskId === task.id}
+              guideTarget={guideTargetId === task.id}
               adventure={adventureTaskId === task.id}
               near={distance !== null && distance <= 60}
               playable={playableTaskId === task.id}

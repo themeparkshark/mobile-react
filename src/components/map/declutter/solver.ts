@@ -445,8 +445,14 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
       if (ok && rect) tagGrid.add(null, rect);
       continue;
     }
-    // The selected marker's card always sits on top (it draws there itself); others keep last pass's side while it is free.
-    const candidates = item.pinned ? all.slice(0, 1)
+    // The selected marker's card draws on top of everything (it draws there itself), above its island when that
+    // is clear of the HUD and the screen edge, else on the first clear side (T022: after a recenter it sat
+    // under the guide card); with no clear side, above. Others keep last pass's side while it is free.
+    const pinnedFits = (c: (typeof all)[number]) => {
+      const rect: Rect = { x: p.x + c.x, y: p.y + c.y, w: item.tag!.w, h: item.tag!.h };
+      return insideView(rect, frame, edge) && !insets.some(inset => overlapArea(rect, inset) > 0);
+    };
+    const candidates = item.pinned ? [all.find(c => !c.far && pinnedFits(c)) ?? all[0]]
       : lastSide ? [...all.filter(c => c.side === lastSide), ...all.filter(c => c.side !== lastSide)] : all;
     let chosen: TagPlacement | null = null;
     for (const c of candidates) {
