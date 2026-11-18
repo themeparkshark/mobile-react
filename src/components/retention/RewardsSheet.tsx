@@ -24,7 +24,7 @@ function rowArt(key: RewardsRowKey) {
   }
 }
 
-const LABEL = { open: 'OPEN', go: 'SEE', claim_all: 'CLAIM ALL' } as const;
+const LABEL = { open: 'OPEN', go: 'SEE', claim_all: 'CLAIM ALL', retry: 'RETRY' } as const;
 
 /** The gold NEW pill (the same one as the Pins lanyard card): a feature's first appearance, never a popup. */
 export function NewPill({ style }: { readonly style?: object }) {

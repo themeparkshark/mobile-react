@@ -12,7 +12,7 @@
 import { kidWords, passGainWords } from '../words/playerWords';
 
 export type RewardsRowKey = 'daily_chest' | 'daily3' | 'level_chest' | 'weekly_box' | 'trail' | 'stamps' | 'events';
-export type RewardsAction = 'open' | 'go' | 'claim_all';
+export type RewardsAction = 'open' | 'go' | 'claim_all' | 'retry';
 
 export interface RewardsRow {
   readonly key: RewardsRowKey;
@@ -39,7 +39,9 @@ export interface RewardsInput {
     /** The Trail host is on screen to open (false: the row shows its line with no button, never a dead tap). */
     readonly door?: boolean } | null;
   /** Earned stamps whose rewards are still to claim. */
-  readonly stamps: { readonly claimable: number } | null;
+  readonly stamps: { readonly claimable: number;
+    /** A claim did not come through and the server still holds the stamp (T094): the row stays with RETRY. */
+    readonly retry?: boolean } | null;
   /** Event chests to open, after rung 9 and only while an event is on. */
   readonly events: { readonly chests: number; readonly door?: boolean } | null;
 }
@@ -73,7 +75,9 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
     }
   }
   if (i.stamps && i.stamps.claimable > 0) {
-    rows.push({ key: 'stamps', title: 'Stamps', line: `${plural(i.stamps.claimable, 'stamp prize', 'stamp prizes')} to claim`, ready: i.stamps.claimable, action: 'claim_all' });
+    rows.push(i.stamps.retry
+      ? { key: 'stamps', title: 'Stamps', line: `${plural(i.stamps.claimable, 'stamp prize is', 'stamp prizes are')} still waiting`, ready: i.stamps.claimable, action: 'retry' }
+      : { key: 'stamps', title: 'Stamps', line: `${plural(i.stamps.claimable, 'stamp prize', 'stamp prizes')} to claim`, ready: i.stamps.claimable, action: 'claim_all' });
   }
   if (i.events && i.events.chests > 0) {
     rows.push({ key: 'events', title: 'Event Chests', line: `${plural(i.events.chests, 'chest', 'chests')} to open`, ready: i.events.chests, action: i.events.door !== false ? 'open' : null });
@@ -195,4 +199,23 @@ export function weekStartsLine(w: { readonly claimed: boolean; readonly claimabl
 /** Streak Freezes show once the flame has reached 3 days (or the player already holds one). */
 export function freezesShown(streak: { readonly days: number; readonly best: number; readonly freezes: number }): boolean {
   return streak.freezes > 0 || streak.days >= 3 || streak.best >= 3;
+}
+
+/**
+ * The line under the Rewards sheet after CLAIM ALL (T094, T100): every prize that landed, by name (XP too), then,
+ * when a stamp did not come through and the server still holds it, that it waits on the row's RETRY.
+ */
+export function stampClaimNote(paid: { readonly coins: number; readonly tickets: number; readonly energy: number; readonly xp: number },
+  stillWaiting: number): string {
+  const got = [
+    paid.tickets ? `+${paid.tickets} ${paid.tickets === 1 ? 'Ticket' : 'Tickets'}` : null,
+    paid.coins ? `+${paid.coins} Shark Coins` : null,
+    paid.energy ? `+${paid.energy} Energy` : null,
+    paid.xp ? `+${paid.xp} XP` : null,
+  ].filter(Boolean).join(', ');
+  if (stillWaiting > 0) {
+    const wait = `${plural(stillWaiting, 'stamp is', 'stamps are')} still waiting. Tap RETRY.`;
+    return got ? `${got}. ${wait}` : wait;
+  }
+  return got || 'Claimed!';
 }

@@ -31,7 +31,8 @@ import { devLadderFeed } from '../../services/retention/devLadderFeed';
 import {
   askForDailyChest, autoOpenUsed, noteAppState, noteAutoOpen, rewardMayAutoOpen,
 } from '../../services/retention/rewardPresence';
-import { emptyLine, rewardsRows, rewardsSummary, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
+import { claimOrReconcile, LOST_CLAIM_WAITS_MS, reconcileClaim } from '../../services/retention/claimReconcile';
+import { emptyLine, rewardsRows, rewardsSummary, stampClaimNote, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
 import { listenReturnToRewards, openRewardsDoor, rewardsDoorOpen } from '../../services/retention/rewardsSignals';
 import { calmForAutoOpen, takeAutoOpen } from '../../services/retention/mapAttention';
 import { boxFraction, headlineBox } from '../../services/trail/trailModel';
@@ -156,6 +157,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const [stamps, setStamps] = useState(0);
   const [rewardsBusy, setRewardsBusy] = useState<RewardsRowKey | null>(null);
   const [rewardsNote, setRewardsNote] = useState<string | null>(null);
+  /** A stamp claim did not come through and the server still holds it: the row says RETRY (T094). */
+  const [stampRetry, setStampRetry] = useState(false);
   const [passToday, setPassToday] = useState<readonly SharkPassEvent[] | null>(null);
   /** The chest card's art is drawn (until then the sheet keeps showing the card it came from). */
   const [chestArt, setChestArt] = useState(false);
@@ -419,21 +422,17 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       setTimeout(() => { if (mounted.current) setView({ ...current, opening: false, rewards: result.rewards }); }, wait);
       if (result.state?.goals) applyDaily(result.state);
       if (current.src === 'level') setChests(cs => cs.map(c => (c.level === current.level ? { ...c, opened: true, rewards: result.rewards } : c)));
-    } catch {
-      // The claim may still be committing: read back up to 3 times, 1.5 s apart (the card says "Still opening...").
-      let paid: PaidRewards | null = null;
-      const giveUp = Date.now() + 12000; // never more than ~12 s of "Still opening..."
-      for (let i = 0; i < 3 && !paid && mounted.current && Date.now() < giveUp; i++) {
-        if (i > 0) await new Promise(r => setTimeout(r, 1500));
-        const left = giveUp - Date.now();
-        if (left < 1000) break;
-        paid = await recoverPaid(current.src, current.level ?? 0, current.claimDate, Math.min(6000, left));
-      }
+    } catch (error) {
+      // The claim may still be committing (the app stops waiting at 12 s, a busy server pays up to 30 s): read
+      // back over the server's whole window (the card says "Still opening..."), the same rule as the daily chest.
+      const paid = await reconcileClaim(error,
+        () => recoverPaid(current.src, current.level ?? 0, current.claimDate, 6000),
+        { waits: LOST_CLAIM_WAITS_MS, alive: () => mounted.current });
       if (!mounted.current) return;
       if (paid) { setView({ ...current, opening: false, rewards: paid }); return; }
       setView(null);
       void refresh(true);
-      gameAlert('Could not open it yet', 'Your reward is safe. Check your internet and try again.');
+      gameAlert('Your chest is still closed', 'Nothing was lost. Open it again from Rewards.');
     } finally {
       opening.current = false;
     }
@@ -500,7 +499,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     levelChest: pendingChest ? { level: pendingChest.level, waiting: chests.filter(c => !c.opened).length } : null,
     trail: trailState ? { ready: trailState.ready.length, walking: trailState.walking.length + trailState.waiting.length,
       nearest: nearest ? boxFraction(nearest) : null, atPark, door: !!o.onOpenTrail || rewardsDoorOpen('trail') } : null,
-    stamps: { claimable: stamps },
+    stamps: { claimable: stamps, retry: stampRetry && stamps > 0 },
     events: eventsOpen && flagOn(flags, 'live_events') && liveEvt.event
       ? { chests: openableKeys(liveEvt.event).length, door: !!o.onOpenEvents || rewardsDoorOpen('events') } : null,
   };
@@ -543,33 +542,38 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const claimStamps = async () => {
     if (rewardsBusy) return;
     setRewardsBusy('stamps');
-    let tickets = 0; let coins = 0; let energy = 0; let xp = 0; let failed = 0; let claimed = 0;
+    const sum = { coins: 0, tickets: 0, energy: 0, xp: 0 };
+    let failed = 0; let claimed = 0;
     let left: number | null = null;
     try {
       const r = await getStamps();
       for (const st of stampsToClaim(r)) {
-        try {
-          const got = await claimStampReward(st.id);
-          claimed += 1;
-          tickets += got.rewards?.tickets ?? 0; coins += got.rewards?.coins ?? 0; energy += got.rewards?.energy ?? 0; xp += got.rewards?.xp ?? 0;
-        } catch { failed += 1; }
+        // T094: a claim whose answer was lost is read back (the server may still be paying); only a stamp the
+        // server still holds after its window counts as failed, and that stamp stays on the row with RETRY.
+        const res = await claimOrReconcile(
+          async () => (await claimStampReward(st.id)).rewards ?? st.rewards,
+          async () => (stampClaimed(await getStamps(), st.id) ? st.rewards : null),
+          { waits: LOST_CLAIM_WAITS_MS, alive: () => mounted.current });
+        if (!res.paid) { failed += 1; continue; }
+        claimed += 1;
+        // The server answered "already claimed" (an earlier tap paid it): nothing new lands now.
+        if (res.lost && res.answered) continue;
+        sum.tickets += res.paid.tickets ?? 0; sum.coins += res.paid.coins ?? 0; sum.energy += res.paid.energy ?? 0; sum.xp += res.paid.xp ?? 0;
       }
       // Read back what is still waiting (the server's own count), so the row is honest after every claim.
       left = claimed > 0 || failed > 0 ? stampClaimableCount(await getStamps()) : stampClaimableCount(r);
     } catch { failed += 1; }
     if (!mounted.current) return;
-    const waiting = left ?? failed;
+    const waiting = left ?? Math.max(failed, stamps);
     if (playerId != null) writeStampDotCache(playerId, waiting);
     setStamps(waiting);
+    setStampRetry(failed > 0 && waiting > 0);
     setRewardsBusy(null);
-    const paid = { coins, tickets, energy, xp } as PaidRewards;
-    if (coins + tickets + energy + xp > 0) { fly(paid); haptic('success'); playSfx('fx.reward'); void refreshPlayer?.(); }
+    const paid = sum as PaidRewards;
+    if (sum.coins + sum.tickets + sum.energy + sum.xp > 0) { fly(paid); haptic('success'); playSfx('fx.reward'); void refreshPlayer?.(); }
     // Nothing was waiting after all (an old count): the row just updates quietly, never a "Claimed!" for nothing.
     if (claimed === 0 && failed === 0) { setRewardsNote(null); return; }
-    setRewardsNote(failed && !claimed ? 'Those stamps did not go through. Try again.'
-      : [tickets ? `+${tickets} ${tickets === 1 ? 'Ticket' : 'Tickets'}` : null, coins ? `+${coins} Shark Coins` : null,
-        !tickets && !coins && energy ? `+${energy} Energy` : null]
-        .filter(Boolean).join(', ') || 'Claimed!');
+    setRewardsNote(stampClaimNote(sum, failed > 0 && waiting > 0 ? waiting : 0));
   };
 
   const onRewardsRow = (key: RewardsRowKey) => {
@@ -866,14 +870,20 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
 /** Earned stamps whose prizes are still to claim (the Stamp Book's own rule). */
 function stampsToClaim(r: { stamps: Record<string, readonly { id: number; is_earned: boolean; reward_claimed: boolean;
   rewards: { energy: number; tickets: number; xp: number; coins: number; title: string | null } }[]> }) {
-  const out: { id: number }[] = [];
+  const out: { id: number; rewards: { energy: number; tickets: number; xp: number; coins: number } }[] = [];
   for (const list of Object.values(r.stamps ?? {})) {
     for (const st of list ?? []) {
       const p = st.rewards;
-      if (st.is_earned && !st.reward_claimed && !!p && (p.energy > 0 || p.tickets > 0 || p.xp > 0 || p.coins > 0 || !!p.title)) out.push({ id: st.id });
+      if (st.is_earned && !st.reward_claimed && !!p && (p.energy > 0 || p.tickets > 0 || p.xp > 0 || p.coins > 0 || !!p.title)) out.push({ id: st.id, rewards: p });
     }
   }
   return out;
+}
+
+/** The server shows this stamp's prize as claimed (a lost claim answer that still paid, T094). */
+function stampClaimed(r: { stamps: Record<string, readonly { id: number; reward_claimed: boolean }[]> }, id: number): boolean {
+  for (const list of Object.values(r.stamps ?? {})) for (const st of list ?? []) if (st.id === id) return !!st.reward_claimed;
+  return false;
 }
 
 function lvOf(p: { experience_level?: { level: number } } | null | undefined): number {

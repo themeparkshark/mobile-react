@@ -31,6 +31,7 @@ import { DURATION, EASE, SPRING } from '../ui/motionEasing';
 import TapHint from './TapHint';
 import CalmModal from './retention/CalmModal';
 import { rewardWord } from '../services/words/playerWords';
+import { LOST_CLAIM_WAITS_MS, reconcileClaim, serverAnswered } from '../services/retention/claimReconcile';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
@@ -155,6 +156,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   const [phase, setPhase] = useState<'closed' | 'opening' | 'open'>('closed');
   const [confirmedGift, setConfirmedGift] = useState<DailyGiftType | null>(null);
   const [shown, setShown] = useState(0);
+  /** The claim's answer was lost and the chest is reading back what the server paid (T093). */
+  const [stillOpening, setStillOpening] = useState(false);
   const { setDailyGift } = useContext(DailyGiftContext);
   const reducedMotion = useReducedGameMotion();
   // Inline, the card takes the Rewards card's place with its own small settle once its chest is drawn.
@@ -405,9 +408,28 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     }
     playSfx('tick', 0.8);
+    // T093: when the answer is lost (the app stops waiting at 12 s, a busy server pays up to 30 s), the chest keeps
+    // opening while it reads back what the server paid, and then shows exactly that. Only a chest the server says is
+    // still closed after its whole window is a failure.
+    let confirmed: DailyGiftType | null = null;
+    let answered = true;
     try {
-      const confirmed = await claim(dailyGift.id);
-      if (!confirmed.redeemed_at) throw new Error('Chest was not confirmed');
+      const c = await claim(dailyGift.id);
+      if (!c.redeemed_at) throw new Error('Chest was not confirmed');
+      confirmed = c;
+    } catch (error) {
+      answered = serverAnswered(error);
+      if (!answered) {
+        if (mounted.current) setStillOpening(true);
+        confirmed = await reconcileClaim(error, async () => {
+          const g = await getDailyGift();
+          return g.id === dailyGift.id && g.redeemed_at ? g : null;
+        }, { waits: LOST_CLAIM_WAITS_MS, alive: () => mounted.current });
+      }
+    }
+    if (mounted.current) setStillOpening(false);
+    try {
+      if (!confirmed) throw new Error('Chest was not confirmed');
       acknowledgedGift.current = confirmed;
       // The wallet refresh waits for the coins to land (flyToWallet); a closed screen refreshes now.
       if (!mounted.current) { void refreshPlayer?.(); setDailyGift(confirmed); return; }
@@ -421,9 +443,10 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         celebrate(isTicket);
       }, reducedMotion ? 0 : Math.max(0, 440 - (Date.now() - startedAt)));
     } catch {
-      // A previous successful claim can outlive this screen. Reconcile before retrying.
+      // The server answered (for example: already opened on another phone), or the whole window passed with the
+      // chest still closed. One read decides which; a lost answer was already read back above.
       let current: DailyGiftType | null = null;
-      try { current = await getDailyGift(); } catch { /* Leave an ordinary retry available. */ }
+      if (answered) { try { current = await getDailyGift(); } catch { /* Leave an ordinary retry available. */ } }
       if (!mounted.current) return;
       claiming.current = false;
       cancelAnimation(shake); shake.value = 0;
@@ -435,7 +458,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         gameAlert('Today’s chest is collected', 'You already got today’s prizes. Come back tomorrow for the next chest.');
       } else {
         setPhase('closed');
-        gameAlert('Could not open your chest', 'Your chest is still waiting. Check your internet and try again.');
+        gameAlert('Your chest is still closed', 'Nothing was lost. Tap the chest to try again.');
       }
     }
   };
@@ -561,7 +584,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               {milestone && <Text style={styles.milestone}>{`${milestone.label} bonus!`}</Text>}
             </Animated.View>
           ) : (
-            <Text style={styles.hint}>{phase === 'opening' ? 'Opening your chest…' : 'Tap the chest to open it!'}</Text>
+            <Text style={styles.hint}>{phase === 'opening' ? (stillOpening ? 'Still opening…' : 'Opening your chest…') : 'Tap the chest to open it!'}</Text>
           )}
           </View>
 

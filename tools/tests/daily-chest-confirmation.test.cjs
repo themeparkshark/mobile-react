@@ -11,7 +11,8 @@ const code = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), 
 }).outputText;
 const pending = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const gift = { id: 9, coins: 25, redeemed_at: null };
-function chest({ reconciled = null, reduced = false, props = {} } = {}) {
+function chest({ reconciled = null, readBacks = null, reduced = false, props = {} } = {}) {
+  let reads = 0;
   const slots = [], updates = [], acknowledged = [], sounds = [], timers = new Map(), flights = [], alerts = [];
   let index = 0, dirty = true, effects = [], timerId = 0, tree, refreshes = 0, springs = 0;
   const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => v === b[i]);
@@ -71,7 +72,12 @@ function chest({ reconciled = null, reduced = false, props = {} } = {}) {
       if (name === '../gamekit/audio/loopSound') return { playChestOpen: () => false, preloadLoopMoments: () => undefined };
       if (name === '../dev/captureMark') return { useCaptureMark: () => undefined };
       if (name === '../api/endpoints/daily-gifts/update') return { default: () => { const request = pending(); updates.push(request); return request.promise; } };
-      if (name === '../api/endpoints/daily-gifts/create') return { default: async () => { if (reconciled) return reconciled; throw new Error('Offline'); } };
+      if (name === '../api/endpoints/daily-gifts/create') return { default: async () => {
+        reads++;
+        if (readBacks) { const next = readBacks.shift(); if (next instanceof Error) throw next; if (next) return next; throw new Error('Offline'); }
+        if (reconciled) return reconciled; throw new Error('Offline'); } };
+      // T093: a lost answer is read back over the server's window; the test reads back with no waits.
+      if (name === '../services/retention/claimReconcile') return { ...require('./helpers/ts-module.cjs').loadTs('src/services/retention/claimReconcile.ts'), LOST_CLAIM_WAITS_MS: [0, 0, 0, 0] };
       if (name.includes('assets/')) return name;
       if (name === './Ribbon') return { default: name };
       // The reward cards' one modal host (UI-thread dim and card); the test reads its props.
@@ -99,7 +105,7 @@ function chest({ reconciled = null, reduced = false, props = {} } = {}) {
     return find(node.props?.children, predicate);
   }
   render();
-  return { updates, acknowledged, sounds, flights, alerts, get exports() { return module.exports; },
+  return { updates, acknowledged, sounds, flights, alerts, get reads() { return reads; }, get exports() { return module.exports; },
     find: predicate => find(tree, predicate),
     decline() { find(tree, node => node.type === 'Pressable' && node.props.accessibilityLabel === 'Back to map without opening this chest').props.onPress(); render(); },
     get modal() { return tree; },
@@ -135,10 +141,37 @@ test('daily chest failures keep retry available without displaying an earned rew
 });
 test('an already-collected chest reconciles provider state without a second celebration', async () => {
   const confirmed = { ...gift, redeemed_at: '2026-09-29T22:00:00Z' };
-  const daily = chest({ reconciled: confirmed }); daily.open(); daily.updates[0].reject(new Error('Already claimed'));
+  // The server answered (an HTTP status): it finished, and the chest was opened before this tap.
+  const already = Object.assign(new Error('Already claimed'), { response: { status: 409 } });
+  const daily = chest({ reconciled: confirmed }); daily.open(); daily.updates[0].reject(already);
   await daily.settle(); daily.reveal();
+  assert.equal(daily.reads, 1, 'a server answer reads back once');
   assert.equal(daily.visible, false); assert.equal(daily.acknowledged[0], confirmed);
   assert.equal(daily.celebrated, false); assert.equal(daily.sounds.includes('win'), false);
+});
+test('T093: a lost answer (timeout) that the server paid shows the reveal with exactly what was granted', async () => {
+  const paid = { ...gift, redeemed_at: '2026-11-18T18:00:00Z', day: 2, ladder, granted: { coins: 0, energy: 20, tickets: 0 } };
+  const timedOut = Object.assign(new Error('timeout of 12000ms exceeded'), { code: 'ECONNABORTED' });
+  // The first read-back runs before the server's transaction commits (still closed), the next one sees it paid.
+  const daily = chest({ readBacks: [{ ...gift, redeemed_at: null }, new Error('Offline'), paid] });
+  daily.open(); daily.updates[0].reject(timedOut);
+  for (let i = 0; i < 6; i++) await daily.settle();
+  daily.reveal();
+  assert.equal(daily.reads, 3, 'it kept reading back until the server showed the chest paid');
+  assert.equal(daily.alerts.length, 0, 'never "could not open" for a chest the server paid');
+  assert.equal(daily.celebrated, true, 'the reveal plays');
+  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+20 Energy'), 'the reveal names what the server granted');
+  assert.equal(daily.updates.length, 1, 'never a second claim');
+});
+test('T093: a lost answer the server never paid stays closed with a calm retry (no internet blame)', async () => {
+  const timedOut = Object.assign(new Error('timeout'), { code: 'ECONNABORTED' });
+  const daily = chest({ readBacks: [{ ...gift, redeemed_at: null }, { ...gift, redeemed_at: null }, { ...gift, redeemed_at: null }, { ...gift, redeemed_at: null }] });
+  daily.open(); daily.updates[0].reject(timedOut);
+  for (let i = 0; i < 6; i++) await daily.settle();
+  daily.reveal();
+  assert.equal(daily.reads, 4, 'read back over the whole window');
+  assert.equal(daily.celebrated, false); assert.equal(daily.disabled, false);
+  assert.deepEqual(daily.alerts, ['Your chest is still closed']);
 });
 test('reduced-motion chest reveals confirmed rewards without spring animations', async () => {
   const daily = chest({ reduced: true }); daily.open(); daily.updates[0].resolve({ ...gift, redeemed_at: '2026-09-29T22:00:00Z' });
@@ -208,7 +241,7 @@ test('day 7 punches a Park Ticket and lists its coins, then flies both to the he
 test('chest errors use the game dialog, never a system alert', async () => {
   const daily = chest(); daily.open(); daily.updates[0].reject(new Error('Offline'));
   await daily.settle();
-  assert.deepEqual(daily.alerts, ['Could not open your chest']);
+  assert.deepEqual(daily.alerts, ['Your chest is still closed']);
   assert.doesNotMatch(require('node:fs').readFileSync(require('node:path').join(root, file), 'utf8'), /Alert\.alert|[\u{1F300}-\u{1FAFF}\u2713\u203A]/u);
 });
 
