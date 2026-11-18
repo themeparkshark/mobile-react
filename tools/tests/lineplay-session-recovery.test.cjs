@@ -1057,9 +1057,16 @@ test('T071: games started away from the line never claim a wait; a fix in the li
   assert.equal(timed.snapshot().waitTimed, true);
   timed.dispose();
 
-  // No zone on file and the server says not near: untimed. No zone and offline: offline first, as before.
-  assert.equal(zone.waitIsTimed({ serverSessionId: null, atLineSeen: false, zoneKnown: false, serverSaidNotNear: true }), false);
-  assert.equal(zone.waitIsTimed({ serverSessionId: null, atLineSeen: false, zoneKnown: false, serverSaidNotNear: false }), true);
+  // The server says not near: untimed. No fix at all yet (GPS still answering, a stationary phone in line): never
+  // called untimed (the device walk at Autopia showed Done playing? while Checking location...).
+  assert.equal(zone.waitIsTimed({ serverSessionId: null, atLineSeen: false, awaySeen: false, serverSaidNotNear: true }), false);
+  assert.equal(zone.waitIsTimed({ serverSessionId: null, atLineSeen: false, awaySeen: false, serverSaidNotNear: false }), true);
+  assert.equal(zone.waitIsTimed({ serverSessionId: null, atLineSeen: false, awaySeen: true, serverSaidNotNear: false }), false);
+  const quiet = makeHarness(null, () => { throw new Error('Network offline'); });
+  const still = new quiet.Session();
+  await still.start(zoned, undefined, 12);
+  assert.equal(still.snapshot().waitTimed, true, 'no fix yet: not untimed');
+  still.dispose();
 });
 
 test('T071: the screen asks first when away, and an untimed wait shows games, never minutes or a logged ride', () => {

@@ -647,6 +647,8 @@ export class LinePlaySession {
   private rewardUnavailable = false;
   /** A fix inside the ride's line zone, or the server's own timed session, was seen this wait (T071). */
   private atLineSeen = false;
+  /** A live fix outside the ride's line zone was seen this wait (and none inside yet). */
+  private awaySeen = false;
   private rewardConnectionIssue: RewardConnectionIssue | null = null;
   private verifiedEligibleSeconds = 0;
   private creditedParts: number | null = null;
@@ -834,7 +836,7 @@ export class LinePlaySession {
       serverSessionId: this.serverSessionId,
       rewardUnavailable: this.rewardUnavailable,
       waitTimed: waitIsTimed({ serverSessionId: this.serverSessionId, atLineSeen: this.atLineSeen,
-        zoneKnown: this.ride?.zone != null, serverSaidNotNear: this.rewardConnectionIssue === 'nearby' }),
+        awaySeen: this.awaySeen, serverSaidNotNear: this.rewardConnectionIssue === 'nearby' }),
       rewardConnectionIssue: this.guest ? 'sign_in' : this.rewardConnectionIssue,
       backgroundTrackingAvailable: this.backgroundTrackingAvailable,
       verifiedEligibleSeconds: this.verifiedEligibleSeconds,
@@ -1096,6 +1098,7 @@ export class LinePlaySession {
       entryFix: this.entryFix,
       offlineTrail: this.offlineTrail,
       atLineSeen: this.atLineSeen,
+      awaySeen: this.awaySeen,
       signAtStartMinutes: this.signAtStart,
     };
     this.checkpointWrites = this.checkpointWrites.then(() => writeCheckpoint(data))
@@ -1524,6 +1527,7 @@ export class LinePlaySession {
     this.backgroundTrackingAvailable = null;
     this.rewardUnavailable = false;
     this.atLineSeen = false;
+    this.awaySeen = false;
     this.rewardConnectionIssue = null;
     this.verifiedEligibleSeconds = 0;
     this.lastSuccessfulPresenceUpdateAt = 0;
@@ -1654,6 +1658,7 @@ export class LinePlaySession {
       : null;
     this.serverSessionId = saved?.serverSessionId ?? null;
     this.atLineSeen = saved?.atLineSeen === true || saved?.serverSessionId != null;
+    this.awaySeen = saved?.awaySeen === true;
     this.verifiedEligibleSeconds = saved?.verifiedEligibleSeconds ?? 0;
     this.state = saved?.state === 'complete' ? 'complete' : 'active';
     if (this.state === 'active') this.startTicking();
@@ -2195,7 +2200,7 @@ export class LinePlaySession {
       if (this.entryFix && this.startRequestId && this.ride && this.ride.rideId > 0 &&
           this.ride.lineRewardsReady !== false && !this.rewardUnavailable &&
           // Only a wait with evidence of this line is sent late: never one the server said was not near it.
-          waitIsTimed({ serverSessionId: null, atLineSeen: this.atLineSeen, zoneKnown: this.ride.zone != null,
+          waitIsTimed({ serverSessionId: null, atLineSeen: this.atLineSeen, awaySeen: this.awaySeen,
             serverSaidNotNear: this.rewardConnectionIssue === 'nearby' })) {
         // The whole wait was offline (airplane mode, a dead zone at the
         // entrance). Its entry checkpoint starts the session late and the
@@ -2383,6 +2388,7 @@ export class LinePlaySession {
     this.serverSessionId = null;
     this.rewardUnavailable = false;
     this.atLineSeen = false;
+    this.awaySeen = false;
     this.rewardConnectionIssue = null;
     this.verifiedEligibleSeconds = 0;
     this.lastSuccessfulPresenceUpdateAt = 0;
@@ -2526,7 +2532,11 @@ export class LinePlaySession {
   /** A live fix inside the ride's line zone is evidence of this line (kept for the whole wait and its relaunch). */
   private noteLineZone(sample: LocationSample | null | undefined): void {
     if (this.atLineSeen || !this.ride?.zone || (this.state !== 'active' && this.state !== 'paused')) return;
-    if (!insideLineZone(sample, this.ride.zone)) return;
+    if (!sample || !Number.isFinite(sample.latitude) || !Number.isFinite(sample.longitude)) return;
+    if (!insideLineZone(sample, this.ride.zone)) {
+      if (!this.awaySeen) { this.awaySeen = true; this.persistCheckpoint(); this.emit(); }
+      return;
+    }
     this.atLineSeen = true;
     this.persistCheckpoint();
     this.emit();

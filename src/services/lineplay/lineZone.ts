@@ -75,18 +75,18 @@ export function startAwayCopy(meters: number): { title: string; message: string 
 }
 
 /**
- * Can this wait be claimed as a wait in this ride's line? Yes with the server's timed session, or with a fix inside
- * the zone (offline first: the late start proves it later). Without a zone on file we cannot tell, so only the
- * server saying "not near the ride" makes it untimed.
+ * Can this wait be claimed as a wait in this ride's line? Yes with the server's timed session or a fix inside the
+ * zone. No when there is evidence the player was away: the server said "not near the ride", or a fix outside the
+ * zone with none inside yet (started from afar, "Play anyway"). With no fix at all yet (GPS still answering) the wait
+ * is not called untimed: offline first, the server still checks every Part.
  */
 export function waitIsTimed(input: {
   readonly serverSessionId: string | null;
   readonly atLineSeen: boolean;
-  readonly zoneKnown: boolean;
+  readonly awaySeen: boolean;
   readonly serverSaidNotNear: boolean;
 }): boolean {
   if (input.serverSessionId) return true;
   if (input.atLineSeen) return true;
-  if (input.zoneKnown) return false;
-  return !input.serverSaidNotNear;
+  return !input.awaySeen && !input.serverSaidNotNear;
 }
