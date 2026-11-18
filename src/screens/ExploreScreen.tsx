@@ -1,3 +1,4 @@
+import { parkLabel } from '../helpers/parkName';
 import { homeLevelUpCoin, useCoinCollection } from '../context/CoinCollection';
 import { useIsFocused, useNavigation, useRoute, type NavigationProp, type ParamListBase } from '@react-navigation/native';
 import Constants from 'expo-constants';
@@ -1924,7 +1925,7 @@ export function ExploreScreenBody() {
           accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           style={{ position: 'absolute', top: slotTop, left: 0, right: GUIDE_CARD_RIGHT, height: GUIDE_CARD_HEIGHT + 8, zIndex: 40 }} />}
         {/* The Next Coin guide (core loop 4.1): exactly one card in the top-left slot, on every park map. */}
-        {guideShown && player && <NextCoinCard copy={nextCoin.copy} state={nextCoin.state} parkName={park.name ?? null}
+        {guideShown && player && <NextCoinCard copy={nextCoin.copy} state={nextCoin.state} parkName={park.name ? parkLabel(park) : null}
           coinUrl={guideCoinUrl} top={slotTop} onAction={onGuideAction} onCardPress={() => onGuideCardPress(onGuideAction)}
           onDotsPress={() => setAdventureSheetRequest(n => n + 1)}
           teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}

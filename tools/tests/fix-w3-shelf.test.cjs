@@ -58,6 +58,7 @@ test('T132: one park name: the guide, the raid banner, Profile and the story say
   assert.equal(shortParkName('Universal Studios Hollywood'), 'Universal Studios Hollywood');
   assert.match(read('src/components/guide/useMapGuide.ts'), /parkName: park \? parkLabel\(park\) : null/);
   assert.match(read('src/components/home/HomeLive.tsx'), /\{parkLabel\(park\)\}<\/Text>/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /parkName=\{park\.name \? parkLabel\(park\) : null\}/, 'the guide card park chip');
   assert.match(read('src/screens/ParkDayRecapCard.tsx'), /shortParkName\(recap\.park_name\)/);
 });
 
