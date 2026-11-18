@@ -128,7 +128,9 @@ test('real money: the shop and the VIP page say "real money" before any price, a
   });
   const money = gate.gateReasonLines({ kind: 'money', price: '$0.99', gets: '6 tickets and 60 Energy' });
   assert.equal(money.head, 'This costs real money.');
-  assert.equal(money.line, 'A grown-up sees the details next.', 'no price or offer before the grown-up answers');
+  assert.equal(money.line, 'It gives 6 tickets and 60 Energy. The price is next.', 'what the tap gives in plain words (T167), never a price before the answer');
+  assert.doesNotMatch(money.line, /\$/);
+  assert.equal(gate.gateReasonLines({ kind: 'renews', what: 'VIP', price: '$39.99', period: 'year', trial: null }).line, 'VIP is a plan that renews by itself. The price is next.');
   assert.equal(gate.gateReasonLines({ kind: 'vip' }).head, 'VIP costs real money.');
   // After the answer the grown-up (only) sees the price and what it gets.
   assert.deepEqual(plain(gate.gateDetails({ kind: 'money', price: '$0.99', gets: '6 tickets and 60 Energy' })),

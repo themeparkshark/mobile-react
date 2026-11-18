@@ -104,10 +104,13 @@ export function gateReasonFor(product: ShopProduct, price: ShopPrice | undefined
 
 /**
  * A bundle's worth at regular pack prices ("$6.60"), for the grown-up only: the shop cards a kid
- * sees never show it (kid-trust: no value anchors aimed at children). Null when it is not a bundle.
+ * sees never show it (kid-trust: no value anchors aimed at children). Null when it is not a bundle,
+ * and null for every bundle but the Starter Pack.
  */
 export function grownUpWorth(product: ShopProduct, catalog: ShopCatalog | null, prices: Record<string, ShopPrice>): string | null {
-  if (!catalog) return null;
+  // Only the once-ever Starter Pack says what its contents cost as single packs (T240): on the bigger
+  // bundles that sum would read as a push toward the biggest buy.
+  if (!catalog || product.limit !== 'once') return null;
   return bundleWorth(product, prices, baseRates(catalog.products, prices))?.worth ?? null;
 }
 

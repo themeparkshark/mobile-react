@@ -145,9 +145,10 @@ export type GateReason =
 export function gateReasonLines(reason: GateReason | null | undefined): { head: string; line: string | null; icon: GameIconName | 'money' } | null {
   if (!reason) return null;
   switch (reason.kind) {
-    case 'money':
-    case 'renews': return { head: 'This costs real money.', line: 'A grown-up sees the details next.', icon: 'money' };
-    case 'vip': return { head: 'VIP costs real money.', line: 'A grown-up sees the details next.', icon: 'money' };
+    // One line in a parent's words of what the tap gives (T167); the price waits until after the answer.
+    case 'money': return { head: 'This costs real money.', line: `It gives ${reason.gets}. The price is next.`, icon: 'money' };
+    case 'renews': return { head: 'This costs real money.', line: `${reason.what} is a plan that renews by itself. The price is next.`, icon: 'money' };
+    case 'vip': return { head: 'VIP costs real money.', line: 'It gives bigger rewards at home and at the park. The price is next.', icon: 'money' };
     case 'leave': return { head: 'This leaves the game.', line: `It opens ${reason.where}.`, icon: 'arrow' };
     case 'share': return { head: 'This shares outside the game.', line: 'It sends this to another app.', icon: 'arrow' };
   }
