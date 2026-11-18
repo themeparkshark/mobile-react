@@ -150,3 +150,16 @@ test('T141: the coin flips over to its new level with a rim that reads at a glan
   assert.notEqual(COIN_TIERS[1].ring.toLowerCase(), '#ffffff', 'Shiny never looks like Classic white');
   assert.ok(COIN_TIERS[1].ringWidth > COIN_TIERS[0].ringWidth, 'a thicker rim from Level 2');
 });
+
+test('T128: the shelf opens on the tab holding your coins, fades in once, and Finn waits for a painted shelf', () => {
+  const { openingTab } = loadTs('src/services/collection/shelfModel.ts');
+  const split = { rides: [{ id: 1 }, { id: 2 }], sights: [{ id: 3 }] };
+  assert.equal(openingTab(split, [], new Set([3]), ['rides', 'sights']), 'sights', 'a sights-only shelf never opens on Rides 0 of 25');
+  assert.equal(openingTab(split, [{ id: 9 }], new Set([9]), ['rides', 'sights', 'limited']), 'limited');
+  assert.equal(openingTab(split, [], new Set([1, 3]), ['rides', 'sights']), 'rides');
+  assert.equal(openingTab(split, [], new Set(), ['rides', 'sights']), 'rides');
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /entering=\{seed \|\| reducedMotion \? undefined : FadeIn\.duration\(240\)\}/, 'one fade under 300 ms');
+  assert.match(park, /!loading && !!currentPark && !progressStale && !tutorialActive/, 'no lesson over a failed or blank shelf');
+  assert.match(park, /const first = openingTab\(split, limitedShelf, owned, tabs\);/);
+});
