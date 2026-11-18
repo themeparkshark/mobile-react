@@ -115,7 +115,8 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   }));
   const wallet = state === 'claim' || state === 'free_try' || state === 'extra_try' || state === 'need_ticket';
   // The goodbye is about the park day, not a coin to win next: the house gold coin, never the next park's coin art.
-  const art = state === 'goodbye' ? COIN_FALLBACK : wallet || !coinUrl ? (wallet ? TICKET : COIN_FALLBACK) : { uri: coinUrl };
+  // At home with no coin planned yet, the card pictures the Tickets waiting for the next park day (T016).
+  const art = state === 'goodbye' ? COIN_FALLBACK : wallet || !coinUrl ? (wallet || state === 'home' ? TICKET : COIN_FALLBACK) : { uri: coinUrl };
   return <Animated.View testID={testID} style={[styles.slot, { top }, animated]}>
     {/* The park name chip and today's Adventure ticket tab sit on the card's top edge, so the kicker never shortens. */}
     {(adventureTab || (parkName && state !== 'arrive' && copy.kicker !== parkName.toUpperCase())) && <View pointerEvents="box-none" style={styles.edgeRow}>

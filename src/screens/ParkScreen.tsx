@@ -65,12 +65,14 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const { width, height } = useWindowDimensions();
   // Keep the familiar five-coin rows inside their shelves on smaller phones.
   const shelfCoinSize = Math.max(40, Math.min(62, (width - 88) / 5));
-  const { park, player, earnedCoin, openMastery, focusCoin } = route.params as {
+  const { park, player, earnedCoin, openMastery, focusCoin, plan: planVisit } = route.params as {
     park: number; player: number; earnedCoin?: EarnedShelfArrival;
     /** "Upgrade Your Coin": open mastery as soon as the coin lands (one hop). */
     openMastery?: boolean;
     /** A coin link from elsewhere: scroll to its slot and open it. */
     focusCoin?: { assetId: number };
+    /** The home card's PLAN: the next park day's coin picker leads, never yesterday's park story (fix round w3 T016). */
+    plan?: boolean;
   };
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const isFocused = useIsFocused();
@@ -380,7 +382,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     void loadRecap(Number(park)).then(recap => { if (live && recap) setPlacedRecap(recap); }).catch(() => undefined);
     return () => { live = false; };
   }, [justLeft, dayDone?.at, park, canChooseGoal, loadRecap]);
-  const storyTop = canChooseGoal && !!placedRecap && storyOnTop({ atPark: inThisPark, justLeft,
+  const storyTop = !planVisit && canChooseGoal && !!placedRecap && storyOnTop({ atPark: inThisPark, justLeft,
     ridesWonToday: placedRecap.distinct_rides_won, milestone: milestoneToday(totals, placedRecap.new_coins) });
   const parkStores = inThisPark ? locationPark?.stores ?? [] : [];
   const trophyNext = currentPark ? nextTrophy(currentPark.park_coins_count) : null;

@@ -208,8 +208,8 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
       return card({
         kicker: 'NEXT PARK DAY',
         title: ctx.parkName ? `${ctx.parkName}: ${tickets(ctx.tickets)} ready` : `${tickets(ctx.tickets)} ready`,
-        line: ctx.planName ? `Next coin: ${ctx.planName}. ${meter}` : shelf && shelf.total > 0
-          ? `Your shelf: ${shelf.owned} of ${shelf.total}. ${meter}` : meter,
+        // PLAN plans (T016): with no coin planned yet the line says what the button does.
+        line: ctx.planName ? `Next coin: ${ctx.planName}. ${meter}` : `Pick your next coin. ${meter}`,
         button: { label: 'PLAN', action: 'plan' },
         dots: null,
       });

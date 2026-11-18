@@ -185,7 +185,7 @@ test('round 3: the park story never slows the shelf or a landing, and its card n
   assert.match(park, /return \(\) => \{ active = false; if \(recapTimer\) clearTimeout\(recapTimer\); \};/);
   // The story's place is set as the shelf paints; a later story sits below until the next visit.
   assert.match(park, /setPlacedRecap\(canChooseGoal && inHand && inHand\.parkId === Number\(park\) \? inHand\.recap : null\);/);
-  assert.match(park, /const storyTop = canChooseGoal && !!placedRecap && storyOnTop\(/);
+  assert.match(park, /const storyTop = !planVisit && canChooseGoal && !!placedRecap && storyOnTop\(/);
   assert.equal((park.match(/initialRecap=\{todayRecap\}/g) || []).length, 2, 'both slots paint with the story already read');
   const card = read('src/screens/ParkDayRecapCard.tsx');
   assert.match(card, /useState<ParkDayRecap \| null>\(initialRecap\)/);

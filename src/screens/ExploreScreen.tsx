@@ -1554,7 +1554,8 @@ export function ExploreScreenBody() {
         RootNavigation.navigate('Park', { park: homeLevelUp.park_id, player: player.id, focusCoin: { assetId: homeLevelUp.id } });
         return;
       }
-      RootNavigation.navigate('Park', { park: tripGoal?.park_id ?? homeShelfPark(player.current_park_id), player: player.id });
+      // PLAN plans: the shelf opens with the next coin picker on top, never yesterday's park story (T016).
+      RootNavigation.navigate('Park', { park: tripGoal?.park_id ?? homeShelfPark(player.current_park_id), player: player.id, plan: true });
     },
   } : null, [player, park, tripGoal, homePlan, welcome, homeLevelUp]);
 
