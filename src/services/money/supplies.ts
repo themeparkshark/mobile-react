@@ -89,16 +89,16 @@ const WORDS: Record<keyof ShopGrants, [string, string]> = {
   tickets: ['ticket', 'tickets'], coins: ['Shark Coin', 'Shark Coins'], energy: ['energy', 'energy'], rescue_passes: ['extra try', 'extra tries'],
 };
 
-/** "15 tickets, 1,500 Shark Coins and 2 extra tries". */
-export function grantsText(grants: ShopGrants): string {
-  const parts = ORDER.filter(k => (grants[k] ?? 0) > 0)
-    .map(k => `${countText(grants[k] ?? 0)} ${grants[k] === 1 ? WORDS[k][0] : WORDS[k][1]}`);
+/** "15 tickets, 1,500 Shark Coins and 2 extra tries" (plus any extra thing, e.g. "the Starter Frame", in the same list). */
+export function grantsText(grants: ShopGrants, extras: readonly string[] = []): string {
+  const parts = [...ORDER.filter(k => (grants[k] ?? 0) > 0)
+    .map(k => `${countText(grants[k] ?? 0)} ${grants[k] === 1 ? WORDS[k][0] : WORDS[k][1]}`), ...extras];
   return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0] ?? '';
 }
 
 /** What the grown-up gate restates before a real-money buy: "$4.99 for 15 tickets". */
 export function gateReasonFor(product: ShopProduct, price: ShopPrice | undefined, worth: string | null = null): GateReason {
-  return { kind: 'money', price: price?.price ?? 'Real money', gets: `${grantsText(product.grants)}${product.frame ? ` and the ${product.frame.name}` : ''}`,
+  return { kind: 'money', price: price?.price ?? 'Real money', gets: grantsText(product.grants, product.frame ? [`the ${product.frame.name}`] : []),
     ...(worth ? { worth } : null) };
 }
 

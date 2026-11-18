@@ -114,9 +114,18 @@ export function featuredPill(section: SectionLike, nowMs: number): Pill {
  * no hours: "New gear on Monday", "New gear tomorrow", "New gear tonight", "New gear soon" at zero.
  * The day is read in park time (the shop flips at midnight Pacific; 7 h back lands on its date).
  */
-export function restockPill(nextAt: string | null | undefined, nowMs: number): Pill | null {
-  const at = nextAt ? Date.parse(nextAt) : NaN;
+/** How late a restock may be before the shelf stops saying soon (the server restocks on an hourly job). */
+export const RESTOCK_LATE_MS = 2 * 60 * 60 * 1000;
+
+export function restockPill(nextAt: string | null | undefined, nowMs: number, intervalDays = 0): Pill | null {
+  let at = nextAt ? Date.parse(nextAt) : NaN;
   if (!Number.isFinite(at)) return null;
+  // A restock the server is late on by more than its hourly job (T159): the shelf names the next real
+  // drop day from the store's own interval, the same days Supplies lists, never a dateless "soon".
+  if (at - nowMs <= -RESTOCK_LATE_MS && intervalDays > 0) {
+    const step = intervalDays * DAY;
+    at += Math.ceil((nowMs - at + 1) / step) * step;
+  }
   const left = at - nowMs;
   if (left <= 0) return { label: 'New gear soon', urgent: false, a11y: 'New gear is on its way' };
   if (left < 12 * HOUR) return { label: 'New gear tonight', urgent: false, a11y: 'New gear arrives tonight' };

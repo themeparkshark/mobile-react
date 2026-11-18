@@ -592,11 +592,11 @@ test('the jetpack shark floats calmly: no jumps, no velocity spikes, a slow boos
 
 test('a store switch never reuses one Store screen: keyed by store, one screen per store id', () => {
   const screen = src('src/screens/StoreScreen.tsx');
-  assert.match(screen, /export default function StoreScreen\(props[^)]*\) \{\s*const store = [^;]+;\s*return <StoreScreenBody key=\{String\(store\)\} \{\.\.\.props\} \/>;\s*\}/);
+  assert.match(screen, /export default function StoreScreen\(props[^)]*\) \{\s*(\/\/[^\n]*\s*)?const \{ store \} = storeParams\(props\.route\?\.params\);\s*return <StoreScreenBody key=\{String\(store\)\} \{\.\.\.props\} \/>;\s*\}/);
   // The wrapper holds no state of its own (every hook lives in the keyed body).
   const wrapper = /export default function StoreScreen\([\s\S]*?\n\}/.exec(screen)[0];
   assert.doesNotMatch(wrapper, /\buse[A-Z]\w*\(/);
-  assert.match(src('src/Root.tsx'), /name="Store" getComponent=\{\(\) => require\('\.\/screens\/StoreScreen'\)\.default\}\s*getId=\{\(\{ params \}\) => String\(/);
+  assert.match(src('src/Root.tsx'), /name="Store" getComponent=\{\(\) => require\('\.\/screens\/StoreScreen'\)\.default\}\s*initialParams=\{\{ store: 'shark-shop' \}\}\s*getId=\{\(\{ params \}\) => String\(/);
 });
 
 test('the Secret Shop never falls back to the legacy grid on a network hiccup', () => {

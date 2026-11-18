@@ -46,6 +46,7 @@ import { haptic } from '../../gamekit/Haptics';
 import OneTimeTip from '../../components/help/OneTimeTip';
 import RealMoneyMark, { REAL_MONEY_GREEN, REAL_MONEY_INK, REAL_MONEY_TINT } from '../../components/RealMoneyMark';
 import { openMembership } from '../../components/GrownUpGate';
+import { BOTTOM_BAR_OVERHANG } from '../../components/Wrapper';
 import { useHelp } from '../../components/help/HelpProvider';
 import * as RootNavigation from '../../RootNavigation';
 import { getSharkPass } from '../../api/endpoints/me/shark-pass';
@@ -253,12 +254,14 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const sectionTitle = (key: 'tickets' | 'coins' | 'rescue') => key === 'rescue' ? 'Extra tries' : key === 'coins' ? 'Shark Coins'
     : catalog.sections.find(s => s.key === key)?.title ?? 'Tickets';
   const allPriced = catalog.products.filter(priced);
-  const packCard = (p: ShopProduct, i: number, columns: 1 | 2 | 3, flag?: string | null) => (
-    <PackCard key={p.product_id} product={p} tier={i} columns={columns} flag={flag}
+  // A pack's picture follows its place in its whole section (25 Tickets keeps the big bundle under More).
+  const tierOf = (p: ShopProduct) => Math.max(0, allPriced.filter(x => x.section === p.section).indexOf(p));
+  const packCard = (p: ShopProduct, _i: number, columns: 1 | 2 | 3, flag?: string | null) => (
+    <PackCard key={p.product_id} product={p} tier={tierOf(p)} columns={columns} flag={flag}
       best={p.badge === 'Best value' && bestValueHolds(p, allPriced, prices)}
       price={prices[p.product_id]?.price} bonus={bonusPercent(p, prices, rates)}
       note={unavailableText(p, holdCap)} busy={busy === p.product_id} disabled={!!busy}
-      onBuy={() => void buy(p, packArtKey(p, i))} />
+      onBuy={() => void buy(p, packArtKey(p, tierOf(p)))} />
   );
   const moreCount = plan.more.bundles.length + plan.more.deals.length + plan.more.packs.reduce((n, s) => n + s.packs.length, 0);
   const sellable = canBuy && catalog.enabled;
@@ -439,8 +442,8 @@ export function FreeTicketsLine({ ways }: { ways: { icon: GameIconName; text: st
         accessibilityLabel={open ? 'Free Tickets. Hide the list.' : 'Free Tickets. See all the free ways.'}
         hitSlop={6} style={st.freeWayRow}>
         <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeWaysHead}>FREE TICKETS</Text>
-        {!open && first && <GameIcon name={first.icon} size={20} />}
-        {!open && first && <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeWayText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{first.text}</Text>}
+        {!open && first && <Image source={TREAT_ART} style={{ width: 24, height: 24 }} contentFit="contain" />}
+        {!open && first && <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeWayText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>3 treats at home = 1 Ticket</Text>}
         {open && <View style={{ flex: 1 }} />}
         <Text maxFontSizeMultiplier={MAX_FONT} style={st.seeAll}>{open ? 'Hide' : 'See all'}</Text>
       </Pressable>
@@ -699,7 +702,8 @@ const st = StyleSheet.create({
   dropsHead: { fontFamily: FONT.display, fontSize: 16, color: '#ffd34d' },
   dropsText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff', lineHeight: 22 },
   center: { flex: 1, justifyContent: 'center' },
-  scroll: { padding: 14, paddingBottom: 48, gap: 14 },
+  // The last card clears the footer's raised Map compass (T160).
+  scroll: { padding: 14, paddingBottom: BOTTOM_BAR_OVERHANG + 24, gap: 14 },
   wallet: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 8 },
   walletChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BRAND.blue, borderRadius: 999,
     borderWidth: 3, borderColor: BRAND.white, paddingHorizontal: 10, paddingVertical: 3 },

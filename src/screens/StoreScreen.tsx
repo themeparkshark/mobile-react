@@ -30,6 +30,7 @@ import Reanimated, { type SharedValue, useAnimatedStyle, useDerivedValue, useSha
 import { clockOffset, formatCoins } from '../helpers/shopShelves';
 import StoreCountdown from '../components/StoreCountdown';
 import InformationModal from '../components/InformationModal';
+import Wrapper from '../components/Wrapper';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -314,8 +315,6 @@ const tabStyles = StyleSheet.create({
   wishText: { fontFamily: 'Shark', fontSize: 14, color: '#c2185b' },
 });
 
-/** The bottom back strip where the footer was (the gear shelf pads insets.bottom + 48, so its last row clears it). */
-const SHOP_BACK_STRIP = 48;
 
 /**
  * One store per screen instance: a new store param (navigate('Store', ...) landing on a Store
@@ -362,6 +361,8 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
   const collapse = useDerivedValue(() => (shopStill ? (scrollY.value > 40 ? 1 : 0) : Math.min(1, Math.max(0, scrollY.value / 40))));
   const [barH, setBarH] = useState(0);
   const { height: winH } = useWindowDimensions();
+  // The shop's own height above the footer (the v2 stack fills it, never the space under the footer).
+  const [boxH, setBoxH] = useState(0);
   const insets = useSafeAreaInsets();
   // The title bar folds away by transform and opacity only (no layout per scroll frame): the whole
   // stack slides up by the bar's height, and is that much taller so the shelf fills the screen.
@@ -517,8 +518,11 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       {purchaseModal}
       <WishlistSheet visible={wishlistOpen} still={shopStill} onClose={() => setWishlistOpen(false)}
         onOpenItem={id => setFocusRequest(r => ({ id, nonce: (r?.nonce ?? 0) + 1 }))} />
-      <View style={{ flex: 1, overflow: 'hidden', backgroundColor: floor }}>
-      <Reanimated.View style={v2 ? [{ position: 'absolute', top: 0, left: 0, right: 0, height: winH + fold }, stackStyle] : { flex: 1 }}>
+      {/* The normal 5-icon footer stays on the Shark Shop (T160): one back button (top left), never a second bar. */}
+      <Wrapper>
+      <View style={{ flex: 1, overflow: 'hidden', backgroundColor: floor }}
+        onLayout={e => setBoxH(e.nativeEvent.layout.height)}>
+      <Reanimated.View style={v2 ? [{ position: 'absolute', top: 0, left: 0, right: 0, height: (boxH || winH) + fold }, stackStyle] : { flex: 1 }}>
       <Reanimated.View style={v2 ? titleStyle : undefined}
         onLayout={e => { if (!barH) setBarH(e.nativeEvent.layout.height); }}>
       {/* The vault keeps the house top bar (navy, not the legacy purple one): the shelves carry the midnight. */}
@@ -571,8 +575,8 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
         >
           {/* The classic Shark Shop shelf scrolls edge to edge (it pads for the home indicator itself). */}
           {classicGear ? (
-            <GearShelf items={items} setItems={setItems} promoUrl={catalog?.promotion_image_url}
-              nextRotationAt={rotation?.next_rotation_at} onRestockElapsed={() => setRestockPending(true)}
+            <GearShelf items={items} setItems={setItems}
+              nextRotationAt={rotation?.next_rotation_at} intervalDays={rotation?.interval_days ?? 0} onRestockElapsed={() => setRestockPending(true)}
               onEndReached={() => { void loadMore(); }} recheck={recheckOwned} focusRequest={focusRequest} still={reducedMotion}
               offset={clockSkew} loading={hasMore} />
           ) : (
@@ -699,18 +703,10 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
         </ImageBackground>
       )}
       </Reanimated.View>
-      {/* The footer is hidden in the Shark Shop, so a kid's tap where the footer was finds a way
-          back: the same back button, bottom left (core loop 5.1, walk lc-kid 144). It sits on its own
-          solid strip where the footer was, so it never covers a pack, a VIP tile or a gear card: the
-          shop above ends at the strip (the gear shelf already pads its last row clear of it). */}
-      {!shopHandoff && <View testID="shop-bottom-back" style={{ marginTop: 'auto', zIndex: 40,
-        height: SHOP_BACK_STRIP + insets.bottom, paddingBottom: insets.bottom, paddingLeft: 14, justifyContent: 'center',
-        backgroundColor: BRAND.blue, borderTopWidth: 3, borderTopColor: '#ffffff' }}>
-        <BackButton />
-      </View>}
       {/* Buy hand-off into the Set Complete reveal: navy over everything, header included. */}
       {shopHandoff && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY, zIndex: 50 }]} />}
       </View>
+      </Wrapper>
     </>
   );
 }

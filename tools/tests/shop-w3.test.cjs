@@ -157,3 +157,25 @@ test('T163: the Starter Pack card shows the player\'s own shark in the Starter F
 test('T240: the single-packs sum is for the Starter Pack only', () => {
   assert.match(read('src/services/money/supplies.ts'), /if \(!catalog \|\| product\.limit !== 'once'\) return null;/);
 });
+
+test('T159: a late restock names the next drop day from the store interval, never a dateless soon', () => {
+  const shelves = loadTs('src/helpers/shopShelves.ts');
+  const now = Date.parse('2026-11-18T13:55:00-08:00'); // Wednesday afternoon
+  const late = '2026-11-18T08:00:00Z'; // midnight PT, nearly 6 hours ago (the restock job never ran)
+  assert.equal(shelves.restockPill(late, now).label, 'New gear soon', 'no interval known: unchanged');
+  assert.equal(shelves.restockPill(late, now, 1).label, 'New gear tonight', 'daily shop: the next midnight');
+  assert.equal(shelves.restockPill(late, now, 7).label, 'New gear in 7 days');
+  const justDue = new Date(now - 20 * 60_000).toISOString();
+  assert.equal(shelves.restockPill(justDue, now, 1).label, 'New gear soon', 'a restock a few minutes late is still soon');
+  const shelf = read('src/screens/StoreScreen/GearShelf.tsx');
+  assert.match(shelf, /restockPill\(nextAt, now, intervalDays\)/);
+  assert.match(read('src/screens/StoreScreen.tsx'), /intervalDays=\{rotation\?\.interval_days \?\? 0\}/);
+});
+
+test('T140: the Gear stage shows the Shark Shop stall art, never the catalog promo coin pile', () => {
+  const shelf = read('src/screens/StoreScreen/GearShelf.tsx');
+  assert.match(shelf, /SHOP_STALL_ART = require\('\.\.\/\.\.\/\.\.\/assets\/images\/screens\/profile\/shark_shop\.png'\)/);
+  assert.match(shelf, /<Image source=\{SHOP_STALL_ART\}/);
+  assert.doesNotMatch(shelf, /imageUrl=\{promoUrl\}/);
+  assert.doesNotMatch(read('src/screens/StoreScreen.tsx'), /promoUrl=\{catalog\?\.promotion_image_url\}/);
+});

@@ -244,16 +244,16 @@ test('Standings counts "Wins this week" with the coin-and-check picture, and its
   assert.doesNotMatch(model.weekDots(end, Date.parse('2026-10-05T05:59:00Z')).spoken, /\d+ minutes/);
 });
 
-test('the Community Center Finn tip runs once on the first visit, waiting its turn; the Shark Shop has a back button where the footer was', () => {
+test('the Community Center Finn tip runs once on the first visit, waiting its turn; the Shark Shop keeps the normal footer and one back button (T160)', () => {
   const center = read('src/screens/CommunityCenterScreen.tsx');
   assert.match(center, /useTutorialWhenReady\('community_center', !loading && !!center && !sheetUp\)/);
   const shop = read('src/screens/StoreScreen.tsx');
-  assert.match(shop, /testID="shop-bottom-back"/);
-  // Its own solid strip where the footer was, in the layout: it never covers a pack, a VIP tile or a gear card.
-  assert.match(shop, /testID="shop-bottom-back" style=\{\{ marginTop: 'auto'/);
-  assert.match(shop, /height: SHOP_BACK_STRIP \+ insets\.bottom, paddingBottom: insets\.bottom/);
-  assert.doesNotMatch(shop, /position: 'absolute', left: 14, bottom: insets\.bottom/, 'no floating button over the shop');
-  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /paddingBottom: insets\.bottom \+ 48/, 'the gear shelf pads its last row clear of the strip');
+  assert.match(shop, /<Wrapper>[\s\S]*<\/Wrapper>/, 'the 5-icon footer is kept');
+  assert.doesNotMatch(shop, /shop-bottom-back|SHOP_BACK_STRIP/, 'no second back button in a bottom bar');
+  assert.equal((shop.match(/<BackButton \/>/g) ?? []).length, 2, 'one back button per layout: the title bar or the tab row (v2), never both');
+  assert.match(shop, /\{v2 \? <View style=\{\{ width: 35 \}\} \/> : <BackButton \/>\}/);
+  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /paddingBottom: BOTTOM_BAR_OVERHANG \+ 16/, 'the gear shelf clears the Map compass');
+  assert.match(read('src/screens/StoreScreen/SuppliesShop.tsx'), /paddingBottom: BOTTOM_BAR_OVERHANG \+ 24/);
 });
 
 test('one word per thing in the shelf-words files: no Mastery, no RIDE COINS, no Rescue Pass, no home finds', () => {
