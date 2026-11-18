@@ -417,7 +417,7 @@ test('card words for every state: one title, one line, one button, in the 4.5 vo
   assert.equal(inLine.title, 'In line for Jungle Cruise?');
   assert.equal(inLine.line, 'Your wait powers its coin');
   const claim = C.guideCardCopy('claim', tgt(), ctx({ tickets: 0, freeStep: { kind: 'claim', tickets: 5, sources: [] } }));
-  assert.equal(claim.title, '5 free Tickets are waiting');
+  assert.equal(claim.title, '5 stamp Tickets are waiting');
   assert.equal(claim.button.label, 'CLAIM');
   // Free try and extra try point at the map's PLAY! (no second, dead button on the card).
   const freeTry = C.guideCardCopy('free_try', tgt({ inRange: true }), ctx());
@@ -929,16 +929,16 @@ test('Adventure sheet and guide card give one answer when earned Tickets wait: c
   const C = loadTs('src/services/guide/guideCopy.ts');
   // StateA: 28 earned stamp Tickets wait, 1 Ticket needed, free try off (production switches).
   const sheet = A.adventureTicketsLine(1, false, false, 28);
-  assert.equal(sheet, '28 free Tickets are waiting. Claim, then play.');
+  assert.equal(sheet, '28 stamp Tickets are waiting. Claim, then play.');
   const wallet = { tickets: 0, claimable: [{ kind: 'stamp', id: 1, tickets: 28 }], freeTryReady: true, extraTries: 0, queueTicketsOn: false };
   const step = F.nextFreeTicket(wallet);
   assert.equal(step.kind, 'claim', 'the card claims before the free try');
   const card = C.guideCardCopy('claim', { taskId: 5, name: 'Soarin\'', parkId: 8, reason: 'adventure', source: 'guide' },
     { freeStep: step, tickets: 0, queueTicketsOn: false });
-  assert.equal(card.title, '28 free Tickets are waiting');
+  assert.equal(card.title, '28 stamp Tickets are waiting');
   assert.ok(sheet.startsWith(card.title), 'the sheet leads with the same words as the card');
   // Claim beats the free try on the sheet too, and one Ticket reads as one.
-  assert.equal(A.adventureTicketsLine(2, true, false, 1), '1 free Ticket is waiting. Claim, then play.');
+  assert.equal(A.adventureTicketsLine(2, true, false, 1), '1 stamp Ticket is waiting. Claim, then play.');
   assert.equal(A.adventureTicketsLine(2, true, false, 0), 'Today\'s free try is ready for this coin.');
   assert.equal(A.adventureTicketsLine(2, false, false, Number.NaN), '2 more Tickets needed. 3 treats at home = 1 Ticket. Tomorrow brings a new free try.');
   // The sheet's CLAIM is the map's own claim (one claim path for both surfaces).

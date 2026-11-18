@@ -80,6 +80,14 @@ const RULES = [
   // T122: one display name per ride. A screen never spells a ride itself; RIDE_DISPLAY_NAMES does.
   ['ride-name-drift', /^(Thunder Mountain|Tiki Room|Walt Disney's Enchanted Tiki Room|Haunted Mansion Holiday|It's A Small World|The Many Adventures Of (Winnie the )?Pooh|Smugglers|Astro Blasters|Mr\. Toad|Mr\. Lincoln)$/,
     'one ride name: RIDE_DISPLAY_NAMES in src/helpers/plainRideName.ts', /^src\/share\/placeNames\.ts$/],
+  // T123: a trophy count never shares a line with the coin count ("15 of 35 coins. 35 more wins for Silver").
+  // T125: Energy has one name ("+10 Energy"); a sentence may say what it does, a label never renames it.
+  ['energy-alias', /^(saved for growing coins|Energy for growing coins)$/i, 'Energy'],
+  // T126: home pickups are treats; earned Tickets are stamp Tickets; only reward boxes are boxes.
+  ['finds-ticket', /\bmore finds?\b|\bnext find\b/i, 'treats ("2 more treats = 1 Ticket")'],
+  ['stamp-prizes', /\bstamp prizes?\b|\b(N|\d+) free Tickets? (is|are) waiting\b/i, 'stamp Tickets'],
+  ['sharky-boxes', /\bPrize Box(es)?\b/i, 'Sea Treasures (Sharky); boxes are reward boxes only'],
+  ['wins-for-trophy', /\bmore wins? for (Bronze|Silver|Gold)\b/, '"Silver trophy: 35 more wins" on its own line'],
 ];
 
 /**

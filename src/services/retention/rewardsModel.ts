@@ -73,7 +73,7 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
     }
   }
   if (i.stamps && i.stamps.claimable > 0) {
-    rows.push({ key: 'stamps', title: 'Stamps', line: `${plural(i.stamps.claimable, 'stamp prize', 'stamp prizes')} to claim`, ready: i.stamps.claimable, action: 'claim_all' });
+    rows.push({ key: 'stamps', title: 'Stamps', line: `Tickets from ${plural(i.stamps.claimable, 'stamp', 'stamps')} to claim`, ready: i.stamps.claimable, action: 'claim_all' });
   }
   if (i.events && i.events.chests > 0) {
     rows.push({ key: 'events', title: 'Event Chests', line: `${plural(i.events.chests, 'chest', 'chests')} to open`, ready: i.events.chests, action: i.events.door !== false ? 'open' : null });

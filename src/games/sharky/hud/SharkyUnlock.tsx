@@ -12,7 +12,7 @@ import { SHARKY_ART } from '../assets';
 
 /** Existing Sharky art for each unlock (no new art). */
 const UNLOCK_ART: Record<string, number> = {
-  'PRIZE BOXES': SHARKY_ART.prizeBox,
+  'SEA TREASURES': SHARKY_ART.prizeBox,
   OVERDRIVE: SHARKY_ART.dash,
   'RALLY YOUR CREW': SHARKY_ART.fanCheer,
   'POWER-UPS': SHARKY_ART.sparkle,

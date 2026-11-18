@@ -492,7 +492,11 @@ export default function PostWinRewardsModal({
               {shelf?.trophy ? <TrophyMomentRow trophy={shelf.trophy} started={caught} reduced={reducedMotion} />
                 : shelf && <View style={styles.shelfLine} accessibilityRole="text">
                   <GameIcon name={shelf.icon} size={22} />
-                  <Text style={styles.shelfText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{shelf.text}</Text>
+                  {/* Coins and the trophy each on their own line (fix w3 T123). */}
+                  <View style={{ flexShrink: 1 }}>
+                    <Text style={styles.shelfText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{shelf.text}</Text>
+                    {!!shelf.sub && <Text style={styles.shelfText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{shelf.sub}</Text>}
+                  </View>
                 </View>}
             </Animated.View>
 

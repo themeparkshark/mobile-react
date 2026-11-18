@@ -84,12 +84,12 @@ test('Sharky shows its unlock as a picture with a gold NEW tag inside the card, 
   assert.ok(sharky.indexOf('{hasBelow ? (') < sharky.indexOf('<Animated.View style={[styles.playWrap'), 'extras above the buttons');
   assert.ok(sharky.indexOf('styles.mRow') < sharky.indexOf('<ResultPrimaryButton'), 'missions above the buttons');
   const unlock = read('src/games/sharky/hud/SharkyUnlock.tsx');
-  assert.match(unlock, /'PRIZE BOXES': SHARKY_ART\.prizeBox/);
+  assert.match(unlock, /'SEA TREASURES': SHARKY_ART\.prizeBox/);
   assert.match(unlock, /label=\{`New unlocked: \$\{unlockName\(card\)\.toLowerCase\(\)\}`\}/);
   // Wave 6: the one unlock tile (the reward cue and the NEW tag live there).
   assert.match(unlock, /<UnlockTile /);
   const name = fnFrom('src/games/sharky/hud/SharkyUnlock.tsx', 'unlockName');
-  assert.equal(name('NEW: Prize Boxes'), 'Prize Boxes');
+  assert.equal(name('NEW: Sea Treasures'), 'Sea Treasures');
   assert.equal(name('Overdrive'), 'Overdrive');
 });
 

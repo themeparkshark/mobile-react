@@ -240,7 +240,7 @@ test('a first coin shows one reward row on the ladder: Shark Coins, and Energy s
     current_level:1,max_level:5,is_unlocked:true,parts_to_next_level:2,available_parts:4,energy_to_next_level:10 }, playerEnergy:40 });
   rewards.find(node => node.type === './CoinCatchReveal').props.onDone(); rewards.render();
   // Parts wait for coin levels (rung 3) and XP for Daily 3 (rung 4); nothing is lost, it all still flies home.
-  assert.deepEqual(rowChips(rewards), [['Shark Coins', 10], ['saved for growing coins', 40]]);
+  assert.deepEqual(rowChips(rewards), [['Shark Coins', 10], ['Energy', 40]], 'fix w3 T125: +40 Energy, one name');
   assert.equal(rewards.find(node => node.props?.accessibilityLabel?.startsWith('Reward receipt')), undefined);
   assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'Back to Map', 'no guide target: never a nameless NEXT COIN');
   rewards.find(node => node.props?.accessibilityLabel === 'See my shelf').props.onPress(); assert.equal(opened, false);

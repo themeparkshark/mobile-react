@@ -114,7 +114,15 @@ test('challenge copy: "Win the X coin", PLAY!, and the free ways in one order (c
   // Fix round W1 item 16: "This ride's game" only where the server deals one game per ride and day.
   assert.equal(copy.punchLines('Walt Statue', true).kicker, "THIS RIDE'S GAME");
   assert.equal(copy.punchLines('Walt Statue').kicker, 'YOUR GAME', 'a new game each Ticket: the ride has no one game');
-  assert.equal(copy.challengeTitle('task', 'Indiana Jones Adventure Temple'), 'Win this coin', 'a long name keeps the short title');
+  // Fix w3 T131: the title always names the coin, never "Win this coin" while it has a name.
+  assert.equal(copy.challengeTitle('task', 'Indiana Jones Adventure Temple'), 'Indiana Jones Adventure Temple');
+  assert.equal(copy.challengeTitle('task', 'Big Thunder Mountain Railroad'), 'Big Thunder Mountain Railroad');
+  assert.equal(copy.challengeTitle('task', 'Millennium Falcon: Smugglers Run'), 'Win the Smugglers Run coin');
+  assert.equal(copy.challengeTitle('task', 'Harry Potter and the Forbidden Journey'), 'Win the Forbidden Journey coin');
+  assert.equal(copy.challengeTitle('task', 'Fire Department'), 'Win the Fire Department coin');
+  assert.equal(copy.challengeTitle('task', 'Main Street Cinema'), 'Main Street Cinema coin');
+  for (const name of ['Main Street Station', 'Great Moments with Mr. Lincoln', "Hagrid's Magical Creatures Motorbike Adventure"])
+    assert.notEqual(copy.challengeTitle('task', name), 'Win this coin', name);
   assert.equal(copy.challengeTitle('task', 'Mad Tea Party'), 'Win the Mad Tea Party coin');
   assert.equal(copy.challengeTitle('secret_task', 'Anything'), 'Win the secret coin');
   for (const name of ['Walt Statue', 'Main Street Station', 'X'.repeat(40)])
@@ -128,7 +136,7 @@ test('challenge copy: "Win the X coin", PLAY!, and the free ways in one order (c
   assert.equal(copy.challengeButtonLabel(null, 1), 'PLAY!');
   assert.equal(copy.challengeButtonLabel({ kind: 'free_try' }, 1), 'PLAY! Free try');
   assert.equal(copy.challengeButtonLabel({ kind: 'extra_try', count: 2 }, 1), 'PLAY! Extra try');
-  assert.equal(copy.challengeButtonLabel({ kind: 'claim', tickets: 5, sources: [] }, 1), 'Claim 5 free Tickets');
+  assert.equal(copy.challengeButtonLabel({ kind: 'claim', tickets: 5, sources: [] }, 1), 'Claim 5 stamp Tickets');
   assert.doesNotMatch(copy.needTicketCopy(false, true).lines.join(' '), /wait at a ride/, 'no line Ticket promise while Queue Tickets is off');
   assert.match(copy.needTicketCopy(true, true).lines.join(' '), /first wait at a ride earns a Ticket/);
 });

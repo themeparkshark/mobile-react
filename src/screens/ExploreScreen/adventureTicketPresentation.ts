@@ -158,7 +158,7 @@ export function adventureTicketsLine(ticketsNeeded: number, freeTryReady: boolea
   claimableTickets = 0): string | null {
   // Earned Tickets come first, before the free try (the guide card's own order: claim, then free try).
   const waiting = Number.isFinite(claimableTickets) && claimableTickets > 0 ? Math.floor(claimableTickets) : 0;
-  if (waiting > 0) return `${waiting} free ${waiting === 1 ? 'Ticket is' : 'Tickets are'} waiting. Claim, then play.`;
+  if (waiting > 0) return `${waiting} stamp ${waiting === 1 ? 'Ticket is' : 'Tickets are'} waiting. Claim, then play.`;
   if (freeTryReady) return 'Today\'s free try is ready for this coin.';
   if (!(ticketsNeeded > 0)) return null;
   const need = `${ticketsNeeded} more ${ticketsNeeded === 1 ? 'Ticket' : 'Tickets'} needed.`;

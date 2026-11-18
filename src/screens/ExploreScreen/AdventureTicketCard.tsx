@@ -342,7 +342,7 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
               <Text style={styles.resourceText}>{ticketsLine}</Text>
             </View>}
             {ticket.phase === 'discover' && data.wallet.tickets_needed > 0 && claimableTickets > 0 && !!onClaim &&
-              <GameButton variant="secondary" size="compact" label="CLAIM" icon="ticket" accessibilityLabel={`Claim ${claimableTickets} free Tickets`}
+              <GameButton variant="secondary" size="compact" label="CLAIM" icon="ticket" accessibilityLabel={`Claim ${claimableTickets} stamp Tickets`}
                 loading={claiming} disabled={claiming} onPress={claimHere} style={{ alignSelf: 'center', marginTop: 10 }} />}
             <View style={styles.primaryRow}>
               <GameButton label={stale ? 'Refresh my ticket' : prompt.action} accessibilityLabel={stale ? 'Refresh Adventure Ticket' : prompt.action}

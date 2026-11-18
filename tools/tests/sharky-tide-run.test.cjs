@@ -864,7 +864,7 @@ test('missions: 3 active, sum and best-in-run progress, 3 completions rank up; u
   const s1 = m.applyRun([{ id: 'skim10', progress: 7, done: false }], 0, 0, 4, stats, 1);
   assert.equal(s1.missions.find((x) => x.id === 'skim10').done, true);
   assert.ok(m.activeMissions([], 0, 5).every((x) => m.MISSION_POOL.find((d) => d.id === x.id).unlock === 0));
-  assert.equal(p.unlockCard(0, 1), 'NEW: Prize Boxes');
+  assert.equal(p.unlockCard(0, 1), 'NEW: Sea Treasures');
   assert.equal(p.unlockCard(1, 2), 'NEW: Overdrive');
   assert.equal(p.unlockCard(2, 3), 'NEW: Rally your crew');
   assert.equal(p.unlockCard(5, 6), null);
