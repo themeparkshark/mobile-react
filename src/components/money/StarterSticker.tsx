@@ -2,7 +2,8 @@
  * <StarterSticker />: a small "Just once" sticker on a Shark Shop door while the Starter Pack is
  * unbought (fix round w3, T158). A door, never an offer: no price, no pop-up, never inside a reward.
  * It reads the shared Supplies catalog (services/money/supplies.ts), so it hides the moment the pack
- * is bought. The Supplies tab wears it; the Home menu and Profile doors mount the same piece.
+ * is bought. The Home menu's Shark Shop row and the Profile Shark Shop door mount it (style: absolute
+ * top-right of the door's picture, e.g. { top: -6, right: -10 }).
  */
 import { useContext } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';

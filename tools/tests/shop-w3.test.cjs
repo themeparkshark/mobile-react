@@ -278,7 +278,7 @@ test('T220: the dev override for natural_offers can never run in a production bu
   assert.equal(mod.exports.captureNaturalOffers(), false);
 });
 
-test('T158: a Just once sticker on the Supplies door while the Starter Pack is unbought (no price)', () => {
+test('T158: a Just once sticker for the Shark Shop doors while the Starter Pack is unbought (no price)', () => {
   const sticker = loadTs('src/components/money/StarterSticker.tsx', {
     react: { useContext: () => ({}) }, 'react/jsx-runtime': { jsx: () => null, jsxs: () => null },
     '../../context/AuthProvider': { AuthContext: {} }, '../../services/money/supplies': { useSupplies: () => ({}) },
@@ -290,7 +290,8 @@ test('T158: a Just once sticker on the Supplies door while the Starter Pack is u
   assert.equal(sticker.STARTER_STICKER_TEXT, 'JUST ONCE');
   const src = read('src/components/money/StarterSticker.tsx');
   assert.doesNotMatch(src.replace(/\/\*[\s\S]*?\*\//g, ''), /price/i, 'the sticker never names a price');
-  assert.match(read('src/screens/StoreScreen.tsx'), /key === 'supplies' && tab !== 'supplies' && <StarterSticker/);
+  // Not on the GEAR/SUPPLIES tab: on SE it covered the SUPPLIES word. The Home menu row and the Profile door mount it (needs_wire).
+  assert.doesNotMatch(read('src/screens/StoreScreen.tsx'), /<StarterSticker/);
 });
 
 test('T220: two placements saving at once both keep their record (writes go one at a time)', async () => {

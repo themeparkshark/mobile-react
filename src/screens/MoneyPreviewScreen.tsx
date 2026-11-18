@@ -19,6 +19,8 @@ import type { InventoryType } from '../models/inventory-type';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CoinTopUpOffer from '../components/money/CoinTopUpOffer';
 import CalmOffer from '../components/money/CalmOffer';
+import StarterSticker from '../components/money/StarterSticker';
+import { Image } from 'expo-image';
 import { BRAND, FONT } from '../ui';
 import countText from '../helpers/countText';
 
@@ -59,6 +61,14 @@ export default function MoneyPreviewScreen({ route }: { route?: { params?: { scr
           <View style={s.blue}><CalmOffer placement="high_point" /></View>
           <Text style={s.label}>Win card, non-member</Text>
           <View style={s.blue}><CalmOffer placement="win_vip" /></View>
+          <Text style={s.label}>Shark Shop door with the Just once sticker (T158)</Text>
+          <View style={[s.blue, { alignItems: 'center' }]}>
+            <View>
+              <Image source={require('../../assets/images/screens/profile/shortcut_shark_shop.png')} style={{ width: 76, height: 76 }} contentFit="contain" />
+              <StarterSticker style={{ top: -6, right: -26 }} />
+            </View>
+            <Text style={s.label}>SHARK SHOP</Text>
+          </View>
           <Text style={s.label}>Loss card (nothing shows)</Text>
           <View style={s.blue}><CalmOffer placement="need_ticket" loss /><CalmOffer placement="win_vip" loss /></View>
         </ScrollView>

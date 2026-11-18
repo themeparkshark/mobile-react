@@ -283,7 +283,8 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
       </View>
 
       {/* Free Ticket ways come before any price: one line, the rest a tap away (T155). */}
-      <FreeTicketsLine ways={freeTicketWays(queueTicketsOn)} />
+      {/* The out-of-Tickets hand-off card says the free way itself: one free line on screen, and its price above the fold on SE. */}
+      {!(sellable && plan.handoff?.need === 'tickets') && <FreeTicketsLine ways={freeTicketWays(queueTicketsOn)} />}
 
       {/* First visit: what Supplies is, once. Then, at the first ad offer, that ads are optional. */}
       <OneTimeTip id="supplies_tab" ready={status === 'ready' && !busy} compact />
