@@ -69,3 +69,23 @@ test('T184: the game motion hook knows Reduce Motion on the first render (off me
   assert.equal(hook(false)(), false, 'motion on: the first render animates (it used to start true for everyone)');
   assert.equal(hook(true)(), true);
 });
+
+test('T177: every outlined title is one element for VoiceOver (never the sizer and eight outline copies)', () => {
+  const stroked = read('src/components/StrokedText.tsx');
+  assert.match(stroked, /accessible accessibilityRole=\{accessibilityRole\} accessibilityLabel=\{children\}/);
+  assert.match(read('src/components/Ribbon.tsx'), /accessibilityRole="header"/);
+  assert.match(read('src/components/Topbar/TopbarText.tsx'), /accessible accessibilityRole="header" accessibilityLabel=\{label\}/);
+  assert.match(read('src/share/Outlined.tsx'), /accessible accessibilityRole="text" accessibilityLabel=\{text\}/);
+  assert.match(read('src/games/trivia-duel/ui/Overlays.tsx'), /<View style=\{style\} accessible accessibilityRole="text" accessibilityLabel=\{text\}>/);
+  assert.match(read('src/games/boss/bash/BashParts.tsx'), /accessibilityElementsHidden importantForAccessibility="no">\{text\}<\/Text>\)\}/);
+});
+
+test('T179: small header, profile, pin and wait-time targets reach 44 pt', () => {
+  assert.match(read('src/components/Button.tsx'), /hitSlop=\{BUTTON_HIT_SLOP\}/);
+  assert.match(read('src/components/Button.tsx'), /BUTTON_HIT_SLOP = \{ top: 8, bottom: 8, left: 8, right: 8 \}/);
+  assert.match(read('src/components/Topbar/Currency.tsx'), /hitSlop=\{PILL_HIT_SLOP\}/);
+  assert.match(read('src/components/Topbar/Currency.tsx'), /PILL_HIT_SLOP = \{ top: 8, bottom: 8/);
+  assert.match(read('src/components/Topbar.tsx'), /accessibilityLabel="Back"\n\s*\/\/ T179[^\n]*\n\s*hitSlop=\{8\}/);
+  assert.match(read('src/screens/QueueTimesScreen.tsx'), /my next coin`\} hitSlop=\{HIT_SLOP\}/);
+  assert.match(read('src/screens/pins/Lanyard.tsx'), /hitSlop=\{Math\.max\(6, Math\.ceil\(\(48 - pinSize\) \/ 2\)\)\}/);
+});

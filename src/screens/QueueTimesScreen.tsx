@@ -38,6 +38,7 @@ import getRideCoins from '../api/endpoints/me/ride-coins';
 import { queuePlayPolicy } from '../services/lineplay/queuePlayPolicy';
 import { compareQueueWaits, postedStandbyWait } from '../services/lineplay/queueWaitPresentation';
 import { UpperText } from '../ui/upper';
+import { HIT_SLOP } from '../ui/tokens';
 
 // --- Types ---
 type SortMode = 'wait-desc' | 'wait-asc' | 'name';
@@ -182,7 +183,7 @@ const RideCard = ({
               </View>
             ) : (
               <Pressable onPress={() => onMakeNextCoin(coinTaskId, entry.name)} accessibilityRole="button"
-                accessibilityLabel={`Make ${entry.name} my next coin`} hitSlop={6}
+                accessibilityLabel={`Make ${entry.name} my next coin`} hitSlop={HIT_SLOP}
                 style={({ pressed }) => [styles.nextCoinBtn, pressed && styles.sessionBtnPressed]}>
                 <GameIcon name="coin" size={16} />
                 <Text style={styles.nextCoinBtnText}>Make this my next coin</Text>

@@ -24,7 +24,7 @@ const AnimatedInput = Animated.createAnimatedComponent(TextInput);
 export function OutlinedText({ text, size, color, stroke = C.ink, width = 3, style }: { text: string; size: number; color: string; stroke?: string; width?: number; style?: object }) {
   const offs = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1.3], [0, 1.3], [-1.3, 0], [1.3, 0]];
   return (
-    <View style={style}>
+    <View style={style} accessible accessibilityRole="text" accessibilityLabel={text}>
       {offs.map(([x, y], i) => (
         <Text key={i} allowFontScaling={false} style={[styles.stampText, { fontSize: size, color: stroke, position: 'absolute', left: x * width, top: y * width }]}>{text}</Text>
       ))}

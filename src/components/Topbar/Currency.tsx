@@ -28,6 +28,7 @@ interface CurrencyProps {
 }
 
 const FALLBACK_ICON = require('../../../assets/images/coingold.png');
+const PILL_HIT_SLOP = { top: 8, bottom: 8, left: 6, right: 6 } as const;
 const GLOW_TEX = require('../../../assets/images/map/fx/glow.png');
 const COUNT_FONT = 19;
 /** A plain gain's "+N": pop, a short hold, a float up and out (the same shape as a stream's, 920 ms in all). */
@@ -207,7 +208,8 @@ export default function Currency({ image, count, name, flyTarget, coverArt = fal
 
   return (
     <View style={styles.container} ref={containerRef} onLayout={measureAndRegister}>
-      <TouchableOpacity onPress={handlePress} activeOpacity={0.7} accessibilityRole="button"
+      {/* T179: the pill art is 30 pt tall; the touch reaches 46 pt. */}
+      <TouchableOpacity onPress={handlePress} activeOpacity={0.7} accessibilityRole="button" hitSlop={PILL_HIT_SLOP}
         accessibilityLabel={`${label}: ${count.toLocaleString()}`} accessibilityHint={term ? 'Tells you what this is and how to get more' : undefined}>
         <View style={styles.currencyRow}>
           {/* The soft gold underglow on a gain: the map's glow texture tinted gold, opacity only (no live shadow pass). */}

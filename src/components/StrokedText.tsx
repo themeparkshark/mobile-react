@@ -1,4 +1,4 @@
-import { Text, TextStyle, View } from 'react-native';
+import { Text, TextStyle, View, type AccessibilityRole } from 'react-native';
 
 const STROKE_WIDTH = 2;
 
@@ -19,6 +19,8 @@ interface Props {
   strokeColor?: string;
   numberOfLines?: number;
   adjustsFontSizeToFit?: boolean;
+  /** What VoiceOver calls the title (a ribbon title is a header). */
+  accessibilityRole?: AccessibilityRole;
 }
 
 export default function StrokedText({
@@ -27,6 +29,7 @@ export default function StrokedText({
   strokeColor = '#0d2b5e',
   numberOfLines,
   adjustsFontSizeToFit,
+  accessibilityRole = 'text',
 }: Props) {
   const textProps = {
     numberOfLines,
@@ -34,7 +37,8 @@ export default function StrokedText({
   };
 
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+    // T177: VoiceOver reads one title, never the sizer and the eight outline copies (REWARDS x9).
+    <View style={{ alignItems: 'center', justifyContent: 'center' }} accessible accessibilityRole={accessibilityRole} accessibilityLabel={children}>
       {/* Invisible sizer — sets the layout size, no offset */}
       <Text {...textProps} style={[style, { opacity: 0 }]}>
         {children}

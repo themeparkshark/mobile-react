@@ -47,7 +47,8 @@ export function Outlined({ text, style, outline, lines = 1, weight }: {
   const shown = sized ? null : styles.hidden;
 
   return (
-    <View onLayout={event => setBox(event.nativeEvent.layout.width)}>
+    // T177: one label for VoiceOver, never the outline copies.
+    <View onLayout={event => setBox(event.nativeEvent.layout.width)} accessible accessibilityRole="text" accessibilityLabel={text}>
       {single && (
         // Natural one-line width at the base size, measured outside the layout.
         <View style={styles.measure} pointerEvents="none">

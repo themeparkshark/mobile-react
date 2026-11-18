@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { ReactNode, useContext, useEffect } from 'react';
+import { ReactNode, useContext, useEffect, useState } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { catchDim, catchShown, isCatchDimmed, isCatchShown } from '../screens/ExploreScreen/catchPresence';
@@ -30,6 +30,21 @@ export const BOTTOM_BAR_OVERHANG = 56;
 export const FOOTER_CLEARANCE = BOTTOM_BAR_OVERHANG + 36;
 const catchHasChrome = () => isCatchDimmed() || isCatchShown();
 
+function routeNow(): string | undefined {
+  try { return RootNavigation.navigationRef.isReady() ? RootNavigation.navigationRef.getCurrentRoute()?.name : undefined; } catch { return undefined; }
+}
+
+/** The screen on top, so the footer can mark its tab selected for VoiceOver (T178). */
+function useTopRoute(): string | undefined {
+  const [name, setName] = useState<string | undefined>(routeNow);
+  useEffect(() => {
+    const sync = () => setName(routeNow());
+    sync();
+    try { return RootNavigation.navigationRef.addListener('state', sync); } catch { return undefined; }
+  }, []);
+  return name;
+}
+
 export default function Wrapper({
   children,
   previewMode = false,
@@ -51,6 +66,7 @@ export default function Wrapper({
   const { checkPermission, hasPermission } = usePermissions();
   const { notificationCount } = useContext(NotificationContext);
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
+  const topRoute = useTopRoute();
   // A catch moment owns the whole screen: the tab bar slides away on the UI thread (no re-render).
   // A common catch keeps the tab bar in place and only softens it (catchDim): the header and footer never move for it.
   // Round 5: a commit here mid-catch re-sends the softened bar (commitHeal), so it never flashes back to full.
@@ -140,6 +156,7 @@ export default function Wrapper({
           }}
         >
           <View
+            accessibilityRole="tablist"
             style={{
               paddingLeft: 32,
               paddingRight: 32,
@@ -148,8 +165,13 @@ export default function Wrapper({
             }}
           >
             {items.map((item, key) => {
+              const selected = topRoute === item.screen;
+              const alert = notificationCount > 0 && item.text === 'Profile';
               return (
-                <View key={key}>
+                // T178: one labelled tab per icon for VoiceOver (the picture and its word are one button),
+                // with its selected state; the icon and the word under it stay two big touch targets.
+                <View key={key} accessible accessibilityRole="tab" accessibilityLabel={alert ? `${item.text}, new notifications` : item.text}
+                  accessibilityState={{ selected }} onAccessibilityTap={() => { playSound(item.sound); goTo(item); }}>
                   <View
                     style={{
                       top: item.size === 'normal' ? 0 : -45,
@@ -187,7 +209,6 @@ export default function Wrapper({
                     <UpperText
                       onPress={() => { playSound(item.sound); goTo(item); }}
                       suppressHighlighting
-                      accessibilityRole="button"
                       maxFontSizeMultiplier={1.2}
                       numberOfLines={1}
                       style={{
