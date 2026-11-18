@@ -27,6 +27,7 @@ const stateListeners = new Set<StateListener>();
 
 function set(next: ConnectionState): void {
   if (next === state) return;
+  if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[net] ${state} -> ${next}`);
   const wasOffline = state === 'offline';
   state = next;
   stateListeners.forEach(listener => listener(state));
