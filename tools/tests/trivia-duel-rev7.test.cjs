@@ -150,7 +150,7 @@ test('balance sim (18.3): the Final flips the winner in 15-30% of matches; the s
   assert.ok(rate >= 0.12 && rate <= 0.33, `Final flips ${rate}`);
 });
 
-test('S1 gate 2: no trademarked ride or park name in any planned question, choice or fact; labels stay unique per question', () => {
+test('S1 gate 2 (T234): place names stay the map names, no company word in any planned question, choice or fact; labels stay unique per question', () => {
   const labels = loadTs('src/games/trivia-duel/engine/labels.ts');
   const content = loadTs('src/games/trivia-duel/engine/content.ts');
   const facts = loadTs('src/games/trivia-duel/engine/facts.ts');
@@ -183,12 +183,17 @@ test('S1 gate 2: no trademarked ride or park name in any planned question, choic
 test('a generic label never hands over the answer: such items sit out of the pool', () => {
   const labels = loadTs('src/games/trivia-duel/engine/labels.ts');
   const content = loadTs('src/games/trivia-duel/engine/content.ts');
-  assert.equal(labels.labelLeaks('What kind of ride does Disney describe Space Mountain as?', 'A roller coaster in the dark'), true);
-  assert.equal(labels.labelLeaks('Which year did Disneyland open its Space Mountain?', '1977'), false);
+  // Place names keep their own names (T234), so they never hand over an answer; company words still can.
+  assert.equal(labels.labelLeaks('What kind of ride does Disney describe Space Mountain as?', 'A roller coaster in the dark'), false);
+  assert.equal(labels.labelLeaks('Which Imagineer tool sketches a ride first?', 'A park designer sketch'), true);
   assert.equal(labels.labelLeaks('Before it became a boat ride, what was Pirates of the Caribbean first planned as?', 'A walk-through wax museum'), false);
   const pool = [
-    { id: 'leak', question: 'What kind of ride does Disney describe Space Mountain as?', choices: ['A roller coaster in the dark', 'A drop tower', 'A boat ride', 'A simulator'], correctIndex: 0, difficulty: 'easy', source: 'x' },
+    { id: 'leak', question: 'Which Imagineer tool sketches a ride first?', choices: ['A park designer sketch', 'A drop tower', 'A boat ride', 'A simulator'], correctIndex: 0, difficulty: 'easy', source: 'x' },
     { id: 'ok', question: 'Which year did Disneyland open its Space Mountain?', choices: ['1977', '1969', '1995', '1959'], correctIndex: 0, difficulty: 'easy', source: 'x' },
   ];
   assert.deepEqual(plain(content.usablePool(pool).map((q) => q.id)), ['ok']);
+  // T043: the map's names, in plain grammar.
+  assert.equal(labels.genericize('Walt Disney’s private Disneyland apartment sits above which building?'), 'Walt’s private Disneyland apartment sits above which building?');
+  assert.equal(labels.genericize('Which Disney California Adventure land is newest?'), 'Which Disney California Adventure land is newest?');
+  assert.equal(labels.genericize('Pirates of the Caribbean opened in 1967.'), 'Pirates of the Caribbean opened in 1967.');
 });

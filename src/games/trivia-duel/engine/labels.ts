@@ -14,39 +14,28 @@
 
 export const NAMES_IN_TEXT = false;
 
+/**
+ * Place names (fix round w3 T234 and T043, decision default Nov 18): a park, land or ride keeps the plain
+ * name the map already shows ("Disneyland", "Magic Kingdom", "Pirates of the Caribbean"). They are text, not
+ * logos, and a hand-swapped nickname broke grammar ("Walt's private the California castle park apartment")
+ * and never matched the map. Each maps to itself, so the company words below never eat into one
+ * ("Disney California Adventure" stays whole; matching is longest-first).
+ */
+export const PLACE_NAMES: readonly string[] = [
+  'Universal Studios Hollywood', 'Disney California Adventure', 'Disney’s Animal Kingdom', 'Animal Kingdom',
+  'Big Thunder Mountain Railroad', 'Pirates of the Caribbean', 'Matterhorn Bobsleds', 'Matterhorn', 'Haunted Mansion',
+  'Space Mountain', 'Splash Mountain', 'Jungle Cruise', 'Star Tours', 'Tokyo Disneyland', 'Disneyland Paris',
+  'Magic Kingdom', 'Disneyland', 'Super Nintendo World', 'CityWalk', 'King Kong 360', 'WaterWorld', 'New Orleans Square',
+  'Tomorrowland', 'Adventureland', 'Fantasyland', 'Frontierland', 'EPCOT',
+];
+
 /** [trademarked name, generic label]. Order does not matter: matching is longest-first. */
 export const GENERIC_LABELS: readonly (readonly [string, string])[] = [
-  ['Universal Studios Hollywood’s Studio Tour', 'the Hollywood studio backlot tour'],
-  ['the Universal Studio Tour', 'the Hollywood studio backlot tour'],
-  ['Universal Studios Hollywood', 'the Hollywood movie studio park'],
-  ['Disney California Adventure', 'the second California park'],
-  ['Disney’s Animal Kingdom', 'the Florida animal park'],
-  ['Animal Kingdom', 'the Florida animal park'],
-  ['Big Thunder Mountain Railroad', 'the runaway mine train'],
-  ['Pirates of the Caribbean', 'the pirate boat ride'],
-  ['Matterhorn Bobsleds', 'the snowy mountain bobsleds'],
-  ['Matterhorn', 'the snowy mountain'],
-  ['Haunted Mansion', 'the haunted house ride'],
-  ['Space Mountain', 'the indoor space coaster'],
-  ['Splash Mountain', 'the log flume mountain'],
-  ['Jungle Cruise', 'the jungle river boat ride'],
-  ['Star Tours', 'the space flight simulator'],
-  ['Tokyo Disneyland', 'the Tokyo castle park'],
-  ['Disneyland Paris', 'the Paris castle park'],
-  ['Magic Kingdom', 'the Florida castle park'],
-  ['Disneyland', 'the California castle park'],
+  ...PLACE_NAMES.map((name) => [name, name] as const),
+  ['Universal Studios Hollywood’s Studio Tour', 'the Universal Studios Hollywood backlot tour'],
+  ['the Universal Studio Tour', 'the Universal Studios Hollywood backlot tour'],
   ['Studio Tour', 'backlot tour'],
-  ['Super Nintendo World', 'the video game land'],
-  ['CityWalk', 'the dining promenade'],
-  ['King Kong 360', 'the giant ape 3-D scene'],
-  ['WaterWorld', 'the water stunt'],
   ['Universal', 'the studio'],
-  ['New Orleans Square', 'the bayou square'],
-  ['Tomorrowland', 'the future land'],
-  ['Adventureland', 'the adventure land'],
-  ['Fantasyland', 'the fairy-tale land'],
-  ['Frontierland', 'the frontier land'],
-  ['EPCOT', 'the Florida future park'],
   ['Audio-Animatronics', 'animated figures'],
   ['Imagineer', 'park designer'],
   ['Walt Disney', 'Walt'],
@@ -60,6 +49,7 @@ export const GENERIC_LABELS: readonly (readonly [string, string])[] = [
  */
 export const DROP_TERMS: readonly string[] = ['Jaws', 'NOPE', 'Sharknado', 'The Meg'];
 
+const PLACES_LONGEST = PLACE_NAMES.slice().sort((a, b) => b.length - a.length);
 const SORTED = GENERIC_LABELS.slice().sort((a, b) => b[0].length - a[0].length);
 const ESC = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const RE = new RegExp(SORTED.map(([n]) => ESC(n)).join('|'), 'g');
@@ -104,7 +94,9 @@ export function genericize(text: string): string {
 /** True when a string still carries a name from the table (tests and the content guard). */
 export function hasTrademarkName(text: string): boolean {
   if (!text) return false;
-  return SORTED.some(([n]) => text.includes(n)) || /\bDisney\b|\bUniversal\b/.test(text) || DROP_TERMS.some((t) => new RegExp(`\\b${t}\\b`).test(text));
+  // Place names keep their map names (T234): only a company word outside one is a leak.
+  const rest = PLACES_LONGEST.reduce((acc, place) => acc.split(place).join(' '), text);
+  return SORTED.some(([n, l]) => n !== l && rest.includes(n)) || /\bDisney\b|\bUniversal\b/.test(rest) || DROP_TERMS.some((t) => new RegExp(`\\b${t}\\b`).test(rest));
 }
 
 /** An item that must sit out entirely (its answer is a film or brand title). */
@@ -125,7 +117,7 @@ export function labelLeaks(question: string, answer: string): boolean {
   if (NAMES_IN_TEXT) return false;
   const ans = ` ${answer.toLowerCase()} `;
   for (const [name, label] of SORTED) {
-    if (!question.includes(name)) continue;
+    if (name === label || !question.includes(name)) continue; // a place keeps its own name (T234): nothing to leak
     const words = label.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 4 && !STOP.has(w));
     if (words.some((w) => ans.includes(w))) return true;
   }

@@ -74,9 +74,11 @@ function adaptiveClueQuestions(chapterId: string, story: AdaptiveStory): readonl
     },
     {
       id: `${chapterId}-trail-order`,
-      question: `The map to the ${story.artifact} says: find the ${story.clue}, then choose a route. What should your crew do first?`,
-      choices: [`Find the ${story.clue}`, 'Choose a route', 'Open the treasure', 'Mark the finish'], correctIndex: 0,
-      difficulty: 'easy', fact: `The ${story.clue} comes before the route choice. Your crew decides the ending later.`,
+      // Fix round w3 T043: the old wording ("The map to the parade plan says: find the color, then choose a
+      // route") read as garbled; one plain step order instead, same answer slot.
+      question: `Your crew's map has two steps. Step 1: find the ${story.clue}. Step 2: pick a path. Which step comes first?`,
+      choices: [`Find the ${story.clue}`, 'Pick a path', 'Open the treasure', 'Mark the finish'], correctIndex: 0,
+      difficulty: 'easy', fact: `Step 1 is finding the ${story.clue}. The path comes after it.`,
     },
     {
       id: `${chapterId}-three-beat-lock`,
