@@ -157,6 +157,7 @@ function provider({ me } = {}) {
     '../RootNavigation': { navigate: route => events.push(['navigate', route]) },
     '../services/lineplay/backgroundQueueHeartbeat': { async clearQueueBackgroundHeartbeat() {} },
     '../utils/apiCache': { async clearCache() { events.push(['clearAccountCache']); } },
+    '../services/walletSync': { setWalletSink() {} },
     '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
     // The launch effect is not run here (useAsyncEffect is a no-op); launch-profile.test.cjs drives it.
     './launchProfile': { loadLaunchProfile: async () => ({ kind: 'failed', error: new Error('launch not driven here') }) },

@@ -23,6 +23,7 @@ import { KeyType } from '../models/key-type';
 import YellowButton from './YellowButton';
 import { BRAND, gameAlert } from '../ui';
 import { UpperText } from '../ui/upper';
+import { tryAgainLine } from '../services/connectionCopy';
 
 export default function RedeemKeyModal({
   open,
@@ -211,7 +212,7 @@ export default function RedeemKeyModal({
                   await redeemKey(redeemable.model as KeyType);
                 } catch {
                   setCollecting(false);
-                  gameAlert('Could not collect this key', 'It is still here. Check your internet and try again.');
+                  gameAlert('Could not collect this key', `It is still here. ${tryAgainLine()}`);
                   return;
                 }
                 setCollecting(false);

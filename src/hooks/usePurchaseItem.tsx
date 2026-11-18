@@ -12,6 +12,7 @@ import { ShopSetReward } from '../models/shop-today';
 import { PlayerType } from '../models/player-type';
 import { BRAND, GameDialog, type GameDialogButton, type GameIconName } from '../ui';
 import useCrumbs from './useCrumbs';
+import { tryAgainLine } from '../services/connectionCopy';
 
 type ModalState =
   | { type: 'none' }
@@ -239,7 +240,7 @@ function dialogFor(modal: ModalState, actions: {
       };
     case 'failed':
       return {
-        title: 'That didn’t work', message: `You still have all your ${currencyLabel(modal.item.currency.name)}. Check your internet and try again.`,
+        title: 'That didn’t work', message: `You still have all your ${currencyLabel(modal.item.currency.name)}. ${tryAgainLine()}`,
         buttons: [
           { text: 'Try again', onPress: () => void actions.confirmPurchase(modal.item) },
           { text: 'Not now', style: 'cancel' },

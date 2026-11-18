@@ -56,6 +56,7 @@ function chest({ reconciled = null, reduced = false, props = {} } = {}) {
       if (name === '../context/DailyGiftProvider') return { DailyGiftContext };
       if (name === '../context/CurrencyFlyProvider') return { useCurrencyFly: () => ({ triggerFly(value) { flights.push(value); }, getTarget: () => null }) };
       if (name === '../dev/ws7Preview') return { ws7Preview: () => '' };
+      if (name === '../services/connectionCopy') return { tryAgainLine: () => 'The game is slow right now. Try again.' };
       if (name === '../ui') return { BRAND: { navy: '#05346e', blue: '#0768b9', white: '#fff', gold: '#ffcf3b', goldLip: '#d99a00' },
         GameIcon: 'GameIcon', ICON_SOURCES: { coins: 'icon:coins', energy: 'icon:energy', ticket: 'icon:ticket' },
         gameAlert(title) { alerts.push(title); } };

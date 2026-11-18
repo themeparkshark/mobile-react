@@ -15,6 +15,7 @@ import { placeCoin, getMyParkCoins, ParkCoin } from '../../api/endpoints/gym-bat
 import { battleHUDEvents } from './battleHUDEvents';
 import { GameIcon, SharkLoader } from '../../ui';
 import { friendlyActionError } from '../../services/match/matchLink';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -111,7 +112,7 @@ export default function PlaceCoinModal({
     } catch (err) {
       console.error('Failed to load coins:', err);
       setState('error');
-      setError('Could not load your ride coins. Check your internet and try again.');
+      setError(`Could not load your ride coins. ${tryAgainLine()}`);
     }
   };
 
@@ -131,7 +132,7 @@ export default function PlaceCoinModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       battleHUDEvents.emit(); // Refresh BattleHUD scores immediately
     } catch (err: any) {
-      setError(friendlyActionError(err, 'Could not place your coin. Check your internet and try again.'));
+      setError(friendlyActionError(err, `Could not place your coin. ${tryAgainLine()}`));
       setState('error');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }

@@ -36,6 +36,7 @@ import { kioskLayout, KIOSK_COLORS } from './CommunityCenter/leaveGiftLayout';
 import { ticketLabel, ticketsEarnedFrom } from './CommunityCenter/communityCenterRewards';
 import { useTutorialWhenReady } from '../components/Tutorial';
 import { useAnyModalLayer } from '../ui/modalLayers';
+import { tryAgainLine } from '../services/connectionCopy';
 
 /** A small busy mark for buttons and slots: his fin bobbing, still under reduced motion. */
 function SharkLoaderDot({ style }: { readonly style?: object }) {
@@ -611,7 +612,7 @@ export default function CommunityCenterScreen() {
         slotAnims[slotIndex].setValue(0);
       } else {
         // Generic error
-        setErrorMessage(errorData?.error || 'That didn’t work. Check your internet and try again.');
+        setErrorMessage(errorData?.error || `That didn’t work. ${tryAgainLine()}`);
         setShowErrorModal(true);
       }
       console.error('Claim failed:', errorData || error);
@@ -744,7 +745,7 @@ export default function CommunityCenterScreen() {
         setShowNotEnoughCoinsModal(true);
       } else {
         // Generic error
-        setErrorMessage(errorData?.error || 'That didn’t work. Check your internet and try again.');
+        setErrorMessage(errorData?.error || `That didn’t work. ${tryAgainLine()}`);
         setShowErrorModal(true);
       }
       console.error('Give failed:', errorData || error);

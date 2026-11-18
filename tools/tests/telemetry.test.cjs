@@ -167,11 +167,13 @@ test('the API client records core-loop breadcrumbs and reports server failures',
       addBreadcrumb: (...args) => crumbs.push(args),
       captureMessage: (...args) => messages.push(args),
     },
-    '../services/connectivity': { reportReachable() {}, reportUnreachable() {} },
+    '../services/connectivity': { reportReachable() {}, reportUnreachable() {}, reportTimeout() {}, reportSlowAnswer() {}, FAILURES_BEFORE_OFFLINE: 2, SLOW_ANSWER_MS: 6000 },
     '../utils/hermesSafeError': loadTs('src/utils/hermesSafeError.ts'),
     './getRetry': { nextGetRetryDelay: () => null },
     './dedupeGet': loadTs('src/api/dedupeGet.ts'),
     './jsonGuard': loadTs('src/api/jsonGuard.ts'),
+    '../dev/laneDelay': loadTs('src/dev/laneDelay.ts'),
+    '../services/walletSync': loadTs('src/services/walletSync.ts'),
   });
   client.recordCoreLoopResponse('post', '/me/task-attempts', 201);
   client.recordCoreLoopResponse('post', '/raids/3/attack', 503);

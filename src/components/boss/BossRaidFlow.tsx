@@ -31,6 +31,7 @@ import MatchLinkBanner from '../match/MatchLinkBanner';
 import { LINK_COPY, type LinkPhase } from '../../services/match/matchLink';
 import { idlePollInterval } from '../../hooks/useUserIdle';
 import countText from '../../helpers/countText';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 /** Poll the park's raid while at a park. `loaded` is false until the first answer for this player and park. */
 export function useParkRaid(parkId: number | null | undefined, { focused = true, idle = false }: {
@@ -304,7 +305,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
       if (result.error === 'too_far') {
         setAwayFor({ raidId: raid.id, reason: result.reason ?? 'far' });
         setNote(PRESENCE[result.reason ?? 'far']);
-      } else setNote(result.error === 'network' ? 'Could not reach the fight. Check your internet and try again.' : ERRORS[result.error]);
+      } else setNote(result.error === 'network' ? `Could not reach the fight. ${tryAgainLine()}` : ERRORS[result.error]);
       return;
     }
     // Lock GPS, the explicit join choice and the server round at the action the player approved.

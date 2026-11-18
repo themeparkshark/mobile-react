@@ -63,5 +63,6 @@ test('writes, other players, other params and cancellable requests never share',
 
 test('the API client dedupes outside the GET retry, below the interceptors', () => {
   const src = fs.readFileSync(path.join(root, 'src/api/client.ts'), 'utf8');
-  assert.match(src, /client\.defaults\.adapter = withInflightDedupe\(withGetRetry\(withNonJsonRetry\(client\.defaults\.adapter as AxiosAdapter\)\)\) as AxiosAdapter;/);
+  assert.match(src, /const transport = withLaneDelay\(client\.defaults\.adapter as AxiosAdapter,/);
+  assert.match(src, /client\.defaults\.adapter = withInflightDedupe\(withGetRetry\(withNonJsonRetry\(transport\)\)\) as AxiosAdapter;/);
 });

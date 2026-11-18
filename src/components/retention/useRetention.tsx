@@ -48,6 +48,7 @@ import RewardReveal from './RewardReveal';
 import RewardsSheet from './RewardsSheet';
 import CalmModal, { calmFace } from './CalmModal';
 import DailyGiftModal from '../DailyGiftModal';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
@@ -435,7 +436,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       if (paid) { setView({ ...current, opening: false, rewards: paid }); return; }
       setView(null);
       void refresh(true);
-      gameAlert('Could not open it yet', 'Your reward is safe. Check your internet and try again.');
+      gameAlert('Could not open it yet', `Your reward is safe. ${tryAgainLine()}`);
     } finally {
       opening.current = false;
     }
@@ -626,7 +627,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       applyDaily(state);
       if (on) void enablePush().catch(() => undefined);
     } catch {
-      gameAlert('Could not change reminders', 'Check your internet and try again.');
+      gameAlert('Could not change reminders', `${tryAgainLine()}`);
     }
   };
 

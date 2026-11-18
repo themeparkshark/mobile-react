@@ -61,6 +61,7 @@ function provider({ login, me, failCache = false, apiCheck } = {}) {
     '../services/lineplay/backgroundQueueHeartbeat': {
       async clearQueueBackgroundHeartbeat() { events.push(['stopQueue']); },
     },
+    '../services/walletSync': { setWalletSink() {} },
     '../utils/apiCache': {
       async clearCache() { events.push(['clearAccountCache']); },
     },

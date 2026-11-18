@@ -10,9 +10,10 @@
  * EXPO_PUBLIC_LANE_DELAY_MATCH regex on the URL) or in dev JS over the debugger:
  *   globalThis.__tpsLaneDelay = { ms: 5000, match: 'feature-flags|/me$' }   // null turns it off
  */
-const LANE_BUNDLE = process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
-const ENV_MS = Number(process.env.EXPO_PUBLIC_LANE_DELAY_MS ?? 0);
-const ENV_MATCH = process.env.EXPO_PUBLIC_LANE_DELAY_MATCH ?? '';
+// (typeof guards: plain test loaders have no process; Metro inlines each EXPO_PUBLIC_ value at bundle time.)
+const LANE_BUNDLE = typeof process !== 'undefined' && process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
+const ENV_MS = typeof process !== 'undefined' ? Number(process.env.EXPO_PUBLIC_LANE_DELAY_MS ?? 0) : 0;
+const ENV_MATCH = typeof process !== 'undefined' ? process.env.EXPO_PUBLIC_LANE_DELAY_MATCH ?? '' : '';
 
 type Rule = { readonly ms: number; readonly match?: string | null };
 type DelayConfig = { url?: string; timeout?: number };

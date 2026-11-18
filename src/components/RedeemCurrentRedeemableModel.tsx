@@ -21,6 +21,7 @@ import { RedeemableType } from '../models/redeemable-type';
 import YellowButton from './YellowButton';
 import { BRAND, gameAlert } from '../ui';
 import { UpperText } from '../ui/upper';
+import { tryAgainLine } from '../services/connectionCopy';
 
 export default function RedeemCurrentRedeemableModel({
   open,
@@ -207,7 +208,7 @@ export default function RedeemCurrentRedeemableModel({
                   await redeemRedeemables(redeemable);
                 } catch {
                   setCollecting(false);
-                  gameAlert('Could not collect this find', 'It is still here. Check your internet and try again.');
+                  gameAlert('Could not collect this find', `It is still here. ${tryAgainLine()}`);
                   return;
                 }
                 setCollecting(false);

@@ -35,6 +35,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { defendGym } from '../../api/endpoints/gym-battle';
 import { friendlyActionError } from '../../services/match/matchLink';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 // iPhone SE and other short screens: a smaller shield and a lower score
@@ -365,7 +366,7 @@ export default function DefendMiniGameModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setResult({
         points: 0,
-        message: friendlyActionError(error, 'That didn’t work. Check your internet and try again.'),
+        message: friendlyActionError(error, `That didn’t work. ${tryAgainLine()}`),
         failed: true,
       });
       setGameState('finished');

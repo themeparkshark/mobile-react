@@ -56,6 +56,7 @@ import { useDevAutoPress } from '../share/devDrive';
 import { UpperText } from '../ui/upper';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import { useMapFlags } from '../services/mapFlags';
+import { tryAgainLine } from '../services/connectionCopy';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 /** The success CTA's width: the card is 95% of (screen - 48), with 14 pt padding each side. */
@@ -427,7 +428,7 @@ export default function CoinLevelingModal({
       const status = (error as { response?: { status?: number } })?.response?.status;
       setUpgradeError(status === 409
         ? 'This coin changed. Close its detail and reopen it to refresh your level.'
-        : 'Your upgrade could not be confirmed. Check your connection and try again.');
+        : `Your upgrade could not be confirmed. ${tryAgainLine()}`);
       setState('preview');
       cancelUi(coinPop); coinShake.value = 0; coinPop.value = 1;
       progressAnim.setValue(0);

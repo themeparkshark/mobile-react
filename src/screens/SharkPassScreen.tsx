@@ -62,6 +62,7 @@ import { trackImpression, trackMoney } from '../services/money/track';
 import { baseRates, formatLike, regularValue } from '../services/money/offers';
 import { useSupplies } from '../services/money/supplies';
 import countText from '../helpers/countText';
+import { tryAgainLine } from '../services/connectionCopy';
 
 /** A pass quest's reward in the pass's own unit: "+1 step" for whole steps, else "Climbs" (steps, never points). */
 function questStepWords(bonus: number, perStep: number): string {
@@ -306,7 +307,7 @@ export default function SharkPassScreen() {
       const code = sharkPassErrorCode(error);
       if (code === 'ITEM_NOT_READY' || code === 'BOXES_NOT_READY') gameAlert('Almost ready', 'This one is almost ready. Come back soon and it’s yours.');
       else if (code === 'SHARK_PASS_CLAIMED') void load();
-      else gameAlert('That didn’t work', 'Check your internet and try again.');
+      else gameAlert('That didn’t work', `${tryAgainLine()}`);
     } finally {
       claiming.current = false;
       setBusy(null);
@@ -329,7 +330,7 @@ export default function SharkPassScreen() {
         caption: claimedLine(rewards), group: pickTrio(rewards), twin: twin ?? undefined, locked });
       void refreshPlayer?.().catch(() => undefined);
     } catch {
-      gameAlert('That didn’t work', 'Check your internet and try again.');
+      gameAlert('That didn’t work', `${tryAgainLine()}`);
     } finally {
       setBusy(null);
     }
@@ -393,7 +394,7 @@ export default function SharkPassScreen() {
       const code = sharkPassErrorCode(error);
       if (code === 'GOLD_COINS') setGoldShort(Math.max(1, cost - Number(player?.coins ?? 0)));
       else if (code === 'GOLD_NOT_READY') gameAlert('Almost ready', 'Gold editions are almost ready. Come back soon.');
-      else gameAlert('That didn’t work', 'Check your internet and try again.');
+      else gameAlert('That didn’t work', `${tryAgainLine()}`);
     } finally {
       setGoldBusy(null);
     }
@@ -407,7 +408,7 @@ export default function SharkPassScreen() {
     if (outcome === 'restored') { await load(); gameAlert('Welcome back!', 'Your Shark Pass is on again.'); }
     else if (outcome === 'nothing') gameAlert('Nothing to bring back', 'We couldn’t find this season’s Shark Pass on this Apple ID.');
     else if (outcome === 'other_account') gameAlert('On another account', 'This Shark Pass belongs to a different Theme Park Shark account.');
-    else gameAlert('That didn’t work', 'Check your internet and try again.');
+    else gameAlert('That didn’t work', `${tryAgainLine()}`);
   };
 
   const running = focused && active && !reduced;
@@ -809,7 +810,7 @@ export default function SharkPassScreen() {
                       </View>
                       {f.owned && (
                         <Pressable disabled={!!busy} accessibilityRole="button" hitSlop={8} accessibilityLabel={wearing ? `Take off the ${f.name}` : `Wear the ${f.name}`}
-                          onPress={() => { setBusy('frame'); void wearFrame(wearing ? null : f.key).then(() => load()).catch(() => gameAlert('That didn’t work', 'Check your internet and try again.')).finally(() => setBusy(null)); }}>
+                          onPress={() => { setBusy('frame'); void wearFrame(wearing ? null : f.key).then(() => load()).catch(() => gameAlert('That didn’t work', `${tryAgainLine()}`)).finally(() => setBusy(null)); }}>
                           <Text maxFontSizeMultiplier={1.1} style={[s.goldBtn, wearing && s.offBtn]}>{wearing ? 'TAKE OFF' : 'WEAR'}</Text>
                         </Pressable>
                       )}

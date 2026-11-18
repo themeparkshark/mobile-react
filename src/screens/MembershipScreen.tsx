@@ -40,6 +40,7 @@ import { getVipGift, type VipPlanTime } from '../api/endpoints/me/vip-gift';
 import GrownUpsInfo from '../components/money/GrownUpsInfo';
 
 import countText from '../helpers/countText';
+import { tryAgainLine } from '../services/connectionCopy';
 // Every line here is backed by live server logic: ride wins pay VIP double
 // (CompleteTaskAction), VIP home maps spawn two extra finds and double their
 // rewards (PrepItemSpawner, PrepItemController). VIP gear is left
@@ -207,7 +208,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
     else if (outcome === 'nothing') gameAlert('Nothing to bring back', 'We couldn’t find VIP on this Apple ID. Ask a grown-up to sign in with the Apple ID that bought it.');
     else if (outcome === 'owned_elsewhere') ownedElsewhere();
     else if (outcome === 'unavailable') gameAlert('Update the game', 'Update Theme Park Shark in the App Store to bring back VIP.');
-    else gameAlert('That didn’t work', 'Check your internet and try again.');
+    else gameAlert('That didn’t work', `${tryAgainLine()}`);
   };
 
   const close = () => (intro ? RootNavigation.navigate('Explore') : RootNavigation.goBack());

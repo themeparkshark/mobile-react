@@ -1,5 +1,6 @@
 import type { AdventureTicket, TripGoalRide } from '../../api/endpoints/me/trip-goal';
 import type { LivePark, LiveRide } from '../../api/endpoints/parks/live';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 type Point = { readonly latitude: number; readonly longitude: number };
 
@@ -134,7 +135,7 @@ export function adventureErrorMessage(cause: unknown): string {
     const first = Object.values(response.data?.errors ?? {})[0]?.[0];
     if (first || response.data?.message) return String(first ?? response.data?.message);
   }
-  return 'Your ticket is safe. Check your internet and try again.';
+  return `Your ticket is safe. ${tryAgainLine()}`;
 }
 
 /** Hand-off for WS3's measured shelf arrival on the Park screen (won coins only). */

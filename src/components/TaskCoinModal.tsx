@@ -21,6 +21,7 @@ import { levelUpGoal } from '../services/collection/levelUpGoal';
 import { LEAVE_FADE_MS, shelfLeaving } from '../services/collection/shelfLeaving';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import YellowButton from './YellowButton';
+import { tryAgainLine } from '../services/connectionCopy';
 
 export default function TaskCoinModal({
   task,
@@ -110,7 +111,7 @@ export default function TaskCoinModal({
         setCoinUnavailable(true);
         setVisible(true);
       } else {
-        gameAlert('Coin did not load', 'Your coin did not load. Check your internet and try again.', undefined, { icon: 'retry' });
+        gameAlert('Coin did not load', `Your coin did not load. ${tryAgainLine()}`, undefined, { icon: 'retry' });
       }
     } finally {
       opening.current = false;

@@ -55,6 +55,7 @@ import {
 } from '../../components/money/moneyUi';
 import type { GlossaryKey } from '../../services/help/glossary';
 import countText from '../../helpers/countText';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 export { grantsText, gateReasonFor } from '../../services/money/supplies';
 
@@ -221,7 +222,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
     } else if (outcome.status === 'capped' || outcome.status === 'claimed') {
       gameAlert('Done for today', 'Your free ticket comes back tomorrow.');
     } else if (outcome.status === 'failed') {
-      gameAlert('That didn’t work', 'Check your internet and try again.');
+      gameAlert('That didn’t work', `${tryAgainLine()}`);
     }
     await reloadAds();
   };

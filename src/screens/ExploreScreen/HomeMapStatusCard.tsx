@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Image } from 'expo-image';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GameIcon, GameRichText } from '../../ui';
+import { isOffline } from '../../services/connectivity';
 
 interface Props {
   readonly mode: 'loading' | 'empty' | 'error' | 'saved' | 'park_check';
@@ -49,7 +50,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections, in
       style={styles.savedShark} contentFit="contain" />
     <View style={styles.savedCopy}>
       <Text style={styles.savedTitle}>SAVED MAP</Text>
-      <Text style={styles.savedDetail}>Check your internet to collect these finds.</Text>
+      <Text style={styles.savedDetail}>{isOffline() ? 'Check your internet to collect these finds.' : 'The game is slow right now. Your finds are safe.'}</Text>
       <RankLine line={rankLine} onPress={onOpenStandings} light />
     </View>
     {onRetry && <Pressable accessibilityRole="button"
@@ -64,7 +65,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections, in
     : mode === 'error' ? 'MAP SIGNAL LOST' : 'THE HUNT IS QUIET';
   const detail = mode === 'park_check' ? 'Treats come back once we see you are outside a park.'
     : mode === 'loading' ? 'Looking for nearby finds...'
-    : mode === 'error' ? 'Could not load nearby finds. Check your internet. We will try again.'
+    : mode === 'error' ? (isOffline() ? 'Could not load nearby finds. Check your internet. We will try again.' : 'The game is slow right now. We will try again.')
       : 'New finds will show up soon. Check your collection while you wait.';
 
   return <View style={[styles.card, inline && styles.inline]}>

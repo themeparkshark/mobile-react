@@ -1,6 +1,8 @@
 import useCrumbs from '../hooks/useCrumbs';
 import SharkLoader, { type SharkLoaderProps } from '../ui/SharkLoader';
 import { stripIconTokens } from '../ui/iconTokens';
+import { isOffline } from '../services/connectivity';
+import { SLOW_LOADING_LINE } from '../services/connectionCopy';
 
 /**
  * Screen loading state. Now the branded SharkLoader (WS0).
@@ -16,7 +18,10 @@ export default function Loading(props: SharkLoaderProps) {
   const { labels } = useCrumbs();
   const crumb = typeof labels.slow_connectivity === 'string' ? stripIconTokens(labels.slow_connectivity) : '';
   const loading = (props.state ?? 'loading') === 'loading';
-  return <SharkLoader {...props} message={props.message ?? (loading && crumb ? crumb : undefined)} />;
+  // T172: the CMS line blames the player's internet, so it shows only while the app really is offline;
+  // a slow server says the game is slow right now.
+  const slowLine = isOffline() && crumb ? crumb : SLOW_LOADING_LINE;
+  return <SharkLoader {...props} message={props.message ?? (loading ? slowLine : undefined)} />;
 }
 
 export type LoadingProps = SharkLoaderProps;

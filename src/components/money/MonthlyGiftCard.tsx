@@ -13,6 +13,7 @@ import { GotIt, MAX_FONT } from './moneyUi';
 import { FlexShareButton } from '../../share';
 import { useModalHandoff } from '../../share/handoff';
 import countText from '../../helpers/countText';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 const PIN_ART: Record<string, number> = {
   'vip-pin-nov': require('../../../assets/images/sharkpass/vip-pin-nov.webp'),
@@ -47,7 +48,7 @@ export default function MonthlyGiftCard() {
       setLanded({ coins: res.granted.coins ?? 0, pin: gift.pin?.name ?? null, art: gift.pin?.art ?? null });
       void refreshPlayer?.().catch(() => undefined);
     } catch {
-      gameAlert('That didn’t work', 'Check your internet and try again.');
+      gameAlert('That didn’t work', `${tryAgainLine()}`);
     } finally {
       setBusy(false);
     }

@@ -32,6 +32,7 @@ import GameIcon from './GameIcon';
 import GameText from './GameText';
 import type { GameIconName } from './iconNames';
 import { MOTION, SPACE } from './tokens';
+import { tryAgainLine } from '../services/connectionCopy';
 
 /** Dustin's TPS shark mascot (hand-drawn original). */
 export const SHARK_LOADER_ART = require('../../assets/images/screens/pin-collections/shark.png');
@@ -74,7 +75,8 @@ export function sharkLoaderContent(props: SharkLoaderProps, slow: boolean) {
       art: props.icon ? 'icon' as const : 'shark' as const,
       icon: props.icon,
       title: props.title ?? SHARK_LOADER_COPY.errorTitle,
-      message: props.message ?? SHARK_LOADER_COPY.errorMessage,
+      // T172: "check your connection" only when the phone really is offline; a slow server says so.
+      message: props.message ?? tryAgainLine(),
       retry: props.onRetry ? props.retryLabel ?? SHARK_LOADER_COPY.retry : undefined,
       action: undefined,
     };

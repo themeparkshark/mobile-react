@@ -3,7 +3,8 @@ const fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript
 const { runtime } = require('./helpers/reward-hook-runtime.cjs');
 const presentation = { exports: {} };
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/screens/ExploreScreen/adventureTicketPresentation.ts', 'utf8'),
- { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { module: presentation, exports: presentation.exports });
+ { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { module: presentation, exports: presentation.exports,
+   require: name => { if (name === '../../services/connectionCopy') return { tryAgainLine: () => 'The game is slow right now. Try again.' }; throw new Error(`Unexpected import ${name}`); } });
 const ride = { task_id: 1, asset_id: 13, ride_id: 8, ride_name: 'Space Ride', coin_url: '', park_id: 1 };
 const ticket = (phase = 'discover') => ({ id: 7, park_id: 1, park_day: '2026-09-29', ride, ride_choices: [ride],
  phase, discover: phase === 'discover' ? null : { ...ride, kind: 'coin_win' },
@@ -60,7 +61,7 @@ test('celebration double taps submit once, network failure preserves the readabl
  const p=card('celebrate');p.button('Unfold my souvenir').props.onPress();p.button('Unfold my souvenir').props.onPress();p.app.render();
  assert.deepEqual(p.calls,['celebrate']);p.work.reject(new Error('offline'));await p.app.settle();
  assert.equal(p.modal().props.isVisible,true);assert.equal(p.button('Unfold my souvenir').props.disabled,false);
- const alert=p.app.find(n=>n.props?.accessibilityRole==='alert');assert.match(alert.props.children,/Check your internet/);assert.deepEqual(p.calls,['celebrate']);
+ const alert=p.app.find(n=>n.props?.accessibilityRole==='alert');assert.match(alert.props.children,/Your ticket is safe\. The game is slow right now\. Try again\./);assert.deepEqual(p.calls,['celebrate']);
 });
 test('a 422 shows the server reason instead of "Reconnect"',async()=>{
  const p=card('play',{closed:true});p.button('Pick another ride').props.onPress();p.app.render();

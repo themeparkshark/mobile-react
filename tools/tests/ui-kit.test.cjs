@@ -285,6 +285,7 @@ function loaderView(props) {
     './GameIcon': { default: 'GameIcon' },
     './GameText': { default: 'GameText' },
     './tokens': tokens,
+    '../services/connectionCopy': loadTs('src/services/connectionCopy.ts'),
   }, props, {}, { exportName: 'default' });
 }
 
@@ -313,24 +314,27 @@ test('SharkLoader: loading turns slow and offers retry; error and empty never sp
   assert.equal(empty.timers.size, 0, 'empty state starts no slow timer');
 });
 
-function loadingView(props, labels = {}) {
+function loadingView(props, labels = {}, offline = false) {
   return runtime('src/components/Loading.tsx', {
     '../ui/SharkLoader': { default: 'SharkLoader' },
     '../hooks/useCrumbs': { default: () => ({ labels }) },
     '../ui/iconTokens': iconTokens,
+    '../services/connectivity': { isOffline: () => offline },
+    '../services/connectionCopy': { SLOW_LOADING_LINE: 'The game is slow right now. Hang tight.' },
   }, props);
 }
 
-test('Loading is a thin wrapper over SharkLoader that keeps the CMS slow copy', () => {
+test('Loading is a thin wrapper over SharkLoader; the CMS internet line only while really offline (T172)', () => {
   const loading = loadingView({ state: 'error', onRetry: 'r' }, { slow_connectivity: 'Slow signal in the park' });
   assert.equal(loading.tree.type, 'SharkLoader');
   assert.equal(loading.tree.props.state, 'error');
   assert.equal(loading.tree.props.onRetry, 'r');
   assert.equal(loading.tree.props.message, undefined, 'the crumb is loading copy only, never the error message');
-  assert.equal(loadingView({}, { slow_connectivity: '\u{1F40C} Slow signal in the park' }).tree.props.message,
-    'Slow signal in the park', 'labels.slow_connectivity is the slow message, with any emoji dropped');
+  assert.equal(loadingView({}, { slow_connectivity: '\u{1F40C} Slow signal in the park' }, true).tree.props.message,
+    'Slow signal in the park', 'offline: labels.slow_connectivity is the slow message, with any emoji dropped');
+  assert.equal(loadingView({}, { slow_connectivity: 'This is taking a while. Check your internet.' }).tree.props.message,
+    'The game is slow right now. Hang tight.', 'a slow server never blames the internet');
   assert.equal(loadingView({ message: 'Own copy' }, { slow_connectivity: 'Slow' }).tree.props.message, 'Own copy');
-  assert.equal(loadingView({}, {}).tree.props.message, undefined, 'no crumb falls back to SHARK_LOADER_COPY.slow');
 });
 
 test('useUiReducedMotion knows the preference on the first render', () => {

@@ -21,6 +21,7 @@ import TeamBadge from '../../components/TeamBadge';
 import { GameIcon } from '../../ui';
 import { QUESTION_BANK } from './teamQuiz';
 import { teamExit, teamStepGone, teamStepLeaving, teamStepShown, type TeamSelectionParams } from '../../components/rewards/teamOffer';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
 const VIBE: Record<TeamId, { tag: string; line: string }> = {
@@ -206,7 +207,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
             <View style={s.warn}>
               <Text style={s.warnText}>This is for keeps: you can’t switch teams later.</Text>
             </View>
-            {stage === 'error' && <Text style={s.error}>Couldn’t join just now. Check your internet and try again.</Text>}
+            {stage === 'error' && <Text style={s.error}>{`Couldn’t join just now. ${tryAgainLine()}`}</Text>}
             <Pressable style={[s.join, { backgroundColor: TEAMS[team].color }]} onPress={() => void join()}
               disabled={stage === 'joining'} accessibilityRole="button">
               {stage === 'joining' ? <ActivityIndicator color="#fff" />

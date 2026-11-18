@@ -97,7 +97,7 @@ test('transport: a non-JSON GET is tried once more after a short pause; writes n
 
 test('the client stacks the non-JSON retry under the GET retry and dedupe', () => {
   const src = fs.readFileSync(path.join(root, 'src/api/client.ts'), 'utf8');
-  assert.match(src, /withInflightDedupe\(withGetRetry\(withNonJsonRetry\(client\.defaults\.adapter/);
+  assert.match(src, /withInflightDedupe\(withGetRetry\(withNonJsonRetry\(transport\)\)\)/);
   assert.match(src, /if \(consecutiveNonJson >= NON_JSON_BEFORE_OFFLINE\) reportUnreachable\(\);/);
 });
 

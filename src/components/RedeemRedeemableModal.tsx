@@ -74,6 +74,7 @@ import { storeAvailable } from '../services/purchases';
 import { watchForReward } from '../services/ads';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { tryAgainLine, tryAgainWith } from '../services/connectionCopy';
 
 
 // Ticket cost by ride importance tier
@@ -590,7 +591,7 @@ export default function RedeemRedeemableModal({
     try {
       await refreshPlayer?.();
     } catch {
-      setStartError('Could not refresh your Tickets. Check your internet and try again.');
+      setStartError(`Could not refresh your Tickets. ${tryAgainLine()}`);
     }
   }, [refreshPlayer]);
 
@@ -755,7 +756,7 @@ export default function RedeemRedeemableModal({
     try { await refreshPlayer?.(); } catch { failed = true; }
     setClaimable(null);
     setClaiming(false);
-    if (failed) setStartError('Some Tickets did not claim. Check your internet and try again.');
+    if (failed) setStartError(`Some Tickets did not claim. ${tryAgainLine()}`);
   }, [claiming, claimable, refreshPlayer]);
 
   // The first coin has one fixed order (blueprint 4.3 rule 3): the win card, then (first coin ever,
@@ -1127,7 +1128,7 @@ export default function RedeemRedeemableModal({
             message="Your Ticket is used and your game is ready. If it does not start, update the app."
             primary={{ label: 'Play Now', onPress: handlePlayNow }} />}
           {flowState === 'spend-error' && <ChallengeStatusCard title="Reconnect" art="loading"
-            message="We could not tell if this game started. Check your internet and tap Reconnect. You will not pay another Ticket."
+            message={`We could not tell if this game started. ${tryAgainWith('tap Reconnect')} You will not pay another Ticket.`}
             primary={{ label: 'Reconnect', onPress: handleStartWheel }}
             quiet={{ label: BACK_TO_MAP, onPress: handleLostClose }} />}
           {flowState === 'save-error' && <ChallengeStatusCard title="Not Started"
@@ -1150,7 +1151,7 @@ export default function RedeemRedeemableModal({
             art={proofRejected ? 'none' : 'loading'}
             message={proofRejected
               ? 'We could not count that game. Your try is still open. Play it again. It costs no new Ticket.'
-              : 'We could not check your score yet. Check your internet and tap Reconnect. You will not pay another Ticket.'}
+              : `We could not check your score yet. ${tryAgainWith('tap Reconnect')} You will not pay another Ticket.`}
             primary={{ label: proofRejected ? 'Replay Game' : 'Reconnect', onPress: () => {
               if (proofRejected) {
                 proofRef.current = null;

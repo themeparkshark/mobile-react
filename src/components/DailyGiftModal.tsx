@@ -31,6 +31,7 @@ import { DURATION, EASE, SPRING } from '../ui/motionEasing';
 import TapHint from './TapHint';
 import CalmModal from './retention/CalmModal';
 import { rewardWord } from '../services/words/playerWords';
+import { tryAgainLine } from '../services/connectionCopy';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
@@ -435,7 +436,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         gameAlert('Today’s chest is collected', 'You already got today’s prizes. Come back tomorrow for the next chest.');
       } else {
         setPhase('closed');
-        gameAlert('Could not open your chest', 'Your chest is still waiting. Check your internet and try again.');
+        gameAlert('Could not open your chest', `Your chest is still waiting. ${tryAgainLine()}`);
       }
     }
   };

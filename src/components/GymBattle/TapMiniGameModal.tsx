@@ -21,6 +21,7 @@ import { checkinGym } from '../../api/endpoints/gym-battle';
 import { battleHUDEvents } from './battleHUDEvents';
 import { GameIcon } from '../../ui';
 import { friendlyActionError } from '../../services/match/matchLink';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -113,7 +114,7 @@ export default function TapMiniGameModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setResult({
         points: 0,
-        message: friendlyActionError(error, 'That didn’t work. Check your internet and try again.'),
+        message: friendlyActionError(error, `That didn’t work. ${tryAgainLine()}`),
       });
       setGameState('finished');
     }
