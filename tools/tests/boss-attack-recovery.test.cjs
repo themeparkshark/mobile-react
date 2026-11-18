@@ -117,6 +117,8 @@ function flow({reduced=false,round,stubs={}}={}){
   './bossArt':{BOSS_ART:{kraken:1}},'../../games/boss/bash/BossBash':{BossBash:'BossBrawl'},
   './BossJoinCard':{default:'BossJoinCard',BossJoinCta:'BossJoinCta'},'./joinModel':joinModel,
   '../../power':{useBudgetedPoll(){}},
+  // T002: the result opens at a still moment through the attention queue (both open here).
+  '../../hooks/useStillMoment':{default:()=>true},'../../screens/ExploreScreen/mapPresentationQueue':{attentionGate:{request:()=>true}},
   '../../ui':{BRAND:{},GameButton:'GameButton',GameIcon:'GameIcon'},
   './BossSheetParts':{AttackPips:'AttackPips',BossSheetSkeleton:'BossSheetSkeleton',TeamDamage:'TeamDamage',TopFighters:'TopFighters'},
   './BossWinCard':{default:'BossWinCard'},

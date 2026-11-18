@@ -1,10 +1,9 @@
 import { Image } from 'expo-image';
-import Countdown from 'react-countdown';
 import { Text, View } from 'react-native';
 import { TagSlot } from '../../components/map/declutter/Placed';
 import type { TagPlacement } from '../../components/map/declutter/solver';
 import { REDEEMABLE_BODY, FIND_BOX, FIND_TAG } from './parkMapLayout';
-import { FindFade, findClock, useFindExpiry } from './FindLife';
+import { FindFade, FindSoonChip, useFindExpiry } from './FindLife';
 import { RedeemableType } from '../../models/redeemable-type';
 
 /**
@@ -31,34 +30,8 @@ export default function Redeemable({
       {/* Timer chip: the declutter places it on a free side (TagSlot). */}
       <TagSlot tag={tag} anchor={FIND_BOX.anchor} width={FIND_TAG.w} height={FIND_TAG.h}
         fallback={{ x: -FIND_TAG.w / 2, y: REDEEMABLE_BODY.y - FIND_TAG.h - 3 }}>
-        {/* Every timed find counts down in the same calm gold chip (never the theme's red). */}
-        <View style={{
-          backgroundColor: '#FFF8E7',
-          borderRadius: 12,
-          paddingHorizontal: 12,
-          paddingVertical: 5,
-          borderWidth: 2,
-          borderColor: '#FFD700',
-          shadowColor: '#FFD700',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.3,
-          shadowRadius: 4,
-          elevation: 4,
-        }}>
-          <Countdown
-            date={Date.parse(redeemable.active_to)}
-            renderer={({ total }) => (
-              <Text style={{
-                fontFamily: 'Shark',
-                fontSize: 15,
-                color: '#B8860B',
-                textAlign: 'center',
-              }}>
-                {findClock(total)}
-              </Text>
-            )}
-          />
-        </View>
+        {/* No clock on the map (T006): words, and only in the last ten minutes. */}
+        <FindSoonChip activeTo={redeemable.active_to} tone="gold" />
       </TagSlot>
 
       {/* Redeemable with static glow */}

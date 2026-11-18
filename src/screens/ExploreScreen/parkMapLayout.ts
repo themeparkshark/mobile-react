@@ -1,3 +1,4 @@
+import { LEAVES_SOON_MS } from '../../helpers/calmTime';
 /**
  * The in-park map's declutter inputs: every marker's footprint, priority and
  * rules for the solver (src/components/map/declutter/solver.ts), and the HUD
@@ -32,7 +33,8 @@ export const FIND_ROOT = { width: 80, height: 80, alignItems: 'center', justifyC
 export const COIN_BODY: Rect = { x: -24, y: -24, w: 48, h: 48 };
 /** Redeemable (50) with its 8 pt glow: 66 x 66. */
 export const REDEEMABLE_BODY: Rect = { x: -33, y: -33, w: 66, h: 66 };
-export const FIND_TAG = { w: 72, h: 30 } as const;
+/** A timed find's chip: "Leaves soon", only in its last ten minutes (T006). */
+export const FIND_TAG = { w: 88, h: 30 } as const;
 export const ITEM_BODY: Rect = { x: -35, y: -35, w: 70, h: 70 };
 export const VAULT_BODY: Rect = { x: -36, y: -36, w: 72, h: 72 };
 /** Haunt lantern (FrightSprites: a 168 x 136 box, ground point at 84, 82): the 96 x 100 facade canvas with its glow. */
@@ -96,7 +98,8 @@ export function rideTagSize(kind: RideTagKind | null, text = ''): { w: number; h
     case 'adventure': return { w: 92, h: 22 };
     case 'goal': return { w: 66, h: 22 };
     case 'limited': return { w: Math.min(190, 36 + text.length * 6), h: 22 };
-    case 'timer': return { w: 56, h: 22 };
+    // "LEAVES SOON" in words (T006), never a minutes chip.
+    case 'timer': return { w: 92, h: 22 };
     default: return null;
   }
 }
@@ -121,7 +124,8 @@ export function selectedCardSide(tag: { readonly y: number } | null | undefined,
   if (tag.y >= artBottom - 1) return 'below';
   return 'beside';
 }
-export const URGENT_MS = 5 * 60_000;
+/** A timed ride's chip shows only in its last ten minutes, in words (T006). */
+export const URGENT_MS = LEAVES_SOON_MS;
 
 /** A ride's chip for the solver, by the same rules TaskMarker draws with. */
 export function rideTagFor({ selected, rush, adventure, goal, owned, limitedText, expiresAt, near, now, closed = false }: {
@@ -139,7 +143,7 @@ export function rideTagFor({ selected, rush, adventure, goal, owned, limitedText
   }
   const badge = markerBadge({ rush, adventure, goal, owned, limited: !!limitedText });
   const timed = expiresAt !== null && expiresAt > now;
-  const showTimer = timed && !rush && (near || expiresAt! - now < URGENT_MS);
+  const showTimer = timed && !rush && expiresAt! - now <= URGENT_MS;
   return rideTagSize(rideTagKind({ badge, showTimer }), (limitedText ?? '').toUpperCase());
 }
 

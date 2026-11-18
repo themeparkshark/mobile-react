@@ -554,7 +554,7 @@ test('a tapped coin says "Walk closer: N m" until PLAY! can rise; calm timers sa
   const pill = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/LiveEventsPill.tsx'), 'utf8');
   assert.doesNotMatch(pill, /padStart\(2, '0'\)\}`;\n\}/, 'no m:ss clock');
   assert.match(pill, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 60_000\)/, 'no per-second tick');
-  assert.match(pill, /extra Parts  ·  \{minutesLeftLabel\(rush\.ends_at, now\)\}/);
+  assert.match(pill, /extra Parts  ·  \{endsLabel\(rush\.ends_at, now\)\}/);
 });
 
 test('the Adventure Ticket: a first ticket never says "detour", and there is one "Pick another ride" button', () => {

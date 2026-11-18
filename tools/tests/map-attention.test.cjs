@@ -439,11 +439,12 @@ test('calm clocks on the map and the home map: whole minutes, never a ticking m:
     assert.doesNotMatch(read(file), /% 60\)\.padStart\(2/, `${file} draws no seconds`);
   }
   const live = read('src/components/home/HomeLive.tsx');
-  assert.match(live, /export function raidMinutes\(endsAt: string, now: number\): string \{/);
-  assert.match(live, /return `\$\{Math\.max\(1, Math\.ceil\(ms \/ 60_000\)\)\} min`;/, 'a raid says "4 min", never 3:59');
+  // T006: a raid says when it ends as a time of day, never minutes left (map-no-clocks.test.cjs).
+  assert.match(live, /export function raidEnds\(endsAt: string, \{ lower = false \} = \{\}\): string \{/);
+  assert.doesNotMatch(live, /ms \/ 60_000/);
   assert.doesNotMatch(live, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\)/, 'no per-second ticking on the home map');
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
-  assert.match(marker, /id = setTimeout\(tick, rest < 60_000 \? rest : \(rest % 60_000\) \|\| 60_000\);/, 'the island chip wakes once a minute');
+  assert.match(marker, /the words change once \(at zero\), so the chip wakes once\./, 'the island chip wakes once, not every minute');
 });
 
 test('at home Finn\'s first-time intro goes first: the daily chest waits while the intro is owed (4.3 rule 1)', () => {
@@ -490,12 +491,12 @@ test('reward broadcast banners stop: coins and Tickets fly to their pill with +N
 });
 
 
-test('the Rush and Boss banners say calm whole minutes, never a ticking m:ss (4.3 rule 7)', () => {
+test('the Rush and Boss banners say when they end, never a ticking clock (4.3 rule 7, T006)', () => {
   const fs = require('node:fs'); const path = require('node:path');
   const pill = fs.readFileSync(path.join(__dirname, '../../src/components/LiveEventsPill.tsx'), 'utf8');
   assert.doesNotMatch(pill, /padStart/, 'no m:ss');
   assert.match(pill, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 60_000\)/, 'no seconds tick');
-  assert.equal((pill.match(/minutesLeftLabel\(/g) ?? []).length, 5, 'both banners and both spoken labels use the one label');
+  assert.equal((pill.match(/endsLabel\(/g) ?? []).length, 5, 'both banners and both spoken labels use the one label');
   const J = loadTs('src/components/boss/joinModel.ts', {});
   const now = Date.parse('2026-10-31T12:00:00Z');
   assert.equal(J.minutesLeft('2026-10-31T12:16:01Z', now), 17);

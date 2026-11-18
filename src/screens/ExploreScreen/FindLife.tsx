@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { leavesSoon, msUntilStayWordsChange } from '../../helpers/calmTime';
 import { soakLog, SOAK_TRACE } from '../../components/map/declutter/soakLog';
 import { FIND_ROOT } from './parkMapLayout';
 
@@ -34,12 +36,44 @@ export function FindFade({ gone, children }: { readonly gone: boolean; readonly 
 }
 
 /**
- * The timer chip in calm whole minutes, rounded up ("4 min", the last minute reads "1 min"), never a
- * ticking m:ss where a kid plays (core loop 4.3 rule 7). The find fades at zero, so a chip never
- * reads 0. An hour or more reads in hours.
+ * True in a timed find's last ten minutes (T006: no clocks on the map). Before that the find shows
+ * no chip at all; then one calm "Leaves soon" chip. It wakes only at that line, never every minute.
  */
-export function findClock(totalMs: number): string {
-  const seconds = Math.max(1, Math.ceil(totalMs / 1000));
-  if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-  return `${Math.max(1, Math.ceil(seconds / 60))} min`;
+export function useLeavesSoon(activeTo: string | number | null | undefined, live = true): boolean {
+  const end = typeof activeTo === 'number' ? activeTo : activeTo ? Date.parse(activeTo) : NaN;
+  const [soon, setSoon] = useState(() => Number.isFinite(end) && leavesSoon(end - Date.now()));
+  useEffect(() => {
+    if (!Number.isFinite(end)) { setSoon(false); return; }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = () => {
+      const left = end - Date.now();
+      setSoon(leavesSoon(left));
+      const wait = msUntilStayWordsChange(left);
+      if (live && wait > 0) timer = setTimeout(check, Math.min(wait, 2 ** 31 - 1));
+    };
+    check();
+    return () => clearTimeout(timer);
+  }, [end, live]);
+  return soon;
 }
+
+const SOON_TONES = {
+  gold: { box: { backgroundColor: '#FFF8E7', borderColor: '#FFD700', shadowColor: '#FFD700' }, text: '#B8860B' },
+  blue: { box: { backgroundColor: '#E8F4FD', borderColor: '#4FC3F7', shadowColor: '#4FC3F7' }, text: '#0288D1' },
+} as const;
+
+/** The one chip a timed find wears, only in its last ten minutes: "Leaves soon" in words, never minutes. */
+export function FindSoonChip({ activeTo, tone }: { readonly activeTo: string | null | undefined; readonly tone: keyof typeof SOON_TONES }) {
+  const soon = useLeavesSoon(activeTo);
+  if (!soon) return null;
+  const look = SOON_TONES[tone];
+  return <View accessible accessibilityLabel="Leaves soon" style={[chip.box, look.box]}>
+    <Text style={[chip.text, { color: look.text }]} numberOfLines={1} maxFontSizeMultiplier={1.1}>Leaves soon</Text>
+  </View>;
+}
+
+const chip = StyleSheet.create({
+  box: { borderRadius: 12, paddingHorizontal: 6, paddingVertical: 5, borderWidth: 2, alignSelf: 'center',
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
+  text: { fontFamily: 'Shark', fontSize: 13, textAlign: 'center' },
+});

@@ -1,11 +1,10 @@
 import { Image } from 'expo-image';
 import { useContext } from 'react';
-import Countdown from 'react-countdown';
 import { Text, View } from 'react-native';
 import { TagSlot } from '../../components/map/declutter/Placed';
 import type { TagPlacement } from '../../components/map/declutter/solver';
 import { COIN_BODY, FIND_BOX, FIND_TAG } from './parkMapLayout';
-import { FindFade, findClock, useFindExpiry } from './FindLife';
+import { FindFade, FindSoonChip, useFindExpiry } from './FindLife';
 import { CurrencyContext } from '../../context/CurrencyProvider';
 import { KeyType } from '../../models/key-type';
 
@@ -33,33 +32,8 @@ export default function Key({
       {/* Timer chip: the declutter places it on a free side (TagSlot). */}
       <TagSlot tag={tag} anchor={FIND_BOX.anchor} width={FIND_TAG.w} height={FIND_TAG.h}
         fallback={{ x: -FIND_TAG.w / 2, y: COIN_BODY.y - FIND_TAG.h - 3 }}>
-        <View style={{
-          backgroundColor: '#E8F4FD',
-          borderRadius: 12,
-          paddingHorizontal: 12,
-          paddingVertical: 5,
-          borderWidth: 2,
-          borderColor: '#4FC3F7',
-          shadowColor: '#4FC3F7',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.3,
-          shadowRadius: 4,
-          elevation: 4,
-        }}>
-          <Countdown
-            date={Date.parse(model.active_to)}
-            renderer={({ total }) => (
-              <Text style={{
-                fontFamily: 'Shark',
-                fontSize: 15,
-                color: '#0288D1',
-                textAlign: 'center',
-              }}>
-                {findClock(total)}
-              </Text>
-            )}
-          />
-        </View>
+        {/* No clock on the map (T006): words, and only in the last ten minutes. */}
+        <FindSoonChip activeTo={model.active_to} tone="blue" />
       </TagSlot>
 
       {/* Key with static glow */}

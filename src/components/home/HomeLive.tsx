@@ -16,14 +16,14 @@ import PushSoftAsk from '../PushSoftAsk';
 import useLivePoll from '../../hooks/useLivePoll';
 import { useAppActive } from '../../hooks/appActive';
 import { homeLiveBar } from './homeLiveBar';
+import { endsAtWords } from '../../helpers/calmTime';
 import TeamBadge from '../TeamBadge';
 
 const ORDER = TEAM_ORDER;
 
-/** How long a raid has left, in calm whole minutes ("4 min"), never a ticking m:ss (core loop 4.3 rule 7). */
-export function raidMinutes(endsAt: string, now: number): string {
-  const ms = Math.max(0, new Date(endsAt).getTime() - now);
-  return `${Math.max(1, Math.ceil(ms / 60_000))} min`;
+/** When a raid ends, as a time of day ("Ends at 1:50"), never a countdown (T006). */
+export function raidEnds(endsAt: string, { lower = false } = {}): string {
+  return endsAtWords(endsAt, { lower }) ?? (lower ? 'on now' : 'On now');
 }
 
 /**
@@ -114,7 +114,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
             <Image source={BOSS_ART[liveRaid.raid.boss]} style={styles.barBossArt} contentFit="contain" />
             <View style={{ flex: 1 }}>
               <View style={styles.liveRow}><View style={styles.liveDot} /><Text style={styles.barKicker} numberOfLines={1}>HELP FROM HOME  ·  {liveRaid.name}</Text></View>
-              <Text style={styles.barTitle} numberOfLines={1}>{BOSS_NAMES[liveRaid.raid.boss]} attack!  ·  {raidMinutes(liveRaid.raid.ends_at, now)}</Text>
+              <Text style={styles.barTitle} numberOfLines={1}>{BOSS_NAMES[liveRaid.raid.boss]} attack!  ·  {raidEnds(liveRaid.raid.ends_at, { lower: true })}</Text>
             </View>
             <View style={styles.joinTag}><Text style={styles.joinTagText}>JOIN</Text></View>
           </>
@@ -210,7 +210,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
                       <View style={styles.hpTrack}>
                         <View style={[styles.hpFill, { width: `${Math.max(2, (park.raid.hp_left / Math.max(1, park.raid.hp_max)) * 100)}%` }]} />
                       </View>
-                      <Text style={styles.raidMeta}>{park.raid.fighters} fighting  ·  {raidMinutes(park.raid.ends_at, now)} left</Text>
+                      <Text style={styles.raidMeta}>{park.raid.fighters} fighting  ·  {raidEnds(park.raid.ends_at, { lower: true })}</Text>
                     </View>
                     <View style={styles.joinTag}><Text style={styles.joinTagText}>JOIN</Text></View>
                   </Pressable>

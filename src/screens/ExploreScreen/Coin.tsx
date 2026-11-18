@@ -1,12 +1,11 @@
 import { Image } from 'expo-image';
 import { useContext } from 'react';
-import Countdown from 'react-countdown';
 import { Text, View } from 'react-native';
 import { TagSlot } from '../../components/map/declutter/Placed';
 import type { TagPlacement } from '../../components/map/declutter/solver';
 import { COIN_BODY, FIND_BOX, FIND_TAG } from './parkMapLayout';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
-import { FindFade, findClock, useFindExpiry } from './FindLife';
+import { FindFade, FindSoonChip, useFindExpiry } from './FindLife';
 import { hash01 } from '../../components/map/alive/ambientBudget';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { CurrencyContext } from '../../context/CurrencyProvider';
@@ -55,35 +54,8 @@ export default function Coin({
       {/* Timer chip: the declutter places it on a free side (TagSlot). */}
       <TagSlot tag={tag} anchor={FIND_BOX.anchor} width={FIND_TAG.w} height={FIND_TAG.h}
         fallback={{ x: -FIND_TAG.w / 2, y: COIN_BODY.y - FIND_TAG.h - 3 }}>
-        <View style={{
-          backgroundColor: '#FFF8E7',
-          borderRadius: 12,
-          paddingHorizontal: 12,
-          paddingVertical: 5,
-          borderWidth: 2,
-          borderColor: '#FFD700',
-          shadowColor: '#FFD700',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.3,
-          shadowRadius: 4,
-          elevation: 4,
-        }}>
-          <Countdown
-            date={Date.parse(coin.active_to)}
-            // Whole minutes only: no need to re-render every second (battery).
-            intervalDelay={15_000}
-            renderer={({ total }) => (
-              <Text style={{
-                fontFamily: 'Shark',
-                fontSize: 15,
-                color: '#B8860B',
-                textAlign: 'center',
-              }}>
-                {findClock(total)}
-              </Text>
-            )}
-          />
-        </View>
+        {/* No clock on the map (T006): words, and only in the last ten minutes. */}
+        <FindSoonChip activeTo={coin.active_to} tone="gold" />
       </TagSlot>
 
       {/* The coin floats over its shadow, with a soft glow and a glint. */}

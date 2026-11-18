@@ -25,7 +25,8 @@ import countText from '../../helpers/countText';
 /** Hand-drawn house (Codex, Alex style): playing from home. */
 const HOUSE = require('../../assets/games/boss/bash/house.webp');
 import { BossHpBar } from './BossSheetParts';
-import { costWords, joinCost, joinLabel, minutesLeft, type RewardPreview } from './joinModel';
+import { costWords, joinCost, joinLabel, type RewardPreview } from './joinModel';
+import { endsAtWords } from '../../helpers/calmTime';
 
 export function Wallet({ energy, tickets, showTickets, short }: {
   energy: number; tickets: number; showTickets: boolean; short: 'energy' | 'ticket' | null;
@@ -51,7 +52,8 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
   const cost = joinCost(raid, remote, energy, tickets);
   const name = BOSS_NAMES[raid.boss];
   const repeat = raid.you.attacks > 0;
-  const mins = minutesLeft(endsAt, now);
+  // When it ends as a time of day, never minutes left (T006).
+  const ends = now < Date.parse(endsAt) ? endsAtWords(endsAt) ?? 'On now' : 'Ending now';
   const bob = useSharedValue(0);
   const enter = useSharedValue(reduced ? 1 : 0);
   const greeted = useRef(false);
@@ -74,10 +76,9 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
   return (
     <View>
       <View style={styles.topRow}>
-        <View style={styles.live} accessible accessibilityLabel={`Live now, ${mins} minutes left`}>
+        <View style={styles.live} accessible accessibilityLabel={`Live now. ${ends}`}>
           <View style={styles.liveDot} />
-          <GameIcon name="timer" size={18} />
-          <Text style={styles.liveText} maxFontSizeMultiplier={1.3}>{mins} min left</Text>
+          <Text style={styles.liveText} maxFontSizeMultiplier={1.3}>{ends}</Text>
         </View>
         <Wallet energy={energy} tickets={tickets} showTickets={remote} short={cost.short?.kind ?? null} />
         <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close} hitSlop={8}>

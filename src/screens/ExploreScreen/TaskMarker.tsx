@@ -27,7 +27,7 @@ import { limitedLabel } from '../../services/collection/limitedCoins';
 import { FoldBadge, Placed, TagSlot, usePlacement } from '../../components/map/declutter/Placed';
 import type { Placement } from '../../components/map/declutter/solver';
 import { RIDE_BODY, RIDE_BOX, SELECTED_TAG, rideLayoutId, rideTagKind, rideTagSize, selectedCardSide } from './parkMapLayout';
-import { findClock } from './FindLife';
+import { stayWords, type StayWords } from '../../helpers/calmTime';
 import StarRideBadge from '../../components/liveEvents/StarRideBadge';
 import { useIslandMount } from './islandMount';
 
@@ -270,27 +270,21 @@ function LimitedShimmer({ seed, moving }: { readonly seed: number; readonly movi
 function MarkerTimer({ expiresAt, ticking, urgent, badgeStyle }: {
   readonly expiresAt: number; readonly ticking: boolean; readonly urgent: boolean; readonly badgeStyle: StyleProp<ViewStyle>;
 }) {
+  // Words, never minutes (T006): the chip says "Leaves soon" and fades itself out at zero.
   const [now, setNow] = useState(() => Date.now());
   const left = expiresAt - now;
   const done = left <= 0;
   useEffect(() => {
     if (!ticking || done) return;
-    // Battery: wake at each minute boundary (the chip shows whole minutes), and once more at zero to fade out.
-    let id: ReturnType<typeof setTimeout>;
-    const tick = () => {
-      const t = Date.now(); setNow(t);
-      const rest = expiresAt - t;
-      if (rest <= 0) return;
-      id = setTimeout(tick, rest < 60_000 ? rest : (rest % 60_000) || 60_000);
-    };
-    tick();
+    // Battery: the words change once (at zero), so the chip wakes once.
+    const id = setTimeout(() => setNow(Date.now()), Math.min(Math.max(50, expiresAt - Date.now() + 50), 2 ** 31 - 1));
     return () => clearTimeout(id);
-  }, [ticking, done, expiresAt]);
+  }, [ticking, done, expiresAt, now]);
   const shown = useSharedValue(done ? 0 : 1);
   useEffect(() => { shown.value = withTiming(done ? 0 : 1, { duration: TIMER_FADE_MS }); }, [done, shown]);
   const fade = useAnimatedStyle(() => ({ opacity: shown.value }));
   return <Animated.View style={[badgeStyle, fade]}>
-    <Text style={[styles.timerText, urgent && styles.timerTextUrgent]}>{findClock(left)}</Text>
+    <Text style={[styles.timerText, urgent && styles.timerTextUrgent]} numberOfLines={1}>{stayWords(left) ?? 'Leaves soon'}</Text>
   </Animated.View>;
 }
 const TIMER_FADE_MS = 280;
@@ -371,7 +365,8 @@ function TaskMarker({
   // The chip's clock ticks only while the map runs and this island is on show.
   const timerTicking = shown ? alive.active : false;
   const expiresAt = gameTimestamp(task.active_to);
-  const minsLeft = expiresAt !== null ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 60000)) : null;
+  // How long a timed ride stays, in words (T006): "Here for a little while" or, in its last ten minutes, "Leaves soon".
+  const stay = expiresAt !== null ? stayWords(expiresAt - Date.now()) : null;
 
   const look = useMemo(() => rideLook(task.name), [task.name]);
   const rush = live?.rush && live.status === 'OPERATING' && new Date(live.rush.ends_at).getTime() > Date.now()
@@ -381,14 +376,15 @@ function TaskMarker({
   const resting = down || closed || restingUntil !== null;
   const owned = (task.times_completed ?? 0) > 0;
   // A closed ride never hurries the player: no countdown and no red on it.
-  const timerUrgent = !resting && minsLeft !== null && minsLeft < 5;
+  const timerUrgent = !resting && stay === 'Leaves soon';
 
   // Rush gold, a held ride its team colour, red only in the last 5 minutes, gold in reach, else blue.
   const ringColor = markerRingColor({ rush: !!rush, team: control ? TEAMS[control.controller].color : null, urgent: timerUrgent, near: near || playable });
   // A limited coin on the map is in rotation: "Limited · leaves Oct 31".
   const limited = task.limited?.active ? limitedLabel(task.limited) : null;
   const badge = markerBadge({ rush: !!rush, adventure, goal: isTripGoal, owned, limited: !!limited, selected: isSelected });
-  const showTimer = !resting && expiresAt !== null && expiresAt > Date.now() && !rush && (isSelected || near || timerUrgent);
+  // The island's chip shows only in the last ten minutes; before that the selected card says it in words.
+  const showTimer = !resting && expiresAt !== null && expiresAt > Date.now() && !rush && timerUrgent;
   // One chip above the art: the badge, else the timer (the timer drops into the art when a badge holds the chip).
   const tagKind = isSelected ? null : rideTagKind({ badge, showTimer });
   const tagSize = rideTagSize(tagKind, limited?.toUpperCase() ?? '');
@@ -432,7 +428,7 @@ function TaskMarker({
     <Marker
       coordinate={{ latitude, longitude }}
       onPress={press}
-      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${limited ? `${limited}. ` : ''}${folded ? `${folded} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${minsLeft !== null ? `Bonus opportunity: ${minsLeft} minutes left. ` : ''}Show ride on the map.`}
+      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${limited ? `${limited}. ` : ''}${folded ? `${folded} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${stay ? `Bonus opportunity. ${stay}. ` : ''}Show ride on the map.`}
       stopPropagation={true}
       hidden={parked}
       anchor={{ x: 0.5, y: 0.9 }}
@@ -440,7 +436,7 @@ function TaskMarker({
       {/* Same 72 x 96 box either way, so the marker's layout never changes (no corner blink). */}
       {materialized ? <IslandArt placement={placement} task={task} isSelected={isSelected} cardSide={cardSide}
         distanceMeters={distanceMeters} restingUntil={restingUntil} ticketCost={ticketCost} status={status}
-        isTripGoal={isTripGoal} adventure={adventure} limited={limited} minsLeft={minsLeft} expiresAt={expiresAt}
+        isTripGoal={isTripGoal} adventure={adventure} limited={limited} stay={stay} expiresAt={expiresAt}
         timerUrgent={timerUrgent} tagKind={tagKind} tagSize={tagSize} playable={playable} rush={rush} live={live}
         timerTicking={timerTicking} star={star} parked={parked} alive={alive} badge={badge} showTimer={showTimer}
         glow={glow} calm={calm} aliveRank={aliveRank} ringColor={ringColor} resting={resting} reducedMotion={reducedMotion}
@@ -455,7 +451,7 @@ type IslandArtProps = {
   readonly placement: Placement; readonly task: TaskType; readonly isSelected: boolean;
   readonly cardSide: ReturnType<typeof selectedCardSide>; readonly distanceMeters: number | null;
   readonly restingUntil: number | null; readonly ticketCost: number; readonly status: string | null | undefined;
-  readonly isTripGoal: boolean; readonly adventure: boolean; readonly limited: string | null; readonly minsLeft: number | null;
+  readonly isTripGoal: boolean; readonly adventure: boolean; readonly limited: string | null; readonly stay: StayWords | null;
   readonly expiresAt: number | null; readonly timerUrgent: boolean; readonly tagKind: ReturnType<typeof rideTagKind> | null;
   readonly tagSize: ReturnType<typeof rideTagSize>; readonly playable: boolean; readonly rush: NonNullable<LiveRide['rush']> | null;
   readonly live: LiveRide | undefined; readonly timerTicking: boolean; readonly star: boolean; readonly parked: boolean;
@@ -474,7 +470,7 @@ type IslandArtProps = {
  */
 function IslandArt({
   placement, task, isSelected, cardSide, distanceMeters, restingUntil, ticketCost, status, isTripGoal, adventure, limited,
-  minsLeft, expiresAt, timerUrgent, tagKind, tagSize, playable, rush, live, timerTicking, star, parked, alive, badge, showTimer,
+  stay, expiresAt, timerUrgent, tagKind, tagSize, playable, rush, live, timerTicking, star, parked, alive, badge, showTimer,
   glow, calm, aliveRank, ringColor, resting, reducedMotion, control, flagRaiseKey, behindKinds, frontKinds, near, look, owned,
   down, folded, revealDelay,
 }: IslandArtProps) {
@@ -549,7 +545,7 @@ function IslandArt({
                     </Text>}
                   </View>
                 </View>
-                {minsLeft !== null && expiresAt! > Date.now() && <Text style={[styles.tooltipTimer, timerUrgent && styles.tooltipTimerSoon]}>{minsLeft} min left</Text>}
+                {stay !== null && expiresAt! > Date.now() && <Text style={[styles.tooltipTimer, timerUrgent && styles.tooltipTimerSoon]}>{stay}</Text>}
               </View>
               {cardSide === 'above' && <View style={styles.tooltipArrow} />}
             </View>
