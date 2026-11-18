@@ -15,8 +15,8 @@ test('footer icon and its word go through the same goTo handler', () => {
   assert.match(label, /<(?:Upper)?Text\s+onPress=\{\(\) => \{ playSound\(item\.sound\); goTo\(item\); \}\}/);
   assert.match(label, /suppressHighlighting/);
   // T178: VoiceOver gets one labelled tab per icon with its selected state (the column is the element).
-  assert.match(src, /<View key=\{key\} accessible accessibilityRole="tab" accessibilityLabel=\{alert \? `\$\{item\.text\}, new notifications` : item\.text\}\n\s*accessibilityState=\{\{ selected \}\} onAccessibilityTap=\{\(\) => \{ playSound\(item\.sound\); goTo\(item\); \}\}>/);
-  assert.match(src, /accessibilityRole="tablist"/);
+  assert.match(src, /<View key=\{key\} accessible accessibilityRole="button" accessibilityLabel=\{alert \? `\$\{item\.text\}, new notifications` : item\.text\}\n\s*accessibilityState=\{\{ selected \}\} onAccessibilityTap=\{\(\) => \{ playSound\(item\.sound\); goTo\(item\); \}\}>/);
+  assert.match(src, /accessibilityRole="tabbar"/);
 });
 
 test('goTo keeps the catch guard, tab reselect and the Profile permission check', () => {

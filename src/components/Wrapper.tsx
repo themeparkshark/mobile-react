@@ -156,7 +156,7 @@ export default function Wrapper({
           }}
         >
           <View
-            accessibilityRole="tablist"
+            accessibilityRole="tabbar"
             style={{
               paddingLeft: 32,
               paddingRight: 32,
@@ -168,9 +168,10 @@ export default function Wrapper({
               const selected = topRoute === item.screen;
               const alert = notificationCount > 0 && item.text === 'Profile';
               return (
-                // T178: one labelled tab per icon for VoiceOver (the picture and its word are one button),
+                // T178: one labelled tab button per icon for VoiceOver (the picture and its word are one button; iOS reads
+                // "selected" on the open tab, and the row is a tab bar),
                 // with its selected state; the icon and the word under it stay two big touch targets.
-                <View key={key} accessible accessibilityRole="tab" accessibilityLabel={alert ? `${item.text}, new notifications` : item.text}
+                <View key={key} accessible accessibilityRole="button" accessibilityLabel={alert ? `${item.text}, new notifications` : item.text}
                   accessibilityState={{ selected }} onAccessibilityTap={() => { playSound(item.sound); goTo(item); }}>
                   <View
                     style={{
