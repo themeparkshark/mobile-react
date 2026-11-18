@@ -99,6 +99,7 @@ import TrailHost from '../components/trail/TrailHost';
 import TooFarDialog from './ExploreScreen/TooFarDialog';
 import { withWs2Profiler } from './ExploreScreen/ws2Profiler';
 import useQueueDwell, { noteWaitEnded } from './ExploreScreen/useQueueDwell';
+import { calloutLineOffer } from '../services/guide/guideCopy';
 import useSwapTapGuard from './ExploreScreen/useSwapTapGuard';
 import { revealDelays } from './ExploreScreen/mapMarkerPresentation';
 import { gameTimestamp } from './ExploreScreen/mapOpportunityTiming';
@@ -1938,7 +1939,7 @@ export function ExploreScreenBody() {
           onDotsPress={() => setAdventureSheetRequest(n => n + 1)}
           teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
           adventureTab={nextCoin.adventureTab && adventure && tripGoalData ? adventureTabProps : null}
-          lineOffer={nextCoin.lineOffer} />}
+          lineOffer={nextCoin.lineOffer ?? calloutLineOffer(queueRide, selectedTask?.id ?? null, nextCoin.target?.taskId ?? null, nextCoin.state)} />}
         {/* Today's Adventure: its sheet stays for the stamps and the souvenir, opened from the guide card on its ride. */}
         {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`} sheetOnly
           openRequest={adventureSheetRequest} celebrateRequest={adventureCelebrateRequest}

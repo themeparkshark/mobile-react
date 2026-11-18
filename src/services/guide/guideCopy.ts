@@ -109,6 +109,18 @@ export function lineOffer(state: string, dwellRideName: string | null | undefine
 }
 
 /**
+ * A tapped queue ride (T078): its callout makes it the guide's target, and the card offers PLAY IN LINE as the
+ * white LinePlay picture button, one tap from the map (Wait Times is no longer the only way in). Only for a ride
+ * with a real line (the queue catalog resolved it) and while the card is about that ride. Pure.
+ */
+export function calloutLineOffer(queueRide: { readonly rideId: number } | null | undefined, selectedTaskId: number | null,
+  targetTaskId: number | null, state: string): { readonly title: string; readonly label: string; readonly action: GuideAction } | null {
+  if (!queueRide || !(queueRide.rideId > 0) || selectedTaskId == null || selectedTaskId !== targetTaskId) return null;
+  if (state === 'in_line' || state === 'line_story' || state === 'goodbye' || state === 'home') return null;
+  return { title: '', label: 'PLAY IN LINE', action: 'lineplay' };
+}
+
+/**
  * One gold button per screen (fix W1 item 9): while PLAY! is up, the card's own gold button becomes its quiet
  * link (or goes, when a quiet link is already there). Pure.
  */

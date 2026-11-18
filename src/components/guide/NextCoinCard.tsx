@@ -105,7 +105,7 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   slam = NO_SLAM, onSlamDone, adventureTab = null, testID = 'next-coin-card', lineOffer = null }: {
   readonly copy: GuideCardCopy;
   /** Standing in an open ride line (T074): "In line? LINEPLAY" as its own picture button under the card's words. */
-  readonly lineOffer?: { readonly title: string; readonly label: string } | null;
+  readonly lineOffer?: { readonly title: string; readonly label: string; readonly action?: GuideAction } | null;
   readonly state: GuideState;
   /** The target coin's art, or null (wallet and resting states draw the Ticket). */
   readonly coinUrl: string | null;
@@ -172,7 +172,7 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
         </View>}
         {/* Its own line under the card's words, so it never crowds the card's button on a small phone. */}
         {lineOffer && <View style={styles.actions}>
-          <LineButton title={lineOffer.title} label={lineOffer.label} onPress={() => onAction('lineplay_here')} />
+          <LineButton title={lineOffer.title} label={lineOffer.label} onPress={() => onAction(lineOffer.action ?? 'lineplay_here')} />
         </View>}
       </View>
       {state === 'walk' && <View style={styles.walkArrow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

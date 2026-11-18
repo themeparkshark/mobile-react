@@ -103,3 +103,13 @@ test('T082: no clock digits and no coral in LinePlay (Sharky Swim tide, LinePlay
   assert.match(hud, /label = calmTide \? '' : /);
   assert.match(read('src/gamekit/GameShellV2.tsx'), /count=\{finalCount && !linePlayMovement\}/);
 });
+
+test('T078: a tapped queue ride offers PLAY IN LINE on the card, one tap from the map', () => {
+  const copy = loadTs('src/services/guide/guideCopy.ts');
+  assert.deepEqual({ ...copy.calloutLineOffer({ rideId: 571 }, 121, 121, 'walk') }, { title: '', label: 'PLAY IN LINE', action: 'lineplay' });
+  assert.equal(copy.calloutLineOffer(null, 121, 121, 'walk'), null, 'no line (a show, a sight): no offer');
+  assert.equal(copy.calloutLineOffer({ rideId: 571 }, 121, 58, 'walk'), null, 'the card is about another coin');
+  assert.equal(copy.calloutLineOffer({ rideId: 571 }, 121, 121, 'in_line'), null, 'already the in-line card');
+  assert.match(read('src/screens/ExploreScreen.tsx'),
+    /lineOffer=\{nextCoin\.lineOffer \?\? calloutLineOffer\(queueRide, selectedTask\?\.id \?\? null, nextCoin\.target\?\.taskId \?\? null, nextCoin\.state\)\}/);
+});
