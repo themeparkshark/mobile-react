@@ -18,8 +18,12 @@ export interface RangePoint {
   readonly longitude: number;
 }
 
-/** The server's redeem radius (config mobile.redeem_radius, 16 m) plus GPS wander before an answer counts as old. */
-export const PLAY_ANSWER_SLACK_METERS = 14;
+/**
+ * The server's redeem radius (config mobile.redeem_radius, 16 m) plus a little GPS wander before an answer counts as
+ * old. Small on purpose: an answer left over from an earlier visit (a check that failed on the way out) must never
+ * raise PLAY! 28 m from the coin on the way back in.
+ */
+export const PLAY_ANSWER_SLACK_METERS = 4;
 export const PLAY_ANSWER_RADIUS_METERS = 16;
 
 function meters(a: RangePoint, b: RangePoint): number {

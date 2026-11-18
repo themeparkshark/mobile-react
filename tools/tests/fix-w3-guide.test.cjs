@@ -242,3 +242,9 @@ test('T009: PLAY! rises on the GPS fix for the coin the player stands at; the se
   assert.match(explore, /if \(playAnswerNear\(rangeAnswer, location\)\) return rangeAnswer;/);
   assert.match(read('src/components/RedeemModal.tsx'), /provisional\?: boolean \}\)\.provisional\) setOpenedRedeemable\(redeemable\)/);
 });
+
+test('T009: an answer left from an earlier visit never raises PLAY! before the redeem radius', () => {
+  const answer = { type: 'task', model: { id: 152, latitude: String(north(0).latitude), longitude: String(north(0).longitude) } };
+  assert.equal(R.playAnswerNear(answer, north(28)), false, '28 m out: no PLAY! from a stale answer');
+  assert.equal(R.playAnswerNear(answer, north(18)), true, 'GPS wander just past 16 m keeps a fresh answer');
+});
