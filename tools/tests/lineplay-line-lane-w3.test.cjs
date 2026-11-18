@@ -113,3 +113,11 @@ test('T078: a tapped queue ride offers PLAY IN LINE on the card, one tap from th
   assert.match(read('src/screens/ExploreScreen.tsx'),
     /lineOffer=\{nextCoin\.lineOffer \?\? calloutLineOffer\(queueRide, selectedTask\?\.id \?\? null, nextCoin\.target\?\.taskId \?\? null, nextCoin\.state\)\}/);
 });
+
+test('T086: one name per game (the shell says the tile name) and the first story is STORY 1', () => {
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /\{linePlayMovement\?\.gameName \|\| title\}/);
+  assert.match(shell, /\{subtitle && !linePlayMovement\?\.gameName \? \(/, 'no second mode name under it');
+  assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /gameName: activeGame \? pageName\(activeGame, snapshot\.chapter\) : null,/);
+  assert.match(read('src/services/lineplay/episodeRotation.ts'), /\? \(previous \+ 1\) % count\n\s+: 0;/);
+});

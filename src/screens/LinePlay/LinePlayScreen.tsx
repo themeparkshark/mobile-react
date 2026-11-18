@@ -1318,6 +1318,8 @@ export default function LinePlayScreen() {
   const movementContext = useMemo(() => ({
     moving: snapshot.moving,
     onResume: () => undefined,
+    // One name per game (T086): the header says what the tile and PLAY said.
+    gameName: activeGame ? pageName(activeGame, snapshot.chapter) : null,
     lineMovePolicy: 'passive' as const,
     queueEnded,
     rideUpLikely: snapshot.boardingSuggested,
@@ -1343,7 +1345,8 @@ export default function LinePlayScreen() {
       actionLabel: 'PLAY FOR BONUS',
       onPress: () => { setActiveGame(null); setArcadeOpen(true); },
     } : null,
-  }), [snapshot.moving, bonus != null, activeGame?.gameId, activeGame?.groupTurn, queueEnded, snapshot.boardingSuggested, finishFailed]);
+  }), [snapshot.moving, bonus != null, activeGame?.gameId, activeGame?.id, activeGame?.groupTurn, queueEnded, snapshot.boardingSuggested,
+    snapshot.chapter, finishFailed]);
   useEffect(() => {
     const id = pendingEncoreId.current;
     if (!id) return;

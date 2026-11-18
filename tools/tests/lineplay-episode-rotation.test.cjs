@@ -42,9 +42,10 @@ test('opening a story does not consume it; playing cycles through every episode 
 test('bad history and storage failure still allow a queue story', async () => {
   const store = new Map([['lineplay_last_adaptive_episode_v1_12_8_99', 'bad']]);
   const { selectAdaptiveEpisode } = harness(store);
-  assert.equal(await selectAdaptiveEpisode(12, 8, 99, 3, 5), 2);
+  // T086 (fix round w3): with no usable history the line starts at STORY 1 OF N, never a random later story.
+  assert.equal(await selectAdaptiveEpisode(12, 8, 99, 3, 5), 0);
   const unavailable = harness();
   unavailable.store.set = () => { throw new Error('storage unavailable'); };
-  assert.equal(await unavailable.selectAdaptiveEpisode(12, 8, 99, 3, 5), 2);
+  assert.equal(await unavailable.selectAdaptiveEpisode(12, 8, 99, 3, 5), 0);
   await unavailable.recordAdaptiveEpisode(12, 8, 99, 2, 3);
 });

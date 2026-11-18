@@ -1439,9 +1439,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </TouchableOpacity>
             <View style={[styles.headerCenter, hudBack && styles.headerHidden]} importantForAccessibility={hudBack ? 'no-hide-descendants' : 'auto'}>
               <Text style={styles.title} numberOfLines={1}>
-                {title}
+                {linePlayMovement?.gameName || title}
               </Text>
-              {subtitle ? (
+              {subtitle && !linePlayMovement?.gameName ? (
                 <Text style={styles.subtitle} numberOfLines={1}>
                   {subtitle}
                 </Text>

@@ -21,13 +21,14 @@ export async function selectAdaptiveEpisode(
   try {
     const raw = await AsyncStorage.getItem(key);
     const previous = raw === null ? null : Number(raw);
+    // The first story in a line is STORY 1 OF N (T086), never a random later one; then they go in order.
     const next = previous !== null && Number.isInteger(previous) && previous >= 0 && previous < count
       ? (previous + 1) % count
-      : safeSeed % count;
+      : 0;
     return next;
   } catch {
-    // Offline queue play should not depend on local history storage.
-    return safeSeed % count;
+    // Offline queue play should not depend on local history storage: start at the first story.
+    return 0;
   }
 }
 
