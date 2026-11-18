@@ -261,6 +261,12 @@ export interface SessionSnapshot {
   readonly plannedWaitMinutes: number;
   readonly waitSource: WaitSource;
   readonly entranceWaitMinutes: number | null;
+  /**
+   * T089: the posted wait on the sign when this line started: the fresh posted wait the wait was sized from, else
+   * the first live entrance wait seen within 10 minutes of the start. Null when neither is known (never a cached
+   * number hours old). The recap's "Sign said N" uses only this.
+   */
+  readonly signAtStartMinutes: number | null;
   readonly entranceWaitObservedAt: number | null;
   readonly entranceWaitChangeMinutes: number;
   readonly extraRoundsAdded: number;
@@ -671,6 +677,7 @@ export class LinePlaySession {
   private startedAt: number | null = null;
   private endedAt: number | null = null;
   private plannedWaitMinutes = DEFAULT_WAIT_MINUTES;
+  private signAtStart: number | null = null;
   private waitSource: WaitSource = 'estimate';
   private entranceWaitMinutes: number | null = null;
   private entranceWaitObservedAt: number | null = null;
@@ -863,6 +870,7 @@ export class LinePlaySession {
       plannedWaitMinutes: this.plannedWaitMinutes,
       waitSource: this.waitSource,
       entranceWaitMinutes: this.entranceWaitMinutes,
+      signAtStartMinutes: this.signAtStart,
       entranceWaitObservedAt: this.entranceWaitObservedAt,
       entranceWaitChangeMinutes: this.entranceWaitChangeMinutes,
       extraRoundsAdded: this.extraRoundsAdded,
@@ -1088,6 +1096,7 @@ export class LinePlaySession {
       entryFix: this.entryFix,
       offlineTrail: this.offlineTrail,
       atLineSeen: this.atLineSeen,
+      signAtStartMinutes: this.signAtStart,
     };
     this.checkpointWrites = this.checkpointWrites.then(() => writeCheckpoint(data))
       .catch(error => console.warn('[LinePlaySession] checkpoint unavailable:', error));
@@ -1387,6 +1396,12 @@ export class LinePlaySession {
         (this.entranceWaitObservedAt != null && observedAt <= this.entranceWaitObservedAt)) return;
 
     const previous = this.entranceWaitMinutes;
+    // No fresh posted wait at the start: the first live sign within 10 minutes of it is what the sign said.
+    if (this.signAtStart == null && this.startedAt != null && observedAt - this.startedAt <= FRESH_WAIT_MS &&
+        waitMinutes > 0) {
+      this.signAtStart = waitMinutes;
+      this.persistCheckpoint();
+    }
     this.entranceWaitMinutes = waitMinutes;
     this.entranceWaitObservedAt = observedAt;
     this.entranceWaitChangeMinutes = previous == null ? 0 : waitMinutes - previous;
@@ -1600,6 +1615,8 @@ export class LinePlaySession {
             ? 'last_known' : saved.waitSource ?? 'estimate' }
       : await resolveSessionWait(ride);
     this.plannedWaitMinutes = wait.minutes;
+    this.signAtStart = saved ? saved.signAtStartMinutes ?? (saved.waitSource === 'posted' ? saved.plannedWaitMinutes : null)
+      : wait.source === 'posted' ? wait.minutes : null;
     this.waitSource = wait.source;
     const initialObservedAt = ride.postedWaitObservedAt;
     const initialAge = initialObservedAt == null ? Infinity : Date.now() - initialObservedAt;

@@ -1712,8 +1712,10 @@ export default function LinePlayScreen() {
               onFavoriteActivity={(favorite) => {
                 if (feedback) void submitFeedback(feedback.rating, favorite);
               }}
-              signLine={snapshot.boardingConfirmed && snapshot.waitTimed ? signSaidLine({ postedMinutes: snapshot.plannedWaitMinutes,
-                waitSource: snapshot.waitSource, waitedMinutes: timedWaitMinutes(snapshot.startedAt, snapshot.boardingAt) }) : null}
+              signLine={snapshot.boardingConfirmed && snapshot.waitTimed ? signSaidLine({
+                // T089: what the sign said when this line started, never an hours-old cached number.
+                postedMinutes: snapshot.signAtStartMinutes,
+                waitSource: snapshot.signAtStartMinutes != null ? 'posted' : 'estimate', waitedMinutes: timedWaitMinutes(snapshot.startedAt, snapshot.boardingAt) }) : null}
               rideLogged={rideLogged}
               onAddMemory={rideLogged && player?.id != null ? openRideJournal : undefined}
               adventureStamped={adventureStamped}

@@ -1104,3 +1104,23 @@ test('T072: a slow complete never says No internet, and the open recap keeps ret
   assert.match(recap, /rewardsPendingReason === 'slow' && \(\n\s+<Text[^>]*>Saving your rewards/);
   assert.match(recap, /rewardsPendingReason !== 'slow' && \(\n\s+<Text style=\{styles\.recapPending\}>No internet/);
 });
+
+test('T089: "Sign said" is the posted wait when the line started, never an hours-old cached number', async () => {
+  const fresh = makeHarness(null, server);
+  const a = new fresh.Session();
+  await a.start({ ...ride, postedWaitMinutes: 20, postedWaitObservedAt: Date.now() - 30_000 }, undefined, 12);
+  assert.equal(a.snapshot().signAtStartMinutes, 20);
+  a.dispose();
+  const stale = makeHarness(null, server);
+  const b = new stale.Session();
+  await b.start({ ...ride, postedWaitMinutes: 10, postedWaitObservedAt: Date.now() - 2 * 3600_000 }, undefined, 12);
+  assert.equal(b.snapshot().waitSource, 'last_known');
+  assert.equal(b.snapshot().signAtStartMinutes, null, 'a 2 hour old 10 is not what the sign says now');
+  b.updateEntranceWait(20, Date.now());
+  assert.equal(b.snapshot().signAtStartMinutes, 20, 'the first live sign at the start is');
+  b.updateEntranceWait(35, Date.now() + 1000);
+  assert.equal(b.snapshot().signAtStartMinutes, 20, 'later changes never rewrite the start');
+  b.dispose();
+  const screen = fs.readFileSync(path.join(root, 'src/screens/LinePlay/LinePlayScreen.tsx'), 'utf8');
+  assert.match(screen, /postedMinutes: snapshot\.signAtStartMinutes,/);
+});
