@@ -732,15 +732,12 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
 
   const xpNow = player?.experience ?? 0;
   const xpNeed = player?.experience_level?.experience ?? 0;
-  // When the next level is far off (Level 7+ takes weeks), lead with the nearer streak prize.
-  const farLevel = xpNeed > 0 && xpNow / xpNeed < 0.5 && lvOf(player) >= 6;
   const nextLevel = (lv: number) => (
     <View style={styles.nextBlock}>
       <View style={styles.nextRow}>
         <Image source={LEVEL_CHEST} style={{ width: 30, height: 30 }} contentFit="contain" />
-        <Text style={styles.nextText}>{farLevel && daily?.streak.next_milestone
-          ? `Next prize: ${daily.streak.next_milestone.label.toLowerCase()} on Day ${daily.streak.next_milestone.day}`
-          : `Next: Level ${lv + 1} chest with new gear`}</Text>
+        {/* T119: beside the XP bar it always names the next level chest (a flame prize here read as a second goal). */}
+        <Text style={styles.nextText}>{`Next: Level ${lv + 1} chest with new gear`}</Text>
       </View>
       {xpNeed > 0 && <XpBar pct={Math.min(1, xpNow / xpNeed)} reducedMotion={reducedMotion} />}
     </View>

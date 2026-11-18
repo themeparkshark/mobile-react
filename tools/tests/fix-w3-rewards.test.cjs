@@ -198,3 +198,9 @@ test('T226: the switch is the served local_reminders; the dev override never run
   assert.match(hook, /if \(localRemindersOn\(flags\)\) void turnOnLocalReminders\(\);/, 'CONTINUE turns them on');
   assert.match(read('src/services/push.ts'), /await cancelLocalReminders\(\);/, 'sign-out cancels them');
 });
+
+test('T119: the level chest footer beside the XP bar names the next level chest, never a flame prize', () => {
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /<Text style=\{styles\.nextText\}>\{`Next: Level \$\{lv \+ 1\} chest with new gear`\}<\/Text>/);
+  assert.doesNotMatch(hook, /Next prize: \$\{daily\.streak\.next_milestone/);
+});
