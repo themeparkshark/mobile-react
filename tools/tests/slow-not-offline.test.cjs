@@ -27,6 +27,7 @@ test('T172: the chest, rewards, shelf, catch, Welcome and team pick never blame 
   assert.match(read('src/screens/CoinShelfScreen.tsx'), /Couldn’t refresh your coins\. \$\{tryAgainLine\(\)\}/);
   assert.match(read('src/screens/GymBattle/TeamSelectionScreen.tsx'), /Couldn’t join just now\. \$\{tryAgainLine\(\)\}/);
   assert.match(read('src/components/RedeemRedeemableModal.tsx'), /We could not tell if this game started\. \$\{tryAgainWith\('tap Reconnect'\)\}/);
+  assert.match(read('src/screens/ExploreScreen/ParkMapRetry.tsx'), /isOffline\(\) \? 'Weak signal\. Tap to try again\.' : 'The game is slow\. Tap to try again\.'/);
   // Loading: the CMS "check your internet" line only while really offline.
   const loading = read('src/components/Loading.tsx');
   assert.match(loading, /const slowLine = isOffline\(\) && crumb \? crumb : SLOW_LOADING_LINE;/);
