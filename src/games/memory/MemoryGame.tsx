@@ -251,8 +251,8 @@ export interface MemoryGameProps {
   /** Legacy: 0 with no mode = Warm-up; 1-3 = queue boards. The paid ride passes mode="ride". */
   difficulty?: number;
   /**
-   * Kid rules for the paid ride (picture-only players, fix round w3 T027): 6 pairs on a 4 x 3 board
-   * instead of 8 on 4 x 4. The server's attempt rules say the same (memory.pairs).
+   * Kid rules for the paid ride (picture-only players, fix round w3 T027): the board size the server's
+   * attempt rules name (memory.pairs, RIDE_KID_PAIRS). The kid fix itself is the resting clock (T042).
    */
   kid?: boolean;
   mode?: MemoryMode;
@@ -285,8 +285,12 @@ export interface DailySetup {
 
 export const RIDE_TRIES = 3;
 const TICK_MS = 50;
-/** Kid rules ride board (T027): 6 pairs, 4 x 3. */
-export const RIDE_KID_PAIRS = 6;
+/**
+ * Kid rules ride board (T027): the same 8 pairs. Tuning (tools/tests/memory-fix-w3.test.cjs) showed the
+ * clock that rests until the first flip and while idle (T042) is what a slow kid needed: about 2 Tickets in
+ * 3 for a forgetful slow tapper on 8 pairs, while 6 pairs won every Ticket (no game left).
+ */
+export const RIDE_KID_PAIRS = 8;
 
 /**
  * The ride loss card's numbers (T049): this shell's pairs plus the best shell of the Ticket, so a

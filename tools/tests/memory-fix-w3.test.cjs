@@ -39,3 +39,36 @@ test('T066: a fresh or resumed ride board keeps a full rope until the first flip
   E.step(s, { t: 'tick', at: 9000 });
   assert.equal(s.clockLeftMs, 45000);
 });
+
+test('T027: the slow forgetful kid wins about 2 Tickets in 3 on the ride board (8 pairs, resting clock)', () => {
+  const Bt = loadTs('src/games/memory/bot.ts');
+  const kid = Bt.BOT.kid;
+  const shell = (seed, cfg) => {
+    let a = seed;
+    const rand = () => { a = (a * 1103515245 + 12345) & 0x7fffffff; return a / 0x7fffffff; };
+    const faces = [];
+    for (let p = 0; p < 8; p++) faces.push(p, p);
+    for (let i = faces.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [faces[i], faces[j]] = [faces[j], faces[i]]; }
+    const s = E.createEngine(cfg, { cols: 4, rows: 4, seed: 5 });
+    let t = 1200;
+    for (let k = 0; k < 400 && s.status === 'play'; k++) {
+      t += kid.minMs + rand() * (kid.maxMs - kid.minMs);
+      E.step(s, { t: 'tick', at: t });
+      if (s.status !== 'play') break;
+      const slot = Bt.botPick(s, kid.recall, rand);
+      if (slot < 0) continue;
+      if (s.phase === 2) E.step(s, { t: 'dismiss', slot, at: t });
+      if (s.status !== 'play' || s.know[slot] === E.K_MATCHED || s.up.indexOf(slot) >= 0) continue;
+      E.step(s, { t: 'flip', slot, face: faces[slot], at: t });
+    }
+    return s.status === 'cleared';
+  };
+  const n = 200;
+  let tickets = 0;
+  for (let i = 0; i < n; i++) {
+    let won = false;
+    for (let sh = 0; sh < 3 && !won; sh++) won = shell(i * 97 + sh * 13 + 1, E.rideSprintConfig());
+    if (won) tickets++;
+  }
+  assert.ok(tickets / n >= 0.55 && tickets / n <= 0.85, `kid wins ${tickets}/${n} Tickets`);
+});

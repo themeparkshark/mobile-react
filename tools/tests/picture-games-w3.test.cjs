@@ -60,5 +60,5 @@ test('T027: the attempt\'s kid rules reach the ride games', () => {
   assert.equal((selector.match(/kid=\{kid && rewardMode === 'task-attempt'\}/g) ?? []).length, 2, 'Whack and Memory');
   const memory = fs.readFileSync('src/games/memory/MemoryGame.tsx', 'utf8');
   assert.match(memory, /const pairs = kidRef\.current \? RIDE_KID_PAIRS : 8;/);
-  assert.match(memory, /export const RIDE_KID_PAIRS = 6;/);
+  assert.match(memory, /export const RIDE_KID_PAIRS = 8;/);
 });
