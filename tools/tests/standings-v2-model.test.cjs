@@ -99,8 +99,10 @@ test('day dots replace "2d 6h": today glows, the last day turns gold, the last h
   const thursday = model.weekDots(end, Date.parse('2026-10-01T19:00:00Z'));
   assert.deepEqual(plain(thursday.dots.map(d => d.state)), ['past', 'past', 'past', 'today', 'future', 'future', 'future']);
   assert.equal(thursday.urgency, 'calm');
-  assert.equal(thursday.label, '4 days left');
-  assert.equal(thursday.spoken, 'New week in 4 days');
+  // Fix w3 T138: the calm week names its last day, never a "4 days left" countdown chip.
+  assert.equal(thursday.label, 'Ends Sunday, Oct 4');
+  assert.equal(thursday.spoken, 'This week ends Sunday, Oct 4');
+  assert.equal(model.weekDots('2026-11-23T08:00:00Z', Date.parse('2026-11-18T19:00:00Z')).label, 'Ends Sunday, Nov 22');
   const sunday = model.weekDots(end, Date.parse('2026-10-04T19:00:00Z'));
   assert.equal(sunday.dots[6].state, 'today');
   assert.deepEqual(plain([sunday.urgency, sunday.label]), ['last_day', 'Ends today']);

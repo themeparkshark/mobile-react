@@ -510,9 +510,30 @@ export function weekDots(endsAt: string | null | undefined, now: number): {
   const daysLeft = Math.ceil(msLeft / dayMs);
   const urgency: WeekUrgency = msLeft <= 3 * 3_600_000 ? 'last_hours' : msLeft <= dayMs ? 'last_day' : 'calm';
   // Calm timers (core loop 4.3 rule 7): words, never a ticking hours-and-minutes count on a kid screen.
-  const label = urgency === 'calm' ? `${daysLeft} days left` : urgency === 'last_day' ? 'Ends today' : 'Ends tonight';
-  const spoken = urgency === 'calm' ? `New week in ${daysLeft} days` : urgency === 'last_day' ? 'Last day of the week' : 'Last day of the week. It ends tonight';
+  // Fix w3 T138: a calm week names its last day ("Ends Sunday, Nov 22"), never a countdown chip.
+  const lastDay = weekLastDayLabel(end);
+  const label = urgency === 'calm' ? (lastDay ? `Ends ${lastDay}` : `${daysLeft} days left`) : urgency === 'last_day' ? 'Ends today' : 'Ends tonight';
+  const spoken = urgency === 'calm' ? (lastDay ? `This week ends ${lastDay}` : `New week in ${daysLeft} days`) : urgency === 'last_day' ? 'Last day of the week' : 'Last day of the week. It ends tonight';
   return { dots: letters.map((l, i) => ({ label: l, state: i < todayIndex ? 'past' : i === todayIndex ? 'today' : 'future' })), daysLeft, urgency, label, spoken };
+}
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** The week's last day in the server's week clock (Pacific): "Sunday, Nov 22". Null when unknown. */
+export function weekLastDayLabel(endMs: number): string | null {
+  if (!Number.isFinite(endMs)) return null;
+  const last = endMs - 1;
+  let offsetMs = -8 * 3_600_000;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hourCycle: 'h23',
+      year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' }).formatToParts(new Date(last));
+    const get = (type: string) => Number(parts.find(part => part.type === type)?.value);
+    const wall = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'));
+    if (Number.isFinite(wall)) offsetMs = Math.round((wall - last) / 60_000) * 60_000;
+  } catch { /* keep PST */ }
+  const wall = new Date(last + offsetMs);
+  return `${WEEKDAYS[wall.getUTCDay()]}, ${MONTHS_SHORT[wall.getUTCMonth()]} ${wall.getUTCDate()}`;
 }
 
 /**

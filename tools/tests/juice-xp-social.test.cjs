@@ -123,7 +123,9 @@ test('Social chest: squash on press, lid pop, wiggle, stars, haptic, Chris sound
   assert.match(chest, /onPressIn=\{pressIn\}/);
   assert.match(chest, /sx\.value = withTiming\(1\.14/);
   assert.match(chest, /setLidOpen\(true\)/);
-  assert.match(chest, /chest_open_empty\.png/, 'an empty open chest, never the coin pile');
+  // Fix w3 T147: the chest means Rewards only; More wears the map's menu button (Alex's FAB with three bars).
+  assert.match(chest, /fab-blue\.webp/);
+  assert.doesNotMatch(chest, /GameIcon name="chest"|chest_open_empty/);
   assert.doesNotMatch(chest, /chestOpen|chest_opened|reveal\.mp3/);
   assert.match(chest, /if \(locked\.current\) return;\n\s+locked\.current = true;/, 'one tap owns the beat: no stacked sounds');
   assert.match(chest, /playSfx\(CHEST_SHUT_CUE/, 'the lid shuts with a tick');
