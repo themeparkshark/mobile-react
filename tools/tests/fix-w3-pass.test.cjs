@@ -97,6 +97,7 @@ test('T105: the count line names each row once', () => {
 test('T116: Plus is said in plain words wherever it shows', () => {
   const extras = [{ type: 'coins', amount: 1500, ready: true }, { type: 'item', name: 'Aurora Sparkle Pin', art: 'aurora-crown', slot: 'pin', icon_url: null, ready: true }];
   assert.equal(pass.plusWords(extras), 'Shark Pass Plus is the Shark Pass row plus Aurora Sparkle Pin and 1500 Shark Coins right away.');
+  assert.equal(pass.plusWords(extras, false), 'The Shark Pass row plus Aurora Sparkle Pin and 1500 Shark Coins right away.');
   assert.equal(pass.plusWords([]), null);
   assert.equal(pass.setMixText([{ row: 'free' }, { row: 'plus' }]), '1 free, 0 on the Shark Pass, 1 with Shark Pass Plus');
   const screen = strip(read('src/screens/SharkPassScreen.tsx'));
@@ -120,4 +121,12 @@ test('T117: the next prize line counts what can still be done today, home first'
   const screen = strip(read('src/screens/SharkPassScreen.tsx'));
   assert.match(screen, /nextPrizeTodayText\(\{ stepsAway: nextStep - step, pointsAway: nextPrize\.pointsAway, perStep, daily3Ready, today: progress\.today \}\)/);
   assert.doesNotMatch(screen, /winsAwayText\(/);
+});
+
+test('T091 lane fixture: inert unless the lane mute and the fixture are both set', () => {
+  const st = { enabled: true, season: { key: 's1', on_sale: true } };
+  assert.equal(pass.lanePassFixture(st, { mute: undefined, fixture: 'not-on-sale' }), st, 'store and OTA bundles: untouched');
+  assert.equal(pass.lanePassFixture(st, { mute: '1', fixture: undefined }), st);
+  assert.equal(plain(pass.lanePassFixture(st, { mute: '1', fixture: 'not-on-sale' })).season.on_sale, false);
+  assert.match(plain(pass.lanePassFixture(st, { mute: '1', fixture: 'not-on-sale-dated' })).season.sale_opens_on, /^\d{4}-\d{2}-\d{2}$/);
 });

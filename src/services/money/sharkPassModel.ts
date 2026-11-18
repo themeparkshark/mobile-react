@@ -135,7 +135,17 @@ export function passQuestLabel(label: string): string {
 export function lanePassFixture<T>(state: T, env: Readonly<Record<string, string | undefined>> = {
   mute: process.env.EXPO_PUBLIC_STUDIO_MUTE, fixture: process.env.EXPO_PUBLIC_CL_PASS_FIXTURE,
 }): T {
-  if (env.mute !== '1' || env.fixture !== 'empty-daily') return state;
+  if (env.mute !== '1') return state;
+  // 'not-on-sale' / 'not-on-sale-dated': the season runs but the row is not for sale (T091), with no
+  // day or with a day two days out, so the "opens soon" card can be seen on a server that sells it.
+  if (env.fixture === 'not-on-sale' || env.fixture === 'not-on-sale-dated') {
+    const s = state as unknown as { enabled?: boolean; season?: Record<string, unknown> | null };
+    if (!s || !s.enabled || !s.season) return state;
+    const day = new Date(Date.now() + 2 * 86_400_000);
+    const ymd = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+    return { ...s, season: { ...s.season, on_sale: false, sale_opens_on: env.fixture === 'not-on-sale-dated' ? ymd : null } } as unknown as T;
+  }
+  if (env.fixture !== 'empty-daily') return state;
   const s = state as unknown as { enabled?: boolean; quests?: { daily: readonly unknown[] } | null };
   if (!s || !s.enabled || !s.quests) return state;
   return { ...s, quests: { ...s.quests, daily: [] } } as unknown as T;
@@ -250,12 +260,13 @@ export function passSoonLines(season: { readonly sale_opens_on?: string | null }
 /**
  * Shark Pass Plus in plain words (T116): what it adds, never just "Plus". Null without extras.
  */
-export function plusWords(plusRewards: readonly SharkPassReward[] | null | undefined): string | null {
+export function plusWords(plusRewards: readonly SharkPassReward[] | null | undefined, named = true): string | null {
   // The thing to wear first, then the rest.
   const extras = [...(plusRewards ?? [])].sort((a, b) => Number(isWearable(b)) - Number(isWearable(a))).map(rewardWords);
   if (!extras.length) return null;
   const list = extras.length > 1 ? `${extras.slice(0, -1).join(', ')} and ${extras[extras.length - 1]}` : extras[0];
-  return `Shark Pass Plus is the Shark Pass row plus ${list} right away.`;
+  // Under its own SHARK PASS PLUS title the line starts plainly (no name said twice).
+  return `${named ? 'Shark Pass Plus is the' : 'The'} Shark Pass row plus ${list} right away.`;
 }
 
 /**

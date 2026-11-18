@@ -682,7 +682,7 @@ export default function SharkPassScreen() {
                           {busy !== 'buy' && <RealMoneyMark size={18} />}
                           <Text maxFontSizeMultiplier={1.15} style={s.plusPrice}>{busy === 'buy' ? '…' : plusPrice.price}</Text>
                         </View>
-                        <Text maxFontSizeMultiplier={MAX_FONT} style={s.plusBody}>{plusLine}</Text>
+                        <Text maxFontSizeMultiplier={MAX_FONT} style={s.plusBody}>{plusWords(season.plus_rewards, false)}</Text>
                       </View>
                     </Pressable>
                   )}
