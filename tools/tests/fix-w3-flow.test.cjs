@@ -128,3 +128,20 @@ test('T047 T062 the coin card has a close X, starts at once when seen before, an
   assert.match(modal, /hitSlop=\{MAIN_BUTTON_HIT_SLOP\}/);
   assert.match(read('src/components/RedeemModal.tsx'), /coinCardSeenNow\(player\?\.id, redeemable\?\.type \?\? '', coin\.id\)/);
 });
+
+/* T068: no toast behind the win card. */
+test('T068 a win\'s Ride Parts banner folds (the card shows it) and server news waits until the challenge lets go', () => {
+  const b = loadTs('src/api/broadcastFilter.ts');
+  assert.deepEqual(plain(b.visibleBroadcasts(['You earned 1 Main Street U.S.A. Ride Parts!', 'Level up!'], true)), ['Level up!']);
+  b.resetBroadcastHoldForTests();
+  const shown = [];
+  b.holdBroadcasts(true);
+  b.routeBroadcasts(['Level up!'], m => shown.push(...m));
+  assert.deepEqual(shown, [], 'held while the card is up');
+  b.holdBroadcasts(false);
+  assert.deepEqual(shown, ['Level up!'], 'shows once the card has closed');
+  b.routeBroadcasts(['News'], m => shown.push(...m));
+  assert.deepEqual(shown, ['Level up!', 'News']);
+  assert.match(read('src/hooks/useAxiosSetup.ts'), /routeBroadcasts\(shown, messages => enqueueRef\.current\(messages\)\)/);
+  assert.match(read('src/components/RedeemRedeemableModal.tsx'), /flowState === 'minigame' \|\| flowState === 'postwin'/);
+});

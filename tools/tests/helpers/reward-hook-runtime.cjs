@@ -142,6 +142,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)rewards\/postWinModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/postWinModel.ts');
       if (/(^|\/)rewards\/challengeCopy$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/challengeCopy.ts');
       // Fix W3 flow: the coin card's pure rules run for real; the seen-cards store, the offer slots and the line lookup are quiet.
+      if (/(^|\/)api\/broadcastFilter$/.test(name)) return require('./ts-module.cjs').loadTs('src/api/broadcastFilter.ts');
       if (/(^|\/)mashGuard$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/mashGuard.ts');
       if (/(^|\/)tryPipsModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/tryPipsModel.ts');
       if (/(^|\/)rewards\/coinCardModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/coinCardModel.ts');

@@ -75,6 +75,7 @@ import { watchForReward } from '../services/ads';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { lossNext } from './rewards/lossNext';
+import { holdBroadcasts } from '../api/broadcastFilter';
 import { needTicketMain, previewRewardTiles, rangeErrorCleared } from './rewards/coinCardModel';
 import { markCoinCardSeen } from './rewards/coinCardSeen';
 import { NeedTicketOfferSlot } from './rewards/offerSlots';
@@ -186,6 +187,13 @@ export default function RedeemRedeemableModal({
 
   // Keep ref in sync so callbacks always have current flowState
   useEffect(() => { flowStateRef.current = flowState; }, [flowState]);
+  // Server news waits while the game plays and the win card is up (fix W3 T068): no toast behind the card.
+  const holdNews = open === true && (flowState === 'spinning' || flowState === 'minigame' || flowState === 'postwin' || flowState === 'claim-error');
+  useEffect(() => {
+    if (!holdNews) return undefined;
+    holdBroadcasts(true);
+    return () => holdBroadcasts(false);
+  }, [holdNews]);
   // From rung 3, a coin already on the shelf shows its Parts ring on the card (blueprint 5.3, scope 3).
   const ownedAssetId = open === true && coinLevelsOpen && redeemable?.type === 'task'
     && ((redeemable.model as TaskType).times_completed ?? 0) > 0 ? (redeemable.model as TaskType).asset_id ?? null : null;
