@@ -701,12 +701,13 @@ export default function RedeemRedeemableModal({
     const delay = reconcileDelayMs(reconcileTry.current);
     const timer = setTimeout(() => {
       reconcileTry.current += 1;
-      void getTaskAttempt(id).then(result => {
+      void getTaskAttempt(id).then(async result => {
         if (!alive || attemptRef.current?.id !== id) return;
-        if (result.attempt.status === 'started' && outcomeRef.current) void resolveAttempt(outcomeRef.current);
+        // The server never got the result (it timed out or failed): send it again with the same proof.
+        if (result.attempt.status === 'started' && outcomeRef.current) await resolveAttempt(outcomeRef.current);
         else applyAttemptState(result.attempt);
-      }).catch(() => {
-        // Still no answer: the next look comes on the next beat (this effect runs again for the new try count).
+      }).catch(() => undefined).finally(() => {
+        // Whatever this look found, the next one is scheduled; a card that moved on (win, loss) cancels it.
         if (alive) setReconcileBeat(beat => beat + 1);
       });
     }, delay);
