@@ -51,7 +51,7 @@ import { prefetchLayers } from './faceLayers';
 import { faceLayerSources, facePoints, wearsOwnLook } from './StandingsShark';
 import {
   boardMatches, DIVIDER_HEIGHT, dockLabel, expectedWeekEnd, firstSkeletonIndex, nextStep, onlyFirstPage, safeToInsert, SKELETON_ROWS, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
-  podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, scoreText, shouldPrefetch, weekLeft, youLine,
+  podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, shouldPrefetch, unitWord, weekLeft, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
 import countText from '../../helpers/countText';
@@ -308,7 +308,8 @@ function StepGlyphs({ plus, target, metric, kind, icon, compact = false }: {
     <View importantForAccessibility="no-hide-descendants" style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', height: h,
       borderRadius: h / 2, overflow: 'hidden', borderWidth: 2, borderColor: gold ? BRAND.goldLip : BRAND.navy }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: compact ? 7 : 9, paddingRight: compact ? 5 : 7, height: '100%', backgroundColor: BRAND.blueBright }}>
-        <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: f, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{`+${plus}`}</Text>
+        {/* Fix w3 T132: "1 more [coin] to #15" in words and pictures, never a bare "+1". */}
+        <Text maxFontSizeMultiplier={1.15} style={{ fontFamily: 'Shark', fontSize: f, color: BRAND.white, fontVariant: ['tabular-nums'] }}>{`${plus} more`}</Text>
         <ScoreIcon metric={metric} size={ic + 1} />
         <GameIcon name="arrow" size={ic - 2} />
       </View>
@@ -441,7 +442,9 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
   const label = youLabel(model, climb, inPark);
   const score = me?.score ?? 0;
   // "0 of 211" is a scary denominator for a new player: just 0 until the first coin.
-  const shownScore = reviewing ? `${model.review?.rides ?? 0}` : score > 0 ? scoreText(model, score) : '0';
+  // Fix w3 T132: your row says what the number is ("2 ride coins"), never "2 of 211" (the denominator was
+  // every coin in every park, and read like a rank).
+  const shownScore = reviewing ? `${model.review?.rides ?? 0}` : `${score} ${unitWord(model.metric, score)}`;
   const passing = step2 >= 0 && step2 < passed.length ? passed[step2] : null;
   const climbed = climb > 0 && step2 >= passed.length;
   // Until the last tick: the old rank and no new line (r2: "You're #1" showed before the ticks).

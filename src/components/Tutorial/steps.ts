@@ -85,6 +85,17 @@ const parkSteps: TutorialStep[] = [
 ];
 
 /**
+ * PARK shelf opened away from the park (home PLAN, fix w3 T136): its card says "Pick a missing coin"
+ * with no GO, so Finn says what to tap here.
+ */
+const parkAwaySteps: TutorialStep[] = [
+  {
+    ...parkSteps[0],
+    subtitle: 'Tap an empty slot to plan your next coin.',
+  },
+];
+
+/**
  * STORE: First time entering StoreScreen
  */
 const storeSteps: TutorialStep[] = [
@@ -243,5 +254,6 @@ export function getStepsForSequence(sequence: TutorialSequence, options?: Tutori
   if (sequence === 'onboarding' && played) return guestWelcomeBackSteps(findReady);
   if (sequence === 'onboarding' && !findReady) return homeNoFindSteps;
   if (sequence === 'park_arrival' && played) return withoutWarmup(parkArrivalSteps);
+  if (sequence === 'park' && options?.inPark === false) return parkAwaySteps;
   return TUTORIAL_SEQUENCES[sequence] || [];
 }

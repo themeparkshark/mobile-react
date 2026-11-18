@@ -324,10 +324,11 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   // Trigger park tutorial on first visit
   useEffect(() => {
     if (isFocused && tutorialReady && !loading && !tutorialActive && !receivedArrival.current && !hasCompleted('park')) {
-      const timer = setTimeout(() => startTutorial('park'), 1000);
+      // Away from the park (home PLAN) the card has no GO, so Finn's line says what to tap there (T136).
+      const timer = setTimeout(() => startTutorial('park', { inPark: inThisPark }), 1000);
       return () => clearTimeout(timer);
     }
-  }, [isFocused, tutorialReady, loading, tutorialActive, hasCompleted, startTutorial]);
+  }, [isFocused, tutorialReady, loading, tutorialActive, hasCompleted, startTutorial, inThisPark]);
 
   const silver =
     currentPark && currentPark.park_coins_count >= 50

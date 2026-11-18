@@ -20,7 +20,7 @@ export default function SplashScreen() {
   // The fun fact shows with the bar from the scene's first frame: picked here, once per launch (the
   // game's words if they are already here, else the facts that ship with the app), so the Loading
   // screen and the map's cover keep the same one and the banner never swaps.
-  useState(() => { setLaunchFact(launchFactFrom(labels.splash_screen_facts)); return 0; });
+  useState(() => { setLaunchFact(launchFactFrom(labels.splash_screen_facts, player?.completed_tasks_count)); return 0; });
 
   // Use useEffectOnceWhen to navigate only once when ready. Only while this screen is on top: the
   // sign-in (AuthProvider) often moves to Loading first, and Loading may already have opened the
@@ -55,9 +55,22 @@ export default function SplashScreen() {
   return <LaunchScene active={focused} />;
 }
 
+/**
+ * Tips for later in the game (fix w3 T135): before a player has won a coin, the launch tip is about the
+ * first minute (walk to the glowing coin, PLAY!), or a shark fact, never levels, Ride Parts, Energy,
+ * LinePlay or sets the player has not met yet.
+ */
+const LATER_TIP = /\blevel up\b|\bRide Parts?\b|\bEnergy\b|\bcollection set\b|\bLinePlay\b|\bTap GO\b|\bSecret coins\b/i;
+export const FIRST_MINUTE_TIPS: readonly string[] = [
+  'Walk to the glowing coin on the park map, then tap PLAY!',
+  'Every ride has a coin. Win it and fill your park shelf!',
+];
+
 /** One fact for this launch: the server's list when it is here, else the shipped list (never a "right now" line out of date). */
-export function launchFactFrom(facts: readonly string[] | undefined): string | null {
-  const list = facts && facts.length > 0 ? facts
+export function launchFactFrom(facts: readonly string[] | undefined, wins?: number | null): string | null {
+  const all = facts && facts.length > 0 ? facts
     : (DEFAULT_CRUMBS.labels.splash_screen_facts as string[]).filter(f => !/right now/i.test(f));
+  const fresh = !(Number(wins) > 0);
+  const list = fresh ? [...FIRST_MINUTE_TIPS, ...all.filter(f => !LATER_TIP.test(f) && !FIRST_MINUTE_TIPS.includes(f))] : all;
   return sample(list) ?? null;
 }

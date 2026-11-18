@@ -1139,7 +1139,7 @@ test('favorite star bursts only on a tap, never when the favorites list arrives 
 
 test('the launch fact shows with the bar from the Splash route on (picked once, never swapped)', () => {
   const splash = read('src/screens/SplashScreen.tsx');
-  assert.match(splash, /useState\(\(\) => \{ setLaunchFact\(launchFactFrom\(labels\.splash_screen_facts\)\); return 0; \}\);/);
+  assert.match(splash, /useState\(\(\) => \{ setLaunchFact\(launchFactFrom\(labels\.splash_screen_facts, player\?\.completed_tasks_count\)\); return 0; \}\);/);
   assert.match(splash, /filter\(f => !\/right now\/i\.test\(f\)\)/, 'no out-of-date "right now" line from the shipped list');
   const scene = read('src/components/launch/LaunchScene.tsx');
   assert.match(scene, /if \(!launchFact && fact\) launchFact = fact;/, 'the first pick wins for the whole launch');

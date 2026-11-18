@@ -47,6 +47,7 @@ function ridDay(iso: string): string {
 }
 import * as RootNavigation from '../RootNavigation';
 import OneTimeTip from './help/OneTimeTip';
+import RideFactLine from './collection/RideFactLine';
 import CoinTopUpOffer from './money/CoinTopUpOffer';
 import { storeAvailable } from '../services/purchases';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
@@ -624,6 +625,10 @@ export default function CoinLevelingModal({
                   </TouchableOpacity>
                 </Reanimated.View>
 
+                {/* Something true about the ride (fix w3 T124, T137): its land and one fan note. Not during the level-up. */}
+                {state !== 'leveling' && state !== 'success' && <RideFactLine rideName={rideCoin.ride_name}
+                  parkId={(rideCoin as { park_id?: number | null }).park_id ?? null} style={{ marginTop: 6, marginBottom: 6 }} />}
+
                 {/* ── Ride Name ── */}
                 <UpperText style={{
                   fontFamily: 'Shark',
@@ -796,6 +801,11 @@ export default function CoinLevelingModal({
                 {/* ══════════════════════════════════════ */}
                 {!showEditions && (state === 'preview' || state === 'confirm') && !isMaxLevel && (
                   <>
+                    {/* First look at a coin card: what leveling costs and does, once. It sits above the cost box
+                        (fix w3 T127): under it, its OK sat where GET 1 RIDE PART slid up to once the tip left, so the
+                        same tap closed the whole card. Here nothing tappable moves under the finger. */}
+                    <OneTimeTip id="coin_card" ready={visible && state === 'preview'} compact
+                      style={{ alignSelf: 'stretch', marginBottom: 8 }} />
                     {/* ── Upgrade Cost Section ── */}
                     <View style={{
                       width: '100%',
@@ -960,9 +970,6 @@ export default function CoinLevelingModal({
                         {upgradeError}
                       </Text>
                     </View>}
-                    {/* First look at a coin card: what leveling costs and does, once. */}
-                    <OneTimeTip id="coin_card" ready={visible && state === 'preview'} compact
-                      style={{ alignSelf: 'stretch', marginBottom: 8 }} />
                     {/* ── Level Up Button ── */}
                     {canLevelUp || !missingAction ? <YellowButton
                       text="Level Up!"

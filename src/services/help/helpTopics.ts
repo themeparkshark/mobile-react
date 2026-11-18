@@ -131,7 +131,8 @@ export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy
   // LinePlay passes the line that matches its wait card (LINEPLAY_INTRO_BODY); this is the Parts-on default.
   lineplay_intro: { title: 'Welcome to LinePlay',
     body: 'Stay near the ride and your time in line earns Ride Parts. Games are bonus fun. Look up when the line moves.' },
-  first_ride_part: { title: 'Your first Ride Part!',
+  // Fix w3 T132: a win can grant a Part before any wait does, so this tip never claims "first".
+  first_ride_part: { title: 'You earned a Ride Part!',
     body: 'Ride Parts belong to this ride. Spend them with Energy to level up its coin on your shelf.' },
   coin_card: { title: 'Level up your coin',
     body: 'Each level costs Energy and this ride\'s Ride Parts. Higher levels give the coin a new look.' },

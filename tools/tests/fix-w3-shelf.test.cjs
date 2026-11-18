@@ -60,3 +60,57 @@ test('T132: one park name: the guide, the raid banner, Profile and the story say
   assert.match(read('src/components/home/HomeLive.tsx'), /\{parkLabel\(park\)\}<\/Text>/);
   assert.match(read('src/screens/ParkDayRecapCard.tsx'), /shortParkName\(recap\.park_name\)/);
 });
+
+test('T132: copy slips: plural Tickets, the raid line, the Ride Part tip, and your Standings row in words', () => {
+  const boss = read('src/components/boss/BossJoinCard.tsx');
+  assert.doesNotMatch(boss, /\$\{tickets\} Tickets`/, 'never "1 Tickets"');
+  assert.match(read('src/components/boss/BossWinCard.tsx'), /It got away with \$\{hpLeftPct\}% left\./);
+  assert.doesNotMatch(read('src/components/boss/BossWinCard.tsx'), /Only \$\{hpLeftPct\}% left!/);
+  assert.match(read('src/services/help/helpTopics.ts'), /first_ride_part: \{ title: 'You earned a Ride Part!'/);
+  const board = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(board, /`\$\{score\} \$\{unitWord\(model\.metric, score\)\}`/, 'your row says "2 ride coins", not "2 of 211"');
+  assert.match(board, /\{`\$\{plus\} more`\}/, 'the chase pill says "1 more", not "+1"');
+});
+
+test('T135: before a first coin the launch tip is about the first minute', () => {
+  const src = read('src/screens/SplashScreen.tsx');
+  const match = /const LATER_TIP = (\/.*\/i);/.exec(src);
+  assert.ok(match, 'the later-tip pattern is named');
+  const later = eval(match[1]);
+  const shipped = require('../../src/api/defaults/crumbs.json').labels.splash_screen_facts;
+  assert.ok(later.test('Level up a ride coin with its Ride Parts and Energy!'));
+  const fresh = shipped.filter(f => !later.test(f));
+  assert.ok(fresh.length >= 4 && fresh.every(f => !/level up|Ride Parts|Energy|LinePlay/i.test(f)));
+  assert.match(src, /'Walk to the glowing coin on the park map, then tap PLAY!'/);
+  assert.match(read('src/screens/LoadingScreen.tsx'), /launchFactFrom\(labels\.splash_screen_facts, player\?\.completed_tasks_count\)/);
+});
+
+test('T136: the shelf opened from home tells you to tap an empty slot, never "Tap GO"', () => {
+  const steps = loadTs('src/components/Tutorial/steps.ts');
+  assert.equal(steps.getStepsForSequence('park', { inPark: false })[0].subtitle, 'Tap an empty slot to plan your next coin.');
+  assert.match(steps.getStepsForSequence('park', { inPark: true })[0].subtitle, /Tap GO/);
+  assert.match(read('src/screens/ParkScreen.tsx'), /startTutorial\('park', \{ inPark: inThisPark \}\)/);
+});
+
+test('T127: the coin card tip sits above the cost box, so OK never lands on GET RIDE PARTS', () => {
+  const modal = read('src/components/CoinLevelingModal.tsx');
+  const tip = modal.indexOf('<OneTimeTip id="coin_card"');
+  const cost = modal.indexOf('{/* ── Upgrade Cost Section ── */}');
+  const button = modal.indexOf('{/* ── Level Up Button ── */}');
+  assert.ok(tip > 0 && tip < cost && cost < button, 'tip, then cost box, then the button');
+});
+
+test('T124/T137: the coin card says something true about the ride: its land and one fan note', () => {
+  const { rideFact } = loadTs('src/services/collection/rideFacts.ts');
+  assert.equal(rideFact('Jungle Cruise').land, 'Adventureland');
+  assert.match(rideFact('Jungle Cruise').note, /O2H is water backwards/);
+  assert.equal(rideFact('Thunder Mountain').land, 'Frontierland', 'every spelling of a ride finds its note');
+  assert.equal(rideFact('Tiki Room').land, 'Adventureland');
+  assert.equal(rideFact('Castle', 8).land, 'Fantasyland');
+  assert.equal(rideFact('Castle', 2), null, 'a short sight name only means Disneyland\'s castle at Disneyland');
+  assert.equal(rideFact('Some New Ride'), null, 'no note is ever guessed');
+  const src = read('src/services/collection/rideFacts.ts');
+  for (const m of src.matchAll(/note: '((?:[^'\\]|\\.)*)'/g)) assert.ok(m[1].length <= 72, m[1]);
+  assert.doesNotMatch(src, /—/, 'no em dashes');
+  assert.match(read('src/components/CoinLevelingModal.tsx'), /<RideFactLine rideName=\{rideCoin\.ride_name\}/);
+});

@@ -180,7 +180,7 @@ export default function BossWinCard({ raid, lastHp, onDone }: {
         {won ? `The park beat ${BOSS_NAMES[raid.boss]}!` : `${BOSS_NAMES[raid.boss]} got away! Get it next time.`}
       </Text>
       {/* What this kid did, win or lose: the loss still reads as progress. */}
-      {raid.you.damage > 0 && <Text style={styles.yourHits}>{won ? `You hit it for ${countText(raid.you.damage)}!` : `You hit it for ${countText(raid.you.damage)}.${hpLeftPct > 0 ? ` Only ${hpLeftPct}% left!` : ''}`}</Text>}
+      {raid.you.damage > 0 && <Text style={styles.yourHits}>{won ? `You hit it for ${countText(raid.you.damage)}!` : `You hit it for ${countText(raid.you.damage)}.${hpLeftPct > 0 ? ` It got away with ${hpLeftPct}% left.` : ''}`}</Text>}
       {raid.mvp_is_you && <Animated.View style={[styles.mvp, crownStyle]}>
         <GameIcon name="crown" size={34} />
         <Text style={styles.mvpText}>YOU WERE MVP</Text>
