@@ -370,7 +370,7 @@ test('a VIP member\'s retry lives inside TRY AGAIN; nobody else sees a VIP or ad
   assert.match(modal, /const canOfferRetry = retryOffered && vipRetryCase && !vipOutToday;/);
   assert.doesNotMatch(modal, /AD_RETRY_ACTION|adsAvailable|gameAlert/);
   const buttons = read('src/gamekit/results/ResultButtons.tsx');
-  assert.match(buttons, /\{note \? <View style=\{styles\.note\}><Text style=\{styles\.noteText\} numberOfLines=\{1\}>\{note\}<\/Text><\/View> : null\}/);
+  assert.match(buttons, /\{note \? <View style=\{styles\.note\}><Text style=\{styles\.noteText\} numberOfLines=\{1\}>\{withNumberFont\(note\)\}<\/Text><\/View> : null\}/);
 });
 
 test('the quit warning is the branded dialog, nested in the challenge card\'s own sheet', () => {
