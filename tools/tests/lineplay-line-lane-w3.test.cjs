@@ -91,3 +91,15 @@ test('T074 and T080: the in-line offer is its own picture button under the card,
   assert.match(card, /\{lineOffer && <View style=\{styles\.actions\}>\n\s+<LineButton title=\{lineOffer\.title\}/);
   assert.match(read('src/screens/ExploreScreen.tsx'), /case 'lineplay_here': void openLinePlayHere\(\)/);
 });
+
+test('T082: no clock digits and no coral in LinePlay (Sharky Swim tide, LinePlay Memory rim, the shell last-5 count)', () => {
+  const engine = loadTs('src/games/memory/engine.ts');
+  assert.equal(engine.modeFlags('timeAttack').quietClock, true, 'LinePlay Memory (queue solo) keeps a calm clock');
+  assert.equal(engine.modeFlags('timeAttack').overtime, 'x2', 'scoring unchanged');
+  assert.equal(engine.modeFlags('race').quietClock, false);
+  assert.match(read('src/games/memory/MemoryGame.tsx'), /const calmClock = flags\.overtime === 'look' \|\| flags\.quietClock;/);
+  const hud = read('src/games/sharky/render/SharkyHud.tsx');
+  assert.match(hud, /const calmTide = s\.mode === MODE_QUEUE;\n\s+low = !calmTide && /);
+  assert.match(hud, /label = calmTide \? '' : /);
+  assert.match(read('src/gamekit/GameShellV2.tsx'), /count=\{finalCount && !linePlayMovement\}/);
+});

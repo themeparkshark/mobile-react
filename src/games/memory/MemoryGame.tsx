@@ -382,7 +382,8 @@ export default function MemoryGame({
   // A clock whose Overtime is look and sound only (a paid ride coin, a line duel) stays calm: no counting-down
   // number, no OVERTIME ribbon and no orange rope (fix round W1 item 18). The rope still drains, the music still
   // turns and the last-5 drumroll still plays, so the end is felt without a ticking number over a kid's board.
-  const calmClock = flags.overtime === 'look';
+  // A calm clock: no digits, no urgency, no last-5 count (the paid ride's look-only overtime, and LinePlay, T082).
+  const calmClock = flags.overtime === 'look' || flags.quietClock;
   const calmClockRef = useRef(calmClock);
   calmClockRef.current = calmClock;
   const reducedMotion = useReducedGameMotion();
