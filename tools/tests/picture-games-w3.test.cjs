@@ -60,5 +60,16 @@ test('T027: the attempt\'s kid rules reach the ride games', () => {
   assert.equal((selector.match(/kid=\{kid && rewardMode === 'task-attempt'\}/g) ?? []).length, 2, 'Whack and Memory');
   const memory = fs.readFileSync('src/games/memory/MemoryGame.tsx', 'utf8');
   assert.match(memory, /const pairs = kidRef\.current \? RIDE_KID_PAIRS : 8;/);
-  assert.match(memory, /export const RIDE_KID_PAIRS = 8;/);
+  assert.match(memory, /export const RIDE_KID_PAIRS = 6;/);
+});
+
+test('T061: every results next-star bar shows the next star\'s score under the star (Sharky, Whack, Memory share it)', () => {
+  const bar = fs.readFileSync('src/gamekit/results/NextStarBar.tsx', 'utf8');
+  assert.match(bar, /\{goal\.nextStar && \(goal\.target \?\? 0\) > 0 \? \(/);
+  assert.match(bar, /\{countText\(goal\.target \?\? 0\)\}/);
+  const scoring = loadTs('src/gamekit/core/scoring.ts');
+  const goal = scoring.nextStarGoal(4206, { one: 2500, two: 6000, three: 11000 });
+  assert.equal(goal.target, 6000, 'Sharky 4206: next star at 6000');
+  const sharky = fs.readFileSync('src/games/sharky/hud/SharkyResults.tsx', 'utf8');
+  assert.match(sharky, /nextStarGoal\(data\.score, data\.thresholds\)/, 'Sharky passes the full goal, target included');
 });

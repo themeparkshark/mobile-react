@@ -40,16 +40,16 @@ test('T066: a fresh or resumed ride board keeps a full rope until the first flip
   assert.equal(s.clockLeftMs, 45000);
 });
 
-test('T027: the slow forgetful kid wins about 2 Tickets in 3 on the ride board (8 pairs, resting clock)', () => {
+test('T027: on the resting clock the slow forgetful kid wins most Tickets on 8 pairs and nearly all on the kid board (6 pairs)', () => {
   const Bt = loadTs('src/games/memory/bot.ts');
   const kid = Bt.BOT.kid;
-  const shell = (seed, cfg) => {
+  const shell = (seed, cfg, pairs = 8) => {
     let a = seed;
     const rand = () => { a = (a * 1103515245 + 12345) & 0x7fffffff; return a / 0x7fffffff; };
     const faces = [];
-    for (let p = 0; p < 8; p++) faces.push(p, p);
+    for (let p = 0; p < pairs; p++) faces.push(p, p);
     for (let i = faces.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [faces[i], faces[j]] = [faces[j], faces[i]]; }
-    const s = E.createEngine(cfg, { cols: 4, rows: 4, seed: 5 });
+    const s = E.createEngine(cfg, { cols: 4, rows: pairs / 2, seed: 5 });
     let t = 1200;
     for (let k = 0; k < 400 && s.status === 'play'; k++) {
       t += kid.minMs + rand() * (kid.maxMs - kid.minMs);
@@ -70,5 +70,9 @@ test('T027: the slow forgetful kid wins about 2 Tickets in 3 on the ride board (
     for (let sh = 0; sh < 3 && !won; sh++) won = shell(i * 97 + sh * 13 + 1, E.rideSprintConfig());
     if (won) tickets++;
   }
-  assert.ok(tickets / n >= 0.55 && tickets / n <= 0.85, `kid wins ${tickets}/${n} Tickets`);
+  assert.ok(tickets / n >= 0.55, `8 pairs: kid wins ${tickets}/${n} Tickets`);
+  // The model is kinder than the device (taps during flips are dropped there): the kid board is 6 pairs.
+  let kidBoard = 0;
+  for (let i = 0; i < n; i++) if (shell(i * 97 + 1, E.rideSprintConfig(), 6)) kidBoard++;
+  assert.ok(kidBoard / n >= 0.8, `6 pairs, first shell: ${kidBoard}/${n}`);
 });

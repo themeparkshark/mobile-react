@@ -286,11 +286,11 @@ export interface DailySetup {
 export const RIDE_TRIES = 3;
 const TICK_MS = 50;
 /**
- * Kid rules ride board (T027): the same 8 pairs. Tuning (tools/tests/memory-fix-w3.test.cjs) showed the
- * clock that rests until the first flip and while idle (T042) is what a slow kid needed: about 2 Tickets in
- * 3 for a forgetful slow tapper on 8 pairs, while 6 pairs won every Ticket (no game left).
+ * Kid rules ride board (T027): 6 pairs on 4 x 3, on the clock that rests until the first flip (T042).
+ * On device the slow kid bot won 2 of 8 Tickets on 8 pairs (fix-w3/play evidence), well under the
+ * 2 in 3 target, so kids get the smaller board the Time Attack opener already uses.
  */
-export const RIDE_KID_PAIRS = 8;
+export const RIDE_KID_PAIRS = 6;
 
 /**
  * The ride loss card's numbers (T049): this shell's pairs plus the best shell of the Ticket, so a
@@ -702,7 +702,7 @@ export default function MemoryGame({
       const cfg = rideSprintConfig(45000, signal ? SIGNAL_TURNS : 0);
       const pairs = kidRef.current ? RIDE_KID_PAIRS : 8;
       src = createSimReveal({ cfg, layout: { pairs, deckSize, seed: s }, deckSize, engineSeed: s ^ 0x5bd1e995, latencyMs: DEV_LATENCY });
-      eng = createEngine(cfg, { cols: 4, rows: pairs / 2, seed: s ^ 0x5bd1e995 });
+      eng = createEngine(cfg, { cols: 4, rows: pairs / 2, seed: s ^ 0x5bd1e995 }); // 4 x 4, or 4 x 3 for kids
     } else if (mode === 'warmup') {
       const cfg = warmupConfig();
       src = createLocalBoard({ pairs: 4, deckSize, seed: s }, deckSize);
