@@ -52,14 +52,16 @@ export const PROMISE_READY_MS = RULE_STEP_MS * RULES.length + 450;
 function RuleRow({ rule, progress }: { readonly rule: (typeof RULES)[number]; readonly progress: SharedValue<number> }) {
   const style = useAnimatedStyle(() => ({
     opacity: progress.value,
-    transform: [{ translateY: (1 - progress.value) * 14 }, { scale: 0.96 + 0.04 * progress.value }],
+    transform: [{ translateY: (1 - progress.value) * 14 }],
   }));
   return (
-    <Animated.View style={[styles.rule, style]} accessible accessibilityLabel={`${rule.title}. ${rule.line}`}>
-      <View style={styles.badge}><GameIcon name={rule.icon} size={30} /></View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.ruleTitle}>{rule.title}</Text>
-        <Text style={styles.ruleLine}>{rule.line}</Text>
+    <Animated.View style={style} accessible accessibilityLabel={`${rule.title}. ${rule.line}`}>
+      <View style={styles.rule}>
+        <View style={styles.badge}><GameIcon name={rule.icon} size={30} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.ruleTitle}>{rule.title}</Text>
+          <Text style={styles.ruleLine}>{rule.line}</Text>
+        </View>
       </View>
     </Animated.View>
   );
