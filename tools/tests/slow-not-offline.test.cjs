@@ -10,7 +10,7 @@ test('T172: the words match what happened: slow says the game is slow, only a re
   const C = loadTs('src/services/connectivity.ts');
   const copy = loadTs('src/services/connectionCopy.ts', { './connectivity': C });
   assert.equal(copy.tryAgainLine(), 'The game is slow right now. Try again.');
-  C.reportTimeout(); C.reportTimeout();
+  C.reportTimeout(); C.reportTimeout(); C.reportTimeout();
   assert.equal(C.connectionState(), 'slow');
   assert.equal(copy.tryAgainLine({ code: 'ECONNABORTED' }), 'The game is slow right now. Try again.', 'a timeout is never the player’s internet');
   C.reportUnreachable();

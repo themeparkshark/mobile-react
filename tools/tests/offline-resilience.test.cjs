@@ -263,15 +263,15 @@ test('real axios: T172 timeouts mean slow, never offline; a quick answer is onli
   const C = loadTs('src/services/connectivity.ts');
   const seen = [];
   C.onConnectionState(state => seen.push(state));
-  C.reportTimeout();
-  assert.equal(C.connectionState(), 'online', 'one slow call shows nothing');
+  C.reportTimeout(); C.reportTimeout();
+  assert.equal(C.connectionState(), 'online', 'two slow calls show nothing (a busy launch)');
   C.reportTimeout();
   assert.equal(C.connectionState(), 'slow');
   assert.equal(C.isOffline(), false, 'slow is not offline');
   C.reportReachable();
-  C.reportSlowAnswer(); C.reportSlowAnswer();
+  C.reportSlowAnswer(); C.reportSlowAnswer(); C.reportSlowAnswer();
   assert.deepEqual(seen, ['slow', 'online', 'slow'], 'late answers count as slow too');
-  assert.match(read('src/api/client.ts'), /Date\.now\(\) - started >= SLOW_ANSWER_MS\) reportSlowAnswer/);
+  assert.match(read('src/api/client.ts'), /Date\.now\(\) - started >= SLOW_ANSWER_MS\) \{[\s\S]{0,160}reportSlowAnswer\?\.\(\);/);
 });
 
 test('React Native network errors (response with status 0) count as no response', async () => {

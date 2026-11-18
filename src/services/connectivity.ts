@@ -15,9 +15,10 @@ type StateListener = (state: ConnectionState) => void;
 
 /** Calls in a row before a state is shown (one bad call is never an outage; client.ts counts the no-answer ones). */
 export const FAILURES_BEFORE_OFFLINE = 2;
-export const SLOW_BEFORE_SLOW = 2;
+/** Slow needs three late answers or timeouts in a row with no quick one between (a busy launch is not "slow"). */
+export const SLOW_BEFORE_SLOW = 3;
 /** An answer slower than this counts toward "slow". */
-export const SLOW_ANSWER_MS = 6000;
+export const SLOW_ANSWER_MS = 8000;
 
 let state: ConnectionState = 'online';
 let slowInRow = 0;

@@ -67,8 +67,10 @@ type Timed = { tpsStartedAt?: number };
 /** A quick answer is online; a late one (a loaded server, a 30 s PHP limit) is slow, never offline. */
 function reportAnswer(config: Timed | undefined): void {
   const started = config?.tpsStartedAt;
-  if (typeof started === 'number' && Date.now() - started >= SLOW_ANSWER_MS) reportSlowAnswer?.();
-  else reportReachable();
+  if (typeof started === 'number' && Date.now() - started >= SLOW_ANSWER_MS) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[net] slow answer ${Date.now() - started} ms`);
+    reportSlowAnswer?.();
+  } else reportReachable();
 }
 
 client.interceptors.request?.use(config => {

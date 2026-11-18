@@ -23,7 +23,7 @@ import { useOfflineChipDock } from './map/offlineDock';
 
 export const OFFLINE_SHOW_DELAY_MS = 1200;
 /** A slow server shows only once it has stayed slow a little while (one slow screen is not news). */
-export const SLOW_SHOW_DELAY_MS = 3000;
+export const SLOW_SHOW_DELAY_MS = 5000;
 /** On the map a tap on the chip opens the full card this long, so the retry is seen. */
 export const CHIP_EXPAND_MS = 4500;
 /** What each state says (T172, T176): slow is never "check your internet". */
