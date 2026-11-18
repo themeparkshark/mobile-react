@@ -248,3 +248,14 @@ export function flameNote(d: RewardsInput['daily3']): string | null {
   if (d.flame === 0 && (d.best ?? 0) > 0) return 'Welcome back! Finish Daily 3 to light a new flame';
   return null;
 }
+
+/**
+ * The Rewards button's number settles before it shows (T113): reads land one by one as the map opens (the chest,
+ * then stamps, then level chests), and the badge used to count up 1, 4, 5 under the player. A rising number waits
+ * until it has held still for SETTLE_MS; a falling number (a claim) shows at once.
+ */
+export const BADGE_SETTLE_MS = 1200;
+export function settleBadge(shown: number, next: number, stillForMs: number): number {
+  if (next <= shown) return next;
+  return stillForMs >= BADGE_SETTLE_MS ? next : shown;
+}

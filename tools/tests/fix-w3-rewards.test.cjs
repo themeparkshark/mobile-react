@@ -204,3 +204,11 @@ test('T119: the level chest footer beside the XP bar names the next level chest,
   assert.match(hook, /<Text style=\{styles\.nextText\}>\{`Next: Level \$\{lv \+ 1\} chest with new gear`\}<\/Text>/);
   assert.doesNotMatch(hook, /Next prize: \$\{daily\.streak\.next_milestone/);
 });
+
+test('T113: the Rewards badge shows once, settled; a claim drops it at once', () => {
+  assert.equal(model.settleBadge(0, 1, 100), 0, 'a rising number waits');
+  assert.equal(model.settleBadge(0, 5, model.BADGE_SETTLE_MS), 5, 'then shows the exact count');
+  assert.equal(model.settleBadge(5, 4, 0), 4, 'a claim shows at once');
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /rewards: settledSummary \}/);
+});

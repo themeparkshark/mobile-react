@@ -35,7 +35,7 @@ import {
 import { daily3SeenDate, noteDaily3Seen, tickToast } from '../../services/retention/daily3Seen';
 import { showToast } from '../../utils/toast';
 import { claimOrReconcile, LOST_CLAIM_WAITS_MS, reconcileClaim } from '../../services/retention/claimReconcile';
-import { emptyLine, rewardsRows, rewardsSummary, flameNote, stampClaimNote, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
+import { emptyLine, rewardsRows, rewardsSummary, BADGE_SETTLE_MS, flameNote, settleBadge, stampClaimNote, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
 import { listenReturnToRewards, openRewardsDoor, rewardsDoorOpen } from '../../services/retention/rewardsSignals';
 import { calmForAutoOpen, takeAutoOpen } from '../../services/retention/mapAttention';
 import { boxFraction, headlineBox } from '../../services/trail/trailModel';
@@ -539,6 +539,14 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   };
   const rows = rewardsRows(rewardsInput);
   const summary = rewardsSummary(rewardsInput);
+  // T113: the button's number appears once, settled (never counting up 1, 4, 5 while the reads land).
+  const [badge, setBadge] = useState(0);
+  useEffect(() => {
+    if (summary.count <= badge) { if (summary.count !== badge) setBadge(summary.count); return undefined; }
+    const t = setTimeout(() => { if (mounted.current) setBadge(n => settleBadge(n, summary.count, BADGE_SETTLE_MS)); }, BADGE_SETTLE_MS);
+    return () => clearTimeout(t);
+  }, [summary.count, badge]);
+  const settledSummary = badge === summary.count ? summary : { ...summary, count: badge };
 
   const openRewards = useCallback(() => {
     playSfx('ui.tap');
@@ -906,7 +914,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     </CalmModal>
   );
 
-  return { button, overlay, occluding: visible, openRewards, rewards: summary };
+  return { button, overlay, occluding: visible, openRewards, rewards: settledSummary };
 }
 
 /** Earned stamps whose prizes are still to claim (the Stamp Book's own rule). */
