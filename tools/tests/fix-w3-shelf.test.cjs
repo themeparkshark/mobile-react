@@ -129,3 +129,10 @@ test('T134: Ride Coins, the shelf and Profile read one server total per park', (
   assert.match(screen, /`\$\{across\.owned\} of \$\{across\.total\}`/);
   assert.doesNotMatch(screen, /\$\{ownedCount\} of \$\{catalogRides\.length\}/);
 });
+
+test('T229: fewer currencies on screen: the shop wallet shows Tickets and Shark Coins; Keys hide until held', () => {
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  const wallet = /const WALLET[^=]*= \[([\s\S]*?)\];/.exec(shop)[1];
+  assert.deepEqual([...wallet.matchAll(/key: '(\w+)'/g)].map(m => m[1]), ['tickets', 'coins']);
+  assert.match(read('src/components/Stats.tsx'), /keys !== null && keys > 0 \? \[\{ label: 'Keys'/);
+});

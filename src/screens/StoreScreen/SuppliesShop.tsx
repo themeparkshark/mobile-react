@@ -62,11 +62,11 @@ const APP_STORE_URL = 'itms-apps://apps.apple.com/app/id6758812566';
 
 export type SuppliesFocus = 'tickets' | 'coins' | 'rescue' | 'featured';
 
+// Fix w3 T229: the shop's wallet shows the two things you spend here, Tickets and Shark Coins. Energy lives
+// on the shelf and extra tries show on PLAY! when you hold one, so the row no longer lists four balances.
 const WALLET: { key: keyof ShopGrants; icon: GameIconName; term: GlossaryKey; many: string }[] = [
   { key: 'tickets', icon: 'ticket', term: 'tickets', many: 'tickets' },
   { key: 'coins', icon: 'coins', term: 'coins', many: 'Shark Coins' },
-  { key: 'energy', icon: 'energy', term: 'energy', many: 'energy' },
-  { key: 'rescue_passes', icon: 'retry', term: 'rescue_pass', many: 'extra tries' },
 ];
 
 /**
@@ -264,8 +264,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
             accessibilityHint="Explains what this is"
             onPress={() => explain(w.term, { count: wallet[w.key] })}>
             <GameIcon name={w.icon} size={22} />
-            {/* Extra tries have no picture of their own yet, so the chip says the word too. */}
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.walletText}>{countText(wallet[w.key])}{w.key === 'rescue_passes' ? (wallet[w.key] === 1 ? ' extra try' : ' extra tries') : ''}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.walletText}>{countText(wallet[w.key])}</Text>
           </Pressable>
         ))}
       </View>
