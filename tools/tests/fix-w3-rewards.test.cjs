@@ -112,3 +112,16 @@ test('T111: after the treat cards on this open, the daily chest waits for this v
   assert.match(explore, /if \(\(homeIntroOwed \|\| homeIntroOpen\) && !park\) introThisOpen\.current = true;/);
   assert.match(explore, /introThisOpen: introThisOpen\.current && !park,/);
 });
+
+test('T109 T110: one calm flame line, keep it tomorrow or a kind welcome back, never a clock', () => {
+  const d = { done: 3, total: 3, claimable: false, claimed: true, flame: 1, counted: true, best: 1 };
+  assert.equal(model.flameNote(d), 'Open the game tomorrow to keep your flame');
+  assert.equal(model.flameNote({ ...d, counted: false }), null, 'not lit today yet: the rows already say what to do');
+  assert.equal(model.flameNote({ ...d, flame: 0, counted: false, best: 4 }), 'Welcome back! Finish Daily 3 to light a new flame');
+  assert.equal(model.flameNote({ ...d, flame: 0, counted: false, best: 0 }), null, 'a new player sees "Start a flame"');
+  assert.equal(model.flameNote(null), null);
+  for (const line of [model.flameNote(d), model.flameNote({ ...d, flame: 0, best: 2 })]) {
+    assert.doesNotMatch(line, /\d+\s*(h|m|s|hours?|minutes?)\b|left|hurry|before|ends/i, 'no countdown words');
+  }
+  assert.match(read('src/components/retention/RewardsSheet.tsx'), /\{flame != null && !!flameLine && <Text style=\{styles\.flameLine\}/);
+});

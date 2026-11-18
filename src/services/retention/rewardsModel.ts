@@ -31,7 +31,9 @@ export interface RewardsInput {
   /** Daily 3, after rung 4 and with its switch on. */
   readonly daily3: { readonly done: number; readonly total: number; readonly claimable: boolean; readonly claimed: boolean; readonly flame: number;
     /** Today's goals were shown to the player (T096). false: the row leads to the goals first, never "All 3 done!". */
-    readonly seen?: boolean } | null;
+    readonly seen?: boolean;
+    /** Today already counts for the flame, and the best flame so far (T109, T110). */
+    readonly counted?: boolean; readonly best?: number } | null;
   /** The Weekly Box (comes with Daily 3). */
   readonly weekly: { readonly claimable: boolean } | null;
   /** The lowest unopened level chest, and how many wait (rung 4). */
@@ -232,4 +234,17 @@ export function withChestOpened<G extends { readonly kind: string; readonly done
   goals: readonly G[], chestOpened: boolean): readonly G[] {
   if (!chestOpened || !goals.some(g => g.kind === 'chest' && !g.done)) return goals;
   return goals.map(g => (g.kind === 'chest' && !g.done ? { ...g, done: true, progress: Math.max(g.progress, g.target) } : g));
+}
+
+/**
+ * One calm line under the flame in the Rewards sheet (T109, T110), never a countdown:
+ * - a lit flame that counts today: come back tomorrow to keep it;
+ * - no flame after having had one (days away): a kind welcome back and how to light a new one;
+ * - otherwise nothing (the flame line already says "Start a flame with Daily 3").
+ */
+export function flameNote(d: RewardsInput['daily3']): string | null {
+  if (!d) return null;
+  if (d.flame > 0 && d.counted) return 'Open the game tomorrow to keep your flame';
+  if (d.flame === 0 && (d.best ?? 0) > 0) return 'Welcome back! Finish Daily 3 to light a new flame';
+  return null;
 }

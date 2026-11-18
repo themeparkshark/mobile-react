@@ -34,7 +34,7 @@ import {
 import { daily3SeenDate, noteDaily3Seen, tickToast } from '../../services/retention/daily3Seen';
 import { showToast } from '../../utils/toast';
 import { claimOrReconcile, LOST_CLAIM_WAITS_MS, reconcileClaim } from '../../services/retention/claimReconcile';
-import { emptyLine, rewardsRows, rewardsSummary, stampClaimNote, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
+import { emptyLine, rewardsRows, rewardsSummary, flameNote, stampClaimNote, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
 import { listenReturnToRewards, openRewardsDoor, rewardsDoorOpen } from '../../services/retention/rewardsSignals';
 import { calmForAutoOpen, takeAutoOpen } from '../../services/retention/mapAttention';
 import { boxFraction, headlineBox } from '../../services/trail/trailModel';
@@ -510,6 +510,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     daily3: wantDaily && daily ? {
       done: doneCount(withChestOpened(daily.goals, chestOpenedOn(dailyGift, daily.date))), total: Math.max(3, daily.goals.length), claimable: daily.claimable,
       claimed: daily.claimed && !daily.claimable, flame: daily.streak.days, seen: seenDate === daily.date,
+      counted: daily.streak.counted_today, best: daily.streak.best,
     } : null,
     weekly: wantDaily && daily ? { claimable: daily.week.claimable } : null,
     levelChest: pendingChest ? { level: pendingChest.level, waiting: chests.filter(c => !c.opened).length } : null,
@@ -730,7 +731,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   // The Rewards card. While a card opened from it is up (a chest, a reveal, Daily 3), it stays mounted out of sight,
   // so BACK shows this same card again at once: a fresh mount drew its row pictures a few frames late.
   const rewardsCard = (
-    <RewardsSheet rows={rows} flame={summary.flame} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
+    <RewardsSheet rows={rows} flame={summary.flame} flameLine={flameNote(rewardsInput.daily3)} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
       reducedMotion={reducedMotion} enterRows={!(presentNow && shownRef.current && !!face.current && face.current.key !== 'rewards')}
       onRow={onRewardsRow} onClose={close} />
   );
