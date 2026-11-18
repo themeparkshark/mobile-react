@@ -26,7 +26,8 @@ import { markRungSeen, useRung } from '../../services/reveal/revealLadder';
 import { rowRung } from '../../services/retention/newTag';
 import { flagOn, loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
-import { mayAskForPush, noteParkDaySeen, notePushAsked, parkDaySeen } from '../../services/retention/pushAsk';
+import { askPacingAllows, mayAskForPush, noteParkDaySeen, notePushAsked, parkDaySeen } from '../../services/retention/pushAsk';
+import { localRemindersOn, mayAskForLocalReminders, refreshLocalReminders, turnOffLocalReminders, turnOnLocalReminders } from '../../services/retention/localReminders';
 import { devLadderFeed } from '../../services/retention/devLadderFeed';
 import {
   askForDailyChest, autoOpenUsed, noteAppState, noteAutoOpen, rewardMayAutoOpen,
@@ -340,10 +341,15 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     if (view || atPark || !sawParkDay || !o.screenFree || !o.mapFocused || !o.enabled) return;
     // The daily chest is the home's one automatic open (section 2): the ask waits for a later open while it waits.
     const own = () => !autoOpenUsed() && !dailyChestWaiting;
-    if (!flagOn(flags, 'retention_push') || !calmForAutoOpen('reward', own())) return;
+    // T226: local reminders (no push key) use the same card, the same moment and the same pacing.
+    const local = localRemindersOn(flags);
+    if (!(flagOn(flags, 'retention_push') || local) || !calmForAutoOpen('reward', own())) return;
     let live = true;
+    const mayAsk = local
+      ? () => Promise.all([mayAskForLocalReminders(), askPacingAllows()]).then(([a, b]) => a && b)
+      : mayAskForPush;
     const timer = setTimeout(() => {
-      void mayAskForPush().then(ok => {
+      void mayAsk().then(ok => {
         if (!live || !ok || !takeAutoOpen('reward', own())) return;
         noteAutoOpen();
         setView(v => v ?? { k: 'push' });
@@ -351,6 +357,17 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     }, 900);
     return () => { live = false; clearTimeout(timer); };
   }, [view, atPark, sawParkDay, o.screenFree, o.mapFocused, o.enabled, flags, dailyChestWaiting]);
+
+  // T226: each app open (and each return to the app) replaces the local reminders with the next 3 days, or cancels
+  // them when the switch is off or reminders were turned off on the Daily 3 card.
+  const localOn = localRemindersOn(flags);
+  const remindersOff = daily?.reminders === false;
+  useEffect(() => {
+    if (!flags || !o.enabled) return undefined;
+    void refreshLocalReminders(localOn, remindersOff);
+    const sub = AppState.addEventListener('change', s => { if (s === 'active') void refreshLocalReminders(localOn, remindersOff); });
+    return () => sub.remove();
+  }, [!!flags, o.enabled, localOn, remindersOff]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [sheetFromRewards, setSheetFromRewards] = useState(false);
   const openSheet = (fromRewards = false) => {
@@ -644,7 +661,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     try {
       const { state } = await setReminders(on);
       applyDaily(state);
-      if (on) void enablePush().catch(() => undefined);
+      if (on && flagOn(flags, 'retention_push')) void enablePush().catch(() => undefined);
+      if (localRemindersOn(flags)) void (on ? turnOnLocalReminders() : turnOffLocalReminders());
     } catch {
       gameAlert('Could not change reminders', 'Check your internet and try again.');
     }
@@ -753,7 +771,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   } else if (view?.k === 'sheet' && daily) {
     content = (
       <Daily3Sheet state={dailyShown ?? daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
-        atPark={atPark} passToday={passOn ? passToday : null} remindersReady={flagOn(flags, 'retention_push')}
+        atPark={atPark} passToday={passOn ? passToday : null} remindersReady={flagOn(flags, 'retention_push') || localOn}
         closeLabel={sheetFromRewards ? 'BACK' : 'BACK TO MAP'}
         reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone}
         onReminders={on => { void toggleReminders(on); }}
@@ -827,7 +845,11 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         <GameIcon name="bell" size={86} />
         <Text style={styles.lead}>Want a friendly reminder each day?</Text>
         <Text style={styles.small}>One a day, never at night. Turn it off anytime.</Text>
-        <Pressable onPress={() => { void notePushAsked(); setView(null); void enablePush().catch(() => undefined); }}
+        <Pressable onPress={() => {
+          void notePushAsked(); setView(null);
+          if (localRemindersOn(flags)) void turnOnLocalReminders();
+          if (flagOn(flags, 'retention_push')) void enablePush().catch(() => undefined);
+        }}
           accessibilityRole="button" style={({ pressed }) => [styles.gold, pressed && styles.pressed]}>
           <Text style={styles.goldText}>CONTINUE</Text>
         </Pressable>

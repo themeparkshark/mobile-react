@@ -25,6 +25,15 @@ export async function mayAskForPush(now = Date.now()): Promise<boolean> {
   }
 }
 
+/** The ask's own pacing only (how many times, how long since), for the local reminders ask (T226). */
+export async function askPacingAllows(now = Date.now()): Promise<boolean> {
+  try {
+    return pushAskAllowed(await read(), 'undetermined', now);
+  } catch {
+    return false;
+  }
+}
+
 /** The pre-prompt was shown (answered either way). */
 export async function notePushAsked(now = Date.now()): Promise<void> {
   const r = await read();

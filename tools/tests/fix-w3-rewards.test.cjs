@@ -125,3 +125,76 @@ test('T109 T110: one calm flame line, keep it tomorrow or a kind welcome back, n
   }
   assert.match(read('src/components/retention/RewardsSheet.tsx'), /\{flame != null && !!flameLine && <Text style=\{styles\.flameLine\}/);
 });
+
+function remindersModule({ status = 'granted', dev = false, os = 'ios' } = {}) {
+  const scheduled = new Map(); const store = new Map(); let perm = status; const requests = [];
+  const Notifications = {
+    SchedulableTriggerInputTypes: { DATE: 'date' },
+    getPermissionsAsync: async () => ({ status: perm }),
+    requestPermissionsAsync: async () => { requests.push(1); perm = 'granted'; return { status: perm }; },
+    scheduleNotificationAsync: async req => { scheduled.set(req.identifier, req); return req.identifier; },
+    getAllScheduledNotificationsAsync: async () => [...scheduled.values()].map(r => ({ identifier: r.identifier })),
+    cancelScheduledNotificationAsync: async id => { scheduled.delete(id); },
+  };
+  const m = loadTs('src/services/retention/localReminders.ts', {
+    '@react-native-async-storage/async-storage': { getItem: async k => store.get(k) ?? null, setItem: async (k, v) => { store.set(k, v); } },
+    'expo-notifications': Notifications,
+    'react-native': { Platform: { OS: os } },
+    './flags': { flagOn: (f, n) => f?.all?.[n] === true },
+  }, { __DEV__: dev, process: { env: dev ? { EXPO_PUBLIC_LOCAL_REMINDERS_DEV: '1' } : {} } });
+  return { m, scheduled, store, requests, other: id => scheduled.set(id, { identifier: id }) };
+}
+
+test('T226: local reminders, one a day in the chest window, 3 at most when ignored, silent, kid words, no clock', async () => {
+  const { m, scheduled, other } = remindersModule();
+  const now = new Date(2026, 10, 18, 21, 5);
+  const times = m.reminderTimes(now);
+  assert.equal(times.length, 3, 'stops after 3 unanswered');
+  times.forEach((t, i) => {
+    assert.equal(t.getDate(), 19 + i, 'one a day, never today');
+    assert.ok(t.getHours() >= 10 && t.getHours() < 12, 'inside the chest window (10 to 12)');
+  });
+  other('boss-push-1');
+  assert.equal(await m.turnOnLocalReminders(), true);
+  const ours = [...scheduled.values()].filter(r => r.identifier.startsWith('tps-local-reminder'));
+  assert.equal(ours.length, 3);
+  for (const r of ours) {
+    assert.equal(r.content.sound, false, 'silent');
+    assert.equal(r.content.title, 'Your daily chest is ready');
+    assert.doesNotMatch(`${r.content.title} ${r.content.body}`, /\d|hurry|left|last chance|ends|before/i, 'no countdown, no urgency');
+    assert.deepEqual(plain(r.content.data.route), { screen: 'Explore', params: { open: 'chest' } });
+    assert.equal(r.trigger.type, 'date');
+  }
+  // Every app open replaces ours (so an everyday player only ever has the next 3, one a day).
+  assert.equal(await m.refreshLocalReminders(true, false, new Date(2026, 10, 19, 9, 0)), 3);
+  assert.equal([...scheduled.keys()].filter(k => k.startsWith('tps-local-reminder')).length, 3);
+  assert.equal([...scheduled.values()].find(r => r.identifier === 'tps-local-reminder-1').trigger.date.getDate(), 20);
+  // Turned off on the Daily 3 card, or the switch goes off: ours are cancelled, nobody else's.
+  assert.equal(await m.refreshLocalReminders(true, true), 0);
+  assert.deepEqual([...scheduled.keys()], ['boss-push-1']);
+  await m.refreshLocalReminders(true, false);
+  assert.equal(await m.refreshLocalReminders(false, false), 0);
+  assert.deepEqual([...scheduled.keys()], ['boss-push-1']);
+});
+
+test('T226: the switch is the served local_reminders; the dev override never runs in a store or OTA bundle', async () => {
+  const prod = remindersModule({ dev: false }).m;
+  assert.equal(prod.localRemindersOn({ all: {} }), false);
+  assert.equal(prod.localRemindersOn({ all: { local_reminders: true } }), true);
+  assert.equal(prod.localRemindersDevOverride(), false, '__DEV__ false: the override is dead code');
+  const dev = remindersModule({ dev: true }).m;
+  assert.equal(dev.localRemindersOn({ all: {} }), true, 'lane testing only');
+  const src = read('src/services/retention/localReminders.ts');
+  assert.match(src, /return __DEV__ && process\.env\.EXPO_PUBLIC_LOCAL_REMINDERS_DEV === '1';/);
+  // Not on this phone (Android) or not asked: nothing scheduled, never a prompt without a tap.
+  const android = remindersModule({ os: 'android' });
+  assert.equal(await android.m.scheduleLocalReminders(), 0);
+  const undecided = remindersModule({ status: 'undetermined' });
+  assert.equal(await undecided.m.mayAskForLocalReminders(), true);
+  assert.equal(await undecided.m.refreshLocalReminders(true, false), 0, 'never chosen: an app open schedules nothing');
+  assert.equal(undecided.requests.length, 0, 'an app open never prompts');
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /if \(!\(flagOn\(flags, 'retention_push'\) \|\| local\) \|\| !calmForAutoOpen\('reward', own\(\)\)\) return;/, 'the same card, moment and one-automatic-open rule');
+  assert.match(hook, /if \(localRemindersOn\(flags\)\) void turnOnLocalReminders\(\);/, 'CONTINUE turns them on');
+  assert.match(read('src/services/push.ts'), /await cancelLocalReminders\(\);/, 'sign-out cancels them');
+});
