@@ -144,7 +144,8 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
         <Text style={styles.parkChipText} numberOfLines={1}>{parkName}</Text>
       </View>}
     </View>}
-    <Pressable accessible accessibilityRole="button" accessibilityLabel={copy.a11y} onPress={onCardPress}
+    {/* With the in-line offer the card's parts read one by one, so VoiceOver reaches its LINEPLAY button too. */}
+    <Pressable accessible={!lineOffer} accessibilityRole="button" accessibilityLabel={copy.a11y} onPress={onCardPress}
       disabled={!onCardPress} style={styles.card}>
       <View style={styles.artCol}>
         <Image source={art} style={styles.coin} contentFit="contain" />
