@@ -250,6 +250,11 @@ export interface MemoryGameProps {
   visible: boolean;
   /** Legacy: 0 with no mode = Warm-up; 1-3 = queue boards. The paid ride passes mode="ride". */
   difficulty?: number;
+  /**
+   * Kid rules for the paid ride (picture-only players, fix round w3 T027): 6 pairs on a 4 x 3 board
+   * instead of 8 on 4 x 4. The server's attempt rules say the same (memory.pairs).
+   */
+  kid?: boolean;
   mode?: MemoryMode;
   /** Server attempt seed. Each run and try derives its own board from it. */
   seed?: number;
@@ -280,6 +285,8 @@ export interface DailySetup {
 
 export const RIDE_TRIES = 3;
 const TICK_MS = 50;
+/** Kid rules ride board (T027): 6 pairs, 4 x 3. */
+export const RIDE_KID_PAIRS = 6;
 
 /**
  * The ride loss card's numbers (T049): this shell's pairs plus the best shell of the Ticket, so a
@@ -386,9 +393,12 @@ export default function MemoryGame({
   party,
   daily,
   captureAutoplay,
+  kid = false,
 }: MemoryGameProps) {
   const partyRef = useRef(party);
   partyRef.current = party;
+  const kidRef = useRef(kid);
+  kidRef.current = kid;
   const devMode = DEV ? process.env.EXPO_PUBLIC_MEMORY_MODE || null : null;
   const mode: MemoryMode = resolveMemoryMode({ party, devMode, mode: modeProp, difficulty });
   const flags = modeFlags(mode === 'race' ? 'race' : mode);
@@ -686,8 +696,9 @@ export default function MemoryGame({
       // Signal Mode is chosen once from the start pings (in-process stand-in: dev flag).
       signal = signalModeFor(DEV_SIGNAL ? [2600, 2400, 2300] : [80, 90, 85]);
       const cfg = rideSprintConfig(45000, signal ? SIGNAL_TURNS : 0);
-      src = createSimReveal({ cfg, layout: { pairs: 8, deckSize, seed: s }, deckSize, engineSeed: s ^ 0x5bd1e995, latencyMs: DEV_LATENCY });
-      eng = createEngine(cfg, { cols: 4, rows: 4, seed: s ^ 0x5bd1e995 });
+      const pairs = kidRef.current ? RIDE_KID_PAIRS : 8;
+      src = createSimReveal({ cfg, layout: { pairs, deckSize, seed: s }, deckSize, engineSeed: s ^ 0x5bd1e995, latencyMs: DEV_LATENCY });
+      eng = createEngine(cfg, { cols: 4, rows: pairs / 2, seed: s ^ 0x5bd1e995 });
     } else if (mode === 'warmup') {
       const cfg = warmupConfig();
       src = createLocalBoard({ pairs: 4, deckSize, seed: s }, deckSize);

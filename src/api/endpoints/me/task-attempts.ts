@@ -84,6 +84,26 @@ export interface TaskAttempt {
     ticket_back?: number;
   } | null;
   expires_at: string;
+  /**
+   * The rules the server checks for this try (core-loop builds). Fix round w3 T027 / T223: a
+   * picture-only try plays the kid rules (Whack-a-Shark 10 bonks, Memory Match 6 pairs).
+   */
+  rules?: TaskAttemptRules;
+  /** What TRY AGAIN deals after this loss: the other picture game after two misses on one (T232). */
+  retry_game?: TaskAttemptGame | null;
+}
+
+export interface TaskAttemptRules {
+  trivia?: { questions: number; win_correct: number; question_ms: number };
+  kid?: boolean;
+  tap?: { win_bonks: number };
+  memory?: { pairs: number };
+}
+
+/** Kid rules for this try: the server's word when it sends one, else the try was asked as picture-only. */
+export function kidRulesFor(attempt: Pick<TaskAttempt, 'rules'> | null | undefined, pictureOnly: boolean): boolean {
+  const kid = attempt?.rules?.kid;
+  return typeof kid === 'boolean' ? kid : pictureOnly;
 }
 
 /**

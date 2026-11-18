@@ -61,6 +61,7 @@ import {
   type EarnedCoinEdition, type RideControlReward, type RushReward,
   getTaskAttempt,
   resolveTaskAttempt,
+  kidRulesFor,
 } from '../api/endpoints/me/task-attempts';
 import {
   readTaskAttemptCheckpoint,
@@ -246,6 +247,8 @@ export default function RedeemRedeemableModal({
   const claimingRef = useRef(false);
   const afterRewardsHidden = useRef<(() => void) | null>(null);
   const attemptRef = useRef<TaskAttempt | null>(null);
+  /** This try was asked as picture-only (kid rules when the server does not say). */
+  const pictureOnlyRef = useRef(false);
   const savedAttemptIdRef = useRef<number | null>(null);
   const requestIdRef = useRef<string | null>(null);
   const outcomeRef = useRef<'win' | 'loss' | null>(null);
@@ -517,6 +520,7 @@ export default function RedeemRedeemableModal({
     startLocationRef.current = startLocation;
     // Picture games only (a child who cannot read yet): the server deals Whack or Memory, never trivia.
     const pictureOnly = saved ? saved.pictureOnly === true : await pictureOnlyFor(player.id).catch(() => false);
+    pictureOnlyRef.current = pictureOnly;
     const requestId = saved?.requestId ?? requestIdRef.current ??
       `tps-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
     requestIdRef.current = requestId;
@@ -1186,6 +1190,7 @@ export default function RedeemRedeemableModal({
                 preferredGame={selectedGame}
                 attemptSeed={attemptRef.current?.seed}
                 rewardMode="task-attempt"
+                kid={kidRulesFor(attemptRef.current, pictureOnlyRef.current)}
                 parkId={park.id}
                 onClose={handleGameLose}
                 onComplete={(_mult, _rewards, proof) => handleGameWin(proof)}
