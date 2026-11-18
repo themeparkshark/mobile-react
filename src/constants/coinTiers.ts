@@ -4,8 +4,9 @@
  * from the brand palette only: no neon, no pink, no purple. Level 1 is the
  * coin as Alex drew it, so it is "Classic", never "Basic".
  *
- * Progression v2 (progression.md 9.1) runs to Level 10. Names match the
- * server (config/progression.php tiers). The server still decides the max a
+ * Progression v2 (progression.md 9.1) runs to Level 10. The app shows these
+ * names, never the server's tier_name (fix w3 T236: Level 2 and 3 were Silver
+ * and Gold, the trophy words; they are Shiny and Glowing here). The server still decides the max a
  * client may reach (max_level), so an old build or v2 switched off shows 5.
  */
 export type CoinStand = 'none' | 'wave' | 'wave_foam' | 'gold_trim' | 'pennant' | 'crown_dais';
@@ -39,9 +40,10 @@ export interface CoinTier {
 export const COIN_TIERS: readonly CoinTier[] = [
   { level: 1, name: 'Classic', ring: '#ffffff', ringDeep: '#ffcf3b', halo: 'rgba(255,255,255,0.85)', ringWidth: 3, shimmer: false,
     look: 'The coin as it was first drawn', fx: 'none', stand: 'none', crown: false, burst: 'glow' },
-  { level: 2, name: 'Silver', ring: '#e3eef8', ringDeep: '#8fa9c2', halo: 'rgba(227,238,248,0.7)', ringWidth: 3, shimmer: true,
+  // Fix w3 T236: coin levels never reuse the trophy words (Bronze, Silver, Gold count wins on the shelf).
+  { level: 2, name: 'Shiny', ring: '#e3eef8', ringDeep: '#8fa9c2', halo: 'rgba(227,238,248,0.7)', ringWidth: 3, shimmer: true,
     look: 'A polished silver rim with a shimmer', fx: 'shimmer', stand: 'none', crown: false, burst: 'glow' },
-  { level: 3, name: 'Gold', ring: '#ffcf3b', ringDeep: '#d99a00', halo: 'rgba(255,207,59,0.45)', ringWidth: 3, shimmer: true,
+  { level: 3, name: 'Glowing', ring: '#ffcf3b', ringDeep: '#d99a00', halo: 'rgba(255,207,59,0.45)', ringWidth: 3, shimmer: true,
     look: 'A gold rim that catches the light', fx: 'shimmer', stand: 'none', crown: false, burst: 'glow' },
   { level: 4, name: 'Prismatic', ring: '#5fd0ff', ringDeep: '#0879ca', halo: 'rgba(95,208,255,0.45)', ringWidth: 4, shimmer: true,
     look: 'A bright water-blue rim with light rays', fx: 'rays', stand: 'none', crown: false, burst: 'glow' },
@@ -73,7 +75,7 @@ export function coinTierName(level: number | null | undefined): string {
   return coinTier(level).name;
 }
 
-/** "Level 3 · Gold" */
+/** "Level 3 · Glowing" */
 export function coinLevelLabel(level: number | null | undefined): string {
   const tier = coinTier(level);
   return `Level ${tier.level} · ${tier.name}`;

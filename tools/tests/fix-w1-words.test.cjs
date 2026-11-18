@@ -99,11 +99,13 @@ test('item 16: "This ride\'s game" only where the server deals one game per ride
 test('items 16 and 17: the win card counts coins and wins apart, and the win that reaches a trophy is its moment', () => {
   const win = loadTs('src/components/rewards/postWinModel.ts');
   const shelf = collected => ({ milestones: [], progress: { park_id: 8, park_name: 'Disneyland', before: collected - 1, collected, available: 35 }, next: null });
-  assert.equal(win.winShelfLine(shelf(10), null, true, 11).text, '10 of 35 coins. 1 more win for Bronze');
+  // Fix w3 T123: the coins and the trophy each get their own line.
+  assert.equal(win.winShelfLine(shelf(10), null, true, 11).text, '10 of 35 coins on your shelf');
+  assert.equal(win.winShelfLine(shelf(10), null, true, 11).sub, 'Bronze trophy: 1 more win');
   const moment = win.winShelfLine(shelf(12), null, true, 12);
   assert.equal(moment.text, 'Bronze trophy! 12 wins here');
   assert.equal(moment.trophy.name, 'Bronze');
-  assert.equal(win.winShelfLine(shelf(12), null, true, null).text, '12 of 35 coins', 'wins unknown: never a trophy number beside a coin count');
+  assert.equal(win.winShelfLine(shelf(12), null, true, null).text, '12 of 35 coins on your shelf', 'wins unknown: never a trophy number beside a coin count');
   // The trophy table is the shelf's own (one truth for the card and the shelf).
   const model = loadTs('src/services/collection/shelfModel.ts');
   assert.equal(win.TROPHY_STEPS.map(t => `${t.name}:${t.at}`).join(), model.TROPHIES.map(t => `${t.name}:${t.at}`).join());

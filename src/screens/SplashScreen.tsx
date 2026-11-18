@@ -9,6 +9,7 @@ import { sample } from 'lodash';
 import LaunchScene, { launchFill, setLaunchFact } from '../components/launch/LaunchScene';
 import useCrumbs from '../hooks/useCrumbs';
 import DEFAULT_CRUMBS from '../api/defaults/crumbs.json';
+import { launchFactPool } from './launchFacts';
 import { SPLASH_CREEP_MS, SPLASH_LONG_CREEP_MS, SPLASH_LONG_SHARE, SPLASH_ROUTE_SHARE } from '../constants/launchHandoff';
 
 export default function SplashScreen() {
@@ -55,22 +56,9 @@ export default function SplashScreen() {
   return <LaunchScene active={focused} />;
 }
 
-/**
- * Tips for later in the game (fix w3 T135): before a player has won a coin, the launch tip is about the
- * first minute (walk to the glowing coin, PLAY!), or a shark fact, never levels, Ride Parts, Energy,
- * LinePlay or sets the player has not met yet.
- */
-const LATER_TIP = /\blevel up\b|\bRide Parts?\b|\bEnergy\b|\bcollection set\b|\bLinePlay\b|\bTap GO\b|\bSecret coins\b/i;
-export const FIRST_MINUTE_TIPS: readonly string[] = [
-  'Walk to the glowing coin on the park map, then tap PLAY!',
-  'Every ride has a coin. Win it and fill your park shelf!',
-];
-
-/** One fact for this launch: the server's list when it is here, else the shipped list (never a "right now" line out of date). */
 export function launchFactFrom(facts: readonly string[] | undefined, wins?: number | null): string | null {
   const all = facts && facts.length > 0 ? facts
     : (DEFAULT_CRUMBS.labels.splash_screen_facts as string[]).filter(f => !/right now/i.test(f));
-  const fresh = !(Number(wins) > 0);
-  const list = fresh ? [...FIRST_MINUTE_TIPS, ...all.filter(f => !LATER_TIP.test(f) && !FIRST_MINUTE_TIPS.includes(f))] : all;
-  return sample(list) ?? null;
+  // Fix w3 T135: first-minute tips until the first coin win (launchFacts.ts).
+  return sample(launchFactPool(all, wins)) ?? null;
 }

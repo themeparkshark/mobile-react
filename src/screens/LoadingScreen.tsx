@@ -9,7 +9,7 @@ import { COVER_LAUNCH_MAX_MS, COVER_STEPS, LAUNCH_HANDOFF_SHARE } from '../const
 /** While the park check runs, the bar creeps from the sign-in step toward the hand-off over this long. */
 const LOADING_CREEP_MS = 8000;
 import { AuthContext } from '../context/AuthProvider';
-import { launchFactFrom } from './SplashScreen';
+import { pickLaunchFact } from './launchFacts';
 import { LocationStatusContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -102,7 +102,7 @@ export default function LoadingScreen() {
 
   useEffect(() => {
     if (fact) return;
-    setLaunchFact(launchFactFrom(labels.splash_screen_facts, player?.completed_tasks_count));
+    setLaunchFact(pickLaunchFact(labels.splash_screen_facts, player?.completed_tasks_count));
     setFact(getLaunchFact());
   }, [fact, labels.splash_screen_facts, player?.completed_tasks_count]);
 

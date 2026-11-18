@@ -73,16 +73,16 @@ test('T132: copy slips: plural Tickets, the raid line, the Ride Part tip, and yo
 });
 
 test('T135: before a first coin the launch tip is about the first minute', () => {
-  const src = read('src/screens/SplashScreen.tsx');
-  const match = /const LATER_TIP = (\/.*\/i);/.exec(src);
-  assert.ok(match, 'the later-tip pattern is named');
-  const later = eval(match[1]);
+  const { launchFactPool, pickLaunchFact, LATER_TIP } = loadTs('src/screens/launchFacts.ts');
   const shipped = require('../../src/api/defaults/crumbs.json').labels.splash_screen_facts;
-  assert.ok(later.test('Level up a ride coin with its Ride Parts and Energy!'));
-  const fresh = shipped.filter(f => !later.test(f));
-  assert.ok(fresh.length >= 4 && fresh.every(f => !/level up|Ride Parts|Energy|LinePlay/i.test(f)));
-  assert.match(src, /'Walk to the glowing coin on the park map, then tap PLAY!'/);
-  assert.match(read('src/screens/LoadingScreen.tsx'), /launchFactFrom\(labels\.splash_screen_facts, player\?\.completed_tasks_count\)/);
+  const fresh = launchFactPool(shipped, 0);
+  assert.ok(fresh.includes('Walk to the glowing coin on the park map, then tap PLAY!'));
+  assert.ok(fresh.every(f => !/level up|Ride Parts|Energy|LinePlay|Tap GO/i.test(f)), 'nothing the player has not met');
+  assert.ok(LATER_TIP.test('Level up a ride coin with its Ride Parts and Energy!'));
+  assert.equal(launchFactPool(shipped, 3).length, shipped.length, 'after a first coin every tip can show');
+  assert.equal(pickLaunchFact([], 0, () => 0), 'Walk to the glowing coin on the park map, then tap PLAY!');
+  assert.match(read('src/screens/LoadingScreen.tsx'), /pickLaunchFact\(labels\.splash_screen_facts, player\?\.completed_tasks_count\)/);
+  assert.match(read('src/screens/SplashScreen.tsx'), /sample\(launchFactPool\(all, wins\)\)/);
 });
 
 test('T136: the shelf opened from home tells you to tap an empty slot, never "Tap GO"', () => {

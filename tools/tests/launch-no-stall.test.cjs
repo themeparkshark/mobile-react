@@ -39,6 +39,8 @@ function harness() {
       COVER_LAUNCH_MAX_MS: 1, COVER_STEPS: { armed: 0.9 }, LAUNCH_HANDOFF_SHARE: 0.56 },
     '../helpers/launchArt': { warmLaunchArt: async () => undefined },
     '../context/CurrencyProvider': { CurrencyContext: { value: { currencies: [] } } },
+    // Fix w3 T135: the launch tip picker is pure; run it for real.
+    './launchFacts': require('./helpers/ts-module.cjs').loadTs('src/screens/launchFacts.ts'),
   };
   return { nav, state, auth, crumbs, common };
 }

@@ -1,3 +1,4 @@
+import { COIN_TIERS } from '../../constants/coinTiers';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -21,20 +22,17 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 // Level colors matching the coin shelf
 const LEVEL_COLORS = {
   0: '#6B7280', // Not collected - gray
-  1: '#a8a29e', // Basic - stone
-  2: '#cbd5e1', // Silver
-  3: '#fbbf24', // Gold
+  1: '#a8a29e', // Classic
+  2: '#cbd5e1', // Shiny
+  3: '#fbbf24', // Glowing
   4: '#c4b5fd', // Prismatic
   5: '#fb923c', // Legendary
 };
 
-const LEVEL_NAMES = {
+// One set of coin level names app-wide (constants/coinTiers.ts, fix w3 T236).
+const LEVEL_NAMES: Record<number, string> = {
   0: 'Not Collected',
-  1: 'Basic',
-  2: 'Silver',
-  3: 'Gold',
-  4: 'Prismatic',
-  5: 'Legendary',
+  ...Object.fromEntries(COIN_TIERS.slice(0, 5).map(tier => [tier.level, tier.name])),
 };
 
 interface CoinOption {
