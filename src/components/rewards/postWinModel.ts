@@ -239,12 +239,17 @@ export function shortCoinName(name: string | null | undefined, max = 28): string
  */
 export function teamSentence(result: {
   needs_team?: boolean; team?: string; ride_name?: string | null; flipped?: boolean; controller?: string | null;
+  scores?: Record<string, number> | null;
 } | null | undefined, teamName: (team: string) => string): string | null {
   if (!result || result.needs_team || !result.team) return null;
   const team = teamName(result.team);
   const ride = (result.ride_name ?? '').trim() || 'this ride';
   if (result.flipped) return `${team} took ${ride}`;
   if (result.controller === result.team) return `${team} holds ${ride}`;
+  // Fix W3 T054: a tie keeps the other flag up, and says why and what takes it.
+  const mine = Number(result.scores?.[result.team]);
+  const theirs = result.controller ? Number(result.scores?.[result.controller]) : NaN;
+  if (Number.isFinite(mine) && Number.isFinite(theirs) && mine === theirs) return 'Tied! Win again or earn Parts to take it.';
   return `Your win helps ${team} at ${ride}`;
 }
 

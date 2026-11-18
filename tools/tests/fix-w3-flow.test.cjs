@@ -232,3 +232,12 @@ test('T069 the unlock picture answers a tap with what it unlocks', () => {
 test('a tap beside the card while PLAY! spends the Ticket never closes it (the game would start with no card)', () => {
   assert.match(read('src/components/RedeemRedeemableModal.tsx'), /if \(flowStateRef\.current === 'preview' && !spendingRef\.current\) \{\n\s+close\(\);/);
 });
+
+test('T054 a tie on the win card says why the other flag stays and what takes it', () => {
+  const win = loadTs('src/components/rewards/postWinModel.ts', { '../../services/lineplay/rideLines': { taskHasLine: () => false } });
+  const name = t => `Team ${t}`;
+  assert.equal(win.teamSentence({ team: 'shark', ride_name: 'Tiki Room', flipped: false, controller: 'mouse', scores: { mouse: 15, shark: 15 } }, name),
+    'Tied! Win again or earn Parts to take it.');
+  assert.equal(win.teamSentence({ team: 'shark', ride_name: 'Tiki Room', flipped: false, controller: 'mouse', scores: { mouse: 30, shark: 15 } }, name),
+    'Your win helps Team shark at Tiki Room');
+});
