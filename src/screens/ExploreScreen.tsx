@@ -84,6 +84,8 @@ import type { RushPick } from '../components/RushCallout';
 import LiveEventsPill from '../components/LiveEventsPill';
 import BossMarker from '../components/boss/BossMarker';
 import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
+import { BOSS_ART } from '../components/boss/bossArt';
+import { BOSS_NAMES } from '../api/endpoints/parks/raid';
 import useBossAttackRecovery from '../hooks/useBossAttackRecovery';
 import DailyGiftModal from '../components/DailyGiftModal';
 import RewardsButton, { rewardsNewRungs, rewardsButtonModel, withRewardsSummary } from '../components/map/RewardsButton';
@@ -233,6 +235,8 @@ const UNDER_SHARK_MAX_M = 40;
 const UNDER_SHARK_COIN = require('../../assets/images/map/ride-coin.png');
 /** The fanned coins stay below the guide card and above the footer and PLAY! (T017). */
 const FAN_GUIDE_CLEAR = 86;
+/** A boss's picture inside the compact HUD chip (T013). */
+const HUD_CHIP_ART = { width: 40, height: 40 } as const;
 const FAN_BOTTOM_CLEAR = 190;
 // An empty ride slot's stand-in (parked, never drawn) and an empty slot's 1 pt content.
 const PARKED_TASK = { id: -1, name: '', latitude: '0', longitude: '0', coin_url: '', coins: 0, completion_goal: 0, experience: 0,
@@ -1588,9 +1592,12 @@ export function ExploreScreenBody() {
     nightMode: frightNight.modeOn, control: hasTeam,
     event: liveEvt.event && eventsRung.open ? (openableKeys(liveEvt.event).length ? 'ready' : 'on') : null,
   }).map(key => {
-    if (key === 'event' && liveEvt.event) return { key, label: liveEvt.event.title, tone: TONES.park, node: withNewTag(eventsRung,
+    if (key === 'event' && liveEvt.event) return { key, label: liveEvt.event.title, tone: TONES.park, icon: <GameIcon name="star" size={28} />, node: withNewTag(eventsRung,
       <EventStatusChip inline event={liveEvt.event} onPress={() => setEventOpen(true)} />) };
-    if (key === 'live') return { key, label: 'Live in the park', tone: rushes.length && !raidActive && !bossMap.moment ? TONES.rush : TONES.park, node: withNewTag(
+    if (key === 'live') return { key, label: raidOnMap && raid ? `Boss raid: ${BOSS_NAMES[raid.boss]}` : 'Rush in the park',
+      tone: rushes.length && !raidActive && !bossMap.moment ? TONES.rush : TONES.park,
+      icon: raidOnMap && raid ? <Image source={BOSS_ART[raid.boss]} style={HUD_CHIP_ART} contentFit="contain" /> : <GameIcon name="rush" size={30} />,
+      node: withNewTag(
       raidOnMap || rushes.length > 0 ? coinLevelsRung : null, <LiveEventsPill inline raid={raidOnMap ? raid : null} rushes={coinLevelsRung.open ? rushes : []} onBoss={() => setBossOpen(true)}
       mapMoment={bossMap.moment} mapFlag={bossMap.flag} onDismissMoment={bossMap.dismiss}
       onMapMoment={() => {
@@ -1599,14 +1606,14 @@ export function ExploreScreenBody() {
       }}
       pendingAttack={bossRecovery?.pending} receiptNeedsCheck={receiptNeedsCheck}
       onRush={(task) => setSelectedTask(task)} />) };
-    if (key === 'show') return { key, label: nightShow.show?.label ?? 'Tonight\'s show', tone: TONES.show, node: nightShow.show ? <NightShowPill inline show={nightShow.show} phase={nightShow.phase}
+    if (key === 'show') return { key, label: nightShow.show?.label ?? 'Tonight\'s show', tone: TONES.show, icon: <GameIcon name="sparkle" size={28} />, node: nightShow.show ? <NightShowPill inline show={nightShow.show} phase={nightShow.phase}
       onSee={() => {
         const anchor = nightShow.show?.anchor;
         if (anchor) { setSelectedTask(null); setMapFocusRequest({ ...anchor, zoom: 17.2, requestId: Date.now() }); }
       }} /> : null };
     // No own "?": the map's one "?" offers the Fin-ister tutorial while the mode is on.
-    if (key === 'fright') return { key, label: frightNight.title, tone: TONES.night, node: <FrightPill inline night={frightNight} engine={frightEngine} /> };
-    return { key, label: 'Ride Control', tone: TONES.park, node: <RideControlBar inline compact control={rideControl} tasks={visibleTasks}
+    if (key === 'fright') return { key, label: frightNight.title, tone: TONES.night, icon: <GameIcon name="pumpkin" size={30} />, node: <FrightPill inline night={frightNight} engine={frightEngine} /> };
+    return { key, label: 'Ride Control', tone: TONES.park, icon: <GameIcon name="swords" size={28} />, node: <RideControlBar inline compact control={rideControl} tasks={visibleTasks}
       hideAllOpen={hideEveryRideOpen({ modeOn: frightNight.modeOn, eventPark: frightNight.eventPark, hasNight: !!frightNight.tonight?.night })}
       onFocusTask={(task) => setSelectedTask(task)} /> };
   }) : [];
@@ -1952,7 +1959,9 @@ export function ExploreScreenBody() {
             style={coin?.style ?? PARK_WELCOME_TIP_STYLE} />;
         })()}
         {/* One HUD row floats over the map (the map runs right up to the header). */}
-        {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} />}
+        {/* T013: one small chip at the right, beside Rewards; the guide card owns the top-left. A boss moment
+            on the map or an attack to check opens it as the full pill (the player is in that moment). */}
+        {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} compact={!bossMap.moment && !receiptNeedsCheck} />}
         {/* Shark Events (after their rung): the sweep and the gain toast sit under the guide card, never over it or PLAY!. */}
         {player && liveEvt.event && eventsRung.open && <>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 37 }]}><FrenzySweep event={liveEvt.event} /></View>

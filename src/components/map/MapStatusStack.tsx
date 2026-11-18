@@ -38,10 +38,18 @@ export interface StatusEntry {
   readonly node: ReactNode;
   /** Colours of this pill (the stack button matches the lead). */
   readonly tone?: StatusTone;
+  /** The small picture the compact chip shows for this status (a raid's boss, the Rush bolt). */
+  readonly icon?: ReactNode;
 }
 
-export default function MapStatusStack({ entries, defaultOpen = false }: {
+export default function MapStatusStack({ entries, defaultOpen = false, compact = false }: {
   readonly entries: readonly StatusEntry[];
+  /**
+   * T013: the map's top-left holds only the guide card. Closed, the HUD row is one small chip at the
+   * right (beside Rewards) with the lead status's picture and a count; a tap drops every status as
+   * before (the raid, Rush, the show, events, Ride Control), and they fold away on their own.
+   */
+  readonly compact?: boolean;
   /** Development previews: start expanded and stay open (captures). */
   readonly defaultOpen?: boolean;
 }) {
@@ -92,9 +100,25 @@ export default function MapStatusStack({ entries, defaultOpen = false }: {
       <Animated.View style={styles.wrap} pointerEvents="box-none">
         {/* Open, the pills sit on one solid card: nothing on the map peeks between them. */}
         {open && <View pointerEvents="none" style={styles.backing} />}
-        <View style={styles.row} pointerEvents="box-none">
-          <Animated.View style={[styles.lead, leadStyle]}>{lead.node}</Animated.View>
-          {rest.length > 0 && (
+        <View style={[styles.row, compact && !open && styles.rowCompact]} pointerEvents="box-none">
+          {compact && !open ? (
+            <Animated.View style={pulseStyle}>
+              <Pressable accessibilityRole="button" onPress={toggle} hitSlop={6} accessibilityState={{ expanded: false }}
+                accessibilityLabel={`${entries.map(entry => entry.label).join(', ')}. Show`}
+                style={({ pressed }) => [styles.more, { backgroundColor: tone.fill, borderColor: tone.border }, pressed && styles.pressed]}>
+                {lead.icon ?? <StackGlyph ink={tone.ink} />}
+                {entries.length > 1 && <View style={styles.badge}><Text style={styles.badgeText}>{entries.length}</Text></View>}
+              </Pressable>
+            </Animated.View>
+          ) : <Animated.View style={[styles.lead, leadStyle]}>{lead.node}</Animated.View>}
+          {compact && open && (
+            <Pressable accessibilityRole="button" onPress={toggle} hitSlop={6} accessibilityState={{ expanded: true }}
+              accessibilityLabel="Hide the statuses"
+              style={({ pressed }) => [styles.more, { backgroundColor: tone.fill, borderColor: tone.border }, pressed && styles.pressed]}>
+              <GameIcon name="close" size={22} />
+            </Pressable>
+          )}
+          {!compact && rest.length > 0 && (
             <Animated.View style={pulseStyle}>
               <Pressable accessibilityRole="button" onPress={toggle} hitSlop={6}
                 accessibilityState={{ expanded: open }}
@@ -138,6 +162,7 @@ const styles = StyleSheet.create({
   scrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 24, backgroundColor: 'rgba(5,16,48,0.38)' },
   wrap: { position: 'absolute', top: HUD_TOP, left: 12, right: 12, zIndex: 25 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: HUD_ROW_HEIGHT },
+  rowCompact: { justifyContent: 'flex-end' },
   lead: { flex: 1, justifyContent: 'center' },
   item: { marginTop: 8, marginRight: 62 },
   // The lead pill's height (54) and corner, in its colours.

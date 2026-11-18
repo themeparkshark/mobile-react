@@ -80,3 +80,16 @@ test('a marker that takes no touches tells its native annotation view, so folded
   const task = read('src/screens/ExploreScreen/TaskMarker.tsx');
   assert.match(task, /hidden=\{parked\}\s*\/\/[^\n]*\n\s*touchEnabled=\{shown\}/, 'a folded or hidden island takes no touch');
 });
+
+test('T013: the raid and the other statuses fold into one small chip at the right; the top-left holds only the guide card', () => {
+  const stack = read('src/components/map/MapStatusStack.tsx');
+  assert.match(stack, /compact && !open \? \(/, 'closed: a chip, no lead pill');
+  assert.match(stack, /\{lead\.icon \?\? <StackGlyph ink=\{tone\.ink\} \/>\}/);
+  assert.match(stack, /rowCompact: \{ justifyContent: 'flex-end' \}/);
+  assert.match(explore, /<MapStatusStack entries=\{statusEntries\} compact=\{!bossMap\.moment && !receiptNeedsCheck\} \/>/);
+  assert.match(explore, /icon: raidOnMap && raid \? <Image source=\{BOSS_ART\[raid\.boss\]\}/);
+  const home = read('src/components/home/HomeLive.tsx');
+  assert.match(home, /style=\{\(\{ pressed \}\) => \[styles\.chipBar, liveRaid && styles\.barBoss, \{ top \}, pressed && styles\.chipPressed\]\}/);
+  assert.match(home, /chipBar: \{ position: 'absolute', right: 12, zIndex: 25, width: 54, height: 54,/);
+  assert.doesNotMatch(home, /JOIN<\/Text>\s*<\/View>\s*<\/>\s*\) : \(/, 'no full-width banner with a red JOIN');
+});

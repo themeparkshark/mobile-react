@@ -552,7 +552,7 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   assert.match(explore, /const LAUNCH_COVER_STYLE = \{ zIndex: 100 \} as const;/);
   assert.match(store, /const launch = firstCover;/);
   // The HUD row is whole from the first map frame; a later lead change cross-fades (MapStatusStack).
-  assert.match(explore, /<MapStatusStack entries=\{statusEntries\} \/>/);
+  assert.match(explore, /<MapStatusStack entries=\{statusEntries\} compact=\{!bossMap\.moment && !receiptNeedsCheck\} \/>/);
   assert.doesNotMatch(explore, /statusSettled|STATUS_ROW_WAIT_MS/);
   assert.match(explore, /<Map onPress=\{[^\n]*\n\s*coverHost="screen"/);
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /<Map coverHost="screen" /);
