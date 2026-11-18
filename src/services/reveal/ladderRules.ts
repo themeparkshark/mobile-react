@@ -100,7 +100,9 @@ export function eligible(rung: Rung, p: Progress, flags: Record<string, boolean>
     case 'team': return num(p.coinsWon) >= 1 || p.hasTeam === true;
     case 'lineplay': return num(p.linesPlayed) >= 1 || p.inLineNow === true;
     case 'coin_levels': return p.levelUpReady === true || num(p.linePartsOnOwned) >= 1 || num(p.coinsWon) >= 3;
-    case 'daily': return num(p.parkDaysDone) >= 1 || num(p.homeDays) >= 3;
+    // The 2nd home day (fix round w3, T099): a home-first install gets a goal to come back for on day 2. Day 1
+    // stays calm (homeDays is 1 all day), and at home only one rung opens per app open.
+    case 'daily': return num(p.parkDaysDone) >= 1 || num(p.homeDays) >= 2;
     case 'shark_pass': return num(p.coinsWon) >= 3;          // plus daily opened on an earlier open (nextToOpen)
     case 'trail': return num(p.trailBoxes) >= 1;             // the server gives the first box on the 2nd park day
     case 'keys': return num(p.keysHeld) >= 1;
