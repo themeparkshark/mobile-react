@@ -43,6 +43,7 @@ export default function CoinCatchReveal({
   coinUrl,
   rideName,
   isNewCoin,
+  sight = false,
   ready = true,
   handoff = null,
   onBurst,
@@ -52,6 +53,8 @@ export default function CoinCatchReveal({
   readonly handoff?: CatchHandoff | null;
   readonly coinUrl?: string;
   readonly rideName: string;
+  /** A sight coin (a statue, a show, a land): the words say coin, never ride coin (fix round w3 T019). */
+  readonly sight?: boolean;
   readonly isNewCoin: boolean;
   /** Hold the sequence until the parent's heavy next screen has mounted. */
   readonly ready?: boolean;
@@ -323,7 +326,7 @@ export default function CoinCatchReveal({
         if (Number.isFinite(x) && Number.isFinite(y)) origin.current = { x, y };
       })}
       accessibilityRole="button"
-      accessibilityLabel={`${isNewCoin ? 'New ride coin' : 'Ride coin'} collected: ${rideName}. Tap to continue.`}
+      accessibilityLabel={`${isNewCoin ? (sight ? 'New coin' : 'New ride coin') : (sight ? 'Coin' : 'Ride coin')} collected: ${rideName}. Tap to continue.`}
     >
       {/* A clean deep-water stage lit softly where the coin lands. Alex's water world still shows through,
           blurred and faint (its props turn to soft shapes), so the money shot stays in the TPS world. */}
@@ -359,7 +362,7 @@ export default function CoinCatchReveal({
 
       <Animated.View style={[styles.titleWrap, { top: height * 0.42 + coinSize * 0.62 }, titleStyle]} pointerEvents="none">
         {/* Thick navy outline: the title sits on bright gold rays. */}
-        <StrokedText style={styles.kicker} strokeColor="#05346e">{isNewCoin ? 'NEW RIDE COIN!' : 'COIN ADDED!'}</StrokedText>
+        <StrokedText style={styles.kicker} strokeColor="#05346e">{isNewCoin ? (sight ? 'NEW COIN!' : 'NEW RIDE COIN!') : 'COIN ADDED!'}</StrokedText>
         <StrokedText style={styles.ride} strokeColor="#05346e" numberOfLines={2}>{rideName}</StrokedText>
       </Animated.View>
 

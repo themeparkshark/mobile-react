@@ -704,6 +704,14 @@ export function ExploreScreenBody() {
   // Posted waits refresh each minute while the map is on screen; paused under
   // another screen or in the background, caught up on return.
   useLivePoll(loadLivePark, idlePollInterval(60000, mapIdle, 2), { enabled: !!park?.id, focused: mapFocused, key: park?.id ?? null });
+  // Back on the map (from Wait Times, a game, the shelf): read the live feed again at once, so the guide card never
+  // keeps "Check it's running" for a ride Wait Times just showed Operating (fix round w3 T014).
+  const mapWasFocused = useRef(mapFocused);
+  useEffect(() => {
+    const back = mapFocused && !mapWasFocused.current;
+    mapWasFocused.current = mapFocused;
+    if (back && park?.id) void loadLivePark();
+  }, [mapFocused]); // eslint-disable-line react-hooks/exhaustive-deps
   // Shark Events (server flag live_events): one shared poll; everything renders nothing while it is off or the route 404s.
   const liveEvt = useLiveEvent(park?.id ?? null, { poll: !!player, focused: mapFocused, enabled: !!player });
   const [eventOpen, setEventOpen] = useState(false);

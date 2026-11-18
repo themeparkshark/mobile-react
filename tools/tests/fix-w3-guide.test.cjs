@@ -248,3 +248,14 @@ test('T009: an answer left from an earlier visit never raises PLAY! before the r
   assert.equal(R.playAnswerNear(answer, north(28)), false, '28 m out: no PLAY! from a stale answer');
   assert.equal(R.playAnswerNear(answer, north(18)), true, 'GPS wander just past 16 m keeps a fresh answer');
 });
+
+test('T014: back on the map, the live feed is read again at once (Wait Times showed it Operating a moment ago)', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /const back = mapFocused && !mapWasFocused\.current;[\s\S]{0,120}if \(back && park\?\.id\) void loadLivePark\(\);/);
+});
+
+test('T019: a sight coin\'s win says NEW COIN, never NEW RIDE COIN', () => {
+  assert.match(read('src/components/CoinCatchReveal.tsx'), /isNewCoin \? \(sight \? 'NEW COIN!' : 'NEW RIDE COIN!'\)/);
+  assert.match(read('src/components/PostWinRewardsModal.tsx'), /isNewCoin \? \(sight \? 'NEW COIN' : 'NEW RIDE COIN'\)/);
+  assert.match(read('src/components/RedeemRedeemableModal.tsx'), /coin_kind\?: string \| null \}\)\.coin_kind !== 'ride'/);
+});
