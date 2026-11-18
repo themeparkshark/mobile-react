@@ -14,3 +14,5 @@ export function rideWinStars(stars: number): number {
   const n = Number.isFinite(stars) ? Math.floor(stars) : 0;
   return Math.max(1, Math.min(3, n));
 }
+/** The one wait line while the server confirms the win. */
+export const RIDE_WIN_WAIT_TEXT = 'Your coin is on its way';

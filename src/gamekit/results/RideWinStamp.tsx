@@ -9,13 +9,13 @@
  * UI-thread springs (motion.ts SPRING.stamp); Reduce Motion shows it still.
  */
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
 import GameIcon from '../../ui/GameIcon';
 import SharkLoader from '../../ui/SharkLoader';
 import { SPRING } from '../../ui/motion';
 import { ResultsRibbon } from './ResultsRibbon';
-import { RIDE_WIN_STAMP_TITLE, RIDE_WIN_WAIT_LINE_MS, rideWinStars } from './rideWinStampModel';
+import { RIDE_WIN_STAMP_TITLE, RIDE_WIN_WAIT_LINE_MS, RIDE_WIN_WAIT_TEXT, rideWinStars } from './rideWinStampModel';
 
 function StampStar({ index, on, reduced }: { readonly index: number; readonly on: boolean; readonly reduced: boolean }) {
   const s = useSharedValue(reduced ? 1 : 0);
@@ -47,8 +47,8 @@ export default function RideWinStamp({ stars, reducedMotion, handedOff }: {
         {[0, 1, 2].map(i => <StampStar key={i} index={i} on={i < shown} reduced={reducedMotion} />)}
       </View>
       {waiting && <Animated.View entering={reducedMotion ? undefined : FadeIn.duration(200)} style={styles.wait}>
-        <SharkLoader compact tone="onBlue" />
-        <Text style={styles.waitText}>Your coin is on its way...</Text>
+        {/* One line only: the loader says it, and keeps saying it (never a second "still loading" line). */}
+        <SharkLoader compact tone="onBlue" title={RIDE_WIN_WAIT_TEXT} message={RIDE_WIN_WAIT_TEXT} />
       </Animated.View>}
     </View>
   );
@@ -61,6 +61,4 @@ const styles = StyleSheet.create({
   star: {},
   starOff: { opacity: 0.35 },
   wait: { alignItems: 'center', marginTop: 18 },
-  waitText: { fontFamily: 'Shark', fontSize: 18, color: '#ffffff', marginTop: 6, textShadowColor: '#05346e',
-    textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
 });
