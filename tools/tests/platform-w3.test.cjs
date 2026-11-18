@@ -89,3 +89,11 @@ test('T179: small header, profile, pin and wait-time targets reach 44 pt', () =>
   assert.match(read('src/screens/QueueTimesScreen.tsx'), /my next coin`\} hitSlop=\{HIT_SLOP\}/);
   assert.match(read('src/screens/pins/Lanyard.tsx'), /hitSlop=\{Math\.max\(6, Math\.ceil\(\(48 - pinSize\) \/ 2\)\)\}/);
 });
+
+test('T183: the guide card grows with Larger Text up to 1.3x and wraps instead of clipping', () => {
+  const src = read('src/components/guide/NextCoinCard.tsx');
+  assert.match(src, /export const CARD_TEXT_MAX = 1\.3;/);
+  assert.match(src, /<Text style=\{styles\.title\} numberOfLines=\{3\} maxFontSizeMultiplier=\{CARD_TEXT_MAX\}>/);
+  assert.match(src, /<Text style=\{styles\.line\} numberOfLines=\{3\} maxFontSizeMultiplier=\{CARD_TEXT_MAX\}>/);
+  assert.equal((src.match(/maxFontSizeMultiplier=\{CARD_TEXT_MAX\}/g) || []).length, 5, 'every word on the card');
+});

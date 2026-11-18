@@ -60,7 +60,7 @@ function CardButton({ button, onPress, quiet = false }: { button: GuideButton; o
     {button.badge === 'ticket' && <GameIcon name="ticket" size={18} />}
     {/* LinePlay's own icon (Dustin, Oct 28, ledger 37); the pocket watch means Wait Times only. */}
     {button.action === 'lineplay' && <Image source={LINEPLAY_ICON} style={styles.lineIcon} contentFit="contain" />}
-    <Text style={quiet ? styles.quietText : styles.buttonText} numberOfLines={1}>{button.label}</Text>
+    <Text style={quiet ? styles.quietText : styles.buttonText} numberOfLines={1} maxFontSizeMultiplier={CARD_TEXT_MAX}>{button.label}</Text>
   </Pressable>;
 }
 
@@ -121,7 +121,7 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
     {(adventureTab || (parkName && state !== 'arrive' && copy.kicker !== parkName.toUpperCase())) && <View pointerEvents="box-none" style={styles.edgeRow}>
       {adventureTab && <AdventureTab stamps={adventureTab.stamps} onPress={adventureTab.onPress} />}
       {parkName && state !== 'arrive' && copy.kicker !== parkName.toUpperCase() && <View pointerEvents="none" style={styles.parkChip}>
-        <Text style={styles.parkChipText} numberOfLines={1}>{parkName}</Text>
+        <Text style={styles.parkChipText} numberOfLines={1} maxFontSizeMultiplier={CARD_TEXT_MAX}>{parkName}</Text>
       </View>}
     </View>}
     <Pressable accessible accessibilityRole="button" accessibilityLabel={copy.a11y} onPress={onCardPress}
@@ -134,8 +134,8 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
         </View>}
       </View>
       <View style={styles.copy}>
-        <Text style={styles.kicker} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{copy.kicker}</Text>
-        <Text style={styles.title} numberOfLines={2}>{copy.title}</Text>
+        <Text style={styles.kicker} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={CARD_TEXT_MAX}>{copy.kicker}</Text>
+        <Text style={styles.title} numberOfLines={3} maxFontSizeMultiplier={CARD_TEXT_MAX}>{copy.title}</Text>
         {copy.dots && (onDotsPress
           ? <Pressable testID="adventure-dots" accessibilityRole="button" accessibilityLabel="Today's Adventure stamps. Open your ticket"
             hitSlop={{ top: 6, bottom: 6, left: 4, right: 12 }} onPress={() => { haptic('tapLight'); onDotsPress(); }} style={styles.dotsPress}>
@@ -144,7 +144,7 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
           : <Dots dots={copy.dots} slam={slam} reduced={reduced} onSlamDone={onSlamDone}
             coin={coinUrl ? { uri: coinUrl } : COIN_FALLBACK} />)}
         {copy.pointsAtPlay && teachPlay && <View style={styles.teach}><CoinTipPicture /></View>}
-        {!!copy.line && <Text style={styles.line} numberOfLines={2}>{copy.line}</Text>}
+        {!!copy.line && <Text style={styles.line} numberOfLines={3} maxFontSizeMultiplier={CARD_TEXT_MAX}>{copy.line}</Text>}
         {(copy.button || copy.secondary) && <View style={styles.actions}>
           {copy.button && <CardButton button={copy.button} onPress={onAction} />}
           {copy.secondary && <CardButton button={copy.secondary} onPress={onAction} quiet />}
@@ -156,6 +156,12 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
     </Pressable>
   </Animated.View>;
 }
+
+/**
+ * T183: Larger Text grows the guide card up to 1.3x (every size up to xxxl), and the card wraps to three lines
+ * instead of clipping; past that (the accessibility sizes) it holds at 1.3x so it never covers the map.
+ */
+export const CARD_TEXT_MAX = 1.3;
 
 /** The ticket tab's stamp dots (pt): big enough to read as three stamps at a glance. */
 export const TAB_DOT = 9;
