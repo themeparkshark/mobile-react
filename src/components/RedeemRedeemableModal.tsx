@@ -43,7 +43,8 @@ import { adventureLineStoryNext, partsProgress, weekLine } from './rewards/postW
 import { getTripGoal } from '../api/endpoints/me/trip-goal';
 import { withNumberFont } from '../ui/numberText';
 import TicketGift from './rewards/TicketGift';
-import { markTeamOffered, teamOffered, wantsTeamStep, whenTeamStepShown, type WinFlyWhen } from './rewards/teamOffer';
+import { markTeamOffered, teamOffered, whenTeamStepShown, type WinFlyWhen } from './rewards/teamOffer';
+import { wantsWinTeamStep } from './rewards/winTeamModel';
 import type { ClaimSource } from '../services/guide/freeTickets';
 import { guide, type GuideTarget } from '../services/guide/nextCoin';
 import { useRung } from '../services/reveal/revealLadder';
@@ -380,7 +381,9 @@ export default function RedeemRedeemableModal({
       setRideTry(null);
       setWeekWins(null);
       retryOfRef.current = null;
-      rideCoinsBeforeRef.current = typeof player?.ride_coins_collected === 'number' ? player.ride_coins_collected : null;
+      // /me has no ride_coins_collected on every server: the completed coin count stands in (fix W3 T034, T037).
+      rideCoinsBeforeRef.current = typeof player?.ride_coins_collected === 'number' ? player.ride_coins_collected
+        : typeof player?.completed_tasks_count === 'number' ? player.completed_tasks_count : null;
       void loadPlayFlags();
       attemptRef.current = null;
       savedAttemptIdRef.current = null;
@@ -888,13 +891,19 @@ export default function RedeemRedeemableModal({
   const teamStepReady = useRef<Promise<boolean>>(Promise.resolve(false));
   const postWinOpen = open === true && flowState === 'postwin';
   const needsTeamNow = !!(rideControl as { needs_team?: boolean } | null)?.needs_team;
+  // T034: the team offer is a step inside this win card (never a screen that arrives late, mid-walk), on a new coin
+  // for a player with no team, once per player: not only on the first coin ever.
+  const [teamInCard, setTeamInCard] = useState(false);
   useEffect(() => {
-    if (!postWinOpen) { teamStepReady.current = Promise.resolve(false); return; }
+    teamStepReady.current = Promise.resolve(false);
+    if (!postWinOpen) { setTeamInCard(false); return undefined; }
+    let alive = true;
     const isNewCoin = coinTimesCollected === 1;
-    teamStepReady.current = (needsTeamNow ? teamOffered(player?.id) : Promise.resolve(true))
-      .then(offeredBefore => wantsTeamStep({ needsTeam: needsTeamNow, isNewCoin, firstCoinEver, offeredBefore }))
-      .catch(() => false);
-  }, [postWinOpen, needsTeamNow, player?.id, coinTimesCollected, firstCoinEver]);
+    void (needsTeamNow ? teamOffered(player?.id) : Promise.resolve(true))
+      .then(offeredBefore => { if (alive) setTeamInCard(wantsWinTeamStep({ needsTeam: needsTeamNow, isNewCoin, offeredBefore })); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [postWinOpen, needsTeamNow, player?.id, coinTimesCollected]);
   // One way out of the win card per win: a second tap while it fades does nothing.
   const leavingWinRef = useRef(false);
   // The win card's rewards fly to the map's pills: now, or once the first coin's team step has closed
@@ -1428,6 +1437,9 @@ export default function RedeemRedeemableModal({
         flyWhen={() => flyWhenRef.current}
         onClose={handlePostWinClose}
         starRide={redeemable?.type === 'task' && starRides.has((redeemable.model as TaskType)?.id)}
+        fullReveal={firstCoinEver}
+        teamStep={teamInCard}
+        onTeamShown={() => { void markTeamOffered(player?.id); }}
         attemptId={attemptRef.current?.status === 'won' ? attemptRef.current.id : null}
       />
           </View>

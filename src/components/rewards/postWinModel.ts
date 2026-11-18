@@ -142,8 +142,10 @@ export interface WinRowInput {
   readonly vipCoins?: number;
   /** Rung 3 (coin levels): Parts and Energy show as themselves. */
   readonly coinLevelsOpen: boolean;
-  /** Rung 4 (daily): XP shows on the card. */
+  /** Rung 4 (daily): kept for callers; XP now shows whenever it was granted (fix W3 T048). */
   readonly dailyOpen: boolean;
+  /** Ride Parts a wait in this coin's line banked on it (fix W3 T070): they join this coin's Parts chip. */
+  readonly lineParts?: number;
 }
 
 /**
@@ -159,7 +161,9 @@ export type WinFlyTarget = 'coins' | 'tickets' | 'energy' | 'xp' | 'rewards';
  * Rewards button; on a map that has not drawn one yet it lands on the Profile tab, where the Stamp
  * Book lives, so a won stamp always has a place to fly (never silently dropped).
  */
-export const WIN_FLY_ROUTES: Readonly<Record<'coins' | 'tickets' | 'energy' | 'parts' | 'xp' | 'stamp', readonly WinFlyTarget[]>> = {
+export const WIN_FLY_ROUTES: Readonly<Record<'coins' | 'tickets' | 'energy' | 'parts' | 'xp' | 'stamp' | 'coinToShelf', readonly WinFlyTarget[]>> = {
+  /** The won coin itself lands on the Shelf button (fix W3 T143); the Shelf button registers as 'energy'. */
+  coinToShelf: ['energy'],
   coins: ['coins'],
   tickets: ['tickets'],
   energy: ['energy'],
@@ -181,10 +185,11 @@ export interface WinChip extends RewardChipModel {
 }
 
 /**
- * The one reward row. Shark Coins and Tickets always; the member's VIP coins
- * as one chip; Parts and Energy only after rung 3 (before it Energy shows as
- * the battery "saved for growing coins"); XP only after rung 4 (before it, it
- * still flies to the Profile tab, with no chip). Never a "+0".
+ * The one reward row (fix W3 T048: everything the server granted that a player keeps an eye on). Shark Coins and
+ * Tickets always; the member's VIP coins as one chip; the Ride Parts that landed on this coin and the XP always,
+ * whenever the server granted them; Energy as its own chip once coin levels are open (before that it is not
+ * named on the card: it still flies to the Shelf button, so a first coin never shows a fifth chip or a
+ * "saved for growing coins" riddle). Never a "+0".
  */
 export function winRewardChips(input: WinRowInput): WinChip[] {
   const chips: WinChip[] = [];
@@ -192,16 +197,39 @@ export function winRewardChips(input: WinRowInput): WinChip[] {
   if (n(input.coins)) chips.push({ icon: 'coins', amount: n(input.coins), label: 'Shark Coins', flyTo: 'coins' });
   if (n(input.vipCoins)) chips.push({ icon: 'member', amount: n(input.vipCoins), label: 'VIP', flyTo: 'coins' });
   if (n(input.tickets)) chips.push({ icon: 'ticket', amount: n(input.tickets), label: n(input.tickets) === 1 ? 'Ticket' : 'Tickets', flyTo: 'tickets' });
-  if (input.coinLevelsOpen && n(input.parts)) {
-    chips.push({ icon: 'parts', amount: n(input.parts), label: n(input.parts) === 1 ? 'Ride Part' : 'Ride Parts', flyTo: 'energy' });
+  const lineParts = n(input.lineParts);
+  if (n(input.parts) || lineParts) {
+    const parts = n(input.parts) + lineParts;
+    chips.push({ icon: 'parts', amount: parts, label: parts === 1 ? 'Ride Part' : 'Ride Parts', flyTo: 'energy' });
   }
-  if (n(input.energy)) {
-    chips.push(input.coinLevelsOpen
-      ? { icon: 'energy', amount: n(input.energy), label: 'Energy', flyTo: 'energy' }
-      : { icon: 'energy', amount: n(input.energy), label: 'saved for growing coins', flyTo: 'energy', quiet: true });
-  }
-  if (input.dailyOpen && n(input.xp)) chips.push({ icon: 'xp', amount: n(input.xp), label: 'XP', flyTo: 'xp' });
+  if (input.coinLevelsOpen && n(input.energy)) chips.push({ icon: 'energy', amount: n(input.energy), label: 'Energy', flyTo: 'energy' });
+  if (n(input.xp)) chips.push({ icon: 'xp', amount: n(input.xp), label: 'XP', flyTo: 'xp' });
   return chips;
+}
+
+/** Energy that flies to the Shelf button with no chip on the card (before coin levels open). */
+export function silentEnergy(input: Pick<WinRowInput, 'energy' | 'coinLevelsOpen'>): number {
+  const value = Number.isFinite(input.energy) && input.energy > 0 ? Math.floor(input.energy) : 0;
+  return input.coinLevelsOpen ? 0 : value;
+}
+
+/**
+ * A coin's short name for the win card's next-coin line (fix W3 T048): "Adventureland Treehouse", never
+ * "Adventureland Treehouse inspired by Walt Disney's Swiss Fami...". Cuts a sponsor or tag line, then keeps
+ * whole words up to about 28 letters.
+ */
+export function shortCoinName(name: string | null | undefined, max = 28): string {
+  let clean = String(name ?? '').trim().replace(/\s+/g, ' ');
+  clean = clean.split(/\s+(?:inspired by|presented by|sponsored by|featuring)\s+/i)[0];
+  clean = clean.split(/\s*[:|]\s+|\s+-\s+/)[0].trim();
+  if (clean.length <= max) return clean;
+  const words = clean.split(' ');
+  let out = '';
+  for (const word of words) {
+    if ((out ? `${out} ${word}` : word).length > max) break;
+    out = out ? `${out} ${word}` : word;
+  }
+  return out || clean.slice(0, max);
 }
 
 /**
@@ -316,7 +344,7 @@ export function nextCoinButton(target: {
   if (target && target.taskId !== wonTaskId) {
     const meters = typeof target.meters === 'number' && Number.isFinite(target.meters) ? Math.max(0, Math.round(target.meters)) : null;
     const where = meters === null ? null : meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`;
-    return { kind: 'next', label: 'NEXT COIN', detail: [target.name, where].filter(Boolean).join(', ') || null };
+    return { kind: 'next', label: 'NEXT COIN', detail: [shortCoinName(target.name), where].filter(Boolean).join(', ') || null };
   }
   // No coin to point at (night, a resting park, every coin owned): the button never promises one.
   return { kind: 'map', label: BACK_TO_MAP_LABEL, detail: null };

@@ -346,8 +346,8 @@ test('one honest line per lost try: right answers lead, so close only at 75%', (
 
 test('a ride loss skips the game\'s own card: one loss card, with TRY AGAIN, the same game and the Ticket flying home', () => {
   const shell = read('src/gamekit/GameShellV2.tsx');
-  assert.match(shell, /const showSharedCard = !rideLoss && phase === 'results'/);
-  assert.match(shell, /const gameResults = rideLoss \|\| isEmptyResultsNode\(ownSurface\) \? null : ownSurface;/);
+  assert.match(shell, /const showSharedCard = !rideLoss && !rideWin && phase === 'results'/);
+  assert.match(shell, /const gameResults = rideLoss \|\| rideWin \|\| isEmptyResultsNode\(ownSurface\) \? null : ownSurface;/);
   const memory = read('src/games/memory/MemoryGame.tsx');
   assert.match(memory, /if \(r\.mode === 'ride' && left <= 0 && rideChallengeRef\.current\) \{/, 'the last Memory try goes straight to the one card');
   assert.match(memory, /if \(rideChallenge && r\?\.mode === 'ride'\) \{\n\s+\/\/ The ride's one loss card says how far this try got \("3 of 8 pairs\."\)\.\n\s+noteRideTry\(/, 'DONE on a try card notes the try too');
@@ -444,12 +444,14 @@ test('the win that reaches a trophy is its moment on the win card (fix round W1 
 test('one reward row on the ladder; a member\'s double coins as one +N VIP chip; every reward flies home', () => {
   const row = input => [...win.winRewardChips(input)].map(c => `${c.label}:${c.amount}:${c.flyTo}`);
   const base = { coins: 10, tickets: 1, parts: 1, energy: 10, xp: 25, coinLevelsOpen: false, dailyOpen: false };
-  assert.deepEqual(row(base), ['Shark Coins:10:coins', 'Ticket:1:tickets', 'saved for growing coins:10:energy']);
+  // Fix W3 T048: the Parts and XP the server granted always show; Energy has a chip once coin levels are open.
+  assert.deepEqual(row(base), ['Shark Coins:10:coins', 'Ticket:1:tickets', 'Ride Part:1:energy', 'XP:25:xp']);
+  assert.equal(win.silentEnergy({ energy: 10, coinLevelsOpen: false }), 10, 'it still flies to the Shelf button');
   assert.deepEqual(row({ ...base, vipCoins: 10, coinLevelsOpen: true, dailyOpen: true }),
     ['Shark Coins:10:coins', 'VIP:10:coins', 'Ticket:1:tickets', 'Ride Part:1:energy', 'Energy:10:energy', 'XP:25:xp']);
-  assert.deepEqual(row({ ...base, coins: 0, tickets: 0, energy: 0 }), [], 'never a +0');
+  assert.deepEqual(row({ ...base, coins: 0, tickets: 0, energy: 0, parts: 0, xp: 0 }), [], 'never a +0');
   const card = read('src/components/PostWinRewardsModal.tsx');
-  assert.match(card, /if \(!daily && xpEarned > 0\) fly\(FLY_ART\.xp, 2, WIN_FLY_ROUTES\.xp\);/, 'XP flies to the Profile tab before rung 4');
+  assert.match(card, /if \(quietEnergy > 0\) fly\(FLY_ART\.energy, Math\.min\(quietEnergy, 3\), WIN_FLY_ROUTES\.energy\);/, 'chipless Energy still flies home');
   assert.match(card, /if \(earnedStamp\) fly\(FLY_ART\.stamp, 1, WIN_FLY_ROUTES\.stamp\);/, 'the stamp flies to the Rewards button');
   assert.doesNotMatch(card, /NEW STAMP|TAP TO COLLECT|StarterOfferCard|SharkPassBanner|vipWinLine|openMembership|DoubleCoinsOffer|bonus_ads/);
   assert.match(card, /watchForReward\('double_coins', attemptId, true\)/);
@@ -496,18 +498,24 @@ test('the first coin has one fixed order: the win card, the team step (once ever
   await team.markTeamOffered(7);
   assert.equal(await team.teamOffered(7), true);
   assert.equal(await team.teamOffered(8), false, 'per player');
+  // Fix W3 T034: the team step is a step inside the win card itself (never a screen that can arrive late, mid-walk),
+  // on a new coin for a player with no team, once per player (not only the first coin ever).
+  const model = loadTs('src/components/rewards/winTeamModel.ts');
+  assert.equal(model.wantsWinTeamStep({ needsTeam: true, isNewCoin: true, offeredBefore: false }), true);
+  assert.equal(model.wantsWinTeamStep({ needsTeam: true, isNewCoin: false, offeredBefore: false }), false, 'a repeat win never asks');
+  assert.equal(model.wantsWinTeamStep({ needsTeam: true, isNewCoin: true, offeredBefore: true }), false, 'once ever');
+  assert.equal(model.teamJoinOutcome({ response: { data: { current_team: 'shark' } } }, 'shark'), 'joined');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /RootNavigation\.navigate\('TeamSelection', \{ firstCoin: true, \.\.\.\(then \? \{ next: then \} : \{\}\) \}\);/);
-  // Read when the win card opens, so the team step slides in under the fading card (no map frames between).
   assert.match(modal, /const postWinOpen = open === true && flowState === 'postwin';/);
-  assert.match(modal, /teamStepReady\.current = \(needsTeamNow \? teamOffered\(player\?\.id\) : Promise\.resolve\(true\)\)/);
-  const handler = name => modal.slice(modal.indexOf(`const ${name} = useCallback(`), modal.indexOf('}, [', modal.indexOf(`const ${name} = useCallback(`)));
+  assert.match(modal, /teamStep=\{teamInCard\}/);
+  assert.match(modal, /onTeamShown=\{\(\) => \{ void markTeamOffered\(player\?\.id\); \}\}/);
+  const card = read('src/components/PostWinRewardsModal.tsx');
+  assert.match(card, /\{panel === 'team' && <WinTeamStep reducedMotion=\{reducedMotion\} onDone=\{teamDone\} \/>\}/);
+  assert.match(card, /if \(!throughTeam\(go\)\) go\(\);/, 'NEXT COIN and See my shelf go through the team step first');
   for (const name of ['handlePostWinClose', 'handleNextCoin', 'handleViewCoin']) {
-    const body = handler(name);
-    assert.ok(body.indexOf('openTeamStep(') > 0 && body.indexOf('openTeamStep(') < body.lastIndexOf('close();'), `${name}: the team step opens before the card closes`);
+    const body = modal.slice(modal.indexOf(`const ${name} = useCallback(`), modal.indexOf('}, [', modal.indexOf(`const ${name} = useCallback(`)));
     assert.match(body, /if \(leavingWinRef\.current\) return;\n\s+leavingWinRef\.current = true;/, `${name}: one way out per win`);
   }
-  assert.doesNotMatch(modal, /withTeamStep/, 'never after the card has faded');
 });
 
 /* ---------- Teaching, names and small fixes (blueprint 5.3, 5.13) ---------- */

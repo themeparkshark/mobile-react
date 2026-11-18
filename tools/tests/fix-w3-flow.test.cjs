@@ -183,3 +183,36 @@ test('T033 a saved try the server says was won comes back as its win card; lost 
   assert.match(modal, /card: \{ name: taskName, coin_url:/, 'the coin card rides in the checkpoint');
   assert.match(read('src/components/RedeemModal.tsx'), /void findPendingWin\(player\.id\)/);
 });
+
+/* T037, T065: a ride win plays as one coin moment. */
+test('T037 T065 a ride win shows one short stamp (no buttons, no Share), then the one win card; the full reveal is for a first coin only', () => {
+  const stamp = loadTs('src/gamekit/results/rideWinStampModel.ts');
+  assert.equal(stamp.RIDE_WIN_HANDOFF_MS, 1600);
+  assert.notEqual(stamp.RIDE_WIN_STAMP_TITLE, 'COIN CAUGHT!', 'never the win card\'s own title twice in a row');
+  assert.equal(stamp.rideWinStars(0), 1);
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /const gameResults = rideLoss \|\| rideWin \|\| isEmptyResultsNode\(ownSurface\) \? null : ownSurface;/, 'no game results card (score, NEW BEST, ALBUM, Share) on a ride win');
+  assert.match(shell, /\{rideWin \? <RideWinStamp stars=\{stars\}/);
+  assert.doesNotMatch(read('src/gamekit/results/RideWinStamp.tsx'), /Pressable|TouchableOpacity|onPress/, 'the stamp has no button to mis-tap');
+  const card = read('src/components/PostWinRewardsModal.tsx');
+  assert.match(card, /\{visible && hasCoin && !caught && revealNow && <CoinCatchReveal/);
+  assert.match(read('src/components/RedeemRedeemableModal.tsx'), /fullReveal=\{firstCoinEver\}/);
+});
+
+/* T048: honest win card. */
+test('T048 the win card shows the Parts and XP granted, and the next coin by a short name with its distance', () => {
+  const win = loadTs('src/components/rewards/postWinModel.ts', { '../../services/lineplay/rideLines': { taskHasLine: () => false } });
+  const labels = [...win.winRewardChips({ coins: 10, tickets: 1, parts: 4, energy: 40, xp: 25, coinLevelsOpen: false, dailyOpen: false })].map(c => c.label);
+  assert.deepEqual(labels, ['Shark Coins', 'Ticket', 'Ride Parts', 'XP']);
+  assert.equal(win.shortCoinName("Adventureland Treehouse inspired by Walt Disney's Swiss Family Robinson"), 'Adventureland Treehouse');
+  assert.equal(win.shortCoinName('Star Wars: Rise of the Resistance'), 'Star Wars');
+  assert.equal(win.nextCoinButton({ taskId: 9, name: "Adventureland Treehouse inspired by Walt Disney's Swiss Family Robinson", meters: 85, reason: 'nearest_open' }, 4).detail,
+    'Adventureland Treehouse, 85 m');
+});
+
+/* T143: the coin flies to the Shelf. */
+test('T143 on NEXT COIN the won coin arcs to the Shelf button', () => {
+  const win = loadTs('src/components/rewards/postWinModel.ts', { '../../services/lineplay/rideLines': { taskHasLine: () => false } });
+  assert.deepEqual([...win.WIN_FLY_ROUTES.coinToShelf], ['energy']);
+  assert.match(read('src/components/PostWinRewardsModal.tsx'), /triggerFly\(\{ imageUrl: taskCoinUrl, amount: 1, startX: x, startY: SH \* 0\.3, targetPosition: shelf \}\)/);
+});

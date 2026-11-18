@@ -108,6 +108,8 @@ const CAPTURE_HOLD_FOR = __DEV__ ? Number(process.env.EXPO_PUBLIC_DEV_HOLD_FOR_M
 const COUNT_TRACE = process.env.EXPO_PUBLIC_COUNT_TRACE === '1';
 import { EASE } from '../ui/motionEasing';
 import { usePowerBudget } from '../power';
+import RideWinStamp from './results/RideWinStamp';
+import { RIDE_WIN_HANDOFF_MS } from './results/rideWinStampModel';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -980,12 +982,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       return () => clearTimeout(t);
     }, [visible, phase, resultsOpacity, resultsScale]);
 
-    // Ride challenge win: a short stamp, then straight into the coin reveal.
+    // Ride challenge win (fix W3 T037): one short stamp (RideWinStamp, no buttons), then straight into the coin's one
+    // win card. The game's own results card never shows on a ride win (no score sheet, NEW BEST, ALBUM or Share).
+    const rideWin = !!rideChallenge && phase === 'results' && !!effectiveResult && effectiveResult.stars > 0 && !wrap;
+    const [rideWinHanded, setRideWinHanded] = useState(false);
     useEffect(() => {
-      if (!rideChallenge || phase !== 'results' || !effectiveResult || effectiveResult.stars <= 0) return;
-      const t = setTimeout(() => handleClaimRef.current?.(), 1600);
+      if (!rideWin) { setRideWinHanded(false); return; }
+      const t = setTimeout(() => { setRideWinHanded(true); handleClaimRef.current?.(); }, RIDE_WIN_HANDOFF_MS);
       return () => clearTimeout(t);
-    }, [rideChallenge, phase, effectiveResult]);
+    }, [rideWin]);
 
     // Ride challenge loss (core loop 5.3, one loss card): no game card. The run is handed to the
     // challenge's own loss card (rideTry.ts: "8 of 13 bonks", "1 of 3 right") and play moves on.
@@ -1402,11 +1407,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       saved,
       reducedMotion,
     }) : null), [phase, renderResults, effectiveResult, stars, won, wrapReason, handleClaim, rematchOffered, rematchRun, challengeOffered, playAgainFirst, claimLabel, saved, reducedMotion]);
-    const gameResults = rideLoss || isEmptyResultsNode(ownSurface) ? null : ownSurface;
+    const gameResults = rideLoss || rideWin || isEmptyResultsNode(ownSurface) ? null : ownSurface;
     // A wrap-up (ride's up) has no game surface to wait for: the shared card shows at once.
-    const showSharedCard = !rideLoss && phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || resultsSafeRef.current || wrap != null)));
+    const showSharedCard = !rideLoss && !rideWin && phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || resultsSafeRef.current || wrap != null)));
     sharedCardShownRef.current = showSharedCard;
-    surfaceShownRef.current = gameResults != null || showSharedCard;
+    surfaceShownRef.current = gameResults != null || showSharedCard || rideWin;
 
     if (!visible) return null;
 
@@ -1567,6 +1572,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           {/* Results. The fade wrapper drops to a plain style after the safety
               net (opacity only); the settle spring keeps its own scale. The scrim
               fades in with the card (w5r2: never a navy board with no card). */}
+          {rideWin ? <RideWinStamp stars={stars} reducedMotion={reducedMotion} handedOff={rideWinHanded} /> : null}
           {gameResults != null ? (
             <View style={[styles.overlay, styles.scrimNone]} pointerEvents="box-none">
               <Animated.View pointerEvents="none" style={[styles.scrimFill, resultsScrim === 'light' ? styles.scrimLight : resultsScrim === 'none' ? styles.scrimNone : null,

@@ -19,6 +19,8 @@ function shell(paid, reduced = false, extra = {}, movement = null) {
     '../hooks/useReducedGameMotion': { default: () => preference.reduced },
     '../ui/GameIcon': { default: 'GameIcon' },
     './results/ResultsCard': { ResultsCard: 'ResultsCard' },
+    './results/RideWinStamp': { default: 'RideWinStamp' },
+    './results/rideWinStampModel': loadTs('src/gamekit/results/rideWinStampModel.ts'),
     './results/feelings': loadTs('src/gamekit/results/feelings.ts'),
     './core/session': session,
     './core/scoring': scoring,
@@ -85,8 +87,13 @@ test('the single paid presentation still starts once and hands off the same conf
   assert.equal(view.timers.size, 0);
   const meta = { game: 'memory-match-plus', score: 400, seed: 123 };
   view.change({ result: { score: 400, stars: 1, meta } });
-  const complete = button(view, 'CONTINUE');
-  complete.props.onPress(); complete.props.onPress();
+  // Fix W3 T037: a ride win shows one short stamp with no buttons, then hands off by itself (once).
+  assert.ok(view.find(node => node.type === 'RideWinStamp'), 'the ride win stamp');
+  assert.equal(view.find(node => node.type === 'TouchableOpacity' && JSON.stringify(node.props.children ?? '').includes('CONTINUE')), undefined, 'no CONTINUE on a ride win');
+  const handoff = [...view.timers].find(([id]) => view.delays.get(id) === 1600);
+  assert.ok(handoff, 'the hand-off waits about 1.6 s');
+  handoff[1](); view.render();
+  for (const [id, fn] of [...view.timers]) if (view.delays.get(id) === 1600) fn();
   assert.equal(calls.complete, 1);
   assert.equal(calls.mult, 1);
   assert.equal(calls.meta, meta);
