@@ -52,10 +52,14 @@ export function nextDwell(previous: QueueDwell | null, seen: QueueDwell | null, 
   readonly lastShownAt: number | null;
   readonly endedRideId: number | null;
   readonly endedAt: number | null;
+  /** Nearly still (no walk): a missed poll with no movement holds; walking off never does. */
+  readonly still?: boolean;
 }): QueueDwell | null {
   if (seen && shows) return previous?.rideId === seen.rideId ? previous : seen;
   if (!previous || input.lastShownAt == null) return null;
   if (seen && seen.rideId !== previous.rideId) return null;
+  // Out of that line's zone and walking: gone at once (never carried to the next ride).
+  if (!seen && input.still === false) return null;
   if (input.endedRideId === previous.rideId && input.endedAt != null && input.now - input.endedAt < WAIT_ENDED_QUIET_MS) return null;
   return input.now - input.lastShownAt <= DWELL_HOLD_MS ? previous : null;
 }
@@ -94,7 +98,8 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
       if (now && shows) lastShownAt.current = at;
       setDwell(previous => nextDwell(previous,
         now && now.parkId === parkId ? { rideId: now.rideId, rideName: now.rideName, parkId: now.parkId } : null, shows,
-        { now: at, lastShownAt: lastShownAt.current, endedRideId: waitEnded?.rideId ?? null, endedAt: waitEnded?.at ?? null }));
+        { now: at, lastShownAt: lastShownAt.current, endedRideId: waitEnded?.rideId ?? null, endedAt: waitEnded?.at ?? null,
+          still: nearlyStill(samples.current, at) }));
     };
     check();
     const timer = setInterval(check, everyMs);

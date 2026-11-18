@@ -79,6 +79,8 @@ test('T074 and T080: the in-line offer is its own picture button under the card,
   shown = dwell.nextDwell(shown, null, false, { ...base, now: t0 + 40_000, lastShownAt: t0 });
   assert.equal(shown?.rideId, 580, 'a missed poll holds it too');
   assert.equal(dwell.nextDwell(shown, null, false, { ...base, now: t0 + 61_000, lastShownAt: t0 }), null, 'walked off: it goes');
+  assert.equal(dwell.nextDwell(shown, null, false, { ...base, now: t0 + 20_000, lastShownAt: t0, still: false }), null,
+    'out of its zone and walking: it goes at once, never carried to the next line');
   assert.equal(dwell.nextDwell(shown, { ...indy, rideId: 571 }, false, { ...base, now: t0 + 20_000, lastShownAt: t0 }), null,
     'another line now: never the old one');
   assert.equal(dwell.nextDwell(shown, null, false, { now: t0 + 20_000, lastShownAt: t0, endedRideId: 580, endedAt: t0 + 15_000 }), null,
@@ -120,4 +122,11 @@ test('T086: one name per game (the shell says the tile name) and the first story
   assert.match(shell, /\{subtitle && !linePlayMovement\?\.gameName \? \(/, 'no second mode name under it');
   assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /gameName: activeGame \? pageName\(activeGame, snapshot\.chapter\) : null,/);
   assert.match(read('src/services/lineplay/episodeRotation.ts'), /\? \(previous \+ 1\) % count\n\s+: 0;/);
+});
+
+test('T082 sibling: Whack-a-Shark in a line drains its ring with no number', () => {
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /const inLine = useContext\(LinePlayMovementContext\) != null;/);
+  assert.match(whack, /quietTimer: ride \|\| inLine,/);
+  assert.match(read('src/games/whack/render/WhackBoard.tsx'), /\{fontM && !hud\.ride && !hud\.quietTimer \? <Text x=\{timerTextX\}/);
 });

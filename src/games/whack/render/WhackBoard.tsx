@@ -148,6 +148,8 @@ function artFrom(im: BoardImages): BoardArt {
 export interface HudProps {
   burstLabel: string;
   ride: boolean;
+  /** No number on the timer ring (a ride coin, or LinePlay's no-clock rule). Defaults to ride. */
+  quietTimer?: boolean;
   feverOn: boolean;
   boss: boolean;
   notches: number;
@@ -536,7 +538,7 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
             <Circle cx={tcx} cy={tcy} r={tr} color={timerFace} />
             <Path path={timerPath} style="stroke" strokeWidth={5} strokeCap="round" color={timerColor} />
             {/* A paid ride game shows the draining ring only, no counting-down number (fix round W1 item 18). */}
-            {fontM && !hud.ride ? <Text x={timerTextX} y={tcy + 7} text={timerText} font={fontM} color={timerNum} /> : null}
+            {fontM && !hud.ride && !hud.quietTimer ? <Text x={timerTextX} y={tcy + 7} text={timerText} font={fontM} color={timerNum} /> : null}
           </Group>
           {fontS ? <Text x={labelX} y={tcy + 5} text={hud.burstLabel} font={fontS} color={NAVY} /> : null}
         </Group>
