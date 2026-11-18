@@ -526,11 +526,12 @@ export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; n
   if (s.phase === 'failed') return { label: 'Try again', action: 'ask', note: 'That didn’t work. You still have all your coins.', look: 'go' };
   // Never a silent re-buy: "Check again" only asks the server what happened.
   if (s.phase === 'unknown') return { label: 'Check again', action: 'recheck', note: 'We couldn’t reach the shop. Let’s check if it went through.', look: 'go' };
-  if (s.phase === 'buying' || s.phase === 'landing') return { label: 'Yes, buy it!', action: 'none', note: null, look: 'busy' };
+  // The confirm step restates the price on the button (T166), and keeps the same words while it buys.
+  if (s.phase === 'buying' || s.phase === 'landing') return { label: `Yes, buy for ${formatCoins(s.cost)}`, action: 'none', note: null, look: 'busy' };
   // Short: say how many; the coin top-up offer (money stream) sits under it with the free path. "Ride coins" are the shelf collectible, not money.
   if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more Shark Coins`, action: 'earn', note: 'Win Shark Coins at rides or open your daily chest.', look: 'go' };
   if (s.paused) return { label: 'Opening soon', action: 'none', note: 'Today’s shop is opening in a moment. Buying is back right after.', look: 'paused' };
-  if (s.phase === 'confirm') return { label: 'Yes, buy it!', action: 'buy', note: null, look: 'go' };
+  if (s.phase === 'confirm') return { label: `Yes, buy for ${formatCoins(s.cost)}`, action: 'buy', note: null, look: 'go' };
   return { label: s.finishes ? `Complete the look: ${formatCoins(s.cost)}` : `Buy for ${formatCoins(s.cost)}`, action: 'ask', note: null, look: 'go' };
 }
 
@@ -874,4 +875,16 @@ export function heroKickerFits(screenW: number, pillLabel: string): boolean {
   const { kickerW } = heroLayout(screenW);
   const kicker = displayTextWidth("THIS WEEK'S STAR", HERO.kickerFont, HERO.kickerTracking);
   return kicker + HERO.rowGap + HERO.pillChrome + displayTextWidth(pillLabel, HERO.pillFont) <= kickerW;
+}
+
+/**
+ * After a piece is worn, the next goal on the shelf (fix round w3, T157): the cheapest piece the
+ * player does not own yet (never a members-only piece for a non-member, never the one just worn).
+ * "Next gear in reach: Hook, 370". Null when the shelf has nothing left to want.
+ */
+export function nextGearGoal(items: readonly { id: number; name: string; display_name?: string | null; cost: number; has_purchased?: boolean; is_member_item?: boolean }[],
+  wornId: number, member = false): string | null {
+  const next = items.filter(i => i.id !== wornId && !i.has_purchased && i.cost > 0 && (member || !i.is_member_item))
+    .sort((a, b) => a.cost - b.cost)[0];
+  return next ? `Next gear in reach: ${next.display_name || next.name}, ${formatCoins(next.cost)}` : null;
 }

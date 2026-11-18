@@ -179,3 +179,48 @@ test('T140: the Gear stage shows the Shark Shop stall art, never the catalog pro
   assert.doesNotMatch(shelf, /imageUrl=\{promoUrl\}/);
   assert.doesNotMatch(read('src/screens/StoreScreen.tsx'), /promoUrl=\{catalog\?\.promotion_image_url\}/);
 });
+
+test('T157: wearing a new piece holds a real moment on the stage, then names the next gear in reach', () => {
+  const shelves = loadTs('src/helpers/shopShelves.ts');
+  const items = [
+    { id: 1, name: 'Duck', cost: 100, has_purchased: true },
+    { id: 2, name: 'Hook', cost: 370, has_purchased: false },
+    { id: 3, name: 'Helmet', cost: 2400, has_purchased: false },
+    { id: 4, name: 'Crown', cost: 50, has_purchased: false, is_member_item: true },
+    { id: 5, name: 'Cup', cost: 65, has_purchased: false },
+  ];
+  assert.equal(shelves.nextGearGoal(items, 5), 'Next gear in reach: Hook, 370', 'never the piece just worn, never a member piece for a guest');
+  assert.equal(shelves.nextGearGoal(items, 2, true), 'Next gear in reach: Crown, 50');
+  assert.equal(shelves.nextGearGoal([{ id: 1, name: 'Duck', cost: 100, has_purchased: true }], 1), null);
+  const sheet = read('src/screens/StoreScreen/TryOnSheet.tsx');
+  assert.match(sheet, /export const WEAR_MOMENT_MS = 1100;/);
+  assert.match(sheet, /new Promise\(r => setTimeout\(r, WEAR_MOMENT_MS\)\)/);
+  const shelf = read('src/screens/StoreScreen/GearShelf.tsx');
+  assert.match(shelf, /const goal = nextGearGoal\(itemsRef\.current, item\.id, memberRef\.current\);/);
+  assert.match(shelf, /useShopToast\(3400\)/);
+});
+
+test('T164: the short try-on says the need once (the pill), the offer under it has no second need line', () => {
+  const sheet = read('src/screens/StoreScreen/TryOnSheet.tsx');
+  assert.match(sheet, /<CoinTopUpOffer need=\{short\} reason="gear" tone="onBlue" headline=\{false\}/);
+  assert.match(read('src/components/money/CoinTopUpOffer.tsx'), /\{headline && \(<View style=\{st\.head\}>/);
+});
+
+test('T165: the buy math holds the balance from before the buy until the sheet closes', () => {
+  const sheet = read('src/screens/StoreScreen/TryOnSheet.tsx');
+  assert.match(sheet, /setMathFrom\(balance\);\s*setPhase\('buying'\);/);
+  assert.match(sheet, /const mathBalance = mathFrom != null && \(phase === 'buying' \|\| phase === 'landing' \|\| phase === 'checking'\) \? mathFrom : balance;/);
+  assert.match(sheet, /\$\{formatCoins\(mathBalance\)\} - \$\{formatCoins\(item\.cost\)\} =/);
+  assert.doesNotMatch(sheet, /\$\{formatCoins\(balance\)\} - \$\{formatCoins\(item\.cost\)\} =/);
+});
+
+test('T166: the confirm step is its own state: the price on the button, a gold rim on the math, a hop', () => {
+  const shelves = loadTs('src/helpers/shopShelves.ts');
+  const base = { owned: false, worn: false, vipLocked: false, short: 0, phase: 'idle', wear: 'idle', finishes: false, cost: 140 };
+  assert.equal(shelves.tryOnCta(base).label, 'Buy for 140');
+  assert.equal(shelves.tryOnCta({ ...base, phase: 'confirm' }).label, 'Yes, buy for 140');
+  assert.equal(shelves.tryOnCta({ ...base, phase: 'buying' }).label, 'Yes, buy for 140', 'no word swap while it buys');
+  const sheet = read('src/screens/StoreScreen/TryOnSheet.tsx');
+  assert.match(sheet, /phase === 'confirm' && styles\.equationConfirm/);
+  assert.match(sheet, /if \(!still\) stageScale\.value = withSequence\(withTiming\(1\.09, \{ duration: DURATION\.tap \}\), withSpring\(1, SPRING\.pop\)\);\s*setPhase\('confirm'\);/);
+});

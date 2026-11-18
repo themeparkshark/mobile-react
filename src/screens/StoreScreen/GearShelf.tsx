@@ -25,7 +25,7 @@ import { BOTTOM_BAR_OVERHANG } from '../../components/Wrapper';
 import { addToWishlist, getWishlist, removeFromWishlist } from '../../api/endpoints/me/wishlist';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
-import { formatCoins, slotWord, passesFilter, restockPill, shelfFilters, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
+import { formatCoins, nextGearGoal, slotWord, passesFilter, restockPill, shelfFilters, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
 import { useAnyModalLayer } from '../../ui/modalLayers';
 import Playercard from '../../components/Playercard';
 import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
@@ -193,7 +193,8 @@ export default function GearShelf({ items, setItems, nextRotationAt, intervalDay
   soundRef.current = playSoundNow;
   const [open, setOpen] = useState<ShopItem | null>(null);
   const [bought, setBought] = useState<number[]>([]);
-  const [toast, setToast] = useShopToast();
+  // Long enough to read the next goal after Now wearing (T157).
+  const [toast, setToast] = useShopToast(3400);
   const [stageAway, setStageAway] = useState(false);
   const nearEnd = useRef(false);
   // Only the first screenful staggers in; tiles from later pages just appear.
@@ -281,7 +282,15 @@ export default function GearShelf({ items, setItems, nextRotationAt, intervalDay
     return owns == null ? null : { owns, set: null };
   }, [recheck]);
 
-  const onWorn = useCallback((item: ShopItem) => setToast(`Now wearing ${item.display_name || item.name}!`), [setToast]);
+  // Worn: say it, then the next goal on the shelf (T157), so the moment after a buy always points somewhere.
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const memberRef = useRef(!!player?.is_subscribed);
+  memberRef.current = !!player?.is_subscribed;
+  const onWorn = useCallback((item: ShopItem) => {
+    const goal = nextGearGoal(itemsRef.current, item.id, memberRef.current);
+    setToast(`Now wearing ${item.display_name || item.name}!${goal ? ` ${goal}` : ''}`);
+  }, [setToast]);
   const todayIds = useMemo(() => items.map(i => i.id), [items]);
 
   return (
@@ -353,7 +362,7 @@ export default function GearShelf({ items, setItems, nextRotationAt, intervalDay
       </ScrollView>
       {/* The shelf slides under the tab row through a short fade (no hard cut across the shopkeeper). */}
       <LinearGradient pointerEvents="none" colors={[BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />
-      <ShopToast message={toast} still={still} />
+      <ShopToast message={toast} still={still} lift={BOTTOM_BAR_OVERHANG} />
       {open && (
         <TryOnSheet item={open} set={null} todayIds={todayIds} still={still} onClose={() => setOpen(null)}
           onWish={wish} onPurchased={onPurchased} onWorn={onWorn} checkOwned={checkOwned}

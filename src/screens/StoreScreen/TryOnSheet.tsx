@@ -7,7 +7,7 @@
  * chest.
  *
  * The buy:
- * - The button asks once ("Yes, buy it!"), and the coin math shows under the stage.
+ * - The button asks once ("Yes, buy for 140"), and the coin math shows under the stage.
  * - Coins pour from the balance into the stage, and the number ticks on the UI thread.
  * - The slot goes empty, then the piece falls onto the shark with a rarity flash.
  * - NEW! replaces TRY-ON. The set reward goes to the shelf at once (it is never
@@ -176,7 +176,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   readonly startBought?: boolean;
   /**
    * Opened from a Buy button (the Secret Shop's "Get it"): the sheet opens on the confirm step, so a
-   * buy is that tap plus "Yes, buy it!". Owned, VIP-locked, short and paused still win (tryOnCta).
+   * buy is that tap plus "Yes, buy for 140". Owned, VIP-locked, short and paused still win (tryOnCta).
    */
   readonly startConfirm?: boolean;
   readonly onClose: () => void;
@@ -241,6 +241,9 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   const [hold, setHold] = useState(false);
   const [coins, setCoins] = useState(0);
   const [balanceAfter, setBalanceAfter] = useState<number | null>(null);
+  // The coin math holds the balance from before the buy until the sheet closes (T165): a fresh player
+  // row mid-landing never turns 375 - 100 = 275 into 275 - 100 = 175.
+  const [mathFrom, setMathFrom] = useState<number | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
@@ -254,7 +257,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   }, [rewardPending, landed]);
 
   useEffect(() => {
-    setExtras([]); setPhase(startConfirm && !startBought ? 'confirm' : 'idle'); setWear('idle'); setBalanceAfter(null); setLanded(0);
+    setExtras([]); setPhase(startConfirm && !startBought ? 'confirm' : 'idle'); setWear('idle'); setBalanceAfter(null); setMathFrom(null); setLanded(0);
     setFullLook(startFullLook);
   }, [item?.id, startFullLook, startBought, startConfirm]);
 
@@ -389,6 +392,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
   // One deliberate tap for a cheap piece: same gold button, the math already on screen, armed only after the sheet settles.
   const baseCta = direct && phase === 'idle' && tried.action === 'ask' ? { ...tried, action: 'buy' as const } : tried;
   const showMath = phase === 'confirm' || phase === 'buying' || phase === 'landing' || (direct && phase === 'idle');
+  const mathBalance = mathFrom != null && (phase === 'buying' || phase === 'landing' || phase === 'checking') ? mathFrom : balance;
   // VIP ran out while the sheet was open: say so kindly, coins untouched.
   const lapsedCta = lapsed && vipLocked ? { ...baseCta, note: 'Your VIP ended, so this one is locked. Your coins are safe.' } : baseCta;
   // The buy confirmation says the member rule out loud before any coins move (DESIGN.md 4.3).
@@ -440,6 +444,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
     if (buyingRef.current) return;
     buyingRef.current = true;
     if (phase === 'idle') { directBuys.push(Date.now()); if (directBuys.filter(t => Date.now() - t < 120_000).length >= 3) directCapped = true; }
+    setMathFrom(balance);
     setPhase('buying');
     try {
       const result = await purchase(item);
@@ -504,7 +509,8 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
       setWear('spinning');
       if (!still) { hop.value = 0; hop.value = withTiming(1, { duration: 620, easing: Easing.out(Easing.quad) }); }
       // The hero, tiles and toast all read the refreshed look: they agree on the same frame.
-      await Promise.all([refreshPlayer().catch(() => undefined), new Promise(r => setTimeout(r, still ? 300 : 900))]);
+      // A real moment of the shark wearing it (T157): about 1 s on the stage before the sheet goes (a held frame under Reduce Motion).
+      await Promise.all([refreshPlayer().catch(() => undefined), new Promise(r => setTimeout(r, WEAR_MOMENT_MS))]);
       onWorn(item);
       closeAnimated();
     } catch {
@@ -527,6 +533,9 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
       case 'ask':
         playSound(require('../../../assets/sounds/purchase_item_prompt.mp3'));
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+        // The confirm step is its own moment (T166): the piece hops on its plinth, the math wears a gold rim,
+        // and the button restates the price (Yes, buy for 140).
+        if (!still) stageScale.value = withSequence(withTiming(1.09, { duration: DURATION.tap }), withSpring(1, SPRING.pop));
         setPhase('confirm');
         break;
     }
@@ -607,10 +616,10 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
                 {/* Confirm reads what, then cost (art director r7/r8): the name above, the coin math under it.
                     The result is the one big number; the subtraction is small (kids UX r8). */}
                 {showMath && (
-                  <Animated.View entering={still ? undefined : FadeIn.duration(140)} style={styles.equation} accessible
-                    accessibilityLabel={`It costs ${formatCoins(item.cost)} Shark Coins. You have ${formatCoins(balance)}. After, you’ll have ${formatCoins(balance - item.cost)} left.`}>
-                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.mathSmall}>{`${formatCoins(balance)} - ${formatCoins(item.cost)} =`}</Text>
-                    <CoinAmount n={balance - item.cost} label="left" big />
+                  <Animated.View entering={still ? undefined : FadeIn.duration(140)} style={[styles.equation, phase === 'confirm' && styles.equationConfirm]} accessible
+                    accessibilityLabel={`It costs ${formatCoins(item.cost)} Shark Coins. You have ${formatCoins(mathBalance)}. After, you’ll have ${formatCoins(mathBalance - item.cost)} left.`}>
+                    <Text maxFontSizeMultiplier={MAX_FONT} style={styles.mathSmall}>{`${formatCoins(mathBalance)} - ${formatCoins(item.cost)} =`}</Text>
+                    <CoinAmount n={mathBalance - item.cost} label="left" big />
                   </Animated.View>
                 )}
                 {/* Non-members see the price too, with the lock (one marker everywhere). */}
@@ -737,7 +746,7 @@ export default function TryOnSheet({ item, set, todayIds, still, accent, startFu
               </View>
               {/* Out of coins (money stream): the cheapest pack that covers it, behind the grown-up gate, plus the free path. */}
               {cta.action === 'earn' && (
-                <CoinTopUpOffer need={short} reason="gear" tone="onBlue" onDone={() => { void refreshPlayer().catch(() => undefined); }} />
+                <CoinTopUpOffer need={short} reason="gear" tone="onBlue" headline={false} onDone={() => { void refreshPlayer().catch(() => undefined); }} />
               )}
             </View>
             <CoinArc from={{ x: 60, y: 44 }} to={{ x: (SCREEN_W - 28) / 2 + 14, y: STAGE_TOP + stageH * 0.5 }} still={still} trigger={coins} />
@@ -772,6 +781,9 @@ const S = SHOP_SURFACE;
  * Secret NEW!: hidden through the dim, then it pops in at full colour with the burst
  * (0 to 1.15 to 1), never fading up grey under the dim (art panel round 5).
  */
+/** The shark wears the new piece on the stage this long before the sheet closes (T157). */
+export const WEAR_MOMENT_MS = 1100;
+
 /** From the confirm tap to the landing, no timer moment competes with the buy (game feel round 6). */
 const HOLD_PHASES = new Set(['checking', 'confirm', 'buying', 'landing']);
 
@@ -809,6 +821,7 @@ const styles = StyleSheet.create({
   wearTagText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.white, letterSpacing: 1 },
   equation: { marginTop: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, backgroundColor: S.well, borderRadius: 999, paddingVertical: 6, borderWidth: 2, borderColor: S.line },
+  equationConfirm: { borderColor: BRAND.gold, borderWidth: 3, backgroundColor: 'rgba(255,207,59,0.16)' },
   // The last row (the heart hint) always rests fully above the fade: fade height + 12.
   body: { paddingHorizontal: 18, paddingTop: 10, gap: 8, paddingBottom: 36 },
   bodyFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 24 },
