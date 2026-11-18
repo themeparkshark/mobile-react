@@ -35,6 +35,8 @@ import { useCoverArt } from './map/mapCover';
  */
 const PLAY_RIDE_REST_Y = -120;
 const PLAY_RIDE_ENTER_FROM = -96;
+/** How long "This coin moved on" stays in PLAY!'s spot before it fades (T012). */
+export const MOVED_ON_SHOW_MS = 4500;
 /** How far around PLAY! a tap on a leaving sheet still counts as PLAY! (a kid's finger). */
 const PLAY_HOLD_SLOP = 8;
 
@@ -44,7 +46,6 @@ export default function RedeemModal({
   onPress,
   onTaskFailed,
   onTaskCompleted,
-  selectedTaskId = null,
   liveStatus = null,
   onOpenChange,
   onShownChange,
@@ -68,8 +69,6 @@ export default function RedeemModal({
   readonly onShownChange?: (shown: boolean) => void;
   /** The live feed's status for the ride in range (DOWN, CLOSED...): no PLAY! on a closed ride. */
   readonly liveStatus?: string | null;
-  /** The ride selected on the map; PLAY! hides while a different ride is selected. */
-  readonly selectedTaskId?: number | null;
   /** The challenge flow opened or closed (for the map's one-overlay-at-a-time queue). */
   readonly onOpenChange?: (open: boolean) => void;
   readonly redeemable?: CurrentRedeemableType;
@@ -123,11 +122,10 @@ export default function RedeemModal({
     // Until the lookup answers, no gift: a gift that vanishes a moment later would be a false promise.
     claimable: claimableTickets === undefined ? ownClaimable : claimableTickets === null ? 1 : claimableTickets,
   }) : null;
-  // Selecting a different ride on the map means the player is looking elsewhere.
-  const otherSelected = !!task && selectedTaskId !== null && selectedTaskId !== task.id;
   // A ride resting until "Back 2:00 PM", or one the live feed shows closed, never offers
-  // PLAY!, even when the server still counts the player in range.
-  const available = !otherSelected && !secretLocked && nearbyOpportunityOpen(redeemable, liveStatus);
+  // PLAY!, even when the server still counts the player in range. A tapped island elsewhere never hides it (T001):
+  // PLAY! always rises for the coin the player stands at, and the guide card names that coin.
+  const available = !secretLocked && nearbyOpportunityOpen(redeemable, liveStatus);
   // Press feedback inside 100 ms (blueprint section 11, Feedback): a tap squashes the pill and buzzes at once,
   // even while the challenge card waits its turn behind a sheet that is still sliding away.
   const press = useRef(new Animated.Value(1)).current;
@@ -142,7 +140,16 @@ export default function RedeemModal({
     Animated.spring(press, { toValue: 1, stiffness: 420, damping: 12, mass: 0.7, useNativeDriver: true }).start();
   };
   // Standing at a ride that is not open: the same spot says why (and when it is back), never a blank.
-  const closedReason = !otherSelected && !available ? nearbyRideClosedReason(redeemable, liveStatus) : null;
+  const rawClosedReason = !available ? nearbyRideClosedReason(redeemable, liveStatus) : null;
+  // A find that moved on says so for a moment, then fades: nothing is left to do at that spot (T012).
+  const movedOnKey = rawClosedReason?.kind === 'moved_on' && redeemable ? `${redeemable.type}:${redeemable.model.id}` : null;
+  const [movedOnDone, setMovedOnDone] = useState<string | null>(null);
+  useEffect(() => {
+    if (!movedOnKey) return undefined;
+    const timer = setTimeout(() => setMovedOnDone(movedOnKey), MOVED_ON_SHOW_MS);
+    return () => clearTimeout(timer);
+  }, [movedOnKey]);
+  const closedReason = rawClosedReason && !(movedOnKey && movedOnDone === movedOnKey) ? rawClosedReason : null;
   const closedLabel = closedReason ? closedRideCopy(closedReason) : null;
   const shown = (available && pillReady) || !!closedLabel;
   // Under the cover the lift waits for the pill art (never past the cover's hard cap).
@@ -236,13 +243,13 @@ export default function RedeemModal({
       )}
       {task && !available && closedLabel && (
         <Animated.View pointerEvents="none" style={entrance} accessible
-          accessibilityLabel={`${task.name}. ${closedLabel.a11y}`}>
+          accessibilityLabel={closedLabel.sub ? closedLabel.a11y : `${task.name}. ${closedLabel.a11y}`}>
           <View style={styles.closedPill}>
             <GameIcon name={closedLabel.icon} size={30} />
             <Text style={styles.closedText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{closedLabel.text}</Text>
           </View>
           <View style={styles.caption}>
-            <Text style={styles.captionText} numberOfLines={1}>{task.name}</Text>
+            <Text style={styles.captionText} numberOfLines={1}>{closedLabel.sub ?? task.name}</Text>
           </View>
         </Animated.View>
       )}
@@ -294,7 +301,7 @@ export default function RedeemModal({
 }
 
 /** What the PLAY! spot says at a ride that is not open: a picture and a few big words. */
-export function closedRideCopy(reason: NearbyClosedReason): { icon: GameIconName; text: string; a11y: string } {
+export function closedRideCopy(reason: NearbyClosedReason): { icon: GameIconName; text: string; a11y: string; sub?: string } {
   switch (reason.kind) {
     case 'resting': {
       const back = restingLabel(reason.at);
@@ -302,6 +309,9 @@ export function closedRideCopy(reason: NearbyClosedReason): { icon: GameIconName
     }
     case 'down': return { icon: 'wrench', text: 'Ride is down', a11y: 'This ride is down right now. Try again soon.' };
     case 'repairs': return { icon: 'wrench', text: 'Closed for repairs', a11y: 'This ride is closed for repairs.' };
+    // Coin words, never ride words: the find moved on, the ride did not close (T012).
+    case 'moved_on': return { icon: 'sparkle', text: 'This coin moved on', a11y: 'This coin moved on. A new one appears soon.',
+      sub: 'A new one appears soon' };
     default: return { icon: 'lock', text: 'Closed now', a11y: 'This ride is closed right now.' };
   }
 }

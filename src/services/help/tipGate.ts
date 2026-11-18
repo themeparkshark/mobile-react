@@ -34,11 +34,16 @@ export function linePlayTipReady(state: LinePlayTipState): boolean {
   return state.screenReady && !state.gameOpen && !state.lineMoving && !state.sheetOpen && !state.finished;
 }
 
-/** Which park tip fits right now. A ride coin in range beats the welcome. */
-export function parkTipFor(input: { readonly inPark: boolean; readonly rideCoinInRange: boolean; readonly arrivalLessonDone: boolean }):
+/**
+ * Which park tip fits right now. A ride coin in range beats the welcome. While PLAY! is up the guide card already says
+ * "You're here! Tap PLAY!", so the walk welcome ("Walk to a ride") waits (fix round w3 T005: never two messages).
+ */
+export function parkTipFor(input: { readonly inPark: boolean; readonly rideCoinInRange: boolean; readonly arrivalLessonDone: boolean;
+  readonly playUp?: boolean }):
   'coin_in_range' | 'park_hud' | null {
   if (!input.inPark || !input.arrivalLessonDone) return null;
-  return input.rideCoinInRange ? 'coin_in_range' : 'park_hud';
+  if (input.rideCoinInRange) return 'coin_in_range';
+  return input.playUp ? null : 'park_hud';
 }
 
 export interface LineNudgeState {

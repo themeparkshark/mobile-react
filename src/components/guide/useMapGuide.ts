@@ -22,6 +22,7 @@ import useNextCoinGuide from './useNextCoinGuide';
 import { goalLevelUpTaskId, guideWallet, ownedTaskIdsFor } from './guideCoins';
 import useClaimableTickets from './useClaimableTickets';
 import useWelcomeBack from './useWelcomeBack';
+import { coinArtCache } from './coinArtCache';
 
 /** Within this distance of one of today's coins the player is really at the park (the guide's 1.5 km reach). */
 const AT_PARK_METERS = 1500;
@@ -136,8 +137,9 @@ export default function useMapGuide(input: MapGuideInput) {
     starTaskIds: starRides, rushTaskIds, ownedTaskIds, levelUpTaskIds,
     starRushUnlocked: coinLevelsRung.open, coinLevelsUnlocked: coinLevelsRung.open,
     wallet, queueTicketsOn: guideFlags.queue_tickets === true,
-    // PLAY! itself decides "You're here": the server's range check, never the guide's geometry alone.
-    playableTaskId: rangeChecked ? playableTaskId : undefined,
+    // PLAY! itself decides "You're here": the server's range check, never the guide's geometry alone. Before its first
+    // answer PLAY! is down, so the card never says "Tap PLAY!" with no PLAY! on screen (T009).
+    playableTaskId: rangeChecked ? playableTaskId ?? null : null,
     daysAway: welcome.daysAway, welcomeBackDone: welcome.done,
     lineStoryNear: adventureGate?.state !== 'far',
     freeTryDaily: guideFlags.ride_rescue_pass === true,
@@ -154,6 +156,10 @@ export default function useMapGuide(input: MapGuideInput) {
     }));
   const guideTargetId = nextCoin.target?.taskId ?? null;
   // The target's own coin art: the map list has none, so the trip goal's ride list (or PLAY!'s coin) supplies it.
+  // Every read that names coin art is remembered, so a late or failed trip goal read never leaves the card on the
+  // generic gold coin (T015).
+  coinArtCache.rememberAll(tripGoalData?.rides);
+  if (activeRedeemable?.type === 'task') coinArtCache.remember((activeRedeemable.model as TaskType).id, (activeRedeemable.model as TaskType).coin_url);
   const guideCoinUrl = useMemo(() => {
     if (guideTargetId == null) return null;
     const fromMap = nextCoin.targetTask?.coin_url;
@@ -162,7 +168,7 @@ export default function useMapGuide(input: MapGuideInput) {
     if (fromTrip) return fromTrip;
     const here = activeRedeemable?.type === 'task' && (activeRedeemable.model as TaskType).id === guideTargetId
       ? (activeRedeemable.model as TaskType).coin_url : null;
-    return here || null;
+    return here || coinArtCache.get(guideTargetId);
   }, [guideTargetId, nextCoin.targetTask, tripGoalData?.rides, activeRedeemable]);
   // Until the first coin is won, the guide's "Tap PLAY!" picture shows every time PLAY! rises.
   const hasWonACoin = (player?.completed_tasks_count ?? 0) > 0 || (player?.ride_coins_collected ?? 0) > 0 || parkWins > 0;

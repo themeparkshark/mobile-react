@@ -42,7 +42,8 @@ import { adventurePlayGate, adventureRideClosed, adventureShelfArrival, rankDeto
 import useAdventureStampMoment from './ExploreScreen/useAdventureStampMoment';
 import { resolveMapQueueContext, resolveQueueStoryContext } from '../services/lineplay/resolveRide';
 import type { RideContext } from '../services/lineplay/LinePlaySession';
-import checkForRedeemable from '../helpers/check-for-redeemable';
+import currentRedeemable from '../api/endpoints/me/current-redeemable';
+import { createRangeChecker, playAnswerNear, selectionStale } from '../components/guide/playRangeCheck';
 import ParkMapRetryCard, { useParkMapRetry } from './ExploreScreen/ParkMapRetry';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
@@ -272,7 +273,9 @@ export function ExploreScreenBody() {
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
   // The last park map load failed (weak signal): the park buttons stay, a calm retry note shows.
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
-  const [activeRedeemable, setActiveRedeemable] = useState<
+  // The server's last in-range answer. PLAY! reads activeRedeemable below: this answer, only while the player is still
+  // near its coin (every GPS fix re-judges it, fix round w3 T008 and T009).
+  const [rangeAnswer, setActiveRedeemable] = useState<
     CurrentRedeemableType | undefined
   >();
   const [failedTaskIds, setFailedTaskIds] = useState<Set<number>>(new Set());
@@ -359,6 +362,8 @@ export function ExploreScreenBody() {
   const { refreshPlayer, player } = useContext(AuthContext);
   const { parkLoaded, parkLookupRecord, location, park, permissionGranted, permissionChecked, latestLocationSampleRef, moveDevLocation } =
     useContext(LocationContext);
+  const activeRedeemable = useMemo(() => (playAnswerNear(rangeAnswer, location) ? rangeAnswer : undefined),
+    [rangeAnswer, location?.latitude, location?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
   // The anchor is the newest outside-park confirmation (kept through a failed
   // re-check), so walking past the 25 m re-check never blanks the home map.
   const homeAnchorRef = useRef<ParkLookupRecord | null>(null);
@@ -882,6 +887,22 @@ export function ExploreScreenBody() {
   const openRedeemable = nearbyOpportunityOpen(activeRedeemable, activeLiveStatus, mapNow) ? activeRedeemable : undefined;
   const playableTaskId = openRedeemable?.type === 'task' ? openRedeemable.model.id : null;
   const adventureTaskId = adventure && (adventure.phase === 'discover' || adventure.phase === 'play') ? adventure.ride.task_id : null;
+  // An old island selection clears after a 30 m walk, or when PLAY! rises for another coin (T001): a stray tap
+  // never leaves a callout that disagrees with PLAY! and the guide card.
+  const selectedFrom = useRef<{ id: number; at: { latitude: number; longitude: number } | null } | null>(null);
+  if ((selectedFrom.current?.id ?? null) !== (selectedTask?.id ?? null)) {
+    selectedFrom.current = selectedTask ? { id: selectedTask.id, at: playerLat != null && playerLng != null
+      ? { latitude: playerLat, longitude: playerLng } : null } : null;
+  }
+  const playSeen = useRef<number | null>(playableTaskId);
+  useEffect(() => {
+    const rose = playableTaskId != null && playableTaskId !== playSeen.current ? playableTaskId : null;
+    playSeen.current = playableTaskId;
+    if (selectionStale({ selectedTaskId: selectedTask?.id ?? null, selectedFrom: selectedFrom.current?.at ?? null,
+      here: playerLat != null && playerLng != null ? { latitude: playerLat, longitude: playerLng } : null, playRoseFor: rose })) {
+      setSelectedTask(null);
+    }
+  }, [playableTaskId, playerLat, playerLng]); // eslint-disable-line react-hooks/exhaustive-deps
   const goalTaskId = tripGoal && !tripGoal.coin_owned ? tripGoal.task_id : null;
   // Every ride island stays mounted, keyed by ride and in first-seen order (new ones append):
   // mounting, unmounting or reordering MapView children mid-list crashes MapLibre
@@ -1108,20 +1129,23 @@ export function ExploreScreenBody() {
   // (within its cap), so PLAY RIDE for the ride you stand at is on the first lifted map frame.
   const [rangeChecked, setRangeChecked] = useState(false);
   useCoverArt(!!park && !!player && !!redeemables && !!location?.latitude && !rangeChecked);
+  // One request at a time, every answer kept, the latest fix asked next, from the map's own watched position (no
+  // second GPS reading): PLAY! rises within a request of stepping into range (fix round w3 T009, playRangeCheck.ts).
+  const failedRef = useRef(failedTaskIds); failedRef.current = failedTaskIds;
+  const rangeChecker = useMemo(() => createRangeChecker<CurrentRedeemableType | undefined>(
+    point => currentRedeemable(point.latitude, point.longitude),
+    redeemable => {
+      setRangeChecked(true);
+      if (redeemable?.type === 'task' && failedRef.current.has(redeemable.model.id)) setActiveRedeemable(undefined);
+      else setActiveRedeemable(redeemable ?? undefined);
+    },
+    // A failed check keeps the last answer (the distance check above still drops it once the player walks off).
+    () => setRangeChecked(true)), [mapContext]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => rangeChecker.cancel(), [rangeChecker]);
   useEffect(() => {
     if (!mapFocused || !park || !location?.latitude || !location?.longitude || !redeemables) return;
-    let current = true;
-    void checkForRedeemable().then(redeemable => {
-      setRangeChecked(true);
-      if (!current) return;
-      if (redeemable?.type === 'task' && failedTaskIds.has(redeemable.model.id)) {
-        setActiveRedeemable(undefined);
-      } else {
-        setActiveRedeemable(redeemable);
-      }
-    });
-    return () => { current = false; };
-  }, [mapFocused, park?.id, location?.latitude, location?.longitude, redeemables, failedTaskIds]);
+    rangeChecker.request({ latitude: location.latitude, longitude: location.longitude });
+  }, [mapFocused, park?.id, location?.latitude, location?.longitude, redeemables, failedTaskIds, rangeChecker]);
 
   // Every ride island, not the zoom-dependent clusters, so the beacon's spot stays put while zooming.
   const beaconAvoid = useMemo(() => [...visibleTasks, ...restingTasks].map(task => ({
@@ -1139,7 +1163,8 @@ export function ExploreScreenBody() {
     player, park, mapFocused, location, redeemables, visibleTasks, livePark, adventure, tripGoalData, queueDwell, starRides,
     rushes, rangeChecked,
     // Another ride is selected: PLAY! hides (RedeemModal), so the guide must not say Tap PLAY! either.
-    playableTaskId: selectedTask && selectedTask.id !== playableTaskId ? null : playableTaskId,
+    // PLAY! always rises for the coin in range, whatever island is selected (T001): the guide hears the same answer.
+    playableTaskId,
     adventureGate, activeRedeemable, refreshPlayer, parkWins, redeemFlowOpen, parkLoaded, homeLocationConfirmed, setSelectedTask,
   });
   // Raids reach the map only after coin levels unlock (they cost Energy) and while the park is open (core loop 5.2).
@@ -1315,7 +1340,7 @@ export function ExploreScreenBody() {
   const parkTip = frightOwnsParkTips({ modeOn: frightNight.modeOn, recapUp: !!frightEngine.recapOffer || !!frightEngine.marquee })
     ? null : parkTipFor({ inPark: atParkNow, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
       // The guide card's "Tap PLAY!" picture replaces Finn's one-time coin card (one card at a time, core loop 4.1).
-      rideCoinInRange: false });
+      rideCoinInRange: false, playUp: playableTaskId != null || playRideShown });
   const parkTipReady = !mapCovered && mapCalm && mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
     dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial,
@@ -1801,7 +1826,6 @@ export function ExploreScreenBody() {
               redeemable={mapFocused && !isActive ? activeRedeemable : undefined}
               covered={mapCovered}
               park={park}
-              selectedTaskId={selectedTask?.id ?? null}
               liveStatus={activeLiveStatus}
               claimableTickets={(player?.tickets ?? 0) === 0 ? (claimable.loaded ? claimableTicketCount : null) : undefined}
               playRequest={playRequest}
@@ -1908,7 +1932,7 @@ export function ExploreScreenBody() {
             small={!!coin && (SHORT_MAP || coin.narrow)} fit={!!coin} narrow={coin?.narrow}
             art={coin ? <CoinTipPicture /> : undefined} artImages={coin ? COIN_TIP_PICTURE_IMAGES : 0}
             pointerLeft={coin?.pointer}
-            style={coin?.style ?? PARK_WELCOME_TIP_STYLE} />;
+            style={coin?.style ?? (guideShown ? { ...PARK_WELCOME_TIP_STYLE, top: slotTop + GUIDE_CARD_HEIGHT + 10 } : PARK_WELCOME_TIP_STYLE)} />;
         })()}
         {/* One HUD row floats over the map (the map runs right up to the header). */}
         {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} />}
@@ -1934,6 +1958,7 @@ export function ExploreScreenBody() {
           openRequest={adventureSheetRequest} celebrateRequest={adventureCelebrateRequest}
           queueTicketsOn={guideFlags.queue_tickets === true}
           claimableTickets={claimableTicketCount} onClaim={claimTickets}
+          guideNextName={nextCoin.target && nextCoin.target.taskId !== adventure.ride.task_id ? nextCoin.target.name : null}
           ticket={adventure} data={tripGoalData} stale={tripGoalStale} gate={adventureGate} detours={adventureDetours}
           closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={slotTop}
           onOcclusionChange={setAdventureOccluded} onRefresh={refreshTripGoal}

@@ -52,7 +52,7 @@ export function nearbyOpportunityOpen(
 
 export type NearbyClosedReason =
   | { readonly kind: 'resting'; readonly at: number }
-  | { readonly kind: 'down' | 'closed' | 'repairs' };
+  | { readonly kind: 'down' | 'closed' | 'repairs' | 'moved_on' };
 
 /**
  * Why the ride the player is standing at cannot be played right now, so the
@@ -70,5 +70,8 @@ export function nearbyRideClosedReason(
   if (liveStatus === 'CLOSED') return { kind: 'closed' };
   const from = gameTimestamp((nearby.model as TimedOpportunity).active_from);
   if (from !== null && from > now) return { kind: 'resting', at: from };
+  // A timed find whose window ended moved on (fix round w3 T012): it is never "closed", the ride is still there.
+  const to = gameTimestamp((nearby.model as TimedOpportunity).active_to);
+  if (to !== null && to <= now) return { kind: 'moved_on' };
   return { kind: 'closed' };
 }

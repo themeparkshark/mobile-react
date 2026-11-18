@@ -20,6 +20,8 @@ const COIN_FALLBACK = require('../../../assets/images/coingold.png');
 const FINN = require('../../../assets/images/screens/pin-collections/shark.png');
 
 interface Props {
+  /** The coin the map's guide card names, when it is not this ride (the sheet says so, T004). */
+  guideNextName?: string | null;
   ticket: AdventureTicket;
   data: TripGoalData;
   closed: boolean;
@@ -157,7 +159,8 @@ function ChipEntrance({ reduced, children, style }: { reduced: boolean; children
 
 export default function AdventureTicketCard({ ticket, data, closed, stale, top, collapsed = false, gate, detours = [], slam = [], onSlamDone,
   onDiscover, onPlay, onFindLine, onShelf, onSelect, onDismiss, onCelebrate, onRefresh, onOcclusionChange,
-  sheetOnly = false, openRequest = 0, celebrateRequest = 0, queueTicketsOn = false, claimableTickets = 0, onClaim, initialOpen = false, initialPicker = false }: Props) {
+  sheetOnly = false, openRequest = 0, celebrateRequest = 0, queueTicketsOn = false, claimableTickets = 0, onClaim, initialOpen = false, initialPicker = false,
+  guideNextName = null }: Props) {
   const [open, setOpen] = useState(initialOpen), [picker, setPicker] = useState(initialPicker);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   const [unfold, setUnfold] = useState(false);
@@ -178,7 +181,9 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
     mounted.current = true;
     return () => { mounted.current = false; pending.current = null; occlusion.current?.(false); };
   }, []);
-  const prompt = adventurePrompt(ticket, closed, gate);
+  // A returning player (any coin on a shelf) reads today's ride by name, never "Your first chapter awaits" (T024).
+  const returning = (data?.rides ?? []).some(ride => ride.coin_owned);
+  const prompt = adventurePrompt(ticket, closed, gate, returning);
   const stamps = adventureStamps(ticket);
   const earnedCount = stamps.filter(Boolean).length;
   const coinUrl = ticket.discover?.coin_url || ticket.ride.coin_url;
@@ -326,7 +331,11 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
           </> : <>
             <Souvenir ticket={ticket} reduced={reduced} unfold={unfold} />
             <Text style={styles.title}>{prompt.title}</Text>
-            <Text style={styles.ride}>{ticket.ride.ride_name}</Text>
+            {!prompt.title.includes(ticket.ride.ride_name) && <Text style={styles.ride}>{ticket.ride.ride_name}</Text>}
+            {/* The map's card points at another coin (the player chose it, or walked on): say so here, so the
+                ticket and the card never read as two different orders (T004). */}
+            {!!guideNextName && guideNextName !== ticket.ride.ride_name && !complete &&
+              <Text style={styles.support} testID="adventure-guide-next">{`Your map's next coin: ${guideNextName}. This story waits for you.`}</Text>}
             <Text style={styles.support}>{prompt.detail}</Text>
             <View style={styles.chapters}>
               {[{ label: 'Discover', detail: ticket.discover ? `${ticket.discover.ride_name}, ${ticket.discover.kind === 'owned_coin' ? 'already on your shelf' : 'coin collected'}` : 'Win this ride\'s coin challenge.' },

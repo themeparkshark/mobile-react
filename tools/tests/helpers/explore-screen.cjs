@@ -24,6 +24,8 @@ const guideCopy = loadTs('src/services/guide/guideCopy.ts');
 const freeTickets = loadTs('src/services/guide/freeTickets.ts');
 // The guide's pure map helpers (LINEPLAY's route, the wallet, owned and level-up coins) run for real too.
 const guideCoins = loadTs('src/components/guide/guideCoins.ts');
+const playRangeCheck = loadTs('src/components/guide/playRangeCheck.ts');
+const coinArtCache = loadTs('src/components/guide/coinArtCache.ts');
 const rewardsNew = loadTs('src/components/map/RewardsButton.tsx', {
   'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' }, 'expo-image': { Image: 'Image' },
   'react-native': { Pressable: 'Pressable', Text: 'Text', View: 'View', StyleSheet: { create: x => x } },
@@ -138,6 +140,10 @@ exports.exploreScreen = function exploreScreen(options = {}) {
       getMyTeam: () => new Promise(() => undefined), getMySwords: () => new Promise(() => undefined), claimSword: async () => undefined },
     '../api/endpoints/me/current-redeemables': { default: async () => options.redeemables ?? { tasks: [], coins: [], keys: [], redeemables: [], items: [], pins: [], vaults: [] } },
     '../helpers/check-for-redeemable': { default: async () => undefined },
+    // PLAY!'s range check (fix round w3): the real one-at-a-time checker, over a stubbed server answer.
+    '../api/endpoints/me/current-redeemable': { default: async () => options.inRange ?? undefined },
+    '../components/guide/playRangeCheck': playRangeCheck,
+    './coinArtCache': coinArtCache,
     '../services/lineplay/resolveRide': { resolveMapQueueContext: async () => options.queueRide ?? null },
     '../services/rideLandmark': { rideLook: () => ({ ambience: [] }) },
     '../helpers/currency-balance': { default: () => 0 },
