@@ -153,6 +153,13 @@ export default function RedeemModal({
     }).catch(() => { if (alive) setClaimWaiting({ tickets: ticketsNow, count: 0 }); });
     return () => { alive = false; };
   }, [short, ticketsNow, claimWaiting?.tickets, claimableTickets]);
+  // While the card is open, a fresher answer for the same coin replaces its snapshot (fix W3: after a loss the
+  // card shows today's free and extra tries, never the ones the map knew before the try).
+  useEffect(() => {
+    if (!modalVisible || !redeemable || !openedRedeemable) return;
+    if (redeemable === openedRedeemable || redeemable.type !== openedRedeemable.type || redeemable.model.id !== openedRedeemable.model.id) return;
+    setOpenedRedeemable(redeemable);
+  }, [modalVisible, redeemable]); // eslint-disable-line react-hooks/exhaustive-deps
   const ownClaimable = short && claimWaiting?.tickets !== ticketsNow ? 1 : claimWaiting?.count ?? 0;
   const badge: PlayBadge = coin ? playBadge({
     tickets: ticketsNow, ticketCost: coin.ticket_cost ?? 1,

@@ -39,32 +39,35 @@ export default function TicketClaimFlight({ tickets, claimed, reduced }: {
 }) {
   const t = useSharedValue(0);
   const bump = useSharedValue(1);
-  const [shown, setShown] = useState(tickets);
+  // While a claim's Tickets are flying the number counts up on its own; any other time it simply follows the wallet.
+  const [flying, setFlying] = useState<number | null>(null);
+  const [counted, setCounted] = useState(tickets);
   const played = useRef<number | null>(null);
   const plan = claimed ? claimFlightPlan(claimed.amount) : null;
   useEffect(() => {
-    if (!claimed || played.current === claimed.id || !plan) { if (!claimed) setShown(tickets); return undefined; }
+    if (!claimed || played.current === claimed.id || !plan || reduced) return undefined;
     played.current = claimed.id;
     const from = Math.max(0, tickets - claimed.amount);
-    if (reduced) { setShown(tickets); return undefined; }
-    setShown(from);
+    setFlying(claimed.id);
+    setCounted(from);
     t.value = 0;
     t.value = withTiming(1, { duration: plan.flightMs, easing: Easing.out(Easing.cubic) });
     bump.value = withDelay(plan.flightMs - 80, withSequence(withTiming(1.25, { duration: 90 }), withSpring(1, { damping: 9, stiffness: 260 })));
     const timers: ReturnType<typeof setTimeout>[] = [];
     plan.steps.forEach((share, i) => {
-      timers.push(setTimeout(() => setShown(from + Math.round(claimed.amount * share)), plan.flightMs - 60 + i * plan.stepMs));
+      timers.push(setTimeout(() => setCounted(from + Math.round(claimed.amount * share)), plan.flightMs - 60 + i * plan.stepMs));
     });
-    return () => { timers.forEach(clearTimeout); cancelAnimation(t); cancelAnimation(bump); };
+    timers.push(setTimeout(() => setFlying(null), plan.flightMs + plan.steps.length * plan.stepMs + 80));
+    return () => { timers.forEach(clearTimeout); cancelAnimation(t); cancelAnimation(bump); setFlying(null); };
   }, [claimed?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (!claimed || played.current !== claimed.id || reduced) setShown(tickets); }, [tickets]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = flying != null ? counted : tickets;
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
   const n = shown;
   return (
     <View style={styles.row} accessible accessibilityLabel={`You have ${tickets} ticket${tickets === 1 ? '' : 's'}`}>
       <Animated.View style={bumpStyle}><GameIcon name="ticket" size={24} /></Animated.View>
       <Text style={styles.count}>{n} {n === 1 ? 'Ticket' : 'Tickets'}</Text>
-      {plan && Array.from({ length: plan.pictures }, (_, i) => <FlyingTicket key={`${claimed?.id}-${i}`} t={t} index={i} count={plan.pictures} />)}
+      {plan && flying != null && Array.from({ length: plan.pictures }, (_, i) => <FlyingTicket key={`${claimed?.id}-${i}`} t={t} index={i} count={plan.pictures} />)}
     </View>
   );
 }

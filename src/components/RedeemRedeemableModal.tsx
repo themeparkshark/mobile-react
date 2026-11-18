@@ -881,9 +881,11 @@ export default function RedeemRedeemableModal({
     setClaimable(null);
     setStartError(null);
     refreshPlayer?.();
+    // The map reads this coin again, so the card's free and extra tries are today's, not the ones from before the loss.
+    onPress();
     cardShownAt.current = Date.now();
     setFlowState('preview');
-  }, [clearFinishedTry, refreshPlayer]);
+  }, [clearFinishedTry, refreshPlayer, onPress]);
 
   // The first coin has one fixed order (blueprint 4.3 rule 3): the win card, then (first coin ever,
   // no team yet) the team offer as its own one-tap step, then the map with nothing else.
