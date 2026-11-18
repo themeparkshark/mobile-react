@@ -29,7 +29,9 @@ export interface RewardsInput {
   /** Today's daily chest (always on). */
   readonly dailyChest: { readonly unclaimed: boolean; readonly day: number; readonly of: number } | null;
   /** Daily 3, after rung 4 and with its switch on. */
-  readonly daily3: { readonly done: number; readonly total: number; readonly claimable: boolean; readonly claimed: boolean; readonly flame: number } | null;
+  readonly daily3: { readonly done: number; readonly total: number; readonly claimable: boolean; readonly claimed: boolean; readonly flame: number;
+    /** Today's goals were shown to the player (T096). false: the row leads to the goals first, never "All 3 done!". */
+    readonly seen?: boolean } | null;
   /** The Weekly Box (comes with Daily 3). */
   readonly weekly: { readonly claimable: boolean } | null;
   /** The lowest unopened level chest, and how many wait (rung 4). */
@@ -56,7 +58,8 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
   }
   if (i.daily3) {
     const d = i.daily3;
-    if (d.claimable) rows.push({ key: 'daily3', title: 'Daily 3 Chest', line: 'All 3 done! Open your chest', ready: 1, action: 'open' });
+    if (d.claimable && d.seen === false) rows.push({ key: 'daily3', title: 'Daily 3', line: `${d.total} of ${d.total} goals done. See them`, ready: 1, action: 'go' });
+    else if (d.claimable) rows.push({ key: 'daily3', title: 'Daily 3 Chest', line: 'All 3 done! Open your chest', ready: 1, action: 'open' });
     else if (d.claimed) rows.push({ key: 'daily3', title: 'Daily 3', line: 'Done for today. New goals tomorrow', ready: 0, action: 'go' });
     else rows.push({ key: 'daily3', title: 'Daily 3', line: `${d.done} of ${d.total} done`, ready: 0, action: 'go' });
   }
@@ -218,4 +221,15 @@ export function stampClaimNote(paid: { readonly coins: number; readonly tickets:
     return got ? `${got}. ${wait}` : wait;
   }
   return got || 'Claimed!';
+}
+
+/**
+ * Today's chest is already open on this phone (T092): its Daily 3 goal reads Done, even before the server's next
+ * Daily 3 read says so (a chest whose answer came back slowly, or a read that raced the open). GO never sends the
+ * player to a map with nothing to claim.
+ */
+export function withChestOpened<G extends { readonly kind: string; readonly done: boolean; readonly progress: number; readonly target: number }>(
+  goals: readonly G[], chestOpened: boolean): readonly G[] {
+  if (!chestOpened || !goals.some(g => g.kind === 'chest' && !g.done)) return goals;
+  return goals.map(g => (g.kind === 'chest' && !g.done ? { ...g, done: true, progress: Math.max(g.progress, g.target) } : g));
 }

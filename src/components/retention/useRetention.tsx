@@ -31,8 +31,10 @@ import { devLadderFeed } from '../../services/retention/devLadderFeed';
 import {
   askForDailyChest, autoOpenUsed, noteAppState, noteAutoOpen, rewardMayAutoOpen,
 } from '../../services/retention/rewardPresence';
+import { daily3SeenDate, noteDaily3Seen, tickToast } from '../../services/retention/daily3Seen';
+import { showToast } from '../../utils/toast';
 import { claimOrReconcile, LOST_CLAIM_WAITS_MS, reconcileClaim } from '../../services/retention/claimReconcile';
-import { emptyLine, rewardsRows, rewardsSummary, stampClaimNote, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
+import { emptyLine, rewardsRows, rewardsSummary, stampClaimNote, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
 import { listenReturnToRewards, openRewardsDoor, rewardsDoorOpen } from '../../services/retention/rewardsSignals';
 import { calmForAutoOpen, takeAutoOpen } from '../../services/retention/mapAttention';
 import { boxFraction, headlineBox } from '../../services/trail/trailModel';
@@ -157,6 +159,10 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const [stamps, setStamps] = useState(0);
   const [rewardsBusy, setRewardsBusy] = useState<RewardsRowKey | null>(null);
   const [rewardsNote, setRewardsNote] = useState<string | null>(null);
+  /** The local date whose Daily 3 goals the player has seen (T096). */
+  const [seenDate, setSeenDate] = useState<string | null>(null);
+  /** The map is up with nothing over it: a goal that ticks says so in a small toast (T096). */
+  const mapClearRef = useRef(false);
   /** A stamp claim did not come through and the server still holds it: the row says RETRY (T094). */
   const [stampRetry, setStampRetry] = useState(false);
   const [passToday, setPassToday] = useState<readonly SharkPassEvent[] | null>(null);
@@ -197,6 +203,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       const index = next.goals.findIndex(g => g.key === fresh[fresh.length - 1]);
       setPop(p => ({ index, key: p.key + 1 }));
       setCelebrate(c => [...new Set([...c, ...fresh])]);
+      // T096: a goal that ticks while the map is up says so (the sheet shows its own checks).
+      if (mapClearRef.current) showToast(tickToast(next.goals.filter(g => g.done).length, Math.max(3, next.goals.length)), 'reward', 2200);
       // Studio sound (approved Oct 24): each check climbs a note (do, re, mi), the third leads into the all-done chord,
       // and that chord rings brighter each day of the streak (every 7th day the flame's own ignite). Its shaped buzz
       // (a tick then the check; the flame's swell) is felt even with the sound off. Studio off: today's.
@@ -267,6 +275,12 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
 
   // Stamps with prizes to claim (the Profile dot's 5 minute cache, so the map adds no new polling).
   const playerId = player?.id ?? null;
+  const playerIdRef = useRef(playerId);
+  playerIdRef.current = playerId;
+  useEffect(() => {
+    if (playerId == null) return;
+    void daily3SeenDate(playerId).then(d => { if (mounted.current) setSeenDate(d); });
+  }, [playerId]);
   const refreshStamps = useCallback(async (force = false) => {
     if (playerId == null) return;
     const cached = force ? null : readStampDotCache(playerId);
@@ -342,6 +356,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const openSheet = (fromRewards = false) => {
     // Opening Daily 3 is seeing it: its NEW tag (rung 4) clears.
     markRungSeen('daily');
+    if (daily && playerIdRef.current != null) { noteDaily3Seen(playerIdRef.current, daily.date); setSeenDate(daily.date); }
     setSheetFromRewards(fromRewards);
     setView({ k: 'sheet' });
     void AsyncStorage.getItem(COACH_KEY).then(v => { if (!v && mounted.current) setCoach(true); }).catch(() => undefined);
@@ -442,7 +457,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     // The chest goal's GO: today's chest opens right here in this sheet, and BACK comes back to Daily 3.
     if (tap === 'chest') {
       if (dailyGift && dailyGift.redeemed_at === null) openChestCard('sheet');
-      else closeThen(() => { askForDailyChest(); o.onOpenChest(); });
+      // Already open (or no chest read yet): never a trip to a map with nothing to claim. Read Daily 3 again here.
+      else void refresh(true);
       return;
     }
     setView(null);
@@ -492,8 +508,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     dailyChest: dailyGift && player?.username
       ? { unclaimed: dailyGift.redeemed_at === null, day: Math.min(giftLadder, Math.max(1, dailyGift.day ?? 1)), of: giftLadder } : null,
     daily3: wantDaily && daily ? {
-      done: doneCount(daily.goals), total: Math.max(3, daily.goals.length), claimable: daily.claimable,
-      claimed: daily.claimed && !daily.claimable, flame: daily.streak.days,
+      done: doneCount(withChestOpened(daily.goals, chestOpenedOn(dailyGift, daily.date))), total: Math.max(3, daily.goals.length), claimable: daily.claimable,
+      claimed: daily.claimed && !daily.claimable, flame: daily.streak.days, seen: seenDate === daily.date,
     } : null,
     weekly: wantDaily && daily ? { claimable: daily.week.claimable } : null,
     levelChest: pendingChest ? { level: pendingChest.level, waiting: chests.filter(c => !c.opened).length } : null,
@@ -591,7 +607,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         if (dailyGift && dailyGift.redeemed_at === null) openChestCard('rewards');
         return;
       case 'daily3':
-        if (daily?.claimable) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
+        // T096: the chest opens straight from here only once today's goals were shown; else the goals come first.
+        if (daily?.claimable && seenDate === daily.date) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
         else openSheet(true);
         return;
       case 'level_chest':
@@ -643,6 +660,11 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   };
 
   const visible = !!view;
+  // T092: today's chest already open on this phone reads Done in Daily 3 at once (the server's next read agrees).
+  const chestOpenedToday = !!daily && chestOpenedOn(dailyGift, daily.date);
+  const shownGoals = daily ? withChestOpened(daily.goals, chestOpenedToday) : null;
+  const dailyShown = daily && shownGoals !== daily.goals ? { ...daily, goals: shownGoals ?? daily.goals } : null;
+  mapClearRef.current = o.mapFocused && !o.mapCovered && !visible;
   // One door for every sheet (BLUEPRINT 4.3 rule 10): the overlay, opened by a tap or by itself, waits until no other
   // registered layer is up (a sheet still dismissing included), then presents.
   const layer = useNativeModalLayer(visible, 'wait');
@@ -729,7 +751,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     content = rewardsCard;
   } else if (view?.k === 'sheet' && daily) {
     content = (
-      <Daily3Sheet state={daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
+      <Daily3Sheet state={dailyShown ?? daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
         atPark={atPark} passToday={passOn ? passToday : null} remindersReady={flagOn(flags, 'retention_push')}
         closeLabel={sheetFromRewards ? 'BACK' : 'BACK TO MAP'}
         reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone}
@@ -878,6 +900,11 @@ function stampsToClaim(r: { stamps: Record<string, readonly { id: number; is_ear
     }
   }
   return out;
+}
+
+/** Today's daily chest (the Daily 3 day) is already open on this phone. */
+function chestOpenedOn(gift: { redeemed_at: string | null; gift_date?: string } | null | undefined, date: string): boolean {
+  return !!gift?.redeemed_at && !!gift.gift_date && gift.gift_date.slice(0, 10) === date;
 }
 
 /** The server shows this stamp's prize as claimed (a lost claim answer that still paid, T094). */

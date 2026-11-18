@@ -71,3 +71,32 @@ test('T094: a stamp that did not come through stays on the row with RETRY, and t
   assert.doesNotMatch(hook, /Those stamps did not go through/);
   assert.doesNotMatch(hook, /Check your internet and try again\.'\);\n    \} finally/, 'the reveal never blames the internet for a slow server');
 });
+
+test('T096: Daily 3 is met as its three goals, never first as "All 3 done!"; ticks say so on the map', () => {
+  const base = { dailyChest: null, weekly: null, levelChest: null, trail: null, stamps: null, events: null };
+  const d = { done: 3, total: 3, claimable: true, claimed: false, flame: 0 };
+  const unseen = model.rewardsRows({ ...base, daily3: { ...d, seen: false } }).find(r => r.key === 'daily3');
+  assert.equal(unseen.action, 'go', 'SEE: the goals first');
+  assert.doesNotMatch(unseen.line, /All 3 done/);
+  assert.equal(unseen.line, '3 of 3 goals done. See them');
+  const seen = model.rewardsRows({ ...base, daily3: { ...d, seen: true } }).find(r => r.key === 'daily3');
+  assert.equal(seen.action, 'open');
+  const seenMod = loadTs('src/services/retention/daily3Seen.ts', { '@react-native-async-storage/async-storage': { default: { getItem: async () => null, setItem: async () => undefined } } });
+  assert.equal(seenMod.tickToast(1, 3), 'Daily 3: 1 of 3 done');
+  assert.equal(seenMod.tickToast(3, 3), 'Daily 3: all 3 done! Your chest is in Rewards');
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /if \(daily\?\.claimable && seenDate === daily\.date\) \{ backToRewards\.current = true;/, 'the row opens the chest only after the goals were shown');
+  assert.match(hook, /noteDaily3Seen\(playerIdRef\.current, daily\.date\)/, 'opening Daily 3 is seeing its goals');
+  assert.match(hook, /if \(mapClearRef\.current\) showToast\(tickToast\(/, 'a tick on the map says so');
+});
+
+test('T092: an opened chest reads Done in Daily 3 and GO never leads to a map with nothing to claim', () => {
+  const goals = [{ kind: 'chest', done: false, progress: 0, target: 1 }, { kind: 'catch', done: false, progress: 0, target: 1 }];
+  const shown = model.withChestOpened(goals, true);
+  assert.equal(shown[0].done, true); assert.equal(shown[0].progress, 1);
+  assert.equal(shown[1].done, false);
+  assert.equal(model.withChestOpened(goals, false), goals, 'not opened: the same list');
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.doesNotMatch(hook, /else closeThen\(\(\) => \{ askForDailyChest\(\); o\.onOpenChest\(\); \}\);/);
+  assert.match(hook, /return !!gift\?\.redeemed_at && !!gift\.gift_date && gift\.gift_date\.slice\(0, 10\) === date;/, 'only today\'s chest counts');
+});

@@ -471,7 +471,7 @@ test('NEW tags: each reward rung wears one NEW on its own surface, and a shown N
     assert.match(src, /\{tag\.isNew && <NewPill \/>\}/, chip);
   }
   const retention = read('src/components/retention/useRetention.tsx');
-  assert.match(retention, /markRungSeen\('daily'\);\n    setSheetFromRewards\(fromRewards\);/, 'opening Daily 3 clears its NEW');
+  assert.match(retention, /markRungSeen\('daily'\);\n(    [^\n]*noteDaily3Seen[^\n]*\n)?    setSheetFromRewards\(fromRewards\);/, 'opening Daily 3 clears its NEW');
   assert.match(retention, /const rung = rowRung\(key\);\n    if \(rung\) markRungSeen\(rung\);/, 'a row tap clears its NEW');
 });
 
