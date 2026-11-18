@@ -150,7 +150,11 @@ export default function CoinLevelingModal({
   const coinPop = useSharedValue(1);
   const coinShake = useSharedValue(0);
   const successIn = useSharedValue(0);
-  const coinStyle = useAnimatedStyle(() => ({ transform: [{ scale: coinPop.value }, { translateX: coinShake.value }] }));
+  // Fix w3 T141: the coin flips over to its new level (one full turn on the UI thread), so the level-up
+  // is the coin itself changing, not only a pill.
+  const coinFlip = useSharedValue(0);
+  const coinStyle = useAnimatedStyle(() => ({ transform: [{ perspective: 700 }, { rotateY: `${coinFlip.value}deg` },
+    { scale: coinPop.value }, { translateX: coinShake.value }] }));
   const successStyle = useAnimatedStyle(() => ({
     transform: [{ scale: Math.max(0, successIn.value) }, { rotate: `${-15 * (1 - Math.min(1, successIn.value))}deg` }],
   }));
@@ -192,7 +196,7 @@ export default function CoinLevelingModal({
   const [fanScale, setFanScale] = useState(1.5);
   const budget = usePowerBudget();
   const [slowServer, setSlowServer] = useState(false);
-  const stopUiShow = () => { [charge, gold, bloom, sparkle, sparkle2, shine, ringPulse, bloomOut, slow, coinShake].forEach(value => cancelUi(value)); };
+  const stopUiShow = () => { [charge, gold, bloom, sparkle, sparkle2, shine, ringPulse, bloomOut, slow, coinShake, coinFlip].forEach(value => cancelUi(value)); coinFlip.value = 0; };
   const chargeStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.001, charge.value) }] }));
   // 0 while charging, 1 once the server is slow (scheduled on the UI thread with the charge).
   const slow = useSharedValue(0);
@@ -398,7 +402,6 @@ export default function CoinLevelingModal({
           bloom.value = uiSequence(uiTiming(1, { duration: 140, easing: EASE.out }), uiTiming(0, { duration: DURATION.bloom, easing: EASE.out }));
           sparkle.value = uiTiming(1, { duration: DURATION.sparkle });
           if (payoff.sparkleWaves === 2) sparkle2.value = uiDelay(240, uiTiming(1, { duration: DURATION.sparkle }));
-          shine.value = uiDelay(380, uiTiming(1, { duration: 620, easing: EASE.inOut }));
           // The big fan peaks and then stays lit behind the card by tier: Legendary keeps most of it.
           bloomOut.value = uiSequence(uiTiming(payoff.fanPeak, { duration: 160, easing: EASE.out }),
             uiDelay(500, uiTiming(payoff.fanHold, { duration: 700, easing: EASE.out })));
@@ -413,6 +416,14 @@ export default function CoinLevelingModal({
           coinPop.value = 1; successIn.value = 1;
         } else {
           coinPop.value = uiSequence(uiTiming(1.35, { duration: 140, easing: EASE.out }), uiSpring(1, SPRING.pop));
+          // The flip: a quick turn onto its edge, then the new face springs round and settles (T141).
+          coinFlip.value = 0;
+          coinFlip.value = uiSequence(uiTiming(180, { duration: 200, easing: EASE.in }),
+            uiSpring(360, SPRING.pop), uiTiming(0, { duration: 0 }));
+          // The new rim catches the light twice more after the first sweep, then rests (no idle loop).
+          shine.value = uiDelay(380, uiSequence(uiTiming(1, { duration: 620, easing: EASE.inOut }), uiTiming(0, { duration: 0 }),
+            uiDelay(700, uiTiming(1, { duration: 620, easing: EASE.inOut })), uiTiming(0, { duration: 0 }),
+            uiDelay(900, uiTiming(1, { duration: 620, easing: EASE.inOut }))));
           // The success card springs in from an effect once it is mounted (see the state effect), never before.
         }
 
@@ -1280,13 +1291,13 @@ function TierRim({ level, size }: { readonly level: number; readonly size: numbe
   const tier = coinTier(level);
   if (tier.level < 2) return null;
   // A metal band: a dark outer edge, a thick band in the tier colour and a bright inner lip.
-  const d = size + 16;
+  const d = size + 18;
   const band = d - 6;
-  const lip = band - 16;
+  const lip = band - 20;
   return (
     <View pointerEvents="none" style={{ position: 'absolute', width: d, height: d, borderRadius: d / 2, borderWidth: 3,
       borderColor: tier.ringDeep, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ width: band, height: band, borderRadius: band / 2, borderWidth: 8, borderColor: tier.ring,
+      <View style={{ width: band, height: band, borderRadius: band / 2, borderWidth: 10, borderColor: tier.ring,
         alignItems: 'center', justifyContent: 'center' }}>
         <View style={{ width: lip, height: lip, borderRadius: lip / 2, borderWidth: 2, borderColor: tier.ringDeep }} />
       </View>

@@ -41,7 +41,8 @@ export const COIN_TIERS: readonly CoinTier[] = [
   { level: 1, name: 'Classic', ring: '#ffffff', ringDeep: '#ffcf3b', halo: 'rgba(255,255,255,0.85)', ringWidth: 3, shimmer: false,
     look: 'The coin as it was first drawn', fx: 'none', stand: 'none', crown: false, burst: 'glow' },
   // Fix w3 T236: coin levels never reuse the trophy words (Bronze, Silver, Gold count wins on the shelf).
-  { level: 2, name: 'Shiny', ring: '#e3eef8', ringDeep: '#8fa9c2', halo: 'rgba(227,238,248,0.7)', ringWidth: 3, shimmer: true,
+  // The Shiny rim is a cool polished blue-silver with a navy edge, so it never reads like Classic's white (T141).
+  { level: 2, name: 'Shiny', ring: '#cfe6fb', ringDeep: '#3d6f9e', halo: 'rgba(207,230,251,0.75)', ringWidth: 4, shimmer: true,
     look: 'A polished silver rim with a shimmer', fx: 'shimmer', stand: 'none', crown: false, burst: 'glow' },
   { level: 3, name: 'Glowing', ring: '#ffcf3b', ringDeep: '#d99a00', halo: 'rgba(255,207,59,0.45)', ringWidth: 3, shimmer: true,
     look: 'A gold rim that catches the light', fx: 'shimmer', stand: 'none', crown: false, burst: 'glow' },
