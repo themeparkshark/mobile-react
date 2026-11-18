@@ -51,9 +51,15 @@ const LANDMARKS: Record<LandmarkId, number> = {
   city: require('../../../assets/images/map/landmarks/city.png'),
   lighthouse: require('../../../assets/images/map/landmarks/lighthouse.png'),
 };
+/** A ride's island picture (the cluster fan shows it so a kid picks by picture, T017). */
+export function rideLandmarkArt(name: string | null | undefined): number {
+  return LANDMARKS[rideLook(name).landmark];
+}
 // Keep the tappable pin close to its artwork so adjacent rides do not steal taps.
 const GROUND = { x: 36, y: 86 };
 const RIDE_COIN = require('../../../assets/images/map/ride-coin.png');
+/** A ride's water scene (it is drawn around the water spot, and takes no taps). */
+const WATER_BOX = { width: 110, height: 70 } as const;
 
 // Water spots found for rides, kept across re-mounts and re-renders.
 const waterSpots = new Map<string, { latitude: number; longitude: number } | null>();
@@ -387,7 +393,7 @@ function TaskMarker({
   const showTimer = !resting && expiresAt !== null && expiresAt > Date.now() && !rush && timerUrgent;
   // One chip above the art: the badge, else the timer (the timer drops into the art when a badge holds the chip).
   const tagKind = isSelected ? null : rideTagKind({ badge, showTimer });
-  const tagSize = rideTagSize(tagKind, limited?.toUpperCase() ?? '');
+  const tagSize = rideTagSize(tagKind, limited?.toUpperCase() ?? '', task.name);
   // Which side of the coin the solver put the selected card on (the arrow points from there).
   const cardSide = selectedCardSide(placement.tag, RIDE_BODY.y, RIDE_BODY.y + RIDE_BODY.h, SELECTED_TAG.h);
   const folded = clusterCount + placement.folded;
@@ -421,6 +427,7 @@ function TaskMarker({
 
   return (<>
     {/* Always mounted (hidden without a water scene): the island's two map markers never come and go. */}
+    {/* Decoration: no onPress, so it never takes the island's tap (Marker, T017). */}
     <Marker coordinate={waterSpot ?? { latitude, longitude }} hidden={parked || !(waterKind && waterSpot)} anchor={{ x: 0.5, y: 0.63 }}>
       {/* Same box size either way, so the marker's layout never changes (no corner blink). */}
       <View style={styles.waterBox}>{waterKind && waterSpot && !parked ? <WaterAmbience kind={waterKind} /> : null}</View>
@@ -431,6 +438,8 @@ function TaskMarker({
       accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${limited ? `${limited}. ` : ''}${folded ? `${folded} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${stay ? `Bonus opportunity. ${stay}. ` : ''}Show ride on the map.`}
       stopPropagation={true}
       hidden={parked}
+      // Folded into a "+N" or hidden by the declutter: invisible, so it must not take the visible island's tap (T017).
+      touchEnabled={shown}
       anchor={{ x: 0.5, y: 0.9 }}
     >
       {/* Same 72 x 96 box either way, so the marker's layout never changes (no corner blink). */}
@@ -563,8 +572,12 @@ function IslandArt({
             )}
             {tagKind === 'adventure' && <View style={styles.adventureBadge}><GameIcon name="ticket" size={13} /><Text style={styles.adventureText}>ADVENTURE</Text></View>}
             {tagKind === 'goal' && <View style={styles.goalBadge}><Text style={styles.goalText}>MY GOAL</Text></View>}
-            {tagKind === 'limited' && limited && <View style={styles.limitedBadge}><GameIcon name="timer" size={12} />
-              <Text style={styles.limitedText} numberOfLines={1}>{limited.toUpperCase()}</Text></View>}
+            {/* The ride's name on top, the dated edition under it (T020); a sparkle, not a stopwatch (T006). */}
+            {tagKind === 'limited' && limited && <View style={styles.limitedBadge}><GameIcon name="sparkle" size={12} />
+              <View style={styles.limitedLines}>
+                <Text style={styles.limitedName} numberOfLines={1}>{task.name}</Text>
+                <Text style={styles.limitedText} numberOfLines={1}>{limited.toUpperCase()}</Text>
+              </View></View>}
             {tagKind === 'timer' && (
               <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
                 badgeStyle={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent]} />
@@ -576,8 +589,11 @@ function IslandArt({
         {star && !parked && <View pointerEvents="none" style={[styles.starRide, playable && styles.standingLift]}><StarRideBadge paused={!alive.running} /></View>}
         {!isSelected && badge === 'new' && <View style={styles.newBadge}><GameIcon name="sparkle" size={16} /></View>}
         {!isSelected && showTimer && tagKind !== 'timer' && (
-          <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
-            badgeStyle={[styles.timerBadge, styles.timerLow, timerUrgent && styles.timerBadgeUrgent]} />
+          // A row wider than the island, so "Leaves soon" is never cut to "Leaves s...".
+          <View pointerEvents="none" style={styles.timerLow}>
+            <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
+              badgeStyle={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent]} />
+          </View>
         )}
 
         {alive.light.lamps >= 0.05 && <LampGlow id={task.id} level={alive.light.lamps} moving={!calm && withinBudget(aliveRank, alive.caps.pulsingRides)} />}
@@ -623,7 +639,7 @@ export default memo(TaskMarker);
 const PARKED_PLACEMENT: Placement = { visible: false, scale: 1, folded: 0, foldedInto: null, tag: null, reason: 'offscreen' };
 
 const styles = StyleSheet.create({
-  waterBox: { width: 110, height: 70 },
+  waterBox: WATER_BOX,
   teamFlag: { position: 'absolute', top: 25, right: -3, zIndex: 21 },
   starRide: { position: 'absolute', top: 0, right: -4, zIndex: 3 },
   // The player's shark (about 70 pt with its cone) stands on a playable island; its chips lift above it.
@@ -640,6 +656,8 @@ const styles = StyleSheet.create({
   limitedBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.white, borderRadius: 9,
     paddingHorizontal: 6, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
   limitedText: { color: BRAND.navy, fontSize: 10, fontFamily: 'Knockout', letterSpacing: 0.5 },
+  limitedLines: { flexShrink: 1, alignItems: 'flex-start' },
+  limitedName: { color: BRAND.navy, fontSize: 12, lineHeight: 14, fontFamily: 'Shark' },
   newBadge: { position: 'absolute', top: 2, right: 2, zIndex: 22 },
   levelPip: { position: 'absolute', bottom: 2, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 3,
     backgroundColor: BRAND.blueBright, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
@@ -647,7 +665,7 @@ const styles = StyleSheet.create({
   timerBadge: { backgroundColor: BRAND.white, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2,
     borderWidth: 2, borderColor: BRAND.navy },
   // Under a badge, the timer sits on the art's shoulder.
-  timerLow: { position: 'absolute', top: -2, zIndex: 20 },
+  timerLow: { position: 'absolute', top: -2, left: -40, right: -40, alignItems: 'center', zIndex: 20 },
   // The last 5 minutes: a calm gold chip, never a red ticking clock (kid-trust).
   timerBadgeUrgent: { backgroundColor: BRAND.gold, borderColor: BRAND.goldLip },
   timerText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, textAlign: 'center' },
@@ -683,7 +701,8 @@ const styles = StyleSheet.create({
   restingSlot: { position: 'absolute', bottom: 2, left: -30, right: -30, alignItems: 'center' },
   // Standing at the ride, the player's shark covers its base, so "BACK 2:00 PM" rides above the art.
   restingSlotNear: { bottom: undefined, top: -4 },
-  clusterBadge: { position: 'absolute', top: 16, left: -4, minWidth: 26, height: 22, borderRadius: 11, paddingHorizontal: 5,
+  // Inside the island's own tap box, so a tap on "+N" opens the fan (T017).
+  clusterBadge: { position: 'absolute', top: 16, left: 0, minWidth: 26, height: 22, borderRadius: 11, paddingHorizontal: 5,
     backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   rushBadge: { flexDirection: 'row', alignItems: 'center', gap: 3,
     backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },

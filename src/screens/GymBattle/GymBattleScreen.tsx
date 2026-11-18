@@ -15,7 +15,8 @@ import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 // LinearGradient removed - not installed
 import { BlurView } from 'expo-blur';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { useAppActive } from '../../hooks/appActive';
 import { getGym, GymData, checkinGym } from '../../api/endpoints/gym-battle';
 import TapMiniGameModal from '../../components/GymBattle/TapMiniGameModal';
 import SwordAttackModal from '../../components/GymBattle/SwordAttackModal';
@@ -632,6 +633,9 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     }
   }, [gymData?.battle_status?.seconds_until_next_event]);
 
+  const screenFocused = useIsFocused();
+  const appActive = useAppActive();
+  const clockLive = screenFocused && appActive;
   useEffect(() => {
     const formatTime = (totalSecs: number | null) => {
       if (totalSecs == null) return '--:--:--';
@@ -643,7 +647,8 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     };
     
     setCountdown(formatTime(battleSeconds));
-    if (battleSeconds == null) return;
+    // Ticks only while this screen is focused and the app is in front (T190).
+    if (battleSeconds == null || !clockLive) return;
     const interval = setInterval(() => {
       setBattleSeconds(prev => {
         if (prev == null) return null;
@@ -653,7 +658,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [battleSeconds]);
+  }, [battleSeconds, clockLive]);
 
   // Attack cooldown timer - use gymData.player since player isn't in scope yet
   useEffect(() => {

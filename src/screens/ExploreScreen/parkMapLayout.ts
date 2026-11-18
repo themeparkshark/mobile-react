@@ -92,12 +92,14 @@ export const PRIORITY = {
 export type RideTagKind = 'rush' | 'adventure' | 'goal' | 'limited' | 'timer';
 
 /** Size of the one chip a ride island shows above its art (badge, else the timer). */
-export function rideTagSize(kind: RideTagKind | null, text = ''): { w: number; h: number } | null {
+export function rideTagSize(kind: RideTagKind | null, text = '', name = ''): { w: number; h: number } | null {
   switch (kind) {
+    // A limited coin names its ride on the tag, above the date (T020: a tower tagged only LIMITED LEAVES NOV 30).
+    case 'limited': if (name) return { w: Math.min(184, Math.round(26 + Math.max(name.length * 6.6, text.length * 5.2))), h: 34 };
+      return { w: Math.min(190, 36 + text.length * 6), h: 22 };
     case 'rush': return { w: 108, h: 22 };
     case 'adventure': return { w: 92, h: 22 };
     case 'goal': return { w: 66, h: 22 };
-    case 'limited': return { w: Math.min(190, 36 + text.length * 6), h: 22 };
     // "LEAVES SOON" in words (T006), never a minutes chip.
     case 'timer': return { w: 92, h: 22 };
     default: return null;
@@ -128,23 +130,25 @@ export function selectedCardSide(tag: { readonly y: number } | null | undefined,
 export const URGENT_MS = LEAVES_SOON_MS;
 
 /** A ride's chip for the solver, by the same rules TaskMarker draws with. */
-export function rideTagFor({ selected, rush, adventure, goal, owned, limitedText, expiresAt, near, now, closed = false }: {
+export function rideTagFor({ selected, rush, adventure, goal, owned, limitedText, expiresAt, near, now, closed = false, name = '' }: {
   readonly selected: boolean; readonly rush: boolean; readonly adventure: boolean; readonly goal: boolean;
   /** Closed, down or resting: no timer. */
   readonly closed?: boolean;
   readonly owned: boolean; readonly limitedText: string | null; readonly expiresAt: number | null;
+  /** The ride's name (a limited tag names its ride). */
+  readonly name?: string;
   readonly near: boolean; readonly now: number;
 }): { w: number; h: number } | null {
   if (selected) return SELECTED_TAG;
   // A closed ride never hurries the player: no countdown on it.
   if (closed) {
     const badge = markerBadge({ rush: false, adventure, goal, owned, limited: !!limitedText });
-    return rideTagSize(rideTagKind({ badge, showTimer: false }), (limitedText ?? '').toUpperCase());
+    return rideTagSize(rideTagKind({ badge, showTimer: false }), (limitedText ?? '').toUpperCase(), name);
   }
   const badge = markerBadge({ rush, adventure, goal, owned, limited: !!limitedText });
   const timed = expiresAt !== null && expiresAt > now;
   const showTimer = timed && !rush && expiresAt! - now <= URGENT_MS;
-  return rideTagSize(rideTagKind({ badge, showTimer }), (limitedText ?? '').toUpperCase());
+  return rideTagSize(rideTagKind({ badge, showTimer }), (limitedText ?? '').toUpperCase(), name);
 }
 
 /* ── Builders ─────────────────────────────────────────────────────────── */
@@ -200,6 +204,20 @@ export interface ParkLayoutInput {
 }
 
 export function rideLayoutId(id: number): string { return `ride:${id}`; }
+
+/**
+ * The rides folded into this island by the declutter ("+N"), the island itself first, nearest the
+ * order the map knows them (T017: a tap fans them out so any one can be picked). Pure.
+ */
+export function clusterMembers<T extends { readonly id: number }>(host: T,
+  placements: ReadonlyMap<string, { readonly foldedInto: string | null }>, rides: readonly T[]): T[] {
+  const hostId = rideLayoutId(host.id);
+  const out: T[] = [host];
+  for (const ride of rides) {
+    if (ride.id !== host.id && placements.get(rideLayoutId(ride.id))?.foldedInto === hostId) out.push(ride);
+  }
+  return out;
+}
 export function hauntLayoutId(key: string): string { return `haunt:${key}`; }
 export function reefLayoutId(key: string): string { return `reef:${key}`; }
 

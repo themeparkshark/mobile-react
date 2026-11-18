@@ -49,6 +49,7 @@ import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput, type HudRect } from './map/fright';
 import { nearestWaterPoint } from './map/water';
 import { createNativeMapGate } from './map/nativeMapGate';
+import { islandUnderShark, type UnderShark } from './map/underShark';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { useFocusEffect } from '@react-navigation/native';
 import { canMirrorShark, hasDressedShark } from '../helpers/wardrobe';
@@ -147,7 +148,7 @@ export function railColumnHeight(buttons: number): number {
   return buttons <= 0 ? 0 : buttons * RAIL_BUTTON + (buttons - 1) * RAIL_GAP;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, sharkLook = 0, sharkHop = 0, trail = null, onZoomChange, guideTarget, guideSticky = false, returnAfterMs = null, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, railFloor = 0, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self', trailHidden = false }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, sharkLook = 0, sharkHop = 0, trail = null, onZoomChange, guideTarget, guideSticky = false, returnAfterMs = null, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, railFloor = 0, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self', trailHidden = false, underShark = null }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -197,6 +198,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly coverHost?: 'self' | 'screen';
   /** Something to catch right here (a ride coin in range): the shark perks up and cheers now and then. */
   readonly sharkCheer?: boolean;
+  /**
+   * The nearest ride island, when it may sit under the following shark (T011). If it does, its coin chip
+   * stands beside the shark and a tap on the shark or the chip goes to that coin (not "say hi").
+   */
+  readonly underShark?: UnderShark | null;
   /** Screen side (-1 left, 1 right) of the nearest find in range: the shark's look-around turns toward it. */
   readonly sharkLook?: -1 | 0 | 1;
   /** Bumped when a find appears in range: the shark gives one happy hop. */
@@ -875,6 +881,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     return { transform: [{ translateX: x }, { translateY: y }, { scale: 1 + 0.006 * m }] };
   });
 
+  // A ride island under the following shark (T011): measured on screen at the current zoom.
+  const sharkOnIsland = underShark && location && focusedOnPlayer
+    && islandUnderShark(glideMeters(location, underShark), pointsPerMeter(cameraZoom, location.latitude)) ? underShark : null;
+
   return (
     <MapAliveProvider value={alive}>
     {/* The Fin-ister layers read the map's bearing through the heading context (FrightBearing). */}
@@ -1155,15 +1165,42 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             {sharkArt(overlayStyles, overlayLive, focusedOnPlayer, true)}
             <SharkSparkles burst={sparkleBurst} />
             <TrailBoxBadge trail={trailHidden || !SHARK_TRAIL_BADGE ? null : liveTrail} live={lifeOn} />
-            {/* Tap your shark: it hops, twirls and shows off what it is wearing. */}
-            <Pressable style={styles.sharkTap} onPress={onSharkTap} disabled={!focusedOnPlayer}
-              accessibilityRole="button" accessibilityLabel="Your shark. Tap to say hi." />
+            {/* Tap your shark: it hops, twirls and shows off what it is wearing. Standing on a ride island, the tap
+                goes to that ride's coin instead (its island is hidden under the shark, T011). */}
+            <Pressable style={styles.sharkTap} onPress={sharkOnIsland ? sharkOnIsland.onPress : onSharkTap} disabled={!focusedOnPlayer}
+              accessibilityRole="button" accessibilityLabel={sharkOnIsland ? `${sharkOnIsland.label}. Show this ride's coin.` : 'Your shark. Tap to say hi.'} />
+            <UnderSharkChip island={sharkOnIsland} reducedMotion={reducedMotion} />
           </View>
         </View>
       )}
     </View>
     </FrightBearing>
     </MapAliveProvider>
+  );
+}
+
+/**
+ * The coin chip of the ride island the shark stands on (T011): it pops in beside the shark (a spring; a
+ * plain fade under Reduce Motion) and takes the tap. Always mounted; it only shows and hides.
+ */
+function UnderSharkChip({ island, reducedMotion }: { readonly island: UnderShark | null; readonly reducedMotion: boolean }) {
+  const shown = useSharedValue(island ? 1 : 0);
+  const last = useRef<UnderShark | null>(island);
+  if (island) last.current = island;
+  useEffect(() => {
+    const to = island ? 1 : 0;
+    shown.value = reducedMotion ? withTiming(to, { duration: 120 }) : island ? withSpring(1, { damping: 11, stiffness: 260 }) : withTiming(0, { duration: 140 });
+  }, [!!island, reducedMotion, shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  const style = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ scale: 0.6 + 0.4 * shown.value }] }));
+  const shownIsland = island ?? last.current;
+  return (
+    <Reanimated.View pointerEvents={island ? 'box-none' : 'none'} style={[chipStyles.underChip, style]}>
+      <Pressable onPress={() => island?.onPress()} hitSlop={8} accessibilityRole="button"
+        accessibilityLabel={shownIsland ? `${shownIsland.label}. Show this ride's coin.` : undefined}
+        style={({ pressed }) => [chipStyles.underChipDisc, pressed && chipStyles.underChipPressed]}>
+        {shownIsland && <Image source={shownIsland.coin} style={chipStyles.underChipCoin} contentFit="contain" />}
+      </Pressable>
+    </Reanimated.View>
   );
 }
 
@@ -1225,6 +1262,16 @@ function FrightBearing({ store, children }: { readonly store: BearingStore; read
   const value = useMemo(() => ({ ...control, heading: bearing, headingEnabled: true }), [control, bearing]);
   return <HeadingContext.Provider value={value}>{children}</HeadingContext.Provider>;
 }
+
+/** The coin chip beside the shark (T011). */
+const chipStyles = StyleSheet.create({
+  // Beside the shark's body, right of its fin (the island it stands on is hidden behind the shark).
+  underChip: { position: 'absolute', left: 80, top: 34, zIndex: 3 },
+  underChipDisc: { width: 46, height: 46, borderRadius: 23, borderWidth: 3, borderColor: BRAND.white, backgroundColor: BRAND.blue,
+    alignItems: 'center', justifyContent: 'center', ...SHADOW.card },
+  underChipPressed: { transform: [{ scale: 0.94 }] },
+  underChipCoin: { width: 36, height: 36 },
+});
 
 const styles = StyleSheet.create({
   // The compass on the right, the extra buttons in their own column to its left (short phones).
@@ -1380,3 +1427,4 @@ function useSharkStyles(live: SharedValue<number>, m: SharkMotion) {
   });
   return { shark, shadow, glow, weakRing };
 }
+

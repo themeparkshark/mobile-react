@@ -167,7 +167,8 @@ test('every map marker pins its overflow extents (envelope), so iOS never re-pla
   // The water ambience marker keeps one box size whether or not it draws.
   const task = read('src/screens/ExploreScreen/TaskMarker.tsx');
   assert.match(task, /<View style=\{styles\.waterBox\}>/);
-  assert.match(task, /waterBox: \{ width: 110, height: 70 \}/);
+  assert.match(task, /const WATER_BOX = \{ width: 110, height: 70 \} as const;/);
+  assert.match(task, /waterBox: WATER_BOX,/);
   // Every chip, the selected card and the arrival burst fit inside the envelope (read from the source).
   const ENVELOPE = Number(/export const ENVELOPE = (\d+);/.exec(marker)[1]);
   const L = require('./helpers/ts-module.cjs').loadTs('src/screens/ExploreScreen/parkMapLayout.ts');

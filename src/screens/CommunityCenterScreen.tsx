@@ -11,7 +11,8 @@ import {
 import Modal from 'react-native-modal';
 import { Image } from 'expo-image';
 import { Video, ResizeMode, Audio } from 'expo-av';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
+import useLivePoll from '../hooks/useLivePoll';
 
 // Sound assets
 const SOUNDS = {
@@ -393,15 +394,10 @@ export default function CommunityCenterScreen() {
   // Track previous gift count to detect new arrivals
   const prevGiftCount = useRef(0);
   
-  // Auto-refresh every 15 seconds to catch new gifts from other players
-  useEffect(() => {
-    const refreshInterval = setInterval(async () => {
-      const prevCount = center?.available_gifts ?? 0;
-      await fetchCenter();
-    }, 15000);
-    
-    return () => clearInterval(refreshInterval);
-  }, [fetchCenter, center?.available_gifts]);
+  // Every 15 s to catch new gifts from other players, only while this screen is focused and the app is in
+  // front (T190: a bare interval kept polling behind other screens and in the background).
+  const screenFocused = useIsFocused();
+  useLivePoll(fetchCenter, 15000, { focused: screenFocused, immediate: false, key: parkId });
   
   // Notify when new gifts appear
   useEffect(() => {
