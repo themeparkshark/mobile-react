@@ -48,3 +48,112 @@ test('T153: real-money coin packs say gear only, and the grown-up box names Myst
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx').replace(/\/\/.*$/gm, '');
   assert.doesNotMatch(shop, /boxesLine|Mystery Pin Boxes\. Odds/, 'no box math or box note on Supplies coin packs');
 });
+
+const P = (id, section, grants, extra = {}) => ({ product_id: `com.themeparkshark.app.${id}`, section, grants, available: true, title: id, badge: null, limit: null, deal_key: null, unavailable_reason: null, ...extra });
+const CATALOG = [
+  P('pack.starter', 'featured', { tickets: 15, coins: 1500, energy: 150, rescue_passes: 2 }, { limit: 'once', title: 'Starter Pack' }),
+  P('deal.daily', 'featured', { tickets: 9 }, { limit: 'daily', deal_key: 'ticket_stack', title: 'Ticket Stack' }),
+  P('pack.parkday', 'featured', { tickets: 20, coins: 500, energy: 200, rescue_passes: 2 }, { limit: 'daily', title: 'Park Day Pack' }),
+  P('pack.parktrip', 'featured', { tickets: 60, coins: 1500, energy: 400, rescue_passes: 6 }, { title: 'Park Trip Pack' }),
+  P('tickets.5', 'tickets', { tickets: 5 }), P('tickets.12', 'tickets', { tickets: 12 }), P('tickets.25', 'tickets', { tickets: 25 }, { badge: 'Best value' }),
+  P('coins.500', 'coins', { coins: 500 }), P('coins.1200', 'coins', { coins: 1200 }), P('coins.3250', 'coins', { coins: 3250 }),
+  P('rescue.3', 'rescue', { rescue_passes: 3 }),
+];
+const USD = { 'pack.starter': 1.99, 'deal.daily': 0.99, 'pack.parkday': 2.99, 'pack.parktrip': 5.99, 'tickets.5': 0.99, 'tickets.12': 1.99, 'tickets.25': 3.99,
+  'coins.500': 0.99, 'coins.1200': 1.99, 'coins.3250': 4.99, 'rescue.3': 0.99 };
+const PRICES = Object.fromEntries(Object.entries(USD).map(([k, v]) => [`com.themeparkshark.app.${k}`, { price: `$${v.toFixed(2)}`, amount: v }]));
+const ids = list => list.map(p => p.product_id.replace('com.themeparkshark.app.', ''));
+const planModule = () => loadTs('src/services/money/suppliesPlan.ts');
+const plan = (over = {}) => plain(planModule().planSupplies({ products: CATALOG, prices: PRICES, focus: null, wallet: { tickets: 3 }, priced: () => true, ...over }));
+const boughtStarter = () => CATALOG.map(x => (x.limit === 'once' ? { ...x, available: false } : x));
+
+test('T155/T221: first look is the Starter Pack, one Ticket row and VIP; the rest waits under More', () => {
+  const p = plan();
+  assert.equal(p.handoff, null, 'no door focus: no hand-off card');
+  assert.equal(p.hero.kind, 'starter');
+  assert.deepEqual(ids([p.hero.product]), ['pack.starter']);
+  assert.deepEqual(ids(p.ticketRow), ['deal.daily', 'tickets.5', 'tickets.12'], 'one row of at most 3');
+  assert.deepEqual(ids(p.more.bundles), ['pack.parkday', 'pack.parktrip']);
+  assert.deepEqual(p.more.packs.map(s => [s.key, ids(s.packs)]), [['tickets', ['tickets.25']], ['coins', ['coins.500', 'coins.1200', 'coins.3250']], ['rescue', ['rescue.3']]]);
+  assert.ok(1 + p.ticketRow.length <= 4, 'a first look holds 4 price points, not 13');
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  assert.doesNotMatch(shop, /scrollTo\(|onSection\(/, 'Supplies never opens scrolled to a section');
+  const render = shop.slice(shop.indexOf('<ScrollView ref={scroll}'));
+  assert.ok(render.indexOf('st.realMoney') < render.indexOf('<BundleCard product={plan.hero.product}'), 'the hero sits right under the real-money pill');
+  assert.ok(render.indexOf('<VipCard') < render.indexOf('<MoreFold'), 'VIP before More');
+  assert.ok(render.indexOf('<MoreFold') < render.indexOf('<SharkPassDoor'), 'the rest under More');
+});
+
+test('T154: the out-of-Tickets door opens on a hand-off card (smallest Ticket pack plus the free way), then the featured shelf', () => {
+  const m = planModule();
+  const p = plan({ focus: 'tickets', wallet: { tickets: 0 } });
+  assert.equal(p.handoff.need, 'tickets');
+  assert.equal(p.handoff.out, true);
+  assert.deepEqual(ids([p.handoff.pack]), ['tickets.5']);
+  assert.equal(m.handoffHead('tickets', true), 'Your shark is out of Tickets');
+  assert.equal(m.handoffHead('tickets', false), 'Need more Tickets?');
+  assert.equal(m.handoffFreeWay('tickets'), 'Or free: 3 treats at home = 1 Ticket');
+  assert.equal(p.hero.kind, 'starter', 'Starter Pack first while unbought');
+  assert.ok(!ids(p.ticketRow).includes('tickets.5'), 'the hand-off pack is not shown twice');
+  const after = plan({ products: boughtStarter(), focus: 'tickets', wallet: { tickets: 0 } });
+  assert.deepEqual(ids([after.hero.product]), ['pack.parkday'], 'after the Starter Pack, the out-of-Tickets door shows the Park Day Pack');
+  const coins = plan({ focus: 'coins', wallet: { coins: 10 } });
+  assert.equal(coins.handoff.need, 'coins');
+  assert.deepEqual(ids([coins.handoff.pack]), ['coins.500']);
+});
+
+test('T168: after the Starter Pack, the Park Trip Pack is "Your next pack" (no timer, no discount)', () => {
+  const p = plan({ products: boughtStarter() });
+  assert.equal(p.hero.kind, 'next');
+  assert.deepEqual(ids([p.hero.product]), ['pack.parktrip']);
+  assert.ok(!ids(p.more.bundles).includes('pack.starter'), 'a bought Starter Pack is never a dead card');
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  assert.match(shop, /band: `YOUR NEXT PACK · \$\{product\.title\.toUpperCase\(\)\}`/);
+  const look = shop.slice(shop.indexOf('function heroLook'), shop.indexOf('function heroLook') + 600);
+  assert.doesNotMatch(look, /OFF|SAVE|ENDS|LEFT|HURRY/);
+});
+
+test('T170: "Best Ticket deal today" only on days it is true, computed from prices', () => {
+  const m = planModule();
+  // The Park Trip Pack gives 60 Tickets for $5.99 (10 a dollar), so 9 for $0.99 is not the best that day.
+  assert.equal(m.bestTicketDeal(CATALOG, PRICES), null, 'never claimed while a bigger pack gives more Tickets per dollar');
+  const noTrip = CATALOG.filter(x => !x.product_id.endsWith('parktrip'));
+  assert.equal(m.bestTicketDeal(noTrip, PRICES), 'com.themeparkshark.app.deal.daily', '9 for $0.99 beats every other Ticket rate');
+  const coinDeal = CATALOG.map(x => (x.deal_key ? { ...x, grants: { coins: 1000 }, deal_key: 'coin_chest' } : x));
+  assert.equal(m.bestTicketDeal(coinDeal, PRICES), null, 'a coin deal is never a Ticket deal');
+  const weak = CATALOG.map(x => (x.deal_key ? { ...x, grants: { tickets: 4 } } : x));
+  assert.equal(m.bestTicketDeal(weak, PRICES), null, '4 for $0.99 loses to 25 for $3.99');
+  const mixed = CATALOG.map(x => (x.deal_key ? { ...x, grants: { tickets: 5, coins: 400 } } : x));
+  assert.equal(m.bestTicketDeal(mixed, PRICES), null);
+  assert.ok(!ids(plan({ products: mixed }).ticketRow).includes('deal.daily'), 'a mixed deal waits under More');
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  assert.match(shop, /plan\.bestTicketDeal === p\.product_id \? 'BEST TICKET DEAL TODAY' : 'TODAY’S PICK'/);
+});
+
+test('T169: "Check again" re-runs the unfinished-purchase replay and says what happened', () => {
+  const src = read('src/services/purchases.ts');
+  assert.match(src, /export async function replayShopPurchases\(\)/);
+  assert.match(src, /getAvailablePurchases\(\{ onlyIncludeActiveItems: true \}\)\)\s*\.filter\(p => isShopProduct\(p\.productId\) && !!jwsOf\(p\)\)/);
+  assert.match(src, /await deliverShop\(store, purchase\)/, 'the same delivery path as launch');
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  assert.match(shop, /replayShopPurchases\(\)/);
+  assert.match(shop, /\{canBuy && <MissingPurchaseRow \/>\}/);
+  assert.match(shop, /'Bought something that did not show up\? Check again'/);
+});
+
+test('T218: extra tries wear their own life-ring picture in every chip', () => {
+  const ui = read('src/components/money/moneyUi.tsx');
+  assert.match(ui, /if \(kind === 'rescue_passes'\) \{\s*return <Image source=\{ART\.rescue\}/);
+  assert.doesNotMatch(ui.slice(ui.indexOf('export function Contents')), /<GameIcon name=\{CURRENCY_ICON\[k\]\}/, 'Contents uses CurrencyPicture');
+  assert.match(read('src/screens/StoreScreen/SuppliesShop.tsx'), /<CurrencyPicture kind=\{w\.key\} size=\{22\} \/>/);
+});
+
+test('T163: the Starter Pack card shows the player\'s own shark in the Starter Frame', () => {
+  const card = read('src/components/money/BundleCard.tsx');
+  assert.match(card, /<MemberFlex inventory=\{player\?\.inventory as InventoryType \| undefined\} frame=\{product\.frame\.key\}/);
+  assert.doesNotMatch(card, /width: 30, height: 30/, 'not a tiny ring');
+});
+
+test('T240: the single-packs sum is for the Starter Pack only', () => {
+  assert.match(read('src/services/money/supplies.ts'), /if \(!catalog \|\| product\.limit !== 'once'\) return null;/);
+});

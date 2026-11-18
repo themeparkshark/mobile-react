@@ -8,8 +8,11 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import type { ShopProduct } from '../../api/endpoints/me/shop';
 import type { BundleWorth } from '../../services/money/offers';
-import { Image } from 'expo-image';
+import { useContext } from 'react';
+import { AuthContext } from '../../context/AuthProvider';
+import type { InventoryType } from '../../models/inventory-type';
 import { frameArt } from './frames';
+import MemberFlex from './MemberFlex';
 import WishHeart from './WishHeart';
 import { Band, Contents, MAX_FONT, PackArt, PriceBar, ShopCard, type PackArtKey } from './moneyUi';
 import { FONT } from '../../ui';
@@ -20,6 +23,7 @@ export default function BundleCard({ product, price, busy, disabled, onBuy, band
   worth?: BundleWorth | null; busy: boolean; disabled: boolean; onBuy: () => void;
   band?: string; art?: PackArtKey; compact?: boolean;
 }) {
+  const { player } = useContext(AuthContext);
   return (
     <Animated.View entering={FadeInUp.delay(60).springify().damping(15)} style={{ alignSelf: 'stretch' }}>
       <ShopCard onPress={onBuy} disabled={disabled || !price} glow
@@ -30,10 +34,11 @@ export default function BundleCard({ product, price, busy, disabled, onBuy, band
           <View style={{ flex: 1, gap: 6 }}>
             <Contents grants={product.grants} size="tight" />
             {product.frame && frameArt(product.frame.key) && (
-              // Only this pack has it: its own look, a profile frame kept for good.
-              <View style={st.frameRow}>
-                <Image source={frameArt(product.frame.key)!} style={{ width: 30, height: 30 }} contentFit="contain" />
-                <Text maxFontSizeMultiplier={MAX_FONT} style={st.kid} numberOfLines={1}>{`Plus the ${product.frame.name}`}</Text>
+              // Only this pack has it: the player's own shark wearing the frame (T163), kept for good.
+              <View style={st.frameRow} accessible accessibilityLabel={`Plus the ${product.frame.name}, shown on your shark.`}>
+                <MemberFlex inventory={player?.inventory as InventoryType | undefined} frame={product.frame.key}
+                  size={compact ? 50 : 66} still />
+                <Text maxFontSizeMultiplier={MAX_FONT} style={st.kid} numberOfLines={2}>{`Plus the ${product.frame.name} for your shark`}</Text>
               </View>
             )}
           </View>
@@ -50,5 +55,5 @@ const st = StyleSheet.create({
   art: { width: 150, height: 140, alignItems: 'center', justifyContent: 'center' },
   artCompact: { width: 92, height: 88 },
   frameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  kid: { fontFamily: FONT.display, fontSize: 15, color: '#e2f6ff' },
+  kid: { flex: 1, fontFamily: FONT.display, fontSize: 15, color: '#e2f6ff' },
 });

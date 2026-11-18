@@ -88,6 +88,17 @@ export function currencyIcon(kind: keyof ShopGrants): GameIconName {
   return CURRENCY_ICON[kind];
 }
 
+/**
+ * The picture for one thing a pack holds. Extra tries wear Alex's own life-ring picture (the same one
+ * as their pack, fix round w3 T218), never the generic retry arrow, so they have one picture everywhere.
+ */
+export function CurrencyPicture({ kind, size }: { kind: keyof ShopGrants; size: number }) {
+  if (kind === 'rescue_passes') {
+    return <Image source={ART.rescue} style={{ width: size * 1.15, height: size * 1.15, marginVertical: -size * 0.075 }} contentFit="contain" />;
+  }
+  return <GameIcon name={CURRENCY_ICON[kind]} size={size} />;
+}
+
 /** Alex's card: blue gradient, white rim, navy lip; press sinks into the lip. */
 export function ShopCard({ children, onPress, disabled, style, accessibilityLabel, glow, fill }: {
   children: ReactNode; onPress?: () => void; disabled?: boolean; style?: StyleProp<ViewStyle>; accessibilityLabel?: string;
@@ -156,7 +167,7 @@ export function Contents({ grants, size = 'big', tone = 'onBlue' }: { grants: Sh
       <View style={s.tightGrid}>
         {ORDER.filter(k => (grants[k] ?? 0) > 0).map(k => (
           <View key={k} style={s.tightChip} accessible accessibilityLabel={`${grants[k]} ${unitWord(k, grants[k] ?? 0)}`}>
-            <GameIcon name={CURRENCY_ICON[k]} size={20} />
+            <CurrencyPicture kind={k} size={20} />
             <Text maxFontSizeMultiplier={MAX_FONT} style={s.tightText}>{countText(grants[k] ?? 0)}</Text>
           </View>
         ))}
@@ -167,9 +178,9 @@ export function Contents({ grants, size = 'big', tone = 'onBlue' }: { grants: Sh
     <View style={s.contents}>
       {ORDER.filter(k => (grants[k] ?? 0) > 0).map(k => (
         <View key={k} style={[s.chip, tone === 'onLight' && s.chipLight]}>
-          <GameIcon name={CURRENCY_ICON[k]} size={size === 'big' ? 22 : 18} />
+          <CurrencyPicture kind={k} size={size === 'big' ? 22 : 18} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={[s.chipText, size === 'small' && s.chipTextSmall, tone === 'onLight' && s.chipTextLight]}>
-            {countText(grants[k] ?? 0)} {k === 'rescue_passes' ? unitWord(k, grants[k] ?? 0) : unitWord(k, grants[k] ?? 0)}
+            {countText(grants[k] ?? 0)} {unitWord(k, grants[k] ?? 0)}
           </Text>
         </View>
       ))}

@@ -113,8 +113,10 @@ test('Supplies: free Ticket ways come before any pack; the line Ticket only whil
   assert.ok(freeTicketWays(true).some(way => /first wait at a ride earns a Ticket/.test(way.text)));
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
   const render = shop.slice(shop.indexOf('<ScrollView ref={scroll}'));
-  assert.ok(render.indexOf('>FREE TICKETS<') > 0 && render.indexOf('>FREE TICKETS<') < render.indexOf("onSection('featured')"),
-    'the free ways sit above the packs');
+  // The free ways sit above every price (T155: folded to one line with See all).
+  assert.ok(render.indexOf('<FreeTicketsLine') > 0 && render.indexOf('<FreeTicketsLine') < render.indexOf('<HandoffCard')
+    && render.indexOf('<FreeTicketsLine') < render.indexOf('<BundleCard'), 'the free ways sit above the packs');
+  assert.match(shop, />FREE TICKETS</);
 });
 
 test('Supplies: every purchase door is listed whenever its switch is on, regardless of rung (App Review path)', () => {
@@ -134,7 +136,7 @@ test('Supplies: every purchase door is listed whenever its switch is on, regardl
   // One word per thing: held passes are Extra tries; the Park Day Pack has its own heading; worth only at the gate.
   assert.match(shop, /key === 'rescue' \? 'Extra tries'/);
   assert.match(shop, /'EXTRA TRY' : 'EXTRA TRIES'/);
-  assert.match(shop, />Park day</);
+  assert.match(shop, /ONE A DAY/, 'the Park Day Pack says it is one a day');
   assert.doesNotMatch(read('src/components/money/BundleCard.tsx'), /\bWorth \$|worth\.worth\}/, 'Worth $X lives only in the grown-up sheet');
   assert.match(read('src/services/money/supplies.ts'), /rescue_passes: \['extra try', 'extra tries'\]/);
 });
