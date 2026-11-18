@@ -22,5 +22,8 @@ test('lane slow server: a no-op outside lane bundles; in a lane bundle the answe
   L.setLaneDelay({ ms: 30000 });
   await assert.rejects(lane({ url: '/me', timeout: 8000 }), err => err.code === 'ECONNABORTED');
   assert.deepEqual(waits, [5000, 8000], 'a 30 s answer times out at the call timeout');
+  L.setLaneDelay({ ms: 9000, match: '/me$', method: 'put' });
+  assert.equal((await lane({ url: '/me', method: 'get', timeout: 8000 })).status, 200, 'a GET is on time when only PUT is slow');
+  await assert.rejects(lane({ url: '/me', method: 'put', timeout: 8000 }));
   L.setLaneDelay(undefined);
 });

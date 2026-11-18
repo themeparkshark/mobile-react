@@ -8,15 +8,15 @@
  * EXPO_PUBLIC_STUDIO_MUTE=1 at bundle time (lane.sh always does; store and OTA bundles never do), and it
  * is off until a delay is asked for, either at bundle time (EXPO_PUBLIC_LANE_DELAY_MS, with an optional
  * EXPO_PUBLIC_LANE_DELAY_MATCH regex on the URL) or in dev JS over the debugger:
- *   globalThis.__tpsLaneDelay = { ms: 5000, match: 'feature-flags|/me$' }   // null turns it off
+ *   globalThis.__tpsLaneDelay = { ms: 5000, match: 'feature-flags|/me$', method: 'put' }   // null turns it off
  */
 // (typeof guards: plain test loaders have no process; Metro inlines each EXPO_PUBLIC_ value at bundle time.)
 const LANE_BUNDLE = typeof process !== 'undefined' && process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
 const ENV_MS = typeof process !== 'undefined' ? Number(process.env.EXPO_PUBLIC_LANE_DELAY_MS ?? 0) : 0;
 const ENV_MATCH = typeof process !== 'undefined' ? process.env.EXPO_PUBLIC_LANE_DELAY_MATCH ?? '' : '';
 
-type Rule = { readonly ms: number; readonly match?: string | null };
-type DelayConfig = { url?: string; timeout?: number };
+type Rule = { readonly ms: number; readonly match?: string | null; readonly method?: string | null };
+type DelayConfig = { url?: string; timeout?: number; method?: string };
 type Adapter<C, R> = (config: C) => Promise<R>;
 
 let override: Rule | null | undefined;
@@ -30,10 +30,11 @@ function rule(): Rule | null {
 }
 
 /** How late this call's answer comes back (0: on time). Always 0 outside a lane bundle. */
-export function laneDelayMs(url: string | undefined, lane: boolean = LANE_BUNDLE): number {
+export function laneDelayMs(url: string | undefined, lane: boolean = LANE_BUNDLE, method?: string): number {
   if (!lane) return 0;
   const r = rule();
   if (!r) return 0;
+  if (r.method && (method ?? 'get').toLowerCase() !== r.method.toLowerCase()) return 0;
   if (r.match) {
     try { if (!new RegExp(r.match).test(url ?? '')) return 0; } catch { return 0; }
   }
@@ -48,7 +49,7 @@ export function withLaneDelay<C extends DelayConfig, R>(adapter: Adapter<C, R>, 
   lane: boolean = LANE_BUNDLE, wait: (ms: number) => Promise<unknown> = ms => new Promise(resolve => setTimeout(resolve, ms))): Adapter<C, R> {
   if (!lane) return adapter;
   return async function laneDelayedAdapter(config: C): Promise<R> {
-    const ms = laneDelayMs(config.url, lane);
+    const ms = laneDelayMs(config.url, lane, config.method);
     if (!ms) return adapter(config);
     const timeout = config.timeout ?? 0;
     // The server gets the request now and does its work; only its answer is late.
