@@ -68,7 +68,8 @@ test('results: ribbon on the first frame, card rises, visible PERFECT burst, kid
   assert.match(src, /data\.banner === 'PERFECT!' && !reducedMotion \? <CoinBurst fire \/>/);
   assert.match(src, /'MEMORY'\}/);
   assert.doesNotMatch(src, /EDITION\$\{/);
-  assert.match(game, /`\+\$\{xp\} XP`/);
+  assert.match(game, /deckProgressLine\(deck\.label, xp\)/, 'deck progress never says XP (T064)');
+  assert.doesNotMatch(game, /`\+\$\{xp\} XP`/);
 });
 
 test('round 3 timing: the card lands with a hit, the family ribbon slams after the last star, upward burst, results saved while the coin flies', () => {
