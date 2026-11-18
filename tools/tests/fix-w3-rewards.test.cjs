@@ -100,3 +100,15 @@ test('T092: an opened chest reads Done in Daily 3 and GO never leads to a map wi
   assert.doesNotMatch(hook, /else closeThen\(\(\) => \{ askForDailyChest\(\); o\.onOpenChest\(\); \}\);/);
   assert.match(hook, /return !!gift\?\.redeemed_at && !!gift\.gift_date && gift\.gift_date\.slice\(0, 10\) === date;/, 'only today\'s chest counts');
 });
+
+test('T111: after the treat cards on this open, the daily chest waits for this visit\'s first catch (even with old catches)', () => {
+  const q = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
+  // A player the server remembers (2 old catches), on a new install: not a "first visit" by the server's count.
+  const back = { firstVisit: false, catchesThisVisit: 0, huntStartedAt: null, now: 1000 };
+  assert.equal(q.firstVisitChestWaits(back), false, 'without the intro this open, a returning player gets the chest');
+  assert.equal(q.firstVisitChestWaits({ ...back, introThisOpen: true }), true, 'the intro just played: the chest waits');
+  assert.equal(q.firstVisitChestWaits({ ...back, introThisOpen: true, catchesThisVisit: 1 }), false, 'the first catch lets it come');
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /if \(\(homeIntroOwed \|\| homeIntroOpen\) && !park\) introThisOpen\.current = true;/);
+  assert.match(explore, /introThisOpen: introThisOpen\.current && !park,/);
+});
