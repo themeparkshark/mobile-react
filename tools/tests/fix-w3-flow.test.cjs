@@ -216,3 +216,15 @@ test('T143 on NEXT COIN the won coin arcs to the Shelf button', () => {
   assert.deepEqual([...win.WIN_FLY_ROUTES.coinToShelf], ['energy']);
   assert.match(read('src/components/PostWinRewardsModal.tsx'), /triggerFly\(\{ imageUrl: taskCoinUrl, amount: 1, startX: x, startY: SH \* 0\.3, targetPosition: shelf \}\)/);
 });
+
+/* T067 and T069. */
+test('T067 the boss sheet names the Energy cost once (the FIGHT! pill); the line under it says what is left', () => {
+  const join = loadTs('src/components/boss/joinModel.ts', {}, {});
+  assert.equal(join.afterWords({ energyAfter: 110 }), "You'll have 110 Energy left");
+  const card = read('src/components/boss/BossJoinCard.tsx');
+  assert.match(card, /maxFontSizeMultiplier=\{1\.3\}>\{afterWords\(cost\)\}<\/Text>/);
+});
+test('T069 the unlock picture answers a tap with what it unlocks', () => {
+  assert.match(read('src/gamekit/results/UnlockTile.tsx'), /\{told && detail \? <Text style=\{styles\.caption\} numberOfLines=\{2\}>\{detail\}<\/Text>/);
+  assert.match(read('src/games/sharky/hud/SharkyUnlock.tsx'), /'PRIZE BOXES': 'Prize boxes now float in your swims\. Grab them!'/);
+});

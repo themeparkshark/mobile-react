@@ -25,7 +25,7 @@ import countText from '../../helpers/countText';
 /** Hand-drawn house (Codex, Alex style): playing from home. */
 const HOUSE = require('../../assets/games/boss/bash/house.webp');
 import { BossHpBar } from './BossSheetParts';
-import { costWords, joinCost, joinLabel, minutesLeft, type RewardPreview } from './joinModel';
+import { afterWords, costWords, joinCost, joinLabel, minutesLeft, type RewardPreview } from './joinModel';
 
 export function Wallet({ energy, tickets, showTickets, short }: {
   energy: number; tickets: number; showTickets: boolean; short: 'energy' | 'ticket' | null;
@@ -201,7 +201,7 @@ export function BossJoinCta({ raid, remote, inPark = false, energy, tickets, blo
       </>
       : blocked ? <Text style={styles.blocked} maxFontSizeMultiplier={1.3}>{blocked}</Text>
         : <View style={styles.afterRow} accessible accessibilityLabel={`${costWords(cost).replace(' \u00b7 ', '. ').replace(' + ', ' and ').replace(' left', ' Energy left')}.${remote && raid.remote.joined ? ' Your Ticket is paid.' : ''} Attack ${raid.you.attacks + 1} of ${raid.max_attacks ?? 5}.`}>
-          <Text style={styles.after} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.3}>{costWords(cost)}</Text>
+          <Text style={styles.after} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.3}>{afterWords(cost)}</Text>
           {(raid.you.attacks > 0 || (remote && raid.remote.joined)) && <Text style={styles.after} maxFontSizeMultiplier={1.3}>
             {[remote && raid.remote.joined ? 'Ticket paid' : '', raid.you.attacks > 0 ? `Attack ${raid.you.attacks + 1} of ${raid.max_attacks ?? 5}` : ''].filter(Boolean).join('  \u00b7  ')}</Text>}
         </View>}

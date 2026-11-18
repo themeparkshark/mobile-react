@@ -548,7 +548,9 @@ test('Parade Beat is the rhythm game\'s one name; Home Defend has its own title 
   assert.match(whack, /const callout = playerCallout\(t\.callout\);/);
   const unlock = read('src/gamekit/results/UnlockTile.tsx');
   assert.match(unlock, /tileFlat: \{ backgroundColor: 'transparent', borderWidth: 0 \}/);
-  assert.match(unlock, /accessibilityRole="text"/);
+  // Fix W3 T069: with a detail line the picture answers a tap (it says what it unlocks); without one it is plain text.
+  assert.match(unlock, /accessibilityRole=\{detail \? 'button' : 'text'\}/);
+  assert.match(read('src/games/sharky/hud/SharkyUnlock.tsx'), /detail=\{UNLOCK_DETAIL\[unlockName\(card\)\.toUpperCase\(\)\]\}/);
   assert.match(read('src/games/sharky/hud/SharkyUnlock.tsx'), /caption=\{`\$\{unlockName\(card\)\} unlocked`\}/);
 });
 

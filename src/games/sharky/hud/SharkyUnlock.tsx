@@ -18,6 +18,14 @@ const UNLOCK_ART: Record<string, number> = {
   'POWER-UPS': SHARKY_ART.sparkle,
 };
 
+/** What each unlock does, said when a kid taps its picture (fix W3 T069). */
+export const UNLOCK_DETAIL: Record<string, string> = {
+  'PRIZE BOXES': 'Prize boxes now float in your swims. Grab them!',
+  OVERDRIVE: 'Fill the bar, then zoom!',
+  'RALLY YOUR CREW': 'Your crew cheers you on.',
+  'POWER-UPS': 'Grab sparkles for a super swim.',
+};
+
 /** "NEW: Prize Boxes" -> "Prize Boxes" (the words are only spoken). */
 export function unlockName(card: string): string {
   return card.replace(/^NEW:\s*/i, '').trim();
@@ -31,6 +39,6 @@ export function unlockArt(card: string): number {
 export function SharkyUnlock({ card, atMs, reducedMotion }: { card: string; atMs: number; reducedMotion: boolean }) {
   return (
     <UnlockTile source={unlockArt(card)} label={`New unlocked: ${unlockName(card).toLowerCase()}`} atMs={atMs} reducedMotion={reducedMotion}
-      caption={`${unlockName(card)} unlocked`} />
+      caption={`${unlockName(card)} unlocked`} detail={UNLOCK_DETAIL[unlockName(card).toUpperCase()]} />
   );
 }
