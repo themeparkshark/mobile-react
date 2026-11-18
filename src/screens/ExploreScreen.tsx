@@ -43,7 +43,8 @@ import useAdventureStampMoment from './ExploreScreen/useAdventureStampMoment';
 import { resolveMapQueueContext, resolveQueueStoryContext } from '../services/lineplay/resolveRide';
 import type { RideContext } from '../services/lineplay/LinePlaySession';
 import currentRedeemable from '../api/endpoints/me/current-redeemable';
-import { createRangeChecker, playAnswerNear, selectionStale } from '../components/guide/playRangeCheck';
+import { createRangeChecker, playAnswerNear, provisionalPlay, selectionStale } from '../components/guide/playRangeCheck';
+import { coinArtCache } from '../components/guide/coinArtCache';
 import ParkMapRetryCard, { useParkMapRetry } from './ExploreScreen/ParkMapRetry';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
@@ -362,8 +363,8 @@ export function ExploreScreenBody() {
   const { refreshPlayer, player } = useContext(AuthContext);
   const { parkLoaded, parkLookupRecord, location, park, permissionGranted, permissionChecked, latestLocationSampleRef, moveDevLocation } =
     useContext(LocationContext);
-  const activeRedeemable = useMemo(() => (playAnswerNear(rangeAnswer, location) ? rangeAnswer : undefined),
-    [rangeAnswer, location?.latitude, location?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Where the server's last range answer was asked from (the provisional PLAY! below never overrules it there).
+  const [rangeAskedAt, setRangeAskedAt] = useState<{ latitude: number; longitude: number } | null>(null);
   // The anchor is the newest outside-park confirmation (kept through a failed
   // re-check), so walking past the 25 m re-check never blanks the home map.
   const homeAnchorRef = useRef<ParkLookupRecord | null>(null);
@@ -684,7 +685,7 @@ export function ExploreScreenBody() {
   const [bossOccluded, setBossOccluded] = useState(false);
   const bossMap = useBossMapMoment({ playerId: player?.id ?? null, parkId: park?.id ?? null, control: rideControl,
     refreshControl: refreshRideControl,
-    available: mapFocused && permissionGranted && !bossOpen && !bossOccluded && !isActive && !activeRedeemable &&
+    available: mapFocused && permissionGranted && !bossOpen && !bossOccluded && !isActive && !rangeAnswer &&
       !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !dailyGiftOccluded && !adventureOccluded });
   const raidActive = raid?.status === 'active';
   const { snapshot: bossRecovery } = useBossAttackRecovery({ playerId: player?.id ?? null, parkId: park?.id ?? null, onResult: () => undefined });
@@ -861,6 +862,17 @@ export function ExploreScreenBody() {
   const mapRetry = useParkMapRetry(mapLoadFailed && !!park && !!player, mapFocused, refreshMapOpportunities);
   const visibleTasks = useMemo(() => (redeemables?.tasks ?? [])
     .filter(task => opportunityIsActive(task, mapNow)), [redeemables?.tasks, mapNow]);
+  // PLAY! for the coin the player steps up to, on the GPS fix itself: the map knows every coin's spot and the redeem
+  // radius, so PLAY! never waits on a slow server; the server's answer replaces it when it lands (T009). The server's
+  // own answer always wins where it has answered, and it is trusted only while the player is still near its coin.
+  const provisionalTask = useMemo(() => provisionalPlay({ tasks: visibleTasks, here: location, askedAt: rangeAskedAt,
+    failed: failedTaskIds, tickets: player?.tickets ?? 0 }), [visibleTasks, location?.latitude, location?.longitude, rangeAskedAt, failedTaskIds, player?.tickets]); // eslint-disable-line react-hooks/exhaustive-deps
+  const activeRedeemable = useMemo<CurrentRedeemableType | undefined>(() => {
+    if (playAnswerNear(rangeAnswer, location)) return rangeAnswer;
+    if (!provisionalTask) return undefined;
+    return { type: 'task', provisional: true,
+      model: { ...provisionalTask, coin_url: provisionalTask.coin_url || coinArtCache.get(provisionalTask.id) || '' } } as unknown as CurrentRedeemableType;
+  }, [rangeAnswer, provisionalTask, location?.latitude, location?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Rides that open later today rest on the map with "Back 2:00 PM" instead of vanishing.
   const restingTasks = useMemo(() => (redeemables?.tasks ?? []).filter(task => {
@@ -1133,9 +1145,15 @@ export function ExploreScreenBody() {
   // second GPS reading): PLAY! rises within a request of stepping into range (fix round w3 T009, playRangeCheck.ts).
   const failedRef = useRef(failedTaskIds); failedRef.current = failedTaskIds;
   const rangeChecker = useMemo(() => createRangeChecker<CurrentRedeemableType | undefined>(
-    point => currentRedeemable(point.latitude, point.longitude),
-    redeemable => {
+    point => {
+      // Dev builds only: lane walks time PLAY! from the fix to the answer (never in a store bundle).
+      if (__DEV__) console.log(`[range] ask ${point.latitude.toFixed(6)},${point.longitude.toFixed(6)} t=${Date.now()}`);
+      return currentRedeemable(point.latitude, point.longitude);
+    },
+    (redeemable, point) => {
       setRangeChecked(true);
+      if (__DEV__) console.log(`[range] answer ${redeemable?.type ?? 'none'}:${redeemable?.model?.id ?? '-'} t=${Date.now()}`);
+      setRangeAskedAt(point);
       if (redeemable?.type === 'task' && failedRef.current.has(redeemable.model.id)) setActiveRedeemable(undefined);
       else setActiveRedeemable(redeemable ?? undefined);
     },
@@ -1143,6 +1161,7 @@ export function ExploreScreenBody() {
     () => setRangeChecked(true)), [mapContext]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => rangeChecker.cancel(), [rangeChecker]);
   useEffect(() => {
+    if (__DEV__ && location?.latitude) console.log(`[range] fix ${location.latitude.toFixed(6)},${location.longitude.toFixed(6)} t=${Date.now()}`);
     if (!mapFocused || !park || !location?.latitude || !location?.longitude || !redeemables) return;
     rangeChecker.request({ latitude: location.latitude, longitude: location.longitude });
   }, [mapFocused, park?.id, location?.latitude, location?.longitude, redeemables, failedTaskIds, rangeChecker]);

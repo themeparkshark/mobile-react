@@ -169,7 +169,7 @@ test('T009: the range check never drops an answer and always asks with the lates
   // The map uses its own watched position: no second Highest-accuracy GPS read per check.
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.doesNotMatch(explore, /checkForRedeemable/);
-  assert.match(explore, /createRangeChecker<CurrentRedeemableType \| undefined>\(\s*point => currentRedeemable\(point\.latitude, point\.longitude\)/);
+  assert.match(explore, /createRangeChecker<CurrentRedeemableType \| undefined>\(\s*point => \{[\s\S]{0,300}?return currentRedeemable\(point\.latitude, point\.longitude\);/);
   // Before the first answer PLAY! is down for the guide too: no "Tap PLAY!" with no PLAY!.
   assert.match(read('src/components/guide/useMapGuide.ts'), /playableTaskId: rangeChecked \? playableTaskId \?\? null : null,/);
   // A few steps out with PLAY! not up yet: "Almost there", never "5 m".
@@ -227,4 +227,18 @@ test('T016: PLAN plans: the shelf opens with the next coin picker on top, and th
   assert.match(read('src/screens/ExploreScreen.tsx'), /player: player\.id, plan: true \}\);/);
   assert.match(read('src/screens/ParkScreen.tsx'), /const storyTop = !planVisit && canChooseGoal/);
   assert.match(read('src/components/guide/NextCoinCard.tsx'), /wallet \|\| state === 'home' \? TICKET : COIN_FALLBACK/);
+});
+
+test('T009: PLAY! rises on the GPS fix for the coin the player stands at; the server\'s answer wins where it answered', () => {
+  const tasks = [{ id: 66, latitude: String(north(0).latitude), longitude: String(north(0).longitude), ticket_cost: 1 },
+    { id: 77, latitude: String(north(60).latitude), longitude: String(north(60).longitude), ticket_cost: 1 }];
+  const base = { tasks, askedAt: north(40), failed: new Set(), tickets: 2 };
+  assert.equal(R.provisionalPlay({ ...base, here: north(10) }).id, 66, 'inside 16 m: PLAY! now, no server wait');
+  assert.equal(R.provisionalPlay({ ...base, here: north(20) }), null, 'outside the radius: no PLAY!');
+  assert.equal(R.provisionalPlay({ ...base, here: north(10), askedAt: north(5) }), null, 'the server already said no from inside: it stands');
+  assert.equal(R.provisionalPlay({ ...base, here: north(10), failed: new Set([66]) }), null, 'a coin that failed today never rises');
+  assert.equal(R.provisionalPlay({ ...base, here: north(10), tickets: 0 }), null, 'short of Tickets: wait for the server (free try badges)');
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /if \(playAnswerNear\(rangeAnswer, location\)\) return rangeAnswer;/);
+  assert.match(read('src/components/RedeemModal.tsx'), /provisional\?: boolean \}\)\.provisional\) setOpenedRedeemable\(redeemable\)/);
 });

@@ -158,6 +158,7 @@ export default function RedeemModal({
   const shownChange = useRef(onShownChange); shownChange.current = onShownChange;
   useEffect(() => { shownChange.current?.(shown); }, [shown]);
   useEffect(() => () => shownChange.current?.(false), []);
+  useEffect(() => { if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[play] redeemable ${identity ?? 'none'} available=${available} t=${Date.now()}`); }, [identity, available]);
   // The pill unmounts when the ride stops being available: its next showing waits for its art again.
   useEffect(() => { if (!available) setPillReady(false); }, [available]);
   // The "you're in range" cue lands with the pill itself (never before the button is on screen).
@@ -167,6 +168,8 @@ export default function RedeemModal({
     if (pillShown && identity !== lastAnnounced.current) {
       lastAnnounced.current = identity;
       if (!studioMoment('coin.inRange')) void playSound(require('../../assets/sounds/in_redeem_zone.mp3'));
+      // Dev builds only: lane walks time PLAY! rising (never in a store bundle).
+      if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[play] up ${identity} t=${Date.now()}`);
     } else if (!available) {
       lastAnnounced.current = null;
     }
@@ -191,6 +194,13 @@ export default function RedeemModal({
       });
     });
   }, [playDrawn]);
+  // PLAY! rose on the GPS fix before the server's range answer (T009): once that answer lands for the same coin, the
+  // open card takes the server's fuller copy (free try fields, coin art), so it never plays on the quick copy.
+  useEffect(() => {
+    if (!openedRedeemable || !(openedRedeemable as { provisional?: boolean }).provisional || !redeemable) return;
+    if (redeemable.type === openedRedeemable.type && redeemable.model.id === openedRedeemable.model.id
+      && !(redeemable as { provisional?: boolean }).provisional) setOpenedRedeemable(redeemable);
+  }, [redeemable, openedRedeemable]);
   pressPlayRef.current = () => {
     pressNow();
     setOpenedRedeemable(redeemable ?? null);

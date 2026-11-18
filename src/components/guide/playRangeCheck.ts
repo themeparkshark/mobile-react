@@ -107,3 +107,37 @@ export function selectionStale(input: {
   if (!input.selectedFrom || !input.here) return false;
   return meters(input.selectedFrom, input.here) >= SELECTION_WALK_METERS;
 }
+
+/**
+ * PLAY! for the coin the player just stepped up to, before the server's range check answers (T009, the safety
+ * panel's "within 2 s"). The map already knows every coin's spot and the server's redeem radius (16 m), so the coin
+ * the player stands at is known on the GPS fix itself; the server's answer replaces it when it lands (and the coin
+ * card's snapshot with it), and the server still checks the spot when the game starts.
+ * Only a ride or sight coin on today's map, never one that failed today, never when the player is short of Tickets
+ * (the free try and extra try badges need the server's word), and never where the server already answered: a "no"
+ * from inside this coin's radius stands.
+ */
+export function provisionalPlay<T extends { readonly id: number; readonly latitude: unknown; readonly longitude: unknown;
+  readonly ticket_cost?: number | null }>(input: {
+  readonly tasks: readonly T[];
+  readonly here: RangePoint | null | undefined;
+  /** Where the server's last answer was asked from, or null before any answer. */
+  readonly askedAt: RangePoint | null;
+  readonly failed: ReadonlySet<number>;
+  readonly tickets: number;
+}): T | null {
+  const here = input.here;
+  if (!here || !Number.isFinite(here.latitude) || !Number.isFinite(here.longitude)) return null;
+  let best: T | null = null;
+  let bestM = Infinity;
+  for (const task of input.tasks) {
+    const spot = { latitude: Number(task.latitude), longitude: Number(task.longitude) };
+    if (!Number.isFinite(spot.latitude) || !Number.isFinite(spot.longitude) || input.failed.has(task.id)) continue;
+    const m = meters(here, spot);
+    if (m > PLAY_ANSWER_RADIUS_METERS || m >= bestM) continue;
+    if (input.askedAt && meters(input.askedAt, spot) <= PLAY_ANSWER_RADIUS_METERS) continue;
+    if ((input.tickets ?? 0) < Math.max(1, Number(task.ticket_cost ?? 1))) continue;
+    best = task; bestM = m;
+  }
+  return best;
+}

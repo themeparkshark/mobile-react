@@ -144,6 +144,7 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '../api/endpoints/me/current-redeemable': { default: async () => options.inRange ?? undefined },
     '../components/guide/playRangeCheck': playRangeCheck,
     './coinArtCache': coinArtCache,
+    '../components/guide/coinArtCache': coinArtCache,
     '../services/lineplay/resolveRide': { resolveMapQueueContext: async () => options.queueRide ?? null },
     '../services/rideLandmark': { rideLook: () => ({ ambience: [] }) },
     '../helpers/currency-balance': { default: () => 0 },

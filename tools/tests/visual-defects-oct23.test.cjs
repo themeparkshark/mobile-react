@@ -1522,7 +1522,7 @@ test('wave 5 round 3: the islands that hold the cover are the ten nearest (ranks
 test('wave 5 round 3: the loading cover waits (within its cap) for the first in-range check, so PLAY RIDE is on the first map frame', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /useCoverArt\(!!park && !!player && !!redeemables && !!location\?\.latitude && !rangeChecked\);/);
-  assert.match(explore, /redeemable => \{\s*setRangeChecked\(true\);/);
+  assert.match(explore, /\(redeemable, point\) => \{\s*setRangeChecked\(true\);/);
 });
 
 test('wave 5 round 3: the slow-tile sheet has no shark of its own (the player shark stands at the middle already)', () => {
