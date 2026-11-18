@@ -1,4 +1,4 @@
-import getFeatureFlags from '../../api/endpoints/platform/feature-flags';
+import getFeatureFlags, { onFeatureFlags, type FeatureFlagsPayload } from '../../api/endpoints/platform/feature-flags';
 
 /**
  * Retention switches from GET /feature-flags, read once per app run. Absent
@@ -19,14 +19,31 @@ export function flagOn(flags: RetentionFlags | null | undefined, name: string): 
 
 let cached: RetentionFlags | null = null;
 let pending: Promise<RetentionFlags | null> | null = null;
+const listeners = new Set<(flags: RetentionFlags) => void>();
 
-/** Null when the read failed (offline, slow server): the caller tries again on the next focus. */
+function fromPayload(payload: Pick<FeatureFlagsPayload, 'flags'>): RetentionFlags {
+  const all: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(payload.flags ?? {})) if (typeof v === 'boolean') all[k] = v;
+  return { dailyThree: payload.flags?.daily_three === true, levelChests: payload.flags?.level_chests === true, all };
+}
+
+// T095: a retry after a slow first read (or a focus refresh) updates every reader in place.
+onFeatureFlags?.(payload => {
+  cached = fromPayload(payload);
+  listeners.forEach(listener => listener(cached as RetentionFlags));
+});
+
+/** Every new answer of the shared read (the Rewards sheet, the flame and the map listen). */
+export function onRetentionFlags(listener: (flags: RetentionFlags) => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
+
+/** Null when the read failed (offline, slow server): the shared store retries and onRetentionFlags brings the answer. */
 export function loadRetentionFlags(read: typeof getFeatureFlags = getFeatureFlags): Promise<RetentionFlags | null> {
   if (cached) return Promise.resolve(cached);
   pending ??= read().then((payload): RetentionFlags | null => {
-    const all: Record<string, boolean> = {};
-    for (const [k, v] of Object.entries(payload.flags ?? {})) if (typeof v === 'boolean') all[k] = v;
-    cached = { dailyThree: payload.flags.daily_three === true, levelChests: payload.flags.level_chests === true, all };
+    cached = fromPayload(payload);
     return cached;
   }).catch(() => { pending = null; return null; });
   return pending;
@@ -53,4 +70,5 @@ export function streakOwner(flags: RetentionFlags | null): 'daily3' | null {
 export function resetRetentionFlagsForTests(): void {
   cached = null;
   pending = null;
+  listeners.clear();
 }

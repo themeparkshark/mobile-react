@@ -29,6 +29,7 @@ import WelcomeScreen from './screens/WelcomeScreen';
 import RideDetectionOverlay from './components/RideTracker/RideDetectionOverlay';
 import SharkDropHandler from './components/SharkDropHandler';
 import OfflineBanner from './components/OfflineBanner';
+import useFeatureFlagWatch from './services/flagWatch';
 import FeedbackHost from './components/Feedback/FeedbackHost';
 import { GameDialogHost } from './ui';
 import { isStandalonePreviewMode } from './utils/standalonePreview';
@@ -78,6 +79,8 @@ export default function App() {
     if (fontsLoaded) releaseNativeSplash({ waitForArt: initialRouteName === 'Splash' });
   }, [fontsLoaded, initialRouteName]);
   useAxiosSetup();
+  // One slow /feature-flags read never hides Daily 3, chests or the pass for the session (T095).
+  useFeatureFlagWatch();
 
 
   useAsyncEffect(async () => {

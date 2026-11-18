@@ -24,7 +24,7 @@ import * as RootNavigation from '../../RootNavigation';
 import { enablePush } from '../../services/push';
 import { markRungSeen, useRung } from '../../services/reveal/revealLadder';
 import { rowRung } from '../../services/retention/newTag';
-import { flagOn, loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
+import { flagOn, loadRetentionFlags, onRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
 import { mayAskForPush, noteParkDaySeen, notePushAsked, parkDaySeen } from '../../services/retention/pushAsk';
 import { devLadderFeed } from '../../services/retention/devLadderFeed';
@@ -173,7 +173,9 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
-  // Read the switches; a failed read (offline, slow server) is retried on the next map focus.
+  // Read the switches; a failed read (offline, slow server) is retried by the shared store and on the next map
+  // focus, and every later answer lands here at once (T095: one slow read never hides Daily 3 for the session).
+  useEffect(() => onRetentionFlags(f => { if (mounted.current) setFlags(f); }), []);
   useEffect(() => {
     if (!o.enabled || flags) return;
     void loadRetentionFlags().then(f => { if (mounted.current && f) setFlags(f); });

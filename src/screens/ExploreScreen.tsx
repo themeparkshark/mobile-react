@@ -154,6 +154,7 @@ import { applyLiveStub, liveStubMode } from '../components/guide/liveStub';
 import { useFlyAnchor, useProfileTabAnchor } from '../components/guide/flyAnchors';
 import { homeShelfPark } from '../components/guide/HomeShelfButton';
 import type { HomeGuide } from './ExploreScreen/HomeExplore';
+import { refreshFeatureFlags } from '../api/endpoints/platform/feature-flags';
 
 /**
  * Park stores move to a "Shops at this park" row on the park's shelf screen (shelf-words). The map
@@ -255,6 +256,8 @@ export const ONBOARDING_FALLBACK_MS = 8000;
 export function ExploreScreenBody() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const mapFocused = useIsFocused();
+  // T095: back on the map after a slow or failed switch read, the switches are read again (the store skips a fresh answer).
+  useEffect(() => { if (mapFocused) void refreshFeatureFlags(); }, [mapFocused]);
   // Idle (no touch, no walking for 2 min): the map's live polls slow down.
   const mapIdle = useUserIdle();
   const route = useRoute();

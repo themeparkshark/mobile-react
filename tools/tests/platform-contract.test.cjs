@@ -74,7 +74,7 @@ test('platform copy has no emoji or em dashes', () => {
 
 test('feature flags are read with a bounded timeout and a malformed answer rejects', async () => {
   let data = { data: { flags: { adventure_ticket: false, queue_tickets: true }, min_app_version: '1.6.0', update_required: false, app_store_url: 'x' } };
-  const getFeatureFlags = load('src/api/endpoints/platform/feature-flags.ts', {
+  const flagsModule = load('src/api/endpoints/platform/feature-flags.ts', {
     '../../client': { async get(url, config) {
       assert.equal(url, '/feature-flags');
       assert.equal(config.timeout, 8000);
@@ -82,14 +82,16 @@ test('feature flags are read with a bounded timeout and a malformed answer rejec
       return { data };
     } },
     '../../platform': { appVersionHeaders: () => ({ 'App-Version': '1.6.0' }) },
-  }).default;
+  });
+  const getFeatureFlags = flagsModule.default;
 
   const flags = await getFeatureFlags();
   assert.equal(flags.flags.queue_tickets, true);
   assert.equal(flags.flags.adventure_ticket, false);
 
+  // The raw read rejects a malformed answer; the shared store keeps the last good one (T095).
   for (data of [{}, { data: { flags: null } }, '<html>']) {
-    await assert.rejects(getFeatureFlags(), /malformed/);
+    await assert.rejects(flagsModule.fetchFeatureFlags(), /malformed/);
   }
 });
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import getFeatureFlags from '../api/endpoints/platform/feature-flags';
+import getFeatureFlags, { onFeatureFlags } from '../api/endpoints/platform/feature-flags';
 
 /**
  * Park map switches from GET /feature-flags, read once per app run and shared. `map_gym_swords` (Gym and
@@ -12,6 +12,12 @@ export interface MapFlags {
 const OFF: MapFlags = { gymSwords: false };
 let cached: MapFlags | null = null;
 let pending: Promise<MapFlags> | null = null;
+const listeners = new Set<(flags: MapFlags) => void>();
+// T095: a later answer (a retry after a slow read) reaches every map in place.
+onFeatureFlags?.(payload => {
+  cached = { gymSwords: payload.flags?.map_gym_swords === true };
+  listeners.forEach(listener => listener(cached as MapFlags));
+});
 
 export function loadMapFlags(read: typeof getFeatureFlags = getFeatureFlags): Promise<MapFlags> {
   if (cached) return Promise.resolve(cached);
@@ -33,7 +39,9 @@ export function useMapFlags(): MapFlags {
   useEffect(() => {
     let active = true;
     void loadMapFlags().then(value => { if (active) setFlags(value); });
-    return () => { active = false; };
+    const listener = (value: MapFlags) => { if (active) setFlags(value); };
+    listeners.add(listener);
+    return () => { active = false; listeners.delete(listener); };
   }, []);
   return flags;
 }

@@ -216,6 +216,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     try { require('../screens/social/socialStore').resetSocialStore(); } catch { /* not loaded */ }
     // Secret Shop v2 can be on for one account only (the preview list).
     try { require('../services/secretShopFlag').resetSecretShopFlag(); } catch { /* not loaded */ }
+    try { require('../api/endpoints/platform/feature-flags').resetFeatureFlags(); } catch { /* not loaded */ }
     try { require('../services/liveEvents/useLiveEvent').resetLiveEvent(); } catch { /* not loaded */ }
     hasInitialNavigated.current = false; // Allow navigation on next login
     // Still signed in here, so the token delete is authorised.
