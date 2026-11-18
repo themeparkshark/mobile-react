@@ -104,6 +104,11 @@ export interface MMConfig {
   fair: boolean;
   finalBonusPerSec: number;
   perfectBonus: number;
+  /**
+   * Fix round w3 T042: the clock runs only while a card is up or within this many ms of the
+   * last tap, so it starts on the first flip and pauses while nobody touches the board. 0 = off.
+   */
+  idlePauseMs: number;
 }
 
 export const BASE_CONFIG: MMConfig = {
@@ -136,7 +141,11 @@ export const BASE_CONFIG: MMConfig = {
   fair: false,
   finalBonusPerSec: 0,
   perfectBonus: 0,
+  idlePauseMs: 0,
 };
+
+/** The ride clock rests this long after the last tap (T042): a kid looking at the ride never loses time. */
+export const RIDE_IDLE_PAUSE_MS = 3000;
 
 /** Warm-up (4.0a): 4 pairs, no clock, gauge, specials or proof. */
 export function warmupConfig(): MMConfig {
@@ -152,7 +161,7 @@ export function rideSprintConfig(clockMs = 45000, signalTurns = 0): MMConfig {
   if (signalTurns > 0) {
     return { ...BASE_CONFIG, mode: 'ride', clockMs: null, clockCapMs: 0, signalTurns, finalBonusPerSec: 0, perfectBonus: 100 };
   }
-  return { ...BASE_CONFIG, mode: 'ride', clockMs: c, clockCapMs: c, finalBonusPerSec: 50, perfectBonus: 100 };
+  return { ...BASE_CONFIG, mode: 'ride', clockMs: c, clockCapMs: c, finalBonusPerSec: 50, perfectBonus: 100, idlePauseMs: RIDE_IDLE_PAUSE_MS };
 }
 
 /** Time Attack: queue solo. Systems arrive one per board, each earned (modes/unlocks.ts). */
@@ -530,6 +539,8 @@ function rand(s: MMState): number {
 function clockRate(s: MMState, t: number): number {
   if (s.frozen || s.pending || s.status !== 'play') return 0;
   if (s.cfg.clockMs == null) return 0;
+  // T042: no card up and no tap for idlePauseMs (or no tap yet): the clock rests.
+  if (s.cfg.idlePauseMs > 0 && s.up.length === 0 && t - s.lastTapAt >= s.cfg.idlePauseMs) return 0;
   if (s.cfg.lineBleed && s.lineMoving && s.up.length === 0 && t - s.lastTapAt >= s.cfg.idleMs) return 0.5;
   return 1;
 }
@@ -610,6 +621,10 @@ function advance(s: MMState, at: number, ev: MMEvent[]): void {
     if (s.cfg.lineBleed && s.lineMoving && s.up.length === 0) {
       const edge = s.lastTapAt + s.cfg.idleMs;
       if (edge > t && edge < next) next = edge;
+    }
+    if (s.cfg.idlePauseMs > 0 && s.up.length === 0) {
+      const rest = s.lastTapAt + s.cfg.idlePauseMs;
+      if (rest > t && rest < next) next = rest;
     }
     const rate = clockRate(s, t);
     if (rate > 0) {
@@ -1202,7 +1217,7 @@ export function rideStars(s: MMState): number {
     if (s.turns <= par + 3) return 2;
     return 1;
   }
-  if (s.turns <= par && chargedElapsed(s) <= 30000) return 3;
+  if (s.turns <= par && chargedElapsed(s) <= 29000) return 3; // 29 s: the clock now starts on the first flip (T042)
   if (s.turns <= par + 3) return 2;
   return 1;
 }

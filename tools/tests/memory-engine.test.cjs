@@ -229,7 +229,7 @@ test('Golden Coin: x2, +3s, +1 gauge pip; Time Attack overtime x2, Ride Sprint o
   const m2 = g.flip(3, 25600).find((e) => e.k === 'match');
   assert.equal(m2.parts.overtime, true);
   assert.equal(m2.parts.value, 60 * 2, "x2 overtime, no QUICK (slow turn)");
-  const r = make();
+  const r = make({ ...E.rideSprintConfig(), idlePauseMs: 0 });
   r.tick(36000);
   assert.equal(r.s.overtime, true);
   r.flip(0, 36100);
@@ -430,8 +430,11 @@ test('miss hold: touch and hold keeps the pair up to 2500ms after B landed; rele
 // Clocks
 // -----------------------------------------------------------------------------
 
-test('Ride Sprint clock runs continuously, times out, and never depends on movement', () => {
-  const g = make();
+/** The ride config with the T042 idle pause off: for the clock mechanics alone. */
+const RUNNING = () => ({ ...E.rideSprintConfig(), idlePauseMs: 0 });
+
+test('Ride Sprint clock (idle pause off) runs continuously, times out, and never depends on movement', () => {
+  const g = make(RUNNING());
   for (let i = 0; i < 40; i++) {
     g.act({ t: 'walking', on: i % 2 === 0, at: i * 1000 });
     g.act({ t: 'lineMoving', on: i % 2 === 0, at: i * 1000 + 1 });
@@ -443,7 +446,7 @@ test('Ride Sprint clock runs continuously, times out, and never depends on movem
 });
 
 test('Ride Sprint: the rope stops while a reveal is pending, and charged time reconciles the clock', () => {
-  const g = make();
+  const g = make(RUNNING());
   g.tick(1000);
   g.act({ t: 'pending', on: true, at: 1000 });
   g.tick(4000);
@@ -687,7 +690,7 @@ test('replay: a flip log replays to the identical state (proof and PHP parity)',
 });
 
 test('movement soak: toggling walking and the line every 3s never pauses Ride Sprint and the clock is continuous', () => {
-  const g = make(E.rideSprintConfig(50000));
+  const g = make({ ...E.rideSprintConfig(50000), idlePauseMs: 0 });
   for (let t = 0; t <= 39000; t += 3000) {
     g.act({ t: 'walking', on: (t / 3000) % 2 === 0, at: t });
     g.act({ t: 'lineMoving', on: (t / 3000) % 2 === 0, at: t });
@@ -704,4 +707,25 @@ test('the accelerometer (walking) can never slow any clock', () => {
     a.tick(9000); b.tick(9000);
     assert.equal(a.s.clockLeftMs, b.s.clockLeftMs, cfg.mode);
   }
+});
+
+test('T042: the ride clock starts on the first flip, rests while nobody touches the board, and never times out an untouched board', () => {
+  const g = make();
+  assert.equal(g.s.cfg.idlePauseMs, E.RIDE_IDLE_PAUSE_MS);
+  g.tick(120000);
+  assert.equal(g.s.clockLeftMs, 45000, 'two minutes looking at the ride: the rope is full');
+  assert.equal(g.s.status, 'play', 'never TIME\'S UP with 0 of 8 pairs');
+  g.flip(0, 120000);
+  g.tick(121000);
+  assert.equal(g.s.clockLeftMs, 44000, 'a card is up: the clock runs');
+  g.flip(5, 121000);
+  g.tick(123000);
+  // The miss pair flips back after 1.5 s; the clock keeps running until 3 s after the last tap.
+  g.tick(124000);
+  assert.equal(g.s.clockLeftMs, 45000 - 1000 - 3000, 'runs until 3 s after the last tap');
+  g.tick(200000);
+  assert.equal(g.s.clockLeftMs, 41000, 'then rests');
+  g.flip(1, 200000);
+  g.tick(200500);
+  assert.equal(g.s.clockLeftMs, 40500, 'and runs again on the next flip');
 });

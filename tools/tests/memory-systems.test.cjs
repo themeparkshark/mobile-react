@@ -163,3 +163,21 @@ test('Fair Deck reveal board: no layout on the client, a perfect player clears t
   assert.equal(E.dailyStars(client), 3);
   assert.equal(src.endReveal(client.ids).length, 16);
 });
+
+test('T042: the charged clock starts on the first flip and never charges resting time past the idle pause', async () => {
+  const Ch = require('./helpers/ts-module.cjs').loadTs('src/games/memory/charged.ts');
+  const cs = Ch.createCharge(0);
+  // A kid looks at the ride for a minute, then flips: nothing is charged.
+  assert.equal(Ch.chargeFlip(cs, { clientT: 60000, rxPrevT: 0, recvAt: 60000, thinkCapMs: 0 }).charged, 0);
+  Ch.revealSent(cs, 60000);
+  // Second card of the turn: think time counts (2 s, less the 1.5 s network allowance cap is not used).
+  assert.equal(Ch.chargeFlip(cs, { clientT: 62000, rxPrevT: 60000, recvAt: 62000 }).charged, 2000);
+  Ch.revealSent(cs, 62000);
+  // Next turn after a 20 s rest with no card up: at most the 3 s idle pause is charged.
+  assert.equal(Ch.chargeFlip(cs, { clientT: 82000, rxPrevT: 62000, recvAt: 82000, thinkCapMs: 3000 }).charged, 3000);
+  // The in-process authority passes the caps itself.
+  const cfg = E.rideSprintConfig();
+  const src = B.createSimReveal({ cfg, layout: { pairs: 8, deckSize: 10, seed: 31 }, deckSize: 10, engineSeed: 5, latencyMs: 0, wait: () => Promise.resolve() });
+  const first = await src.flip(0, 90000, { clientT: 90000, rxPrevT: 0 });
+  assert.equal(first.chargedMs, 0, 'the first flip starts the clock at full');
+});

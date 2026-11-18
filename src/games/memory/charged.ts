@@ -57,6 +57,11 @@ export interface FlipTiming {
   recvAt: number;
   /** A buffered tap sent before the previous reveal arrived: think time 0. */
   pipelined?: boolean;
+  /**
+   * Fix round w3 T042: the most think time this flip may be charged. The ride passes the idle
+   * pause (3 s) when no card is up, and 0 for the first flip: the clock starts on the first flip.
+   */
+  thinkCapMs?: number;
 }
 
 export interface ChargeResult {
@@ -72,7 +77,9 @@ export function chargeFlip(cs: ChargeState, f: FlipTiming): ChargeResult {
   const think = f.pipelined ? 0 : Math.max(0, Math.min(gap, f.clientT - f.rxPrevT));
   const tryLeft = Math.max(0, ALLOWANCE_PER_TRY_MS - cs.allowanceMs);
   const allowance = Math.max(0, Math.min(gap - think, ALLOWANCE_PER_FLIP_MS, tryLeft));
-  const charged = gap - allowance;
+  // Resting think time (no card up, past the idle pause) is never charged.
+  const rested = f.thinkCapMs != null ? Math.max(0, think - Math.max(0, f.thinkCapMs)) : 0;
+  const charged = Math.max(0, gap - allowance - rested);
   cs.allowanceMs += allowance;
   if (cs.allowanceMs >= ALLOWANCE_PER_TRY_MS) cs.capHit = true;
   cs.chargedMs += charged;
