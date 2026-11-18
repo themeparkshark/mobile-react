@@ -97,6 +97,11 @@ export const CHALLENGE_GAMES = [
   { id: 'trivia' as const, name: 'Beat the Buzzer', color: CHALLENGE_GAME_COLORS.trivia },
 ];
 
+/** A game this build can play (the Game Ready card is only for one it cannot, T044). */
+export function knownChallengeGame(game: string | null | undefined): boolean {
+  return CHALLENGE_GAMES.some((entry) => entry.id === game);
+}
+
 type FlowState = 'recovering' | 'auth-required' | 'preview' | 'retrying' | 'wheel' | 'spinning' | 'minigame' | 'postwin' | 'lost' | 'claim-error' | 'spend-error' | 'save-error' | 'expired';
 type GameType = 'tap' | 'memory' | 'trivia';
 
@@ -249,6 +254,8 @@ export default function RedeemRedeemableModal({
   const attemptRef = useRef<TaskAttempt | null>(null);
   /** This try was asked as picture-only (kid rules when the server does not say). */
   const pictureOnlyRef = useRef(false);
+  /** The deal step, readable from the spend callback declared above it (T036, T044). */
+  const selectAssignedGameRef = useRef<() => boolean>(() => false);
   const savedAttemptIdRef = useRef<number | null>(null);
   const requestIdRef = useRef<string | null>(null);
   const outcomeRef = useRef<'win' | 'loss' | null>(null);
@@ -546,21 +553,31 @@ export default function RedeemRedeemableModal({
       spendingRef.current = false;
       return;
     }
+    // T036: a fresh spend starts the punch at once; the game card pops as soon as the server deals it
+    // (the request id makes the spend safe to repeat, so nothing waits on ONE MOMENT).
+    const optimistic = !saved;
+    if (optimistic) {
+      setSelectedGame(null);
+      setSelectedGameData(null);
+      setFlowState('spinning');
+    }
     try {
       const result = await recoverTaskAttempt(checkpoint);
       retryOfRef.current = null;
       applyAttemptState(result.attempt);
       if (result.attempt.status === 'started') {
-        playSound(require('../../assets/sounds/redeem_modal_open.mp3'));
-        setFlowState('wheel');
-      }
+        if (!optimistic) playSound(require('../../assets/sounds/redeem_modal_open.mp3'));
+        // A game this build knows goes straight into (or on with) the punch; never the Game Ready card.
+        setFlowState(selectAssignedGameRef.current() ? 'spinning' : 'wheel');
+      } else if (optimistic) setFlowState('preview');
     } catch (firstError) {
       // The first response may have been lost after the Ticket was spent.
       // Retry with exactly the same key; the server will return the same attempt.
       try {
         const result = await recoverTaskAttempt(checkpoint);
         applyAttemptState(result.attempt);
-        if (result.attempt.status === 'started') setFlowState('wheel');
+        if (result.attempt.status === 'started') setFlowState(selectAssignedGameRef.current() ? 'spinning' : 'wheel');
+        else if (optimistic) setFlowState('preview');
       } catch (retryError) {
         console.error('Could not confirm Ticket attempt:', retryError);
         if ((retryError as any)?.response?.status === 422) {
@@ -609,6 +626,8 @@ export default function RedeemRedeemableModal({
     setSelectedGameData(game);
     return true;
   }, []);
+
+  selectAssignedGameRef.current = selectAssignedGame;
 
   const handlePlayNow = useCallback(() => {
     if (!selectAssignedGame()) return;
@@ -1115,10 +1134,10 @@ export default function RedeemRedeemableModal({
           )}
 
           {/* TICKET PUNCH: the spent Ticket tears and this ride's game pops up. */}
-          {flowState === 'spinning' && selectedGameData && (
+          {flowState === 'spinning' && (
             <TicketPunch
-              gameName={selectedGameData.name}
-              gameColor={selectedGameData.color}
+              gameName={selectedGameData?.name ?? null}
+              gameColor={selectedGameData?.color ?? '#ffcf3b'}
               rideName={taskName}
               kicker={punchLines(taskName, playFlagsNow().retrySameGame).kicker}
               winLine={punchLines(taskName).win}
@@ -1127,8 +1146,9 @@ export default function RedeemRedeemableModal({
               onDone={() => setFlowState('minigame')}
             />
           )}
-          {flowState === 'wheel' && <ChallengeStatusCard title="Game Ready"
-            message="Your Ticket is used and your game is ready. If it does not start, update the app."
+          {/* T044: only a game this build does not know ever stops here; a known game goes straight to the punch. */}
+          {flowState === 'wheel' && !knownChallengeGame(attemptRef.current?.game) && <ChallengeStatusCard title="Game Ready"
+            message="Your Ticket is used and your game is ready."
             primary={{ label: 'Play Now', onPress: handlePlayNow }} />}
           {flowState === 'spend-error' && <ChallengeStatusCard title="Reconnect" art="loading"
             message="We could not tell if this game started. Check your internet and tap Reconnect. You will not pay another Ticket."
@@ -1180,11 +1200,15 @@ export default function RedeemRedeemableModal({
 
           {/* MINIGAME STATE - rendered inside the same modal */}
           {/* The game stays under the win card until the card covers it, so a win never shows a dim map. */}
-          {selectedGame && (flowState === 'minigame' || (flowState === 'postwin' && !winCovered)) && (
-            <View style={styles.minigameContainer}>
+          {/* T036: the game mounts under the punch (hidden, not started) so its board art is drawn by the time
+              the punch ends; it becomes visible, and its count starts, when the punch hands over. */}
+          {selectedGame && (flowState === 'spinning' || flowState === 'minigame' || (flowState === 'postwin' && !winCovered)) && (
+            <View style={[styles.minigameContainer, flowState === 'spinning' && styles.prewarm]}
+              pointerEvents={flowState === 'spinning' ? 'none' : 'auto'}>
               <RideChallengeContext.Provider value={true}>
               <MiniGameSelector
-                visible={true}
+                visible={flowState !== 'spinning'}
+                prewarm={flowState === 'spinning'}
                 taskId={(redeemable?.model as TaskType)?.id ?? 0}
                 taskName={taskName}
                 preferredGame={selectedGame}
@@ -1287,5 +1311,7 @@ const styles = StyleSheet.create({
     paddingTop: 7, borderTopWidth: 1, borderTopColor: 'rgba(7, 91, 155, 0.2)' },
   shopRowText: { color: '#075b9b', fontFamily: 'Knockout', fontSize: 15, flexShrink: 1 },
   minigameContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  /** Under the punch: mounted and drawing its board, never seen or touched (T036). */
+  prewarm: { opacity: 0 },
   parkedCard: { position: 'absolute', width: 0, height: 0 },
 });

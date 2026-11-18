@@ -55,6 +55,11 @@ interface Props {
   excludeGames?: MiniGameType[];
   /** Kid rules for a paid ride try (picture-only players, fix round w3 T027): easier Whack and Memory. */
   kid?: boolean;
+  /**
+   * T036: mounted under the ticket punch while not yet visible: the game mounts and loads its board art
+   * (it never starts or counts) so it is drawn the moment the punch hands over.
+   */
+  prewarm?: boolean;
   onClose: () => void;
   onComplete: (multiplier: number, rewards: { coins: number; xp: number }, proof?: TaskGameProof) => void;
 }
@@ -74,6 +79,7 @@ export default function MiniGameSelector({
   parkId,
   excludeGames = [],
   kid = false,
+  prewarm = false,
   onClose,
   onComplete,
 }: Props) {
@@ -129,8 +135,7 @@ export default function MiniGameSelector({
   }, [showIntro, selectedGame, markTipSeen]);
 
   useEffect(() => {
-    console.log('🎮 MiniGameSelector useEffect:', { visible, preferredGame, selectedGame });
-    if (!visible) {
+    if (!visible && !(prewarm && preferredGame)) {
       setSelectedGame(null);
       setIntroGame(null);
       introChecked.current = null;
@@ -138,7 +143,6 @@ export default function MiniGameSelector({
     }
 
     if (preferredGame && !excludeGames.includes(preferredGame)) {
-      console.log('🎮 Setting game to preferredGame:', preferredGame);
       setSelectedGame(preferredGame);
       return;
     }
@@ -158,7 +162,7 @@ export default function MiniGameSelector({
     }
 
     setSelectedGame(available[Math.floor(Math.random() * available.length)]);
-  }, [visible, preferredGame, rewardMode]);
+  }, [visible, preferredGame, rewardMode, prewarm]);
 
   const handleComplete = useCallback((multiplier: number, extra: any) => {
     const rewards = rewardMode === 'task-attempt'

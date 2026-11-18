@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
@@ -16,6 +16,8 @@ import { playSfx } from '../gamekit/SFX';
 
 const TICKET = require('../../assets/images/ticket-icon.png');
 const TICKET_RATIO = 549 / 799;
+/** Punch beats (ms after PLAY): the tear, then the game card as soon as the server has dealt it. */
+export const PUNCH_T = { punch: 520, card: 640, done: 1650 } as const;
 
 /**
  * Spending a Park Ticket is the "throw": the ticket slides in, gets punched in
@@ -32,7 +34,11 @@ export default function TicketPunch({
   winLine,
   onDone,
 }: {
-  readonly gameName: string;
+  /**
+   * The game the server dealt. Fix round w3 T036: the punch starts the moment PLAY is tapped, while
+   * the Ticket spend is still on its way; null until the server answers, and the game card pops then.
+   */
+  readonly gameName: string | null;
   readonly gameColor: string;
   readonly rideName: string;
   /** Over the game's name: "THIS RIDE'S GAME" where the server deals one game per ride and day, else "YOUR GAME" (punchLines). */
@@ -46,6 +52,11 @@ export default function TicketPunch({
   const { width, height } = useWindowDimensions();
   const done = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /** null until the motion setting is known; then whether Reduce Motion is on. */
+  const [reduced, setReduced] = useState<boolean | null>(null);
+  /** The ticket is torn and the card may pop (T.card reached). */
+  const [torn, setTorn] = useState(false);
+  const cardShown = useRef(false);
 
   const enter = useSharedValue(0);
   const tear = useSharedValue(0);
@@ -53,44 +64,34 @@ export default function TicketPunch({
   const card = useSharedValue(0);
 
   const finish = () => {
-    if (done.current) return;
+    if (done.current || !cardShown.current) return; // never skip past a game that is not dealt yet
     done.current = true;
     timers.current.forEach(clearTimeout);
     onDone();
   };
   const at = (ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); };
 
+  // The ticket slides in and tears at once, whether or not the server has answered yet.
   useEffect(() => {
     let cancelled = false;
-    AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
+    AccessibilityInfo.isReduceMotionEnabled().then((isReduced) => {
       if (cancelled) return;
-      if (reduced) {
+      setReduced(isReduced);
+      if (isReduced) {
         tear.value = 1;
-        card.value = withTiming(1, { duration: 200 });
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        at(1000, finish);
+        setTorn(true);
         return;
       }
-      const T = { punch: 520, card: 640, done: 1650 };
       playSfx('whoosh', 0.6);
       enter.value = withSpring(1, { damping: 12, stiffness: 170 });
-      tear.value = withDelay(T.punch, withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) }));
-      flash.value = withDelay(T.punch, withSequence(withTiming(0.85, { duration: 30 }), withTiming(0, { duration: 220 })));
-      card.value = withDelay(T.card, withSequence(
-        withSpring(1, { damping: 9, stiffness: 190 }),
-        withDelay(T.done - T.card - 500, withTiming(1, { duration: 1 }, (ok) => {
-          if (ok) runOnJS(finish)();
-        })),
-      ));
-      at(T.punch, () => {
+      tear.value = withDelay(PUNCH_T.punch, withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) }));
+      flash.value = withDelay(PUNCH_T.punch, withSequence(withTiming(0.85, { duration: 30 }), withTiming(0, { duration: 220 })));
+      at(PUNCH_T.punch, () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
         playSfx('hit');
       });
-      at(T.card + 60, () => {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        playSfx('go', 0.9);
-      });
-      at(T.done + 400, finish); // safety net
+      at(PUNCH_T.card, () => setTorn(true));
     });
     return () => {
       cancelled = true;
@@ -99,6 +100,29 @@ export default function TicketPunch({
     // Plays once per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The game card pops once the ticket is torn and the server has dealt the game.
+  useEffect(() => {
+    if (!torn || !gameName || cardShown.current || reduced == null) return;
+    cardShown.current = true;
+    if (reduced) {
+      card.value = withTiming(1, { duration: 200 });
+      at(1000, finish);
+      return;
+    }
+    card.value = withSequence(
+      withSpring(1, { damping: 9, stiffness: 190 }),
+      withDelay(PUNCH_T.done - PUNCH_T.card - 500, withTiming(1, { duration: 1 }, (ok) => {
+        if (ok) runOnJS(finish)();
+      })),
+    );
+    at(60, () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      playSfx('go', 0.9);
+    });
+    at(PUNCH_T.done - PUNCH_T.card + 400, finish); // safety net
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [torn, gameName, reduced]);
 
   const ticketW = Math.min(width * 0.72, 320);
   const ticketH = ticketW * TICKET_RATIO;
@@ -134,7 +158,7 @@ export default function TicketPunch({
 
   return (
     <Pressable style={StyleSheet.absoluteFill} onPress={finish} accessibilityRole="button"
-      accessibilityLabel={`${kicker.charAt(0)}${kicker.slice(1).toLowerCase()}: ${gameName}. ${winLine ?? rideName}. Tap to start.`}>
+      accessibilityLabel={gameName ? `${kicker.charAt(0)}${kicker.slice(1).toLowerCase()}: ${gameName}. ${winLine ?? rideName}. Tap to start.` : `Your Ticket. ${winLine ?? rideName}.`}>
       <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <View style={[StyleSheet.absoluteFill, styles.scrim]} />
 
@@ -152,7 +176,7 @@ export default function TicketPunch({
       <Animated.View style={[styles.cardWrap, { top: height * 0.4 - 70 }, cardStyle]} pointerEvents="none">
         <View style={[styles.card, { borderColor: gameColor }]}>
           <Text style={styles.cardKicker}>{kicker}</Text>
-          <Text style={styles.cardGame} adjustsFontSizeToFit numberOfLines={1}>{gameName}</Text>
+          <Text style={styles.cardGame} adjustsFontSizeToFit numberOfLines={1}>{gameName ?? ''}</Text>
           <Text style={styles.cardRide} numberOfLines={2}>{winLine ?? `Win the ${rideName.replace(/^the\s+/i, '')} coin!`}</Text>
         </View>
         {!!note && <Text style={styles.note}>{note}</Text>}
