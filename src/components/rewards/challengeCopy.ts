@@ -48,7 +48,8 @@ export function challengeTitle(taskType: 'task' | 'secret_task' | null, name?: s
   if (`${ribbon} coin`.length <= RIBBON_MAX_CHARS) return `${ribbon} coin`;
   if (ribbon.length <= RIBBON_MAX_CHARS) return ribbon;
   // Still too long to read on an SE: the name's first words that fit (the full name sits under the picture).
-  const cut = ribbon.slice(0, RIBBON_MAX_CHARS + 1).replace(/\s+\S*$/, '').trim();
+  const head = ribbon.slice(0, RIBBON_MAX_CHARS + 1);
+  const cut = /\s/.test(head) ? head.replace(/\s+\S*$/, '').trim() : '';
   return cut || ribbon.slice(0, RIBBON_MAX_CHARS);
 }
 
