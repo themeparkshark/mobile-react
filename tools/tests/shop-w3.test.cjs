@@ -292,3 +292,17 @@ test('T158: a Just once sticker on the Supplies door while the Starter Pack is u
   assert.doesNotMatch(src.replace(/\/\*[\s\S]*?\*\//g, ''), /price/i, 'the sticker never names a price');
   assert.match(read('src/screens/StoreScreen.tsx'), /key === 'supplies' && tab !== 'supplies' && <StarterSticker/);
 });
+
+test('T220: two placements saving at once both keep their record (writes go one at a time)', async () => {
+  const store = new Map();
+  const slow = ms => new Promise(r => setTimeout(r, ms));
+  const m = loadTs('src/services/money/naturalOffers.ts', {
+    '@react-native-async-storage/async-storage': { __esModule: true, default: {
+      getItem: async k => { await slow(5); return store.get(k) ?? null; },
+      setItem: async (k, v) => { await slow(5); store.set(k, v); },
+    } },
+  });
+  await Promise.all(m.OFFER_PLACEMENTS.map(p => m.saveOfferRecord(7, p, { day: '2026-11-18', firstShownAt: 1, restUntil: null })));
+  const saved = plain(m.parseRecords(store.get(m.offerKey(7))));
+  assert.deepEqual(Object.keys(saved).sort(), [...m.OFFER_PLACEMENTS].sort(), 'no placement lost its shown-today mark');
+});

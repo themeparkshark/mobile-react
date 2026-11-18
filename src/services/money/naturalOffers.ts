@@ -128,11 +128,21 @@ export async function loadOfferRecords(playerId: number | string): Promise<Offer
   }
 }
 
-export async function saveOfferRecord(playerId: number | string, placement: OfferPlacement, record: OfferRecord): Promise<void> {
-  try {
-    const all = await loadOfferRecords(playerId);
-    await AsyncStorage.setItem(offerKey(playerId), JSON.stringify({ ...all, [placement]: record }));
-  } catch {
-    // A failed write only means the card may show once more; never a crash.
-  }
+/**
+ * Writes go one at a time: two placements on one screen (a win card with its VIP line and the
+ * Starter Pack card) each read-modify-write the same record, and side by side the last write
+ * would drop the other's "shown today".
+ */
+let writes: Promise<void> = Promise.resolve();
+
+export function saveOfferRecord(playerId: number | string, placement: OfferPlacement, record: OfferRecord): Promise<void> {
+  writes = writes.then(async () => {
+    try {
+      const all = await loadOfferRecords(playerId);
+      await AsyncStorage.setItem(offerKey(playerId), JSON.stringify({ ...all, [placement]: record }));
+    } catch {
+      // A failed write only means the card may show once more; never a crash.
+    }
+  });
+  return writes;
 }
