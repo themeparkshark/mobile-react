@@ -228,3 +228,7 @@ test('T069 the unlock picture answers a tap with what it unlocks', () => {
   assert.match(read('src/gamekit/results/UnlockTile.tsx'), /\{told && detail \? <Text style=\{styles\.caption\} numberOfLines=\{2\}>\{detail\}<\/Text>/);
   assert.match(read('src/games/sharky/hud/SharkyUnlock.tsx'), /'PRIZE BOXES': 'Prize boxes now float in your swims\. Grab them!'/);
 });
+
+test('a tap beside the card while PLAY! spends the Ticket never closes it (the game would start with no card)', () => {
+  assert.match(read('src/components/RedeemRedeemableModal.tsx'), /if \(flowStateRef\.current === 'preview' && !spendingRef\.current\) \{\n\s+close\(\);/);
+});

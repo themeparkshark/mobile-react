@@ -220,9 +220,11 @@ export default function RedeemRedeemableModal({
     return guide.subscribe(() => setGuideTarget(guide.current()));
   }, [watchGuide]);
 
-  // Safe close: only allows closing during preview state
+  // Safe close: only allows closing during preview state, and never while PLAY! is spending the Ticket (fix W3:
+  // a stray tap beside the card during One moment closed it while the game started, so the Ticket was spent with
+  // no game on screen).
   const safeClose = useCallback(() => {
-    if (flowStateRef.current === 'preview') {
+    if (flowStateRef.current === 'preview' && !spendingRef.current) {
       close();
     }
   }, [close]);
