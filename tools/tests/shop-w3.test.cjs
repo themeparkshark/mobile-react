@@ -224,3 +224,67 @@ test('T166: the confirm step is its own state: the price on the button, a gold r
   assert.match(sheet, /phase === 'confirm' && styles\.equationConfirm/);
   assert.match(sheet, /if \(!still\) stageScale\.value = withSequence\(withTiming\(1\.09, \{ duration: DURATION\.tap \}\), withSpring\(1, SPRING\.pop\)\);\s*setPhase\('confirm'\);/);
 });
+
+const offersModule = () => loadTs('src/services/money/naturalOffers.ts', {
+  '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => undefined } },
+});
+
+test('T220/T230: one calm offer decision for every placement (switch, loss, kid paths, once a day, remembered dismiss)', () => {
+  const m = offersModule();
+  const now = Date.parse('2026-11-18T12:00:00-08:00');
+  const base = { placement: 'need_ticket', switchOn: true, today: '2026-11-18', now, record: null };
+  assert.equal(m.offerDecision(base), 'show');
+  assert.equal(m.offerDecision({ ...base, switchOn: false }), 'switch_off', 'only while natural_offers is served');
+  assert.equal(m.offerDecision({ ...base, loss: true }), 'loss', 'never on a loss card');
+  assert.equal(m.offerDecision({ ...base, familyWithKids: true }), 'kids', 'never with a Family with kids crew');
+  assert.equal(m.offerDecision({ ...base, pictureGames: true }), 'picture', 'never while Picture games is on');
+  assert.equal(m.offerDecision({ ...base, placement: 'win_vip', vip: true }), 'vip', 'VIP line only for non-members');
+  const shown = plain(m.markShown(null, '2026-11-18', now));
+  assert.equal(m.offerDecision({ ...base, record: shown }), 'today', 'at most once per placement per day');
+  assert.equal(m.offerDecision({ ...base, today: '2026-11-19', now: now + 86_400_000, record: shown }), 'show', 'back the next day');
+  assert.equal(m.offerDecision({ ...base, placement: 'first_win', today: '2026-12-01', record: shown }), 'once', 'the Starter Pack card once ever');
+  const dismissed = plain(m.markDismissed(shown, now));
+  assert.equal(m.offerDecision({ ...base, today: '2026-11-20', now: now + 2 * 86_400_000, record: dismissed }), 'dismissed', 'a Not now is remembered');
+  assert.equal(m.offerDecision({ ...base, today: '2026-11-26', now: now + 8 * 86_400_000, record: dismissed }), 'show');
+  assert.deepEqual(plain(m.parseRecords('{"need_ticket":{"day":"2026-11-18","restUntil":5},"bogus":1}')), { need_ticket: { day: '2026-11-18', firstShownAt: null, restUntil: 5 } });
+  assert.deepEqual(plain(m.parseRecords('not json')), {});
+  // No urgency, no price on any card.
+  const words = JSON.stringify(plain(m.OFFER_COPY));
+  assert.doesNotMatch(words, /hurry|limited|last chance|ends|only \d|don.t miss|sale|\$|left|now or never|before it/i);
+  const card = read('src/components/money/CalmOffer.tsx');
+  assert.doesNotMatch(card, /PriceBar|\.price\b|prices\[/, 'the card never shows a price; the gate does');
+  assert.match(card, /await buyPack\(pack, \{ onStart: \(\) => setBusy\(true\), placement: `offer\.\$\{placement\}` \}\)/, 'the one gated buy path');
+  assert.match(card, /if \(placement === 'win_vip'\) \{ void openMembership\(\); return; \}/, 'VIP opens behind the grown-up gate');
+  assert.match(card, /flagOn\(retentionFlagsNow\(\), 'natural_offers'\)/, 'read the way daily_three is read');
+  assert.match(card, /crew\?\.kind === 'family' && hasKids\(crew\)/);
+  assert.match(card, /pictureOnlyFor\(/);
+});
+
+test('T220: the dev override for natural_offers can never run in a production bundle', () => {
+  const card = read('src/components/money/CalmOffer.tsx');
+  assert.match(card, /function devSwitch\(\): boolean \{\s*if \(!__DEV__\) return false;/);
+  const cap = read('tools/capture/moneyCapture.ts');
+  assert.match(cap, /return __DEV__ && process\.env\.EXPO_PUBLIC_CAPTURE_NATURAL_OFFERS === '1';/);
+  // With __DEV__ false (a store bundle) the capture file says off whatever the env holds.
+  const ts = require(path.join(root, 'node_modules/typescript'));
+  const vm = require('node:vm');
+  const src = ts.transpileModule(cap, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const mod = { exports: {} };
+  vm.runInNewContext(`(function (module, exports, require) {${src}\n})`, { __DEV__: false, process: { env: { EXPO_PUBLIC_CAPTURE_NATURAL_OFFERS: '1' } } })(mod, mod.exports, () => ({}));
+  assert.equal(mod.exports.captureNaturalOffers(), false);
+});
+
+test('T158: a Just once sticker on the Supplies door while the Starter Pack is unbought (no price)', () => {
+  const sticker = loadTs('src/components/money/StarterSticker.tsx', {
+    react: { useContext: () => ({}) }, 'react/jsx-runtime': { jsx: () => null, jsxs: () => null },
+    '../../context/AuthProvider': { AuthContext: {} }, '../../services/money/supplies': { useSupplies: () => ({}) },
+    '../../services/purchases': { storeAvailable: () => true }, './moneyUi': { Sticker: 'Sticker' },
+  });
+  assert.equal(sticker.starterUnbought({ enabled: true, products: CATALOG }), true);
+  assert.equal(sticker.starterUnbought({ enabled: true, products: boughtStarter() }), false);
+  assert.equal(sticker.starterUnbought({ enabled: false, products: CATALOG }), false);
+  assert.equal(sticker.STARTER_STICKER_TEXT, 'JUST ONCE');
+  const src = read('src/components/money/StarterSticker.tsx');
+  assert.doesNotMatch(src.replace(/\/\*[\s\S]*?\*\//g, ''), /price/i, 'the sticker never names a price');
+  assert.match(read('src/screens/StoreScreen.tsx'), /key === 'supplies' && tab !== 'supplies' && <StarterSticker/);
+});

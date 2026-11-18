@@ -6,6 +6,7 @@
  *   EXPO_PUBLIC_CAPTURE_PRICES=1   US App Store prices for VIP and Supplies
  *   EXPO_PUBLIC_CAPTURE_TRIAL=0    VIP without the intro trial
  *   EXPO_PUBLIC_CAPTURE_BUY=success|pending|failed  what a Buy returns after the gate
+ *   EXPO_PUBLIC_CAPTURE_NATURAL_OFFERS=1  the natural_offers switch reads on (until lane be-economy serves it)
  */
 import type { ShopPrice, VipPlan } from '../../src/services/purchases';
 
@@ -48,3 +49,8 @@ export function captureBuy(): 'success' | 'pending' | 'failed' | null {
   return v === 'success' || v === 'pending' || v === 'failed' ? v : null;
 }
 
+
+/** Dev captures only: read the server's natural_offers switch as on. Never in a store bundle (__DEV__ is false there). */
+export function captureNaturalOffers(): boolean {
+  return __DEV__ && process.env.EXPO_PUBLIC_CAPTURE_NATURAL_OFFERS === '1';
+}

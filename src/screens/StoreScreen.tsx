@@ -31,6 +31,7 @@ import { clockOffset, formatCoins } from '../helpers/shopShelves';
 import StoreCountdown from '../components/StoreCountdown';
 import InformationModal from '../components/InformationModal';
 import Wrapper from '../components/Wrapper';
+import StarterSticker from '../components/money/StarterSticker';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -280,6 +281,8 @@ function ShopTabs({ tab, onChange, coins, onWishlist, withBack = false }: {
         <Pressable key={key} onPress={() => onChange(key)} style={[tabStyles.tab, tab === key && tabStyles.tabOn]}
           accessibilityRole="tab" accessibilityState={{ selected: tab === key }}>
           <Text style={[tabStyles.label, tab === key && tabStyles.labelOn]}>{key === 'gear' ? 'GEAR' : 'SUPPLIES'}</Text>
+          {/* A door to the Starter Pack from Gear (T158): a small sticker while it is unbought, no price. */}
+          {key === 'supplies' && tab !== 'supplies' && <StarterSticker style={tabStyles.sticker} />}
         </Pressable>
       ))}
     </View>
@@ -305,6 +308,7 @@ const tabStyles = StyleSheet.create({
     backgroundColor: 'rgba(5,52,110,0.55)', borderRadius: 999 },
   tab: { flex: 1, paddingVertical: 7, borderRadius: 999, alignItems: 'center' },
   tabOn: { backgroundColor: '#ffcf3b' },
+  sticker: { top: -9, right: -4 },
   label: { fontFamily: 'Shark', fontSize: 17, color: '#fff' },
   labelOn: { color: '#6a3b00' },
   coins: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minWidth: 92, gap: 4, marginTop: 10, backgroundColor: BRAND.blueLip,

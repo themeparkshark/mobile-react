@@ -18,6 +18,7 @@ import { useEffect } from 'react';
 import type { InventoryType } from '../models/inventory-type';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CoinTopUpOffer from '../components/money/CoinTopUpOffer';
+import CalmOffer from '../components/money/CalmOffer';
 import { BRAND, FONT } from '../ui';
 import countText from '../helpers/countText';
 
@@ -41,6 +42,27 @@ export default function MoneyPreviewScreen({ route }: { route?: { params?: { scr
         {ready && <SharkPassBanner style={{ alignSelf: 'stretch' }} />}
         <StarterOfferCard ready onShown={() => undefined} />
       </View>
+    );
+  }
+  if (screen === 'natural') {
+    // T220/T230 dev bench: the calm offer in each placement other screens will mount, plus the
+    // loss card (must stay empty). Start Metro with the natural-offers capture switch (tools/capture) until the
+    // server serves natural_offers.
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.blue }}>
+        <ScrollView contentContainerStyle={s.scroll}>
+          <Text style={s.label}>NEED A TICKET? (after the free ways)</Text>
+          <View style={s.cream}><CalmOffer placement="need_ticket" /></View>
+          <Text style={s.label}>First-win recap (once ever)</Text>
+          <View style={s.blue}><CalmOffer placement="first_win" /></View>
+          <Text style={s.label}>High point (park-day story, Daily 3 chest)</Text>
+          <View style={s.blue}><CalmOffer placement="high_point" /></View>
+          <Text style={s.label}>Win card, non-member</Text>
+          <View style={s.blue}><CalmOffer placement="win_vip" /></View>
+          <Text style={s.label}>Loss card (nothing shows)</Text>
+          <View style={s.blue}><CalmOffer placement="need_ticket" loss /><CalmOffer placement="win_vip" loss /></View>
+        </ScrollView>
+      </SafeAreaView>
     );
   }
   if (screen === 'park') {
