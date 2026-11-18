@@ -114,3 +114,18 @@ test('T124/T137: the coin card says something true about the ride: its land and 
   assert.doesNotMatch(src, /—/, 'no em dashes');
   assert.match(read('src/components/CoinLevelingModal.tsx'), /<RideFactLine rideName=\{rideCoin\.ride_name\}/);
 });
+
+test('T134: Ride Coins, the shelf and Profile read one server total per park', () => {
+  const { mergeParkTotals, allParksTotal } = loadTs('src/services/collection/parkTotals.ts');
+  // The catalog counts the Limited rotation too (40 rows); the server's permanent shelf says 35.
+  const catalog = new Map([[8, { name: 'Disneyland', owned: 2, total: 40 }], [2, { name: 'Magic Kingdom', owned: 0, total: 30 }]]);
+  const merged = mergeParkTotals(catalog, [{ id: 8, ride_coins_collected: 2, ride_coins_available: 35 }]);
+  assert.deepEqual({ ...merged.get(8) }, { name: 'Disneyland', owned: 2, total: 35 });
+  assert.deepEqual({ ...merged.get(2) }, { name: 'Magic Kingdom', owned: 0, total: 30 }, 'no server row: keep the catalog');
+  assert.deepEqual({ ...allParksTotal(merged) }, { owned: 2, total: 65 });
+  assert.deepEqual({ ...mergeParkTotals(catalog, [{ id: 8, ride_coins_collected: null, ride_coins_available: 35 }]).get(8) }, { name: 'Disneyland', owned: 2, total: 40 });
+  const screen = read('src/screens/CoinShelfScreen.tsx');
+  assert.match(screen, /return mergeParkTotals\(byPark, visited\);/);
+  assert.match(screen, /`\$\{across\.owned\} of \$\{across\.total\}`/);
+  assert.doesNotMatch(screen, /\$\{ownedCount\} of \$\{catalogRides\.length\}/);
+});
