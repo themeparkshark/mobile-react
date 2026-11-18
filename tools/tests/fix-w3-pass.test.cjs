@@ -205,6 +205,10 @@ test('T156: three concrete VIP perks with the player own week, the rest folded',
   assert.equal(plain(offers.vipHeroPerks(PERKS, { thisWeekWins: 1 })).hero[0].body, 'This week you won 1 ride coin. VIP doubles every one.');
   assert.equal(plain(offers.vipHeroPerks(PERKS, {})).hero[0].body, 'Every ride coin you win at the park pays double.');
   assert.equal(plain(offers.vipHeroPerks(PERKS, {})).hero[2].body, PERKS[3].body, 'no gift numbers: the server line');
+  // The perk list failed to load: the gift still shows from its own on answer, never invented without it.
+  const fallback = PERKS.filter(p => p.key === 'ride' || p.key === 'home' || p.key === 'badge');
+  assert.deepEqual(plain(offers.vipHeroPerks(fallback, { giftOn: true, giftCoins: 500, giftPin: 'VIP November Pin' })).hero.map(p => p.key), ['ride', 'monthly_gift']);
+  assert.deepEqual(plain(offers.vipHeroPerks(fallback, { giftOn: false, giftCoins: 500, giftPin: 'VIP November Pin' })).hero.map(p => p.key), ['ride']);
   // An older server without keys: matched by its words.
   const nokey = PERKS.map(({ key, ...p }) => p);
   assert.equal(plain(offers.vipHeroPerks(nokey, {})).hero.length, 3);

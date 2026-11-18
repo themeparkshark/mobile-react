@@ -218,7 +218,7 @@ export function vipWinOffer(input: {
  */
 export type VipHeroPerk = { readonly key: 'ride' | 'daily_ticket' | 'monthly_gift'; readonly icon: string; readonly title: string; readonly body: string };
 export function vipHeroPerks(perks: readonly { key?: string; icon: string; title: string; body: string }[],
-  own: { lastWeekWins?: number | null; thisWeekWins?: number | null; giftCoins?: number | null; giftPin?: string | null }): { hero: VipHeroPerk[]; rest: { key?: string; icon: string; title: string; body: string }[] } {
+  own: { lastWeekWins?: number | null; thisWeekWins?: number | null; giftCoins?: number | null; giftPin?: string | null; giftOn?: boolean }): { hero: VipHeroPerk[]; rest: { key?: string; icon: string; title: string; body: string }[] } {
   const find = (key: string, re: RegExp) => perks.find(p => p.key === key) ?? perks.find(p => !p.key && re.test(p.title));
   const ride = find('ride', /\bXP\b.*coin|coin.*\bXP\b/i);
   const ticket = find('daily_ticket', /ticket every day/i);
@@ -235,10 +235,13 @@ export function vipHeroPerks(perks: readonly { key?: string; icon: string; title
     hero.push({ key: 'ride', icon: ride.icon, title: ride.title, body });
   }
   if (ticket) hero.push({ key: 'daily_ticket', icon: ticket.icon, title: ticket.title, body: 'That is 7 more Tickets every week. Claim it in Supplies.' });
+  const giftCoins = typeof own.giftCoins === 'number' && own.giftCoins > 0 ? `${countText(own.giftCoins)} Shark Coins` : null;
   if (gift) {
-    const coins = typeof own.giftCoins === 'number' && own.giftCoins > 0 ? `${countText(own.giftCoins)} Shark Coins` : null;
-    const body = coins && own.giftPin ? `This month: ${coins} and the ${own.giftPin}.` : gift.body;
+    const body = giftCoins && own.giftPin ? `This month: ${giftCoins} and the ${own.giftPin}.` : gift.body;
     hero.push({ key: 'monthly_gift', icon: gift.icon, title: gift.title, body });
+  } else if (own.giftOn && giftCoins && own.giftPin) {
+    // The perk list did not load (slow park Wi-Fi), but the gift's own server answer says it is on: say it from that.
+    hero.push({ key: 'monthly_gift', icon: 'gift', title: 'A gift every month', body: `This month: ${giftCoins} and the ${own.giftPin}.` });
   }
   const used = new Set([ride, ticket, gift].filter(Boolean));
   return { hero, rest: perks.filter(p => !used.has(p)) };

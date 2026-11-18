@@ -224,7 +224,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
 
   const close = () => (intro ? RootNavigation.navigate('Explore') : RootNavigation.goBack());
   const allPerks: VipPerk[] = boxesLive ? [...perks, VIP_WEEKLY_BOX_PERK as VipPerk] : perks;
-  const hero = vipHeroPerks(allPerks, { lastWeekWins: week?.last, thisWeekWins: week?.now, giftCoins: gift?.coins, giftPin: gift?.pin?.name });
+  const hero = vipHeroPerks(allPerks, { lastWeekWins: week?.last, thisWeekWins: week?.now, giftCoins: gift?.coins, giftPin: gift?.pin?.name, giftOn: !!gift });
   const trial = plan?.trial ?? null;
   const savings = savingsText(plans);
 
