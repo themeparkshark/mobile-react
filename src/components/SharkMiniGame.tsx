@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { MINIGAME_ORIGIN_WHITELIST, allowMinigameNavigation } from './minigameWeb';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { Asset } from 'expo-asset';
 import * as Haptics from 'expo-haptics';
+import { AuthContext } from '../context/AuthProvider';
+import { STUDIO_MUTE } from '../dev/studioMute';
 
 const SHARKY_HTML = require('../assets/minigames/sharky/sharky.html');
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -30,7 +32,17 @@ function scoreToMultiplier(score: number, target: number): number {
   return 1.0;
 }
 
+/**
+ * Sharky draws its own beeps with WebAudio inside the page, so the app's sound switch never reached it.
+ * Run before the page's script: with no AudioContext the game's beep helper fails inside its own
+ * try/catch and plays nothing.
+ */
+export const SILENCE_WEB_AUDIO = 'window.AudioContext = void 0; window.webkitAudioContext = void 0; true;';
+
 export default function SharkMiniGame({ visible, taskName, targetScore = 5, onClose, onComplete }: Props) {
+  const { player } = useContext(AuthContext);
+  // Sound Effects off in Settings (or a muted test simulator) means no beeps here either.
+  const silent = STUDIO_MUTE || player?.enabled_sound_effects === false;
   const [htmlUri, setHtmlUri] = useState<string | null>(null);
   const [liveScore, setLiveScore] = useState(0);
   const resolvedRef = useRef(false);
@@ -90,6 +102,7 @@ export default function SharkMiniGame({ visible, taskName, targetScore = 5, onCl
             source={{ uri: htmlUri, baseUrl: htmlUri }}
             onMessage={handleMessage}
             injectedJavaScript={injected}
+            injectedJavaScriptBeforeContentLoaded={silent ? SILENCE_WEB_AUDIO : undefined}
             originWhitelist={MINIGAME_ORIGIN_WHITELIST}
           onShouldStartLoadWithRequest={allowMinigameNavigation}
           setSupportMultipleWindows={false}
