@@ -25,6 +25,8 @@ export interface PoolQuestion {
   readonly fact?: string;
   readonly source?: string;
   readonly tpsArticleUrl?: string;
+  /** A fact-checked server bank row: shown as written, never through the generic labels (hold-fix 3). */
+  readonly bank?: boolean;
 }
 
 export interface SliderSpec {
@@ -52,6 +54,8 @@ export interface DuelQuestion {
   stats: QuestionStats;
   /** Verified facts this item uses, computed from the original text before generic labels (9.1). */
   factKeys?: string[];
+  /** A server bank row: its text is the server's, fact-checked and shown as written. */
+  bank?: boolean;
 }
 
 /**
@@ -61,6 +65,9 @@ export interface DuelQuestion {
 export function withGenericLabels(q: DuelQuestion): DuelQuestion {
   if (NAMES_IN_TEXT) return q;
   const factKeys = q.factKeys ?? factKeysOf(q);
+  // The server's bank is written and fact-checked for the screen (plain park and ride names, T234): the app never
+  // rewrites it. Relabelling it broke right answers ("The Disney Studio" read "The park company Studio").
+  if (q.bank) return { ...q, factKeys };
   return {
     ...q,
     prompt: genericize(q.prompt),
@@ -100,8 +107,8 @@ export function usablePool(pool: readonly PoolQuestion[], limit: number = TEXT_L
     if (seen.has(q.id) || isFiller(q)) continue;
     if (q.question.length > limit + 20) continue;
     if (q.choices.length < 2 || q.correctIndex < 0 || q.correctIndex >= q.choices.length) continue;
-    // 19.2: a generic label must never hand over the answer.
-    if (labelLeaks(q.question, q.choices[q.correctIndex])) continue;
+    // 19.2: a generic label must never hand over the answer (a bank row keeps its words, so it has no label to leak).
+    if (!q.bank && labelLeaks(q.question, q.choices[q.correctIndex])) continue;
     if (mustDrop([q.question, ...q.choices])) continue;
     seen.add(q.id);
     out.push(q);
@@ -144,6 +151,7 @@ function fromPool(seed: number, q: PoolQuestion): DuelQuestion {
     source: q.source,
     tpsArticleUrl: q.tpsArticleUrl,
     stats: priorStats(q.difficulty),
+    ...(q.bank ? { bank: true } : {}),
   };
 }
 
