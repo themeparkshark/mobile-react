@@ -268,3 +268,25 @@ test('r6 follow-up: a held podium week gets a "being checked" card, never a priz
   const board = model.boardModel({ board: 'week', rows: [], last_week: { week_start: '2026-09-28', rank: 1, score: 26, players_count: 30, title: null, tickets: 0, held: true, seen: false } }, 'week', 5);
   assert.equal(board.lastWeek.held, true);
 });
+
+test('critic M4 (Nov 19): a short board puts your card under its last row; a row under the compass is not seen', () => {
+  // SE, a board of 4: the podium header plus one row ends well above the nav, so the card sits right under row 4.
+  const room = 72 + 52 + 34;
+  assert.equal(model.youInlineTop(330, 520, room), 330, 'every row fits: the card follows the last row');
+  assert.equal(model.youInlineTop(900, 520, room), null, 'a long board docks the card at the bottom');
+  assert.equal(model.youInlineTop(330, 0, room), null, 'not laid out yet');
+  // 17 Pro All-Time top: row 8 half under the raised Map compass is not clear, so the dock shows.
+  assert.equal(model.rowOnScreen(560, 64, 0, 620), true, '60% inside the list');
+  assert.equal(model.rowClear(560, 64, 0, 620), false, 'but under the compass: the dock shows');
+  assert.equal(model.rowClear(400, 64, 0, 620), true, 'fully clear');
+  const src = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(src, /const inlineAt = youInlineTop\(rowsEnd, listBox\.height, YOU_CARD_HEIGHT \+ YOU_CARD_BOTTOM \+ 34\);/);
+  assert.match(src, /<YouRow inlineTop=\{inlineTop\}/);
+  assert.match(src, /&& myRowClearRef\.current\(\);/);
+  assert.doesNotMatch(src, /rowOnScreen\(/, 'every visibility check uses the clear test');
+});
+
+test('critic (Nov 19): a short board says how many are racing, so its cream sheet is never a blank slab', () => {
+  const src = read('src/screens/LeaderboardsScreen/standingsV2Model.ts');
+  assert.match(src, /if \(model\.board !== 'friends' && \(model\.playersCount \?\? 0\) > 0\) \{/);
+});
