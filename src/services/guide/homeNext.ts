@@ -98,7 +98,8 @@ export function homeDaily3Goal(d: HomeNextInput['daily3'], treatsOnMap: number):
     const goal = homeSideGoal(sent, false);
     if (goal.parkOnly) continue;
     const go = goalGo(goal, false);
-    const action = go ? GOAL_ACTION[go] : null;
+    // "Pick your next coin" is done on the next park day's shelf picker (PLAN), the place that counts it.
+    const action = goal.kind === 'plan' ? 'plan' : go ? GOAL_ACTION[go] : null;
     if (!action) continue;
     // A treat goal with no treat on the map yet would be a dead FIND: the next goal leads instead.
     if (action === 'find' && treatsOnMap <= 0) continue;

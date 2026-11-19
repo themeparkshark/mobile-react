@@ -125,6 +125,14 @@ test('T007: a whole evening walks the steps in order, one at a time, each one tr
   assert.deepEqual(seen, ['level_up', 'reward', 'daily3', 'daily3', 'limited', 'plan', 'treat', 'parts', 'practice', 'park_day']);
 });
 
+test('T007: the Daily 3 "Pick your next coin" goal opens the park day plan picker', () => {
+  const d3 = { goals: [goal('plan', 'Pick your next coin')], done: 2, total: 3 };
+  const step = H.homeNextStep(base({ daily3: d3 }));
+  assert.equal(step.key, 'daily3');
+  assert.equal(step.action, 'plan');
+  assert.equal(step.copy.line, '2 of 3 done');
+});
+
 test('T007: a fresh player sees the treat meter with treats near, then PLAN, never a park-only goal or a dead FIND', () => {
   const fresh = base({ treats: { onMap: 6, toTicket: 3, capped: false }, park: { parkName: null, tickets: 0, plan: null } });
   assert.equal(H.homeNextStep(fresh).copy.line, '3 more treats = 1 Ticket');
