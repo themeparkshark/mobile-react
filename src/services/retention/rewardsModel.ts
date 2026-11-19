@@ -28,8 +28,8 @@ export interface RewardsRow {
 export interface RewardsInput {
   /** Today's daily chest (always on). */
   readonly dailyChest: { readonly unclaimed: boolean; readonly day: number; readonly of: number;
-    /** Today's chest started the ladder again after days away (T110). */
-    readonly restarted?: boolean } | null;
+    /** Today's chest started the ladder again after this many days away (T110); 0 or absent: it did not. */
+    readonly restarted?: number } | null;
   /** Daily 3, after rung 4 and with its switch on. */
   readonly daily3: { readonly done: number; readonly total: number; readonly claimable: boolean; readonly claimed: boolean; readonly flame: number;
     /** Today's goals were shown to the player (T096). false: the row leads to the goals first, never "All 3 done!". */
@@ -64,7 +64,9 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
   const rows: RewardsRow[] = [];
   if (i.dailyChest?.unclaimed) {
     // T110: a chest that started over says why (once, from the server's streak_reset), never a bare "Day 1".
-    rows.push({ key: 'daily_chest', title: 'Daily Chest', line: i.dailyChest.restarted
+    // When the flame line above already says the welcome back, the row says only the day (one welcome, never two).
+    const welcome = !!i.dailyChest.restarted && !flameNote(i.daily3, i.dailyChest.restarted);
+    rows.push({ key: 'daily_chest', title: 'Daily Chest', line: welcome
       ? `Welcome back! Day ${i.dailyChest.day} of ${i.dailyChest.of} is ready` : `Day ${i.dailyChest.day} of ${i.dailyChest.of} is ready`, ready: 1, action: 'open' });
   }
   if (i.daily3) {
@@ -271,10 +273,14 @@ export function withChestOpened<G extends { readonly kind: string; readonly done
  * - no flame after having had one (days away): a kind welcome back and how to light a new one;
  * - otherwise nothing (the flame line already says "Start a flame with Daily 3").
  */
-export function flameNote(d: RewardsInput['daily3']): string | null {
+export function flameNote(d: RewardsInput['daily3'], daysAway = 0): string | null {
   if (!d) return null;
   if (d.flame > 0 && d.counted) return 'Open the game tomorrow to keep your flame';
-  if (d.flame === 0 && (d.best ?? 0) > 0) return 'Welcome back! Finish Daily 3 to light a new flame';
+  // Fix pass w4 T110: after days away, once, the why (the server's streak_reset on today's chest) and what to do.
+  if (d.flame === 0 && (d.best ?? 0) > 0) {
+    return daysAway > 0 ? `Welcome back! Away ${daysAway} ${daysAway === 1 ? 'day' : 'days'}, so your chest and flame start again. Finish Daily 3 to light a new one`
+      : 'Welcome back! Finish Daily 3 to light a new flame';
+  }
   return null;
 }
 

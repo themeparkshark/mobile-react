@@ -547,7 +547,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const rewardsInput: RewardsInput = {
     dailyChest: dailyGift && player?.username
       ? { unclaimed: dailyGift.redeemed_at === null, day: Math.min(giftLadder, Math.max(1, dailyGift.day ?? 1)), of: giftLadder,
-        restarted: !!chestRestartLine(dailyGift.streak_reset) } : null,
+        restarted: chestRestartLine(dailyGift.streak_reset) ? Math.floor(Number(dailyGift.streak_reset?.days_away ?? 0)) : 0 } : null,
     daily3: wantDaily && daily ? {
       done: doneCount(withChestOpened(daily.goals, chestOpenedOn(dailyGift, daily.date))), total: Math.max(3, daily.goals.length), claimable: daily.claimable,
       claimed: daily.claimed && !daily.claimable, flame: daily.streak.days, seen: seenToday(daily, seenDate),
@@ -785,7 +785,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   // The Rewards card. While a card opened from it is up (a chest, a reveal, Daily 3), it stays mounted out of sight,
   // so BACK shows this same card again at once: a fresh mount drew its row pictures a few frames late.
   const rewardsCard = (
-    <RewardsSheet rows={rows} flame={summary.flame} flameLine={flameNote(rewardsInput.daily3)} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
+    <RewardsSheet rows={rows} flame={summary.flame} flameLine={flameNote(rewardsInput.daily3, rewardsInput.dailyChest?.restarted ?? 0)} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
       tomorrow={tomorrowCard}
       reducedMotion={reducedMotion} enterRows={!(presentNow && shownRef.current && !!face.current && face.current.key !== 'rewards')}
       onRow={onRewardsRow} onClose={close} />

@@ -71,9 +71,12 @@ test('T110 (B06): a chest that started over says why, once, kindly; absent field
   assert.equal(chestDay.chestRestartLine(undefined), null);
   assert.equal(chestDay.chestRestartLine({ days_away: 0 }), null);
   const base = { daily3: null, weekly: null, levelChest: null, trail: null, stamps: null, events: null };
-  const row = r => model.rewardsRows({ ...base, dailyChest: { unclaimed: true, day: 1, of: 7, restarted: r } })[0].line;
-  assert.equal(row(true), 'Welcome back! Day 1 of 7 is ready');
-  assert.equal(row(false), 'Day 1 of 7 is ready');
+  const row = (r, daily3 = null) => model.rewardsRows({ ...base, daily3, dailyChest: { unclaimed: true, day: 1, of: 7, restarted: r } }).find(x => x.key === 'daily_chest').line;
+  assert.equal(row(3), 'Welcome back! Day 1 of 7 is ready', 'no flame line yet: the row says it');
+  assert.equal(row(0), 'Day 1 of 7 is ready');
+  const cold = { flame: 0, best: 2, done: 0, total: 3, claimable: false, claimed: false, seen: true };
+  assert.equal(row(3, cold), 'Day 1 of 7 is ready', 'the flame line says the welcome back: never twice');
+  assert.equal(model.flameNote(cold, 3), 'Welcome back! Away 3 days, so your chest and flame start again. Finish Daily 3 to light a new one');
   const gift = read('src/components/DailyGiftModal.tsx');
   assert.match(gift, /const restartLine = chestRestartLine\(displayedGift\.streak_reset \?\? dailyGift\.streak_reset\);/);
   assert.match(gift, /!simple && !!restartLine && phase !== 'open' && <Text style=\{styles\.restart\}/);
