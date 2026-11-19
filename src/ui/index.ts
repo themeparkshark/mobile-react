@@ -25,5 +25,8 @@ export type { GameButtonProps } from './GameButton';
 export { GameDialog, GameDialogHost, gameAlert, confirmGame, showGameDialog, DIALOG_CARD } from './GameDialog';
 export type { GameDialogProps, GameDialogButton, GameDialogOptions } from './GameDialog';
 
+export { default as GameToggle, TOGGLE, thumbX } from './GameToggle';
+export type { GameToggleProps } from './GameToggle';
+
 export { default as SharkLoader, SHARK_LOADER_COPY, SHARK_LOADER_ART, sharkLoaderContent } from './SharkLoader';
 export type { SharkLoaderProps, SharkLoaderState } from './SharkLoader';

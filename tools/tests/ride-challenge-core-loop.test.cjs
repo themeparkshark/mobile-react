@@ -314,7 +314,9 @@ test('Settings shows Picture games only while the server deals them, and hides F
   // A row that toggles by itself shows its switch as a picture: a tap on the switch reached both and flipped twice.
   assert.match(settings, /<BrandSwitch label="Picture games only" value=\{play\.prefs\.pictureOnly\} rowToggles/);
   assert.match(settings, /<BrandSwitch label="Battery saver" value=\{batterySaver\} rowToggles/);
-  assert.match(settings, /if \(rowToggles\) \{\n\s+return \(\n\s+<View pointerEvents="none"/);
+  // The row toggles; the switch only shows the state (GameToggle without onChange is pointerEvents none).
+  assert.match(settings, /if \(rowToggles\) return <GameToggle value=\{!!value\} label=\{label\} \/>;/);
+  assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/ui/GameToggle.tsx'), 'utf8'), /if \(!onChange\) \{\n\s+return <View testID=\{testID\} pointerEvents="none"/);
   const intro = read('src/components/help/GameIntroCard.tsx');
   assert.match(intro, /const offerPictures = kind === 'trivia' && play\.available;/);
   assert.match(intro, /Can't read yet\?/);

@@ -162,3 +162,23 @@ test('T175: a treat catch plays at once on a slow server and its claim finishes 
   assert.match(q, /storageKey: 'home_catch_claim_queue'/);
   assert.match(q, /if \(typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429\) return true;/);
 });
+
+test('T150: Settings uses the game toggle (no stock iOS Switch) and 56 pt rows', () => {
+  const src = read('src/screens/SettingsScreen.tsx');
+  assert.doesNotMatch(src, /<Switch\b/);
+  assert.doesNotMatch(src, /\bSwitch,/);
+  assert.match(src, /if \(rowToggles\) return <GameToggle value=\{!!value\} label=\{label\} \/>;/);
+  assert.match(src, /minHeight: 56,/);
+  const toggle = read('src/ui/GameToggle.tsx');
+  assert.match(toggle, /accessibilityRole="switch"/);
+  assert.match(toggle, /withSpring\(value \? 1 : 0, SPRING\.stamp\)/);
+  assert.match(toggle, /borderColor: BRAND\.navy/);
+  assert.doesNotMatch(toggle, /'#[0-9a-f]{6}'/i, 'colours from BRAND only');
+  const T = loadTs('src/ui/GameToggle.tsx', {
+    react: { useEffect() {} }, 'react-native': {}, 'react-native-reanimated': {}, 'expo-haptics': {},
+    './useUiReducedMotion': { default: () => false }, './tokens': loadTs('src/ui/tokens.ts'), './motion': loadTs('src/ui/motion.ts'),
+    'react/jsx-runtime': { jsx() {}, jsxs() {} },
+  });
+  assert.equal(T.thumbX(0), 0);
+  assert.equal(T.thumbX(1), 56 - 24 - 4 - 6, 'the thumb travels inside the outline');
+});
