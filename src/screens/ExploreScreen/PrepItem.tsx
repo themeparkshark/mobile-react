@@ -430,9 +430,9 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         <GameIcon name="camera" size={inRange ? 16 : 12} />
         {inRange && <RarityMark tier={tier} />}
       </View>}
-      {/* The group's count drops to the art's lower corner when the hand stands on its top-left, so neither the
-          hand nor the shark (the hand is always on the side away from it) ever covers it (rule h). */}
-      {count > 1 && <View style={[styles.countBadge, cues.finger && leftSide && !below && styles.countBadgeLow, chromeless && styles.chromeOff]}><Text style={styles.countText}>×{count}</Text></View>}
+      {/* With the hand on it, the group's count sits on the hand's side (always the side away from the shark) and
+          at the other end from the hand, so neither the hand nor the shark ever covers it (rule h). */}
+      {count > 1 && <View style={[styles.countBadge, cues.finger && !below && styles.countBadgeLow, cues.finger && !leftSide && styles.countBadgeRight, chromeless && styles.chromeOff]}><Text style={styles.countText}>×{count}</Text></View>}
       {cues.newTag && <View style={[styles.newBadge, chromeless && styles.chromeOff]}><Text style={styles.newText}>NEW</Text></View>}
       {cues.newDot && <View style={[styles.newDot, chromeless && styles.chromeOff]} />}
       {cues.finger && <Animated.Image source={FINGER} style={[styles.finger, chromeless && styles.chromeOff, below ? styles.fingerBelow : leftSide ? styles.fingerLeft : styles.fingerRight, finger]} />}
@@ -489,6 +489,7 @@ const styles = StyleSheet.create({
   countBadge: { position: 'absolute', top: B / 2 - A / 2 - 12, left: B / 2 - A / 2 - 14, backgroundColor: BRAND.navy,
     borderWidth: 2, borderColor: BRAND.white, borderRadius: 10, paddingHorizontal: 6 },
   countBadgeLow: { top: B / 2 + A / 2 - 18 },
+  countBadgeRight: { left: undefined, right: B / 2 - A / 2 - 14 },
   countText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 15 },
   // The fingertip (bottom centre of the 34 x 43 art, turned 28 degrees) lands on the find itself, 6 pt
   // from its centre on the side away from the player, never on the NEW tag or the badges.
