@@ -1450,6 +1450,8 @@ export default function RedeemRedeemableModal({
                 visible={flowState !== 'spinning'}
                 taskId={(redeemable?.model as TaskType)?.id ?? 0}
                 taskName={taskName}
+                // T060 (play-teach): the coin being played for, so the game's HUD shows its own coin art.
+                coinImageUrl={coinUri ?? undefined}
                 preferredGame={selectedGame}
                 attemptSeed={attemptRef.current?.seed}
                 rewardMode="task-attempt"

@@ -148,3 +148,13 @@ test('T032: Current Quest (LinePlay) teaches a tap, moves on every step, pops a 
   assert.notEqual(replaySeed(12345, 1), 12345);
   assert.notEqual(replaySeed(12345, 1), replaySeed(12345, 2));
 });
+
+test('T060: the Whack ride round draws the ride coin\'s own art inside its HUD ring', () => {
+  const board = read('src/games/whack/render/WhackBoard.tsx');
+  assert.match(board, /const coinImg = useImage\(hud\.ride && hud\.coinUrl \? hud\.coinUrl : null\);/);
+  assert.match(board, /<Circle cx=\{tcx\} cy=\{tcy\} r=\{tr\} color=\{timerFace\} \/>\s*\{coinImg \? <Image image=\{coinImg\}/);
+  const whack = read('src/games/whack/WhackAShark.tsx');
+  assert.match(whack, /coinUrl: ride && !defend \? coinImage \?\? null : null,/, 'Home Defend never shows a coin it does not give');
+  assert.match(read('src/components/MiniGameSelector.tsx'), /<WhackAShark visible=\{visible\} seed=\{seed\} taskName=\{taskName\} coinImage=\{coinImageUrl \?\? null\}/);
+  assert.match(read('src/components/RedeemRedeemableModal.tsx'), /coinImageUrl=\{coinUri \?\? undefined\}/, 'the coin card hands its coin_url to the game');
+});
