@@ -128,7 +128,7 @@ test('a limited coin out of rotation explains itself and cannot be played', () =
     'react-native': { StyleSheet: { create: v => v } }, 'react-native-modal': {}, 'expo-haptics': {}, 'expo-image': {},
     '../context/SoundEffectProvider': {}, './Ribbon': {}, './YellowButton': {}, './MysteryCoinArtwork': {},
     './collection/CoinSocket': {}, '../ui/GameIcon': {}, '../ui/GameRichText': {}, '../hooks/useReducedGameMotion': {},
-    '../ui/modalLayers': {}, '../services/reveal/revealLadder': {},
+    '../ui/modalLayers': {}, '../services/reveal/revealLadder': {}, './collection/RideFactLine': {},
   });
   const base = { isSecret: false, isArchived: false, isResting: false, kind: 'ride' };
   assert.equal(unfoundCoinCopy({ ...base, limited: IN }).ribbon, 'Limited Coin');

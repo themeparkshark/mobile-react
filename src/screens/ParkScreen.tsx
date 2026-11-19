@@ -535,6 +535,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                 <View>
                   <UnfoundCoinModal task={task} size={coinSize} kind={rideKind(task.id)}
                     limited={(task as TaskType).limited}
+                    parkId={Number(park)}
                     isGoal={parkTripGoal?.task_id === task.id || guidePlan === task.id}
                     onPlayInLine={canChooseGoal && inThisPark &&
                       currentPark?.ride_passport_task_ids?.includes(task.id)

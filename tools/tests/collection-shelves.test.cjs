@@ -151,7 +151,7 @@ test('unfound coin copy is type-aware and leads with the gameplay action', () =>
     'react-native': { StyleSheet: { create: v => v } }, 'react-native-modal': {}, 'expo-haptics': {}, 'expo-image': {},
     '../context/SoundEffectProvider': {}, './Ribbon': {}, './YellowButton': {}, './MysteryCoinArtwork': {},
     './collection/CoinSocket': {}, '../ui/GameIcon': {}, '../ui/GameRichText': {}, '../hooks/useReducedGameMotion': {},
-    '../ui/modalLayers': {}, '../services/reveal/revealLadder': {},
+    '../ui/modalLayers': {}, '../services/reveal/revealLadder': {}, './collection/RideFactLine': {},
   });
   assert.equal(unfoundCoinCopy({ isSecret: false, isArchived: false, isResting: false, kind: 'ride' }).ribbon, 'Ride Coin');
   assert.equal(unfoundCoinCopy({ isSecret: false, isArchived: false, isResting: false }).challenge, 'PLAY! at this spot');

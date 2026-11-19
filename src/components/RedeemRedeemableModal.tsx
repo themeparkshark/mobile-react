@@ -91,6 +91,7 @@ import { taskHasLine } from '../services/lineplay/rideLines';
 import { TREATS_PER_TICKET } from '../services/guide/freeTickets';
 import TicketClaimFlight from './rewards/TicketClaimFlight';
 import { tryAgainLine, tryAgainWith } from '../services/connectionCopy';
+import { coinFaceNote } from '../services/collection/rideFacts';
 
 
 // Ticket cost by ride importance tier
@@ -323,6 +324,7 @@ export default function RedeemRedeemableModal({
     redeemable?.rescue_pass_available === true;
   const vip = !!player?.is_subscribed;
   const taskName = redeemable ? (redeemable.model as TaskType | SecretTaskType).name : '';
+  const faceNote = redeemable?.type === 'task' ? coinFaceNote(taskName, park.id) : null;
   const title = challengeTitle(taskType, taskName);
   // The free ways to play, in the one fixed order (freeTickets contract): claim, free try, extra tries,
   // the line Ticket (only while Queue Tickets is on), treats at home. The grown-up shop comes last.
@@ -1219,6 +1221,9 @@ export default function RedeemRedeemableModal({
                       type={redeemable.type}
                       pulse
                     />
+                    {/* T137: a coin face that reads like a typo ("O2H") says what it is the first time it is seen. */}
+                    {isTaskType && !!faceNote && <Text style={styles.faceNote} numberOfLines={1} adjustsFontSizeToFit
+                      minimumFontScale={0.8} maxFontSizeMultiplier={1.2}>{faceNote}</Text>}
                     {/* Out of Tickets with no free way left, the help card takes the reward tiles' room, so the
                         card stays inside the screen on an iPhone SE (the title says what this coin is). */}
                     {!needTicket && <View style={{ marginLeft: -4, marginRight: -4, marginTop: 8, flexDirection: 'row', justifyContent: 'center' }}>
@@ -1529,6 +1534,8 @@ const styles = StyleSheet.create({
   howStrip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40, marginTop: -6, marginBottom: 6 },
   howCoin: { width: 30, height: 30 },
   rewardTile: { minWidth: 82, paddingHorizontal: 4, alignItems: 'center' },
+  faceNote: { fontFamily: 'Knockout', fontSize: 15, color: '#ffffff', textAlign: 'center', marginTop: 6,
+    textShadowColor: 'rgba(5, 52, 110, 0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1 },
   rewardIcon: { width: 52, height: 52, borderRadius: 12, backgroundColor: '#bfe5ff', borderWidth: 3, borderColor: '#05346e',
     alignItems: 'center', justifyContent: 'center' },
   rewardAmount: { color: '#fff', fontFamily: 'Shark', fontSize: 18, textAlign: 'center', marginTop: 2,

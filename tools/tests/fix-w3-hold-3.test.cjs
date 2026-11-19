@@ -146,3 +146,16 @@ test('regression: the Starter Pack shown as the first-win offer sends starter_se
   // Only the placement that shows the Starter Pack: the Park Day Pack card never counts as the Starter Pack seen.
   assert.doesNotMatch(seenEffect, /need_ticket[^\n]*starter_seen/);
 });
+
+test('T137: the O2H face is explained where it is first seen: the WIN card and the shelf slot sheet', () => {
+  const facts = loadTs('src/services/collection/rideFacts.ts');
+  assert.match(facts.coinFaceNote('Jungle Cruise', 8), /O2H/);
+  assert.match(facts.coinFaceNote('Jungle Cruise', 8), /backside of water/);
+  assert.equal(facts.coinFaceNote('Haunted Mansion', 8), null, 'a face that reads fine gets no extra line');
+  const card = strip(read('src/components/RedeemRedeemableModal.tsx'));
+  assert.match(card, /const faceNote = redeemable\?\.type === 'task' \? coinFaceNote\(taskName, park\.id\) : null;/);
+  assert.match(card, /pulse\s*\/>\s*(\{\}\s*)?\{isTaskType && !!faceNote && <Text style=\{styles\.faceNote\}/);
+  const slot = strip(read('src/components/UnfoundCoinModal.tsx'));
+  assert.match(slot, /<RideFactLine rideName=\{task\.name\} parkId=\{parkId\} onDark/);
+  assert.match(strip(read('src/screens/ParkScreen.tsx')), /<UnfoundCoinModal task=\{task\}[\s\S]{0,200}parkId=\{Number\(park\)\}/);
+});
