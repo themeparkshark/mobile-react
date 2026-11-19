@@ -161,7 +161,7 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '../components/guide/guideCoins': guideCoins,
     '../services/guide/guideFlags': { useGuideFlags: () => options.flags ?? {} },
     '../services/reveal/revealLadder': { useRung: rung => ({ open: (options.rungs ?? []).includes(rung), isNew: false, markSeen: () => undefined }),
-      currentAppOpen: () => 'open-test' },
+      currentAppOpen: () => 'open-test', useLadderCounters: () => options.ladderCounters ?? { homeDays: 0 } },
     ...options.modules,
   };
   // useMapGuide runs for real in the screen's realm; its own imports get the same stubs as the screen's.

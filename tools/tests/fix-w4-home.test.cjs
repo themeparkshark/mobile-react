@@ -154,7 +154,7 @@ test('T007: the home map wires the step, its art and its buttons (practice, FIND
   assert.match(home, /onCardPress=\{homeCopy\.button \? \(\) => onHomeAction\(homeCopy\.button!\.action\) : undefined\}/, 'a tap on the card is its button');
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /case 'rewards': openRewards\(\); return;/);
-  assert.match(explore, /readyReward: retention\.homeNext\.readyReward,/);
+  assert.match(explore, /readyReward: retention\.homeNext\?\.readyReward \?\? null,/);
   assert.match(read('src/components/retention/useRetention.tsx'), /const readyRow = settledSummary\.count > 0 \? rows\.find\(r => r\.ready > 0 && r\.action != null\) \?\? null : null;/,
     'the card and the Rewards button agree on what is ready');
 });
@@ -180,4 +180,12 @@ test('T198: the park day counts come from the server: every won attempt, every w
   const card = read('src/screens/ParkDayRecapCard.tsx');
   assert.match(card, /\{recapWins\(recap\)\}<\/Text><Text style=\{styles\.statLabel\}>WINS/);
   assert.match(card, /\{!!lineCopy && <GameRichText/);
+});
+
+test('T023: while the first coin is picked the card breathes softly (UI thread, opacity only), still under Reduce Motion and Battery Saver', () => {
+  const card = read('src/components/guide/NextCoinCard.tsx');
+  assert.match(card, /const breathing = loading && !reduced && ambient;/);
+  assert.match(card, /withRepeat\(withTiming\(0\.55, \{ duration: AMBIENT\.breathMs \/ 2, easing: Easing\.bezier\(\.\.\.BEZIER\.inOut\) \}\), -1, true\)/);
+  assert.match(card, /<Animated\.View style=\{breathStyle\}><Image source=\{art\}/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /loading=\{nextCoin\.state === 'arrive' && !nextCoin\.target\}/);
 });
