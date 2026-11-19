@@ -53,6 +53,7 @@ export const MAP_GUIDES: readonly string[] = ['onboarding', 'home_first_find', '
 
 /** Each screen's first-visit guide and the route it belongs to. */
 export const GUIDE_ROUTES: Readonly<Record<string, string>> = {
+  // vocab-allow: route names, never shown
   store: 'Store', park: 'Park', gym: 'GymBattle', community_center: 'CommunityCenter', friends: 'Friends', pins: 'PinCollections',
 };
 
