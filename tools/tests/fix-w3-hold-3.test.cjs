@@ -118,3 +118,23 @@ test('regression: the gate summary says Tickets and Energy with capitals, like S
   const copy = loadTs('src/services/money/copy.ts');
   assert.equal(copy.topUpHeadline(1, 'tickets', 'ride'), 'Out of Tickets?');
 });
+
+test('T156: the Supplies VIP card says what VIP gives in plain numbers, like the VIP page (no "bigger rewards")', () => {
+  const offers = loadTs('src/services/money/offers.ts');
+  const perks = [
+    { key: 'ride', icon: 'xp', title: '2x XP and coins', body: 'On ride coin wins.' },
+    { icon: 'search', title: '2 extra treats on every home hunt', body: '' },
+    { key: 'daily_ticket', icon: 'ticket', title: 'A free ticket every day', body: '' },
+    { key: 'monthly_gift', icon: 'gift', title: 'A gift every month', body: '' },
+    { icon: 'member', title: 'Member badge', body: '' },
+  ];
+  const tiles = Array.from(offers.vipCardTiles(perks), t => t.text);
+  assert.deepEqual(tiles, ['Every ride coin win pays double', 'A free Ticket every day', 'A gift every month', '2 extra treats on every home hunt']);
+  assert.equal(offers.VIP_PITCH, 'Double ride coin wins, a free Ticket every day and a gift every month.');
+  for (const file of ['src/screens/StoreScreen/SuppliesShop.tsx', 'src/screens/MembershipScreen.tsx', 'src/components/GrownUpGate.tsx', 'src/services/help/glossary.ts']) {
+    assert.doesNotMatch(read(file), /[Bb]igger rewards/, file);
+  }
+  const shop = strip(read('src/screens/StoreScreen/SuppliesShop.tsx'));
+  assert.match(shop, /style=\{st\.vipSub\}>\{VIP_PITCH\}</);
+  assert.match(shop, /vipCardTiles\(perks \?\? \[\]\)/);
+});

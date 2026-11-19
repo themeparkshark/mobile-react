@@ -35,7 +35,7 @@ import { getAdSummary, type AdSummary } from '../../api/endpoints/me/ad-rewards'
 import getVipPerks, { type VipPerk } from '../../api/endpoints/economy/vip-perks';
 import { onShopDelivered, replayShopPurchases, storeAvailable, type ShopReplayOutcome } from '../../services/purchases';
 import { adsAvailable, rewardText, watchForReward } from '../../services/ads';
-import { baseRates, bestValueHolds, bonusPercent, dropDays, gearLine } from '../../services/money/offers';
+import { baseRates, bestValueHolds, bonusPercent, dropDays, gearLine, vipCardTiles, VIP_PITCH } from '../../services/money/offers';
 import { handoffFreeWay, handoffHead, isDeal as isDealProduct, isParkDay as isParkDayProduct, planSupplies, type HeroKind, type SuppliesNeed } from '../../services/money/suppliesPlan';
 import getStores from '../../api/endpoints/stores/stores';
 import getStoreRotation from '../../api/endpoints/stores/rotation';
@@ -659,9 +659,9 @@ function VipGiftDoor() {
 
 /** The VIP door on the shelf: what VIP gives, no price (the page after the grown-up gate has it). */
 function VipCard({ perks }: { perks: VipPerk[] | null }) {
-  // One home word (4.5): an older server's perk lines say "finds"; the kid reads "treats".
-  const lines = (perks ?? []).filter(p => p.icon !== 'member').slice(0, 4)
-    .map(p => ({ ...p, title: vipPerkWords(p.title) }));
+  // T156: the VIP page's concrete perks first ("Every ride coin win pays double"), then the server's other lines in
+  // the app's words (4.5: an older server's lines say "finds"; the kid reads "treats").
+  const lines = vipCardTiles(perks ?? []).map(t => ({ icon: t.icon as GameIconName, title: vipPerkWords(t.text) }));
   return (
     <Animated.View entering={FadeInUp.delay(180).springify().damping(15)} style={st.vipLip}>
       <View style={st.vip}>
@@ -669,7 +669,7 @@ function VipCard({ perks }: { perks: VipPerk[] | null }) {
           <GameIcon name="member" size={40} />
           <View style={{ flex: 1 }}>
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipTitle}>GO VIP</Text>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipSub}>Bigger rewards at home and at the park.</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipSub}>{VIP_PITCH}</Text>
           </View>
         </View>
         <View style={st.vipTiles}>

@@ -137,7 +137,7 @@ const TERMS: readonly GlossaryTerm[] = [
     what: 'Three teams race to control the rides at each park.',
     earn: 'Pick a team. Your ride coin wins claim rides for it.' },
   { key: 'vip', label: 'VIP', icon: 'member', topic: 'shop',
-    what: 'A plan a grown-up buys. Bigger rewards at home and the park.',
+    what: 'A plan a grown-up buys. Double ride coin wins and a daily Ticket.',
     earn: 'Tap Member on the Social screen to see what VIP gives you.' },
   { key: 'supplies', label: 'Supplies', icon: 'gift', topic: 'shop',
     what: 'Packs of Tickets, coins and Energy. A grown-up pays real money.',
