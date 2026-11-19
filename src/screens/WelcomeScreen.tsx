@@ -19,7 +19,8 @@ import useCrumbs from '../hooks/useCrumbs';
 import { RECOVERY_COPY } from '../services/accountRecovery/model';
 import { BRAND, GameButton, GameIcon, textPreset } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
-import { NAME_MAX, nameSaved, welcomeSaveLine } from './welcomeCopy';
+import { NAME_MAX, NAME_TAKEN_LINE, nameSaved, nameTaken, welcomeSaveLine } from './welcomeCopy';
+import checkUsername, { type UsernameCheck } from '../api/endpoints/me/username-check';
 
 // Theme-park-flavored names, all letters/numbers and never over 12 characters.
 const FIRST = ['Churro', 'Fin', 'Coaster', 'Splash', 'Chomp', 'Snack', 'Turkey', 'Castle', 'Rocket', 'Pirate',
@@ -112,8 +113,22 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.value }] }));
 
   const status = check(username);
-  const hint = serverError ?? (slowSave ? 'The game is slow. Saving your name…' : cut ? `${NAME_MAX} letters is the most. We kept ${username}` : status.hint);
-  const hintOk = !serverError && status.ok;
+  // Fix w4 T174: the server checks a good-looking name before LET'S GO (debounced while typing), so a
+  // taken name says so in our own words before the tap. Unknown answers never block the save.
+  const [nameCheck, setNameCheck] = useState<{ name: string; result: UsernameCheck | null } | null>(null);
+  const checkedName = username.trim();
+  useEffect(() => {
+    if (!status.ok) return undefined;
+    let live = true;
+    const timer = setTimeout(() => {
+      void checkUsername(checkedName).then(result => { if (live) setNameCheck({ name: checkedName.toLowerCase(), result }); });
+    }, 450);
+    return () => { live = false; clearTimeout(timer); };
+  }, [checkedName, status.ok]);
+  const takenNow = status.ok && nameCheck?.name === checkedName.toLowerCase() && nameTaken(nameCheck.result);
+  const hint = serverError ?? (slowSave ? 'The game is slow. Saving your name…' : cut ? `${NAME_MAX} letters is the most. We kept ${username}`
+    : takenNow ? NAME_TAKEN_LINE : status.hint);
+  const hintOk = !serverError && status.ok && !takenNow;
 
   const newName = () => {
     Haptics.selectionAsync();
@@ -148,6 +163,16 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
     setSubmitting(true);
     setServerError(null);
     try {
+      // The check for this exact name, or a quick one now (the debounce may not have answered yet).
+      const known = nameCheck?.name === name.toLowerCase() ? nameCheck.result : await checkUsername(name);
+      setNameCheck({ name: name.toLowerCase(), result: known });
+      if (nameTaken(known)) {
+        setServerError(NAME_TAKEN_LINE);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        shake.value = withSequence(withTiming(-10, { duration: 50 }), withTiming(10, { duration: 50 }),
+          withTiming(-6, { duration: 50 }), withTiming(0, { duration: 50 }));
+        return;
+      }
       await updatePlayer({ username: name });
       await refreshPlayer().catch(() => undefined); // the name saved; the header catches up by itself
       celebrate();
@@ -225,7 +250,7 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
                   <Text style={[styles.hint, hintOk && styles.hintOk, !!serverError && styles.hintBad]}>{hint}</Text>
                 </View>
                 {/* His yellow button. An invalid name still takes the press so the card can shake and say why. */}
-                <View style={[styles.go, !status.ok && styles.goOff]}>
+                <View style={[styles.go, (!status.ok || takenNow) && styles.goOff]}>
                   <GameButton label={labels?.letsgo || "Let's Go!"} loading={submitting} haptics={false}
                     onPress={() => void submit()} accessibilityHint="Saves your shark name" />
                 </View>

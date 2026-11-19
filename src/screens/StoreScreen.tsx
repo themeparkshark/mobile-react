@@ -47,7 +47,7 @@ import { InformationModalEnums } from '../models/information-modal-enums';
 import { ItemType } from '../models/item-type';
 import { StoreType } from '../models/store-type';
 import { AWAY_LINE, HALLOWEEN_SHOP_NAME, awayMessage, isEventShop } from '../components/fright/halloweenShop';
-import { useTutorial } from '../components/Tutorial';
+import useTutorialWhenReady from '../components/Tutorial/useTutorialWhenReady';
 import { SECRET_THEME } from '../fx/secretTheme';
 import { loadSecretShopFlag } from '../services/secretShopFlag';
 import Item from './StoreScreen/Item';
@@ -343,7 +343,6 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
   const { player } = useContext(AuthContext);
   const { labels } = useCrumbs();
   const { currencies } = useContext(CurrencyContext);
-  const { startTutorial, hasCompleted } = useTutorial();
   const [today, setToday] = useState<ShopToday | null>(null);
   const storeIdRef = useRef<number | null>(null);
   // Server clock minus device clock: timers never trust a changed device clock.
@@ -388,13 +387,9 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
   // A restock refresh swaps the shelves in place; it never blanks the shop mid-browse.
   const silentReload = useRef(false);
 
-  // Trigger store tutorial on first visit
-  useEffect(() => {
-    if (!hasCompleted('store')) {
-      const timer = setTimeout(() => startTutorial('store'), 800);
-      return () => clearTimeout(timer);
-    }
-  }, []);
+  // Finn's first-visit tip waits until the shop has loaded and painted (fix w4 N05): a fixed 800 ms
+  // timer started him while the shelves were still rendering, so his bubble opened with a blank body.
+  useTutorialWhenReady('store', status === 'ready');
   const [rotation, setRotation] = useState<StoreRotation | null>(null);
   const [restockPending, setRestockPending] = useState(false);
 

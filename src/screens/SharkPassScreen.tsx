@@ -53,7 +53,7 @@ import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIco
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { passGainWords, passSinceLine } from '../services/words/playerWords';
 
-import { EVENT_COPY, isWearable, claimedLine, passGain, passGrants, lastDayText, nextPassPrize, passSummary, pieceSource, dailyQuestsSlot, DAILY_GOALS_LATER, passQuestLabel, lanePassFixture, readyNowLine, rewardWords, seasonSet, setMixText, nextPrizeTodayText, passSale, passSoonLines, plusWords, trackCountLine, type SetPiece } from '../services/money/sharkPassModel';
+import { claimableRewards, EVENT_COPY, isWearable, claimedLine, passGain, passGrants, lastDayText, nextPassPrize, passSummary, pieceSource, dailyQuestsSlot, DAILY_GOALS_LATER, passQuestLabel, lanePassFixture, readyNowLine, rewardWords, seasonSet, setMixText, nextPrizeTodayText, passSale, passSoonLines, plusWords, trackCountLine, type SetPiece } from '../services/money/sharkPassModel';
 import { markRungSeen, useRung } from '../services/reveal/revealLadder';
 import { flagOn } from '../services/retention/flags';
 import useRetentionFlags from '../services/retention/useRetentionFlags';
@@ -440,6 +440,7 @@ export default function SharkPassScreen() {
   const step = progress?.tier ?? 0;
   const steps = season?.tier_count ?? 0;
   const perStep = season?.points_per_tier ?? 1;
+  const rewardsToClaim = claimableRewards(state);
   const into = progress?.points_into_tier ?? 0;
   const summary = useMemo(() => passSummary(tiers), [tiers]);
   // One next prize everywhere: the same answer as the banner (the server's next_prize when it sends one).
@@ -599,8 +600,9 @@ export default function SharkPassScreen() {
               )}
               {/* T105: the top prize, VIP and catch-up lines live under More (How to climb), so the
                   first read is one next prize and one claim. */}
+              {/* Fix w4 N09: the button counts rewards, the same number as the Profile banner. */}
               {progress.claimable > 0 && (
-                <GameButton label={progress.claimable === 1 ? 'Claim 1 reward' : `Claim ${progress.claimable} rewards`} icon="gift"
+                <GameButton label={rewardsToClaim <= 1 ? 'Claim 1 reward' : `Claim ${rewardsToClaim} rewards`} icon="gift"
                   loading={busy === 'all'} disabled={!!busy} onPress={() => void claimAll()} style={{ marginTop: 6 }} />
               )}
             </Animated.View>
@@ -924,7 +926,7 @@ export default function SharkPassScreen() {
           picture={heroLook ? (
             <View style={{ width: 170, height: 190 }}><Playercard inventory={heroLook} showBackground={false} pinAnchor="body" still={reduced} style={StyleSheet.absoluteFill} /></View>
           ) : <Image source={EMBLEM} style={{ width: 170, height: 170 }} contentFit="contain" />}
-          caption={`You climbed ${climbed.to - climbed.from} ${climbed.to - climbed.from === 1 ? 'step' : 'steps'}. ${progress?.claimable ? `${progress.claimable} ${progress.claimable === 1 ? 'reward is' : 'rewards are'} ready.` : 'Keep going!'}`} />
+          caption={`You climbed ${climbed.to - climbed.from} ${climbed.to - climbed.from === 1 ? 'step' : 'steps'}. ${rewardsToClaim ? `${rewardsToClaim} ${rewardsToClaim === 1 ? 'reward is' : 'rewards are'} ready.` : 'Keep going!'}`} />
       )}
       {tryOn && (
         <Pressable style={s.tryScrim} onPress={() => setTryOn(null)} accessibilityRole="button" accessibilityLabel="Close">

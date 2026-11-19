@@ -7,6 +7,8 @@ export interface LimitedWindow {
   readonly ends_at: string | null;
   readonly ends_on?: string | null;
   readonly returns: boolean;
+  /** The dated special edition this coin belongs to ("November 2026 Edition"); newer servers only. */
+  readonly edition?: string | null;
 }
 
 export interface TaskType {

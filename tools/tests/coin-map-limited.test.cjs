@@ -119,7 +119,8 @@ test('map markers: the limited badge sits under rush, adventure and goal', () =>
   assert.match(marker, /limited: false, selected: isSelected/);
   assert.match(marker, /\{limited !== null && <LimitedShimmer/);
   assert.doesNotMatch(fs.readFileSync('src/screens/ExploreScreen.tsx', 'utf8'), /limitedText: task\.limited\?\.active/);
-  assert.match(fs.readFileSync('src/screens/ParkCollectionHeader.tsx', 'utf8'), /`These limited coins leave \$\{limitedLeaves\}`/);
+  // Fix w4 T233: the line comes from limitedTabLine (the edition first, the old words on an older server).
+  assert.match(fs.readFileSync('src/screens/ParkCollectionHeader.tsx', 'utf8'), /limitedTabLine\(limitedEdition, limitedLeaves\)/);
 });
 
 test('a limited coin out of rotation explains itself and cannot be played', () => {

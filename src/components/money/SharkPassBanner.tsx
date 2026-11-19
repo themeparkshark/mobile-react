@@ -14,7 +14,7 @@ import { getSharkPass, type SharkPassState } from '../../api/endpoints/me/shark-
 import * as RootNavigation from '../../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../../ui';
 import { MAX_FONT } from './moneyUi';
-import { nextPassPrize, passGain, rewardWords, stepWords } from '../../services/money/sharkPassModel';
+import { claimableRewards, nextPassPrize, passGain, rewardWords, stepWords } from '../../services/money/sharkPassModel';
 import { markRungSeen, useRung } from '../../services/reveal/revealLadder';
 import { NewPill } from '../retention/RewardsSheet';
 import countText from '../../helpers/countText';
@@ -27,7 +27,7 @@ const EMBLEM = require('../../../assets/images/sharkpass/pass-emblem.webp');
  */
 export function bannerLine(state: SharkPassState | null): string | null {
   if (!state || !state.enabled || !state.season || !state.progress) return null;
-  const { claimable } = state.progress;
+  const claimable = claimableRewards(state);
   if (claimable > 0) return `${claimable} ${claimable === 1 ? 'reward' : 'rewards'} to claim`;
   const next = nextPassPrize(state);
   // The step bar is the progress; the line names the prize and its step ("Step 4 of 50", no points sums).
@@ -95,7 +95,7 @@ export default function SharkPassBanner({ style, open, always }: {
   useEffect(() => { if (isNew) newShown.current = true; }, [isNew]);
   useFocusEffect(useCallback(() => () => { if (newShown.current) { newShown.current = false; markRungSeen('shark_pass'); } }, []));
   if (!visibleNow || !line || !state || !state.enabled || !state.season) return null;
-  const claim = (state.progress?.claimable ?? 0) > 0;
+  const claim = claimableRewards(state) > 0;
   return (
     <Pressable onPress={() => { if (isNew) passLadder.markSeen(); const go = () => RootNavigation.navigate('SharkPass'); if (open) open(go); else go(); }} accessibilityRole="button"
       accessibilityLabel={`Shark Pass, ${state.season.title}. ${line}.`}

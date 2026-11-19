@@ -69,7 +69,22 @@ export async function getStamps(): Promise<StampsResponse> {
   return data;
 }
 
-export async function claimStampReward(stampId: number): Promise<{ success: boolean; rewards: StampRewards; levels_gained?: number; level?: number | null }> {
+export type StampClaimAnswer = {
+  success: boolean; rewards: StampRewards; levels_gained?: number; level?: number | null;
+  /** ECONOMY_STAMPS_V2: the claimed title went on at once (no title was worn), and which title is worn now. */
+  title_worn?: boolean; equipped_title?: string | null;
+};
+
+/**
+ * Fix w4 T242: the title a claim put on (a Ride Passport's "Disneyland Ride Master" when nothing was
+ * worn), so the card says "On your profile!" at the claim moment; null when the claim wore nothing.
+ */
+export function titleWornByClaim(answer: Partial<StampClaimAnswer> | null | undefined): string | null {
+  const title = answer?.title_worn === true && typeof answer.equipped_title === 'string' ? answer.equipped_title.trim() : '';
+  return title || null;
+}
+
+export async function claimStampReward(stampId: number): Promise<StampClaimAnswer> {
   // The card shows the rewards and any level-up itself: skip the global broadcast banners for this call.
   const { data } = await client.post(`/me/stamps/${stampId}/claim`, undefined, { skipBroadcasts: true } as object);
   return data;

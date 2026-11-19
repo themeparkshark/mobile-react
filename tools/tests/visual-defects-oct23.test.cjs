@@ -348,7 +348,9 @@ test('the park arrival tip is one short line a 7-year-old reads at a glance', ()
 
 test('Finn catches up by the clock, so a slow first frame never leaves one word above the button', () => {
   const src = read('src/components/Tutorial/TeacherShark.tsx');
-  assert.match(src, /visibleParts\(parts, Date\.now\(\) - startedAt\)/);
+  // Fix w4 N05: the clock tick lives in revealTick (by the clock, and a late tick shows the whole line).
+  assert.match(src, /revealTick\(parts, elapsed, dueAt\)/);
+  assert.match(src, /const elapsed = Date\.now\(\) - startedAt;/);
 });
 
 // Round 4 (grader blockers and fixes).

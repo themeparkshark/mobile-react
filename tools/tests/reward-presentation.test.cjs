@@ -227,6 +227,8 @@ test('the owner shelf shows each coin at its real level, never a blanket Level 1
     '../helpers/haptics': { impactAsync() {}, ImpactFeedbackStyle: {} },
     '../constants/coinTiers': coinTiers,
     '../context/CoinCollection': { loadCoin: async () => null, upsertCoin() {}, setFeaturedCoin() {} },
+    // Fix w4 T233: the card names a Limited coin's edition (a permanent coin has none).
+    '../services/collection/limitedCoins': { limitedEdition: () => null },
   }, { task: { id: 104, asset_id: 13, name: 'Forbidden Journey', coin_url: 'coin' }, level: 3 });
   assert.equal(view.find(node => node.type === './collection/ShelfCoin').props.level, 3);
   view.change({ level: undefined, readOnly: true, task: { id: 104, asset_id: 13, name: 'Forbidden Journey', coin_url: 'coin', coin_level: 4 } });

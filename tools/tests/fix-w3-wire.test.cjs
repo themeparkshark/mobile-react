@@ -104,7 +104,7 @@ test('T124: the ride line sits under the won coin name on the win card, with the
 
 test('T158: the Just once sticker sits on both Shark Shop doors (Home menu row, Profile badge), nowhere in a reward', () => {
   const menu = strip(read('src/components/QuickAccessMenu.tsx'));
-  assert.match(menu, /\{item\.id === 'shop' && <StarterSticker style=\{\{ top: -6, right: -10 \}\} \/>\}/);
+  assert.match(menu, /\{item\.id === 'shop' && <StarterSticker style=\{\{ top: -12, right: -8 \}\} \/>\}/, 'fix w4: on the label corner, never over the icon');
   const profile = strip(read('src/screens/ProfileScreen.tsx'));
   const shop = profile.slice(profile.indexOf("key: 'shark-shop'"), profile.indexOf('as ProfileShortcut]'));
   assert.match(shop, /sticker: <StarterSticker align="center" style=\{\{ top: -10 \}\} \/>/);

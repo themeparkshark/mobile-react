@@ -30,7 +30,7 @@ import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
 import * as RootNavigation from '../RootNavigation';
-import { claimStampReward, equipStampTitle, getStamps, type StampsResponse } from '../api/endpoints/me/stamps';
+import { claimStampReward, equipStampTitle, getStamps, titleWornByClaim, type StampClaimAnswer, type StampsResponse } from '../api/endpoints/me/stamps';
 import { AuthContext } from '../context/AuthProvider';
 import { haptic } from '../gamekit/Haptics';
 import { playSfx } from '../gamekit/SFX';
@@ -355,6 +355,18 @@ export default function StampBookScreen() {
     };
     return () => { delete g.__stampBook; };
   }, [devHooks, sections, open, openNextClaim]);
+  /**
+   * Fix w4 T242: a claim that put its title on (the server wears a first title at once) shows it as worn
+   * right away: "On your profile!" on the card and in Claim all, then the player refresh takes over.
+   */
+  const showClaimTitle = useCallback((res: Partial<StampClaimAnswer> | null | undefined): boolean => {
+    const title = titleWornByClaim(res);
+    if (!title) return false;
+    setTitleOverride({ title });
+    refreshPlayer().catch(() => undefined).finally(() => setTitleOverride(null));
+    return true;
+  }, [refreshPlayer]);
+
   const claim = useCallback(async (): Promise<ClaimResult> => {
     if (!selected || claimingRef.current) return { ok: false };
     if (previewMode) { pendingPatch.current.push(selected.id); return { ok: true }; }
@@ -364,7 +376,7 @@ export default function StampBookScreen() {
     try {
       const res = await claimStampReward(id);
       pendingPatch.current.push(id);
-      refreshPlayer().catch(() => undefined);
+      if (!showClaimTitle(res)) refreshPlayer().catch(() => undefined);
       return { ok: true, levelsGained: Number(res?.levels_gained ?? 0) || 0, level: typeof res?.level === 'number' ? res.level : null };
     } catch {
       // A lost response can follow a successful claim. Read back before showing failure.
@@ -381,7 +393,7 @@ export default function StampBookScreen() {
     } finally {
       claimingRef.current = false;
     }
-  }, [selected, previewMode, refreshPlayer]);
+  }, [selected, previewMode, refreshPlayer, showClaimTitle]);
 
   /**
    * Wear (stampId) or take off (null) a title. Optimistic: the book shows it on the tap, the server call and the player
@@ -443,8 +455,9 @@ export default function StampBookScreen() {
   const claimOne = useCallback(async (stamp: BookStamp): Promise<boolean> => {
     if (previewMode) { pendingPatch.current.push(stamp.id); return true; }
     try {
-      await claimStampReward(stamp.id);
+      const res = await claimStampReward(stamp.id);
       pendingPatch.current.push(stamp.id);
+      showClaimTitle(res);
       return true;
     } catch {
       try {
@@ -453,7 +466,7 @@ export default function StampBookScreen() {
       } catch { /* shown as not claimed: the gift stays and can be tried again */ }
       return false;
     }
-  }, [previewMode]);
+  }, [previewMode, showClaimTitle]);
 
   const openClaim = useCallback(() => {
     const waiting = queue.filter(s => !pendingPatch.current.includes(s.id));

@@ -13,7 +13,7 @@ import { Image } from 'expo-image';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType, type LimitedWindow } from '../models/task-type';
-import { limitedDayLabel } from '../services/collection/limitedCoins';
+import { limitedDayLabel, limitedEdition } from '../services/collection/limitedCoins';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import MysteryCoinArtwork from './MysteryCoinArtwork';
@@ -64,12 +64,15 @@ export function unfoundCoinCopy({ isSecret, isArchived, isResting, kind, limited
   };
   if (limited) {
     const day = limitedDayLabel(limited.ends_on);
+    // Fix w4 T233: the coin says which dated edition it is, so it never reads as a ride leaving the park.
+    const edition = limitedEdition(limited);
+    const lead = edition ? `${edition}. ` : '';
     return {
       ribbon: 'Limited Coin',
-      hint: !limited.active
+      hint: lead + (!limited.active
         ? 'This coin is resting. It comes back later.'
         : day ? `Here until ${day}. Win it before then.`
-        : 'Here for a short time. Win it while it is here.',
+        : 'Here for a short time. Win it while it is here.'),
       challenge: kind === 'ride' ? 'PLAY! at the ride' : 'PLAY! at this spot',
     };
   }

@@ -1,4 +1,5 @@
 import client from '../../client';
+import { leanLadder } from '../../../services/money/ladder';
 
 export type ShopCurrency = 'tickets' | 'coins' | 'energy' | 'rescue_passes';
 export type ShopGrants = Partial<Record<ShopCurrency, number>>;
@@ -28,6 +29,8 @@ export type ShopCatalog = {
   readonly day_ends_at: string;
   /** The once-ever Starter Pack offer was seen (kept per player, any device). */
   readonly starter_seen_at?: string | null;
+  /** 'lean' when the server already lists the lean Ticket ladder (ECONOMY_LEAN_LADDER); older servers send none. */
+  readonly ladder?: 'lean' | 'full' | null;
   /** Passed to StoreKit as appAccountToken so a purchase names its buyer. */
   readonly account_token: string;
   readonly wallet: ShopWallet;
@@ -41,7 +44,8 @@ export type ShopCatalog = {
 export async function getShop(): Promise<ShopCatalog> {
   const { data } = await client.get<{ data: ShopCatalog }>('/me/shop', { timeout: 15000 });
   if (!data?.data || !Array.isArray(data.data.products)) throw new Error('Shop response was malformed.');
-  return data.data;
+  // Fix w4 T221: one ladder on every server (services/money/ladder.ts).
+  return leanLadder(data.data);
 }
 
 export type ShopRedeemResult = {
