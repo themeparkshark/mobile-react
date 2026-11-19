@@ -118,7 +118,8 @@ test('the door hides a sheet in the same commit it stops being wanted, and repla
   const door = src('src/ui/DoorModal.tsx');
   assert.match(door, /visible=\{doorNativeVisible\(phase\) && !blink && !\(phase === 'up' && !wants\)\}/);
   assert.match(door, /phase === 'off' && was !== 'off' && !nested\) \{\s*const how = tapThrough\.deliver\(\)/);
-  assert.match(door, /leavingSheetTap\.note\(.*!now\.current\.nested\)\}>/);
+  assert.match(door, /leavingSheetTap\.note\(.*!now\.current\.nested\);/);
+  assert.match(door, /if \(event\.nativeEvent\.tpsSheetNoted\) return;\s*event\.nativeEvent\.tpsSheetNoted = true;/, 'a touch on the gate inside a sheet is noted once, by the gate');
   assert.match(door, /tapThrough\.setScreenRoot\(internalHandle\(host\)\)/);
 });
 

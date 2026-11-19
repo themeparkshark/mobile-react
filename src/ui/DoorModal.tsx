@@ -206,7 +206,12 @@ export default function DoorModal(props: DoorModalProps) {
           <InsideNativeModal.Provider value>
             <View style={[styles.container, containerStyles]} collapsable={false}
               // On touch down: the sheet can be gone before the finger lifts, and that touch would never end here.
-              onTouchStart={(event: { nativeEvent: { pageX: number; pageY: number } }) => leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants), !now.current.nested)}>
+              onTouchStart={(event: { nativeEvent: { pageX: number; pageY: number; tpsSheetNoted?: boolean } }) => {
+                // The touch bubbles from a sheet inside this one (the gate) to this sheet too: only the innermost notes it.
+                if (event.nativeEvent.tpsSheetNoted) return;
+                event.nativeEvent.tpsSheetNoted = true;
+                leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants), !now.current.nested);
+              }}>
               {children}
             </View>
           </InsideNativeModal.Provider>
