@@ -40,7 +40,7 @@ import Tag from '../Tag';
 import { Body, Caps, Count, Title } from '../Text';
 import { ART, ART_RATIO } from '../art';
 import { ART_SIZE, SPACE } from '../tokens';
-import { mapBehind } from './ProofMap';
+import { FOOTER_ITEMS, mapBehind } from './ProofMap';
 import { useParkCoins } from './proofCoins';
 import { WIN_BEATS, countSteps, winsLeft } from './proofData';
 
@@ -138,7 +138,7 @@ function WinScreen({ coins, ready }: { readonly coins: Readonly<Record<string, I
     <View key="t" ref={chipRefs.tickets} collapsable={false}><CurrencyChip kind="tickets" value={chips.tickets} /></View>,
   ] };
   // Until the art is on the phone, the map the coin was won on stays exactly as it was.
-  if (!ready) return <Screen testID="proof-win-wait" ground="map" mapLayer={mapBehind} scroll={false} header={header} />;
+  if (!ready) return <Screen testID="proof-win-wait" ground="map" mapLayer={mapBehind} scroll={false} header={header} footer={{ items: FOOTER_ITEMS, picked: 'map' }} />;
   const next = coins[NEXT];
   const won = coins[WON];
   const nextTag = (
