@@ -44,7 +44,7 @@ const PRIZE_ART = 44;
 const FOOT = TAG.height + SPACE.base * 2 + buttonHeight('large') + SPACE.base * 2 + 44;
 
 export default function ProofWin() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [found, setFound] = useState(15);
   const [landed, setLanded] = useState(false);
   useEffect(() => {
@@ -53,7 +53,8 @@ export default function ProofWin() {
     return () => { clearTimeout(walk); clearTimeout(land); };
   }, []);
   const inner = screenFrameWidth(width) - LINE.page * 2 - SPACE.pagePad * 2;
-  const stageH = Math.round(inner * 0.5);
+  // The stage gives up height first on a short phone, so the prize row stays in view above the foot band.
+  const stageH = Math.round(Math.max(84, Math.min(inner * 0.5, height * 0.5 - 250)));
   const coin = Math.round(stageH * 0.86);
   return (
     <Screen testID="proof-win" header={{ children: [
