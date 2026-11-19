@@ -607,7 +607,8 @@ test('round 5: VIP perk lines say treats, Shark Coins and Ticket on Supplies and
   assert.equal(words('2x XP and coins'), '2x XP and Shark Coins');
   assert.equal(words('A free ticket every day'), 'A free Ticket every day');
   assert.equal(words('Win ride coins'), 'Win ride coins');
-  assert.match(shop, /title: vipPerkWords\(p\.title\)/);
+  // Hold-fix 3 (T156): the Supplies card's tiles come from vipCardTiles, still in the app's words.
+  assert.match(shop, /title: vipPerkWords\(t\.text\)/);
   const vip = read('src/screens/MembershipScreen.tsx');
   assert.match(vip, /title: vipPerkWords\(p\.title\), body: vipPerkWords\(p\.body\)/);
 });
