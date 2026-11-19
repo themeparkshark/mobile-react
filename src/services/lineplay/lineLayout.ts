@@ -107,8 +107,8 @@ export function pageRailMode(pagesShown: boolean): PageRailMode {
 export const FIRST_LINEPLAY_ROUND = 'lineplay:first-round';
 
 /**
- * The very first LinePlay (T083): the story page with one PLAY and nothing else to choose. The rail
- * (Story, Games, Next) waits until the first round is done, so a new player never meets three calls
+ * The very first LinePlay (T083): the story page with one PLAY and nothing else to choose, then that first
+ * round's own page. The rail (Story, Games, Next) waits until the first round is done, so a new player never meets three calls
  * at once. Null `played` (still loading, or a guest) shows the usual rail. The rail's "Show games"
  * button while Details is open on a small phone always stays.
  */
@@ -119,7 +119,8 @@ export function firstLinePlayCalm(input: {
   readonly railMode: PageRailMode;
 }): boolean {
   if (!input.played || input.played.size > 0 || input.roundsDone > 0) return false;
-  return input.pageKind === 'chapter_intro' && input.railMode === 'pages';
+  // The story page and the first round PLAY opens (its clue or game page): one thing to do until it is done.
+  return input.pageKind != null && input.railMode === 'pages';
 }
 
 /**

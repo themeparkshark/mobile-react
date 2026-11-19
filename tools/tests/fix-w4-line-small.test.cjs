@@ -20,7 +20,8 @@ test('T083: the first LinePlay shows one PLAY on the story page; the rail waits 
   assert.equal(L.firstLinePlayCalm({ ...base, played: new Set([L.FIRST_LINEPLAY_ROUND]) }), false, 'the next LinePlay opens full');
   assert.equal(L.firstLinePlayCalm({ ...base, played: new Set(['whack']) }), false, 'played a game before');
   assert.equal(L.firstLinePlayCalm({ ...base, played: null }), false, 'still loading, or a guest: the usual rail');
-  assert.equal(L.firstLinePlayCalm({ ...base, pageKind: 'minigame' }), false, 'swiped to a game page: the rail is needed');
+  assert.equal(L.firstLinePlayCalm({ ...base, pageKind: 'trivia' }), true, 'the first clue PLAY opened: still one thing to do');
+  assert.equal(L.firstLinePlayCalm({ ...base, pageKind: undefined }), false, 'no page yet');
   assert.equal(L.firstLinePlayCalm({ ...base, railMode: 'back' }), false, 'Details open on a small phone keeps Show games');
 
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
@@ -92,4 +93,16 @@ test('T087: Who\'s in line? is asked once a day, first, and the loading card cro
   assert.match(screen, /\{holdPages && <Reanimated\.View exiting=\{reducedFx \? undefined : FadeOut\.duration\(240\)\}/);
   const group = read('src/screens/LinePlay/group/useGroupPlay.tsx');
   assert.match(group, /const asking = live && !editing && \(!crew\.loaded \|\| \(!crew\.chosen && !gameOpen\)\);/);
+});
+
+test('T090: the game banner title never auto-shrinks (it stuck at about 4 px after a game); slim sizes come from the name', () => {
+  const slot = read('src/screens/LinePlay/components/ActivitySlot.tsx');
+  const hero = slot.slice(slot.indexOf('function ActivityHero('), slot.indexOf('export default function ActivitySlot('));
+  assert.doesNotMatch(hero, /adjustsFontSizeToFit/);
+  assert.match(hero, /slim && slimTitleSize\(title\)\]\}\n\s+numberOfLines=\{slim \? 1 : undefined\} ellipsizeMode="tail">/);
+  const fn = slot.slice(slot.indexOf('export function slimTitleSize'), slot.indexOf('function ActivityHero('));
+  const slimTitleSize = new Function(`${fn.replace('export function', 'function').replace(/: \{[^}]*\}/, '').replace('(title: string)', '(title)')}; return slimTitleSize;`)();
+  assert.equal(slimTitleSize('Follow the stamp').fontSize, 19);
+  assert.equal(slimTitleSize('Search for the lucky penny').fontSize, 17.5);
+  assert.equal(slimTitleSize('Rebuild the park map and the dispatch').fontSize, 16);
 });

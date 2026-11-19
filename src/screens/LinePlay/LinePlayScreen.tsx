@@ -550,9 +550,11 @@ export default function LinePlayScreen() {
     const owner = startedRef.current;
     void (async () => {
       // Honesty (T071): the ride's line zone rides along, so the session claims a wait only with evidence of it.
-      const zone = ride.zone !== undefined ? ride.zone : await lineZoneForRide(ride.parkId, ride.rideId);
       // T081: a walk-in show or walk-through (the catalog's type) plays games only, never a line story or wait recap.
-      const rideType = ride.rideType !== undefined ? ride.rideType : await rideTypeForRide(ride.parkId, ride.rideId);
+      // One catalog read answers both, side by side (never a second wait on a slow server).
+      const [zone, rideType] = await Promise.all([
+        ride.zone !== undefined ? ride.zone : lineZoneForRide(ride.parkId, ride.rideId),
+        ride.rideType !== undefined ? ride.rideType : rideTypeForRide(ride.parkId, ride.rideId)]);
       const saved = playerId ? await readCheckpoint(playerId, ride.rideId).catch(() => null) : null;
       if (startedRef.current !== owner) return;
       const freshSample = latestLocationSampleRef.current;
@@ -1783,7 +1785,10 @@ export default function LinePlayScreen() {
                 setPagesMeasuredLent(lentAtCommit.current);
                 revealPages();
                 // The first page lays its blocks out on the next frame or two (ChapterCard measures first).
-                if (!pagesReady) requestAnimationFrame(() => requestAnimationFrame(() => setPagesReady(true)));
+                if (!pagesReady) requestAnimationFrame(() => requestAnimationFrame(() => {
+                  if (__DEV__) console.log(`[pages] ready t=${Date.now()}`);
+                  setPagesReady(true);
+                }));
               }}>
             <View ref={pagesInnerRef} style={[styles.pagesInner, !pagesShown && styles.pagesHidden]}
               accessibilityElementsHidden={!pagesShown} importantForAccessibility={pagesShown ? 'auto' : 'no-hide-descendants'}>
