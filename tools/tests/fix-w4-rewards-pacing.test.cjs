@@ -187,3 +187,17 @@ test('T106 the help pages and the treats intro skip veterans, and never share on
   assert.match(map, /const homeIntroAllowed = homeIntroMayPresent\(homeIntroQueue\) && !veteran && lessonOpen\.current !== appOpenId;/);
   assert.match(map, /lessonOpen\.current = appOpenId;\n\s+setHelpPageSeen\(true\);/);
 });
+
+/* T115 and N12: day one shows one thing to claim at a time. */
+test('T115 N12 a fresh player sees the chest first, then the stamps as one claim; never 5 to claim', () => {
+  const model = loadTs('src/services/retention/rewardsModel.ts', { '../words/playerWords': { kidWords: s => s, passGainWords: () => '' } });
+  const none = { dailyChest: null, daily3: null, weekly: null, levelChest: null, trail: null, stamps: null, events: null };
+  const dayOne = { ...none, dailyChest: { unclaimed: true, day: 1, of: 7 }, stamps: { claimable: 4 } };
+  assert.deepEqual(plain(model.rewardsRows(dayOne)).map(r => r.key), ['daily_chest']);
+  assert.equal(model.rewardsCount(dayOne), 1, 'the walk-lc-new badge said 5');
+  const opened = { ...dayOne, dailyChest: { unclaimed: false, day: 1, of: 7 } };
+  assert.deepEqual(plain(model.rewardsRows(opened)).map(r => [r.key, r.ready]), [['stamps', 1]]);
+  assert.equal(model.rewardsCount(opened), 1);
+  const retry = { ...dayOne, stamps: { claimable: 2, retry: true } };
+  assert.deepEqual(plain(model.rewardsRows(retry)).map(r => r.key), ['daily_chest', 'stamps'], 'a stamp owed after a failed claim never hides');
+});

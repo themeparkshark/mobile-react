@@ -88,11 +88,15 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
       rows.push({ key: 'trail', title: 'Trail Boxes', line: t.atPark ? 'Walk the park to open them' : 'They walk open on your next park day', ready: 0, action: door ? 'go' : null });
     }
   }
-  if (i.stamps && i.stamps.claimable > 0) {
+  // Fix w4 T115 and N12: one thing to claim at a time. While today's chest (or the Daily 3 chest) waits, the stamps
+  // wait behind it (they come back the moment it is open), and every stamp waiting is one row with one reveal, so
+  // it counts once on the Rewards button (never "5 to claim" on day one). A RETRY row always shows.
+  const chestReady = !!i.dailyChest?.unclaimed || !!i.daily3?.claimable;
+  if (i.stamps && i.stamps.claimable > 0 && (!chestReady || i.stamps.retry)) {
     // Fix w3 T094 (retry) and T126 (stamp Tickets, one name): never "stamp prizes".
     rows.push(i.stamps.retry
-      ? { key: 'stamps', title: 'Stamps', line: `Tickets from ${plural(i.stamps.claimable, 'stamp', 'stamps')} still waiting`, ready: i.stamps.claimable, action: 'retry' }
-      : { key: 'stamps', title: 'Stamps', line: `Tickets from ${plural(i.stamps.claimable, 'stamp', 'stamps')} to claim`, ready: i.stamps.claimable, action: 'claim_all' });
+      ? { key: 'stamps', title: 'Stamps', line: `Tickets from ${plural(i.stamps.claimable, 'stamp', 'stamps')} still waiting`, ready: 1, action: 'retry' }
+      : { key: 'stamps', title: 'Stamps', line: `Tickets from ${plural(i.stamps.claimable, 'stamp', 'stamps')} to claim`, ready: 1, action: 'claim_all' });
   }
   if (i.events && i.events.chests > 0) {
     rows.push({ key: 'events', title: 'Event Chests', line: `${plural(i.events.chests, 'chest', 'chests')} to open`, ready: i.events.chests, action: i.events.door !== false ? 'open' : null });
