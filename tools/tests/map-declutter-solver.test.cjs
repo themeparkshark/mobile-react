@@ -504,27 +504,32 @@ test('T022: the selected ride\'s card never sits under the guide card: it takes 
   assert.equal(free.get('ride:2').tag.side, 'top');
 });
 
-test('T022 hold: the selected ride\'s card is never covered by a neighbour island or the player\'s shark', () => {
+test('T022 hold: nothing shown ever overlaps the selected ride\'s card (neighbour islands, the player\'s shark), even with no free side', () => {
   const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-  const cardRect = (out, item) => {
-    const p = s.project(item.latitude, item.longitude, frame());
-    const tag = out.get(item.id).tag;
-    return { x: p.x + tag.x, y: p.y + tag.y, w: L.SELECTED_TAG.w, h: L.SELECTED_TAG.h };
+  const check = (items, label) => {
+    const f = frame();
+    const out = s.solveLayout(items, f);
+    const sel = items.find(it => it.pinned);
+    const p = s.project(sel.latitude, sel.longitude, f);
+    const tag = out.get(sel.id).tag;
+    assert.ok(tag, `${label}: the card is placed`);
+    const card = { x: p.x + tag.x, y: p.y + tag.y, w: L.SELECTED_TAG.w, h: L.SELECTED_TAG.h };
+    for (const a of boxes(items, out, f).art) if (a.id !== sel.id) assert.ok(!overlap(card, a.rect), `${label}: ${a.id} drawn over the card`);
+    for (const it of items.filter(x => x.tagObstacleOnly)) {
+      const q = s.project(it.latitude, it.longitude, f);
+      assert.ok(!overlap(card, { x: q.x + it.body.x, y: q.y + it.body.y, w: it.body.w, h: it.body.h }), `${label}: the shark covers the card`);
+    }
+    return { out, tag };
   };
-  // Mad Tea Party selected with the Storybook Land tower just up and to the right (the Pro Max shot).
   const sel = rideAt(1, 0, 60, { pinned: true, tag: L.SELECTED_TAG });
-  const tower = rideAt(2, 95, -20);
-  const out = s.solveLayout([sel, tower], frame());
-  assert.equal(out.get('ride:2').visible, true, 'the tower still stands');
-  const tp = s.project(tower.latitude, tower.longitude, frame());
-  const towerRect = { x: tp.x + L.RIDE_BODY.x, y: tp.y + L.RIDE_BODY.y, w: L.RIDE_BODY.w, h: L.RIDE_BODY.h };
-  assert.ok(!overlap(cardRect(out, sel), towerRect), `card clear of the tower: ${JSON.stringify(cardRect(out, sel))}`);
+  // Mad Tea Party with the Storybook Land tower up and to the right (the Pro Max shot): the card takes a clear side.
+  const one = check([sel, rideAt(2, 95, -20)], 'tower');
+  assert.equal(one.out.get('ride:2').visible, true, 'with a free side the tower stays');
   // The player's shark just above the selected island (the 17 Pro Pirates shot).
-  const shark = { id: 'player', ...at(0, -20), priority: 0, tagObstacleOnly: true, body: { x: -26, y: -52, w: 52, h: 60 } };
-  const withShark = s.solveLayout([sel, shark], frame());
-  const sp = s.project(shark.latitude, shark.longitude, frame());
-  const sharkRect = { x: sp.x - 26, y: sp.y - 52, w: 52, h: 60 };
-  assert.ok(!overlap(cardRect(withShark, sel), sharkRect), 'card clear of the shark');
+  check([sel, { id: 'player', ...at(0, -20), priority: 0, tagObstacleOnly: true, body: { x: -26, y: -52, w: 52, h: 60 } }], 'shark');
+  // Islands all around (Fantasyland at the left edge): no free side, so the islands under the card step back.
+  const crowd = [sel, rideAt(2, 95, -20), rideAt(3, -110, -10), rideAt(4, 0, 190), rideAt(5, 140, 90), rideAt(6, -140, 90), rideAt(7, 0, -70)];
+  check(crowd, 'crowd');
   // Nothing around: right above its island, as before.
   assert.equal(s.solveLayout([sel], frame()).get('ride:1').tag.side, 'top');
 });
