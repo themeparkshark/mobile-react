@@ -151,6 +151,10 @@ test('T102 level lines become one moment (in their turn), and a stamp claim\'s l
     'routed through the win card hold, so it waits behind the card');
   assert.match(read('src/components/retention/useRetention.tsx'), /if \(\(answer\.levels_gained \?\? 0\) > 0\) noteLevelUp\(answer\.level \?\? null\);/);
   assert.match(read('src/Root.tsx'), /\{!!player && <LevelUpMoment \/>\}/);
+  // Device run: a level reached inside the Rewards sheet played under it; the toast waits for every sheet to leave.
+  const host = read('src/components/rewards/LevelUpMoment.tsx');
+  assert.match(host, /const sheetUp = useAnyModalLayer\(\);/);
+  assert.match(host, /if \(!level \|\| sheetUp\) return undefined;/);
 });
 
 /* T100, T224, T242: a stamp claim shows the stamps, every prize, and a title. */
