@@ -125,7 +125,7 @@ test('T101 the park day starter plays as a moment: fly to the header with its re
   const host = read('src/components/rewards/TicketGrantMoment.tsx');
   assert.match(host, /targetPosition: 'tickets'/);
   assert.match(host, /gap\.current = setTimeout/, 'the gap timer survives re-renders');
-  assert.match(read('src/screens/ExploreScreen.tsx'), /<TicketGrantMoment calm=\{mapFocused && !isActive/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /<TicketGrantMoment calm=\{mapFocused && mapCalm && !finnOwnsMap && !mapCovered/);
 });
 
 /* T102: a level-up has its moment. */

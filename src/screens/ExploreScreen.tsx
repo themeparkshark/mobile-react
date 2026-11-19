@@ -2077,8 +2077,9 @@ export function ExploreScreenBody() {
             on the map or an attack to check opens it as the full pill (the player is in that moment). */}
         {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} compact={!bossMap.moment && !receiptNeedsCheck} />}
         {/* Fix w4 T101: a Ticket grant with no card of its own (the park day starter) flies to the header with its reason. */}
-        <TicketGrantMoment calm={mapFocused && !isActive && !redeemFlowOpen && !retentionOccluding && !showPrepItemModal
-          && !bossOpen && !showTooFarModal && !showCommunityCenterModal} />
+        {/* It waits for a settled map with Finn done (a first open's warm-up comes first, the grant right after). */}
+        <TicketGrantMoment calm={mapFocused && mapCalm && !finnOwnsMap && !mapCovered && !redeemFlowOpen && !retentionOccluding
+          && !showPrepItemModal && !bossOpen && !showTooFarModal && !showCommunityCenterModal} />
         {/* Shark Events (after their rung): the sweep and the gain toast sit under the guide card, never over it or PLAY!. */}
         {player && liveEvt.event && eventsShown && <>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 37 }]}><FrenzySweep event={liveEvt.event} /></View>
