@@ -141,6 +141,7 @@ test('T075: the twin hunt shows six different pictures with the target exactly o
       assert.equal(new Set(r.grid).size, 6);
       assert.equal(r.grid.filter(symbol => symbol === r.target).length, 1);
       assert.ok(puzzle.twinTapRight(r, r.target));
+      if (round > 0) assert.notEqual(r.target, puzzle.twinRound(seed, round - 1, 10).target, `seed ${seed} round ${round} repeats`);
     }
   }
   assert.equal(puzzle.puzzleRounds('pattern') + puzzle.puzzleRounds('twin'), 5);

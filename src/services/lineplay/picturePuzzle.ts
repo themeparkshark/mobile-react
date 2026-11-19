@@ -83,7 +83,10 @@ export function twinRound(seed: number, round: number, deckSize: number): TwinRo
   if (deckSize < TWIN_GRID) throw new Error('A twin hunt needs at least six pictures');
   const rand = seededRandom(seed * 131 + round * 104729 + 3);
   const grid = pickDistinct(TWIN_GRID, deckSize, rand);
-  const target = grid[Math.floor(rand() * grid.length)];
+  let target = grid[Math.floor(rand() * grid.length)];
+  // Each round hunts a new picture: never the one the last round just found.
+  const previous = round > 0 ? twinRound(seed, round - 1, deckSize).target : null;
+  if (target === previous) target = grid[(grid.indexOf(target) + 1) % grid.length];
   return { target, grid };
 }
 
