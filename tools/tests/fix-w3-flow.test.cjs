@@ -42,7 +42,7 @@ test('T029 a free retry or a VIP try comes first; at 0 Tickets the way on is the
 
 test('T029 the loss card always shows the map as its small second button and its primary from the plan', () => {
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  const lost = modal.slice(modal.indexOf("{flowState === 'lost' && <ChallengeStatusCard"), modal.indexOf('{/* MINIGAME STATE'));
+  const lost = modal.slice(modal.indexOf("{(flowState === 'lost' || replayUnderCard) && <ChallengeStatusCard"), modal.indexOf('{/* MINIGAME STATE'));
   assert.match(lost, /quiet=\{\{ label: BACK_TO_MAP, onPress: handleLostClose \}\}/);
   assert.match(lost, /label: lossPlan\.kind === 'vip_retry'/);
   assert.match(lost, /footnotes=\{lossPlan\.footnotes\}/);

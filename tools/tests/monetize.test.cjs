@@ -219,7 +219,7 @@ test('offers live on result and recap screens only, never inside a game or a mov
   assert.ok(retryUse > 0);
   // Fix W3: the loss card's one way on comes from lossNext, which offers the VIP try only through canOfferRetry.
   assert.match(modal, /vipRetry: canOfferRetry/);
-  assert.match(modal, /flowState === 'lost' && <ChallengeStatusCard[\s\S]*?lossPlan/);
+  assert.match(modal, /\(flowState === 'lost' \|\| replayUnderCard\) && <ChallengeStatusCard[\s\S]*?lossPlan/);
   // The line snack is passed to the recap only, and only for an ended server session.
   assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /snackSlot=\{snapshot\.serverSessionId && snapshot\.rewards \? <LineSnackOffer/);
   assert.match(read('src/screens/LinePlay/components/SessionRecap.tsx'), /\{rewardsConfirmed && snackSlot\}/);

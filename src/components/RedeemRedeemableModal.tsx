@@ -1326,7 +1326,9 @@ export default function RedeemRedeemableModal({
     void handleStartWheel().finally(() => setStarting(false));
   };
   const coinUri = isTaskType ? (redeemable.model as TaskType).coin_url : undefined;
-  const fullBleed = flowState === 'spinning' || flowState === 'minigame' || flowState === 'postwin' || flowState === 'replay';
+  /** w5 N04: TRY AGAIN pressed, the kept board's reset not drawn yet: the loss card holds (same layout, no touch). */
+  const replayUnderCard = flowState === 'replay' && !replayShown;
+  const fullBleed = flowState === 'spinning' || flowState === 'minigame' || flowState === 'postwin' || (flowState === 'replay' && !replayUnderCard);
   // w5 N04: the kept board under the loss card (a card with the sheet's 5% margin) keeps the full-window frame, so
   // TRY AGAIN shows it without a new layout. Held there (never seen or touched), shown and still held in 'replay'.
   const boardKept = keepBoard && (flowState === 'lost' || flowState === 'replay');
@@ -1649,7 +1651,9 @@ export default function RedeemRedeemableModal({
             quiet={{ label: BACK_TO_MAP, onPress: handleLostClose }} />}
           {/* The one loss card: a kind title, one honest line from the game, the Ticket (it flies home when it
               came back) and one way on. A member's VIP try lives inside TRY AGAIN; nobody else sees a VIP line. */}
-          {flowState === 'lost' && <ChallengeStatusCard title={lostCopy.title} art="soClose"
+          {/* w5 N04: the loss card stays under the kept board until the board's reset is drawn, so TRY AGAIN goes from
+              the card straight to the new try (never a dim map between). The board covers it, so it takes no touch. */}
+          {(flowState === 'lost' || replayUnderCard) && <ChallengeStatusCard title={lostCopy.title} art="soClose"
             message={vipNote ?? (vipOutToday ? VIP_TRY_TOMORROW : lostCopy.message)} ticket={lostCopy.ticket} line={rideTry?.line ?? null} ticketFlyTo={ticketTarget}
             pips={rideTry?.need ? { have: rideTry.have ?? 0, need: rideTry.need } : null}
             primary={{ label: lossPlan.kind === 'vip_retry' && adBusy ? 'One Moment' : location || lossPlan.kind === 'ways' ? lossPlan.label : 'Finding You',

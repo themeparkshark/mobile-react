@@ -706,7 +706,7 @@ test('round 3: one card per ride miss, one surface, one exit word, honest ticks 
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   // w5 N04: a Leave before the kept board's deal waits for it; every other loss resolves at once.
   assert.match(modal, /const handleGameLose = useCallback\(async \(\) => \{\n\s+if \(!attemptRef\.current && flowStateRef\.current === 'replay'\) \{ lossBeforeDealRef\.current = true; return; \}\n\s+await resolveAttempt\('loss'\);/);
-  assert.match(modal, /\{flowState === 'lost' && <ChallengeStatusCard/);
+  assert.match(modal, /\{\(flowState === 'lost' \|\| replayUnderCard\) && <ChallengeStatusCard/);
   assert.doesNotMatch(modal, /skipLostCard|lostFromGameRef/);
   assert.match(modal, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,\n\s+retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.retrySameGame,\n\s+rescueSource: redeemable\?\.rescue_pass_source, nextGame: retryGameName \}\)/);
   const shellSrc = read('src/gamekit/GameShellV2.tsx');
