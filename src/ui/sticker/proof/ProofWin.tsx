@@ -54,6 +54,8 @@ const PRIZES = [
 ] as const;
 const START: Record<ChipKey, number> = { coins: 4075, energy: 3, tickets: 12 };
 const PRIZE_ART = 44;
+/** Each prize takes its own width and an equal share of what is left, so "Shark Coins" stays on one line on the SE. */
+const PRIZE_COLUMN = { flexGrow: 1, flexShrink: 1, flexBasis: 'auto', alignItems: 'center' } as const;
 /** The tag sits on the wave's crest, half above it. */
 const WAVE_TAG_LIFT = 14;
 /** A short phone: the foot puts the tag and "See my shelf" on one row. */
@@ -200,7 +202,7 @@ function WinCard({ coins }: { readonly coins: Readonly<Record<string, ImageSourc
         <Card style={{ marginTop: SPACE.cardGapLoose + PRIZE_ART / 2 }}>
           <View style={{ flexDirection: 'row', paddingTop: PRIZE_ART / 2 + SPACE.base, paddingBottom: SPACE.base * 2, paddingHorizontal: SPACE.base, gap: SPACE.base }}>
             {PRIZES.map((p, i) => (
-              <Arrive key={p.key} delay={WIN_BEATS.prizes + i * WIN_BEATS.prizeGap} style={{ flex: 1, alignItems: 'center' }}>
+              <Arrive key={p.key} delay={WIN_BEATS.prizes + i * WIN_BEATS.prizeGap} style={PRIZE_COLUMN}>
                 {() => (
                   <>
                     <View ref={r => { prizeRefs.current[p.key] = r; }} collapsable={false} style={{ position: 'absolute', top: -PRIZE_ART - SPACE.base }}>
