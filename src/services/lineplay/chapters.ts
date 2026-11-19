@@ -379,6 +379,19 @@ export function puzzleFact(chapter: Pick<LinePlayChapter, 'id'>, rideFacts: read
 }
 
 /**
+ * What a solved story puzzle shows under its check (T077, T075): this ride's own fact under FAN FACT, or at a
+ * ride with no checked fact, clue 1 tells its land's true line under ABOUT THIS LAND. Never another ride's.
+ */
+export function puzzleReward(chapter: Pick<LinePlayChapter, 'id' | 'ride'>, rideFacts: readonly string[], clue: 0 | 1):
+  { readonly kicker: string; readonly text: string } | null {
+  const fact = puzzleFact(chapter, rideFacts, clue);
+  if (fact) return { kicker: 'FAN FACT', text: fact };
+  if (rideFacts.length > 0 || clue !== 0) return null;
+  const land = landLine(chapter.ride?.land);
+  return land ? { kicker: 'ABOUT THIS LAND', text: land } : null;
+}
+
+/**
  * The story line a chapter page reads (T077). Adaptive stories name the ride and its land, then tell this
  * ride's own fact; a ride with no checked fact gets a true line about its land instead. Authored chapters
  * keep their own story.

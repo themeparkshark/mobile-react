@@ -199,7 +199,8 @@ test('T075: free-play trivia at an adaptive ride never deals the story riddles; 
   const card = read('src/screens/LinePlay/components/PicturePuzzleCard.tsx').replace(/\/\/.*$|\/\*[\s\S]*?\*\//gm, '');
   assert.doesNotMatch(card, /timer|countdown|seconds|Switch|Alert|ActivityIndicator/);
   assert.match(card, /useUiReducedMotion/);
-  assert.match(card, /FAN FACT/);
+  assert.match(card, /reward\.kicker/);
+  assert.match(slot, /reward=\{puzzleReward\(chapter, facts,/);
 });
 
 test('T077: cachedRideFacts reads only rows keyed to this ride', async () => {
@@ -247,4 +248,18 @@ test('T075: no story clue name tells a player to read or decode, since a kid pla
       for (const mission of chapter.missionNames.slice(0, 2)) assert.doesNotMatch(mission, /^(Read|Decode)\b/, `${name}: ${mission}`);
     }
   }
+});
+
+test('T077: a solved puzzle at a ride with no fact tells its land, never another ride, and FAN FACT only for real facts', () => {
+  const vehicles = chapters.getLinePlayChapter(8, 'main-street-vehicles-8', 'Main Street Vehicles', 0, 597);
+  const street = chapters.puzzleReward(vehicles, [], 0);
+  assert.equal(street.kicker, 'ABOUT THIS LAND');
+  assert.equal(street.text, 'Main Street, U.S.A. is styled after a small American town from around 1900.');
+  assert.equal(chapters.puzzleReward(vehicles, [], 1), null);
+  const autopia = chapters.getLinePlayChapter(8, 'autopia-8', 'Autopia', 0, 571);
+  assert.equal(chapters.puzzleReward(autopia, [AUTOPIA_FACT], 0).kicker, 'FAN FACT');
+  assert.equal(chapters.puzzleReward(autopia, [AUTOPIA_FACT], 0).text, AUTOPIA_FACT);
+  // A ride in a park with no authored lands: no land, no fact, nothing made up.
+  const far = chapters.getLinePlayChapter(1, 'jurassic-1', 'Jurassic World The Ride', 0, 9);
+  assert.equal(chapters.puzzleReward(far, [], 0), null);
 });

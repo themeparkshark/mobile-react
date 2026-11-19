@@ -34,7 +34,7 @@ import { BRAND, GameButton, GameIcon, SharkLoader } from '../../../ui';
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 import { AuthContext } from '../../../context/AuthProvider';
 import { usePlayPrefs } from '../../../services/playPrefs';
-import { getLinePlayChapterById, puzzleFact, type LinePlayChapter } from '../../../services/lineplay/chapters';
+import { getLinePlayChapterById, puzzleReward, type LinePlayChapter } from '../../../services/lineplay/chapters';
 import { cachedRideFacts } from '../../../services/lineplay/triviaDeck';
 import { rideFact } from '../../../services/collection/rideFacts';
 import PicturePuzzleCard from './PicturePuzzleCard';
@@ -167,7 +167,7 @@ export default function ActivitySlot({
     const facts = storyFacts(chapter, parkId, rideId);
     return <PageScroll fill={CARD_FILL}>
       <PicturePuzzleCard kind={puzzle.kind} deckId={puzzle.deckId} seed={puzzleSeed(chapter.id, item.kind === 'trivia' || item.kind === 'lore' ? item.seed : 0)}
-        title={missionTitle} completed={completed} paused={paused} fact={puzzleFact(chapter, facts, puzzle.kind === 'twin' ? 1 : 0)}
+        title={missionTitle} completed={completed} paused={paused} reward={puzzleReward(chapter, facts, puzzle.kind === 'twin' ? 1 : 0)}
         onSolved={() => onActivityCompleted(item.id)} />
     </PageScroll>;
   }

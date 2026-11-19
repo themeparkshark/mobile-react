@@ -5,7 +5,7 @@
  * memory card back. No timer and no countdown: a wrong tap wobbles and rests, the right tap pops.
  *
  * Solved, the page shows this ride's own checked fact under FAN FACT (only a real ride fact ever wears that
- * label) and a small Play again.
+ * label), or at a ride with no fact its land's true line, and a small Play again.
  *
  * Motion: springs on the UI thread (Reanimated), nothing loops while idle except one soft glow on the gap,
  * and Reduce Motion shows every state with no movement.
@@ -41,8 +41,8 @@ interface Props {
   readonly title?: string;
   readonly completed: boolean;
   readonly paused: boolean;
-  /** This ride's own checked fact, shown once solved; null shows none (never a made-up fact). */
-  readonly fact?: string | null;
+  /** This ride's own checked fact (FAN FACT) or its land's true line, shown once solved; null shows none. */
+  readonly reward?: { readonly kicker: string; readonly text: string } | null;
   readonly factSource?: string | null;
   readonly onSolved: () => void;
 }
@@ -111,7 +111,7 @@ function GapCard({ width, reduced, filled }: { width: number; reduced: boolean; 
   </View>;
 }
 
-export default function PicturePuzzleCard({ kind, deckId, seed, title, completed, paused, fact = null, factSource = null, onSolved }: Props) {
+export default function PicturePuzzleCard({ kind, deckId, seed, title, completed, paused, reward = null, factSource = null, onSolved }: Props) {
   const deck = deckById(deckId) ?? deckById('park')!;
   const reduced = useUiReducedMotion();
   const pageHeight = useContext(PageHeightContext);
@@ -210,9 +210,9 @@ export default function PicturePuzzleCard({ kind, deckId, seed, title, completed
         <GameIcon name="check" size={44} />
         <Text style={styles.solvedText}>Solved!</Text>
       </View>
-      {fact ? <View style={styles.factBox}>
-        <Text style={styles.factKicker}>FAN FACT</Text>
-        <Text style={styles.factText}>{fact}</Text>
+      {reward ? <View style={styles.factBox}>
+        <Text style={styles.factKicker}>{reward.kicker}</Text>
+        <Text style={styles.factText}>{reward.text}</Text>
         {factSourceLine(factSource) ? <Text style={styles.factSource}>{factSourceLine(factSource)}</Text> : null}
       </View> : null}
       {/* Quiet: the rail's Next is the one big step after a solve. */}
