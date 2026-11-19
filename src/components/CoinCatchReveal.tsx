@@ -158,6 +158,9 @@ export default function CoinCatchReveal({
       // starts coming up under the coin right now (onExit), so it lands in a card already there.
       const exit = () => {
         callbacks.current.onExit?.();
+        // The title is gone the moment the card comes up under it (its words never sit over the card).
+        cancelAnimation(title);
+        title.value = withTiming(0, { duration: 90 });
         const target = handoffRef.current;
         const coinSize = Math.min(width * 0.52, 240);
         if (target) {
