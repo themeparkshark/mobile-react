@@ -187,7 +187,7 @@ function BoothMenu({ taskName, deckId, onPick, onClose }: { taskName?: string; d
         </View>
         <View style={[styles.cards, { paddingBottom: insets.bottom + 14 }]}>
           <BoothCard index={0} reducedMotion={reducedMotion} onPress={() => go({ kind: 'timeAttack' })}
-            title="Time Attack" body="Race the clock. Each board you clear, the next one gets bigger." icon={STOPWATCH}
+            title="Time Attack" body="Each board you clear, the next one gets bigger." icon={STOPWATCH}
             right={heatOk ? (
               <View style={{ alignItems: 'flex-end', gap: 4 }}>
                 <Text style={styles.badge}>{`HEAT${heat.seagull && heat.tide ? ' +60%' : heat.seagull || heat.tide ? ' +25%' : ''}`}</Text>

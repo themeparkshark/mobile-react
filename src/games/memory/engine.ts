@@ -180,6 +180,16 @@ export function timeAttackConfig(): MMConfig {
 }
 
 /**
+ * Time Attack in a ride line (T082): the same staircase, but the round rests
+ * while nobody is tapping, like the ride clock (T042). A kid who looks up to
+ * move with the line never comes back to a board that ended by itself; the
+ * gold rope only drains while they play.
+ */
+export function lineTimeAttackConfig(): MMConfig {
+  return { ...timeAttackConfig(), idlePauseMs: RIDE_IDLE_PAUSE_MS };
+}
+
+/**
  * Memory Race: 45s, Showtime on, overtime x2, the Golden Coin pays x2 only.
  * The interim PRACTICE RACE on Line Party replays a tap log on a seeded layout
  * with a shared glimpse, so it is not a Fair Deck yet (v2 moves it onto

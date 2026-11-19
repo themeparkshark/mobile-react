@@ -94,7 +94,7 @@ const GAME_LABELS: Record<string, string> = {
 const GAME_PREVIEWS: Record<string, string> = {
   tap: 'Find the shark, avoid the decoy, and chase a quick combo.',
   timing: 'Tap in rhythm as the pattern speeds up.',
-  memory: 'Match pairs before time runs out. Your crew can call out the pairs.',
+  memory: 'Match the pairs. Your crew can call out the pairs.',
   trivia: 'Answer a short round of park questions.',
   shark: 'Guide your shark through a fast swim challenge.',
   banana: 'Catch the good snacks and dodge the bad ones.',

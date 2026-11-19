@@ -130,3 +130,30 @@ test('T082 sibling: Whack-a-Shark in a line drains its ring with no number', () 
   assert.match(whack, /quietTimer: ride \|\| inLine,/);
   assert.match(read('src/games/whack/render/WhackBoard.tsx'), /\{fontM && !hud\.ride && !hud\.quietTimer \? <Text x=\{timerTextX\}/);
 });
+
+test('T082 hold: LinePlay Memory never ends on a clock nobody is using, and its words never say clock', () => {
+  const E = loadTs('src/games/memory/engine.ts');
+  const PAIRED = (n) => Array.from({ length: n }, (_, i) => Math.floor(i / 2));
+  const faces = PAIRED(12);
+  // The old queue config: an untouched board ran out by itself (the grader's 11 s board end).
+  const old = E.createEngine(E.timeAttackConfig(), { cols: 4, rows: 3, seed: 7 });
+  E.step(old, { t: 'tick', at: 60000 });
+  assert.equal(old.status !== 'play', true, 'the plain Time Attack clock runs out on an idle board');
+  // In a line: the round rests while nobody taps, so looking up at the line never ends it.
+  const line = E.createEngine(E.lineTimeAttackConfig(), { cols: 4, rows: 3, seed: 7 });
+  assert.equal(line.cfg.idlePauseMs, E.RIDE_IDLE_PAUSE_MS);
+  E.step(line, { t: 'tick', at: 120000 });
+  assert.equal(line.status, 'play', 'two minutes looking at the line: still playing');
+  assert.equal(line.clockLeftMs, 30000, 'and the gold rope is full');
+  E.step(line, { t: 'flip', slot: 0, face: faces[line.ids[0]], at: 120000 });
+  E.step(line, { t: 'tick', at: 121000 });
+  assert.ok(line.clockLeftMs < 30000, 'a card is up: the rope drains while they play');
+  const game = read('src/games/memory/MemoryGame.tsx');
+  assert.match(game, /const cfg = inLineRef\.current \? lineTimeAttackConfig\(\) : timeAttackConfig\(\);/);
+  assert.match(game, /inLineRef\.current = movement != null;/);
+  // Words: no "clock", "beat" or "time runs out" anywhere Time Attack or a line names Memory.
+  assert.doesNotMatch(game, /Beat the clock/);
+  assert.match(game, /export const MEMORY_TIME_ATTACK_OBJECTIVE = 'Find the pairs\. Every match fills the gold rope\.';/);
+  assert.doesNotMatch(read('src/screens/LinePlay/components/ActivitySlot.tsx'), /before time runs out/);
+  assert.doesNotMatch(read('src/games/memory/MemoryMenu.tsx'), /Race the clock/);
+});
