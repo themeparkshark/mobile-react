@@ -325,6 +325,22 @@ export function useLadderCounters(): Readonly<Counters> {
   return key ? (JSON.parse(key) as Counters) : freshRecord().counters;
 }
 
+/**
+ * Fix w4 T098: whether the player has won a coin at a park today (on this phone). Live events (a boss raid, a Rush,
+ * an event pill) wait for it, for everyone, preview ids included: the day's first coin comes first.
+ */
+export function wonCoinToday(at: number = now()): boolean {
+  if (!player || !hydrated) return false;
+  return firstCoinTodayAt(at) !== null;
+}
+
+const coinTodayKey = () => (wonCoinToday() ? '1' : '0');
+
+/** wonCoinToday as a hook (re-reads whenever the ladder store changes, and at each app open). */
+export function useWonCoinToday(): boolean {
+  return useSyncExternalStore(subscribe, coinTodayKey, () => '0') === '1';
+}
+
 /** Read without React (tests, captures, the map's own logic). */
 export function rungState(rung: Rung): { open: boolean; isNew: boolean } {
   const key = rungKey(rung);

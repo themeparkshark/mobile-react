@@ -16,7 +16,8 @@ import { BRAND, GameButton, GameIcon } from '../../ui';
 import PushSoftAsk from '../PushSoftAsk';
 import useLivePoll from '../../hooks/useLivePoll';
 import { useAppActive } from '../../hooks/appActive';
-import { homeLiveBar } from './homeLiveBar';
+import { homeLiveBar, homeRaidsAllowed, withoutRaids } from './homeLiveBar';
+import { useRung } from '../../services/reveal/revealLadder';
 import { endsAtWords } from '../../helpers/calmTime';
 import TeamBadge from '../TeamBadge';
 
@@ -37,8 +38,12 @@ export default function HomeLive({ top = 12, onBarChange }: {
   /** Tells the map whether a bar is taking the top row, so the controls below it can move up. */
   readonly onBarChange?: (bar: 'raid' | 'teams' | null) => void;
 }) {
-  const { refreshPlayer } = useContext(AuthContext);
-  const [live, setLive] = useState<LiveParks | null>(null);
+  const { player, refreshPlayer } = useContext(AuthContext);
+  const [sentLive, setLive] = useState<LiveParks | null>(null);
+  // Fix w4 T098: no raid from home before the first ride coin and coin levels (rung 3).
+  const raidsAllowed = homeRaidsAllowed({ coinLevelsOpen: useRung('coin_levels').open,
+    coinsWon: Math.max(player?.ride_coins_collected ?? 0, player?.park_coins_count ?? 0) });
+  const live = sentLive && !raidsAllowed ? withoutRaids(sentLive) : sentLive;
   const [open, setOpen] = useState(false);
   const [raidPark, setRaidPark] = useState<number | null>(null);
   const [cheer, setCheer] = useState<{ park: LiveParkSummary; target: HomeCheerTarget; seed: number } | null>(null);

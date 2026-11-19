@@ -148,7 +148,7 @@ import { modalLayers } from '../ui/modalLayers';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
 import NewTag from '../components/map/NewTag';
 import useMapGuide from '../components/guide/useMapGuide';
-import { retireRungTag, useRung } from '../services/reveal/revealLadder';
+import { retireRungTag, useRung, useWonCoinToday } from '../services/reveal/revealLadder';
 import { linePlayRoute } from '../components/guide/guideCoins';
 import { guide } from '../services/guide/nextCoin';
 import type { GuideAction } from '../services/guide/guideCopy';
@@ -167,6 +167,8 @@ import { refreshFeatureFlags } from '../api/endpoints/platform/feature-flags';
  * buttons leave only once that row is in the integrated build (core loop 5.1, integration check 1).
  */
 const SHOPS_ROW_SHIPPED = false;
+/** Fix w4 T098: no Rush before the day's first coin (one stable empty list, so memo inputs hold still). */
+const NO_RUSHES: RushPick[] = [];
 /** Dev-only live feed stub for lane walks (state D: feed off; or a daytime park at night). Never in a store or OTA bundle. */
 const LIVE_STUB = liveStubMode(__DEV__, process.env.EXPO_PUBLIC_GUIDE_LIVE_STUB);
 /** The camera follows the shark again this long after the player pans away (core loop 5.1, must-fix 28). */
@@ -1234,6 +1236,10 @@ export function ExploreScreenBody() {
   // PLAY RIDE (or a closed ride's sign) is on screen: the declutter keeps ride art out from under it, and the guide card
   // says "Tap PLAY!" only once PLAY! is really drawn (its art in), never a beat before it (fix round w3 T009).
   const [playRideShown, setPlayRideShown] = useState(false);
+  // Fix w4 T098: live events (a boss raid, a Rush, an event) wait for the day's first coin, for everyone (preview
+  // ids too): a park day starts with a coin, never with a raid, a timed find and four reward systems.
+  const liveDayStarted = useWonCoinToday();
+  const liveRushes = liveDayStarted ? rushes : NO_RUSHES;
   const {
     guideFlags, coinLevelsRung, dailyRung, trailRung, eventsRung, claimable, claimableTicketCount, claimTickets, wallet, welcome,
     levelUpTaskId, setAdventureWonTaskId, nextCoin, guideShown, guideCoinUrl, hasWonACoin, guideTargetId, setGuidePathRequest, guideMapTarget, lineStoryIsland, adventureSheetRequest,
@@ -1241,20 +1247,23 @@ export function ExploreScreenBody() {
     playRequest, atParkNow,
   } = useMapGuide({
     player, park, mapFocused, location, redeemables, visibleTasks, livePark, adventure, tripGoalData, queueDwell, starRides,
-    rushes, rangeChecked,
+    rushes: liveRushes, rangeChecked,
     // PLAY! always rises for the coin in range, whatever island is selected (T001): the guide hears the same answer,
     // once PLAY! is drawn.
     playableTaskId: playRideShown ? playableTaskId : null,
     adventureGate, activeRedeemable, refreshPlayer, parkWins, redeemFlowOpen, parkLoaded, homeLocationConfirmed, setSelectedTask,
   });
   // Raids reach the map only after coin levels unlock (they cost Energy) and while the park is open (core loop 5.2).
-  const raidOnMap = raidActive && coinLevelsRung.open && parkOpenNow;
-  const liveSlotShown = (coinLevelsRung.open && (raidOnMap || !!rushes.length)) || receiptNeedsCheck || !!bossMap.moment;
+  // Fix w4 T098: and only after the day's first coin.
+  const raidOnMap = raidActive && coinLevelsRung.open && parkOpenNow && liveDayStarted;
+  const eventsShown = eventsRung.open && liveDayStarted;
+  const liveSlotShown = (coinLevelsRung.open && (raidOnMap || !!liveRushes.length)) || receiptNeedsCheck
+    || (!!bossMap.moment && liveDayStarted);
   // The one NEW goes to a surface that wears it. The team step and LinePlay in a real line are their own moment
   // and wear none; coin levels wear theirs only on a raid or Rush pill. Those rungs never hold the slot.
   const teamRung = useRung('team');
   const linePlayRung = useRung('lineplay');
-  const coinLevelsCanWearNew = raidOnMap || rushes.length > 0;
+  const coinLevelsCanWearNew = raidOnMap || liveRushes.length > 0;
   useEffect(() => { if (teamRung.isNew) retireRungTag('team'); }, [teamRung.isNew]);
   useEffect(() => { if (linePlayRung.isNew) retireRungTag('lineplay'); }, [linePlayRung.isNew]);
   useEffect(() => { if (coinLevelsRung.isNew && !coinLevelsCanWearNew) retireRungTag('coin_levels'); }, [coinLevelsRung.isNew, coinLevelsCanWearNew]);
@@ -1395,7 +1404,7 @@ export function ExploreScreenBody() {
     flags: guideFlags,
   });
   // The event recap comes through the attention queue (after its rung; never in the park's quiet moments).
-  const recapShown = !!liveEvt.event && recapDue && mapFocused && !eventOpen && !finnOwnsMap && eventsRung.open && attentionFor('event_recap');
+  const recapShown = !!liveEvt.event && recapDue && mapFocused && !eventOpen && !finnOwnsMap && eventsShown && attentionFor('event_recap');
   useEffect(() => { if (recapShown) attentionQueue.take(appOpenId, 'event_recap'); }, [recapShown, appOpenId]);
   // A brand new player's first 30 s of hunting: no Rewards button yet, just the treats (the chest comes after).
   const mapControlsCount = firstVisitHold || !player ? 0 : 1;
@@ -1662,15 +1671,15 @@ export function ExploreScreenBody() {
   const statusEntries: StatusEntry[] = player && park ? statusOrder({
     live: liveSlotShown, show: nightPill ? (nightShow.phase === 'live' ? 'live' : 'teaser') : null,
     nightMode: frightNight.modeOn, control: hasTeam,
-    event: liveEvt.event && eventsRung.open ? (openableKeys(liveEvt.event).length ? 'ready' : 'on') : null,
+    event: liveEvt.event && eventsShown ? (openableKeys(liveEvt.event).length ? 'ready' : 'on') : null,
   }).map(key => {
     if (key === 'event' && liveEvt.event) return { key, label: liveEvt.event.title, tone: TONES.park, icon: <GameIcon name="star" size={28} />, node: withNewTag(eventsRung,
       <EventStatusChip inline event={liveEvt.event} onPress={() => setEventOpen(true)} />) };
     if (key === 'live') return { key, label: raidOnMap && raid ? `Boss raid: ${BOSS_NAMES[raid.boss]}` : 'Rush in the park',
-      tone: rushes.length && !raidActive && !bossMap.moment ? TONES.rush : TONES.park,
+      tone: liveRushes.length && !raidActive && !bossMap.moment ? TONES.rush : TONES.park,
       icon: raidOnMap && raid ? <Image source={BOSS_ART[raid.boss]} style={HUD_CHIP_ART} contentFit="contain" /> : <GameIcon name="rush" size={30} />,
       node: withNewTag(
-      raidOnMap || rushes.length > 0 ? coinLevelsRung : null, <LiveEventsPill inline raid={raidOnMap ? raid : null} rushes={coinLevelsRung.open ? rushes : []} onBoss={() => setBossOpen(true)}
+      raidOnMap || liveRushes.length > 0 ? coinLevelsRung : null, <LiveEventsPill inline raid={raidOnMap ? raid : null} rushes={coinLevelsRung.open ? liveRushes : []} onBoss={() => setBossOpen(true)}
       mapMoment={bossMap.moment} mapFlag={bossMap.flag} onDismissMoment={bossMap.dismiss}
       onMapMoment={() => {
         const task = visibleTasks.find(task => task.id === bossMap.moment?.impact.taskId);
@@ -2034,7 +2043,7 @@ export function ExploreScreenBody() {
             on the map or an attack to check opens it as the full pill (the player is in that moment). */}
         {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} compact={!bossMap.moment && !receiptNeedsCheck} />}
         {/* Shark Events (after their rung): the sweep and the gain toast sit under the guide card, never over it or PLAY!. */}
-        {player && liveEvt.event && eventsRung.open && <>
+        {player && liveEvt.event && eventsShown && <>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 37 }]}><FrenzySweep event={liveEvt.event} /></View>
           <View pointerEvents="none" style={{ position: 'absolute', top: slotTop + GUIDE_CARD_HEIGHT + 10, left: 0, right: 0, alignItems: 'center', zIndex: 39 }}>
             <EventGainToast gained={liveEvt.gained} gainedAt={liveEvt.gainedAt} artKey={liveEvt.event.art_key ?? null} />

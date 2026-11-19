@@ -44,3 +44,51 @@ test('T097 before rung 3 the shelf shows no Level up button and your coin opens 
   assert.match(book, /\(levelsOpen \|\| chip\.icon !== 'energy'\)/);
   assert.doesNotMatch(book, /prizeChips\(reward\)\.filter\(chip => chip\.icon !== 'crown'\)\.map/, 'every prize list goes through useShownPrizes');
 });
+
+/* T098: live events wait for the day's first coin; home raids for the first coin and rung 3. */
+function ladderStore() {
+  const disk = new Map();
+  let clock = Date.parse('2026-11-18T17:00:00Z');
+  const R = loadTs('src/services/reveal/revealLadder.ts', {
+    react: { useCallback: fn => fn, useSyncExternalStore: (_s, get) => get() },
+    'react-native': { AppState: { addEventListener: () => ({ remove() {} }) } },
+    '@react-native-async-storage/async-storage': { __esModule: true, default: {
+      getItem: async key => (disk.has(key) ? disk.get(key) : null), setItem: async (key, value) => { disk.set(key, value); },
+    } },
+    '../../gamekit/core/playerStorage': { gameSavesPlayer: () => '77' },
+  });
+  R.__ladderTest.reset(() => clock);
+  return { R, tick: ms => { clock += ms; }, ready: () => R.__ladderTest.whenReady().then(() => new Promise(r => setImmediate(r))) };
+}
+
+test('T098 a park day has no live events until its first coin, preview ids included', async () => {
+  const s = ladderStore();
+  s.R.feedLadder({ flags: { live_events: true, reveal_all: true }, atPark: true, progress: { coinsWon: 12, revealAll: true } });
+  await s.ready();
+  s.R.feedLadder({ progress: { coinsWon: 12, revealAll: true } });
+  assert.equal(s.R.rungState('events').open, true, 'reveal_all opens the rung');
+  assert.equal(s.R.wonCoinToday(), false, 'but the day has no coin yet');
+  s.tick(60000);
+  s.R.feedLadder({ progress: { coinsWon: 13, revealAll: true } });
+  assert.equal(s.R.wonCoinToday(), true);
+  s.tick(24 * 3600000);
+  assert.equal(s.R.wonCoinToday(), false, 'a new day waits for its own first coin');
+  const map = read('src/screens/ExploreScreen.tsx');
+  assert.match(map, /const raidOnMap = raidActive && coinLevelsRung\.open && parkOpenNow && liveDayStarted;/);
+  assert.match(map, /const eventsShown = eventsRung\.open && liveDayStarted;/);
+  assert.match(map, /const liveRushes = liveDayStarted \? rushes : NO_RUSHES;/);
+  assert.doesNotMatch(map, /eventsRung\.open &&(?! liveDayStarted)/, 'every event surface reads eventsShown');
+});
+
+test('T098 home shows no raid before the first ride coin and coin levels', () => {
+  const bar = loadTs('src/components/home/homeLiveBar.ts');
+  assert.equal(bar.homeRaidsAllowed({ coinLevelsOpen: true, coinsWon: 0 }), false, 'preview id, day 1, no coin');
+  assert.equal(bar.homeRaidsAllowed({ coinLevelsOpen: false, coinsWon: 2 }), false);
+  assert.equal(bar.homeRaidsAllowed({ coinLevelsOpen: true, coinsWon: 1 }), true);
+  const live = { parks: [{ park_id: 8, raid: { boss: 'kraken' } }], next_boss: { at: 'x', park_name: 'Disneyland' }, team_names: null };
+  const quiet = bar.withoutRaids(live);
+  assert.equal(quiet.parks[0].raid, null);
+  assert.equal(quiet.next_boss, null);
+  assert.equal(bar.homeLiveBar(quiet, false), null);
+  assert.match(read('src/components/home/HomeLive.tsx'), /const live = sentLive && !raidsAllowed \? withoutRaids\(sentLive\) : sentLive;/);
+});
