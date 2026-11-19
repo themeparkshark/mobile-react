@@ -1659,6 +1659,7 @@ export function ExploreScreenBody() {
       practice: practiceInMenu(ladderCounters.homeDays, player.completed_tasks_count ?? player.ride_coins_collected ?? 0),
       park: { parkName: tripGoal?.park_name ?? null, tickets: player.tickets ?? 0,
         plan: homePlan ? ref(homePlan.ride_name, homePlan.coin_url, homePlan.asset_id, homePlan.park_id) : null },
+      veteran: homeCoinList.length > 0,
       welcomeBack: welcome.daysAway != null && welcome.daysAway >= 14 && !welcome.done,
     };
     return {

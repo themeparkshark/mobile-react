@@ -53,6 +53,7 @@ test('T007: a whole evening walks the steps in order, one at a time, each one tr
     parts: { ...coinRef('Autopia', { assetId: 12 }), partsToGo: 2, levelName: 'Shiny' },
     practice: true,
     park: { parkName: 'Disneyland', tickets: 3, plan: null },
+    veteran: true,
   });
   const seen = [];
   const take = () => { const step = H.homeNextStep(s); seen.push(step.key); return step; };
@@ -84,20 +85,26 @@ test('T007: a whole evening walks the steps in order, one at a time, each one tr
   assert.equal(step.action, 'closet');
   s = { ...s, daily3: null };
 
-  step = take();
-  assert.equal(step.key, 'treat');
-  assert.equal(step.copy.line, '2 more treats = 1 Ticket');
-  assert.equal(step.copy.button.label, 'FIND');
-  s = { ...s, treats: { onMap: 5, toTicket: 3, capped: true } };
-
+  // The limited coin leads the treats: treats never run out at home, a limited coin leaves on its day.
   step = take();
   assert.equal(step.key, 'limited');
   assert.equal(step.copy.title, 'Holiday Coaster');
   assert.equal(step.copy.line, 'Win it at Disneyland. It leaves Monday, Nov 30');
   assert.equal(step.action, 'coin');
   assert.equal(step.coin.assetId, 99);
-  // Planned: the limited coin is the plan now, so the card moves on.
-  s = { ...s, park: { ...s.park, plan: { ...coinRef('Holiday Coaster', { assetId: 99 }) } } };
+  s = { ...s, limited: null };
+
+  // A veteran with no coin planned plans before the treats.
+  step = take();
+  assert.equal(step.key, 'plan');
+  assert.equal(step.copy.line, 'Pick your next coin');
+  s = { ...s, park: { ...s.park, plan: coinRef('Holiday Coaster', { assetId: 99 }) } };
+
+  step = take();
+  assert.equal(step.key, 'treat');
+  assert.equal(step.copy.line, '2 more treats = 1 Ticket');
+  assert.equal(step.copy.button.label, 'FIND');
+  s = { ...s, treats: { onMap: 5, toTicket: 3, capped: true } };
 
   step = take();
   assert.equal(step.key, 'parts');
@@ -115,7 +122,7 @@ test('T007: a whole evening walks the steps in order, one at a time, each one tr
   assert.equal(step.copy.title, 'Disneyland: 3 Tickets ready');
   assert.equal(step.copy.line, 'Next coin: Holiday Coaster');
   assert.equal(step.action, 'plan');
-  assert.deepEqual(seen, ['level_up', 'reward', 'daily3', 'daily3', 'treat', 'limited', 'parts', 'practice', 'park_day']);
+  assert.deepEqual(seen, ['level_up', 'reward', 'daily3', 'daily3', 'limited', 'plan', 'treat', 'parts', 'practice', 'park_day']);
 });
 
 test('T007: a fresh player sees the treat meter with treats near, then PLAN, never a park-only goal or a dead FIND', () => {

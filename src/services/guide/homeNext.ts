@@ -48,6 +48,8 @@ export interface HomeNextInput {
   readonly practice: boolean;
   /** The next park day: its park, the Tickets ready and the planned coin. */
   readonly park: { readonly parkName: string | null; readonly tickets: number; readonly plan: HomeCoinRef | null };
+  /** The player has won a coin: a veteran plans the park day before the treats. */
+  readonly veteran?: boolean;
   /** Away 14 days or more: the welcome back card leads. */
   readonly welcomeBack: boolean;
 }
@@ -141,13 +143,7 @@ export function homeNextStep(i: HomeNextInput): HomeStep {
       copy: card('DAILY 3', goal.title, goal.line, { label: 'GO', action: goal.action }) };
   }
 
-  // 4. A treat on the map while the Ticket meter still fills today.
-  if (i.treats.onMap > 0 && meter) {
-    return { key: 'treat', action: 'find', art: 'treat', coin: null,
-      copy: card('TONIGHT', 'Find a treat near you', meter, { label: 'FIND', action: 'find' }) };
-  }
-
-  // 5. A limited coin at the next park that leaves on a set day, not planned yet.
+  // 4. A limited coin at the next park that leaves on a set day, not planned yet.
   const planned = i.park.plan;
   const leaves = i.limited ? leavesLine(i.limited.leavesOn) : null;
   if (i.limited && leaves && planned?.assetId !== i.limited.assetId) {
@@ -156,12 +152,19 @@ export function homeNextStep(i: HomeNextInput): HomeStep {
       copy: card('LIMITED COIN', i.limited.name, `Win it${where}. It ${leaves}`, { label: 'SEE IT', action: 'coin' }) };
   }
 
-  // 6. No coin planned yet: pick one (PLAN opens the picker on the shelf).
-  if (!planned) {
-    return { key: 'plan', action: 'plan', art: 'ticket', coin: null,
-      copy: card('NEXT PARK DAY', park ? `${park}: ${tickets(i.park.tickets)} ready` : `${tickets(i.park.tickets)} ready`,
-        'Pick your next coin', { label: 'PLAN', action: 'plan' }) };
+  // 5. No coin planned yet: pick one (PLAN opens the picker on the shelf). Treats never run out at home, so a player
+  // with coins plans the park day before the treats; a brand new player's first goal is the treats and their meter.
+  const planStep = (): HomeStep => ({ key: 'plan', action: 'plan', art: 'ticket', coin: null,
+    copy: card('NEXT PARK DAY', park ? `${park}: ${tickets(i.park.tickets)} ready` : `${tickets(i.park.tickets)} ready`,
+      'Pick your next coin', { label: 'PLAN', action: 'plan' }) });
+  if (!planned && i.veteran) return planStep();
+
+  // 6. A treat on the map while the Ticket meter still fills today.
+  if (i.treats.onMap > 0 && meter) {
+    return { key: 'treat', action: 'find', art: 'treat', coin: null,
+      copy: card('TONIGHT', 'Find a treat near you', meter, { label: 'FIND', action: 'find' }) };
   }
+  if (!planned) return planStep();
 
   // 7. Ride Parts for the coin closest to its next level (they come from waiting in its line on a park day).
   if (i.parts && i.parts.partsToGo > 0) {
