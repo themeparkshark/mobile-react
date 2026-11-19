@@ -185,3 +185,9 @@ test('w5 N04: Memory re-deals a kept board of the same shape in place (no card r
   for (const k of vKeys) assert.ok(new RegExp(`v\\.${k}\\.value = |'${k}'`).test(reset), `card value ${k} is reset`);
   assert.match(reset, /setRimColor\(MM\.blue\);/);
 });
+
+test('w5 T036: PLAY starts from the recovery check and the start skips a second checkpoint read', () => {
+  assert.match(modal, /const knownNone = noSavedAtRef\.current > 0 && Date\.now\(\) - noSavedAtRef\.current < NO_SAVED_FRESH_MS;\n\s+noSavedAtRef\.current = 0;\n\s+saved = knownNone \? null : await readTaskAttemptCheckpoint\(player\.id, taskType, taskId\);/);
+  assert.match(modal, /export const NO_SAVED_FRESH_MS = 5000;/);
+  assert.match(modal, /quickStartRef\.current = \(\) => tryQuickStart\('check'\);/);
+});

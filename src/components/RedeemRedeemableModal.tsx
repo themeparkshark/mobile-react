@@ -134,6 +134,8 @@ export function knownChallengeGame(game: string | null | undefined): boolean {
 /** 'replay' (fix pass w5, N04): TRY AGAIN on the kept board, the board shown and held until the server deals the try. */
 /** The kept board shows by this time even if its stage never reports its reset (w5 N04). */
 export const REPLAY_SHOW_MAX_MS = 250;
+/** T036 (w5): the open's "no saved try" answer stands in for the start's own read this long. */
+export const NO_SAVED_FRESH_MS = 5000;
 type FlowState = 'recovering' | 'auth-required' | 'preview' | 'retrying' | 'wheel' | 'spinning' | 'minigame' | 'postwin' | 'lost' | 'replay' | 'claim-error' | 'spend-error' | 'save-error' | 'expired';
 type GameType = 'tap' | 'memory' | 'trivia';
 
@@ -316,6 +318,10 @@ export default function RedeemRedeemableModal({
   // First coin ever (team step after the win card): the player's coin count when the card opened.
   const rideCoinsBeforeRef = useRef<number | null>(null);
   const clearing = useRef<Promise<unknown> | null>(null);
+  /** T036 (w5): when the open's recovery check found no saved try (the start then skips its own read). */
+  const noSavedAtRef = useRef(0);
+  /** T036 (w5): PLAY's one-press start, callable from the recovery check (set each render). */
+  const quickStartRef = useRef<() => void>(() => undefined);
   const spendingRef = useRef(false);
   const protectedRetryRef = useRef(false);
   const claimingRef = useRef(false);
@@ -608,7 +614,13 @@ export default function RedeemRedeemableModal({
         const saved = await readTaskAttemptCheckpoint(player.id, taskType, taskId);
         if (!alive) return;
         if (!saved) {
-          if (!spendingRef.current) setFlowState('preview');
+          if (!spendingRef.current) {
+            // T036 (w5): PLAY's one press starts the try now, not a render and an effect later, and the start does
+            // not read the checkpoint again (nothing writes it in between): 0.3 to 0.9 s on a loaded phone.
+            noSavedAtRef.current = Date.now();
+            setFlowState('preview');
+            quickStartRef.current();
+          }
           return;
         }
         requestIdRef.current = saved.requestId;
@@ -665,8 +677,10 @@ export default function RedeemRedeemableModal({
     const crewAsk = loadLastCrew(Number(player.id)).then(group => triviaCrewFor(group, hasKids(group))).catch(() => null);
     try {
       await clearing.current;
-      saved = await readTaskAttemptCheckpoint(player.id, taskType, taskId);
-      pressTrace('card.read');
+      const knownNone = noSavedAtRef.current > 0 && Date.now() - noSavedAtRef.current < NO_SAVED_FRESH_MS;
+      noSavedAtRef.current = 0;
+      saved = knownNone ? null : await readTaskAttemptCheckpoint(player.id, taskType, taskId);
+      pressTrace('card.read', () => (knownNone ? 'known none' : 'read'));
     } catch (error) {
       console.warn('Could not check saved ride challenge:', error);
       setFlowState('spend-error');
@@ -1255,11 +1269,18 @@ export default function RedeemRedeemableModal({
   // One press (T047): the coin's card was read before and a Ticket is in hand, so PLAY! on the map starts it.
   const quickStarted = useRef(false);
   useEffect(() => { if (!open) quickStarted.current = false; }, [open]);
-  useEffect(() => {
-    if (!open || !quickStart || quickStarted.current || flowState !== 'preview' || !isTaskType || !hasEnoughTickets || !location || previewOnly) return;
+  const tryQuickStart = (from: 'check' | 'preview') => {
+    if (!open || !quickStart || quickStarted.current || !isTaskType || !hasEnoughTickets || !location || previewOnly) return;
+    if (from === 'preview' && flowStateRef.current !== 'preview' && flowState !== 'preview') return;
     quickStarted.current = true;
     setStarting(true);
     void handleStartWheel().finally(() => setStarting(false));
+  };
+  // The recovery check calls it the moment it finds no saved try (T036, w5); the preview effect stays the fallback.
+  quickStartRef.current = () => tryQuickStart('check');
+  useEffect(() => {
+    if (flowState !== 'preview') return;
+    tryQuickStart('preview');
   }, [open, quickStart, flowState, isTaskType, hasEnoughTickets, location, previewOnly]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!redeemable) return null;
 

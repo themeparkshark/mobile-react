@@ -125,7 +125,9 @@ test('T142 claimed Tickets fly (at most 4 pictures) and count up to the exact to
 test('T047 T062 the coin card has a close X, starts at once when seen before, and its big button takes edge taps', () => {
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /accessibilityLabel="Close">\n\s+<GameIcon name="close" size=\{34\} \/>/);
-  assert.match(modal, /if \(!open \|\| !quickStart \|\| quickStarted\.current \|\| flowState !== 'preview'/);
+  // w5 T036: the one-press start runs from the recovery check (no saved try) or, as before, from the preview.
+  assert.match(modal, /if \(!open \|\| !quickStart \|\| quickStarted\.current \|\| !isTaskType \|\| !hasEnoughTickets \|\| !location \|\| previewOnly\) return;/);
+  assert.match(modal, /noSavedAtRef\.current = Date\.now\(\);\n\s+setFlowState\('preview'\);\n\s+quickStartRef\.current\(\);/);
   assert.match(modal, /hitSlop=\{MAIN_BUTTON_HIT_SLOP\}/);
   assert.match(read('src/components/RedeemModal.tsx'), /coinCardSeenNow\(player\?\.id, redeemable\?\.type \?\? '', coin\.id\)/);
 });
