@@ -261,7 +261,8 @@ function LandSky({ g, land }: { g: BoothGeo; land: keyof typeof LAND_PROPS }) {
   const room = g.awning.y - 8;
   if (room < 70) return null;
   const left = g.barker.x + g.barker.w * 0.82;
-  const right = g.hud.x - 6;
+  // The HUD band spans the right 60 %, but its chain plate is content-sized at the right edge (about 84 pt).
+  const right = g.hud.x + g.hud.w - 92;
   const maxW = Math.max(0, right - left);
   let h = Math.min(170, room);
   let w = h * prop.aspect;

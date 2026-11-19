@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
+import { RideChallengeContext } from '../gamekit/RideChallengeContext';
 import { useNavigation } from '@react-navigation/native';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -311,7 +312,8 @@ export default function MiniGameTesterScreen() {
       </Wrapper>
       {WHACK_PERF_CONTROL ? <PerfControl /> : null}
 
-      {/* Mini-Game */}
+      {/* Mini-Game. Dev only: EXPO_PUBLIC_RIDE_GAME_PREVIEW_CHALLENGE=1 plays it as a paid ride challenge (the coin card's context). */}
+      <RideChallengeContext.Provider value={ridePreview && process.env.EXPO_PUBLIC_RIDE_GAME_PREVIEW_CHALLENGE === '1'}>
       <MiniGameSelector
         visible={activeGame !== null}
         taskId={999}
@@ -325,6 +327,7 @@ export default function MiniGameTesterScreen() {
         onClose={handleClose}
         onComplete={handleComplete}
       />
+      </RideChallengeContext.Provider>
 
       {/* Studio engine demo (dev) */}
       {engineDemo ? (
