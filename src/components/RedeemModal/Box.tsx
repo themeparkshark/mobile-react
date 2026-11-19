@@ -1,7 +1,18 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, ImageURISource, Text, View } from 'react-native';
-import * as Animatable from 'react-native-animatable';
+import Reanimated, { Easing as REasing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import useAmbientLoop from '../../power/useAmbientLoop';
+
+/**
+ * The coin's gentle pulse on the card (scale 1 to 1.05 and back, a second each way), on the UI thread (fix pass w5,
+ * lane host). It was a react-native-animatable loop driven from JS: one setNativeProps per frame, and on this build
+ * each one re-commits the whole screen through Reanimated's commit hook. With the coin card open the JS and UI threads
+ * stayed busy, so a tap reached the app 3 to 12 s late (sampled on the simulator). It rests with Reduce Motion,
+ * Battery Saver and an idle phone, like every ambient loop.
+ */
+export const BOX_PULSE_SCALE = 1.05;
+export const BOX_PULSE_MS = 1000;
 
 export default function Box({
   background,
@@ -22,6 +33,13 @@ export default function Box({
   readonly pulse?: boolean;
 }) {
   const rotate = useRef(new Animated.Value(0)).current;
+  const pulseScale = useSharedValue(1);
+  useAmbientLoop(
+    () => { pulseScale.value = withRepeat(withTiming(BOX_PULSE_SCALE, { duration: BOX_PULSE_MS, easing: REasing.inOut(REasing.quad) }), -1, true); },
+    () => { cancelAnimation(pulseScale); pulseScale.value = 1; },
+    !!pulse,
+  );
+  const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulseScale.value }] }));
 
   const spin = rotate.interpolate({
     inputRange: [0, 1],
@@ -85,12 +103,7 @@ export default function Box({
         }}
       >
         {pulse && (
-          <Animatable.View
-            animation="pulse"
-            iterationCount="infinite"
-            direction="alternate"
-            style={{ justifyContent: 'center', padding: 16 }}
-          >
+          <Reanimated.View style={[{ justifyContent: 'center', padding: 16 }, pulseStyle]}>
             <Image
               source={image}
               style={{
@@ -101,7 +114,7 @@ export default function Box({
               }}
               contentFit="contain"
             />
-          </Animatable.View>
+          </Reanimated.View>
         )}
         {!pulse && (
           <View style={{ padding: 8 }}>

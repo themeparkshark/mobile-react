@@ -222,3 +222,21 @@ test('ROOT-GATE N02: a gate ask reads the saved rest once per launch, and a gate
   assert.match(gate, /function restLoaded\(\): Promise<void> \{\s*restReady \?\?= loadRest\(\)\.finally\(\(\) => \{ restDone = true; \}\);\s*return restReady;\s*\}/);
   assert.match(gate, /useLayoutEffect\(\(\) => \{\s*if \(!sheetOverlay \|\| bodyRef\.current === sentRef\.current\) return;/);
 });
+
+test('SAFETY-first-press: no endless JS-driven pulse on a card (each frame re-committed the whole screen and held taps 3 to 12 s)', () => {
+  // Sampled on the simulator (release-like JS, coin card with 0 Tickets): the JS thread spent 3 s of 3 in Animated's
+  // flush calling setNativeProps, each a full shadow tree commit through Reanimated's commit hook, and the UI thread 93%
+  // in Reanimated's mount hook. The coin card's coin pulse (react-native-animatable, no native driver) was the loop.
+  const box = src('src/components/RedeemModal/Box.tsx');
+  assert.doesNotMatch(box, /from 'react-native-animatable'/, 'the coin pulse is not a JS-driven loop');
+  assert.match(box, /withRepeat\(withTiming\(BOX_PULSE_SCALE/, 'it runs on the UI thread');
+  assert.match(box, /useAmbientLoop\(/, 'and rests with Reduce Motion, Battery Saver and an idle phone');
+  // The whole app: every endless Animatable animation runs on the native driver.
+  const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : /\.tsx$/.test(e.name) ? [path.join(dir, e.name)] : []);
+  for (const file of walk(path.join(root, 'src'))) {
+    const text = fs.readFileSync(file, 'utf8');
+    for (const m of text.matchAll(/<Animatable\.[A-Za-z]+[\s\S]*?>/g)) {
+      if (/iterationCount=("infinite"|\{'infinite'\})/.test(m[0])) assert.match(m[0], /useNativeDriver/, `${path.relative(root, file)}: an endless Animatable loop must use the native driver`);
+    }
+  }
+});
