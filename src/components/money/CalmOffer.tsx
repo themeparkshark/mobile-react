@@ -195,9 +195,9 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.kicker} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.kicker.toUpperCase()}</Text>
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.slimTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.title}</Text>
           </View>
-          <View style={st.slimAsk}>
-            <GameIcon name={placement === 'high_point' ? 'arrow' : 'member'} size={16} />
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.slimAskText} numberOfLines={1}>{busy ? 'One moment' : copy.action}</Text>
+          {/* The kicker already says it is for grown-ups: the row's way on is one round arrow, so the name keeps the room. */}
+          <View style={[st.slimAsk, busy && { opacity: 0.6 }]}>
+            <GameIcon name="arrow" size={18} />
           </View>
         </Pressable>
         <Pressable onPress={dismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel="Not now">
@@ -247,9 +247,8 @@ const st = StyleSheet.create({
     borderWidth: 2, borderColor: BRAND.gold, borderBottomWidth: 4, paddingLeft: 8, paddingRight: 10, paddingVertical: 5 },
   slimTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   slimTitle: { fontFamily: FONT.display, fontSize: 17, color: '#ffffff' },
-  slimAsk: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 999,
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)', paddingHorizontal: 8, paddingVertical: 4 },
-  slimAskText: { fontFamily: FONT.display, fontSize: 13, color: '#ffffff' },
+  slimAsk: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
   vipLine: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 8, maxWidth: '100%', backgroundColor: '#123f80', borderRadius: 999,
     borderWidth: 2, borderColor: BRAND.gold, paddingLeft: 10, paddingRight: 8, paddingVertical: 5 },
   vipTap: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
