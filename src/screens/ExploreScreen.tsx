@@ -1280,8 +1280,11 @@ export function ExploreScreenBody() {
     const timer = setTimeout(() => setChestClock(tick => tick + 1), FIRST_VISIT_CHEST_WAIT_MS + 50);
     return () => clearTimeout(timer);
   }, [huntStartedAt]);
-  // The treat cards played on this open (T111): the chest waits for this visit's first catch.
-  if ((homeIntroOwed || homeIntroOpen) && !park) introThisOpen.current = true;
+  // The treat cards played on this open (T111): the chest waits for this visit's first catch. Only cards that really
+  // opened count (fix pass w4, N10): "owed" is also true for the moment the intro's seen flag is still loading, and
+  // latching that hid the Rewards button (Daily 3, the flame, every chest) until a catch on each later home launch.
+  // While the intro is owed the chest still waits through chestReady's own homeIntroOwed check.
+  if (homeIntroOpen && !park) introThisOpen.current = true;
   const firstVisitHold = firstVisitChestWaits({
     introThisOpen: introThisOpen.current && !park,
     // The first hunt is the home map's (home catches count it down). In a park there is no home catch

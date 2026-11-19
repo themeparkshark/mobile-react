@@ -27,7 +27,9 @@ export interface RewardsRow {
 
 export interface RewardsInput {
   /** Today's daily chest (always on). */
-  readonly dailyChest: { readonly unclaimed: boolean; readonly day: number; readonly of: number } | null;
+  readonly dailyChest: { readonly unclaimed: boolean; readonly day: number; readonly of: number;
+    /** Today's chest started the ladder again after this many days away (T110); 0 or absent: it did not. */
+    readonly restarted?: number } | null;
   /** Daily 3, after rung 4 and with its switch on. */
   readonly daily3: { readonly done: number; readonly total: number; readonly claimable: boolean; readonly claimed: boolean; readonly flame: number;
     /** Today's goals were shown to the player (T096). false: the row leads to the goals first, never "All 3 done!". */
@@ -61,11 +63,17 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 export function rewardsRows(i: RewardsInput): RewardsRow[] {
   const rows: RewardsRow[] = [];
   if (i.dailyChest?.unclaimed) {
-    rows.push({ key: 'daily_chest', title: 'Daily Chest', line: `Day ${i.dailyChest.day} of ${i.dailyChest.of} is ready`, ready: 1, action: 'open' });
+    // T110: a chest that started over says why (once, from the server's streak_reset), never a bare "Day 1".
+    // When the flame line above already says the welcome back, the row says only the day (one welcome, never two).
+    const welcome = !!i.dailyChest.restarted && !flameNote(i.daily3, i.dailyChest.restarted);
+    rows.push({ key: 'daily_chest', title: 'Daily Chest', line: welcome
+      ? `Welcome back! Day ${i.dailyChest.day} of ${i.dailyChest.of} is ready` : `Day ${i.dailyChest.day} of ${i.dailyChest.of} is ready`, ready: 1, action: 'open' });
   }
   if (i.daily3) {
     const d = i.daily3;
-    if (d.claimable && d.seen === false) rows.push({ key: 'daily3', title: 'Daily 3', line: `${d.total} of ${d.total} goals done. See them`, ready: 1, action: 'go' });
+    // Fix pass w4 T096: before today's goals were shown, the row names the goals (never a done count or a chest):
+    // the sheet then ticks the finished ones one by one and only then offers the chest.
+    if (d.seen === false && !d.claimed) rows.push({ key: 'daily3', title: 'Daily 3', line: `See your ${d.total} goals for today`, ready: d.claimable ? 1 : 0, action: 'go' });
     else if (d.claimable) rows.push({ key: 'daily3', title: 'Daily 3 Chest', line: 'All 3 done! Open your chest', ready: 1, action: 'open' });
     else if (d.claimed) rows.push({ key: 'daily3', title: 'Daily 3', line: 'Done for today. New goals tomorrow', ready: 0, action: 'go' });
     else rows.push({ key: 'daily3', title: 'Daily 3', line: `${d.done} of ${d.total} done`, ready: 0, action: 'go' });
@@ -126,7 +134,18 @@ export function emptyLine(i: RewardsInput): string {
   // T118: a chest held for the next visit is named honestly, never hidden behind "tomorrow".
   if (i.chestOpenedThisVisit && ((i.levelChest?.waiting ?? 0) > 0 || i.weekly?.claimable)) return 'Another chest waits for your next visit';
   if (i.daily3 && !i.daily3.claimed && !i.daily3.claimable) return 'Finish your Daily 3 for a chest';
-  return 'Your next daily chest comes tomorrow';
+  return TOMORROW_LINE;
+}
+
+/** The empty sheet's line when today is all done; the sheet shows tomorrow's chest pictured instead (T103). */
+export const TOMORROW_LINE = 'Your next daily chest comes tomorrow';
+
+/**
+ * N13: today is done (today's chest is open and Daily 3, when on, is claimed): the sheet shows what tomorrow brings,
+ * whatever else is still waiting in it (a level chest, stamps), not only when it is empty.
+ */
+export function todayDone(i: RewardsInput): boolean {
+  return !!i.dailyChest && !i.dailyChest.unclaimed && (!i.daily3 || (i.daily3.claimed && !i.daily3.claimable));
 }
 
 /** The kid's Daily 3 goal from the server, as the home side when the app is at home (never a GO to a park). */
@@ -254,10 +273,14 @@ export function withChestOpened<G extends { readonly kind: string; readonly done
  * - no flame after having had one (days away): a kind welcome back and how to light a new one;
  * - otherwise nothing (the flame line already says "Start a flame with Daily 3").
  */
-export function flameNote(d: RewardsInput['daily3']): string | null {
+export function flameNote(d: RewardsInput['daily3'], daysAway = 0): string | null {
   if (!d) return null;
   if (d.flame > 0 && d.counted) return 'Open the game tomorrow to keep your flame';
-  if (d.flame === 0 && (d.best ?? 0) > 0) return 'Welcome back! Finish Daily 3 to light a new flame';
+  // Fix pass w4 T110: after days away, once, the why (the server's streak_reset on today's chest) and what to do.
+  if (d.flame === 0 && (d.best ?? 0) > 0) {
+    return daysAway > 0 ? `Welcome back! Away ${daysAway} ${daysAway === 1 ? 'day' : 'days'}, so your chest and flame start again. Finish Daily 3 to light a new one`
+      : 'Welcome back! Finish Daily 3 to light a new flame';
+  }
   return null;
 }
 
@@ -271,3 +294,4 @@ export function settleBadge(shown: number, next: number, stillForMs: number): nu
   if (next <= shown) return next;
   return stillForMs >= BADGE_SETTLE_MS ? next : shown;
 }
+

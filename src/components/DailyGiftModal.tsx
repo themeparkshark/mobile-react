@@ -33,6 +33,8 @@ import CalmModal from './retention/CalmModal';
 import { rewardWord } from '../services/words/playerWords';
 import { LOST_CLAIM_WAITS_MS, reconcileClaim, serverAnswered } from '../services/retention/claimReconcile';
 import { tryAgainLine } from '../services/connectionCopy';
+import { chestRestartLine, tomorrowChest } from '../services/retention/chestDay';
+import TomorrowTile from './retention/TomorrowTile';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
@@ -192,6 +194,10 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   }, []);
 
   const displayedGift = confirmedGift ?? dailyGift;
+  // T110: why today's chest started over (the ladder's own words; the flame stays the only streak).
+  const { streak_reset: resetShown } = displayedGift;
+  const restartLine = chestRestartLine(resetShown ?? dailyGift.streak_reset);
+  const tomorrow = tomorrowChest(displayedGift);
   const ladder = displayedGift.ladder?.length ? displayedGift.ladder : fallbackLadder(displayedGift);
   const day = Math.min(ladder.length, Math.max(1, displayedGift.day ?? 1));
   const today = ladder[day - 1];
@@ -534,7 +540,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         <Ribbon text="Daily Chest" />
         <View style={styles.card}>
           {/* The ladder's words are "Day N of 7": the word streak belongs to the Daily 3 flame only. */}
-          {simple ? null : <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Day ${day} of ${ladder.length}`}</Text>}
+          {simple ? null : <Text style={[styles.subtitle, !!restartLine && phase !== 'open' && styles.subtitleTight]}>{phase === 'open' ? `Day ${day} collected!` : `Day ${day} of ${ladder.length}`}</Text>}
+          {/* Fix pass w4 T110: a chest that started over says why, kindly, before it is opened (the server's streak_reset). */}
+          {!simple && !!restartLine && phase !== 'open' && <Text style={styles.restart} maxFontSizeMultiplier={1.2}>{restartLine}</Text>}
 
           {simple ? null : <View style={[styles.ladder, styles.aboveGold]}>
             {ladder.map((r) => (
@@ -617,6 +625,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               <Text style={styles.buttonText}>{ticketDay ? 'SEE YOU AT THE PARK!' : 'AWESOME!'}</Text>
             </Pressable>
           )}
+          {/* Fix pass w4 T103: tomorrow's chest, pictured from the ladder (moon, chest, "Day 2 chest: Thursday"). */}
+          {phase === 'open' && !!tomorrow && <View style={styles.tomorrow}><TomorrowTile chest={tomorrow} /></View>}
           {phase === 'closed' && <Pressable onPress={dismiss} accessibilityRole="button"
             accessibilityLabel={fromRewards.current ? 'Back to your Rewards without opening this chest' : 'Back to map without opening this chest'}
             style={styles.laterButton}>
@@ -774,6 +784,9 @@ const styles = StyleSheet.create({
   card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
     paddingTop: 22, paddingBottom: 18, paddingHorizontal: 12, alignItems: 'center' },
   subtitle: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff', marginBottom: 10, textAlign: 'center' },
+  subtitleTight: { marginBottom: 2 },
+  tomorrow: { alignSelf: 'stretch', marginTop: 8 },
+  restart: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold, textAlign: 'center', marginBottom: 8, paddingHorizontal: 8 },
   aboveGold: { zIndex: 2 },
   ladder: { flexDirection: 'row', gap: 4, alignSelf: 'stretch', justifyContent: 'center' },
   day: { flex: 1, maxWidth: 48, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 10,

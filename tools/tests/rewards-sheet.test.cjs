@@ -205,7 +205,9 @@ test('Daily 3: a Shark Pass line per goal after rung 5 (steps, never points), fr
   const sheet = read('src/components/retention/Daily3Sheet.tsx');
   assert.match(sheet, /passToday && !shown\.parkOnly \? goalPassLine\(shown, passToday\) : null/, 'the home side earns home points');
   assert.match(read('src/components/retention/useRetention.tsx'), /passToday=\{passOn \? passToday : null\}/);
-  assert.match(sheet, /New goals tomorrow/, 'a day in words, never a ticking clock');
+  // Fix pass w4 T107: the reset is said in words by the chest when today is done (tomorrowLine), never a ticking clock.
+  assert.match(sheet, /tomorrowLine\(state\)/, 'a day in words, never a ticking clock');
+  assert.doesNotMatch(sheet, /resetLabel\(/);
   assert.doesNotMatch(sheet, /resetLabel/);
 });
 
@@ -476,7 +478,7 @@ test('NEW tags: each reward rung wears one NEW on its own surface, and a shown N
     assert.match(src, /\{tag\.isNew && <NewPill \/>\}/, chip);
   }
   const retention = read('src/components/retention/useRetention.tsx');
-  assert.match(retention, /markRungSeen\('daily'\);\n(    [^\n]*noteDaily3Seen[^\n]*\n)?    setSheetFromRewards\(fromRewards\);/, 'opening Daily 3 clears its NEW');
+  assert.match(retention, /const openSheet = \(fromRewards = false\) => \{\n[^\n]*\n    markRungSeen\('daily'\);\n/, 'opening Daily 3 clears its NEW');
   assert.match(retention, /const rung = rowRung\(key\);\n    if \(rung\) markRungSeen\(rung\);/, 'a row tap clears its NEW');
 });
 

@@ -41,7 +41,9 @@ export function NewPill({ style }: { readonly style?: object }) {
  * (the same chest moments as before); stamps claim in place. Nothing here is
  * for sale and nothing counts down.
  */
-export default function RewardsSheet({ rows, flame, flameLine = null, empty, busy, note, reducedMotion, enterRows = true, onRow, onClose }: {
+export default function RewardsSheet({ rows, flame, flameLine = null, empty, busy, note, reducedMotion, enterRows = true, onRow, onClose, tomorrow = null }: {
+  /** Today is done: tomorrow's chest, pictured (T103, N13). It replaces the empty line's words. */
+  readonly tomorrow?: React.ReactNode;
   readonly rows: readonly RewardsRow[];
   /** One calm line under the flame (keep it tomorrow, or welcome back), never a countdown. */
   readonly flameLine?: string | null;
@@ -107,13 +109,14 @@ export default function RewardsSheet({ rows, flame, flameLine = null, empty, bus
             </Pressable>
           </Animated.View>
         ))}
-        {!ready && (
+        {!ready && !tomorrow && (
           <View style={styles.empty}>
             <GameIcon name="chestOpen" size={56} />
             <Text style={styles.emptyText}>{empty}</Text>
           </View>
         )}
       </ScrollView>
+      {tomorrow}
       {!!note && <Text style={styles.note}>{note}</Text>}
       <Pressable onPress={onClose} accessibilityRole="button" style={({ pressed }) => [styles.close, pressed && styles.pressed]}>
         <Text style={styles.closeText}>BACK TO MAP</Text>

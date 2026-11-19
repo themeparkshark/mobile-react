@@ -5,7 +5,7 @@ import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } 
 import { AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import {
-  buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
+  buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markDailyThreeSeen, markFreezeSeen, openLevelChest, setReminders,
   setRetentionMode, type DailyThreeState, type LevelChest, type PaidRewards,
 } from '../../api/endpoints/retention';
 import { claimStampReward, getStamps } from '../../api/endpoints/me/stamps';
@@ -32,10 +32,12 @@ import { devLadderFeed } from '../../services/retention/devLadderFeed';
 import {
   askForDailyChest, autoOpenUsed, noteAppState, noteAutoOpen, rewardMayAutoOpen,
 } from '../../services/retention/rewardPresence';
-import { daily3SeenDate, noteDaily3Seen, tickToast } from '../../services/retention/daily3Seen';
+import { daily3SeenDate, noteDaily3Seen, seenToday, tickToast, ticksOnFirstSight } from '../../services/retention/daily3Seen';
+import { chestRestartLine, tomorrowChest } from '../../services/retention/chestDay';
+import TomorrowTile from './TomorrowTile';
 import { showToast } from '../../utils/toast';
 import { claimOrReconcile, LOST_CLAIM_WAITS_MS, reconcileClaim } from '../../services/retention/claimReconcile';
-import { emptyLine, rewardsRows, rewardsSummary, BADGE_SETTLE_MS, flameNote, settleBadge, stampClaimNote, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
+import { emptyLine, todayDone, rewardsRows, rewardsSummary, BADGE_SETTLE_MS, flameNote, settleBadge, stampClaimNote, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
 import { listenReturnToRewards, openRewardsDoor, rewardsDoorOpen } from '../../services/retention/rewardsSignals';
 import { calmForAutoOpen, takeAutoOpen } from '../../services/retention/mapAttention';
 import { boxFraction, headlineBox } from '../../services/trail/trailModel';
@@ -385,7 +387,15 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const openSheet = (fromRewards = false) => {
     // Opening Daily 3 is seeing it: its NEW tag (rung 4) clears.
     markRungSeen('daily');
-    if (daily && playerIdRef.current != null) { noteDaily3Seen(playerIdRef.current, daily.date); setSeenDate(daily.date); }
+    if (daily && playerIdRef.current != null) {
+      // Fix pass w4 T096: the first sight of today's goals ticks the ones already done, one by one, before the chest.
+      const first = ticksOnFirstSight({ ...daily, goals: withChestOpened(daily.goals, chestOpenedOn(dailyGift, daily.date)) },
+        seenToday(daily, seenDate));
+      if (first.length) setCelebrate(first);
+      noteDaily3Seen(playerIdRef.current, daily.date); setSeenDate(daily.date);
+      // B07: a server that keeps seen_at hears of the first look once (a lost write is simply sent on the next open).
+      if (daily.seen_at === null) void markDailyThreeSeen().then(r => { if (mounted.current && r?.state?.goals) applyDaily(r.state); }).catch(() => undefined);
+    }
     setSheetFromRewards(fromRewards);
     setView({ k: 'sheet' });
     void AsyncStorage.getItem(COACH_KEY).then(v => { if (!v && mounted.current) setCoach(true); }).catch(() => undefined);
@@ -536,10 +546,11 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const nearest = trailState ? headlineBox({ ready: [], walking: trailState.walking }) : null;
   const rewardsInput: RewardsInput = {
     dailyChest: dailyGift && player?.username
-      ? { unclaimed: dailyGift.redeemed_at === null, day: Math.min(giftLadder, Math.max(1, dailyGift.day ?? 1)), of: giftLadder } : null,
+      ? { unclaimed: dailyGift.redeemed_at === null, day: Math.min(giftLadder, Math.max(1, dailyGift.day ?? 1)), of: giftLadder,
+        restarted: chestRestartLine(dailyGift.streak_reset) ? Math.floor(Number(dailyGift.streak_reset?.days_away ?? 0)) : 0 } : null,
     daily3: wantDaily && daily ? {
       done: doneCount(withChestOpened(daily.goals, chestOpenedOn(dailyGift, daily.date))), total: Math.max(3, daily.goals.length), claimable: daily.claimable,
-      claimed: daily.claimed && !daily.claimable, flame: daily.streak.days, seen: seenDate === daily.date,
+      claimed: daily.claimed && !daily.claimable, flame: daily.streak.days, seen: seenToday(daily, seenDate),
       counted: daily.streak.counted_today, best: daily.streak.best,
     } : null,
     weekly: wantDaily && daily ? { claimable: daily.week.claimable } : null,
@@ -592,7 +603,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   useEffect(() => {
     if (!__DEV__) return undefined;
     const g = globalThis as { __tpsRewards?: unknown };
-    g.__tpsRewards = { open: openRewards, summary: () => summary, rows: () => rows, dims: () => ({ width, height }) };
+    g.__tpsRewards = { open: openRewards, summary: () => summary, rows: () => rows, input: () => rewardsInput, dims: () => ({ width, height }) };
     return () => { if (g.__tpsRewards) delete g.__tpsRewards; };
   });
 
@@ -649,7 +660,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         return;
       case 'daily3':
         // T096: the chest opens straight from here only once today's goals were shown; else the goals come first.
-        if (daily?.claimable && seenDate === daily.date) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
+        if (daily?.claimable && seenToday(daily, seenDate)) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
         else openSheet(true);
         return;
       case 'level_chest':
@@ -766,10 +777,16 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     </View>
   );
 
+  // N13 and T103: once today is done, tomorrow's chest shows pictured under the rows (whatever else still waits), and
+  // stands in for the empty sheet's words. A chest held for the next visit keeps its own line.
+  const tomorrowAt = todayDone(rewardsInput) && emptyLine(rewardsInput) !== 'Another chest waits for your next visit'
+    ? tomorrowChest(dailyGift) : null;
+  const tomorrowCard = tomorrowAt ? <TomorrowTile chest={tomorrowAt} /> : null;
   // The Rewards card. While a card opened from it is up (a chest, a reveal, Daily 3), it stays mounted out of sight,
   // so BACK shows this same card again at once: a fresh mount drew its row pictures a few frames late.
   const rewardsCard = (
-    <RewardsSheet rows={rows} flame={summary.flame} flameLine={flameNote(rewardsInput.daily3)} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
+    <RewardsSheet rows={rows} flame={summary.flame} flameLine={flameNote(rewardsInput.daily3, rewardsInput.dailyChest?.restarted ?? 0)} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
+      tomorrow={tomorrowCard}
       reducedMotion={reducedMotion} enterRows={!(presentNow && shownRef.current && !!face.current && face.current.key !== 'rewards')}
       onRow={onRewardsRow} onClose={close} />
   );
@@ -793,7 +810,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       <Daily3Sheet state={dailyShown ?? daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
         atPark={atPark} passToday={passOn ? passToday : null} remindersReady={flagOn(flags, 'retention_push') || localOn}
         closeLabel={sheetFromRewards ? 'BACK' : 'BACK TO MAP'}
-        reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone}
+        reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone} ticksHeld={coach}
         onReminders={on => { void toggleReminders(on); }}
         onClaim={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }}
         onClaimWeekly={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'weekly', rewards: null, opening: false }); }}
@@ -823,6 +840,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       ) : null;
     content = (
       <RewardReveal reducedMotion={reducedMotion} rewards={r.rewards} opening={r.opening} footer={footer} dropIn={r.src === 'level'}
+        preview={chestPreview(r.src, daily, chests.find(c => c.level === r.level) ?? null)}
         energySaved={!coinLevelsOpen} pinBoxes={flagOn(flags, 'pin_mystery_boxes')}
         subtitle={r.src === 'level' ? `You reached Level ${r.level}! Tap your chest.`
           : r.src === 'weekly' ? 'A whole week of flames. Tap the box!' : 'All three goals done. Tap your chest!'}
@@ -950,6 +968,25 @@ function stampsToClaim(r: { stamps: Record<string, readonly { id: number; is_ear
     }
   }
   return out;
+}
+
+/**
+ * What a chest holds before it opens (fix pass w4, T104), from the numbers the server already sent: the Daily 3
+ * chest's reward (plus a milestone's gear or boxes), the Weekly Box's reward, a level chest's preview.
+ */
+export function chestPreview(src: 'daily' | 'weekly' | 'level', d: DailyThreeState | null, chest: LevelChest | null): PaidRewards | null {
+  const gear = { id: 0, name: 'New gear', image: null, rarity: null };
+  if (src === 'level') {
+    const p = chest?.preview;
+    return p ? { coins: p.coins, bonus_coins: p.bonus_coins, tickets: p.tickets, energy: p.energy, mystery_boxes: p.mystery_boxes, item: p.item ? gear : null } : null;
+  }
+  if (!d) return null;
+  if (src === 'weekly') {
+    const w = d.week.reward;
+    return { coins: w.coins, bonus_coins: w.bonus_coins, tickets: w.tickets, freezes: w.freezes, mystery_boxes: w.mystery_boxes };
+  }
+  const m = d.claimable_milestone;
+  return { ...d.reward, mystery_boxes: m?.mystery_boxes ?? 0, item: m?.gear ? gear : null };
 }
 
 /** Today's daily chest (the Daily 3 day) is already open on this phone. */

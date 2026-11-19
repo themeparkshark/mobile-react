@@ -66,6 +66,7 @@ function chest({ reconciled = null, readBacks = null, reduced = false, props = {
       if (name === '../ui/GoldBurst') return { GoldBurst: 'GoldBurst' };
       if (name === '../ui/motionEasing') return { ...require('./helpers/ts-module.cjs').loadTs('src/ui/motion.ts'), EASE: {} };
       if (name === './TapHint') return { default: 'TapHint' };
+      if (name === './retention/TomorrowTile') return { default: 'TomorrowTile' };
       if (name === '../hooks/useReducedGameMotion') return { default: () => reduced };
       if (name === '../gamekit/SFX') return { playSfx: name => sounds.push(name) };
       // Studio sound (wave 5 chest pop): off in this test, so the chest plays today's sounds.
@@ -91,6 +92,7 @@ function chest({ reconciled = null, readBacks = null, reduced = false, props = {
       if (name === '../services/retention/rewardsSignals') return require('./helpers/ts-module.cjs').loadTs('src/services/retention/rewardsSignals.ts');
       if (name === '../ui/modalLayers') return { useNativeModalLayer: wanted => ({ present: wanted, onDismissed() {} }) };
       // Fix round W1: the prize words come from the one word table (the real one, pure).
+      if (name === '../services/retention/chestDay') return require('./helpers/ts-module.cjs').loadTs('src/services/retention/chestDay.ts');
       if (name === '../services/words/playerWords') return require('./helpers/ts-module.cjs').loadTs('src/services/words/playerWords.ts');
       throw new Error(`Unexpected import ${name}`);
     },

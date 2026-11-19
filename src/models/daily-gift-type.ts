@@ -34,4 +34,6 @@ export interface DailyGiftType {
   readonly granted?: DailyGiftAmountsType | null;
   readonly milestone?: DailyGiftMilestoneType | null;
   readonly next_milestone?: DailyGiftMilestoneType | null;
+  /** Fix pass w4 (B06): today's chest started the ladder again after days with no chest opened. Absent otherwise. */
+  readonly streak_reset?: { readonly days_away: number } | null;
 }
