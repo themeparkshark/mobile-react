@@ -189,8 +189,9 @@ test('T077: cachedRideFacts reads only rows keyed to this ride', async () => {
   const row = (id, rideId, fact) => ({ id, park_id: rideId ? null : 8, ride_id: rideId, question: 'Q?', choices: ['a', 'b', 'c', 'd'],
     correct_index: 0, difficulty: 'easy', fact, source: 'Disneyland Resort' });
   await triviaDeck.primeTriviaDeck(8, 571, async () => ({ park_id: 8, ride_id: 571, version: '1', questions: [
+    { ...row('n', 571, 'Guests 54 inches or taller may drive alone.'), deck: 'numbers' },
     row('a', 571, AUTOPIA_FACT), row('b', null, 'A park fact.'), row('c', 584, 'A Matterhorn fact.'), row('d', 571, null)] }));
-  assert.deepEqual([...triviaDeck.cachedRideFacts(8, 571)], [AUTOPIA_FACT]);
+  assert.deepEqual([...triviaDeck.cachedRideFacts(8, 571)], [AUTOPIA_FACT, 'Guests 54 inches or taller may drive alone.']);
   assert.deepEqual([...triviaDeck.cachedRideFacts(8, 584)], []);
   assert.deepEqual([...triviaDeck.cachedRideFacts(8, undefined)], []);
 });

@@ -54,7 +54,9 @@ export function cachedServerTrivia(parkId: number | undefined, rideId: number | 
  */
 export function cachedRideFacts(parkId: number | undefined, rideId: number | undefined): readonly string[] {
   if (parkId == null || rideId == null) return [];
-  const deck = decks.get(keyFor(parkId, rideId)) ?? [];
+  // Story-worthy facts first (history, the ride itself, the kids deck); height rules and numbers last.
+  const deck = [...(decks.get(keyFor(parkId, rideId)) ?? [])]
+    .sort((a, b) => (a.deck === 'numbers' ? 1 : 0) - (b.deck === 'numbers' ? 1 : 0));
   const out: string[] = [];
   for (const question of deck) {
     const fact = question.rideId === rideId ? question.fact?.trim() : undefined;
