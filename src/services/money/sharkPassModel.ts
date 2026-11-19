@@ -93,6 +93,25 @@ export function nextPassPrize(state: SharkPassState | null | undefined):
   return nextBigPrize(state.tiers ?? [], state.progress.points, state.season.points_per_tier, !!state.progress.premium);
 }
 
+/**
+ * Fix w4 N09: how many rewards this player can claim right now (not steps). The server's
+ * progress.claimable counts steps with something waiting; a step with both a free and a Shark Pass
+ * reward is two rewards for a pass owner. Order: the server's claimable_rewards (B09), else counted
+ * from the steps this player has reached, else the step count.
+ */
+export function claimableRewards(state: SharkPassState | null | undefined): number {
+  if (!state || !state.enabled || !state.progress) return 0;
+  const progress = state.progress as { claimable?: number; claimable_rewards?: unknown; premium?: boolean; tier?: number };
+  if (typeof progress.claimable_rewards === 'number' && Number.isFinite(progress.claimable_rewards)) return Math.max(0, progress.claimable_rewards);
+  const tiers = state.tiers ?? [];
+  if (tiers.length > 0) {
+    const reached = (t: SharkPassTier) => t.unlocked || t.tier <= (progress.tier ?? 0);
+    return tiers.filter(reached).reduce((sum, t) =>
+      sum + (t.free && !t.free_claimed ? 1 : 0) + (progress.premium && t.paid && !t.paid_claimed ? 1 : 0), 0);
+  }
+  return Math.max(0, progress.claimable ?? 0);
+}
+
 /** "Step 4 of 50": the pass's progress words (never "pts"). */
 export function stepWords(step: number, of: number): string {
   return `Step ${Math.max(0, step)} of ${Math.max(1, of)}`;

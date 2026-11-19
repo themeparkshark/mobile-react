@@ -152,3 +152,18 @@ test('T242: the claim answer that wore a title shows it on the card at once', ()
   assert.match(book, /const res = await claimStampReward\(stamp\.id\);\s*pendingPatch\.current\.push\(stamp\.id\);\s*showClaimTitle\(res\);/, 'Claim all too');
   assert.match(book, /if \(!showClaimTitle\(res\)\) refreshPlayer\(\)/);
 });
+
+// ---------- N09: the Shark Pass banner counts the rewards this player can claim ----------
+test('N09: rewards, not steps: a pass owner with both rows waiting sees both', () => {
+  const model = loadTs('src/services/money/sharkPassModel.ts');
+  const tiers = Array.from({ length: 50 }, (_, i) => ({ tier: i + 1, unlocked: i < 12, free: i === 0 ? null : { type: 'tickets', amount: 1 },
+    paid: { type: 'energy', amount: 60 }, free_claimed: false, paid_claimed: false }));
+  const base = { enabled: true, season: { key: 's1', tier_count: 50, points_per_tier: 250 }, tiers };
+  assert.equal(model.claimableRewards({ ...base, progress: { tier: 12, premium: false, claimable: 11 } }), 11);
+  assert.equal(model.claimableRewards({ ...base, progress: { tier: 12, premium: true, claimable: 12 } }), 23, 'steps say 12, rewards are 23');
+  assert.equal(model.claimableRewards({ ...base, progress: { tier: 12, premium: true, claimable: 12, claimable_rewards: 20 } }), 20, 'B09 wins');
+  const fresh = { ...base, tiers: tiers.map(t => ({ ...t, unlocked: false })), progress: { tier: 0, premium: false, claimable: 0 } };
+  assert.equal(model.claimableRewards(fresh), 0, 'a new player has nothing to claim');
+  assert.match(read('src/components/money/SharkPassBanner.tsx'), /const claimable = claimableRewards\(state\);/);
+  assert.match(read('src/screens/SharkPassScreen.tsx'), /Claim \$\{rewardsToClaim\} rewards/);
+});
