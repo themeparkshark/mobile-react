@@ -28,6 +28,10 @@
 
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Dimensions, Image, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import HoldDemo from '../../components/help/HoldDemo';
+import { GAME_INTROS } from '../../services/help/helpTopics';
+/** T045: the basket art for the pictured hold (the how-to card uses the same picture). */
+const HOLD_BASKET = require('../../assets/games/banana-basket/v2/basket.png');
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { runOnJS, runOnUI, useSharedValue } from 'react-native-reanimated';
 
@@ -1055,11 +1059,10 @@ function BananaRun({
 
   const images = useFieldImages();
   const twistName = cfg.twist && (mode === 'heat' || (mode === 'queue' && cfg.unlock >= 3)) ? TWIST_NAMES[cfg.twist] : '';
-  const objective = mode === 'ride'
-    ? 'Catch! Aim! Dodge!'
-    : mode === 'heat'
-      ? `Same line, same race. ${twistName ? `Today: ${twistName}.` : ''}`
-      : `Three quick sets. Catch them all!${twistName ? ` Twist: ${twistName}.` : ''}`;
+  // T045: one rule wording everywhere (the how-to card, the LinePlay tile and this start card): GAME_INTROS.banana.
+  const objective = mode === 'heat'
+    ? `Same line, same race. ${GAME_INTROS.banana.how}${twistName ? ` Today: ${twistName}.` : ''}`
+    : `${GAME_INTROS.banana.how}${twistName ? ` Twist: ${twistName}.` : ''}`;
   const subtitle = mode === 'queue'
     ? (cfg.unlock >= 3 ? `Queue${twistName ? `: ${twistName}` : ''}` : cfg.unlock === 2 ? 'Queue: Gull Set run' : 'Queue run 1')
     : mode === 'heat' ? 'Line Heat' : cfg.rules === R_INTRO ? 'Win the coin: first try' : 'Win the coin';
@@ -1074,6 +1077,8 @@ function BananaRun({
       hideHeaderScore
       personalBest={shownBest || undefined}
       objective={objective}
+      // T045: the start card pictures the hold (a finger held on the basket, sliding it), zero reading.
+      countdownDemo={<HoldDemo subject={HOLD_BASKET} motion="slide" reduced={reducedMotion} />}
       result={result}
       thresholds={thresholds}
       gameId="banana"

@@ -66,3 +66,41 @@ test('N03: the shared lock is the T046 lock (same timings, the dimmed look, a ca
   // A player who stops and looks presses it the first time.
   assert.equal(M.firstPressOf([100, 200, 300, 2000]), 2000);
 });
+
+test('T045: a quick tap gives Sharky a short swim: the release waits until the press has swum TAP_SWIM_STEPS', () => {
+  const engine = read('src/games/sharky/useSharkyEngine.ts');
+  assert.match(engine, /export const TAP_SWIM_STEPS = 9;/);
+  assert.match(engine, /if \(inp\.releasePending\) \{\s*if \(!s\.holding\) inp\.releasePending = false;\s*else if \(releaseDue\(!!s\.holding, s\.step, s\.holdStart\)\) \{\s*applyInput\(s, IN_RELEASE, 0, 0\);\s*pushEvent\(r, BR_INPUT, IN_RELEASE, 0, 0, s\.step\);/,
+    'the delayed release is applied and logged like any input (replays and the verifier see plain inputs)');
+  const swim = read('src/games/sharky/SharkySwim.tsx');
+  assert.match(swim, /if \(inp\.holding\) inp\.releasePending = true;/, 'lifting the finger asks for the release, never sends it at once');
+  assert.doesNotMatch(swim.slice(swim.indexOf('.onTouchesUp'), swim.indexOf('.onTouchesCancelled')), /IN_RELEASE/);
+  // The pure rule, and the sim: a 1-step tap now rises; before, a press then release a step later barely moved.
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const src = engine.slice(engine.indexOf('export function releaseDue'), engine.indexOf('}', engine.indexOf('export function releaseDue')) + 1);
+  // eslint-disable-next-line no-new-func
+  const releaseDue = new Function(`${src.replace(/export function/, 'function').replace(/: (boolean|number)/g, '').replace(/= TAP_SWIM_STEPS/, '= 9')}; return releaseDue;`)();
+  assert.equal(releaseDue(true, 104, 100), false);
+  assert.equal(releaseDue(true, 109, 100), true);
+  assert.equal(releaseDue(false, 200, 100), false);
+  void loadTs;
+});
+
+test('T045: both start cards picture the hold, and Banana and Sharky say one rule everywhere', () => {
+  const demo = read('src/components/help/HoldDemo.tsx');
+  assert.match(demo, /export function holdPose\(/);
+  assert.match(demo, /tap-hand\.webp/, 'the tap hand players already know (existing art)');
+  assert.doesNotMatch(demo, /Easing\.linear[\s\S]*translate[XY]: [^q]*t\.value/, 'movement eases on the loop clock (smoothstep, sine)');
+  const swim = read('src/games/sharky/SharkySwim.tsx');
+  assert.match(swim, /countdownDemo=\{<HoldDemo subject=\{HOLD_SHARK\} motion="rise" reduced=\{reducedMotion\} \/>\}/);
+  assert.match(swim, /<HoldDemo subject=\{HOLD_SHARK\} motion="rise" reduced=\{reducedMotion\} \/>\s*<Text style=\{styles\.freezeText\}>HOLD TO SWIM<\/Text>/);
+  const banana = read('src/games/banana-basket/BananaBasketGame.tsx');
+  assert.match(banana, /countdownDemo=\{<HoldDemo subject=\{HOLD_BASKET\} motion="slide" reduced=\{reducedMotion\} \/>\}/);
+  assert.match(banana, /\$\{GAME_INTROS\.banana\.how\}/);
+  assert.doesNotMatch(banana, /Catch! Aim! Dodge!|Three quick sets\. Catch them all!/);
+  const tiles = read('src/screens/LinePlay/components/ActivitySlot.tsx');
+  assert.match(tiles, /shark: GAME_INTROS\.shark\.how,\s*banana: GAME_INTROS\.banana\.how,/);
+  assert.doesNotMatch(tiles, /good snacks/);
+  const intro = read('src/components/help/GameIntroCard.tsx');
+  assert.match(intro, /if \(pic\.demo && pic\.art\) return <HoldDemo/);
+});

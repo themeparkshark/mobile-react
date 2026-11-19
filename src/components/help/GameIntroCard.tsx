@@ -3,6 +3,7 @@ import { useContext } from 'react';
 import { Pressable, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import HoldDemo from './HoldDemo';
 import { GAME_INTROS, type MiniGameKind } from '../../services/help/helpTopics';
 import { usePlayPrefs } from '../../services/playPrefs';
 import { AuthContext } from '../../context/AuthProvider';
@@ -37,6 +38,8 @@ const ART = {
 interface Pic {
   readonly art?: ImageSourcePropType; readonly icon?: GameIconName; readonly mark?: 'check' | 'close'; readonly wide?: boolean;
   readonly line?: boolean; readonly tap?: boolean; readonly hold?: boolean; readonly up?: boolean; readonly swipe?: boolean;
+  /** T045: a moving hold demo (HoldDemo) with `art` as its hero: the finger stays down while it rises or slides. */
+  readonly demo?: 'rise' | 'slide';
 }
 /** A step is one or two pictures; steps are joined by arrows. */
 type Step = readonly Pic[];
@@ -51,10 +54,11 @@ export const INTRO_PICTURES: Readonly<Record<MiniGameKind, readonly Step[]>> = {
   memory: [[{ art: ART.cardBack }, { art: ART.cardBack }], [{ art: ART.cardShark }, { art: ART.cardShark, mark: 'check' }]],
   // Beat the Buzzer: a question, then the hand tapping the desk bell (read, then buzz in with the answer).
   trivia: [[{ art: ART.question }], [{ art: ART.bell, tap: true, mark: 'check' }]],
-  // The ball is bounced, not dodged: it wears a check too, so a kid never steers away from it.
-  banana: [[{ art: ART.basket }, { art: ART.banana, mark: 'check' }], [{ art: ART.ball, mark: 'check' }]],
-  // Sharky Swim: the hand held down, then the shark rising (hold to swim up).
-  shark: [[{ art: ART.hand, hold: true }], [{ art: ART.swimmer, up: true, mark: 'check' }]],
+  // T045: a finger held on the basket slides it (the hold, pictured and moving), then what it catches:
+  // the ball is bounced, not dodged, so it wears a check too and a kid never steers away from it.
+  banana: [[{ art: ART.basket, demo: 'slide' }], [{ art: ART.banana, mark: 'check' }, { art: ART.ball, mark: 'check' }]],
+  // Sharky Swim (T045): the finger pressed down and held, Sharky rising while it holds (hold to swim up).
+  shark: [[{ art: ART.swimmer, demo: 'rise' }]],
   // Current Quest: the hand swiping beside the shark, then the chest (swipe to swim, reach the chest).
   current: [[{ art: ART.hand, swipe: true }, { art: ART.quester }], [{ art: ART.chest, mark: 'check' }]],
   // Parade Beat: a note on the gold line, then the hand tapping the drum (tap when the note hits the line).
@@ -63,6 +67,8 @@ export const INTRO_PICTURES: Readonly<Record<MiniGameKind, readonly Step[]>> = {
 };
 
 function Picture({ pic }: { readonly pic: Pic }) {
+  const reduced = useReducedGameMotion();
+  if (pic.demo && pic.art) return <HoldDemo subject={pic.art} motion={pic.demo} reduced={reduced} size={52} />;
   return (
     <View style={styles.pic}>
       {pic.line && <View style={styles.hitLine} />}
