@@ -39,9 +39,11 @@ test('no value anchors on a kid-facing shop card: a bundle\'s worth shows only i
   const gateSrc = read('src/components/GrownUpGate.tsx');
   assert.match(gateSrc, /reason\.worth \? \[`Bought as single packs, this would cost \$\{reason\.worth\}\.`\]/);
   // The kid-facing step before the answer never names a price or a worth.
-  assert.match(gateSrc, /case 'money':\s*case 'renews': return \{ head: 'This costs real money\.', line: 'A grown-up sees the details next\.'/);
+  // T167: it says what the tap gives (no price): "It gives 5 tickets. The price is next."
+  assert.match(gateSrc, /case 'money': return \{ head: 'This costs real money\.', line: `It gives \$\{reason\.gets\}\. The price is next\.`/);
   const supplies = read('src/services/money/supplies.ts');
   assert.match(supplies, /gateReasonFor\(product, state\.prices\[product\.product_id\], grownUpWorth\(product, catalog, state\.prices\)\)/);
+  assert.match(supplies, /if \(!catalog \|\| product\.limit !== 'once'\) return null;/, 'T240: the single-packs sum is for the Starter Pack only');
 });
 
 test('timed finds on the map count down in calm gold, never red', () => {

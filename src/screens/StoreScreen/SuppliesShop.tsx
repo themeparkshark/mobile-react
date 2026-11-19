@@ -25,16 +25,18 @@
  * for an update; VIP players can still claim the free ticket there.
  */
 import { openExternal } from '../../services/external';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { AuthContext } from '../../context/AuthProvider';
 import type { ShopGrants, ShopProduct } from '../../api/endpoints/me/shop';
 import { getAdSummary, type AdSummary } from '../../api/endpoints/me/ad-rewards';
 import getVipPerks, { type VipPerk } from '../../api/endpoints/economy/vip-perks';
-import { onShopDelivered, storeAvailable } from '../../services/purchases';
+import { onShopDelivered, replayShopPurchases, storeAvailable, type ShopReplayOutcome } from '../../services/purchases';
 import { adsAvailable, rewardText, watchForReward } from '../../services/ads';
-import { baseRates, bestValueHolds, bonusPercent, boxesLine, bundleWorth, dropDays, gearLine } from '../../services/money/offers';
+import { baseRates, bestValueHolds, bonusPercent, dropDays, gearLine } from '../../services/money/offers';
+import { handoffFreeWay, handoffHead, isDeal as isDealProduct, isParkDay as isParkDayProduct, planSupplies, type HeroKind, type SuppliesNeed } from '../../services/money/suppliesPlan';
 import getStores from '../../api/endpoints/stores/stores';
 import getStoreRotation from '../../api/endpoints/stores/rotation';
 import { buyPack, outcomeMessage, refreshSupplies, useSupplies } from '../../services/money/supplies';
@@ -44,14 +46,15 @@ import { haptic } from '../../gamekit/Haptics';
 import OneTimeTip from '../../components/help/OneTimeTip';
 import RealMoneyMark, { REAL_MONEY_GREEN, REAL_MONEY_INK, REAL_MONEY_TINT } from '../../components/RealMoneyMark';
 import { openMembership } from '../../components/GrownUpGate';
+import { BOTTOM_BAR_OVERHANG } from '../../components/Wrapper';
 import { useHelp } from '../../components/help/HelpProvider';
 import * as RootNavigation from '../../RootNavigation';
 import { getSharkPass } from '../../api/endpoints/me/shark-pass';
 import BundleCard from '../../components/money/BundleCard';
 import WishHeart from '../../components/money/WishHeart';
-import { MYSTERY_BOX_COINS, VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../../services/money/flags';
+import { VIP_WEEKLY_BOX_PERK, useMoneyFlag } from '../../services/money/flags';
 import {
-  Band, CARD, Contents, GotIt, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, packArtKey, unitWord, type PackArtKey,
+  Band, CARD, Contents, CurrencyPicture, GotIt, MAX_FONT, PackArt, PriceBar, ShopCard, Sticker, packArtKey, unitWord, type PackArtKey,
 } from '../../components/money/moneyUi';
 import type { GlossaryKey } from '../../services/help/glossary';
 import countText from '../../helpers/countText';
@@ -59,8 +62,22 @@ import countText from '../../helpers/countText';
 export { grantsText, gateReasonFor } from '../../services/money/supplies';
 
 const APP_STORE_URL = 'itms-apps://apps.apple.com/app/id6758812566';
+/** Alex's churro treat (the same picture the out-of-Tickets card uses for "3 treats at home"). */
+const TREAT_ART = require('../../../assets/images/prep-items/churros/churro_18.png');
 
-export type SuppliesFocus = 'tickets' | 'coins' | 'rescue' | 'featured';
+/** What "Check again" says for each replay outcome. Exported for tests. */
+export function replayMessage(outcome: ShopReplayOutcome): { title: string; body: string } {
+  switch (outcome.status) {
+    case 'delivered': return { title: 'Found it!', body: outcome.count === 1 ? 'One buy was still on its way. It\u2019s in your Supplies now.' : `${outcome.count} buys were still on their way. They\u2019re in your Supplies now.` };
+    case 'nothing': return { title: 'Nothing missing', body: 'Everything bought with this Apple ID is already in your Supplies.' };
+    case 'other_account': return { title: 'Bought on another account', body: 'This was bought on a different Theme Park Shark account. Sign in to that account to get it.' };
+    case 'unavailable': return { title: 'Update the game', body: 'Update Theme Park Shark in the App Store to check your buys.' };
+    default: return { title: 'That didn\u2019t work', body: 'Check your internet and try again.' };
+  }
+}
+
+import type { SuppliesFocus } from './storeParams';
+export type { SuppliesFocus } from './storeParams';
 
 // Fix w3 T229: the shop's wallet shows the two things you spend here, Tickets and Shark Coins. Energy lives
 // on the shelf and extra tries show on PLAY! when you hold one, so the row no longer lists four balances.
@@ -148,8 +165,9 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const [perks, setPerks] = useState<VipPerk[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [landed, setLanded] = useState<{ grants: ShopGrants; art: PackArtKey } | null>(null);
+  // Supplies always opens at its top (T155): a door's focus picks the hand-off card, never a scroll.
   const scroll = useRef<ScrollView>(null);
-  const scrolledTo = useRef(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   // Read-only: the Shark Shop's next new-gear days, from its own rotation (nothing to buy here).
   const [drops, setDrops] = useState<string[]>([]);
@@ -173,21 +191,8 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
     void refreshSupplies(true);
   }), [refreshPlayer]);
 
-  const onSection = (key: SuppliesFocus) => (event: LayoutChangeEvent) => {
-    if (focus === key && !scrolledTo.current) {
-      scrolledTo.current = true;
-      const y = event.nativeEvent.layout.y;
-      setTimeout(() => scroll.current?.scrollTo({ y: Math.max(0, y - 8), animated: true }), 250);
-    }
-  };
-
   useEffect(() => { if (catalog && Object.keys(prices).length) trackImpression('supplies'); }, [catalog, prices]);
   const rates = useMemo(() => baseRates(catalog?.products ?? [], prices), [catalog, prices]);
-  const sections = useMemo(() => {
-    const bySection = new Map<string, ShopProduct[]>();
-    for (const p of catalog?.products ?? []) bySection.set(p.section, [...(bySection.get(p.section) ?? []), p]);
-    return bySection;
-  }, [catalog]);
 
   const buy = async (product: ShopProduct, art: PackArtKey) => {
     if (busy) return;
@@ -240,19 +245,26 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
 
   const daily = ads?.placements.daily_ticket;
   const showDaily = !!ads?.enabled && !!daily && (vip || adsAvailable());
-  const featured = sections.get('featured') ?? [];
-  const starter = featured.find(p => p.limit === 'once');
-  // Bigger featured bundles with no daily limit (the Park Trip Pack) get Alex's big card like the Starter Pack.
-  const bigBundles = featured.filter(p => p !== starter && !p.limit);
-  const todays = featured.filter(p => p !== starter && !bigBundles.includes(p));
   // A product Apple hasn't priced (not set up yet in this storefront) is never shown as a dead card.
   const priced = (p: ShopProduct) => !!prices[p.product_id] || Object.keys(prices).length === 0;
   const holdCap = catalog.ticket_hold_cap;
   const wallet = freshWallet(player, catalog.wallet);
-  // The Daily Deal stays in today's pick; the Park Day Pack lives under its own "Park day" heading.
-  const isDeal = (p: ShopProduct) => !!p.deal_key || p.product_id.endsWith('.deal.daily');
-  const deals = todays.filter(isDeal);
-  const parkDay = todays.filter(p => !isDeal(p));
+  // What shows first and what waits under More (services/money/suppliesPlan.ts, tested).
+  const plan = planSupplies({ products: catalog.products, prices, focus, wallet, priced });
+  const sectionTitle = (key: 'tickets' | 'coins' | 'rescue') => key === 'rescue' ? 'Extra tries' : key === 'coins' ? 'Shark Coins'
+    : catalog.sections.find(s => s.key === key)?.title ?? 'Tickets';
+  const allPriced = catalog.products.filter(priced);
+  // A pack's picture follows its place in its whole section (25 Tickets keeps the big bundle under More).
+  const tierOf = (p: ShopProduct) => Math.max(0, allPriced.filter(x => x.section === p.section).indexOf(p));
+  const packCard = (p: ShopProduct, _i: number, columns: 1 | 2 | 3, flag?: string | null) => (
+    <PackCard key={p.product_id} product={p} tier={tierOf(p)} columns={columns} flag={flag}
+      best={p.badge === 'Best value' && bestValueHolds(p, allPriced, prices)}
+      price={prices[p.product_id]?.price} bonus={bonusPercent(p, prices, rates)}
+      note={unavailableText(p, holdCap)} busy={busy === p.product_id} disabled={!!busy}
+      onBuy={() => void buy(p, packArtKey(p, tierOf(p)))} />
+  );
+  const moreCount = plan.more.bundles.length + plan.more.deals.length + plan.more.packs.reduce((n, s) => n + s.packs.length, 0);
+  const sellable = canBuy && catalog.enabled;
 
   return (
     <ScrollView ref={scroll} contentContainerStyle={st.scroll} showsVerticalScrollIndicator={false}>
@@ -263,22 +275,16 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
             accessibilityLabel={`${wallet[w.key].toLocaleString('en-US')} ${w.many}`}
             accessibilityHint="Explains what this is"
             onPress={() => explain(w.term, { count: wallet[w.key] })}>
-            <GameIcon name={w.icon} size={22} />
+            {/* Extra tries wear their own life-ring picture (T218), so every chip is picture plus number. */}
+            <CurrencyPicture kind={w.key} size={22} />
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.walletText}>{countText(wallet[w.key])}</Text>
           </Pressable>
         ))}
       </View>
 
-      {/* Free Ticket ways come before any price. */}
-      <View style={st.freeWays} accessible accessibilityLabel={`Free ways to get Tickets: ${freeTicketWays(queueTicketsOn).map(w => w.text).join('. ')}.`}>
-        <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeWaysHead}>FREE TICKETS</Text>
-        {freeTicketWays(queueTicketsOn).map(way => (
-          <View key={way.text} style={st.freeWayRow}>
-            <GameIcon name={way.icon} size={22} />
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeWayText}>{way.text}</Text>
-          </View>
-        ))}
-      </View>
+      {/* Free Ticket ways come before any price: one line, the rest a tap away (T155). */}
+      {/* The out-of-Tickets hand-off card says the free way itself: one free line on screen, and its price above the fold on SE. */}
+      {!(sellable && plan.handoff?.need === 'tickets') && <FreeTicketsLine ways={freeTicketWays(queueTicketsOn)} />}
 
       {/* First visit: what Supplies is, once. Then, at the first ad offer, that ads are optional. */}
       <OneTimeTip id="supplies_tab" ready={status === 'ready' && !busy} compact />
@@ -301,111 +307,104 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
             </Text>
           </View>
 
-          <View onLayout={onSection('featured')} style={{ gap: 12 }}>
-            {starter && starter.available && priced(starter) && (
-              <BundleCard product={starter} price={prices[starter.product_id]?.price} worth={bundleWorth(starter, prices, rates)}
-                busy={busy === starter.product_id} disabled={!!busy} onBuy={() => void buy(starter, 'chest')} />
-            )}
-            {bigBundles.filter(priced).map(p => (
-              <BundleCard key={p.product_id} product={p} price={prices[p.product_id]?.price} worth={bundleWorth(p, prices, rates)}
-                busy={busy === p.product_id} disabled={!!busy} onBuy={() => void buy(p, 'bag')}
-                band={`${p.title.toUpperCase()} · FOR A PARK TRIP`} art="bag" />
-            ))}
-            {deals.length > 0 && (
-              <View style={st.row}>
-                {deals.filter(priced).map((p, i) => (
-                  <DayCard key={p.product_id} product={p} index={i} price={prices[p.product_id]?.price}
-                    worth={bundleWorth(p, prices, rates)} note={unavailableText(p, holdCap)}
-                    busy={busy === p.product_id} disabled={!!busy} onBuy={() => void buy(p, packArtKey(p))} />
-                ))}
+          {/* Came for one thing (out of Tickets at a ride): say so first, with its smallest pack and the free way (T154). */}
+          {plan.handoff && (
+            <HandoffCard need={plan.handoff.need} out={plan.handoff.out} pack={plan.handoff.pack}
+              price={plan.handoff.pack ? prices[plan.handoff.pack.product_id]?.price : undefined}
+              note={plan.handoff.pack ? unavailableText(plan.handoff.pack, holdCap) : null}
+              busy={!!plan.handoff.pack && busy === plan.handoff.pack.product_id} disabled={!!busy}
+              onBuy={() => { if (plan.handoff?.pack) void buy(plan.handoff.pack, packArtKey(plan.handoff.pack)); }} />
+          )}
+
+          {/* One hero pack, right under the pill: the Starter Pack, or after it "Your next pack" (T155, T168). */}
+          {plan.hero && (
+            <BundleCard product={plan.hero.product} price={prices[plan.hero.product.product_id]?.price}
+              busy={busy === plan.hero.product.product_id} disabled={!!busy}
+              onBuy={() => { if (plan.hero) void buy(plan.hero.product, plan.hero.kind === 'starter' ? 'chest' : 'bag'); }}
+              {...heroLook(plan.hero.kind, plan.hero.product)} />
+          )}
+
+          {/* One Ticket row (T221): today's Ticket deal, when there is one, beside the Ticket packs. */}
+          {plan.ticketRow.length > 0 && (
+            <View style={st.section}>
+              <View style={st.sectionHead}>
+                <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionTitle} accessibilityRole="header">{sectionTitle('tickets')}</Text>
+                <View style={st.sectionRule} />
               </View>
-            )}
-            {parkDay.filter(priced).length > 0 && (
-              <View style={st.section}>
-                <View style={st.sectionHead}>
-                  <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionTitle} accessibilityRole="header">Park day</Text>
-                  <View style={st.sectionRule} />
-                </View>
-                <View style={st.row}>
-                  {parkDay.filter(priced).map((p, i) => (
-                    <DayCard key={p.product_id} product={p} index={i} price={prices[p.product_id]?.price}
-                      worth={bundleWorth(p, prices, rates)} note={unavailableText(p, holdCap)}
-                      busy={busy === p.product_id} disabled={!!busy} onBuy={() => void buy(p, packArtKey(p))} />
-                  ))}
-                </View>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionNote}>{SECTION_NOTE.tickets}</Text>
+              <View style={st.grid}>
+                {plan.ticketRow.map((p, i) => packCard(p, i, plan.ticketRow.length === 1 ? 2 : 3,
+                  isDealProduct(p) ? (plan.bestTicketDeal === p.product_id ? 'BEST TICKET DEAL TODAY' : 'TODAY’S PICK') : null))}
               </View>
-            )}
-          </View>
+            </View>
+          )}
         </>
       )}
-
-      {/* The Shark Pass door (Pass and Pass Plus), whenever its switch is on for this player. */}
-      <SharkPassDoor switchOn={passOn} playerId={player?.id ?? null} />
 
       {!vip && <VipCard perks={perks && boxesLive ? [...perks, VIP_WEEKLY_BOX_PERK as VipPerk] : perks} />}
       {/* Members: the VIP page, with the gift plans when their switch is on. */}
       {vip && giftPlansOn && <VipGiftDoor />}
 
-      {showDaily && (
-        <Animated.View entering={FadeInUp.springify().damping(15)} style={st.freeCard}>
-          <PackArt art="tickets-1" size={46} bob={false} />
-          <View style={{ flex: 1 }}>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeTitle}>FREE DAILY TICKET</Text>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeBody}>
-              {daily.remaining > 0
-                ? vip ? 'Free for VIP members. Tap Claim.' : 'Watch one short ad for 1 free ticket. You don’t have to.'
-                : 'Claimed. Back tomorrow.'}
-            </Text>
+      {/* Everything else waits under More: a first look holds a handful of prices, not thirteen (T221). */}
+      <MoreFold open={moreOpen} onToggle={() => setMoreOpen(o => !o)} count={moreCount}>
+        {/* The Shark Pass door (Pass and Pass Plus), whenever its switch is on for this player. */}
+        <SharkPassDoor switchOn={passOn} playerId={player?.id ?? null} />
+        {sellable && plan.more.bundles.map(p => (
+          <BundleCard key={p.product_id} product={p} price={prices[p.product_id]?.price}
+            busy={busy === p.product_id} disabled={!!busy || !!unavailableText(p, holdCap)} onBuy={() => void buy(p, 'bag')}
+            {...heroLook(isParkDayProduct(p) ? 'parkday' : 'trip', p)} />
+        ))}
+        {sellable && plan.more.deals.length > 0 && (
+          <View style={st.row}>
+            {plan.more.deals.map((p, i) => (
+              <DayCard key={p.product_id} product={p} index={i} price={prices[p.product_id]?.price}
+                note={unavailableText(p, holdCap)} busy={busy === p.product_id} disabled={!!busy} onBuy={() => void buy(p, packArtKey(p))} />
+            ))}
           </View>
-          {daily.remaining > 0 && (
-            <GameButton label={vip ? 'Claim' : 'Watch'} size="compact" fullWidth={false} icon={vip ? 'member' : 'play'}
-              loading={busy === 'daily_ticket'} disabled={!!busy} onPress={() => void claimDailyTicket()}
-              // A fixed width: an unsized art button grows to its cap and squeezes the copy to one word a line.
-              style={{ width: 118 }}
-              accessibilityLabel={vip ? 'Claim your free daily ticket' : 'Watch an ad for a free ticket'} />
-          )}
-        </Animated.View>
-      )}
-
-      {canBuy && catalog.enabled && (['tickets', 'coins', 'rescue'] as const).map(key => {
-        const packs = (sections.get(key) ?? []).filter(priced);
-        if (!packs.length) return null;
-        // One word per thing (4.5): held passes are "Extra tries", whatever the server calls the shelf.
-        // The money is Shark Coins, never bare "Coins" next to ride coins.
-        const title = key === 'rescue' ? 'Extra tries' : key === 'coins' ? 'Shark Coins'
-          : catalog.sections.find(s => s.key === key)?.title ?? key;
-        return (
-          <View key={key} onLayout={onSection(key)} style={st.section}>
+        )}
+        {showDaily && (
+          <View style={st.freeCard}>
+            <PackArt art="tickets-1" size={46} bob={false} />
+            <View style={{ flex: 1 }}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeTitle}>FREE DAILY TICKET</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeBody}>
+                {daily.remaining > 0
+                  ? vip ? 'Free for VIP members. Tap Claim.' : 'Watch one short ad for 1 free ticket. You don’t have to.'
+                  : 'Claimed. Back tomorrow.'}
+              </Text>
+            </View>
+            {daily.remaining > 0 && (
+              <GameButton label={vip ? 'Claim' : 'Watch'} size="compact" fullWidth={false} icon={vip ? 'member' : 'play'}
+                loading={busy === 'daily_ticket'} disabled={!!busy} onPress={() => void claimDailyTicket()}
+                // A fixed width: an unsized art button grows to its cap and squeezes the copy to one word a line.
+                style={{ width: 118 }}
+                accessibilityLabel={vip ? 'Claim your free daily ticket' : 'Watch an ad for a free ticket'} />
+            )}
+          </View>
+        )}
+        {sellable && plan.more.packs.map(({ key, packs }) => (
+          <View key={key} style={st.section}>
             <View style={st.sectionHead}>
-              <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionTitle} accessibilityRole="header">{title}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionTitle} accessibilityRole="header">{sectionTitle(key)}</Text>
               <View style={st.sectionRule} />
             </View>
             {SECTION_NOTE[key] && <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionNote}>{SECTION_NOTE[key]}</Text>}
-            {key === 'coins' && boxesLive && (
-              <Text maxFontSizeMultiplier={MAX_FONT} style={st.sectionNote}>Shark Coins can open Mystery Pin Boxes. Odds are shown on each box.</Text>
-            )}
             <View style={st.grid}>
-              {packs.map((p, i) => (
-                <PackCard key={p.product_id} product={p} tier={i} boxesLive={boxesLive}
-                  best={p.badge === 'Best value' && bestValueHolds(p, catalog.products.filter(priced), prices)} columns={key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 2 : 3}
-                  price={prices[p.product_id]?.price} bonus={bonusPercent(p, prices, rates)}
-                  note={unavailableText(p, holdCap)} busy={busy === p.product_id} disabled={!!busy}
-                  onBuy={() => void buy(p, packArtKey(p, i))} />
-              ))}
+              {packs.map((p, i) => packCard(p, i, key === 'coins' && packs.length === 4 ? 2 : packs.length === 1 ? 2 : 3))}
             </View>
           </View>
-        );
-      })}
-
-      {drops.length > 0 && (
-        <View style={st.drops} accessible accessibilityLabel={`New gear in the Shark Shop: ${drops.join(', ')}.`}>
-          <GameIcon name="shark" size={30} />
-          <View style={{ flex: 1 }}>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.dropsHead}>NEW GEAR IN THE SHARK SHOP</Text>
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.dropsText}>{drops.join('\n')}</Text>
+        ))}
+        {drops.length > 0 && (
+          <View style={st.drops} accessible accessibilityLabel={`New gear in the Shark Shop: ${drops.join(', ')}.`}>
+            <GameIcon name="shark" size={30} />
+            <View style={{ flex: 1 }}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.dropsHead}>NEW GEAR IN THE SHARK SHOP</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.dropsText}>{drops.join('\n')}</Text>
+            </View>
           </View>
-        </View>
-      )}
+        )}
+      </MoreFold>
+
       <View style={st.rules}>
         {catalog.rules.map(rule => (
           <View key={rule} style={st.ruleRow}>
@@ -413,6 +412,8 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.rule}>{rule}</Text>
           </View>
         ))}
+        {/* A buy that never showed up: the same replay the app runs at launch, on demand (T169). */}
+        {canBuy && <MissingPurchaseRow />}
       </View>
 
       <GotIt grants={landed?.grants ?? null} art={landed?.art ?? 'gift'} onDone={() => setLanded(null)} />
@@ -420,9 +421,130 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   );
 }
 
+/** The hero card's band and art: Starter Pack (just once), Your next pack (after it), today's Park Day Pack. */
+function heroLook(kind: HeroKind | 'trip', product: ShopProduct): { band: string; art: PackArtKey } {
+  if (kind === 'starter') return { band: 'STARTER PACK · JUST ONCE', art: 'chest' };
+  if (kind === 'next') return { band: `YOUR NEXT PACK · ${product.title.toUpperCase()}`, art: 'bag' };
+  if (kind === 'parkday') return { band: `${product.title.toUpperCase()} · ONE A DAY`, art: 'bag' };
+  return { band: `${product.title.toUpperCase()} · FOR A PARK TRIP`, art: 'bag' };
+}
+
+/**
+ * "FREE TICKETS: 3 treats at home = 1 Ticket. See all": the free ways on one line, opened in place.
+ * Exported for the dev preview.
+ */
+export function FreeTicketsLine({ ways }: { ways: { icon: GameIconName; text: string }[] }) {
+  const [open, setOpen] = useState(false);
+  const first = ways[0];
+  return (
+    <View style={st.freeWays} accessible={!open}
+      accessibilityLabel={`Free ways to get Tickets: ${ways.map(w => w.text).join('. ')}.`}>
+      <Pressable onPress={() => setOpen(o => !o)} accessibilityRole="button" accessibilityState={{ expanded: open }}
+        accessibilityLabel={open ? 'Free Tickets. Hide the list.' : 'Free Tickets. See all the free ways.'}
+        hitSlop={6} style={st.freeWayRow}>
+        <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeWaysHead}>FREE TICKETS</Text>
+        {!open && first && <Image source={TREAT_ART} style={{ width: 24, height: 24 }} contentFit="contain" />}
+        {!open && first && <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeWayText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>3 treats at home = 1 Ticket</Text>}
+        {open && <View style={{ flex: 1 }} />}
+        <Text maxFontSizeMultiplier={MAX_FONT} style={st.seeAll}>{open ? 'Hide' : 'See all'}</Text>
+      </Pressable>
+      {open && (
+        <Animated.View entering={FadeInUp.springify().damping(16)} style={{ gap: 6 }}>
+          {ways.map(way => (
+            <View key={way.text} style={st.freeWayRow}>
+              <GameIcon name={way.icon} size={22} />
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.freeWayText}>{way.text}</Text>
+            </View>
+          ))}
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
+/**
+ * The hand-off card (T154): what the kid ran out of, said to the grown-up holding the phone, with the
+ * smallest pack of it (the price on the card; the grown-up gate on the tap) and the free way beside it.
+ */
+function HandoffCard({ need, out, pack, price, note, busy, disabled, onBuy }: {
+  need: SuppliesNeed; out: boolean; pack: ShopProduct | null; price?: string; note: string | null;
+  busy: boolean; disabled: boolean; onBuy: () => void;
+}) {
+  const kind = need === 'tickets' ? 'tickets' : need === 'coins' ? 'coins' : 'rescue_passes';
+  const n = pack?.grants[kind] ?? 0;
+  return (
+    <Animated.View entering={FadeInUp.springify().damping(15)}>
+      <ShopCard onPress={pack && price && !note ? onBuy : undefined} disabled={disabled || !pack || !price || !!note} glow
+        accessibilityLabel={`${handoffHead(need, out)}. ${pack ? `${countText(n)} ${unitWord(kind, n)}, ${price ?? ''}, real money, a grown-up buys it.` : ''} ${handoffFreeWay(need)}.`}>
+        <Band text={handoffHead(need, out).toUpperCase()} color="gold" size={16} />
+        <View style={st.handoffBody}>
+          {pack && (
+            <View style={st.handoffPack}>
+              <PackArt art={packArtKey(pack)} size={58} bob={false} />
+              <Text maxFontSizeMultiplier={MAX_FONT} style={st.handoffCount}>{`${countText(n)} ${unitWord(kind, n).toUpperCase()}`}</Text>
+            </View>
+          )}
+          <View style={st.handoffFree}>
+            <Image source={TREAT_ART} style={{ width: 34, height: 34 }} contentFit="contain" />
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.handoffFreeText}>{handoffFreeWay(need)}</Text>
+          </View>
+        </View>
+        {pack && <PriceBar price={price} busy={busy} note={note} />}
+      </ShopCard>
+    </Animated.View>
+  );
+}
+
+/** The More fold: one navy door that opens the rest of Supplies in place. */
+function MoreFold({ open, onToggle, count, children }: { open: boolean; onToggle: () => void; count: number; children: ReactNode }) {
+  return (
+    <>
+      <Pressable onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded: open }}
+        accessibilityLabel={open ? 'Show less' : `More Supplies${count ? `, ${count} more packs` : ''}`}
+        style={({ pressed }) => [st.door, pressed && { transform: [{ translateY: 2 }] }]}>
+        <PackArt art="gift" size={34} bob={false} />
+        <View style={{ flex: 1 }}>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={st.doorTitle}>{open ? 'SHOW LESS' : 'MORE SUPPLIES'}</Text>
+          {!open && <Text maxFontSizeMultiplier={MAX_FONT} style={st.doorBody}>Park packs, Shark Coins, extra tries and the Shark Pass</Text>}
+        </View>
+        <View style={{ transform: [{ rotate: open ? '-90deg' : '90deg' }] }}><GameIcon name="arrow" size={22} /></View>
+      </Pressable>
+      {open && <Animated.View entering={FadeInUp.springify().damping(16)} style={{ gap: 14 }}>{children}</Animated.View>}
+    </>
+  );
+}
+
+/** "Missing a purchase? Check again": re-runs the unfinished-purchase replay and says what happened (T169). */
+function MissingPurchaseRow() {
+  const { refreshPlayer } = useContext(AuthContext);
+  const [checking, setChecking] = useState(false);
+  const check = async () => {
+    if (checking) return;
+    setChecking(true);
+    const outcome = await replayShopPurchases().catch(() => ({ status: 'failed' as const }));
+    setChecking(false);
+    if (outcome.status === 'delivered') {
+      haptic('success');
+      await refreshPlayer().catch(() => undefined);
+      void refreshSupplies(true);
+    }
+    const message = replayMessage(outcome);
+    gameAlert(message.title, message.body);
+  };
+  return (
+    <Pressable onPress={() => void check()} disabled={checking} accessibilityRole="button"
+      accessibilityLabel="Bought something that did not show up? Check again." style={({ pressed }) => [st.ruleRow, st.missing, pressed && { opacity: 0.7 }]}>
+      <GameIcon name="retry" size={16} />
+      <Text maxFontSizeMultiplier={MAX_FONT} style={[st.rule, st.missingText]}>
+        {checking ? 'Checking with the App Store…' : 'Bought something that did not show up? Check again'}
+      </Text>
+    </Pressable>
+  );
+}
+
 /** Daily Deal and Park Day Pack, side by side: today's picks. */
-function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: {
-  product: ShopProduct; index: number; price?: string; worth: ReturnType<typeof bundleWorth>; note: string | null;
+function DayCard({ product, index, price, note, busy, disabled, onBuy }: {
+  product: ShopProduct; index: number; price?: string; note: string | null;
   busy: boolean; disabled: boolean; onBuy: () => void;
 }) {
   const deal = !!product.deal_key || product.product_id.endsWith('.deal.daily');
@@ -445,8 +567,10 @@ function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: 
   );
 }
 
-function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, onBuy, boxesLive = false, best = false }: {
-  product: ShopProduct; tier: number; columns: 1 | 2 | 3; price?: string; bonus: number | null; note: string | null; boxesLive?: boolean;
+function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, onBuy, best = false, flag = null }: {
+  product: ShopProduct; tier: number; columns: 1 | 2 | 3; price?: string; bonus: number | null; note: string | null;
+  /** Today's deal in the Ticket row: "TODAY'S PICK", or "BEST TICKET DEAL TODAY" only on days it is true (T170). */
+  flag?: string | null;
   /** The server's badge, kept only when it is true for the whole page (bestValueHolds). */
   best?: boolean;
   busy: boolean; disabled: boolean; onBuy: () => void;
@@ -454,7 +578,9 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
   const main = (['tickets', 'coins', 'rescue_passes'] as const).find(k => (product.grants[k] ?? 0) > 0) ?? 'tickets';
   const n = product.grants[main] ?? 0;
   const wide = columns === 1;
-  const gear = main === 'coins' ? [gearLine(product.buys, bonus), boxesLive ? boxesLine(n, MYSTERY_BOX_COINS) : null].filter(Boolean).join(' ') || null : null;
+  // Real-money coin packs are priced in gear only (T153): never in Mystery Pin Boxes, so real money never
+  // points at a random box.
+  const gear = main === 'coins' ? gearLine(product.buys, bonus) : null;
   // No % stickers at all (psychology r6): coin packs say it in the gear line, tickets in the label below.
   const sticker = null as string | null;
   return (
@@ -471,7 +597,7 @@ function PackCard({ product, tier, columns, price, bonus, note, busy, disabled, 
         <WishHeart id={product.product_id} name={`${countText(n)} ${unitWord(main, n)}`} />
         {sticker && <Sticker text={sticker} style={{ top: 6, right: 4 }} />}
       </ShopCard>
-      {best && <View style={st.bestPill} pointerEvents="none"><Text maxFontSizeMultiplier={1.1} style={st.bestPillText}>BEST VALUE</Text></View>}
+      {(best || flag) && <View style={[st.bestPill, flag ? st.flagPill : null]} pointerEvents="none"><Text maxFontSizeMultiplier={1.1} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[st.bestPillText, flag ? st.flagPillText : null]}>{flag ?? 'BEST VALUE'}</Text></View>}
     </View>
   );
 }
@@ -578,7 +704,8 @@ const st = StyleSheet.create({
   dropsHead: { fontFamily: FONT.display, fontSize: 16, color: '#ffd34d' },
   dropsText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff', lineHeight: 22 },
   center: { flex: 1, justifyContent: 'center' },
-  scroll: { padding: 14, paddingBottom: 48, gap: 14 },
+  // The last card clears the footer's raised Map compass (T160).
+  scroll: { padding: 14, paddingBottom: BOTTOM_BAR_OVERHANG + 24, gap: 14 },
   wallet: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 8 },
   walletChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BRAND.blue, borderRadius: 999,
     borderWidth: 3, borderColor: BRAND.white, paddingHorizontal: 10, paddingVertical: 3 },
@@ -632,6 +759,17 @@ const st = StyleSheet.create({
   freeWaysHead: { fontFamily: FONT.display, fontSize: 17, color: '#075b9b' },
   freeWayRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   freeWayText: { flex: 1, fontFamily: FONT.body, fontSize: 15, color: '#17446c' },
+  seeAll: { fontFamily: FONT.display, fontSize: 15, color: '#0b62b8' },
+  flagPill: { backgroundColor: '#2fb44a', maxWidth: '96%' },
+  flagPillText: { color: '#ffffff' },
+  handoffBody: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10, alignSelf: 'stretch' },
+  handoffPack: { alignItems: 'center', gap: 2, width: 96 },
+  handoffCount: { fontFamily: FONT.display, fontSize: 16, color: '#ffffff', textShadowColor: CARD.lip, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  handoffFree: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(5,52,110,0.45)', borderRadius: 14,
+    paddingHorizontal: 8, paddingVertical: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },
+  handoffFreeText: { flex: 1, fontFamily: FONT.display, fontSize: 15, color: '#ffffff' },
+  missing: { marginTop: 4, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.25)' },
+  missingText: { fontFamily: FONT.display, color: '#ffd34d' },
   door: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#123f80', borderRadius: 18, borderWidth: 3,
     borderColor: BRAND.gold, padding: 12 },
   doorTitle: { fontFamily: FONT.display, fontSize: 20, color: BRAND.gold },

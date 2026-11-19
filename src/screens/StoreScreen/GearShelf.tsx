@@ -5,7 +5,8 @@
  * doesn't need to be that big."
  *
  * Top to bottom, one scroll (nothing is pinned, so the shelf rises as you scroll):
- * 1. The shopkeeper stage: the catalog's promo shark bobbing in the bubbles (kept, shorter).
+ * 1. The shop stage: Alex's Shark Shop stall bobbing in the bubbles. Never the catalog's promo picture
+ *    (a gold coin pile floated over the filter bar; T140: no floating pile on a money screen).
  * 2. One house-blue shelf panel: "ON THE SHELF" and one small calm chip that names the restock day.
  * 3. The v2 tiles (name, rarity plate, price, owned), owned pieces last. A tap opens the try-on on
  *    your own shark (the v2 TryOnSheet: same buy endpoint, coin landing, wear it now).
@@ -20,10 +21,11 @@ import { Animated as RNAnimated, Dimensions, Easing as RNEasing, Pressable, Scro
 import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BOTTOM_BAR_OVERHANG } from '../../components/Wrapper';
 import { addToWishlist, getWishlist, removeFromWishlist } from '../../api/endpoints/me/wishlist';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
-import { formatCoins, slotWord, passesFilter, restockPill, shelfFilters, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
+import { formatCoins, nextGearGoal, slotWord, passesFilter, restockPill, shelfFilters, shelfOrder, slotLine, starPick, wishSavedCopy } from '../../helpers/shopShelves';
 import { useAnyModalLayer } from '../../ui/modalLayers';
 import Playercard from '../../components/Playercard';
 import { isItemWorn, itemDisplayName, wearableBadge } from '../../helpers/wardrobe';
@@ -50,8 +52,11 @@ export const GEAR_STAGE_H = 116;
 /** The shelf panel rises over the stage's floor: the shopkeeper stands behind the counter. */
 export const COUNTER_TUCK = 32;
 
-/** The catalog promo shark, bobbing and tilting in its bubbles (UI thread; stops when still). */
-const Shopkeeper = memo(function Shopkeeper({ imageUrl, still }: { imageUrl: string | undefined; still: boolean }) {
+/** Alex's Shark Shop stall (the same art as the Profile door and How to Play): the shop's own picture. */
+export const SHOP_STALL_ART = require('../../../assets/images/screens/profile/shark_shop.png');
+
+/** The shop stall, bobbing and tilting in its bubbles (UI thread; stops when still). */
+const Shopkeeper = memo(function Shopkeeper({ still }: { still: boolean }) {
   const bob = useRef(new RNAnimated.Value(0)).current;
   const tilt = useRef(new RNAnimated.Value(0)).current;
   useEffect(() => {
@@ -66,7 +71,7 @@ const Shopkeeper = memo(function Shopkeeper({ imageUrl, still }: { imageUrl: str
   const rotate = tilt.interpolate({ inputRange: [-1, 1], outputRange: ['-3deg', '3deg'] });
   return (
     <RNAnimated.View style={{ flex: 1, transform: [{ translateY: bob }, { rotate }] }}>
-      <Image source={imageUrl} style={styles.keeper} contentFit="contain" transition={160} />
+      <Image source={SHOP_STALL_ART} style={styles.keeper} contentFit="contain" transition={160} />
     </RNAnimated.View>
   );
 });
@@ -94,10 +99,10 @@ function Bubble({ x, size, ms, delay, o, still }: (typeof BUBBLES)[number] & { s
 }
 
 /** The restock day, small: one chip that ticks once a minute (never seconds). */
-function RestockChip({ nextAt, offset, onElapsed }: { nextAt: string | null | undefined; offset: number; onElapsed?: () => void }) {
+function RestockChip({ nextAt, intervalDays, offset, onElapsed }: { nextAt: string | null | undefined; intervalDays: number; offset: number; onElapsed?: () => void }) {
   // Server time (offset), like every shop timer: a changed device clock never moves the day.
   const now = useShopNow(offset);
-  const pill = restockPill(nextAt, now);
+  const pill = restockPill(nextAt, now, intervalDays);
   const fired = useRef<string | null>(null);
   const due = !!nextAt && Date.parse(nextAt) - now <= 0;
   // Once per restock: a new nextAt (the next rotation) can fire again.
@@ -163,11 +168,14 @@ const StarTile = memo(function StarTile({ item, balance, still, onOpen, onWish }
   );
 });
 
-export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, onRestockElapsed, onEndReached, recheck, focusRequest, still, offset = 0, loading = false }: {
+export default function GearShelf({ items, setItems, nextRotationAt, intervalDays = 0, onRestockElapsed, onEndReached, recheck, focusRequest, still, offset = 0, loading = false }: {
   readonly items: ItemType[];
   readonly setItems: (update: (prev: ItemType[]) => ItemType[]) => void;
-  readonly promoUrl: string | undefined;
+  /** Kept for callers; the stage always shows the shop's own stall art (T140). */
+  readonly promoUrl?: string | undefined;
   readonly nextRotationAt: string | null | undefined;
+  /** The store's restock interval, so a late restock still names the next drop day (T159). */
+  readonly intervalDays?: number;
   readonly onRestockElapsed?: () => void;
   readonly onEndReached?: () => void;
   /** Refetches the catalog and answers whether this item is now owned (the try-on's "Check again"). */
@@ -186,7 +194,8 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
   soundRef.current = playSoundNow;
   const [open, setOpen] = useState<ShopItem | null>(null);
   const [bought, setBought] = useState<number[]>([]);
-  const [toast, setToast] = useShopToast();
+  // Long enough to read the next goal after Now wearing (T157).
+  const [toast, setToast] = useShopToast(3400);
   const [stageAway, setStageAway] = useState(false);
   const nearEnd = useRef(false);
   // Only the first screenful staggers in; tiles from later pages just appear.
@@ -275,12 +284,21 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
     return owns == null ? null : { owns, set: null };
   }, [recheck]);
 
-  const onWorn = useCallback((item: ShopItem) => setToast(`Now wearing ${item.display_name || item.name}!`), [setToast]);
+  // Worn: say it, then the next goal on the shelf (T157), so the moment after a buy always points somewhere.
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const memberRef = useRef(!!player?.is_subscribed);
+  memberRef.current = !!player?.is_subscribed;
+  const onWorn = useCallback((item: ShopItem) => {
+    const goal = nextGearGoal(itemsRef.current, item.id, memberRef.current);
+    setToast(`Now wearing ${item.display_name || item.name}!${goal ? ` ${goal}` : ''}`);
+  }, [setToast]);
   const todayIds = useMemo(() => items.map(i => i.id), [items]);
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 48 }]} showsVerticalScrollIndicator={false} scrollEventThrottle={64}
+      {/* The last row clears the footer's raised Map compass (the footer sits under the shop, T160). */}
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: BOTTOM_BAR_OVERHANG + 16 }]} showsVerticalScrollIndicator={false} scrollEventThrottle={64}
         // A shelf shorter than the screen still asks for the next page (performance r8: page 2 never loaded).
         onContentSizeChange={(_, h) => { if (h < winH + 240 && !nearEnd.current) { nearEnd.current = true; onEndReached?.(); } else if (h >= winH + 240) nearEnd.current = false; }}
         onTouchStart={wake} onScrollBeginDrag={wake}
@@ -294,10 +312,10 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
         }}>
         <View style={styles.stage}>
           {BUBBLES.slice(0, bubbleCount).map((b, i) => <Bubble key={i} {...b} still={stageStill} />)}
-          <Shopkeeper imageUrl={promoUrl} still={stageStill} />
+          <Shopkeeper still={stageStill} />
           {/* The restock day rides on the stage's corner: small, calm, out of the shelf's way. */}
           <View style={styles.restock}>
-            <RestockChip nextAt={nextRotationAt} offset={offset} onElapsed={onRestockElapsed} />
+            <RestockChip nextAt={nextRotationAt} intervalDays={intervalDays} offset={offset} onElapsed={onRestockElapsed} />
             {/* Collection progress, quietly (monetization r7): a reason to come back that never pressures. */}
             {ownedCount > 0 && <View style={styles.yoursChip} accessible accessibilityLabel={`${ownedCount} of ${items.length} on the shelf are yours`}>
               <GameIcon name="check" size={14} /><Text maxFontSizeMultiplier={1.2} style={styles.yoursChipText}>{`${ownedCount} of ${items.length} yours`}</Text></View>}
@@ -349,7 +367,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
       </ScrollView>
       {/* The shelf slides under the tab row through a short fade (no hard cut across the shopkeeper). */}
       <LinearGradient pointerEvents="none" colors={[BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />
-      <ShopToast message={toast} still={still} />
+      <ShopToast message={toast} still={still} lift={BOTTOM_BAR_OVERHANG} />
       {open && (
         <TryOnSheet item={open} set={null} todayIds={todayIds} still={still} onClose={() => setOpen(null)}
           onWish={wish} onPurchased={onPurchased} onWorn={onWorn} checkOwned={checkOwned}

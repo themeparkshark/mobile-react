@@ -114,9 +114,18 @@ export function featuredPill(section: SectionLike, nowMs: number): Pill {
  * no hours: "New gear on Monday", "New gear tomorrow", "New gear tonight", "New gear soon" at zero.
  * The day is read in park time (the shop flips at midnight Pacific; 7 h back lands on its date).
  */
-export function restockPill(nextAt: string | null | undefined, nowMs: number): Pill | null {
-  const at = nextAt ? Date.parse(nextAt) : NaN;
+/** How late a restock may be before the shelf stops saying soon (the server restocks on an hourly job). */
+export const RESTOCK_LATE_MS = 2 * 60 * 60 * 1000;
+
+export function restockPill(nextAt: string | null | undefined, nowMs: number, intervalDays = 0): Pill | null {
+  let at = nextAt ? Date.parse(nextAt) : NaN;
   if (!Number.isFinite(at)) return null;
+  // A restock the server is late on by more than its hourly job (T159): the shelf names the next real
+  // drop day from the store's own interval, the same days Supplies lists, never a dateless "soon".
+  if (at - nowMs <= -RESTOCK_LATE_MS && intervalDays > 0) {
+    const step = intervalDays * DAY;
+    at += Math.ceil((nowMs - at + 1) / step) * step;
+  }
   const left = at - nowMs;
   if (left <= 0) return { label: 'New gear soon', urgent: false, a11y: 'New gear is on its way' };
   if (left < 12 * HOUR) return { label: 'New gear tonight', urgent: false, a11y: 'New gear arrives tonight' };
@@ -517,11 +526,12 @@ export function tryOnCta(s: TryOnState): { label: string; action: TryOnAction; n
   if (s.phase === 'failed') return { label: 'Try again', action: 'ask', note: 'That didn’t work. You still have all your coins.', look: 'go' };
   // Never a silent re-buy: "Check again" only asks the server what happened.
   if (s.phase === 'unknown') return { label: 'Check again', action: 'recheck', note: 'We couldn’t reach the shop. Let’s check if it went through.', look: 'go' };
-  if (s.phase === 'buying' || s.phase === 'landing') return { label: 'Yes, buy it!', action: 'none', note: null, look: 'busy' };
+  // The confirm step restates the price on the button (T166), and keeps the same words while it buys.
+  if (s.phase === 'buying' || s.phase === 'landing') return { label: `Yes, buy for ${formatCoins(s.cost)}`, action: 'none', note: null, look: 'busy' };
   // Short: say how many; the coin top-up offer (money stream) sits under it with the free path. "Ride coins" are the shelf collectible, not money.
   if (s.short > 0) return { label: `Need ${formatCoins(s.short)} more Shark Coins`, action: 'earn', note: 'Win Shark Coins at rides or open your daily chest.', look: 'go' };
   if (s.paused) return { label: 'Opening soon', action: 'none', note: 'Today’s shop is opening in a moment. Buying is back right after.', look: 'paused' };
-  if (s.phase === 'confirm') return { label: 'Yes, buy it!', action: 'buy', note: null, look: 'go' };
+  if (s.phase === 'confirm') return { label: `Yes, buy for ${formatCoins(s.cost)}`, action: 'buy', note: null, look: 'go' };
   return { label: s.finishes ? `Complete the look: ${formatCoins(s.cost)}` : `Buy for ${formatCoins(s.cost)}`, action: 'ask', note: null, look: 'go' };
 }
 
@@ -865,4 +875,16 @@ export function heroKickerFits(screenW: number, pillLabel: string): boolean {
   const { kickerW } = heroLayout(screenW);
   const kicker = displayTextWidth("THIS WEEK'S STAR", HERO.kickerFont, HERO.kickerTracking);
   return kicker + HERO.rowGap + HERO.pillChrome + displayTextWidth(pillLabel, HERO.pillFont) <= kickerW;
+}
+
+/**
+ * After a piece is worn, the next goal on the shelf (fix round w3, T157): the cheapest piece the
+ * player does not own yet (never a members-only piece for a non-member, never the one just worn).
+ * "Next gear in reach: Hook, 370". Null when the shelf has nothing left to want.
+ */
+export function nextGearGoal(items: readonly { id: number; name: string; display_name?: string | null; cost: number; has_purchased?: boolean; is_member_item?: boolean }[],
+  wornId: number, member = false): string | null {
+  const next = items.filter(i => i.id !== wornId && !i.has_purchased && i.cost > 0 && (member || !i.is_member_item))
+    .sort((a, b) => a.cost - b.cost)[0];
+  return next ? `Next gear in reach: ${next.display_name || next.name}, ${formatCoins(next.cost)}` : null;
 }

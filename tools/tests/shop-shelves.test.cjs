@@ -470,7 +470,7 @@ test('round 6 S5: fallback polls every 15 to 30 s and Buy shows "Opening soon"',
     assert.equal(paused.action, 'none');
   }
   // A buy already in flight is never relabelled; owned and wear states are untouched.
-  assert.equal(shelves.tryOnCta({ ...base6, phase: 'buying', paused: true }).label, 'Yes, buy it!');
+  assert.equal(shelves.tryOnCta({ ...base6, phase: 'buying', paused: true }).label, `Yes, buy for ${base6.cost}`);
   assert.equal(shelves.tryOnCta({ ...base6, owned: true, phase: 'bought', paused: true }).label, 'Wear it now');
   assert.match(src('src/screens/StoreScreen/ShopShelves.tsx'), /startFallbackPoll\(\{[\s\S]{0,700}fallbackPollMs/);
 });

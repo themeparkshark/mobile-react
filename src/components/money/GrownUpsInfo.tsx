@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { getMoneySpend } from '../../api/endpoints/me/money-spend';
 import { useWishlist } from '../../services/money/wishlist';
+import { useMoneyFlag } from '../../services/money/flags';
 import { FONT, GameIcon } from '../../ui';
 
 /**
@@ -14,12 +15,25 @@ export const GROWN_UP_LINES: readonly string[] = [
   'VIP is a subscription. A free trial turns into a paid plan unless it is turned off at least 24 hours before. Turn it off in Settings, your name, Subscriptions.',
   'The Shark Pass is one buy per season. It never renews. Steps come only from playing.',
   'Gift plans of VIP (1 or 12 months) never renew.',
-  'Nothing random is sold for real money. Coins can be bought with real money; Mystery Pin Boxes cost coins and show their odds on the box.',
+  'Nothing random is sold for real money.',
   'Gold editions and frames are looks only. They never change how the game plays, and they stay yours forever.',
   'If a buy is refunded, the coins, tickets and passes from it that are still unspent are taken back. Pins and frames already given stay.',
   'Supplies packs show exactly what they hold. No surprise prizes.',
   'Bring back an earlier buy with Restore on the VIP page or the Shark Pass page.',
 ];
+
+/**
+ * The Mystery Pin Box sentence, said only while the server's pin_mystery_boxes switch is on for
+ * this player (fix round w3, T153): a parent never reads about boxes their kid cannot see.
+ */
+export const BOX_LINE = 'Mystery Pin Boxes cost Shark Coins and show their odds on the box. They are never sold for real money.';
+
+/** The grown-up list for this player: the box sentence only while boxes are live. Exported for tests. */
+export function grownUpLines(boxesLive: boolean): string[] {
+  const lines = [...GROWN_UP_LINES];
+  if (boxesLive) lines.splice(lines.indexOf('Nothing random is sold for real money.') + 1, 0, BOX_LINE);
+  return lines;
+}
 
 /** "This month on this account: $6.98 in 2 buys." Exported for tests. */
 export function spendLine(spend: { usd: number; buys: number } | null): string | null {
@@ -34,19 +48,20 @@ export default function GrownUpsInfo({ tone = 'onNavy' }: { tone?: 'onNavy' | 'o
   const [spend, setSpend] = useState<{ usd: number; buys: number } | null>(null);
   useEffect(() => { void getMoneySpend().then(setSpend); }, []);
   const wishes = useWishlist();
+  const lines = grownUpLines(useMoneyFlag('pin_mystery_boxes'));
   const extra = [
     spendLine(spend),
     wishes.length ? `Your kid’s wishlist (saved on this phone, nothing is bought): ${wishes.map(w => w.name).join(', ')}.` : null,
   ].filter((x): x is string => !!x);
   return (
-    <View style={st.list} accessible accessibilityLabel={`For grown-ups. ${[...extra, ...GROWN_UP_LINES].join(' ')}`}>
+    <View style={st.list} accessible accessibilityLabel={`For grown-ups. ${[...extra, ...lines].join(' ')}`}>
       {extra.map(line => (
         <View key={line} style={st.row}>
           <GameIcon name="info" size={16} />
           <Text maxFontSizeMultiplier={1.3} style={[st.text, { color: ink, fontFamily: FONT.display }]}>{line}</Text>
         </View>
       ))}
-      {GROWN_UP_LINES.map(line => (
+      {lines.map(line => (
         <View key={line} style={st.row}>
           <GameIcon name="check" size={16} />
           <Text maxFontSizeMultiplier={1.3} style={[st.text, { color: ink }]}>{line}</Text>

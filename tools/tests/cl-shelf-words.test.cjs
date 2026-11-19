@@ -113,8 +113,10 @@ test('Supplies: free Ticket ways come before any pack; the line Ticket only whil
   assert.ok(freeTicketWays(true).some(way => /first wait at a ride earns a Ticket/.test(way.text)));
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
   const render = shop.slice(shop.indexOf('<ScrollView ref={scroll}'));
-  assert.ok(render.indexOf('>FREE TICKETS<') > 0 && render.indexOf('>FREE TICKETS<') < render.indexOf("onSection('featured')"),
-    'the free ways sit above the packs');
+  // The free ways sit above every price (T155: folded to one line with See all).
+  assert.ok(render.indexOf('<FreeTicketsLine') > 0 && render.indexOf('<FreeTicketsLine') < render.indexOf('<HandoffCard')
+    && render.indexOf('<FreeTicketsLine') < render.indexOf('<BundleCard'), 'the free ways sit above the packs');
+  assert.match(shop, />FREE TICKETS</);
 });
 
 test('Supplies: every purchase door is listed whenever its switch is on, regardless of rung (App Review path)', () => {
@@ -134,7 +136,7 @@ test('Supplies: every purchase door is listed whenever its switch is on, regardl
   // One word per thing: held passes are Extra tries; the Park Day Pack has its own heading; worth only at the gate.
   assert.match(shop, /key === 'rescue' \? 'Extra tries'/);
   assert.match(shop, /'EXTRA TRY' : 'EXTRA TRIES'/);
-  assert.match(shop, />Park day</);
+  assert.match(shop, /ONE A DAY/, 'the Park Day Pack says it is one a day');
   assert.doesNotMatch(read('src/components/money/BundleCard.tsx'), /\bWorth \$|worth\.worth\}/, 'Worth $X lives only in the grown-up sheet');
   assert.match(read('src/services/money/supplies.ts'), /rescue_passes: \['extra try', 'extra tries'\]/);
 });
@@ -242,16 +244,16 @@ test('Standings counts "Wins this week" with the coin-and-check picture, and its
   assert.doesNotMatch(model.weekDots(end, Date.parse('2026-10-05T05:59:00Z')).spoken, /\d+ minutes/);
 });
 
-test('the Community Center Finn tip runs once on the first visit, waiting its turn; the Shark Shop has a back button where the footer was', () => {
+test('the Community Center Finn tip runs once on the first visit, waiting its turn; the Shark Shop keeps the normal footer and one back button (T160)', () => {
   const center = read('src/screens/CommunityCenterScreen.tsx');
   assert.match(center, /useTutorialWhenReady\('community_center', !loading && !!center && !sheetUp\)/);
   const shop = read('src/screens/StoreScreen.tsx');
-  assert.match(shop, /testID="shop-bottom-back"/);
-  // Its own solid strip where the footer was, in the layout: it never covers a pack, a VIP tile or a gear card.
-  assert.match(shop, /testID="shop-bottom-back" style=\{\{ marginTop: 'auto'/);
-  assert.match(shop, /height: SHOP_BACK_STRIP \+ insets\.bottom, paddingBottom: insets\.bottom/);
-  assert.doesNotMatch(shop, /position: 'absolute', left: 14, bottom: insets\.bottom/, 'no floating button over the shop');
-  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /paddingBottom: insets\.bottom \+ 48/, 'the gear shelf pads its last row clear of the strip');
+  assert.match(shop, /<Wrapper>[\s\S]*<\/Wrapper>/, 'the 5-icon footer is kept');
+  assert.doesNotMatch(shop, /shop-bottom-back|SHOP_BACK_STRIP/, 'no second back button in a bottom bar');
+  assert.equal((shop.match(/<BackButton \/>/g) ?? []).length, 2, 'one back button per layout: the title bar or the tab row (v2), never both');
+  assert.match(shop, /\{v2 \? <View style=\{\{ width: 35 \}\} \/> : <BackButton \/>\}/);
+  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /paddingBottom: BOTTOM_BAR_OVERHANG \+ 16/, 'the gear shelf clears the Map compass');
+  assert.match(read('src/screens/StoreScreen/SuppliesShop.tsx'), /paddingBottom: BOTTOM_BAR_OVERHANG \+ 24/);
 });
 
 test('one word per thing in the shelf-words files: no Mastery, no RIDE COINS, no Rescue Pass, no home finds', () => {

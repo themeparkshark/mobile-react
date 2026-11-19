@@ -231,12 +231,14 @@ export function ShopCta({ label, icon, width, onPress, loading = false, disabled
  * The shop's compact toast: one line, docked just above the home indicator,
  * never over tile names or headers. Max 48pt tall.
  */
-export function ShopToast({ message, icon = 'check', still }: { message: string | null; icon?: GameIconName; still: boolean }) {
+export function ShopToast({ message, icon = 'check', still, lift = 0 }: { message: string | null; icon?: GameIconName; still: boolean;
+  /** Extra room under the toast (the footer's raised Map compass on the Shark Shop). */
+  lift?: number }) {
   const insets = useSafeAreaInsets();
   if (!message) return null;
   return (
     <Animated.View key={message} entering={still ? undefined : FadeInDown.duration(180)} exiting={still ? undefined : FadeOutDown.duration(160)}
-      pointerEvents="none" style={[styles.toast, { bottom: Math.max(8, insets.bottom - 6) }]} accessibilityLiveRegion="polite">
+      pointerEvents="none" style={[styles.toast, { bottom: lift > 0 ? lift + 8 : Math.max(8, insets.bottom - 6) }]} accessibilityLiveRegion="polite">
       <GameIcon name={icon} size={20} />
       <Text maxFontSizeMultiplier={MAX_FONT} numberOfLines={2} style={styles.toastText}>{message}</Text>
     </Animated.View>

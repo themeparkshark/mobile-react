@@ -401,6 +401,44 @@ export async function buyShopProduct(
   }
 }
 
+export type ShopReplayOutcome =
+  | { status: 'delivered'; count: number }
+  | { status: 'nothing' | 'other_account' | 'unavailable' | 'failed' };
+
+/**
+ * "Missing a purchase? Check again" (fix round w3, T169): runs the same replay the app runs at
+ * launch, on demand. StoreKit keeps an unfinished consumable in its current entitlements until it
+ * is finished, so every unfinished Supplies purchase is sent to the server now (granted once per
+ * transaction id; one already granted comes back as a replay and is simply finished).
+ */
+export async function replayShopPurchases(): Promise<ShopReplayOutcome> {
+  if (!storeAvailable()) return { status: 'unavailable' };
+  let store: Iap;
+  let unfinished: StorePurchase[];
+  try {
+    store = await connect();
+    unfinished = (await store.getAvailablePurchases({ onlyIncludeActiveItems: true }))
+      .filter(p => isShopProduct(p.productId) && !!jwsOf(p));
+  } catch {
+    return { status: 'failed' };
+  }
+  if (!unfinished.length) return { status: 'nothing' };
+  let count = 0;
+  let other = false;
+  let failed = false;
+  for (const purchase of unfinished) {
+    try {
+      const result = await deliverShop(store, purchase);
+      count += result ? result.results.filter(r => !r.replay && !r.revoked).length : 0;
+    } catch (error) {
+      if (shopErrorCode(error) === 'SHOP_PURCHASE_OTHER_PLAYER') other = true;
+      else failed = true;
+    }
+  }
+  if (count > 0) return { status: 'delivered', count };
+  return { status: other ? 'other_account' : failed ? 'failed' : 'nothing' };
+}
+
 let launchSyncedFor: string | null = null;
 
 /**

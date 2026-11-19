@@ -48,8 +48,10 @@ export function topUpDoneLabel(reason: TopUpReason, retries: boolean): string | 
   return reason === 'mystery-box' && retries ? 'Open your box' : undefined;
 }
 
-export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins', tone = 'onLight', style }: {
+export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins', tone = 'onLight', style, headline = true }: {
   need: number; reason: TopUpReason; onDone?: () => void; currency?: TopUpCurrency;
+  /** False when the screen already says the need right above (the try-on's Need N more pill, T164): one need line. */
+  headline?: boolean;
   /** onBlue on the house blue panels (try-on, Secret Shop), onLight on cream and white cards. */
   tone?: 'onLight' | 'onBlue'; style?: StyleProp<ViewStyle>;
 }) {
@@ -87,10 +89,10 @@ export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins
 
   return (
     <Animated.View entering={FadeIn.duration(180)} style={[st.wrap, blue && st.wrapBlue, style]}>
-      <View style={st.head}>
+      {headline && (<View style={st.head}>
         <GameIcon name={currencyIcon(kind)} size={26} />
         <Text maxFontSizeMultiplier={MAX_FONT} style={[st.headline, blue && st.inkBlue]} numberOfLines={2}>{topUpHeadline(need, kind, reason)}</Text>
-      </View>
+      </View>)}
       {pack && (
         <Pressable onPress={() => void buy()} disabled={busy || !price}
           accessibilityRole="button"
