@@ -111,3 +111,34 @@ test('T107: Daily 3 reads as three pictured goals, their chest, one This week ro
   assert.match(sheet, /goal\.target > 1 && !doneNow && <View style=\{styles\.goalCount\}>/, 'each goal leads with its picture and number');
   assert.match(body, /state\.week\.claimable \? onClaimWeekly :/, 'a ready Weekly Box opens from the row itself');
 });
+
+test('T103: tomorrow\'s chest is pictured from the ladder: its day, its weekday, its prize', () => {
+  const ladder = [1, 2, 3, 4, 5, 6, 7].map(day => ({ day, coins: day === 7 ? 0 : 20 * day, energy: day === 2 ? 20 : 0, tickets: day === 7 ? 1 : 0 }));
+  const t = chestDay.tomorrowChest({ day: 1, gift_date: '2026-11-18', ladder });
+  assert.equal(t.line, 'Day 2 chest: Thursday');
+  assert.deepEqual(plain(t.prize), { kind: 'energy', amount: 20 });
+  const wrap = chestDay.tomorrowChest({ day: 7, gift_date: '2026-11-22', ladder });
+  assert.equal(wrap.line, 'Day 1 chest: Monday', 'after Day 7 the ladder starts again');
+  assert.equal(chestDay.tomorrowChest({ day: 6, gift_date: '2026-11-21', ladder }).prize.kind, 'ticket');
+  assert.equal(chestDay.tomorrowChest(null), null);
+  const gift = read('src/components/DailyGiftModal.tsx');
+  assert.match(gift, /phase === 'open' && !!tomorrow && <View style=\{styles\.tomorrow\}><TomorrowTile chest=\{tomorrow\} \/><\/View>/, 'under AWESOME!');
+  const tile = read('src/components/retention/TomorrowTile.tsx');
+  assert.match(tile, /<GameIcon name="moon"/);
+  assert.match(tile, /DAILY_CHEST/);
+});
+
+test('N13: once today is done, tomorrow shows whatever else still waits, not only on an empty sheet', () => {
+  const base = { weekly: null, trail: null, events: null, stamps: null };
+  const done = { ...base, dailyChest: { unclaimed: false, day: 1, of: 7 }, daily3: { done: 3, total: 3, claimable: false, claimed: true, flame: 1, seen: true } };
+  assert.equal(model.todayDone(done), true);
+  assert.equal(model.todayDone({ ...done, levelChest: { level: 3, waiting: 1 } }), true, 'a level chest still waiting');
+  assert.equal(model.todayDone({ ...done, dailyChest: { unclaimed: true, day: 1, of: 7 } }), false, 'today\'s chest is still closed');
+  assert.equal(model.todayDone({ ...done, daily3: { ...done.daily3, claimed: false, claimable: true } }), false, 'the Daily 3 chest still waits');
+  assert.equal(model.todayDone({ ...done, daily3: null }), true, 'Daily 3 not on yet');
+  const sheet = read('src/components/retention/RewardsSheet.tsx');
+  assert.match(sheet, /\{!ready && !tomorrow && \(/, 'the picture stands in for the words');
+  assert.match(sheet, /<\/ScrollView>\n      \{tomorrow\}/, 'shown under the rows, ready rows or not');
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /const tomorrowAt = todayDone\(rewardsInput\)/);
+});

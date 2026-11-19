@@ -33,10 +33,11 @@ import {
   askForDailyChest, autoOpenUsed, noteAppState, noteAutoOpen, rewardMayAutoOpen,
 } from '../../services/retention/rewardPresence';
 import { daily3SeenDate, noteDaily3Seen, seenToday, tickToast, ticksOnFirstSight } from '../../services/retention/daily3Seen';
-import { chestRestartLine } from '../../services/retention/chestDay';
+import { chestRestartLine, tomorrowChest } from '../../services/retention/chestDay';
+import TomorrowTile from './TomorrowTile';
 import { showToast } from '../../utils/toast';
 import { claimOrReconcile, LOST_CLAIM_WAITS_MS, reconcileClaim } from '../../services/retention/claimReconcile';
-import { emptyLine, rewardsRows, rewardsSummary, BADGE_SETTLE_MS, flameNote, settleBadge, stampClaimNote, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
+import { emptyLine, todayDone, rewardsRows, rewardsSummary, BADGE_SETTLE_MS, flameNote, settleBadge, stampClaimNote, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
 import { listenReturnToRewards, openRewardsDoor, rewardsDoorOpen } from '../../services/retention/rewardsSignals';
 import { calmForAutoOpen, takeAutoOpen } from '../../services/retention/mapAttention';
 import { boxFraction, headlineBox } from '../../services/trail/trailModel';
@@ -776,10 +777,16 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     </View>
   );
 
+  // N13 and T103: once today is done, tomorrow's chest shows pictured under the rows (whatever else still waits), and
+  // stands in for the empty sheet's words. A chest held for the next visit keeps its own line.
+  const tomorrowAt = todayDone(rewardsInput) && emptyLine(rewardsInput) !== 'Another chest waits for your next visit'
+    ? tomorrowChest(dailyGift) : null;
+  const tomorrowCard = tomorrowAt ? <TomorrowTile chest={tomorrowAt} /> : null;
   // The Rewards card. While a card opened from it is up (a chest, a reveal, Daily 3), it stays mounted out of sight,
   // so BACK shows this same card again at once: a fresh mount drew its row pictures a few frames late.
   const rewardsCard = (
     <RewardsSheet rows={rows} flame={summary.flame} flameLine={flameNote(rewardsInput.daily3)} empty={emptyLine(rewardsInput)} busy={rewardsBusy} note={rewardsNote}
+      tomorrow={tomorrowCard}
       reducedMotion={reducedMotion} enterRows={!(presentNow && shownRef.current && !!face.current && face.current.key !== 'rewards')}
       onRow={onRewardsRow} onClose={close} />
   );

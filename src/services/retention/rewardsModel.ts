@@ -132,7 +132,18 @@ export function emptyLine(i: RewardsInput): string {
   // T118: a chest held for the next visit is named honestly, never hidden behind "tomorrow".
   if (i.chestOpenedThisVisit && ((i.levelChest?.waiting ?? 0) > 0 || i.weekly?.claimable)) return 'Another chest waits for your next visit';
   if (i.daily3 && !i.daily3.claimed && !i.daily3.claimable) return 'Finish your Daily 3 for a chest';
-  return 'Your next daily chest comes tomorrow';
+  return TOMORROW_LINE;
+}
+
+/** The empty sheet's line when today is all done; the sheet shows tomorrow's chest pictured instead (T103). */
+export const TOMORROW_LINE = 'Your next daily chest comes tomorrow';
+
+/**
+ * N13: today is done (today's chest is open and Daily 3, when on, is claimed): the sheet shows what tomorrow brings,
+ * whatever else is still waiting in it (a level chest, stamps), not only when it is empty.
+ */
+export function todayDone(i: RewardsInput): boolean {
+  return !!i.dailyChest && !i.dailyChest.unclaimed && (!i.daily3 || (i.daily3.claimed && !i.daily3.claimable));
 }
 
 /** The kid's Daily 3 goal from the server, as the home side when the app is at home (never a GO to a park). */

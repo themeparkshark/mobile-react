@@ -33,7 +33,8 @@ import CalmModal from './retention/CalmModal';
 import { rewardWord } from '../services/words/playerWords';
 import { LOST_CLAIM_WAITS_MS, reconcileClaim, serverAnswered } from '../services/retention/claimReconcile';
 import { tryAgainLine } from '../services/connectionCopy';
-import { chestRestartLine } from '../services/retention/chestDay';
+import { chestRestartLine, tomorrowChest } from '../services/retention/chestDay';
+import TomorrowTile from './retention/TomorrowTile';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
@@ -194,6 +195,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
 
   const displayedGift = confirmedGift ?? dailyGift;
   const restartLine = chestRestartLine(displayedGift.streak_reset ?? dailyGift.streak_reset);
+  const tomorrow = tomorrowChest(displayedGift);
   const ladder = displayedGift.ladder?.length ? displayedGift.ladder : fallbackLadder(displayedGift);
   const day = Math.min(ladder.length, Math.max(1, displayedGift.day ?? 1));
   const today = ladder[day - 1];
@@ -621,6 +623,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               <Text style={styles.buttonText}>{ticketDay ? 'SEE YOU AT THE PARK!' : 'AWESOME!'}</Text>
             </Pressable>
           )}
+          {/* Fix pass w4 T103: tomorrow's chest, pictured from the ladder (moon, chest, "Day 2 chest: Thursday"). */}
+          {phase === 'open' && !!tomorrow && <View style={styles.tomorrow}><TomorrowTile chest={tomorrow} /></View>}
           {phase === 'closed' && <Pressable onPress={dismiss} accessibilityRole="button"
             accessibilityLabel={fromRewards.current ? 'Back to your Rewards without opening this chest' : 'Back to map without opening this chest'}
             style={styles.laterButton}>
@@ -779,6 +783,7 @@ const styles = StyleSheet.create({
     paddingTop: 22, paddingBottom: 18, paddingHorizontal: 12, alignItems: 'center' },
   subtitle: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff', marginBottom: 10, textAlign: 'center' },
   subtitleTight: { marginBottom: 2 },
+  tomorrow: { alignSelf: 'stretch', marginTop: 8 },
   restart: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold, textAlign: 'center', marginBottom: 8, paddingHorizontal: 8 },
   aboveGold: { zIndex: 2 },
   ladder: { flexDirection: 'row', gap: 4, alignSelf: 'stretch', justifyContent: 'center' },

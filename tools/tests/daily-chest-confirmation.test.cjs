@@ -66,6 +66,7 @@ function chest({ reconciled = null, readBacks = null, reduced = false, props = {
       if (name === '../ui/GoldBurst') return { GoldBurst: 'GoldBurst' };
       if (name === '../ui/motionEasing') return { ...require('./helpers/ts-module.cjs').loadTs('src/ui/motion.ts'), EASE: {} };
       if (name === './TapHint') return { default: 'TapHint' };
+      if (name === './retention/TomorrowTile') return { default: 'TomorrowTile' };
       if (name === '../hooks/useReducedGameMotion') return { default: () => reduced };
       if (name === '../gamekit/SFX') return { playSfx: name => sounds.push(name) };
       // Studio sound (wave 5 chest pop): off in this test, so the chest plays today's sounds.
