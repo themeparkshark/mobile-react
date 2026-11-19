@@ -6,17 +6,23 @@
  * The fill and the dot move by translateX on the UI thread. The groove's width goes into a shared
  * value (from `width` when the caller knows it, else one onLayout into the shared value, never into
  * React state), so the bar is drawn from its first frame and a width change walks, not snaps.
- * Reduce Motion: a changed value fades in over 150 ms; nothing fades on mount.
+ * Reduce Motion: a changed value fades in over 150 ms; nothing fades on mount. Without a known
+ * width the fill stays hidden until the groove is laid out, so it never flashes full.
+ *
+ * `above` (the count line, "16 of 35 coins") sits over the groove beside the prize, so the trophy
+ * stands up into the count line as the board draws it (2-win.png) instead of costing a row of its
+ * own; at large text the box grows to hold both.
  */
-import { memo, useEffect, useRef } from 'react';
-import { View, type ImageSourcePropType, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { memo, useEffect, useRef, type ReactNode } from 'react';
+import { View, type ImageSourcePropType, type LayoutChangeEvent, type StyleProp } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { SPRING } from '../motion';
 import useUiReducedMotion from '../useUiReducedMotion';
 import Lift from './Lift';
 import { useStickerPlace } from './StickerContext';
-import { BAR, DROP, INK, LINE, SHADE, STICK } from './tokens';
+import type { LayoutStyle } from './style';
+import { BAR, DROP, INK, LINE, SHADE, SPACE, STICK } from './tokens';
 
 export type ProgressBarProps = {
   /** 0 to 1. */
@@ -29,7 +35,9 @@ export type ProgressBarProps = {
   /** The bar's whole width when the caller knows it (drawn right from the first frame). */
   readonly width?: number;
   readonly showDot?: boolean;
-  readonly style?: StyleProp<ViewStyle>;
+  /** The count line over the groove, beside the prize (the trophy stands into it). */
+  readonly above?: ReactNode;
+  readonly style?: StyleProp<LayoutStyle>;
 };
 
 const GOLD = [INK.goldLight, INK.gold, SHADE.goldFillLow] as const;
@@ -45,7 +53,7 @@ export function prizeRoom(prizeWidth: number): number {
   return Math.round(prizeWidth * 0.75);
 }
 
-function ProgressBarImpl({ value, second = 0, prize, label, width, showDot = true, style }: ProgressBarProps) {
+function ProgressBarImpl({ value, second = 0, prize, label, width, showDot = true, above, style }: ProgressBarProps) {
   const { surface } = useStickerPlace();
   const paper = surface === 'paper';
   const reduced = useUiReducedMotion();
@@ -70,15 +78,17 @@ function ProgressBarImpl({ value, second = 0, prize, label, width, showDot = tru
   useEffect(() => {
     if (width) groove.value = withSpring(Math.max(0, width - room - LINE.chip * 2), SPRING.settle);
   }, [groove, room, width]);
-  const fillStyle = useAnimatedStyle(() => ({ opacity: fade.value, transform: [{ translateX: -groove.value * (1 - v.value) }] }));
-  const twoStyle = useAnimatedStyle(() => ({ opacity: fade.value, transform: [{ translateX: -groove.value * (1 - Math.min(1, v.value + two.value)) }] }));
-  const dotStyle = useAnimatedStyle(() => ({ transform: [{ translateX: groove.value * v.value }] }));
+  // Hidden until the groove has a width: a bar that flashed full would lie to the player.
+  const fillStyle = useAnimatedStyle(() => ({ opacity: groove.value > 0 ? fade.value : 0, transform: [{ translateX: -groove.value * (1 - v.value) }] }));
+  const twoStyle = useAnimatedStyle(() => ({ opacity: groove.value > 0 ? fade.value : 0, transform: [{ translateX: -groove.value * (1 - Math.min(1, v.value + two.value)) }] }));
+  const dotStyle = useAnimatedStyle(() => ({ opacity: groove.value > 0 ? 1 : 0, transform: [{ translateX: groove.value * v.value }] }));
   const onLayout = width ? undefined : (e: LayoutChangeEvent) => { groove.value = Math.max(0, e.nativeEvent.layout.width - LINE.chip * 2); };
   const boxH = Math.max(BAR.dot, prize ? prize.height : 0);
   return (
     <View accessible accessibilityRole="progressbar" accessibilityLabel={label}
       accessibilityValue={{ min: 0, max: 100, now: Math.round(clamp01(value) * 100) }}
-      style={[{ height: boxH, justifyContent: prize ? 'flex-end' : 'center', paddingRight: room, width, paddingBottom: prize ? (BAR.dot - BAR.height) / 2 : 0 }, style]}>
+      style={[{ minHeight: boxH, justifyContent: prize || above ? 'flex-end' : 'center', paddingRight: room, width, paddingBottom: prize ? (BAR.dot - BAR.height) / 2 : 0 }, style]}>
+      {above ? <View style={{ marginBottom: SPACE.base + (BAR.dot - BAR.height) / 2 }}>{above}</View> : null}
       <View onLayout={onLayout} style={{ height: BAR.height }}>
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: BAR.height / 2, borderWidth: LINE.chip, borderColor: INK.navy,
           backgroundColor: paper ? SHADE.barPaper : INK.blueLip, overflow: 'hidden' }}>

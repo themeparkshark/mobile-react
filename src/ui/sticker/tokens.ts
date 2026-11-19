@@ -127,6 +127,9 @@ export const SHADE = {
   ghostPressed: navy(0.14),
   /** The Secret Shop's midnight wash over Alex's bar. */
   nightWash: navy(0.8),
+  /** The header band's shade over the water (kit.css .hdr): clear at the top, the lip blue at 38 percent at the edge. */
+  bandShadeTop: inkAt(INK.blueLip, 0),
+  bandShadeLow: inkAt(INK.blueLip, 0.38),
   /** The switch's groove when on: gold ink at 35 percent. */
   switchOnInset: inkAt(INK.goldInk, 0.35),
 } as const;
@@ -190,6 +193,25 @@ export const RADIUS = {
   pill: 999,
 } as const;
 
+/**
+ * Art size roles (pt): how big Alex's art is drawn in each job, so screens never type art
+ * geometry. Each is the longer side of the box the art is fitted into.
+ */
+export const ART_SIZE = {
+  /** A mark inside a tag or a line. */
+  mark: 18,
+  /** A chip's art. */
+  chip: 30,
+  /** A prize in a prize row (the win card: five the same size). */
+  prize: 44,
+  /** A list row's chest or book. */
+  row: 60,
+  /** The progress bar's prize (about 2.5 times the bar's height, kit.png). */
+  trophy: 46,
+  /** Alex's shark in an empty, error or loading panel (kit.png: about 140). */
+  state: 128,
+} as const;
+
 /** 4 pt base. */
 export const SPACE = {
   base: 4,
@@ -202,6 +224,9 @@ export const SPACE = {
   /** Hanging art keeps at least this far from the next frame line and the screen edge. */
   artClear: 8,
 } as const;
+
+/** Named gaps for Row and Stack (4 pt base): the only gaps a screen lays pieces out with. */
+export const GAP = { none: 0, hair: 2, tight: SPACE.base, base: SPACE.base * 2, card: SPACE.cardGap, loose: SPACE.cardGapLoose, wide: SPACE.base * 6 } as const;
 
 export const FONT = {
   shark: 'Shark',
@@ -281,8 +306,12 @@ export const TAG = { height: 24, heightLarge: 32, padX: 10, font: 14, fontKo: 13
 export const LABEL = { height: 30, heightLarge: 36, padX: 14, font: 17, fontLarge: 20, maxScale: 1.15 } as const;
 export const BADGE = { size: 22, ring: 2, font: 13, max: 99 } as const;
 export const BAR = { height: 18, dot: 22, dotLine: 2.5, inset: 3 } as const;
-/** Spots: ghosts are a tinted silhouette of the art; next up is a 3 pt gold ring with a gold-light ring inside. */
-export const SPOT = { size: 46, line: 2, nextLine: 3, nextInner: 2, ghostOpacity: 0.3, ghostPaperOpacity: 0.75, ghostTrace: 0.22, weekMin: 24 } as const;
+/**
+ * Spots: a ghost is a one-colour silhouette of the art (sky on blue, navy soft on paper), never the
+ * art's own colours at low opacity (gold over the navy disc went gray); next up is a 3 pt gold ring
+ * with a gold-light ring inside.
+ */
+export const SPOT = { size: 46, line: 2, nextLine: 3, nextInner: 2, ghostOpacity: 0.45, ghostPaperOpacity: 0.4, weekMin: 24 } as const;
 /**
  * Header band: the water's straight bottom edge sits `crest` under the safe area top, then the
  * navy line, the white edge and a 3 pt drop at the map's 50 percent navy; content starts `gap`
@@ -308,7 +337,8 @@ export const SWITCH = { width: 58, height: 32, knob: 26, line: 2 } as const;
 export const TOAST = { height: 48, ms: 2400, art: 28 } as const;
 /** Floating sheets and dialogs: the board's 24 pt side margin, capped on wide screens. */
 export const LAYER = { margin: 24, maxWidth: 420, bottom: 12, exitMs: 180 } as const;
-export const ROW = { min: 62, artRoom: 58, actionWidth: 86, gap: 8, padRight: 10 } as const;
+/** List rows: `artOver` is the board's overhang where the page has room (rowArtOver keeps 8 pt from the page's line). */
+export const ROW = { min: 62, artRoom: 58, artOver: 14, badgeLeft: 26, actionWidth: 86, gap: 8, padRight: 10 } as const;
 
 /** Motion of the look: stuck on (1.08 to 1.0, the drop closing), 150 ms fades under Reduce Motion. */
 export const STICK = {

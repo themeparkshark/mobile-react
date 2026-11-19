@@ -1,41 +1,46 @@
 /**
  * Proof screen (dev gallery only): the win card as board/pick/2-win, with its motion built for
- * real. Under the chips bar, a page with Alex's ribbon ("COIN CAUGHT!"), the stage (his underwater
- * light and rays) holding the won coin (the server's Walt Statue art) with his NEW! sticker once,
- * "RIDE COIN" and the coin's name, the walking-dot bar with the bronze trophy on its end, and the
- * five prizes flat in one row on one card, art off its top edge. The screen's wave foot holds the
+ * real, over the dimmed map it is won on. Under the chips bar, a page with Alex's ribbon ("COIN
+ * CAUGHT!"), the stage (his underwater light and rays) holding the won coin (the server's Walt
+ * Statue art) with his NEW! sticker on the stage's corner, "RIDE COIN" and the coin's name, the
+ * count line beside the bronze trophy over the walking-dot bar, and the five prizes in one row on
+ * one card, each stuck into its own spot on the card's top edge. The screen's wave foot holds the
  * one gold NEXT COIN, the next coin's tag and "See my shelf".
  *
- * The sequence (WIN_BEATS): the page is stuck on, the coin lands on the stage, NEW! is stuck on,
- * the dot walks from 15 to 16, the prizes are stuck on one by one and count up, then the coins,
- * ticket and energy fly to their header chips, which bounce as each lands. Reduce Motion: every
- * step is a 150 ms fade in the same order, nothing flies, and the chips take their new counts
- * with a fade. Sample numbers; nothing is claimed.
+ * The hero never gives up size first: the stage grows into what the page leaves and the coin is
+ * at least winHeroSize (110 on the SE, about 145 on the 17 Pro); on a short phone the window
+ * shrinks under it and the coin breaks the window's top edge, and the prize names give way (the
+ * art says what each prize is; VoiceOver still hears the names).
  *
- * On a short phone (the SE) the stage gives up height first and "See my shelf" shares the tag's
- * row in the foot, so the whole card shows at rest with nothing under the foot.
+ * The sequence (WIN_BEATS): until the won coin's art is on the phone the map stays as it was (the
+ * screen the player was on, no blank frame); then the map dims and the page is stuck on whole, a
+ * gold "next" spot waiting on the stage and five empty spots on the prize card. The coin lands on
+ * the stage (squash, ring, sparkles), NEW! is stuck on, the dot walks from 15 to 16, the prizes are
+ * stuck into their spots one by one and count up, then coins, ticket and energy fly to their header
+ * chips, which bounce as each lands. Reduce Motion: every step is a 150 ms fade in the same order,
+ * nothing flies, the chips take their new counts with a fade. Sample numbers; nothing is claimed.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, useWindowDimensions, type ImageSourcePropType } from 'react-native';
 import useUiReducedMotion from '../../useUiReducedMotion';
-import Arrive from '../Arrive';
 import Card from '../Card';
 import CurrencyChip from '../CurrencyChip';
 import Flight, { type FlightPoint } from '../Flight';
 import GhostButton from '../GhostButton';
 import Glyph from '../Glyph';
+import { Row, Stack } from '../Arrange';
 import Lift from '../Lift';
 import Page from '../Page';
 import ProgressBar from '../ProgressBar';
 import Screen from '../Screen';
 import Spot from '../Spot';
-import Stage from '../Stage';
+import Stage, { winHeroSize } from '../Stage';
 import StickerButton from '../StickerButton';
 import Tag from '../Tag';
 import { Body, Caps, Count, Title } from '../Text';
 import { ART, ART_RATIO } from '../art';
-import { buttonHeight, screenFrameWidth } from '../layout';
-import { LINE, SPACE, TAG } from '../tokens';
+import { ART_SIZE, SPACE } from '../tokens';
+import { mapLayer } from './ProofMap';
 import { useParkCoins } from './proofCoins';
 import { WIN_BEATS, countSteps, winsLeft } from './proofData';
 
@@ -53,25 +58,13 @@ const PRIZES = [
   { key: 'xp', art: ART.xp, ratio: ART_RATIO.xp, count: 25, name: 'XP', chip: null },
 ] as const;
 const START: Record<ChipKey, number> = { coins: 4075, energy: 3, tickets: 12 };
-const PRIZE_ART = 44;
-/** Each prize takes its own width and an equal share of what is left, so "Shark Coins" stays on one line on the SE. */
-const PRIZE_COLUMN = { flexGrow: 1, flexShrink: 1, flexBasis: 'auto', alignItems: 'center' } as const;
-/** The tag sits on the wave's crest, half above it. */
-const WAVE_TAG_LIFT = 14;
-/** A short phone: the foot puts the tag and "See my shelf" on one row. */
+/** A short phone (the SE): the foot puts the tag and "See my shelf" on one row and the prize names give way. */
 const SHORT = 700;
 /** A tall phone has room for the week line under "See my shelf". */
 const TALL = 800;
-/** The stage takes what the card and the foot leave: half the window less this, never under STAGE_MIN (measured on the 17 Pro and the SE). */
-const STAGE_ROOM = 293;
-const STAGE_MIN = 80;
-/** The ghost button's least touch height. */
-const GHOST_H = 44;
-/** The week line under "See my shelf" on a tall phone. */
-const WEEK_LINE = 20;
 
 /** "+10" counting up in a few steps once its prize is stuck on (Reduce Motion: the number is just there). */
-const PrizeCount = memo(function PrizeCount({ value, delay, reduced }: { value: number; delay: number; reduced: boolean }) {
+const PrizeCount = memo(function PrizeCount({ value, delay, reduced, label }: { value: number; delay: number; reduced: boolean; label: string }) {
   const [shown, setShown] = useState(reduced ? value : 0);
   useEffect(() => {
     if (reduced) { setShown(value); return undefined; }
@@ -79,7 +72,7 @@ const PrizeCount = memo(function PrizeCount({ value, delay, reduced }: { value: 
     const timers = steps.map((v, i) => setTimeout(() => setShown(v), delay + i * WIN_BEATS.countStep));
     return () => timers.forEach(clearTimeout);
   }, [delay, reduced, value]);
-  return <Count size="count" align="center" label={`plus ${value}`}>{`+${shown}`}</Count>;
+  return <Count size="count" align="center" label={label}>{shown ? `+${shown}` : ' '}</Count>;
 });
 
 type Measurable = { measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => void };
@@ -90,18 +83,15 @@ function measure(node: Measurable | null): Promise<{ x: number; y: number; w: nu
   });
 }
 
-/** The win card waits for the won coin's art (a real win has it before the card opens), then runs its beats from zero. */
+/** The win card waits on the map (the screen it is won on) for the won coin's art, then runs its beats from zero. */
 export default function ProofWin() {
   const { art, ready } = useParkCoins(useMemo(() => [WON, NEXT], []));
-  return ready ? <WinCard coins={art} /> : <Screen testID="proof-win-wait" header={{ children: [
-    <CurrencyChip key="c" kind="coins" value={START.coins} />, <CurrencyChip key="e" kind="energy" value={START.energy} />, <CurrencyChip key="t" kind="tickets" value={START.tickets} />,
-  ] }} />;
+  return <WinScreen coins={art} ready={ready} />;
 }
 
-function WinCard({ coins }: { readonly coins: Readonly<Record<string, ImageSourcePropType | undefined>> }) {
-  const { width, height } = useWindowDimensions();
+function WinScreen({ coins, ready }: { readonly coins: Readonly<Record<string, ImageSourcePropType | undefined>>; readonly ready: boolean }) {
+  const { height } = useWindowDimensions();
   const reduced = useUiReducedMotion();
-  const [found, setFound] = useState(15);
   const [chips, setChips] = useState<Record<ChipKey, number>>(START);
   const [flights, setFlights] = useState<{ key: string; chip: ChipKey; from: FlightPoint; to: FlightPoint; delay: number; art: number; ratio: number }[]>([]);
   const fxRef = useRef<View>(null);
@@ -114,7 +104,7 @@ function WinCard({ coins }: { readonly coins: Readonly<Record<string, ImageSourc
   const landers = useMemo(() => ({ coins: () => land('coins'), energy: () => land('energy'), tickets: () => land('tickets') }), [land]);
 
   useEffect(() => {
-    const walk = setTimeout(() => setFound(16), WIN_BEATS.walk);
+    if (!ready) return undefined;
     let live = true;
     const fly = setTimeout(async () => {
       const flying = PRIZES.filter(p => p.chip);
@@ -130,94 +120,101 @@ function WinCard({ coins }: { readonly coins: Readonly<Record<string, ImageSourc
         const b = await measure(chipRefs[chip].current);
         if (!origin || !a || !b) { land(chip); continue; }
         out.push({ key: p.key, chip, art: p.art, ratio: p.ratio, delay: i * WIN_BEATS.flyGap,
-          from: { x: a.x - origin.x + a.w / 2, y: a.y - origin.y + a.h / 2, size: PRIZE_ART },
+          from: { x: a.x - origin.x + a.w / 2, y: a.y - origin.y + a.h / 2, size: ART_SIZE.prize },
           // The chip's art sits on its left end: aim there.
-          to: { x: b.x - origin.x + 12, y: b.y - origin.y + b.h / 2, size: 30 } });
+          to: { x: b.x - origin.x + SPACE.cardGapLoose, y: b.y - origin.y + b.h / 2, size: ART_SIZE.chip } });
       }
       if (live) setFlights(out);
     }, WIN_BEATS.fly);
-    return () => { live = false; clearTimeout(walk); clearTimeout(fly); };
-    // chipRefs are stable refs; the sequence runs once per mount.
+    return () => { live = false; clearTimeout(fly); };
+    // chipRefs are stable refs; the sequence runs once the card is up.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [land, reduced]);
+  }, [land, ready, reduced]);
 
-  const inner = screenFrameWidth(width) - LINE.page * 2 - SPACE.pagePad * 2;
   const short = height < SHORT;
-  // The stage gives up height first on a short phone, so the prize row stays in view above the foot band.
-  const stageH = Math.round(Math.max(STAGE_MIN, Math.min(inner * 0.5, height * 0.5 - STAGE_ROOM)));
-  const coinH = Math.round(stageH * 0.86);
-  const footH = short
-    ? Math.max(TAG.height, GHOST_H) + SPACE.base * 2 + buttonHeight('large') + SPACE.base
-    : TAG.height + SPACE.base * 2 + buttonHeight('large') + SPACE.base * 2 + GHOST_H + (height >= TALL ? WEEK_LINE : 0);
+  const header = { children: [
+    <View key="c" ref={chipRefs.coins} collapsable={false}><CurrencyChip kind="coins" value={chips.coins} /></View>,
+    <View key="e" ref={chipRefs.energy} collapsable={false}><CurrencyChip kind="energy" value={chips.energy} /></View>,
+    <View key="t" ref={chipRefs.tickets} collapsable={false}><CurrencyChip kind="tickets" value={chips.tickets} /></View>,
+  ] };
+  // Until the art is on the phone, the map the coin was won on stays exactly as it was.
+  if (!ready) return <Screen testID="proof-win-wait" ground="map" mapLayer={mapLayer} scroll={false} header={header} />;
   const next = coins[NEXT];
+  const won = coins[WON];
   const nextTag = (
-    <Tag label={`Next coin: ${NEXT}, 61 meters`} leading={next ? <Lift source={next} width={18} height={18} flat /> : <Spot state="next" size={18} />}
+    <Tag label={`Next coin: ${NEXT}, 61 meters`} leading={next ? <Lift source={next} width={ART_SIZE.mark} height={ART_SIZE.mark} flat /> : <Spot state="next" size={ART_SIZE.mark} />}
       style={{ alignSelf: 'center' }}>{`${NEXT}, 61 m`}</Tag>
   );
   const shelf = <GhostButton label="See my shelf" onPress={noop} />;
-  const won = coins[WON];
   return (
-    <Screen testID="proof-win"
-      header={{ children: [
-        <View key="c" ref={chipRefs.coins} collapsable={false}><CurrencyChip kind="coins" value={chips.coins} /></View>,
-        <View key="e" ref={chipRefs.energy} collapsable={false}><CurrencyChip kind="energy" value={chips.energy} /></View>,
-        <View key="t" ref={chipRefs.tickets} collapsable={false}><CurrencyChip kind="tickets" value={chips.tickets} /></View>,
-      ] }}
+    <Screen testID="proof-win" ground="map" mapLayer={mapLayer} dim header={header}
       fx={(
         <View ref={fxRef} collapsable={false} style={{ flex: 1 }}>
           {flights.map(f => <Flight key={f.key} source={f.art} ratio={f.ratio} from={f.from} to={f.to} delay={f.delay} onLand={landers[f.chip]} />)}
         </View>
       )}
-      foot={{ height: footH, children: (
-        <View style={{ alignItems: 'center', alignSelf: 'stretch', paddingHorizontal: SPACE.margin + 8, marginTop: -WAVE_TAG_LIFT }}>
-          {short ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' }}>{nextTag}{shelf}</View>
-          ) : nextTag}
-          <StickerButton label="NEXT COIN" variant="primary" size="large" fullWidth style={{ marginTop: SPACE.base * 2 }} onPress={noop} />
+      foot={{ children: (
+        // The tag sits on the wave's crest, half above it.
+        <Stack align="center" style={{ alignSelf: 'stretch', marginHorizontal: SPACE.margin + SPACE.base * 2, marginTop: -SPACE.base * 4 + 2 }}>
+          {short ? <Row justify="between" style={{ alignSelf: 'stretch' }}>{nextTag}{shelf}</Row> : nextTag}
+          <StickerButton label="NEXT COIN" variant="primary" size="large" style={{ marginTop: SPACE.base * 2 }} onPress={noop} />
           {short ? null : <View style={{ marginTop: SPACE.base }}>{shelf}</View>}
           {!short && height >= TALL ? (
-            <View accessible accessibilityLabel="1 coin this week" style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {won ? <Lift source={won} width={18} height={18} flat /> : null}
-              <Glyph kind="check" size={18} />
-              <Body size="small" lines={1} role="none">1 coin this week</Body>
-            </View>
+            <Row gap="base" style={{ marginTop: -SPACE.base }}>
+              <View accessible accessibilityLabel="1 coin this week"><Row gap="base">
+                <Lift source={ART.coin} width={ART_SIZE.mark} height={Math.round(ART_SIZE.mark / ART_RATIO.coin)} />
+                <Glyph kind="check" size={ART_SIZE.mark} />
+                <Body size="small" lines={1} role="none">1 coin this week</Body>
+              </Row></View>
+            </Row>
           ) : null}
-        </View>
+        </Stack>
       ) }}>
-      <Page arrive ribbon={{ text: 'COIN CAUGHT!', kind: 'page' }}>
-        <Stage width={inner} height={stageH} label={`${WON} coin`} landDelay={WIN_BEATS.land}>
-          {won ? <Lift source={won} width={coinH} height={coinH} /> : <Spot state="next" size={coinH} />}
-        </Stage>
-        <Arrive delay={WIN_BEATS.sticker} style={{ position: 'absolute', left: SPACE.base * 2, top: 44 }}>
-          {() => <Lift source={ART.newSticker} width={74} height={Math.round(74 / ART_RATIO.newSticker)} style={{ transform: [{ rotate: `${-TAG.tilt}deg` }] }} />}
-        </Arrive>
-        <Caps gold align="center" style={{ marginTop: SPACE.cardGapLoose }}>Ride coin</Caps>
-        <Title size="large">{WON}</Title>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: SPACE.base * 2, gap: SPACE.base * 2 }}>
-          <Body align="left" lines={1}>{`${found} of ${TOTAL} coins`}</Body>
-          <Body size="small" soft align="right" lines={1}>{`${winsLeft(found, GOAL)} more wins for Bronze`}</Body>
-        </View>
-        <ProgressBar value={found / TOTAL} label={`${found} of ${TOTAL} coins`} width={inner}
-          prize={{ source: ART.bronze, width: 46, height: Math.round(46 / ART_RATIO.bronze) }} style={{ marginTop: SPACE.base }} />
-        <Card style={{ marginTop: SPACE.cardGapLoose + PRIZE_ART / 2 }}>
-          <View style={{ flexDirection: 'row', paddingTop: PRIZE_ART / 2 + SPACE.base, paddingBottom: SPACE.base * 2, paddingHorizontal: SPACE.base, gap: SPACE.base }}>
+      <Page arrive fill ribbon={{ text: 'COIN CAUGHT!', kind: 'page' }}>
+        <Stage label={`${WON} coin`} landDelay={WIN_BEATS.land}
+          hero={{ min: winHeroSize(height), render: size => (won ? <Lift source={won} width={size} height={size} /> : <Spot state="next" size={size} />) }}
+          corner={{ delay: WIN_BEATS.sticker, node: <Lift source={ART.newSticker} width={74} height={Math.round(74 / ART_RATIO.newSticker)} /> }} />
+        <Caps gold align="center" style={{ marginTop: SPACE.cardGap }}>Ride coin</Caps>
+        <Title size="large" lines={1} fit>{WON}</Title>
+        <WalkingBar />
+        <Card style={{ marginTop: SPACE.cardGap }} topRow={{ size: 'prize', children: (
+          <Row even align="center" style={{ minHeight: ART_SIZE.prize }}>
             {PRIZES.map((p, i) => (
-              <Arrive key={p.key} delay={WIN_BEATS.prizes + i * WIN_BEATS.prizeGap} style={PRIZE_COLUMN}>
-                {() => (
-                  <>
-                    <View ref={r => { prizeRefs.current[p.key] = r; }} collapsable={false} style={{ position: 'absolute', top: -PRIZE_ART - SPACE.base }}>
-                      <Lift source={p.art} width={Math.round(PRIZE_ART * Math.min(1.5, p.ratio))} height={PRIZE_ART} />
-                    </View>
-                    <PrizeCount value={p.count} delay={WIN_BEATS.prizes + i * WIN_BEATS.prizeGap + WIN_BEATS.countLead} reduced={reduced} />
-                    {/* Two lines at large text sizes ("Shark / Coins"), never an ellipsis. */}
-                    <Body size="small" soft lines={2} style={{ alignSelf: 'stretch' }}>{p.name}</Body>
-                  </>
-                )}
-              </Arrive>
+              <View key={p.key} ref={r => { prizeRefs.current[p.key] = r; }} collapsable={false}>
+                <Spot state="empty" stickAt={WIN_BEATS.prizes + i * WIN_BEATS.prizeGap} art={p.art} artRatio={p.ratio} size={ART_SIZE.prize} />
+              </View>
             ))}
-          </View>
+          </Row>
+        ) }}>
+          <Row even align="start" style={{ marginBottom: SPACE.base * 2, marginHorizontal: SPACE.base }}>
+            {PRIZES.map((p, i) => (
+              <Stack key={p.key} gap="none" align="stretch">
+                <PrizeCount value={p.count} delay={WIN_BEATS.prizes + i * WIN_BEATS.prizeGap + WIN_BEATS.countLead} reduced={reduced} label={`plus ${p.count} ${p.name}`} />
+                {short ? null : <Body size="small" soft lines={2} role="none">{p.name}</Body>}
+              </Stack>
+            ))}
+          </Row>
         </Card>
       </Page>
     </Screen>
+  );
+}
+
+/** The count line beside the bronze trophy over the walking-dot bar (the dot walks 15 to 16). */
+function WalkingBar() {
+  const [found, setFound] = useState(15);
+  useEffect(() => {
+    const walk = setTimeout(() => setFound(16), WIN_BEATS.walk);
+    return () => clearTimeout(walk);
+  }, []);
+  return (
+    <ProgressBar value={found / TOTAL} label={`${found} of ${TOTAL} coins`} style={{ marginTop: SPACE.base * 2 }}
+      prize={{ source: ART.bronze, width: ART_SIZE.trophy, height: Math.round(ART_SIZE.trophy / ART_RATIO.bronze) }}
+      above={(
+        <Row justify="between" align="end" gap="base">
+          <Body align="left" lines={1} role="none">{`${found} of ${TOTAL} coins`}</Body>
+          <Body size="small" soft align="right" lines={1} role="none" style={{ flexShrink: 1 }}>{`${winsLeft(found, GOAL)} more wins for Bronze`}</Body>
+        </Row>
+      )} />
   );
 }

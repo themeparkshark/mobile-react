@@ -139,13 +139,13 @@ function LevelSection() {
   return (
     <Section id="level" title="The level rule">
       <World>
-        <ListRow art={CHEST} title="Card on the world" line="Level 1: white cut edge, 4 pt drop." state="ready" action={{ label: 'OPEN' }} />
+        <ListRow art={CHEST} title="Card on the world" line="Level 1: white cut edge, 4 pt drop." state="ready" actionLabel='OPEN' />
       </World>
       <InPage>
-        <ListRow art={CHEST} title="Card on a page" line="Level 2: navy line and a lip only." state="second" action={{ label: 'OPEN' }} />
+        <ListRow art={CHEST} title="Card on a page" line="Level 2: navy line and a lip only." state="second" actionLabel='OPEN' />
         <View style={{ height: 12 }} />
         <WorldPlace>
-          <Card style={{ height: 46 }}>
+          <Card style={{ minHeight: 46 }}>
             <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 14 }}>
               <Body size="small" soft align="left">A world ground asked for inside a page: refused, no white edge.</Body>
             </View>
@@ -171,7 +171,7 @@ function TypeSection() {
         <Body size="small" soft align="left">Body 14 soft: the second line on blue.</Body>
       </World>
       <InPage>
-        <Card padding={14}>
+        <Card padding="snug">
           <Title align="left">Title on paper</Title>
           <Name>Name on paper: plain navy</Name>
           <Caps>Caps on paper: gold ink</Caps>
@@ -288,7 +288,7 @@ function PageSection() {
     <Section id="page" title="Page">
       <World>
         <Page label={{ text: 'Title label', tone: 'gold' }}>
-          <ListRow art={CHEST} title="Card on a page" line="Navy line and a lip only." state="third" action={{ label: 'SEE' }} />
+          <ListRow art={CHEST} title="Card on a page" line="Navy line and a lip only." state="third" actionLabel='SEE' />
         </Page>
         <Note>The label rises above the page; the page reserves it as its top margin.</Note>
       </World>
@@ -302,7 +302,7 @@ function PageSection() {
         <Note paper>On the map: white edge 3, drop 5 at 50 percent navy.</Note>
       </MapGround>
       <Scrim>
-        <Page floating label={{ text: 'Use 1 Ticket?', large: true }} foot={{ height: 58, children: <GhostButton label="Not now" /> }}>
+        <Page floating label={{ text: 'Use 1 Ticket?', large: true }} foot={{ children: <GhostButton label="Not now" /> }}>
           <Body>Play for the Walt Statue coin.</Body>
           <StickerButton label="PLAY!" variant="primary" size="medium" width={160} style={{ alignSelf: 'center', marginTop: 12 }} />
         </Page>
@@ -315,21 +315,21 @@ function CardSection() {
   return (
     <Section id="card" title="Card">
       <World>
-        <Card style={{ height: 62 }} art={{ ...CHEST, along: 2 }}>
+        <Card style={{ minHeight: 62 }} art={{ ...CHEST, along: 2 }}>
           <View style={{ flex: 1, justifyContent: 'center', paddingLeft: 58 }}><Name>Cream on the world</Name><Body size="small" soft align="left">Level 1, white edge.</Body></View>
         </Card>
         <View style={{ height: 10 }} />
-        <Card paper="white" style={{ height: 52 }}>
+        <Card paper="white" style={{ minHeight: 52 }}>
           <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 14 }}><Name>White on the world</Name></View>
         </Card>
       </World>
       <MapGround>
-        <Card style={{ height: 62 }} art={{ ...CHEST, along: 2 }}>
+        <Card style={{ minHeight: 62 }} art={{ ...CHEST, along: 2 }}>
           <View style={{ flex: 1, justifyContent: 'center', paddingLeft: 58 }}><Name>Cream on the map</Name><Body size="small" soft align="left">3 pt line, 50 percent drop.</Body></View>
         </Card>
       </MapGround>
       <InPage>
-        <Card paper="white" art={{ source: ART.coin, width: 54, height: 54 / ART_RATIO.coin, side: 'top', over: 26, along: 128 }} style={{ height: 70, marginTop: 20 }}>
+        <Card paper="white" art={{ source: ART.coin, width: 54, height: 54 / ART_RATIO.coin, side: 'top', over: 26, along: 128 }} style={{ minHeight: 70, marginTop: 20 }}>
           <View style={{ flex: 1, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 10 }}><Name align="center">Art off the top edge</Name></View>
         </Card>
       </InPage>
@@ -382,7 +382,7 @@ function SpotSection() {
       </World>
       <MapGround><Row gap={18}>{SPOT_STATES.map(s => <Spot key={s} state={s} art={ART.coin} />)}</Row></MapGround>
       <InPage>
-        <Card padding={14}>
+        <Card padding="snug">
           <Row gap={18}>{SPOT_STATES.map(s => <Spot key={s} state={s} art={ART.coin} label={`coin, ${s}`} />)}</Row>
           <View style={{ height: 12 }} />
           <Row gap={4}>
@@ -451,8 +451,8 @@ function WaveSection() {
   return (
     <Section id="wave" title="Wave foot">
       <Scrim>
-        <Page floating label={{ text: 'Rewards', tone: 'gold', large: true }} foot={{ height: 62, children: <GhostButton label="BACK TO MAP" size="large" art="back" /> }}>
-          <ListRow art={CHEST} title="Daily Chest" line="Day 1 of 7 is ready" state="ready" action={{ label: 'OPEN' }} />
+        <Page floating label={{ text: 'Rewards', tone: 'gold', large: true }} foot={{ children: <GhostButton label="BACK TO MAP" size="large" art="back" /> }}>
+          <ListRow art={CHEST} title="Daily Chest" line="Day 1 of 7 is ready" state="ready" actionLabel='OPEN' />
         </Page>
       </Scrim>
       <World label="a screen's foot band: the one primary wears its edge" pad={false}>
@@ -482,7 +482,7 @@ function ProgressSection() {
         <ProgressBar value={0.3} second={0.25} label="3 of 10, 2 more today" />
       </World>
       <MapGround><ProgressBar value={0.6} label="6 of 10" /></MapGround>
-      <InPage><Card padding={14}><ProgressBar value={0.6} label="6 of 10 sights" /></Card></InPage>
+      <InPage><Card padding="snug"><ProgressBar value={0.6} label="6 of 10 sights" /></Card></InPage>
     </Section>
   );
 }
@@ -509,7 +509,7 @@ function HeaderSection() {
 
 const FOOTER_ITEMS = [
   { key: 'news', label: 'News' }, { key: 'standings', label: 'Standings' }, { key: 'map', label: 'Map' },
-  { key: 'social', label: 'Social' }, { key: 'profile', label: 'Profile', badge: 2, accessibilityLabel: 'Profile, 2 new' },
+  { key: 'social', label: 'Social' }, { key: 'profile', label: 'Profile', badge: 2, badgeNoun: 'new' },
 ] as const;
 
 function FooterSection() {
@@ -519,7 +519,7 @@ function FooterSection() {
       <World label="Map picked, on the world" pad={false}><Footer items={FOOTER_ITEMS} picked={picked} onPick={setPicked} /></World>
       <MapGround pad={false}><Footer items={FOOTER_ITEMS} picked="news" onPick={noop} /></MapGround>
       <View style={[styles.ground, { padding: 0, height: 150 }]}>
-        <ParkMap />
+        <ParkMap attribution={0} />
         <View style={{ flex: 1 }} />
         <WorldPlace><Footer items={FOOTER_ITEMS} picked="profile" onPick={noop} /></WorldPlace>
       </View>
@@ -550,7 +550,7 @@ function SheetSection() {
     <Section id="sheet" title="Sheet">
       <Scrim>
         <SheetBody title="REWARDS" wayOut={{ label: 'BACK TO MAP', art: 'back', onPress: noop }}>
-          <ListRow art={CHEST} title="Daily Chest" line="Day 1 of 7 is ready" state="ready" action={{ label: 'OPEN' }} />
+          <ListRow art={CHEST} title="Daily Chest" line="Day 1 of 7 is ready" state="ready" actionLabel='OPEN' />
         </SheetBody>
       </Scrim>
       <Scrim>
@@ -611,15 +611,15 @@ function ListRowSection() {
     <Section id="listrow" title="List row">
       <InPage label="Four states">
         <View style={{ gap: SPACE.cardGap }}>
-          <ListRow art={CHEST} title="Daily Chest" line="Day 1 of 7 is ready" state="ready" action={{ label: 'OPEN' }} />
-          <ListRow art={{ source: ART.levelChest, width: 60, height: 60 }} title="Level 7 Chest" line="New gear inside" state="second" action={{ label: 'OPEN' }} />
+          <ListRow art={CHEST} title="Daily Chest" line="Day 1 of 7 is ready" state="ready" actionLabel='OPEN' />
+          <ListRow art={{ source: ART.levelChest, width: 60, height: 60 }} title="Level 7 Chest" line="New gear inside" state="second" actionLabel='OPEN' />
           <ListRow art={{ source: ART.chestOpen, width: 60, height: 60 }} title="Daily Chest" line="Back tomorrow" state="done" doneLabel="Opened" />
-          <ListRow art={{ source: ART.brownChest, width: 50, height: Math.round(50 / ART_RATIO.brownChest) }} title="Daily 3" state="notyet" action={{ label: 'SEE' }}
+          <ListRow art={{ source: ART.brownChest, width: 50, height: Math.round(50 / ART_RATIO.brownChest) }} title="Daily 3" state="notyet" actionLabel='SEE'
             strip={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>{[0, 1, 2].map(i => <Spot key={i} state="empty" size={20} />)}<Body size="small" soft align="left" lines={1} style={{ marginLeft: 4 }}>0 of 3 done</Body></View>} />
         </View>
       </InPage>
-      <World><ListRow art={CHEST} title="Row on the world" line="Level 1: the card wears the edge." state="third" action={{ label: 'SEE' }} /></World>
-      <MapGround><ListRow art={CHEST} title="Row on the map" line="3 pt line, 50 percent drop." state="third" action={{ label: 'SEE' }} /></MapGround>
+      <World><ListRow art={CHEST} title="Row on the world" line="Level 1: the card wears the edge." state="third" actionLabel='SEE' /></World>
+      <MapGround><ListRow art={CHEST} title="Row on the map" line="3 pt line, 50 percent drop." state="third" actionLabel='SEE' /></MapGround>
     </Section>
   );
 }
@@ -630,7 +630,7 @@ function SwitchSection() {
     <Section id="switch" title="Switch">
       <World><Row gap={16}><Switch value={on} onChange={setOn} accessibilityLabel="Music" /><Switch value={false} accessibilityLabel="Sound effects" /><Switch value accessibilityLabel="Off" disabled /></Row><Note>On (gold), off (blue), off and disabled.</Note></World>
       <MapGround><Row gap={16}><Switch value accessibilityLabel="On" /><Switch value={false} accessibilityLabel="Off" /></Row></MapGround>
-      <InPage><Card padding={14}><Row gap={16}><Name>Music</Name><Switch value accessibilityLabel="Music" /></Row></Card></InPage>
+      <InPage><Card padding="snug"><Row gap={16}><Name>Music</Name><Switch value accessibilityLabel="Music" /></Row></Card></InPage>
     </Section>
   );
 }

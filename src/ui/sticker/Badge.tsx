@@ -3,14 +3,27 @@
  * under it. What VoiceOver says comes from the caller ("20 prizes to claim").
  */
 import { memo } from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { View, type StyleProp } from 'react-native';
 import StickerText from './StickerText';
+import type { LayoutStyle } from './style';
 import { TEXT } from './textRoles';
 import { BADGE, INK } from './tokens';
 
 export function badgeText(count: number): string {
   if (!(count > 0)) return '';
   return count > BADGE.max ? `${BADGE.max}+` : String(Math.floor(count));
+}
+
+/**
+ * What VoiceOver says for a part that wears a badge: the caller's words, then the count and the
+ * caller's noun ("Daily chest, 2 ready"), composed by the part so the count and the words never
+ * drift. No count: the words alone. Pure, tested.
+ */
+export function badgeLabel(words: string, count: number | undefined, noun?: string): string {
+  const text = count ? badgeText(count) : '';
+  if (!text) return words;
+  const said = text === `${BADGE.max}+` ? `over ${BADGE.max}` : text;
+  return noun ? `${words}, ${said} ${noun}` : `${words}, ${said}`;
 }
 
 const SPEC = { ...TEXT.tag, size: BADGE.font, spacing: 0, maxScale: 1 };
@@ -21,7 +34,7 @@ function BadgeImpl({ count, label, hidden = false, style }: {
   readonly label: string;
   /** A parent already says the count (a round button's label). */
   readonly hidden?: boolean;
-  readonly style?: StyleProp<ViewStyle>;
+  readonly style?: StyleProp<LayoutStyle>;
 }) {
   const text = badgeText(count);
   if (!text) return null;

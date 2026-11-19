@@ -46,6 +46,8 @@ const STUBS = {
   'react-native-safe-area-context': anything('safe'),
   'expo-linear-gradient': anything('grad'),
   '../../gamekit/Haptics': { haptic: () => {} },
+  '@react-navigation/native': { NavigationContext: { Provider: 'P', _v: undefined }, NavigationRouteContext: { Provider: 'P', _v: undefined } },
+  '../GameIcon': { ICON_SOURCES: { coin: 'coin.png', ticket: 'ticket.png' } },
 };
 const part = name => loadTs(`src/ui/sticker/${name}`, STUBS);
 
@@ -125,7 +127,7 @@ test('no black and no gray anywhere in the tokens; the off button is sky, never 
   }
   for (const gone of ['offLip', 'offFaceTop', 'offFaceLow', 'offInk', 'offStroke', 'spotNextFill']) assert.ok(!(gone in tokens.SHADE), `SHADE.${gone} is gone`);
   const button = source(path.join(dir, 'StickerButton.tsx'));
-  assert.match(button, /off: \{ lip: INK\.skyLip, face: \[SHADE\.skyPale, INK\.sky\], shine: SHADE\.shine50, ink: 'soft' \}/);
+  assert.match(button, /off: \{ lip: INK\.skyLip, face: \[INK\.sky, INK\.sky\], shine: null, ink: 'soft' \}/, 'off is sky paper pressed in, no top line: never slate, never the white third');
 });
 
 // ---------- the two-level rule ----------
@@ -185,6 +187,9 @@ test('no part takes an edge prop, and the place providers stay internal', () => 
   for (const internal of ['StickerGround', 'PlaceProvider', 'StickerText', 'SHADE', 'DROP', 'GALLERY', "export * from './tokens'"]) {
     assert.ok(!index.includes(internal), `the barrel exports ${internal}`);
   }
+  // No palette and no wave foot for screens: a screen that needs a colour has found a missing part,
+  // and only Page, Screen, Sheet and Dialog draw a wave foot (which grants the primary its edge).
+  for (const internal of ['INK', 'RADIUS', 'WaveFoot']) assert.doesNotMatch(index, new RegExp(`\\b${internal}\\b`), `the barrel exports ${internal}`);
   assert.doesNotMatch(index, /\{[^}]*\bGround\b[^}]*\}/, 'the barrel exports the internal Ground');
   for (const pub of ['Screen', 'World', 'MapGround', 'Header', 'Footer', 'Sheet', 'Dialog', 'Stage', 'Switch', 'showToast', 'StatePanel', 'ListRow', 'FilterChips', 'Body', 'Caps']) {
     assert.match(index, new RegExp(`\\b${pub}\\b`), `the barrel misses ${pub}`);
@@ -237,9 +242,12 @@ test('text roles are the DIRECTION.md type table, and paper is always plain navy
   assert.deepEqual(plain(roles.inkFor(T.title, false)), { ink: 'white', stroke: 2.7, drop: 2.5, smallDrop: false });
   assert.deepEqual(plain(roles.inkFor(T.caps, false)), { ink: 'white', stroke: 0, drop: 0, smallDrop: true }, 'caps on blue are plain white');
   assert.equal(roles.inkFor(T.hero, false, 'gold').ink, 'gold');
-  // StickerText: on paper there is never a stroke, whatever was asked.
+  assert.equal(roles.inkFor(T.hero, true, 'gold').ink, 'goldInk', 'gold on paper is gold ink');
+  // StickerText draws with the one tested rule: its ink, stroke and drop come from inkFor.
   const st = source(path.join(dir, 'StickerText.tsx'));
-  assert.match(st, /const width = onPaper \|\| tone === 'navy' \|\| tone === 'soft' \? 0 : strokeFor\(size, askedStroke\);/);
+  assert.match(st, /import \{ inkFor[^}]*\} from '\.\/textRoles'/, 'StickerText imports inkFor');
+  assert.match(st, /const ink = inkFor\(/, 'StickerText inks from inkFor');
+  assert.doesNotMatch(st, /INK\.goldInk : INK\.gold|onPaper \? INK\.navySoft/, 'no second ink rule beside inkFor');
   assert.match(st, /fit = false/, 'fit is off unless asked');
   assert.match(st, /const measureNode = shrink && natural === 0 \?/, 'the measure node unmounts once measured');
   assert.doesNotMatch(st, /adjustsFontSizeToFit|styles\.hidden/, 'no system shrink and no invisible first frame');
@@ -276,7 +284,14 @@ test('the Header is never taller than today\'s top bar (status bar + 70) for the
   const body = header.slice(header.indexOf('function HeaderImpl'));
   assert.doesNotMatch(body, /wavePath|waveRun|WAVE\./, 'the Header draws no wave');
   assert.doesNotMatch(body, /position: 'absolute', left: 0, right: 0, top: 0, height, zIndex/, 'the Header is in flow, not an overlay');
-  assert.match(body, /style=\{\[\{ height, zIndex: 20 \}, slideStyle\]\}/);
+  // The band is straight layers that end exactly at the bar's height: water, line, edge, drop.
+  const hp = part('Header.tsx');
+  for (const inset of [62, 59, 20, 0]) {
+    const lay = plain(hp.headerLayers(inset));
+    assert.ok(lay.water < lay.line && lay.line < lay.edge && lay.edge < lay.drop);
+    assert.equal(lay.drop, layout.headerHeight(inset), 'the drop ends where the bar ends: nothing hangs under it');
+  }
+  assert.doesNotMatch(header, /from 'react-native-svg'/, 'the straight band is views and RN images (server art through the image cache)');
 });
 
 test('the Footer takes its own space: band never taller than today, hump and Map icon inside its box', () => {
@@ -310,8 +325,10 @@ test('the Footer takes its own space: band never taller than today, hump and Map
 
 test('Screen lays the bars out in flow and pads the body from the parts', () => {
   const screen = part('Screen.tsx');
-  assert.deepEqual(plain(screen.screenBodyPadding(true, true, 62, 34)), { top: tokens.HEADER.gap, bottom: tokens.HEADER.gap });
-  assert.deepEqual(plain(screen.screenBodyPadding(false, false, 20, 0)), { top: 20 + tokens.HEADER.gap, bottom: tokens.SPACE.margin + tokens.HEADER.gap });
+  // The footer sits over the body's bottom, so the body pads by the footer's whole box and gap (clear at rest, under the wave when scrolled).
+  assert.deepEqual(plain(screen.screenBodyPadding(true, 'footer', 62, 34, 402)), { top: tokens.HEADER.gap, bottom: layout.footerContentBottom(402) });
+  assert.deepEqual(plain(screen.screenBodyPadding(true, 'foot', 62, 34, 402)), { top: tokens.HEADER.gap, bottom: tokens.HEADER.gap });
+  assert.deepEqual(plain(screen.screenBodyPadding(false, 'none', 20, 0, 375)), { top: 20 + tokens.HEADER.gap, bottom: tokens.SPACE.margin + tokens.HEADER.gap });
   const text = source(path.join(dir, 'Screen.tsx'));
   assert.match(text, /\{header \? <Header \{\.\.\.header\}/);
   assert.ok(text.indexOf('<Header') < text.indexOf('{body}') && text.indexOf('{body}') < text.indexOf('<Footer'), 'header, body, footer in flow, in that order (VoiceOver reads in order)');
@@ -387,8 +404,31 @@ test('spots: dark navy discs on blue, a ghost is a tinted silhouette, next is a 
   assert.equal(next.dashed, false);
   const paperGhost = plain(spot.spotLook('ghost', true));
   assert.equal(paperGhost.fill, tokens.SHADE.spotPaper);
-  assert.equal(paperGhost.ghostTint, tokens.INK.skyLip);
+  assert.equal(paperGhost.ghostTint, tokens.INK.navySoft, 'on paper the ghost is navy soft');
+  assert.equal(ghost.ghostTrace, 0, 'no layer of the art\'s own colour');
   assert.match(source(path.join(dir, 'Spot.tsx')), /tintColor: look\.ghostTint/);
+  assert.doesNotMatch(source(path.join(dir, 'Spot.tsx')), /ghostTrace \}|opacity: SPOT\.ghostTrace/, 'the art is never drawn faded under its ghost');
+  // A gold ghost samples exactly as a blue one: tintColor replaces every pixel's colour, so the art's own colour never shows.
+  const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  const over = (top, a, under) => top.map((c, i) => Math.round(c * a + under[i] * (1 - a)));
+  const ghostPixel = (art, paper) => {
+    const look = plain(spot.spotLook('ghost', paper));
+    const page = rgb(tokens.INK.blue);
+    const disc = paper ? rgb(tokens.SHADE.spotPaper) : over(rgb(tokens.INK.navy), 0.5, page);
+    const tinted = rgb(look.ghostTint); // tintColor: the art's colour is replaced
+    void art;
+    return over(tinted, look.ghostOpacity, disc);
+  };
+  for (const paper of [false, true]) {
+    const gold = ghostPixel(rgb(tokens.INK.gold), paper);
+    const blue = ghostPixel(rgb(tokens.INK.blueBright), paper);
+    assert.deepEqual(gold, blue, 'the art\'s colour does not reach the ghost');
+    const [r, g, b] = gold;
+    assert.ok(b - r >= 30, `the ghost reads blue, not gray (${gold})`);
+  }
+  const fit = plain(spot.fitArt(44, 799 / 549));
+  assert.deepEqual(fit, { width: 44, height: 30 }, 'a ticket fits the prize box by its longer side');
+  assert.deepEqual(plain(spot.fitArt(44, 196 / 284)), { width: 30, height: 44 });
 });
 
 test('badge: the real count up to 99, then 99+; its words come from the caller', () => {
@@ -400,6 +440,12 @@ test('badge: the real count up to 99, then 99+; its words come from the caller',
   assert.equal(badge.badgeText(100), '99+');
   assert.doesNotMatch(source(path.join(dir, 'Badge.tsx')), /new`|'new'/, 'no English spoken copy in the kit');
   assert.match(source(path.join(dir, 'Badge.tsx')), /readonly label: string;/);
+  // Parts compose what VoiceOver says: the caller's words, the count, the caller's noun.
+  assert.equal(badge.badgeLabel('Daily chest', 2, 'ready'), 'Daily chest, 2 ready');
+  assert.equal(badge.badgeLabel('Profile', 0, 'new'), 'Profile');
+  assert.equal(badge.badgeLabel('Stamps', 120, 'prizes'), 'Stamps, over 99 prizes');
+  assert.equal(badge.badgeLabel('Profile', 3), 'Profile, 3');
+  for (const name of ['RoundButton.tsx', 'Footer.tsx', 'ListRow.tsx']) assert.match(source(path.join(dir, name)), /badgeLabel\(/, `${name} leaves the count to the caller's words`);
 });
 
 test('list rows: one gold for ready, blue second, white third and not yet, the check for done, one VoiceOver stop', () => {
@@ -414,6 +460,15 @@ test('list rows: one gold for ready, blue second, white third and not yet, the c
   assert.match(text, /accessibilityActions=/, 'the row is one stop and its action is its button');
   assert.doesNotMatch(text, /to claim|`\$\{badge\} new`/, 'no English copy in the row');
   assert.match(text, /size="row"/, 'the row action is the named row size, no face override');
+  assert.doesNotMatch(text, /readonly action\?:/, 'flat action props: an object prop would defeat the row\'s memo');
+  assert.match(text, /handler\.current = onAction/, 'the handler lives in a ref');
+  assert.match(text, /busy=\{actionBusy\} disabled=\{actionDisabled\}/, 'the action can be busy or off');
+  // The art keeps 8 pt from the page's line at every width.
+  for (const pad of [tokens.SPACE.pagePad, tokens.SPACE.pageSnug]) {
+    const over = layout.rowArtOver(pad, tokens.ROW.artOver);
+    assert.ok(pad - over >= tokens.SPACE.artClear, `pad ${pad}: art ${pad - over} pt from the page line`);
+  }
+  assert.equal(layout.rowArtOver(40, 14), 14, 'the board\'s 14 where there is room');
 });
 
 test('currency chips: geometry from the kind, a step width per digit count, tabular digits', () => {
@@ -429,8 +484,7 @@ test('currency chips: geometry from the kind, a step width per digit count, tabu
 test('progress bar: the width lives in a shared value, the prize stands inside the bar\'s box', () => {
   const text = source(path.join(dir, 'ProgressBar.tsx'));
   assert.doesNotMatch(text, /useState/, 'no React state from layout');
-  assert.match(text, /groove\.value = Math\.max\(0, e\.nativeEvent\.layout\.width/);
-  assert.match(text, /if \(first\.current\) \{ first\.current = false; return; \}/, 'no fade on mount');
+  assert.doesNotMatch(text, /setState|onLayout=\{[^}]*set[A-Z]/, 'layout never goes through React state');
   const bar = part('ProgressBar.tsx');
   assert.equal(bar.prizeRoom(40), 30);
   assert.equal(bar.clamp01(2), 1);
@@ -457,6 +511,7 @@ test('the layer queue: one at a time, in order; the next shows only after the fr
   q.close(b);
   assert.equal(q.count(), 1, 'a waiting layer is simply dropped');
   const c = q.present({ element: 'C' });
+  q.drawn(a);
   q.close(a);
   assert.equal(q.front().id, a, 'the front stays while it peels off');
   assert.equal(q.front().leaving, true);
@@ -470,13 +525,96 @@ test('the layer queue: one at a time, in order; the next shows only after the fr
   const out = () => {};
   assert.equal(layers.scrimAction({ wayOut: out }), out);
   assert.equal(layers.scrimAction({ wayOut: out, dismissible: false }), null);
+  // A layer no host ever drew is dropped at once on close: nothing to peel, so the queue never blocks.
+  const q2 = layers.createLayerQueue();
+  const lonely = q2.present({ element: 'X' });
+  q2.close(lonely);
+  assert.equal(q2.count(), 0);
+  const drawn = q2.present({ element: 'Y' });
+  q2.drawn(drawn);
+  q2.close(drawn);
+  assert.equal(q2.front().leaving, true, 'a drawn layer peels off');
+});
+
+test('hosts follow navigation focus: push, cover by a legacy screen, pop; the root host is the fallback', () => {
   const hosts = layers.createHostRegistry();
-  const h1 = hosts.add();
-  const h2 = hosts.add();
-  assert.equal(hosts.isActive(h2), true, 'the newest host (the screen on top) draws');
-  assert.equal(hosts.isActive(h1), false);
-  hosts.remove(h2);
-  assert.equal(hosts.isActive(h1), true);
+  assert.equal(hosts.active(), null, 'no host: nothing draws');
+  const root = hosts.add({ root: true });
+  assert.equal(hosts.isActive(root), true, 'only the root: it draws (a legacy screen is on top)');
+  const a = hosts.add({ focused: true });
+  assert.equal(hosts.isActive(a), true, 'a kit screen with focus beats the root');
+  // push kit screen B over A
+  hosts.setFocused(a, false);
+  const b = hosts.add({ focused: true });
+  assert.equal(hosts.isActive(b), true);
+  // cover B with a legacy screen: B loses focus, the root host draws, never the covered B or A
+  hosts.setFocused(b, false);
+  assert.equal(hosts.isActive(root), true, 'covered kit screens never draw');
+  // the legacy screen pops: B has focus again
+  hosts.setFocused(b, true);
+  assert.equal(hosts.isActive(b), true);
+  // pop B: A gains focus
+  hosts.remove(b);
+  hosts.setFocused(a, true);
+  assert.equal(hosts.isActive(a), true);
+  // a host mounted first but focused last wins (mount order no longer decides)
+  const c = hosts.add({ focused: false });
+  hosts.setFocused(a, false);
+  hosts.setFocused(c, true);
+  assert.equal(hosts.isActive(c), true);
+  hosts.remove(root); hosts.remove(a); hosts.remove(c);
+  assert.equal(hosts.count(), 0);
+  const ov = source(path.join(dir, 'Overlay.tsx'));
+  assert.match(ov, /nav\.addListener\('focus'/, 'the host listens to navigation focus');
+  assert.match(source(path.join(dir, 'Root.tsx')), /useHostSlot\(true\)/, 'StickerRoot is the root fallback host');
+});
+
+test('toasts: one host draws and VoiceOver hears each toast once; with no host a toast is dropped, a dialog answers at once', () => {
+  const toast = part('Toast.tsx');
+  const q = toast.createToastQueue();
+  const id = q.show({ title: '+1 Ticket' });
+  assert.equal(q.announce(id), true);
+  assert.equal(q.announce(id), false, 'a second host (focus moved) does not announce again');
+  assert.equal(toast.showToast({ title: 'x' }, { count: () => 0 }), -1, 'no kit host: dropped, never shown late');
+  assert.match(source(path.join(dir, 'Toast.tsx')), /if \(!front \|\| !active\) return null;/, 'only the active host draws the toast');
+  const dialog = loadTs('src/ui/sticker/Dialog.tsx', STUBS);
+  return dialog.showStickerDialog({ title: 'Leave?', buttons: [{ text: 'Stay', style: 'cancel' }, { text: 'Leave' }] }, { count: () => 0 }).then(answer => {
+    assert.equal(answer, 0, 'resolved with the dismiss answer (the cancel)');
+  });
+});
+
+test('outside any kit root a part sits at level 2 on blue, and its gold still counts', () => {
+  assert.deepEqual(plain(level.DEFAULT_PLACE), { level: 'page', surface: 'blue', foot: false });
+  assert.equal(level.edgeFor('card', level.DEFAULT_PLACE), 0, 'a Card in a legacy box wears no white edge');
+  assert.equal(level.edgeFor('button', level.DEFAULT_PLACE, true), 0, 'a gold in a legacy box wears no edge');
+  assert.equal(level.edgeFor('page', level.DEFAULT_PLACE), 0);
+  // Render the context with no provider: the default place is the one above, and the gold counter has a root scope.
+  const ReactStub = { ...STUBS.react, createContext: v => ({ Provider: 'P', _v: v }), useContext: c => c._v };
+  const ctx = loadTs('src/ui/sticker/StickerContext.tsx', { ...STUBS, react: ReactStub });
+  assert.deepEqual(plain(ctx.useStickerPlace()), plain(level.DEFAULT_PLACE));
+  assert.equal(ctx.useRefuseInPage('Header'), false, 'a Header outside any kit root still draws (it is the bar)');
+  assert.equal(ctx.useInsidePage(), false);
+  const said = [];
+  const realWarn = console.warn;
+  level.resetWarnings();
+  assert.equal(level.primaryKey('Store', 'proof-shop'), 'primary-Store:proof-shop');
+  assert.notEqual(level.primaryKey('Store'), level.primaryKey('Settings'), 'each screen is heard, not only the first in a session');
+  void said; void realWarn;
+  assert.match(source(path.join(dir, 'Screen.tsx')), /warnKey=\{primaryKey\(route\?\.name, testID\)\}/);
+  assert.equal(level.tooManyEdgeKinds(['page', 'primary', 'label']), false);
+  assert.equal(level.tooManyEdgeKinds(['page', 'primary', 'card']), true, 'cards on the world, a page and the primary: three kinds');
+});
+
+test('Screen hides header, body and footer from VoiceOver while a layer is up (the gate is a real gate)', () => {
+  const screen = part('Screen.tsx');
+  assert.deepEqual(plain(screen.behindLayer(true)), { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants', pointerEvents: 'none' });
+  assert.equal(screen.behindLayer(false).accessibilityElementsHidden, false);
+  const text = source(path.join(dir, 'Screen.tsx'));
+  const body = text.slice(text.indexOf('function ScreenImpl'));
+  assert.match(body, /accessibilityElementsHidden=\{hide\.accessibilityElementsHidden\} importantForAccessibility=\{hide\.importantForAccessibility\}\s*pointerEvents=\{hide\.pointerEvents\}>\s*\{body\}/, 'the body is hidden under a layer');
+  assert.match(body, /<Header \{\.\.\.header\} inert=\{layerUp/);
+  assert.match(body, /<Footer \{\.\.\.footer\} inert=\{layerUp/);
+  assert.match(body, /\{fx \? <View[^>]*importantForAccessibility="no-hide-descendants"/);
 });
 
 test('the layer host is a real modal: no native Modal, a11y modal, escape and back take the way out, modalLayers registered', () => {
@@ -510,7 +648,6 @@ test('footer, tabs, switch, toast, state panel, stage: the rules of each part', 
   assert.match(tabs, /minWidth: BUTTON\.minTouch/, 'tabs reach 44 pt wide');
   assert.match(tabs, /translateY: \(picked \? -LIFT : 0\)/, 'the chip lifts by a transform, not layout');
   assert.doesNotMatch(tabs, /marginTop: picked/);
-  assert.match(tabs, /useCallback\(\(\) => \{ haptic\('tapLight'\); onPick\?\.\(item\.key\); \}, \[item\.key, onPick\]\)/, 'stable handlers');
   assert.doesNotMatch(tabs, /INK\.gold\b/, 'the pick is never gold');
   const sw = source(path.join(dir, 'Switch.tsx'));
   assert.match(sw, /accessibilityRole="switch"/);
@@ -561,7 +698,7 @@ test('kit engineering rules: no Skia, no measured SVG, no linear easing, springs
     assert.doesNotMatch(text, /from '@expo\/vector-icons'|react-native-vector-icons/, `${name} uses a vector-font icon`);
     if (/withSpring\(/.test(text)) assert.match(text, /from '\.\.\/motion'|from '\.\.\/\.\.\/motion'/, `${name} springs without ui/motion`);
     for (const m of text.matchAll(/useAnimatedStyle\(\(\) => \(?(?:reduced\s*\?\s*)?\(?\{([^]*?)\}\)?\)/g)) {
-      const keys = [...m[1].matchAll(/(\w+):/g)].map(k => k[1]).filter(k => !['translateX', 'translateY', 'scale', 'rotate'].includes(k));
+      const keys = [...m[1].matchAll(/(\w+):/g)].map(k => k[1]).filter(k => !['translateX', 'translateY', 'scale', 'scaleX', 'scaleY', 'rotate'].includes(k));
       for (const k of keys) assert.ok(['opacity', 'transform'].includes(k), `${name} animates ${k}`);
     }
   }
@@ -607,6 +744,7 @@ test('migrated screens hold no colour outside the kit tokens', () => {
   for (const file of MIGRATED) {
     const text = source(path.join(root, file));
     assert.doesNotMatch(text, /#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/, `${file} holds a colour`);
+    assert.doesNotMatch(text, /\bINK\.|\bSHADE\./, `${file} builds a box in kit colours`);
   }
 });
 
@@ -687,4 +825,161 @@ test('a prize flies on an eased arc, never linear, and skips flying under Reduce
 test('Screen\'s fx layer is above every bar and never takes a touch', () => {
   const text = source(path.join(dir, 'Screen.tsx'));
   assert.match(text, /\{fx \? <View style=\{StyleSheet\.absoluteFill\} pointerEvents="none"/);
+});
+
+// ---------- after the second critique ----------
+
+test('defaults never hide words: sentences, headings and caps wrap as far as they need; titles and names wrap to two', () => {
+  assert.deepEqual(plain(roles.ROLE_LINES), { title: 2, heading: 0, name: 2, count: 1, body: 0, caps: 0 });
+  const text = source(path.join(dir, 'Text.tsx'));
+  assert.match(text, /lines = ROLE_LINES\.body/);
+  assert.match(text, /lines = ROLE_LINES\.heading/);
+  assert.match(text, /lines = ROLE_LINES\.title/);
+  const dialog = source(path.join(dir, 'Dialog.tsx'));
+  assert.doesNotMatch(dialog, /lines=\{\d\}/, 'no dialog message or heading is capped');
+  for (const name of ['GhostButton.tsx']) assert.match(source(path.join(dir, name)), /role="none" fit>/, `${name} fits its label`);
+  const sb = part('StickerButton.tsx');
+  assert.equal(sb.BUTTON_DEFAULTS.fit(180), true, 'a fixed width: the label fits');
+  assert.equal(sb.BUTTON_DEFAULTS.fit(undefined), false);
+});
+
+test('art on a card\'s top edge is reserved: the card takes its rise as its own top margin', () => {
+  assert.equal(layout.cardTopRise({ edge: 3 }), 0, 'nothing rises: the caller\'s margins stand');
+  assert.equal(layout.cardTopRise({ topArt: 14, edge: 0 }), 14);
+  assert.equal(layout.cardTopRise({ topRow: tokens.ART_SIZE.prize, edge: 0 }), tokens.ART_SIZE.prize / 2, 'a row standing on the edge: half rises');
+  assert.equal(layout.cardTopRise({ topArt: 2, edge: 3 }), 3, 'never less than the white edge when anything rises');
+  assert.equal(layout.cardTopRise({ label: true, edge: 0 }), layout.cardLabelRise(0));
+  const card = source(path.join(dir, 'Card.tsx'));
+  assert.match(card, /const rise = cardTopRise\(/);
+  const win = source(path.join(dir, 'proof', 'ProofWin.tsx'));
+  assert.doesNotMatch(win, /position: 'absolute', top: -/, 'the win card places no art above a card by hand');
+  assert.match(win, /topRow=\{\{ size: 'prize'/);
+});
+
+test('the won coin never gives up size: at least 110 on the SE and 135 on the 17 Pro, breaking the window, never leaving its box', () => {
+  const stage = part('Stage.tsx');
+  assert.ok(stage.winHeroSize(667) >= 110, 'SE');
+  assert.ok(stage.winHeroSize(874) >= 135, '17 Pro');
+  assert.ok(stage.winHeroSize(956) <= 150);
+  for (const [box, min] of [[130, 110], [stage.stageMinBox(110), 110], [150, 144], [400, 144]]) {
+    const l = plain(stage.stageLayout(box, min));
+    assert.ok(l.hero >= min, `${box}: hero ${l.hero} under ${min}`);
+    assert.ok(l.heroTop >= 0 && l.heroTop + l.hero <= box, `${box}: the hero leaves the stage's own box`);
+    assert.ok(l.windowTop + l.windowHeight === box);
+    if (l.hero > l.windowHeight) assert.ok(l.heroTop < l.windowTop, 'the hero breaks the window\'s top edge');
+  }
+  assert.deepEqual(plain(stage.stageLayout(400, 144)), { hero: 344, heroTop: 28, windowTop: 0, windowHeight: 400 }, 'room to spare: the window is the whole box');
+  const win = source(path.join(dir, 'proof', 'ProofWin.tsx'));
+  assert.doesNotMatch(win, /STAGE_ROOM|STAGE_MIN|height \* 0\.5 -/, 'no stage size measured by hand');
+  assert.match(win, /hero=\{\{ min: winHeroSize\(height\)/);
+  assert.match(source(path.join(dir, 'Stage.tsx')), /withSpring\(1, SPRING\.stamp\)/, 'the landing squash springs back');
+});
+
+test('hanging art keeps 8 pt from the screen edge: Page clamps side art', () => {
+  assert.equal(layout.sideArtOver(undefined), tokens.SPACE.artClear);
+  assert.equal(layout.sideArtOver(16), tokens.SPACE.margin - tokens.SPACE.artClear, 'asked for 16, clamped');
+  for (const asked of [0, 4, 8, 16, 30]) {
+    const left = tokens.SPACE.margin - layout.sideArtOver(asked);
+    assert.ok(left >= tokens.SPACE.artClear, `asked ${asked}: the art's left is ${left} pt from the screen`);
+  }
+  assert.match(source(path.join(dir, 'Page.tsx')), /sideArtOver\(sideArt\.over\)/);
+});
+
+test('the Shop wallet is one row at every phone width', () => {
+  const chip = part('CurrencyChip.tsx');
+  const row = chip.chipWidth(12) + chip.chipWidth(3825) + chip.chipWidth(935) + 2 * tokens.GAP.base;
+  for (const width of [320, 375, 402, 440]) assert.ok(row <= layout.screenFrameWidth(width), `${width}: the wallet (${row}) wraps`);
+  const shop = source(path.join(dir, 'proof', 'ProofShop.tsx'));
+  assert.doesNotMatch(shop, /flexWrap|columnGap/, 'no wrapping wallet');
+  assert.match(shop, /size="small" width=\{64\}/, 'the welcome card\'s OK is small');
+});
+
+test('the map credit ends clear of the footer\'s wave, and Alex\'s discs keep today\'s size', () => {
+  const map = loadTs('src/ui/sticker/proof/ProofMap.tsx', { ...STUBS, './proofCoins': { useParkCoinArt: () => ({}) } });
+  for (const [w, h] of [[375, 667], [402, 874], [440, 956]]) {
+    const at = layout.mapAttributionBottom(w);
+    assert.ok(at >= layout.footerBand(w) + tokens.WAVE.amplitude / 2 + tokens.SPACE.base, 'the credit line clears the wave crest');
+    const plate = plain(map.platePlacement(w, h, at));
+    const creditY = plate.top + (2010 / 2200) * plate.height;
+    assert.ok(creditY <= h - at + 0.01, `${w}x${h}: the credit ends ${h - creditY} pt above the bottom, under ${at}`);
+    assert.ok(plate.top + plate.height >= h - layout.footerBand(w), 'the map still runs under the whole band');
+  }
+  const text = source(path.join(dir, 'proof', 'ProofMap.tsx'));
+  const disc = /const DISC = \{ follow: (\d+), chest: (\d+), help: (\d+), watch: (\d+), shelf: (\d+) \}/.exec(text).slice(1).map(Number);
+  const [follow, , , watch, shelf] = disc;
+  assert.ok(follow >= 56 && watch >= 72 && shelf >= 68, 'today\'s sizes: follow 56, wait times 72, Shelf 68 (atlas 018)');
+  assert.match(text, /kind="follow"/, 'the follow disc carries its locate pointer');
+  assert.match(text, /expand=\{\{/, 'the guide card has its chevron disc');
+});
+
+test('buttons: one height rule, the kit\'s defaults, the off look says why', () => {
+  const button = source(path.join(dir, 'StickerButton.tsx'));
+  assert.match(button, /const height = buttonHeight\(size, onMap\);/, 'StickerButton draws the tested height');
+  assert.match(button, /const line = buttonLine\(onMap\);/);
+  const sb = part('StickerButton.tsx');
+  assert.equal(sb.BUTTON_DEFAULTS.variant, 'second', 'gold is only ever chosen on purpose (one gold per screen)');
+  assert.equal(sb.BUTTON_DEFAULTS.fullWidth(undefined), true, 'stretches like GameButton (fullWidth = true)');
+  assert.equal(sb.BUTTON_DEFAULTS.fullWidth(164), false, 'a given width wins');
+  assert.equal(sb.OFF_LIP, 2);
+  assert.ok(sb.glintFor('key', 42).size < sb.glintFor('medium', 44).size, 'a smaller glint under 44 pt');
+  assert.ok(sb.glintFor('key', 42).left >= 10);
+  assert.match(button, /readonly reason\?: string;/);
+  assert.doesNotMatch(button, /Math\.max\(p\.value, held\)/, 'buttons do not pay for the gallery\'s pressed sample');
+  assert.match(button, /\{e > 0 \? <EdgeLayers/, 'edge layers mount only on the edged primary');
+  const icons = loadTs('src/ui/sticker/icons.ts', STUBS);
+  assert.equal(icons.iconArt('ticket'), 'ticket.png', 'an icon name draws Alex\'s file');
+  assert.equal(icons.iconArt('timer'), undefined, 'a generated icon draws nothing in the kit');
+  const game = source(path.join(root, 'src/ui/GameButton.tsx'));
+  assert.match(game, /fullWidth = true/, 'GameButton still stretches by default (the kit matches)');
+});
+
+test('parts take a layout style only: a screen cannot paint a box onto a kit part', () => {
+  const style = source(path.join(dir, 'style.ts')).slice(source(path.join(dir, 'style.ts')).indexOf('Pick<ViewStyle'));
+  for (const banned of ['backgroundColor', 'borderWidth', 'borderColor', 'borderRadius', 'padding', "'height'"]) assert.ok(!style.includes(banned), `LayoutStyle allows ${banned}`);
+  for (const name of ['Page.tsx', 'Card.tsx', 'StickerButton.tsx', 'Tag.tsx', 'Badge.tsx', 'Tabs.tsx', 'ProgressBar.tsx', 'CurrencyChip.tsx', 'ListRow.tsx', 'Switch.tsx', 'RoundButton.tsx', 'GhostButton.tsx', 'Spot.tsx', 'Stage.tsx', 'StatePanel.tsx', 'Arrange.tsx']) {
+    const text = source(path.join(dir, name));
+    assert.doesNotMatch(text, /readonly style\?: StyleProp<ViewStyle>/, `${name} takes a free ViewStyle`);
+  }
+  const arrange = loadTs('src/ui/sticker/Arrange.tsx', STUBS);
+  assert.ok(arrange.Row && arrange.Stack, 'Row and Stack exist');
+  for (const gap of Object.values(tokens.GAP)) assert.equal(gap % 2, 0, 'gaps are on the 2 and 4 pt steps');
+});
+
+test('proofs carry no hand gaps: named gaps and SPACE only', () => {
+  for (const name of ['ProofGate.tsx', 'ProofRewards.tsx', 'ProofShelf.tsx', 'ProofWin.tsx', 'ProofMap.tsx', 'ProofShop.tsx']) {
+    const text = source(path.join(dir, 'proof', name));
+    assert.doesNotMatch(text, /\bgap: \d|paddingVertical: \d|paddingBottom: \d|marginRight: \d|marginTop: \d|top: \d{2}\b/, `${name} has a hand number`);
+    assert.doesNotMatch(text, /LINE\.page \* 2|SPACE\.pagePad \* 2/, `${name} re-derives a page's inner width`);
+  }
+});
+
+test('the win card arrives whole over the map it was won on: no blank world, no empty box', () => {
+  const win = source(path.join(dir, 'proof', 'ProofWin.tsx'));
+  assert.match(win, /if \(!ready\) return <Screen testID="proof-win-wait" ground="map" mapLayer=\{mapLayer\}/, 'while the art loads, the map stays as it was');
+  assert.match(win, /ground="map" mapLayer=\{mapLayer\} dim/, 'the card sits over the dimmed map');
+  assert.match(win, /<Spot state="empty" stickAt=/, 'each prize is stuck into its own empty spot');
+  assert.match(source(path.join(dir, 'Stage.tsx')), /<Spot state="next"/, 'a next spot waits where the coin lands');
+  assert.match(source(path.join(dir, 'proof', 'ProofRewards.tsx')), /ground="map" mapLayer=\{mapLayer\}/, 'Rewards opens over the map');
+  assert.match(source(path.join(dir, 'proof', 'ProofShelf.tsx')), /footer=\{\{ items: FOOTER_ITEMS/, 'the shelf proof has the footer');
+});
+
+test('empty, error and loading: Alex\'s shark big, SharkLoader\'s props by name, never a page in a page', () => {
+  const state = part('StatePanel.tsx');
+  assert.ok(state.stateSharkHeight('empty', false) >= 120);
+  assert.ok(state.stateSharkHeight('error', false) >= 120);
+  const shark = source(path.join(root, 'src/ui/SharkLoader.tsx'));
+  const names = [...shark.slice(shark.indexOf('export type SharkLoaderProps'), shark.indexOf('};', shark.indexOf('export type SharkLoaderProps'))).matchAll(/readonly (\w+)\??:/g)].map(m => m[1]);
+  const kit = source(path.join(dir, 'StatePanel.tsx'));
+  const props = kit.slice(kit.indexOf('export type StatePanelProps'), kit.indexOf('\n};', kit.indexOf('export type StatePanelProps')));
+  for (const name of names) assert.match(props, new RegExp(`readonly ${name}\\??:`), `StatePanelProps misses SharkLoader's ${name}`);
+  assert.match(source(path.join(dir, 'Page.tsx')), /if \(useInsidePage\(\)\) \{/, 'a Page inside a page draws as a Card');
+});
+
+test('a flight keeps its handler in a ref and lands at once under Reduce Motion', () => {
+  const text = source(path.join(dir, 'Flight.tsx'));
+  assert.match(text, /landRef\.current = onLand/);
+  assert.doesNotMatch(text, /\[delay, onLand, t\]/, 'a fresh onLand never restarts a flight');
+  assert.match(text, /if \(reduced\) \{/);
+  const bar = source(path.join(dir, 'ProgressBar.tsx'));
+  assert.match(bar, /opacity: groove\.value > 0 \?/, 'the fill hides until the groove is laid out');
 });

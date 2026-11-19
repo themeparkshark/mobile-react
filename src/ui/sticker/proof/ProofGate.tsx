@@ -7,6 +7,7 @@
  */
 import { useCallback, useState } from 'react';
 import { View } from 'react-native';
+import { Row, Stack } from '../Arrange';
 import Card from '../Card';
 import Dialog from '../Dialog';
 import Glyph from '../Glyph';
@@ -37,33 +38,35 @@ export default function ProofGate() {
   return (
     <Screen header={{ title: 'SHARK SHOP', onBack: noop, onHelp: noop }} testID="proof-gate">
       <Dialog visible label={{ text: 'Ask a grown-up', large: true, art: 'lock' }} wayOut={{ label: 'Not now', onPress: noop }} testID="proof-gate-dialog">
-        <Card>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.pageSnug, paddingVertical: 7, gap: 11 }}>
+        <Card padding="snug">
+          <Row gap="card">
             <Glyph kind="money" size={27} />
             <View style={{ flex: 1 }}>
-              <Name fit>This costs real money.</Name>
+              <Name fit lines={1}>This costs real money.</Name>
               <Body size="small" soft align="left">A grown-up sees the details next.</Body>
             </View>
-          </View>
+          </Row>
         </Card>
         <Body style={{ marginTop: SPACE.cardGapLoose }}>Hand the phone to a grown-up.</Body>
         <Caps align="center" style={{ marginTop: SPACE.base * 2 }}>Grown-up question</Caps>
         <Heading style={{ marginTop: SPACE.base }}>thirty-three times nine</Heading>
         <View accessible accessibilityRole="text" accessibilityLabel={`Answer, ${typed.length} of ${ANSWER.length} digits`}
-          style={{ flexDirection: 'row', justifyContent: 'center', gap: SPACE.cardGap, marginTop: SPACE.base * 2, marginBottom: SPACE.cardGap }}>
-          {spots.map((s, i) => <Spot key={i} state={s.state} glyph={s.glyph ?? undefined} size={GATE.spot} />)}
+          style={{ marginTop: SPACE.base * 2, marginBottom: SPACE.cardGap }}>
+          <Row justify="center" gap="card">
+            {spots.map((s, i) => <Spot key={i} state={s.state} glyph={s.glyph ?? undefined} size={GATE.spot} />)}
+          </Row>
         </View>
-        <View style={{ gap: GATE.rowGap }}>
+        <Stack gap="tight">
           {[0, 1, 2, 3].map(row => (
-            <View key={row} style={{ flexDirection: 'row', gap: GATE.keyGap }}>
+            <Row key={row} gap="loose">
               {KEYS.slice(row * 3, row * 3 + 3).map(key => key === 'ok'
                 ? <StickerButton key={key} label="OK" accessibilityLabel="OK, check the answer" variant="primary" size="key" busy={busy} style={{ flex: 1 }} onPress={() => press(key)} />
                 : key === 'del'
                   ? <StickerButton key={key} label="Delete" variant="key" size="key" glyph={<Glyph kind="delete" size={22} />} style={{ flex: 1 }} onPress={() => press(key)} />
                   : <StickerButton key={key} label={key} variant="key" size="key" style={{ flex: 1 }} onPress={() => press(key)} />)}
-            </View>
+            </Row>
           ))}
-        </View>
+        </Stack>
       </Dialog>
     </Screen>
   );

@@ -13,12 +13,12 @@
 import { memo } from 'react';
 import type { AccessibilityRole, StyleProp, TextStyle, ViewStyle } from 'react-native';
 import StickerText from './StickerText';
-import { TEXT } from './textRoles';
+import { ROLE_LINES, TEXT } from './textRoles';
 
 type Common = {
   readonly children: string;
   readonly align?: TextStyle['textAlign'];
-  /** Lines before it wraps (default 1; sentences default 2). */
+  /** Lines before it ends (ROLE_LINES: sentences, headings and caps never cut; titles and names wrap to two). */
   readonly lines?: number;
   /** One line that shrinks to fit its box (never under 60 percent). */
   readonly fit?: boolean;
@@ -29,7 +29,7 @@ type Common = {
   readonly style?: StyleProp<ViewStyle>;
 };
 
-export const Title = memo(function Title({ size = 'title', gold = false, align, lines, fit, label, role = 'header', style, children }: Common & {
+export const Title = memo(function Title({ size = 'title', gold = false, align, lines = ROLE_LINES.title, fit, label, role = 'header', style, children }: Common & {
   readonly size?: 'title' | 'large' | 'hero';
   readonly gold?: boolean;
 }) {
@@ -37,13 +37,13 @@ export const Title = memo(function Title({ size = 'title', gold = false, align, 
   return <StickerText spec={spec} tone={gold ? 'gold' : 'auto'} align={align} lines={lines} fit={fit} label={label} role={role} style={style}>{children}</StickerText>;
 });
 
-export const Heading = memo(function Heading({ size = 'heading', align, lines, fit, label, role = 'header', style, children }: Common & {
+export const Heading = memo(function Heading({ size = 'heading', align, lines = ROLE_LINES.heading, fit, label, role = 'header', style, children }: Common & {
   readonly size?: 'heading' | 'sub';
 }) {
   return <StickerText spec={size === 'sub' ? TEXT.sub : TEXT.heading} align={align} lines={lines} fit={fit} label={label} role={role} style={style}>{children}</StickerText>;
 });
 
-export const Name = memo(function Name({ small = false, align = 'left', lines, fit, label, role = 'text', style, children }: Common & {
+export const Name = memo(function Name({ small = false, align = 'left', lines = ROLE_LINES.name, fit, label, role = 'text', style, children }: Common & {
   readonly small?: boolean;
 }) {
   return <StickerText spec={small ? TEXT.nameSmall : TEXT.name} align={align} lines={lines} fit={fit} label={label} role={role} style={style}>{children}</StickerText>;
@@ -54,11 +54,11 @@ export const Count = memo(function Count({ size = 'count', gold = false, align, 
   readonly gold?: boolean;
 }) {
   const spec = size === 'hero' ? TEXT.hero : size === 'heading' ? TEXT.heading : TEXT.count;
-  return <StickerText spec={spec} tone={gold ? 'gold' : 'auto'} align={align} tabular label={label} role={role} style={style}>{children}</StickerText>;
+  return <StickerText spec={spec} tone={gold ? 'gold' : 'auto'} align={align} lines={ROLE_LINES.count} tabular label={label} role={role} style={style}>{children}</StickerText>;
 });
 
-/** Every Knockout sentence. Wraps to two lines by default and never ends in an ellipsis unless `lines` says so. */
-export const Body = memo(function Body({ size = 'body', soft = false, align = 'center', lines = 2, label, role = 'text', style, children }: Omit<Common, 'fit'> & {
+/** Every Knockout sentence. Wraps as far as it needs (the page scrolls); it ends early only when `lines` says so. */
+export const Body = memo(function Body({ size = 'body', soft = false, align = 'center', lines = ROLE_LINES.body, label, role = 'text', style, children }: Omit<Common, 'fit'> & {
   readonly size?: 'body' | 'mid' | 'small';
   /** The second-line colour (navy soft on paper, pale blue on colour). */
   readonly soft?: boolean;
@@ -71,5 +71,5 @@ export const Caps = memo(function Caps({ align = 'left', gold = false, label, ro
   /** Gold on colour (the guide card's NEXT COIN); on paper caps are always gold ink. */
   readonly gold?: boolean;
 }) {
-  return <StickerText spec={TEXT.caps} tone={gold ? 'gold' : 'auto'} align={align} label={label ?? children} role={role} style={style}>{children.toUpperCase()}</StickerText>;
+  return <StickerText spec={TEXT.caps} tone={gold ? 'gold' : 'auto'} align={align} lines={ROLE_LINES.caps} label={label ?? children} role={role} style={style}>{children.toUpperCase()}</StickerText>;
 });

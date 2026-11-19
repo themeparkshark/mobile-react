@@ -10,7 +10,8 @@
  * "selected"; handlers are stable so a memoised row never re-renders for a press.
  */
 import { memo, useCallback, type ReactNode } from 'react';
-import { Image, Pressable, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, Pressable, View, type ImageSourcePropType, type StyleProp } from 'react-native';
+import type { LayoutStyle } from './style';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { haptic } from '../../gamekit/Haptics';
@@ -61,7 +62,7 @@ const Tab = memo(function Tab({ item, picked, onPick }: { item: TabItem; picked:
   );
 });
 
-function TabsImpl({ items, picked, onPick, style }: { readonly items: readonly TabItem[]; readonly picked: string; readonly onPick?: (key: string) => void; readonly style?: StyleProp<ViewStyle> }) {
+function TabsImpl({ items, picked, onPick, style }: { readonly items: readonly TabItem[]; readonly picked: string; readonly onPick?: (key: string) => void; readonly style?: StyleProp<LayoutStyle> }) {
   return (
     <View accessibilityRole="tablist" style={[{ borderRadius: 999, borderWidth: LINE.card, borderColor: INK.navy, backgroundColor: INK.blueLip, padding: 5 }, style]}>
       <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 999, borderTopWidth: 4, borderColor: SHADE.grooveInset }} />
@@ -106,7 +107,7 @@ const Chip = memo(function Chip({ item, picked, onPick }: { item: TabItem; picke
   );
 });
 
-function FilterChipsImpl({ items, picked, onPick, style }: { readonly items: readonly TabItem[]; readonly picked: string; readonly onPick?: (key: string) => void; readonly style?: StyleProp<ViewStyle> }) {
+function FilterChipsImpl({ items, picked, onPick, style }: { readonly items: readonly TabItem[]; readonly picked: string; readonly onPick?: (key: string) => void; readonly style?: StyleProp<LayoutStyle> }) {
   return (
     <View accessibilityRole="tablist" style={[{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }, style]}>
       {items.map(item => <Chip key={item.key} item={item} picked={item.key === picked} onPick={onPick} />)}

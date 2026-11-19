@@ -12,11 +12,18 @@
  * back button take the way out (the wave foot's ghost), and the layer is registered with
  * src/ui/modalLayers so the app's native dialogs and the kit's layers never stack. It arrives
  * stuck on (the Page's arrive) and leaves peeled off; Reduce Motion: 150 ms fades.
- * Inside a page it refuses to mount. When several screens are mounted (a stack), only the newest
- * host draws.
+ * Inside a page it refuses to mount. When several screens are mounted (a stack), only the active
+ * host draws (layers.ts: the kit Screen that has navigation focus, else the root host from
+ * StickerRoot), so a layer is never drawn inside a covered screen. The room avoids the keyboard.
+ *
+ * Context: a layer's element is drawn under its host, not where it was asked for, so React context
+ * provided below the host's Screen (a park, a form, a list item) does not reach it. A native Modal
+ * kept the owner's tree. Step 2: pass what a layer needs in its props, or render it through a
+ * portal that keeps context; never rely on a provider between the Screen and the Sheet.
  */
-import { memo, useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { BackHandler, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { memo, useCallback, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { BackHandler, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { NavigationContext } from '@react-navigation/native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { modalLayers } from '../modalLayers';
@@ -26,7 +33,7 @@ import { layerHosts, scrimAction, stickerLayers, type LayerQueue } from './layer
 import { layerWidth } from './layout';
 import { WORLD } from './level';
 import { peelTiming, usePeelStyle } from './motion';
-import { INK, LAYER, STICK } from './tokens';
+import { INK, LAYER, SPACE, STICK } from './tokens';
 
 /** Side margin of a floating sheet or dialog (the board: 24 on a 390 phone). */
 export const OVERLAY_MARGIN = LAYER.margin;
@@ -38,20 +45,45 @@ export type LayerHostProps = {
   readonly bottom?: number;
   /** The queue it draws (default: the app's one). */
   readonly queue?: LayerQueue;
+  /** Whether this host is the one that draws (from useHostSlot: navigation focus, or the root fallback). */
+  readonly active: boolean;
 };
+
+/** Whether the screen this part sits in has navigation focus (true outside a navigator: the root). */
+function useNavFocused(): boolean {
+  const nav = useContext(NavigationContext);
+  const [focused, setFocused] = useState(() => (nav ? nav.isFocused() : true));
+  useEffect(() => {
+    if (!nav) return undefined;
+    setFocused(nav.isFocused());
+    const off1 = nav.addListener('focus', () => setFocused(true));
+    const off2 = nav.addListener('blur', () => setFocused(false));
+    return () => { off1(); off2(); };
+  }, [nav]);
+  return focused;
+}
+
+/**
+ * Register a host (a kit Screen's, or the root one) and say whether it is the one that draws.
+ * Screen calls it once and hands the answer to its LayerHost and its ToastHost.
+ */
+export function useHostSlot(root: boolean = false): boolean {
+  const focused = useNavFocused();
+  const [id] = useState(() => layerHosts.add({ root, focused }));
+  useEffect(() => () => layerHosts.remove(id), [id]);
+  useEffect(() => { layerHosts.setFocused(id, focused); }, [focused, id]);
+  return useSyncExternalStore(layerHosts.subscribe, () => layerHosts.isActive(id));
+}
 
 function useFrontLayer(queue: LayerQueue) {
   return useSyncExternalStore(queue.subscribe, queue.front);
 }
 
-function LayerHostImpl({ top, bottom, queue = stickerLayers }: LayerHostProps) {
+function LayerHostImpl({ top, bottom, queue = stickerLayers, active }: LayerHostProps) {
   const refused = useRefuseInPage('LayerHost');
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const reduced = useUiReducedMotion();
-  const [hostId] = useState(() => layerHosts.add());
-  useEffect(() => () => layerHosts.remove(hostId), [hostId]);
-  const active = useSyncExternalStore(layerHosts.subscribe, () => layerHosts.isActive(hostId));
   const front = useFrontLayer(queue);
   const frontId = active && front ? front.id : null;
 
@@ -67,12 +99,13 @@ function LayerHostImpl({ top, bottom, queue = stickerLayers }: LayerHostProps) {
 
   const scrim = useSharedValue(0);
   const out = useSharedValue(0);
-  const shown = !!front && ready && !refused;
+  const shown = active && !!front && ready && !refused;
   useEffect(() => {
-    if (!shown) return;
+    if (!shown || !front) return;
+    queue.drawn(front.id);
     out.value = 0;
     scrim.value = withTiming(1, { duration: reduced ? STICK.reducedFadeMs : 200, easing: Easing.out(Easing.quad) });
-  }, [front?.id, out, reduced, scrim, shown]);
+  }, [front?.id, out, queue, reduced, scrim, shown]);
 
   const finish = useCallback((id: number) => queue.done(id), [queue]);
   const leaving = active && front ? front.leaving : false;
@@ -102,8 +135,8 @@ function LayerHostImpl({ top, bottom, queue = stickerLayers }: LayerHostProps) {
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: INK.scrim }, scrimStyle]}>
         <Pressable accessible={false} importantForAccessibility="no" style={{ flex: 1 }} disabled={!onScrim} onPress={onScrim ?? undefined} />
       </Animated.View>
-      <View testID={front.testID} accessibilityViewIsModal onAccessibilityEscape={wayOut}
-        style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: top, paddingBottom: bottom ?? Math.max(insets.bottom, LAYER.bottom) + 8 }}
+      <KeyboardAvoidingView testID={front.testID} accessibilityViewIsModal onAccessibilityEscape={wayOut} behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: top, paddingBottom: bottom ?? Math.max(insets.bottom, LAYER.bottom) + SPACE.base * 2 }}
         pointerEvents="box-none">
         <Animated.View style={[{ width: sheetWidth, flexShrink: 1 }, peel]} pointerEvents="box-none">
           <PlaceProvider value={WORLD}>
@@ -112,7 +145,7 @@ function LayerHostImpl({ top, bottom, queue = stickerLayers }: LayerHostProps) {
             </FrameProvider>
           </PlaceProvider>
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

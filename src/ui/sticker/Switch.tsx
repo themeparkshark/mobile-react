@@ -6,7 +6,8 @@
  * off (disabled) is a sky groove (the kit's off look); busy holds it still and says busy.
  */
 import { memo, useEffect } from 'react';
-import { Pressable, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, View, type StyleProp } from 'react-native';
+import type { LayoutStyle } from './style';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../../gamekit/Haptics';
@@ -22,7 +23,7 @@ export type SwitchProps = {
   readonly disabled?: boolean;
   readonly busy?: boolean;
   readonly testID?: string;
-  readonly style?: StyleProp<ViewStyle>;
+  readonly style?: StyleProp<LayoutStyle>;
 };
 
 const GOLD = [INK.goldLight, INK.gold] as const;

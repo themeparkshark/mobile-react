@@ -7,7 +7,7 @@
  * card adds its rise to the room it takes. Screen lays the Header and the Footer out in flow, and
  * every Page reserves its own rise as top margin, so a screen never adds an overhang by hand.
  */
-import { BUTTON, DROP, EDGE, FOOTER, HEADER, LABEL, LAYER, LINE, RIBBON, SPACE, TOAST } from './tokens';
+import { BUTTON, DROP, EDGE, FOOTER, HEADER, LABEL, LAYER, LINE, RIBBON, SPACE, TOAST, WAVE } from './tokens';
 
 /** Today's top bar (src/components/Topbar.tsx): 70 pt of art under the status bar. The Header is never taller. */
 export const TOPBAR_TODAY = 70;
@@ -58,6 +58,16 @@ export function footerCrest(): number {
 /** How far up from the screen's bottom content must end on a screen with the Footer (its box plus the gap). */
 export function footerContentBottom(width: number): number {
   return footerHeight(width) + HEADER.gap;
+}
+
+/**
+ * Where a map's attribution (the OpenStreetMap credit, a licence requirement) must end above the
+ * screen's bottom on a screen with the Footer: the band, the wave's crest above its flat line
+ * (half the curve's control height) and a 4 pt gap. Beside the hump the wave is the footer's
+ * highest point, so a credit at the screen's left or right edge is fully clear of it.
+ */
+export function mapAttributionBottom(width: number): number {
+  return footerBand(width) + Math.ceil(WAVE.amplitude / 2) + SPACE.base;
 }
 
 /** Icon sizes scale with the window, as the board's 390 pt mock (clamped so they never crowd or shrink away). */
@@ -129,6 +139,42 @@ export function cardLabelRise(edge: number): number {
   return Math.max(labelRise(false, false), edge);
 }
 
+/**
+ * How far a card's own pieces rise above its top edge: a title label, art hanging off the top edge
+ * (`topArt`: how far past the edge), a row of pieces standing on it (`topRow`: their height, half
+ * rises), never less than the card's white edge when anything rises. Card takes this as its own top
+ * margin, as Page does with pageRise. Nothing rises: 0 (a plain card keeps its caller's margins).
+ */
+export function cardTopRise(spec: { readonly label?: boolean; readonly topArt?: number; readonly topRow?: number; readonly edge: number }): number {
+  const label = spec.label ? labelRise(false, false) : 0;
+  const art = spec.topArt ?? 0;
+  const row = (spec.topRow ?? 0) / 2;
+  const rise = Math.max(label, art, row);
+  return rise > 0 ? Math.ceil(Math.max(rise, spec.edge)) : 0;
+}
+
+/**
+ * How far art may hang off a page's left edge so it keeps SPACE.artClear from the screen edge:
+ * the page's own left on the screen less the clear room. Asked for more, it is clamped.
+ */
+export function sideArtOver(asked: number | undefined, pageLeft: number = SPACE.margin): number {
+  const want = asked ?? SPACE.artClear;
+  return Math.max(0, Math.min(want, pageLeft - SPACE.artClear));
+}
+
+/**
+ * How far a list row's art hangs off its card's left edge so it keeps SPACE.artClear from the
+ * page's line: the page's padding less the clear room (the board's 14 where there is room).
+ */
+export function rowArtOver(pagePad: number, asked: number = 14): number {
+  return Math.max(0, Math.min(asked, pagePad - SPACE.artClear));
+}
+
+/** The navy line of a button: 3 on the map (DIRECTION: map pieces get the 3 pt line), else 2.5. */
+export function buttonLine(onMap: boolean): number {
+  return onMap ? LINE.map : LINE.button;
+}
+
 /** Space between two stacked pages: the loose card gap; each page adds its own rise on top. */
 export const PAGE_GAP = SPACE.cardGapLoose;
 
@@ -150,10 +196,9 @@ export function buttonLip(size: ButtonSize): number {
   return size === 'small' ? BUTTON.lipSmall : BUTTON.lip;
 }
 
-/** A button's laid-out height: face, lip and the navy line above and below (3 on the map). */
+/** A button's laid-out height: face, lip and the navy line above and below (3 on the map). StickerButton draws exactly this. */
 export function buttonHeight(size: ButtonSize, onMap: boolean = false): number {
-  const line = onMap ? LINE.map : LINE.button;
-  return buttonFace(size) + buttonLip(size) + line * 2;
+  return buttonFace(size) + buttonLip(size) + buttonLine(onMap) * 2;
 }
 
 /** The width a floating sheet or dialog gets: the board's 24 pt margins, capped on wide screens. */

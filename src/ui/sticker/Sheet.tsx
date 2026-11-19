@@ -36,7 +36,7 @@ export type SheetProps = {
 export const SheetBody = memo(function SheetBody({ title, wayOut, foot, children }: Pick<SheetProps, 'title' | 'wayOut' | 'foot' | 'children'>) {
   return (
     <Page floating arrive scroll ribbon={{ text: title, kind: 'page' }}
-      foot={{ height: 62, children: foot ?? <GhostButton label={wayOut.label} accessibilityLabel={wayOut.accessibilityLabel} size="large" art={wayOut.art} onPress={wayOut.onPress} /> }}>
+      foot={{ children: foot ?? <GhostButton label={wayOut.label} accessibilityLabel={wayOut.accessibilityLabel} size="large" art={wayOut.art} onPress={wayOut.onPress} /> }}>
       {children}
     </Page>
   );

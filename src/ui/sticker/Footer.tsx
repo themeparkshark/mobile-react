@@ -15,7 +15,7 @@ import { Pressable, View, useWindowDimensions, type ImageSourcePropType } from '
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import Svg, { ClipPath, Defs, G, Image as SvgImage, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import { haptic } from '../../gamekit/Haptics';
-import Badge from './Badge';
+import Badge, { badgeLabel } from './Badge';
 import Lift from './Lift';
 import { PlaceProvider, useRefuseInPage } from './StickerContext';
 import StickerText from './StickerText';
@@ -54,10 +54,12 @@ export type FooterItem = {
   readonly key: string;
   /** The word under the icon ("Map"); shown in caps. */
   readonly label: string;
-  /** What VoiceOver says (default: the word). */
+  /** What VoiceOver says (default: the word); the part adds the badge's count and noun. */
   readonly accessibilityLabel?: string;
   /** A red count on the icon (Profile's notifications). */
   readonly badge?: number;
+  /** The word after the count ("new"), from the caller. */
+  readonly badgeNoun?: string;
   /** Alex's icon (default: FOOTER_ART in order). */
   readonly art?: ImageSourcePropType;
 };
@@ -70,6 +72,8 @@ export type FooterProps = {
   /** 0 at rest, 1 slid away (a catch moment), on the UI thread. */
   readonly slide?: SharedValue<number>;
   readonly inert?: boolean;
+  /** The theme's bottom bar art (theme.bottom_bar_url, today's Wrapper), drawn in the band over the bundled water. */
+  readonly art?: ImageSourcePropType;
 };
 
 const WORD = { ...TEXT.tag, size: FOOTER.label, spacing: 0.04, maxScale: 1 };
@@ -91,7 +95,7 @@ const Tab = memo(function Tab({ item, index, picked, width, height, onPick }: {
   const press = useCallback(() => { haptic('tapLight'); onPick?.(item.key); }, [item.key, onPick]);
   const word = item.label.toUpperCase();
   return (
-    <Pressable accessibilityRole="tab" accessibilityLabel={item.accessibilityLabel ?? item.label} accessibilityState={{ selected: picked }}
+    <Pressable accessibilityRole="tab" accessibilityLabel={badgeLabel(item.accessibilityLabel ?? item.label, item.badge, item.badgeNoun)} accessibilityState={{ selected: picked }}
       onPressIn={pressIn} onPressOut={pressOut} onPress={press}
       style={{ position: 'absolute', left: x - hitW / 2, width: hitW, top, bottom: 0, alignItems: 'center' }}>
       <Animated.View style={squish}>
@@ -116,7 +120,7 @@ const Tab = memo(function Tab({ item, index, picked, width, height, onPick }: {
 
 let nextId = 0;
 
-function FooterImpl({ items, picked, onPick, slide, inert = false }: FooterProps) {
+function FooterImpl({ items, picked, onPick, slide, inert = false, art }: FooterProps) {
   const refused = useRefuseInPage('Footer');
   const { width } = useWindowDimensions();
   const id = useRef(`ftr${(nextId += 1)}`).current;
@@ -141,6 +145,8 @@ function FooterImpl({ items, picked, onPick, slide, inert = false }: FooterProps
         <G clipPath={`url(#${id}c)`}>
           <Rect x={0} y={0} width={width} height={height} fill={INK.blue} />
           <SvgImage href={ART.topBar} x={-width * 0.513} y={c - 54} width={width * 2.026} height={height - c + 54 + 25} preserveAspectRatio="none" />
+          {/* The theme's art inside the wave's clip (the only SVG left in the bars: the wave needs a clip path). */}
+          {art ? <SvgImage href={art} x={0} y={c - FOOTER.hump} width={width} height={height - c + FOOTER.hump} preserveAspectRatio="xMidYMid slice" /> : null}
           <Rect x={0} y={0} width={width} height={height} fill={`url(#${id}g)`} />
         </G>
       </Svg>

@@ -2,8 +2,11 @@
  * Toast: a cream pill under the header (DIRECTION.md kit: Toast). Level 1: the white cut edge and a
  * hard drop, Alex's art for the thing it is about hanging off its left end, a Shark title and an
  * optional soft line. It slaps on (stuck on, 1.08 to 1.0 with the drop closing), stays about 2.4 s,
- * and peels off (lifts, turns at its corner, fades). Reduce Motion: 150 ms fades. VoiceOver hears it
- * once. Toasts queue: one at a time, in order.
+ * and peels off (lifts, turns at its corner, fades). Reduce Motion: 150 ms fades. Toasts queue: one
+ * at a time, in order. Only the active host draws (the focused kit Screen's, else the root one from
+ * StickerRoot), so a stack of kit screens draws and announces it once; VoiceOver hears each toast
+ * once even if focus moves while it is up. With no host in the tree a toast is dropped (dev
+ * warning), never queued to appear later, stale.
  *
  *   showToast({ title: '+1 Ticket', line: 'Treats found', art: ART.ticket, artRatio: ART_RATIO.ticket })
  *
@@ -18,10 +21,11 @@ import Lift from './Lift';
 import Shell from './Shell';
 import { PlaceProvider, useStickerPlace } from './StickerContext';
 import StickerText from './StickerText';
-import { edgeFor, insideCard } from './level';
+import { layerHosts } from './layers';
+import { edgeFor, insideCard, warnOnce } from './level';
 import { peelTiming, usePeelStyle } from './motion';
 import { TEXT } from './textRoles';
-import { DROP, INK, LINE, RADIUS, SHADE, TOAST } from './tokens';
+import { DROP, HEADER, INK, LINE, SHADE, SPACE, TOAST } from './tokens';
 
 export type ToastSpec = {
   readonly title: string;
@@ -41,9 +45,12 @@ export function createToastQueue() {
   let list: Entry[] = [];
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach(l => l());
+  const announced = new Set<number>();
   return {
     show(spec: ToastSpec): number { const id = next++; list = [...list, { ...spec, id }]; emit(); return id; },
-    done(id: number): void { list = list.filter(t => t.id !== id); emit(); },
+    done(id: number): void { list = list.filter(t => t.id !== id); announced.delete(id); emit(); },
+    /** True the first time it is asked for a toast: the one moment VoiceOver hears it. */
+    announce(id: number): boolean { if (announced.has(id)) return false; announced.add(id); return true; },
     front(): Entry | null { return list[0] ?? null; },
     subscribe(l: () => void): () => void { listeners.add(l); return () => { listeners.delete(l); }; },
   };
@@ -51,7 +58,12 @@ export function createToastQueue() {
 
 export const stickerToasts = createToastQueue();
 
-export function showToast(spec: ToastSpec): number {
+/** Show a toast in the active host. Returns its id, or -1 when no kit host is mounted (dropped, never shown late). */
+export function showToast(spec: ToastSpec, hosts: { count(): number } = layerHosts): number {
+  if (hosts.count() === 0) {
+    warnOnce('toast-nohost', __DEV__, m => console.warn(m), `showToast("${spec.title}") with no kit host mounted: dropped. Step 2 mounts StickerRoot above the navigator.`);
+    return -1;
+  }
   return stickerToasts.show(spec);
 }
 
@@ -87,7 +99,7 @@ function ToastRun({ entry, onDone }: { entry: Entry; onDone: (id: number) => voi
   const peel = usePeelStyle(out, reduced);
   const finish = useCallback(() => onDone(entry.id), [entry.id, onDone]);
   useEffect(() => {
-    AccessibilityInfo.announceForAccessibility(entry.announce ?? (entry.line ? `${entry.title}. ${entry.line}` : entry.title));
+    if (stickerToasts.announce(entry.id)) AccessibilityInfo.announceForAccessibility(entry.announce ?? (entry.line ? `${entry.title}. ${entry.line}` : entry.title));
     out.value = withDelay(TOAST.ms, withTiming(1, peelTiming(reduced), done => { if (done) runOnJS(finish)(); }));
   }, [entry, finish, out, reduced]);
   return (
@@ -97,13 +109,13 @@ function ToastRun({ entry, onDone }: { entry: Entry; onDone: (id: number) => voi
   );
 }
 
-/** Where toasts appear: Screen puts it at the top of its body, under the bar. */
-export const ToastHost = memo(function ToastHost() {
+/** Where toasts appear: Screen puts it at the top of its body, under the bar. Draws only when its host is the active one. */
+export const ToastHost = memo(function ToastHost({ active }: { readonly active: boolean }) {
   const front = useSyncExternalStore(stickerToasts.subscribe, stickerToasts.front);
   const done = useCallback((id: number) => stickerToasts.done(id), []);
-  if (!front) return null;
+  if (!front || !active) return null;
   return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: 32, right: 32, top: 12, zIndex: 45, alignItems: 'center' }}
+    <View pointerEvents="none" style={{ position: 'absolute', left: SPACE.margin * 2, right: SPACE.margin * 2, top: HEADER.gap, zIndex: 45, alignItems: 'center' }}
       accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <ToastRun key={front.id} entry={front} onDone={done} />
     </View>

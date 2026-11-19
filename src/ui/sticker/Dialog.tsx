@@ -10,19 +10,27 @@
  *    one moves onto the page as a heading (dialogTitleLayout).
  * 2. A custom body (the grown-up gate): `<Dialog visible label={{ text, art: 'lock' }} wayOut={...}>...</Dialog>`.
  *
- * Drawn by the one LayerHost, queued, stuck on, peeled off; its body scrolls if it must.
+ * Drawn by the active LayerHost, queued, stuck on, peeled off; its body scrolls if it must, and the
+ * room avoids the keyboard. The main action is large (58) and full width; nothing is cut: the
+ * message and a long title wrap as far as they need. GameDialogOptions' `icon` is drawn as Alex's
+ * art above the words (icons.ts), its `haptic` plays when the dialog is presented, and `children`
+ * (a model dialog with a field or a picker) sit under the message.
  */
-import { memo, type ReactNode } from 'react';
+import { memo, useEffect, type ReactNode } from 'react';
 import { View } from 'react-native';
+import { haptic } from '../../gamekit/Haptics';
 import GhostButton from './GhostButton';
-import { stickerLayers } from './layers';
+import Lift from './Lift';
+import { iconArt } from './icons';
+import { layerHosts, stickerLayers } from './layers';
+import { warnOnce } from './level';
 import { useLayer } from './Overlay';
 import Page, { type PageLabel } from './Page';
 import StickerButton, { type StickerVariant } from './StickerButton';
 import { Body, Heading } from './Text';
 import type { WayOut } from './Sheet';
 import { dialogTitleLayout, dismissAction, layoutActions, type GameDialogOptions } from '../gameDialogModel';
-import { SPACE } from './tokens';
+import { ART_SIZE, SPACE } from './tokens';
 
 /** Which kit variant each dialog action gets. Pure, so it is tested. */
 export function dialogVariant(variant: string): StickerVariant {
@@ -46,22 +54,29 @@ export function dialogPlan(request: GameDialogOptions) {
   return { title, bodyActions, footAction, extraGhosts: ghosts.slice(1), dismiss: dismissAction(request) };
 }
 
-export const DialogModelBody = memo(function DialogModelBody({ request, onAnswer }: { request: GameDialogOptions; onAnswer: (index: number | null) => void }) {
+export const DialogModelBody = memo(function DialogModelBody({ request, onAnswer, children }: { request: GameDialogOptions; onAnswer: (index: number | null) => void; children?: ReactNode }) {
   const plan = dialogPlan(request);
   const foot = plan.footAction;
   const footIsGold = foot ? dialogVariant(foot.variant) !== 'ghost' : false;
+  const art = iconArt(request.icon, `Dialog "${request.title}"`);
+  useEffect(() => {
+    if (request.haptic === 'warning' || request.haptic === 'success') haptic(request.haptic);
+  }, [request.haptic]);
   return (
     <Page floating arrive scroll label={plan.title.placement === 'ribbon' ? { text: plan.title.text, large: true } : undefined}
-      foot={{ height: footIsGold ? 70 : 58, children: foot ? (footIsGold
-        ? <StickerButton label={foot.text} variant={dialogVariant(foot.variant)} size="medium" width={180} image={foot.image} onPress={() => onAnswer(foot.index)} />
+      foot={{ children: foot ? (footIsGold
+        ? <View style={{ alignSelf: 'stretch', paddingHorizontal: SPACE.pagePad }}><StickerButton label={foot.text} variant={dialogVariant(foot.variant)} size="large" fullWidth image={foot.image} icon={foot.icon} onPress={() => onAnswer(foot.index)} /></View>
         : <GhostButton label={foot.text} onPress={() => onAnswer(foot.index)} />) : null }}>
-      {plan.title.placement === 'card' ? <Heading lines={3}>{plan.title.text}</Heading> : null}
-      {request.message ? <Body lines={4} style={{ marginTop: plan.title.placement === 'card' ? SPACE.base * 2 : 0 }}>{request.message}</Body> : null}
+      {art ? <Lift source={art} width={ART_SIZE.prize} height={ART_SIZE.prize} style={{ alignSelf: 'center', marginBottom: SPACE.base * 2 }} /> : null}
+      {plan.title.placement === 'card' ? <Heading>{plan.title.text}</Heading> : null}
+      {request.message ? <Body style={{ marginTop: plan.title.placement === 'card' ? SPACE.base * 2 : 0 }}>{request.message}</Body> : null}
+      {children ? <View style={{ marginTop: SPACE.cardGapLoose }}>{children}</View> : null}
       {plan.bodyActions.length ? (
-        <View style={{ marginTop: SPACE.cardGapLoose, gap: SPACE.cardGap, alignItems: 'center' }}>
-          {plan.bodyActions.map(a => (
-            <StickerButton key={a.index} label={a.text} variant={dialogVariant(a.variant)} size="medium" width={200} image={a.image} onPress={() => onAnswer(a.index)} />
-          ))}
+        <View style={{ marginTop: SPACE.cardGapLoose, gap: SPACE.cardGap, alignSelf: 'stretch' }}>
+          {plan.bodyActions.map(a => {
+            const v = dialogVariant(a.variant);
+            return <StickerButton key={a.index} label={a.text} variant={v} size={v === 'primary' ? 'large' : 'medium'} fullWidth image={a.image} icon={a.icon} onPress={() => onAnswer(a.index)} />;
+          })}
           {plan.extraGhosts.map(a => <GhostButton key={a.index} label={a.text} onPress={() => onAnswer(a.index)} />)}
         </View>
       ) : null}
@@ -72,14 +87,14 @@ export const DialogModelBody = memo(function DialogModelBody({ request, onAnswer
 export const DialogCustomBody = memo(function DialogCustomBody({ label, wayOut, children }: { label: PageLabel; wayOut: WayOut; children: ReactNode }) {
   return (
     <Page floating arrive scroll label={label}
-      foot={{ height: 58, children: <GhostButton label={wayOut.label} accessibilityLabel={wayOut.accessibilityLabel} art={wayOut.art} onPress={wayOut.onPress} /> }}>
+      foot={{ children: <GhostButton label={wayOut.label} accessibilityLabel={wayOut.accessibilityLabel} art={wayOut.art} onPress={wayOut.onPress} /> }}>
       {children}
     </Page>
   );
 });
 
 export type DialogProps =
-  | { readonly visible: boolean; readonly request: GameDialogOptions; readonly onAnswer: (index: number | null) => void; readonly testID?: string; readonly label?: undefined; readonly children?: undefined }
+  | { readonly visible: boolean; readonly request: GameDialogOptions; readonly onAnswer: (index: number | null) => void; readonly testID?: string; readonly label?: undefined; readonly children?: ReactNode }
   | { readonly visible: boolean; readonly label: PageLabel; readonly wayOut: WayOut; readonly dismissible?: boolean; readonly testID?: string; readonly children: ReactNode; readonly request?: undefined };
 
 function DialogImpl(props: DialogProps) {
@@ -87,7 +102,7 @@ function DialogImpl(props: DialogProps) {
   const request = props.request;
   const dismiss = request ? dismissAction(request) : null;
   const element = request && props.request
-    ? <DialogModelBody request={request} onAnswer={props.onAnswer} />
+    ? <DialogModelBody request={request} onAnswer={props.onAnswer}>{props.children}</DialogModelBody>
     : props.label ? <DialogCustomBody label={props.label} wayOut={(props as { wayOut: WayOut }).wayOut}>{props.children}</DialogCustomBody> : null;
   const wayOut = model
     ? (dismiss !== null ? () => (props as { onAnswer: (i: number | null) => void }).onAnswer(dismiss) : undefined)
@@ -99,8 +114,16 @@ function DialogImpl(props: DialogProps) {
 const Dialog = memo(DialogImpl);
 export default Dialog;
 
-/** Imperative: show a model dialog in the kit's host; resolves with the chosen button's index (null when dismissed with no cancel). */
-export function showStickerDialog(request: GameDialogOptions): Promise<number | null> {
+/**
+ * Imperative: show a model dialog in the kit's active host; resolves with the chosen button's index
+ * (null when dismissed with no cancel). With no kit host in the tree at all it never waits: it
+ * resolves at once with the dismiss answer (dev warning), so it can never block the queue.
+ */
+export function showStickerDialog(request: GameDialogOptions, hosts: { count(): number } = layerHosts): Promise<number | null> {
+  if (hosts.count() === 0) {
+    warnOnce('dialog-nohost', __DEV__, m => console.warn(m), `showStickerDialog("${request.title}") with no kit host mounted: answered as dismissed. Step 2 mounts StickerRoot above the navigator.`);
+    return Promise.resolve(dismissAction(request));
+  }
   return new Promise(resolve => {
     let id = 0;
     const answer = (index: number | null) => { stickerLayers.close(id); resolve(index); };

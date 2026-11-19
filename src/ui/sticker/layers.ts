@@ -20,7 +20,12 @@ export type LayerSpec = {
   readonly testID?: string;
 };
 
-export type LayerEntry = LayerSpec & { readonly id: number; readonly leaving: boolean };
+export type LayerEntry = LayerSpec & {
+  readonly id: number;
+  readonly leaving: boolean;
+  /** A host has drawn it. One never drawn (no host had focus) is simply dropped on close: nothing to peel. */
+  readonly drawn: boolean;
+};
 
 type Listener = () => void;
 
@@ -33,7 +38,7 @@ export function createLayerQueue() {
     /** Ask for a layer; it shows when every layer asked before it is gone. */
     present(spec: LayerSpec): number {
       const id = nextId++;
-      entries = [...entries, { ...spec, id, leaving: false }];
+      entries = [...entries, { ...spec, id, leaving: false, drawn: false }];
       emit();
       return id;
     },
@@ -47,12 +52,18 @@ export function createLayerQueue() {
     close(id: number): void {
       const at = entries.findIndex(e => e.id === id);
       if (at < 0) return;
-      if (at === 0) {
+      if (at === 0 && entries[0].drawn) {
         if (entries[0].leaving) return;
         entries = entries.map(e => (e.id === id ? { ...e, leaving: true } : e));
       } else {
         entries = entries.filter(e => e.id !== id);
       }
+      emit();
+    },
+    /** A host drew this layer (from now on closing it peels it off). */
+    drawn(id: number): void {
+      if (!entries.some(e => e.id === id && !e.drawn)) return;
+      entries = entries.map(e => (e.id === id ? { ...e, drawn: true } : e));
       emit();
     },
     /** The host finished peeling the front layer off. */
@@ -86,16 +97,48 @@ export function scrimAction(entry: Pick<LayerSpec, 'wayOut' | 'dismissible'>): (
   return entry.dismissible === false ? null : entry.wayOut;
 }
 
-/** Hosts in the tree, newest last: only the newest one draws (the screen on top of a stack). */
+/**
+ * The hosts in the tree (a kit Screen's, and the root one mounted once above the navigator), and
+ * which one draws: the kit Screen that gained navigation focus most recently and still has it.
+ * When no kit Screen has focus (a legacy screen is on top, or a kit screen was covered), the root
+ * host draws, so a dialog or toast is always drawn where the player is looking, never inside a
+ * covered screen. With no host focused and no root, nothing draws and layers wait for one.
+ */
 export function createHostRegistry() {
-  let hosts: number[] = [];
+  type Host = { readonly id: number; readonly root: boolean; focused: boolean; seq: number };
+  let hosts: Host[] = [];
   let next = 1;
+  let clock = 0;
   const listeners = new Set<Listener>();
   const emit = () => listeners.forEach(l => l());
+  const active = (): number | null => {
+    let best: Host | null = null;
+    for (const h of hosts) if (!h.root && h.focused && (!best || h.seq > best.seq)) best = h;
+    if (best) return best.id;
+    for (let i = hosts.length - 1; i >= 0; i -= 1) if (hosts[i].root) return hosts[i].id;
+    return null;
+  };
   return {
-    add(): number { const id = next++; hosts = [...hosts, id]; emit(); return id; },
-    remove(id: number): void { hosts = hosts.filter(h => h !== id); emit(); },
-    isActive(id: number): boolean { return hosts[hosts.length - 1] === id; },
+    add(opts: { readonly root?: boolean; readonly focused?: boolean } = {}): number {
+      const id = next++;
+      clock += 1;
+      hosts = [...hosts, { id, root: !!opts.root, focused: opts.focused ?? true, seq: clock }];
+      emit();
+      return id;
+    },
+    remove(id: number): void { hosts = hosts.filter(h => h.id !== id); emit(); },
+    /** Navigation focus changed for a screen's host; gaining focus makes it the newest. */
+    setFocused(id: number, focused: boolean): void {
+      const h = hosts.find(x => x.id === id);
+      if (!h || h.focused === focused) return;
+      h.focused = focused;
+      if (focused) { clock += 1; h.seq = clock; }
+      hosts = [...hosts];
+      emit();
+    },
+    active,
+    isActive(id: number): boolean { return active() === id; },
+    count(): number { return hosts.length; },
     subscribe(listener: Listener): () => void { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
 }

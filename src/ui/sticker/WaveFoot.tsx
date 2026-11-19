@@ -7,7 +7,8 @@
  * no measured SVG), with the one wave period the footer shares. The words and buttons are plain views.
  */
 import { memo, useRef, type ReactNode } from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { View, type StyleProp } from 'react-native';
+import type { LayoutStyle } from './style';
 import Svg, { ClipPath, Defs, G, Image as SvgImage, LinearGradient, Path, Stop } from 'react-native-svg';
 import { PlaceProvider } from './StickerContext';
 import { ART } from './art';
@@ -44,7 +45,7 @@ function WaveFootImpl({ width, height = WAVE.height, padBottom = SPACE.base * 2,
   /** Room under the content (a screen band adds the home bar inset). */
   readonly padBottom?: number;
   readonly children?: ReactNode;
-  readonly style?: StyleProp<ViewStyle>;
+  readonly style?: StyleProp<LayoutStyle>;
 }) {
   const id = useRef(`wave${(nextId += 1)}`).current;
   const w = Math.max(1, Math.round(width));

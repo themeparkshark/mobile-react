@@ -3,7 +3,8 @@
  * (kit.css .lift / .lift-map). Server art (coins, pins) gets no white edge at run time.
  */
 import { memo } from 'react';
-import { Image, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, View, type ImageSourcePropType, type StyleProp } from 'react-native';
+import type { LayoutStyle } from './style';
 import { useStickerPlace } from './StickerContext';
 import { DROP } from './tokens';
 
@@ -16,7 +17,7 @@ export type LiftProps = {
   /** No drop (a ghost in a spot). */
   readonly flat?: boolean;
   readonly opacity?: number;
-  readonly style?: StyleProp<ViewStyle>;
+  readonly style?: StyleProp<LayoutStyle>;
 };
 
 function LiftImpl({ source, width, height, mirror = false, flat = false, opacity = 1, style }: LiftProps) {

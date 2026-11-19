@@ -1,29 +1,35 @@
 /**
  * RoundButton: Alex's own discs. Back is his blue arrow disc mirrored, help is his faq disc,
- * close is his X disc on a white ring, base is his blank blue base with art on it. No code-drawn
- * back, close or help. Hit area at least 48 pt. Optional red count badge, said in the button's own
- * label ("Daily chest, 2 ready": the caller's words). Pressing squishes the disc on the UI thread;
- * Reduce Motion swaps it instantly. Off fades by the one off token; busy shows the three dots.
+ * close is his X disc on a white ring, base is his blank blue base with art on it, follow is his
+ * follow shark on a white disc with today's red locate pointer on its rim (so it never reads as
+ * the Shelf's shark disc). No code-drawn back, close or help. Hit area at least 48 pt. Optional
+ * red count badge: the part says it after the caller's words with the caller's noun ("Daily chest,
+ * 2 ready"). Pressing squishes the disc on the UI thread; Reduce Motion swaps it instantly. Off
+ * fades by the one off token; busy shows the three dots.
  */
 import { memo } from 'react';
-import { Pressable, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, View, type ImageSourcePropType, type StyleProp } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { haptic } from '../../gamekit/Haptics';
-import Badge from './Badge';
+import Badge, { badgeLabel } from './Badge';
 import Busy from './Busy';
+import Glyph from './Glyph';
 import Lift from './Lift';
 import { useStickerPlace } from './StickerContext';
 import { ART, ART_RATIO } from './art';
 import { usePress } from './motion';
-import { DROP, INK, OFF } from './tokens';
+import type { LayoutStyle } from './style';
+import { DROP, INK, LINE, OFF } from './tokens';
 
 /** `disc`: one of Alex's own whole-disc files passed as `art` (his wait-times watch, his heart). */
-export type RoundKind = 'back' | 'help' | 'close' | 'base' | 'disc';
+export type RoundKind = 'back' | 'help' | 'close' | 'base' | 'disc' | 'follow';
 
 export type RoundButtonProps = {
   readonly kind: RoundKind;
-  /** The whole thing VoiceOver says, count included ("Help, 3 new"). */
+  /** What VoiceOver says ("Daily chest"); the part adds the badge's count and noun. */
   readonly accessibilityLabel: string;
+  /** The word after the badge's count ("ready", "new"), from the caller. */
+  readonly badgeNoun?: string;
   readonly size?: number;
   /** Art on the blank base. */
   readonly art?: ImageSourcePropType;
@@ -35,13 +41,13 @@ export type RoundButtonProps = {
   readonly busy?: boolean;
   readonly testID?: string;
   readonly onPress?: () => void;
-  readonly style?: StyleProp<ViewStyle>;
+  readonly style?: StyleProp<LayoutStyle>;
 };
 
 /** Every disc reaches 48 pt of touch. */
 export const ROUND_HIT = 48;
 
-function RoundButtonImpl({ kind, accessibilityLabel, size = 50, art, artMirror = false, artRatio = 1, badge, disabled = false, busy = false, testID, onPress, style }: RoundButtonProps) {
+function RoundButtonImpl({ kind, accessibilityLabel, badgeNoun, size = 50, art, artMirror = false, artRatio = 1, badge, disabled = false, busy = false, testID, onPress, style }: RoundButtonProps) {
   const { p, pressIn, pressOut, reduced } = usePress();
   // On the map every disc stands on the map's 50 percent hard drop so it reads on tan streets (DIRECTION fix 2).
   const flat = useStickerPlace().level !== 'map';
@@ -49,7 +55,18 @@ function RoundButtonImpl({ kind, accessibilityLabel, size = 50, art, artMirror =
   const pad = Math.max(0, (ROUND_HIT - size) / 2);
   const inert = disabled || busy;
   let body;
-  if (kind === 'close') {
+  if (kind === 'follow') {
+    // Alex's follow shark on a white disc with a navy line, today's red pointer on the rim: "find me".
+    body = (
+      <View style={{ width: size, height: size }}>
+        <View style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, backgroundColor: flat ? DROP.color : DROP.map, transform: [{ translateY: flat ? DROP.art : DROP.artOnMap }] }} />
+        <View style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, backgroundColor: INK.white, borderWidth: LINE.map, borderColor: INK.navy, alignItems: 'center', justifyContent: 'center' }}>
+          {art ? <Lift source={art} width={size * 0.74} height={size * 0.74} flat /> : null}
+        </View>
+        <View style={{ position: 'absolute', left: size / 2 - size * 0.11, top: -size * 0.07 }}><Glyph kind="pointer" size={size * 0.22} /></View>
+      </View>
+    );
+  } else if (kind === 'close') {
     const inner = size - 6;
     body = (
       <View style={{ width: size, height: size }}>
@@ -75,7 +92,7 @@ function RoundButtonImpl({ kind, accessibilityLabel, size = 50, art, artMirror =
     body = <Lift source={source} width={size} height={Math.round(size / ratio)} mirror={kind === 'back'} flat={kind === 'help' && flat} />;
   }
   return (
-    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled, busy }} disabled={inert}
+    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={badgeLabel(accessibilityLabel, badge, badgeNoun)} accessibilityState={{ disabled, busy }} disabled={inert}
       onPressIn={inert ? undefined : pressIn} onPressOut={inert ? undefined : pressOut} onPress={inert ? undefined : () => { haptic('tapLight'); onPress?.(); }}
       hitSlop={pad} style={[{ alignSelf: 'flex-start', opacity: disabled ? OFF.artOpacity : 1 }, style]}>
       <Animated.View style={squish}>{body}</Animated.View>

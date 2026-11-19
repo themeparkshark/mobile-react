@@ -69,16 +69,23 @@ export type InkDecision = {
 };
 
 /**
- * How a role is inked at a place. Paper: plain navy (soft: navy soft; caps: gold ink), never a
- * stroke. Colour: white (or gold when asked), stroked at 17 pt and up, else plain with the 1.5 pt
- * drop (soft: the pale blue line).
+ * How a role is inked at a place: the one rule StickerText draws with. Paper: plain navy (soft:
+ * navy soft; caps and gold: gold ink), never a stroke. Colour: white (or gold when asked), stroked
+ * at 17 pt and up, else plain with the 1.5 pt drop (soft: the pale blue line).
  */
 export function inkFor(spec: TextRoleSpec, onPaper: boolean, tone: 'auto' | 'gold' | 'soft' = 'auto'): InkDecision {
   if (onPaper) {
-    const ink = spec.caps ? 'goldInk' : tone === 'soft' ? 'navySoft' : 'navy';
+    const ink = spec.caps || tone === 'gold' ? 'goldInk' : tone === 'soft' ? 'navySoft' : 'navy';
     return { ink, stroke: 0, drop: 0, smallDrop: false };
   }
   const stroked = spec.stroke > 0 && spec.size >= STROKE.minSize && tone !== 'soft';
   if (stroked) return { ink: tone === 'gold' ? 'gold' : 'white', stroke: Math.min(STROKE.max, spec.stroke), drop: spec.drop, smallDrop: false };
   return { ink: tone === 'soft' ? 'onBlueSoft' : 'white', stroke: 0, drop: 0, smallDrop: tone !== 'soft' };
 }
+
+/**
+ * Lines each role wraps to by default: sentences, headings and caps never cut (0: no limit, the
+ * page scrolls); titles and names wrap to two; counts are one line. A screen caps lines only where
+ * its design asks for it.
+ */
+export const ROLE_LINES = { title: 2, heading: 0, name: 2, count: 1, body: 0, caps: 0 } as const;

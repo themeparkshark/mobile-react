@@ -5,13 +5,15 @@
  * (never linear): the art rises on a small arc, turns a little and shrinks to the chip's art size,
  * then calls `onLand` (the caller bumps the chip's value, so the chip bounces).
  *
- * Reduce Motion: nothing flies. The caller skips the flight and updates the chip (which fades).
- * Positions are window points measured once by the caller before the flight starts.
+ * Reduce Motion: nothing flies. Flight reads it itself and lands at once (the chip fades to its new
+ * count). `onLand` is kept in a ref, so a parent passing a fresh closure never restarts a flight
+ * in the air. Positions are window points measured once by the caller before the flight starts.
  */
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import type { ImageSourcePropType } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { DURATION } from '../motion';
+import useUiReducedMotion from '../useUiReducedMotion';
 import Lift from './Lift';
 
 export type FlightPoint = { readonly x: number; readonly y: number; readonly size: number };
@@ -31,12 +33,22 @@ function FlightImpl({ source, ratio = 1, from, to, delay = 0, onLand }: {
   readonly onLand?: () => void;
 }) {
   const t = useSharedValue(0);
+  const reduced = useUiReducedMotion();
+  const landRef = useRef(onLand);
+  landRef.current = onLand;
   const arc = flightArc(to.x - from.x, to.y - from.y);
   useEffect(() => {
+    const land = () => landRef.current?.();
+    if (reduced) {
+      // Nothing flies: it lands at its time, the chip takes its count with a fade.
+      const timer = setTimeout(land, delay);
+      return () => clearTimeout(timer);
+    }
     t.value = withDelay(delay, withTiming(1, { duration: DURATION.bloom + 60, easing: Easing.inOut(Easing.cubic) }, done => {
-      if (done && onLand) runOnJS(onLand)();
+      if (done) runOnJS(land)();
     }));
-  }, [delay, onLand, t]);
+    return undefined;
+  }, [delay, reduced, t]);
   const style = useAnimatedStyle(() => {
     const p = t.value;
     return {

@@ -5,7 +5,8 @@
  * shrinks to fit a fixed width rather than clip.
  */
 import { memo, type ReactNode } from 'react';
-import { Image, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, View, type ImageSourcePropType, type StyleProp } from 'react-native';
+import type { LayoutStyle } from './style';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useStickerPlace } from './StickerContext';
 import StickerText from './StickerText';
@@ -28,7 +29,7 @@ export type TagProps = {
   readonly tilt?: boolean;
   /** What VoiceOver says (default: the words). */
   readonly label?: string;
-  readonly style?: StyleProp<ViewStyle>;
+  readonly style?: StyleProp<LayoutStyle>;
 };
 
 const FACES = {

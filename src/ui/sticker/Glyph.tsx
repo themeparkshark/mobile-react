@@ -1,6 +1,8 @@
 /**
  * Glyph: the only code-drawn marks the look keeps (DIRECTION.md, icons): the delete key, the
- * small chevron, the done check and the real-money mark. Everything else is Alex's art.
+ * small chevron, the done check and the real-money mark, plus today's red locate pointer on the
+ * follow disc (drawn on the board's map, 1-map.png, so the two shark discs each say one job).
+ * Everything else is Alex's art.
  * Fixed-size SVG paths, never measured.
  */
 import { memo } from 'react';
@@ -9,9 +11,12 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import StickerText from './StickerText';
 import { INK } from './tokens';
 
-export type GlyphKind = 'delete' | 'chevron' | 'check' | 'money';
+export type GlyphKind = 'delete' | 'chevron' | 'check' | 'money' | 'pointer';
 
-function GlyphImpl({ kind, size = 24 }: { readonly kind: GlyphKind; readonly size?: number }) {
+/** The chevron's three ways (drawn, never turned). */
+const CHEVRON = { right: 'M4.2 2.4L8 6l-3.8 3.6', down: 'M2.4 4.2L6 8l3.6-3.8', up: 'M2.4 7.8L6 4l3.6 3.8' } as const;
+
+function GlyphImpl({ kind, size = 24, point = 'right' }: { readonly kind: GlyphKind; readonly size?: number; readonly point?: keyof typeof CHEVRON }) {
   if (kind === 'money') {
     // A navy disc with a white Shark "$": the real-money mark (gate, Supplies).
     return (
@@ -30,10 +35,18 @@ function GlyphImpl({ kind, size = 24 }: { readonly kind: GlyphKind; readonly siz
       </Svg>
     );
   }
+  if (kind === 'pointer') {
+    // Today's follow button pointer (src/components/map/FollowButton.tsx): a red triangle with a navy line, pointing up.
+    return (
+      <Svg width={size} height={size * 0.8} viewBox="0 0 10 8">
+        <Path d="M5 0.8L9.2 7.2H0.8Z" fill={INK.red} stroke={INK.navy} strokeWidth={1.2} strokeLinejoin="round" />
+      </Svg>
+    );
+  }
   if (kind === 'chevron') {
     return (
       <Svg width={size} height={size} viewBox="0 0 12 12">
-        <Path d="M4.2 2.4L8 6l-3.8 3.6" fill="none" stroke={INK.navy} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d={CHEVRON[point]} fill="none" stroke={INK.navy} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
       </Svg>
     );
   }

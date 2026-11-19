@@ -3,10 +3,10 @@
  * "See my shelf" under a primary). Rest, pressed (a small squish and the 14 percent navy press
  * pill), off (faded by the one off token) and busy (three dots). At least 44 pt tall and 88 wide,
  * one VoiceOver label. Optional art before the words: Alex's arrow, mirrored, for "back".
- * On paper the words are plain navy; on colour white with the stroke.
+ * On paper the words are plain navy; on colour white with the stroke. The words fit their room.
  */
 import { memo } from 'react';
-import { Pressable, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, View, type ImageSourcePropType, type StyleProp } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { haptic } from '../../gamekit/Haptics';
 import Lift from './Lift';
@@ -15,6 +15,7 @@ import StickerText from './StickerText';
 import { ART, ART_RATIO } from './art';
 import { usePress } from './motion';
 import { TEXT } from './textRoles';
+import type { LayoutStyle } from './style';
 import { BUTTON, OFF, SHADE } from './tokens';
 
 export type GhostButtonProps = {
@@ -29,7 +30,7 @@ export type GhostButtonProps = {
   readonly haptics?: boolean;
   readonly testID?: string;
   readonly onPress?: () => void;
-  readonly style?: StyleProp<ViewStyle>;
+  readonly style?: StyleProp<LayoutStyle>;
 };
 
 const NORMAL = { ...TEXT.nameSmall, size: 19, spacing: 0.05, maxScale: 1.2 };
@@ -53,7 +54,8 @@ function GhostButtonImpl({ label, accessibilityLabel, size = 'normal', art, disa
           <>
             {a ? <Lift source={a.source} width={a.width} height={a.height} mirror={a.mirror} flat /> : null}
             <View style={{ paddingTop: 2, flexShrink: 1 }}>
-              <StickerText spec={size === 'large' ? LARGE : NORMAL} role="none">{label}</StickerText>
+              {/* One line that shrinks to fit at larger text ("BACK TO MAP" in a foot), never an ellipsis at the asked size. */}
+              <StickerText spec={size === 'large' ? LARGE : NORMAL} role="none" fit>{label}</StickerText>
             </View>
           </>
         )}

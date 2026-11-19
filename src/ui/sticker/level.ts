@@ -27,6 +27,12 @@ export type StickerPlace = {
 export const WORLD: StickerPlace = Object.freeze({ level: 'world', surface: 'blue', foot: false });
 export const MAP: StickerPlace = Object.freeze({ level: 'map', surface: 'map', foot: false });
 const IN_PAGE: StickerPlace = Object.freeze({ level: 'page', surface: 'blue', foot: false });
+/**
+ * Where a part sits when no kit root is above it (a legacy screen in step 2, a gallery row):
+ * level 2 on blue. No white edge, no gold edge, so a part dropped into an old box can never turn
+ * the screen into clip art. Level 1 comes only from Screen, World and MapGround.
+ */
+export const DEFAULT_PLACE: StickerPlace = IN_PAGE;
 const IN_CARD: StickerPlace = Object.freeze({ level: 'page', surface: 'paper', foot: false });
 const IN_FOOT: StickerPlace = Object.freeze({ level: 'page', surface: 'blue', foot: true });
 
@@ -89,6 +95,24 @@ export function lineFor(level: StickerLevel, inPage: number, onMap: number): num
 /** Whether a second gold primary just mounted in one screen or layer (one gold per screen). */
 export function tooManyPrimaries(count: number): boolean {
   return count > 1;
+}
+
+/** The kinds of white edge a screen may show at once (DIRECTION: the page and the primary). */
+export type EdgeKind = 'page' | 'card' | 'label' | 'primary';
+
+/** Whether a screen shows more kinds of white edge than the two the board allows. Labels ride their page, so they never count alone. */
+export function tooManyEdgeKinds(kinds: Iterable<EdgeKind>): boolean {
+  const set = new Set(kinds);
+  set.delete('label');
+  return set.size > 2;
+}
+
+/**
+ * The warning key for one screen's gold counter: the route and the screen's own name, so every
+ * screen that breaks the one-gold rule is heard, not only the first in a session.
+ */
+export function primaryKey(route: string | undefined, name: string | undefined): string {
+  return `primary-${route ?? 'root'}${name ? `:${name}` : ''}`;
 }
 
 const warned = new Set<string>();

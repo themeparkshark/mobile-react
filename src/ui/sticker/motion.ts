@@ -80,10 +80,10 @@ export function peelTiming(reduced: boolean) {
   return { duration: reduced ? STICK.reducedFadeMs : STICK.peelMs, easing: Easing.in(Easing.quad) };
 }
 
-/** Press progress 0 (rest) to 1 (pressed by its lip). Fast in, spring back out. */
-export function usePress() {
+/** Press progress 0 (rest) to 1 (pressed by its lip). Fast in, spring back out. `initial` 1 holds it pressed (the gallery's still sample). */
+export function usePress(initial: number = 0) {
   const reduced = useUiReducedMotion();
-  const p = useSharedValue(0);
+  const p = useSharedValue(initial);
   const pressIn = () => {
     // Reduce Motion: the pressed state swaps in, nothing travels.
     p.value = reduced ? 1 : withTiming(1, { duration: 60, easing: Easing.out(Easing.quad) });

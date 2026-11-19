@@ -7,7 +7,8 @@
  * never React.
  */
 import { memo, useEffect, useRef } from 'react';
-import { Image, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, View, type ImageSourcePropType, type StyleProp } from 'react-native';
+import type { LayoutStyle } from './style';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { SPRING } from '../motion';
 import useUiReducedMotion from '../useUiReducedMotion';
@@ -44,7 +45,7 @@ export type CurrencyChipProps = {
   readonly unit?: string;
   /** What VoiceOver says (default "4075 coins"). */
   readonly label?: string;
-  readonly style?: StyleProp<ViewStyle>;
+  readonly style?: StyleProp<LayoutStyle>;
 };
 
 const SPEC = { ...TEXT.count, maxScale: 1 };

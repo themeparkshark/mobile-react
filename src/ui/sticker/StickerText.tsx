@@ -16,8 +16,13 @@ import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from '
 import { StyleSheet, Text, View, type AccessibilityRole, type LayoutChangeEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { useStickerPlace } from './StickerContext';
 import { copiesFor, dropFor, ring, strokeFor } from './outline';
-import type { TextRoleSpec } from './textRoles';
+import { inkFor, type InkDecision, type TextRoleSpec } from './textRoles';
 import { FONT, INK, SHADE, STROKE } from './tokens';
+
+/** The colour of each ink the one rule (inkFor) can pick. */
+const INK_OF: Record<InkDecision['ink'], string> = {
+  white: INK.white, gold: INK.gold, navy: INK.navy, navySoft: INK.navySoft, goldInk: INK.goldInk, onBlueSoft: SHADE.onBlueSoft,
+};
 
 export type StickerTextTone = 'auto' | 'white' | 'gold' | 'navy' | 'soft';
 export type OutlineTechnique = 'shadow' | 'copies';
@@ -82,7 +87,11 @@ function StickerTextImpl({
   const font = fontProp ?? spec?.font ?? 'shark';
   const maxScale = maxScaleProp ?? spec?.maxScale ?? 1.3;
   const askedStroke = stroke ?? spec?.stroke;
-  const width = onPaper || tone === 'navy' || tone === 'soft' ? 0 : strokeFor(size, askedStroke);
+  // One rule for ink, stroke and drop: inkFor (tested). A white face (tone 'navy') inks like paper.
+  const ink = inkFor({
+    font, size, spacing, stroke: strokeFor(size, askedStroke), drop: drop ?? spec?.drop ?? 0, leading: spec?.leading ?? 1.25, maxScale, caps: spec?.caps,
+  }, (onPaper && tone !== 'white') || tone === 'navy', tone === 'gold' ? 'gold' : tone === 'soft' ? 'soft' : 'auto');
+  const width = ink.stroke;
   const outlined = width > 0;
   const shrink = fit && lines === 1;
   const key = `${children}|${size}|${spacing}|${maxScale}|${font}`;
@@ -93,9 +102,7 @@ function StickerTextImpl({
   useEffect(() => {
     if (box > 0 && !readyRef.current) { readyRef.current = true; onReady?.(); }
   }, [box, onReady]);
-  const fill = fillColor ?? (tone === 'gold' ? (onPaper ? INK.goldInk : INK.gold)
-    : tone === 'soft' ? (onPaper ? INK.navySoft : SHADE.onBlueSoft)
-    : tone === 'navy' || onPaper ? INK.navy : INK.white);
+  const fill = fillColor ?? INK_OF[ink.ink];
   const drawn = shrink ? fitSize(size, box, natural) : size;
   const base: TextStyle = {
     fontFamily: font === 'shark' ? FONT.shark : FONT.knockout,
@@ -105,7 +112,8 @@ function StickerTextImpl({
     textAlign: align,
     fontVariant: tabular ? ['tabular-nums'] : undefined,
   };
-  const textProps = { numberOfLines: lines, maxFontSizeMultiplier: maxScale, accessible: false } as const;
+  // Wrapped lines break the iOS way that avoids a lone last word ("= 1 / Ticket"); one line never wraps.
+  const textProps = { numberOfLines: lines, maxFontSizeMultiplier: maxScale, accessible: false, lineBreakStrategyIOS: lines === 1 ? undefined : 'push-out' } as const;
   const a11y = role === 'none'
     ? { accessible: false, importantForAccessibility: 'no-hide-descendants' as const }
     : { accessible: true, accessibilityRole: role, accessibilityLabel: label ?? children };
@@ -126,7 +134,7 @@ function StickerTextImpl({
   ) : null;
 
   if (!outlined) {
-    const small: TextStyle = fill === INK.white && !onPaper
+    const small: TextStyle = ink.smallDrop && !fillColor
       ? { color: fill, textShadowColor: SHADE.smallDrop, textShadowOffset: { width: 0, height: STROKE.smallDrop }, textShadowRadius: 0 }
       : { color: fill };
     return (
