@@ -18,7 +18,8 @@ import React, { createContext, useCallback, useContext, useEffect, useLayoutEffe
 import { I18nManager, StyleSheet } from 'react-native';
 import { leavingSheetTap } from './modalLayers';
 import { pressTrace } from './pressTrace';
-import { sheetOverlayContext, withOverlay, type SheetOverlayList, type SheetOverlaySet } from './sheetOverlay';
+import { overlayDrop, sheetOverlayContext, withOverlay, type SheetOverlayList, type SheetOverlaySet } from './sheetOverlay';
+import SheetOverlayLayer, { SHEET_LAYER_OUT_MS } from './SheetOverlayLayer';
 import { tapThrough, type ChainNode } from './tapThrough';
 import {
   DOOR_DISMISS_ANIMATED_MS, DOOR_DISMISS_MS, DOOR_PRESENT_MS, DOOR_TORN_ANIMATED_MS, DOOR_TORN_MS,
@@ -87,7 +88,11 @@ export default function DoorModal(props: DoorModalProps) {
   const tries = useRef(0);
   const dismissTold = useRef(false);
   const [overlays, setOverlays] = useState<SheetOverlayList>([]);
-  const setOverlay = useCallback<SheetOverlaySet>((key, node) => { if (live.current) setOverlays(list => withOverlay(list, key, node)); }, []);
+  const setOverlay = useCallback<SheetOverlaySet>((key, node) => {
+    if (!live.current) return;
+    setOverlays(list => withOverlay(list, key, node));
+    if (node == null) setTimeout(() => { if (live.current) setOverlays(list => overlayDrop(list, key)); }, SHEET_LAYER_OUT_MS + 60);
+  }, []);
 
   const freeSlot = () => { if (!now.current.nested) modalDoor.release(id.current); };
   const gone = () => {
@@ -242,10 +247,7 @@ export default function DoorModal(props: DoorModalProps) {
                 leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants), !now.current.nested);
               }}>
               {children}
-              {overlays.map(([key, node]) => (
-                // Never box-none: a layer that is fading in (or a frame late) still keeps a tap off the sheet under it.
-                <View key={key} style={StyleSheet.absoluteFill} accessibilityViewIsModal>{node}</View>
-              ))}
+              {overlays.map(item => <SheetOverlayLayer key={`${item.key}.${item.gen}`} leaving={item.leaving}>{item.node}</SheetOverlayLayer>)}
             </View>
            </SheetOverlay.Provider>
           </InsideNativeModal.Provider>

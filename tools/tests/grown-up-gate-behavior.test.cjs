@@ -688,16 +688,24 @@ test('N02: a gate in a sheet that was never drawn is unshown, never a no', async
 test('N02: every sheet host gives its contents the overlay, and draws its layers above them in its own view', () => {
   const door = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/ui/DoorModal.tsx'), 'utf8');
   assert.match(door, /<SheetOverlay\.Provider value=\{setOverlay\}>/);
-  assert.match(door, /\{children\}\s*\{overlays\.map\(\(\[key, node\]\) => \([\s\S]{0,160}?<View key=\{key\} style=\{StyleSheet\.absoluteFill\} accessibilityViewIsModal>/,
-    'drawn above the sheet, and never box-none (a layer still fading in keeps a tap off the row under it)');
+  assert.match(door, /\{children\}\s*\{overlays\.map\(item => <SheetOverlayLayer key=\{`\$\{item\.key\}\.\$\{item\.gen\}`\} leaving=\{item\.leaving\}>/);
+  const layer = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/ui/SheetOverlayLayer.tsx'), 'utf8');
+  assert.match(layer, /<View style=\{StyleSheet\.absoluteFill\} pointerEvents=\{leaving \? 'none' : 'auto'\}/,
+    'never see-through to taps while up (an opacity 0 view is skipped by the hit test), let through at once when leaving');
+  assert.match(layer, /useEffect\(\(\) => \{\s*shown\.value = withTiming\(leaving \? 0 : 1/, 'the layer fades itself in on its own mount');
   const gateSrc = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/components/GrownUpGate.tsx'), 'utf8');
   assert.match(gateSrc, /if \(!presenting \|\| inSheetRef\.current\) return;\s*fadeIn\(\);/,
-    'in a sheet the fade starts only once the layer is mounted: started earlier it ended before the view existed and the gate stayed invisible');
-  assert.match(gateSrc, /shownRef\.current = true;\s*fadeIn\(\);/);
-  const { withOverlay } = loadTs('src/ui/sheetOverlay.ts', { react: { createContext: v => ({ v }), useContext: c => c.v } });
+    'in a sheet the gate never runs its own fade (it could end before the layer existed and leave the gate invisible)');
+  const { withOverlay, overlayDrop } = loadTs('src/ui/sheetOverlay.ts', { react: { createContext: v => ({ v }), useContext: c => c.v } });
+  const keys = l => Array.from(l, i => `${i.key}.${i.gen}${i.node ?? ''}${i.leaving ? '-' : ''}`);
   let list = withOverlay([], 1, 'a');
   list = withOverlay(list, 2, 'b');
   list = withOverlay(list, 1, 'a2');
-  assert.deepEqual(Array.from(list, ([k, n]) => `${k}${n}`), ['1a2', '2b'], 'an update keeps its place');
-  assert.deepEqual(Array.from(withOverlay(list, 1, null), ([k]) => k), [2]);
+  assert.deepEqual(keys(list), ['1.1a2', '2.1b'], 'an update keeps its place');
+  list = withOverlay(list, 1, null);
+  assert.deepEqual(keys(list), ['1.1a2-', '2.1b'], 'a removed layer keeps its look while it fades out');
+  assert.deepEqual(keys(overlayDrop(list, 1)), ['2.1b']);
+  list = withOverlay(list, 1, 'c');
+  assert.deepEqual(keys(list), ['2.1b', '1.2c'], 'asked again while leaving: a fresh layer that fades in');
+  assert.deepEqual(keys(overlayDrop(list, 1)), ['2.1b', '1.2c'], 'the old fade ending never removes the new one');
 });

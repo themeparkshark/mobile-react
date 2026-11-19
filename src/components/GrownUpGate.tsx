@@ -424,6 +424,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     answerRef.current = ok;
     // Only iOS refuses to present while a modal is leaving (and only iOS reports onDismiss).
     if (Platform.OS !== 'ios') { finish(); return; }
+    // In a sheet's own view the layer fades itself out and lets taps through at once.
+    if (inSheetRef.current) { closeAfterFade(ok); return; }
     fade.value = withTiming(0, { duration: reduced ? 0 : GATE_FADE_OUT_MS }, done => { if (done) runOnJS(closeAfterFade)(ok); });
     // A fade whose end never comes back (a busy phone) still closes.
     setTimeout(() => closeAfterFade(ok), GATE_FADE_OUT_MS + 250);
@@ -464,8 +466,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     fade.value = withTiming(1, { duration: reduced ? 0 : GATE_FADE_IN_MS });
   }, [fade, reduced]);
   useEffect(() => {
-    // In a sheet's own view the fade starts once the layer is mounted (drawn, below): started earlier, it could end
-    // before the view existed and the gate stayed at opacity 0, unseen and letting taps through (fix pass w4, N02).
+    // In a sheet's own view the layer fades itself in once it is mounted (ui/SheetOverlayLayer.tsx): a fade started
+    // here could end before that view existed, and the gate stayed at opacity 0, unseen (fix pass w4, N02).
     if (!presenting || inSheetRef.current) return;
     fadeIn();
   }, [presenting, req]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -511,9 +513,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const drawn = useCallback(() => {
     if (!reqRef.current || shownRef.current) return;
     shownRef.current = true;
-    fadeIn();
     pressTrace('gate.drawn', () => `nested=${nested} inSheet=true`);
-  }, [nested, fadeIn]);
+  }, [nested]);
   // In the sheet's own view there is no native dismiss to wait for: the answer goes once the fade out has ended.
   useEffect(() => { if (inSheet && closing !== null) finish(); }, [inSheet, closing, finish]);
   // Not a <Modal>: it draws inside whatever holds this host, so it shows even where the gate could not.
@@ -541,7 +542,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     setTyped(t => (t.length < 3 ? t + k : t));
   };
   const scrim = (
-      <Animated.View style={[styles.scrim, fadeStyle]}>
+      <Animated.View style={[styles.scrim, inSheet ? null : fadeStyle]}>
         {details ? (
           <View style={styles.card} accessibilityViewIsModal>
             <RealMoneyMark size={36} />
