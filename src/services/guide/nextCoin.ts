@@ -325,6 +325,12 @@ const BELOW_ADVENTURE: ReadonlySet<TargetReason> = new Set(['star_rush', 'neares
  * nearest. Null when PLAY! is down. PLAY! is the one thing on screen a kid can press, so the card always names it.
  */
 function playUpCoin(input: GuideInput, coins: readonly GuideCoin[], prefer: GuideTarget | null): GuideCoin | null {
+  // The map's own PLAY! check already read the live feed as it is now: a coin PLAY! is up for is open, whatever an
+  // older closed answer in the memo says (the release walk saw PLAY! at Thunder Mountain with the card elsewhere).
+  if (typeof input.playableTaskId === 'number') {
+    const coin = coins.find(c => c.taskId === input.playableTaskId && !c.owned);
+    return coin ?? null;
+  }
   const up = coins.filter(c => winnable(input, c) && coinInPlayRange(input, c));
   if (!up.length) return null;
   return (prefer && up.find(c => c.taskId === prefer.taskId)) || nearest(input, up);

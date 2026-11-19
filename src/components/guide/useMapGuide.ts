@@ -131,9 +131,15 @@ export default function useMapGuide(input: MapGuideInput) {
     const timer = setTimeout(() => setAdventureWonTaskId(null), 30_000);
     return () => clearTimeout(timer);
   }, [adventureWonTaskId]);
+  // The coin PLAY! is up for is always one the guide can name, even when the map's list has it out of its window (a
+  // timed coin the server still answers for): the card and PLAY! never name two coins.
+  const guideTasks = useMemo(() => {
+    const model = playUp?.type === 'task' ? playUp.model as TaskType : null;
+    return model && !visibleTasks.some(task => task.id === model.id) ? [...visibleTasks, model] : visibleTasks;
+  }, [visibleTasks, playUp]);
   const nextCoin = useNextCoinGuide({
     enabled: !!player && !!park, ready: guideReady, tripGoalLoaded: !!tripGoalData, parkId: park?.id ?? null, parkName: park?.name ?? null, location,
-    tasks: visibleTasks, live: livePark, adventure, adventureWonTaskId, dwellRideId: queueDwell?.rideId ?? null,
+    tasks: guideTasks, live: livePark, adventure, adventureWonTaskId, dwellRideId: queueDwell?.rideId ?? null,
     starTaskIds: starRides, rushTaskIds, ownedTaskIds, levelUpTaskIds,
     starRushUnlocked: coinLevelsRung.open, coinLevelsUnlocked: coinLevelsRung.open,
     wallet, queueTicketsOn: guideFlags.queue_tickets === true,

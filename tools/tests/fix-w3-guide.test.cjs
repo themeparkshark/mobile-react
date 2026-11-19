@@ -301,3 +301,15 @@ test('T012: "This coin moved on" keeps its full moment even when the next range 
   assert.match(src, /\{!available && closedLabel && \(task \|\| movedOnShowing\) && \(/);
   assert.match(src, /setTimeout\(\(\) => setMovedOn\(current => current && \{ \.\.\.current, showing: false \}\), MOVED_ON_SHOW_MS\)/);
 });
+
+test('release walk: PLAY! up for a coin the memo still calls closed, or the map list has out of its window: the card names it', () => {
+  const rides = [coin(57, 'Thunder Mountain', 5), coin(77, 'Tiki Room', 100, { kind: 'sight' })];
+  const t = G.pickNextCoin(input({ coins: rides, live: { 57: 'closed' }, playableTaskId: 57,
+    current: { taskId: 77, parkId: 8, name: 'Tiki Room', kind: 'sight', reason: 'adventure', source: 'guide', meters: 100,
+      inRange: false, checkRunning: false, leavesOn: null } }));
+  assert.equal(t.taskId, 57, 'PLAY!\'s own check read the feed as it is now');
+  assert.equal(t.reason, 'in_range');
+  const hook = read('src/components/guide/useMapGuide.ts');
+  assert.match(hook, /model && !visibleTasks\.some\(task => task\.id === model\.id\) \? \[\.\.\.visibleTasks, model\] : visibleTasks/);
+  assert.match(hook, /tasks: guideTasks,/);
+});
