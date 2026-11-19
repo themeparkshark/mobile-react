@@ -19,19 +19,50 @@ export function edgeArrowPlacement(point: { x: number; y: number }, size: { widt
 }
 
 /**
- * Overlapping finds collapse into one marker with a count ("×2"), never two NEW tags stacked: the
- * nearest find in a group leads and the rest hide. Finds whose spot sits within `clearTop` of the
- * map's top edge (under the header) keep their art but drop their chrome (pill, dot, badge, finger).
+ * What a find draws on screen around its spot (rule h): the NEW tag above its art, the art, and the distance pill
+ * that hangs under it. Two finds whose boxes touch are drawn as one marker, and a box cut by the screen edge is an
+ * edge arrow instead (mapChrome.underChrome).
+ */
+export function markerBox(point: { x: number; y: number }): Rect {
+  return { x: point.x - 42, y: point.y - 42, w: 84, h: 84 };
+}
+
+/**
+ * Markers never overlap (MAP_LAYOUT rule h). Finds whose marker boxes touch collapse into one marker with a count
+ * ("x2"), never two NEW tags stacked: the nearest find in a group leads and the rest hide. The player's shark is
+ * reserved too: a find (other than `keep`, the one the hand points at) whose box lands on the shark folds into the
+ * nearest marker still showing. GPS spots never move; only what is drawn there does. Finds whose spot sits within
+ * `clearTop` of the map's top edge (under the header) keep their art but drop their chrome (pill, dot, badge,
+ * finger). Pure.
  */
 export function clusterFinds(points: readonly { pivot: number; x: number; y: number; distance: number | null }[],
-  radius = 44, clearTop = 24 + 34): { counts: Record<number, number>; hidden: number[]; chromeless: number[] } {
+  opts: { readonly shark?: { x: number; y: number } | null; readonly keep?: number | null; readonly clearTop?: number } = {}):
+  { counts: Record<number, number>; hidden: number[]; chromeless: number[] } {
+  const clearTop = opts.clearTop ?? 24 + 34;
   const order = [...points].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity) || a.pivot - b.pivot);
+  const keep = opts.keep ?? order[0]?.pivot ?? null;
+  const shark = opts.shark ? sharkFootprint(opts.shark) : null;
   const counts: Record<number, number> = {};
   const hidden: number[] = [];
   const leaders: typeof order = [];
-  for (const point of order) {
-    const lead = leaders.find(l => Math.hypot(l.x - point.x, l.y - point.y) < radius);
-    if (lead) { counts[lead.pivot] = (counts[lead.pivot] ?? 1) + 1; hidden.push(point.pivot); } else leaders.push(point);
+  const onShark: typeof order = [];
+  const fold = (lead: typeof order[number], point: typeof order[number]) => {
+    counts[lead.pivot] = (counts[lead.pivot] ?? 1) + 1;
+    hidden.push(point.pivot);
+  };
+  // The kept find leads first, so the hand's treat is never folded into another.
+  const kept = order.find(point => point.pivot === keep);
+  for (const point of kept ? [kept, ...order.filter(p => p !== kept)] : order) {
+    const box = markerBox(point);
+    const lead = leaders.find(l => hits(markerBox(l), box));
+    if (lead) fold(lead, point);
+    else if (shark && point.pivot !== keep && hits(box, shark)) onShark.push(point);
+    else leaders.push(point);
+  }
+  for (const point of onShark) {
+    const lead = [...leaders].sort((a, b) => Math.hypot(a.x - point.x, a.y - point.y) - Math.hypot(b.x - point.x, b.y - point.y))[0];
+    if (lead) fold(lead, point);
+    else leaders.push(point);
   }
   const chromeless = leaders.filter(point => point.y < clearTop).map(point => point.pivot);
   return { counts, hidden, chromeless };

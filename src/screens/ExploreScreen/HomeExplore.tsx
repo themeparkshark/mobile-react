@@ -143,6 +143,8 @@ interface Props {
    * lessons go first, so the daily chest waits for it (core loop 4.3 rule 1).
    */
   onIntroOwedChange?: (owed: boolean) => void;
+  /** The home card names a reward to claim (the rail chest then drops its number: one cue per reward). */
+  onRewardCardChange?: (shown: boolean) => void;
   /** The daily chest button, under the recenter button while today's chest is unclaimed. */
   chestButton?: ReactNode;
   /** Buttons stacked in chestButton (chest and Daily 3), for the map's declutter inset. */
@@ -186,7 +188,7 @@ export interface HomeGuide {
  */
 export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching = null, onCatchCollected, onCatchUnavailable,
   onCatchDone, refreshVersion, homeLocationConfirmed,
-  introAllowed = false, introEligible = false, onIntroOpenChange, onIntroOwedChange, chestButton, chestButtonCount, highlightNearestFind = null, parkStory = null, eventChip = null,
+  introAllowed = false, introEligible = false, onIntroOpenChange, onIntroOwedChange, onRewardCardChange, chestButton, chestButtonCount, highlightNearestFind = null, parkStory = null, eventChip = null,
   compassHintReady = false, quiet = false, firstHunt = false, homeGuide = null }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -684,7 +686,8 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
         next.set(item.pivot_id, point);
         const off = point.x < 0 || point.y < 0 || point.x > containerSize.width || point.y > containerSize.height;
         const under = !off && underChrome(point, reservedRef.current, undefined, containerSize);
-        if (under) covered.add(item.pivot_id);
+        // Off screen counts as covered too, so its pill and sparkle never peek in from the edge (rule c).
+        if (off || under) covered.add(item.pivot_id);
         if (off || under) edges.push({ item, point, distance });
       }
       findPoints.current = next;
@@ -703,15 +706,19 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       });
       setFindSides(current => (JSON.stringify(current) === JSON.stringify(sides) ? current : sides));
       const distances = new globalThis.Map(placed.map(entry => [entry.item.pivot_id, entry.distance] as const));
-      const groups = clusterFinds([...next.entries()].map(([pivot, point]) => ({ pivot, x: point.x, y: point.y, distance: distances.get(pivot) ?? null })));
-      setFindGroups(current => (JSON.stringify(current) === JSON.stringify(groups) ? current : groups));
-      // What each visible find occupies on screen: the HUD row and the peek keep clear of these.
-      const prints = [...next.entries()].filter(([pivot, p]) => !groups.hidden.includes(pivot) && !covered.has(pivot)
-        && p.x > -40 && p.y > -40 && p.x < containerSize.width + 40 && p.y < containerSize.height + 40)
-        .map(([pivot, p]) => findFootprint(p, pivot === fingerRef.current));
       const here = fixRef.current.location;
       const shark = here?.latitude != null && here?.longitude != null ? await toLocal(here.latitude, here.longitude) : null;
       if (!alive) return;
+      // Rule h: markers never overlap each other or the shark. Only finds that show are grouped; the hand's treat
+      // (the nearest one in range) always keeps its own marker.
+      const keep = placed.filter(entry => entry.inRange && entry.item.pivot_id != null && !covered.has(entry.item.pivot_id))
+        .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))[0]?.item.pivot_id ?? null;
+      const groups = clusterFinds([...next.entries()].filter(([pivot]) => !covered.has(pivot))
+        .map(([pivot, point]) => ({ pivot, x: point.x, y: point.y, distance: distances.get(pivot) ?? null })), { shark, keep });
+      setFindGroups(current => (JSON.stringify(current) === JSON.stringify(groups) ? current : groups));
+      // What each visible find occupies on screen: the HUD row and the peek keep clear of these.
+      const prints = [...next.entries()].filter(([pivot]) => !groups.hidden.includes(pivot) && !covered.has(pivot))
+        .map(([pivot, p]) => findFootprint(p, pivot === fingerRef.current));
       if (shark) prints.push(sharkFootprint(shark));
       setFootprints(current => (JSON.stringify(current) === JSON.stringify(prints) ? current : prints));
       setEdgeFinds(edges.sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0)));
@@ -798,6 +805,8 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const homeStep = useMemo(() => homeGuide ? homeNextStep({ ...homeGuide.next,
     treats: { onMap: treatsOnMap, toTicket: ticket.until, capped: ticket.capped } }) : null, [homeGuide, treatsOnMap, ticket.until, ticket.capped]);
   const homeCopy = homeStep?.copy ?? null;
+  const rewardCard = guideShown && homeStep?.key === 'reward';
+  useEffect(() => { onRewardCardChange?.(rewardCard); }, [rewardCard, onRewardCardChange]);
   const [arcadeOpen, setArcadeOpen] = useState(false);
   const onHomeAction = useCallback((action: HomeAction) => {
     if (!homeStep || !homeGuide) return;

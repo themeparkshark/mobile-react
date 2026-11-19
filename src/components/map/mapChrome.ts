@@ -13,8 +13,10 @@
  *  (e) One cue per marker: the hand or the NEW tag, never both; the calling rings only on the current target.
  *  (f) The distance pill is one quiet line (Report is a long press on the pill or the treat).
  *  (g) At rest the map shows only what matters now (restThings lists them).
+ *  (h) Markers never overlap each other or the shark: touching markers draw as one with a count, and a treat on
+ *      the shark folds into the nearest marker still showing (findEdges.clusterFinds; the hand's treat stays).
  */
-import type { Rect } from '../../screens/ExploreScreen/findEdges';
+import { markerBox, type Rect } from '../../screens/ExploreScreen/findEdges';
 
 export type { Rect };
 
@@ -175,15 +177,17 @@ export function mapTipGate(g: {
 export const UNDER_PAD = 18;
 
 /**
- * Whether a treat's map spot sits under any reserved area, or so close to the map's edge that its art is cut off
- * (then it shows as an edge arrow, never peeking). Pure.
+ * Whether a treat's marker sits under any reserved area, or so close to the map's edge that any part of it (the art,
+ * the NEW tag above it, the distance pill under it) is cut off. Then it shows as an edge arrow, never peeking. Pure.
  */
 export function underChrome(point: { readonly x: number; readonly y: number }, reserved: readonly Rect[], pad = UNDER_PAD,
   size: { readonly width: number; readonly height: number } | null = null): boolean {
-  // The art stands about 36 pt above its spot: test that box, not the bare point.
+  // The whole marker (art, tag and pill), not just its art: a half-cut "70 m" pill at the edge is a peek too (critic M2).
+  const box = markerBox(point);
+  if (size && (box.x < 0 || box.y < 0 || box.x + box.w > size.width || box.y + box.h > size.height)) return true;
+  // The art stands about 36 pt above its spot: that box keeps the padded margin around chrome.
   const art: Rect = { x: point.x - 20, y: point.y - 36, w: 40, h: 44 };
-  if (size && (art.x < 0 || art.y < 0 || art.x + art.w > size.width || art.y + art.h > size.height)) return true;
-  return reserved.some(r => hits(art, inflate(r, pad)));
+  return reserved.some(r => hits(art, inflate(r, pad)) || hits(box, r));
 }
 
 // ---------------------------------------------------------------------------------------------------------------

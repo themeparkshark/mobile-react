@@ -159,3 +159,63 @@ test('the home map and the park map read their chrome from the one owner', () =>
   assert.match(park, /tipCard=\{guideShown \?/);
   assert.match(park, /mapTipAllowed\(currentAppOpen\(\), parkTip\)/);
 });
+
+const E = loadTs('src/screens/ExploreScreen/findEdges.ts');
+
+test('(h) markers never overlap: touching markers draw as one with a count, one NEW tag at most', () => {
+  // Critic M1 (SE, cr-13): three treats piled on the shark, two NEW tags stacked one above the other.
+  const out = E.clusterFinds([
+    { pivot: 1, x: 150, y: 260, distance: 6 },
+    { pivot: 2, x: 190, y: 225, distance: 12 },
+    { pivot: 3, x: 280, y: 270, distance: 30 },
+  ]);
+  assert.deepEqual(plain(out.counts), { 1: 2 }, 'the pair that touches is one marker, the nearer find leads');
+  assert.deepEqual(plain(out.hidden), [2]);
+  // No two markers that still show touch.
+  const shown = [{ x: 150, y: 260 }, { x: 280, y: 270 }];
+  assert.ok(!hits(E.markerBox(shown[0]), E.markerBox(shown[1])));
+  // Grouped markers wear no NEW tag (one cue per marker): never two stacked.
+  assert.equal(C.markerCues({ isNew: true, inRange: true, target: false, grouped: true }).newTag, false);
+});
+
+test('(h) the shark is reserved: a treat on it folds into the nearest marker still showing; the hand keeps its own', () => {
+  const shark = { x: 187, y: 260 };
+  const out = E.clusterFinds([
+    { pivot: 10, x: 150, y: 300, distance: 5 },   // the hand's treat, beside the shark
+    { pivot: 11, x: 200, y: 230, distance: 9 },   // behind the shark's head
+    { pivot: 12, x: 320, y: 420, distance: 40 },  // far and clear
+  ], { shark, keep: 10 });
+  assert.ok(!out.hidden.includes(10), 'the target treat is never folded away');
+  assert.ok(out.hidden.includes(11), 'the treat behind the shark folds');
+  assert.equal(Object.values(plain(out.counts)).reduce((a, b) => a + b, 0), 2, 'its count joins a marker that shows');
+  assert.ok(!out.hidden.includes(12));
+  // A treat on the shark with no other marker showing still shows (nothing vanishes).
+  const lone = E.clusterFinds([{ pivot: 20, x: 190, y: 250, distance: 3 }], { shark, keep: null });
+  assert.deepEqual(plain(lone.hidden), []);
+  // HomeExplore groups only the finds that show, around the real shark, keeping the hand's treat.
+  const homeSrc = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(homeSrc, /clusterFinds\(\[\.\.\.next\.entries\(\)\]\.filter\(\(\[pivot\]\) => !covered\.has\(pivot\)\)/);
+  assert.match(homeSrc, /\{ shark, keep \}\)/);
+});
+
+test('(c) a marker cut by the screen edge is an edge arrow: its pill never peeks (critic M2)', () => {
+  const layout = home();
+  const reserved = layout.reserved.map(r => r.rect);
+  assert.ok(C.underChrome({ x: 18, y: 400 }, reserved, undefined, PRO), '18 pt inside the left edge: the pill would be cut');
+  assert.ok(C.underChrome({ x: PRO.width - 30, y: 400 }, reserved, undefined, PRO), '30 pt inside the right edge');
+  assert.ok(!C.underChrome({ x: 60, y: 400 }, reserved, undefined, PRO), 'fully on screen');
+  const homeSrc = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  // A point just off screen (10 pt outside) is hidden too and becomes an edge arrow candidate.
+  assert.match(homeSrc, /if \(off \|\| under\) covered\.add\(item\.pivot_id\);/);
+  assert.match(homeSrc, /if \(off \|\| under\) edges\.push\(\{ item, point, distance \}\);/);
+});
+
+test('(e) one cue per reward: while the home card names a reward, the rail chest drops its number', () => {
+  const btn = read('src/components/map/RewardsButton.tsx');
+  assert.match(btn, /model\.count > 0 && !cardHasIt && <View style=\{styles\.count\}/);
+  const homeSrc = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(homeSrc, /const rewardCard = guideShown && homeStep\?\.key === 'reward';/);
+  const park = read('src/screens/ExploreScreen.tsx');
+  assert.match(park, /cardHasIt=\{homeRewardCard && !atParkNow\}/);
+  assert.match(park, /onRewardCardChange=\{setHomeRewardCard\}/);
+});

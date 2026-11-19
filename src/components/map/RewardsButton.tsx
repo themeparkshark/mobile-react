@@ -94,8 +94,13 @@ export function trailBoxJustReady(previous: number | null, ready: number, trailO
   return trailOpen && previous !== null && Number.isFinite(ready) && ready > previous;
 }
 
-export default function RewardsButton({ model, onPress, isNew = false }: {
+export default function RewardsButton({ model, onPress, isNew = false, cardHasIt = false }: {
   readonly model: RewardsButtonModel; readonly onPress: () => void;
+  /**
+   * The map's top card already names a reward to claim: the chest drops its number, so one reward never wears two
+   * cues at once (critic, Nov 19: READY FOR YOU on the card and a 3 on the chest).
+   */
+  readonly cardHasIt?: boolean;
   /** The flame (rung 4) or the Trail ring (rung 6) just unlocked: the button wears NEW until tapped. */
   readonly isNew?: boolean;
 }) {
@@ -117,7 +122,7 @@ export default function RewardsButton({ model, onPress, isNew = false }: {
       </View>}
       <Image source={CHEST} style={styles.chest} contentFit="contain" transition={0} />
       {isNew && <NewTag style={styles.newTag} />}
-      {model.count > 0 && <View style={styles.count} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {model.count > 0 && !cardHasIt && <View style={styles.count} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Text style={styles.countText}>{model.count > 9 ? '9+' : model.count}</Text>
       </View>}
       {model.flame !== null && <View style={styles.flame} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

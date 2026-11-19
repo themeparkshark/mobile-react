@@ -1462,8 +1462,10 @@ export function ExploreScreenBody() {
     if (rewardsNewKey.includes('trail')) trailRung.markSeen();
     openRewards();
   }, [rewardsNewKey, dailyRung, trailRung, openRewards]);
+  // The home card names a reward to claim: the rail chest drops its number (one cue per reward).
+  const [homeRewardCard, setHomeRewardCard] = useState(false);
   const mapControls = mapControlsCount > 0 ? <TrailReadyPulse pulseKey={trailPulse}>
-    <RewardsButton model={rewardsModel} onPress={onRewardsPress} isNew={rewardsNew} />
+    <RewardsButton model={rewardsModel} onPress={onRewardsPress} isNew={rewardsNew} cardHasIt={homeRewardCard && !atParkNow} />
   </TrailReadyPulse> : null;
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
@@ -1902,7 +1904,7 @@ export function ExploreScreenBody() {
           onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
           introAllowed={mapOnScreen && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
-          onIntroOpenChange={setHomeIntroOpen} onIntroOwedChange={setHomeIntroOwed} chestButton={mapControls} chestButtonCount={mapControlsCount} compassHintReady={parkTipReady} highlightNearestFind={highlightNearestFind}
+          onIntroOpenChange={setHomeIntroOpen} onIntroOwedChange={setHomeIntroOwed} onRewardCardChange={setHomeRewardCard} chestButton={mapControls} chestButtonCount={mapControlsCount} compassHintReady={parkTipReady} highlightNearestFind={highlightNearestFind}
           parkStory={activeParkProject && !finnOwnsMap ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null}
           eventChip={liveEvt.event?.include_home && !finnOwnsMap ? <EventHomeChip event={liveEvt.event} onPress={() => setEventOpen(true)} /> : null}

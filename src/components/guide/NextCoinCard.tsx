@@ -18,7 +18,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
 import { AMBIENT, BEZIER } from '../../ui/motion';
 import { usePowerBudget } from '../../power';
-import type { GuideAction, GuideButton, GuideCardCopy } from '../../services/guide/guideCopy';
+import { cardKicker, type GuideAction, type GuideButton, type GuideCardCopy } from '../../services/guide/guideCopy';
 import type { GuideState } from '../../services/guide/nextCoin';
 import CoinTipPicture from '../help/CoinTipPicture';
 import { StampDot } from '../../screens/ExploreScreen/AdventureTicketCard';
@@ -86,18 +86,18 @@ function LineButton({ label, onPress, title }: { label: string; onPress: () => v
 }
 
 /**
- * Today's Adventure ticket tab: a small ticket on the card's top edge while the guide points at
- * another coin, so the Adventure's sheet (its line story, its souvenir, another ride, hide for
- * today) is never stranded. A gold ticket button (the card button's look, so it never reads like the
- * white park name chip beside it) with the ticket picture and its three stamp dots; a 46 pt tap target.
+ * Today's Adventure ticket stamps inside the card, on its kicker line, while the guide points at another coin, so
+ * the Adventure's sheet (its line story, its souvenir, another ride, hide for today) is never stranded. Nothing
+ * sits on the card's frame (critic M3, Nov 19: the old tab rode the top border beside the park chip). A small gold
+ * ticket button (the card button's look) with the ticket picture and its three stamp dots; a 46 pt tap target.
  */
 function AdventureTab({ stamps, onPress }: { stamps: readonly [boolean, boolean, boolean]; onPress: () => void }) {
   const done = stamps.filter(Boolean).length;
-  return <Pressable testID="adventure-tab" accessibilityRole="button" hitSlop={{ top: 10, bottom: 8, left: 6, right: 6 }}
+  return <Pressable testID="adventure-tab" accessibilityRole="button" hitSlop={TAB_SLOP}
     accessibilityLabel={`Today's Adventure. ${done} of 3 stamps. Open your ticket`}
     onPress={() => { haptic('tapLight'); onPress(); }}
     style={({ pressed }) => [styles.tab, pressed && styles.pressed]}>
-    <GameIcon name="ticket" size={20} />
+    <GameIcon name="ticket" size={16} />
     <View style={styles.tabDots}>
       {stamps.map((on, index) => <View key={index} style={[styles.tabDot, on && styles.tabDotOn]} />)}
     </View>
@@ -112,7 +112,7 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   readonly state: GuideState;
   /** The target coin's art, or null (wallet and resting states draw the Ticket). */
   readonly coinUrl: string | null;
-  /** The park name chip on park maps ("Disneyland"); null at home. */
+  /** The park's name on park maps ("Disneyland"), joined to the kicker line; null at home. */
   readonly parkName: string | null;
   readonly top: number;
   readonly onAction: (action: GuideAction) => void;
@@ -157,15 +157,9 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   // The goodbye is about the park day, not a coin to win next: the house gold coin, never the next park's coin art.
   // At home with no coin planned yet, the card pictures the Tickets waiting for the next park day (T016).
   const art = artOverride != null ? artOverride : state === 'goodbye' ? COIN_FALLBACK : wallet || !coinUrl ? (wallet || state === 'home' ? TICKET : COIN_FALLBACK) : { uri: coinUrl };
+  const kicker = cardKicker(copy.kicker, parkName, state);
   return <Animated.View testID={testID} style={[styles.slot, { top }, animated]}
     onLayout={onHeight ? event => onHeight(Math.round(event.nativeEvent.layout.height)) : undefined}>
-    {/* The park name chip and today's Adventure ticket tab sit on the card's top edge, so the kicker never shortens. */}
-    {(adventureTab || (parkName && state !== 'arrive' && copy.kicker !== parkName.toUpperCase())) && <View pointerEvents="box-none" style={styles.edgeRow}>
-      {adventureTab && <AdventureTab stamps={adventureTab.stamps} onPress={adventureTab.onPress} />}
-      {parkName && state !== 'arrive' && copy.kicker !== parkName.toUpperCase() && <View pointerEvents="none" style={styles.parkChip}>
-        <Text style={styles.parkChipText} numberOfLines={1} maxFontSizeMultiplier={CARD_TEXT_MAX}>{parkName}</Text>
-      </View>}
-    </View>}
     {/* With the in-line offer the card's parts read one by one, so VoiceOver reaches its LINEPLAY button too. */}
     <Pressable accessible={!lineOffer} accessibilityRole="button" accessibilityLabel={copy.a11y} onPress={onCardPress}
       disabled={!onCardPress} style={styles.card}>
@@ -177,7 +171,12 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
         </View>}
       </View>
       <View style={styles.copy}>
-        <Text style={styles.kicker} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={CARD_TEXT_MAX}>{copy.kicker}</Text>
+        {/* One kicker line: the park's name joins it ("NEXT COIN · DISNEYLAND") and today's Adventure stamps sit at
+            its end, so nothing rides the card's frame (critic M3). */}
+        <View style={styles.kickerRow}>
+          <Text style={styles.kicker} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={CARD_TEXT_MAX}>{kicker}</Text>
+          {adventureTab && <AdventureTab stamps={adventureTab.stamps} onPress={adventureTab.onPress} />}
+        </View>
         <Animated.Text style={[styles.title, breathStyle]} numberOfLines={3} maxFontSizeMultiplier={CARD_TEXT_MAX}>{copy.title}</Animated.Text>
         {copy.dots && (onDotsPress
           ? <Pressable testID="adventure-dots" accessibilityRole="button" accessibilityLabel="Today's Adventure stamps. Open your ticket"
@@ -211,7 +210,9 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
 export const CARD_TEXT_MAX = 1.3;
 
 /** The ticket tab's stamp dots (pt): big enough to read as three stamps at a glance. */
-export const TAB_DOT = 9;
+export const TAB_DOT = 8;
+/** The in-card ticket tab is 20 pt tall: 13 pt of slop above and below makes its 46 pt tap target. */
+const TAB_SLOP = { top: 13, bottom: 13, left: 6, right: 6 } as const;
 
 const styles = StyleSheet.create({
   slot: { position: 'absolute', left: 12, right: GUIDE_CARD_RIGHT, zIndex: 21 },
@@ -221,18 +222,14 @@ const styles = StyleSheet.create({
   coin: { width: 46, height: 46 },
   pointer: { flexDirection: 'row', alignItems: 'center', transform: [{ rotate: '90deg' }] },
   copy: { flex: 1, minWidth: 0 },
-  kicker: { color: '#ffdc61', fontFamily: 'Knockout', fontSize: 11, letterSpacing: 0.6 },
-  edgeRow: { position: 'absolute', top: -9, right: 14, zIndex: 2, flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
-  parkChip: { backgroundColor: BRAND.white, borderRadius: 8,
-    borderWidth: 2, borderColor: BRAND.blueBright, paddingHorizontal: 6, paddingVertical: 0, maxWidth: 170 },
-  // A gold button (the card's own button look, lip and all), never a white label like the park chip beside it.
-  tab: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.gold, borderRadius: 10, borderWidth: 2,
-    borderColor: BRAND.white, borderBottomWidth: 4, borderBottomColor: BRAND.goldLip, paddingHorizontal: 6, height: 28, marginTop: -8,
-    ...SHADOW.card },
+  kicker: { flexShrink: 1, color: '#ffdc61', fontFamily: 'Knockout', fontSize: 11, letterSpacing: 0.6 },
+  kickerRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // A gold button (the card's own button look, lip and all), inside the card on the kicker line.
+  tab: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.gold, borderRadius: 8,
+    borderBottomWidth: 3, borderBottomColor: BRAND.goldLip, paddingHorizontal: 5, height: 20, marginLeft: 'auto' },
   tabDots: { flexDirection: 'row', gap: 3 },
   tabDot: { width: TAB_DOT, height: TAB_DOT, borderRadius: TAB_DOT / 2, borderWidth: 1.5, borderColor: BRAND.navy, backgroundColor: BRAND.white },
   tabDotOn: { backgroundColor: BRAND.navy },
-  parkChipText: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 10 },
   title: { color: BRAND.white, fontFamily: 'Shark', fontSize: 15, marginTop: 1 },
   line: { color: '#dff4ff', fontFamily: 'Knockout', fontSize: 12, marginTop: 1 },
   dots: { flexDirection: 'row', gap: 5, marginTop: 3 },

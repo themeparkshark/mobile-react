@@ -1158,7 +1158,7 @@ test('launch never starts the login music while sign-in is still loading (no aud
 test('map rail: Daily 3 first and the late chest joins at the end, popping in on the UI thread (no button ever moves)', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
   // Core loop 4.2: the chest and Daily 3 buttons fold into one Rewards button (one chest, one number), so no button moves.
-  assert.match(explore, /const mapControls = mapControlsCount > 0 \? <TrailReadyPulse pulseKey=\{trailPulse\}>\n\s+<RewardsButton model=\{rewardsModel\} onPress=\{onRewardsPress\} isNew=\{rewardsNew\} \/>\n\s+<\/TrailReadyPulse> : null;/);
+  assert.match(explore, /const mapControls = mapControlsCount > 0 \? <TrailReadyPulse pulseKey=\{trailPulse\}>\n\s+<RewardsButton model=\{rewardsModel\} onPress=\{onRewardsPress\} isNew=\{rewardsNew\} cardHasIt=\{homeRewardCard && !atParkNow\} \/>\n\s+<\/TrailReadyPulse> : null;/);
   assert.doesNotMatch(explore, /retention\.button/);
   const chest = read('src/components/map/ChestMapButton.tsx');
   assert.match(chest, /Animated\.spring\(shown, \{ toValue: 1, stiffness: 320, damping: 18, mass: 0\.8, useNativeDriver: true \}\)/);
