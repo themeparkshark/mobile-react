@@ -164,6 +164,11 @@ export interface WhackSim {
   fever: boolean;
   feverLeft: number;
   coin: number;
+  /** Ride rules 5: the meter counts bonks (one notch each, never backward). */
+  bonkMeter: boolean;
+  /** Bonks counted on the ride meter, and the bonks that win. */
+  bonks: number;
+  winBonks: number;
   win: boolean;
   winAt: number;
   // Stats
@@ -281,6 +286,9 @@ export function createSim(tl: Timeline, carry: BurstCarry = NO_CARRY, emit = tru
     fever: tl.fever && (start || carry.feverLeft > 0),
     feverLeft: !tl.fever ? 0 : start ? FEVER_MS : Math.max(0, carry.feverLeft | 0),
     coin: 0,
+    bonkMeter: !!tl.ride && !!tl.bonkMeter,
+    bonks: 0,
+    winBonks: tl.winBonks > 0 ? tl.winBonks : 13,
     win: false,
     winAt: -1,
     hits: 0,
@@ -424,6 +432,21 @@ function addMeter(s: WhackSim, pct: number): void {
 function addCoin(s: WhackSim, pct: number): void {
   'worklet';
   if (!s.ride || s.win) return;
+  if (s.bonkMeter) {
+    // T040: one notch per friendly bonk, whatever its grade; nothing ever takes one back.
+    if (pct <= 0) return;
+    s.bonks += 1;
+    s.coin = Math.min(100, (s.bonks * 100) / s.winBonks);
+    if (s.bonks >= s.winBonks) {
+      s.coin = 100;
+      s.win = true;
+      s.winAt = s.t;
+      s.ended = true;
+      push(s, E_WIN, 0, 0, 0);
+      push(s, E_END, 2, 0, 0);
+    }
+    return;
+  }
   s.coin += pct;
   if (s.coin < 0) s.coin = 0;
   if (s.coin >= 100) {
@@ -873,11 +896,14 @@ export function simTap(s: WhackSim, h: number, dx = 0, dy = 0, sub = 0): void {
     flags |= TAP_RESUME;
     resumeLookUp(s, h);
     if (s.rules === 5) {
-      // v5: the touch that ends a freeze only resumes. It never hits anything, wherever it lands.
+      // v5: the touch that ends a freeze resumes the board. Fix round w3 T028: when it lands on a
+      // friendly target that is up (the one the player came back for), it also bonks it.
+      // A resume on an empty hole, a decoy or a splat is still only a resume (never a whiff).
       s.taps.push(s.t, h, flags);
       s.pos.push(clampI8(dx), clampI8(dy), sub < 0 ? 0 : sub > 16 ? 16 : Math.round(sub));
       s.tapCount += 1;
       s.lastTap = s.t;
+      if (s.hPh[h] === P_UP && s.hSplat[h] !== SPLAT_DOWN && s.t >= s.hLock[h] && !isDecoyKind(kindAt(s, h))) bonk(s, h);
       return;
     }
   }
@@ -978,6 +1004,9 @@ export interface BurstResult {
   /** A banked fever is waiting (the breather offers GO FEVER). */
   feverReady: boolean;
   coin: number;
+  /** Ride: bonks on the meter and the bonks that win (the loss card says "5 of 8 bonks"). */
+  bonks: number;
+  winBonks: number;
   winAt: number;
   bossHp: number;
   bossDamage: number;
@@ -986,9 +1015,17 @@ export interface BurstResult {
   carry: BurstCarry;
 }
 
-export function rideStars(s: { win: boolean; winAt: number }): number {
+/** Bonk meter stars (T040): the meter fills at the spawn pace for everyone, so stars come from QUICK bonks. */
+export const RIDE_STAR_QUICK = { three: 0.3, two: 0.1 };
+
+export function rideStars(s: { win: boolean; winAt: number; bonkMeter?: boolean; quick?: number; good?: number; late?: number }): number {
   'worklet';
   if (!s.win) return 0;
+  if (s.bonkMeter) {
+    const judged = (s.quick ?? 0) + (s.good ?? 0) + (s.late ?? 0);
+    const share = judged > 0 ? (s.quick ?? 0) / judged : 0;
+    return share >= RIDE_STAR_QUICK.three ? 3 : share >= RIDE_STAR_QUICK.two ? 2 : 1;
+  }
   if (s.winAt <= 18000) return 3;
   if (s.winAt <= 24000) return 2;
   return 1;
@@ -1026,6 +1063,8 @@ export function simResult(s: WhackSim): BurstResult {
     lookupDrops: s.lookupDrops,
     feverReady: s.feverReady,
     coin: Math.round(s.coin),
+    bonks: s.bonkMeter ? s.bonks : Math.floor((Math.min(100, s.coin) * s.winBonks) / 100),
+    winBonks: s.winBonks,
     winAt: s.winAt,
     bossHp: s.bossHp,
     bossDamage: s.bossMax - s.bossHp,

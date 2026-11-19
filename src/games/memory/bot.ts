@@ -4,13 +4,15 @@
  */
 import { K_GLIMPSED, K_MATCHED, K_SEEN, type MMState } from './engine';
 
-export type BotProfile = 'clean' | 'mixed' | 'novice' | 'timeout';
+export type BotProfile = 'clean' | 'mixed' | 'novice' | 'timeout' | 'kid';
 
 export const BOT: Record<BotProfile, { recall: number; minMs: number; maxMs: number }> = {
   clean: { recall: 1, minMs: 380, maxMs: 560 },
   mixed: { recall: 0.8, minMs: 520, maxMs: 820 },
   novice: { recall: 0.5, minMs: 800, maxMs: 1200 },
   timeout: { recall: 0.3, minMs: 1500, maxMs: 2300 },
+  /** The slow picture-only kid (fix round w3 T027 device proof): about a tap a second, often forgets a card. */
+  kid: { recall: 0.35, minMs: 1000, maxMs: 1500 },
 };
 
 function known(s: MMState, slot: number): boolean {

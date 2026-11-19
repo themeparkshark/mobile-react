@@ -126,6 +126,33 @@ export const COIN_ESCAPE = -3;
 export const COIN_BUTTER = -10;
 /** "13 BONKS TO WIN": 100% / GOOD (8%) rounds up to 13 notches. */
 export const RIDE_WIN_NOTCHES = 13;
+/**
+ * Bonk meter (rules 5 ride, fix round w3 T040): the ride meter counts bonks, one
+ * notch per friendly bonk (a golden or a Bruiser hit is one bonk too). Escapes,
+ * anglerfish and butterfingers never take a notch back, so the meter only fills.
+ */
+export const RIDE_WIN_BONKS = RIDE_WIN_NOTCHES;
+const RIDE_ANGLER_FROM_MS = 5000;
+/**
+ * Kid rules (picture-only players, T027 and T223): about 2 wins in 3 tries for a
+ * slow tapper (the autoplayer's 'kid' profile: about 1 tap a second, 1.25 s to
+ * react, often bonks the anglerfish; it won 1 ride in 100 under the old rules,
+ * like the kid walker's 2 of 16). 10 bonks win, every target stays up 25% longer
+ * and spawns come 40% slower, so the board is calmer. The server checks the same
+ * goal for the attempt (TaskGameProofService, kid_rules). Tuned in
+ * tools/tests/whack-kid-rules.test.cjs.
+ */
+export const RIDE_WIN_BONKS_KID = 10;
+export const KID_UP_MULT = 1.25;
+export const KID_GAP_SCALE = 1.4;
+export const KID_ANGLER_FROM = RIDE_ANGLER_FROM_MS;
+export const KID_ANGLER_SHARE = 1;
+
+/** The ride meter's words: "8 BONKS TO WIN", "1 BONK TO WIN". */
+export function bonksToWinLabel(left: number): string {
+  'worklet';
+  return left === 1 ? '1 BONK TO WIN' : `${left} BONKS TO WIN`;
+}
 
 // Boss (5.6)
 export const BOSS_HP: Record<Difficulty, number> = { 1: 16, 2: 20, 3: 24 };
@@ -315,7 +342,7 @@ export const SHAPES: Record<BurstShapeId, BurstShape> = {
 };
 
 /** Ride segments (5.3): anglers from 8s, formations 16-24s, Bruiser 24-30s. */
-export const RIDE_ANGLER_FROM = 5000;
+export const RIDE_ANGLER_FROM = RIDE_ANGLER_FROM_MS;
 export const RIDE_BRUISER_FROM = 24000;
 export const RIDE_BRUISER_EVERY = 1500;
 

@@ -1003,6 +1003,7 @@ test('item 13: Who\'s in line? is asked once per wait (its own id), and never sa
   const sheet = loadTs('src/screens/LinePlay/group/WhosInLineSheet.tsx', {
     react: {}, 'react-native': { StyleSheet: { create: x => x }, Platform: { OS: 'ios' } }, 'expo-image': {},
     'react-native-reanimated': {}, '../../../context/AuthProvider': {},
+    '../../../services/playPrefs': { crewWantsPictureGames: () => false, defaultPictureGamesOn: async () => false },
     '../../../hooks/useReducedGameMotion': {}, '../../../services/lineplay/lineGroup': {}, './PlayerBadge': {},
     // Style tokens only: any name reads as a plain value.
     '../../../ui': new Proxy({}, { get: () => new Proxy({}, { get: () => 0 }) }),

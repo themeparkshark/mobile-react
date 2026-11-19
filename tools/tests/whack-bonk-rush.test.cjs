@@ -189,7 +189,7 @@ test('whiffs: one bump is free; 3 in 1s is Butterfingers (only once unlocked)', 
   assert.equal(early.s.butters, 0, 'not before lifetime 3');
 });
 
-test('Auto Look-Up v5: an idle player never loses a target; the resume touch only resumes, frozen targets run on at 1x', () => {
+test('Auto Look-Up v5: an idle player never loses a target; the resume touch bonks the up target it lands on (T028), frozen targets run on at 1x', () => {
   const tl = q(21, 0, 0);
   const s = S.createSim(tl, undefined, true);
   S.simAdvance(s, 60000);
@@ -206,12 +206,10 @@ test('Auto Look-Up v5: an idle player never loses a target; the resume touch onl
   S.simTap(s, h);
   assert.equal(s.frozen, false);
   assert.equal(s.taps[2] & S.TAP_RESUME, 1, 'resume flag bit');
-  assert.equal(s.hits, hitsBefore, 'the resume touch never hits, even on the target');
+  // Fix round w3 T028: the touch that resumes the board on the up target also bonks it (TAP TO KEEP BONKING).
+  assert.equal(s.hits, hitsBefore + 1, 'the resume touch on the up target bonks it');
+  assert.equal(s.late, 1, 'it grades LATE (about 0.8U into its up time)');
   assert.equal(s.whiffs, 0, 'and never whiffs');
-  // The frozen target continues at 1x: about 0.2U left, a quick LATE is still possible.
-  S.simAdvance(s, 60);
-  S.simTap(s, h);
-  assert.equal(s.late, 1, 'a follow-up tap grades LATE');
   // Keep idling: every target is either hit or frozen on, never escaped.
   let guard = 0;
   while (!s.ended && guard++ < 400) {

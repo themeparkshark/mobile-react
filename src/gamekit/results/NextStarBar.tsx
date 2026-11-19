@@ -3,8 +3,8 @@
  *
  * A fill bar that ends in a star, with one short word over it (KEEP GOING,
  * HALFWAY THERE, ALMOST!, ALL 3 STARS!). A kid who cannot read 8,000 still
- * sees how close the star is. The exact points live in the accessibility
- * label. The fill grows once, after the score count, on the UI thread, as a
+ * sees how close the star is; the next star's score sits under the star for
+ * everyone else (T061), and the exact points live in the accessibility label. The fill grows once, after the score count, on the UI thread, as a
  * scaleX transform from the left edge (no layout pass per frame).
  */
 
@@ -14,9 +14,11 @@ import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, wi
 import GameIcon from '../../ui/GameIcon';
 import { formatScore, type NextStarGoal } from '../core/scoring';
 import { nextStarWord } from './feelings';
+import countText from '../../helpers/countText';
 
 export function NextStarBar({ goal, delayMs = 0, reducedMotion = false, tone = 'onBlue', word, a11yLabel }: {
-  goal: Pick<NextStarGoal, 'nextStar' | 'progress' | 'near' | 'remaining'>;
+  /** `target` (the next star's score) draws under the star, so the goal is a number too (fix round w3 T061). */
+  goal: Pick<NextStarGoal, 'nextStar' | 'progress' | 'near' | 'remaining'> & { target?: number };
   /** A different word over the bar (Sharky's ride gate: ALMOST AT THE GATE!). */
   word?: string;
   /** A different spoken label (the exact numbers live here, never on screen). */
@@ -53,6 +55,11 @@ export function NextStarBar({ goal, delayMs = 0, reducedMotion = false, tone = '
         </View>
         <View style={styles.star}>
           <GameIcon name="star" size={34} mono={goal.nextStar ? '#bfe5ff' : undefined} />
+          {goal.nextStar && (goal.target ?? 0) > 0 ? (
+            <Animated.Text style={[styles.target, tone === 'onWhite' && styles.wordInk, wordStyle]} importantForAccessibility="no">
+              {countText(goal.target ?? 0)}
+            </Animated.Text>
+          ) : null}
         </View>
       </View>
     </View>
@@ -63,8 +70,10 @@ const styles = StyleSheet.create({
   goal: { width: '100%', marginTop: 8, alignItems: 'center' },
   word: { fontFamily: 'Shark', fontSize: 17, color: '#ffffff', marginBottom: 4 },
   wordInk: { color: '#05346e' },
+  /** The next star's score under the star (digits only, the Shark font's comma reads as a period). */
+  target: { position: 'absolute', top: 34, fontFamily: 'Shark', fontSize: 13, color: '#ffffff' },
   row: { flexDirection: 'row', alignItems: 'center', width: '100%' },
   track: { flex: 1, height: 18, borderRadius: 9, backgroundColor: '#bfe5ff', borderWidth: 3, borderColor: '#05346e', overflow: 'hidden' },
   fill: { width: '100%', height: '100%', backgroundColor: '#ffcf3b', transformOrigin: 'left' },
-  star: { marginLeft: -8 },
+  star: { marginLeft: -8, alignItems: 'center' },
 });

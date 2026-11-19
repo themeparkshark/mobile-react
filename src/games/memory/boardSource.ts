@@ -140,7 +140,10 @@ function authority(cfg: MMConfig, init: EngineInit) {
       serverNow = Math.max(serverNow, recvAt);
       let at: number;
       if (charged && timing) {
-        chargeFlip(charge, { clientT: timing.clientT, rxPrevT: timing.rxPrevT, recvAt: serverNow, pipelined: timing.pipelined });
+        // T042: the first flip starts the clock; a flip with no card up is charged at most the idle pause.
+        const resting = eng.phase !== 1; // no card, or a miss pair that flips back on its own
+        const thinkCapMs = cfg.idlePauseMs > 0 && resting ? (charge.flips === 0 ? 0 : cfg.idlePauseMs) : undefined;
+        chargeFlip(charge, { clientT: timing.clientT, rxPrevT: timing.rxPrevT, recvAt: serverNow, pipelined: timing.pipelined, thinkCapMs });
         at = charge.chargedMs;
       } else {
         at = timing ? timing.clientT : recvAt;

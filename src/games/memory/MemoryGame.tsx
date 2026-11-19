@@ -250,6 +250,11 @@ export interface MemoryGameProps {
   visible: boolean;
   /** Legacy: 0 with no mode = Warm-up; 1-3 = queue boards. The paid ride passes mode="ride". */
   difficulty?: number;
+  /**
+   * Kid rules for the paid ride (picture-only players, fix round w3 T027): the board size the server's
+   * attempt rules name (memory.pairs, RIDE_KID_PAIRS). The kid fix itself is the resting clock (T042).
+   */
+  kid?: boolean;
   mode?: MemoryMode;
   /** Server attempt seed. Each run and try derives its own board from it. */
   seed?: number;
@@ -280,6 +285,25 @@ export interface DailySetup {
 
 export const RIDE_TRIES = 3;
 const TICK_MS = 50;
+/**
+ * Kid rules ride board (T027): 6 pairs on 4 x 3, on the clock that rests until the first flip (T042).
+ * On device the slow kid bot won 2 of 8 Tickets on 8 pairs (fix-w3/play evidence), well under the
+ * 2 in 3 target, so kids get the smaller board the Time Attack opener already uses.
+ */
+export const RIDE_KID_PAIRS = 6;
+
+/**
+ * The ride loss card's numbers (T049): this shell's pairs plus the best shell of the Ticket, so a
+ * last shell that found nothing never hides the 4 pairs an earlier shell matched ("Best try: 4 of 8").
+ */
+/** The deck mastery line on the results card: "+4 CARNIVAL DECK" (never XP, T064). */
+export function deckProgressLine(label: string, points: number): string {
+  return `+${points} ${label.toUpperCase()} DECK`;
+}
+
+export function rideTryMeta(pairs: number, pairsTotal: number, bestEarlier: number): Record<string, unknown> {
+  return { game: 'memory', pairs, pairsTotal, bestPairs: Math.max(pairs, bestEarlier) };
+}
 
 const now = () => (global as unknown as { performance?: { now: () => number } }).performance?.now() ?? Date.now();
 
@@ -373,9 +397,12 @@ export default function MemoryGame({
   party,
   daily,
   captureAutoplay,
+  kid = false,
 }: MemoryGameProps) {
   const partyRef = useRef(party);
   partyRef.current = party;
+  const kidRef = useRef(kid);
+  kidRef.current = kid;
   const devMode = DEV ? process.env.EXPO_PUBLIC_MEMORY_MODE || null : null;
   const mode: MemoryMode = resolveMemoryMode({ party, devMode, mode: modeProp, difficulty });
   const flags = modeFlags(mode === 'race' ? 'race' : mode);
@@ -673,8 +700,9 @@ export default function MemoryGame({
       // Signal Mode is chosen once from the start pings (in-process stand-in: dev flag).
       signal = signalModeFor(DEV_SIGNAL ? [2600, 2400, 2300] : [80, 90, 85]);
       const cfg = rideSprintConfig(45000, signal ? SIGNAL_TURNS : 0);
-      src = createSimReveal({ cfg, layout: { pairs: 8, deckSize, seed: s }, deckSize, engineSeed: s ^ 0x5bd1e995, latencyMs: DEV_LATENCY });
-      eng = createEngine(cfg, { cols: 4, rows: 4, seed: s ^ 0x5bd1e995 });
+      const pairs = kidRef.current ? RIDE_KID_PAIRS : 8;
+      src = createSimReveal({ cfg, layout: { pairs, deckSize, seed: s }, deckSize, engineSeed: s ^ 0x5bd1e995, latencyMs: DEV_LATENCY });
+      eng = createEngine(cfg, { cols: 4, rows: pairs / 2, seed: s ^ 0x5bd1e995 }); // 4 x 4, or 4 x 3 for kids
     } else if (mode === 'warmup') {
       const cfg = warmupConfig();
       src = createLocalBoard({ pairs: 4, deckSize, seed: s }, deckSize);
@@ -1221,7 +1249,8 @@ export default function MemoryGame({
         if (xp > 0) try {
           const m = addXp(await loadMastery(), deck.id, xp);
           await saveMastery(m.mastery);
-          extra.push(m.after > m.before ? `${deck.label.toUpperCase()} LEVEL ${m.after}!` : `+${xp} XP`);
+          // T064: deck progress is its own word, never "XP" beside the server's player XP.
+          extra.push(m.after > m.before ? `${deck.label.toUpperCase()} LEVEL ${m.after}!` : deckProgressLine(deck.label, xp));
         } catch {
           // Mastery waits for the next run.
         }
@@ -1397,6 +1426,9 @@ export default function MemoryGame({
     else stage.current?.tumble();
     rope.urgent.value = 0;
     const left = RIDE_TRIES - 1 - r.tryIndex;
+    // T049: remember this shell's pairs before the next shell (or the loss card) reads the best.
+    const bestEarlier = r.tryIndex === 0 ? 0 : rideBestPairsRef.current;
+    if (r.mode === 'ride') rideBestPairsRef.current = Math.max(bestEarlier, r.eng.pairs);
     // With nothing to reveal there is nothing to look at: the card comes up fast.
     later(k > 0 ? 1500 : 600, () => {
       // Ride challenge: every try ends on the same end card (TRY AGAIN while
@@ -1404,7 +1436,7 @@ export default function MemoryGame({
       if (r.mode === 'ride' && left <= 0 && rideChallengeRef.current) {
         // The Ticket's last try: one loss card (core loop 5.3), the ride's own, which carries
         // "6 of 8 pairs." and TRY AGAIN when the Ticket came back. No Memory try card before it.
-        noteRideTry({ stars: 0, meta: { game: 'memory', pairs: r.eng.pairs, pairsTotal: r.eng.pairsTotal } });
+        noteRideTry({ stars: 0, meta: rideTryMeta(r.eng.pairs, r.eng.pairsTotal, bestEarlier) });
         giveUpRef.current?.();
       } else if (r.mode === 'ride') {
         // Short phones: the card covers more board, so veil it a bit more under the ribbon.
@@ -2257,8 +2289,15 @@ export default function MemoryGame({
     const id = r.eng.ids[s];
     pressedId.current = id;
     cards.current[id]?.press((x - c.x) / (g.cw / 2), (y - c.y) / (g.ch / 2));
+    // T063: the card flips on touch-down, so a quick tap (under 0.1 s) always flips it.
+    if (!r.ended && r.pausedAt == null) {
+      flippedOnDown.current = true;
+      tapSlotRef.current(s);
+    }
   }, [gameNow, hitSlot, send]);
 
+  /** The current touch flipped its card on touch-down (T063). */
+  const flippedOnDown = useRef(false);
   const releaseHold = useCallback(() => {
     if (!holding.current) return;
     holding.current = false;
@@ -2374,6 +2413,11 @@ export default function MemoryGame({
     pressedId.current = -1;
     const wasHolding = holding.current;
     releaseHold();
+    // The touch-down already flipped this card (T063): the lift only releases it.
+    if (flippedOnDown.current) {
+      flippedOnDown.current = false;
+      return;
+    }
     const r = runRef.current;
     if (wasHolding && r && r.eng.phase !== 2) return;
     tapSlot(hitSlot(x, y));
@@ -2381,6 +2425,7 @@ export default function MemoryGame({
   const onCancel = useCallback(() => {
     if (pressedId.current >= 0) cards.current[pressedId.current]?.release();
     pressedId.current = -1;
+    flippedOnDown.current = false;
     releaseHold();
   }, [releaseHold]);
 
@@ -2432,7 +2477,7 @@ export default function MemoryGame({
     const r = runRef.current;
     if (rideChallenge && r?.mode === 'ride') {
       // The ride's one loss card says how far this try got ("3 of 8 pairs.").
-      noteRideTry({ stars: 0, meta: { game: 'memory', pairs: r.eng.pairs, pairsTotal: r.eng.pairsTotal } });
+      noteRideTry({ stars: 0, meta: rideTryMeta(r.eng.pairs, r.eng.pairsTotal, r.tryIndex === 0 ? 0 : rideBestPairsRef.current) });
       r.ended = true;
       r.playing = false;
       clearTimers();

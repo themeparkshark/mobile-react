@@ -23,6 +23,9 @@ import {
   type BurstResult, type WhackSim,
 } from './sim';
 import { K_ANGLER, K_BRUISER, K_HELMET, K_PUFFER } from './waves';
+
+/** Dev-only slow kid bot for the T027 device proof (never in a store build: __DEV__ folds it away). */
+const KID_BOT = __DEV__ && process.env.EXPO_PUBLIC_WHACK_BOT === 'kid';
 import { hitTest, touchOffset, type BoardLayout } from './render/layout';
 import { computeRender, createHoleAnim, createRenderState, type HoleAnim, type RenderState } from './render/renderState';
 
@@ -41,6 +44,8 @@ export interface RuntimeFlags {
   botEv: number[];
   botAt: number[];
   botHits: number[];
+  /** Kid bot (dev only): wall ms of its last tap (it taps about once a second at most). */
+  botLastWall: number;
   swipeHole: number;
   swipeX0: number;
   reducedMotion: boolean;
@@ -77,7 +82,7 @@ function createFlags(): RuntimeFlags {
     return a;
   };
   return {
-    running: false, acc: 0, easeT: 600, endSeen: false, bot: false, botEv: z(-1), botAt: z(0), botHits: z(0),
+    running: false, acc: 0, easeT: 600, endSeen: false, bot: false, botEv: z(-1), botAt: z(0), botHits: z(0), botLastWall: 0,
     swipeHole: -1, swipeX0: 0, reducedMotion: false, wallMs: 0, logTaps: false, frameWall: 0, hatBounces: 0, resumedAt: -99999,
     scoreBase: 0, scoreLive: false, rest: false,
   };
@@ -97,7 +102,7 @@ function emptySim(): WhackSim {
     perfects: 0, ripeHits: 0, ripeBolts: 0, ripePoints: 0, lookupDrops: 0,
     t: 0, next: 0, ended: false, frozen: false, hEv: z(-1), hPh: z(0), hAt: z(0), hExt: z(0), hHelm: z(0), hLock: z(0),
     hHitT: z(-99999), hGrade: z(0), hSplat: z(0), hSplatType: z(0), hFade: z(0), hPuffed: z(0), score: 0, streak: 0,
-    maxStreak: 0, tier: 0, meter: 0, fever: false, feverLeft: 0, coin: 0, win: false, winAt: -1, hits: 0, legacyHits: 0,
+    maxStreak: 0, tier: 0, meter: 0, fever: false, feverLeft: 0, coin: 0, bonkMeter: false, bonks: 0, winBonks: 13, win: false, winAt: -1, hits: 0, legacyHits: 0,
     quick: 0, good: 0, late: 0, crits: 0, goldens: 0, decoyHits: 0, whiffs: 0, butters: 0, escapes: 0, engagedEscapes: 0,
     freezes: 0, doubles: 0, anticipated: 0, tierDrops: 0, lastTap: 0, w0: -99999, w1: -99999, quickRun: 0, blocked: 0, bossHp: 0, bossMax: 0,
     bossDownAt: -1, lap: false, bruiserHp: 0, scanRow: -1, scanUntil: 0, taps: [], pos: [], tapCount: 0, emit: true, ev: [],
@@ -237,9 +242,48 @@ export function useWhackRuntime(opts: {
     a.fingerSpin = 0;
   };
 
+  // Dev only (EXPO_PUBLIC_WHACK_BOT=kid, fix round w3 T027 device proof): the slow picture-only tapper of
+  // the autoplayer's 'kid' profile. It sees a shark about 1.25 s after it pops (seeded 1.0 to 1.5 s),
+  // skips 15% of them, bonks 30% of the anglerfish, taps at most once a second, and after a look-up it
+  // taps the frozen shark (the tap that resumes, which now bonks it, T028).
+  const kidStep = (s: WhackSim, r: RuntimeFlags, a: HoleAnim, L: BoardLayout) => {
+    'worklet';
+    const now = Date.now();
+    const ready = now - r.botLastWall >= 1000;
+    for (let h = 0; h < 9; h++) {
+      const e = s.hEv[h];
+      if (e < 0 || s.hPh[h] !== P_UP || s.hSplat[h] === SPLAT_DOWN) continue;
+      const k = s.evKind[e];
+      const decoy = k === K_ANGLER || k === K_PUFFER;
+      if (r.botEv[h] !== e) {
+        r.botEv[h] = e;
+        const roll = mixSeed(e + 7, s.seed) % 100;
+        const skip = decoy ? roll >= 30 : roll < 15;
+        r.botAt[h] = skip ? 1e9 : s.evEmerge[e] + 1000 + (mixSeed(e + 1, s.seed) % 500);
+        r.botHits[h] = 0;
+      }
+      if (!ready) continue;
+      if (s.frozen ? !decoy && r.botAt[h] < 1e9 : s.t >= r.botAt[h]) {
+        tapHole(s, a, r, L, h, L.cx[h], L.my[h] - L.spriteH[h] * 0.45);
+        r.botLastWall = now;
+        r.botHits[h] += 1;
+        r.botAt[h] = k === K_BRUISER ? s.t + 1000 : 1e9;
+        return;
+      }
+    }
+    if (s.frozen && ready && now - r.botLastWall >= 2500) {
+      simUnfreeze(s);
+      r.botLastWall = now;
+    }
+  };
+
   // Dev autoplay: a human-paced bot (350-560 ms after emerge), never bonks decoys.
   const botStep = (s: WhackSim, r: RuntimeFlags, a: HoleAnim, L: BoardLayout) => {
     'worklet';
+    if (KID_BOT) {
+      kidStep(s, r, a, L);
+      return;
+    }
     if (s.frozen) {
       simUnfreeze(s);
       return;

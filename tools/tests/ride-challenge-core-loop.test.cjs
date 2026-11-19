@@ -401,7 +401,8 @@ test('paid trivia: at least 10 s a question, one even tone, the Final a no-risk 
   assert.equal(content.isKidsDeck({ id: 'kid-76' }), true);
   assert.equal(content.isKidsDeck({ id: 'dl-12' }), false);
   const labels = loadTs('src/games/trivia-duel/engine/labels.ts');
-  assert.equal(labels.genericize('Where did the original 1987 Star Tours flight head?'), 'Where did the original 1987 space flight simulator head?');
+  // Fix round w3 T234 / T043: rides keep the names the map shows.
+  assert.equal(labels.genericize('Where did the original 1987 Star Tours flight head?'), 'Where did the original 1987 Star Tours flight head?');
   assert.doesNotMatch(labels.genericize('The original 1987 Star Tours ride'), /\bthe the\b|original 1987 the/i);
   const duel = read('src/games/trivia-duel/TriviaDuel.tsx');
   assert.match(duel, /the Final is a no-risk bonus question worth double points/, 'kid rule: no betting');
@@ -534,7 +535,7 @@ test('Parade Beat is the rhythm game\'s one name; Home Defend has its own title 
   assert.match(whack, /export const HOME_DEFEND = \{ title: 'Home Defend', win: 'DEFENDED!'/);
   assert.match(whack, /const defend = ride && !rideChallenge;/);
   assert.match(whack, /text: defendRef\.current \? HOME_DEFEND\.win : 'COIN CAUGHT!'/);
-  assert.match(read('src/games/whack/render/WhackBoard.tsx'), /return s\.win \? winWord : `\$\{left\} BONKS TO WIN`;/);
+  assert.match(read('src/games/whack/render/WhackBoard.tsx'), /return s\.win \? winWord : bonksToWinLabel\(left\);/);
   assert.match(whack, /return text\.replace\(\/\\bWATCH THE TEETH\\b\/, 'NOT THE ANGLERFISH'\);/, 'the anglerfish, never teeth');
   assert.match(whack, /const callout = playerCallout\(t\.callout\);/);
   const unlock = read('src/gamekit/results/UnlockTile.tsx');

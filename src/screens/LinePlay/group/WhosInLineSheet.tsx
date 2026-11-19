@@ -15,6 +15,7 @@ import {
   MAX_NAME_LENGTH, type GroupKind, type LineGroup,
 } from '../../../services/lineplay/lineGroup';
 import PlayerBadge from './PlayerBadge';
+import { crewWantsPictureGames, defaultPictureGamesOn } from '../../../services/playPrefs';
 
 const CREW_ART = require('../../../../assets/images/screens/lineplay/line-crew-sharks.png');
 
@@ -119,7 +120,10 @@ export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing,
               </View>
               {lastCrew && <Pressable accessibilityRole="button"
                 accessibilityLabel={`Same crew as last ride: ${crewSummary(lastCrew)}`}
-                onPress={() => onChoose(lastCrew)} style={({ pressed }) => [styles.sameCrew, pressed && styles.pressed]}>
+                onPress={() => {
+                  if (crewWantsPictureGames(lastCrew)) void defaultPictureGamesOn(player?.id ?? null).catch(() => false);
+                  onChoose(lastCrew);
+                }} style={({ pressed }) => [styles.sameCrew, pressed && styles.pressed]}>
                 <View style={styles.badgeRow}>
                   {lastCrew.players.slice(0, 4).map((player, index) =>
                     <View key={player.id} style={index > 0 ? styles.badgeOverlap : null}>
@@ -178,7 +182,12 @@ export default function WhosInLineSheet({ visible, ownerName, lastCrew, editing,
                   </Pressable>}
                 </View>)}
               </ScrollView>
-              <GameButton label="Start playing" icon="play" onPress={() => onChoose(createLineGroup(kind, filled))} />
+              <GameButton label="Start playing" icon="play" onPress={() => {
+                const group = createLineGroup(kind, filled);
+                // Family with kids (T223): picture games for the kids' ride tries, unless a grown-up chose otherwise.
+                if (crewWantsPictureGames(group)) void defaultPictureGamesOn(player?.id ?? null).catch(() => false);
+                onChoose(group);
+              }} />
               <GameButton label={editing ? 'Keep current crew' : 'Back'} variant="ghost"
                 onPress={() => { if (editing && onClose) onClose(); else setKind(null); }} />
             </>

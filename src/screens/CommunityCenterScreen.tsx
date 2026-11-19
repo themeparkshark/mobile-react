@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import Modal from 'react-native-modal';
 import { Image } from 'expo-image';
-import { Video, ResizeMode, Audio } from 'expo-av';
+import { Video, ResizeMode } from 'expo-av';
+import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import useLivePoll from '../hooks/useLivePoll';
 
@@ -179,20 +180,9 @@ export default function CommunityCenterScreen() {
   const modalOut = reduced ? 'fadeOut' : 'zoomOut';
   
   // Sound player helper
-  const playSound = async (soundKey: keyof typeof SOUNDS) => {
-    try {
-      const { sound } = await Audio.Sound.createAsync(SOUNDS[soundKey]);
-      await sound.playAsync();
-      // Unload after playing to free memory
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          sound.unloadAsync();
-        }
-      });
-    } catch (error) {
-      console.log('Sound play error:', error);
-    }
-  };
+  // Fix round w3 T188: through the app's sound effects player, so the Sound Effects setting is obeyed.
+  const { playSound: playSfx } = useContext(SoundEffectContext);
+  const playSound = (soundKey: keyof typeof SOUNDS) => playSfx(SOUNDS[soundKey]);
   
   // Target position for ticket icon (top right currency display)
   // Currency display is at top: 60, right: 20, ticket icon is roughly 50px from right edge

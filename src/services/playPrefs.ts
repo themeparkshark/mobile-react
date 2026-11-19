@@ -21,6 +21,11 @@ const KEY = 'tps.playPrefs.v1';
 export interface PlayPrefs {
   /** Deal only picture games (Whack, Memory) on paid ride tries. */
   readonly pictureOnly: boolean;
+  /**
+   * The player (or a grown-up) set Picture games themselves, in Settings or on the Trivia card.
+   * A default (Family with kids, fix round w3 T223) never overrides that choice.
+   */
+  readonly pictureChosen?: boolean;
 }
 
 export const DEFAULT_PLAY_PREFS: PlayPrefs = Object.freeze({ pictureOnly: false });
@@ -59,7 +64,7 @@ export function parsePlayPrefs(raw: string | null | undefined): PlayPrefs {
   if (!raw) return DEFAULT_PLAY_PREFS;
   try {
     const value = JSON.parse(raw) as Partial<PlayPrefs> | null;
-    return { pictureOnly: value?.pictureOnly === true };
+    return { pictureOnly: value?.pictureOnly === true, ...(value?.pictureChosen === true ? { pictureChosen: true } : {}) };
   } catch {
     return DEFAULT_PLAY_PREFS;
   }
@@ -146,6 +151,24 @@ function subscribe(listener: () => void): () => void {
  * `available` is false while the server's picture_games switch is off: the
  * setting is not shown at all then.
  */
+/**
+ * Fix round w3 T223 (decision default, Nov 18): a family crew with a kid turns Picture games on, so
+ * the first ride try a young child plays is Whack-a-Shark or Memory Match with the kid rules. It never
+ * overrides a choice the player made in Settings or on the Trivia card. Resolves to the new value.
+ */
+export async function defaultPictureGamesOn(playerId: number | null | undefined): Promise<boolean> {
+  if (playerId == null) return false;
+  const now = await loadPlayPrefs(playerId);
+  if (now.pictureChosen || now.pictureOnly) return now.pictureOnly;
+  await setPlayPrefs(playerId, { pictureOnly: true });
+  return true;
+}
+
+/** A crew turns Picture games on by default when it is a family with at least one kid. */
+export function crewWantsPictureGames(group: { kind: string; players: ReadonlyArray<{ kid?: boolean }> }): boolean {
+  return group.kind === 'family' && group.players.some(player => player.kid === true);
+}
+
 export function usePlayPrefs(playerId: number | null | undefined): {
   readonly flags: PlayFlags;
   readonly prefs: PlayPrefs;
@@ -159,7 +182,7 @@ export function usePlayPrefs(playerId: number | null | undefined): {
   }, [playerId]);
   const own = playerId == null ? DEFAULT_PLAY_PREFS : prefs.get(String(playerId)) ?? DEFAULT_PLAY_PREFS;
   const switches = playFlagsNow();
-  const setPictureOnly = useCallback((on: boolean) => { void setPlayPrefs(playerId, { pictureOnly: on }); }, [playerId]);
+  const setPictureOnly = useCallback((on: boolean) => { void setPlayPrefs(playerId, { pictureOnly: on, pictureChosen: true }); }, [playerId]);
   return { flags: switches, prefs: own, available: switches.pictureGames, setPictureOnly };
 }
 
