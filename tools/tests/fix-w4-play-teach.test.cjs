@@ -104,3 +104,26 @@ test('T045: both start cards picture the hold, and Banana and Sharky say one rul
   const intro = read('src/components/help/GameIntroCard.tsx');
   assert.match(intro, /if \(pic\.demo && pic\.art\) return <HoldDemo/);
 });
+
+test('T052 and T059: the first SCOUT and SLIP tips are pictures (the words are only spoken)', () => {
+  const game = read('src/games/memory/MemoryGame.tsx');
+  const block = game.slice(game.indexOf('{tip ? ('), game.indexOf(') : null}', game.indexOf('{tip ? (')));
+  assert.match(block, /accessibilityLabel=\{tip\.text\}/);
+  assert.match(block, /<TipPicture kind=\{tip\.kind\} \/>/);
+  assert.doesNotMatch(block, /<Text[^>]*>\{tip\.text\}<\/Text>/, 'no sentence drawn on the board');
+  const pic = game.slice(game.indexOf('function TipPicture'), game.indexOf('\nconst styles = StyleSheet.create', game.indexOf('function TipPicture')));
+  assert.match(pic, /GameIcon name="search"/, 'the SCOUT chip\'s magnifier');
+  assert.match(pic, /CARD_BACK/);
+  assert.match(pic, /TIP_STREAK/);
+  assert.match(pic, /slip \? 'close' : 'check'/);
+  assert.doesNotMatch(pic, /<Text/);
+});
+
+test('T052: a signed-in warm-up card shows the way to a coin (footsteps, ride, coin to win), never a coin that does not come', () => {
+  const r = read('src/games/memory/MemoryResults.tsx');
+  assert.match(r, /const guest = !useContext\(AuthContext\)\.player;/);
+  assert.match(r, /testID="first-win-path"[\s\S]*FIRST_WIN_STEPS[\s\S]*FIRST_WIN_RIDE[\s\S]*firstWinGoal/);
+  assert.match(r, /if \(reducedMotion \|\| !guest\) \{ claim\(\); return; \}/, 'no coin hop or shelf hand-off without the guest shelf');
+  assert.match(r, /if \(!node \|\| !guest\) \{ go\(\); return; \}/);
+  assert.ok(fs.existsSync(path.join(ROOT, 'assets/images/ride-photo/footsteps.webp')), 'existing art only');
+});

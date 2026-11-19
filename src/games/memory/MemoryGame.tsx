@@ -25,6 +25,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import TapHint, { TAP_HINT_SIZE } from '../../components/TapHint';
 import { Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import GameIcon from '../../ui/GameIcon';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -2766,8 +2767,11 @@ export default function MemoryGame({
             <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.headsUp, headsUpStyle]} />
 
             {tip ? (
-              <View pointerEvents="none" style={[styles.tip, tip.kind === 'slip' && styles.tipSlip, { top: g.awning.y - 46 }]} accessibilityLiveRegion="polite">
-                <Text style={styles.tipText}>{tip.text}</Text>
+              // T052 and T059: the first SCOUT and SLIP are taught with a picture, never a sentence to read
+              // (the words stay as the VoiceOver label): the chip's own glyph, what happened, then the chain.
+              <View pointerEvents="none" style={[styles.tip, tip.kind === 'slip' && styles.tipSlip, { top: g.awning.y - 58 }]}
+                accessible accessibilityLabel={tip.text} accessibilityLiveRegion="polite">
+                <TipPicture kind={tip.kind} />
               </View>
             ) : null}
             {unlock ? (
@@ -2842,6 +2846,42 @@ function ArrowGlyph({ dir }: { dir: 'h' | 'v' }) {
   );
 }
 
+/** T052/T059: the card the tips picture (the Ocean deck's shark face, existing art). */
+const TIP_FACE = require('../../assets/games/memory/deck-ocean-shark.png');
+/** The chain plate's own flame (Hud ChainPlate), so the tip points at the HUD it explains. */
+const TIP_STREAK = require('../../assets/games/memory/studio/streak.png');
+
+/**
+ * The first SCOUT or SLIP, as a picture. SCOUT: the chip's magnifier, a card back turning into a new face,
+ * then the chain flame with a check (a new card is free, the chain stays). SLIP: the chip's crack colour,
+ * a face you already saw (magnifier on it), then the chain flame with a cross (it resets).
+ */
+function TipPicture({ kind }: { kind: 'scout' | 'slip' }) {
+  const slip = kind === 'slip';
+  return (
+    <View style={styles.tipRow}>
+      <View style={[styles.tipChip, slip && styles.tipChipSlip]}><GameIcon name="search" size={20} /></View>
+      {slip ? (
+        <View style={styles.tipMarkWrap}>
+          <Image source={TIP_FACE} style={styles.tipCard} resizeMode="contain" />
+          <View style={[styles.tipMark, { borderColor: MM.scout }]}><GameIcon name="search" size={12} /></View>
+        </View>
+      ) : (
+        <>
+          <Image source={CARD_BACK} style={styles.tipCard} resizeMode="contain" />
+          <GameIcon name="arrow" size={16} />
+          <Image source={TIP_FACE} style={styles.tipCard} resizeMode="contain" />
+        </>
+      )}
+      <GameIcon name="arrow" size={16} />
+      <View style={styles.tipMarkWrap}>
+        <Image source={TIP_STREAK} style={styles.tipStreak} resizeMode="contain" />
+        <View style={[styles.tipMark, slip && styles.tipMarkNo]}><GameIcon name={slip ? 'close' : 'check'} size={12} /></View>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   preload: { position: 'absolute', left: 0, top: 0, width: 24, height: 24, opacity: 0, overflow: 'hidden' },
   preloadImg: { position: 'absolute', width: 24, height: 24 },
@@ -2872,6 +2912,15 @@ const styles = StyleSheet.create({
   tip: { position: 'absolute', alignSelf: 'center', backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 3, borderColor: MM.scout, paddingHorizontal: 14, paddingVertical: 6 },
   tipSlip: { borderColor: '#0768b9' },
   tipText: { fontFamily: 'Knockout', fontSize: 16, color: MM.navyText },
+  tipRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tipChip: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: MM.scout },
+  tipChipSlip: { backgroundColor: '#3d6fa8' },
+  tipCard: { width: 34, height: 44, borderRadius: 6 },
+  tipMarkWrap: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  tipStreak: { width: 32, height: 32 },
+  tipMark: { position: 'absolute', right: -4, bottom: -4, width: 22, height: 22, borderRadius: 11, backgroundColor: '#ffffff',
+    borderWidth: 2, borderColor: '#2fa84f', alignItems: 'center', justifyContent: 'center' },
+  tipMarkNo: { borderColor: '#e2574c' },
   unlock: { position: 'absolute', left: 40, right: 40, alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 3, borderColor: MM.gold, paddingVertical: 10 },
   unlockKicker: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, letterSpacing: 1 },
   unlockText: { fontFamily: 'Shark', fontSize: 28, color: MM.navyText },

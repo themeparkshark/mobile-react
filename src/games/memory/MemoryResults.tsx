@@ -21,7 +21,7 @@
  * CHALLENGE replace the action row with an inline cream panel (DONE returns).
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import LockedResultActions from '../../gamekit/results/LockedResultActions';
 import Animated, {
@@ -39,6 +39,8 @@ import SparkleBurst from '../../components/SparkleBurst';
 import TapHint from '../../components/TapHint';
 import { GameAudio, Haptic } from '../../gamekit';
 import GameIcon, { type GameIconName } from '../../ui/GameIcon';
+import { BRAND } from '../../ui/tokens';
+import { AuthContext } from '../../context/AuthProvider';
 import type { CoinEdition, Grade } from './engine';
 import { deckById } from './decks';
 import { faceFor } from './faces';
@@ -299,6 +301,8 @@ const FINN_CHEER = require('../../assets/games/memory/studio/barker_fist_pump.pn
 const FIRST_WIN_COIN = require('../../../assets/images/coingold.png');
 /** Existing game icon art: a ride car on its track, so 'ride coins' reads without reading. */
 const FIRST_WIN_RIDE = require('../../../assets/icons/game/ride.png');
+/** T052: the footsteps the map's walk hint already uses: "walk to a ride". */
+const FIRST_WIN_STEPS = require('../../../assets/images/ride-photo/footsteps.webp');
 const FIRST_WIN_BACKDROP = require('../../../assets/images/screens/park/background-new.png');
 const SHOWER_BUBBLE = require('../../../assets/images/map/fx/bubble.png');
 const SHOWER_SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
@@ -318,6 +322,8 @@ export const FIRST_WIN_BEATS = { finn: 0, ribbon: 120, shower: 120, next: 200, b
 const SHOWER = 20;
 function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim: () => void; reducedMotion: boolean }) {
   const win = useWindowDimensions();
+  // T052: only a guest's coin flies on (GuestTaste's shelf step); a signed-in player's card shows the way to a coin.
+  const guest = !useContext(AuthContext).player;
   const pop = useSharedValue(reducedMotion ? 1 : 0);
   const squash = useSharedValue(0);
   const cheer = useSharedValue(0);
@@ -373,13 +379,13 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
     Haptic.tapLight();
     // Remember where the coin sits: the shelf step flies this same coin from here.
     const go = () => {
-      if (reducedMotion) { claim(); return; }
+      if (reducedMotion || !guest) { claim(); return; }
       GameAudio.playLadder('mm_sharp_twinkle', 8, { volume: 0.7 });
       fly.value = withTiming(1, { duration: FIRST_WIN_BEATS.coinLift, easing: Easing.out(Easing.quad) });
       claimTimer.current = setTimeout(claim, FIRST_WIN_BEATS.coinLift);
     };
     const node = coinRef.current;
-    if (!node) { go(); return; }
+    if (!node || !guest) { go(); return; }
     let sent = false;
     const once = () => { if (!sent) { sent = true; go(); } };
     node.measureInWindow((x, y, w, h) => {
@@ -433,13 +439,27 @@ function FirstWinCard({ banner, claim, reducedMotion }: { banner: string; claim:
           <ResultsRibbon title={banner} reducedMotion style={styles.firstWinRibbon} />
         </Animated.View>
         <Animated.View style={[styles.firstWinNext, nextSt]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-          {/* A ride car with the coin it gives: coins come from rides, no reading needed (no words drawn). */}
-          <View style={styles.firstWinPic}>
-            <Image source={FIRST_WIN_RIDE} style={styles.firstWinRide} resizeMode="contain" />
-            <View ref={coinRef} collapsable={false} style={styles.firstWinCoinSpot}>
-              <Animated.Image source={FIRST_WIN_COIN} style={[styles.firstWinCoin, coinSt]} resizeMode="contain" />
+          {guest ? (
+            // A guest: a ride car with the coin it gives, and that coin really flies onto the guest shelf next.
+            <View style={styles.firstWinPic}>
+              <Image source={FIRST_WIN_RIDE} style={styles.firstWinRide} resizeMode="contain" />
+              <View ref={coinRef} collapsable={false} style={styles.firstWinCoinSpot}>
+                <Animated.Image source={FIRST_WIN_COIN} style={[styles.firstWinCoin, coinSt]} resizeMode="contain" />
+              </View>
             </View>
-          </View>
+          ) : (
+            // T052: a signed-in player gets no coin from the warm-up, so the picture is the way to one, never a
+            // prize: footsteps, then a ride, then the coin waiting in a gold "to win" ring (no reading needed).
+            <View style={styles.firstWinPic} testID="first-win-path">
+              <Image source={FIRST_WIN_STEPS} style={styles.firstWinStep} resizeMode="contain" />
+              <GameIcon name="arrow" size={22} />
+              <Image source={FIRST_WIN_RIDE} style={styles.firstWinRideSmall} resizeMode="contain" />
+              <GameIcon name="arrow" size={22} />
+              <View style={styles.firstWinGoal}>
+                <Image source={FIRST_WIN_COIN} style={styles.firstWinGoalCoin} resizeMode="contain" />
+              </View>
+            </View>
+          )}
           {/* "Ride coins!" is spoken with the title (FIRST_WIN_COPY.a11y); the picture says it on screen. */}
         </Animated.View>
         <Animated.View style={[styles.firstWinBtnWrap, btnSt]} pointerEvents={live ? 'auto' : 'none'}>
@@ -719,6 +739,12 @@ const styles = StyleSheet.create({
   firstWinRide: { width: 88, height: 72 },
   firstWinCoinSpot: { width: 62, height: 62 },
   firstWinCoin: { width: 62, height: 62 },
+  firstWinStep: { width: 52, height: 52 },
+  firstWinRideSmall: { width: 66, height: 56 },
+  // The coin waits in a gold ring: a goal to win, not a prize already given.
+  firstWinGoal: { width: 60, height: 60, borderRadius: 30, borderWidth: 3, borderColor: BRAND.gold, borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center' },
+  firstWinGoalCoin: { width: 44, height: 44 },
   firstWinBtnWrap: { alignSelf: 'stretch', alignItems: 'center' },
   // The fingertip (bottom of the hand) lands on the lower right of CONTINUE.
   firstWinHand: { right: 26, bottom: 6 },
