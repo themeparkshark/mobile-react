@@ -158,3 +158,26 @@ test('T007: the home map wires the step, its art and its buttons (practice, FIND
   assert.match(read('src/components/retention/useRetention.tsx'), /const readyRow = settledSummary\.count > 0 \? rows\.find\(r => r\.ready > 0 && r\.action != null\) \?\? null : null;/,
     'the card and the Rewards button agree on what is ready');
 });
+
+test('T198: the park day counts come from the server: every won attempt, every wait and the rides logged', () => {
+  const C = loadTs('src/services/guide/parkDayCounts.ts');
+  const old = { distinct_rides_won: 1, line_play_sessions: 1, eligible_line_minutes: 2, ride_parts_earned: 0 };
+  const core = { ...old, coins_won: 4, waits: 2, rides_ridden: 1 };
+  // The goodbye: the phone saw 3, the server counted 4.
+  assert.equal(C.goodbyeCoins(3, { coins_won: 4 }), 4);
+  assert.equal(C.goodbyeCoins(3, null), 3, 'no answer yet: the phone count');
+  assert.equal(C.goodbyeCoins(3, {}), 3, 'an older server: the phone count');
+  assert.equal(C.recapWins(core), 4);
+  assert.equal(C.recapWins(old), 1);
+  assert.equal(C.recapLineCopy(core), '2 waits · 2 minutes in line · 0 Ride Parts');
+  assert.equal(C.recapLineCopy(old), '2 minutes in line · 0 Ride Parts', 'older server: as before');
+  assert.equal(C.recapLineCopy({ ...core, waits: 0, line_play_sessions: 0 }), null);
+  assert.equal(C.recapRidesCopy(core), '1 ride ridden');
+  assert.equal(C.recapRidesCopy(old), null);
+  const guide = read('src/components/guide/useNextCoinGuide.ts');
+  assert.match(guide, /leaving: leaving \? \{ parkName: leavingFrom\?\.parkName \?\? null,\n\s+coins: goodbyeWon \} : null,/);
+  assert.match(guide, /getParkDayRecap\(leavingId\)\.then/);
+  const card = read('src/screens/ParkDayRecapCard.tsx');
+  assert.match(card, /\{recapWins\(recap\)\}<\/Text><Text style=\{styles\.statLabel\}>WINS/);
+  assert.match(card, /\{!!lineCopy && <GameRichText/);
+});
