@@ -77,7 +77,8 @@ function LineButton({ label, onPress, title }: { label: string; onPress: () => v
     onPress={() => { haptic('tapLight'); onPress(); }}
     style={({ pressed }) => [styles.lineButton, pressed && styles.pressed]}>
     <Image source={LINEPLAY_ICON} style={styles.lineIcon} contentFit="contain" />
-    {title ? <Text style={styles.lineButtonAsk} numberOfLines={1}>{title}</Text> : null}
+    {/* A long ride name gives way, so LINEPLAY always reads whole (N14). */}
+    {title ? <Text style={[styles.lineButtonAsk, styles.lineButtonAskShrink]} numberOfLines={1}>{title}</Text> : null}
     <Text style={styles.lineButtonText} numberOfLines={1}>{label}</Text>
   </Pressable>;
 }
@@ -221,8 +222,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 3, borderBottomColor: BRAND.goldLip, paddingHorizontal: 12, paddingVertical: 4, minHeight: 30 },
   lineIcon: { width: 30, height: 16 },
   lineButton: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.white, borderRadius: 12,
-    borderWidth: 2, borderColor: BRAND.blueBright, borderBottomWidth: 4, paddingHorizontal: 8, minHeight: 30 },
+    borderWidth: 2, borderColor: BRAND.blueBright, borderBottomWidth: 4, paddingHorizontal: 8, minHeight: 30, flexShrink: 1 },
   lineButtonAsk: { color: BRAND.blueBright, fontFamily: 'Knockout', fontSize: 12 },
+  lineButtonAskShrink: { flexShrink: 1 },
   lineButtonText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 14 },
   buttonText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 14 },
   pressed: { transform: [{ scale: 0.95 }], opacity: 0.9 },

@@ -9,7 +9,7 @@ export const DWELL_STILL_MS = 90_000;
 /** After a wait ends (LinePlay at that ride), its line never asks "In line?" again for this long. */
 export const WAIT_ENDED_QUIET_MS = 30 * 60 * 1000;
 
-type Sample = { readonly at: number; readonly latitude: number; readonly longitude: number };
+type Sample = { readonly at: number; readonly latitude: number; readonly longitude: number; readonly speedMps?: number | null };
 
 const meters = (a: Sample, b: Sample) => {
   const k = Math.cos(((a.latitude + b.latitude) / 2) * Math.PI / 180);
@@ -77,6 +77,13 @@ export function nextDwell(previous: QueueDwell | null, seen: QueueDwell | null, 
  */
 export const WALK_METERS = 15;
 export const WALK_WINDOW_MS = 30_000;
+/**
+ * N14: the phone's own speed makes a walk-off known within a few steps. Two fixes in a row at walking speed, each
+ * farther from where the player stood, the newest at least WALK_FAST_METERS away: walking (about 6 to 8 s at a
+ * stroll). A line that shuffles forward a step or two never moves this far this fast; GPS jitter has no speed.
+ */
+export const WALK_FAST_MPS = 1.0;
+export const WALK_FAST_METERS = 8;
 
 /**
  * Pure: the player is walking right now. The last two fixes are both more than WALK_METERS from where the player
@@ -91,7 +98,12 @@ export function walkingNow(samples: readonly Sample[], now: number): boolean {
   if (ref < 0) ref = 0;
   const after = samples.slice(ref + 1);
   if (after.length < 2) return false;
-  return after.slice(-2).every(s => meters(samples[ref], s) > WALK_METERS);
+  if (after.slice(-2).every(s => meters(samples[ref], s) > WALK_METERS)) return true;
+  // The fast path (N14): walking speed on the last two fixes, moving away, already WALK_FAST_METERS out.
+  const [prev, last] = after.slice(-2);
+  const fast = (s: Sample) => typeof s.speedMps === 'number' && s.speedMps >= WALK_FAST_MPS;
+  return fast(prev) && fast(last) && meters(samples[ref], prev) > 3 &&
+    meters(samples[ref], last) > meters(samples[ref], prev) && meters(samples[ref], last) >= WALK_FAST_METERS;
 }
 
 let waitEnded: { rideId: number; at: number } | null = null;
@@ -107,7 +119,9 @@ export function noteWaitEnded(rideId: number, at = Date.now()): void {
  * focused.
  */
 export default function useQueueDwell(parkId: number | null, enabled: boolean, read = currentRideDwell, everyMs = 10_000,
-  location?: { readonly latitude: number; readonly longitude: number } | null): QueueDwell | null {
+  location?: { readonly latitude: number; readonly longitude: number } | null,
+  /** The newest raw OS fix (its speed): N14, a walk-off is known within a few steps. */
+  sampleRef?: { readonly current: { readonly timestamp?: number; readonly speedMps?: number | null } | null } | null): QueueDwell | null {
   const [dwell, setDwell] = useState<QueueDwell | null>(null);
   const samples = useRef<Sample[]>([]);
   const lastShownAt = useRef<number | null>(null);
@@ -118,9 +132,16 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
     // The last fix older than the still window stays too: where a player who stood still (iOS sends nothing) started
     // walking from. nearlyStill reads only the window.
     const older = samples.current.filter(s => now - s.at > DWELL_STILL_MS).slice(-1);
-    samples.current = [...older, ...samples.current.filter(s => now - s.at <= DWELL_STILL_MS), { at: now, latitude: lat, longitude: lng }];
+    const raw = sampleRef?.current;
+    const speedMps = raw && typeof raw.timestamp === 'number' && now - raw.timestamp <= 5_000 ? raw.speedMps ?? null : null;
+    samples.current = [...older, ...samples.current.filter(s => now - s.at <= DWELL_STILL_MS),
+      { at: now, latitude: lat, longitude: lng, speedMps }];
     // Walking off ends a shown offer at this fix, not at the next 10 s check.
-    if (walkingNow(samples.current, now)) setDwell(previous => (previous ? null : previous));
+    if (walkingNow(samples.current, now)) {
+      // Dev builds only: when a walk-off ended the in-line card (N14 proof reads this).
+      if (__DEV__) console.log(`[dwell] walked-off t=${now} speed=${speedMps ?? '-'}`);
+      setDwell(previous => (previous ? null : previous));
+    }
   }, [lat, lng]);
   useEffect(() => {
     if (!enabled || !parkId) { setDwell(null); return; }
@@ -132,7 +153,7 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
       });
       const walkedOff = walkingNow(samples.current, at);
       // Dev builds only: lane walks read the in-line decisions (never in a store bundle).
-      if (__DEV__) console.log(`[dwell] seen=${now?.rideId ?? '-'} shows=${shows} walking=${walkedOff} still=${nearlyStill(samples.current, at)} fixes=${samples.current.length} t=${at}`);
+      if (__DEV__) console.log(`[dwell] seen=${now?.rideId ?? '-'} shows=${shows} walking=${walkedOff} still=${nearlyStill(samples.current, at)} fixes=${samples.current.length} speed=${samples.current[samples.current.length - 1]?.speedMps ?? '-'} t=${at}`);
       if (now && shows && !walkedOff) lastShownAt.current = at;
       setDwell(previous => nextDwell(previous,
         now && now.parkId === parkId ? { rideId: now.rideId, rideName: now.rideName, parkId: now.parkId } : null, shows,

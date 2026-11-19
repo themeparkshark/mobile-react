@@ -9,6 +9,7 @@
  */
 import type { GuideState, GuideTarget } from './nextCoin';
 import { shortParkName } from '../../helpers/parkName';
+import { plainRideName } from '../../helpers/plainRideName';
 import { TREATS_PER_TICKET, type FreeTicketStep } from './freeTickets';
 
 /** What the card's one button does. */
@@ -113,7 +114,8 @@ export const ALMOST_THERE_METERS = 16;
  */
 export function lineOffer(state: string, dwellRideName: string | null | undefined): { readonly title: string; readonly label: string } | null {
   if (!dwellRideName || state === 'in_line' || state === 'line_story' || state === 'goodbye' || state === 'home') return null;
-  return { title: 'In line?', label: 'LINEPLAY' };
+  // N14: the offer names the line it means (two queues can overlap), in the plain display name.
+  return { title: `In line for ${plainRideName(dwellRideName)}?`, label: 'LINEPLAY' };
 }
 
 /**
