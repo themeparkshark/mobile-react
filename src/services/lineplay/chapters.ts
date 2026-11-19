@@ -343,6 +343,11 @@ export function adaptiveEpisodeCountForRide(rideName: string, parkId?: number): 
   return ADAPTIVE_STORIES[storyThemeFor(parkId, rideName)].length;
 }
 
+/** Where an authored chapter's ride stands (T077), so its story opens on the ride and its land like every other. */
+function authoredRide(parkId: number, name: string): NonNullable<LinePlayChapter['ride']> {
+  return { parkId, name, land: rideLand(parkId, name), park: parkPlainName(parkId) };
+}
+
 /** "Autopia, in Tomorrowland." The ride and where it stands, in plain words. */
 function rideIntro(name: string, land: string | null, park: string | null): string {
   // A street takes "on" (on Main Street, U.S.A.); every other land takes "in".
@@ -398,7 +403,9 @@ export function puzzleReward(chapter: Pick<LinePlayChapter, 'id' | 'ride'>, ride
  */
 export function chapterStoryText(chapter: LinePlayChapter, rideFacts: readonly string[], done = false): string {
   if (done) return chapter.completedStory;
-  if (!chapter.adaptive || !chapter.ride) return chapter.story;
+  if (!chapter.ride) return chapter.story;
+  // Authored chapters open on the ride and its land; their checked facts are in their own clues.
+  if (!chapter.adaptive) return `${rideIntro(chapter.ride.name, chapter.ride.land, chapter.ride.park)} ${chapter.story}`;
   const fact = chapterFact(chapter, rideFacts);
   const extra = fact ? `Fan fact: ${fact}` : landLine(chapter.ride.land);
   return extra ? `${chapter.story} ${extra}` : chapter.story;
@@ -414,6 +421,7 @@ export function chapterStoryText(chapter: LinePlayChapter, rideFacts: readonly s
  */
 const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
   id: 'mk-space-mountain',
+  ride: authoredRide(2, 'Space Mountain'),
   navigationPanel: true,
   episodeCount: 3,
   episodeLabel: 'FLIGHT 1 OF 3',
@@ -649,6 +657,7 @@ function magicKingdomSpaceFlight(episode: number): LinePlayChapter {
  */
 const DISNEYLAND_SPACE_MOUNTAIN: LinePlayChapter = {
   id: 'dl-space-mountain',
+  ride: authoredRide(8, 'Space Mountain'),
   parkLabel: 'TOMORROWLAND',
   title: 'The Missing Launch Code',
   story: 'Your shark’s flight vehicle is ready, but three launch signals have gone missing. Decode Mission Control, spot a signal from your place in line, and restore the code before the countdown.',
@@ -737,6 +746,7 @@ const DISNEYLAND_SPACE_MOUNTAIN: LinePlayChapter = {
  */
 const DISNEYLAND_JUNGLE_CRUISE: LinePlayChapter = {
   id: 'dl-jungle-cruise',
+  ride: authoredRide(8, 'Jungle Cruise'),
   parkLabel: 'ADVENTURELAND',
   title: 'The Missing Skipper’s Log',
   story: 'Your shark crew found an empty logbook beside the river. Gather three clues from your place in line, then choose a course to bring the skipper’s lost pages home.',
@@ -808,6 +818,7 @@ const DISNEYLAND_JUNGLE_CRUISE: LinePlayChapter = {
 
 const DISNEYLAND_PIRATES: LinePlayChapter = {
   id: 'dl-pirates',
+  ride: authoredRide(8, 'Pirates of the Caribbean'),
   parkLabel: 'NEW ORLEANS SQUARE',
   title: 'The Vanishing Compass',
   story: 'A shark cartographer has lost the compass that points to a secret harbor. Assemble a crew, read the bayou clues, and choose a course before your boat arrives.',
@@ -890,6 +901,7 @@ const DISNEYLAND_PIRATES: LinePlayChapter = {
  */
 const MAGIC_KINGDOM_HAUNTED_MANSION: LinePlayChapter = {
   id: 'mk-haunted-mansion',
+  ride: authoredRide(2, 'Haunted Mansion'),
   parkLabel: 'LIBERTY SQUARE',
   title: 'The Missing Guest Book',
   story: 'A friendly ghost invited your shark crew to the mansion, but their names vanished from the guest book. Gather three clues from your place in line and choose how to sign in before your Doom Buggy arrives.',
@@ -973,6 +985,7 @@ const MAGIC_KINGDOM_HAUNTED_MANSION: LinePlayChapter = {
  */
 const DISNEYLAND_HAUNTED_MANSION: LinePlayChapter = {
   id: 'dl-haunted-mansion',
+  ride: authoredRide(8, 'Haunted Mansion'),
   parkLabel: 'NEW ORLEANS SQUARE',
   title: 'The Vanishing Portrait Frame',
   story: 'In New Orleans Square, your shark crew finds an empty portrait frame. Three clues will help you imagine who belongs in it. Choose a route and reveal your crew’s own ghostly portrait before your mansion visit.',
@@ -1137,6 +1150,7 @@ const UNIVERSAL_STUDIO_TOUR: LinePlayChapter = {
  */
 const DISNEYLAND_BIG_THUNDER: LinePlayChapter = {
   id: 'dl-big-thunder', parkLabel: 'FRONTIERLAND',
+  ride: authoredRide(8, 'Big Thunder Mountain Railroad'),
   title: 'The Rainbow Ridge Dispatch',
   story: 'A runaway train carried off your shark crew’s dispatch from Rainbow Ridge. Decode the first clue, gather a signal from your place in line, and choose which trail brings the message home.',
   completedTitle: 'Dispatch delivered!',

@@ -60,9 +60,9 @@ test('T077: the story tells this ride’s own checked fact, and a ride with no f
   assert.doesNotMatch(noFact, /Fan fact/);
   // Finished: the completed line, never the opening one.
   assert.equal(chapters.chapterStoryText(chapter, [AUTOPIA_FACT], true), chapter.completedStory);
-  // Authored chapters keep their own story untouched.
   const pirates = chapters.getLinePlayChapter(8, 'pirates-of-the-caribbean-8', 'Pirates of the Caribbean');
-  assert.equal(chapters.chapterStoryText(pirates, [AUTOPIA_FACT]), pirates.story);
+  // Authored chapters keep their own story, opened on the ride and its land, and never take another ride's fact.
+  assert.equal(chapters.chapterStoryText(pirates, [AUTOPIA_FACT]), `Pirates of the Caribbean, in New Orleans Square. ${pirates.story}`);
   // A Main Street ride with no fact: on the street, its true street line, no fan fact, no other ride's name.
   const vehicles = chapters.getLinePlayChapter(8, 'main-street-vehicles-8', 'Main Street Vehicles', 0, 597);
   const street = chapters.chapterStoryText(vehicles, []);
