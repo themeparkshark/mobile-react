@@ -1208,12 +1208,12 @@ export default function RedeemRedeemableModal({
               <RideChallengeContext.Provider value={true}>
               <MiniGameSelector
                 visible={flowState !== 'spinning'}
-                prewarm={flowState === 'spinning'}
                 taskId={(redeemable?.model as TaskType)?.id ?? 0}
                 taskName={taskName}
                 preferredGame={selectedGame}
                 attemptSeed={attemptRef.current?.seed}
                 rewardMode="task-attempt"
+                prewarm={flowState === 'spinning'}
                 kid={kidRulesFor(attemptRef.current, pictureOnlyRef.current)}
                 parkId={park.id}
                 onClose={handleGameLose}

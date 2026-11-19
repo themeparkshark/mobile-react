@@ -166,7 +166,7 @@ export default function TicketPunch({
 
   return (
     <Pressable style={StyleSheet.absoluteFill} onPress={finish} accessibilityRole="button"
-      accessibilityLabel={gameName ? `${kicker.charAt(0)}${kicker.slice(1).toLowerCase()}: ${gameName}. ${winLine ?? rideName}. Tap to start.` : `Your Ticket. ${winLine ?? rideName}.`}>
+      accessibilityLabel={`${kicker.charAt(0)}${kicker.slice(1).toLowerCase()}: ${gameName ?? 'your Ticket'}. ${winLine ?? rideName}.${gameName ? ' Tap to start.' : ''}`}>
       <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <View style={[StyleSheet.absoluteFill, styles.scrim]} />
 

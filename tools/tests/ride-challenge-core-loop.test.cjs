@@ -401,7 +401,8 @@ test('paid trivia: at least 10 s a question, one even tone, the Final a no-risk 
   assert.equal(content.isKidsDeck({ id: 'kid-76' }), true);
   assert.equal(content.isKidsDeck({ id: 'dl-12' }), false);
   const labels = loadTs('src/games/trivia-duel/engine/labels.ts');
-  assert.equal(labels.genericize('Where did the original 1987 Star Tours flight head?'), 'Where did the original 1987 space flight simulator head?');
+  // Fix round w3 T234 / T043: rides keep the names the map shows.
+  assert.equal(labels.genericize('Where did the original 1987 Star Tours flight head?'), 'Where did the original 1987 Star Tours flight head?');
   assert.doesNotMatch(labels.genericize('The original 1987 Star Tours ride'), /\bthe the\b|original 1987 the/i);
   const duel = read('src/games/trivia-duel/TriviaDuel.tsx');
   assert.match(duel, /the Final is a no-risk bonus question worth double points/, 'kid rule: no betting');
