@@ -150,6 +150,10 @@ test('w5 N04: the kept board is live while the deal travels; only GO waits for i
   assert.match(modal, /const boardDealt = flowState !== 'replay';/);
   assert.match(modal, /dealt=\{boardDealt\}/);
   assert.match(modal, /pointerEvents=\{boardHeld \? 'none' : 'auto'\}/);
+  // Unseen but hit-testable before its reset is drawn (iOS ignores touches on a view under 1% alpha).
+  assert.match(modal, /boardHidden && \(flowState === 'replay' \? styles\.replayVeil : styles\.prewarm\)/);
+  const veil = Number(/replayVeil: \{ opacity: ([0-9.]+) \}/.exec(modal)?.[1]);
+  assert.ok(veil >= 0.015 && veil <= 0.03, String(veil));
   // The shell takes no touch in the render that brings a new try number, until its reset has run.
   assert.match(shell, /const retryResetPending = retryRound !== retryRoundSeen\.current;\n\s+const gameContent = \(\n\s+<View style=\{styles\.root\} pointerEvents=\{retryResetPending \? 'none' : 'auto'\}>/);
   assert.match(shell, /retryRoundSeen\.current = retryRound;\n\s+setRetrySeen\(retryRound\);/);

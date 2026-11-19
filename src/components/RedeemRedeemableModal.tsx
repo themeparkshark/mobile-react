@@ -1643,7 +1643,7 @@ export default function RedeemRedeemableModal({
           {/* T036: the game mounts under the punch (hidden, not started) so its board art is drawn by the time
               the punch ends; it becomes visible, and its count starts, when the punch hands over. */}
           {selectedGame && ((flowState === 'spinning' && (punchCard || earlyGameRef.current === selectedGame)) || flowState === 'minigame' || (flowState === 'postwin' && !winCovered) || boardKept) && (
-            <View style={[styles.minigameContainer, boardOutset, boardHidden && styles.prewarm]}
+            <View style={[styles.minigameContainer, boardOutset, boardHidden && (flowState === 'replay' ? styles.replayVeil : styles.prewarm)]}
               onTouchStart={pressTraceOn ? () => pressTrace('board.touch', () => flowStateRef.current) : undefined}
               pointerEvents={boardHeld ? 'none' : 'auto'}>
               <RideChallengeContext.Provider value={true}>
@@ -1786,5 +1786,8 @@ const styles = StyleSheet.create({
   minigameContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   /** Under the punch: mounted and drawing its board, never seen or touched (T036). */
   prewarm: { opacity: 0 },
+  // w5 N04: the kept board in the moment before its reset is drawn: unseen (2%, over the card's navy), but iOS still
+  // hit-tests it (UIKit skips any view under 1% alpha), so the first tap after TRY AGAIN is never dropped.
+  replayVeil: { opacity: 0.02 },
   parkedCard: { position: 'absolute', width: 0, height: 0 },
 });
