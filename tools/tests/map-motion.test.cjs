@@ -326,11 +326,15 @@ test('a straight walk with GPS scatter: even pace (CV under 0.2) and the shark n
   assert.ok(cvs[3] < 0.2, `walk pace CV median ${cvs[3].toFixed(2)}`);
 });
 
-test('iPhone SE: the one-time Map spin hint rises above the button so it never covers the shark', () => {
+test('every phone: the one-time Map spin hint sits where the map chrome layout fits it (never over the shark or a card)', () => {
+  // Map Calm (Nov 19): mapChrome.tipSpot owns the bubble's spot on every phone (tested in map-chrome.test.cjs);
+  // FollowButton only draws it at the drop it is given, with no screen-height special case of its own.
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/map/FollowButton.tsx'), 'utf8');
-  assert.match(src, /const SHORT_SCREEN = Dimensions\.get\('window'\)\.height < 700;/);
-  assert.match(src, /hint && SHORT_SCREEN && styles\.pillLaneUp/);
-  assert.match(src, /pillLaneUp: \{ top: undefined, bottom: 20 \}/);
+  assert.doesNotMatch(src, /SHORT_SCREEN/);
+  assert.match(src, /hint && hintDrop > 0 && \{ top: hintDrop \}/);
+  const map = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/Map.tsx'), 'utf8');
+  assert.match(map, /tipSpot\(anchor, /);
+  assert.match(map, /hintDrop=\{hintDropRef\.current\}/);
 });
 
 test('standing at a ride, its timer chip and gift rise clear of the shark and its view cone', () => {

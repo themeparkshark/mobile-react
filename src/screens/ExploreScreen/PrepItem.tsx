@@ -5,6 +5,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, wi
 import { useFocusEffect } from '@react-navigation/native';
 import { BAND_FADE_MS, BAND_LOOK, SPAWN, bookSpawn, findBand, hopAt, newSpawnClock, ringAt } from '../../components/map/alive/mapWow';
 import { EASE, SPRING } from '../../ui/motionEasing';
+import { markerCues } from '../../components/map/mapChrome';
 import { GOLD_FX } from '../../ui/motion';
 import { queueHaptic } from '../../gamekit/Haptics';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
@@ -367,7 +368,10 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   const pulseRing = useAnimatedStyle(() => ({ opacity: pulseV.value, transform: [{ scale: 0.8 + 0.6 * pulseV.value }] }));
   const rays = useAnimatedStyle(() => ({ transform: [{ rotate: `${live ? (tick.value * 24) % 360 : 0}deg` }] }), [live]);
   // The pointed-at find breathes a soft ring on the map's clock, so a kid who cannot read sees which one to tap.
-  const pointed = inRange && showFinger;
+  // One cue per marker (map chrome rule e): the current target wears the hand and the calling rings; any other
+  // find wears its NEW tag, never both.
+  const cues = markerCues({ isNew: !!prepItem.is_new_variant, inRange, target: showFinger, grouped: count > 1 });
+  const pointed = cues.finger;
   const softRing = useAnimatedStyle(() => {
     if (!pointed) return { opacity: 0 };
     if (!live) return { opacity: 0.5, transform: [{ scale: 1 }] };
@@ -385,8 +389,8 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         <Animated.View style={[styles.groundGlow, halo]} pointerEvents="none">
           <Tinted source={GLOW} tint={GOLD_FX.glow} />
         </Animated.View>
-        <Animated.View style={[styles.callRing, ring0]} pointerEvents="none" />
-        <Animated.View style={[styles.callRing, ring1]} pointerEvents="none" />
+        {cues.rings && <Animated.View style={[styles.callRing, ring0]} pointerEvents="none" />}
+        {cues.rings && <Animated.View style={[styles.callRing, ring1]} pointerEvents="none" />}
         {/* Commons glow warm gold in range (never the grey that read as a loading bar). */}
         {inRange && <Animated.View style={[styles.groundGlow, pulse]} pointerEvents="none">
           <Tinted source={GLOW} tint={tier === 1 ? BRAND.gold : color} />
@@ -424,10 +428,9 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         {inRange && <RarityMark tier={tier} />}
       </View>}
       {count > 1 && <View style={[styles.countBadge, chromeless && styles.chromeOff]}><Text style={styles.countText}>×{count}</Text></View>}
-      {prepItem.is_new_variant && count === 1 && (inRange
-        ? <View style={[styles.newBadge, chromeless && styles.chromeOff]}><Text style={styles.newText}>NEW</Text></View>
-        : <View style={[styles.newDot, chromeless && styles.chromeOff]} />)}
-      {inRange && showFinger && <Animated.Image source={FINGER} style={[styles.finger, chromeless && styles.chromeOff, below ? styles.fingerBelow : leftSide ? styles.fingerLeft : styles.fingerRight, finger]} />}
+      {cues.newTag && <View style={[styles.newBadge, chromeless && styles.chromeOff]}><Text style={styles.newText}>NEW</Text></View>}
+      {cues.newDot && <View style={[styles.newDot, chromeless && styles.chromeOff]} />}
+      {cues.finger && <Animated.Image source={FINGER} style={[styles.finger, chromeless && styles.chromeOff, below ? styles.fingerBelow : leftSide ? styles.fingerLeft : styles.fingerRight, finger]} />}
       {!inRange && !far && <Image source={FOOTSTEPS} style={styles.footsteps} contentFit="contain" transition={0} />}
       {/* Hangs right under its own art (and badge), so it never reads as the next find's. */}
       <View style={[styles.timePill, inRange ? styles.tagNear : styles.tagFar, (chromeless || !tag) && styles.chromeOff]}>

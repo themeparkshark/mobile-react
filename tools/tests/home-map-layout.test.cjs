@@ -143,8 +143,8 @@ test('home map polish: peek timing, hold and pan; status lines stay; edge tokens
   assert.match(chip, /style=\{styles\.wrap\}>\s*<Animated\.View style=\{slide\}>/);
   // Live boss bar: rowTop moves down, and the edge tokens (48 pt) centre below the chip row.
   assert.match(home, /const edgeTop = rowTop \+ guideBlock \+ 30 \+ 8 \+ 24;/);
-  assert.match(home, /insetTop=\{edgeTop\}/);
-  assert.match(read('src/screens/ExploreScreen/FindEdgeArrows.tsx'), /\{ top: insetTop, bottom: 190, side: 30 \}/);
+  // Map Calm (Nov 19): the chrome owner places the tokens (one per side, clear of the chrome) inside that inset.
+  assert.match(home, /edgeTokens\(edgeFinds, containerSize, \{ top: edgeTop, bottom: 190, side: 30 \}, reservedRects\)/);
 });
 
 test('home map polish: story chip wears Alex\'s paper-and-pencil; chip hit slops never overlap', () => {

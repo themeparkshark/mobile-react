@@ -155,7 +155,8 @@ import { modalLayers } from '../ui/modalLayers';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
 import NewTag from '../components/map/NewTag';
 import useMapGuide from '../components/guide/useMapGuide';
-import { retireRungTag, useLadderCounters, useLadderVeteran, useRung, useWonCoinToday } from '../services/reveal/revealLadder';
+import { currentAppOpen, retireRungTag, useLadderCounters, useLadderVeteran, useRung, useWonCoinToday } from '../services/reveal/revealLadder';
+import { mapTipAllowed, markMapTipShown } from '../components/map/mapChrome';
 import { linePlayRoute } from '../components/guide/guideCoins';
 import { guide } from '../services/guide/nextCoin';
 import type { GuideAction } from '../services/guide/guideCopy';
@@ -1476,13 +1477,15 @@ export function ExploreScreenBody() {
     ? null : parkTipFor({ inPark: atParkNow, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
       // The guide card's "Tap PLAY!" picture replaces Finn's one-time coin card (one card at a time, core loop 4.1).
       rideCoinInRange: false, playUp: playableTaskId != null || playRideShown });
-  const parkTipReady = !mapCovered && mapCalm && mapTipReady({
+  // One map tip per app open (mapChrome rule b): the park tip, the compass hint and the home tip share it.
+  const parkTipReady = !mapCovered && mapCalm && (!parkTip || mapTipAllowed(currentAppOpen(), parkTip)) && mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
     dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial,
     bossOrChest: bossOpen || bossOccluded || dailyGiftOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
     adventureOpen: adventureOccluded, coinFlying: !!pendingCollect || !!collectFlight,
   });
   useEffect(() => { setParkTipShowing(!!player && !!parkTip && parkTipReady); }, [player, parkTip, parkTipReady]);
+  useEffect(() => { if (parkTip && activeTip === parkTip) markMapTipShown(currentAppOpen(), parkTip); }, [parkTip, activeTip]);
   // Park help page 1 ("Win ride coins") opens by itself once, on the first park arrival on this build,
   // only for an account that never had Finn's park lesson here (core loop 4.3 and 5.11). New players see
   // the same picture inside Finn's hand-off, so the guide card is the next thing on their screen.
@@ -2176,6 +2179,7 @@ export function ExploreScreenBody() {
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); setClusterFan(null); }}
           coverHost="screen"
           hintReady={parkTipReady && !parkTipShowing}
+          tipCard={guideShown ? { rect: { x: 12, y: slotTop, w: WINDOW_WIDTH - GUIDE_CARD_RIGHT - 12, h: GUIDE_CARD_HEIGHT }, key: String(guideTargetId ?? 'guide') } : null}
           sharkCheer={openRedeemable?.type === 'task' || openRedeemable?.type === 'secret_task'}
           underShark={underShark}
           onUserPan={() => setClusterFan(null)}

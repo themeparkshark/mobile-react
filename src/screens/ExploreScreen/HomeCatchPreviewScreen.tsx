@@ -21,6 +21,7 @@ import HomeCatchMoment, { resetCatchSessionForPreview, resetRideHintForPreview, 
 import { resetRevealSeenForPreview } from './ridePhoto/CatchReveal';
 import HomeHuntChip, { chipWidthFor, type HuntChipMessage } from './HomeHuntChip';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
+import { edgeTokens } from '../../components/map/mapChrome';
 import { bannerCovers, edgeArrowPlacement, findFootprint, hudRowTop, peekBottom, sharkFootprint, type Rect } from './findEdges';
 import { peekLine, walkCloserLine } from './findPresentation';
 import HomeHudChips from './HomeHudChips';
@@ -442,7 +443,7 @@ function HomeCatchPreview() {
       </Map>
       {/* Same as the app: kept mounted, hidden and inert during a catch. */}
       <Animated.View style={[StyleSheet.absoluteFill, edgesBack, BARE && styles.hidden]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
-        <FindEdgeArrows finds={edges} size={size} onPress={onEdgePress} insetTop={12 + 30 + 8 + 24} />
+        <FindEdgeArrows tokens={edgeTokens(edges, size, { top: 12 + 30 + 8 + 24, bottom: 190, side: 30 })} size={size} onPress={onEdgePress} />
       </Animated.View>
       {!request && <Animated.View style={[styles.bottom, { bottom: slotBottom }, edgesBack, BARE && styles.hidden]} pointerEvents="box-none">
         <HomeHuntChip message={chip} onDismiss={() => setChip(null)} />
