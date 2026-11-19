@@ -94,6 +94,8 @@ test('T104: the chest card is sized to its prizes, the lid pops on the phone, pr
   assert.match(reveal, /!revealed && previewRows\.length \? previewRows\.map/, 'the held prizes show dim from the first frame');
   assert.doesNotMatch(reveal, /styles\.flash|useCountUp/, 'no white flash oval, no count-up');
   assert.match(reveal, /colors=\{GOLD_BURST\}/, 'a gold burst');
+  assert.match(reveal, /fromDim=\{previewRows\.some\(p => p\.kind === row\.kind\)\}/, 'a held prize brightens in place, never blinks out');
+  assert.match(reveal, /opacity: 0\.4 \+ 0\.6 \* Math\.min\(1, t\.value\)/);
   const hook = read('src/components/retention/useRetention.tsx');
   assert.match(hook, /preview=\{chestPreview\(r\.src, daily, chests\.find\(c => c\.level === r\.level\) \?\? null\)\}/);
 });

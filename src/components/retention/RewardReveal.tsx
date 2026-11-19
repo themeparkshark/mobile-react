@@ -252,6 +252,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
             </View>
           ) : rows.map((row, i) => (
             <Row key={row.kind} row={row} shown={i < landed} reducedMotion={reducedMotion} compact={compact}
+              fromDim={previewRows.some(p => p.kind === row.kind)}
               slamKey={i === rows.length - 1 ? replay : 0} onLand={isBigReward(row.kind) ? pulseGlow : undefined}
               onWear={row.kind === 'item' ? onWear : undefined} onPins={row.kind === 'mystery_boxes' ? onPins : undefined}
               wearBusy={wearBusy} />
@@ -300,8 +301,10 @@ function rowIcon(row: RewardRow) {
   }
 }
 
-function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamKey = 0, onLand, wearBusy = false }: {
+function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamKey = 0, onLand, wearBusy = false, fromDim = false }: {
   readonly row: RewardRow; readonly shown: boolean; readonly reducedMotion: boolean; readonly compact?: boolean;
+  /** T104: this prize was already showing dim (the chest's preview): it brightens in place, never blinks out first. */
+  readonly fromDim?: boolean;
   readonly slamKey?: number; readonly onLand?: () => void;
   readonly onWear?: () => void; readonly onPins?: () => void; readonly wearBusy?: boolean;
 }) {
@@ -322,12 +325,14 @@ function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamK
     t.value = withSequence(withTiming(1.08, { duration: 90 }), withSpring(1, { damping: 8, stiffness: 300 }));
     onLand?.();
   }, [slamKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const style = useAnimatedStyle(() => ({
-    opacity: Math.min(1, t.value),
-    transform: big
-      ? [{ scale: 1.35 - t.value * 0.35 }]
-      : [{ translateY: (1 - t.value) * -18 }, { scale: 0.7 + t.value * 0.3 }],
-  }));
+  const style = useAnimatedStyle(() => (fromDim
+    ? { opacity: 0.4 + 0.6 * Math.min(1, t.value), transform: [{ scale: 0.94 + t.value * 0.06 }] }
+    : {
+      opacity: Math.min(1, t.value),
+      transform: big
+        ? [{ scale: 1.35 - t.value * 0.35 }]
+        : [{ translateY: (1 - t.value) * -18 }, { scale: 0.7 + t.value * 0.3 }],
+    }));
   const beamStyle = useAnimatedStyle(() => ({ opacity: beam.value }));
   // T104: the number lands whole with its row (never counting +13 then +20 under the player).
   const amount = row.amount;
