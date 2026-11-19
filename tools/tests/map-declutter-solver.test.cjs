@@ -504,6 +504,31 @@ test('T022: the selected ride\'s card never sits under the guide card: it takes 
   assert.equal(free.get('ride:2').tag.side, 'top');
 });
 
+test('T022 hold: the selected ride\'s card is never covered by a neighbour island or the player\'s shark', () => {
+  const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const cardRect = (out, item) => {
+    const p = s.project(item.latitude, item.longitude, frame());
+    const tag = out.get(item.id).tag;
+    return { x: p.x + tag.x, y: p.y + tag.y, w: L.SELECTED_TAG.w, h: L.SELECTED_TAG.h };
+  };
+  // Mad Tea Party selected with the Storybook Land tower just up and to the right (the Pro Max shot).
+  const sel = rideAt(1, 0, 60, { pinned: true, tag: L.SELECTED_TAG });
+  const tower = rideAt(2, 95, -20);
+  const out = s.solveLayout([sel, tower], frame());
+  assert.equal(out.get('ride:2').visible, true, 'the tower still stands');
+  const tp = s.project(tower.latitude, tower.longitude, frame());
+  const towerRect = { x: tp.x + L.RIDE_BODY.x, y: tp.y + L.RIDE_BODY.y, w: L.RIDE_BODY.w, h: L.RIDE_BODY.h };
+  assert.ok(!overlap(cardRect(out, sel), towerRect), `card clear of the tower: ${JSON.stringify(cardRect(out, sel))}`);
+  // The player's shark just above the selected island (the 17 Pro Pirates shot).
+  const shark = { id: 'player', ...at(0, -20), priority: 0, tagObstacleOnly: true, body: { x: -26, y: -52, w: 52, h: 60 } };
+  const withShark = s.solveLayout([sel, shark], frame());
+  const sp = s.project(shark.latitude, shark.longitude, frame());
+  const sharkRect = { x: sp.x - 26, y: sp.y - 52, w: 52, h: 60 };
+  assert.ok(!overlap(cardRect(withShark, sel), sharkRect), 'card clear of the shark');
+  // Nothing around: right above its island, as before.
+  assert.equal(s.solveLayout([sel], frame()).get('ride:1').tag.side, 'top');
+});
+
 test('T022 and T148: one cheap idle loop on the target island and on the nearest treat (off under Reduce Motion)', () => {
   const fs = require('node:fs');
   const task = fs.readFileSync('src/screens/ExploreScreen/TaskMarker.tsx', 'utf8');

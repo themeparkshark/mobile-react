@@ -445,14 +445,20 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
       if (ok && rect) tagGrid.add(null, rect);
       continue;
     }
-    // The selected marker's card draws on top of everything (it draws there itself), above its island when that
-    // is clear of the HUD and the screen edge, else on the first clear side (T022: after a recenter it sat
-    // under the guide card); with no clear side, above. Others keep last pass's side while it is free.
+    // The selected marker's card: above its island when that is clear of the HUD, the screen edge, other
+    // islands and the player's shark, else on the first side clear of all of them (T022 hold: a neighbour's
+    // tower and the shark drew over it, since iOS stacks marker views in its own order). With no side clear
+    // of the art, the first side clear of the HUD and the edge (T022: never under the guide card); else above.
     const pinnedFits = (c: (typeof all)[number]) => {
       const rect: Rect = { x: p.x + c.x, y: p.y + c.y, w: item.tag!.w, h: item.tag!.h };
       return insideView(rect, frame, edge) && !insets.some(inset => overlapArea(rect, inset) > 0);
     };
-    const candidates = item.pinned ? [all.find(c => !c.far && pinnedFits(c)) ?? all[0]]
+    const pinnedClear = (c: (typeof all)[number]) => {
+      const rect: Rect = { x: p.x + c.x, y: p.y + c.y, w: item.tag!.w, h: item.tag!.h };
+      return pinnedFits(c) && !grid.near(rect).some(cell => cell.owner !== entry && overlapArea(rect, cell.rect) > 0)
+        && !tagObstacles.some(other => overlapArea(rect, other) > 0);
+    };
+    const candidates = item.pinned ? [all.find(c => !c.far && pinnedClear(c)) ?? all.find(c => !c.far && pinnedFits(c)) ?? all[0]]
       : lastSide ? [...all.filter(c => c.side === lastSide), ...all.filter(c => c.side !== lastSide)] : all;
     let chosen: TagPlacement | null = null;
     for (const c of candidates) {
