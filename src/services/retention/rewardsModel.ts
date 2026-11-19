@@ -48,6 +48,11 @@ export interface RewardsInput {
     readonly retry?: boolean } | null;
   /** Event chests to open, after rung 9 and only while an event is on. */
   readonly events: { readonly chests: number; readonly door?: boolean } | null;
+  /**
+   * A Daily 3, Weekly or level chest was opened in this visit to Rewards (hold-fix 3, T118). The other bonus chests
+   * wait for the next open, so one visit never has two chest moments back to back.
+   */
+  readonly chestOpenedThisVisit?: boolean;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -65,12 +70,14 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
     else if (d.claimed) rows.push({ key: 'daily3', title: 'Daily 3', line: 'Done for today. New goals tomorrow', ready: 0, action: 'go' });
     else rows.push({ key: 'daily3', title: 'Daily 3', line: `${d.done} of ${d.total} done`, ready: 0, action: 'go' });
   }
-  // T118: one chest moment at a time. While the Daily 3 chest is ready, the level chest waits its turn (it shows the
-  // moment the Daily 3 chest is opened, so the two are never offered together).
-  if (i.levelChest && i.levelChest.waiting > 0 && !i.daily3?.claimable) {
+  // T118: one chest moment per visit. While the Daily 3 chest is ready the level chest waits, and once a chest was
+  // opened in this visit the level chest and the Weekly Box wait for the next open (the button's number says they
+  // are there the moment the sheet closes), so two chests never come back to back in one open.
+  const waitTurn = !!i.chestOpenedThisVisit;
+  if (i.levelChest && i.levelChest.waiting > 0 && !i.daily3?.claimable && !waitTurn) {
     rows.push({ key: 'level_chest', title: `Level ${i.levelChest.level} Chest`, line: 'New gear inside', ready: i.levelChest.waiting, action: 'open' });
   }
-  if (i.weekly?.claimable) {
+  if (i.weekly?.claimable && !waitTurn) {
     rows.push({ key: 'weekly_box', title: 'Weekly Box', line: 'Your week of flames earned it', ready: 1, action: 'open' });
   }
   if (i.trail) {
@@ -116,6 +123,8 @@ export function rewardsSummary(i: RewardsInput): RewardsSummary {
 
 /** The sheet's closing line when nothing is ready: always a reason to come back (never a dead end). */
 export function emptyLine(i: RewardsInput): string {
+  // T118: a chest held for the next visit is named honestly, never hidden behind "tomorrow".
+  if (i.chestOpenedThisVisit && ((i.levelChest?.waiting ?? 0) > 0 || i.weekly?.claimable)) return 'Another chest waits for your next visit';
   if (i.daily3 && !i.daily3.claimed && !i.daily3.claimable) return 'Finish your Daily 3 for a chest';
   return 'Your next daily chest comes tomorrow';
 }

@@ -156,6 +156,13 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const [daily, setDaily] = useState<DailyThreeState | null>(null);
   const [chests, setChests] = useState<readonly LevelChest[]>([]);
   const [view, setView] = useState<View_ | null>(null);
+  // T118: a Daily 3, Weekly or level chest paid out in this visit to Rewards. The other bonus chests wait for the
+  // next open; the visit ends when the overlay closes (then the button's number shows what still waits).
+  const [chestThisVisit, setChestThisVisit] = useState(false);
+  useEffect(() => {
+    if (!view) setChestThisVisit(false);
+    else if (view.k === 'reveal' && view.rewards) setChestThisVisit(true);
+  }, [view]);
   const [busy, setBusy] = useState(false);
   const [pop, setPop] = useState<{ index: number | null; key: number }>({ index: null, key: 0 });
   const [celebrate, setCelebrate] = useState<string[]>([]);
@@ -541,6 +548,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     stamps: { claimable: stamps, retry: stampRetry && stamps > 0 },
     events: eventsOpen && flagOn(flags, 'live_events') && liveEvt.event
       ? { chests: openableKeys(liveEvt.event).length, door: !!o.onOpenEvents || rewardsDoorOpen('events') } : null,
+    chestOpenedThisVisit: chestThisVisit,
   };
   const rows = rewardsRows(rewardsInput);
   const summary = rewardsSummary(rewardsInput);

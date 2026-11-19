@@ -46,3 +46,22 @@ test('regression: Gill\'s badge in Beat the Buzzer never shows a seconds readout
   assert.doesNotMatch(lockLabel, /toFixed|\/ 1000/, 'the portrait chip is a word, not a time');
   assert.doesNotMatch(duel, /me: 'TIME'|BELL \$\{/, 'no clock words on the chip either');
 });
+
+test('T118: after the Daily 3 chest opens, the level chest waits for the next open of Rewards', () => {
+  const model = loadTs('src/services/retention/rewardsModel.ts');
+  const base = { dailyChest: null, trail: null, stamps: null, events: null, levelChest: { level: 2, waiting: 1 }, weekly: { claimable: true } };
+  const claimed = { done: 3, total: 3, claimable: false, claimed: true, flame: 1, seen: true };
+  const keys = input => model.rewardsRows(input).map(r => r.key);
+  // Same visit, the Daily 3 chest just closed: no second chest in this open.
+  const sameVisit = keys({ ...base, daily3: claimed, chestOpenedThisVisit: true });
+  assert.ok(!sameVisit.includes('level_chest'), sameVisit.join(','));
+  assert.ok(!sameVisit.includes('weekly_box'), sameVisit.join(','));
+  assert.equal(model.emptyLine({ ...base, daily3: claimed, chestOpenedThisVisit: true }), 'Another chest waits for your next visit');
+  // The sheet closed: the button counts the waiting chests, and the next open offers them.
+  assert.equal(model.rewardsCount({ ...base, daily3: claimed }), 2);
+  assert.ok(keys({ ...base, daily3: claimed }).includes('level_chest'));
+  // The hook ends the visit when the overlay closes, and starts the hold when a chest has paid.
+  const hook = strip(read('src/components/retention/useRetention.tsx'));
+  assert.match(hook, /if \(!view\) setChestThisVisit\(false\);\s*else if \(view\.k === 'reveal' && view\.rewards\) setChestThisVisit\(true\);/);
+  assert.match(hook, /chestOpenedThisVisit: chestThisVisit,/);
+});
