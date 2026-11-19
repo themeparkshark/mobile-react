@@ -7,6 +7,7 @@
  * Motion runs on the UI thread (Reanimated); Reduce Motion swaps every move
  * for a short fade.
  */
+import StarterSticker from './money/StarterSticker';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
@@ -313,6 +314,8 @@ function MenuRow({ item, index, count, open, reduced, popped, badge, onPress }: 
       <Image source={ROUND[item.round]} style={StyleSheet.absoluteFill} contentFit="contain" />
       {item.image ? <Image source={item.image} style={styles.rowArt} contentFit="contain" /> : <GameIcon name={item.icon} size={38} />}
       {badge && <Animated.View style={[styles.badge, badgeStyle]}><GameIcon name="gift" size={20} /></Animated.View>}
+      {/* T158: "Just once" on the Shark Shop door while the Starter Pack is unbought (no price, no pop-up). */}
+      {item.id === 'shop' && <StarterSticker style={{ top: -6, right: -10 }} />}
     </View>
   );
   const label = (

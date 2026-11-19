@@ -99,3 +99,13 @@ test('T124: the ride line sits under the won coin name on the win card, with the
   assert.ok(title > 0 && card.indexOf('<RideFactLine') > title, 'under the name');
   assert.match(strip(read('src/components/RedeemRedeemableModal.tsx')), /rideName=\{taskName\}\s*parkId=\{park\?\.id \?\? null\}/);
 });
+
+test('T158: the Just once sticker sits on both Shark Shop doors (Home menu row, Profile badge), nowhere in a reward', () => {
+  const menu = strip(read('src/components/QuickAccessMenu.tsx'));
+  assert.match(menu, /\{item\.id === 'shop' && <StarterSticker style=\{\{ top: -6, right: -10 \}\} \/>\}/);
+  const profile = strip(read('src/screens/ProfileScreen.tsx'));
+  const shop = profile.slice(profile.indexOf("key: 'shark-shop'"), profile.indexOf('as ProfileShortcut]'));
+  assert.match(shop, /sticker: <StarterSticker style=\{\{ top: -6, right: -26 \}\} \/>/);
+  assert.match(strip(read('src/components/profile/ProfileShortcuts.tsx')), /\{!item\.locked && item\.sticker\}/);
+  assert.doesNotMatch(read('src/components/PostWinRewardsModal.tsx'), /StarterSticker/, 'a door, never inside a reward');
+});

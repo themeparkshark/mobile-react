@@ -29,6 +29,7 @@ import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
 import { rideCoinTotal, visitedParkCount } from '../components/profile/profileCounts';
 import ProfileShortcuts, { type ProfileShortcut } from '../components/profile/ProfileShortcuts';
+import StarterSticker from '../components/money/StarterSticker';
 import { profileStores } from '../components/profile/profileStores';
 import { loadSecretShopFlag, secretShopFlagNow } from '../services/secretShopFlag';
 import StatusBadges from '../components/profile/StatusBadges';
@@ -255,6 +256,8 @@ export default function ProfileScreen() {
         label: 'Shark Shop',
         image: require('../../assets/images/screens/profile/shortcut_shark_shop.png'),
         hint: 'Opens the shop for new gear',
+        // T158: "Just once" while the Starter Pack is unbought (a door, never a price or a pop-up).
+        sticker: <StarterSticker style={{ top: -6, right: -26 }} />,
         onPress: () => {
           if (sharkShop) RootNavigation.navigate('Store', { store: sharkShop.id });
           else RootNavigation.navigate('Store', { store: 'shark-shop' });

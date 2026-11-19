@@ -13,7 +13,7 @@
  *   keeps the haptic and sound and skips the squash.
  */
 import { Image, type ImageSource } from 'expo-image';
-import { memo, useContext, useRef } from 'react';
+import { memo, useContext, useRef, type ReactNode } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SoundEffectContext, SoundEffectContextType } from '../../context/SoundEffectProvider';
 import HapticPatterns from '../../helpers/hapticPatterns';
@@ -31,6 +31,8 @@ export type ProfileShortcut = {
   readonly locked?: boolean;
   /** A small red dot (something new inside). */
   readonly dot?: boolean;
+  /** A small sticker over the badge's corner (the Shark Shop's "Just once" while the Starter Pack is unbought, T158). */
+  readonly sticker?: ReactNode;
 };
 
 const BADGE_RATIO = 386 / 363; // Alex's store frame art
@@ -74,6 +76,7 @@ const Badge = memo(function Badge({ item, width, reduced }: {
           </View>
         )}
         {item.dot && !item.locked && <View style={styles.dot} />}
+        {!item.locked && item.sticker}
       </Animated.View>
       <UpperText style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}
         maxFontSizeMultiplier={1.3}>
