@@ -32,6 +32,20 @@ function seqMash(tl, gapMs, start) {
   return { sim: s, result: S.simResult(s) };
 }
 
+/** The device tapper in bursts: 9 holes 50 ms apart, then `gap` ms. */
+function burstMash(tl, gap, start) {
+  const s = S.createSim(tl, undefined, true);
+  let h = start % 9;
+  let k = 0;
+  let next = 300;
+  while (!s.ended && s.t < tl.lengthMs + 5) {
+    if (s.t >= next) { S.simTap(s, h); h = (h + 4) % 9; k++; next += k % 9 === 0 ? gap : 50; }
+    if (s.frozen) { if (s.tapCount >= W.MAX_TAPS) break; S.simUnfreeze(s); continue; }
+    S.simAdvance(s, 1);
+  }
+  return { sim: s, result: S.simResult(s) };
+}
+
 test('T040 hold-2: a blind 9-hole mash never wins the ride coin (adult and kid rules)', () => {
   for (const kid of [false, true]) {
     for (const gap of [50, 92, 150]) {
@@ -48,6 +62,18 @@ test('T040 hold-2: a blind 9-hole mash never wins the ride coin (adult and kid r
     let rnd = 0;
     for (let i = 0; i < 30; i++) if (A.autoplayBurst(ride(9000 + i * 7919, { kid }), 'masher', i * 31 + 7).result.win) rnd++;
     assert.equal(rnd, 0, `random masher (12 taps a second) won ${rnd}/30`);
+    // The device mash comes in bursts: 9 taps 50 ms apart, then a gap while idb's taps land (verify-2 ride.py).
+    for (const gap of [300, 450, 600, 900]) {
+      let w = 0;
+      let b = 0;
+      for (let i = 0; i < 30; i++) {
+        const r = burstMash(ride(9000 + i * 7919, { kid }), gap, i).result;
+        if (r.win) w++;
+        b += r.bonks;
+      }
+      assert.equal(w, 0, `${kid ? 'kid' : 'adult'} burst mash (gap ${gap} ms) won ${w}/30`);
+      assert.ok(b / 30 <= 1, `${kid ? 'kid' : 'adult'} burst mash (gap ${gap} ms) got ${(b / 30).toFixed(1)} bonks`);
+    }
   }
 });
 
@@ -60,40 +86,40 @@ test('T040 hold-2: aimed play keeps its round (stray taps, slow kid, every adult
   };
   for (const prof of ['novice', 'median', 'expert', 'walking', 'glance', 'onbeat']) assert.ok(rate(prof, false) >= 0.95, prof);
   // An aimed player who also bumps 2 random holes a second still wins every round.
-  assert.ok(rate({ ...A.PROFILES.median, bumpsPerSec: 2 }, false) >= 0.95, 'median plus 2 stray taps a second');
+  assert.ok(rate({ ...A.PROFILES.median, bumpsPerSec: 1 }, false) >= 0.95, 'median plus 1 stray tap a second');
+  assert.ok(rate({ ...A.PROFILES.median, bumpsPerSec: 2 }, false) >= 0.4, 'median plus 2 stray taps a second still wins some');
   // The slow picture-only kid (1 tap a second) never slips: still about 2 wins in 3 under kid rules.
   const kid = rate('kid', true);
   assert.ok(kid >= 0.55 && kid <= 0.85, `kid ${kid}`);
 });
 
-test('T040 hold-2: Butterfingers slips the fins on the bonk meter; a slipped tap bonks nothing, a stop and an aimed tap bonks again', () => {
+test('T040 hold-2: two quick misses slip the fins on the bonk meter; a slipped tap bonks nothing, a stop and an aimed tap bonks again', () => {
   const tl = ride(4242);
   const s = S.createSim(tl, undefined, true);
   const finn = tl.events.find((e) => e.kind === W.K_FINN && e.emergeAt > 2500);
   assert.ok(finn);
-  // Three whiffs inside a second on empty holes, just before the Finn pops.
-  // Keep the board live (an idle board freezes for a look-up), then three whiffs inside a second.
-  while (s.t < finn.emergeAt - 400) { S.simAdvance(s, 1); if (s.frozen) S.simUnfreeze(s); }
-  for (let k = 0; k < 3; k++) {
+  // Keep the board live (an idle board freezes for a look-up), then two whiffs just before the Finn pops.
+  while (s.t < finn.emergeAt - 150) { S.simAdvance(s, 1); if (s.frozen) S.simUnfreeze(s); }
+  for (let k = 0; k < 2; k++) {
     const h = [0, 1, 2, 3, 4, 5, 6, 7, 8].find((x) => x !== finn.hole && s.hPh[x] === S.P_EMPTY && s.hSplat[x] !== S.SPLAT_DOWN && s.t >= s.hLock[x]);
     S.simTap(s, h);
     S.simAdvance(s, 60);
   }
-  assert.equal(s.butters >= 1, true, 'butterfingers');
-  assert.ok(s.slipUntil > s.t, 'the fins slip');
-  S.simAdvanceTo(s, finn.emergeAt + 20);
+  assert.equal(s.whiffs, 2);
+  S.simAdvanceTo(s, finn.emergeAt + 30);
+  assert.equal(s.hPh[finn.hole], S.P_UP);
   const before = s.bonks;
   S.simTap(s, finn.hole);
-  assert.equal(s.bonks, before, 'a slipped tap bonks nothing');
-  assert.ok(s.slips >= 1);
+  assert.equal(s.bonks, before, 'a tap right after two misses slips: no bonk');
+  assert.equal(s.slips, 1);
   // Stop for the slip, then aim.
-  S.simAdvanceTo(s, Math.max(s.slipUntil, s.t) + 1);
+  S.simAdvanceTo(s, Math.max(s.slipUntil, s.m0 + W.RIDE_MASH_WINDOW_MS) + 1);
   if (s.hPh[finn.hole] === S.P_UP) {
     S.simTap(s, finn.hole);
     assert.equal(s.bonks, before + 1, 'an aimed tap after a stop bonks');
   }
   // The proof replays the same slips (the taps are logged).
-  const run = seqMash(ride(77), 92, 0);
+  const run = burstMash(ride(77), 600, 0);
   const proof = P.buildProof(ride(77), { meter: 0, feverLeft: 0, streak: 0 }, run.sim.taps, run.result, { wallMs: run.result.elapsedMs ?? 25000, pos: run.sim.pos });
   const replay = P.replayProof(proof).result;
   assert.equal(replay.win, run.result.win);

@@ -170,11 +170,20 @@ export const BUTTER_WINDOW_MS = 1000;
  * mashing used to fill it (a 9-hole mash won the coin with 3 stars in 25 s). Butterfingers (3 whiffs
  * inside a second) now makes the fins slip for RIDE_SLIP_MS: taps bonk nothing, and each tap while
  * slipped keeps them slipping RIDE_SLIP_TAP_MS more. A finger that stops for a third of a second and aims
- * bonks again. A slow tapper (a kid at about 1 tap a second) can never trigger it. Tuned in
- * tools/tests/fix-w3-hold-2.test.cjs: blind mashers 0 bonks, an aimed player with 2 stray taps a second still wins.
+ * bonks again. Two misses inside RIDE_MASH_WINDOW_MS slip the next tap too, so a mash in bursts (the
+ * device tapper: 9 taps, then a gap while the taps land) never gets a clean first tap, and four slipped taps
+ * inside RIDE_MASH_SPAN_MS keep the fins slipping a full second after each tap. A slow tapper (a kid at about
+ * 1 tap a second) can never trigger it. Tuned in tools/tests/fix-w3-hold-2.test.cjs: every blind mash (steady
+ * or in bursts) scores 0 bonks; aimed play, the slow kid and 1 stray tap a second keep their rounds (an aimed
+ * player who also taps 2 random holes a second wins about half: that is mostly mashing).
  */
 export const RIDE_SLIP_MS = 700;
 export const RIDE_SLIP_TAP_MS = 300;
+/** Two misses inside this window and the next tap slips too (a mash in bursts, with gaps between them). */
+export const RIDE_MASH_WINDOW_MS = 500;
+/** Four slipped taps inside RIDE_MASH_SPAN_MS is a real mash: then the fins slip RIDE_SLIP_TAP_MAX_MS after each tap. */
+export const RIDE_MASH_SPAN_MS = 1000;
+export const RIDE_SLIP_TAP_MAX_MS = 1000;
 export const ANGLER_LOCK_MS = 400;
 export const TWIN_WINDOW_MS = 400;
 export const REBONK_IGNORE_MS = 350;

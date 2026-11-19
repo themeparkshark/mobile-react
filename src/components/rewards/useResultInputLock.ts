@@ -10,8 +10,8 @@ import { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reani
 import { DURATION } from '../../ui/motion';
 import { RESULT_INPUT_LOCK_MS, RESULT_QUIET_MS, nextMashUnlock } from './mashGuard';
 
-/** Locked buttons show at this opacity (readable, clearly not ready yet). */
-export const LOCKED_BUTTON_OPACITY = 0.55;
+/** Locked buttons show at this opacity: plainly resting, never a muddy colour over the blue card (0.55 read green). */
+export const LOCKED_BUTTON_OPACITY = 0.8;
 
 /** `resetKey`: a new value locks again (a card that swaps its panel, like the win card's team step). */
 export default function useResultInputLock(active: boolean, firstMs: number = RESULT_INPUT_LOCK_MS, quietMs: number = RESULT_QUIET_MS,
