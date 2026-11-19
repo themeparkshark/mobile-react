@@ -317,7 +317,8 @@ export default function RedeemModal({
               : badge === 'extra_try' ? `${coin.name}. Uses an extra try.`
               : `${coin.name}. Costs ${coin.ticket_cost ?? 1} ${(coin.ticket_cost ?? 1) === 1 ? 'Ticket' : 'Tickets'}.`}>
             {!!coin.coin_url && <Image source={{ uri: coin.coin_url }} style={styles.captionCoin} contentFit="contain" />}
-            <Text style={styles.captionText} numberOfLines={1}>{coin.name}</Text>
+            {/* The coin's full display name, on two lines when it is long (Finding Nemo Submarine Voyage), never cut. */}
+            <Text style={styles.captionText} numberOfLines={2}>{coin.name}</Text>
             {!badge && <View style={styles.cost}>
               <GameIcon name="ticket" size={16} />
               <Text style={styles.captionText}>{coin.ticket_cost ?? 1}</Text>
@@ -417,6 +418,6 @@ const styles: Record<'caption' | 'cost' | 'closedPill' | 'badge', ViewStyle> & {
   // Ride name and price under PLAY!, on a white tab with his navy outline.
   caption: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: -4, maxWidth: '100%',
     backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 10, paddingVertical: 3 },
-  captionText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, flexShrink: 1 },
+  captionText: { fontFamily: 'Shark', fontSize: 13, lineHeight: 15, color: BRAND.navy, flexShrink: 1, textAlign: 'center' },
   cost: { flexDirection: 'row', alignItems: 'center', gap: 2 },
 };
