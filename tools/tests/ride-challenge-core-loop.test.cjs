@@ -686,7 +686,7 @@ test('after a trivia loss with Picture games on, TRY AGAIN sends retry_of and pi
   assert.equal(writes[0].attemptId, 902, 'the new attempt id is saved for a relaunch');
   // The card builds exactly that checkpoint: the lost attempt id on TRY AGAIN, the player's picture setting on every paid try.
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /retryOfRef\.current = attemptRef\.current\?\.id \?\? retryOfRef\.current;\n\s+try \{\n\s+await clearAttemptCheckpoint\(\);/);
+  assert.match(modal, /retryOfRef\.current = attemptRef\.current\?\.id \?\? retryOfRef\.current;[\s\S]{0,900}?attemptRef\.current = null;[\s\S]{0,400}?try \{\n\s+await clearAttemptCheckpoint\(\);/);
   assert.match(modal, /\.\.\.\(\(saved\?\.retryOf \?\? retryOfRef\.current\) \? \{ retryOf: saved\?\.retryOf \?\? retryOfRef\.current \} : \{\}\),\n\s+\.\.\.\(pictureOnly \? \{ pictureOnly: true \} : \{\}\),/);
 });
 
