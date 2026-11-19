@@ -157,7 +157,7 @@ test('T060: the Whack ride round draws the ride coin\'s own art inside its HUD r
   assert.match(board, /<Circle cx=\{tcx\} cy=\{tcy\} r=\{tr\} color=\{timerFace\} \/>\s*\{coinImg \? <Image image=\{coinImg\}/);
   const whack = read('src/games/whack/WhackAShark.tsx');
   assert.match(whack, /coinUrl: ride && !defend \? coinImage \?\? null : null,/, 'Home Defend never shows a coin it does not give');
-  assert.match(read('src/components/MiniGameSelector.tsx'), /<WhackAShark visible=\{visible\} seed=\{seed\} taskName=\{taskName\} coinImage=\{coinImageUrl \?\? null\}/);
+  assert.match(read('src/components/MiniGameSelector.tsx'), /<WhackAShark visible=\{onStage\} seed=\{seed\} taskName=\{taskName\} coinImage=\{coinImageUrl \?\? null\}/);
   assert.match(read('src/components/RedeemRedeemableModal.tsx'), /coinImageUrl=\{coinUri \?\? undefined\}/, 'the coin card hands its coin_url to the game');
 });
 
