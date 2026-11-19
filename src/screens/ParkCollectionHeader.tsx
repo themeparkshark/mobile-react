@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import GameIcon from '../ui/GameIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
-import { limitedDayLabel } from '../services/collection/limitedCoins';
+import { limitedDayLabel, limitedTabLine } from '../services/collection/limitedCoins';
 import { parkCoinParts } from './parkCoinParts';
 import { shelfLeaving } from '../services/collection/shelfLeaving';
 import { playSfx } from '../gamekit/SFX';
@@ -27,6 +27,8 @@ interface Props {
   readonly limitedAvailable?: number;
   /** Last park-local day of the rotation, YYYY-MM-DD. */
   readonly limitedEndsOn?: string | null;
+  /** The dated edition in play ("November 2026 Edition"), from the Limited coins themselves. */
+  readonly limitedEdition?: string | null;
   readonly onBrowseLimited?: () => void;
   readonly onBrowseSecrets?: () => void;
   readonly onOpenStampBook?: () => void;
@@ -79,7 +81,7 @@ interface Props {
 /** The slim park header: one shelf count ("9 of 35 coins"), the next trophy, the Rides, Sights and Limited tabs, and the next coin with GO. */
 export default function ParkCollectionHeader({ parkName, isOwnPark = true, collected, available, completionRate,
   ridePassportCollected, ridePassportAvailable, onOpenRidePassport, limitedCollected = 0, limitedAvailable = 0,
-  limitedEndsOn, onBrowseLimited, onBrowseSecrets, onOpenStampBook,
+  limitedEndsOn, limitedEdition, onBrowseLimited, onBrowseSecrets, onOpenStampBook,
   nextRideName, nextRideOwned, ownedGoalHint, ownedGo = false, nearbyRideName, ticketsNeeded = 0,
   rescuePassAvailable = false, goalStale = false,
   goalReportedDown = false, alternateRideName, nearbyReportedOpen = false, nearbyHint = null, parkResting = null,
@@ -217,8 +219,9 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
         </Pressable>}
       </View>
       {/* Fix w3 T228: on the Limited tab the leave date shows in words, not only to VoiceOver. */}
-      {tab === 'limited' && limitedAvailable > 0 && !!limitedLeaves && <Text style={styles.limitedLine} accessibilityRole="text">
-        {`These limited coins leave ${limitedLeaves}`}
+      {/* Fix w4 T233: the Limited tab names its dated edition ("November 2026 Edition · leaves Monday, Nov 30"). */}
+      {tab === 'limited' && limitedAvailable > 0 && !!limitedTabLine(limitedEdition, limitedLeaves) && <Text style={styles.limitedLine} accessibilityRole="text">
+        {limitedTabLine(limitedEdition, limitedLeaves)}
       </Text>}
     </LinearGradient>
     {(passportComplete || goal) && <View style={styles.lower}>

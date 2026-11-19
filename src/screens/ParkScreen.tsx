@@ -39,7 +39,7 @@ import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
 import { loadParkRides, prefetchRideCatalog, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
-import { splitParkShelf } from '../services/collection/limitedCoins';
+import { shelfEdition, splitParkShelf } from '../services/collection/limitedCoins';
 import type { RideType } from '../api/endpoints/rides';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
@@ -658,6 +658,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     limitedCollected={currentPark.limited_coins_collected}
                     limitedAvailable={currentPark.limited_coins_available}
                     limitedEndsOn={currentPark.limited_ends_on}
+                    limitedEdition={shelfEdition(limitedShelf)}
                     tab={shownTab}
                     tabs={tabs}
                     onTab={next => {

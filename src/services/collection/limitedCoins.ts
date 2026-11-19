@@ -22,12 +22,38 @@ export function limitedDayLabel(day: string | null | undefined): string | null {
   return `${WEEKDAYS[value.getUTCDay()]}, ${MONTHS[month - 1]} ${date}`;
 }
 
-/** "Limited · leaves Monday, Nov 30" in rotation, "Limited · returns later" out of it; null for a permanent coin. */
+/**
+ * The coin's dated edition ("November 2026 Edition"), or null on an older server (fix w4 T233: a
+ * Limited coin always reads as a dated special edition, never as a ride that left the park).
+ */
+export function limitedEdition(limited: LimitedWindow | null | undefined): string | null {
+  const edition = typeof limited?.edition === 'string' ? limited.edition.trim() : '';
+  return edition ? edition : null;
+}
+
+/**
+ * "November 2026 Edition · leaves Monday, Nov 30" in rotation, "October 2026 Edition · returns later"
+ * out of it (an older server with no edition says "Limited"); null for a permanent coin.
+ */
 export function limitedLabel(limited: LimitedWindow | null | undefined): string | null {
   if (!limited) return null;
-  if (!limited.active) return limited.returns ? 'Limited · returns later' : 'Limited';
+  const name = limitedEdition(limited) ?? 'Limited';
+  if (!limited.active) return limited.returns ? `${name} · returns later` : name;
   const day = limitedDayLabel(limited.ends_on);
-  return day ? `Limited · leaves ${day}` : 'Limited';
+  return day ? `${name} · leaves ${day}` : name;
+}
+
+/** The edition the Limited tab is showing now: the one in play (the first coin in rotation that names one). */
+export function shelfEdition(shelf: readonly { readonly limited?: LimitedWindow | null }[]): string | null {
+  for (const task of shelf) if (task.limited?.active) { const edition = limitedEdition(task.limited); if (edition) return edition; }
+  return null;
+}
+
+/** The Limited tab's line: "November 2026 Edition · leaves Monday, Nov 30" (older servers: "These limited coins leave ..."). */
+export function limitedTabLine(edition: string | null | undefined, leaves: string | null | undefined): string | null {
+  const name = edition?.trim();
+  if (name) return leaves ? `${name} · leaves ${leaves}` : name;
+  return leaves ? `These limited coins leave ${leaves}` : null;
 }
 
 /** A limited coin that cannot be collected right now. */

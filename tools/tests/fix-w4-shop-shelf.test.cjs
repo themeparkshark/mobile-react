@@ -82,3 +82,46 @@ test('N05: the Shark Shop tip waits for a loaded, painted shop (no fixed 800 ms 
   assert.doesNotMatch(store, /startTutorial\('store'\), 800/);
   assert.match(store, /useTutorialWhenReady\('store', status === 'ready'\)/);
 });
+
+// ---------- T221: one lean Ticket ladder whatever the server sends ----------
+const { leanLadder } = loadTs('src/services/money/ladder.ts');
+const product = (id, section, grants, extra = {}) => ({ product_id: `com.themeparkshark.app.${id}`, section, title: id, badge: null,
+  grants, limit: null, deal_key: null, available: true, unavailable_reason: null, ...extra });
+const FULL = ['pack.starter', 'deal.daily', 'pack.parkday', 'pack.parktrip', 'tickets.5', 'tickets.12', 'tickets.25', 'coins.500', 'coins.7000', 'coins.16000']
+  .map(id => product(id, id.split('.')[0] === 'tickets' ? 'tickets' : id.startsWith('coins') ? 'coins' : 'featured', { tickets: 1 }));
+
+test('T221: an older server (no ladder) never lists the 12 and 25 Ticket packs', () => {
+  const ids = leanLadder({ products: FULL }).products.map(p => p.product_id.replace('com.themeparkshark.app.', ''));
+  assert.equal(ids.includes('tickets.12'), false);
+  assert.equal(ids.includes('tickets.25'), false);
+  assert.equal(ids.includes('tickets.5'), true);
+  assert.equal(ids.includes('coins.16000'), true, 'only the server knows a first purchase: big coin packs stay in More');
+  assert.equal(leanLadder({ ladder: 'full', products: FULL }).products.length, FULL.length - 2);
+});
+
+test('T221: a lean server list is used as served', () => {
+  const served = { ladder: 'lean', products: FULL };
+  assert.equal(leanLadder(served), served);
+  assert.match(read('src/api/endpoints/me/shop.ts'), /return leanLadder\(data\.data\)/, 'every reader of the shop gets the same list');
+});
+
+// ---------- T233: a Limited coin is a dated special edition ----------
+const limitedCoins = loadTs('src/services/collection/limitedCoins.ts');
+
+test('T233: Limited coins and the Limited tab name their dated edition', () => {
+  const now = { active: true, ends_at: '2026-12-01T08:00:00+00:00', ends_on: '2026-11-30', returns: false, edition: 'November 2026 Edition' };
+  const later = { active: false, ends_at: null, ends_on: null, returns: true, edition: 'October 2026 Edition' };
+  assert.equal(limitedCoins.limitedLabel(now), 'November 2026 Edition · leaves Monday, Nov 30');
+  assert.equal(limitedCoins.limitedLabel(later), 'October 2026 Edition · returns later');
+  assert.equal(limitedCoins.limitedLabel({ ...now, edition: undefined }), 'Limited · leaves Monday, Nov 30', 'older server unchanged');
+  assert.equal(limitedCoins.shelfEdition([{ limited: later }, { limited: now }]), 'November 2026 Edition', 'the edition in play');
+  assert.equal(limitedCoins.limitedTabLine('November 2026 Edition', 'Monday, Nov 30'), 'November 2026 Edition · leaves Monday, Nov 30');
+  assert.equal(limitedCoins.limitedTabLine(null, 'Monday, Nov 30'), 'These limited coins leave Monday, Nov 30');
+});
+
+test('T233: the coin cards and the tab header read the edition', () => {
+  assert.match(read('src/components/UnfoundCoinModal.tsx'), /const edition = limitedEdition\(limited\)/);
+  assert.match(read('src/components/TaskCoinModal.tsx'), /limitedEdition\(\(task as TaskType\)\.limited\)/);
+  assert.match(read('src/screens/ParkCollectionHeader.tsx'), /limitedTabLine\(limitedEdition, limitedLeaves\)/);
+  assert.match(read('src/screens/ParkScreen.tsx'), /limitedEdition=\{shelfEdition\(limitedShelf\)\}/);
+});

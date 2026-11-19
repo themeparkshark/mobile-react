@@ -22,6 +22,7 @@ import { LEAVE_FADE_MS, shelfLeaving } from '../services/collection/shelfLeaving
 import { useNativeModalLayer } from '../ui/modalLayers';
 import YellowButton from './YellowButton';
 import { tryAgainLine } from '../services/connectionCopy';
+import { limitedEdition } from '../services/collection/limitedCoins';
 
 export default function TaskCoinModal({
   task,
@@ -161,7 +162,7 @@ export default function TaskCoinModal({
         animationIn="zoomIn" animationOut="zoomOut" backdropColor="#05346e" backdropOpacity={0.55}>
         <View style={{ alignItems: 'center', justifyContent: 'center', flex: 1 }}>
           <View style={{ width: '88%', alignItems: 'center' }}>
-            <Ribbon text="Ride Coin" />
+            <Ribbon text={(task as TaskType).limited ? 'Limited Coin' : 'Ride Coin'} />
             <View style={{ alignItems: 'center', alignSelf: 'stretch',
               backgroundColor: '#0878be', borderColor: '#fff', borderWidth: 3,
               borderRadius: 20, padding: 18, paddingTop: 25, marginTop: -12 }}>
@@ -171,6 +172,9 @@ export default function TaskCoinModal({
               <Text style={{ fontFamily: 'Shark', color: '#fff', fontSize: 22,
                 textAlign: 'center', textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 },
                 textShadowRadius: 0.1 }}>{task.name}</Text>
+              {/* Fix w4 T233: a Limited coin names its dated edition under the ride name. */}
+              {!!limitedEdition((task as TaskType).limited) && <Text style={{ fontFamily: 'Knockout', color: '#ffe08a', fontSize: 17,
+                textAlign: 'center', marginTop: 4 }}>{limitedEdition((task as TaskType).limited)}</Text>}
               {coinUnavailable && <Text style={{ color: '#e4f7ff', fontFamily: 'Knockout',
                 fontSize: 16, textAlign: 'center', marginTop: 12 }}>
                 Could not load this coin’s level-up info. Line games still work.
