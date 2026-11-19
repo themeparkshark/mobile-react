@@ -25,7 +25,7 @@ test('T036: a fresh spend starts the punch before the server answers', () => {
 });
 
 test('T036: the game mounts hidden under the punch and becomes visible when it hands over', () => {
-  assert.match(modal, /\{stageGame && \(\(flowState === 'spinning' && \(punchCard \|\| !!earlyGame\)\) \|\| flowState === 'minigame'/);
+  assert.match(modal, /\{selectedGame && \(\(flowState === 'spinning' && punchCard\) \|\| flowState === 'minigame'/);
   assert.match(modal, /visible=\{flowState !== 'spinning'\}/);
   assert.match(modal, /prewarm=\{flowState === 'spinning'\}/);
   assert.match(modal, /pointerEvents=\{flowState === 'spinning' \? 'none' : 'auto'\}/);

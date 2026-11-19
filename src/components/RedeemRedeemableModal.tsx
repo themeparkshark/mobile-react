@@ -54,7 +54,6 @@ import { guide, type GuideTarget } from '../services/guide/nextCoin';
 import { useRung } from '../services/reveal/revealLadder';
 import { pictureOnlyFor, playFlagsNow, loadPlayFlags, usePlayPrefs } from '../services/playPrefs';
 import { shouldRedealPicture } from '../services/task-attempt/pictureRedeal';
-import { retryPrewarmGame } from '../services/task-attempt/retryPrewarm';
 import { takeRideTry, type RideTrySummary } from '../gamekit/results/rideTry';
 import { resolveQueueStoryContext } from '../services/lineplay/resolveRide';
 import { parkShelfRequest, prefetchParkShelf } from '../services/collection/parkShelfPrefetch';
@@ -318,9 +317,7 @@ export default function RedeemRedeemableModal({
    * on device), and the card's second on screen is time enough to draw its board.
    */
   const [punchCard, setPunchCard] = useState(false);
-  /** N04: the game TRY AGAIN will deal, mounted under the punch from the press (before the server answers). */
-  const [earlyGame, setEarlyGame] = useState<string | null>(null);
-  useEffect(() => { if (flowState !== 'spinning') { setPunchCard(false); setEarlyGame(null); } }, [flowState]);
+  useEffect(() => { if (flowState !== 'spinning') setPunchCard(false); }, [flowState]);
   /** The deal step, readable from the spend callback declared above it (T036, T044). */
   const selectAssignedGameRef = useRef<() => boolean>(() => false);
   const savedAttemptIdRef = useRef<number | null>(null);
@@ -834,7 +831,6 @@ export default function RedeemRedeemableModal({
     // It names the lost attempt, so TRY AGAIN deals the same game.
     // hold-2 T232: keep the game TRY AGAIN deals for the Setting Up card (the lost attempt is cleared next).
     retryNextGameRef.current = retryGameNameFor(attemptRef.current);
-    const prewarmGame = retryPrewarmGame(attemptRef.current, playFlagsNow().retrySameGame, CHALLENGE_GAMES.map(game => game.id));
     retryOfRef.current = attemptRef.current?.id ?? retryOfRef.current;
     try {
       await clearAttemptCheckpoint();
@@ -845,7 +841,6 @@ export default function RedeemRedeemableModal({
       proofRef.current = null;
       setSelectedGame(null);
       setSelectedGameData(null);
-      setEarlyGame(prewarmGame);
       await handleStartWheel();
     } catch (error) {
       console.warn('Could not prepare protected ride retry:', error);
@@ -884,8 +879,6 @@ export default function RedeemRedeemableModal({
   // T232: when the server says TRY AGAIN deals another game (retry_game), the card names it.
   // The Setting Up card shows after TRY AGAIN cleared the lost attempt, so it reads the name kept at the press.
   const retryGameName = flowState === 'retrying' ? retryNextGameRef.current : retryGameNameFor(attemptRef.current);
-  // The game on stage: the dealt one, or under a TRY AGAIN punch the one it will deal (N04).
-  const stageGame = selectedGame ?? (flowState === 'spinning' ? earlyGame as typeof selectedGame : null);
   const lostCopy = lostTryCopy({ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,
     retryOffered: canOfferRetry, near: rideTry?.near === true, sameGame: playFlagsNow().retrySameGame,
     rescueSource: redeemable?.rescue_pass_source, nextGame: retryGameName });
@@ -1487,7 +1480,7 @@ export default function RedeemRedeemableModal({
           {/* The game stays under the win card until the card covers it, so a win never shows a dim map. */}
           {/* T036: the game mounts under the punch (hidden, not started) so its board art is drawn by the time
               the punch ends; it becomes visible, and its count starts, when the punch hands over. */}
-          {stageGame && ((flowState === 'spinning' && (punchCard || !!earlyGame)) || flowState === 'minigame' || (flowState === 'postwin' && !winCovered)) && (
+          {selectedGame && ((flowState === 'spinning' && punchCard) || flowState === 'minigame' || (flowState === 'postwin' && !winCovered)) && (
             <View style={[styles.minigameContainer, flowState === 'spinning' && styles.prewarm]}
               pointerEvents={flowState === 'spinning' ? 'none' : 'auto'}>
               <RideChallengeContext.Provider value={true}>
@@ -1495,7 +1488,7 @@ export default function RedeemRedeemableModal({
                 visible={flowState !== 'spinning'}
                 taskId={(redeemable?.model as TaskType)?.id ?? 0}
                 taskName={taskName}
-                preferredGame={stageGame}
+                preferredGame={selectedGame}
                 attemptSeed={attemptRef.current?.seed}
                 rewardMode="task-attempt"
                 prewarm={flowState === 'spinning'}

@@ -69,23 +69,9 @@ test('T036: the game mounts under the punch once the tear starts, so its mount n
   const modal = fs.readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
   const punch = fs.readFileSync('src/components/TicketPunch.tsx', 'utf8');
   assert.match(modal, /onCardShown=\{\(\) => setPunchCard\(true\)\}/);
-  assert.match(modal, /useEffect\(\(\) => \{ if \(flowState !== 'spinning'\) \{ setPunchCard\(false\); setEarlyGame\(null\); \} \}, \[flowState\]\);/);
+  assert.match(modal, /useEffect\(\(\) => \{ if \(flowState !== 'spinning'\) setPunchCard\(false\); \}, \[flowState\]\);/);
   // Called after the UI-thread tear and card springs are set, in both the full and the Reduce Motion punch.
   assert.match(punch, /cardShown\.current = true;\n\s+if \(reduced\) \{\n\s+onCardShown\?\.\(\);/);
   assert.match(punch, /at\(PUNCH_T\.done - PUNCH_T\.punch \+ 400, finish\); \/\/ safety net\n[^\n]*\n\s+onCardShown\?\.\(\);/);
-});
-
-test('N04: TRY AGAIN mounts the game it will deal under the punch from the press, before the server answers', () => {
-  const RP = loadTs('src/services/task-attempt/retryPrewarm.ts');
-  const known = ['tap', 'memory', 'trivia'];
-  assert.equal(RP.retryPrewarmGame({ game: 'tap', retry_game: 'memory' }, false, known), 'memory', 'the server named the next game');
-  assert.equal(RP.retryPrewarmGame({ game: 'tap' }, true, known), 'tap', 'same game');
-  assert.equal(RP.retryPrewarmGame({ game: 'tap' }, false, known), null, 'an older server may deal another game: wait for it');
-  assert.equal(RP.retryPrewarmGame({ game: 'current' }, true, known), null);
-  assert.equal(RP.retryPrewarmGame(null, true, known), null);
-  const modal = fs.readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
-  assert.match(modal, /setEarlyGame\(prewarmGame\);\n\s+await handleStartWheel\(\);/);
-  assert.match(modal, /const stageGame = selectedGame \?\? \(flowState === 'spinning' \? earlyGame/);
-  assert.match(modal, /preferredGame=\{stageGame\}/);
 });
 
