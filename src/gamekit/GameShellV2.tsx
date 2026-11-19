@@ -67,7 +67,7 @@ import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovem
 import { RideChallengeContext } from './RideChallengeContext';
 import { noteRideTry } from './results/rideTry';
 import { ShellFrameContext } from './ShellFrameContext';
-import { StageDrawnContext, StageHoldContext } from './StageHoldContext';
+import { RetryRoundContext, StageDrawnContext, StageHoldContext } from './StageHoldContext';
 import { GrownUpGateSlot } from '../components/GrownUpGate';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
@@ -95,6 +95,7 @@ import { CountdownStage } from './fx/CountdownStage';
 import { FinalSeconds } from './fx/FinalSeconds';
 import { COACH_EXIT_MS, COACH_LEAD_MS, COUNT_END_MS, COUNT_WATCHDOG_MS, advanceCountClock, GO_AT_MS, GO_SPARKLES, type CountStep, RARE_GO_SPARKLES, STAGE_READY_MAX_MS, countPose, countStartsOf, countSteps, finalSecondsBeat, isRareGo, noteCountStart } from './core/gameMoments';
 import { AMBIENT, DURATION, flashPeak, momentParticles } from '../ui/motion';
+import { pressTrace } from '../ui/pressTrace';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 
 /** Dev capture only: hold the drawn count on this clock time (ms) for 6 s. Never set in release. */
@@ -448,6 +449,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // Off stage (under the ride's ticket punch or a first play's how-to card, T036): mounted and drawn, never counting.
     const stageHeld = useContext(StageHoldContext);
     const stageHeldRef = useRef(stageHeld);
+    if (stageHeldRef.current !== stageHeld) pressTrace('shell.render', () => `held=${stageHeld}`);
     stageHeldRef.current = stageHeld;
     /** Told once the held stage is drawn, so the ride's punch hands over onto a drawn board (w4 N04). */
     const onStageDrawn = useContext(StageDrawnContext);
@@ -642,6 +644,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       if (startedRef.current) return;
       startedRef.current = true;
       playedOnceRef.current = true;
+      pressTrace('shell.play', () => gameIdRef.current);
       setPhase('playing');
       onStartRef.current();
     }, []);
@@ -811,6 +814,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const fieldOn = (stageDrawn ?? stageReady) || stageOn;
     const fieldIn = useSharedValue(fieldOn ? 1 : 0);
     useEffect(() => {
+      if (fieldOn) pressTrace('shell.drawn', () => `${gameIdRef.current} held=${stageHeld}`);
       if (fieldOn && stageHeld) onStageDrawn?.();
     }, [fieldOn, stageHeld, onStageDrawn]);
     useEffect(() => {
@@ -887,6 +891,38 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       setPhase('countdown');
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [result, rescue, phase, wrap, visible]);
+
+    // -- TRY AGAIN on a kept board (fix pass w5, N04): the ride bumps the try number instead of mounting a
+    // new game. Everything the last try left in the shell resets here (its result, a hold sheet left by Leave,
+    // the end watch, the count), in the same commit as the game's own reset, and the next start is a repeat
+    // (2-1-GO, no how-to line). Never on the first mount.
+    const retryRound = useContext(RetryRoundContext);
+    const retryRoundSeen = useRef(retryRound);
+    useEffect(() => {
+      if (retryRound === retryRoundSeen.current) return;
+      retryRoundSeen.current = retryRound;
+      clearCountdown();
+      stopCountStage();
+      clearCelebration();
+      clearResume();
+      clearHeadsUp();
+      clearEndWatch();
+      endWatchRun.current = 0;
+      hadResultRef.current = false;
+      startedRef.current = false;
+      claimedRef.current = false;
+      playedOnceRef.current = true;
+      backFromPocketRef.current = false;
+      setRescue(null);
+      setWrap(null);
+      setHoldReason(null);
+      setPauseReason(undefined);
+      setHeadsUp(false);
+      setCountText(firstCount);
+      setPhase('countdown');
+      pressTrace('shell.retry', () => `${gameIdRef.current} round=${retryRound}`);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [retryRound]);
 
     // -- Transition to results when the game (or a wrap-up) reports one. ----
     useEffect(() => {
@@ -1327,6 +1363,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // Tap anywhere skips straight to GO (the burst still plays over live play).
     const skipCountdown = useCallback(() => {
       if (phase !== 'countdown') return;
+      pressTrace('shell.skip', () => gameIdRef.current);
       clearCountdown();
       const steps = countSteps(countdownStyle === 'none' ? 'go' : countdownStyle);
       const go = steps[steps.length - 1];

@@ -18,7 +18,7 @@ import {
   Canvas, Circle, ColorMatrix, Group, Image, LinearGradient, Path, Picture, Rect, RoundedRect, Skia, Text, createPicture, rect,
   useFont, useImage, vec, type SkFont, type SkImage,
 } from '@shopify/react-native-skia';
-import { useCachedImage } from './imageCache';
+import { loadCachedImage, useCachedImage } from './imageCache';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { ART, RIMS, THEMED_SHARK_FRAMES, type WhackTheme } from '../assets';
 import { DECKS, HATS, KEY_POSES, PROPS, RIM_WARNING } from '../art.generated';
@@ -93,6 +93,28 @@ const THEME_PROPS: Record<WhackTheme, [number | null, number | null, number | nu
   jungle: [null, null, PROPS.jungle_steps],
   backlot: [PROPS.backlot_light_a, PROPS.backlot_light_b, PROPS.backlot_chair],
 };
+
+/**
+ * Fix pass w5 (T036): decode a theme's board art into the never-disposed cache before the game mounts (the ride
+ * card calls it while its coin card is up and the Ticket is on its way). The board then reads every image from the
+ * cache on its first render: no decode and no image-by-image re-render while the punch hands over. One image per
+ * frame, so the card never stutters.
+ */
+export async function warmBoardImages(theme: WhackTheme): Promise<void> {
+  const frames = THEMED_SHARK_FRAMES[theme];
+  const poses = KEY_POSES[theme];
+  const props = THEME_PROPS[theme];
+  const srcs = [ART.playfield, frames[0], RIMS[theme], DECKS[theme], frames[1], frames[2], HATS[theme], ...props,
+    poses.glance, poses.contact, poses.bonked_spiral, poses.bonked_tongue, poses.bonked_hatoff, poses.duck,
+    RIM_WARNING.teeth, RIM_WARNING.tab, CAUSTICS, SHADOW, ART.impactL, ART.impactS, ART.golden, ART.angler, ART.bruiser,
+    ART.bruiserDazed, ART.puffer, ART.pufferPuffed, ART.helmet, ART.sunglasses, ART.dizzyStar, ART.foamFinger, ART.kraken,
+    ART.anglerPeek, ART.anglerAngry, ART.goldenDazed, ART.splatInk, ART.splatCandy];
+  for (const src of srcs) {
+    if (src == null) continue;
+    await loadCachedImage(src as number);
+    await new Promise<void>((r) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => r()) : setTimeout(r, 16)));
+  }
+}
 
 export function useBoardImages(theme: WhackTheme, bossSrc: number | null): BoardImages {
   const frames = THEMED_SHARK_FRAMES[theme];

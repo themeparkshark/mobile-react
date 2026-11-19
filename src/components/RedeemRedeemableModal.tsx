@@ -1,7 +1,7 @@
 import Lottie from 'lottie-react-native';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Dimensions, Platform, Pressable, View, Text, StyleSheet } from 'react-native';
+import { Dimensions, Platform, Pressable, View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import CalmModal from './retention/CalmModal';
 import { GrownUpGateSlot } from './GrownUpGate';
 import { loadLastCrew } from '../services/lineplay/lineGroupStore';
@@ -93,6 +93,8 @@ import { taskHasLine } from '../services/lineplay/rideLines';
 import { TREATS_PER_TICKET } from '../services/guide/freeTickets';
 import TicketClaimFlight from './rewards/TicketClaimFlight';
 import { tryAgainLine, tryAgainWith } from '../services/connectionCopy';
+import { warmRideGameArt } from '../games/warmRideGames';
+import { KEEP_BOARD_MS, KEPT_BOARD_STATES, canRetryInPlace, flowAfterDeal } from './rewards/retryInPlace';
 import { coinFaceNote } from '../services/collection/rideFacts';
 import { noteNewestCoin } from '../services/collection/newestCoin';
 
@@ -129,7 +131,8 @@ export function knownChallengeGame(game: string | null | undefined): boolean {
   return CHALLENGE_GAMES.some((entry) => entry.id === game);
 }
 
-type FlowState = 'recovering' | 'auth-required' | 'preview' | 'retrying' | 'wheel' | 'spinning' | 'minigame' | 'postwin' | 'lost' | 'claim-error' | 'spend-error' | 'save-error' | 'expired';
+/** 'replay' (fix pass w5, N04): TRY AGAIN on the kept board, the board shown and held until the server deals the try. */
+type FlowState = 'recovering' | 'auth-required' | 'preview' | 'retrying' | 'wheel' | 'spinning' | 'minigame' | 'postwin' | 'lost' | 'replay' | 'claim-error' | 'spend-error' | 'save-error' | 'expired';
 type GameType = 'tap' | 'memory' | 'trivia';
 
 
@@ -203,6 +206,8 @@ export default function RedeemRedeemableModal({
   const devFlow = devFlowEnv && ['lost', 'expired', 'claim-error', 'spend-error', 'save-error'].includes(devFlowEnv)
     ? devFlowEnv : undefined;
   const [flowState, setFlowState] = useState<FlowState>(devFlow ?? 'preview');
+  const traceFlowRender = useRef<string>('');
+  if (traceFlowRender.current !== flowState) { traceFlowRender.current = flowState; pressTrace('card.render', () => flowState); }
   useEffect(() => { pressTrace('card.flow', () => flowState); }, [flowState]);
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [winCovered, setWinCovered] = useState(false);
@@ -216,7 +221,7 @@ export default function RedeemRedeemableModal({
   // Keep ref in sync so callbacks always have current flowState
   useEffect(() => { flowStateRef.current = flowState; }, [flowState]);
   // Server news waits while the game plays and the win card is up (fix W3 T068): no toast behind the card.
-  const holdNews = open === true && (flowState === 'spinning' || flowState === 'minigame' || flowState === 'postwin' || flowState === 'claim-error');
+  const holdNews = open === true && (flowState === 'spinning' || flowState === 'replay' || flowState === 'minigame' || flowState === 'postwin' || flowState === 'claim-error');
   useEffect(() => {
     if (!holdNews) return undefined;
     holdBroadcasts(true);
@@ -329,6 +334,23 @@ export default function RedeemRedeemableModal({
   useEffect(() => { if (flowState !== 'spinning') setBoardDrawn(false); }, [flowState]);
   /** w4 N04: this punch is a TRY AGAIN of the game just played: the game card's short stay. */
   const repeatPunchRef = useRef(false);
+  /**
+   * Fix pass w5 N04: the last board stays mounted (hidden and held) under the loss card, so TRY AGAIN of the same
+   * game resets it in place (retryRound) instead of mounting a new game. Let go after KEEP_BOARD_MS on the card.
+   */
+  /** CalmModal's card margin (5% of the window width) that the kept board reaches past (w5 N04). */
+  const sheetMargin = useWindowDimensions().width * 0.05;
+  const [keepBoard, setKeepBoard] = useState(false);
+  const [retryRound, setRetryRound] = useState(0);
+  /** TRY AGAIN is resetting the kept board (set on the press, read by the deal before the next render). */
+  const replayRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (flowState === 'minigame') { setKeepBoard(true); return undefined; }
+    if (!KEPT_BOARD_STATES.includes(flowState)) { setKeepBoard(false); replayRef.current = null; return undefined; }
+    if (flowState !== 'lost') return undefined;
+    const t = setTimeout(() => setKeepBoard(false), KEEP_BOARD_MS);
+    return () => clearTimeout(t);
+  }, [flowState]);
   /** The deal step, readable from the spend callback declared above it (T036, T044). */
   const selectAssignedGameRef = useRef<() => boolean>(() => false);
   const savedAttemptIdRef = useRef<number | null>(null);
@@ -348,6 +370,8 @@ export default function RedeemRedeemableModal({
     redeemable?.rescue_pass_available === true;
   const vip = !!player?.is_subscribed;
   const taskName = redeemable ? (redeemable.model as TaskType | SecretTaskType).name : '';
+  // T036 (w5): the ride's game art decodes while the coin card is up, so PLAY's board draws from memory.
+  useEffect(() => { if (open && taskName) void warmRideGameArt(taskName); }, [open, taskName]);
   // T039: the tries a Ticket buys at this ride today, from the server's deal (absent: nothing new shows).
   const cardTries = isTaskType ? dealTries(redeemable?.deal) : null;
   const faceNote = redeemable?.type === 'task' ? coinFaceNote(taskName, park.id) : null;
@@ -594,6 +618,17 @@ export default function RedeemRedeemableModal({
     void run.finally(() => { if (clearing.current === run) clearing.current = null; });
   }, [clearAttemptCheckpoint]);
 
+  /** Where a dealt try goes: the kept board's own game plays at once, any other game takes the punch (w5 N04). */
+  const dealtFlow = (): FlowState => {
+    const kept = replayRef.current;
+    replayRef.current = null;
+    const known = selectAssignedGameRef.current();
+    const next = flowAfterDeal({ replay: !!kept, keptGame: kept, dealtGame: attemptRef.current?.game, known });
+    if (next === 'spinning' && kept) repeatPunchRef.current = true;
+    pressTrace('card.deal.flow', () => `${next} kept=${kept}`);
+    return next;
+  };
+
   // The request ID and active attempt survive retries while this modal is open.
   const handleStartWheel = useCallback(async () => {
     pressTrace('card.start', () => `spending=${spendingRef.current} player=${!!player?.id} task=${taskType}:${taskId} loc=${!!location}`);
@@ -604,6 +639,7 @@ export default function RedeemRedeemableModal({
     try {
       await clearing.current;
       saved = await readTaskAttemptCheckpoint(player.id, taskType, taskId);
+      pressTrace('card.read');
     } catch (error) {
       console.warn('Could not check saved ride challenge:', error);
       setFlowState('spend-error');
@@ -648,6 +684,7 @@ export default function RedeemRedeemableModal({
     };
     try {
       await writeTaskAttemptCheckpoint(checkpoint);
+      pressTrace('card.saved');
     } catch (error) {
       console.warn('Could not save ride challenge before Ticket spend:', error);
       setFlowState('save-error');
@@ -657,19 +694,22 @@ export default function RedeemRedeemableModal({
     // T036: a fresh spend starts the punch at once; the game card pops as soon as the server deals it
     // (the request id makes the spend safe to repeat, so nothing waits on ONE MOMENT).
     const optimistic = !saved;
-    if (optimistic) {
+    // A kept board waiting for its deal stays on screen (w5 N04); every other fresh spend starts the punch.
+    if (optimistic && !replayRef.current) {
       setSelectedGame(null);
       setSelectedGameData(null);
       setFlowState('spinning');
     }
     try {
       const result = await recoverTaskAttempt(checkpoint);
+      pressTrace('card.dealt', () => `${result.attempt.game} ${result.attempt.status}`);
       retryOfRef.current = null;
       applyAttemptState(result.attempt);
       if (result.attempt.status === 'started') {
         if (!optimistic) playSound(require('../../assets/sounds/redeem_modal_open.mp3'));
         // A game this build knows goes straight into (or on with) the punch; never the Game Ready card.
-        setFlowState(selectAssignedGameRef.current() ? 'spinning' : 'wheel');
+        // The kept board of the same game goes straight to play (w5 N04).
+        setFlowState(dealtFlow());
       } else if (optimistic) setFlowState('preview');
     } catch (firstError) {
       // The first response may have been lost after the Ticket was spent.
@@ -677,7 +717,7 @@ export default function RedeemRedeemableModal({
       try {
         const result = await recoverTaskAttempt(checkpoint);
         applyAttemptState(result.attempt);
-        if (result.attempt.status === 'started') setFlowState(selectAssignedGameRef.current() ? 'spinning' : 'wheel');
+        if (result.attempt.status === 'started') setFlowState(dealtFlow());
         else if (optimistic) setFlowState('preview');
       } catch (retryError) {
         console.error('Could not confirm Ticket attempt:', retryError);
@@ -828,6 +868,13 @@ export default function RedeemRedeemableModal({
   const handleGameLose = useCallback(async () => {
     await resolveAttempt('loss');
   }, [resolveAttempt]);
+  // Fix pass w5: one stable pair of game callbacks (the memoized game never re-renders for a new arrow).
+  const gameEndRef = useRef({ win: handleGameWin, lose: handleGameLose });
+  gameEndRef.current = { win: handleGameWin, lose: handleGameLose };
+  const onGameLose = useCallback(() => { void gameEndRef.current.lose(); }, []);
+  const onGameWin = useCallback((_mult: number, _rewards: { coins: number; xp: number }, proof?: TaskGameProof) => {
+    void gameEndRef.current.win(proof);
+  }, []);
 
   const handleLostClose = useCallback(() => {
     if (flowStateRef.current === 'lost' || flowStateRef.current === 'expired') {
@@ -851,27 +898,42 @@ export default function RedeemRedeemableModal({
     // Fix round w4 N04: TRY AGAIN starts the ticket punch on the press, like PLAY (T036). It used to sit on a
     // "Setting Up" loading card through the checkpoint reads and writes (0.5 to 1.2 s on device) before the
     // punch even began. The lost try is cleared first, so the punch bobs until the server deals the new one.
+    // Fix pass w5 N04: the same game on the kept board resets in place and shows at once (held until the deal);
+    // the server dealing another game falls back to the punch at the deal (dealtFlow).
+    const inPlace = canRetryInPlace({ flowState: flowStateRef.current, keptGame: selectedGame, keepBoard,
+      nextGame: retryNextGameRef.current });
+    pressTrace('card.retry.mode', () => (inPlace ? `in-place ${selectedGame}` : 'punch'));
     attemptRef.current = null;
     savedAttemptIdRef.current = null;
     requestIdRef.current = null;
     outcomeRef.current = null;
     proofRef.current = null;
-    setSelectedGame(null);
-    setSelectedGameData(null);
-    repeatPunchRef.current = true;
-    setFlowState('spinning');
+    if (inPlace) {
+      replayRef.current = selectedGame;
+      repeatPunchRef.current = false;
+      setRetryRound((r) => r + 1);
+      setFlowState('replay');
+    } else {
+      replayRef.current = null;
+      setSelectedGame(null);
+      setSelectedGameData(null);
+      repeatPunchRef.current = true;
+      setFlowState('spinning');
+    }
     try {
       await clearAttemptCheckpoint();
       await handleStartWheel();
       // A start that could not begin (no saved place to play from) goes back to the loss card, never a punch that bobs on.
-      if (flowStateRef.current === 'spinning' && !attemptRef.current && !spendingRef.current) { repeatPunchRef.current = false; setFlowState('lost'); }
+      if ((flowStateRef.current === 'spinning' || flowStateRef.current === 'replay' || replayRef.current) && !attemptRef.current && !spendingRef.current) {
+        repeatPunchRef.current = false; replayRef.current = null; setFlowState('lost');
+      }
     } catch (error) {
       console.warn('Could not prepare protected ride retry:', error);
       setFlowState('save-error');
     } finally {
       protectedRetryRef.current = false;
     }
-  }, [handleStartWheel, location, clearAttemptCheckpoint]);
+  }, [handleStartWheel, location, clearAttemptCheckpoint, selectedGame, keepBoard]);
 
   // Out of Tickets: the Supplies tab of the Shark Shop, opened on Tickets.
   const openSupplies = useCallback(() => {
@@ -1189,13 +1251,20 @@ export default function RedeemRedeemableModal({
     void handleStartWheel().finally(() => setStarting(false));
   };
   const coinUri = isTaskType ? (redeemable.model as TaskType).coin_url : undefined;
+  const fullBleed = flowState === 'spinning' || flowState === 'minigame' || flowState === 'postwin' || flowState === 'replay';
+  // w5 N04: the kept board under the loss card (a card with the sheet's 5% margin) keeps the full-window frame, so
+  // TRY AGAIN shows it without a new layout. Held there (never seen or touched), shown and still held in 'replay'.
+  const boardKept = keepBoard && (flowState === 'lost' || flowState === 'replay');
+  const boardOutset = fullBleed ? null : { top: -sheetMargin, left: -sheetMargin, right: -sheetMargin, bottom: -sheetMargin };
+  const boardHidden = flowState === 'spinning' || flowState === 'lost';
+  const boardHeld = flowState === 'spinning' || flowState === 'lost' || flowState === 'replay';
 
   return (
     <>
       <CalmModal
         visible={challengeLayer.present}
         reducedMotion={reducedMotion}
-        fullBleed={flowState === 'spinning' || flowState === 'minigame' || flowState === 'postwin'}
+        fullBleed={fullBleed}
         fadeOnly={flowState === 'postwin'}
         onSwipeDown={flowState === 'preview' ? safeClose : undefined}
         onWillShow={() => { cardShownAt.current = Date.now(); }}
@@ -1514,12 +1583,12 @@ export default function RedeemRedeemableModal({
           {/* The game stays under the win card until the card covers it, so a win never shows a dim map. */}
           {/* T036: the game mounts under the punch (hidden, not started) so its board art is drawn by the time
               the punch ends; it becomes visible, and its count starts, when the punch hands over. */}
-          {selectedGame && ((flowState === 'spinning' && punchCard) || flowState === 'minigame' || (flowState === 'postwin' && !winCovered)) && (
-            <View style={[styles.minigameContainer, flowState === 'spinning' && styles.prewarm]}
-              pointerEvents={flowState === 'spinning' ? 'none' : 'auto'}>
+          {selectedGame && ((flowState === 'spinning' && punchCard) || flowState === 'minigame' || (flowState === 'postwin' && !winCovered) || boardKept) && (
+            <View style={[styles.minigameContainer, boardOutset, boardHidden && styles.prewarm]}
+              pointerEvents={boardHeld ? 'none' : 'auto'}>
               <RideChallengeContext.Provider value={true}>
               <MiniGameSelector
-                visible={flowState !== 'spinning'}
+                visible={!boardHeld}
                 taskId={(redeemable?.model as TaskType)?.id ?? 0}
                 taskName={taskName}
                 preferredGame={selectedGame}
@@ -1527,13 +1596,14 @@ export default function RedeemRedeemableModal({
                 rewardMode="task-attempt"
                 // T060 (play-teach): the coin being played for, so the game's HUD shows its own coin art.
                 coinImageUrl={coinUri ?? undefined}
-                prewarm={flowState === 'spinning'}
+                prewarm={boardHeld}
                 onStageDrawn={markBoardDrawn}
+                round={retryRound}
                 kid={kidRulesFor(attemptRef.current, pictureOnlyRef.current)}
                 parkId={park.id}
                 triviaDeal={attemptRef.current?.trivia ?? null}
-                onClose={handleGameLose}
-                onComplete={(_mult, _rewards, proof) => handleGameWin(proof)}
+                onClose={onGameLose}
+                onComplete={onGameWin}
               />
               </RideChallengeContext.Provider>
             </View>

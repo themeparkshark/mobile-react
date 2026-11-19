@@ -37,6 +37,8 @@ import Animated, {
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
 import { COUNTDOWN } from '../../gamekit/theme';
+import { pressTrace } from '../../ui/pressTrace';
+import { useOnRetryRound } from '../../gamekit/StageHoldContext';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { useGameClock } from '../../gamekit/useGameClock';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
@@ -526,7 +528,10 @@ export function TriviaDuel(props: TriviaDuelProps) {
   useEffect(() => { hotSv.value = streakView.streak >= 5 ? 2 : streakView.streak >= 3 ? 1 : 0; }, [streakView.streak, hotSv]);
 
   const dispatchRef = useRef<(ev: number, a: number, b: number) => void>(() => undefined);
-  const dispatch = useCallback((ev: number, a: number, b: number) => dispatchRef.current(ev, a, b), []);
+  const dispatch = useCallback((ev: number, a: number, b: number) => {
+    if (ev === EV_EARLY || ev === EV_LOCK) pressTrace('trivia.tap', () => (ev === EV_LOCK ? `lock ${a}` : `early ${a}`));
+    dispatchRef.current(ev, a, b);
+  }, []);
   const beatSv = music.beat;
 
   const clock = useGameClock({
@@ -1726,8 +1731,11 @@ export function TriviaDuel(props: TriviaDuelProps) {
   // stamps on the stage, 3-2-1-GO on the shell's step timing, no scrim.
   const onStart = useCallback(async () => {
     await (warmRef.current ?? Promise.resolve());
-    await new Promise((r) => setTimeout(r, 250));
-    const steps = ['3', '2', '1', 'GO!'];
+    // A repeat start (TRY AGAIN on the kept board, w5 N04): GO! alone, then the round.
+    const repeat = repeatStart.current;
+    repeatStart.current = false;
+    if (!repeat) await new Promise((r) => setTimeout(r, 250));
+    const steps = repeat ? ['GO!'] : ['3', '2', '1', 'GO!'];
     // Over the face-down board (the stage band draws above the stamp layer).
     const y = ZONE_TOP + 40;
     steps.forEach((label, i) => later(i * COUNTDOWN.stepMs, () => {
@@ -1737,7 +1745,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       sfx(CUE.tick, { volume: label === 'GO!' ? 0.7 : 0.45 });
       Haptic.tickSelection();
     }));
-    later(3 * COUNTDOWN.stepMs + COUNTDOWN.goMs, () => { void beginMatch(false); });
+    later((steps.length - 1) * COUNTDOWN.stepMs + COUNTDOWN.goMs, () => { void beginMatch(false); });
   }, [beginMatch, later, stamp, W]);
 
   const onPause = useCallback(() => {
@@ -1781,6 +1789,29 @@ export function TriviaDuel(props: TriviaDuelProps) {
     const stars = isRide ? rideStars(t.me.correct, RIDE_QUESTIONS, t.me.score) : duelStars(t.me.score, t.opp.score, t.me.correct, plan?.rounds.length ?? 5);
     return { score: t.me.score, stars, meta: buildMeta(true) };
   }, [clearTimers, setClock, isRide, plan, buildMeta]);
+
+  // Fix pass w5 (N04): TRY AGAIN of a ride round on the kept board. The last round's results, hold, tiles,
+  // stamps and clock are let go here (in the shell's reset commit), and the next start is a repeat: one GO!
+  // and the newly dealt round, never the full 3-2-1 again (the player just played it).
+  const repeatStart = useRef(false);
+  useOnRetryRound(() => {
+    clearTimers();
+    if (held) { setHeld(false); holdTimers(false); clock.resume(); }
+    setClock({ phase: PH_IDLE });
+    setPhase('loading');
+    setResults(null);
+    setShellResult(null);
+    setCrate(null);
+    setVs(null);
+    setStamps([]);
+    setRound(null);
+    setTiles([]);
+    setGhost(null);
+    crown.value = 0;
+    setRunKey((k) => k + 1);
+    setMusicBed(null);
+    repeatStart.current = isRide;
+  });
 
   // Reset when hidden.
   useEffect(() => {

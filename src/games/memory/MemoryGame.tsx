@@ -63,7 +63,7 @@ import { memoryLossBanner, memoryLossCopy } from './lossCopy';
 import { TryCard } from './TryCard';
 import { comboCall } from './comboCallout';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
-import { useStageHold } from '../../gamekit/StageHoldContext';
+import { useStageHold, useRetryRound } from '../../gamekit/StageHoldContext';
 import { noteRideTry } from '../../gamekit/results/rideTry';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { MemoryCard, makeCardValues, sharedReady, type CardValues, type MemoryCardHandle, type SharedSheets, type ShimmerState } from './MemoryCard';
@@ -474,6 +474,8 @@ export default function MemoryGame({
   // Off stage under the ticket punch or a first play's how-to card (T036, N04): the board is built and dealt
   // in place (no sound), so it is on screen at the hand-over; the barker and the bot wait for it.
   const stageHeld = useStageHold();
+  // Fix pass w5 (N04): TRY AGAIN on the kept board builds a fresh run in place (the open / rematch effect below).
+  const retryRound = useRetryRound();
   const stageHeldRef = useRef(stageHeld);
   stageHeldRef.current = stageHeld;
   const rideChallengeRef = useRef(rideChallenge);
@@ -953,7 +955,7 @@ export default function MemoryGame({
     })();
     return () => { live = false; clearTimers(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, runIndex, baseSeed, mode]);
+  }, [visible, runIndex, baseSeed, mode, retryRound]);
 
   // ---------------------------------------------------------------------------
   // Start, pause, resume

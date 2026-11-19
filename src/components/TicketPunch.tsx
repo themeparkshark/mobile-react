@@ -14,6 +14,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { playSfx } from '../gamekit/SFX';
+import { pressTrace } from '../ui/pressTrace';
 
 const TICKET = require('../../assets/images/ticket-icon.png');
 const TICKET_RATIO = 549 / 799;
@@ -92,6 +93,7 @@ export default function TicketPunch({
     if (done.current || !cardShown.current) return; // never skip past a game that is not dealt yet
     done.current = true;
     timers.current.forEach(clearTimeout);
+    pressTrace('punch.done');
     onDone();
   };
   const at = (ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); };
@@ -132,6 +134,7 @@ export default function TicketPunch({
   // Punch and pop: once the ticket has landed and the server has dealt the game.
   useEffect(() => {
     if (!torn || !gameName || cardShown.current || reduced == null) return;
+    pressTrace('punch.tear', () => gameName);
     cardShown.current = true;
     if (reduced) {
       onCardShown?.();

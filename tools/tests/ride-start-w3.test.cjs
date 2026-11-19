@@ -14,7 +14,8 @@ const punch = fs.readFileSync('src/components/TicketPunch.tsx', 'utf8');
 const selector = fs.readFileSync('src/components/MiniGameSelector.tsx', 'utf8');
 
 test('T036: a fresh spend starts the punch before the server answers', () => {
-  assert.match(modal, /const optimistic = !saved;\n\s+if \(optimistic\) \{\n\s+setSelectedGame\(null\);\n\s+setSelectedGameData\(null\);\n\s+setFlowState\('spinning'\);/);
+  // w5 N04: a kept board waiting for its deal is the one fresh spend that keeps its game on screen.
+  assert.match(modal, /const optimistic = !saved;\n(\s+\/\/.*\n)?\s+if \(optimistic && !replayRef\.current\) \{\n\s+setSelectedGame\(null\);\n\s+setSelectedGameData\(null\);\n\s+setFlowState\('spinning'\);/);
   const spinAt = modal.indexOf("setFlowState('spinning');\n    }\n    try {\n      const result = await recoverTaskAttempt(checkpoint);");
   assert.ok(spinAt > 0, 'the punch is set before the spend request');
   assert.match(modal, /\{flowState === 'spinning' && \(\n\s+<TicketPunch\n\s+gameName=\{selectedGameData\?\.name \?\? null\}/);
@@ -26,14 +27,18 @@ test('T036: a fresh spend starts the punch before the server answers', () => {
 
 test('T036: the game mounts hidden under the punch and becomes visible when it hands over', () => {
   assert.match(modal, /\{selectedGame && \(\(flowState === 'spinning' && punchCard\) \|\| flowState === 'minigame'/);
-  assert.match(modal, /visible=\{flowState !== 'spinning'\}/);
-  assert.match(modal, /prewarm=\{flowState === 'spinning'\}/);
-  assert.match(modal, /pointerEvents=\{flowState === 'spinning' \? 'none' : 'auto'\}/);
+  // w5 N04: hidden and held under the punch and under the loss card (the kept board), held while it replays.
+  assert.match(modal, /const boardHeld = flowState === 'spinning' \|\| flowState === 'lost' \|\| flowState === 'replay';/);
+  assert.match(modal, /visible=\{!boardHeld\}/);
+  assert.match(modal, /prewarm=\{boardHeld\}/);
+  assert.match(modal, /pointerEvents=\{boardHeld \? 'none' : 'auto'\}/);
   assert.match(selector, /if \(!visible && !\(prewarm && preferredGame\)\) \{/);
 });
 
 test('T044: no Game Ready card for a known game, no update-the-app words', () => {
   assert.doesNotMatch(modal, /update the app/i);
   assert.match(modal, /\{flowState === 'wheel' && !knownChallengeGame\(attemptRef\.current\?\.game\) && <ChallengeStatusCard title="Game Ready"/);
-  assert.equal((modal.match(/setFlowState\(selectAssignedGameRef\.current\(\) \? 'spinning' : 'wheel'\)/g) ?? []).length, 2);
+  // w5 N04: both deal paths go through dealtFlow (the punch for a known game, play at once for the kept board).
+  assert.equal((modal.match(/setFlowState\(dealtFlow\(\)\);/g) ?? []).length, 2);
+  assert.match(modal, /const known = selectAssignedGameRef\.current\(\);/);
 });
