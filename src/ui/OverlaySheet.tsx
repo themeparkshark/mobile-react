@@ -161,6 +161,25 @@ export default function OverlaySheet(props: DoorModalProps) {
     return () => clearTimeout(timer);
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Released and committed: React Native's hit test (findNodeAtPoint, 0.76) no longer sees this sheet (a box-none
+  // overlay over a pass-through view), so the tap it held is pressed on the screen under it now, not two frames and a
+  // tree removal later (0.5 to 0.9 s of a busy phone, phase log, fix pass w5). Only with no other sheet up: what is
+  // under the tap then is that sheet, and the gone step below drops the tap.
+  const deliverAtRelease = useCallback((why: string) => {
+    if (now.current.nested || overlayStack.others(id.current)) return;
+    const how = tapThrough.deliver();
+    if (how !== 'none') pressTrace('tapThrough.deliver', () => `id=${id.current} ${how} at=${why}`);
+  }, []);
+  // A sheet with no leave of its own (animationType none: CalmModal and GameDialog animate their own card, which has
+  // already ended) is released in the very commit that stops wanting it, not two commits later (each a second on a
+  // busy phone: phase log, Rewards, fix pass w5).
+  const shownReleased = released || (motion.outMs === 0 && !wants && phase !== 'off');
+  const releasedRef = useRef(false);
+  releasedRef.current = shownReleased;
+  useEffect(() => {
+    if (shownReleased && !now.current.wants) deliverAtRelease('release');
+  }, [shownReleased]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Out of the tree once the release has had its frames (a frame clock that stalls still ends it).
   useEffect(() => {
     if (!released || phase !== 'closing') return undefined;
@@ -228,6 +247,8 @@ export default function OverlaySheet(props: DoorModalProps) {
     measureOwner();
     // Going: the door is taking it down, or its owner's own leave animation has started (props.leaving).
     leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants) || now.current.props.leaving === true, !now.current.nested);
+    // Released in JS but not yet natively: the hit test already sees what is under, so the tap goes there at once.
+    if (releasedRef.current) setTimeout(() => deliverAtRelease('touch'), 0);
   };
 
   return (
@@ -235,15 +256,15 @@ export default function OverlaySheet(props: DoorModalProps) {
       {/* Zero size, no touch: tells the sheet where its owner sits, and is the screen's root for the replayed tap. */}
       <View pointerEvents="none" style={styles.anchor} collapsable={false}
         ref={(host: unknown) => { anchor.current = host; if (host && !nested) tapThrough.setScreenRoot(internalHandle(host)); }} />
-      <FullWindowOverlayNative style={[styles.overlay, { width, height }, place]}>
+      <FullWindowOverlayNative style={[styles.overlay, { width, height }, place]} pointerEvents={shownReleased ? 'box-none' : undefined}>
         {/* Released: hidden by a plain view's style. Reanimated re-applies the leave's last animated opacity on every
             commit, so with a stalled frame clock the sheet would stay drawn mid-fade while it let touches through
             (W4-SMOKE-2: a tap through a gate a kid could still see). */}
-        <View collapsable={false} style={[StyleSheet.absoluteFill, released && styles.released]} pointerEvents={released ? 'none' : 'box-none'}>
+        <View collapsable={false} style={[StyleSheet.absoluteFill, shownReleased && styles.released]} pointerEvents={shownReleased ? 'none' : 'box-none'}>
         <Animated.View collapsable={false} testID={props.testID} style={[StyleSheet.absoluteFill, enter]}
           // Up or leaving, the sheet takes every touch over the window (a native sheet did); leaving, its buttons rest.
           // Released (invisible, about to leave the tree), every touch goes to what is under it.
-          pointerEvents={released ? 'none' : 'auto'}
+          pointerEvents={shownReleased ? 'none' : 'auto'}
           accessibilityElementsHidden={!isTop || leaving}
           importantForAccessibility={!isTop || leaving ? 'no-hide-descendants' : 'auto'}
           onAccessibilityEscape={props.onRequestClose ? () => props.onRequestClose?.({ nativeEvent: {} }) : undefined}

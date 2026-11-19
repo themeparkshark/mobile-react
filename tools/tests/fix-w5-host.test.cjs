@@ -134,7 +134,7 @@ test('every iOS Modal goes through the door, and the door draws in-tree unless t
   assert.match(sheet, /if \(!nested && !overlayStack\.others\(id\.current\)\) \{\s*const how = tapThrough\.deliver\(\)/);
   assert.match(sheet, /onAccessibilityEscape=/);
   // A sheet is released (invisible, touches pass natively) before it leaves the tree, never removed while it blocks.
-  assert.match(sheet, /pointerEvents=\{released \? 'none' : 'auto'\}/);
+  assert.match(sheet, /pointerEvents=\{shownReleased \? 'none' : 'auto'\}/);
   assert.match(sheet, /if \(motion\.outMs === 0\) \{ release\(\); return undefined; \}/);
   assert.match(sheet, /\} else if \(phase === 'up' && !wants\) \{\s*setPhase\('closing'\);/, 'even an instant leave goes through the release');
   assert.ok(H.SHEET_RELEASE_FRAMES >= 2 && H.SHEET_RELEASE_FALLBACK_MS <= 300);
@@ -191,7 +191,22 @@ test('N01 on every sibling: react-native-modal\'s own leave reaches the door as 
 
 test('W4-SMOKE-2: a released sheet is hidden by a plain view, never by the animated style a stalled frame clock keeps mid-fade', () => {
   const sheet = src('src/ui/OverlaySheet.tsx');
-  assert.match(sheet, /<View collapsable=\{false\} style=\{\[StyleSheet\.absoluteFill, released && styles\.released\]\} pointerEvents=\{released \? 'none' : 'box-none'\}>/);
-  assert.doesNotMatch(sheet, /enter, released && styles\.released/, 'the release is not on the Reanimated view');
+  assert.match(sheet, /<View collapsable=\{false\} style=\{\[StyleSheet\.absoluteFill, shownReleased && styles\.released\]\} pointerEvents=\{shownReleased \? 'none' : 'box-none'\}>/);
+  assert.doesNotMatch(sheet, /enter, (shownR|r)eleased && styles\.released/, 'the release is not on the Reanimated view');
   assert.match(sheet, /released: \{ opacity: 0 \}/);
+});
+
+test('N01: a held tap is pressed under the sheet the moment it is released, not two frames and a tree removal later', () => {
+  // Phase log, Rewards, release-like JS: 0.75 to 1.7 s between the release and the sheet leaving the tree on a busy
+  // phone, all of it added to a kept press. Fails on 535be9b0 (the held tap waited for the tree removal).
+  const sheet = src('src/ui/OverlaySheet.tsx');
+  assert.match(sheet, /const shownReleased = released \|\| \(motion\.outMs === 0 && !wants && phase !== 'off'\);/, 'no leave motion: released in the commit that stops wanting it');
+  assert.match(sheet, /if \(shownReleased && !now\.current\.wants\) deliverAtRelease\('release'\);/);
+  assert.match(sheet, /if \(now\.current\.nested \|\| overlayStack\.others\(id\.current\)\) return;/, 'never onto another sheet');
+  assert.match(sheet, /if \(releasedRef\.current\) setTimeout\(\(\) => deliverAtRelease\('touch'\), 0\);/);
+  assert.match(sheet, /<FullWindowOverlayNative style=\{\[styles\.overlay, \{ width, height \}, place\]\} pointerEvents=\{shownReleased \? 'box-none' : undefined\}>/);
+  // The hit test this relies on skips a node that is neither a touch target nor holds one (React Native 0.76).
+  const cpp = fs.readFileSync(path.join(root, 'node_modules/react-native/ReactCommon/react/renderer/core/LayoutableShadowNode.cpp'), 'utf8');
+  assert.match(cpp, /if \(!layoutableShadowNode->canBeTouchTarget\(\) &&\s*!layoutableShadowNode->canChildrenBeTouchTarget\(\)\) \{\s*return nullptr;/);
+  assert.match(cpp, /return layoutableShadowNode->canBeTouchTarget\(\) \? node : nullptr;/, 'a box-none overlay is never the hit itself');
 });
