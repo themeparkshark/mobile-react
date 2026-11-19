@@ -64,6 +64,14 @@ export function sheetLeaveFallbackMs(motion: SheetMotion): number {
 }
 
 /**
+ * Frames between a sheet's release (invisible, touches pass through natively) and its leaving the tree, and the
+ * fallback when the frame clock stalls. A touch can then never land on a sheet that is drawn natively but already
+ * gone from JS (it would reach no one).
+ */
+export const SHEET_RELEASE_FRAMES = 2;
+export const SHEET_RELEASE_FALLBACK_MS = 250;
+
+/**
  * The in-tree sheet is drawn at the window's top left, but React Native measures it where its owner sits in the tree
  * (a sheet asked for from a card lower on the screen). Pressability compares the finger, in window points, with that
  * measure, so a finger that moved a little would cancel the press. The overlay node is shifted back by the owner's

@@ -30,7 +30,7 @@ import { SPRING } from './motion';
 import { pressTrace } from './pressTrace';
 import { overlayDrop, sheetOverlayContext, sheetPressContext, withOverlay, type SheetOverlayList, type SheetOverlaySet } from './sheetOverlay';
 import SheetOverlayLayer, { SHEET_LAYER_OUT_MS } from './SheetOverlayLayer';
-import { overlayNodeStyle, overlayStack, ownerMoved, sheetLeaveFallbackMs, sheetMotion, type OwnerPlace } from './sheetHost';
+import { SHEET_RELEASE_FALLBACK_MS, SHEET_RELEASE_FRAMES, overlayNodeStyle, overlayStack, ownerMoved, sheetLeaveFallbackMs, sheetMotion, type OwnerPlace } from './sheetHost';
 import { openerNow, returnFocus, type TouchPoint } from './SheetScreenRoot';
 import { internalHandle, pressInside, tapThrough } from './tapThrough';
 import useUiReducedMotion from './useUiReducedMotion';
@@ -104,6 +104,17 @@ export default function OverlaySheet(props: DoorModalProps) {
     if (live.current) setPhase('off');
   }, []);
   const goneIfClosing = useCallback(() => { if (now.current.phase === 'closing' && !now.current.wants) gone(); }, [gone]);
+  // Released: the leave has ended, the sheet is invisible and lets every touch through natively. It leaves the tree
+  // only a couple of frames later (sheetHost.SHEET_RELEASE_FRAMES): a touch that landed on it before the release was
+  // drawn still finds it in the tree (and is kept for the screen under it), and none can land on a sheet that is
+  // still drawn natively but already gone from JS, where its touch would be lost (seen once in 4 on the map PLAY!
+  // pill, phase log, fix pass w5).
+  const [released, setReleased] = useState(false);
+  const release = useCallback(() => {
+    if (!live.current || now.current.phase !== 'closing' || now.current.wants) return;
+    pressTrace('door.released', () => `id=${id.current} overlay=1`);
+    setReleased(true);
+  }, []);
 
   useLayoutEffect(() => {
     if (phase === 'off' && wants) {
@@ -112,8 +123,9 @@ export default function OverlaySheet(props: DoorModalProps) {
       opener.current = openerNow();
       setPhase('up');
     } else if (phase === 'up' && !wants) {
-      if (motion.outMs === 0) gone(); else setPhase('closing');
+      setPhase('closing');
     } else if (phase === 'closing' && wants) {
+      setReleased(false);
       setPhase('up');
     }
   }, [phase, wants]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -142,11 +154,24 @@ export default function OverlaySheet(props: DoorModalProps) {
   useEffect(() => {
     if (phase !== 'closing') return undefined;
     overlayStack.remove(id.current);
+    if (motion.outMs === 0) { release(); return undefined; }
     cancelAnimation(p);
-    p.value = withTiming(0, { duration: motion.outMs, easing: Easing.in(Easing.quad) }, done => { if (done) runOnJS(goneIfClosing)(); });
-    const timer = setTimeout(goneIfClosing, sheetLeaveFallbackMs(motion));
+    p.value = withTiming(0, { duration: motion.outMs, easing: Easing.in(Easing.quad) }, done => { if (done) runOnJS(release)(); });
+    const timer = setTimeout(release, sheetLeaveFallbackMs(motion));
     return () => clearTimeout(timer);
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Out of the tree once the release has had its frames (a frame clock that stalls still ends it).
+  useEffect(() => {
+    if (!released || phase !== 'closing') return undefined;
+    let frame = 0;
+    let left = SHEET_RELEASE_FRAMES;
+    const tick = () => { left -= 1; if (left <= 0) goneIfClosing(); else frame = requestAnimationFrame(tick); };
+    frame = requestAnimationFrame(tick);
+    const timer = setTimeout(goneIfClosing, SHEET_RELEASE_FALLBACK_MS);
+    return () => { cancelAnimationFrame(frame); clearTimeout(timer); };
+  }, [released, phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (phase === 'off' && released) setReleased(false); }, [phase, released]);
 
   // Gone: the first tap held on the leaving sheet presses what is under it now; VoiceOver's focus goes home.
   const lastPhase = useRef<Phase>('off');
@@ -208,9 +233,10 @@ export default function OverlaySheet(props: DoorModalProps) {
       <View pointerEvents="none" style={styles.anchor} collapsable={false}
         ref={(host: unknown) => { anchor.current = host; if (host && !nested) tapThrough.setScreenRoot(internalHandle(host)); }} />
       <FullWindowOverlayNative style={[styles.overlay, { width, height }, place]}>
-        <Animated.View collapsable={false} testID={props.testID} style={[StyleSheet.absoluteFill, enter]}
+        <Animated.View collapsable={false} testID={props.testID} style={[StyleSheet.absoluteFill, enter, released && styles.released]}
           // Up or leaving, the sheet takes every touch over the window (a native sheet did); leaving, its buttons rest.
-          pointerEvents="auto"
+          // Released (invisible, about to leave the tree), every touch goes to what is under it.
+          pointerEvents={released ? 'none' : 'auto'}
           accessibilityElementsHidden={!isTop || leaving}
           importantForAccessibility={!isTop || leaving ? 'no-hide-descendants' : 'auto'}
           onAccessibilityEscape={props.onRequestClose ? () => props.onRequestClose?.({ nativeEvent: {} }) : undefined}
@@ -239,5 +265,6 @@ const side = I18nManager.getConstants().isRTL ? 'right' : 'left';
 const styles = StyleSheet.create({
   anchor: { position: 'absolute', top: 0, [side]: 0, width: 0, height: 0 },
   overlay: { position: 'absolute' },
+  released: { opacity: 0 },
   container: { [side]: 0, top: 0, flex: 1 },
 });

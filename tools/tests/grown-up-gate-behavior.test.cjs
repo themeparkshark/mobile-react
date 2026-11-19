@@ -692,10 +692,10 @@ test('N02: every sheet host gives its contents the overlay, and draws its layers
   const layer = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/ui/SheetOverlayLayer.tsx'), 'utf8');
   // Fix pass w5 (W4-SMOKE-2): the outer view takes every touch while up AND while leaving (a fading gate is still drawn);
   // only its own buttons rest while it leaves, and the held tap goes to the sheet under it once the layer is gone.
-  assert.match(layer, /<View style=\{StyleSheet\.absoluteFill\} accessibilityViewIsModal=\{!leaving\}/,
+  assert.match(layer, /<View style=\{StyleSheet\.absoluteFill\} pointerEvents=\{released \? 'none' : 'auto'\} accessibilityViewIsModal=\{!leaving\}/,
     'never see-through to taps while up (an opacity 0 view is skipped by the hit test), nor while it leaves');
   assert.match(layer, /pointerEvents=\{leaving \? 'none' : 'auto'\}>\{children\}/);
-  assert.match(layer, /useEffect\(\(\) => \{\s*shown\.value = withTiming\(leaving \? 0 : 1/, 'the layer fades itself in on its own mount');
+  assert.match(layer, /useEffect\(\(\) => \{\s*if \(!leaving\) setReleased\(false\);\s*shown\.value = withTiming\(leaving \? 0 : 1/, 'the layer fades itself in on its own mount');
   const gateSrc = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/components/GrownUpGate.tsx'), 'utf8');
   assert.match(gateSrc, /if \(!presenting \|\| inSheetRef\.current \|\| inTreeRef\.current\) return;\s*fadeIn\(\);/,
     'in a sheet the gate never runs its own fade (it could end before the layer existed and leave the gate invisible)');

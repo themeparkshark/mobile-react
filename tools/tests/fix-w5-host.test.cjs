@@ -97,10 +97,10 @@ test('a hit inside an in-tree sheet is on that sheet: never replayed onto the sc
 
 test('W4-SMOKE-2: a leaving gate holds the first tap (never lets it through), and hands it to the sheet once gone', () => {
   const L = loadTs('src/ui/SheetOverlayLayer.tsx', {
-    react: { useContext: () => null, useEffect() {}, useRef: v => ({ current: v }) },
+    react: { useContext: () => null, useEffect() {}, useRef: v => ({ current: v }), useState: v => [v, () => {}] },
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
     'react-native': { StyleSheet: { absoluteFill: {} }, View: 'View' },
-    'react-native-reanimated': { default: { View: 'Animated.View' }, Easing: { in: f => f, out: f => f, quad: 1 }, useAnimatedStyle: f => f, useSharedValue: v => ({ value: v }), withTiming: v => v },
+    'react-native-reanimated': { default: { View: 'Animated.View' }, Easing: { in: f => f, out: f => f, quad: 1 }, runOnJS: f => f, useAnimatedStyle: f => f, useSharedValue: v => ({ value: v }), withTiming: v => v },
     './pressTrace': { pressTrace() {} },
     './sheetOverlay': { sheetPressContext: () => ({}) },
     './useUiReducedMotion': { default: () => false },
@@ -111,6 +111,8 @@ test('W4-SMOKE-2: a leaving gate holds the first tap (never lets it through), an
   assert.equal(L.holdLeavingTap(first, true, 99, 99), first, 'a second tap in the same leave is the same press');
   const layer = src('src/ui/SheetOverlayLayer.tsx');
   assert.doesNotMatch(layer, /<View style=\{StyleSheet\.absoluteFill\} pointerEvents=\{leaving \? 'none'/, 'the outer view never lets a drawn, leaving layer pass a tap');
+  assert.match(layer, /<View style=\{StyleSheet\.absoluteFill\} pointerEvents=\{released \? 'none' : 'auto'\}/, 'only once its fade has ended');
+  assert.match(layer, /done => \{ if \(done && leaving\) runOnJS\(setReleased\)\(true\); \}/, 'a stalled fade never releases it');
   assert.match(layer, /pointerEvents=\{leaving \? 'none' : 'auto'\}>\{children\}/, 'its own buttons rest while it leaves');
   assert.match(layer, /press\(tap\.x, tap\.y\)/);
 });
@@ -131,6 +133,11 @@ test('every iOS Modal goes through the door, and the door draws in-tree unless t
   assert.match(sheet, /leavingSheetTap\.note\(/, 'a tap on a leaving sheet is kept for the screen under it');
   assert.match(sheet, /if \(!nested && !overlayStack\.others\(id\.current\)\) \{\s*const how = tapThrough\.deliver\(\)/);
   assert.match(sheet, /onAccessibilityEscape=/);
+  // A sheet is released (invisible, touches pass natively) before it leaves the tree, never removed while it blocks.
+  assert.match(sheet, /pointerEvents=\{released \? 'none' : 'auto'\}/);
+  assert.match(sheet, /if \(motion\.outMs === 0\) \{ release\(\); return undefined; \}/);
+  assert.match(sheet, /\} else if \(phase === 'up' && !wants\) \{\s*setPhase\('closing'\);/, 'even an instant leave goes through the release');
+  assert.ok(H.SHEET_RELEASE_FRAMES >= 2 && H.SHEET_RELEASE_FALLBACK_MS <= 300);
   assert.match(sheet, /<SheetOverlay\.Provider value=\{setOverlay\}>/, 'the in-sheet gate layer still draws in the sheet');
 });
 
