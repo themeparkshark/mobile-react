@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameIconName } from '../ui/iconNames';
 import RealMoneyMark from './RealMoneyMark';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
@@ -132,6 +132,16 @@ async function loadRest() {
   } catch { /* storage is best effort */ }
 }
 const MISS_KEY = 'grown-up-gate:misses';
+/**
+ * The saved rest and miss count, read once per launch (fix pass w5, ROOT-GATE). Every ask used to read both again,
+ * two storage round trips before the gate could even start to draw (most of the 180 ms from the row's touch to the
+ * gate's request on a busy phone). This module writes both and keeps them in memory, so one read at start is enough.
+ */
+let restReady: Promise<void> | null = null;
+function restLoaded(): Promise<void> {
+  restReady ??= loadRest();
+  return restReady;
+}
 
 /**
  * What the grown-up is saying yes to, in plain words, shown above the sum so
@@ -226,7 +236,7 @@ export function askGrownUp(reason: GateReason | null = null, seed = Math.floor(M
  */
 export function askGrownUpOutcome(reason: GateReason | null = null, seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<GateOutcome> {
   if (!showGate) return Promise.resolve('unshown');
-  open ??= loadRest()
+  open ??= restLoaded()
     .then(() => new Promise<GateOutcome>(resolve => {
       if (!showGate) { resolve('unshown'); return; }
       const request: GateRequest = { seed: now < gateRestUntil ? -1 : seed, reason,
@@ -509,7 +519,9 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   if (overlayKey.current === 0) overlayKey.current = nextOverlayKey++;
   const bodyRef = useRef<ReactNode>(null);
   const sentRef = useRef<ReactNode>(null);
-  useEffect(() => {
+  // In the commit that changed the body (a layout effect, fix pass w5, ROOT-GATE): the sheet draws the gate in that
+  // same pass, not one passive-effect flush (a frame or more on a busy phone) later.
+  useLayoutEffect(() => {
     if (!sheetOverlay || bodyRef.current === sentRef.current) return;
     sentRef.current = bodyRef.current;
     sheetOverlay(overlayKey.current, bodyRef.current);
@@ -689,4 +701,4 @@ const styles = StyleSheet.create({
 });
 
 // Load the saved rest and miss count as soon as the app starts (best effort).
-void loadRest();
+void restLoaded();

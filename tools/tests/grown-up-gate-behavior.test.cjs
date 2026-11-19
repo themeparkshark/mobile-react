@@ -84,6 +84,8 @@ function hooksRuntime() {
         inst.effects.push({ slot, fn });
       }
     },
+    // The gate sends its body to a sheet in a layout effect (fix pass w5): after render, like useEffect here.
+    useLayoutEffect(fn, deps) { return React.useEffect(fn, deps); },
   };
   async function settle() {
     for (let round = 0; round < 50; round++) {

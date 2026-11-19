@@ -210,3 +210,13 @@ test('N01: a held tap is pressed under the sheet the moment it is released, not 
   assert.match(cpp, /if \(!layoutableShadowNode->canBeTouchTarget\(\) &&\s*!layoutableShadowNode->canChildrenBeTouchTarget\(\)\) \{\s*return nullptr;/);
   assert.match(cpp, /return layoutableShadowNode->canBeTouchTarget\(\) \? node : nullptr;/, 'a box-none overlay is never the hit itself');
 });
+
+test('ROOT-GATE N02: a gate ask reads the saved rest once per launch, and a gate in a sheet is drawn in the commit that asked for it', () => {
+  // Phase log, need_ticket row: 179 ms from the row's touch to the gate's request (two storage reads on every ask),
+  // then a passive-effect flush before the sheet drew it. Fails on 535be9b0.
+  const gate = src('src/components/GrownUpGate.tsx');
+  assert.match(gate, /open \?\?= restLoaded\(\)/);
+  assert.doesNotMatch(gate, /open \?\?= loadRest\(\)/, 'never two storage round trips per ask');
+  assert.match(gate, /function restLoaded\(\): Promise<void> \{\s*restReady \?\?= loadRest\(\);\s*return restReady;\s*\}/);
+  assert.match(gate, /useLayoutEffect\(\(\) => \{\s*if \(!sheetOverlay \|\| bodyRef\.current === sentRef\.current\) return;/);
+});
