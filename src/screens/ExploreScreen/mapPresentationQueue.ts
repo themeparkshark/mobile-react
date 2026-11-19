@@ -184,6 +184,15 @@ export function autoOpenAllowed(kind: AutoOpenKind, s: AttentionState): boolean 
   return true;
 }
 
+/**
+ * Pure: the guide has the player on one next thing, so nothing opens by itself over it: walking to its coin,
+ * PLAY! up at a coin, or standing in a ride line (the YOUR WAIT card, today's Line story, or the In line? offer
+ * from a queue dwell). Hold R1: the Ride Journal opened over YOUR WAIT in Autopia's line about a ride long ago.
+ */
+export function guideBusy(g: { readonly atPark: boolean; readonly state: string; readonly playUp: boolean; readonly inLine: boolean }): boolean {
+  return g.atPark && (g.state === 'walk' || g.playUp || g.inLine || g.state === 'in_line' || g.state === 'line_story');
+}
+
 let usedIn: string | null = null;
 let usedBy: AutoOpenKind | null = null;
 

@@ -504,6 +504,36 @@ test('T022: the selected ride\'s card never sits under the guide card: it takes 
   assert.equal(free.get('ride:2').tag.side, 'top');
 });
 
+test('T022 hold: nothing shown ever overlaps the selected ride\'s card (neighbour islands, the player\'s shark), even with no free side', () => {
+  const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const check = (items, label) => {
+    const f = frame();
+    const out = s.solveLayout(items, f);
+    const sel = items.find(it => it.pinned);
+    const p = s.project(sel.latitude, sel.longitude, f);
+    const tag = out.get(sel.id).tag;
+    assert.ok(tag, `${label}: the card is placed`);
+    const card = { x: p.x + tag.x, y: p.y + tag.y, w: L.SELECTED_TAG.w, h: L.SELECTED_TAG.h };
+    for (const a of boxes(items, out, f).art) if (a.id !== sel.id) assert.ok(!overlap(card, a.rect), `${label}: ${a.id} drawn over the card`);
+    for (const it of items.filter(x => x.tagObstacleOnly)) {
+      const q = s.project(it.latitude, it.longitude, f);
+      assert.ok(!overlap(card, { x: q.x + it.body.x, y: q.y + it.body.y, w: it.body.w, h: it.body.h }), `${label}: the shark covers the card`);
+    }
+    return { out, tag };
+  };
+  const sel = rideAt(1, 0, 60, { pinned: true, tag: L.SELECTED_TAG });
+  // Mad Tea Party with the Storybook Land tower up and to the right (the Pro Max shot): the card takes a clear side.
+  const one = check([sel, rideAt(2, 95, -20)], 'tower');
+  assert.equal(one.out.get('ride:2').visible, true, 'with a free side the tower stays');
+  // The player's shark just above the selected island (the 17 Pro Pirates shot).
+  check([sel, { id: 'player', ...at(0, -20), priority: 0, tagObstacleOnly: true, body: { x: -26, y: -52, w: 52, h: 60 } }], 'shark');
+  // Islands all around (Fantasyland at the left edge): no free side, so the islands under the card step back.
+  const crowd = [sel, rideAt(2, 95, -20), rideAt(3, -110, -10), rideAt(4, 0, 190), rideAt(5, 140, 90), rideAt(6, -140, 90), rideAt(7, 0, -70)];
+  check(crowd, 'crowd');
+  // Nothing around: right above its island, as before.
+  assert.equal(s.solveLayout([sel], frame()).get('ride:1').tag.side, 'top');
+});
+
 test('T022 and T148: one cheap idle loop on the target island and on the nearest treat (off under Reduce Motion)', () => {
   const fs = require('node:fs');
   const task = fs.readFileSync('src/screens/ExploreScreen/TaskMarker.tsx', 'utf8');

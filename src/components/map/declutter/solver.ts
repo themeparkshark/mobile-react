@@ -316,6 +316,34 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     const p = project(item.latitude, item.longitude, frame);
     return at(bodies.get(item.id)!, p.x, p.y);
   });
+  // The selected ride's card (T022 hold). iOS stacks marker views in its own order, so a neighbour island drew over
+  // the card wherever they met (the Storybook Land tower over Mad Tea Party's "1 Ticket", the shark over Pirates).
+  // The card is placed with the selected body, before any other art: the first side clear of the HUD, the screen
+  // edge and the player's shark that covers the fewest islands, then it is art itself, so an island under it steps
+  // back (recedes, or hides into a "+N") instead of drawing over it.
+  const pinnedCards = new Map<string, { side: TagSide; x: number; y: number } | null>();
+  const artRects = (exceptId: string) => sorted.filter(other => other.id !== exceptId && !other.tagObstacleOnly).map(other => {
+    const q = project(other.latitude, other.longitude, frame);
+    return at(bodies.get(other.id)!, q.x, q.y);
+  });
+  const placePinnedCard = (item: LayoutItem, entry: Placed, p: { x: number; y: number }) => {
+    if (!item.tag) return;
+    const all = tagCandidates(bodies.get(item.id)!, item.tag.w, item.tag.h).filter(c => !c.far);
+    const rectOf = (c: (typeof all)[number]): Rect => ({ x: p.x + c.x, y: p.y + c.y, w: item.tag!.w, h: item.tag!.h });
+    const fits = all.filter(c => insideView(rectOf(c), frame, edge) && !insets.some(inset => overlapArea(rectOf(c), inset) > 0));
+    const offShark = fits.filter(c => !playerRects.some(other => overlapArea(rectOf(c), other) > 0));
+    const pool = offShark.length ? offShark : fits;
+    const others = artRects(item.id);
+    let best: (typeof all)[number] | null = null, bestCover = Infinity;
+    for (const c of pool) {
+      const r = rectOf(c);
+      const cover = others.reduce((sum, o) => sum + overlapArea(r, o), 0);
+      if (cover < bestCover - 1) { best = c; bestCover = cover; }
+    }
+    const chosen = best ?? all[0];
+    pinnedCards.set(item.id, { side: chosen.side, x: chosen.x, y: chosen.y });
+    grid.add(entry, rectOf(chosen));
+  };
   for (const item of sorted) {
     const itemBody = bodies.get(item.id)!;
     const p = project(item.latitude, item.longitude, frame);
@@ -323,7 +351,9 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
     if (item.tagObstacleOnly) { tagObstacles.push(at(itemBody, p.x, p.y)); continue; }
     if (item.pinned) {
       scales.set(item.id, 1);
-      place({ item, rect: at(itemBody, p.x, p.y), order: placed.length, p, folded: 0 });
+      const entry: Placed = { item, rect: at(itemBody, p.x, p.y), order: placed.length, p, folded: 0 };
+      place(entry);
+      placePinnedCard(item, entry, p);
       continue;
     }
     if (item.fixed) {
@@ -445,14 +475,9 @@ export function solveLayout(items: readonly LayoutItem[], frame: CameraFrame, op
       if (ok && rect) tagGrid.add(null, rect);
       continue;
     }
-    // The selected marker's card draws on top of everything (it draws there itself), above its island when that
-    // is clear of the HUD and the screen edge, else on the first clear side (T022: after a recenter it sat
-    // under the guide card); with no clear side, above. Others keep last pass's side while it is free.
-    const pinnedFits = (c: (typeof all)[number]) => {
-      const rect: Rect = { x: p.x + c.x, y: p.y + c.y, w: item.tag!.w, h: item.tag!.h };
-      return insideView(rect, frame, edge) && !insets.some(inset => overlapArea(rect, inset) > 0);
-    };
-    const candidates = item.pinned ? [all.find(c => !c.far && pinnedFits(c)) ?? all[0]]
+    // The selected marker's card took its side with its body, before the other art (placePinnedCard).
+    const pinnedCard = item.pinned ? pinnedCards.get(item.id) ?? null : null;
+    const candidates = item.pinned ? [all.find(c => pinnedCard && c.side === pinnedCard.side) ?? all[0]]
       : lastSide ? [...all.filter(c => c.side === lastSide), ...all.filter(c => c.side !== lastSide)] : all;
     let chosen: TagPlacement | null = null;
     for (const c of candidates) {

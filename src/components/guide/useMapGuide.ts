@@ -13,7 +13,7 @@ import type { PlayerType } from '../../models/player-type';
 import type { CurrentRedeemableType } from '../../models/current-redeemable-type';
 import type { LivePark } from '../../api/endpoints/parks/live';
 import type { AdventureTicket, TripGoalData } from '../../api/endpoints/me/trip-goal';
-import { attentionGate, attentionQueue, autoOpenAllowed } from '../../screens/ExploreScreen/mapPresentationQueue';
+import { attentionGate, attentionQueue, autoOpenAllowed, guideBusy } from '../../screens/ExploreScreen/mapPresentationQueue';
 import { guide } from '../../services/guide/nextCoin';
 import type { GuideAction } from '../../services/guide/guideCopy';
 import { freeTrySignal } from '../../services/guide/freeTickets';
@@ -222,9 +222,10 @@ export default function useMapGuide(input: MapGuideInput) {
     return () => clearTimeout(timer);
   }, [nextCoin.arrivedAt, flowClosedAt]);
   const appOpenId = currentAppOpen();
-  // Walking to the guide's coin, or standing at a coin with PLAY! up: nothing opens by itself over the one next thing
-  // (fix round w3: the Ride Journal opened over PLAY! at the Castle mid-walk).
-  const busyWithCoin = !!park && (nextCoin.state === 'walk' || playableTaskId != null);
+  // Walking to the guide's coin, standing at a coin with PLAY! up, or standing in a ride line (the YOUR WAIT card or
+  // the In line? offer): nothing opens by itself over the one next thing (fix round w3: the Ride Journal opened over
+  // PLAY! at the Castle mid-walk; hold R1: it opened over YOUR WAIT in Autopia's line, about a ride long ago).
+  const busyWithCoin = guideBusy({ atPark: !!park, state: nextCoin.state, playUp: playableTaskId != null, inLine: !!queueDwell });
   const attentionFor = (kind: Parameters<typeof autoOpenAllowed>[0]) => autoOpenAllowed(kind, {
     atPark: !!park, now: attentionClock >= 0 ? Date.now() : 0, arrivedAt: nextCoin.arrivedAt,
     walkingToTarget: busyWithCoin, playing: redeemFlowOpen, winCardClosedAt: flowClosedAt,

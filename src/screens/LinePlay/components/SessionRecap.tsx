@@ -30,6 +30,7 @@ import { coinTierName } from '../../../constants/coinTiers';
 import { parkDayLine, recapRows, type RecapRewardsInput } from '../../../services/lineplay/bonusRounds';
 import type { RecapGo } from '../../../services/lineplay/rideStep';
 import { UpperText } from '../../../ui/upper';
+import { recapCoinLine } from '../../../services/lineplay/waitScreen';
 
 const QUEUE_STAMP_IMAGE = require('../../../../assets/images/stamps/stamp-09.png');
 const QUEUE_RECAP_SHARK = require('../../../../assets/images/screens/lineplay/queue-recap-shark.png');
@@ -237,9 +238,6 @@ export default function SessionRecap({
   // "I left the line" (manual) is a wrapped-up wait too, never "time played". Games only is neither.
   const wrappedUp = waitTimed && (leftQueue || endReason === 'manual');
   const enter = (index: number) => reducedMotion ? undefined : FadeInDown.delay(420 + index * 90).springify().damping(14);
-  const upgradeReady = coin != null && coin.current_level < coin.max_level &&
-    (coin.available_parts ?? 0) >= coin.parts_to_next_level && playerEnergy != null &&
-    playerEnergy >= coin.energy_to_next_level;
   let stat = 0;
   const shownStats = recapStats({ activityCount, earnedEnergy, experience, partsCount, ticketsEarned, rewardsConfirmed,
     showEnergy, showXp, showTickets });
@@ -362,9 +360,9 @@ export default function SessionRecap({
       {go && onGo && (
         <Animated.View entering={enter(4)} style={styles.goCard}>
           {coinState === 'owned' && coin && coin.current_level < coin.max_level && (
-            <Text style={styles.coinNextBody}>{`${coin.available_parts ?? 0} of ${coin.parts_to_next_level} Parts to Level ${coin.current_level + 1}`}
-              {playerEnergy != null && !upgradeReady && coin.energy_to_next_level > playerEnergy
-                ? ` · ${coin.energy_to_next_level - playerEnergy} more Energy` : ''}</Text>
+            // The wait card's own words (waitCoinProgress): once the Parts cover the level it says so, never
+            // "4 of 2 Parts to Level 2"; short of Energy it says how much more.
+            <Text style={styles.coinNextBody}>{recapCoinLine(coin, playerEnergy)}</Text>
           )}
           <Text style={styles.goTitle}>{go.label}</Text>
           {coinState === 'unowned' && partsCount > 0 && (

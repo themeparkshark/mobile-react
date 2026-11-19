@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, useContext } from 'react';
 import {
-  AppState,
   View,
   Text,
   StyleSheet,
@@ -17,6 +16,8 @@ import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { BlurView } from 'expo-blur';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { useAppActive } from '../../hooks/appActive';
+import useLiveCountdown from '../../hooks/useLiveCountdown';
+import useLivePoll from '../../hooks/useLivePoll';
 import { getGym, GymData, checkinGym } from '../../api/endpoints/gym-battle';
 import TapMiniGameModal from '../../components/GymBattle/TapMiniGameModal';
 import SwordAttackModal from '../../components/GymBattle/SwordAttackModal';
@@ -592,10 +593,6 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     toastTimer.current = setTimeout(() => setPillarToast(null), 2000);
   }, []);
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
-  const [countdown, setCountdown] = useState<string>('--:--:--');
-  const [attackCooldown, setAttackCooldown] = useState<number>(0);
-  const [checkinCooldown, setCheckinCooldown] = useState<number>(0);
-  const [defendCooldown, setDefendCooldown] = useState<number>(0);
 
   // The server refuses every arena action outside this park. Once the app
   // knows the kid is somewhere else, the buttons say GET CLOSER instead of
@@ -636,59 +633,17 @@ export default function GymBattleScreen({ navigation, route }: Props) {
   const screenFocused = useIsFocused();
   const appActive = useAppActive();
   const clockLive = screenFocused && appActive;
-  useEffect(() => {
-    const formatTime = (totalSecs: number | null) => {
-      if (totalSecs == null) return '--:--:--';
-      if (totalSecs <= 0) return '0:00:00';
-      const h = Math.floor(totalSecs / 3600);
-      const m = Math.floor((totalSecs % 3600) / 60);
-      const s = totalSecs % 60;
-      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    };
-    
-    setCountdown(formatTime(battleSeconds));
-    // Ticks only while this screen is focused and the app is in front (T190).
-    if (battleSeconds == null || !clockLive) return;
-    const interval = setInterval(() => {
-      setBattleSeconds(prev => {
-        if (prev == null) return null;
-        const next = Math.max(0, prev - 1);
-        setCountdown(formatTime(next));
-        return next;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [battleSeconds, clockLive]);
-
-  // Attack cooldown timer - use gymData.player since player isn't in scope yet
-  useEffect(() => {
-    const secs = gymData?.player?.seconds_until_attack;
-    if (secs && secs > 0) {
-      setAttackCooldown(secs);
-    } else {
-      setAttackCooldown(0);
-    }
-  }, [gymData?.player?.seconds_until_attack]);
-
-  // Checkin cooldown timer
-  useEffect(() => {
-    const secs = gymData?.player?.seconds_until_checkin;
-    if (secs && secs > 0) {
-      setCheckinCooldown(secs);
-    } else {
-      setCheckinCooldown(0);
-    }
-  }, [gymData?.player?.seconds_until_checkin]);
-
-  // Defend cooldown timer
-  useEffect(() => {
-    const secs = gymData?.player?.seconds_until_defend;
-    if (secs && secs > 0) {
-      setDefendCooldown(secs);
-    } else {
-      setDefendCooldown(0);
-    }
-  }, [gymData?.player?.seconds_until_defend]);
+  // Every clock on this screen ticks only while it is focused and the app is in
+  // front, from a deadline so it is right again on return (T190, useLiveCountdown).
+  const battleLeft = useLiveCountdown(battleSeconds, clockLive && battleSeconds != null, undefined, gymData);
+  const countdown = useMemo(() => {
+    if (battleSeconds == null) return '--:--:--';
+    if (battleLeft <= 0) return '0:00:00';
+    const h = Math.floor(battleLeft / 3600);
+    const m = Math.floor((battleLeft % 3600) / 60);
+    const s = battleLeft % 60;
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }, [battleSeconds, battleLeft]);
 
   // Fix round w3 T188: through the app's sound effects player, so the Sound Effects setting is obeyed.
   const { playSound: playSfx } = useContext(SoundEffectContext);
@@ -720,6 +675,14 @@ export default function GymBattleScreen({ navigation, route }: Props) {
   }, [parkId]);
   fetchGymRef.current = () => { void fetchGym(); };
 
+  // Cooldowns: the server's seconds-left, counted down only while someone can
+  // see them; reaching zero asks the server again so the button turns READY.
+  const refetchGym = useCallback(() => { void fetchGym(); }, [fetchGym]);
+  const gymPlayer = gymData?.player;
+  const attackCooldown = useLiveCountdown(gymPlayer?.seconds_until_attack, clockLive, refetchGym, gymPlayer);
+  const checkinCooldown = useLiveCountdown(gymPlayer?.seconds_until_checkin, clockLive, refetchGym, gymPlayer);
+  const defendCooldown = useLiveCountdown(gymPlayer?.seconds_until_defend, clockLive, refetchGym, gymPlayer);
+
   // A cooldown that ran out on this phone before the server agreed (the
   // button says ALMOST): ask again shortly, so it turns READY on its own.
   const staleWait = Boolean(gymData?.player && battleActive && !awayFromArena && (
@@ -731,31 +694,12 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     return () => clearTimeout(retry);
   }, [staleWait, gymData, fetchGym]);
 
-  // Countdown timers - single interval, refetch when any cooldown expires
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setAttackCooldown(prev => {
-        const next = Math.max(0, prev - 1);
-        if (prev > 0 && next === 0) fetchGym();
-        return next;
-      });
-      setCheckinCooldown(prev => {
-        const next = Math.max(0, prev - 1);
-        if (prev > 0 && next === 0) fetchGym();
-        return next;
-      });
-      setDefendCooldown(prev => {
-        const next = Math.max(0, prev - 1);
-        if (prev > 0 && next === 0) fetchGym();
-        return next;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [fetchGym]);
+  // A refresh every 30 s only while this screen is focused and the app is in
+  // front (T190); the focus effect below fetches on every return.
+  useLivePoll(fetchGym, 30000, { focused: screenFocused, immediate: false, key: parkId });
 
   useEffect(() => {
     fetchGym();
-    const interval = setInterval(() => { if (AppState.currentState === 'active') void fetchGym(); }, 30000);
     
     Animated.parallel([
       Animated.timing(screenOpacity, { toValue: 1, duration: 800, useNativeDriver: true }),
@@ -763,8 +707,6 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     ]).start();
     
     playEntrySound();
-    
-    return () => clearInterval(interval);
   }, [fetchGym]);
 
   // Refetch gym data when screen comes into focus (app reopen, tab switch, etc.)

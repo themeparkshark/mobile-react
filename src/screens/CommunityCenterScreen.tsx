@@ -14,6 +14,8 @@ import { Video, ResizeMode } from 'expo-av';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import useLivePoll from '../hooks/useLivePoll';
+import useLiveCountdown from '../hooks/useLiveCountdown';
+import { useAppActive } from '../hooks/appActive';
 
 // Sound assets
 const SOUNDS = {
@@ -171,7 +173,6 @@ export default function CommunityCenterScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [flyingTicket, setFlyingTicket] = useState<{ startX: number; startY: number; count: number } | null>(null);
   const [justGiftedSlot, setJustGiftedSlot] = useState<number | null>(null); // Which slot shows "gift placed" animation
-  const [liveCooldown, setLiveCooldown] = useState(0); // Live countdown in seconds for the badge
   
   const { player, refreshPlayer } = useContext(AuthContext);
   const { triggerFly } = useCurrencyFly();
@@ -224,23 +225,6 @@ export default function CommunityCenterScreen() {
   // Entrance animation
   const entranceAnim = useRef(new Animated.Value(0)).current;
   
-  // Countdown timer for cooldown modal
-  useEffect(() => {
-    if (showCooldownModal && cooldownSeconds > 0) {
-      const timer = setInterval(() => {
-        setCooldownSeconds(prev => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            setShowCooldownModal(false);
-            fetchCenter(); // Refresh data when cooldown ends
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [showCooldownModal, cooldownSeconds > 0]);
   
   // Entrance animation on mount
   useEffect(() => {
@@ -389,6 +373,23 @@ export default function CommunityCenterScreen() {
   // front (T190: a bare interval kept polling behind other screens and in the background).
   const screenFocused = useIsFocused();
   useLivePoll(fetchCenter, 15000, { focused: screenFocused, immediate: false, key: parkId });
+
+  // Cooldown clocks tick only while this screen is focused and the app is in
+  // front, from a deadline so they are right again on return (T190).
+  const appActive = useAppActive();
+  const clocksLive = screenFocused && appActive;
+  const onCooldownModalDone = useCallback(() => {
+    setShowCooldownModal(false);
+    fetchCenter(); // Refresh data when cooldown ends
+  }, [fetchCenter]);
+  const cooldownLeft = useLiveCountdown(showCooldownModal ? cooldownSeconds : 0, clocksLive, onCooldownModalDone);
+  const onGiveReady = useCallback(() => {
+    fetchCenter();
+    playSound('reveal'); // Play a sound when cooldown ends
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [fetchCenter, playSound]);
+  // Live countdown in seconds for the badge
+  const liveCooldown = useLiveCountdown(center?.give_cooldown_remaining, clocksLive, onGiveReady, center);
   
   // Notify when new gifts appear
   useEffect(() => {
@@ -402,31 +403,6 @@ export default function CommunityCenterScreen() {
   }, [center?.available_gifts]);
   
   // Live cooldown ticker for the badge
-  useEffect(() => {
-    if (center?.give_cooldown_remaining && center.give_cooldown_remaining > 0) {
-      setLiveCooldown(center.give_cooldown_remaining);
-    }
-  }, [center?.give_cooldown_remaining]);
-  
-  useEffect(() => {
-    if (liveCooldown <= 0) return;
-    
-    const timer = setInterval(() => {
-      setLiveCooldown(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          // Refresh center data when cooldown ends
-          fetchCenter();
-          playSound('reveal'); // Play a sound when cooldown ends
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    
-    return () => clearInterval(timer);
-  }, [liveCooldown > 0]);
   
   // Animate button press
   const animatePress = (scaleAnim: Animated.Value) => {
@@ -1131,7 +1107,7 @@ export default function CommunityCenterScreen() {
             <View style={styles.cooldownTimerContainer}>
               <Text style={styles.cooldownTimerLabel}>Time remaining</Text>
               <Text style={styles.cooldownTimerValue}>
-                {Math.floor(cooldownSeconds / 60)}:{(cooldownSeconds % 60).toString().padStart(2, '0')}
+                {Math.floor(cooldownLeft / 60)}:{(cooldownLeft % 60).toString().padStart(2, '0')}
               </Text>
             </View>
             <TouchableOpacity

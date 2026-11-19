@@ -6,6 +6,7 @@ import { showToast } from '../../../utils/toast';
 import type { PerkChipData } from '../../../components/coin/progressionModel';
 import client from '../../client';
 import { noteCoinGame } from '../../../services/lineplay/coinGames';
+import { withPlainAttemptNames } from '../../../helpers/plainRideName';
 
 export type TaskAttemptGame = 'tap' | 'timing' | 'memory' | 'trivia' | 'photo';
 export type TaskAttemptStatus = 'started' | 'won' | 'lost' | 'expired';
@@ -166,12 +167,14 @@ export async function startTaskAttempt(
   });
   // A coin game is open at this coin: ride detection never counts the time spent playing it as its line.
   if (type === 'task') noteCoinGame(taskId);
-  return data.data;
+  // The win card names the ride like the guide card (hold R2).
+  return withPlainAttemptNames(data.data);
 }
 
 export async function getTaskAttempt(id: number): Promise<TaskAttemptResponse> {
   const { data } = await client.get<{ data: TaskAttemptResponse }>(`/me/task-attempts/${id}`);
-  return data.data;
+  // The win card names the ride like the guide card (hold R2).
+  return withPlainAttemptNames(data.data);
 }
 
 export async function resolveTaskAttempt(
@@ -194,5 +197,6 @@ export async function resolveTaskAttempt(
     const note = winNote((data.data.attempt.rewards as { standings?: unknown } | null | undefined)?.standings);
     if (note) parkWinNote(note, left => showToast(left.text, left.big ? 'reward' : 'success', left.big ? 4000 : 2200));
   }
-  return data.data;
+  // The win card names the ride like the guide card (hold R2).
+  return withPlainAttemptNames(data.data);
 }

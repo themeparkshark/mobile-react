@@ -92,6 +92,7 @@ import {
   rideSprintConfig,
   rideStars,
   step,
+  lineTimeAttackConfig,
   timeAttackConfig,
   timeAttackStars,
   upgradeEdition,
@@ -384,6 +385,13 @@ interface EndExtras {
 }
 const NO_END_EXTRAS: EndExtras = { isNewBest: false, rewards: null, daily: null, edition: null, upgraded: false, ridePb: null, newRidePb: false, extra: [] };
 
+/**
+ * Time Attack's start line (T082): Time Attack shows no digits and nothing
+ * urgent (quietClock), so its words never say clock. The gold rope around the
+ * board is the time, and every match tops it up.
+ */
+export const MEMORY_TIME_ATTACK_OBJECTIVE = 'Find the pairs. Every match fills the gold rope.';
+
 export default function MemoryGame({
   visible,
   difficulty = 1,
@@ -416,6 +424,8 @@ export default function MemoryGame({
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const movement = useContext(LinePlayMovementContext);
+  const inLineRef = useRef(movement != null);
+  inLineRef.current = movement != null;
   const rideChallenge = useContext(RideChallengeContext);
   const rideChallengeRef = useRef(rideChallenge);
   rideChallengeRef.current = rideChallenge;
@@ -742,7 +752,8 @@ export default function MemoryGame({
         layout: local.layout,
       };
     } else {
-      const cfg = timeAttackConfig();
+      // In a ride line the round rests while nobody taps (T082): it never ends on its own.
+      const cfg = inLineRef.current ? lineTimeAttackConfig() : timeAttackConfig();
       const plan = planBoard(1, 0, ledger, heat);
       introduced = plan.introduced;
       src = createLocalBoard({ pairs: 6, deckSize, seed: s, golden: plan.sys.golden, gull: plan.sys.seagull }, deckSize);
@@ -2601,7 +2612,7 @@ export default function MemoryGame({
       finalCount={!calmClock}
       countdownY={0.62}
       stageReady={stageDealt}
-      objective={mode === 'ride' ? (r?.signal ? 'Low signal: clear in 24 turns' : 'Clear the board') : mode === 'daily' ? 'Two slips and you are out' : mode === 'race' ? 'Same board, four sharks. First to clear wins.' : mode === 'warmup' ? 'Find the pairs. Remember where you saw them.' : 'Find the pairs. Beat the clock!'}
+      objective={mode === 'ride' ? (r?.signal ? 'Low signal: clear in 24 turns' : 'Clear the board') : mode === 'daily' ? 'Two slips and you are out' : mode === 'race' ? 'Same board, four sharks. First to clear wins.' : mode === 'warmup' ? 'Find the pairs. Remember where you saw them.' : MEMORY_TIME_ATTACK_OBJECTIVE}
       result={result}
       gameId="memory"
       onStart={onStart}

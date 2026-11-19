@@ -204,6 +204,20 @@ export function lastCoinGameAt(taskId: number | null | undefined, now = Date.now
   return at != null && at >= now - COIN_GAME_KEEP_MS ? at : null;
 }
 
+/**
+ * The latest coin game of ANY coin that was open between `from` and `to` (null: none in the last 6 hours).
+ * A guest playing a coin's game stands at that coin, not in a line: a neighbour ride whose zone overlaps
+ * (Indiana Jones beside Jungle Cruise) must not count that time as its queue (fix round w3, hold R1).
+ */
+export function lastCoinGameIn(from: number, to: number, now = Date.now()): number | null {
+  let best: number | null = null;
+  for (const at of Object.values(record.coinGames)) {
+    if (!Number.isFinite(at) || at < now - COIN_GAME_KEEP_MS || at < from || at > to) continue;
+    if (best == null || at > best) best = at;
+  }
+  return best;
+}
+
 /** The LinePlay wait at this ride that `at` falls in, or null. */
 export function linePlayWaitAt(rideId: number, at: number, now = Date.now()): LinePlayWait | null {
   const i = waitIndexAt(rideId, at, now);

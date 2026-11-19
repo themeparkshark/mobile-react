@@ -288,7 +288,7 @@ test('T009 and the walk: the card says Tap PLAY! only once PLAY! is drawn, and n
   assert.ok(explore.indexOf('const [playRideShown, setPlayRideShown] = useState(false);') < explore.indexOf('} = useMapGuide({'),
     'declared before the guide reads it');
   const hook = read('src/components/guide/useMapGuide.ts');
-  assert.match(hook, /const busyWithCoin = !!park && \(nextCoin\.state === 'walk' \|\| playableTaskId != null\);/);
+  assert.match(hook, /const busyWithCoin = guideBusy\(\{ atPark: !!park, state: nextCoin\.state, playUp: playableTaskId != null, inLine: !!queueDwell \}\);/);
   assert.match(hook, /attentionGate\.publish\(\{ atPark: !!park, arrivedAt: nextCoin\.arrivedAt, walkingToTarget: busyWithCoin,/);
   const Q = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
   const base = { atPark: true, now: 100_000, arrivedAt: 0, walkingToTarget: true, playing: false, winCardClosedAt: null, autoOpenUsed: false };
@@ -312,4 +312,19 @@ test('release walk: PLAY! up for a coin the memo still calls closed, or the map 
   const hook = read('src/components/guide/useMapGuide.ts');
   assert.match(hook, /model && !visibleTasks\.some\(task => task\.id === model\.id\) \? \[\.\.\.visibleTasks, model\] : visibleTasks/);
   assert.match(hook, /tasks: guideTasks,/);
+});
+
+test('hold R1: standing in a ride line (YOUR WAIT, Line story or the In line? offer), no Ride Journal opens by itself', () => {
+  const Q = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
+  const busy = g => Q.guideBusy({ atPark: true, state: 'here', playUp: false, inLine: false, ...g });
+  assert.equal(busy({}), false, 'standing about: free to ask');
+  assert.equal(busy({ state: 'walk' }), true);
+  assert.equal(busy({ playUp: true }), true);
+  assert.equal(busy({ state: 'in_line' }), true, 'the YOUR WAIT card');
+  assert.equal(busy({ state: 'line_story' }), true);
+  assert.equal(busy({ inLine: true, state: 'here' }), true, 'the In line? offer under another card');
+  assert.equal(busy({ atPark: false, inLine: true }), false, 'home: not a park line');
+  const base = { atPark: true, now: 100_000, arrivedAt: 0, playing: false, winCardClosedAt: null, autoOpenUsed: false };
+  assert.equal(Q.autoOpenAllowed('ride_question', { ...base, walkingToTarget: busy({ state: 'in_line' }) }), false, 'the Ride Journal waits');
+  assert.equal(Q.autoOpenAllowed('raid_result', { ...base, walkingToTarget: busy({ state: 'in_line' }) }), true, 'a raid result may still say hi');
 });

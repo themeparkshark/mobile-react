@@ -59,7 +59,7 @@ function makeHarness({ backgroundGranted = false, deferredPermissionCheck = fals
       if (name === './lineplay/rideQuestionLedger') return {
         ensureRideQuestionLedger: async () => {}, noteLinePlayWaitStarted() {}, noteLinePlayWaitEnded() {},
         rideHoldUntil: () => null, setRideHold() {}, visitInLinePlayWait: () => false, rideQuestionOwner: () => null,
-        lastCoinGameAt: () => null, linePlayWaitAt: () => null,
+        lastCoinGameAt: () => null, lastCoinGameIn: () => null, linePlayWaitAt: () => null,
       };
       if (name === './lineplay/rideLines') return {
         noteRideLineCatalog() {}, noteRideLive() {}, rideLineState: () => null,

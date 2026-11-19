@@ -1,5 +1,5 @@
 import client from '../../client';
-import { plainRideName } from '../../../helpers/plainRideName';
+import { plainRideName, withPlainAdventureNames } from '../../../helpers/plainRideName';
 import { shortParkName } from '../../../helpers/parkName';
 
 /** One ride name and one park name everywhere (fix w3 T122, T132): the Ride Coins picker reads like the shelf. */
@@ -8,7 +8,8 @@ function plainRide<T extends { ride_name: string; park_name?: string }>(ride: T)
 }
 function plainTripGoal(data: TripGoalData): TripGoalData {
   if (!data || typeof data !== 'object') return data;
-  return { ...data, rides: Array.isArray(data.rides) ? data.rides.map(plainRide) : data.rides, goal: data.goal ? plainRide(data.goal) : data.goal };
+  return { ...data, rides: Array.isArray(data.rides) ? data.rides.map(plainRide) : data.rides, goal: data.goal ? plainRide(data.goal) : data.goal,
+    ...(data.adventure_ticket ? { adventure_ticket: withPlainAdventureNames(data.adventure_ticket) } : {}) };
 }
 
 export interface AdventureRide {

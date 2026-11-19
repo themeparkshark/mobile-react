@@ -54,14 +54,44 @@ export function nextDwell(previous: QueueDwell | null, seen: QueueDwell | null, 
   readonly endedAt: number | null;
   /** Nearly still (no walk): a missed poll with no movement holds; walking off never does. */
   readonly still?: boolean;
+  /**
+   * Walking right now (walkingNow): the player walked off. It goes at once, even while the detector still names
+   * that line from the time gathered there (T074 hold: Matterhorn's offer walked along to Mad Tea Party, then
+   * dropped in front of a player standing in that line).
+   */
+  readonly walkedOff?: boolean;
 }): QueueDwell | null {
   if (seen && shows) return previous?.rideId === seen.rideId ? previous : seen;
   if (!previous || input.lastShownAt == null) return null;
+  if (input.walkedOff) return null;
   if (seen && seen.rideId !== previous.rideId) return null;
   // Out of that line's zone and walking: gone at once (never carried to the next ride).
   if (!seen && input.still === false) return null;
   if (input.endedRideId === previous.rideId && input.endedAt != null && input.now - input.endedAt < WAIT_ENDED_QUIET_MS) return null;
   return input.now - input.lastShownAt <= DWELL_HOLD_MS ? previous : null;
+}
+
+/**
+ * Walking pace, not a line shuffle: more than this many meters inside WALK_WINDOW_MS. In a park the GPS watcher
+ * sends a fix every 10 m (gpsWatchPolicy), so the window holds three or four fixes of a walk.
+ */
+export const WALK_METERS = 15;
+export const WALK_WINDOW_MS = 30_000;
+
+/**
+ * Pure: the player is walking right now. The last two fixes are both more than WALK_METERS from where the player
+ * was WALK_WINDOW_MS ago (a line moves a few meters at a time; one GPS jump and back is not a walk).
+ */
+export function walkingNow(samples: readonly Sample[], now: number): boolean {
+  if (samples.length < 3) return false;
+  // Where the player was WALK_WINDOW_MS ago: the last fix at or before then (iOS sends none while standing), else
+  // the oldest fix inside the window.
+  let ref = -1;
+  for (let i = 0; i < samples.length; i++) if (now - samples[i].at >= WALK_WINDOW_MS) ref = i;
+  if (ref < 0) ref = 0;
+  const after = samples.slice(ref + 1);
+  if (after.length < 2) return false;
+  return after.slice(-2).every(s => meters(samples[ref], s) > WALK_METERS);
 }
 
 let waitEnded: { rideId: number; at: number } | null = null;
@@ -85,21 +115,29 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
   useEffect(() => {
     if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
     const now = Date.now();
-    samples.current = [...samples.current.filter(s => now - s.at <= DWELL_STILL_MS), { at: now, latitude: lat, longitude: lng }];
+    // The last fix older than the still window stays too: where a player who stood still (iOS sends nothing) started
+    // walking from. nearlyStill reads only the window.
+    const older = samples.current.filter(s => now - s.at > DWELL_STILL_MS).slice(-1);
+    samples.current = [...older, ...samples.current.filter(s => now - s.at <= DWELL_STILL_MS), { at: now, latitude: lat, longitude: lng }];
+    // Walking off ends a shown offer at this fix, not at the next 10 s check.
+    if (walkingNow(samples.current, now)) setDwell(previous => (previous ? null : previous));
   }, [lat, lng]);
   useEffect(() => {
     if (!enabled || !parkId) { setDwell(null); return; }
     const check = () => {
       const now = read();
       const at = Date.now();
-      const shows = !!now && now.parkId === parkId && dwellShows({ rideId: now.rideId, rideName: now.rideName, parkId: now.parkId }, {
+      const shows = !!now && now.parkId === parkId && !walkingNow(samples.current, at) && dwellShows({ rideId: now.rideId, rideName: now.rideName, parkId: now.parkId }, {
         still: nearlyStill(samples.current, at), endedRideId: waitEnded?.rideId ?? null, endedAt: waitEnded?.at ?? null, now: at,
       });
-      if (now && shows) lastShownAt.current = at;
+      const walkedOff = walkingNow(samples.current, at);
+      // Dev builds only: lane walks read the in-line decisions (never in a store bundle).
+      if (__DEV__) console.log(`[dwell] seen=${now?.rideId ?? '-'} shows=${shows} walking=${walkedOff} still=${nearlyStill(samples.current, at)} fixes=${samples.current.length} t=${at}`);
+      if (now && shows && !walkedOff) lastShownAt.current = at;
       setDwell(previous => nextDwell(previous,
         now && now.parkId === parkId ? { rideId: now.rideId, rideName: now.rideName, parkId: now.parkId } : null, shows,
         { now: at, lastShownAt: lastShownAt.current, endedRideId: waitEnded?.rideId ?? null, endedAt: waitEnded?.at ?? null,
-          still: nearlyStill(samples.current, at) }));
+          still: nearlyStill(samples.current, at), walkedOff }));
     };
     check();
     const timer = setInterval(check, everyMs);

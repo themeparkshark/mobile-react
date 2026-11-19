@@ -119,6 +119,12 @@ export function sharkHit(ground: readonly [number, number], tap: readonly [numbe
  * its idle bob, a hop, the fin and worn pieces on top (a hat, a jetpack). Cards and chips keep out.
  */
 export const PLAYER_BODY = { x: -38, y: -96, w: 76, h: 102 } as const;
+/**
+ * The ride coin chip beside the shark standing on an island (UnderSharkChip, styles.underChip at 80, 34 in the
+ * shark's box, ground at SHARK_GROUND), with room for its pop. Chips keep out of it too (T006 hold: an island's
+ * "Leaves soon" sat under it once the standing lift stopped moving chips the solver had placed).
+ */
+export const UNDER_CHIP_BODY = { x: 80 - 50 - 3, y: 34 - 100 - 3, w: 46 + 6, h: 46 + 6 } as const;
 /** The weak-GPS ring: drawn at most this wide (points), scaled down to the fix's accuracy circle. */
 const WEAK_RING_MAX_PT = 200;
 const WEAK_RING_MIN_PT = 110;
@@ -630,8 +636,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // Declutter: the shark is an obstacle for chips (never for art you walk up to),
   // and the map's own button column is an inset no marker draws under.
   const declutterPlayer = useMemo<LayoutItem[]>(() => declutter && location ? [{ id: 'player', latitude: location.latitude,
-    longitude: location.longitude, priority: 0, tagObstacleOnly: true, body: PLAYER_BODY }] : [],
-  [!!declutter, location?.latitude, location?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
+    longitude: location.longitude, priority: 0, tagObstacleOnly: true, body: PLAYER_BODY },
+    ...(underShark ? [{ id: 'player-chip', latitude: location.latitude, longitude: location.longitude, priority: 0,
+      tagObstacleOnly: true, body: UNDER_CHIP_BODY }] : [])] : [],
+  [!!declutter, location?.latitude, location?.longitude, !!underShark]); // eslint-disable-line react-hooks/exhaustive-deps
   const hasExtraControls = !!extraControls;
   const extraCount = hasExtraControls ? Math.max(1, extraControlsCount ?? 1) : 0;
   // A short phone: the one column (compass, then each extra 62 pt lower) would reach the screen's

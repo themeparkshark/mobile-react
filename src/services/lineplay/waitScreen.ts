@@ -89,6 +89,19 @@ export function waitCoinProgress(input: WaitCoinInput): WaitCoinProgress {
   };
 }
 
+/**
+ * The recap's one line about this ride's coin, in the wait card's words: "1 of 4 Parts to Level 3", then
+ * "Parts ready · 20 more Energy" or "Ready to level up" once the Parts cover it (hold: "4 of 2 Parts to Level 2").
+ */
+export function recapCoinLine(coin: { readonly current_level: number; readonly max_level: number; readonly available_parts?: number | null;
+    readonly parts_to_next_level: number; readonly energy_to_next_level: number },
+  playerEnergy: number | null | undefined): string {
+  const p = waitCoinProgress({ level: coin.current_level, maxLevel: coin.max_level, partsBanked: coin.available_parts ?? 0,
+    partsToNext: coin.parts_to_next_level, energyToNext: coin.energy_to_next_level, playerEnergy: playerEnergy ?? null });
+  if (!p.partsReady && playerEnergy != null && p.energyShort > 0) return `${p.label} · ${p.energyShort} more Energy`;
+  return p.label;
+}
+
 export interface WaitEstimateInput {
   readonly postedMinutes: number | null;
   /** 'estimate' means no posted number existed at start. */
