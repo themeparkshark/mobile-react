@@ -33,14 +33,18 @@ export type CardProps = {
   readonly edge?: boolean;
   readonly art?: CardArt;
   readonly arrive?: boolean;
+  /** Room between the paper's edge and what is on it. */
+  readonly padding?: number;
+  /** Outer box: size and margins. */
   readonly style?: StyleProp<ViewStyle>;
   readonly children?: ReactNode;
 };
 
 const CREAM = { colors: [SHADE.creamTop, INK.cream] as const, locations: [0, 0.45] as const };
 const WHITE = { colors: [INK.white, INK.white] as const };
+const FILL = { flexGrow: 1 } as const;
 
-function CardImpl({ paper = 'cream', edge: asked, art, arrive = false, style, children }: CardProps) {
+function CardImpl({ paper = 'cream', edge: asked, art, arrive = false, padding, style, children }: CardProps) {
   const { edge, place } = useEdge('Card', asked);
   const onMap = place.level === 'map';
   const stick = useStickOn(arrive);
@@ -54,7 +58,7 @@ function CardImpl({ paper = 'cream', edge: asked, art, arrive = false, style, ch
         edge={edge ? EDGE.card : 0} drop={drop} dropColor={dropColor} dropStyle={stick.drop}
         insetTop={white ? undefined : { width: 2, color: INK.white }}
         insetBottom={{ width: 4, color: white ? SHADE.skyPale : INK.creamDeep }}
-        style={{ flex: 1 }}>
+        style={padding === undefined ? FILL : [FILL, { padding }]}>
         <PlaceProvider value={insideCard(place)}>
           {children}
           {art ? (

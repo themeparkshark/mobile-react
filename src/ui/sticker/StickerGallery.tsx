@@ -381,7 +381,7 @@ function SpotSection() {
         <Row gap={18}>{SPOT_STATES.map(s => <View key={s} style={{ alignItems: 'center' }}><Spot state={s} art={ART.coin} label={`coin, ${s}`} /><Note>{s}</Note></View>)}</Row>
       </World>
       <InPage>
-        <Card style={{ padding: 14 }}>
+        <Card padding={14}>
           <Row gap={18}>{SPOT_STATES.map(s => <Spot key={s} state={s} art={ART.coin} label={`coin, ${s}`} />)}</Row>
           <View style={{ height: 12 }} />
           <Row gap={6}>
@@ -487,7 +487,7 @@ function ProgressSection() {
         <ProgressBar value={0.3} second={0.25} label="3 of 10, 2 more today" />
       </World>
       <InPage>
-        <Card style={{ padding: 14 }}>
+        <Card padding={14}>
           <ProgressBar value={0.6} label="6 of 10 sights" />
         </Card>
       </InPage>
