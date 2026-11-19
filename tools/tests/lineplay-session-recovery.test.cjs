@@ -1188,7 +1188,9 @@ test('Parade Beat on the Games sheet: picking it adds one round once, never a se
   assert.equal(session.addPracticeGame('banana'), null, 'only while the wait is active');
   session.dispose();
   const screen = fs.readFileSync(path.join(root, 'src/screens/LinePlay/LinePlayScreen.tsx'), 'utf8');
-  assert.match(screen, /if \(index === ADD_PARADE_BEAT\) \{\n\s+const added = session\.addPracticeGame\(PARADE_BEAT_GAME\);/);
+  // Merged w4: the add tile and the sheet's extra Parade Beat tile both join the playlist as one round.
+  assert.match(screen, /if \(index === ADD_PARADE_BEAT \|\| extra\) \{\n\s+const gameId = \(extra\?\.gameId \?\? PARADE_BEAT_GAME\) as MiniGameId;\n\s+const added = session\.addPracticeGame\(gameId\);/);
+  assert.equal((screen.match(/const chooseArcade = /g) ?? []).length, 1, 'one chooser');
   // Both sheets (the Games sheet and the bonus picker) route through the one chooser.
   assert.equal((screen.match(/onChoose=\{chooseArcade\}/g) ?? []).length, 2);
   assert.match(screen, /arcadeBase\.some\(choice => choice\.gameId === PARADE_BEAT_GAME\) \? arcadeBase/);

@@ -76,7 +76,7 @@ import { BananaBasketGame } from '../../games/banana-basket';
 import { CurrentQuestQueueGame } from '../../games/current-quest';
 import SharkShowdown from '../../games/showdown/SharkShowdown';
 import { showdownReplaySeed } from '../../games/showdown/logic';
-import type { RideContext, ActivityItem } from '../../services/lineplay/LinePlaySession';
+import type { RideContext, ActivityItem, MiniGameId } from '../../services/lineplay/LinePlaySession';
 import { starsFromMultiplier, type QueueDifficulty } from '../../services/lineplay/replay';
 import {
   PredictionCard,
@@ -1137,20 +1137,6 @@ export default function LinePlayScreen() {
   // T031: Parade Beat is in the Games sheet every wait, though it is not a swipe page.
   const arcadeBase = queueArcadeWithExtras(queueArcadeDestinations(activityPages, completedActivityIds).map(arcadeChoice),
     completedActivityIds, (gameId, index, completed) => arcadeChoice({ id: `arcade-${gameId}`, gameId, index, completed }));
-  // A tile tap: a page game jumps to its page and plays there; an extra game plays straight from the sheet.
-  const chooseArcade = (index: number) => {
-    const extra = arcadeExtraItem(index, ((ride?.rideId ?? 0) * 7919 + 17) >>> 0);
-    if (extra) {
-      queuedArcadeGame.current = extra as Extract<ActivityItem, { kind: 'minigame' }>;
-      setArcadeOpen(false);
-      return;
-    }
-    const page = activityPages[index];
-    if (page?.kind !== 'minigame') return;
-    queuedArcadeGame.current = page;
-    setArcadeOpen(false);
-    jumpToPage(index);
-  };
   // NEW only on games this account has never played, two at most (all six NEW meant nothing).
   // Parade Beat is on the Games sheet in every wait (the playlist does not deal it): picking it adds its round.
   const arcadeWithParade = arcadeBase.some(choice => choice.gameId === PARADE_BEAT_GAME) ? arcadeBase
@@ -1498,12 +1484,17 @@ export default function LinePlayScreen() {
   // board's PLAY strip), so while a page is on screen the rail's Next (and More games) is a quiet white button.
   const railQuiet = visibleItem != null;
   // Both game sheets (the plain Games sheet and the bonus picker) choose through here, Parade Beat included.
+  // A page tile jumps to its page and plays there. Parade Beat (its add tile, or the sheet's extra tile) joins the
+  // playlist as one round and plays; if the wait is no longer active it still plays straight from the sheet.
   const chooseArcade = (index: number) => {
-    if (index === ADD_PARADE_BEAT) {
-      const added = session.addPracticeGame(PARADE_BEAT_GAME);
+    const extra = arcadeExtraItem(index, ((ride?.rideId ?? 0) * 7919 + 17) >>> 0);
+    if (index === ADD_PARADE_BEAT || extra) {
+      const gameId = (extra?.gameId ?? PARADE_BEAT_GAME) as MiniGameId;
+      const added = session.addPracticeGame(gameId);
       if (__DEV__) console.log(`[arcade] parade added=${added?.id ?? 'none'} state=${session.getState()}`);
-      if (!added) return;
-      queuedArcadeGame.current = added;
+      const play = added ?? (extra as Extract<ActivityItem, { kind: 'minigame' }> | null);
+      if (!play) return;
+      queuedArcadeGame.current = play;
       setArcadeOpen(false);
       return;
     }
