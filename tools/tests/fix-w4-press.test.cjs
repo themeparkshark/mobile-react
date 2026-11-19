@@ -114,6 +114,28 @@ test('a tap on a leaving top-level sheet is kept for the screen; a listener that
   assert.equal(tapStub.dropped, 1, 'the sheet stayed: its kept tap is dropped');
 });
 
+test('N01: two taps a busy JS thread delivers in one batch: the later one, on a sheet the first one closes, reaches the screen', () => {
+  const tapStub = { kept: [] };
+  const L = loadTs('src/ui/modalLayers.ts', { react: reactStub, './tapThrough': { tapThrough: {
+    keep: (x, y) => { const k = { x, y, claimed: false }; tapStub.kept.push(k); return k; }, drop: () => undefined } } });
+  L.modalLayers.reset();
+  const id = L.modalLayers.add();
+  const now = Date.now();
+  L.leavingSheetTap.note(201, 617, now, false, true);       // BACK TO MAP
+  L.leavingSheetTap.note(359, 284, now, false, true);       // Rewards, same batch (phase log: same millisecond)
+  assert.equal(tapStub.kept.length, 0, 'nothing is kept while the sheet is up');
+  L.modalLayers.markLeaving(id);
+  assert.deepEqual(tapStub.kept.map(k => [k.x, k.y]), [[359, 284]], 'once BACK TO MAP closes it, the Rewards tap is kept');
+  L.modalLayers.reset();
+  const id2 = L.modalLayers.add();
+  L.leavingSheetTap.note(100, 100, now + 1000, false, true);
+  L.leavingSheetTap.note(120, 120, now + 1400, false, true);  // a human second tap, not a batch
+  L.modalLayers.markLeaving(id2);
+  assert.equal(tapStub.kept.length, 1, 'taps far apart are two presses on the sheet, never replayed');
+  const T2 = loadTs('src/ui/tapThrough.ts');
+  assert.ok(T2.TAP_THROUGH_MAX_AGE_MS >= 5000, 'a slow leave (3.6 s under load) still delivers its kept tap');
+});
+
 test('the door hides a sheet in the same commit it stops being wanted, and replays the kept tap once it is gone', () => {
   const door = src('src/ui/DoorModal.tsx');
   assert.match(door, /visible=\{doorNativeVisible\(phase\) && !blink && !\(phase === 'up' && !wants\)\}/);

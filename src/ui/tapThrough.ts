@@ -27,7 +27,8 @@ export interface ChainNode {
 const HOST_COMPONENT = 5;
 const MAX_DEPTH = 60;
 /** A tap older than this when its sheet finally goes is not replayed (the kid has moved on). */
-export const TAP_THROUGH_MAX_AGE_MS = 2500;
+// Fix pass w4: under load a Rewards sheet took 3.6 s to leave and its kept tap (4.7 s old) was dropped as stale.
+export const TAP_THROUGH_MAX_AGE_MS = 5000;
 
 /** Props that mark a map or a map pin: a tap there needs a real map coordinate, so it is never replayed. */
 const MAP_PROPS = ['coordinate', 'region', 'initialRegion', 'onRegionChangeComplete'];

@@ -51,6 +51,7 @@ export const modalLayers = {
     if (leaving.length === 0) leavingSince = Date.now();
     leaving = [...leaving, id];
     pressTrace('layer.leaving', () => `id=${id} layers=${layers.join(',')}`);
+    takeBatchedTap();
     emit();
   },
   /** The sheet wants to show again before it was gone: it is no longer leaving. */
@@ -87,6 +88,24 @@ export const modalLayers = {
  */
 export const LEAVING_TAP_MIN_MS = 0;
 let leavingSince = 0;
+/**
+ * Two taps that reach JS within this long of each other on a sheet that is still up were held back by a busy JS
+ * thread and arrive in one batch (fix pass w4, N01, phase log on Rewards: BACK TO MAP and the Rewards press noted in
+ * the same millisecond, 2 of 30). The first one closes the sheet; the later one was meant for the screen under it.
+ */
+export const BATCHED_TAP_MS = 60;
+/** The later tap of such a batch counts as a tap on the leaving sheet if the sheet starts leaving within this long. */
+export const BATCHED_LEAVE_MS = 1500;
+let lastUpTap: { x: number; y: number; at: number } | null = null;
+let batchedTap: { x: number; y: number; at: number } | null = null;
+function takeBatchedTap() {
+  const tap = batchedTap;
+  batchedTap = null;
+  if (!tap || Date.now() - tap.at > BATCHED_LEAVE_MS) return;
+  pressTrace('leavingTap.batched', () => `x=${Math.round(tap.x)} y=${Math.round(tap.y)}`);
+  const kept = tapThrough.keep(tap.x, tap.y);
+  leavingTapListeners.forEach(fn => fn(tap.x, tap.y, () => { kept.claimed = true; }));
+}
 /** A listener that takes the tap as its own calls `claim`, so the screen under the sheet is not pressed too. */
 type LeavingTapListener = (x: number, y: number, claim: () => void) => void;
 const leavingTapListeners = new Set<LeavingTapListener>();
@@ -103,7 +122,13 @@ export const leavingSheetTap = {
    */
   note(x: number, y: number, now: number = Date.now(), going: boolean = false, topLevel: boolean = false): void {
     pressTrace('leavingTap', () => `x=${Math.round(x)} y=${Math.round(y)} going=${going} leaving=${leaving.length} top=${topLevel}`);
-    if (!going && (leaving.length === 0 || now - leavingSince < LEAVING_TAP_MIN_MS)) return;
+    if (!going && (leaving.length === 0 || now - leavingSince < LEAVING_TAP_MIN_MS)) {
+      if (topLevel) {
+        if (lastUpTap && now - lastUpTap.at <= BATCHED_TAP_MS && (lastUpTap.x !== x || lastUpTap.y !== y)) batchedTap = { x, y, at: now };
+        lastUpTap = { x, y, at: now };
+      }
+      return;
+    }
     const kept = topLevel ? tapThrough.keep(x, y) : null;
     leavingTapListeners.forEach(fn => fn(x, y, () => { if (kept) kept.claimed = true; }));
   },
