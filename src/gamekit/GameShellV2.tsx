@@ -67,6 +67,7 @@ import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovem
 import { RideChallengeContext } from './RideChallengeContext';
 import { noteRideTry } from './results/rideTry';
 import { ShellFrameContext } from './ShellFrameContext';
+import { StageHoldContext } from './StageHoldContext';
 import { GrownUpGateSlot } from '../components/GrownUpGate';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
@@ -262,6 +263,12 @@ interface GameShellV2Props {
    * never reports ready still counts after STAGE_READY_MAX_MS.
    */
   stageReady?: boolean;
+  /**
+   * The stage's art is drawn, before the stage is ready to count (Memory: the felt and awning are up while
+   * the cards are still being dealt). The field shows from here, so the deal is seen instead of a blank
+   * page (fix round w4, N04). Default: stageReady.
+   */
+  stageDrawn?: boolean;
   /** Where the 3-2-1-GO lands, as a fraction of the screen height (default 0.5): put it in the stage's clear space. */
   countdownY?: number;
   /** The shell plays the last-5 tick, haptic and TIME! whistle (default). False when the game owns its own ticks. */
@@ -427,6 +434,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       finalTimeStamp = true,
       finalCount = true,
       stageReady = true,
+      stageDrawn,
       finalSecondsFeedback = true,
       countdownY = 0.5,
       children,
@@ -437,6 +445,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const linePlayMovement = useContext(LinePlayMovementContext);
     const rideChallenge = useContext(RideChallengeContext);
     const shellFrame = useContext(ShellFrameContext);
+    // Off stage (under the ride's ticket punch or a first play's how-to card, T036): mounted and drawn, never counting.
+    const stageHeld = useContext(StageHoldContext);
+    const stageHeldRef = useRef(stageHeld);
+    stageHeldRef.current = stageHeld;
     const reducedMotion = useReducedGameMotion();
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
@@ -793,16 +805,18 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       return () => clearTimeout(t);
     }, [stageReady, visible]);
     const stageOn = stageReady || readyCap;
-    const fieldIn = useSharedValue(stageReady ? 1 : 0);
+    // The field shows once the art is drawn (N04): a stage that is drawn but still dealing is seen, never a blank page.
+    const fieldOn = (stageDrawn ?? stageReady) || stageOn;
+    const fieldIn = useSharedValue(fieldOn ? 1 : 0);
     useEffect(() => {
-      if (stageOn) fieldIn.value = withTiming(1, { duration: DURATION.enter, easing: EASE.out });
+      if (fieldOn) fieldIn.value = withTiming(1, { duration: DURATION.enter, easing: EASE.out });
       else fieldIn.value = 0;
-    }, [stageOn, fieldIn]);
+    }, [fieldOn, fieldIn]);
     // A repeat start of the same game (play again, a second burst of play) counts 2-1-GO; now and
     // then GO throws gold confetti (never on a first play).
     const [rareGo, setRareGo] = useState(false);
     useEffect(() => {
-      if (phase !== 'countdown' || !visible || !stageOn) return;
+      if (phase !== 'countdown' || !visible || !stageOn || stageHeld) return;
       clearCountdown();
       if (countdownStyle === 'none') {
         beginPlayRef.current();
@@ -834,7 +848,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         if (!startedRef.current) stopCountStage();
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [phase, visible, clearCountdown, countdownStyle, stageOn]);
+    }, [phase, visible, clearCountdown, countdownStyle, stageOn, stageHeld]);
 
     // The last 5 seconds: one tick, one soft buzz and one stamp per second, TIME! at 0 (core/gameMoments).
     const lastFinal = useRef<number | null>(null);
@@ -1142,6 +1156,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     useEffect(() => {
       if (!visible) return;
       const subscription = AppState.addEventListener('change', state => {
+        // Off stage nothing has started, so there is nothing to hold (the count simply waits for the hand-over).
+        if (stageHeldRef.current) return;
         if (state === 'background' || state === 'inactive') doHoldRef.current('background', 'Paused while away');
         else if (state === 'active' && holdRef.current === 'background') {
           // Back from the pocket while ride detection thinks the guest boarded:

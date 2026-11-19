@@ -167,7 +167,9 @@ export const Tile = React.memo(function Tile({
   }, [share, shareFill, reducedMotion]);
 
   const touch = (down: boolean) => onTouch?.(index, down);
-  const live = state === 'up' && !disabled;
+  // T051: a striped tile is touchable too. The board's clock gate decides what the tap does (a wiggle before
+  // the tiles open, the answer once they are), so a tap in the moment before the faces draw is never lost.
+  const live = (state === 'up' || state === 'down') && !disabled;
   const slop = Math.max(18, Math.min(width, height) * 0.45);
 
   const tap = Gesture.Tap()

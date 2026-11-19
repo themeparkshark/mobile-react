@@ -434,6 +434,7 @@ function shell(extra = {}) {
     './LinePlayMovementContext': { LinePlayMovementContext: { value: null }, shouldPauseForMovement: () => false },
     './RideChallengeContext': { RideChallengeContext: { value: false } },
     './ShellFrameContext': { ShellFrameContext: { value: null } },
+    './StageHoldContext': { StageHoldContext: { value: false } },
     './Haptics': { Haptic: new Proxy({}, { get: () => () => {} }) }, './SFX': { playSfx() {} },
     '../hooks/useReducedGameMotion': { default: () => false },
     '../ui/GameIcon': { default: 'GameIcon' },

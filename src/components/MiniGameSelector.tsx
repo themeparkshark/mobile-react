@@ -25,6 +25,8 @@ import { getLinePlayChapter } from '../services/lineplay/chapters';
 import { useHelp } from './help/HelpProvider';
 import GameIntroCard from './help/GameIntroCard';
 import { gameIntroTip } from '../services/help/helpTopics';
+import { StageHoldContext } from '../gamekit/StageHoldContext';
+import { stageHoldFor } from '../gamekit/stageHold';
 
 const USE_QUEUE_KIT_GAMES = true;
 
@@ -102,6 +104,11 @@ export default function MiniGameSelector({
     if (!hasSeenTip(gameIntroTip(selectedGame))) setIntroGame(selectedGame);
   }
   const showIntro = visible && !!selectedGame && introGame === selectedGame;
+  // T036, N04: under the punch (prewarm) and under a first play's how-to card the game is mounted, drawn and
+  // held off stage, so its board is on screen the moment either hands over (never a blank blue page).
+  const stage = stageHoldFor({ visible, prewarm, preferredGame, selectedGame, showIntro });
+  const onStage = stage.mounted;
+  const stageHeld = stage.held;
 
   // The quit warning for a paid try (blueprint 5.13): the branded dialog, drawn inside the challenge
   // card's own native sheet (a nested layer), never the system Alert and never a second sibling modal.
@@ -198,7 +205,7 @@ export default function MiniGameSelector({
 
   // One deterministic seed per game mount so runs are replayable in telemetry.
   const seed = useMemo(() => Number.isInteger(attemptSeed) ? attemptSeed! :
-    Math.floor(Math.random() * 0x7fffffff), [visible, selectedGame, attemptSeed]);
+    Math.floor(Math.random() * 0x7fffffff), [onStage, selectedGame, attemptSeed]);
   // Trivia Duel builds its own deck from the park/ride chapter. The paid
   // ride challenge ("Beat the Buzzer", 3 questions, 2 right to win) and the
   // local tester use bundled questions; only the attempt result grants coins.
@@ -214,22 +221,28 @@ export default function MiniGameSelector({
     return <BananaLab command={process.env.EXPO_PUBLIC_BANANA_LAB} onClose={() => setBananaLabClosed(true)} />;
   }
 
-  if (!visible || !selectedGame) return null;
+  if (!onStage || !selectedGame) return null;
 
-  if (showIntro) {
-    // The paid trivia game is Beat the Buzzer everywhere: on the punch, this card and the game's own header.
-    const paidTrivia = selectedGame === 'trivia' && rewardMode === 'task-attempt';
-    return <GameIntroCard kind={selectedGame} onStart={() => setIntroGame(null)}
-      name={paidTrivia ? 'Beat the Buzzer' : undefined} win={paidTrivia ? '2 right answers win the coin.' : undefined} />;
-  }
+  // The paid trivia game is Beat the Buzzer everywhere: on the punch, this card and the game's own header.
+  const paidTrivia = selectedGame === 'trivia' && rewardMode === 'task-attempt';
+  const intro = showIntro ? (
+    <GameIntroCard kind={selectedGame} onStart={() => setIntroGame(null)}
+      name={paidTrivia ? 'Beat the Buzzer' : undefined} win={paidTrivia ? '2 right answers win the coin.' : undefined} />
+  ) : null;
+  // A game that does not honor the hold keeps the old order: its how-to card first, then the game mounts.
+  if (stage.introOnly) return intro;
+  // One tree for held and live, so the hand-over never remounts the game (its board stays drawn).
+  const held = (game: React.ReactNode) => (
+    <StageHoldContext.Provider value={stageHeld}>{game}{intro}</StageHoldContext.Provider>
+  );
 
   // A Ticket was already spent when the server created this attempt.
   // The attempt resolve call is the only path that awards its coin.
-  if (selectedGame === 'trivia' && rewardMode === 'task-attempt') {
-    return (
+  if (paidTrivia) {
+    return held(
       <>
         <TriviaDuel
-          visible={visible}
+          visible={onStage}
           mode="ride"
           seed={seed}
           title="Beat the Buzzer"
@@ -253,10 +266,10 @@ export default function MiniGameSelector({
 
   if (USE_QUEUE_KIT_GAMES && rewardMode === 'task-attempt') {
     const game = renderQueueKitGame();
-    return game ? <>{game}{quitDialog}</> : null;
+    return game ? held(<>{game}{quitDialog}</>) : null;
   }
 
-  if (USE_QUEUE_KIT_GAMES) return renderQueueKitGame();
+  if (USE_QUEUE_KIT_GAMES) return held(renderQueueKitGame());
 
   function renderQueueKitGame() {
     switch (selectedGame) {
@@ -266,7 +279,7 @@ export default function MiniGameSelector({
           return <WhackRushLab visible={visible} onClose={onClose} autoplay={process.env.EXPO_PUBLIC_GAME_AUTOPLAY === '1'} />;
         }
         return (
-          <WhackAShark visible={visible} seed={seed} taskName={taskName}
+          <WhackAShark visible={onStage} seed={seed} taskName={taskName}
             format={WHACK_DEV.format ?? (rewardMode === 'task-attempt' ? 'ride' : 'queue')}
             unlockLevel={WHACK_DEV.unlock} theme={WHACK_DEV.theme}
             kid={kid && rewardMode === 'task-attempt'}
@@ -281,14 +294,14 @@ export default function MiniGameSelector({
         );
       case 'memory':
         return (
-          <MemoryGame visible={visible} seed={seed} mode={rewardMode === 'task-attempt' ? 'ride' : undefined} difficulty={1} menu={rewardMode !== 'task-attempt'} taskName={taskName} onClose={onClose} onQuit={handleQuit}
+          <MemoryGame visible={onStage} seed={seed} mode={rewardMode === 'task-attempt' ? 'ride' : undefined} difficulty={1} menu={rewardMode !== 'task-attempt'} taskName={taskName} onClose={onClose} onQuit={handleQuit}
             kid={kid && rewardMode === 'task-attempt'}
             onComplete={(mult, meta) => handleComplete(mult, meta)} />
         );
       case 'trivia':
         return (
           <TriviaDuel
-            visible={visible}
+            visible={onStage}
             mode={isPractice ? 'practice' : 'queue'}
             seed={seed}
             title={homeArcade ? 'Park Trivia' : 'Trivia Duel'}
