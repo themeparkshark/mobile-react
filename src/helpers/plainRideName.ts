@@ -115,3 +115,53 @@ export function withPlainTaskNames<T>(data: T): T {
   }
   return out as T;
 }
+
+type Named = { readonly name?: unknown };
+type RideNamed = { readonly ride_name?: unknown };
+const plainNamed = <T>(row: T): T => {
+  const value = row && typeof row === 'object' ? (row as Named).name : undefined;
+  if (typeof value !== 'string') return row;
+  const plain = plainRideName(value);
+  return plain === value ? row : { ...row, name: plain };
+};
+const plainRideNamed = <T>(row: T): T => {
+  const value = row && typeof row === 'object' ? (row as RideNamed).ride_name : undefined;
+  if (typeof value !== 'string') return row;
+  const plain = plainRideName(value);
+  return plain === value ? row : { ...row, ride_name: plain };
+};
+
+/**
+ * The coin PLAY! is up for (/me/current-redeemable): its name labels the pill under PLAY!, the coin card and
+ * the win card, so it reads like the guide card above it (hold R2: "Matterhorn Bobsleds" on the card and
+ * "Matterhorn" under PLAY!). Only ride and secret coins carry a ride name.
+ */
+export function withPlainRedeemableName<T>(data: T): T {
+  if (!data || typeof data !== 'object') return data;
+  const r = data as { type?: unknown; model?: unknown };
+  if ((r.type !== 'task' && r.type !== 'secret_task') || !r.model) return data;
+  const model = plainNamed(r.model);
+  return model === r.model ? data : { ...data, model } as T;
+}
+
+/** Today's Adventure (its ride, the choices and both stamps): the ticket sheet names the ride like the card does. */
+export function withPlainAdventureNames<T>(ticket: T): T {
+  if (!ticket || typeof ticket !== 'object') return ticket;
+  const t = ticket as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...t };
+  for (const key of ['ride', 'discover', 'play']) if (t[key]) out[key] = plainRideNamed(t[key]);
+  if (Array.isArray(t.ride_choices)) out.ride_choices = t.ride_choices.map(plainRideNamed);
+  return out as T;
+}
+
+/** A coin game's result: the win card's ride name and its Ride Control line. */
+export function withPlainAttemptNames<T>(response: T): T {
+  if (!response || typeof response !== 'object') return response;
+  const attempt = (response as { attempt?: { rewards?: Record<string, unknown> | null } }).attempt;
+  const rewards = attempt?.rewards;
+  if (!attempt || !rewards || typeof rewards !== 'object') return response;
+  const next: Record<string, unknown> = { ...rewards };
+  if (typeof rewards.task_name === 'string') next.task_name = plainRideName(rewards.task_name);
+  if (rewards.ride_control && typeof rewards.ride_control === 'object') next.ride_control = plainRideNamed(rewards.ride_control);
+  return { ...response, attempt: { ...attempt, rewards: next } } as T;
+}
