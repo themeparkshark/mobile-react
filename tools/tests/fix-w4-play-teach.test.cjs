@@ -158,3 +158,18 @@ test('T060: the Whack ride round draws the ride coin\'s own art inside its HUD r
   assert.match(read('src/components/MiniGameSelector.tsx'), /<WhackAShark visible=\{visible\} seed=\{seed\} taskName=\{taskName\} coinImage=\{coinImageUrl \?\? null\}/);
   assert.match(read('src/components/RedeemRedeemableModal.tsx'), /coinImageUrl=\{coinUri \?\? undefined\}/, 'the coin card hands its coin_url to the game');
 });
+
+test('T056 and N07: Beat the Buzzer counts nothing while you read and shows Gill only after you answer', () => {
+  const td = read('src/games/trivia-duel/TriviaDuel.tsx');
+  assert.match(td, /const drumOn = !isRide && phase === 'question'/, 'no counting points plaque on the ride game');
+  assert.match(td, /if \(!isRide\) fx\.current\?\.flyUp\(`\+\$\{Math\.round\(drum\.value\)\}`/, 'no points fly before the answer is known');
+  const fin = td.slice(td.indexOf('case EV_FIN: {'), td.indexOf('case EV_LOCK: {'));
+  assert.match(fin, /if \(isRide\) \{[\s\S]*oppBuzzBeat\(\);\s*return;\s*\}/, 'Gill\'s buzz is a beat; his time and points wait');
+  assert.ok(fin.indexOf('oppBuzzBeat()') < fin.lastIndexOf('resolveOppShown()'));
+  const beat = td.slice(td.indexOf('const oppBuzzBeat'), td.indexOf('const maybeReveal'));
+  assert.doesNotMatch(beat, /setLocks|resolved\.current\.opp = true/, 'the buzz beat shows no chip and does not resolve him');
+  // After you lock or time runs out, he resolves 350 ms later (the existing paths).
+  const lock = td.slice(td.indexOf('case EV_LOCK: {'), td.indexOf('case EV_FIN_BUZZ: {'));
+  assert.match(lock, /if \(!resolved\.current\.opp\) \{[\s\S]*later\(FIN_RESOLVE_AFTER_MS, \(\) => \{ resolveOppShown\(\); maybeReveal\(\); \}\);/);
+  assert.match(lock, /if \(!resolved\.current\.opp\) later\(FIN_RESOLVE_AFTER_MS, \(\) => \{ resolveOppShown\(\); maybeReveal\(\); \}\);/);
+});

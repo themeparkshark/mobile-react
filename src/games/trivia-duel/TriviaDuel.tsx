@@ -994,6 +994,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
     if (!ghost) setFin('point');
   }, [lockLabel, ghost, setFin]);
 
+  /** T056: Gill buzzes in (a visible, audible beat), with no time chip and no score until you have answered. */
+  const oppBuzzBeat = useCallback(() => {
+    sfx(CUE.oppLock, { pan: 0.6 });
+    Haptic.tapLight();
+    if (!ghost) setFin('point');
+  }, [ghost, setFin]);
+
   const maybeReveal = useCallback(() => {
     if (!resolved.current.me || !resolved.current.opp || resolved.current.revealing) return;
     resolved.current.revealing = true;
@@ -1011,7 +1018,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
     muffle(false);
     // The drum value peels off and flies to your rail drum.
     const c = { x: W / 2, y: BOARD_TOP + ROPE_H };
-    fx.current?.flyUp(`+${Math.round(drum.value)}`, c.x, c.y, { size: 'lg', color: C.gold, to: railScore });
+    // N07: Beat the Buzzer shows no points until the answer is known (the reveal stamps the real +points once).
+    if (!isRide) fx.current?.flyUp(`+${Math.round(drum.value)}`, c.x, c.y, { size: 'lg', color: C.gold, to: railScore });
     if (t < 1500 && !ghost && !isRide) say('youFast');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [later, meAct, ghost, isRide, say, W, BOARD_TOP]);
@@ -1079,6 +1087,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
         if (r.spec.type === 'buzz') return;
         if (resolved.current.me) {
           later(FIN_RESOLVE_AFTER_MS, () => { resolveOppShown(); maybeReveal(); });
+          return;
+        }
+        if (isRide) {
+          // T056 (Beat the Buzzer): Gill buzzing in is its own beat (his pose and the lock sound), but his time and
+          // points wait until you answer or time runs out (EV_LOCK / EV_TIMEOUT resolve him 350 ms later), so
+          // nothing about him moves while you are still reading.
+          oppBuzzBeat();
           return;
         }
         resolveOppShown();
@@ -1823,7 +1838,9 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const showTiles = !!round && (phase === 'question' || phase === 'reveal' || phase === 'between');
   const mult = isRide ? 1 : streakMult(streakView.streak + 1);
   const multChip = !isRide && mult > 1 ? `x${mult}` : null;
-  const drumOn = phase === 'question' && round != null && (tiles[0] !== 'down' || q?.format === 'closest' || bellOn);
+  // N07: Beat the Buzzer (ride) draws no counting points plaque: nothing counts while the question is read, and the
+  // only number is the real +points the reveal stamps after the answer (two numbers never share the plaque).
+  const drumOn = !isRide && phase === 'question' && round != null && (tiles[0] !== 'down' || q?.format === 'closest' || bellOn);
   const finalRound = round?.spec.type === 'final';
   const zoneTiles = q?.choices.length ? q.choices : ['', '', '', ''];
   const finStripes = FIN_RANKS[rankRef.current].stripes;
