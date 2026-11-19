@@ -2,7 +2,7 @@
  * Native guards that must be in place before anything renders (index.js imports this second, right after the studio
  * mute). See ui/nativeModalDoor.ts and dev/setNativePropsTrace.ts for why.
  */
-import { Platform } from 'react-native';
+import { AppRegistry, Platform } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 // 1. Every <Modal> on iOS goes through the one door. React Native reads this seam the first time Modal is required.
@@ -10,7 +10,10 @@ if (Platform.OS === 'ios') {
   /* eslint-disable @typescript-eslint/no-require-imports */
   const injection = require('react-native/Libraries/Modal/ModalInjection').default;
   injection.unstable_Modal = require('./DoorModal').default;
+  // In-tree sheets (fix pass w5): the screen behind a sheet is hidden from VoiceOver, and focus returns to its opener.
+  const SheetScreenRoot = require('./SheetScreenRoot').default;
   /* eslint-enable @typescript-eslint/no-require-imports */
+  AppRegistry.setWrapperComponentProvider(() => SheetScreenRoot);
 }
 
 // 2. Reanimated hands any animated prop it does not know to JS, as a setNativeProps per frame: a data race with its

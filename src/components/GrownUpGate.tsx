@@ -8,6 +8,7 @@ import { BRAND, FONT, GameIcon } from '../ui';
 import { useSheetOverlay } from '../ui/sheetOverlay';
 import { useModalLayer } from '../ui/modalLayers';
 import { pressTrace } from '../ui/pressTrace';
+import { sheetsInTree } from '../ui/sheetHostMode';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 
@@ -416,7 +417,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   // w4, N02): UIKit's own fade presentation took 1.3 to 5.3 s to report under load and sometimes never did, so the
   // gate was closed before it drew. A plain present reports at once; the look is the same soft fade.
   const reduced = useUiReducedMotion();
-  const fade = useSharedValue(0);
+  const inTreeRef = useRef(Platform.OS === 'ios' && sheetsInTree());
+  const fade = useSharedValue(inTreeRef.current ? 1 : 0);
   const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
   const closeAfterFade = useCallback((ok: boolean) => { setClosing(current => (current === null ? ok : current)); }, []);
   const close = useCallback((ok: boolean) => {
@@ -424,8 +426,11 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     answerRef.current = ok;
     // Only iOS refuses to present while a modal is leaving (and only iOS reports onDismiss).
     if (Platform.OS !== 'ios') { finish(); return; }
-    // In a sheet's own view the layer fades itself out and lets taps through at once.
+    // In a sheet's own view the layer fades itself out, holding taps until it is gone.
     if (inSheetRef.current) { closeAfterFade(ok); return; }
+    // An in-tree sheet (fix pass w5, W4-SMOKE-2): the sheet fades out on the UI thread and holds every tap until it is
+    // gone, then hands the first one to what is under it. A fade of the gate's own let taps die on its scrim.
+    if (inTreeRef.current) { closeAfterFade(ok); return; }
     fade.value = withTiming(0, { duration: reduced ? 0 : GATE_FADE_OUT_MS }, done => { if (done) runOnJS(closeAfterFade)(ok); });
     // A fade whose end never comes back (a busy phone) still closes.
     setTimeout(() => closeAfterFade(ok), GATE_FADE_OUT_MS + 250);
@@ -468,7 +473,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   useEffect(() => {
     // In a sheet's own view the layer fades itself in once it is mounted (ui/SheetOverlayLayer.tsx): a fade started
     // here could end before that view existed, and the gate stayed at opacity 0, unseen (fix pass w4, N02).
-    if (!presenting || inSheetRef.current) return;
+    if (!presenting || inSheetRef.current || inTreeRef.current) return;
     fadeIn();
   }, [presenting, req]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (req) pressTrace('gate.front', () => `nested=${nested} front=${front} presenting=${presenting}`); }, [req, front, presenting]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -625,7 +630,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   }
   return (
     <>
-    <Modal visible={closing === null && !devRefuse()} transparent animationType="none" onRequestClose={() => close(false)} statusBarTranslucent
+    <Modal visible={closing === null && !devRefuse()} transparent animationType={inTreeRef.current && !reduced ? 'fade' : 'none'} onRequestClose={() => close(false)} statusBarTranslucent
       testID={nested ? 'gate-slot' : 'gate'}
       onShow={() => { shownRef.current = true; }} onDismiss={finish}>
       {scrim}

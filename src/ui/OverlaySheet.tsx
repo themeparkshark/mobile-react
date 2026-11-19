@@ -1,0 +1,243 @@
+/**
+ * Every iOS sheet, drawn in-tree over the whole window (fix pass w5, lane host; why in ui/sheetHost.ts).
+ *
+ * Same props and same children as React Native's Modal (ui/DoorModal.tsx hands them over), with no UIKit
+ * presentation or dismissal at all:
+ * - The sheet is a child of whoever renders it, so it keeps every React context, and it is drawn inside
+ *   react-native-screens' FullWindowOverlay: a view laid over the whole window, above the screen and above every
+ *   older sheet (the newest is the window's front subview, so a sheet over a sheet is on top).
+ * - Enter and leave run on the UI thread from one shared value: 'fade' fades, 'slide' rises on a settle spring with no
+ *   overshoot and leaves on a short ease in, 'none' (most hosts: they animate their own card) is placed and removed at
+ *   once. Reduce Motion and Battery Saver turn a slide into a quick fade.
+ * - Touches: while it is up the sheet takes every touch over the window, like a native sheet. While it leaves it still
+ *   holds them (what is drawn is what is tapped) but its buttons no longer answer; the first tap it held goes to what is
+ *   under that point the moment it is gone (ui/tapThrough.ts), so a quick next press is never lost and never fires
+ *   twice. A leave whose end never comes back still ends (sheetLeaveFallbackMs). The in-tree host itself takes no touch.
+ * - onShow after its first frame, onDismiss once it is out of the tree, onRequestClose on VoiceOver's escape.
+ * - Assistive tech: the overlay is modal (react-native-screens sets accessibilityViewIsModal on its container), the
+ *   screen behind and every older sheet are hidden (ui/SheetScreenRoot.tsx), focus moves into the sheet when it
+ *   appears, and returns to the element that opened it when the last sheet closes.
+ * - Safe areas: the overlay is the whole window, so the notch and home bar insets are the screen's own.
+ * - React Native measures the sheet's children in window points like the touch (sheetHost.overlayNodeStyle), so
+ *   Pressability never cancels a press for a finger that moved a little, wherever the sheet's owner sits.
+ */
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { I18nManager, StyleSheet, View, useWindowDimensions } from 'react-native';
+import Animated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import type { DoorModalProps } from './DoorModal';
+import { leavingSheetTap } from './modalLayers';
+import { SPRING } from './motion';
+import { pressTrace } from './pressTrace';
+import { overlayDrop, sheetOverlayContext, sheetPressContext, withOverlay, type SheetOverlayList, type SheetOverlaySet } from './sheetOverlay';
+import SheetOverlayLayer, { SHEET_LAYER_OUT_MS } from './SheetOverlayLayer';
+import { overlayNodeStyle, overlayStack, ownerMoved, sheetLeaveFallbackMs, sheetMotion, type OwnerPlace } from './sheetHost';
+import { openerNow, returnFocus, type TouchPoint } from './SheetScreenRoot';
+import { internalHandle, pressInside, tapThrough } from './tapThrough';
+import useUiReducedMotion from './useUiReducedMotion';
+import { useBatterySaver } from '../power/batterySaver';
+
+/* eslint-disable @typescript-eslint/no-require-imports */
+const FullWindowOverlayNative = require('react-native-screens/src/fabric/FullWindowOverlayNativeComponent').default;
+const ScrollView = require('react-native/Libraries/Components/ScrollView/ScrollView');
+const { VirtualizedListContextResetter } = require('@react-native/virtualized-lists');
+/* eslint-enable @typescript-eslint/no-require-imports */
+
+/** True inside an in-tree sheet's children: a sheet there is nested (it never replays a kept tap onto the screen). */
+const InsideOverlay = createContext(false);
+
+type Phase = 'off' | 'up' | 'closing';
+let nextId = 1;
+type TouchEvent = { nativeEvent: { pageX: number; pageY: number; tpsSheetNoted?: boolean } };
+type Measurable = { measure?: (callback: (x: number, y: number, w: number, h: number, pageX: number, pageY: number) => void) => void };
+
+export default function OverlaySheet(props: DoorModalProps) {
+  const SheetOverlay = sheetOverlayContext();
+  const SheetPress = sheetPressContext();
+  const nested = useContext(InsideOverlay);
+  const wants = props.visible !== false;
+  const reduced = useUiReducedMotion();
+  const saver = useBatterySaver();
+  const motion = sheetMotion(props.animationType, reduced || saver);
+  const { width, height } = useWindowDimensions();
+  const [phase, setPhase] = useState<Phase>('off');
+  const id = useRef(0);
+  if (id.current === 0) id.current = nextId++;
+  const live = useRef(true);
+  const now = useRef({ phase, wants, nested, props, motion });
+  now.current = { phase, wants, nested, props, motion };
+  const dismissTold = useRef(false);
+  const showTold = useRef(false);
+  const opener = useRef<TouchPoint | null>(null);
+  const p = useSharedValue(motion.kind === 'none' ? 1 : 0);
+
+  const [overlays, setOverlays] = useState<SheetOverlayList>([]);
+  const setOverlay = useCallback<SheetOverlaySet>((key, node) => {
+    if (!live.current) return;
+    setOverlays(list => withOverlay(list, key, node));
+    if (node == null) setTimeout(() => { if (live.current) setOverlays(list => overlayDrop(list, key)); }, SHEET_LAYER_OUT_MS + 60);
+  }, []);
+  const contentRef = useRef<unknown>(null);
+  const pressAt = useCallback((x: number, y: number) => { pressInside(internalHandle(contentRef.current), x, y); }, []);
+
+  // Where the owner sits, so the children measure in window points (sheetHost.overlayNodeStyle).
+  const anchor = useRef<unknown>(null);
+  const [owner, setOwner] = useState<OwnerPlace | null>(null);
+  const measureOwner = useCallback(() => {
+    const node = anchor.current as Measurable | null;
+    try {
+      node?.measure?.((x, y, _w, _h, pageX, pageY) => {
+        if (!live.current || !Number.isFinite(pageX) || !Number.isFinite(pageY)) return;
+        const next = { x, y, pageX, pageY };
+        setOwner(prev => (ownerMoved(prev, next) ? next : prev));
+      });
+    } catch {
+      // No measure (a test renderer): the children measure from the owner's place, as a native sheet's never did.
+    }
+  }, []);
+
+  const gone = useCallback(() => {
+    const state = now.current;
+    if (state.phase === 'off') return;
+    pressTrace('door.gone', () => `id=${id.current} phase=${state.phase} overlay=1`);
+    overlayStack.remove(id.current);
+    if (!dismissTold.current) { dismissTold.current = true; state.props.onDismiss?.(); }
+    if (live.current) setPhase('off');
+  }, []);
+  const goneIfClosing = useCallback(() => { if (now.current.phase === 'closing' && !now.current.wants) gone(); }, [gone]);
+
+  useLayoutEffect(() => {
+    if (phase === 'off' && wants) {
+      dismissTold.current = false;
+      showTold.current = false;
+      opener.current = openerNow();
+      setPhase('up');
+    } else if (phase === 'up' && !wants) {
+      if (motion.outMs === 0) gone(); else setPhase('closing');
+    } else if (phase === 'closing' && wants) {
+      setPhase('up');
+    }
+  }, [phase, wants]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Up: measured, listed, and on its way in on the UI thread. Asked again while leaving: back from where it is.
+  useLayoutEffect(() => {
+    if (phase !== 'up') return undefined;
+    measureOwner();
+    overlayStack.add(id.current);
+    cancelAnimation(p);
+    if (motion.kind === 'none') p.value = 1;
+    else if (motion.kind === 'fade') p.value = withTiming(1, { duration: motion.inMs, easing: Easing.out(Easing.quad) });
+    else p.value = withSpring(1, { ...SPRING.settle, overshootClamping: true });
+    if (showTold.current) return undefined;
+    // onShow once its first frame is drawn (a native sheet's onShow came after UIKit put it up).
+    const frame = requestAnimationFrame(() => {
+      if (!live.current || now.current.phase !== 'up' || showTold.current) return;
+      showTold.current = true;
+      pressTrace('door.nativeShow', () => `id=${id.current} overlay=1`);
+      now.current.props.onShow?.({ nativeEvent: {} });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Leaving: off the list at once (assistive tech moves on), out on the UI thread, out of the tree when that ends.
+  useEffect(() => {
+    if (phase !== 'closing') return undefined;
+    overlayStack.remove(id.current);
+    cancelAnimation(p);
+    p.value = withTiming(0, { duration: motion.outMs, easing: Easing.in(Easing.quad) }, done => { if (done) runOnJS(goneIfClosing)(); });
+    const timer = setTimeout(goneIfClosing, sheetLeaveFallbackMs(motion));
+    return () => clearTimeout(timer);
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Gone: the first tap held on the leaving sheet presses what is under it now; VoiceOver's focus goes home.
+  const lastPhase = useRef<Phase>('off');
+  useEffect(() => {
+    const was = lastPhase.current;
+    lastPhase.current = phase;
+    pressTrace('door.phase', () => `id=${id.current} ${props.testID ?? 'sheet'} ${phase} wants=${wants} nested=${nested} overlay=1 up=${overlayStack.count()}`);
+    if (phase !== 'off' || was === 'off') return;
+    if (!nested && !overlayStack.others(id.current)) {
+      const how = tapThrough.deliver();
+      if (how !== 'none') pressTrace('tapThrough.deliver', () => `id=${id.current} ${how}`);
+    } else if (!nested) {
+      // Another sheet is up: what is under the tap is that sheet, and it never saw the press.
+      tapThrough.drop();
+    }
+    if (overlayStack.count() === 0) returnFocus(opener.current);
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Torn out of the tree (its owner stopped rendering it): off the list, and a kept tap reaches the screen.
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+      const state = now.current;
+      pressTrace('door.torn', () => `id=${id.current} phase=${state.phase} overlay=1`);
+      overlayStack.remove(id.current);
+      if (state.nested || state.phase === 'off') return;
+      setTimeout(() => {
+        if (overlayStack.count() === 0) { tapThrough.deliver(); returnFocus(opener.current); } else tapThrough.drop();
+      }, 0);
+    };
+  }, []);
+
+  const isTop = useSyncExternalStore(overlayStack.subscribe, () => overlayStack.top() === id.current);
+  const enter = useAnimatedStyle(() => {
+    if (motion.kind === 'slide') return { transform: [{ translateY: (1 - p.value) * height }] };
+    if (motion.kind === 'fade') return { opacity: p.value };
+    return {};
+  }, [motion.kind, height]);
+
+  // Wanted sheets mount their children in this very commit, like React Native's Modal: react-native-modal reads its
+  // content ref in the same commit's callback, and with no ref its open animation never ends and it can never close.
+  if (phase === 'off' && !wants) return null;
+
+  const leaving = phase === 'closing' || (phase === 'up' && !wants);
+  const background = props.transparent === true ? 'transparent' : 'white';
+  const place = overlayNodeStyle(owner);
+  const onTouchStart = (event: TouchEvent) => {
+    // The touch bubbles from a sheet inside this one to this one too: only the innermost notes it.
+    if (event.nativeEvent.tpsSheetNoted) return;
+    event.nativeEvent.tpsSheetNoted = true;
+    measureOwner();
+    leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants), !now.current.nested);
+  };
+
+  return (
+    <>
+      {/* Zero size, no touch: tells the sheet where its owner sits, and is the screen's root for the replayed tap. */}
+      <View pointerEvents="none" style={styles.anchor} collapsable={false}
+        ref={(host: unknown) => { anchor.current = host; if (host && !nested) tapThrough.setScreenRoot(internalHandle(host)); }} />
+      <FullWindowOverlayNative style={[styles.overlay, { width, height }, place]}>
+        <Animated.View collapsable={false} testID={props.testID} style={[StyleSheet.absoluteFill, enter]}
+          // Up or leaving, the sheet takes every touch over the window (a native sheet did); leaving, its buttons rest.
+          pointerEvents="auto"
+          accessibilityElementsHidden={!isTop || leaving}
+          importantForAccessibility={!isTop || leaving ? 'no-hide-descendants' : 'auto'}
+          onAccessibilityEscape={props.onRequestClose ? () => props.onRequestClose?.({ nativeEvent: {} }) : undefined}
+          onTouchStart={onTouchStart}>
+          <VirtualizedListContextResetter>
+            <ScrollView.Context.Provider value={null}>
+              <InsideOverlay.Provider value>
+                <SheetOverlay.Provider value={setOverlay}>
+                  <SheetPress.Provider value={pressAt}>
+                    <View ref={contentRef as never} collapsable={false} style={[styles.container, { backgroundColor: background }]} pointerEvents={leaving ? 'none' : 'box-none'}>
+                      {props.children as ReactNode}
+                      {overlays.map(item => <SheetOverlayLayer key={`${item.key}.${item.gen}`} leaving={item.leaving}>{item.node}</SheetOverlayLayer>)}
+                    </View>
+                  </SheetPress.Provider>
+                </SheetOverlay.Provider>
+              </InsideOverlay.Provider>
+            </ScrollView.Context.Provider>
+          </VirtualizedListContextResetter>
+        </Animated.View>
+      </FullWindowOverlayNative>
+    </>
+  );
+}
+
+const side = I18nManager.getConstants().isRTL ? 'right' : 'left';
+const styles = StyleSheet.create({
+  anchor: { position: 'absolute', top: 0, [side]: 0, width: 0, height: 0 },
+  overlay: { position: 'absolute' },
+  container: { [side]: 0, top: 0, flex: 1 },
+});

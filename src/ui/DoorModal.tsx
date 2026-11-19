@@ -13,14 +13,21 @@
  * 4. A tap on a sheet that is leaving reaches the button under it once the sheet is gone (ui/tapThrough.ts).
  * 5. A layer drawn above a sheet's own contents (the grown-up gate asked from a row on the coin card) is drawn in this
  *    sheet's own view, not as a second native sheet presented from it (useSheetOverlay, fix pass w4, N02).
+ *
+ * Fix pass w5 (lane host): by default none of the above runs. Every iOS sheet is drawn in-tree inside a window overlay
+ * (ui/OverlaySheet.tsx, why in ui/sheetHost.ts), so UIKit never presents or dismisses one and never drops a touch.
+ * This native door stays, whole, behind the kill switch (SHEET_HOST_DEFAULT or the server switch sheet_host_native).
  */
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { I18nManager, StyleSheet } from 'react-native';
 import { leavingSheetTap } from './modalLayers';
 import { pressTrace } from './pressTrace';
-import { overlayDrop, sheetOverlayContext, withOverlay, type SheetOverlayList, type SheetOverlaySet } from './sheetOverlay';
+import { overlayDrop, sheetOverlayContext, sheetPressContext, withOverlay, type SheetOverlayList, type SheetOverlaySet } from './sheetOverlay';
+import { sheetHostMode } from './sheetHost';
+import { readSheetHost } from './sheetHostMode';
+import OverlaySheet from './OverlaySheet';
 import SheetOverlayLayer, { SHEET_LAYER_OUT_MS } from './SheetOverlayLayer';
-import { tapThrough, type ChainNode } from './tapThrough';
+import { internalHandle, pressInside, tapThrough } from './tapThrough';
 import {
   DOOR_DISMISS_ANIMATED_MS, DOOR_DISMISS_MS, DOOR_PRESENT_MS, DOOR_TORN_ANIMATED_MS, DOOR_TORN_MS,
   doorNativeVisible, doorPresentTimedOut, modalDoor, type DoorPhase,
@@ -65,14 +72,17 @@ const respond = () => true;
 /** How often, and how many times, a sheet not yet reported up is nudged (see the nudge in DoorModal). */
 export const DOOR_NUDGE_MS = 600;
 export const DOOR_NUDGES = 12;
-/** The renderer's fiber behind a host view (React Native's own public-instance field, read as the inspector does). */
-function internalHandle(host: unknown): ChainNode | null {
-  const h = host as { __internalInstanceHandle?: ChainNode; _internalInstanceHandle?: ChainNode };
-  return h._internalInstanceHandle ?? h.__internalInstanceHandle ?? null;
+
+/** Every iOS <Modal>: in-tree by default (OverlaySheet), the native door below when the kill switch says so. */
+export default function DoorModal(props: DoorModalProps) {
+  return sheetHostMode(readSheetHost) === 'overlay' ? <OverlaySheet {...props} /> : <NativeDoorModal {...props} />;
 }
 
-export default function DoorModal(props: DoorModalProps) {
+function NativeDoorModal(props: DoorModalProps) {
   const SheetOverlay = sheetOverlayContext();
+  const SheetPress = sheetPressContext();
+  const contentRef = useRef<unknown>(null);
+  const pressAt = useCallback((x: number, y: number) => { pressInside(internalHandle(contentRef.current), x, y); }, []);
   const nested = useContext(InsideNativeModal);
   const rootTag = useContext(RootTagContext);
   const wants = props.visible !== false;
@@ -238,7 +248,8 @@ export default function DoorModal(props: DoorModalProps) {
         <ScrollView.Context.Provider value={null}>
           <InsideNativeModal.Provider value>
            <SheetOverlay.Provider value={setOverlay}>
-            <View style={[styles.container, containerStyles]} collapsable={false}
+           <SheetPress.Provider value={pressAt}>
+            <View ref={contentRef} style={[styles.container, containerStyles]} collapsable={false}
               // On touch down: the sheet can be gone before the finger lifts, and that touch would never end here.
               onTouchStart={(event: { nativeEvent: { pageX: number; pageY: number; tpsSheetNoted?: boolean } }) => {
                 // The touch bubbles from a sheet inside this one (the gate) to this sheet too: only the innermost notes it.
@@ -249,6 +260,7 @@ export default function DoorModal(props: DoorModalProps) {
               {children}
               {overlays.map(item => <SheetOverlayLayer key={`${item.key}.${item.gen}`} leaving={item.leaving}>{item.node}</SheetOverlayLayer>)}
             </View>
+           </SheetPress.Provider>
            </SheetOverlay.Provider>
           </InsideNativeModal.Provider>
         </ScrollView.Context.Provider>
