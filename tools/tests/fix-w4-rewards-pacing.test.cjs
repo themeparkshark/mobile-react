@@ -18,7 +18,9 @@ test('T097 the first wins name coins, Tickets and XP only; Parts and Energy fly 
   assert.deepEqual(row(firstWin), ['Shark Coins', 'Ticket', 'XP']);
   assert.equal(win.silentParts(firstWin), 2);
   assert.equal(win.silentEnergy(firstWin), 10);
-  assert.deepEqual(row({ ...firstWin, coinLevelsOpen: true }), ['Shark Coins', 'Ticket', 'Ride Parts', 'Energy', 'XP']);
+  // Merged w4: once coin levels open, the line's Parts keep their own quiet chip (T070, lane flow).
+  assert.deepEqual(row({ ...firstWin, coinLevelsOpen: true }), ['Shark Coins', 'Ticket', 'Ride Part', 'From your line', 'Energy', 'XP']);
+  assert.deepEqual(row({ ...firstWin, lineParts: 0, parts: 2, coinLevelsOpen: true }), ['Shark Coins', 'Ticket', 'Ride Parts', 'Energy', 'XP']);
   const card = read('src/components/PostWinRewardsModal.tsx');
   assert.match(card, /if \(quietParts > 0\) fly\(FLY_ART\.parts, Math\.min\(quietParts, 3\), WIN_FLY_ROUTES\.parts\);/);
 });
