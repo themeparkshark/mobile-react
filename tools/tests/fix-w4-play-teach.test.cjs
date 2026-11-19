@@ -191,3 +191,18 @@ test('T041: Memory stands each land\'s own landmark (Whack\'s themed props) behi
   const theme = read('src/services/rideTheme.ts');
   assert.match(theme, /indiana jones\|temple of\|tiki/, 'Indiana Jones is a jungle ride');
 });
+
+test('T041: the land prop fits between Finn and the chain plate on every phone (it never drew when bounded by the HUD band)', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const L = loadTs('src/games/memory/layout.ts');
+  const game = read('src/games/memory/MemoryGame.tsx');
+  assert.match(game, /const right = g\.hud\.x \+ g\.hud\.w - 92;/);
+  for (const [W, H] of [[402, 735], [375, 560], [440, 815]]) {
+    const g = L.boothGeo(W, H, 4, 4);
+    const left = g.barker.x + g.barker.w * 0.82;
+    const right = g.hud.x + g.hud.w - 92;
+    const maxW = right - left;
+    const h = Math.min(170, g.awning.y - 8, maxW / 0.805);
+    assert.ok(h >= 56, `${W}x${H}: the space gantry is ${Math.round(h)} pt tall (needs 56)`);
+  }
+});
