@@ -26,7 +26,7 @@ import {
 } from 'react-native';
 import Animated, {
   Easing, FadeIn, FadeInRight, FadeOut, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withRepeat, withSequence,
-  withSpring, withTiming, ZoomIn, Extrapolation, runOnJS, useAnimatedReaction,
+  withSpring, withTiming, ZoomIn, Extrapolation, runOnJS, useAnimatedReaction, type SharedValue,
 } from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
 import type { InventoryType } from '../../models/inventory-type';
@@ -331,9 +331,11 @@ function StepGlyphs({ plus, target, metric, kind, icon, compact = false }: {
  * plays in the step slot: each player you passed slides by with a tick, then
  * "Up N!" lands on your rank.
  */
-function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbLanded, onClimbDone, finaleFollows, teach = false, onTaught, inlineTop = null }: {
+function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbLanded, onClimbDone, finaleFollows, teach = false, onTaught, inlineTop = null, scrollY }: {
   /** A short board: the card sits right under its last row (this top, in the board's frame), never over it. */
   readonly inlineTop?: number | null;
+  /** The list's scroll, so an inline card moves with its rows. */
+  readonly scrollY?: SharedValue<number>;
   /** The week's first visit: bounce once with a tap glyph, so a kid learns the row opens their card (r7). */
   readonly teach?: boolean;
   readonly onTaught?: () => void;
@@ -435,8 +437,9 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
   // text never ghosts over a row (r2).
   const dockStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, Math.max(0, shown.value) * 4),
-    transform: [{ translateY: Math.max(0, 1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 30) + bounce.value }],
-  }));
+    transform: [{ translateY: Math.max(0, 1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 30) + bounce.value
+      - (inlineTop != null && scrollY ? scrollY.value : 0) }],
+  }), [inlineTop, scrollY]);
   const joining = step.kind === 'join';
   const reviewing = step.kind === 'review';
   const label = youLabel(model, climb, inPark);
@@ -1035,11 +1038,12 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
 
   // A hidden tab keeps its card down, so activating it can never flash a duplicate of your row.
   const hideYou = !active || (!climbing && (myRowVisible || (meOnPodium && podiumOnScreen)));
-  // A short board (every row fits above the nav with the card's room under it): the card sits right under the
-  // last row instead of docking over it (critic M4: SE, a board of 4, the join card covered row 4).
+  // A short board (every row sits clear above the nav): the card joins the flow right under the last row and scrolls
+  // with the list, instead of docking over that row (critic M4: SE, a board of 4, the join card covered row 4). The
+  // footer keeps room so the card always scrolls fully clear of the nav.
   const lastLayout = layouts[layouts.length - 1];
   const rowsEnd = HEADER_HEIGHT + (lastLayout ? lastLayout.offset + lastLayout.length : 0);
-  const inlineAt = youInlineTop(rowsEnd, listBox.height, YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 34);
+  const inlineAt = youInlineTop(rowsEnd, listBox.height);
   const inlineTop = inlineAt != null ? listBox.y + inlineAt : null;
 
   return (
@@ -1084,7 +1088,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           <LinearGradient colors={[BRAND.cream, 'rgba(255,248,228,0)']} style={{ flex: 1 }} />
         </Animated.View>
       </View>
-      <YouRow inlineTop={inlineTop} model={model} climb={climb} climbFrom={climbFrom} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} inPark={inPark} onPress={scrollToMe}
+      <YouRow inlineTop={inlineTop} scrollY={scrollY} model={model} climb={climb} climbFrom={climbFrom} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} inPark={inPark} onPress={scrollToMe}
         onOpenCard={() => { playSound(tapSound); setCard(model.me); }}
         onGoRide={() => { playSound(tapSound); RootNavigation.navigate('Explore'); }}
         finaleFollows={meJoined}
