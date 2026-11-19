@@ -47,7 +47,7 @@ const InsideOverlay = createContext(false);
 
 type Phase = 'off' | 'up' | 'closing';
 let nextId = 1;
-type TouchEvent = { nativeEvent: { pageX: number; pageY: number; tpsSheetNoted?: boolean } };
+type TouchEvent = { nativeEvent: { pageX: number; pageY: number; tpsSheetNoted?: boolean; tpsLeaving?: boolean } };
 type Measurable = { measure?: (callback: (x: number, y: number, w: number, h: number, pageX: number, pageY: number) => void) => void };
 
 export default function OverlaySheet(props: DoorModalProps) {
@@ -251,7 +251,8 @@ export default function OverlaySheet(props: DoorModalProps) {
     event.nativeEvent.tpsSheetNoted = true;
     measureOwner();
     // Going: the door is taking it down, or its owner's own leave animation has started (props.leaving).
-    leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants) || now.current.props.leaving === true, !now.current.nested);
+    // tpsLeaving: what holds the touch (the root gate) was already asked to close in this same batch of touches.
+    leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants) || now.current.props.leaving === true || event.nativeEvent.tpsLeaving === true, !now.current.nested);
     // Released in JS but not yet natively: the hit test already sees what is under, so the tap goes there at once.
     if (releasedRef.current) setTimeout(() => deliverAtRelease('touch'), 0);
   };

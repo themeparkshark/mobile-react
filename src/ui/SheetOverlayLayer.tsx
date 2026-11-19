@@ -20,7 +20,7 @@ import useUiReducedMotion from './useUiReducedMotion';
 export const SHEET_LAYER_IN_MS = 220;
 export const SHEET_LAYER_OUT_MS = 160;
 
-type TouchEvent = { nativeEvent: { pageX: number; pageY: number; tpsSheetNoted?: boolean } };
+type TouchEvent = { nativeEvent: { pageX: number; pageY: number; tpsSheetNoted?: boolean; tpsLeaving?: boolean } };
 
 /** Pure: the first tap a leaving layer holds (later ones in the same leave are the same press, never a second). */
 export function holdLeavingTap(held: { x: number; y: number } | null, leaving: boolean, x: number, y: number): { x: number; y: number } | null {
@@ -62,11 +62,13 @@ export default function SheetOverlayLayer({ leaving, children }: { readonly leav
     <View style={StyleSheet.absoluteFill} pointerEvents={released ? 'none' : 'auto'} accessibilityViewIsModal={!leaving}
       accessibilityElementsHidden={leaving} importantForAccessibility={leaving ? 'no-hide-descendants' : 'auto'}
       onTouchStart={(event: TouchEvent) => {
-        if (!leaving) return;
+        // Leaving, or its owner already asked it to close in this same batch of touches (tpsLeaving, set by the gate).
+        const going = leaving || event.nativeEvent.tpsLeaving === true;
+        if (!going) return;
         // Held here: the sheet itself does not keep it as a tap for the screen under the whole sheet.
         event.nativeEvent.tpsSheetNoted = true;
         const first = held.current === null;
-        held.current = holdLeavingTap(held.current, leaving, event.nativeEvent.pageX, event.nativeEvent.pageY);
+        held.current = holdLeavingTap(held.current, going, event.nativeEvent.pageX, event.nativeEvent.pageY);
         if (first) pressTrace('layer.heldTap', () => `x=${Math.round(event.nativeEvent.pageX)} y=${Math.round(event.nativeEvent.pageY)}`);
       }}>
       <Animated.View style={[StyleSheet.absoluteFill, fade]} pointerEvents={leaving ? 'none' : 'auto'}>{children}</Animated.View>

@@ -259,11 +259,11 @@ function NativeDoorModal(props: DoorModalProps) {
               // The owner's own leave has started: the sheet's buttons rest and the touch is the screen's (kept below).
               pointerEvents={props.leaving === true ? 'box-only' : undefined}
               // On touch down: the sheet can be gone before the finger lifts, and that touch would never end here.
-              onTouchStart={(event: { nativeEvent: { pageX: number; pageY: number; tpsSheetNoted?: boolean } }) => {
+              onTouchStart={(event: { nativeEvent: { pageX: number; pageY: number; tpsSheetNoted?: boolean; tpsLeaving?: boolean } }) => {
                 // The touch bubbles from a sheet inside this one (the gate) to this sheet too: only the innermost notes it.
                 if (event.nativeEvent.tpsSheetNoted) return;
                 event.nativeEvent.tpsSheetNoted = true;
-                leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants) || now.current.props.leaving === true, !now.current.nested);
+                leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants) || now.current.props.leaving === true || event.nativeEvent.tpsLeaving === true, !now.current.nested);
               }}>
               {children}
               {overlays.map(item => <SheetOverlayLayer key={`${item.key}.${item.gen}`} leaving={item.leaving}>{item.node}</SheetOverlayLayer>)}

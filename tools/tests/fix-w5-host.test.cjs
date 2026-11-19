@@ -158,10 +158,10 @@ test('N01: a tap on a card that its owner is already shrinking away is the scree
   assert.match(dialog, /leaving=\{fading\}/);
   assert.match(dialog, /const fadeOut = \(token: number\) => \{\s*setFading\(true\);/);
   const sheet = src('src/ui/OverlaySheet.tsx');
-  assert.match(sheet, /now\.current\.props\.leaving === true, !now\.current\.nested\);/);
+  assert.match(sheet, /now\.current\.props\.leaving === true( \|\| event\.nativeEvent\.tpsLeaving === true)?, !now\.current\.nested\);/);
   assert.match(sheet, /const leaving = phase === 'closing' \|\| \(phase === 'up' && !wants\) \|\| props\.leaving === true;/);
   const door = src('src/ui/DoorModal.tsx');
-  assert.match(door, /now\.current\.props\.leaving === true, !now\.current\.nested\);/);
+  assert.match(door, /now\.current\.props\.leaving === true( \|\| event\.nativeEvent\.tpsLeaving === true)?, !now\.current\.nested\);/);
   assert.match(door, /pointerEvents=\{props\.leaving === true \? 'box-only' : undefined\}/);
 });
 
@@ -239,4 +239,29 @@ test('SAFETY-first-press: no endless JS-driven pulse on a card (each frame re-co
       if (/iterationCount=("infinite"|\{'infinite'\})/.test(m[0])) assert.match(m[0], /useNativeDriver/, `${path.relative(root, file)}: an endless Animatable loop must use the native driver`);
     }
   }
+});
+
+test('W4-SMOKE-2: a tap that lands on the gate after Not now but before the gate is leaving on screen is held for what is under it', () => {
+  // Phase log (try 3 of 20): Not now and a quick tap on the row reached the app in one batch (416 and 417 ms), before
+  // the gate's leave was committed, so the row's tap fell on the gate and was lost. Fails on 598c8bd9.
+  const L = loadTs('src/ui/SheetOverlayLayer.tsx', {
+    react: { useContext: () => null, useEffect() {}, useRef: v => ({ current: v }), useState: v => [v, () => {}] },
+    'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
+    'react-native': { StyleSheet: { absoluteFill: {} }, View: 'View' },
+    'react-native-reanimated': { __esModule: true, default: { View: 'Animated.View' }, Easing: { in: f => f, out: f => f, quad: 1 }, runOnJS: f => f, useAnimatedStyle: f => f, useSharedValue: v => ({ value: v }), withTiming: v => v },
+    './pressTrace': { pressTrace() {} },
+    './sheetOverlay': { sheetPressContext: () => ({}) },
+    './useUiReducedMotion': { __esModule: true, default: () => false },
+  });
+  const el = L.default({ leaving: false, children: null });
+  const asked = { nativeEvent: { pageX: 199, pageY: 679, tpsLeaving: true } };
+  el.props.onTouchStart(asked);
+  assert.equal(asked.nativeEvent.tpsSheetNoted, true, 'held by the layer, not noted by the sheet as its own');
+  const plain = { nativeEvent: { pageX: 199, pageY: 679 } };
+  el.props.onTouchStart(plain);
+  assert.equal(plain.nativeEvent.tpsSheetNoted, undefined, 'a gate that is up and not closing keeps its own taps');
+  const gate = src('src/components/GrownUpGate.tsx');
+  assert.match(gate, /if \(answerRef\.current !== null\) \(event\.nativeEvent as \{ tpsLeaving\?: boolean \}\)\.tpsLeaving = true;/);
+  assert.match(gate, /const press = \(k: typeof KEYS\[number\]\) => \{\s*\/\/[^\n]*\n\s*if \(answerRef\.current !== null\) return;/, 'a key never acts on a closing gate');
+  assert.match(src('src/ui/OverlaySheet.tsx'), /now\.current\.props\.leaving === true \|\| event\.nativeEvent\.tpsLeaving === true, !now\.current\.nested\);/, 'the root gate\'s sheet keeps it for the screen');
 });

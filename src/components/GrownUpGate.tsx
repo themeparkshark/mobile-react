@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameIconName } from '../ui/iconNames';
 import RealMoneyMark from './RealMoneyMark';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
 import { useSheetOverlay } from '../ui/sheetOverlay';
@@ -554,6 +554,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const q = resting ? null : grownUpQuestion(req.seed);
   const why = resting ? null : gateReasonLines(req.reason);
   const press = (k: typeof KEYS[number]) => {
+    // Already closing: a key under the next press does nothing (that press is held for what is under the gate).
+    if (answerRef.current !== null) return;
     if (k === 'del') { setTyped(t => t.slice(0, -1)); return; }
     if (k === 'ok') {
       const ok = judgeGate(typed, req.seed);
@@ -564,7 +566,11 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     setTyped(t => (t.length < 3 ? t + k : t));
   };
   const scrim = (
-      <Animated.View style={[styles.scrim, inSheet ? null : fadeStyle]}>
+      <Animated.View style={[styles.scrim, inSheet ? null : fadeStyle]}
+        // Asked to close (Not now, a wrong answer) but not yet leaving on screen: a touch that lands now is the next
+        // press, for what is under the gate. The host holding the gate keeps it until the gate is gone (fix pass w5,
+        // W4-SMOKE-2: Not now and a quick tap on the row reached the app in one batch, and the row's tap died here).
+        onTouchStart={(event: GestureResponderEvent) => { if (answerRef.current !== null) (event.nativeEvent as { tpsLeaving?: boolean }).tpsLeaving = true; }}>
         {details ? (
           <View style={styles.card} accessibilityViewIsModal>
             <RealMoneyMark size={36} />
