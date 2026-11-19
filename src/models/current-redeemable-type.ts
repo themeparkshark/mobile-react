@@ -14,6 +14,8 @@ export interface CurrentRedeemableType {
   readonly rescue_pass_source?: 'daily' | 'held' | 'held_retry' | null;
   /** Rescue Passes the player holds. */
   readonly rescue_passes?: number;
+  /** The game the next PLAY deals here today and the tries a Ticket buys (core-loop servers, fix w4 T039). */
+  readonly deal?: { readonly game?: 'tap' | 'memory' | 'trivia' | string | null; readonly tries_per_ticket?: number | null } | null;
   readonly model:
     | SecretTaskType
     | ItemType

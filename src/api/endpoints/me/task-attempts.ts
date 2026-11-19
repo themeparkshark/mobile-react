@@ -69,6 +69,8 @@ export interface TaskAttempt {
     xp_earned: number;
     energy_earned: number;
     ride_parts_earned: number;
+    /** Ride Parts already earned for this coin while waiting in its line, named on the win card (fix w4 T070). */
+    line_parts?: number | null;
     task_name: string;
     coin_asset_id?: number | null;
     coin_times_collected?: number | null;

@@ -440,6 +440,7 @@ export default function PostWinRewardsModal({
       if (target) triggerFly({ imageSource: art, amount, startX: x, startY: y, targetPosition: target });
     };
     for (const chip of chips) {
+      if (chip.noFly) continue;
       const kind = chip.icon === 'member' || chip.icon === 'coins' ? 'coins' : chip.icon === 'ticket' ? 'tickets'
         : chip.icon === 'parts' ? 'parts' : chip.icon === 'xp' ? 'xp' : 'energy';
       const art = kind === 'coins' ? FLY_ART.coins : kind === 'tickets' ? FLY_ART.ticket : kind === 'parts' ? FLY_ART.parts

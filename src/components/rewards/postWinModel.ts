@@ -198,6 +198,8 @@ export interface WinChip extends RewardChipModel {
   readonly flyTo: WinFlyTarget;
   /** A shorter, kinder chip (Energy before rung 3: "saved for growing coins"). */
   readonly quiet?: boolean;
+  /** Already in the balance before this card (the line's Parts, T070): shown, never flown again. */
+  readonly noFly?: boolean;
 }
 
 /**
@@ -213,11 +215,11 @@ export function winRewardChips(input: WinRowInput): WinChip[] {
   if (n(input.coins)) chips.push({ icon: 'coins', amount: n(input.coins), label: 'Shark Coins', flyTo: 'coins' });
   if (n(input.vipCoins)) chips.push({ icon: 'member', amount: n(input.vipCoins), label: 'VIP', flyTo: 'coins' });
   if (n(input.tickets)) chips.push({ icon: 'ticket', amount: n(input.tickets), label: n(input.tickets) === 1 ? 'Ticket' : 'Tickets', flyTo: 'tickets' });
+  if (n(input.parts)) chips.push({ icon: 'parts', amount: n(input.parts), label: n(input.parts) === 1 ? 'Ride Part' : 'Ride Parts', flyTo: 'energy' });
+  // T070: the Parts this coin already earned in its line get their own quiet chip that says where they came from
+  // (already in the balance, so they never fly again: a separate kind the card's fly loop skips).
   const lineParts = n(input.lineParts);
-  if (n(input.parts) || lineParts) {
-    const parts = n(input.parts) + lineParts;
-    chips.push({ icon: 'parts', amount: parts, label: parts === 1 ? 'Ride Part' : 'Ride Parts', flyTo: 'energy' });
-  }
+  if (lineParts) chips.push({ icon: 'parts', amount: lineParts, label: 'From your line', flyTo: 'energy', quiet: true, noFly: true });
   if (input.coinLevelsOpen && n(input.energy)) chips.push({ icon: 'energy', amount: n(input.energy), label: 'Energy', flyTo: 'energy' });
   if (n(input.xp)) chips.push({ icon: 'xp', amount: n(input.xp), label: 'XP', flyTo: 'xp' });
   return chips;

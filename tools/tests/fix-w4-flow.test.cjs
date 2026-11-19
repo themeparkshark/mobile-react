@@ -127,3 +127,30 @@ test('T037 the win\'s own Energy line folds into the held win card; Energy news 
   B.routeBroadcasts(['You gained 20 Energy!'], show);
   assert.equal(shown.at(-1), 'You gained 20 Energy!', 'outside a win card nothing is folded');
 });
+
+/* T039: the card says what a Ticket buys before PLAY. */
+test('T039 the server deal turns into shells on the card; no deal keeps the card as today', () => {
+  const card = loadTs('src/components/rewards/coinCardModel.ts');
+  assert.deepEqual(plain(card.dealTries({ game: 'memory', tries_per_ticket: 3 })), { shells: 3, label: '1 Ticket = 3 tries at Memory Match' });
+  assert.deepEqual(plain(card.dealTries({ game: 'tap', tries_per_ticket: 1 })), { shells: 1, label: '1 Ticket = 1 try at Whack-a-Shark' });
+  assert.equal(card.dealTries({ game: 'trivia', tries_per_ticket: 1 }).label, '1 Ticket = 1 try at Beat the Buzzer');
+  assert.equal(card.dealTries({ tries_per_ticket: 9 }).shells, 5, 'never more than five shells');
+  assert.equal(card.dealTries(null), null);
+  assert.equal(card.dealTries({ game: 'tap', tries_per_ticket: 0 }), null);
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(modal, /dealTries\(redeemable\?\.deal\)/);
+  assert.match(read('src/api/endpoints/me/current-redeemable.ts'), /picture_only: 1/);
+  assert.match(read('src/screens/ExploreScreen.tsx'), /currentRedeemable\(point\.latitude, point\.longitude, \{ pictureOnly \}\)/);
+});
+
+/* T070: the line Part on the win card. */
+test('T070 Parts the line already paid get their own quiet chip that never flies again', () => {
+  const chips = plain(win.winRewardChips({ coins: 10, tickets: 0, parts: 1, energy: 0, xp: 0, coinLevelsOpen: true, lineParts: 2 }));
+  assert.deepEqual(chips.map(c => [c.label, c.amount]), [['Shark Coins', 10], ['Ride Part', 1], ['From your line', 2]]);
+  assert.equal(chips[2].noFly, true);
+  assert.equal(plain(win.winRewardChips({ coins: 10, tickets: 0, parts: 1, energy: 0, xp: 0, coinLevelsOpen: true })).length, 2);
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(modal, /setLinePartsEarned\(Number\(attempt\.rewards\.line_parts\)/);
+  assert.match(modal, /lineParts=\{linePartsEarned\}/);
+  assert.match(read('src/components/PostWinRewardsModal.tsx'), /if \(chip\.noFly\) continue;/);
+});

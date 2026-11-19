@@ -84,7 +84,7 @@ import { lossNext } from './rewards/lossNext';
 import { foldHeldXp, holdBroadcasts } from '../api/broadcastFilter';
 import { reconcileDelayMs } from '../services/task-attempt/reconcileDelay';
 import { markWinShown } from '../services/task-attempt/pendingWins';
-import { needTicketMain, previewRewardTiles, rangeErrorCleared } from './rewards/coinCardModel';
+import { dealTries, needTicketMain, previewRewardTiles, rangeErrorCleared } from './rewards/coinCardModel';
 import { markCoinCardSeen } from './rewards/coinCardSeen';
 import { NeedTicketOfferSlot } from './rewards/offerSlots';
 import { taskHasLine } from '../services/lineplay/rideLines';
@@ -139,6 +139,8 @@ export const BACK_TO_MAP = 'Back to Map';
 export const NEED_TICKET_BUTTON = BACK_TO_MAP;
 /** "3 treats at home": the treat art from How to Play (the churro), never the compass. */
 const TREAT_ART = require('../../assets/images/prep-items/churros/churro_18.png');
+/** One shell per try on a Ticket (the Memory try card's shells, Alex's conch). */
+const SHELL_ART = require('../../assets/games/current-quest/conch.png');
 /** Taps beside the challenge card in its first moment on screen are queued PLAY! taps, not a close. */
 export const SCRIM_GRACE_MS = 900;
 /** The card waits this long on a sheet that registered before it, then asks the native door itself. */
@@ -251,6 +253,7 @@ export default function RedeemRedeemableModal({
   const [coinsEarned, setCoinsEarned] = useState(0);
   const [xpEarned, setXpEarned] = useState(0);
   const [ridePartsEarned, setRidePartsEarned] = useState(0);
+  const [linePartsEarned, setLinePartsEarned] = useState(0);
   const [energyEarned, setEnergyEarned] = useState(0);
   const [coinTimesCollected, setCoinTimesCollected] = useState<number | null>(null);
   const [earnedEdition, setEarnedEdition] = useState<EarnedCoinEdition | null>(null);
@@ -327,6 +330,8 @@ export default function RedeemRedeemableModal({
     redeemable?.rescue_pass_available === true;
   const vip = !!player?.is_subscribed;
   const taskName = redeemable ? (redeemable.model as TaskType | SecretTaskType).name : '';
+  // T039: the tries a Ticket buys at this ride today, from the server's deal (absent: nothing new shows).
+  const cardTries = isTaskType ? dealTries(redeemable?.deal) : null;
   const faceNote = redeemable?.type === 'task' ? coinFaceNote(taskName, park.id) : null;
   const title = challengeTitle(taskType, taskName);
   // The free ways to play, in the one fixed order (freeTickets contract): claim, free try, extra tries,
@@ -451,6 +456,7 @@ export default function RedeemRedeemableModal({
       // The win card says this XP: the server's "You earned N XP!" never follows it onto the map.
       foldHeldXp();
       setRidePartsEarned(attempt.rewards.ride_parts_earned);
+      setLinePartsEarned(Number(attempt.rewards.line_parts) > 0 ? Number(attempt.rewards.line_parts) : 0);
       setEnergyEarned(attempt.rewards.energy_earned);
       setCoinTimesCollected(attempt.rewards.coin_times_collected ?? null);
       // T128: a coin new to the shelf glows there (and the shelf opens on its tab) until its card is opened.
@@ -1282,6 +1288,14 @@ export default function RedeemRedeemableModal({
                         {/* Out of Tickets: the free way that plays now, in one short line above the same button. */}
                         {playsNow && outOfTickets && challengeStepLine(freeStep) && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
                         {freeStep?.kind === 'claim' && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
+                        {/* T039: what a Ticket buys here, before PLAY, as the same shells the try card empties. */}
+                        {!needTicket && cardTries && <View style={styles.dealRow} accessible accessibilityLabel={cardTries.label}>
+                          <View style={styles.wayTile}>
+                            <GameIcon name="ticket" size={24} />
+                            <Text style={styles.wayEquals}>=</Text>
+                            {Array.from({ length: cardTries.shells }, (_, i) => <Image key={i} source={SHELL_ART} style={styles.treatArt} contentFit="contain" />)}
+                          </View>
+                        </View>}
                         <YellowButton
                           hitSlop={MAIN_BUTTON_HIT_SLOP}
                           text={buttonLabel}
@@ -1486,6 +1500,7 @@ export default function RedeemRedeemableModal({
         coinsEarned={coinsEarned}
         xpEarned={xpEarned}
         ridePartsEarned={ridePartsEarned}
+        lineParts={linePartsEarned}
         energyEarned={energyEarned}
         coinTimesCollected={coinTimesCollected}
         earnedEdition={earnedEdition}
@@ -1538,6 +1553,7 @@ const styles = StyleSheet.create({
   wayTile: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff8e4', borderRadius: 14, borderWidth: 2,
     borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9ccbe9', paddingHorizontal: 8, paddingVertical: 4 },
   wayEquals: { fontFamily: 'Shark', fontSize: 18, color: '#075b9b' },
+  dealRow: { alignItems: 'center', marginBottom: 8 },
   treatStack: { flexDirection: 'row', marginRight: -2 },
   mapLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8, paddingVertical: 4 },
   mapLinkText: { color: '#ffffff', fontFamily: 'Shark', fontSize: 16, textShadowColor: '#05346e',
