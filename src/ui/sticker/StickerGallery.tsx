@@ -7,7 +7,7 @@
  * from t0 (performance.now() when the navigation was sent) until the 30 titles have laid out
  * and two frames have passed, into globalThis.__stickerBench.
  */
-import { memo, useCallback, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useRef, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,7 +30,7 @@ import SvgTitle from './spike/SvgTitle';
 import { FONT, GALLERY, INK, SHADE, STROKE } from './tokens';
 
 export type GallerySection = 'level' | 'type' | 'text' | 'textcand' | 'titles30' | 'page' | 'card' | 'button' | 'spot' | 'chips' | 'round' | 'wave' | 'progress';
-export type TitleVariant = 'shadow12' | 'shadow8' | 'copies16' | 'copies12' | 'svg' | 'plain';
+export type TitleVariant = 'shadow16' | 'shadow12' | 'shadow8' | 'copies16' | 'copies12' | 'svg' | 'plain';
 
 const SECTIONS: readonly GallerySection[] = ['level', 'type', 'text', 'textcand', 'page', 'card', 'button', 'spot', 'chips', 'round', 'wave', 'progress', 'titles30'];
 const noop = () => undefined;
@@ -160,7 +160,7 @@ const strokeAt = (size: number) => (size >= 24 ? STROKE.title : STROKE.button);
 function TextSection() {
   return (
     <Section id="text" title="Outlined titles">
-      <World label="the pick: 12 copies, shadow drop">
+      <World label="the pick: 16 copies, shadow drop">
         {SIZES.map(size => (
           <View key={size} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
             <Text style={styles.sizeTag}>{size}</Text>
@@ -183,13 +183,14 @@ function TextSection() {
 function Candidate({ technique, copies, size }: { technique: OutlineTechnique | 'svg'; copies: number; size: number }) {
   const word = 'MAX ark';
   if (technique === 'svg') return <SvgTitle size={size} width={size * 4.2} stroke={strokeAt(size)} drop={size >= 24 ? 2.5 : 2}>{word}</SvgTitle>;
-  return <StickerText size={size} technique={technique} copies={copies} spacing={0.06} rasterize={false}>{word}</StickerText>;
+  return <StickerText size={size} technique={technique} copies={copies} spacing={0.06}>{word}</StickerText>;
 }
 
 function TextCandidatesSection() {
   const rows: readonly { name: string; technique: OutlineTechnique | 'svg'; copies: number }[] = [
     { name: 'A copies 16 + 8 drop', technique: 'copies', copies: 16 },
-    { name: 'B shadow 12 (pick)', technique: 'shadow', copies: 12 },
+    { name: 'B shadow 16 (pick)', technique: 'shadow', copies: 16 },
+    { name: 'B shadow 12', technique: 'shadow', copies: 12 },
     { name: 'B shadow 8', technique: 'shadow', copies: 8 },
     { name: 'C one SVG text', technique: 'svg', copies: 0 },
   ];
@@ -218,15 +219,16 @@ declare global {
 
 function BenchTitle({ text, size, variant, onLaid }: { text: string; size: number; variant: TitleVariant; onLaid: () => void }) {
   const stroke = strokeAt(size);
-  let body: ReactNode;
-  if (variant === 'svg') body = <SvgTitle size={size} width={330} stroke={stroke} drop={2.5}>{text}</SvgTitle>;
-  else if (variant === 'plain') body = <StickerText size={size} stroke={0}>{text}</StickerText>;
-  else {
-    const technique: OutlineTechnique = variant.startsWith('copies') ? 'copies' : 'shadow';
-    const copies = Number(variant.replace(/\D/g, ''));
-    body = <StickerText size={size} technique={technique} copies={copies} spacing={0.08}>{text}</StickerText>;
+  if (variant === 'svg') {
+    return <View onLayout={onLaid} style={{ alignItems: 'center', marginBottom: 6 }}><SvgTitle size={size} width={330} stroke={stroke} drop={2.5}>{text}</SvgTitle></View>;
   }
-  return <View onLayout={onLaid} style={{ alignItems: 'center', marginBottom: 6 }}>{body}</View>;
+  const technique: OutlineTechnique = variant.startsWith('copies') ? 'copies' : 'shadow';
+  const copies = Number(variant.replace(/\D/g, '')) || 16;
+  return (
+    <View style={{ alignItems: 'center', marginBottom: 6 }}>
+      <StickerText size={size} stroke={variant === 'plain' ? 0 : undefined} technique={technique} copies={copies} spacing={0.08} onReady={onLaid}>{text}</StickerText>
+    </View>
+  );
 }
 
 const BenchList = memo(function BenchList({ variant, t0 }: { variant: TitleVariant; t0: number }) {
@@ -499,8 +501,8 @@ export default function StickerGallery({ route }: { route?: { params?: Params } 
   const insets = useSafeAreaInsets();
   const params = route?.params ?? {};
   const mountAt = useRef(performance.now()).current;
-  const [only] = useState(params.section);
-  const variant = params.variant ?? 'shadow12';
+  const only = params.section;
+  const variant = params.variant ?? 'shadow16';
   const t0 = params.t0 ?? mountAt;
   const shown = only ? [only] : SECTIONS;
   return (

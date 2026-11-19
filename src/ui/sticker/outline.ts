@@ -47,8 +47,12 @@ export function scallop(radius: number, count: number): number {
   return radius * (1 - Math.cos(Math.PI / count));
 }
 
-/** Copies the chosen technique draws for a stroke: 12 is the spike's pick (see PARTS.md). */
-export const RING_COPIES = 12;
+/**
+ * Copies the chosen technique draws for a stroke. The spike's pick (PARTS.md): 16 copies with a
+ * shadow drop were as smooth as 16 copies plus 8 drop copies (contour roughness 0.522 vs 0.517 px
+ * at 3x) and mounted 30 titles 18 percent faster; 12 copies were 15 percent rougher.
+ */
+export const RING_COPIES = 16;
 
 /** Copies per title for each candidate the spike measured (ring + drop + fill). */
 export function nodeCount(technique: 'shadow' | 'copies', count: number): number {

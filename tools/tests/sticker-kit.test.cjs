@@ -114,7 +114,7 @@ test('the level rule lives in the parts: Page sets it, the edge parts ask useEdg
   assert.ok(page.indexOf('<TitleLabel') > page.indexOf('</PlaceProvider>'), 'the label sits outside the page provider');
 });
 
-test('outlined type: no stroke under 17 pt, never above 3 pt, 12 copies on a round ring', () => {
+test('outlined type: no stroke under 17 pt, never above 3 pt, 16 copies on a round ring', () => {
   assert.equal(outline.strokeFor(16), 0);
   assert.equal(outline.strokeFor(16.9, 2.5), 0);
   assert.equal(outline.strokeFor(17), 2.2);
@@ -123,11 +123,27 @@ test('outlined type: no stroke under 17 pt, never above 3 pt, 12 copies on a rou
   assert.equal(outline.dropFor(30), 2.5);
   assert.equal(outline.dropFor(19), 2);
   const r = outline.ring(2.7, outline.RING_COPIES);
-  assert.equal(r.length, 12);
+  assert.equal(r.length, 16);
   for (const p of r) assert.ok(Math.abs(Math.hypot(p.x, p.y) - 2.7) < 0.02);
-  assert.ok(outline.scallop(2.8, 12) < 0.1, 'the ring is round to under 0.1 pt at 12 copies');
+  assert.ok(outline.scallop(2.8, outline.RING_COPIES) < 0.06, 'the ring is round to under 0.06 pt');
+  assert.equal(outline.nodeCount('shadow', 16), 17);
   assert.equal(outline.nodeCount('shadow', 12), 13);
   assert.equal(outline.nodeCount('copies', 16), 25);
+});
+
+test('a one-line title is sized once for every copy: never bigger, never under 60 percent', () => {
+  const text = loadTs('src/ui/sticker/StickerText.tsx', {
+    react: { memo: x => x, useState: v => [v, () => {}], useRef: v => ({ current: v }), useEffect: () => {}, useCallback: f => f, createContext: () => ({ Provider: 'P' }), useContext: () => null, useMemo: f => f() },
+    'react-native': { StyleSheet: { create: x => x } },
+    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'F' },
+  });
+  assert.equal(text.fitSize(30, 200, 150), 30, 'fits: unchanged');
+  assert.equal(text.fitSize(30, 0, 150), 30, 'not measured yet');
+  assert.equal(text.fitSize(30, 150, 200), 22.5);
+  assert.equal(text.fitSize(30, 50, 200), 18, 'floor at 60 percent');
+  assert.equal(text.fitSize(35, 157, 211), 26, 'rounded down to 0.1 pt');
+  const source = fs.readFileSync(path.join(root, 'src/ui/sticker/StickerText.tsx'), 'utf8');
+  assert.match(source, /adjustsFontSizeToFit: shrink && !outlined/, 'outlined copies never shrink themselves');
 });
 
 test('one VoiceOver element per title: the copies are never accessible', () => {
@@ -197,8 +213,8 @@ test('wave foot path and badge text', () => {
   assert.match(d, /^M0,9 Q10\.50,3\.80 21\.00,9 Q31\.50,14\.20 42\.00,9 /, 'the board wave: half-waves of 21 pt, controls at 3.8 and 14.2');
   assert.match(d, / L294,64 L0,64 Z$/);
   const badge = loadTs('src/ui/sticker/Badge.tsx', {
-    react: { memo: x => x, createContext: () => ({ Provider: 'P' }), useContext: () => null, useMemo: f => f() },
-    'react-native': {},
+    react: { memo: x => x, createContext: () => ({ Provider: 'P' }), useContext: () => null, useMemo: f => f(), useState: v => [v, () => {}], useRef: v => ({ current: v }), useEffect: () => {}, useCallback: f => f },
+    'react-native': { StyleSheet: { create: x => x } },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'F' },
   });
   assert.equal(badge.badgeText(0), '');
