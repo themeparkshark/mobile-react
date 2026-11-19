@@ -29,7 +29,7 @@ import {
   METER_SPRINTER, MULT_CAP, PTS_ANGLER, PTS_BOSS_DEFEAT, PTS_BRUISER_HIT, PTS_BRUISER_KO, PTS_COIN_BUBBLE, PTS_CRIT,
   PTS_DOUBLE, PTS_FINN, PTS_GOLDEN, PTS_HELMET_POP, PTS_LAP_PER_SEC, PTS_PUFFER_POKE, PTS_SPRINTER, PTS_TENTACLE,
   QUICK_FRAC, REBONK_IGNORE_MS, TIER_AT, TIER_MULT, TWIN_WINDOW_MS, LOOKUP_TIER_COST_FROM, PERFECT_WINDOW_MS, PTS_PERFECT,
-  RIPE_STAGE_AT, RIPE_VALUE, SIXTEENTH_MS, resumeEaseExtension,
+  RIPE_STAGE_AT, RIPE_VALUE, SIXTEENTH_MS, resumeEaseExtension, RIDE_SLIP_MS, RIDE_SLIP_TAP_MS,
 } from './waves';
 
 // Hole phases
@@ -169,6 +169,13 @@ export interface WhackSim {
   /** Bonks counted on the ride meter, and the bonks that win. */
   bonks: number;
   winBonks: number;
+  /**
+   * Bonk meter rides (hold-2, T040 regression): Butterfingers makes the fins slip until this game time.
+   * A slipped tap bonks nothing (a soft puff), and every tap while slipped keeps the fins slipping, so
+   * blind mashing never fills the meter; an aimed tap after a short stop bonks again.
+   */
+  slipUntil: number;
+  slips: number;
   win: boolean;
   winAt: number;
   // Stats
@@ -289,6 +296,8 @@ export function createSim(tl: Timeline, carry: BurstCarry = NO_CARRY, emit = tru
     bonkMeter: !!tl.ride && !!tl.bonkMeter,
     bonks: 0,
     winBonks: tl.winBonks > 0 ? tl.winBonks : 13,
+    slipUntil: -1,
+    slips: 0,
     win: false,
     winAt: -1,
     hits: 0,
@@ -676,6 +685,8 @@ function whiff(s: WhackSim, h: number): void {
     streakBreak(s);
     addMeter(s, METER_BUTTER);
     addCoin(s, COIN_BUTTER);
+    // Bonk meter rides: nothing takes a notch back, so the fins slip instead (see slipTap).
+    if (s.bonkMeter) s.slipUntil = t + RIDE_SLIP_MS;
     push(s, E_BUTTER, h, 0, 0);
     return;
   }
@@ -917,6 +928,13 @@ export function simTap(s: WhackSim, h: number, dx = 0, dy = 0, sub = 0): void {
   s.tapCount += 1;
   s.lastTap = s.t;
   if (hidden) return; // under a splat (swipe it) or an angler lock
+  if (s.bonkMeter && s.t < s.slipUntil) {
+    // Slipped fins (T040 hold-2): the tap bonks nothing and keeps them slipping a little longer.
+    s.slips += 1;
+    s.slipUntil = Math.max(s.slipUntil, s.t + RIDE_SLIP_TAP_MS);
+    push(s, E_BUTTER, h, 1, 0);
+    return;
+  }
   if (ph === P_TELL) {
     if (early) {
       s.anticipated += 1;

@@ -165,6 +165,16 @@ export const LOOKUP_FRAC = 0.8;
 export const ENGAGED_MS = 1200;
 export const BUTTER_WHIFFS = 3;
 export const BUTTER_WINDOW_MS = 1000;
+/**
+ * Bonk meter rides (fix round w3 hold-2, the T040 regression): the meter never goes back, so blind
+ * mashing used to fill it (a 9-hole mash won the coin with 3 stars in 25 s). Butterfingers (3 whiffs
+ * inside a second) now makes the fins slip for RIDE_SLIP_MS: taps bonk nothing, and each tap while
+ * slipped keeps them slipping RIDE_SLIP_TAP_MS more. A finger that stops for a third of a second and aims
+ * bonks again. A slow tapper (a kid at about 1 tap a second) can never trigger it. Tuned in
+ * tools/tests/fix-w3-hold-2.test.cjs: blind mashers 0 bonks, an aimed player with 2 stray taps a second still wins.
+ */
+export const RIDE_SLIP_MS = 700;
+export const RIDE_SLIP_TAP_MS = 300;
 export const ANGLER_LOCK_MS = 400;
 export const TWIN_WINDOW_MS = 400;
 export const REBONK_IGNORE_MS = 350;
