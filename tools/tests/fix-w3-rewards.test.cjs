@@ -109,7 +109,10 @@ test('T111: after the treat cards on this open, the daily chest waits for this v
   assert.equal(q.firstVisitChestWaits({ ...back, introThisOpen: true }), true, 'the intro just played: the chest waits');
   assert.equal(q.firstVisitChestWaits({ ...back, introThisOpen: true, catchesThisVisit: 1 }), false, 'the first catch lets it come');
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /if \(\(homeIntroOwed \|\| homeIntroOpen\) && !park\) introThisOpen\.current = true;/);
+  // Fix pass w4 N10: only cards that really opened latch the hold (owed is also true while the seen flag loads).
+  assert.match(explore, /if \(homeIntroOpen && !park\) introThisOpen\.current = true;/);
+  assert.doesNotMatch(explore, /homeIntroOwed \|\| homeIntroOpen\) && !park\) introThisOpen/);
+  assert.match(explore, /const chestReady = !firstVisitHold && !\(homeIntroOwed && !park\)/, 'the chest still waits while the intro is owed');
   assert.match(explore, /introThisOpen: introThisOpen\.current && !park,/);
 });
 
