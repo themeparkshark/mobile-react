@@ -36,7 +36,7 @@ export default function ProofRewards() {
         </View>
         <View style={{ gap: SPACE.cardGap }}>
           <ListRow art={{ source: ART.chestClosed, width: 60, height: 60 }} title="Daily Chest" line={`Day ${TODAY} of 7 is ready`} state="ready"
-            action={{ label: 'OPEN', onPress: noop }} accessibilityLabel={`Daily Chest, day ${TODAY} of 7 is ready, open`}
+            action={{ label: 'OPEN', onPress: noop }} accessibilityLabel={`Daily Chest, day ${TODAY} of 7 is ready, open`} stripWide
             strip={(
               <View style={{ flexDirection: 'row', gap: SPACE.base }}>
                 {week.map((state, i) => <Spot key={i} state={state} size={SPOT.weekMin} art={state === 'yours' ? ART.coin : undefined} />)}

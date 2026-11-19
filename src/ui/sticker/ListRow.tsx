@@ -28,8 +28,10 @@ export type ListRowProps = {
   readonly art: { readonly source: ImageSourcePropType; readonly width: number; readonly height: number };
   readonly title: string;
   readonly line?: string;
-  /** Spots or a small bar on its own line under the words (the week row, Daily 3). */
+  /** Spots or a small bar under the words (Daily 3's three spots), beside the action as the board draws it. */
   readonly strip?: ReactNode;
+  /** The strip is too wide to share the row with the action (the seven-day week row): it takes its own full line. */
+  readonly stripWide?: boolean;
   readonly state: ListRowState;
   /** The action's words and what it does (every state but done). */
   readonly action?: { readonly label: string; readonly onPress?: () => void };
@@ -66,7 +68,7 @@ const LINE_SPEC = TEXT.bodySmall;
 const DONE = { ...TEXT.nameSmall, size: 16, maxScale: 1.2 };
 const ACTIVATE = [{ name: 'activate' as const }];
 
-function ListRowImpl({ art, title, line, strip, state, action, doneLabel, actionWidth = ROW.actionWidth, badge, accessibilityLabel, arrive, delay, style }: ListRowProps) {
+function ListRowImpl({ art, title, line, strip, stripWide = false, state, action, doneLabel, actionWidth = ROW.actionWidth, badge, accessibilityLabel, arrive, delay, style }: ListRowProps) {
   const variant = rowVariant(state);
   const done = state === 'done';
   const said = accessibilityLabel ?? [title, line, done ? doneLabel : action?.label].filter(Boolean).join(', ');
@@ -83,6 +85,7 @@ function ListRowImpl({ art, title, line, strip, state, action, doneLabel, action
                 <StickerText spec={TITLE} align="left" role="none" fit>{title}</StickerText>
               </View>
               {line ? <StickerText spec={LINE_SPEC} tone="soft" align="left" lines={2} role="none">{line}</StickerText> : null}
+              {strip && !stripWide ? <View style={{ marginTop: SPACE.base / 2 }}>{strip}</View> : null}
             </View>
             {done ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 4 }}>
@@ -93,7 +96,7 @@ function ListRowImpl({ art, title, line, strip, state, action, doneLabel, action
               <StickerButton label={action.label} variant={variant} size="row" width={actionWidth} onPress={action.onPress} fit />
             ) : null}
           </View>
-          {strip ? <View style={{ marginTop: SPACE.base, marginBottom: 2 }}>{strip}</View> : null}
+          {strip && stripWide ? <View style={{ marginTop: SPACE.base, marginBottom: 2 }}>{strip}</View> : null}
         </View>
         {badge ? <Badge count={badge.count} label="" hidden style={{ position: 'absolute', left: 26, top: -9 }} /> : null}
       </Card>
