@@ -1469,6 +1469,22 @@ export default function LinePlayScreen() {
     pagesHoldFade.value = reducedFx ? (holdPages ? 0 : 1) : withTiming(holdPages ? 0 : 1, { duration: 240 });
   }, [holdPages, reducedFx]); // eslint-disable-line react-hooks/exhaustive-deps
   const pagesHoldStyle = useAnimatedStyle(() => ({ opacity: pagesHoldFade.value }));
+  // Both game sheets (the plain Games sheet and the bonus picker) choose through here, Parade Beat included.
+  const chooseArcade = (index: number) => {
+    if (index === ADD_PARADE_BEAT) {
+      const added = session.addPracticeGame(PARADE_BEAT_GAME);
+      if (__DEV__) console.log(`[arcade] parade added=${added?.id ?? 'none'} state=${session.getState()}`);
+      if (!added) return;
+      queuedArcadeGame.current = added;
+      setArcadeOpen(false);
+      return;
+    }
+    const page = activityPages[index];
+    if (page?.kind !== 'minigame') return;
+    queuedArcadeGame.current = page;
+    setArcadeOpen(false);
+    jumpToPage(index);
+  };
   const firstCalm = firstLinePlayCalm({ played: playedEver, roundsDone: snapshot.completedActivityIds.length,
     pageKind: activityPages[visiblePageIndex]?.kind, railMode });
   // The rail fades in only when it arrives after the calm first page (never on an ordinary open).
@@ -1976,21 +1992,7 @@ export default function LinePlayScreen() {
           queuedArcadeGame.current = null;
           if (next) handlePlayGame(next);
         }}
-        onChoose={(index) => {
-          if (index === ADD_PARADE_BEAT) {
-            const added = session.addPracticeGame(PARADE_BEAT_GAME);
-            if (__DEV__) console.log(`[arcade] parade added=${added?.id ?? 'none'} state=${session.getState()} pages=${snapshot.playlist.length}`);
-            if (!added) return;
-            queuedArcadeGame.current = added;
-            setArcadeOpen(false);
-            return;
-          }
-          const page = activityPages[index];
-          if (page?.kind !== 'minigame') return;
-          queuedArcadeGame.current = page;
-          setArcadeOpen(false);
-          jumpToPage(index);
-        }}
+        onChoose={chooseArcade}
         onOpenCodebreaker={() => {
           setArcadeOpen(false);
           jumpToPage(activityPages.findIndex(page => page.kind === 'puzzle'));
@@ -2008,13 +2010,7 @@ export default function LinePlayScreen() {
           queuedArcadeGame.current = null;
           if (next) handlePlayGame(next);
         }}
-        onChoose={(index) => {
-          const page = activityPages[index];
-          if (page?.kind !== 'minigame') return;
-          queuedArcadeGame.current = page;
-          setArcadeOpen(false);
-          jumpToPage(index);
-        }}
+        onChoose={chooseArcade}
       />}
 
       {snapshot.parkProject && (

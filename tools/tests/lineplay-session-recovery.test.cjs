@@ -1189,5 +1189,7 @@ test('Parade Beat on the Games sheet: picking it adds one round once, never a se
   session.dispose();
   const screen = fs.readFileSync(path.join(root, 'src/screens/LinePlay/LinePlayScreen.tsx'), 'utf8');
   assert.match(screen, /if \(index === ADD_PARADE_BEAT\) \{\n\s+const added = session\.addPracticeGame\(PARADE_BEAT_GAME\);/);
+  // Both sheets (the Games sheet and the bonus picker) route through the one chooser.
+  assert.equal((screen.match(/onChoose=\{chooseArcade\}/g) ?? []).length, 2);
   assert.match(screen, /arcadeBase\.some\(choice => choice\.gameId === PARADE_BEAT_GAME\) \? arcadeBase/);
 });
