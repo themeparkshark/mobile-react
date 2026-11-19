@@ -164,9 +164,11 @@ test('T074 hold: an offer shown at Matterhorn goes the moment the player walks o
   assert.equal(D.walkingNow([...stand.slice(0, 6), at(33.813453 + 40 * k, -117.91782, 18_000), at(33.813453, -117.91782, 21_000)], 21_000), false);
   // A line shuffle: 8 m forward in 20 s.
   assert.equal(D.walkingNow(Array.from({ length: 6 }, (_, i) => at(33.813453 + i * 1.6 * k, -117.91782, i * 4000)), 20_000), false);
-  // Walking to Mad Tea Party at 1.2 m/s: walking within the window.
-  const walk = Array.from({ length: 7 }, (_, i) => at(33.813453, -117.91782 - i * 4.2 * k / Math.cos(33.8135 * Math.PI / 180), i * 3500));
-  assert.equal(D.walkingNow(walk, 21_000), true);
+  // Walking to Mad Tea Party at 1.2 m/s, one fix every 10 m (the park GPS watcher): walking within the window.
+  const lng = m => -117.91782 - m * k / Math.cos(33.8135 * Math.PI / 180);
+  const walk = [0, 10, 20, 30].map((m, i) => at(33.813453, lng(m), i * 8300));
+  assert.equal(D.walkingNow(walk, 25_000), true, 'known within 30 m of the walk');
+  assert.equal(D.walkingNow(walk.slice(0, 2), 9_000), false, 'one step is not yet a walk');
   const matter = { rideId: 584, rideName: 'Matterhorn Bobsleds', parkId: 8 };
   const base = { endedRideId: null, endedAt: null, lastShownAt: 0 };
   // The detector still names Matterhorn from the time gathered there, the walk is 20 s old: walked off wins.

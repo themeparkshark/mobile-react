@@ -71,9 +71,12 @@ export function nextDwell(previous: QueueDwell | null, seen: QueueDwell | null, 
   return input.now - input.lastShownAt <= DWELL_HOLD_MS ? previous : null;
 }
 
-/** Walking pace, not a line shuffle: more than this many meters inside WALK_WINDOW_MS. */
+/**
+ * Walking pace, not a line shuffle: more than this many meters inside WALK_WINDOW_MS. In a park the GPS watcher
+ * sends a fix every 10 m (gpsWatchPolicy), so the window holds three or four fixes of a walk.
+ */
 export const WALK_METERS = 15;
-export const WALK_WINDOW_MS = 20_000;
+export const WALK_WINDOW_MS = 30_000;
 
 /**
  * Pure: the player is walking right now. The last two fixes are both more than WALK_METERS from the oldest fix of
