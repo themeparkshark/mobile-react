@@ -27,7 +27,12 @@ let waiting: string[] = [];
 let showWaiting: ((messages: string[]) => void) | null = null;
 /** The win card on screen already shows this win's XP: its "You earned N XP!" never comes after it. */
 let xpOnCard = false;
-const XP_EARNED = /^You earned \d+ XP!$/i;
+/**
+ * The win's own reward lines the card already carries. Fix w4 T037: "You gained 10 Energy!" waited behind the
+ * card and then slid in over the shelf or the map, one more stop after the win (the card shows Energy as a chip,
+ * or flies it to the Shelf button before coin levels open).
+ */
+const XP_EARNED = /^You earned \d+ XP!$|^You gained \d+ Energy!$/i;
 
 export function holdBroadcasts(on: boolean): void {
   holders = Math.max(0, holders + (on ? 1 : -1));
@@ -42,7 +47,8 @@ export function holdBroadcasts(on: boolean): void {
 /**
  * The held win card shows this win's XP on its reward row (+25 XP): the server's own XP line for it, which
  * names only part of that total ("You earned 10 XP!" after a +25 XP card), is folded, like its coins and Parts.
- * Only while the hold lasts; XP news from anything else still shows.
+ * The win's Energy line folds the same way (fix w4 T037). Only while the hold lasts; XP and Energy news from
+ * anything else still shows.
  */
 export function foldHeldXp(): void {
   if (holders === 0) return;

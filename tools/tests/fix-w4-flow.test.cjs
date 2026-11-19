@@ -63,10 +63,10 @@ test('T054 the card shows the explainer the first time and a tap swaps it', () =
 /* T194: the first coin counts for the team picked right after it, and the app says so. */
 test('T194 the join answer credit turns into one line; no credit keeps today\'s words', () => {
   assert.equal(team.teamCreditLine([{ ride_name: 'Mr. Lincoln', points: 15, team: 'globe', first: true }], 'Team Green'),
-    'Your Mr. Lincoln coin counts for Team Green too!');
+    'Your Mr. Lincoln coin counts for Team Green!');
   assert.equal(team.teamCreditLine([{ ride_name: 'A', points: 15 }, { ride_name: 'B', points: 10 }], 'Team Gold'),
-    'Your 2 coins from today count for Team Gold too!');
-  assert.equal(team.teamCreditLine([{ ride_name: '', points: 10 }], 'Team Shark'), 'Your coin from today counts for Team Shark too!');
+    'Your 2 coins from today count for Team Gold!');
+  assert.equal(team.teamCreditLine([{ ride_name: '', points: 10 }], 'Team Shark'), 'Your coin from today counts for Team Shark!');
   assert.equal(team.teamCreditLine(undefined, 'Team Shark'), null);
   assert.equal(team.teamCreditLine([], 'Team Shark'), null);
   assert.equal(team.teamCreditLine([{ ride_name: 'A', points: 0 }], 'Team Shark'), null);
@@ -112,4 +112,18 @@ test('T037 the win card comes up under the leaving catch, and the reveal never a
   assert.match(card, /const shown = caught \|\| under;/);
   assert.match(card, /opacity: shown \? 1 : 0/, 'the card shows under the leaving coin, not only after the catch is gone');
   assert.match(card, /onBurst=\{measureHero\}/, 'the hero slot is measured fresh before the coin flies to it');
+});
+
+test('T037 the win\'s own Energy line folds into the held win card; Energy news from anything else still shows', () => {
+  const B = loadTs('src/api/broadcastFilter.ts');
+  B.resetBroadcastHoldForTests();
+  const shown = [];
+  const show = m => shown.push(...m);
+  B.holdBroadcasts(true);
+  B.routeBroadcasts(['You gained 10 Energy!', 'You earned 10 XP!', 'Level 2 unlocked!'], show);
+  B.foldHeldXp();
+  B.holdBroadcasts(false);
+  assert.deepEqual(plain(shown), ['Level 2 unlocked!'], 'the win card already showed (or flew) this win\'s Energy');
+  B.routeBroadcasts(['You gained 20 Energy!'], show);
+  assert.equal(shown.at(-1), 'You gained 20 Energy!', 'outside a win card nothing is folded');
 });

@@ -36,7 +36,7 @@ export interface TeamJoinCredit {
 
 /**
  * The line after joining when coins won before the pick now count for the new team (fix w4 T194):
- * "Your Mr. Lincoln coin counts for Team Green too!", or "Your 2 coins from today count for Team Green too!".
+ * "Your Mr. Lincoln coin counts for Team Green!", or "Your 2 coins from today count for Team Green!".
  * Null when the join answer has no ride_control_credit (older servers, or nothing to credit): today's
  * team screen words then stay as they are.
  */
@@ -46,7 +46,7 @@ export function teamCreditLine(credits: readonly TeamJoinCredit[] | null | undef
   if (!counted.length) return null;
   if (counted.length === 1) {
     const ride = typeof counted[0].ride_name === 'string' ? counted[0].ride_name.trim() : '';
-    return ride ? `Your ${ride} coin counts for ${teamLabel} too!` : `Your coin from today counts for ${teamLabel} too!`;
+    return ride ? `Your ${ride} coin counts for ${teamLabel}!` : `Your coin from today counts for ${teamLabel}!`;
   }
-  return `Your ${counted.length} coins from today count for ${teamLabel} too!`;
+  return `Your ${counted.length} coins from today count for ${teamLabel}!`;
 }
