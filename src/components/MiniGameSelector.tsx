@@ -25,7 +25,7 @@ import { getLinePlayChapter } from '../services/lineplay/chapters';
 import { useHelp } from './help/HelpProvider';
 import GameIntroCard from './help/GameIntroCard';
 import { gameIntroTip } from '../services/help/helpTopics';
-import { RetryRoundContext, StageDrawnContext, StageHoldContext } from '../gamekit/StageHoldContext';
+import { RetryRoundContext, StageDealtContext, StageDrawnContext, StageHoldContext } from '../gamekit/StageHoldContext';
 import { stageHoldFor } from '../gamekit/stageHold';
 import { pressTrace } from '../ui/pressTrace';
 
@@ -73,6 +73,8 @@ interface Props {
    * resets in place (RetryRoundContext) instead of mounting a new one.
    */
   round?: number;
+  /** w5 N04: false while TRY AGAIN's kept board counts ahead of the server's deal (GO waits for it). */
+  dealt?: boolean;
   onClose: () => void;
   onComplete: (multiplier: number, rewards: { coins: number; xp: number }, proof?: TaskGameProof) => void;
 }
@@ -96,6 +98,7 @@ function MiniGameSelector({
   prewarm = false,
   onStageDrawn,
   round = 0,
+  dealt = true,
   onClose,
   onComplete,
 }: Props) {
@@ -246,7 +249,9 @@ function MiniGameSelector({
   const held = (game: React.ReactNode) => (
     <StageDrawnContext.Provider value={onStageDrawn ?? null}>
       <RetryRoundContext.Provider value={round}>
-        <StageHoldContext.Provider value={stageHeld}>{game}{intro}</StageHoldContext.Provider>
+        <StageDealtContext.Provider value={dealt}>
+          <StageHoldContext.Provider value={stageHeld}>{game}{intro}</StageHoldContext.Provider>
+        </StageDealtContext.Provider>
       </RetryRoundContext.Provider>
     </StageDrawnContext.Provider>
   );

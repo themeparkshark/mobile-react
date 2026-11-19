@@ -5,7 +5,7 @@ const { loadTs } = require('./helpers/ts-module.cjs');
 const session = loadTs('src/gamekit/core/session.ts');
 const scoring = loadTs('src/gamekit/core/scoring.ts');
 
-function shell(paid, reduced = false, extra = {}, movement = null) {
+function shell(paid, reduced = false, extra = {}, movement = null, dealt = { value: true }) {
   const calls = { start: 0, complete: 0, close: 0, pause: [], resume: 0, lineResume: 0, snapshots: [], cleared: [], music: [] };
   const preference = { reduced };
   const haptic = new Proxy({}, { get: () => () => {} });
@@ -15,7 +15,7 @@ function shell(paid, reduced = false, extra = {}, movement = null) {
     './LinePlayMovementContext': { LinePlayMovementContext: movementContext, shouldPauseForMovement: c => Boolean(c && c.moving && c.lineMovePolicy === 'pause') },
     './RideChallengeContext': { RideChallengeContext: { value: paid } },
     './ShellFrameContext': { ShellFrameContext: { value: null } },
-    './StageHoldContext': { StageHoldContext: { value: false }, StageDrawnContext: { value: null }, RetryRoundContext: { value: 0 } },
+    './StageHoldContext': { StageHoldContext: { value: false }, StageDrawnContext: { value: null }, RetryRoundContext: { value: 0 }, StageDealtContext: dealt },
     './Haptics': { Haptic: haptic }, './SFX': { playSfx() {} },
     '../hooks/useReducedGameMotion': { default: () => preference.reduced },
     '../ui/GameIcon': { default: 'GameIcon' },
@@ -33,7 +33,7 @@ function shell(paid, reduced = false, extra = {}, movement = null) {
     onComplete(mult, meta) { calls.complete++; calls.mult = mult; calls.meta = meta; },
     onClose() { calls.close++; }, onPause(reason) { calls.pause.push(reason); }, onResume() { calls.resume++; },
     children: 'The game board', ...extra });
-  return { view, calls, preference, movementContext };
+  return { view, calls, preference, movementContext, dealt };
 }
 
 /** Run every pending timer (in id order) and re-render. */
@@ -378,5 +378,29 @@ test('QUEUE REALITY: boarding news during the 3-2-1 back from the pocket holds t
   flush(view);
   assert.equal(calls.resume, 0, 'the round never starts over the ride question');
   assert.ok(view.find(node => node.type === 'Text' && node.props.children === 'Did you get to the ride?'));
+  view.unmount();
+});
+
+test('w5 N04: a kept board counts and takes its skip tap before the deal; play opens only once the try is dealt', () => {
+  const dealt = { value: false };
+  const { view, calls } = shell(true, false, {}, null, dealt);
+  // The tap is taken at once (the count jumps to GO), but GO never opens play on a try the server has not dealt.
+  startPlaying(view);
+  flush(view);
+  assert.equal(calls.start, 0, 'no play before the deal');
+  // The deal lands: play opens on the frames after it (the game has read the dealt seed and rules by then).
+  dealt.value = true; view.render();
+  assert.equal(calls.start, 0, 'not in the deal commit itself');
+  flush(view);
+  assert.equal(calls.start, 1, 'play opens once, after the deal');
+  flush(view);
+  assert.equal(calls.start, 1, 'and never twice');
+  view.unmount();
+});
+
+test('w5 N04: with the deal in, the skip tap opens play at once (every other start is unchanged)', () => {
+  const { view, calls } = shell(true);
+  startPlaying(view);
+  assert.equal(calls.start, 1);
   view.unmount();
 });

@@ -143,3 +143,17 @@ test('T051: the striped tiles before the question take a tap with a wiggle, neve
   const gate = fs.readFileSync('src/games/trivia-duel/engine/tapGate.ts', 'utf8');
   assert.match(gate, /if \(phase === TAP_PH\.read\) return 'early';/);
 });
+
+test('w5 N04: the kept board is live while the deal travels; only GO waits for it, and a Leave then is kept', () => {
+  // In 'replay' the board is shown and takes taps (never held); the dealt flag tells the shell to hold GO.
+  assert.match(modal, /const boardHeld = flowState === 'spinning' \|\| flowState === 'lost';/);
+  assert.match(modal, /const boardDealt = flowState !== 'replay';/);
+  assert.match(modal, /dealt=\{boardDealt\}/);
+  assert.match(modal, /pointerEvents=\{boardHeld \|\| boardHidden \? 'none' : 'auto'\}/);
+  assert.match(selector, /<StageDealtContext\.Provider value=\{dealt\}>/);
+  assert.match(ctx, /export const StageDealtContext = createContext<boolean>\(true\);/);
+  assert.match(shell, /if \(!stageDealtRef\.current\) \{\n\s+playWaitsDealRef\.current = true;/);
+  // A Leave before the deal has no attempt to end yet: it is sent once the try is dealt.
+  assert.match(modal, /if \(!attemptRef\.current && flowStateRef\.current === 'replay'\) \{ lossBeforeDealRef\.current = true; return; \}/);
+  assert.match(modal, /if \(flowState === 'minigame' && lossBeforeDealRef\.current && attemptRef\.current\) void resolveAttempt\('loss'\);/);
+});

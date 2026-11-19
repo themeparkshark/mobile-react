@@ -29,6 +29,13 @@ export const StageDrawnContext = createContext<(() => void) | null>(null);
  */
 export const RetryRoundContext = createContext<number>(0);
 
+/**
+ * Fix pass w5 (N04): false while TRY AGAIN's kept board is on screen and counting but the server has not dealt the
+ * new try yet. The board takes taps and counts 2-1-GO at once; the shell opens play (GO's onStart) only once this is
+ * true again, so the try always plays the dealt seed and rules. True everywhere else.
+ */
+export const StageDealtContext = createContext<boolean>(true);
+
 /** The ride try number (see RetryRoundContext). */
 export function useRetryRound(): number {
   return useContext(RetryRoundContext);

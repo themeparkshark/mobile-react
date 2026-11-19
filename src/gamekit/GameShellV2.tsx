@@ -67,7 +67,7 @@ import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovem
 import { RideChallengeContext } from './RideChallengeContext';
 import { noteRideTry } from './results/rideTry';
 import { ShellFrameContext } from './ShellFrameContext';
-import { RetryRoundContext, StageDrawnContext, StageHoldContext } from './StageHoldContext';
+import { RetryRoundContext, StageDealtContext, StageDrawnContext, StageHoldContext } from './StageHoldContext';
 import { GrownUpGateSlot } from '../components/GrownUpGate';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
@@ -453,6 +453,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     stageHeldRef.current = stageHeld;
     /** Told once the held stage is drawn, so the ride's punch hands over onto a drawn board (w4 N04). */
     const onStageDrawn = useContext(StageDrawnContext);
+    /** False while a kept board counts ahead of its try's deal (w5 N04): GO waits for it. */
+    const stageDealt = useContext(StageDealtContext);
+    const stageDealtRef = useRef(stageDealt);
+    stageDealtRef.current = stageDealt;
+    const playWaitsDealRef = useRef(false);
     const reducedMotion = useReducedGameMotion();
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
@@ -642,6 +647,14 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     onStartRef.current = onStart;
     const beginPlay = useCallback(() => {
       if (startedRef.current) return;
+      // w5 N04: a kept board counts while its try's deal is on the way; play opens only on the dealt try (its seed,
+      // its trivia round, its rules), the frame after the deal lands (the deal-gate effect below).
+      if (!stageDealtRef.current) {
+        playWaitsDealRef.current = true;
+        pressTrace('shell.waitdeal', () => gameIdRef.current);
+        return;
+      }
+      playWaitsDealRef.current = false;
       startedRef.current = true;
       playedOnceRef.current = true;
       pressTrace('shell.play', () => gameIdRef.current);
@@ -699,6 +712,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // (a new onStart each render) never restarts it from 3.
     const beginPlayRef = useRef(beginPlay);
     beginPlayRef.current = beginPlay;
+    // w5 N04: GO landed before the deal: play opens the frame after it lands, once the game has read the dealt try
+    // (its own effects run in the deal's commit). Hidden or reset, nothing waits.
+    useEffect(() => {
+      if (!visible) { playWaitsDealRef.current = false; return undefined; }
+      if (!stageDealt || !playWaitsDealRef.current) return undefined;
+      let raf2: unknown = 0;
+      const raf1 = nextFrame(() => { raf2 = nextFrame(() => { if (playWaitsDealRef.current) beginPlayRef.current(); }); });
+      return () => { cancelFrame(raf1); cancelFrame(raf2); };
+    }, [stageDealt, visible]);
     const fireStepRef = useRef(fireCountStep);
     fireStepRef.current = fireCountStep;
     const countStepsRef = useRef<readonly CountStep[]>([]);
@@ -784,7 +806,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       // Safety only: if the UI thread never ticks (it always does in the foreground), JS opens play.
       const expected = lead + (steps[steps.length - 1].at - from);
       countdownTimers.current.push(setTimeout(() => {
-        if (startedRef.current) return;
+        if (startedRef.current || playWaitsDealRef.current) return;
         cdLive.value = false;
         countFrame.setActive(false);
         cdClock.value = -1;
@@ -913,6 +935,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       startedRef.current = false;
       claimedRef.current = false;
       playedOnceRef.current = true;
+      playWaitsDealRef.current = false;
       backFromPocketRef.current = false;
       setRescue(null);
       setWrap(null);

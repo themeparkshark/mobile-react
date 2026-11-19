@@ -909,9 +909,18 @@ export default function RedeemRedeemableModal({
     await resolveAttempt('win', proof);
   }, [resolveAttempt]);
 
+  // w5 N04: the kept board is live before the server deals its try, so a Leave in that moment has no attempt to
+  // end yet. It is kept and sent the moment the try is dealt, never dropped (the game already shows it left).
+  const lossBeforeDealRef = useRef(false);
   const handleGameLose = useCallback(async () => {
+    if (!attemptRef.current && flowStateRef.current === 'replay') { lossBeforeDealRef.current = true; return; }
     await resolveAttempt('loss');
   }, [resolveAttempt]);
+  useEffect(() => {
+    if (flowState === 'replay') return;
+    if (flowState === 'minigame' && lossBeforeDealRef.current && attemptRef.current) void resolveAttempt('loss');
+    lossBeforeDealRef.current = false;
+  }, [flowState, resolveAttempt]);
   // Fix pass w5: one stable pair of game callbacks (the memoized game never re-renders for a new arrow).
   const gameEndRef = useRef({ win: handleGameWin, lose: handleGameLose });
   gameEndRef.current = { win: handleGameWin, lose: handleGameLose };
@@ -1302,7 +1311,10 @@ export default function RedeemRedeemableModal({
   const boardKept = keepBoard && (flowState === 'lost' || flowState === 'replay');
   const boardOutset = fullBleed ? null : { top: -sheetMargin, left: -sheetMargin, right: -sheetMargin, bottom: -sheetMargin };
   const boardHidden = flowState === 'spinning' || flowState === 'lost' || (flowState === 'replay' && !replayShown);
-  const boardHeld = flowState === 'spinning' || flowState === 'lost' || flowState === 'replay';
+  // w5 N04: in 'replay' the kept board is live (it counts and takes taps) while the deal travels; only GO waits
+  // for the deal (dealt below), so input never waits on the server.
+  const boardHeld = flowState === 'spinning' || flowState === 'lost';
+  const boardDealt = flowState !== 'replay';
 
   return (
     <>
@@ -1630,7 +1642,7 @@ export default function RedeemRedeemableModal({
               the punch ends; it becomes visible, and its count starts, when the punch hands over. */}
           {selectedGame && ((flowState === 'spinning' && (punchCard || earlyGameRef.current === selectedGame)) || flowState === 'minigame' || (flowState === 'postwin' && !winCovered) || boardKept) && (
             <View style={[styles.minigameContainer, boardOutset, boardHidden && styles.prewarm]}
-              pointerEvents={boardHeld ? 'none' : 'auto'}>
+              pointerEvents={boardHeld || boardHidden ? 'none' : 'auto'}>
               <RideChallengeContext.Provider value={true}>
               <MiniGameSelector
                 visible={!boardHeld}
@@ -1644,6 +1656,7 @@ export default function RedeemRedeemableModal({
                 prewarm={boardHeld}
                 onStageDrawn={markBoardDrawn}
                 round={retryRound}
+                dealt={boardDealt}
                 kid={kidRulesFor(attemptRef.current, pictureOnlyRef.current)}
                 parkId={park.id}
                 triviaDeal={attemptRef.current?.trivia ?? null}
