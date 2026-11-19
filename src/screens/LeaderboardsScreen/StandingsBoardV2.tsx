@@ -38,7 +38,7 @@ import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, SharkLoader, textPreset } 
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import LastWeekCard from './LastWeekCard';
 import MiniPodium, { MINI_PODIUM_HEIGHT, ScoreIcon } from './MiniPodium';
-import PodiumSteps, { type PodiumStep } from './PodiumSteps';
+import PodiumBarrels from './PodiumBarrels';
 import { CROWN_ART } from './PodiumSpot';
 import SharkCard from './SharkCard';
 import StandingsShark from './StandingsShark';
@@ -80,8 +80,6 @@ const sizeOfItem = (layout: { size?: number }, item: ListItem) => {
   layout.size = item.type === 'divider' ? DIVIDER_HEIGHT : item.type === 'retry' ? ROW_HEIGHT * SKELETON_ROWS : ROW_HEIGHT;
 };
 const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
-/** The empty board's podium: the same plain steps, small. */
-const EMPTY_STEPS: readonly PodiumStep[] = [{ rank: 2, width: 60, height: 44 }, { rank: 1, width: 70, height: 66 }, { rank: 3, width: 60, height: 32 }];
 
 /**
  * The board's one pill: what the number is and how long the week has left.
@@ -1007,9 +1005,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           {board === 'friends' ? <GameIcon name="heart" size={84} /> : (
             <View style={{ alignItems: 'center' }}>
               <Image source={CROWN_ART[1]} style={{ width: 64, height: 64, marginBottom: -14, zIndex: 2 }} contentFit="contain" />
-              {/* An empty podium (plain steps, no coin piles) waiting for its first three. */}
-              <View style={{ width: 200, height: 70 }}>
-                <PodiumSteps steps={EMPTY_STEPS} gap={4} />
+              {/* Alex's numbered barrels, small, waiting for their first three. */}
+              <View style={{ width: 200, height: 86, overflow: 'hidden', borderRadius: RADIUS.md }}>
+                <PodiumBarrels cut="numbered" width={200} height={86} />
               </View>
             </View>
           )}

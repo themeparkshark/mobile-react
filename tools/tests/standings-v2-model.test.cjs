@@ -213,8 +213,8 @@ test('round 3 wiring: the Monday card always releases the queued climb, the clim
   assert.match(board, /onClimbDone=\{\(\) => \{ setClimbing\(false\); setClimb\(0\); setPassed\(\[\]\); setClimbFrom\(null\); setPodiumHold\(false\); \}\}/, 'the climb resets, so a same-size climb plays again');
   assert.match(board, /\}, \[climbId\]\);/);
   assert.match(read('src/screens/LeaderboardsScreen/StandingsShark.tsx'), /fadeDuration=\{0\}/);
-  // Plain podium steps, no gold barrels or coin piles (Dustin, Oct 28, ledger 38).
-  assert.match(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /<PodiumSteps steps=\{MINI_STEPS\}/);
+  // Alex's barrel tops under the spots again (OTA 2 look, Dustin Nov 19), through the one podium part.
+  assert.match(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /<PodiumBarrels cut="tops" width=\{width\} height=\{MINI_BARRELS_SHOWN\} \/>/);
   assert.doesNotMatch(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /barrel(-flipped)?\.png/);
   assert.match(read('src/api/endpoints/me/task-attempts.ts'), /winNote\(/);
 });

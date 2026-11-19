@@ -1,5 +1,5 @@
 /**
- * Standings podium (WS8): plain podium steps (no coin piles, Dustin Oct 28) with the
+ * Standings podium (WS8): Alex's numbered coin barrels (OTA 2 look, Dustin Nov 19) with the
  * top three players on them, and "open spots" for places nobody holds yet.
  *
  * Choreography (UI thread): 3rd rises, then 2nd, then 1st, each with a small
@@ -7,7 +7,7 @@
  * gold confetti pop from his spot, all on the same frame. Reduced motion shows
  * the finished podium with no confetti.
  *
- * The steps stand 3 (left), 1 (centre), 2 (right), so the spots sit in that order.
+ * The barrel art is numbered 3 (left), 1 (centre), 2 (right), so the spots sit in that order.
  */
 import * as Haptics from 'expo-haptics';
 import { useContext, useEffect, useRef, useState } from 'react';
@@ -19,7 +19,7 @@ import { PlayerType } from '../../models/player-type';
 import { BRAND, type GameIconName } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import PodiumSpot, { type PodiumRank } from './PodiumSpot';
-import PodiumSteps from './PodiumSteps';
+import PodiumBarrels from './PodiumBarrels';
 
 const revealSound = require('../../../assets/sounds/reveal.mp3');
 
@@ -97,7 +97,7 @@ export default function StandingsPodium({ podium, scoreOf, scoreIcon, meId, play
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playKey, reduced]);
 
-  // Spots: 3 on the left step, 1 in the centre, 2 on the right, lifted to each step's height.
+  // Spots: 3 on the left barrel, 1 in the centre, 2 on the right, lifted to each barrel's height.
   const spot = (rank: PodiumRank, lift: number, flex: number) => (
     <View style={{ flex, alignItems: 'center', marginBottom: lift }}
       onLayout={rank === 1 ? event => {
@@ -121,12 +121,8 @@ export default function StandingsPodium({ podium, scoreOf, scoreIcon, meId, play
   return (
     <View style={{ height: podiumHeight }}>
       {header}
-      {/* Plain steps under the spots (no gold barrels or coin piles): each top meets its spot. */}
-      <PodiumSteps paddingHorizontal={8} gap={6} steps={[
-        { rank: 3, flex: 1, height: barrelHeight - (compact ? 40 : 50) + 4 },
-        { rank: 1, flex: 1.2, height: barrelHeight - (compact ? 40 : 50) + 54 },
-        { rank: 2, flex: 1, height: barrelHeight - (compact ? 40 : 50) + 24 },
-      ]} />
+      {/* Alex's numbered barrels under the spots, top first. */}
+      <PodiumBarrels cut="numbered" width={width} height={barrelHeight} />
       <View pointerEvents="box-none" onLayout={event => { spotsTop.current = event.nativeEvent.layout.y; }} style={{
         position: 'absolute', left: 0, right: 0, bottom: barrelHeight - (compact ? 40 : 50), flexDirection: 'row',
         alignItems: 'flex-end', paddingHorizontal: 8,

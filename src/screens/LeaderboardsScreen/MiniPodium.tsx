@@ -1,7 +1,7 @@
 /**
  * The Standings v2 podium: 236 pt, so the race below shows on the first
- * screen. Three plain podium steps (no coin piles, Dustin Oct 28) with the top three standing on
- * them, 2nd left, 1st centre, 3rd right, each with Alex's crown.
+ * screen. Alex's coin barrels (the tops cut, flipped so silver has the taller base) with the top
+ * three standing on them, 2nd left, 1st centre, 3rd right, each with Alex's crown (OTA 2 look, Dustin Nov 19).
  *
  * Motion: the rise (3rd, 2nd, 1st) plays only when the top three changed since
  * this player last looked (`celebrate`); every other visit is a 150 ms fade
@@ -17,7 +17,7 @@ import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { BRAND, GameIcon, RADIUS } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { CROWN_ART, RANK_RING } from './PodiumSpot';
-import PodiumSteps, { type PodiumStep } from './PodiumSteps';
+import PodiumBarrels from './PodiumBarrels';
 import StandingsShark from './StandingsShark';
 import { rowLabel, type StandingsMetric, type StandingsRowModel } from './standingsV2Model';
 import { UpperText } from '../../ui/upper';
@@ -26,10 +26,8 @@ const RIDE_COIN = require('../../../assets/images/map/ride-coin.png');
 const revealSound = require('../../../assets/sounds/reveal.mp3');
 
 export const MINI_PODIUM_HEIGHT = 236;
-/** The podium steps under the spots: each step's top meets its spot's score chip (spot bottom = 42 + SEAT). */
-export const MINI_STEPS: readonly PodiumStep[] = [
-  { rank: 2, width: 104, height: 48 }, { rank: 1, width: 124, height: 98 }, { rank: 3, width: 104, height: 30 },
-];
+/** How much of the barrels shows under the spots: the coin rims and lids (the painted digits sit lower and stay hidden). */
+export const MINI_BARRELS_SHOWN = 100;
 const CONFETTI_COLORS = [BRAND.gold, BRAND.goldLight, BRAND.white, BRAND.skyDeep, '#ff8a3d', '#ff5d8f'];
 
 /**
@@ -107,7 +105,7 @@ export function ScoreIcon({ metric, size }: { readonly metric: StandingsMetric; 
   );
 }
 
-/** Each spot's score chip rests on its step (1st on the tallest, then 2nd, then 3rd). */
+/** Each spot's score chip rests on its barrel rim (flipped art: center, then left, then right). */
 const SEAT: Record<1 | 2 | 3, number> = { 1: 52, 2: 2, 3: -16 };
 
 function Spot({ rank, row, metric, progress, pop, loading, onPress }: {
@@ -223,8 +221,8 @@ function MiniPodium({ podium, metric, celebrate, meJoined, playKey, onPress, dim
 
   return (
     <View style={{ height: MINI_PODIUM_HEIGHT, width }}>
-      {/* Plain podium steps, 1 > 2 > 3, the spots stand on them (no gold barrels or coin piles). */}
-      <PodiumSteps steps={MINI_STEPS} gap={8} />
+      {/* The top of Alex's barrels: coin rims and lids, the spots stand on them. */}
+      <PodiumBarrels cut="tops" width={width} height={MINI_BARRELS_SHOWN} />
       {/* The dimmed hold is the old stage: VoiceOver skips it (its rows already carry their new
           ranks) and follows the dock's climb instead (r7). */}
       <View pointerEvents="box-none" accessibilityElementsHidden={dimmed} importantForAccessibility={dimmed ? 'no-hide-descendants' : 'auto'} style={{

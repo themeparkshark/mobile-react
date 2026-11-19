@@ -283,18 +283,24 @@ test('the vocabulary test is strict: shelf-words and every unowned file fail the
   assert.equal(v.scanSource("const a = <Text>Rescue Pass</Text>;", 'x.tsx')[0].rule, 'rescue-pass');
 });
 
-test('round 2 (ledger 38): no coin piles on the Starter Pack or Standings, existing Alex art only', () => {
+test('round 2 (ledger 38): the Starter Pack shows Alex\'s closed chest; Standings stands on Alex\'s barrels again (Dustin, Nov 19)', () => {
   const ui = read('src/components/money/moneyUi.tsx');
   assert.match(ui, /chest: require\('\.\.\/\.\.\/\.\.\/assets\/images\/screens\/redeem\/chest_closed\.png'\)/, "the Starter Pack shows Alex's closed chest");
   assert.doesNotMatch(ui, /supplies\/chest\.webp/, 'not the overflowing gold chest');
   assert.ok(fs.existsSync(path.join(ROOT, 'assets/images/screens/redeem/chest_closed.png')), 'an existing file');
+  // One podium part: every Standings podium draws PodiumBarrels, and only it requires the barrel art.
   for (const file of ['MiniPodium.tsx', 'StandingsPodium.tsx', 'StandingsBoardV2.tsx']) {
     const src = read(`src/screens/LeaderboardsScreen/${file}`);
-    assert.doesNotMatch(src, /barrel(-flipped)?\.png/, `${file}: no gold barrels`);
-    assert.match(src, /<PodiumSteps /, `${file}: plain podium steps`);
+    assert.doesNotMatch(src, /barrel(-flipped)?\.png|PodiumSteps/, `${file}: the podium comes from the one part`);
+    assert.match(src, /<PodiumBarrels cut="(tops|numbered)" /, `${file}: Alex's barrels`);
   }
-  const steps = read('src/screens/LeaderboardsScreen/PodiumSteps.tsx');
-  assert.doesNotMatch(steps, /require\(/, 'the steps are drawn from the board UI, no new art');
+  const part = read('src/screens/LeaderboardsScreen/PodiumBarrels.tsx');
+  assert.match(part, /tops: require\('\.\.\/\.\.\/\.\.\/assets\/images\/screens\/leaderboard\/barrel-flipped\.png'\)/);
+  assert.match(part, /numbered: require\('\.\.\/\.\.\/\.\.\/assets\/images\/screens\/leaderboard\/barrel\.png'\)/);
+  for (const art of ['barrel.png', 'barrel-flipped.png', 'standings-bg.png']) {
+    assert.ok(fs.existsSync(path.join(ROOT, 'assets/images/screens/leaderboard', art)), `${art} ships`);
+  }
+  assert.equal(fs.existsSync(path.join(ROOT, 'src/screens/LeaderboardsScreen/PodiumSteps.tsx')), false, 'no second podium part');
 });
 
 test('round 2 (ledger 37, 39): help pages show LinePlay\'s own icon; the app never names the Green Train Toy', () => {
@@ -354,15 +360,14 @@ test('round 2: a sight coin card never sends you to a line it does not have', ()
   assert.match(read('src/screens/ParkScreen.tsx'), /sight=\{section === 'normal' && rideKind\(task\.id\) === 'coin'\}/);
 });
 
-test('round 3, ledger 38: the Standings help page stands on the plain podium steps too (no barrels, no coin pile)', () => {
+test('the Standings help page stands on the board\'s own barrels (one podium part, Dustin Nov 19)', () => {
   const hero = read('src/components/help/HelpHero.tsx');
-  assert.doesNotMatch(hero, /podium-barrels/, 'the barrels-on-coins picture is gone from the help hero');
-  assert.doesNotMatch(hero, /ART\.barrel/);
-  assert.match(hero, /import PodiumSteps, \{ type PodiumStep \} from '\.\.\/\.\.\/screens\/LeaderboardsScreen\/PodiumSteps';/);
-  assert.match(hero, /<PodiumSteps steps=\{steps\} gap=\{gap\} numberAt="top" \/>/, 'round 4: 2, 1, 3 sit under the top edges, above the stage frame');
+  assert.match(hero, /import PodiumBarrels, \{ BARREL_ASPECT, BARREL_TOPS_SEAT, BARREL_TOPS_SHOWN \} from '\.\.\/\.\.\/screens\/LeaderboardsScreen\/PodiumBarrels';/);
+  assert.match(hero, /<PodiumBarrels cut="tops" width=\{bw\} height=\{shown\} \/>/, 'silver on the taller left barrel, gold in the middle, bronze right, as on the board');
+  assert.doesNotMatch(hero, /podium-barrels\.webp|ART\.barrel|PodiumSteps/, 'no second podium picture');
   // The sheet page that draws it is still the Standings "Top 3 win each week" page.
   assert.match(read('src/services/help/helpSheets.ts'), /key: 'podium', hero: 'standings_podium', headline: 'Top 3 win each week'/);
-  // No Standings surface (screens or help) points at a barrel file.
+  // Only the one part points at a barrel file.
   for (const file of ['src/screens/LeaderboardScreen.tsx', 'src/components/help/HelpHero.tsx']) {
     assert.doesNotMatch(read(file), /barrel(-flipped)?\.(png|webp)|podium-barrels/, file);
   }
@@ -564,7 +569,6 @@ test('round 5: Profile counts shelf coins in the shelf word with the coin pictur
   assert.doesNotMatch(stats, /player\.park_coins_count/);
   assert.doesNotMatch(stats, /label: 'Ride Coins'/);
   assert.match(read('src/components/Tutorial/steps.ts'), /Then follow the glowing coin on the map\./);
-  assert.match(read('src/screens/LeaderboardsScreen/PodiumSteps.tsx'), /numberAt === 'top' \? 'rgba\(5,52,110,0\.55\)'/);
 });
 
 test('round 5: the park day story waits on top after park_day_done', () => {
