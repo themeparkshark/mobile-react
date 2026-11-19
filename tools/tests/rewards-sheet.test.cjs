@@ -205,7 +205,9 @@ test('Daily 3: a Shark Pass line per goal after rung 5 (steps, never points), fr
   const sheet = read('src/components/retention/Daily3Sheet.tsx');
   assert.match(sheet, /passToday && !shown\.parkOnly \? goalPassLine\(shown, passToday\) : null/, 'the home side earns home points');
   assert.match(read('src/components/retention/useRetention.tsx'), /passToday=\{passOn \? passToday : null\}/);
-  assert.match(sheet, /New goals tomorrow/, 'a day in words, never a ticking clock');
+  // Fix pass w4 T107: the reset is said in words by the chest when today is done (tomorrowLine), never a ticking clock.
+  assert.match(sheet, /tomorrowLine\(state\)/, 'a day in words, never a ticking clock');
+  assert.doesNotMatch(sheet, /resetLabel\(/);
   assert.doesNotMatch(sheet, /resetLabel/);
 });
 

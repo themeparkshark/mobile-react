@@ -2,12 +2,12 @@ import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, Easing, FadeInDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import type { DailyGoal, DailyThreeState, WeekDayState } from '../../api/endpoints/retention';
 import { haptic } from '../../gamekit/Haptics';
 import {
-  doneCount, milestoneLine, showsBar, streakSubline, tomorrowLine, weekdayLetter,
+  doneCount, milestoneLine, streakSubline, tomorrowLine, weekdayLetter,
 } from '../../services/retention/logic';
 import { freezesShown, goalGo, goalPassLine, homeSideGoal, weekStartsLine } from '../../services/retention/rewardsModel';
 import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
@@ -71,33 +71,12 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
   const reminders = state.reminders !== false;
   // At home with a goal that only a park can finish, the hero never says "Finish today" for a day the kid cannot finish.
   const parkGoalWaits = !atPark && state.goals.some(g => !g.done && homeSideGoal(g, false).parkOnly);
+  // Fix pass w4 T107: three goals and their chest lead; the flame, week dots, Weekly Box gift, freezes and the next
+  // milestone sit behind one This week row (a tap opens them), so the sheet reads as five things, picture first.
+  const [weekOpen, setWeekOpen] = useState(false);
+  const weekLeft = Math.max(0, state.week.needed - state.week.done);
   return (
     <View style={styles.card}>
-      <View style={styles.hero}>
-        <Flame days={s.days} reducedMotion={reducedMotion} />
-        <View style={styles.heroText}>
-          <Text style={styles.streakBig} numberOfLines={1} adjustsFontSizeToFit>{s.days > 0 ? `${s.days} DAY FLAME` : 'START A FLAME'}</Text>
-          <Text style={styles.streakSub} numberOfLines={2}>{streakSubline(state, parkGoalWaits)}</Text>
-          {tease && (
-            <View style={styles.tease}>
-              <GameIcon name="gift" size={18} />
-              <Text style={styles.teaseText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{tease}</Text>
-            </View>
-          )}
-        </View>
-        {showFreezes && <View style={styles.freezes} accessible accessibilityLabel={`${s.freezes} of ${s.freeze_cap} streak freezes`}>
-          {Array.from({ length: s.freeze_cap }, (_, i) => i < s.freezes ? (
-            <Image key={i} source={FREEZE} style={styles.freezeIcon} contentFit="contain" />
-          ) : (
-            <Pressable key={i} onPress={canBuyFreeze ? onBuyFreeze : undefined} disabled={busy || !canBuyFreeze} hitSlop={4}
-              accessibilityRole="button" accessibilityLabel={canBuyFreeze ? `Get a streak freeze for ${s.freeze_price} Shark Coins` : 'Empty freeze slot'}
-              style={[styles.freezeSlot, canBuyFreeze && styles.freezeSlotBuy]}>
-              {canBuyFreeze && <Text style={styles.freezePlus}>+</Text>}
-            </Pressable>
-          ))}
-        </View>}
-      </View>
-
       <View style={styles.goals}>
         {state.goals.map((g, i) => {
           const shown = homeSideGoal(g, atPark);
@@ -113,31 +92,62 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
       <ChestBlock state={state} done={done} busy={busy} onClaim={onClaim} reducedMotion={reducedMotion}
         ticks={reducedMotion ? 0 : celebrate.filter(k => state.goals.some(g => g.key === k && g.done)).length} held={ticksHeld} />
 
-      <View style={styles.week}>
-        <View style={styles.weekDays}>
-          <View style={styles.track} />
-          {state.week.days.map(d => <WeekDay key={d.date} letter={weekdayLetter(d.date)} state={d.state} reducedMotion={reducedMotion} />)}
+      <Pressable onPress={state.week.claimable ? onClaimWeekly : () => { haptic('tapLight'); setWeekOpen(o => !o); }}
+        disabled={busy && state.week.claimable} accessibilityRole="button" accessibilityState={{ expanded: weekOpen }}
+        accessibilityLabel={state.week.claimable ? 'Open your Weekly Box' : `This week: ${s.days} day flame, ${state.week.done} of ${state.week.needed} flames for the Weekly Box`}
+        style={({ pressed }) => [styles.weekRow, state.week.claimable && !state.claimable && styles.weekRowReady, pressed && styles.goalPressed]}>
+        <Flame days={s.days} reducedMotion={reducedMotion} small />
+        <View style={styles.weekRowText}>
+          <Text style={[styles.weekRowTitle, state.week.claimable && !state.claimable && styles.weekRowTitleReady]} numberOfLines={1}>THIS WEEK</Text>
+          <View style={styles.weekPips} accessible={false}>
+            {Array.from({ length: state.week.needed }, (_, n) => (
+              <View key={n} style={[styles.weekPip, n < state.week.done && styles.weekPipLit]}>
+                {n < state.week.done && <GameIcon name="streak" size={14} />}
+              </View>
+            ))}
+          </View>
         </View>
-        <Pressable onPress={state.week.claimable ? onClaimWeekly : undefined} disabled={busy || !state.week.claimable}
-          accessibilityRole="button"
-          accessibilityLabel={state.week.claimable ? 'Open your Weekly Box'
-            : `Weekly Box: ${state.week.done} of ${state.week.needed} flames`}
-          style={[styles.weekly, state.week.claimable && !state.claimable && styles.weeklyReady,
-            state.week.claimable && state.claimable && styles.weeklyWaiting]}>
+        <View style={styles.weekGift}>
           <Image source={WEEKLY} style={styles.weeklyArt} contentFit="contain" />
-          <Text style={[styles.weeklyText, state.week.claimable && !state.claimable && styles.weeklyTextReady]}>
-            {state.week.claimed ? 'DONE' : state.week.claimable ? (state.claimable ? 'NEXT' : 'OPEN') : 'GIFT'}
-          </Text>
-        </Pressable>
-      </View>
-      <Text style={styles.weekHint} numberOfLines={1}>{weekStartsLine(state.week)}</Text>
+          {state.week.claimable
+            ? <View style={styles.go}><Text style={styles.goText}>{state.claimable ? 'NEXT' : 'OPEN'}</Text></View>
+            : <Text style={styles.weekGiftText}>{state.week.claimed ? 'DONE' : `${weekLeft} more`}</Text>}
+        </View>
+      </Pressable>
+      {weekOpen && (
+        <Animated.View entering={reducedMotion ? undefined : FadeInDown.duration(180)} style={styles.weekMore}>
+          <View style={styles.weekMoreTop}>
+            <Text style={styles.streakSub} numberOfLines={2}>{streakSubline(state, parkGoalWaits)}</Text>
+            {showFreezes && <View style={styles.freezesRow} accessible accessibilityLabel={`${s.freezes} of ${s.freeze_cap} streak freezes`}>
+              {Array.from({ length: s.freeze_cap }, (_, n) => n < s.freezes ? (
+                <Image key={n} source={FREEZE} style={styles.freezeIcon} contentFit="contain" />
+              ) : (
+                <Pressable key={n} onPress={canBuyFreeze ? onBuyFreeze : undefined} disabled={busy || !canBuyFreeze} hitSlop={4}
+                  accessibilityRole="button" accessibilityLabel={canBuyFreeze ? `Get a streak freeze for ${s.freeze_price} Shark Coins` : 'Empty freeze slot'}
+                  style={[styles.freezeSlot, canBuyFreeze && styles.freezeSlotBuy]}>
+                  {canBuyFreeze && <Text style={styles.freezePlus}>+</Text>}
+                </Pressable>
+              ))}
+            </View>}
+          </View>
+          {tease && (
+            <View style={styles.tease}>
+              <GameIcon name="gift" size={18} />
+              <Text style={styles.teaseText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{tease}</Text>
+            </View>
+          )}
+          <View style={styles.weekDays}>
+            <View style={styles.track} />
+            {state.week.days.map(d => <WeekDay key={d.date} letter={weekdayLetter(d.date)} state={d.state} reducedMotion={reducedMotion} />)}
+          </View>
+          <Text style={styles.weekHint} numberOfLines={1}>{weekStartsLine(state.week)}</Text>
+        </Animated.View>
+      )}
 
       <Pressable onPress={onClose} accessibilityRole="button" style={styles.later}>
         <Text style={styles.laterText}>{closeLabel}</Text>
       </Pressable>
       <View style={styles.footer}>
-        {/* A date in words, never a clock that ticks down. */}
-        <Text style={styles.reset}>New goals tomorrow</Text>
         {remindersReady && (
           <Pressable onPress={() => onReminders(!reminders)} accessibilityRole="switch" accessibilityState={{ checked: reminders }}
             accessibilityLabel="Daily reminders" hitSlop={8} style={styles.bell}>
@@ -177,7 +187,7 @@ function CoachLine({ icon, text }: { readonly icon: React.ReactNode; readonly te
   );
 }
 
-function Flame({ days, reducedMotion }: { readonly days: number; readonly reducedMotion: boolean }) {
+function Flame({ days, reducedMotion, small = false }: { readonly days: number; readonly reducedMotion: boolean; readonly small?: boolean }) {
   const t = useSharedValue(0);
   const lit = days > 0;
   const ambient = useAmbient();
@@ -188,9 +198,9 @@ function Flame({ days, reducedMotion }: { readonly days: number; readonly reduce
   }, [lit, reducedMotion, ambient, t]);
   const style = useAnimatedStyle(() => ({ transform: [{ scaleY: 1 + t.value * 0.07 }, { rotate: `${(t.value - 0.5) * 6}deg` }] }));
   return (
-    <View style={styles.flameWrap}>
-      <View style={styles.flameHalo} />
-      <Animated.View style={style}><GameIcon name="streak" size={66} /></Animated.View>
+    <View style={[styles.flameWrap, small && styles.flameWrapSmall]}>
+      <View style={[styles.flameHalo, small && styles.flameHaloSmall]} />
+      <Animated.View style={style}><GameIcon name="streak" size={small ? 40 : 66} /></Animated.View>
       <View style={styles.flameNum}><Text style={styles.flameNumText}>{days}</Text></View>
     </View>
   );
@@ -237,20 +247,19 @@ function GoalRow({ goal, tick, held, onPress, reducedMotion, go, passLine }: {
   const checkStyle = useAnimatedStyle(() => ({ opacity: stamp.value, transform: [{ scale: 1.8 - stamp.value * 0.8 }] }));
   const doneNow = goal.done && ticked;
   const actionable = !goal.done && go !== null;
-  const pct = Math.min(1, goal.progress / Math.max(1, goal.target));
   return (
     <Pressable onPress={actionable ? onPress : undefined} disabled={!actionable} accessibilityRole="button"
       accessibilityLabel={`${goal.title}. ${doneNow ? 'Done' : goal.hint}`}
       style={({ pressed }) => [styles.goal, doneNow && styles.goalDone, pressed && styles.goalPressed]}>
-      <View style={styles.goalIcon}>{goalIcon(goal)}</View>
+      {/* T107: each goal leads with its picture and its number (how many so far, of how many). */}
+      <View style={styles.goalIcon}>{goalIcon(goal)}
+        {goal.target > 1 && !doneNow && <View style={styles.goalCount}><Text style={styles.goalCountText}>{`${Math.min(goal.progress, goal.target)}/${goal.target}`}</Text></View>}
+      </View>
       <View style={styles.goalText}>
         <Text style={[styles.goalTitle, doneNow && styles.goalTitleDone]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
           {goal.title}
         </Text>
-        {doneNow ? <Text style={styles.goalHintDone} numberOfLines={1}>Done!</Text> : showsBar(goal) && go !== null ? (
-          <View style={styles.bar}><View style={[styles.barFill, { width: `${pct * 100}%` }]} />
-            <Text style={styles.barText}>{`${goal.progress}/${goal.target}`}</Text></View>
-        ) : <Text style={styles.goalHint} numberOfLines={1}>{goal.hint}</Text>}
+        {doneNow ? <Text style={styles.goalHintDone} numberOfLines={1}>Done!</Text> : <Text style={styles.goalHint} numberOfLines={1}>{goal.hint}</Text>}
         {!!passLine && <Text style={styles.passLine} numberOfLines={1}>{passLine}</Text>}
       </View>
       <View style={styles.goalEnd}>
@@ -359,20 +368,15 @@ function WeekDay({ letter, state, reducedMotion }: { readonly letter: string; re
 const styles = StyleSheet.create({
   card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
     paddingTop: 20, paddingBottom: 10, paddingHorizontal: 12, alignItems: 'stretch', overflow: 'hidden' },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 18, padding: 8 },
   flameWrap: { width: 78, height: 78, alignItems: 'center', justifyContent: 'center' },
   flameHalo: { position: 'absolute', width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255, 226, 92, 0.28)' },
   flameNum: { position: 'absolute', bottom: -2, right: -2, minWidth: 30, height: 30, borderRadius: 15, paddingHorizontal: 6,
     backgroundColor: BRAND.white, borderWidth: 2.5, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   flameNumText: { fontFamily: 'Shark', fontSize: 16, color: BRAND.navy, marginTop: 1 },
-  heroText: { flex: 1, gap: 1 },
-  streakBig: { fontFamily: 'Shark', fontSize: 23, color: BRAND.gold },
-  streakSub: { fontFamily: 'Knockout', fontSize: 15, color: '#e4f7ff' },
+  streakSub: { flex: 1, fontFamily: 'Knockout', fontSize: 15, color: '#e4f7ff' },
   tease: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', maxWidth: '100%', backgroundColor: BRAND.navy, borderRadius: 10,
     paddingHorizontal: 6, paddingVertical: 2, marginTop: 2 },
   teaseText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.gold, marginTop: 1 },
-  freezes: { gap: 4, alignItems: 'center' },
   freezeIcon: { width: 36, height: 36 },
   freezeSlot: { width: 36, height: 36, borderRadius: 10, borderWidth: 2.5, borderStyle: 'dashed', borderColor: '#9fd2f5',
     alignItems: 'center', justifyContent: 'center' },
@@ -391,9 +395,6 @@ const styles = StyleSheet.create({
   goalHint: { fontFamily: 'Knockout', fontSize: 14, color: BRAND.navySoft },
   goalHintDone: { fontFamily: 'Knockout', fontSize: 14, color: '#2c7a43' },
   passLine: { fontFamily: 'Shark', fontSize: 12, color: BRAND.goldLip },
-  bar: { height: 16, borderRadius: 8, backgroundColor: BRAND.sky, overflow: 'hidden', justifyContent: 'center', marginTop: 2, marginRight: 4 },
-  barFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.gold, borderRadius: 8 },
-  barText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.navy, textAlign: 'center' },
   goalEnd: { width: 46, alignItems: 'center' },
   go: { backgroundColor: BRAND.gold, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, borderBottomWidth: 3,
     borderBottomColor: BRAND.goldLip },
@@ -417,8 +418,27 @@ const styles = StyleSheet.create({
   chipText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white, marginTop: 1 },
   chipGold: { backgroundColor: BRAND.gold },
   chipGoldText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy, marginTop: 1 },
-  week: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 6 },
-  weekDays: { flex: 1, flexDirection: 'row', justifyContent: 'space-between' },
+  // T107: the one This week row (flame, five flame pips, the Weekly Box gift) and what it opens.
+  weekRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 16, paddingHorizontal: 6, paddingVertical: 4, minHeight: 60 },
+  weekRowReady: { backgroundColor: BRAND.gold },
+  weekRowText: { flex: 1, gap: 4 },
+  weekRowTitle: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
+  weekRowTitleReady: { color: BRAND.navy },
+  weekPips: { flexDirection: 'row', gap: 4 },
+  weekPip: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#9fd2f5', alignItems: 'center', justifyContent: 'center' },
+  weekPipLit: { backgroundColor: BRAND.white, borderColor: BRAND.white },
+  weekGift: { width: 64, alignItems: 'center', gap: 2 },
+  weekGiftText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
+  weekMore: { marginTop: 6, gap: 6, backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: 16, padding: 8 },
+  weekMoreTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  freezesRow: { flexDirection: 'row', gap: 4 },
+  flameWrapSmall: { width: 52, height: 52 },
+  flameHaloSmall: { width: 46, height: 46, borderRadius: 23 },
+  goalCount: { position: 'absolute', bottom: -4, right: -6, minWidth: 30, height: 22, borderRadius: 11, paddingHorizontal: 5,
+    backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
+  goalCountText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.white, marginTop: 1 },
+  weekDays: { flexDirection: 'row', justifyContent: 'space-between' },
   track: { position: 'absolute', left: 15, right: 15, top: 15, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   day: { alignItems: 'center', gap: 2 },
   dayDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND.blue, alignItems: 'center',
@@ -430,18 +450,12 @@ const styles = StyleSheet.create({
   dayBefore: { borderColor: 'rgba(159, 210, 245, 0.35)' },
   dayLetter: { fontFamily: 'Knockout', fontSize: 12, color: '#cdeaff' },
   dayLetterToday: { color: BRAND.gold },
-  weekly: { width: 64, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14, paddingVertical: 4 },
-  weeklyReady: { backgroundColor: BRAND.gold },
-  weeklyWaiting: { borderWidth: 2, borderColor: BRAND.gold },
   weeklyArt: { width: 38, height: 38 },
-  weeklyText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
-  weeklyTextReady: { color: BRAND.navy },
   weekHint: { fontFamily: 'Knockout', fontSize: 14, color: '#cdeaff', marginTop: 4, textAlign: 'center' },
   later: { minHeight: 44, justifyContent: 'center', alignItems: 'center', marginTop: 10, borderRadius: 12, borderWidth: 2,
     borderColor: '#8fcdff', backgroundColor: '#075395' },
   laterText: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.white },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, paddingHorizontal: 4 },
-  reset: { fontFamily: 'Knockout', fontSize: 13, color: '#a9d6f7' },
   bell: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 4 },
   bellOff: { opacity: 0.45 },
   bellText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white },

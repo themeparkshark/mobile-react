@@ -97,3 +97,17 @@ test('T104: the chest card is sized to its prizes, the lid pops on the phone, pr
   const hook = read('src/components/retention/useRetention.tsx');
   assert.match(hook, /preview=\{chestPreview\(r\.src, daily, chests\.find\(c => c\.level === r\.level\) \?\? null\)\}/);
 });
+
+test('T107: Daily 3 reads as three pictured goals, their chest, one This week row and BACK', () => {
+  const sheet = read('src/components/retention/Daily3Sheet.tsx');
+  const body = sheet.slice(sheet.indexOf('<View style={styles.card}>'), sheet.indexOf('{coach && <Coach'));
+  const order = ['<View style={styles.goals}>', '<ChestBlock', 'styles.weekRow', '{closeLabel}'].map(k => body.indexOf(k));
+  assert.ok(order.every(n => n >= 0), 'all four parts are there');
+  assert.deepEqual(plain([...order].sort((a, b) => a - b)), plain(order), 'goals, chest, This week, BACK in that order');
+  assert.doesNotMatch(body, /styles\.hero\b|New goals tomorrow/, 'no flame hero card on top, no extra footer line');
+  // Week dots, the gift line, freezes and the milestone tease wait behind the This week row.
+  const more = body.slice(body.indexOf('{weekOpen && ('));
+  for (const k of ['<WeekDay', 'weekStartsLine(state.week)', '{tease && (', 'showFreezes &&']) assert.ok(more.includes(k), k);
+  assert.match(sheet, /goal\.target > 1 && !doneNow && <View style=\{styles\.goalCount\}>/, 'each goal leads with its picture and number');
+  assert.match(body, /state\.week\.claimable \? onClaimWeekly :/, 'a ready Weekly Box opens from the row itself');
+});
